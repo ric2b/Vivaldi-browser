@@ -128,8 +128,8 @@ UnifiedSystemTrayView* UnifiedSystemTrayController::CreateView() {
         media_controls_controller_->CreateView());
   }
 
-  volume_slider_controller_ =
-      std::make_unique<UnifiedVolumeSliderController>(this);
+  volume_slider_controller_ = std::make_unique<UnifiedVolumeSliderController>(
+      this, false /* in_bubble */);
   unified_view_->AddSliderView(volume_slider_controller_->CreateView());
 
   brightness_slider_controller_ =
@@ -439,13 +439,13 @@ void UnifiedSystemTrayController::InitFeaturePods() {
   AddFeaturePodItem(std::make_unique<QuietModeFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<RotationLockFeaturePodController>());
   AddFeaturePodItem(std::make_unique<PrivacyScreenFeaturePodController>());
+  if (features::IsCaptureModeEnabled())
+    AddFeaturePodItem(std::make_unique<CaptureModeFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<NightLightFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<CastFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<VPNFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<IMEFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<LocaleFeaturePodController>(this));
-  if (features::IsCaptureModeEnabled())
-    AddFeaturePodItem(std::make_unique<CaptureModeFeaturePodController>(this));
   if (features::IsDarkLightModeEnabled())
     AddFeaturePodItem(std::make_unique<DarkModeFeaturePodController>(this));
   AddFeaturePodItem(std::make_unique<NearbyShareFeaturePodController>(this));

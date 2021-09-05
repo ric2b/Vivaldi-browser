@@ -225,10 +225,6 @@
       settable_from_internals: true,
     },
     {
-      name: "AzimuthAltitude",
-      status: "stable",
-    },
-    {
       name: "BackForwardCache",
     },
     {
@@ -338,6 +334,9 @@
       status: "experimental",
     },
     {
+      name: "ClickPointerEventIntegerCoordinates",
+    },
+    {
       name: "ClickRetargetting",
       status: "experimental",
     },
@@ -357,11 +356,11 @@
     },
     {
       name: "CompositeRelativeKeyframes",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "CompositeSVG",
-      status: "test"
+      status: "stable"
     },
     {
       name: "CompositingOptimizations",
@@ -407,14 +406,6 @@
       status: "experimental",
     },
     {
-      name: "CookieStoreDocument",
-      status: "stable",
-    },
-    {
-      name: "CookieStoreWorker",
-      status: "stable",
-    },
-    {
       name: "CookiesWithoutSameSiteMustBeSecure",
       status: "test",
     },
@@ -445,6 +436,12 @@
     {
       // https://drafts.csswg.org/css-counter-styles-3
       name: "CSSAtRuleCounterStyle",
+      status: "test",
+    },
+    {
+      // Whether <image> values are allowed as counter style <symbol>
+      name: "CSSAtRuleCounterStyleImageSymbols",
+      depends_on: ["CSSAtRuleCounterStyle"]
     },
     {
       name: "CSSCalcAsInt",
@@ -457,6 +454,10 @@
       // color property. Enabling this runtime flag will enable dark UA
       // rendering for form controls, scrollbars, etc.
       name: "CSSColorSchemeUARendering",
+      status: "stable",
+    },
+    {
+      name: "CSSContainerQueries",
     },
     {
       // The main content-visibility feature.
@@ -518,14 +519,6 @@
       status: "experimental",
     },
     {
-      // Change ScopedStyleResolve and StyleEngine to use the already stored
-      // StyleSheetCollection to find @keyframes rules instead of creating their
-      // own hashmaps, so that we can save memory when there are web components
-      // with @keyframes rules in their stylesheets.
-      name: "CSSKeyframesMemoryReduction",
-      status: "test",
-    },
-    {
       name: "CSSLayoutAPI",
       status: "experimental",
     },
@@ -540,11 +533,6 @@
     {
       name: "CSSMarkerNestedPseudoElement",
       status: "experimental",
-    },
-    {
-      name: "CSSMarkerPseudoElement",
-      status: "stable",
-      implied_by: ["CSSMarkerNestedPseudoElement"],
     },
     // Enables dependency support for the MatchedPropertiesCache.
     {
@@ -596,17 +584,15 @@
       depends_on: ["PictureInPictureAPI"],
     },
     {
+      name: "CSSPseudoDir",
+      status: "experimental",
+    },
+    {
       name: "CSSPseudoIs",
       status: "stable",
     },
     {
       name: "CSSPseudoWhere",
-      status: "stable",
-    },
-    {
-      // Perform partial layout invalidation on web font loading.
-      // See https://crbug.com/441925 and https://bit.ly/35JjPmq for details.
-      name: "CSSReducedFontLoadingLayoutInvalidations",
       status: "stable",
     },
     // Scrollbar styling.
@@ -628,6 +614,17 @@
       name: "CSSSnapSize",
       status: "experimental",
     },
+    {
+      // Support for CSS ::spelling-error, ::grammar-error, and the
+      // spelling-error and grammar-error values in text-decoration-line.
+      //
+      // https://drafts.csswg.org/css-pseudo-4/#selectordef-spelling-error
+      // https://drafts.csswg.org/css-pseudo-4/#selectordef-grammar-error
+      // https://drafts.csswg.org/css-text-decor-4/#valdef-text-decoration-line-spelling-error
+      // https://drafts.csswg.org/css-text-decor-4/#valdef-text-decoration-line-grammar-error
+      name: "CSSSpellingGrammarErrors",
+      status: "test",
+    },
     // Make system color keywords compute to themselves.
     // https://github.com/w3c/csswg-drafts/issues/3847
     {
@@ -638,7 +635,7 @@
       // Support for ::target-text pseudo element as specified in
       // https://drafts.csswg.org/css-pseudo/#selectordef-target-text
       name: "CSSTargetTextPseudoElement",
-      status: "test",
+      status: "stable",
     },
     // Support for @property rules.
     {
@@ -655,6 +652,9 @@
     {
       name: "CSSVariables2TransformValues",
       status: "test",
+    },
+    {
+      name: "CullRectUpdate",
     },
     {
       name: "CustomElementDefaultStyle",
@@ -681,11 +681,11 @@
     },
     {
       name: "DecodeJpeg420ImagesToYUV",
-      status: "test",
+      status: "stable",
     },
     {
       name: "DecodeLossyWebPImagesToYUV",
-      status: "test",
+      status: "stable",
     },
     {
       name: "DelayAsyncScriptExecutionUntilFinishedParsing",
@@ -702,9 +702,13 @@
       status: "experimental",
     },
     {
+      name: "DeviceInterface",
+      status: "experimental",
+    },
+    {
       name: "DigitalGoods",
       origin_trial_feature_name: "DigitalGoods",
-      origin_trial_os: ["android"],
+      origin_trial_os: ["android", "chromeos"],
       status: {
         "Android": "experimental",
         "ChromeOS": "experimental",
@@ -732,6 +736,13 @@
       status: "experimental",
     },
     {
+      name: "DisplayCapturePermissionPolicy",
+      implied_by: ["GetCurrentBrowsingContextMedia"],
+      // TODO(crbug.com/1150788): Implement for Android when this is applied
+      // to getDisplayMedia.
+      status: {"Android": "", "default": "test"},
+    },
+    {
       name: "DisplayCutoutAPI",
       settable_from_internals: true,
     },
@@ -743,7 +754,6 @@
     },
     {
       name: "DocumentPolicy",
-      origin_trial_feature_name: "DocumentPolicy",
       status: "stable",
     },
     {
@@ -751,6 +761,18 @@
       origin_trial_feature_name: "DocumentPolicyNegotiation",
       status: "experimental",
       depends_on: ['DocumentPolicy']
+    },
+    // Enables the ability to use Document Policy header to control feature
+    // SyncXHR.
+    {
+      name: "DocumentPolicySyncXHR",
+      status: "experimental",
+      depends_on: ["DocumentPolicy"],
+    },
+    {
+      // Document transitions, including shared element transitions.
+      // See https://github.com/WICG/proposals/issues/12.
+      name: "DocumentTransition"
     },
     {
       name: "DocumentWrite",
@@ -763,7 +785,7 @@
     {
       // http://crbug.com/707656 content editable in LayoutNG.
       name: "EditingNG",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "EncryptedMediaEncryptionSchemeQuery",
@@ -817,12 +839,9 @@
       origin_trial_feature_name: "ExperimentalJSProfiler",
       status: "experimental"
     },
-    // Enables a set of features intended to help improve web developer
-    // productivity, by restricting the use of potentially problematic web-
-    // platform behaviors, as well as adding new high-level APIs for common
-    // development patterns.
     {
-      name: "ExperimentalProductivityFeatures",
+      name: "ExperimentalPolicies",
+      depends_on: ["DocumentPolicy"],
       status: "experimental"
     },
     {
@@ -841,13 +860,7 @@
       status: "stable",
     },
     {
-      name: "FeaturePolicyForSandbox",
-      status: "experimental",
-    },
-    {
       name: "FeaturePolicyReporting",
-      implied_by: ["ExperimentalProductivityFeatures"],
-      origin_trial_feature_name: "FeaturePolicyReporting",
       status: "experimental"
     },
     {
@@ -862,7 +875,7 @@
       // Also enabled when blink::features::kFileHandlingAPI is overridden
       // on the command line (or via chrome://flags).
       name: "FileHandling",
-      depends_on: ["NativeFileSystem"],
+      depends_on: ["FileSystemAccess"],
       status: {"Android": "test", "default": "experimental"},
       origin_trial_feature_name: "FileHandling",
       origin_trial_os: ["win", "mac", "linux", "chromeos"],
@@ -870,6 +883,15 @@
     {
       name: "FileSystem",
       status: "stable",
+    },
+    {
+      name: "FileSystemAccess",
+      status: {"Android": "test", "default": "stable"},
+    },
+    {
+      // In-development features for the File System Access API.
+      name: "FileSystemAccessAPIExperimental",
+      status: "experimental",
     },
     {
       name: "FlexAspectRatio",
@@ -900,9 +922,7 @@
     // For simulating Android's overlay fullscreen video in web tests on Linux.
     {
       name: "ForcedColors",
-      // No status because this blink runtime feature doesn't work by itself.
-      // It's controlled by the corresponding Chromium feature which needs to
-      // be enabled to make the whole feature work.
+      status: "stable",
     },
     {
       name: "ForceDeferScriptIntervention",
@@ -911,10 +931,6 @@
       // This is used in tests to perform memory measurement without
       // waiting for GC.
       name:"ForceEagerMeasureMemory",
-    },
-    {
-      name: "ForceLoadAtTop",
-      origin_trial_feature_name: "ForceLoadAtTop",
     },
     {
       name: "ForceOverlayFullscreenVideo",
@@ -928,6 +944,7 @@
     },
     {
       name: "FractionalScrollOffsets",
+      status: "experimental",
     },
     {
       name: "FreezeFramesOnVisibility",
@@ -993,10 +1010,11 @@
     {
       name: "ImplicitRootScroller",
       settable_from_internals: true,
+      status: {"Android": "stable"},
     },
     {
       name: "ImportMaps",
-      implied_by: ["ExperimentalProductivityFeatures"],
+      status: "stable"
     },
     {
       name: "InertAttribute",
@@ -1014,6 +1032,11 @@
     {
       name: "InterestCohortAPI",
       origin_trial_feature_name: "InterestCohortAPI",
+      origin_trial_allows_third_party: true,
+    },
+    {
+      name: "InterestCohortFeaturePolicy",
+      status: "experimental",
     },
     {
       name: "IntersectionObserverDocumentScrollingElementRoot",
@@ -1043,7 +1066,7 @@
       // provides a convenient way for testing legacy layout code path in blink
       // unit tests.
       name: "LayoutNG",
-      implied_by: ["LayoutNGGrid", "BidiCaretAffinity", "LayoutNGTable"],
+      implied_by: ["LayoutNGGrid", "BidiCaretAffinity"],
       status: "stable",
     },
     {
@@ -1072,6 +1095,12 @@
       implied_by: ["LayoutNGBlockFragmentation"],
     },
     {
+      // Full support for PositionForPoint in NGPhysicalFragment. Without this
+      // enabled, we'll typically fall back to legacy code for block children.
+      name: "LayoutNGFullPositionForPoint",
+      implied_by: ["LayoutNGBlockFragmentation", "LayoutNGFragmentTraversal"],
+    },
+    {
       name: "LayoutNGGrid",
     },
     {
@@ -1083,12 +1112,18 @@
       name: "LayoutNGPrinting",
     },
     {
+      name: "LayoutNGReplaced",
+      depends_on: ["LayoutNG"]
+    },
+    {
       name: "LayoutNGTable",
+      depends_on: ["LayoutNG"]
     },
     {
       name: "LayoutNGTextControl",
       depends_on: ["EditingNG"],
-      status: "experimental",
+      // In Chrome, the flag is managed by Finch.
+      status: "test",
     },
     {
       name: "LayoutNGWebkitBox",
@@ -1133,8 +1168,7 @@
     },
     {
       name:"MeasureMemory",
-      origin_trial_feature_name: "MeasureMemory",
-      status:"experimental",
+      status:"stable",
     },
     {
       name: "MediaCapabilitiesDynamicRange",
@@ -1159,10 +1193,6 @@
     {
       name: "MediaCaptureDepthVideoKind",
       status: "experimental",
-    },
-    {
-      name: "MediaCapturePanTilt",
-      status: "stable",
     },
     // Set to reflect the MediaCastOverlayButton feature.
     {
@@ -1217,6 +1247,10 @@
     },
     {
       name: "MediaSourceExperimental",
+      status: "experimental",
+    },
+    {
+      name: "MediaSourceExtensionsForWebCodecs",
       status: "experimental",
     },
     {
@@ -1275,15 +1309,6 @@
       // Named pages for pagination (the "page" CSS property).
       name: "NamedPages",
       status: "stable",
-    },
-    {
-      // Also enabled when blink::features::kNativeFileSystemAPI is overridden
-      // on the command line (or via chrome://flags).
-      name: "NativeFileSystem",
-      status: {"Android": "test", "default": "stable"},
-      // TODO(mek): Remove origin trial integration.
-      origin_trial_feature_name: "NativeFileSystem2",
-      origin_trial_os: ["win", "mac", "linux", "chromeos"],
     },
     {
       name: "NativeIO",
@@ -1362,7 +1387,6 @@
     },
     {
       name: "OriginIsolationHeader",
-      origin_trial_feature_name: "OriginIsolationHeader",
       status: "experimental",
     },
     {
@@ -1493,6 +1517,10 @@
     {
       name: "PaymentRequestMerchantValidationEvent",
       status: "experimental",
+    },
+    // Enables the correct behavior for show(): crbug.com/825270
+    {
+      name: "PaymentRequestShowConsumesUserActivation",
     },
     {
       name: "PaymentRetry",
@@ -1627,6 +1655,7 @@
     },
     {
       name: "ReadableByteStream",
+      status: "stable",
     },
     {
       name: "RemotePlayback",
@@ -1695,6 +1724,13 @@
       origin_trial_feature_name: "RTCQuicTransport",
       status: "experimental",
     },
+    // Enables the use of |RTCRtpTransceiver::setOfferedRtpHeaderExtensions|,
+    // |RTCRtpTransceiver::headerExtensionsToOffer|, and
+    // |RTCRtpTransceiver::headerExtensionsNegotiated|.
+    {
+      name: "RTCRtpHeaderExtensionControl",
+      status: "experimental",
+    },
     // Enables the use of |RTCRtpTransceiver::stop()|
     {
       name: "RTCRtpTransceiverStop",
@@ -1729,6 +1765,10 @@
     {
       name: "SanitizerAPI",
       status: "test",
+    },
+    {
+      name: "ScreenFold",
+      status: "experimental",
     },
     {
       name: "ScreenWakeLock",
@@ -1796,8 +1836,7 @@
     },
     {
       name: "Serial",
-      origin_trial_feature_name: "Serial",
-      status: {"Android": "", "default": "experimental"},
+      status: {"Android": "", "default": "stable"},
     },
     {
       name: "ServiceWorkerClientLifecycleState",
@@ -1862,6 +1901,10 @@
       status: "test",
     },
     {
+      name: "StorageBuckets",
+      status: "experimental",
+    },
+    {
       name: "StrictMimeTypesForWorkers",
       status: "experimental"
     },
@@ -1870,6 +1913,10 @@
       origin_trial_feature_name: "SubresourceWebBundles",
       origin_trial_allows_third_party: true,
       status: "test"
+    },
+    {
+      name: "SummaryListItem",
+      status: "stable",
     },
     {
       name: "SurfaceEmbeddingFeatures",
@@ -1988,16 +2035,8 @@
       status: "stable",
     },
     {
-      name: "UnoptimizedImagePolicies",
+      name: "URLPattern",
       status: "experimental",
-      origin_trial_feature_name: "UnoptimizedImagePolicies",
-      implied_by: ["ExperimentalProductivityFeatures"]
-    },
-    {
-      name: "UnsizedMediaPolicy",
-      status: "experimental",
-      origin_trial_feature_name: "UnsizedMediaPolicy",
-      implied_by: ["ExperimentalProductivityFeatures"]
     },
     {
       name: "UserActivationSameOriginVisibility",
@@ -2063,12 +2102,12 @@
     {
       name: "WebAssemblySimd",
       origin_trial_feature_name: "WebAssemblySimd",
-      status: "experimental",
+      status: "test",
     },
     {
       name: "WebAssemblyThreads",
       origin_trial_feature_name: "WebAssemblyThreads",
-      status: "experimental",
+      status: "test",
     },
     // WebAuth is disabled on Android versions prior to N (7.0) due to lack of
     // supporting APIs, see runtime_features.cc.
@@ -2086,7 +2125,7 @@
     },
     {
       name: "WebAuthenticationResidentKeyRequirement",
-      status: "experimental",
+      status: "stable",
     },
     // WebBluetooth is enabled by default on Android, ChromeOS and Mac.
     // It is also supported in Windows 10 which is handled in runtime_features.cc
@@ -2146,21 +2185,23 @@
     },
     {
       name: "WebHID",
-      origin_trial_feature_name: "WebHID",
-      status: {"Android": "", "default": "experimental"},
+      status: {"Android": "", "default": "stable"},
     },
     {
       name: "WebID",
     },
     {
       name: "WebNFC",
-      origin_trial_feature_name: "WebNFC",
-      origin_trial_os: ["android"],
-      status: "experimental",
+      status: {"Android": "stable", "default": "test"},
     },
     {
       name: "WebOTP",
       status: {"default": "experimental", "Android": "stable"},
+    },
+    {
+      name: "WebOTPAssertionFeaturePolicy",
+      status: "experimental",
+      depends_on: ["WebOTP"],
     },
     {
       name: "WebScheduler",

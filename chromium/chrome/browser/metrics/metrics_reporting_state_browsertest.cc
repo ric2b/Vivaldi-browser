@@ -13,6 +13,7 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/values.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_browser_main.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
@@ -26,7 +27,7 @@
 #include "components/metrics/metrics_service_accessor.h"
 #include "content/public/test/browser_test.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/chromeos/settings/device_settings_cache.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
 #include "components/policy/proto/device_management_backend.pb.h"
@@ -128,8 +129,8 @@ IN_PROC_BROWSER_TEST_P(MetricsReportingStateTest, ChangeMetricsReportingState) {
   bool value_after_change = false;
   ChangeMetricsReportingStateWithReply(
       !is_metrics_reporting_enabled_initial_value(),
-      base::BindRepeating(&OnMetricsReportingStateChanged, &value_after_change,
-                          run_loop.QuitClosure()));
+      base::BindOnce(&OnMetricsReportingStateChanged, &value_after_change,
+                     run_loop.QuitClosure()));
   run_loop.Run();
   EXPECT_EQ(!is_metrics_reporting_enabled_initial_value(), value_after_change);
 }

@@ -291,6 +291,19 @@ ScopedJavaLocalRef<jobject> WebContentsAndroid::GetRenderFrameHostFromId(
   return rfh->GetJavaRenderFrameHost();
 }
 
+ScopedJavaLocalRef<jobjectArray> WebContentsAndroid::GetAllRenderFrameHosts(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) const {
+  std::vector<RenderFrameHost*> frames = web_contents_->GetAllFrames();
+  ScopedJavaLocalRef<jobjectArray> jframes =
+      Java_WebContentsImpl_createRenderFrameHostArray(env, frames.size());
+  for (size_t i = 0; i < frames.size(); i++) {
+    Java_WebContentsImpl_addRenderFrameHostToArray(
+        env, jframes, i, frames[i]->GetJavaRenderFrameHost());
+  }
+  return jframes;
+}
+
 ScopedJavaLocalRef<jstring> WebContentsAndroid::GetTitle(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) const {
@@ -649,10 +662,16 @@ void WebContentsAndroid::RequestAccessibilitySnapshot(
   ScopedJavaGlobalRef<jobject> j_callback;
   j_callback.Reset(env, callback);
 
+  // Set a timeout of 2.0 seconds to compute the snapshot of the
+  // accessibility tree because Google Assistant ignores results that
+  // don't come back within 3.0 seconds.
   static_cast<WebContentsImpl*>(web_contents_)
       ->RequestAXTreeSnapshot(
           base::BindOnce(&AXTreeSnapshotCallback, j_callback),
-          ui::kAXModeComplete);
+          ui::kAXModeComplete,
+          /* exclude_offscreen= */ false,
+          /* max_nodes= */ 5000,
+          /* timeout= */ base::TimeDelta::FromSeconds(2));
 }
 
 ScopedJavaLocalRef<jstring> WebContentsAndroid::GetEncoding(

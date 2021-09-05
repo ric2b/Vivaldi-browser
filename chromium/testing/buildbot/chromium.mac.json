@@ -1570,28 +1570,6 @@
         "test_id_prefix": "ninja://components:components_perftests/"
       },
       {
-        "isolate_name": "extension_docserver_python_unittests",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "extension_docserver_python_unittests",
-        "resultdb": {
-          "enable": true
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "none",
-              "os": "Mac-10.11"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/common/extensions/docs/server2:extension_docserver_python_unittests/"
-      },
-      {
         "isolate_name": "flatbuffers_unittests",
         "merge": {
           "args": [],
@@ -1721,25 +1699,6 @@
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "test_id_prefix": "ninja://chrome/test:telemetry_gpu_unittests/"
-      },
-      {
-        "isolate_name": "updater_integration_tests",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "updater_integration_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "none",
-              "os": "Mac-10.11"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/updater:updater_integration_tests/"
       },
       {
         "args": [
@@ -3363,28 +3322,6 @@
         "test_id_prefix": "ninja://content/shell:content_shell_crash_test/"
       },
       {
-        "isolate_name": "extension_docserver_python_unittests",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "extension_docserver_python_unittests",
-        "resultdb": {
-          "enable": true
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "8086:0a2e",
-              "os": "Mac-10.12.6"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/common/extensions/docs/server2:extension_docserver_python_unittests/"
-      },
-      {
         "isolate_name": "flatbuffers_unittests",
         "merge": {
           "args": [],
@@ -3572,25 +3509,6 @@
         "test_id_prefix": "ninja://chrome/test:telemetry_unittests/"
       },
       {
-        "isolate_name": "updater_integration_tests",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "updater_integration_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "8086:0a2e",
-              "os": "Mac-10.12.6"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/updater:updater_integration_tests/"
-      },
-      {
         "args": [
           "--gtest-benchmark-name=views_perftests"
         ],
@@ -3628,8 +3546,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -3647,8 +3564,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -3669,8 +3585,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -3689,8 +3604,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -3708,8 +3622,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -3727,8 +3640,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -3746,8 +3658,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -3765,8 +3676,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -3784,8 +3694,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -3803,8 +3712,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -3823,8 +3731,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -3842,8 +3749,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -3861,8 +3767,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -3883,8 +3788,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -3902,8 +3806,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -3921,8 +3824,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -3940,8 +3842,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -3959,8 +3860,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -3978,8 +3878,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -3997,8 +3896,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4016,8 +3914,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
@@ -4036,8 +3933,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4055,8 +3951,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4074,8 +3969,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4093,8 +3987,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4112,8 +4005,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4131,8 +4023,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4150,8 +4041,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4169,8 +4059,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4188,8 +4077,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4207,8 +4095,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4226,8 +4113,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4245,8 +4131,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4264,8 +4149,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4283,8 +4167,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4302,8 +4185,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4321,8 +4203,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4340,8 +4221,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4359,8 +4239,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4378,8 +4257,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4397,8 +4275,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4416,8 +4293,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
@@ -4436,8 +4312,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4455,8 +4330,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4474,8 +4348,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4493,8 +4366,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4512,8 +4384,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4531,8 +4402,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4550,8 +4420,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4569,8 +4438,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4588,8 +4456,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4607,8 +4474,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4626,8 +4492,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4645,8 +4510,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4664,8 +4528,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4683,8 +4546,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4702,8 +4564,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4721,8 +4582,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4740,8 +4600,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4759,8 +4618,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4778,8 +4636,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4797,8 +4654,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4816,8 +4672,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4835,8 +4690,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4854,8 +4708,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4873,8 +4726,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4892,8 +4744,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4911,8 +4762,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4933,8 +4783,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4952,8 +4801,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4971,8 +4819,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -4990,8 +4837,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -5009,8 +4855,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -5028,8 +4873,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -5047,8 +4891,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -5066,8 +4909,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -5085,8 +4927,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -5105,8 +4946,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -5124,8 +4964,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -5150,8 +4989,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -5179,7 +5017,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
@@ -5202,8 +5040,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -5222,8 +5059,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -5247,8 +5083,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -5271,36 +5106,12 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "test_id_prefix": "ninja://content/shell:content_shell_crash_test/"
-      },
-      {
-        "isolate_name": "extension_docserver_python_unittests",
-        "isolate_profile_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "extension_docserver_python_unittests",
-        "resultdb": {
-          "enable": true
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/common/extensions/docs/server2:extension_docserver_python_unittests/"
       },
       {
         "isolate_name": "flatbuffers_unittests",
@@ -5318,8 +5129,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -5341,8 +5151,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -5361,8 +5170,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -5384,8 +5192,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -5407,8 +5214,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -5430,8 +5236,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "idempotent": false,
@@ -5458,8 +5263,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "idempotent": false,
@@ -5467,26 +5271,6 @@
           "shards": 4
         },
         "test_id_prefix": "ninja://chrome/test:telemetry_unittests/"
-      },
-      {
-        "isolate_name": "updater_integration_tests",
-        "isolate_profile_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "updater_integration_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/updater:updater_integration_tests/"
       },
       {
         "args": [
@@ -5505,8 +5289,7 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
+              "os": "Mac-10.15"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
@@ -5526,7 +5309,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -5544,7 +5326,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -5565,7 +5346,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -5584,7 +5364,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -5602,7 +5381,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -5620,7 +5398,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -5638,7 +5415,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -5656,7 +5432,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -5674,7 +5449,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -5692,7 +5466,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -5711,7 +5484,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -5729,7 +5501,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -5747,7 +5518,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -5757,6 +5527,9 @@
         "test_id_prefix": "ninja://third_party/boringssl:boringssl_ssl_tests/"
       },
       {
+        "args": [
+          "--test-launcher-jobs=2"
+        ],
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -5765,7 +5538,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -5787,7 +5559,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -5805,7 +5576,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -5823,7 +5593,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -5841,7 +5610,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -5859,7 +5627,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -5877,7 +5644,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -5895,7 +5661,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -5913,7 +5678,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -5932,7 +5696,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -5950,7 +5713,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -5968,7 +5730,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -5986,7 +5747,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6004,7 +5764,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6022,7 +5781,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6040,7 +5798,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6058,7 +5815,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6076,7 +5832,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6094,7 +5849,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6112,7 +5866,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6130,7 +5883,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6148,7 +5900,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6166,7 +5917,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6184,7 +5934,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6202,7 +5951,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6220,7 +5968,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6238,7 +5985,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6256,7 +6002,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6274,7 +6019,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6292,7 +6036,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6311,7 +6054,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6329,7 +6071,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6347,7 +6088,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6365,7 +6105,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6383,7 +6122,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6401,7 +6139,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6419,7 +6156,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6437,7 +6173,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6455,7 +6190,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6473,7 +6207,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6491,7 +6224,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6509,7 +6241,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6527,7 +6258,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6545,7 +6275,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6563,7 +6292,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6581,7 +6309,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6599,7 +6326,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6617,7 +6343,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6635,7 +6360,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6653,7 +6377,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6671,7 +6394,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6689,7 +6411,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6707,7 +6428,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6725,7 +6445,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6743,7 +6462,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6761,7 +6479,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6779,7 +6496,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6797,7 +6513,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6815,7 +6530,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6833,7 +6547,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6851,7 +6564,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6869,7 +6581,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6887,7 +6598,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6905,7 +6615,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6923,7 +6632,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6941,7 +6649,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6960,7 +6667,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -6978,7 +6684,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -7003,7 +6708,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -7032,7 +6736,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -7056,35 +6759,12 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "test_id_prefix": "ninja://content/shell:content_shell_crash_test/"
-      },
-      {
-        "isolate_name": "extension_docserver_python_unittests",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "extension_docserver_python_unittests",
-        "resultdb": {
-          "enable": true
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "none",
-              "os": "Mac-10.13.6"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/common/extensions/docs/server2:extension_docserver_python_unittests/"
       },
       {
         "isolate_name": "flatbuffers_unittests",
@@ -7101,7 +6781,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -7123,7 +6802,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -7145,7 +6823,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -7171,7 +6848,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -7195,7 +6871,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -7222,7 +6897,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -7248,7 +6922,6 @@
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
             {
-              "gpu": "none",
               "os": "Mac-10.13.6"
             }
           ],
@@ -8854,28 +8527,6 @@
         "test_id_prefix": "ninja://content/shell:content_shell_crash_test/"
       },
       {
-        "isolate_name": "extension_docserver_python_unittests",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "extension_docserver_python_unittests",
-        "resultdb": {
-          "enable": true
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "none",
-              "os": "Mac-10.14.6"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/common/extensions/docs/server2:extension_docserver_python_unittests/"
-      },
-      {
         "isolate_name": "flatbuffers_unittests",
         "merge": {
           "args": [],
@@ -9045,7 +8696,7 @@
         },
         "name": "telemetry_unittests",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -9060,25 +8711,6 @@
           "shards": 4
         },
         "test_id_prefix": "ninja://chrome/test:telemetry_unittests/"
-      },
-      {
-        "isolate_name": "updater_integration_tests",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "updater_integration_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "gpu": "none",
-              "os": "Mac-10.14.6"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/updater:updater_integration_tests/"
       },
       {
         "args": [
@@ -9333,24 +8965,6 @@
         },
         "test": "boringssl_ssl_tests",
         "test_id_prefix": "ninja://third_party/boringssl:boringssl_ssl_tests/"
-      },
-      {
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Mac-10.15"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 10
-        },
-        "test": "browser_tests",
-        "test_id_prefix": "ninja://chrome/test:browser_tests/"
       },
       {
         "args": [
@@ -10297,6 +9911,9 @@
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
+        "precommit_args": [
+          "--gtest_filter=-*"
+        ],
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -10527,7 +10144,7 @@
             }
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 12
+          "shards": 25
         },
         "test_id_prefix": "ninja://:blink_web_tests/"
       },
@@ -10614,27 +10231,6 @@
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "test_id_prefix": "ninja://content/shell:content_shell_crash_test/"
-      },
-      {
-        "isolate_name": "extension_docserver_python_unittests",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "extension_docserver_python_unittests",
-        "resultdb": {
-          "enable": true
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Mac-10.15"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/common/extensions/docs/server2:extension_docserver_python_unittests/"
       },
       {
         "isolate_name": "flatbuffers_unittests",
@@ -10763,32 +10359,6 @@
       },
       {
         "args": [
-          "--extra-browser-args=--enable-crashpad"
-        ],
-        "isolate_name": "telemetry_perf_unittests",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "telemetry_perf_unittests",
-        "resultdb": {
-          "enable": true
-        },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Mac-10.15"
-            }
-          ],
-          "idempotent": false,
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 12
-        },
-        "test_id_prefix": "ninja://chrome/test:telemetry_perf_unittests/"
-      },
-      {
-        "args": [
           "--jobs=1",
           "--extra-browser-args=--disable-gpu"
         ],
@@ -10813,24 +10383,6 @@
           "shards": 4
         },
         "test_id_prefix": "ninja://chrome/test:telemetry_unittests/"
-      },
-      {
-        "isolate_name": "updater_integration_tests",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "updater_integration_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Mac-10.15"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://chrome/updater:updater_integration_tests/"
       },
       {
         "args": [
@@ -10880,13 +10432,14 @@
           "--xctest"
         ],
         "isolate_name": "absl_hardening_tests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "absl_hardening_tests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -10925,13 +10478,14 @@
           "--xctest"
         ],
         "isolate_name": "absl_hardening_tests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "absl_hardening_tests_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -10970,13 +10524,14 @@
           "--xctest"
         ],
         "isolate_name": "base_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "base_unittests_iPad Air 2 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -11015,13 +10570,14 @@
           "--xctest"
         ],
         "isolate_name": "base_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "base_unittests_iPad Air 2 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -11060,13 +10616,14 @@
           "--xctest"
         ],
         "isolate_name": "base_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "base_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -11105,13 +10662,14 @@
           "--xctest"
         ],
         "isolate_name": "base_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "base_unittests_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -11150,13 +10708,14 @@
           "--xctest"
         ],
         "isolate_name": "base_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "base_unittests_iPhone 6s Plus 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -11195,13 +10754,14 @@
           "--xctest"
         ],
         "isolate_name": "base_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "base_unittests_iPhone 6s Plus 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -11240,13 +10800,14 @@
           "--xctest"
         ],
         "isolate_name": "base_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "base_unittests_iPhone SE (1st generation) 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -11285,13 +10846,14 @@
           "--xctest"
         ],
         "isolate_name": "base_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "base_unittests_iPhone SE (1st generation) 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -11330,13 +10892,14 @@
           "--xctest"
         ],
         "isolate_name": "boringssl_crypto_tests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "boringssl_crypto_tests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -11375,13 +10938,14 @@
           "--xctest"
         ],
         "isolate_name": "boringssl_crypto_tests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "boringssl_crypto_tests_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -11420,13 +10984,14 @@
           "--xctest"
         ],
         "isolate_name": "boringssl_ssl_tests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "boringssl_ssl_tests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -11465,13 +11030,14 @@
           "--xctest"
         ],
         "isolate_name": "boringssl_ssl_tests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "boringssl_ssl_tests_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -11510,13 +11076,14 @@
           "--xctest"
         ],
         "isolate_name": "components_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "components_unittests_iPad Air 2 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -11555,13 +11122,14 @@
           "--xctest"
         ],
         "isolate_name": "components_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "components_unittests_iPad Air 2 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -11600,13 +11168,14 @@
           "--xctest"
         ],
         "isolate_name": "components_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "components_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -11645,13 +11214,14 @@
           "--xctest"
         ],
         "isolate_name": "components_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "components_unittests_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -11690,13 +11260,14 @@
           "--xctest"
         ],
         "isolate_name": "components_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "components_unittests_iPhone 6s Plus 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -11735,13 +11306,14 @@
           "--xctest"
         ],
         "isolate_name": "components_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "components_unittests_iPhone 6s Plus 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -11780,13 +11352,14 @@
           "--xctest"
         ],
         "isolate_name": "components_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "components_unittests_iPhone SE (1st generation) 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -11825,13 +11398,14 @@
           "--xctest"
         ],
         "isolate_name": "components_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "components_unittests_iPhone SE (1st generation) 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -11870,13 +11444,14 @@
           "--xctest"
         ],
         "isolate_name": "crypto_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "crypto_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -11915,13 +11490,14 @@
           "--xctest"
         ],
         "isolate_name": "crypto_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "crypto_unittests_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -11960,13 +11536,14 @@
           "--xctest"
         ],
         "isolate_name": "gfx_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "gfx_unittests_iPad Air 2 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -12005,13 +11582,14 @@
           "--xctest"
         ],
         "isolate_name": "gfx_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "gfx_unittests_iPad Air 2 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -12050,13 +11628,14 @@
           "--xctest"
         ],
         "isolate_name": "gfx_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "gfx_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -12095,13 +11674,14 @@
           "--xctest"
         ],
         "isolate_name": "gfx_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "gfx_unittests_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -12140,13 +11720,14 @@
           "--xctest"
         ],
         "isolate_name": "gfx_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "gfx_unittests_iPhone 6s Plus 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -12185,13 +11766,14 @@
           "--xctest"
         ],
         "isolate_name": "gfx_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "gfx_unittests_iPhone 6s Plus 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -12230,13 +11812,14 @@
           "--xctest"
         ],
         "isolate_name": "gfx_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "gfx_unittests_iPhone SE (1st generation) 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -12275,13 +11858,14 @@
           "--xctest"
         ],
         "isolate_name": "gfx_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "gfx_unittests_iPhone SE (1st generation) 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -12320,13 +11904,14 @@
           "--xctest"
         ],
         "isolate_name": "google_apis_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "google_apis_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -12365,13 +11950,14 @@
           "--xctest"
         ],
         "isolate_name": "google_apis_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "google_apis_unittests_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -12411,13 +11997,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_integration_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_integration_eg2tests_module_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -12458,13 +12045,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_integration_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_integration_eg2tests_module_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -12505,13 +12093,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_signin_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_signin_eg2tests_module_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -12551,13 +12140,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_signin_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_signin_eg2tests_module_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -12597,13 +12187,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_ui_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_ui_eg2tests_module_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -12644,13 +12235,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_ui_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_ui_eg2tests_module_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -12690,13 +12282,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_chrome_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_unittests_iPad Air 2 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -12735,13 +12328,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_chrome_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_unittests_iPad Air 2 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -12780,13 +12374,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_chrome_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -12825,13 +12420,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_chrome_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_unittests_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -12870,13 +12466,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_chrome_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_unittests_iPhone 6s Plus 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -12915,13 +12512,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_chrome_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_unittests_iPhone 6s Plus 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -12960,13 +12558,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_chrome_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_unittests_iPhone SE (1st generation) 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -13005,13 +12604,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_chrome_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_unittests_iPhone SE (1st generation) 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -13050,13 +12650,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_components_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_components_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -13095,13 +12696,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_components_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_components_unittests_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -13140,13 +12742,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_net_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_net_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -13185,13 +12788,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_net_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_net_unittests_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -13230,13 +12834,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_remoting_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_remoting_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -13275,13 +12880,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_remoting_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_remoting_unittests_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -13320,13 +12926,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_testing_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_testing_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -13365,13 +12972,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_testing_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_testing_unittests_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -13410,13 +13018,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_inttests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_inttests_iPad Air 2 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -13455,13 +13064,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_inttests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_inttests_iPad Air 2 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -13500,13 +13110,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_inttests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_inttests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -13545,13 +13156,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_inttests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_inttests_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -13590,13 +13202,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_inttests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_inttests_iPhone 6s Plus 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -13635,13 +13248,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_inttests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_inttests_iPhone 6s Plus 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -13680,13 +13294,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_inttests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_inttests_iPhone SE (1st generation) 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -13725,13 +13340,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_inttests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_inttests_iPhone SE (1st generation) 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -13771,13 +13387,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_web_shell_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_shell_eg2tests_module_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -13817,13 +13434,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_web_shell_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_shell_eg2tests_module_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -13862,13 +13480,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_unittests_iPad Air 2 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -13907,13 +13526,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_unittests_iPad Air 2 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -13952,13 +13572,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -13997,13 +13618,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_unittests_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -14042,13 +13664,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_unittests_iPhone 6s Plus 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -14087,13 +13710,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_unittests_iPhone 6s Plus 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -14132,13 +13756,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_unittests_iPhone SE (1st generation) 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -14177,13 +13802,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_unittests_iPhone SE (1st generation) 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -14222,13 +13848,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_view_inttests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_view_inttests_iPad Air 2 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -14267,13 +13894,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_view_inttests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_view_inttests_iPad Air 2 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -14312,13 +13940,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_view_inttests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_view_inttests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -14357,13 +13986,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_view_inttests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_view_inttests_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -14402,13 +14032,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_view_inttests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_view_inttests_iPhone 6s Plus 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -14447,13 +14078,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_view_inttests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_view_inttests_iPhone 6s Plus 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -14492,13 +14124,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_view_inttests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_view_inttests_iPhone SE (1st generation) 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -14537,13 +14170,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_view_inttests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_view_inttests_iPhone SE (1st generation) 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -14582,13 +14216,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_view_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_view_unittests_iPad Air 2 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -14627,13 +14262,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_view_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_view_unittests_iPad Air 2 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -14672,13 +14308,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_view_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_view_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -14717,13 +14354,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_view_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_view_unittests_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -14762,13 +14400,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_view_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_view_unittests_iPhone 6s Plus 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -14807,13 +14446,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_view_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_view_unittests_iPhone 6s Plus 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -14852,13 +14492,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_view_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_view_unittests_iPhone SE (1st generation) 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -14897,13 +14538,14 @@
           "--xctest"
         ],
         "isolate_name": "ios_web_view_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_view_unittests_iPhone SE (1st generation) 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -14942,13 +14584,14 @@
           "--xctest"
         ],
         "isolate_name": "net_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "net_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -14987,13 +14630,14 @@
           "--xctest"
         ],
         "isolate_name": "net_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "net_unittests_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -15032,13 +14676,14 @@
           "--xctest"
         ],
         "isolate_name": "services_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "services_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -15077,13 +14722,14 @@
           "--xctest"
         ],
         "isolate_name": "services_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "services_unittests_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -15122,13 +14768,14 @@
           "--xctest"
         ],
         "isolate_name": "skia_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "skia_unittests_iPad Air 2 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -15167,13 +14814,14 @@
           "--xctest"
         ],
         "isolate_name": "skia_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "skia_unittests_iPad Air 2 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -15212,13 +14860,14 @@
           "--xctest"
         ],
         "isolate_name": "skia_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "skia_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -15257,13 +14906,14 @@
           "--xctest"
         ],
         "isolate_name": "skia_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "skia_unittests_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -15302,13 +14952,14 @@
           "--xctest"
         ],
         "isolate_name": "skia_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "skia_unittests_iPhone 6s Plus 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -15347,13 +14998,14 @@
           "--xctest"
         ],
         "isolate_name": "skia_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "skia_unittests_iPhone 6s Plus 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -15392,13 +15044,14 @@
           "--xctest"
         ],
         "isolate_name": "skia_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "skia_unittests_iPhone SE (1st generation) 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -15437,13 +15090,14 @@
           "--xctest"
         ],
         "isolate_name": "skia_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "skia_unittests_iPhone SE (1st generation) 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -15482,13 +15136,14 @@
           "--xctest"
         ],
         "isolate_name": "sql_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "sql_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -15527,13 +15182,14 @@
           "--xctest"
         ],
         "isolate_name": "sql_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "sql_unittests_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -15572,13 +15228,14 @@
           "--xctest"
         ],
         "isolate_name": "ui_base_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ui_base_unittests_iPad Air 2 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -15617,13 +15274,14 @@
           "--xctest"
         ],
         "isolate_name": "ui_base_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ui_base_unittests_iPad Air 2 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -15662,13 +15320,14 @@
           "--xctest"
         ],
         "isolate_name": "ui_base_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ui_base_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -15707,13 +15366,14 @@
           "--xctest"
         ],
         "isolate_name": "ui_base_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ui_base_unittests_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -15752,13 +15412,14 @@
           "--xctest"
         ],
         "isolate_name": "ui_base_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ui_base_unittests_iPhone 6s Plus 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -15797,13 +15458,14 @@
           "--xctest"
         ],
         "isolate_name": "ui_base_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ui_base_unittests_iPhone 6s Plus 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -15842,13 +15504,14 @@
           "--xctest"
         ],
         "isolate_name": "ui_base_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ui_base_unittests_iPhone SE (1st generation) 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -15887,13 +15550,14 @@
           "--xctest"
         ],
         "isolate_name": "ui_base_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ui_base_unittests_iPhone SE (1st generation) 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -15932,13 +15596,14 @@
           "--xctest"
         ],
         "isolate_name": "url_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "url_unittests_iPhone 6s 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -15977,13 +15642,14 @@
           "--xctest"
         ],
         "isolate_name": "url_unittests",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "url_unittests_iPhone 6s 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -16030,13 +15696,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_bookmarks_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_bookmarks_eg2tests_module_iPad Air 2 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -16076,13 +15743,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_bookmarks_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_bookmarks_eg2tests_module_iPad Air 2 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -16122,13 +15790,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_bookmarks_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_bookmarks_eg2tests_module_iPhone 7 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -16168,13 +15837,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_bookmarks_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_bookmarks_eg2tests_module_iPhone 7 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -16214,13 +15884,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_bookmarks_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_bookmarks_eg2tests_module_iPhone X 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -16260,13 +15931,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_bookmarks_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_bookmarks_eg2tests_module_iPhone X 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -16306,13 +15978,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_integration_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_integration_eg2tests_module_iPad Air 2 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -16353,13 +16026,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_integration_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_integration_eg2tests_module_iPad Air 2 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -16400,13 +16074,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_integration_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_integration_eg2tests_module_iPhone 7 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -16447,13 +16122,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_integration_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_integration_eg2tests_module_iPhone 7 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -16494,13 +16170,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_settings_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_settings_eg2tests_module_iPad Air 2 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -16541,13 +16218,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_settings_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_settings_eg2tests_module_iPad Air 2 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -16588,13 +16266,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_settings_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_settings_eg2tests_module_iPhone 7 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -16635,13 +16314,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_settings_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_settings_eg2tests_module_iPhone 7 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -16682,13 +16362,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_settings_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_settings_eg2tests_module_iPhone X 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -16729,13 +16410,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_settings_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_settings_eg2tests_module_iPhone X 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -16776,13 +16458,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_signin_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_signin_eg2tests_module_iPad Air 2 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -16822,13 +16505,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_signin_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_signin_eg2tests_module_iPad Air 2 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -16868,13 +16552,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_signin_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_signin_eg2tests_module_iPhone 7 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -16914,13 +16599,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_signin_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_signin_eg2tests_module_iPhone 7 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -16960,13 +16646,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_smoke_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_smoke_eg2tests_module_iPad Air 2 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -17006,13 +16693,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_smoke_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_smoke_eg2tests_module_iPad Air 2 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -17052,13 +16740,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_smoke_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_smoke_eg2tests_module_iPhone 7 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -17098,13 +16787,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_smoke_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_smoke_eg2tests_module_iPhone 7 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -17144,13 +16834,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_smoke_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_smoke_eg2tests_module_iPhone X 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -17190,13 +16881,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_smoke_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_smoke_eg2tests_module_iPhone X 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -17236,13 +16928,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_ui_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_ui_eg2tests_module_iPad Air 2 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -17283,13 +16976,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_ui_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_ui_eg2tests_module_iPad Air 2 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -17330,13 +17024,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_ui_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_ui_eg2tests_module_iPhone 7 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -17377,13 +17072,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_ui_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_ui_eg2tests_module_iPhone 7 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -17424,13 +17120,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_web_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_web_eg2tests_module_iPad Air 2 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -17470,13 +17167,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_web_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_web_eg2tests_module_iPad Air 2 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -17516,13 +17214,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_web_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_web_eg2tests_module_iPhone 7 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -17562,13 +17261,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_web_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_web_eg2tests_module_iPhone 7 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -17608,13 +17308,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_web_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_web_eg2tests_module_iPhone X 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -17654,13 +17355,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_chrome_web_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_chrome_web_eg2tests_module_iPhone X 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -17700,13 +17402,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_showcase_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_showcase_eg2tests_module_iPad Air 2 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -17746,13 +17449,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_showcase_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_showcase_eg2tests_module_iPad Air 2 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -17792,13 +17496,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_showcase_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_showcase_eg2tests_module_iPhone 7 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -17838,13 +17543,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_showcase_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_showcase_eg2tests_module_iPhone 7 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -17884,13 +17590,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_showcase_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_showcase_eg2tests_module_iPhone X 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -17930,13 +17637,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_showcase_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_showcase_eg2tests_module_iPhone X 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -17976,13 +17684,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_web_shell_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_shell_eg2tests_module_iPad Air 2 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -18022,13 +17731,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_web_shell_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_shell_eg2tests_module_iPad Air 2 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -18068,13 +17778,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_web_shell_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_shell_eg2tests_module_iPhone 7 13.6",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -18114,13 +17825,14 @@
           "--xcode-parallelization"
         ],
         "isolate_name": "ios_web_shell_eg2tests_module",
+        "isolate_profile_data": true,
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "ios_web_shell_eg2tests_module_iPhone 7 14.0",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -18172,7 +17884,7 @@
         },
         "name": "absl_hardening_tests_iPhone 6s 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -18217,7 +17929,7 @@
         },
         "name": "boringssl_crypto_tests_iPhone 6s 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -18262,7 +17974,7 @@
         },
         "name": "boringssl_ssl_tests_iPhone 6s 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -18307,7 +18019,7 @@
         },
         "name": "crypto_unittests_iPhone 6s 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -18352,7 +18064,7 @@
         },
         "name": "google_apis_unittests_iPhone 6s 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -18398,7 +18110,7 @@
         },
         "name": "ios_chrome_bookmarks_eg2tests_module_iPad Air 2 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -18444,7 +18156,7 @@
         },
         "name": "ios_chrome_bookmarks_eg2tests_module_iPhone X 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -18490,7 +18202,7 @@
         },
         "name": "ios_chrome_integration_eg2tests_module_iPad Air 2 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -18537,7 +18249,7 @@
         },
         "name": "ios_chrome_integration_eg2tests_module_iPhone 6s 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -18584,7 +18296,7 @@
         },
         "name": "ios_chrome_settings_eg2tests_module_iPad Air 2 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -18631,7 +18343,7 @@
         },
         "name": "ios_chrome_settings_eg2tests_module_iPhone X 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -18678,7 +18390,7 @@
         },
         "name": "ios_chrome_signin_eg2tests_module_iPad Air 2 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -18724,7 +18436,7 @@
         },
         "name": "ios_chrome_signin_eg2tests_module_iPhone 6s 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -18770,7 +18482,7 @@
         },
         "name": "ios_chrome_smoke_eg2tests_module_iPad Air 2 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -18816,7 +18528,7 @@
         },
         "name": "ios_chrome_smoke_eg2tests_module_iPhone X 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -18862,7 +18574,7 @@
         },
         "name": "ios_chrome_ui_eg2tests_module_iPad Air 2 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -18909,7 +18621,7 @@
         },
         "name": "ios_chrome_ui_eg2tests_module_iPhone 6s 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -18956,7 +18668,7 @@
         },
         "name": "ios_chrome_web_eg2tests_module_iPad Air 2 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -19002,7 +18714,7 @@
         },
         "name": "ios_chrome_web_eg2tests_module_iPhone X 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -19047,7 +18759,7 @@
         },
         "name": "ios_components_unittests_iPhone 6s 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -19092,7 +18804,7 @@
         },
         "name": "ios_net_unittests_iPhone 6s 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -19137,7 +18849,7 @@
         },
         "name": "ios_remoting_unittests_iPhone 6s 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -19183,7 +18895,7 @@
         },
         "name": "ios_showcase_eg2tests_module_iPad Air 2 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -19229,7 +18941,7 @@
         },
         "name": "ios_showcase_eg2tests_module_iPhone X 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -19274,7 +18986,7 @@
         },
         "name": "ios_testing_unittests_iPhone 6s 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -19320,7 +19032,7 @@
         },
         "name": "ios_web_shell_eg2tests_module_iPad Air 2 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -19366,7 +19078,7 @@
         },
         "name": "ios_web_shell_eg2tests_module_iPhone 6s 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -19411,7 +19123,7 @@
         },
         "name": "net_unittests_iPhone 6s 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -19456,7 +19168,7 @@
         },
         "name": "services_unittests_iPhone 6s 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -19501,7 +19213,7 @@
         },
         "name": "sql_unittests_iPhone 6s 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -19546,7 +19258,7 @@
         },
         "name": "url_unittests_iPhone 6s 12.4",
         "resultdb": {
-          "enable": false
+          "enable": true
         },
         "swarming": {
           "can_use_on_swarming_builders": true,

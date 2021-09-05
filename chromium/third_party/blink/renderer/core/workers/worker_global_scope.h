@@ -85,6 +85,7 @@ class CORE_EXPORT WorkerGlobalScope
   void Dispose() override;
   WorkerThread* GetThread() const final { return thread_; }
   const base::UnguessableToken& GetDevToolsToken() const override;
+  bool IsInitialized() const final { return !url_.IsNull(); }
 
   void ExceptionUnhandled(int exception_id);
 
@@ -116,14 +117,16 @@ class CORE_EXPORT WorkerGlobalScope
   bool IsContextThread() const final;
   const KURL& BaseURL() const final;
   String UserAgent() const final { return user_agent_; }
-  const UserAgentMetadata& GetUserAgentMetadata() const { return ua_metadata_; }
+  UserAgentMetadata GetUserAgentMetadata() const override {
+    return ua_metadata_;
+  }
   HttpsState GetHttpsState() const override { return https_state_; }
   scheduler::WorkerScheduler* GetScheduler() final;
   ukm::UkmRecorder* UkmRecorder() final;
   ScriptWrappable* ToScriptWrappable() final { return this; }
 
   void AddConsoleMessageImpl(ConsoleMessage*, bool discard_duplicates) final;
-  BrowserInterfaceBrokerProxy& GetBrowserInterfaceBroker() final;
+  const BrowserInterfaceBrokerProxy& GetBrowserInterfaceBroker() const final;
 
   OffscreenFontSelector* GetFontSelector() { return font_selector_; }
 
@@ -226,8 +229,7 @@ class CORE_EXPORT WorkerGlobalScope
  protected:
   WorkerGlobalScope(std::unique_ptr<GlobalScopeCreationParams>,
                     WorkerThread*,
-                    base::TimeTicks time_origin,
-                    ukm::SourceId);
+                    base::TimeTicks time_origin);
 
   // ExecutionContext
   void ExceptionThrown(ErrorEvent*) override;

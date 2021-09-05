@@ -12,7 +12,11 @@
 # method = interface.AddMethod('Tat', 0)
 # method.AddParameter('baz', 0, mojom.INT32)
 
-import pickle
+import sys
+if sys.version_info.major == 2:
+  import cPickle as pickle
+else:
+  import pickle
 from uuid import UUID
 
 
@@ -305,6 +309,9 @@ class NamedValue(object):
     return (isinstance(rhs, NamedValue)
             and (self.parent_kind, self.mojom_name) == (rhs.parent_kind,
                                                         rhs.mojom_name))
+
+  def __hash__(self):
+    return hash((self.parent_kind, self.mojom_name))
 
 
 class BuiltinValue(object):

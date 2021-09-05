@@ -36,6 +36,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/time/default_clock.h"
 #include "base/time/default_tick_clock.h"
+#include "third_party/blink/public/mojom/feature_policy/document_policy_feature.mojom-blink.h"
 #include "third_party/blink/public/mojom/timing/worker_timing_container.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
@@ -55,6 +56,7 @@
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/loader/document_load_timing.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
+#include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/timing/largest_contentful_paint.h"
 #include "third_party/blink/renderer/core/timing/layout_shift.h"
 #include "third_party/blink/renderer/core/timing/measure_memory/measure_memory_controller.h"
@@ -150,7 +152,7 @@ EventCounts* Performance::eventCounts() {
   return nullptr;
 }
 
-ScriptPromise Performance::measureMemory(
+ScriptPromise Performance::measureUserAgentSpecificMemory(
     ScriptState* script_state,
     ExceptionState& exception_state) const {
   return MeasureMemoryController::StartMeasurement(script_state,
@@ -631,11 +633,13 @@ void Performance::AddEventTimingBuffer(PerformanceEventTiming& entry) {
 }
 
 void Performance::AddLayoutShiftBuffer(LayoutShift& entry) {
+  probe::PerformanceEntryAdded(GetExecutionContext(), &entry);
   if (layout_shift_buffer_.size() < kDefaultLayoutShiftBufferSize)
     layout_shift_buffer_.push_back(&entry);
 }
 
 void Performance::AddLargestContentfulPaint(LargestContentfulPaint* entry) {
+  probe::PerformanceEntryAdded(GetExecutionContext(), entry);
   if (largest_contentful_paint_buffer_.size() <
       kDefaultLargestContenfulPaintSize) {
     largest_contentful_paint_buffer_.push_back(entry);
@@ -672,13 +676,18 @@ void Performance::AddLongTaskTiming(base::TimeTicks start_time,
                                     base::TimeTicks end_time,
                                     const AtomicString& name,
                                     const AtomicString& container_type,
-                                    const String& container_src,
-                                    const String& container_id,
-                                    const String& container_name) {
+                                    const AtomicString& container_src,
+                                    const AtomicString& container_id,
+                                    const AtomicString& container_name) {
+  double dom_high_res_start_time =
+      MonotonicTimeToDOMHighResTimeStamp(start_time);
   auto* entry = MakeGarbageCollected<PerformanceLongTaskTiming>(
-      MonotonicTimeToDOMHighResTimeStamp(start_time),
-      MonotonicTimeToDOMHighResTimeStamp(end_time), name, container_type,
-      container_src, container_id, container_name);
+      dom_high_res_start_time,
+      // Convert the delta between start and end times to an int to reduce the
+      // granularity of the duration to 1 ms.
+      static_cast<int>(MonotonicTimeToDOMHighResTimeStamp(end_time) -
+                       dom_high_res_start_time),
+      name, container_type, container_src, container_id, container_name);
   if (longtask_buffer_.size() < kDefaultLongTaskBufferSize) {
     longtask_buffer_.push_back(entry);
   } else {
@@ -860,6 +869,15 @@ ScriptPromise Performance::profile(ScriptState* script_state,
   DCHECK(execution_context);
   DCHECK(
       RuntimeEnabledFeatures::ExperimentalJSProfilerEnabled(execution_context));
+
+  if (!GetExecutionContext()->IsFeatureEnabled(
+          mojom::blink::DocumentPolicyFeature::kJSProfiling,
+          ReportOptions::kReportOnFailure)) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kNotAllowedError,
+        "JS profiling is disabled by Document Policy.");
+    return ScriptPromise();
+  }
 
   if (!execution_context->CrossOriginIsolatedCapability()) {
     exception_state.ThrowSecurityError(

@@ -73,9 +73,7 @@ const uint32 kWebSocketOptionBlockThirdPartyCookies = 2;
 // The browser can provide a CustomProxyConfig to a CustomProxyConfigClient
 // running in the network service. The network service will use the given proxy
 // configuration if a request matches the proxy rules and all the other
-// criteria contained within it. This configuration allows the browser to
-// direct the network service to set headers on requests to the given proxies
-// before and/or after the caching layer.
+// criteria contained within it.
 struct CustomProxyConfig {
   // The custom proxy rules to use. Note that ftp:// requests are not
   // supported.
@@ -95,6 +93,21 @@ struct CustomProxyConfig {
   // to the CONNECT request. Headers here will overwrite matching headers on
   // the CONNECT request if a custom proxy is used.
   HttpRequestHeaders connect_tunnel_headers;
+};
+
+// Observer of custom proxy connections, especially for when errors occur.
+interface CustomProxyConnectionObserver {
+  // Called when use of |bad_proxy| fails due to |net_error|. |net_error| is the
+  // network error encountered, if any, and OK if the fallback was for a reason
+  // other than a network error (e.g. the proxy service was explicitly directed
+  // to skip a proxy).
+  OnFallback(proxy_resolver.mojom.ProxyServer bad_proxy, int32 net_error);
+
+  // Called when the response headers for the proxy tunnel request have been
+  // received.
+  OnTunnelHeadersReceived(
+      proxy_resolver.mojom.ProxyServer proxy_server,
+      HttpResponseHeaders response_headers);
 };
 
 // Parameters to specify how the net::CertVerifier and net::CertVerifyProc
@@ -334,6 +347,12 @@ struct NetworkContextParams {
   CustomProxyConfig? initial_custom_proxy_config;
   pending_receiver<CustomProxyConfigClient>?
       custom_proxy_config_client_receiver;
+
+  // If |initial_custom_proxy_config| or |custom_proxy_config_client_receiver|
+  // is set, information about custom proxy connections will be reported to this
+  // observer.
+  pending_remote<CustomProxyConnectionObserver>?
+      custom_proxy_connection_observer_remote;
 
   // If |proxy_config_client_request| is non-null, this is called during
   // periods of network activity, and can be used as a signal for polling-based
@@ -697,6 +716,10 @@ struct URLLoaderFactoryParams {
   // trusted source, it would be good to set this depending on the headers'
   // values, too.
   TrustTokenRedemptionPolicy trust_token_redemption_policy = kPotentiallyPermit;
+
+  // TODO(lukasza): https://crbug.com/1151008: Consider removing this
+  // diagnostic aid once the bug is understood.
+  string debug_tag = "";
 };
 
 // The |credentials| output parameter is given to URLRequest::SetAuth()
@@ -884,12 +907,14 @@ interface NetworkContext {
   // Gets a RestrictedCookieManager scoped to a given origin, and applying
   // settings configured on the CookieManager associated with this domain.
   //
-  // |site_for_cookies| represents which domains (perhaps none) the cookie
-  // manager should consider to be first-party, for purposes of SameSite cookies
-  // and any third-party cookie blocking the embedder may implement.
+  // |origin| represents the domain for which the RestrictedCookieManager can
+  // access cookies. It could either be a frame origin when |role| is
+  // RestrictedCookieManagerRole::SCRIPT (a script scoped to a particular
+  // document's frame)), or a request origin when |role| is
+  // RestrictedCookieManagerRole::NETWORK (a network request).
   //
-  // |top_frame_origin| represents the domain for top-level frame, and can be
-  // used to look up preferences that are dependent on that.
+  // |isolation_info| contains info for SameSite and SameParty cookie queries.
+  // Must be fully populated.
   //
   // If |role| == SCRIPT, this interface can be safely handed out to a process
   // that is known to represent the given origin, such as a renderer process.
@@ -900,8 +925,7 @@ interface NetworkContext {
       pending_receiver<RestrictedCookieManager> restricted_cookie_manager,
       RestrictedCookieManagerRole role,
       url.mojom.Origin origin,
-      SiteForCookies site_for_cookies,
-      url.mojom.Origin top_frame_origin,
+      IsolationInfo isolation_info,
       pending_remote<CookieAccessObserver>? cookie_observer);
 
   // Provides a HasTrustTokensAnswerer scoped to the given top-frame origin
@@ -927,6 +951,10 @@ interface NetworkContext {
   //
   // A null |filter| indicates that all Trust Tokens data should be cleared.
   ClearTrustTokenData(ClearDataFilter? filter) => ();
+
+  // Returns the number of signed-but-not-spent Trust Tokens.
+  GetStoredTrustTokenCounts()
+      => (array<StoredTrustTokensForIssuer> tokens);
 
   // Clears network objects with implicit URL history information. Data related
   // to events that happened prior to |start_time| and after |end_time| may be

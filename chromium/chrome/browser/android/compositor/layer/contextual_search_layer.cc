@@ -41,7 +41,6 @@ void ContextualSearchLayer::SetProperties(
     int search_bar_shadow_resource_id,
     int search_provider_icon_resource_id,
     int quick_action_icon_resource_id,
-    int arrow_up_resource_id,
     int drag_handlebar_resource_id,
     int open_tab_icon_resource_id,
     int close_icon_resource_id,
@@ -83,18 +82,11 @@ void ContextualSearchLayer::SetProperties(
     int bar_image_size,
     int icon_color,
     int drag_handlebar_color,
-    float arrow_icon_opacity,
-    float arrow_icon_rotation,
     float close_icon_opacity,
     bool progress_bar_visible,
     float progress_bar_height,
     float progress_bar_opacity,
     float progress_bar_completion,
-    float divider_line_visibility_percentage,
-    float divider_line_width,
-    float divider_line_height,
-    int divider_line_color,
-    float divider_line_x_offset,
     bool touch_highlight_visible,
     float touch_highlight_x_offset,
     float touch_highlight_width,
@@ -235,45 +227,6 @@ void ContextualSearchLayer::SetProperties(
                      search_term_caption_spacing);
 
   // ---------------------------------------------------------------------------
-  // Arrow Icon.  Deprecated -- old layout only.
-  // ---------------------------------------------------------------------------
-  // Grabs the arrow icon resource.
-  ui::Resource* arrow_icon_resource =
-      resource_manager_->GetStaticResourceWithTint(arrow_up_resource_id,
-                                                   icon_color);
-
-  // Positions the icon at the end of the bar.
-  float arrow_icon_left;
-  if (is_rtl) {
-    arrow_icon_left = search_bar_margin_side;
-  } else {
-    arrow_icon_left = search_panel_width - arrow_icon_resource->size().width() -
-                      search_bar_margin_side;
-  }
-
-  // Centers the Arrow Icon vertically in the bar.
-  float arrow_icon_top = search_bar_top + search_bar_height / 2 -
-                         arrow_icon_resource->size().height() / 2;
-
-  arrow_icon_->SetUIResourceId(arrow_icon_resource->ui_resource()->id());
-  arrow_icon_->SetBounds(arrow_icon_resource->size());
-  arrow_icon_->SetPosition(
-      gfx::PointF(arrow_icon_left, arrow_icon_top));
-  arrow_icon_->SetOpacity(arrow_icon_opacity);
-
-  gfx::Transform transform;
-  if (arrow_icon_rotation != 0.f) {
-    // Apply rotation about the center of the icon.
-    float pivot_x = floor(arrow_icon_resource->size().width() / 2);
-    float pivot_y = floor(arrow_icon_resource->size().height() / 2);
-    gfx::PointF pivot_origin(pivot_x, pivot_y);
-    transform.Translate(pivot_origin.x(), pivot_origin.y());
-    transform.RotateAboutZAxis(arrow_icon_rotation);
-    transform.Translate(-pivot_origin.x(), -pivot_origin.y());
-  }
-  arrow_icon_->SetTransform(transform);
-
-  // ---------------------------------------------------------------------------
   // Search Promo
   // ---------------------------------------------------------------------------
   if (search_promo_visible) {
@@ -322,30 +275,6 @@ void ContextualSearchLayer::SetProperties(
       progress_bar_background_resource_id, progress_bar_resource_id,
       progress_bar_visible, search_bar_bottom, progress_bar_height,
       progress_bar_opacity, progress_bar_completion, search_panel_width);
-
-  // ---------------------------------------------------------------------------
-  // Divider Line separator.  Deprecated -- old layout only.
-  // ---------------------------------------------------------------------------
-  if (divider_line_visibility_percentage > 0.f) {
-    if (divider_line_->parent() != layer_)
-      layer_->AddChild(divider_line_);
-
-    // The divider line animates in from the bottom.
-    float divider_line_y_offset =
-        ((search_bar_height - divider_line_height) / 2) +
-        (divider_line_height * (1.f - divider_line_visibility_percentage));
-    divider_line_->SetPosition(gfx::PointF(divider_line_x_offset,
-                                           divider_line_y_offset));
-
-    // The divider line should not draw below its final resting place.
-    // Set bounds to restrict the vertical draw position.
-    divider_line_->SetBounds(
-        gfx::Size(divider_line_width,
-                  divider_line_height * divider_line_visibility_percentage));
-    divider_line_->SetBackgroundColor(divider_line_color);
-  } else if (divider_line_->parent()) {
-    divider_line_->RemoveFromParent();
-  }
 
   // ---------------------------------------------------------------------------
   // Touch Highlight Layer
@@ -690,7 +619,6 @@ ContextualSearchLayer::ContextualSearchLayer(
       search_provider_icon_layer_(cc::UIResourceLayer::Create()),
       thumbnail_layer_(cc::UIResourceLayer::Create()),
       quick_action_icon_layer_(cc::UIResourceLayer::Create()),
-      arrow_icon_(cc::UIResourceLayer::Create()),
       search_promo_(cc::UIResourceLayer::Create()),
       search_promo_container_(cc::SolidColorLayer::Create()),
       bar_banner_container_(cc::SolidColorLayer::Create()),
@@ -698,7 +626,6 @@ ContextualSearchLayer::ContextualSearchLayer(
       bar_banner_text_(cc::UIResourceLayer::Create()),
       search_caption_(cc::UIResourceLayer::Create()),
       text_layer_(cc::UIResourceLayer::Create()),
-      divider_line_(cc::SolidColorLayer::Create()),
       touch_highlight_layer_(cc::SolidColorLayer::Create()) {
   // Search Bar Banner
   bar_banner_container_->SetIsDrawable(true);
@@ -714,10 +641,6 @@ ContextualSearchLayer::ContextualSearchLayer(
 
   // Search Bar Caption
   search_caption_->SetIsDrawable(true);
-
-  // Arrow Icon
-  arrow_icon_->SetIsDrawable(true);
-  layer_->AddChild(arrow_icon_);
 
   // Search Opt Out Promo
   search_promo_container_->SetIsDrawable(true);
@@ -736,9 +659,6 @@ ContextualSearchLayer::ContextualSearchLayer(
 
   // Quick action icon
   quick_action_icon_layer_->SetIsDrawable(true);
-
-  // Divider line
-  divider_line_->SetIsDrawable(true);
 
   // Content layer
   text_layer_->SetIsDrawable(true);

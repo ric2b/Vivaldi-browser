@@ -32,10 +32,10 @@
 #include "components/variations/net/variations_url_loader_throttle.h"
 #include "content/child/child_thread_impl.h"
 #include "content/common/frame.mojom.h"
+#include "content/common/net/ip_address_space_util.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/navigation_policy.h"
-#include "content/public/renderer/request_peer.h"
 #include "content/renderer/loader/resource_dispatcher.h"
 #include "content/renderer/variations_render_thread_observer.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -55,7 +55,7 @@
 #include "net/ssl/ssl_connection_status_flags.h"
 #include "net/ssl/ssl_info.h"
 #include "services/network/public/cpp/http_raw_request_response_info.h"
-#include "services/network/public/cpp/ip_address_space_util.h"
+#include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/mojom/ip_address_space.mojom-shared.h"
 #include "services/network/public/mojom/trust_tokens.mojom-shared.h"
@@ -63,7 +63,6 @@
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/loader/mime_sniffing_throttle.h"
-#include "third_party/blink/public/common/loader/network_utils.h"
 #include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/common/loader/referrer_utils.h"
 #include "third_party/blink/public/common/loader/resource_type_util.h"
@@ -71,6 +70,7 @@
 #include "third_party/blink/public/common/security/security_style.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/blob/blob_registry.mojom.h"
+#include "third_party/blink/public/mojom/frame/frame.mojom.h"
 #include "third_party/blink/public/platform/file_path_conversion.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/resource_load_info_notifier_wrapper.h"
@@ -78,6 +78,7 @@
 #include "third_party/blink/public/platform/sync_load_response.h"
 #include "third_party/blink/public/platform/url_conversion.h"
 #include "third_party/blink/public/platform/web_http_load_info.h"
+#include "third_party/blink/public/platform/web_request_peer.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/web_url_error.h"
@@ -123,6 +124,7 @@ network::mojom::LoadTimingInfo ToMojoLoadTiming(
       load_timing.proxy_resolve_start, load_timing.proxy_resolve_end,
       load_timing.connect_timing, load_timing.send_start, load_timing.send_end,
       load_timing.receive_headers_start, load_timing.receive_headers_end,
+      load_timing.receive_non_informational_headers_start,
       load_timing.first_early_hints_time, load_timing.push_start,
       load_timing.push_end, load_timing.service_worker_start_time,
       load_timing.service_worker_ready_time,
@@ -196,7 +198,7 @@ void SetSecurityStyleAndDetails(const GURL& url,
   if (!url.SchemeIsCryptographic()) {
     // Some origins are considered secure even though they're not cryptographic,
     // so treat them as secure in the UI.
-    if (blink::network_utils::IsOriginSecure(url))
+    if (network::IsUrlPotentiallyTrustworthy(url))
       response->SetSecurityStyle(blink::SecurityStyle::kSecure);
     else
       response->SetSecurityStyle(blink::SecurityStyle::kInsecure);
@@ -320,8 +322,8 @@ bool IsBannedCrossSiteAuth(
     // If the first party is secure but the subresource is not, this is
     // mixed-content. Do not allow the image.
     if (!allow_cross_origin_auth_prompt &&
-        blink::network_utils::IsOriginSecure(first_party.RepresentativeUrl()) &&
-        !blink::network_utils::IsOriginSecure(request_url)) {
+        network::IsUrlPotentiallyTrustworthy(first_party.RepresentativeUrl()) &&
+        !network::IsUrlPotentiallyTrustworthy(request_url)) {
       return true;
     }
     return false;
@@ -348,13 +350,12 @@ std::unique_ptr<blink::WebURLLoader> WebURLLoaderFactoryImpl::CreateURLLoader(
     std::unique_ptr<WebResourceLoadingTaskRunnerHandle>
         freezable_task_runner_handle,
     std::unique_ptr<WebResourceLoadingTaskRunnerHandle>
-        unfreezable_task_runner_handle) {
+        unfreezable_task_runner_handle,
+    blink::CrossVariantMojoRemote<blink::mojom::KeepAliveHandleInterfaceBase>
+        keep_alive_handle) {
   DCHECK(freezable_task_runner_handle);
   DCHECK(unfreezable_task_runner_handle);
   DCHECK(resource_dispatcher_);
-  // This default implementation does not support KeepAlive.
-  mojo::PendingRemote<mojom::KeepAliveHandle> keep_alive_handle =
-      mojo::NullRemote();
   return std::make_unique<WebURLLoaderImpl>(
       resource_dispatcher_.get(), std::move(freezable_task_runner_handle),
       std::move(unfreezable_task_runner_handle), loader_factory_,
@@ -373,7 +374,7 @@ class WebURLLoaderImpl::Context : public base::RefCounted<Context> {
           std::unique_ptr<WebResourceLoadingTaskRunnerHandle>
               unfreezable_task_runner_handle,
           scoped_refptr<network::SharedURLLoaderFactory> factory,
-          mojo::PendingRemote<mojom::KeepAliveHandle> keep_alive_handle);
+          mojo::PendingRemote<blink::mojom::KeepAliveHandle> keep_alive_handle);
 
   ResourceDispatcher* resource_dispatcher() { return resource_dispatcher_; }
   int request_id() const { return request_id_; }
@@ -411,6 +412,8 @@ class WebURLLoaderImpl::Context : public base::RefCounted<Context> {
   void OnReceivedCachedMetadata(mojo_base::BigBuffer data);
   void OnCompletedRequest(const network::URLLoaderCompletionStatus& status);
   void EvictFromBackForwardCache(blink::mojom::RendererEvictionReason);
+  void DidBufferLoadWhileInBackForwardCache(size_t num_bytes);
+  bool CanContinueBufferingWhileInBackForwardCache();
 
  private:
   friend class base::RefCounted<Context>;
@@ -455,7 +458,7 @@ class WebURLLoaderImpl::Context : public base::RefCounted<Context> {
       unfreezable_task_runner_handle_;
   scoped_refptr<base::SingleThreadTaskRunner> freezable_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> unfreezable_task_runner_;
-  mojo::PendingRemote<mojom::KeepAliveHandle> keep_alive_handle_;
+  mojo::PendingRemote<blink::mojom::KeepAliveHandle> keep_alive_handle_;
   blink::WebURLLoader::DeferType defers_loading_;
   int request_id_;
   bool in_two_phase_read_ = false;
@@ -469,11 +472,11 @@ class WebURLLoaderImpl::Context : public base::RefCounted<Context> {
 // A thin wrapper class for Context to ensure its lifetime while it is
 // handling IPC messages coming from ResourceDispatcher. Owns one ref to
 // Context and held by ResourceDispatcher.
-class WebURLLoaderImpl::RequestPeerImpl : public RequestPeer {
+class WebURLLoaderImpl::RequestPeerImpl : public blink::WebRequestPeer {
  public:
   explicit RequestPeerImpl(Context* context);
 
-  // RequestPeer methods:
+  // blink::WebRequestPeer methods:
   void OnUploadProgress(uint64_t position, uint64_t size) override;
   bool OnReceivedRedirect(const net::RedirectInfo& redirect_info,
                           network::mojom::URLResponseHeadPtr head,
@@ -486,6 +489,8 @@ class WebURLLoaderImpl::RequestPeerImpl : public RequestPeer {
   void OnCompletedRequest(
       const network::URLLoaderCompletionStatus& status) override;
   void EvictFromBackForwardCache(blink::mojom::RendererEvictionReason) override;
+  void DidBufferLoadWhileInBackForwardCache(size_t num_bytes) override;
+  bool CanContinueBufferingWhileInBackForwardCache() override;
 
  private:
   scoped_refptr<Context> context_;
@@ -505,7 +510,7 @@ WebURLLoaderImpl::Context::Context(
     std::unique_ptr<WebResourceLoadingTaskRunnerHandle>
         unfreezable_task_runner_handle,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-    mojo::PendingRemote<mojom::KeepAliveHandle> keep_alive_handle)
+    mojo::PendingRemote<blink::mojom::KeepAliveHandle> keep_alive_handle)
     : loader_(loader),
       report_raw_headers_(false),
       client_(nullptr),
@@ -613,10 +618,6 @@ void WebURLLoaderImpl::Context::Start(
     request->corb_detachable = true;
   }
 
-  if (resource_type == blink::mojom::ResourceType::kPluginResource) {
-    request->corb_excluded = true;
-  }
-
   auto throttles =
       url_request_extra_data->TakeURLLoaderThrottles().ReleaseVector();
   // The frame request blocker is only for a frame's subresources.
@@ -659,9 +660,6 @@ void WebURLLoaderImpl::Context::Start(
 
   TRACE_EVENT_WITH_FLOW0("loading", "WebURLLoaderImpl::Context::Start", this,
                          TRACE_EVENT_FLAG_FLOW_OUT);
-  // If we use freezable_task_runner_, we won't call
-  // URLLoaderClientImpl::OnStartLoadingResponseBody until after bfcache
-  // restore. Is this OK?
   request_id_ = resource_dispatcher_->StartAsync(
       std::move(request), requestor_id, unfreezable_task_runner_,
       GetTrafficAnnotationTag(resource_type), loader_options, std::move(peer),
@@ -843,6 +841,16 @@ void WebURLLoaderImpl::RequestPeerImpl::EvictFromBackForwardCache(
   context_->EvictFromBackForwardCache(reason);
 }
 
+void WebURLLoaderImpl::RequestPeerImpl::DidBufferLoadWhileInBackForwardCache(
+    size_t num_bytes) {
+  context_->DidBufferLoadWhileInBackForwardCache(num_bytes);
+}
+
+bool WebURLLoaderImpl::RequestPeerImpl::
+    CanContinueBufferingWhileInBackForwardCache() {
+  return context_->CanContinueBufferingWhileInBackForwardCache();
+}
+
 // WebURLLoaderImpl -----------------------------------------------------------
 
 WebURLLoaderImpl::WebURLLoaderImpl(
@@ -852,7 +860,7 @@ WebURLLoaderImpl::WebURLLoaderImpl(
     std::unique_ptr<WebResourceLoadingTaskRunnerHandle>
         unfreezable_task_runner_handle,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-    mojo::PendingRemote<mojom::KeepAliveHandle> keep_alive_handle)
+    mojo::PendingRemote<blink::mojom::KeepAliveHandle> keep_alive_handle)
     : context_(new Context(this,
                            resource_dispatcher,
                            std::move(freezable_task_runner_handle),
@@ -901,22 +909,19 @@ void WebURLLoaderImpl::PopulateURLResponse(
           ? blink::WebString::FromUTF8(head.cache_storage_cache_name)
           : blink::WebString());
 
+  blink::WebVector<blink::WebString> dns_aliases(head.dns_aliases.size());
+  std::transform(
+      head.dns_aliases.begin(), head.dns_aliases.end(), dns_aliases.begin(),
+      [](const std::string& h) { return blink::WebString::FromASCII(h); });
+  response->SetDnsAliases(dns_aliases);
   response->SetRemoteIPEndpoint(head.remote_endpoint);
-
   // This computation can only be done once SetUrlListViaServiceWorker() has
   // been called on |response|, so that ResponseUrl() returns the correct
   // answer.
   //
   // Implements: https://wicg.github.io/cors-rfc1918/#integration-html
-  //
-  // TODO(crbug.com/955213): Just copy the address space in |head| once it is
-  // made available.
-  if (response->ResponseUrl().ProtocolIs("file")) {
-    response->SetAddressSpace(network::mojom::IPAddressSpace::kLocal);
-  } else {
-    response->SetAddressSpace(
-        network::IPAddressToIPAddressSpace(head.remote_endpoint.address()));
-  }
+  response->SetAddressSpace(CalculateResourceAddressSpace(
+      response->ResponseUrl(), head.remote_endpoint.address()));
 
   blink::WebVector<blink::WebString> cors_exposed_header_names(
       head.cors_exposed_header_names.size());
@@ -1021,7 +1026,8 @@ WebURLError WebURLLoaderImpl::PopulateURLError(
 
   if (status.trust_token_operation_status !=
       network::mojom::TrustTokenOperationStatus::kOk) {
-    DCHECK(status.error_code == net::ERR_TRUST_TOKEN_OPERATION_CACHE_HIT ||
+    DCHECK(status.error_code ==
+               net::ERR_TRUST_TOKEN_OPERATION_SUCCESS_WITHOUT_SENDING_REQUEST ||
            status.error_code == net::ERR_TRUST_TOKEN_OPERATION_FAILED)
         << "Unexpected error code on Trust Token operation failure (or cache "
            "hit): "
@@ -1258,6 +1264,15 @@ void WebURLLoaderImpl::Context::AppendVariationsThrottles(
 void WebURLLoaderImpl::Context::EvictFromBackForwardCache(
     blink::mojom::RendererEvictionReason reason) {
   client()->EvictFromBackForwardCache(reason);
+}
+
+void WebURLLoaderImpl::Context::DidBufferLoadWhileInBackForwardCache(
+    size_t num_bytes) {
+  client()->DidBufferLoadWhileInBackForwardCache(num_bytes);
+}
+
+bool WebURLLoaderImpl::Context::CanContinueBufferingWhileInBackForwardCache() {
+  return client()->CanContinueBufferingWhileInBackForwardCache();
 }
 
 }  // namespace content

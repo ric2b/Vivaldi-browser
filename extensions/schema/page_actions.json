@@ -108,7 +108,19 @@
         "name": "onScriptsChanged",
         "type": "function",
         "description": "Fired when new scripts have been found in a page action directory or when some scripts were modified or deleted"
+      },
+      {
+        "name": "onOverridesChanged",
+        "type": "function",
+        "description": "Fired when something (usually a call to setScriptOverrideForTab) caused script overrides to change",
+        "parameters": [
+          {
+            "name": "tab_id",
+            "type": "integer"
+          }
+        ]
       }
+
     ]
   }
 ]

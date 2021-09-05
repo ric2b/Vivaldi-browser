@@ -22,6 +22,7 @@ namespace blink {
 
 class ImageBitmap;
 class ExceptionState;
+class ExecutionContext;
 class ScriptPromise;
 class ScriptState;
 class VideoFrameInit;
@@ -32,15 +33,18 @@ class MODULES_EXPORT VideoFrame final : public ScriptWrappable,
 
  public:
   // Creates a VideoFrame with a new VideoFrameHandle wrapping |frame|.
-  explicit VideoFrame(scoped_refptr<media::VideoFrame> frame);
+  VideoFrame(scoped_refptr<media::VideoFrame> frame, ExecutionContext*);
 
   // Creates a VideoFrame from an existing handle.
   // All frames sharing |handle| will have their |handle_| invalidated if any of
-  // the frames receives a call to destroy().
+  // the frames receives a call to close().
   explicit VideoFrame(scoped_refptr<VideoFrameHandle> handle);
 
   // video_frame.idl implementation.
-  static VideoFrame* Create(ImageBitmap*, VideoFrameInit*, ExceptionState&);
+  static VideoFrame* Create(ScriptState*,
+                            ImageBitmap*,
+                            VideoFrameInit*,
+                            ExceptionState&);
 
   String format() const;
   base::Optional<HeapVector<Member<Plane>>> planes();
@@ -61,12 +65,16 @@ class MODULES_EXPORT VideoFrame final : public ScriptWrappable,
 
   // Invalidates |handle_|, releasing underlying media::VideoFrame references.
   // This effectively "destroys" all frames sharing the same Handle.
-  void destroy();
+  void close();
 
-  // Creates a copy of |this|, with a new Handle, referencing the same
-  // media::VideoFrame. The cloned frame will not be destroyed when |this| is,
+  // DEPRECATED. Alias for close().
+  void destroy(ExecutionContext*);
+
+  // Creates a clone of |this|, with a new Handle, referencing the same
+  // media::VideoFrame. The cloned frame will not be closed when |this| is,
   // and its lifetime should be independently managed.
-  VideoFrame* clone(ExceptionState&);
+  VideoFrame* clone(ScriptState*, ExceptionState&);
+  VideoFrame* CloneFromNative(ExecutionContext*);
 
   ScriptPromise createImageBitmap(ScriptState*,
                                   const ImageBitmapOptions*,
@@ -87,7 +95,6 @@ class MODULES_EXPORT VideoFrame final : public ScriptWrappable,
   // ImageBitmapSource implementation
   static constexpr uint64_t kCpuEfficientFrameSize = 320u * 240u;
   IntSize BitmapSourceSize() const override;
-  bool preferAcceleratedImageBitmap() const;
   ScriptPromise CreateImageBitmap(ScriptState*,
                                   base::Optional<IntRect> crop_rect,
                                   const ImageBitmapOptions*,

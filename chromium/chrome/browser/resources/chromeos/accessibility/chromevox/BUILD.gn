@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/features.gni")
 import(
     "//chrome/browser/resources/chromeos/accessibility/common/run_jsbundler.gni")
@@ -25,9 +26,13 @@ chromevox_modules = [
   "../common/automation_predicate.js",
   "../common/automation_util.js",
   "../common/constants.js",
+  "../common/cursors/cursor.js",
+  "../common/cursors/range.js",
+  "../common/cursors/recovery_strategy.js",
   "../common/event_generator.js",
   "../common/key_code.js",
   "../common/instance_checker.js",
+  "../common/string_util.js",
   "../common/tree_walker.js",
   "background/annotation/node_identifier.js",
   "background/annotation/user_annotation_handler.js",
@@ -42,12 +47,13 @@ chromevox_modules = [
   "background/classic_background.js",
   "background/color.js",
   "background/command_handler.js",
-  "background/cursors.js",
   "background/custom_automation_event.js",
   "background/desktop_automation_handler.js",
   "background/download_handler.js",
   "background/earcon_engine.js",
-  "background/editing.js",
+  "background/editing/editable_line.js",
+  "background/editing/editing.js",
+  "background/editing/intent_handler.js",
   "background/event_source.js",
   "background/find_handler.js",
   "background/focus_automation_handler.js",
@@ -74,7 +80,6 @@ chromevox_modules = [
   "background/phonetic_data.js",
   "background/prefs.js",
   "background/range_automation_handler.js",
-  "background/recovery_strategy.js",
   "background/smart_sticky_mode.js",
   "background/tabs_api_handler.js",
   "background/user_action_monitor.js",
@@ -106,7 +111,6 @@ chromevox_modules = [
   "common/msgs.js",
   "common/nav_description.js",
   "common/spannable.js",
-  "common/string_util.js",
   "common/tts_background.js",
   "common/tts_base.js",
   "common/tts_interface.js",
@@ -330,7 +334,7 @@ if (chromevox_compress_js) {
   }
 }
 
-if (is_chromeos) {
+if (is_chromeos_ash) {
   source_set("browser_tests") {
     testonly = true
     assert(enable_extensions)
@@ -447,16 +451,15 @@ if (is_chromeos) {
       "background/background_test.js",
       "background/braille_command_data_test.js",
       "background/color_test.js",
-      "background/cursors_test.js",
       "background/download_handler_test.js",
-      "background/editing_test.js",
+      "background/editing/editing_test.js",
+      "background/editing/intent_handler_test.js",
       "background/keyboard_handler_test.js",
       "background/live_regions_test.js",
       "background/locale_output_helper_test.js",
       "background/logging/log_store_test.js",
       "background/output_test.js",
       "background/portals_test.js",
-      "background/recovery_strategy_test.js",
       "background/settings_test.js",
       "background/smart_sticky_mode_test.js",
       "background/user_action_monitor_test.js",
@@ -468,6 +471,7 @@ if (is_chromeos) {
       "options/options_test.js",
       "panel/i_search_test.js",
       "panel/panel_test.js",
+      "panel/panel_test_base.js",
       "panel/tutorial_test.js",
     ]
     gen_include_files = [

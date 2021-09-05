@@ -12,8 +12,10 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/autofill/content/common/mojom/autofill_driver.mojom-forward.h"
 #include "components/autofill/core/common/password_generation_util.h"
 #include "components/autofill/core/common/renderer_id.h"
@@ -51,7 +53,7 @@ class TouchToFillController;
 #include "chrome/browser/ui/passwords/account_storage_auth_helper.h"
 #endif
 
-#if defined(OS_ANDROID) || defined(OS_CHROMEOS)
+#if defined(OS_ANDROID) || BUILDFLAG(IS_CHROMEOS_ASH)
 #include "components/password_manager/core/browser/sync_credentials_filter.h"
 #else
 #include "chrome/browser/password_manager/multi_profile_credentials_filter.h"
@@ -138,7 +140,7 @@ class ChromePasswordManagerClient
   void UpdateCredentialCache(
       const url::Origin& origin,
       const std::vector<const password_manager::PasswordForm*>& best_matches,
-      bool is_blacklisted) override;
+      bool is_blocklisted) override;
   void AutomaticPasswordSave(
       std::unique_ptr<password_manager::PasswordFormManagerForUI>
           saved_form_manager) override;
@@ -172,6 +174,7 @@ class ChromePasswordManagerClient
   net::CertStatus GetMainFrameCertStatus() const override;
   void PromptUserToEnableAutosignin() override;
   bool IsIncognito() const override;
+  profile_metrics::BrowserProfileType GetProfileType() const override;
   const password_manager::PasswordManager* GetPasswordManager() const override;
   using password_manager::PasswordManagerClient::GetPasswordFeatureManager;
   const password_manager::PasswordFeatureManager* GetPasswordFeatureManager()
@@ -185,30 +188,24 @@ class ChromePasswordManagerClient
       const override;
   const autofill::LogManager* GetLogManager() const override;
   void AnnotateNavigationEntry(bool has_password_field) override;
-  std::string GetPageLanguage() const override;
+  autofill::LanguageCode GetPageLanguage() const override;
 
-#if defined(ON_FOCUS_PING_ENABLED) || defined(PASSWORD_REUSE_DETECTION_ENABLED)
   safe_browsing::PasswordProtectionService* GetPasswordProtectionService()
       const override;
-#endif
 
 #if defined(ON_FOCUS_PING_ENABLED)
   void CheckSafeBrowsingReputation(const GURL& form_action,
                                    const GURL& frame_url) override;
 #endif
 
-#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
   void CheckProtectedPasswordEntry(
       password_manager::metrics_util::PasswordType reused_password_type,
       const std::string& username,
       const std::vector<password_manager::MatchingReusedCredential>&
           matching_reused_credentials,
       bool password_field_exists) override;
-#endif
 
-#if defined(PASSWORD_REUSE_WARNING_ENABLED)
   void LogPasswordReuseDetectedEvent() override;
-#endif
 
   ukm::SourceId GetUkmSourceId() override;
   password_manager::PasswordManagerMetricsRecorder* GetMetricsRecorder()
@@ -346,11 +343,8 @@ class ChromePasswordManagerClient
   password_manager::PasswordManager password_manager_;
   password_manager::PasswordFeatureManagerImpl password_feature_manager_;
   password_manager::HttpAuthManagerImpl httpauth_manager_;
-
-#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
   password_manager::PasswordReuseDetectionManager
       password_reuse_detection_manager_;
-#endif
 
 #if defined(OS_ANDROID)
   // Holds and facilitates a credential store for each origin in this tab.
@@ -396,7 +390,7 @@ class ChromePasswordManagerClient
   // point.
   BooleanPrefMember saving_passwords_enabled_;
 
-#if defined(OS_CHROMEOS) || defined(OS_ANDROID)
+#if BUILDFLAG(IS_CHROMEOS_ASH) || defined(OS_ANDROID)
   // ChromeOS and Android don't support multiple profiles
   const password_manager::SyncCredentialsFilter credentials_filter_;
 #else
@@ -425,6 +419,11 @@ class ChromePasswordManagerClient
   // Helper for performing logic that is common between
   // ChromePasswordManagerClient and IOSChromePasswordManagerClient.
   password_manager::PasswordManagerClientHelper helper_;
+
+  // This is added as a workaround for an issue inside OnPaste(). Please don't
+  // just use the WeakPtrs returned from this factory blindly, but make a
+  // informed decision after carefully considering the involved lifetimes.
+  base::WeakPtrFactory<ChromePasswordManagerClient> weak_ptr_factory_{this};
 
   WEB_CONTENTS_USER_DATA_KEY_DECL();
 

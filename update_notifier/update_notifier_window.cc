@@ -145,9 +145,12 @@ void UpdateNotifierWindow::ShowNotification(const std::string& version) {
                         l10n_util::GetStringFUTF16(IDS_UPDATE_NOTIFICATION_TEXT,
                                                    base::UTF8ToUTF16(version)));
   notify_icon.uTimeout = 30000;
+  int message_id = UpdateNotifierManager::IsSilentDownload()
+                       ? IDS_UPDATE_DOWNLOAD_NOTIFICATION_TITLE
+                       : IDS_UPDATE_NOTIFICATION_TITLE;
   SetNotificationString(
       notify_icon.szInfoTitle, base::size(notify_icon.szInfoTitle),
-      l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_TITLE));
+      l10n_util::GetStringUTF16(message_id));
   Shell_NotifyIcon(NIM_MODIFY, &notify_icon);
 }
 

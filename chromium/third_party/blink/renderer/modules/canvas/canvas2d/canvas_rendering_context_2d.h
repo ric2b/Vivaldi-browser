@@ -131,6 +131,7 @@ class MODULES_EXPORT CanvasRenderingContext2D final
   void setTextRendering(const String&);
 
   void setFontKerning(const String&);
+  void setFontStretch(const String&);
   void setFontVariantCaps(const String&);
 
   void fillText(const String& text, double x, double y);
@@ -210,13 +211,16 @@ class MODULES_EXPORT CanvasRenderingContext2D final
 
   void Trace(Visitor*) const override;
 
-  ImageData* getImageData(int sx,
-                          int sy,
-                          int sw,
-                          int sh,
-                          ExceptionState&) override;
+  ImageData* getImageDataInternal(int sx,
+                                  int sy,
+                                  int sw,
+                                  int sh,
+                                  ImageDataSettings*,
+                                  ExceptionState&) final;
 
-  CanvasColorParams ColorParamsForTest() const { return ColorParams(); }
+  CanvasColorParams ColorParamsForTest() const {
+    return GetCanvas2DColorParams();
+  }
 
   IdentifiableToken IdentifiableTextToken() const override {
     return identifiability_study_helper_.GetToken();
@@ -231,7 +235,7 @@ class MODULES_EXPORT CanvasRenderingContext2D final
   }
 
  protected:
-  CanvasColorParams ColorParams() const override;
+  CanvasColorParams GetCanvas2DColorParams() const override;
   bool WritePixels(const SkImageInfo& orig_info,
                    const void* pixels,
                    size_t row_bytes,
@@ -267,14 +271,14 @@ class MODULES_EXPORT CanvasRenderingContext2D final
     return CanvasRenderingContext::kContext2D;
   }
 
-  String ColorSpaceAsString() const override;
-  CanvasPixelFormat PixelFormat() const override;
-
   bool IsRenderingContext2D() const override { return true; }
   bool IsComposited() const override;
   bool IsAccelerated() const override;
   bool IsOriginTopLeft() const override;
   bool HasAlpha() const override { return CreationAttributes().alpha; }
+  bool IsDesynchronized() const override {
+    return CreationAttributes().desynchronized;
+  }
   void SetIsInHiddenPage(bool) override;
   void SetIsBeingDisplayed(bool) override;
   void Stop() final;

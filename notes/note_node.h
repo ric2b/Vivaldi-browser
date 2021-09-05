@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/guid.h"
 #include "base/strings/string16.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/time/time.h"
@@ -37,7 +38,7 @@ class NoteNode : public ui::TreeNode<NoteNode> {
   static const char kOtherNotesNodeGuid[];
   static const char kTrashNodeGuid[];
 
-  NoteNode(int64_t id, const std::string& guid, Type type);
+  NoteNode(int64_t id, const base::GUID& guid, Type type);
   ~NoteNode() override;
 
   // Returns true if the node is a NotePermanentNode (which does not include
@@ -58,11 +59,11 @@ class NoteNode : public ui::TreeNode<NoteNode> {
   int64_t id() const { return id_; }
   void set_id(int64_t id) { id_ = id; }
 
-  // Returns the GUID for this node.
+  // Returns this node's GUID, which is guaranteed to be valid.
   // For note nodes that are managed by the notes model, the GUIDs are
   // persisted across sessions and stable throughout the lifetime of the
   // note.
-  const std::string& guid() const { return guid_; }
+  const base::GUID& guid() const { return guid_; }
 
   // Get the creation time for the node.
   base::Time GetCreationTime() const { return creation_time_; }
@@ -98,7 +99,7 @@ class NoteNode : public ui::TreeNode<NoteNode> {
 
  protected:
   NoteNode(int64_t id,
-           const std::string& guid,
+           const base::GUID& guid,
            Type type,
            bool is_permanent_node);
 
@@ -119,7 +120,7 @@ class NoteNode : public ui::TreeNode<NoteNode> {
   // The GUID for this node. A NoteNode GUID is immutable and differs from
   // the |id_| in that it is consistent across different clients and
   // stable throughout the lifetime of the bookmark.
-  const std::string guid_;
+  const base::GUID guid_;
 
   // The unique identifier for this node.
   int64_t id_;
@@ -146,7 +147,7 @@ class PermanentNoteNode : public NoteNode {
   // other than the well-known ones, see factory methods.
   PermanentNoteNode(int64_t id,
                     Type type,
-                    const std::string& guid,
+                    const base::GUID& guid,
                     const base::string16& title);
   DISALLOW_COPY_AND_ASSIGN(PermanentNoteNode);
 };

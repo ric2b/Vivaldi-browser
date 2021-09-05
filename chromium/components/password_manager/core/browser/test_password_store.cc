@@ -12,7 +12,7 @@
 #include "base/notreached.h"
 #include "base/stl_util.h"
 #include "base/threading/sequenced_task_runner_handle.h"
-#include "components/password_manager/core/browser/compromised_credentials_table.h"
+#include "components/password_manager/core/browser/insecure_credentials_table.h"
 #include "components/password_manager/core/browser/login_database.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/psl_matching_helper.h"
@@ -263,7 +263,7 @@ bool TestPasswordStore::FillAutofillableLogins(
   return true;
 }
 
-bool TestPasswordStore::FillBlacklistLogins(
+bool TestPasswordStore::FillBlocklistLogins(
     std::vector<std::unique_ptr<PasswordForm>>* forms) {
   for (const auto& forms_for_realm : stored_passwords_) {
     for (const PasswordForm& form : forms_for_realm.second) {
@@ -331,15 +331,24 @@ std::vector<InteractionsStats> TestPasswordStore::GetAllSiteStatsImpl() {
   return std::vector<InteractionsStats>();
 }
 
-bool TestPasswordStore::AddCompromisedCredentialsImpl(
+PasswordStoreChangeList TestPasswordStore::AddCompromisedCredentialsImpl(
     const CompromisedCredentials& compromised_credentials) {
   CompromisedCredentials cred = compromised_credentials;
   cred.in_store = IsAccountStore() ? PasswordForm::Store::kAccountStore
                                    : PasswordForm::Store::kProfileStore;
-  return compromised_credentials_.insert(std::move(cred)).second;
+  if (!compromised_credentials_.insert(std::move(cred)).second)
+    return {};
+
+  PasswordStoreChangeList changes;
+  for (const auto& form :
+       stored_passwords_[compromised_credentials.signon_realm]) {
+    if (form.username_value == compromised_credentials.username)
+      changes.emplace_back(PasswordStoreChange::UPDATE, form);
+  }
+  return changes;
 }
 
-bool TestPasswordStore::RemoveCompromisedCredentialsImpl(
+PasswordStoreChangeList TestPasswordStore::RemoveCompromisedCredentialsImpl(
     const std::string& signon_realm,
     const base::string16& username,
     RemoveCompromisedCredentialsReason reason) {
@@ -349,21 +358,15 @@ bool TestPasswordStore::RemoveCompromisedCredentialsImpl(
            credential.username == username;
   });
 
-  return old_size != compromised_credentials_.size();
-}
+  if (old_size == compromised_credentials_.size())
+    return {};
 
-bool TestPasswordStore::RemoveCompromisedCredentialsByCompromiseTypeImpl(
-    const std::string& signon_realm,
-    const base::string16& username,
-    const CompromiseType& compromise_type,
-    RemoveCompromisedCredentialsReason reason) {
-  const size_t old_size = compromised_credentials_.size();
-  base::EraseIf(compromised_credentials_, [&](const auto& credential) {
-    return credential.signon_realm == signon_realm &&
-           credential.username == username &&
-           credential.compromise_type == compromise_type;
-  });
-  return old_size != compromised_credentials_.size();
+  PasswordStoreChangeList changes;
+  for (const auto& form : stored_passwords_[signon_realm]) {
+    if (form.username_value == username)
+      changes.emplace_back(PasswordStoreChange::UPDATE, form);
+  }
+  return changes;
 }
 
 std::vector<CompromisedCredentials>
@@ -382,20 +385,6 @@ TestPasswordStore::GetMatchingCompromisedCredentialsImpl(
                  return credential.signon_realm == signon_realm;
                });
   return result;
-}
-
-bool TestPasswordStore::RemoveCompromisedCredentialsByUrlAndTimeImpl(
-    const base::RepeatingCallback<bool(const GURL&)>& url_filter,
-    base::Time remove_begin,
-    base::Time remove_end) {
-  const size_t old_size = compromised_credentials_.size();
-  base::EraseIf(compromised_credentials_, [&](const auto& credential) {
-    return remove_begin <= credential.create_time &&
-           credential.create_time < remove_end &&
-           (!url_filter || url_filter.Run(GURL(credential.signon_realm)));
-  });
-
-  return old_size != compromised_credentials_.size();
 }
 
 void TestPasswordStore::AddFieldInfoImpl(const FieldInfo& field_info) {
@@ -434,6 +423,12 @@ FormRetrievalResult TestPasswordStore::ReadAllLogins(
   // just leave it not implemented.
   NOTIMPLEMENTED();
   return FormRetrievalResult::kDbError;
+}
+
+std::vector<CompromisedCredentials> TestPasswordStore::ReadSecurityIssues(
+    FormPrimaryKey parent_key) {
+  NOTIMPLEMENTED();
+  return std::vector<CompromisedCredentials>();
 }
 
 PasswordStoreChangeList TestPasswordStore::RemoveLoginByPrimaryKeySync(

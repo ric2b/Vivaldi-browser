@@ -56,9 +56,6 @@ void WriteIpcMessageIdAsProtozero(uint32_t message_id,
     case ChromotingMsgStart:
       message_class = ChromeLegacyIpc::CLASS_CHROMOTING;
       break;
-    case AndroidWebViewMsgStart:
-      message_class = ChromeLegacyIpc::CLASS_ANDROID_WEB_VIEW;
-      break;
     case NaClHostMsgStart:
       message_class = ChromeLegacyIpc::CLASS_NACL_HOST;
       break;
@@ -82,9 +79,6 @@ void WriteIpcMessageIdAsProtozero(uint32_t message_id,
       break;
     case ExtensionWorkerMsgStart:
       message_class = ChromeLegacyIpc::CLASS_EXTENSION_WORKER;
-      break;
-    case UnfreezableFrameMsgStart:
-      message_class = ChromeLegacyIpc::CLASS_UNFREEZABLE_FRAME;
       break;
   }
   legacy_ipc->set_message_class(message_class);

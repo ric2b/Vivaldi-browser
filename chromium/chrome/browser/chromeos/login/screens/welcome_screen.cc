@@ -9,9 +9,9 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/containers/contains.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/stl_util.h"
 #include "base/time/default_tick_clock.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
@@ -33,6 +33,8 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/constants/chromeos_features.h"
+#include "chromeos/constants/chromeos_switches.h"
 #include "components/language/core/browser/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
@@ -72,6 +74,13 @@ constexpr const char kUserActionDisableVirtualKeyboard[] =
 constexpr const char kUserActionSetupDemoMode[] = "setupDemoMode";
 constexpr const char kUserActionSetupDemoModeGesture[] = "setupDemoModeGesture";
 constexpr const char kUserActionEnableDebugging[] = "enableDebugging";
+constexpr const char kUserActionActivateChromeVoxFromHint[] =
+    "activateChromeVoxFromHint";
+constexpr const char kUserActionDismissChromeVoxHint[] = "dismissChromeVoxHint";
+constexpr const char kUserActionCancelChromeVoxHint[] = "cancelChromeVoxHint";
+
+constexpr base::TimeDelta kChromeVoxHintTimerDuration =
+    base::TimeDelta::FromSeconds(20);
 
 struct WelcomeScreenA11yUserAction {
   const char* name_;
@@ -200,11 +209,12 @@ void WelcomeScreen::SetApplicationLocaleAndInputMethod(
 
   // Block UI while resource bundle is being reloaded.
   // (InputEventsBlocker will live until callback is finished.)
-  locale_util::SwitchLanguageCallback callback(base::Bind(
+  locale_util::SwitchLanguageCallback callback(base::BindOnce(
       &WelcomeScreen::OnLanguageChangedCallback, weak_factory_.GetWeakPtr(),
       base::Owned(new chromeos::InputEventsBlocker), input_method));
   locale_util::SwitchLanguage(locale, true /* enableLocaleKeyboardLayouts */,
-                              true /* login_layouts_only */, callback,
+                              true /* login_layouts_only */,
+                              std::move(callback),
                               ProfileManager::GetActiveUserProfile());
 }
 
@@ -226,11 +236,12 @@ void WelcomeScreen::SetApplicationLocale(const std::string& locale) {
 
   // Block UI while resource bundle is being reloaded.
   // (InputEventsBlocker will live until callback is finished.)
-  locale_util::SwitchLanguageCallback callback(base::Bind(
+  locale_util::SwitchLanguageCallback callback(base::BindOnce(
       &WelcomeScreen::OnLanguageChangedCallback, weak_factory_.GetWeakPtr(),
       base::Owned(new chromeos::InputEventsBlocker), std::string()));
   locale_util::SwitchLanguage(locale, true /* enableLocaleKeyboardLayouts */,
-                              true /* login_layouts_only */, callback,
+                              true /* login_layouts_only */,
+                              std::move(callback),
                               ProfileManager::GetActiveUserProfile());
 }
 
@@ -325,6 +336,7 @@ void WelcomeScreen::ShowImpl() {
       base::DefaultTickClock::GetInstance(), this);
   if (view_) {
     view_->Show();
+    StartChromeVoxHintTimer();
   }
 }
 
@@ -351,6 +363,20 @@ void WelcomeScreen::OnUserAction(const std::string& action_id) {
     HandleAccelerator(ash::LoginAcceleratorAction::kStartDemoMode);
     return;
   }
+  if (action_id == kUserActionActivateChromeVoxFromHint) {
+    base::UmaHistogramBoolean("OOBE.WelcomeScreen.AcceptChromeVoxHint", true);
+    AccessibilityManager::Get()->EnableSpokenFeedback(true);
+    return;
+  }
+  if (action_id == kUserActionDismissChromeVoxHint) {
+    base::UmaHistogramBoolean("OOBE.WelcomeScreen.AcceptChromeVoxHint", false);
+    return;
+  }
+  if (action_id == kUserActionCancelChromeVoxHint) {
+    CancelChromeVoxHintTimer();
+    return;
+  }
+
   if (IsA11yUserAction(action_id)) {
     RecordA11yUserAction(action_id);
     if (action_id == kUserActionEnableSpokenFeedback) {
@@ -445,6 +471,7 @@ void WelcomeScreen::InputMethodChanged(
 
 void WelcomeScreen::OnContinueButtonPressed() {
   demo_mode_detector_.reset();
+  CancelChromeVoxHintTimer();
   exit_callback_.Run(Result::NEXT);
 }
 
@@ -487,9 +514,9 @@ void WelcomeScreen::ScheduleResolveLanguageList(
   // Cancel pending requests.
   weak_factory_.InvalidateWeakPtrs();
 
-  UILanguageListResolvedCallback callback = base::Bind(
-      &WelcomeScreen::OnLanguageListResolved, weak_factory_.GetWeakPtr());
-  ResolveUILanguageList(std::move(language_switch_result), callback);
+  ResolveUILanguageList(std::move(language_switch_result),
+                        base::BindOnce(&WelcomeScreen::OnLanguageListResolved,
+                                       weak_factory_.GetWeakPtr()));
 }
 
 void WelcomeScreen::OnLanguageListResolved(
@@ -512,6 +539,35 @@ void WelcomeScreen::OnLanguageListResolved(
 
 void WelcomeScreen::NotifyLocaleChange() {
   ash::LocaleUpdateController::Get()->OnLocaleChanged();
+}
+
+void WelcomeScreen::StartChromeVoxHintTimer() {
+  if (!features::IsOobeChromeVoxHintEnabled() ||
+      chromeos::switches::IsOOBEChromeVoxHintTimerDisabledForTesting()) {
+    return;
+  }
+
+  if (chromevox_hint_timer_activated_)
+    return;
+
+  // This timer should only be started once.
+  chromevox_hint_timer_activated_ = true;
+  chromevox_hint_timer_.Start(FROM_HERE, kChromeVoxHintTimerDuration, this,
+                              &WelcomeScreen::GiveChromeVoxHint);
+}
+
+void WelcomeScreen::CancelChromeVoxHintTimer() {
+  chromevox_hint_timer_.Stop();
+  chromevox_hint_timer_cancelled_for_testing_ = true;
+}
+
+void WelcomeScreen::GiveChromeVoxHint() {
+  if (view_)
+    view_->GiveChromeVoxHint();
+}
+
+void WelcomeScreen::GiveChromeVoxHintForTesting() {
+  GiveChromeVoxHint();
 }
 
 }  // namespace chromeos

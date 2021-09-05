@@ -18,4 +18,10 @@ specific_include_rules = {
     "+ash/system/status_area_widget.h",
     "+ash/system/unified/unified_system_tray.h",
   ],
+  "speech_monitor\.(cc|h)": [
+    "+content/public/browser/tts_controller.h",
+  ],
+  "accessibility_live_site_browsertest\.cc": [
+    "+ash/shell.h",
+  ],
 }

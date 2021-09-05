@@ -70,16 +70,6 @@ class RuleService : public KeyedService {
   virtual bool IsRuleGroupEnabled(RuleGroup group) const = 0;
   virtual void SetRuleGroupEnabled(RuleGroup group, bool enabled) = 0;
 
-  // Adds a rules source from the given URL. Returns the ID attributed to it or
-  // nothing if the same rule source was already added.
-  virtual base::Optional<uint32_t> AddRulesFromURL(RuleGroup group,
-                                                   const GURL& url) = 0;
-  // Adds a rules source from the given file. Returns the ID attributed to it or
-  // nothing if the same rule source was already added.
-  virtual base::Optional<uint32_t> AddRulesFromFile(
-      RuleGroup group,
-      const base::FilePath& file) = 0;
-
   // Returns the rule source matching the given ID, if it is an existing ID.
   virtual base::Optional<RuleSource> GetRuleSource(RuleGroup group,
                                                    uint32_t source_id) = 0;
@@ -89,9 +79,6 @@ class RuleService : public KeyedService {
   // Triggers an immediate fetching of a rule source instead of waiting for its
   // next update time.
   virtual bool FetchRuleSourceNow(RuleGroup group, uint32_t source_id) = 0;
-
-  // Removes a rule source.
-  virtual void DeleteRuleSource(RuleGroup group, uint32_t source_id) = 0;
 
   virtual void SetActiveExceptionList(RuleGroup group, ExceptionsList list) = 0;
   virtual ExceptionsList GetActiveExceptionList(RuleGroup group) const = 0;

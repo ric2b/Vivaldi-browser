@@ -33,8 +33,8 @@ class TtsEngineExtensionObserverChromeOS
 
   Profile* profile() { return profile_; }
 
-  void BindTtsStream(
-      mojo::PendingReceiver<chromeos::tts::mojom::TtsStream> receiver);
+  void BindTtsStreamFactory(
+      mojo::PendingReceiver<chromeos::tts::mojom::TtsStreamFactory> receiver);
 
   // Implementation of KeyedService.
   void Shutdown() override;
@@ -66,8 +66,7 @@ class TtsEngineExtensionObserverChromeOS
 
   std::set<std::string> engine_extension_ids_;
 
-  std::unique_ptr<chromeos::AccessibilityStatusSubscription>
-      accessibility_status_subscription_;
+  base::CallbackListSubscription accessibility_status_subscription_;
 
   mojo::Remote<chromeos::tts::mojom::TtsService> tts_service_;
 

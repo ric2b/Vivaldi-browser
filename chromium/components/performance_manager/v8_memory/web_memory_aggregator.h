@@ -5,42 +5,150 @@
 #ifndef COMPONENTS_PERFORMANCE_MANAGER_V8_MEMORY_WEB_MEMORY_AGGREGATOR_H_
 #define COMPONENTS_PERFORMANCE_MANAGER_V8_MEMORY_WEB_MEMORY_AGGREGATOR_H_
 
-#include <memory>
+#include <string>
 
-#include "base/callback.h"
+#include "base/optional.h"
+#include "base/sequence_checker.h"
 #include "components/performance_manager/public/mojom/web_memory.mojom.h"
-#include "components/performance_manager/public/v8_memory/v8_detailed_memory.h"
-#include "third_party/blink/public/common/tokens/tokens.h"
+#include "url/origin.h"
 
 namespace performance_manager {
 
-class ProcessNode;
+class FrameNode;
+class PageNode;
+class WorkerNode;
 
 namespace v8_memory {
 
-// A helper class for implementing WebMeasureMemory().
+// Traverses the graph of execution contexts to find the results of the last
+// memory measurement and aggregates them according to the rules defined in the
+// performance.measureUserAgentSpecificMemory spec.
+// (See public/v8_memory/web_memory.h for the link and spec version.)
 class WebMemoryAggregator {
  public:
-  using MeasurementCallback =
-      base::OnceCallback<void(mojom::WebMemoryMeasurementPtr)>;
-
-  WebMemoryAggregator(const blink::LocalFrameToken&,
-                      V8DetailedMemoryRequest::MeasurementMode,
-                      MeasurementCallback);
-
+  // Constructs an aggregator for the results of a memory request from
+  // |requesting_node|. This expects the caller to check if |requesting_node|
+  // is allowed to measure memory according to the spec.
+  //
+  // The aggregation is performed by calling AggregateMemoryResult. The graph
+  // traversal will not start directly from |requesting_node|, but from the
+  // highest node in the frame tree that is visible to it as found by
+  // FindAggregationStartNode. (This allows a same-origin subframe to request
+  // memory for the whole page it's embedded in.)
+  explicit WebMemoryAggregator(const FrameNode* requesting_node);
   ~WebMemoryAggregator();
 
-  V8DetailedMemoryRequestOneShot* request() const { return request_.get(); }
+  WebMemoryAggregator(const WebMemoryAggregator& other) = delete;
+  WebMemoryAggregator& operator=(const WebMemoryAggregator& other) = delete;
 
-  // A callback for V8DetailedMemoryRequestOneShot.
-  void MeasurementComplete(const ProcessNode*,
-                           const V8DetailedMemoryProcessData*);
+  // The various ways a node can be treated during the aggregation.
+  enum class NodeAggregationType {
+    // Node is same-origin to |requesting_node|; will be a new aggregation
+    // point with scope "Window".
+    kSameOriginAggregationPoint,
+    // Node is cross-origin with |requesting_node| but its parent is not; will
+    // be a new aggregation point with scope
+    // "cross-origin-aggregated".
+    kCrossOriginAggregationPoint,
+    // Node is cross-origin with |requesting_node| and so is its parent; will
+    // be aggregated into its parent's aggregation point.
+    kCrossOriginAggregated,
+    // Node is in a different browsing context group; will not be added to the
+    // aggregation.
+    kInvisible,
+  };
+
+  // Returns the origin of |requesting_node|.
+  const url::Origin& requesting_origin() const { return requesting_origin_; }
+
+  // Returns the way that |frame_node| should be treated during the
+  // aggregation.  |aggregation_start_node_| must be reachable from
+  // |frame_node| by following parent/child or opener links. This will always
+  // be true if |frame_node| comes from a call to VisitFrame.
+  NodeAggregationType FindNodeAggregationType(const FrameNode* frame_node);
+  // Returns the aggregation type of a dedicated worker node based on its
+  // parent's aggregation type.
+  NodeAggregationType FindNodeAggregationType(
+      const WorkerNode* worker_node,
+      NodeAggregationType parent_aggregation_type);
+
+  // Performs the aggregation.
+  mojom::WebMemoryMeasurementPtr AggregateMeasureMemoryResult();
 
  private:
-  blink::LocalFrameToken frame_token_;
-  MeasurementCallback callback_;
-  std::unique_ptr<V8DetailedMemoryRequestOneShot> request_;
+  // FrameNodeVisitor that recursively adds |frame_node| and its children to
+  // the aggregation. |enclosing_aggregation_point| is the aggregation point
+  // that |frame_node|'s parent or opener is in. Always returns true to
+  // continue traversal.
+  bool VisitFrame(mojom::WebMemoryBreakdownEntry* enclosing_aggregation_point,
+                  const FrameNode* frame_node);
+
+  // WorkerNodeVisitor that recursively adds |worker_node| and its children to
+  // the aggregation. |enclosing_aggregation_point| is the aggregation point
+  // that |worker_node|'s parent is in. Similarly |enclosing_aggregation_type|
+  // is the aggregation type of the parent.
+  // Always returns true to continue traversal.
+  bool VisitWorker(mojom::WebMemoryBreakdownEntry* enclosing_aggregation_point,
+                   NodeAggregationType enclosing_aggregation_type,
+                   const WorkerNode* worker_node);
+
+  // PageNodeVisitor that recursively adds |page_node|'s main frames and their
+  // children to the aggregation. |enclosing_aggregation_point| is the
+  // aggregation point that |page_node|'s opener is in. Always returns true to
+  // continue traversal.
+  bool VisitOpenedPage(
+      mojom::WebMemoryBreakdownEntry* enclosing_aggregation_point,
+      const PageNode* page_node);
+
+  // The origin of |requesting_node|. Cached so it doesn't have to be
+  // recalculated in each call to VisitFrame.
+  const url::Origin requesting_origin_;
+
+  // The node that the graph traversal should start from, found from
+  // |requesting_node| using FindAggregationStartNode.
+  const FrameNode* aggregation_start_node_;
+
+  // Stores the result of the aggregation. This is populated by
+  // AggregateMeasureMemoryResult.
+  mojom::WebMemoryMeasurementPtr aggregation_result_
+      GUARDED_BY_CONTEXT(sequence_checker_);
+
+  SEQUENCE_CHECKER(sequence_checker_);
 };
+
+namespace internal {
+
+// These functions are used in the implementation and exposed in the header for
+// testing.
+
+// Returns |frame_node|'s parent or opener if the parent or opener is
+// same-origin with |origin|, nullptr otherwise.
+const FrameNode* GetSameOriginParentOrOpener(const FrameNode* frame_node,
+                                             const url::Origin& origin);
+
+// Walks back the chain of parents and openers from |requesting_node| to find
+// the farthest ancestor that should be visible to it (all intermediate nodes
+// in the chain are same-origin).
+const FrameNode* FindAggregationStartNode(const FrameNode* requesting_node);
+
+// Creates a new breakdown entry with the given |scope| and |url|, and adds it
+// to the list in |measurement|. Returns a pointer to the newly created entry.
+mojom::WebMemoryBreakdownEntry* CreateBreakdownEntry(
+    mojom::WebMemoryAttribution::Scope scope,
+    base::Optional<std::string> url,
+    mojom::WebMemoryMeasurement* measurement);
+
+// Sets the id and src attributes of |breakdown| using those stored in the
+// V8ContextTracker for the given |frame_node|.
+void SetBreakdownAttributionFromFrame(
+    const FrameNode* frame_node,
+    mojom::WebMemoryBreakdownEntry* breakdown);
+
+// Copies the id and src attributes from |from| to |to|.
+void CopyBreakdownAttribution(const mojom::WebMemoryBreakdownEntry* from,
+                              mojom::WebMemoryBreakdownEntry* to);
+
+}  // namespace internal
 
 }  // namespace v8_memory
 

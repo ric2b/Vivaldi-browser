@@ -41,13 +41,12 @@ ASH_PUBLIC_EXPORT extern const char kAccessibilityFloatingMenuPosition[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityFocusHighlightEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilitySelectToSpeakEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilitySwitchAccessEnabled[];
-ASH_PUBLIC_EXPORT extern const char kAccessibilitySwitchAccessSelectKeyCodes[];
-ASH_PUBLIC_EXPORT extern const char kAccessibilitySwitchAccessSelectSetting[];
-ASH_PUBLIC_EXPORT extern const char kAccessibilitySwitchAccessNextKeyCodes[];
-ASH_PUBLIC_EXPORT extern const char kAccessibilitySwitchAccessNextSetting[];
 ASH_PUBLIC_EXPORT extern const char
-    kAccessibilitySwitchAccessPreviousKeyCodes[];
-ASH_PUBLIC_EXPORT extern const char kAccessibilitySwitchAccessPreviousSetting[];
+    kAccessibilitySwitchAccessSelectDeviceKeyCodes[];
+ASH_PUBLIC_EXPORT extern const char
+    kAccessibilitySwitchAccessNextDeviceKeyCodes[];
+ASH_PUBLIC_EXPORT extern const char
+    kAccessibilitySwitchAccessPreviousDeviceKeyCodes[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilitySwitchAccessAutoScanEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilitySwitchAccessAutoScanSpeedMs[];
 ASH_PUBLIC_EXPORT extern const char
@@ -55,7 +54,10 @@ ASH_PUBLIC_EXPORT extern const char
 ASH_PUBLIC_EXPORT extern const char
     kAccessibilityTabletModeShelfNavigationButtonsEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityDictationEnabled[];
+ASH_PUBLIC_EXPORT extern const char kLiveCaptionEnabled[];
 ASH_PUBLIC_EXPORT extern const char kShouldAlwaysShowAccessibilityMenu[];
+
+ASH_PUBLIC_EXPORT extern const char kAltTabPerDesk[];
 
 ASH_PUBLIC_EXPORT extern const char kContextualTooltips[];
 
@@ -194,9 +196,6 @@ ASH_PUBLIC_EXPORT extern const char kBatteryChargeCustomStartCharging[];
 ASH_PUBLIC_EXPORT extern const char kBatteryChargeCustomStopCharging[];
 
 ASH_PUBLIC_EXPORT extern const char kUsbPowerShareEnabled[];
-
-ASH_PUBLIC_EXPORT extern const char kAssistantPrivacyInfoShownInLauncher[];
-ASH_PUBLIC_EXPORT extern const char kAssistantPrivacyInfoDismissedInLauncher[];
 
 ASH_PUBLIC_EXPORT extern const char kSuggestedContentInfoShownInLauncher[];
 ASH_PUBLIC_EXPORT extern const char kSuggestedContentInfoDismissedInLauncher[];

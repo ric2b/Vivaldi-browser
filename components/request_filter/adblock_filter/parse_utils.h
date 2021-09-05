@@ -3,12 +3,32 @@
 #ifndef COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_PARSE_UTILS_H_
 #define COMPONENTS_REQUEST_FILTER_ADBLOCK_FILTER_PARSE_UTILS_H_
 
-#include <map>
-
+#include "base/containers/fixed_flat_map.h"
 #include "base/strings/string_piece.h"
+#include "components/request_filter/adblock_filter/adblock_request_filter_rule.h"
 
 namespace adblock_filter {
-extern const std::map<base::StringPiece, int> kTypeStringMap;
+
+constexpr char kAbpSnippetsScriptletName[] = "snippets.js";
+
+constexpr auto kTypeStringMap = base::MakeFixedFlatMap<base::StringPiece, int>(
+    {{"script", RequestFilterRule::kScript},
+     {"image", RequestFilterRule::kImage},
+     {"background",
+      RequestFilterRule::kImage},  // Compat with older filter formats
+     {"stylesheet", RequestFilterRule::kStylesheet},
+     {"object", RequestFilterRule::kObject},
+     {"xmlhttprequest", RequestFilterRule::kXmlHttpRequest},
+     {"subdocument", RequestFilterRule::kSubDocument},
+     {"ping", RequestFilterRule::kPing},
+     {"websocket", RequestFilterRule::kWebSocket},
+     {"webrtc", RequestFilterRule::kWebRTC},
+     {"font", RequestFilterRule::kFont},
+     {"media", RequestFilterRule::kMedia},
+     {"other", RequestFilterRule::kOther},
+     {"xbl", RequestFilterRule::kOther},  // Compat with older filter formats
+     {"dtd", RequestFilterRule::kOther}});
+
 std::string BuildNgramSearchString(const base::StringPiece& pattern);
 }  // namespace adblock_filter
 

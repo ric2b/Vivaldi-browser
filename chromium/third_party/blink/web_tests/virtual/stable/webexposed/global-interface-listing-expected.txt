@@ -2183,6 +2183,40 @@ interface Gyroscope : Sensor
     getter y
     getter z
     method constructor
+interface HID : EventTarget
+    attribute @@toStringTag
+    getter onconnect
+    getter ondisconnect
+    method constructor
+    method getDevices
+    method requestDevice
+    setter onconnect
+    setter ondisconnect
+interface HIDConnectionEvent : Event
+    attribute @@toStringTag
+    getter device
+    method constructor
+interface HIDDevice : EventTarget
+    attribute @@toStringTag
+    getter collections
+    getter oninputreport
+    getter opened
+    getter productId
+    getter productName
+    getter vendorId
+    method close
+    method constructor
+    method open
+    method receiveFeatureReport
+    method sendFeatureReport
+    method sendReport
+    setter oninputreport
+interface HIDInputReportEvent : Event
+    attribute @@toStringTag
+    getter data
+    getter device
+    getter reportId
+    method constructor
 interface HTMLAllCollection
     attribute @@toStringTag
     getter length
@@ -2412,12 +2446,6 @@ interface HTMLCollection
     method constructor
     method item
     method namedItem
-interface HTMLContentElement : HTMLElement
-    attribute @@toStringTag
-    getter select
-    method constructor
-    method getDistributedNodes
-    setter select
 interface HTMLDListElement : HTMLElement
     attribute @@toStringTag
     getter compact
@@ -3473,10 +3501,6 @@ interface HTMLSelectElement : HTMLElement
     setter selectedIndex
     setter size
     setter value
-interface HTMLShadowElement : HTMLElement
-    attribute @@toStringTag
-    method constructor
-    method getDistributedNodes
 interface HTMLSlotElement : HTMLElement
     attribute @@toStringTag
     getter name
@@ -4316,6 +4340,7 @@ interface MediaQueryListEvent : Event
 interface MediaRecorder : EventTarget
     static method isTypeSupported
     attribute @@toStringTag
+    getter audioBitrateMode
     getter audioBitsPerSecond
     getter mimeType
     getter ondataavailable
@@ -4557,6 +4582,7 @@ interface Navigator
     getter doNotTrack
     getter geolocation
     getter hardwareConcurrency
+    getter hid
     getter keyboard
     getter language
     getter languages
@@ -4574,6 +4600,7 @@ interface Navigator
     getter product
     getter productSub
     getter scheduling
+    getter serial
     getter serviceWorker
     getter storage
     getter usb
@@ -4582,6 +4609,7 @@ interface Navigator
     getter vendor
     getter vendorSub
     getter wakeLock
+    getter webdriver
     getter webkitPersistentStorage
     getter webkitTemporaryStorage
     getter xr
@@ -4992,6 +5020,7 @@ interface Performance : EventTarget
     method getEntriesByType
     method mark
     method measure
+    method measureUserAgentSpecificMemory
     method now
     method setResourceTimingBufferSize
     method toJSON
@@ -5622,6 +5651,14 @@ interface Range
     method setStartBefore
     method surroundContents
     method toString
+interface ReadableByteStreamController
+    attribute @@toStringTag
+    getter byobRequest
+    getter desiredSize
+    method close
+    method constructor
+    method enqueue
+    method error
 interface ReadableStream
     attribute @@toStringTag
     getter locked
@@ -5631,6 +5668,26 @@ interface ReadableStream
     method pipeThrough
     method pipeTo
     method tee
+interface ReadableStreamBYOBReader
+    attribute @@toStringTag
+    getter closed
+    method cancel
+    method constructor
+    method read
+    method releaseLock
+interface ReadableStreamBYOBRequest
+    attribute @@toStringTag
+    getter view
+    method constructor
+    method respond
+    method respondWithNewView
+interface ReadableStreamDefaultController
+    attribute @@toStringTag
+    getter desiredSize
+    method close
+    method constructor
+    method enqueue
+    method error
 interface ReadableStreamDefaultReader
     attribute @@toStringTag
     getter closed
@@ -6945,6 +7002,29 @@ interface SensorErrorEvent : Event
     attribute @@toStringTag
     getter error
     method constructor
+interface Serial : EventTarget
+    attribute @@toStringTag
+    getter onconnect
+    getter ondisconnect
+    method constructor
+    method getPorts
+    method requestPort
+    setter onconnect
+    setter ondisconnect
+interface SerialPort : EventTarget
+    attribute @@toStringTag
+    getter onconnect
+    getter ondisconnect
+    getter readable
+    getter writable
+    method close
+    method constructor
+    method getInfo
+    method getSignals
+    method open
+    method setSignals
+    setter onconnect
+    setter ondisconnect
 interface ServiceWorker : EventTarget
     attribute @@toStringTag
     getter onerror
@@ -9325,6 +9405,9 @@ interface XRViewport
     getter width
     getter x
     getter y
+    method constructor
+interface XRWebGLBinding
+    attribute @@toStringTag
     method constructor
 interface XRWebGLLayer : XRLayer
     static method getNativeFramebufferScaleFactor

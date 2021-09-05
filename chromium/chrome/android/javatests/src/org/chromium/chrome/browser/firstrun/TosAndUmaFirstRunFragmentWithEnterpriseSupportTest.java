@@ -56,7 +56,7 @@ import org.chromium.chrome.browser.policy.EnterpriseInfo;
 import org.chromium.chrome.browser.policy.PolicyServiceFactory;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
-import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManager;
+import org.chromium.chrome.browser.privacy.settings.PrivacyPreferencesManagerImpl;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.components.policy.PolicyService;
@@ -99,7 +99,7 @@ public class TosAndUmaFirstRunFragmentWithEnterpriseSupportTest {
 
     @Rule
     public ChromeRenderTestRule mRenderTestRule =
-            ChromeRenderTestRule.Builder.withPublicCorpus().build();
+            ChromeRenderTestRule.Builder.withPublicCorpus().setRevision(1).build();
 
     @Mock
     public FirstRunAppRestrictionInfo mMockAppRestrictionInfo;
@@ -128,6 +128,7 @@ public class TosAndUmaFirstRunFragmentWithEnterpriseSupportTest {
     private View mAcceptButton;
     private View mLowerSpinner;
     private View mCenterSpinner;
+    private View mPrivacyDisclaimer;
     private CheckBox mUmaCheckBox;
 
     @Before
@@ -145,6 +146,7 @@ public class TosAndUmaFirstRunFragmentWithEnterpriseSupportTest {
         FirstRunAppRestrictionInfo.setInitializedInstanceForTest(mMockAppRestrictionInfo);
         ToSAndUMAFirstRunFragment.setShowUmaCheckBoxForTesting(true);
         PolicyServiceFactory.setPolicyServiceForTest(mPolicyService);
+        FirstRunUtils.setDisableDelayOnExitFreForTest(true);
         FirstRunUtilsJni.TEST_HOOKS.setInstanceForTesting(mFirstRunUtils);
         EnterpriseInfo.setInstanceForTest(mMockEnterpriseInfo);
 
@@ -184,7 +186,9 @@ public class TosAndUmaFirstRunFragmentWithEnterpriseSupportTest {
     public void tearDown() {
         FirstRunAppRestrictionInfo.setInitializedInstanceForTest(null);
         ToSAndUMAFirstRunFragment.setShowUmaCheckBoxForTesting(false);
+        TosAndUmaFirstRunFragmentWithEnterpriseSupport.setOverrideOnExitFreRunnableForTest(null);
         PolicyServiceFactory.setPolicyServiceForTest(null);
+        FirstRunUtils.setDisableDelayOnExitFreForTest(false);
         FirstRunUtilsJni.TEST_HOOKS.setInstanceForTesting(mFirstRunUtils);
         EnterpriseInfo.setInstanceForTest(null);
         SharedPreferencesManager.getInstance().writeBoolean(
@@ -204,15 +208,13 @@ public class TosAndUmaFirstRunFragmentWithEnterpriseSupportTest {
         assertHistograms(true, SpeedComparedToInflation.SLOWER,
                 SpeedComparedToInflation.NOT_RECORDED, SpeedComparedToInflation.NOT_RECORDED);
 
-        SharedPreferencesManager.getInstance().writeBoolean(
-                ChromePreferenceKeys.PRIVACY_METRICS_REPORTING, false);
-        Assert.assertFalse("Crash report should be disabled by shared preference.",
-                PrivacyPreferencesManager.getInstance().isUsageAndCrashReportingPermittedByUser());
 
         // Try to accept ToS.
+        setMetricsReportDisabled();
         TestThreadUtils.runOnUiThreadBlocking((Runnable) mAcceptButton::performClick);
         Assert.assertTrue("Crash report should be enabled.",
-                PrivacyPreferencesManager.getInstance().isUsageAndCrashReportingPermittedByUser());
+                PrivacyPreferencesManagerImpl.getInstance()
+                        .isUsageAndCrashReportingPermittedByUser());
     }
 
     @Test
@@ -227,21 +229,22 @@ public class TosAndUmaFirstRunFragmentWithEnterpriseSupportTest {
         assertHistograms(true, SpeedComparedToInflation.SLOWER,
                 SpeedComparedToInflation.NOT_RECORDED, SpeedComparedToInflation.NOT_RECORDED);
 
-        SharedPreferencesManager.getInstance().writeBoolean(
-                ChromePreferenceKeys.PRIVACY_METRICS_REPORTING, false);
-        Assert.assertFalse("Crash report should be disabled by shared preference.",
-                PrivacyPreferencesManager.getInstance().isUsageAndCrashReportingPermittedByUser());
-
         // Try to accept ToS.
+        setMetricsReportDisabled();
         TestThreadUtils.runOnUiThreadBlocking((Runnable) mAcceptButton::performClick);
         assertUIState(FragmentState.WAITING_UNTIL_NEXT_PAGE);
         Assert.assertFalse("Crash report should not be enabled before native initialized.",
-                PrivacyPreferencesManager.getInstance().isUsageAndCrashReportingPermittedByUser());
+                PrivacyPreferencesManagerImpl.getInstance()
+                        .isUsageAndCrashReportingPermittedByUser());
 
         // ToS should be accepted when native is initialized.
         startNativeInitializationAndWait();
+        String histogram = "MobileFre.TosFragment.SpinnerVisibleDuration";
+        Assert.assertEquals(String.format("Histogram <%s> should be recorded.", histogram), 1,
+                RecordHistogram.getHistogramTotalCountForTesting(histogram));
         Assert.assertTrue("Crash report should be enabled.",
-                PrivacyPreferencesManager.getInstance().isUsageAndCrashReportingPermittedByUser());
+                PrivacyPreferencesManagerImpl.getInstance()
+                        .isUsageAndCrashReportingPermittedByUser());
     }
 
     @Test
@@ -270,10 +273,11 @@ public class TosAndUmaFirstRunFragmentWithEnterpriseSupportTest {
         assertHistograms(true, SpeedComparedToInflation.FASTER,
                 SpeedComparedToInflation.NOT_RECORDED, SpeedComparedToInflation.SLOWER);
 
-        // Try to accept Tos.
+        // Try to accept ToS.
         TestThreadUtils.runOnUiThreadBlocking((Runnable) mAcceptButton::performClick);
         Assert.assertTrue("Crash report should be enabled.",
-                PrivacyPreferencesManager.getInstance().isUsageAndCrashReportingPermittedByUser());
+                PrivacyPreferencesManagerImpl.getInstance()
+                        .isUsageAndCrashReportingPermittedByUser());
     }
 
     @Test
@@ -302,16 +306,38 @@ public class TosAndUmaFirstRunFragmentWithEnterpriseSupportTest {
 
         assertHistograms(true, SpeedComparedToInflation.FASTER, SpeedComparedToInflation.SLOWER,
                 SpeedComparedToInflation.NOT_RECORDED);
-
-        // Try to accept Tos.
-        TestThreadUtils.runOnUiThreadBlocking((Runnable) mAcceptButton::performClick);
-        Assert.assertTrue("Crash report should be enabled.",
-                PrivacyPreferencesManager.getInstance().isUsageAndCrashReportingPermittedByUser());
     }
 
     @Test
     @SmallTest
-    public void testNotOwnedDevice_beforeInflation() {
+    public void testNotOwnedDevice_AcceptBeforePolicy() {
+        setAppRestrictionsMockInitialized(true);
+        launchFirstRunThroughCustomTab();
+        assertUIState(FragmentState.LOADING);
+
+        setEnterpriseInfoInitializedWithDeviceOwner(false);
+        assertUIState(FragmentState.NO_POLICY);
+
+        // Try to accept Tos.
+        setMetricsReportDisabled();
+        TestThreadUtils.runOnUiThreadBlocking((Runnable) mAcceptButton::performClick);
+        assertUIState(FragmentState.WAITING_UNTIL_NEXT_PAGE);
+
+        setPolicyServiceMockInitializedWithDialogEnabled(false);
+        CriteriaHelper.pollUiThread(()
+                                            -> PrivacyPreferencesManagerImpl.getInstance()
+                                                       .isUsageAndCrashReportingPermittedByUser());
+        String histogram = "MobileFre.TosFragment.SpinnerVisibleDuration";
+        Assert.assertEquals(String.format("Histogram <%s> should be recorded.", histogram), 1,
+                RecordHistogram.getHistogramTotalCountForTesting(histogram));
+
+        assertHistograms(true, SpeedComparedToInflation.FASTER, SpeedComparedToInflation.SLOWER,
+                SpeedComparedToInflation.SLOWER);
+    }
+
+    @Test
+    @SmallTest
+    public void testNotOwnedDevice_BeforeInflation() {
         setAppRestrictionsMockInitialized(true);
         setEnterpriseInfoInitializedWithDeviceOwner(false);
 
@@ -369,7 +395,8 @@ public class TosAndUmaFirstRunFragmentWithEnterpriseSupportTest {
         assertHistograms(true, SpeedComparedToInflation.FASTER, SpeedComparedToInflation.SLOWER,
                 SpeedComparedToInflation.SLOWER);
         Assert.assertFalse("Crash report should not be enabled.",
-                PrivacyPreferencesManager.getInstance().isUsageAndCrashReportingPermittedByUser());
+                PrivacyPreferencesManagerImpl.getInstance()
+                        .isUsageAndCrashReportingPermittedByUser());
     }
 
     @Test
@@ -388,7 +415,8 @@ public class TosAndUmaFirstRunFragmentWithEnterpriseSupportTest {
         assertHistograms(true, SpeedComparedToInflation.FASTER, SpeedComparedToInflation.SLOWER,
                 SpeedComparedToInflation.SLOWER);
         Assert.assertFalse("Crash report should not be enabled.",
-                PrivacyPreferencesManager.getInstance().isUsageAndCrashReportingPermittedByUser());
+                PrivacyPreferencesManagerImpl.getInstance()
+                        .isUsageAndCrashReportingPermittedByUser());
     }
 
     @Test
@@ -414,7 +442,8 @@ public class TosAndUmaFirstRunFragmentWithEnterpriseSupportTest {
         assertHistograms(true, SpeedComparedToInflation.SLOWER, SpeedComparedToInflation.SLOWER,
                 SpeedComparedToInflation.SLOWER);
         Assert.assertFalse("Crash report should not be enabled.",
-                PrivacyPreferencesManager.getInstance().isUsageAndCrashReportingPermittedByUser());
+                PrivacyPreferencesManagerImpl.getInstance()
+                        .isUsageAndCrashReportingPermittedByUser());
     }
 
     @Test
@@ -449,7 +478,8 @@ public class TosAndUmaFirstRunFragmentWithEnterpriseSupportTest {
 
         mAcceptTosCallbackHelper.waitForCallback("Accept Tos is never called.", 0);
         Assert.assertFalse("Crash report should not be enabled.",
-                PrivacyPreferencesManager.getInstance().isUsageAndCrashReportingPermittedByUser());
+                PrivacyPreferencesManagerImpl.getInstance()
+                        .isUsageAndCrashReportingPermittedByUser());
     }
 
     @Test
@@ -470,6 +500,33 @@ public class TosAndUmaFirstRunFragmentWithEnterpriseSupportTest {
         setAppRestrictionsMockInitialized(false);
         assertUIState(FragmentState.NO_POLICY);
         renderWithPortraitAndLandscape(tosAndUmaFragment, "fre_tosanduma_nopolicy");
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"RenderTest", "FirstRun"})
+    public void testRenderWithPolicy() throws Exception {
+        final CallbackHelper onExitFreCallback = new CallbackHelper();
+        TosAndUmaFirstRunFragmentWithEnterpriseSupport.setOverrideOnExitFreRunnableForTest(
+                onExitFreCallback::notifyCalled);
+
+        setAppRestrictionsMockInitialized(true);
+        setEnterpriseInfoInitializedWithDeviceOwner(true);
+        launchFirstRunThroughCustomTab();
+        assertUIState(FragmentState.LOADING);
+
+        // Clear the focus on view to avoid unexpected highlight on background.
+        View tosAndUmaFragment =
+                mActivity.getSupportFragmentManager().getFragments().get(0).getView();
+        Assert.assertNotNull(tosAndUmaFragment);
+        TestThreadUtils.runOnUiThreadBlocking(tosAndUmaFragment::clearFocus);
+
+        setPolicyServiceMockInitializedWithDialogEnabled(false);
+        onExitFreCallback.waitForFirst("OnExitFreCallback is never invoked.");
+        Assert.assertEquals("Privacy disclaimer is not visible", mPrivacyDisclaimer.getVisibility(),
+                View.VISIBLE);
+
+        renderWithPortraitAndLandscape(tosAndUmaFragment, "fre_tosanduma_withpolicy");
     }
 
     private void launchFirstRunThroughCustomTab() {
@@ -511,11 +568,14 @@ public class TosAndUmaFirstRunFragmentWithEnterpriseSupportTest {
         mAcceptButton = mActivity.findViewById(R.id.terms_accept);
         mLowerSpinner = mActivity.findViewById(R.id.progress_spinner);
         mCenterSpinner = mActivity.findViewById(R.id.progress_spinner_large);
+        mPrivacyDisclaimer = mActivity.findViewById(R.id.privacy_disclaimer);
     }
 
     private void assertUIState(@FragmentState int fragmentState) {
         int tosVisibility = (fragmentState == FragmentState.NO_POLICY) ? View.VISIBLE : View.GONE;
         int spinnerVisibility = (fragmentState == FragmentState.LOADING) ? View.VISIBLE : View.GONE;
+        int privacyVisibility =
+                (fragmentState == FragmentState.HAS_POLICY) ? View.VISIBLE : View.GONE;
         int lowerSpinnerVisibility =
                 (fragmentState == FragmentState.WAITING_UNTIL_NEXT_PAGE) ? View.VISIBLE : View.GONE;
 
@@ -533,10 +593,14 @@ public class TosAndUmaFirstRunFragmentWithEnterpriseSupportTest {
                 tosVisibility, mAcceptButton.getVisibility());
         Assert.assertEquals("Visibility of lower spinner is different than the test setting.",
                 lowerSpinnerVisibility, mLowerSpinner.getVisibility());
+        Assert.assertEquals("Visibility of privacy disclaimer is different than the test setting.",
+                privacyVisibility, mPrivacyDisclaimer.getVisibility());
+
         Assert.assertTrue("Uma Check Box should be checked.", mUmaCheckBox.isChecked());
 
         int expectedExitCount = fragmentState == FragmentState.HAS_POLICY ? 1 : 0;
-        Assert.assertEquals(expectedExitCount, mExitCount);
+        CriteriaHelper.pollUiThread(
+                () -> Criteria.checkThat(mExitCount, Matchers.is(expectedExitCount)));
     }
 
     private void startNativeInitializationAndWait() {
@@ -701,6 +765,14 @@ public class TosAndUmaFirstRunFragmentWithEnterpriseSupportTest {
                 callback.onResult(ownedState);
             }
         });
+    }
+
+    private void setMetricsReportDisabled() {
+        SharedPreferencesManager.getInstance().writeBoolean(
+                ChromePreferenceKeys.PRIVACY_METRICS_REPORTING, false);
+        Assert.assertFalse("Crash report should be disabled by shared preference.",
+                PrivacyPreferencesManagerImpl.getInstance()
+                        .isUsageAndCrashReportingPermittedByUser());
     }
 
     private void renderWithPortraitAndLandscape(View tosAndUmaFragmentView, String testPrefix)

@@ -13,9 +13,9 @@
 #include "components/autofill/core/common/autofill_internals/log_message.h"
 #include "components/autofill/core/common/autofill_internals/logging_scope.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
+#include "components/autofill/core/common/autofill_switches.h"
 #include "components/autofill/core/common/autofill_tick_clock.h"
-#include "components/autofill/core/common/renderer_id.h"
-#include "components/autofill/core/common/signatures.h"
+#include "google_apis/google_api_keys.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace autofill {
@@ -42,7 +42,8 @@ AutofillField* FindAutofillFillField(const FormStructure& form,
   return nullptr;
 }
 
-// Returns true if |live_form| does not match |cached_form|.
+// Returns true if |live_form| does not match |cached_form|, assuming that
+// |live_form|'s language is |live_form_language|.
 bool CachedFormNeedsUpdate(const FormData& live_form,
                            const FormStructure& cached_form) {
   if (live_form.fields.size() != cached_form.field_count())
@@ -56,13 +57,64 @@ bool CachedFormNeedsUpdate(const FormData& live_form,
   return false;
 }
 
+std::string GetAPIKeyForUrl(version_info::Channel channel) {
+  // First look if we can get API key from command line flag.
+  const base::CommandLine& command_line =
+      *base::CommandLine::ForCurrentProcess();
+  if (command_line.HasSwitch(switches::kAutofillAPIKey))
+    return command_line.GetSwitchValueASCII(switches::kAutofillAPIKey);
+
+  // Get the API key from Chrome baked keys.
+  if (channel == version_info::Channel::STABLE)
+    return google_apis::GetAPIKey();
+  return google_apis::GetNonStableAPIKey();
+}
+
 }  // namespace
 
 using base::TimeTicks;
 
-AutofillHandler::AutofillHandler(AutofillDriver* driver,
-                                 LogManager* log_manager)
-    : driver_(driver), log_manager_(log_manager) {}
+// static
+void AutofillHandler::LogAutofillTypePredictionsAvailable(
+    LogManager* log_manager,
+    const std::vector<FormStructure*>& forms) {
+  if (VLOG_IS_ON(1)) {
+    VLOG(1) << "Parsed forms:";
+    for (FormStructure* form : forms)
+      VLOG(1) << *form;
+  }
+
+  if (!log_manager || !log_manager->IsLoggingActive())
+    return;
+
+  LogBuffer buffer;
+  for (FormStructure* form : forms)
+    buffer << *form;
+
+  log_manager->Log() << LoggingScope::kParsing << LogMessage::kParsedForms
+                     << std::move(buffer);
+}
+
+// static
+bool AutofillHandler::IsRichQueryEnabled(version_info::Channel channel) {
+  return base::FeatureList::IsEnabled(features::kAutofillRichMetadataQueries) &&
+         channel != version_info::Channel::STABLE &&
+         channel != version_info::Channel::BETA;
+}
+
+AutofillHandler::AutofillHandler(
+    AutofillDriver* driver,
+    LogManager* log_manager,
+    AutofillDownloadManagerState enable_download_manager,
+    version_info::Channel channel)
+    : driver_(driver),
+      log_manager_(log_manager),
+      is_rich_query_enabled_(IsRichQueryEnabled(channel)) {
+  if (enable_download_manager == ENABLE_AUTOFILL_DOWNLOAD_MANAGER) {
+    download_manager_ = std::make_unique<AutofillDownloadManager>(
+        driver, this, GetAPIKeyForUrl(channel), log_manager);
+  }
+}
 
 AutofillHandler::~AutofillHandler() = default;
 
@@ -73,14 +125,13 @@ void AutofillHandler::OnFormSubmitted(const FormData& form,
     OnFormSubmittedImpl(form, known_success, source);
 }
 
-void AutofillHandler::OnFormsSeen(const std::vector<FormData>& forms,
-                                  const base::TimeTicks timestamp) {
+void AutofillHandler::OnFormsSeen(const std::vector<FormData>& forms) {
   if (!IsValidFormDataVector(forms) || !driver_->RendererIsAvailable())
     return;
 
   // This should be called even forms is empty, AutofillProviderAndroid uses
   // this event to detect form submission.
-  if (!ShouldParseForms(forms, timestamp))
+  if (!ShouldParseForms(forms))
     return;
 
   if (forms.empty())
@@ -128,7 +179,56 @@ void AutofillHandler::OnFormsSeen(const std::vector<FormData>& forms,
 
   if (new_forms.empty())
     return;
-  OnFormsParsed(new_forms, timestamp);
+  OnFormsParsed(new_forms);
+}
+
+void AutofillHandler::OnFormsParsed(const std::vector<const FormData*>& forms) {
+  DCHECK(!forms.empty());
+  OnBeforeProcessParsedForms();
+
+  driver()->HandleParsedForms(forms);
+
+  std::vector<FormStructure*> non_queryable_forms;
+  std::vector<FormStructure*> queryable_forms;
+  std::set<FormType> form_types;
+  for (const FormData* form : forms) {
+    FormStructure* form_structure =
+        FindCachedFormByRendererId(form->unique_renderer_id);
+    if (!form_structure) {
+      NOTREACHED();
+      continue;
+    }
+
+    std::set<FormType> current_form_types = form_structure->GetFormTypes();
+    form_types.insert(current_form_types.begin(), current_form_types.end());
+
+    // Configure the query encoding for this form and add it to the appropriate
+    // collection of forms: queryable vs non-queryable.
+    form_structure->set_is_rich_query_enabled(is_rich_query_enabled_);
+    if (form_structure->ShouldBeQueried())
+      queryable_forms.push_back(form_structure);
+    else
+      non_queryable_forms.push_back(form_structure);
+
+    OnFormProcessed(*form, *form_structure);
+  }
+
+  if (!queryable_forms.empty() || !non_queryable_forms.empty()) {
+    OnAfterProcessParsedForms(form_types);
+  }
+
+  // Send the current type predictions to the renderer. For non-queryable forms
+  // this is all the information about them that will ever be available. The
+  // queryable forms will be updated once the field type query is complete.
+  driver()->SendAutofillTypePredictionsToRenderer(non_queryable_forms);
+  driver()->SendAutofillTypePredictionsToRenderer(queryable_forms);
+  LogAutofillTypePredictionsAvailable(log_manager_, non_queryable_forms);
+  LogAutofillTypePredictionsAvailable(log_manager_, queryable_forms);
+
+  // Query the server if at least one of the forms was parsed.
+  if (!queryable_forms.empty() && download_manager()) {
+    download_manager()->StartQueryRequest(queryable_forms);
+  }
 }
 
 void AutofillHandler::OnTextFieldDidChange(const FormData& form,
@@ -203,6 +303,7 @@ void AutofillHandler::SendFormDataToRenderer(
   driver_->SendFormDataToRenderer(query_id, action, data);
 }
 
+// Returns true if |live_form| does not match |cached_form|.
 bool AutofillHandler::GetCachedFormAndField(const FormData& form,
                                             const FormFieldData& field,
                                             FormStructure** form_structure,
@@ -240,6 +341,14 @@ bool AutofillHandler::GetCachedFormAndField(const FormData& form,
   // Find the AutofillField that corresponds to |field|.
   *autofill_field = FindAutofillFillField(**form_structure, field);
   return *autofill_field != nullptr;
+}
+
+void AutofillHandler::InitFormInteractionsUkmLogger(
+    FormInteractionsUkmLoggerFactoryCallback callback) {
+  DCHECK(callback);
+  form_interactions_ukm_logger_factory_callback_ = std::move(callback);
+  form_interactions_ukm_logger_ =
+      form_interactions_ukm_logger_factory_callback_.Run();
 }
 
 size_t AutofillHandler::FindCachedFormsBySignature(
@@ -290,7 +399,7 @@ FormStructure* AutofillHandler::ParseForm(const FormData& form,
       value_from_dynamic_change_form_ = true;
   }
 
-  form_structure->set_page_language(GetPageLanguage());
+  form_structure->set_current_page_language(GetPageLanguage());
 
   form_structure->DetermineHeuristicTypes(log_manager_);
 
@@ -309,12 +418,71 @@ FormStructure* AutofillHandler::ParseForm(const FormData& form,
   return parsed_form_structure;
 }
 
-std::string AutofillHandler::GetPageLanguage() const {
-  return std::string();
+LanguageCode AutofillHandler::GetPageLanguage() const {
+  return LanguageCode();
 }
 
 void AutofillHandler::Reset() {
   form_structures_.clear();
+  if (form_interactions_ukm_logger_factory_callback_) {
+    form_interactions_ukm_logger_ =
+        form_interactions_ukm_logger_factory_callback_.Run();
+  }
 }
+
+void AutofillHandler::OnLoadedServerPredictions(
+    std::string response,
+    const std::vector<FormSignature>& queried_form_signatures) {
+  // Get the current valid FormStructures represented by
+  // |queried_form_signatures|.
+  std::vector<FormStructure*> queried_forms;
+  queried_forms.reserve(queried_form_signatures.size());
+  for (const auto& form_signature : queried_form_signatures) {
+    FindCachedFormsBySignature(form_signature, &queried_forms);
+  }
+
+  // Each form signature in |queried_form_signatures| is supposed to be unique,
+  // and therefore appear only once. This ensures that
+  // FindCachedFormsBySignature() produces an output without duplicates in the
+  // forms.
+  // TODO(crbug/1064709): |queried_forms| could be a set data structure; their
+  // order should be irrelevant.
+  DCHECK_EQ(queried_forms.size(),
+            std::set<FormStructure*>(queried_forms.begin(), queried_forms.end())
+                .size());
+
+  // If there are no current forms corresponding to the queried signatures, drop
+  // the query response.
+  if (queried_forms.empty())
+    return;
+
+  // Parse and store the server predictions.
+  FormStructure::ParseApiQueryResponse(std::move(response), queried_forms,
+                                       queried_form_signatures,
+                                       form_interactions_ukm_logger());
+
+  // Will log quality metrics for each FormStructure based on the presence of
+  // autocomplete attributes, if available.
+  if (auto* logger = form_interactions_ukm_logger()) {
+    for (FormStructure* cur_form : queried_forms) {
+      cur_form->LogQualityMetricsBasedOnAutocomplete(logger);
+    }
+  }
+
+  // Send field type predictions to the renderer so that it can possibly
+  // annotate forms with the predicted types or add console warnings.
+  driver()->SendAutofillTypePredictionsToRenderer(queried_forms);
+
+  LogAutofillTypePredictionsAvailable(log_manager_, queried_forms);
+
+  // Forward form structures to the password generation manager to detect
+  // account creation forms.
+  driver()->PropagateAutofillPredictions(queried_forms);
+}
+
+void AutofillHandler::OnServerRequestError(
+    FormSignature form_signature,
+    AutofillDownloadManager::RequestType request_type,
+    int http_error) {}
 
 }  // namespace autofill

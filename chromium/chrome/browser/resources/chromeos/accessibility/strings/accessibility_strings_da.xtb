@@ -186,7 +186,7 @@
 <translation id="2347456970887948350">Et link</translation>
 <translation id="2365384324219615024">Du kan også trykke på Enter for at aktivere elementer. Enter kan f.eks. bruges til at indsende tekst i en formular. Tryk på Enter for at fortsætte.</translation>
 <translation id="2381733276052567791">Slå tale til eller fra</translation>
-<translation id="2390264819538553347">Tryk på Enter for at gå videre. Tryk på backspace for at gå tilbage.</translation>
+<translation id="2390264819538553347">Tryk på Enter for at gå videre. Tryk på Backspace for at gå tilbage.</translation>
 <translation id="2398579267367951220">Skriv for at søge på siden. Tryk på Enter for at gå videre til resultatet, tryk på pil op eller pil ned for at gennemse resultaterne, fortsæt med at skrive for at ændre din søgning, eller tryk på Esc for at annullere.</translation>
 <translation id="240709722712693803">Violetblå</translation>
 <translation id="2416512023405990736">Et afkrydsningsfelt uden markering</translation>
@@ -914,6 +914,7 @@
 <translation id="7810781339813764006">Næste gruppe</translation>
 <translation id="7813616274030162878">Menu for Kontaktadgang</translation>
 <translation id="7839679365527550018">Forrige ord</translation>
+<translation id="7842115774595115751">Aktivér styringselementerne til navigation</translation>
 <translation id="7846634333498149051">Tastatur</translation>
 <translation id="7851816175263618915">Nogen tegnsætning</translation>
 <translation id="7871691770940645922">Virtuelt display til blindskrift</translation>
@@ -1057,6 +1058,7 @@
 <translation id="8978496506222343566">tltip</translation>
 <translation id="8986362086234534611">Glem</translation>
 <translation id="8989104346085848538">Tryk på Ctrl-tasten for at stoppe oplæsning i ChromeVox.</translation>
+<translation id="8993737615451556423">Giver mulighed for at sænke eller øge hastigheden på oplæsningsstemmen eller sætte den på pause</translation>
 <translation id="9014206344398081366">ChromeVox-selvstudie</translation>
 <translation id="9040132695316389094">Overskrift 1</translation>
 <translation id="9061884144798498064">Vælg en 8-punkts brailletabel:</translation>

@@ -58,7 +58,8 @@ VivaldiBookmarkMenuViews::VivaldiBookmarkMenuViews(
     for (BookmarkMenuContainerEntry e: container->siblings) {
       if (e.id == node->id()) {
         SetBookmarkContainer(container, index);
-        controller_ = new BookmarkMenuController(browser, web_contents_,
+        controller_ = new BookmarkMenuController(
+            browser, GetPageNavigatorGetter(),
             GetTopLevelWidgetFromWebContents(web_contents_), node, offset,
             false);
         controller_->set_observer(this);
@@ -97,6 +98,17 @@ void VivaldiBookmarkMenuViews::BookmarkMenuControllerDeleted(
     observer_->BookmarkMenuClosed(this);
   }
   controller_ = nullptr;
+}
+
+base::RepeatingCallback<content::PageNavigator*()>
+VivaldiBookmarkMenuViews::GetPageNavigatorGetter() {
+  auto getter = [](base::WeakPtr<VivaldiBookmarkMenuViews> bookmark_bar_view)
+      -> content::PageNavigator* {
+    if (!bookmark_bar_view)
+      return nullptr;
+    return bookmark_bar_view->web_contents_;
+  };
+  return base::BindRepeating(getter, weak_ptr_factory_.GetWeakPtr());
 }
 
 

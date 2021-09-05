@@ -366,6 +366,11 @@
           "default": {"sortOrder": 1, "sortField": "manually"},
           "syncable": true
         }
+      },
+      "fetch_page_metadata": {
+        "type": "boolean",
+        "default": true,
+        "syncable": true
       }
     },
     "show_extensions_banner": {
@@ -939,6 +944,12 @@
         "type": "dictionary",
         "default": {"width": 400, "width_wide": 600, "height": 240},
         "syncable": true
+      },
+      "feeds_in_mail_panel": {
+        "description": "Are feeds shown in mail panel?",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
       }
     },
     "menu": {
@@ -1179,7 +1190,7 @@
         "default": [
           {
             "id": "format",
-            "format": 6,
+            "format": 7,
             "available": false,
             "forMailOnly": false,
             "width": -1,
@@ -1211,11 +1222,17 @@
           }, {
             "id": "tabs",
             "available": true,
-            "forMailOnly": true,
+            "forMailOnly": false,
             "width": -1,
             "resizable": false
           }, {
             "id": "mail",
+            "available": true,
+            "forMailOnly": true,
+            "width": -1,
+            "resizable": false
+          }, {
+            "id": "feeds",
             "available": true,
             "forMailOnly": true,
             "width": -1,
@@ -1394,20 +1411,8 @@
         }
       },
       "google_component_extensions": {
-        "cloud_print": {
-          "description": "Load Google cloudprint ( will die soon ).",
-          "type": "boolean",
-          "default": true,
-          "syncable": true
-        },
         "web_store": {
           "description": "Load the Google webstore app.",
-          "type": "boolean",
-          "default": true,
-          "syncable": true
-        },
-        "pdf_viewer": {
-          "description": "Load Google pdf.",
           "type": "boolean",
           "default": true,
           "syncable": true
@@ -1497,6 +1502,22 @@
         "description": "Search in English translation term of command",
         "type": "boolean",
         "default": true,
+        "syncable": true
+      },
+      "search_priority": {
+        "description": "QC search result highlight priority",
+        "type": "list",
+        "default": [
+          "CALCULATOR",
+          "NORMAL_COMMAND",
+          "KEYWORD_SEARCH",
+          "OPEN_TABS",
+          "BOOKMARK_ITEM_OR_FOLDER",
+          "NOTES_SEARCH",
+          "HISTORY",
+          "PAGE_ACTIONS",
+          "CLOSED_TABS"
+        ],
         "syncable": true
       }
     },
@@ -1629,6 +1650,16 @@
           "enum_values": {
             "always": 0,
             "hover": 1,
+            "never": 2
+          },
+          "default": "always",
+          "syncable": true
+        },
+        "titles_and_favicon_visible": {
+          "type": "enum",
+          "enum_values": {
+            "always": 0,
+            "show_title": 1,
             "never": 2
           },
           "default": "always",
@@ -1999,12 +2030,6 @@
           "description": "[DEPRECATED 2021/1] Allow tab stack renaming",
           "type": "boolean",
           "default": false,
-          "syncable": true
-        },
-        "dnd_delay": {
-          "description": "Delay before triggering tab stacking by drag & drop",
-          "type": "integer",
-          "default": 250,
           "syncable": true
         },
         "mode": {
@@ -2463,12 +2488,6 @@
           "syncable": true
         }
       },
-      "fallback_background_color": {
-        "description": "Background color shown before a webpage has been loaded.",
-        "type": "string",
-        "default": "var(--colorBgLightIntense)",
-        "syncable": true
-      },
       "allow_selection_in_links": {
         "description": "Allowing the injection of boss-select into all frames. Turning this off will disable the ability to select text inside link elements.",
         "type": "boolean",
@@ -2502,6 +2521,12 @@
         "default": true,
         "description": "Should new feeds notifications be shown",
         "syncable": false
+      },
+      "embed_youtube_attachments": {
+        "type": "boolean",
+        "default": true,
+        "description": "Should embed YouTube attachments",
+        "syncable": true
       }
     },
     "windows": {

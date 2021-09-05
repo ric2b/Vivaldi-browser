@@ -40,8 +40,6 @@ if (enable_arcore) {
 #     library files going into module if the module is executed in 64 bit.
 #   pak_deps: (Optional) Grit or repack targets of PAKs going into module.
 #   paks: (Optional) PAKs going into module.
-#   supports_isolated_split: (Optional) Whether this module can be in its own
-#     isolated split.
 # Each new module needs to add a desc to one of the lists below.
 
 # Modules shipped in Chrome Modern (Android L+).
@@ -62,9 +60,6 @@ monochrome_module_descs = chrome_modern_module_descs
 if (false) {  # AR DFM is currently disabled
   monochrome_module_descs += [ ar_module_desc ]
 }
-if (!disable_autofill_assistant_dfm) {
-  monochrome_module_descs += [ autofill_assistant_module_desc ]
-}
 if (!disable_tab_ui_dfm) {
   monochrome_module_descs += [ tab_ui_module_desc ]
 }
@@ -77,4 +72,11 @@ trichrome_module_descs = monochrome_module_descs
 # part of Monochrome.
 if (enable_chrome_module && webview_includes_weblayer) {
   monochrome_module_descs += [ weblayer_module_desc ]
+}
+
+# Add a slightly different autofill_assistant module desc for trichrome compared
+# to monochrome.
+if (!disable_autofill_assistant_dfm) {
+  monochrome_module_descs += [ autofill_assistant_module_desc ]
+  trichrome_module_descs += [ autofill_assistant_module_trichrome_desc ]
 }

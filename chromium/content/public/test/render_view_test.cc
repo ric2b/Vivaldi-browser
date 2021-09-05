@@ -200,7 +200,9 @@ class FakeWebURLLoaderFactory : public blink::WebURLLoaderFactoryForTest {
       std::unique_ptr<blink::scheduler::WebResourceLoadingTaskRunnerHandle>
           freezable_task_runner_handle,
       std::unique_ptr<blink::scheduler::WebResourceLoadingTaskRunnerHandle>
-          unfreezable_task_runner_handle) override {
+          unfreezable_task_runner_handle,
+      blink::CrossVariantMojoRemote<blink::mojom::KeepAliveHandleInterfaceBase>
+          keep_alive_handle) override {
     return std::make_unique<FakeWebURLLoader>(
         std::move(freezable_task_runner_handle),
         std::move(unfreezable_task_runner_handle));
@@ -235,21 +237,6 @@ bool GetWindowsKeyCode(char ascii_character, int* key_code) {
     default:
       return false;
   }
-}
-
-std::unique_ptr<AgentSchedulingGroup> CreateAgentSchedulingGroup(
-    RenderThread& render_thread) {
-  // Fake mojos for the AgentSchedulingGroupHost interface.
-  mojo::PendingAssociatedRemote<mojom::AgentSchedulingGroupHost>
-      agent_scheduling_group_host;
-  ignore_result(
-      agent_scheduling_group_host.InitWithNewEndpointAndPassReceiver());
-  mojo::PendingAssociatedReceiver<mojom::AgentSchedulingGroup>
-      agent_scheduling_group_receiver;
-
-  return std::make_unique<MockAgentSchedulingGroup>(
-      render_thread, std::move(agent_scheduling_group_host),
-      std::move(agent_scheduling_group_receiver));
 }
 
 }  // namespace
@@ -399,8 +386,8 @@ blink::PageState RenderViewTest::GetCurrentPageState() {
   // This returns a PageState object for the main frame, excluding subframes.
   // This could be extended to all local frames if needed by tests, but it
   // cannot include out-of-process frames.
-  auto* frame = static_cast<TestRenderFrame*>(view->GetMainRenderFrame());
-  return SingleHistoryItemToPageState(frame->current_history_item());
+  auto* frame = view->GetMainRenderFrame();
+  return frame->GetWebFrame()->CurrentHistoryItemToPageState();
 }
 
 void RenderViewTest::GoBack(const GURL& url, const blink::PageState& state) {
@@ -436,6 +423,8 @@ void RenderViewTest::SetUp() {
   if (!render_thread_)
     render_thread_ = std::make_unique<MockRenderThread>();
 
+  render_thread_->SetIOTaskRunner(test_io_thread_->task_runner());
+
   // Blink needs to be initialized before calling CreateContentRendererClient()
   // because it uses blink internally.
   blink_platform_impl_.Initialize();
@@ -449,7 +438,7 @@ void RenderViewTest::SetUp() {
   SetBrowserClientForTesting(content_browser_client_.get());
   SetRendererClientForTesting(content_renderer_client_.get());
 
-  agent_scheduling_group_ = CreateAgentSchedulingGroup(*render_thread_);
+  agent_scheduling_group_ = MockAgentSchedulingGroup::Create(*render_thread_);
   render_widget_host_ = CreateRenderWidgetHost();
 
 #if defined(OS_WIN)
@@ -504,19 +493,10 @@ void RenderViewTest::SetUp() {
       render_thread_->GetNextRoutingID();
   view_params->main_frame_frame_token = base::UnguessableToken::Create();
   view_params->main_frame_routing_id = render_thread_->GetNextRoutingID();
-  view_params->main_frame_interface_bundle =
-      mojom::DocumentScopedInterfaceBundle::New();
-  render_thread_->PassInitialInterfaceProviderReceiverForFrame(
-      view_params->main_frame_routing_id,
-      view_params->main_frame_interface_bundle->interface_provider
-          .InitWithNewPipeAndPassReceiver());
 
-  mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>
-      browser_interface_broker;
   // Ignoring the returned PendingReceiver because it is not bound to anything
-  ignore_result(browser_interface_broker.InitWithNewPipeAndPassReceiver());
-  view_params->main_frame_interface_bundle->browser_interface_broker =
-      std::move(browser_interface_broker);
+  ignore_result(view_params->main_frame_interface_broker
+                    .InitWithNewPipeAndPassReceiver());
   view_params->session_storage_namespace_id =
       blink::AllocateSessionStorageNamespaceId();
   view_params->replicated_frame_state = FrameReplicationState();
@@ -842,20 +822,10 @@ void RenderViewTest::SimulateUserInputChangeForElement(
 void RenderViewTest::OnSameDocumentNavigation(blink::WebLocalFrame* frame,
                                               bool is_new_navigation) {
   RenderViewImpl* view = static_cast<RenderViewImpl*>(view_);
-  blink::WebHistoryItem item;
-  item.Initialize();
-
-  // Set the document sequence number to be the same as the current page.
-  const blink::WebHistoryItem& current_item =
-      view->GetMainRenderFrame()->current_history_item();
-  DCHECK(!current_item.IsNull());
-  item.SetDocumentSequenceNumber(current_item.DocumentSequenceNumber());
-
   view->GetMainRenderFrame()->DidFinishSameDocumentNavigation(
-      item,
       is_new_navigation ? blink::kWebStandardCommit
                         : blink::kWebHistoryInertCommit,
-      false /* content_initiated */);
+      false /* content_initiated */, false /* is_history_api_navigation */);
 }
 
 void RenderViewTest::SetUseZoomForDSFEnabled(bool enabled) {

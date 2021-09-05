@@ -6,10 +6,10 @@
 
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "chrome/browser/installable/installable_logging.h"
+#include "components/webapps/browser/installable/installable_logging.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 
-namespace banners {
+namespace webapps {
 
 const char kDismissEventHistogram[] = "AppBanners.DismissEvent";
 const char kDisplayEventHistogram[] = "AppBanners.DisplayEvent";
@@ -75,4 +75,4 @@ void TrackInstallDisplayMode(blink::mojom::DisplayMode display) {
   UMA_HISTOGRAM_ENUMERATION(kInstallDisplayModeHistogram, display);
 }
 
-}  // namespace banners
+}  // namespace webapps

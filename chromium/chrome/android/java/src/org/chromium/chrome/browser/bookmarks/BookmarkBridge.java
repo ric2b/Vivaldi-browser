@@ -25,6 +25,7 @@ import org.chromium.components.bookmarks.BookmarkType;
 import org.chromium.components.url_formatter.SchemeDisplay;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.url.GURL;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -901,9 +902,10 @@ public class BookmarkBridge {
      * bookmark ID will be returned.
      * @param title The title to be used for the reading list item.
      * @param url The URL of the reading list item.
-     * @return The bookmark ID created after saving the article to the reading list.
+     * @return The bookmark ID created after saving the article to the reading list, or null on
+     *         error.
      */
-    public BookmarkId addToReadingList(String title, String url) {
+    public @Nullable BookmarkId addToReadingList(String title, String url) {
         ThreadUtils.assertOnUiThread();
         assert title != null;
         assert url != null;
@@ -934,6 +936,15 @@ public class BookmarkBridge {
     public void setReadStatusForReadingList(String url, boolean read) {
         BookmarkBridgeJni.get().setReadStatus(
                 mNativeBookmarkBridge, BookmarkBridge.this, url, read);
+    }
+
+    /**
+     * Checks whether supplied URL has already been bookmarked.
+     * @param url The URL to check.
+     * @return Whether the URL has been bookmarked.
+     */
+    public boolean isBookmarked(GURL url) {
+        return BookmarkBridgeJni.get().isBookmarked(mNativeBookmarkBridge, url);
     }
 
     @VisibleForTesting
@@ -1180,6 +1191,8 @@ public class BookmarkBridge {
         boolean isEditBookmarksEnabled(long nativeBookmarkBridge);
         void reorderChildren(long nativeBookmarkBridge, BookmarkBridge caller, BookmarkId parent,
                 long[] orderedNodes);
+        boolean isBookmarked(long nativeBookmarkBridge, GURL url);
+
         /** Vivaldi */
         BookmarkId getTrashFolderId(long nativeBookmarkBridge, BookmarkBridge caller);
         void setBookmarkDescription(long nativeBookmarkBridge, BookmarkBridge caller,
@@ -1274,5 +1287,48 @@ public class BookmarkBridge {
         assert mIsNativeBookmarkModelLoaded;
         BookmarkBridgeJni.get().getSpeedDialFolders(
                 mNativeBookmarkBridge, BookmarkBridge.this, folderList);
+    }
+
+    /**
+     * Calls {@link #getAllFoldersWithDepths(List, List)} and remove all folders and children
+     * in bookmarksToMove. This method is useful when finding a list of possible parent folders when
+     * moving some folders (a folder cannot be moved to its own children).
+     * @param onlySD - if true, include only speed dial folders
+     */
+    public void getMoveDestinations(List<BookmarkId> folderList,
+            List<Integer> depthList, List<BookmarkId> bookmarksToMove, boolean onlySD) {
+        ThreadUtils.assertOnUiThread();
+        assert mIsNativeBookmarkModelLoaded;
+        BookmarkBridgeJni.get().getAllFoldersWithDepths(
+                mNativeBookmarkBridge, BookmarkBridge.this, folderList, depthList);
+        if (bookmarksToMove == null || bookmarksToMove.size() == 0) return;
+
+        boolean shouldTrim = false;
+        int trimThreshold = -1;
+        for (int i = 0; i < folderList.size(); i++) {
+            int depth = depthList.get(i);
+            if (shouldTrim) {
+                if (depth <= trimThreshold) {
+                    shouldTrim = false;
+                    trimThreshold = -1;
+                } else {
+                    folderList.remove(i);
+                    depthList.remove(i);
+                    i--;
+                }
+            }
+            // Do not use else here because shouldTrim could be set true after if (shouldTrim)
+            // statement.
+            if (!shouldTrim) {
+                BookmarkId folder = folderList.get(i);
+                if (bookmarksToMove.contains(folder)) {
+                    shouldTrim = true;
+                    trimThreshold = depth;
+                    folderList.remove(i);
+                    depthList.remove(i);
+                    i--;
+                }
+            }
+        }
     }
 }

@@ -8,6 +8,7 @@
 #include <string>
 #include <utility>
 
+#include "base/allocator/buildflags.h"
 #include "base/bind.h"
 #include "base/compiler_specific.h"
 #include "base/containers/flat_map.h"
@@ -172,6 +173,8 @@ const Metric kAllocatorDumpNamesForMetrics[] = {
      EmitTo::kSizeInUkmAndUma, &Memory_Experimental::SetDiscardable},
     {"discardable", "Discardable.FreelistSize", MetricSize::kSmall,
      "freelist_size", EmitTo::kSizeInUmaOnly, nullptr},
+    {"discardable", "Discardable.ResidentSize", MetricSize::kSmall,
+     "resident_size", EmitTo::kSizeInUmaOnly, nullptr},
     {"discardable", "Discardable.VirtualSize", MetricSize::kSmall,
      "virtual_size", EmitTo::kSizeInUmaOnly, nullptr},
     {"extensions/functions", "ExtensionFunctions", MetricSize::kLarge,
@@ -208,6 +211,10 @@ const Metric kAllocatorDumpNamesForMetrics[] = {
     {"malloc/allocated_objects", "Malloc.AllocatedObjects", MetricSize::kLarge,
      kEffectiveSize, EmitTo::kSizeInUkmAndUma,
      &Memory_Experimental::SetMalloc_AllocatedObjects},
+#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+    {"malloc/thread_cache", "Malloc.ThreadCache", MetricSize::kSmall, kSize,
+     EmitTo::kSizeInUmaOnly, nullptr},
+#endif
     {"mojo", "NumberOfMojoHandles", MetricSize::kSmall,
      MemoryAllocatorDump::kNameObjectCount, EmitTo::kCountsInUkmOnly,
      &Memory_Experimental::SetNumberOfMojoHandles},
@@ -249,6 +256,11 @@ const Metric kAllocatorDumpNamesForMetrics[] = {
      "PartitionAlloc.Partitions.FastMalloc", MetricSize::kLarge, kSize,
      EmitTo::kSizeInUkmAndUma,
      &Memory_Experimental::SetPartitionAlloc_Partitions_FastMalloc},
+#if !BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+    {"partition_alloc/partitions/fast_malloc/thread_cache",
+     "PartitionAlloc.Partitions.FastMalloc.ThreadCache", MetricSize::kSmall,
+     kSize, EmitTo::kSizeInUmaOnly, nullptr},
+#endif
     {"partition_alloc/partitions/layout", "PartitionAlloc.Partitions.Layout",
      MetricSize::kLarge, kSize, EmitTo::kSizeInUkmAndUma,
      &Memory_Experimental::SetPartitionAlloc_Partitions_Layout},
@@ -649,18 +661,23 @@ void ProcessMemoryMetricsEmitter::FetchAndEmitProcessMemoryMetrics() {
 
   MarkServiceRequestsInProgress();
 
-  // The callback keeps this object alive until the callback is invoked.
-  auto callback =
-      base::BindOnce(&ProcessMemoryMetricsEmitter::ReceivedMemoryDump, this);
-  std::vector<std::string> mad_list;
-  for (const auto& metric : kAllocatorDumpNamesForMetrics)
-    mad_list.push_back(metric.dump_name);
-  if (pid_scope_ != base::kNullProcessId) {
-    memory_instrumentation::MemoryInstrumentation::GetInstance()
-        ->RequestGlobalDumpForPid(pid_scope_, mad_list, std::move(callback));
-  } else {
-    memory_instrumentation::MemoryInstrumentation::GetInstance()
-        ->RequestGlobalDump(mad_list, std::move(callback));
+  auto* instrumentation =
+      memory_instrumentation::MemoryInstrumentation::GetInstance();
+  // nullptr means content layer is not initialized yet (there's no memory
+  // metrics to log in this case)
+  if (instrumentation) {
+    // The callback keeps this object alive until the callback is invoked.
+    auto callback =
+        base::BindOnce(&ProcessMemoryMetricsEmitter::ReceivedMemoryDump, this);
+    std::vector<std::string> mad_list;
+    for (const auto& metric : kAllocatorDumpNamesForMetrics)
+      mad_list.push_back(metric.dump_name);
+    if (pid_scope_ != base::kNullProcessId) {
+      instrumentation->RequestGlobalDumpForPid(pid_scope_, mad_list,
+                                               std::move(callback));
+    } else {
+      instrumentation->RequestGlobalDump(mad_list, std::move(callback));
+    }
   }
 
   // Use a lambda adapter to post the results back to this sequence.

@@ -14,6 +14,7 @@
 #include "base/metrics/user_metrics.h"
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -60,7 +61,9 @@
 #include "ui/gfx/image/canvas_image_source.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/strings/grit/ui_strings.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 
 namespace {
 
@@ -204,7 +207,7 @@ void ProfileMenuView::BuildMenu() {
   BuildFeatureButtons();
 
 //  ChromeOS doesn't support multi-profile.
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   if (!(IsGuest(profile) &&
         base::FeatureList::IsEnabled(features::kNewProfilePicker))) {
     BuildProfileManagementHeading();
@@ -254,8 +257,18 @@ gfx::ImageSkia ProfileMenuView::GetSyncIcon() const {
 }
 
 base::string16 ProfileMenuView::GetAccessibleWindowTitle() const {
-  return l10n_util::GetStringUTF16(
-      IDS_PROFILES_PROFILE_BUBBLE_ACCESSIBLE_TITLE);
+  base::string16 title =
+      l10n_util::GetStringUTF16(IDS_PROFILES_PROFILE_BUBBLE_ACCESSIBLE_TITLE);
+
+  if (!menu_title_.empty()) {
+    title = l10n_util::GetStringFUTF16(IDS_CONCAT_TWO_STRINGS_WITH_COMMA, title,
+                                       menu_title_);
+  }
+  if (!menu_subtitle_.empty()) {
+    title = l10n_util::GetStringFUTF16(IDS_CONCAT_TWO_STRINGS_WITH_COMMA, title,
+                                       menu_subtitle_);
+  }
+  return title;
 }
 
 void ProfileMenuView::OnManageGoogleAccountButtonClicked() {
@@ -322,7 +335,7 @@ void ProfileMenuView::OnSyncSettingsButtonClicked() {
 
 void ProfileMenuView::OnSyncErrorButtonClicked(
     sync_ui_util::AvatarSyncErrorType error) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // On ChromeOS, sync errors are fixed by re-signing into the OS.
   chrome::AttemptUserExit();
 #else
@@ -340,8 +353,7 @@ void ProfileMenuView::OnSyncErrorButtonClicked(
       if (auto* account_mutator =
               IdentityManagerFactory::GetForProfile(browser()->profile())
                   ->GetPrimaryAccountMutator()) {
-        account_mutator->ClearPrimaryAccount(
-            signin::PrimaryAccountMutator::ClearAccountsAction::kDefault,
+        account_mutator->RevokeSyncConsent(
             signin_metrics::USER_CLICKED_SIGNOUT_SETTINGS,
             signin_metrics::SignoutDelete::IGNORE_METRIC);
         Hide();
@@ -393,7 +405,7 @@ void ProfileMenuView::OnSigninAccountButtonClicked(AccountInfo account) {
       signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN);
 }
 
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 void ProfileMenuView::OnSignoutButtonClicked() {
   RecordClick(ActionableItem::kSignoutButton);
   if (!perform_menu_actions())
@@ -447,7 +459,7 @@ void ProfileMenuView::OnEditProfileButtonClicked() {
     return;
   chrome::ShowSettingsSubPage(browser(), chrome::kManageProfileSubPage);
 }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 void ProfileMenuView::OnCookiesClearedOnExitLinkClicked() {
   RecordClick(ActionableItem::kCookiesClearedOnExitLink);
@@ -473,7 +485,7 @@ void ProfileMenuView::BuildIdentity() {
   base::string16 profile_name;
   base::Optional<EditButtonParams> edit_button_params;
 // Profile names are not supported on ChromeOS.
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   size_t num_of_profiles =
       g_browser_process->profile_manager()->GetNumberOfProfiles();
   if (num_of_profiles > 1 || !profile_attributes->IsUsingDefaultName() ||
@@ -492,31 +504,36 @@ void ProfileMenuView::BuildIdentity() {
   SkColor background_color =
       profile_attributes->GetProfileThemeColors().profile_highlight_color;
   if (account_info.has_value()) {
+    menu_title_ = base::UTF8ToUTF16(account_info.value().full_name);
+    menu_subtitle_ =
+        IsSyncPaused(profile)
+            ? l10n_util::GetStringUTF16(IDS_PROFILES_LOCAL_PROFILE_STATE)
+            : base::UTF8ToUTF16(account_info.value().email);
     SetProfileIdentityInfo(
         profile_name, background_color, edit_button_params,
         ui::ImageModel::FromImage(account_info.value().account_image),
-        base::UTF8ToUTF16(account_info.value().full_name),
-        IsSyncPaused(profile)
-            ? l10n_util::GetStringUTF16(IDS_PROFILES_LOCAL_PROFILE_STATE)
-            : base::UTF8ToUTF16(account_info.value().email));
+        menu_title_, menu_subtitle_);
   } else {
+    menu_title_ = base::string16();
+    menu_subtitle_ =
+        l10n_util::GetStringUTF16(IDS_PROFILES_LOCAL_PROFILE_STATE);
     SetProfileIdentityInfo(
         profile_name, background_color, edit_button_params,
         ui::ImageModel::FromImage(
             profile_attributes->GetAvatarIcon(kIdentityImageSize)),
-        /*title=*/base::string16(),
-        l10n_util::GetStringUTF16(IDS_PROFILES_LOCAL_PROFILE_STATE));
+        menu_title_, menu_subtitle_);
   }
 }
 
 void ProfileMenuView::BuildGuestIdentity() {
   int guest_window_count = BrowserList::GetGuestBrowserCount();
 
-  base::string16 subtitle;
+  menu_title_ = l10n_util::GetStringUTF16(IDS_GUEST_PROFILE_NAME);
+  menu_subtitle_ = base::string16();
   if (guest_window_count > 1 &&
       base::FeatureList::IsEnabled(features::kNewProfilePicker)) {
-    subtitle = l10n_util::GetPluralStringFUTF16(IDS_GUEST_WINDOW_COUNT_MESSAGE,
-                                                guest_window_count);
+    menu_subtitle_ = l10n_util::GetPluralStringFUTF16(
+        IDS_GUEST_WINDOW_COUNT_MESSAGE, guest_window_count);
   }
 
   ui::ThemedVectorIcon header_art_icon(
@@ -524,9 +541,8 @@ void ProfileMenuView::BuildGuestIdentity() {
   SetProfileIdentityInfo(
       /*profile_name=*/base::string16(),
       /*background_color=*/SK_ColorTRANSPARENT,
-      /*edit_button=*/base::nullopt, profiles::GetGuestAvatar(),
-      l10n_util::GetStringUTF16(IDS_GUEST_PROFILE_NAME), subtitle,
-      header_art_icon);
+      /*edit_button=*/base::nullopt, profiles::GetGuestAvatar(), menu_title_,
+      menu_subtitle_, header_art_icon);
 }
 
 void ProfileMenuView::BuildAutofillButtons() {
@@ -591,7 +607,7 @@ void ProfileMenuView::BuildSyncInfo() {
                             base::Unretained(this), account_info.value()),
         /*show_badge=*/true);
   } else {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     // There is always an account on ChromeOS.
     NOTREACHED();
 #else
@@ -652,7 +668,7 @@ void ProfileMenuView::BuildFeatureButtons() {
     }
   }
 
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   const bool has_primary_account =
       !IsGuest(profile) && identity_manager->HasPrimaryAccount();
   // The sign-out button is always at the bottom.
@@ -666,7 +682,7 @@ void ProfileMenuView::BuildFeatureButtons() {
 #endif
 }
 
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 void ProfileMenuView::BuildProfileManagementHeading() {
   SetProfileManagementHeading(
       UseNewPicker()
@@ -681,6 +697,8 @@ void ProfileMenuView::BuildSelectableProfiles() {
   for (ProfileAttributesEntry* profile_entry : profile_entries) {
     // The current profile is excluded.
     if (profile_entry->GetPath() == browser()->profile()->GetPath())
+      continue;
+    if (profile_entry->IsOmitted())
       continue;
 
     AddSelectableProfile(
@@ -726,4 +744,8 @@ void ProfileMenuView::BuildProfileManagementFeatureButtons() {
                             base::Unretained(this)));
   }
 }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+BEGIN_METADATA(ProfileMenuView, ProfileMenuViewBase)
+ADD_READONLY_PROPERTY_METADATA(gfx::ImageSkia, SyncIcon)
+END_METADATA

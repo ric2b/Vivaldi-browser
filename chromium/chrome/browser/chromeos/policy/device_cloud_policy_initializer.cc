@@ -16,6 +16,7 @@
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/attestation/attestation_ca_client.h"
+#include "chrome/browser/chromeos/login/login_pref_names.h"
 #include "chrome/browser/chromeos/policy/device_cloud_policy_manager_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_cloud_policy_store_chromeos.h"
 #include "chrome/browser/chromeos/policy/enrollment_config.h"
@@ -38,7 +39,6 @@
 #include "chromeos/tpm/install_attributes.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
 #include "components/policy/core/common/cloud/device_management_service.h"
-#include "components/policy/core/common/cloud/dm_auth.h"
 #include "components/prefs/pref_service.h"
 
 namespace chromeos {
@@ -114,7 +114,7 @@ void DeviceCloudPolicyInitializer::Shutdown() {
 
   policy_store_->RemoveObserver(this);
   enrollment_handler_.reset();
-  state_keys_update_subscription_.reset();
+  state_keys_update_subscription_ = {};
   is_initialized_ = false;
 }
 
@@ -122,7 +122,7 @@ void DeviceCloudPolicyInitializer::PrepareEnrollment(
     DeviceManagementService* device_management_service,
     chromeos::ActiveDirectoryJoinDelegate* ad_join_delegate,
     const EnrollmentConfig& enrollment_config,
-    std::unique_ptr<DMAuth> dm_auth,
+    DMAuth dm_auth,
     const EnrollmentCallback& enrollment_callback) {
   DCHECK(is_initialized_);
   DCHECK(!enrollment_handler_);
@@ -177,7 +177,8 @@ EnrollmentConfig DeviceCloudPolicyInitializer::GetPrescribedEnrollmentConfig()
 
   // If OOBE is done and we are not enrolled, make sure we only try interactive
   // enrollment.
-  const bool oobe_complete = local_state_->GetBoolean(prefs::kOobeComplete);
+  const bool oobe_complete =
+      local_state_->GetBoolean(chromeos::prefs::kOobeComplete);
   if (oobe_complete &&
       config.auth_mechanism == EnrollmentConfig::AUTH_MECHANISM_BEST_AVAILABLE)
     config.auth_mechanism = EnrollmentConfig::AUTH_MECHANISM_INTERACTIVE;

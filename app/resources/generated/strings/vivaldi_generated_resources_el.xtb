@@ -102,6 +102,7 @@
 <translation id="2662876636500006917">Ηλεκτρονικό κατάστημα Chrome</translation>
 <translation id="2678063897982469759">Εκ νέου ενεργοποίηση</translation>
 <translation id="2721037002783622288">&amp;Αναζήτηση <ph name="SEARCH_ENGINE" /> για εικόνα</translation>
+<translation id="2783321960289401138">Δημιουργία συντόμευσης...</translation>
 <translation id="2785873697295365461">Περιγραφές αρχείων</translation>
 <translation id="2809586584051668049">και ακόμη <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
 <translation id="2812989263793994277">Να μην γίνεται εμφάνιση εικόνων</translation>
@@ -113,7 +114,7 @@
 <translation id="2904456025988372123">Να γίνεται ερώτηση όταν ένας ιστότοπος προσπαθεί να κατεβάσει αρχεία αυτόματα μετά το πρώτο αρχείο</translation>
 <translation id="2913331724188855103">Να επιτρέπεται στους ιστότοπους η αποθήκευση και η ανάγνωση δεδομένων cookie (συνιστάται)</translation>
 <translation id="2931157624143513983">Προσαρμογή στην εκτυπώσιμη περιοχή</translation>
-<translation id="2932085390869194046">Πρόταση για Κωδικό Πρόσβασης…</translation>
+<translation id="2932085390869194046">Πρόταση για Κωδικό Πρόσβασης...</translation>
 <translation id="2932883381142163287">Αναφορά κατάχρησης</translation>
 <translation id="2941112035454246133">Χαμηλή</translation>
 <translation id="2972581237482394796">&amp;Επανάληψη ενέργειας</translation>
@@ -162,6 +163,7 @@
 <translation id="357886715122934472">Ο χρήστης &lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; θέλει να μοιραστεί έναν εκτυπωτή &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; με μια ομάδα που σας ανήκει: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Εάν δεχτείτε, όλα τα μέλη της ομάδας θα έχουν τη δυνατότητα να χρησιμοποιούν τον εκτυπωτή.</translation>
 <translation id="3587482841069643663">Όλες</translation>
 <translation id="3627588569887975815">Άνοιγμα συνδέσμου σε παράθυρο inco&amp;gnito</translation>
+<translation id="3627879631695760395">Εγκατάσταση του <ph name="APP" />...</translation>
 <translation id="3668823961463113931">Προγράμματα χειρισμού</translation>
 <translation id="3678156199662914018">Επέκταση: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Αίτημα κοινής χρήσης οθόνης από την εφαρμογή <ph name="APP_NAME" /></translation>
@@ -320,7 +322,7 @@
 <translation id="6268252012308737255">Άνοιγμα με <ph name="APP" /></translation>
 <translation id="6273677812470008672">Ποιότητα</translation>
 <translation id="6295158916970320988">Όλοι οι Ιστότοποι</translation>
-<translation id="6295855836753816081">Αποθήκευση…</translation>
+<translation id="6295855836753816081">Αποθήκευση...</translation>
 <translation id="6308937455967653460">Αποθήκευση συν&amp;δέσμου ως...</translation>
 <translation id="6315493146179903667">Μεταφορά Όλων στο Προσκήνιο</translation>
 <translation id="6326855256003666642">Πλήθος Keepalive</translation>
@@ -453,7 +455,7 @@
 <translation id="8800004011501252845">Εμφάνιση προορισμών για</translation>
 <translation id="8808478386290700967">Ηλεκτρονικό κατάστημα</translation>
 <translation id="8823514049557262177">Αντιγραφή κειμένου συνδέσμου</translation>
-<translation id="8823704566850948458">Πρόταση για κωδικό πρόσβασης…</translation>
+<translation id="8823704566850948458">Πρόταση για κωδικό πρόσβασης...</translation>
 <translation id="8859174528519900719">Υποπλαίσιο: <ph name="SUBFRAME_SITE" /></translation>
 <translation id="8899851313684471736">Άνοιγμα συνδέσμου σε νέο παρά&amp;θυρο</translation>
 <translation id="8910146161325739742">Κοινή χρήση της οθόνης σας</translation>
@@ -468,6 +470,7 @@
 <translation id="9027459031423301635">Άνοιγμα Συνδέσμου σε Νέα Καρτέ&amp;λα</translation>
 <translation id="9056810968620647706">Δεν βρέθηκαν αντιστοιχίες.</translation>
 <translation id="9137916601698928395">Άνοιγμα συνδέσμου ως <ph name="USER" /></translation>
+<translation id="91568222606626347">Δημιουργία Συντόμευσης...</translation>
 <translation id="916607977885256133">Εικόνα μέσα σε Εικόνα</translation>
 <translation id="9170848237812810038">Αναί&amp;ρεση</translation>
 <translation id="9215293857209265904">Προστέθηκε η επέκταση "<ph name="EXTENSION_NAME" />"</translation>

@@ -415,7 +415,7 @@ ExecuteCodeFunction::InitResult WebViewInternalExecuteCodeFunction::Init() {
     WebViewGuest* guest = WebViewGuest::From(
         render_frame_host()->GetProcess()->GetID(), guest_instance_id_);
     if (guest && vivaldi::IsVivaldiRunning()) {
-      guest_src_ = GURL(guest->sourceSpec());
+      guest_src_ = GURL(guest->web_contents()->GetURL());
     } else {
       guest_src_ = GURL::EmptyGURL();
     }
@@ -1069,7 +1069,7 @@ ExtensionFunction::ResponseAction WebViewInternalClearDataFunction::Run() {
   if (remove_mask_) {
     scheduled = guest_->ClearData(
         remove_since_, remove_mask_,
-        base::Bind(&WebViewInternalClearDataFunction::ClearDataDone, this));
+        base::BindOnce(&WebViewInternalClearDataFunction::ClearDataDone, this));
   }
   if (!remove_mask_ || !scheduled) {
     Release();  // Balanced above.

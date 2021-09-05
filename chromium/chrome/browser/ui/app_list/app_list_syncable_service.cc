@@ -11,9 +11,9 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/one_shot_event.h"
-#include "base/stl_util.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -22,7 +22,6 @@
 #include "chrome/browser/chromeos/crostini/crostini_features.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
-#include "chrome/browser/chromeos/web_applications/default_web_app_ids.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
@@ -35,6 +34,7 @@
 #include "chrome/browser/ui/app_list/chrome_app_list_model_updater.h"
 #include "chrome/browser/ui/app_list/page_break_app_item.h"
 #include "chrome/browser/ui/app_list/page_break_constants.h"
+#include "chrome/browser/web_applications/components/web_app_id_constants.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
@@ -189,7 +189,7 @@ bool IsPageBreakItem(const AppListSyncableService::SyncItem& sync_item) {
 
 // Returns true if the app is Settings app
 bool IsOsSettingsApp(const std::string& app_id) {
-  return app_id == chromeos::default_web_apps::kOsSettingsAppId;
+  return app_id == web_app::kOsSettingsAppId;
 }
 
 bool IsSystemCreatedSyncFolder(AppListSyncableService::SyncItem* folder_item) {
@@ -204,10 +204,9 @@ bool IsSystemCreatedSyncFolder(AppListSyncableService::SyncItem* folder_item) {
 // AppListSyncableService::ScopedModelUpdaterFactoryForTest
 
 AppListSyncableService::ScopedModelUpdaterFactoryForTest::
-    ScopedModelUpdaterFactoryForTest(
-        const ModelUpdaterFactoryCallback& factory) {
+    ScopedModelUpdaterFactoryForTest(ModelUpdaterFactoryCallback factory) {
   DCHECK(factory);
-  factory_ = factory;
+  factory_ = std::move(factory);
   g_model_updater_factory_callback_for_test_ = &factory_;
 }
 

@@ -8,6 +8,7 @@
 #include "base/files/file_path.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
+#include "build/build_config.h"
 #include "components/variations/net/variations_http_headers.h"
 #include "components/variations/variations_ids_provider.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -361,6 +362,28 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, SetRequestHeaderWithReferer) {
             GURL(response.http_request()->headers.at(header_name)));
 }
 
+// Like above but checks that referer isn't sent when it's https and the target
+// url is http.
+IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
+                       SetRequestHeaderWithRefererDowngrade) {
+  net::test_server::ControllableHttpResponse response(embedded_test_server(),
+                                                      "", true);
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  const std::string header_name = "Referer";
+  const std::string header_value = "https://request.com";
+  NavigationObserverImpl observer(GetNavigationController());
+  observer.SetStartedCallback(
+      base::BindLambdaForTesting([&](Navigation* navigation) {
+        navigation->SetRequestHeader(header_name, header_value);
+      }));
+
+  shell()->LoadURL(embedded_test_server()->GetURL("/simple_page.html"));
+  response.WaitForRequest();
+
+  EXPECT_EQ(0u, response.http_request()->headers.count(header_name));
+}
+
 IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, SetRequestHeaderInRedirect) {
   net::test_server::ControllableHttpResponse response_1(embedded_test_server(),
                                                         "", true);
@@ -684,13 +707,20 @@ class NavigationBrowserTest2 : public NavigationBrowserTest {
 IN_PROC_BROWSER_TEST_F(NavigationBrowserTest2, ReplaceXClientDataHeader) {
   std::unique_ptr<base::RunLoop> run_loop = std::make_unique<base::RunLoop>();
   std::string last_header_value;
+  auto main_task_runner = base::SequencedTaskRunnerHandle::Get();
   https_server()->RegisterRequestHandler(base::BindLambdaForTesting(
-      [&](const net::test_server::HttpRequest& request)
+      [&, main_task_runner](const net::test_server::HttpRequest& request)
           -> std::unique_ptr<net::test_server::HttpResponse> {
         auto iter = request.headers.find(variations::kClientDataHeader);
-        if (iter != request.headers.end())
-          last_header_value = iter->second;
-        run_loop->Quit();
+        if (iter != request.headers.end()) {
+          main_task_runner->PostTask(
+              FROM_HERE, base::BindOnce(base::BindLambdaForTesting(
+                                            [&](const std::string& value) {
+                                              last_header_value = value;
+                                              run_loop->Quit();
+                                            }),
+                                        iter->second));
+        }
         return std::make_unique<net::test_server::BasicHttpResponse>();
       }));
   ASSERT_TRUE(https_server()->Start());
@@ -723,8 +753,9 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest2,
   std::unique_ptr<base::RunLoop> run_loop = std::make_unique<base::RunLoop>();
   std::string last_header_value;
   bool should_redirect = true;
+  auto main_task_runner = base::SequencedTaskRunnerHandle::Get();
   https_server()->RegisterRequestHandler(base::BindLambdaForTesting(
-      [&](const net::test_server::HttpRequest& request)
+      [&, main_task_runner](const net::test_server::HttpRequest& request)
           -> std::unique_ptr<net::test_server::HttpResponse> {
         auto response = std::make_unique<net::test_server::BasicHttpResponse>();
         if (should_redirect) {
@@ -735,8 +766,13 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest2,
               https_server()->GetURL("www.google.com", "/redirect").spec());
         } else {
           auto iter = request.headers.find(variations::kClientDataHeader);
-          last_header_value = iter->second;
-          run_loop->Quit();
+          main_task_runner->PostTask(
+              FROM_HERE, base::BindOnce(base::BindLambdaForTesting(
+                                            [&](const std::string& value) {
+                                              last_header_value = value;
+                                              run_loop->Quit();
+                                            }),
+                                        iter->second));
         }
         return response;
       }));
@@ -760,8 +796,9 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest2, SetXClientDataHeaderInRedirect) {
   std::unique_ptr<base::RunLoop> run_loop = std::make_unique<base::RunLoop>();
   std::string last_header_value;
   bool should_redirect = true;
+  auto main_task_runner = base::SequencedTaskRunnerHandle::Get();
   https_server()->RegisterRequestHandler(base::BindLambdaForTesting(
-      [&](const net::test_server::HttpRequest& request)
+      [&, main_task_runner](const net::test_server::HttpRequest& request)
           -> std::unique_ptr<net::test_server::HttpResponse> {
         auto response = std::make_unique<net::test_server::BasicHttpResponse>();
         if (should_redirect) {
@@ -772,15 +809,19 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest2, SetXClientDataHeaderInRedirect) {
               https_server()->GetURL("www.google.com", "/redirect").spec());
         } else {
           auto iter = request.headers.find(variations::kClientDataHeader);
-          last_header_value = iter->second;
-          run_loop->Quit();
+          main_task_runner->PostTask(
+              FROM_HERE, base::BindOnce(base::BindLambdaForTesting(
+                                            [&](const std::string& value) {
+                                              last_header_value = value;
+                                              run_loop->Quit();
+                                            }),
+                                        iter->second));
         }
         return response;
       }));
   ASSERT_TRUE(https_server()->Start());
 
   const std::string header_value = "value";
-  run_loop = std::make_unique<base::RunLoop>();
   NavigationObserverImpl observer(GetNavigationController());
   observer.SetRedirectedCallback(
       base::BindLambdaForTesting([&](Navigation* navigation) {
@@ -792,5 +833,28 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest2, SetXClientDataHeaderInRedirect) {
   run_loop->Run();
   EXPECT_EQ(header_value, last_header_value);
 }
+
+#if defined(OS_ANDROID)
+// Verifies setting the 'referer' to an android-app url works.
+IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, AndroidAppReferer) {
+  net::test_server::ControllableHttpResponse response(embedded_test_server(),
+                                                      "", true);
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  const std::string header_name = "Referer";
+  const std::string header_value = "android-app://google.com/";
+  NavigationObserverImpl observer(GetNavigationController());
+  observer.SetStartedCallback(
+      base::BindLambdaForTesting([&](Navigation* navigation) {
+        navigation->SetRequestHeader(header_name, header_value);
+      }));
+
+  shell()->LoadURL(embedded_test_server()->GetURL("/simple_page.html"));
+  response.WaitForRequest();
+
+  // Verify 'referer' matches expected value.
+  EXPECT_EQ(header_value, response.http_request()->headers.at(header_name));
+}
+#endif
 
 }  // namespace weblayer

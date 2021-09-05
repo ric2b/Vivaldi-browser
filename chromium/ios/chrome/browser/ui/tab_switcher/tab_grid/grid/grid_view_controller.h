@@ -8,9 +8,11 @@
 #import <UIKit/UIKit.h>
 
 #import "ios/chrome/browser/ui/gestures/layout_switcher.h"
+#import "ios/chrome/browser/ui/incognito_reauth/incognito_reauth_consumer.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_consumer.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/grid/grid_theme.h"
 
+@protocol IncognitoReauthCommands;
 @protocol GridDragDropHandler;
 @protocol GridEmptyView;
 @protocol GridImageDataSource;
@@ -45,10 +47,16 @@
 - (void)didChangeLastItemVisibilityInGridViewController:
     (GridViewController*)gridViewController;
 
+// Tells the delegate when the currently displayed content is hidden from the
+// user until they authenticate. Used for incognito biometric authentication.
+- (void)gridViewController:(GridViewController*)gridViewController
+    contentNeedsAuthenticationChanged:(BOOL)needsAuth;
+
 @end
 
 // A view controller that contains a grid of items.
-@interface GridViewController : UIViewController <GridConsumer, LayoutSwitcher>
+@interface GridViewController
+    : UIViewController <GridConsumer, LayoutSwitcher, IncognitoReauthConsumer>
 // The gridView is accessible to manage the content inset behavior.
 @property(nonatomic, readonly) UIScrollView* gridView;
 // The view that is shown when there are no items.
@@ -57,6 +65,8 @@
 @property(nonatomic, readonly, getter=isGridEmpty) BOOL gridEmpty;
 // The visual look of the grid.
 @property(nonatomic, assign) GridTheme theme;
+// Handler for reauth commands.
+@property(nonatomic, weak) id<IncognitoReauthCommands> handler;
 // Delegate is informed of user interactions in the grid UI.
 @property(nonatomic, weak) id<GridViewControllerDelegate> delegate;
 // Handles drag and drop interactions that involved the model layer.
@@ -71,6 +81,9 @@
 @property(nonatomic, assign) BOOL showsSelectionUpdates;
 // The fraction of the last item of the grid that is visible.
 @property(nonatomic, assign, readonly) CGFloat fractionVisibleOfLastItem;
+// YES when the current contents are hidden from the user before a successful
+// biometric authentication.
+@property(nonatomic, assign) BOOL contentNeedsAuthentication;
 
 // Returns the layout of the grid for use in an animated transition.
 - (GridTransitionLayout*)transitionLayout;

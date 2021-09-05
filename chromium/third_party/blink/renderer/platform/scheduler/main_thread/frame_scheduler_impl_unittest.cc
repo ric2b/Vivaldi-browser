@@ -27,6 +27,7 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/switches.h"
 #include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
+#include "third_party/blink/public/platform/web_runtime_features.h"
 #include "third_party/blink/renderer/platform/scheduler/common/features.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/frame_task_queue_controller.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/main_thread_scheduler_impl.h"
@@ -288,6 +289,52 @@ class FrameSchedulerImplTest : public testing::Test {
     }
   }
 
+  // Helper for posting several tasks to specific queues. |task_descriptor| is a
+  // string with space delimited task identifiers. The first letter of each task
+  // identifier specifies the task queue:
+  // - 'L': Loading task queue
+  // - 'T': Throttleable task queue
+  // - 'P': Pausable task queue
+  // - 'U': Unpausable task queue
+  // - 'D': Deferrable task queue
+  void PostTestTasksToQueuesWithTrait(Vector<String>* run_order,
+                                      const String& task_descriptor) {
+    std::istringstream stream(task_descriptor.Utf8());
+    while (!stream.eof()) {
+      std::string task;
+      stream >> task;
+      switch (task[0]) {
+        case 'L':
+          LoadingTaskQueue()->GetTaskRunnerWithDefaultTaskType()->PostTask(
+              FROM_HERE, base::BindOnce(&AppendToVectorTestTask, run_order,
+                                        String::FromUTF8(task)));
+          break;
+        case 'T':
+          ThrottleableTaskQueue()->GetTaskRunnerWithDefaultTaskType()->PostTask(
+              FROM_HERE, base::BindOnce(&AppendToVectorTestTask, run_order,
+                                        String::FromUTF8(task)));
+          break;
+        case 'P':
+          PausableTaskQueue()->GetTaskRunnerWithDefaultTaskType()->PostTask(
+              FROM_HERE, base::BindOnce(&AppendToVectorTestTask, run_order,
+                                        String::FromUTF8(task)));
+          break;
+        case 'U':
+          UnpausableTaskQueue()->GetTaskRunnerWithDefaultTaskType()->PostTask(
+              FROM_HERE, base::BindOnce(&AppendToVectorTestTask, run_order,
+                                        String::FromUTF8(task)));
+          break;
+        case 'D':
+          DeferrableTaskQueue()->GetTaskRunnerWithDefaultTaskType()->PostTask(
+              FROM_HERE, base::BindOnce(&AppendToVectorTestTask, run_order,
+                                        String::FromUTF8(task)));
+          break;
+        default:
+          NOTREACHED();
+      }
+    }
+  }
+
   static void ResetForNavigation(FrameSchedulerImpl* frame_scheduler) {
     frame_scheduler->ResetForNavigation();
   }
@@ -430,22 +477,6 @@ class FrameSchedulerImplTest : public testing::Test {
   scoped_refptr<MainThreadTaskQueue> throttleable_task_queue_;
 };
 
-class FrameSchedulerImplStopNonTimersInBackgroundEnabledTest
-    : public FrameSchedulerImplTest {
- public:
-  FrameSchedulerImplStopNonTimersInBackgroundEnabledTest()
-      : FrameSchedulerImplTest({blink::features::kStopNonTimersInBackground},
-                               {}) {}
-};
-
-class FrameSchedulerImplStopNonTimersInBackgroundDisabledTest
-    : public FrameSchedulerImplTest {
- public:
-  FrameSchedulerImplStopNonTimersInBackgroundDisabledTest()
-      : FrameSchedulerImplTest({},
-                               {blink::features::kStopNonTimersInBackground}) {}
-};
-
 class FrameSchedulerImplStopInBackgroundDisabledTest
     : public FrameSchedulerImplTest,
       public ::testing::WithParamInterface<TaskType> {
@@ -503,10 +534,6 @@ class MockLifecycleObserver final : public FrameScheduler::Observer {
 
 void IncrementCounter(int* counter) {
   ++*counter;
-}
-
-void RecordQueueName(String name, Vector<String>* tasks) {
-  tasks->push_back(std::move(name));
 }
 
 // Simulate running a task of a particular length by fast forwarding the task
@@ -857,8 +884,7 @@ TEST_F(FrameSchedulerImplTest, FreezeForegroundOnlyTasks) {
   EXPECT_EQ(1, counter);
 }
 
-TEST_F(FrameSchedulerImplStopNonTimersInBackgroundEnabledTest,
-       PageFreezeAndUnfreezeFlagEnabled) {
+TEST_F(FrameSchedulerImplTest, PageFreezeAndUnfreeze) {
   int counter = 0;
   LoadingTaskQueue()->GetTaskRunnerWithDefaultTaskType()->PostTask(
       FROM_HERE, base::BindOnce(&IncrementCounter, base::Unretained(&counter)));
@@ -882,13 +908,13 @@ TEST_F(FrameSchedulerImplStopNonTimersInBackgroundEnabledTest,
   page_scheduler_->SetPageFrozen(false);
 
   EXPECT_EQ(1, counter);
-  // Same as RunUntilIdle but also advances the clock if necessary.
   task_environment_.FastForwardUntilNoTasksRemain();
   EXPECT_EQ(5, counter);
 }
 
-TEST_F(FrameSchedulerImplStopNonTimersInBackgroundDisabledTest,
-       PageFreezeAndUnfreezeFlagDisabled) {
+// Similar to PageFreezeAndUnfreeze, but unfreezes task queues by making the
+// page visible instead of by invoking SetPageFrozen(false).
+TEST_F(FrameSchedulerImplTest, PageFreezeAndPageVisible) {
   int counter = 0;
   LoadingTaskQueue()->GetTaskRunnerWithDefaultTaskType()->PostTask(
       FROM_HERE, base::BindOnce(&IncrementCounter, base::Unretained(&counter)));
@@ -906,13 +932,13 @@ TEST_F(FrameSchedulerImplStopNonTimersInBackgroundDisabledTest,
 
   EXPECT_EQ(0, counter);
   base::RunLoop().RunUntilIdle();
-  // throttleable tasks and loading tasks are frozen, others continue to run.
-  EXPECT_EQ(3, counter);
+  // unpausable tasks continue to run.
+  EXPECT_EQ(1, counter);
 
-  page_scheduler_->SetPageFrozen(false);
+  // Making the page visible should cause frozen queues to resume.
+  page_scheduler_->SetPageVisible(true);
 
-  EXPECT_EQ(3, counter);
-  // Same as RunUntilIdle but also advances the clock if necessary.
+  EXPECT_EQ(1, counter);
   task_environment_.FastForwardUntilNoTasksRemain();
   EXPECT_EQ(5, counter);
 }
@@ -980,27 +1006,7 @@ TEST_F(FrameSchedulerImplTest, FramePostsCpuTasksThroughReloadRenavigate) {
 
 TEST_F(FrameSchedulerImplTest, PageFreezeWithKeepActive) {
   Vector<String> tasks;
-  LoadingTaskQueue()->GetTaskRunnerWithDefaultTaskType()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&RecordQueueName,
-                     LoadingTaskQueue()->GetTaskQueue()->GetName(), &tasks));
-  ThrottleableTaskQueue()->GetTaskRunnerWithDefaultTaskType()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&RecordQueueName,
-                     ThrottleableTaskQueue()->GetTaskQueue()->GetName(),
-                     &tasks));
-  DeferrableTaskQueue()->GetTaskRunnerWithDefaultTaskType()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&RecordQueueName,
-                     DeferrableTaskQueue()->GetTaskQueue()->GetName(), &tasks));
-  PausableTaskQueue()->GetTaskRunnerWithDefaultTaskType()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&RecordQueueName,
-                     PausableTaskQueue()->GetTaskQueue()->GetName(), &tasks));
-  UnpausableTaskQueue()->GetTaskRunnerWithDefaultTaskType()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&RecordQueueName,
-                     UnpausableTaskQueue()->GetTaskQueue()->GetName(), &tasks));
+  PostTestTasksToQueuesWithTrait(&tasks, "L1 T1 D1 P1 U1");
 
   page_scheduler_->SetKeepActive(true);  // say we have a Service Worker
   page_scheduler_->SetPageVisible(false);
@@ -1009,30 +1015,19 @@ TEST_F(FrameSchedulerImplTest, PageFreezeWithKeepActive) {
   EXPECT_THAT(tasks, UnorderedElementsAre());
   base::RunLoop().RunUntilIdle();
   // Everything runs except throttleable tasks (timers)
-  EXPECT_THAT(tasks,
-              UnorderedElementsAre(
-                  String(LoadingTaskQueue()->GetTaskQueue()->GetName()),
-                  String(DeferrableTaskQueue()->GetTaskQueue()->GetName()),
-                  String(PausableTaskQueue()->GetTaskQueue()->GetName()),
-                  String(UnpausableTaskQueue()->GetTaskQueue()->GetName())));
+  EXPECT_THAT(tasks, UnorderedElementsAre("L1", "D1", "P1", "U1"));
 
   tasks.clear();
-  LoadingTaskQueue()->GetTaskRunnerWithDefaultTaskType()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&RecordQueueName,
-                     LoadingTaskQueue()->GetTaskQueue()->GetName(), &tasks));
+  PostTestTasksToQueuesWithTrait(&tasks, "L1");
 
   EXPECT_THAT(tasks, UnorderedElementsAre());
   base::RunLoop().RunUntilIdle();
   // loading task runs
-  EXPECT_THAT(tasks, UnorderedElementsAre(String(
-                         LoadingTaskQueue()->GetTaskQueue()->GetName())));
+  EXPECT_THAT(tasks, UnorderedElementsAre("L1"));
 
   tasks.clear();
-  LoadingTaskQueue()->GetTaskRunnerWithDefaultTaskType()->PostTask(
-      FROM_HERE,
-      base::BindOnce(&RecordQueueName,
-                     LoadingTaskQueue()->GetTaskQueue()->GetName(), &tasks));
+  PostTestTasksToQueuesWithTrait(&tasks, "L1");
+
   // KeepActive is false when Service Worker stops.
   page_scheduler_->SetKeepActive(false);
   EXPECT_THAT(tasks, UnorderedElementsAre());
@@ -1044,37 +1039,7 @@ TEST_F(FrameSchedulerImplTest, PageFreezeWithKeepActive) {
   EXPECT_THAT(tasks, UnorderedElementsAre());
   base::RunLoop().RunUntilIdle();
   // loading task runs
-  EXPECT_THAT(tasks, UnorderedElementsAre(String(
-                         LoadingTaskQueue()->GetTaskQueue()->GetName())));
-}
-
-TEST_F(FrameSchedulerImplStopNonTimersInBackgroundEnabledTest,
-       PageFreezeAndPageVisible) {
-  int counter = 0;
-  LoadingTaskQueue()->GetTaskRunnerWithDefaultTaskType()->PostTask(
-      FROM_HERE, base::BindOnce(&IncrementCounter, base::Unretained(&counter)));
-  ThrottleableTaskQueue()->GetTaskRunnerWithDefaultTaskType()->PostTask(
-      FROM_HERE, base::BindOnce(&IncrementCounter, base::Unretained(&counter)));
-  DeferrableTaskQueue()->GetTaskRunnerWithDefaultTaskType()->PostTask(
-      FROM_HERE, base::BindOnce(&IncrementCounter, base::Unretained(&counter)));
-  PausableTaskQueue()->GetTaskRunnerWithDefaultTaskType()->PostTask(
-      FROM_HERE, base::BindOnce(&IncrementCounter, base::Unretained(&counter)));
-  UnpausableTaskQueue()->GetTaskRunnerWithDefaultTaskType()->PostTask(
-      FROM_HERE, base::BindOnce(&IncrementCounter, base::Unretained(&counter)));
-
-  page_scheduler_->SetPageVisible(false);
-  page_scheduler_->SetPageFrozen(true);
-
-  EXPECT_EQ(0, counter);
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(1, counter);
-
-  // Making the page visible should cause frozen queues to resume.
-  page_scheduler_->SetPageVisible(true);
-
-  EXPECT_EQ(1, counter);
-  base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(5, counter);
+  EXPECT_THAT(tasks, UnorderedElementsAre("L1"));
 }
 
 class FrameSchedulerImplTestWithUnfreezableLoading
@@ -1082,7 +1047,9 @@ class FrameSchedulerImplTestWithUnfreezableLoading
  public:
   FrameSchedulerImplTestWithUnfreezableLoading()
       : FrameSchedulerImplTest({blink::features::kLoadingTasksUnfreezable},
-                               {}) {}
+                               {}) {
+    WebRuntimeFeatures::EnableBackForwardCache(true);
+  }
 };
 
 TEST_F(FrameSchedulerImplTestWithUnfreezableLoading,
@@ -2478,7 +2445,7 @@ TEST_F(FrameSchedulerImplTest, BackForwardCacheOptOut) {
 
   auto feature_handle1 = frame_scheduler_->RegisterFeature(
       SchedulingPolicy::Feature::kWebSocket,
-      {SchedulingPolicy::RecordMetricsForBackForwardCache()});
+      {SchedulingPolicy::DisableBackForwardCache()});
 
   EXPECT_THAT(
       frame_scheduler_->GetActiveFeaturesTrackedForBackForwardCacheMetrics(),
@@ -2489,7 +2456,7 @@ TEST_F(FrameSchedulerImplTest, BackForwardCacheOptOut) {
 
   auto feature_handle2 = frame_scheduler_->RegisterFeature(
       SchedulingPolicy::Feature::kWebRTC,
-      {SchedulingPolicy::RecordMetricsForBackForwardCache()});
+      {SchedulingPolicy::DisableBackForwardCache()});
 
   EXPECT_THAT(
       frame_scheduler_->GetActiveFeaturesTrackedForBackForwardCacheMetrics(),
@@ -2528,7 +2495,7 @@ TEST_F(FrameSchedulerImplTest, BackForwardCacheOptOut_FrameNavigated) {
 
   auto feature_handle = frame_scheduler_->RegisterFeature(
       SchedulingPolicy::Feature::kWebSocket,
-      {SchedulingPolicy::RecordMetricsForBackForwardCache()});
+      {SchedulingPolicy::DisableBackForwardCache()});
 
   EXPECT_THAT(
       frame_scheduler_->GetActiveFeaturesTrackedForBackForwardCacheMetrics(),
@@ -2539,7 +2506,7 @@ TEST_F(FrameSchedulerImplTest, BackForwardCacheOptOut_FrameNavigated) {
 
   frame_scheduler_->RegisterStickyFeature(
       SchedulingPolicy::Feature::kMainResourceHasCacheControlNoStore,
-      {SchedulingPolicy::RecordMetricsForBackForwardCache()});
+      {SchedulingPolicy::DisableBackForwardCache()});
 
   EXPECT_THAT(
       frame_scheduler_->GetActiveFeaturesTrackedForBackForwardCacheMetrics(),
@@ -2596,11 +2563,11 @@ TEST_F(FrameSchedulerImplTest, FeatureUpload) {
                 frame_scheduler->RegisterStickyFeature(
                     SchedulingPolicy::Feature::
                         kMainResourceHasCacheControlNoStore,
-                    {SchedulingPolicy::RecordMetricsForBackForwardCache()});
+                    {SchedulingPolicy::DisableBackForwardCache()});
                 frame_scheduler->RegisterStickyFeature(
                     SchedulingPolicy::Feature::
                         kMainResourceHasCacheControlNoCache,
-                    {SchedulingPolicy::RecordMetricsForBackForwardCache()});
+                    {SchedulingPolicy::DisableBackForwardCache()});
                 // Ensure that the feature upload is delayed.
                 testing::Mock::VerifyAndClearExpectations(delegate);
                 EXPECT_CALL(
@@ -2635,7 +2602,7 @@ TEST_F(FrameSchedulerImplTest, FeatureUpload_FrameDestruction) {
                  FeatureHandle* feature_handle) {
                 *feature_handle = frame_scheduler->RegisterFeature(
                     SchedulingPolicy::Feature::kWebSocket,
-                    {SchedulingPolicy::RecordMetricsForBackForwardCache()});
+                    {SchedulingPolicy::DisableBackForwardCache()});
                 // Ensure that the feature upload is delayed.
                 testing::Mock::VerifyAndClearExpectations(delegate);
                 EXPECT_CALL(*delegate,

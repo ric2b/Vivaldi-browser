@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert, assertNotReached} from 'chrome://resources/js/assert.m.js';
 import {EventTracker} from 'chrome://resources/js/event_tracker.m.js';
 import {$, hasKeyModifiers} from 'chrome://resources/js/util.m.js';
 
@@ -75,12 +75,10 @@ export class Viewport {
    * @param {number} defaultZoom The default zoom level.
    * @param {number} topToolbarHeight The number of pixels that should initially
    *     be left blank above the document for the toolbar.
-   * @param {boolean} topToolbarFixed True if the top toolbar is fixed and does
-   *     not automatically disappear in fit to page mode.
    */
   constructor(
       scrollParent, sizer, content, scrollbarWidth, defaultZoom,
-      topToolbarHeight, topToolbarFixed) {
+      topToolbarHeight) {
     /** @private {!HTMLElement} */
     this.window_ = scrollParent;
 
@@ -98,9 +96,6 @@ export class Viewport {
 
     /** @private {number} */
     this.topToolbarHeight_ = topToolbarHeight;
-
-    /** @private {boolean} */
-    this.topToolbarFixed_ = topToolbarFixed;
 
     /** @private {function():void} */
     this.viewportChangedCallback_ = function() {};
@@ -459,12 +454,20 @@ export class Viewport {
    * @private
    */
   resize_() {
+    // Force fit-to-height when resizing happens as a result of entering full
+    // screen mode.
+    if (document.fullscreenElement !== null) {
+      this.fittingType_ = FittingType.FIT_TO_HEIGHT;
+      this.window_.dispatchEvent(
+          new CustomEvent('fitting-type-changed-for-testing'));
+    }
+
     if (this.fittingType_ === FittingType.FIT_TO_PAGE) {
       this.fitToPageInternal_(false);
     } else if (this.fittingType_ === FittingType.FIT_TO_WIDTH) {
       this.fitToWidth();
     } else if (this.fittingType_ === FittingType.FIT_TO_HEIGHT) {
-      this.fitToHeightInternal_(false);
+      this.fitToHeightInternal_(document.fullscreenElement !== null);
     } else if (this.internalZoom_ === 0) {
       this.fitToNone();
     } else {
@@ -677,6 +680,15 @@ export class Viewport {
   }
 
   /**
+   * @param {number} index
+   * @return {number} The y coordinate of the bottom of the given page.
+   * @private
+   */
+  getPageBottom_(index) {
+    return this.pageDimensions_[index].y + this.pageDimensions_[index].height;
+  }
+
+  /**
    * Get the page at a given y position. If there are multiple pages
    * overlapping the given y-coordinate, return the page with the smallest
    * index.
@@ -685,21 +697,38 @@ export class Viewport {
    * @private
    */
   getPageAtY_(y) {
+    if (y < 0) {
+      assert(this.topToolbarHeight_ > 0);
+      return 0;
+    }
+
+    // Drop decimal part of |y| otherwise it can appear as larger than the
+    // bottom of the last page in the document (even without the presence of a
+    // horizontal scrollbar).
+    y = Math.floor(y);
+
     let min = 0;
     let max = this.pageDimensions_.length - 1;
+    if (max === min) {
+      return min;
+    }
+
     while (max >= min) {
-      const page = Math.floor(min + ((max - min) / 2));
+      const page = min + Math.floor((max - min) / 2);
       // There might be a gap between the pages, in which case use the bottom
       // of the previous page as the top for finding the page.
-      let top = 0;
-      if (page > 0) {
-        top = this.pageDimensions_[page - 1].y +
-            this.pageDimensions_[page - 1].height;
-      }
-      const bottom =
-          this.pageDimensions_[page].y + this.pageDimensions_[page].height;
+      const top = page > 0 ? this.getPageBottom_(page - 1) : 0;
+      const bottom = this.getPageBottom_(page);
 
       if (top <= y && y <= bottom) {
+        return page;
+      }
+
+      // If the search reached the last page just return that page. |y| is
+      // larger than the last page's |bottom|, which can happen either because a
+      // horizontal scrollbar exists, or the document is zoomed out enough for
+      // free space to exist at the bottom.
+      if (page === this.pageDimensions_.length - 1) {
         return page;
       }
 
@@ -709,7 +738,10 @@ export class Viewport {
         min = page + 1;
       }
     }
-    return 0;
+
+    // Should always return within the while loop above.
+    assertNotReached('Could not find page for Y position: ' + y);
+    return -1;
   }
 
   /**
@@ -766,6 +798,7 @@ export class Viewport {
 
     const firstVisiblePage = this.getPageAtY_(viewportRect.y);
     const lastPossibleVisiblePage = this.getLastPageInViewport_(viewportRect);
+    assert(firstVisiblePage <= lastPossibleVisiblePage);
     if (firstVisiblePage === lastPossibleVisiblePage) {
       return firstVisiblePage;
     }
@@ -812,13 +845,9 @@ export class Viewport {
             'true.');
 
     // First compute the zoom without scrollbars.
-    let height = this.window_.offsetHeight;
-    if (this.topToolbarFixed_) {
-      height -= this.topToolbarHeight_;
-    }
     let zoom = this.computeFittingZoomGivenDimensions_(
-        fitWidth, fitHeight, this.window_.offsetWidth, height,
-        pageDimensions.width, pageDimensions.height);
+        fitWidth, fitHeight, this.window_.offsetWidth,
+        this.window_.offsetHeight, pageDimensions.width, pageDimensions.height);
 
     // Check if there needs to be any scrollbars.
     const needsScrollbars = this.documentNeedsScrollbars(zoom);
@@ -844,7 +873,7 @@ export class Viewport {
     // Compute available window space.
     const windowWithScrollbars = {
       width: this.window_.offsetWidth,
-      height: height,
+      height: this.window_.offsetHeight,
     };
     if (needsScrollbars.horizontal) {
       windowWithScrollbars.height -= scrollbarWidth;
@@ -940,10 +969,9 @@ export class Viewport {
       };
       this.setZoomInternal_(this.computeFittingZoom_(dimensions, false, true));
       if (scrollToTopOfPage) {
-        const offset = this.topToolbarFixed_ ? this.topToolbarHeight_ : 0;
         this.position = {
           x: 0,
-          y: this.pageDimensions_[page].y * this.getZoom() - offset,
+          y: this.pageDimensions_[page].y * this.getZoom(),
         };
       }
       this.updateViewport_();
@@ -976,10 +1004,9 @@ export class Viewport {
       };
       this.setZoomInternal_(this.computeFittingZoom_(dimensions, true, true));
       if (scrollToTopOfPage) {
-        const offset = this.topToolbarFixed_ ? this.topToolbarHeight_ : 0;
         this.position = {
           x: 0,
-          y: this.pageDimensions_[page].y * this.getZoom() - offset,
+          y: this.pageDimensions_[page].y * this.getZoom(),
         };
       }
       this.updateViewport_();
@@ -1043,33 +1070,18 @@ export class Viewport {
    * @param {!KeyboardEvent} e
    * @private
    */
-  pageUpHandler_(e) {
-    // Go to the previous page if we are fit-to-page or fit-to-height.
+  pageUpDownSpaceHandler_(e) {
+    const direction =
+        e.key === 'PageUp' || (e.key === ' ' && e.shiftKey) ? -1 : 1;
+    // Go to the previous/next page if we are fit-to-page or fit-to-height.
     if (this.isPagedMode_()) {
-      this.goToPreviousPage();
+      direction === 1 ? this.goToNextPage() : this.goToPreviousPage();
       // Since we do the movement of the page.
       e.preventDefault();
     } else if (
         /** @type {!{fromScriptingAPI: (boolean|undefined)}} */ (e)
             .fromScriptingAPI) {
-      this.position.y -= this.size.height;
-    }
-  }
-
-  /**
-   * @param {!KeyboardEvent} e
-   * @private
-   */
-  pageDownHandler_(e) {
-    // Go to the next page if we are fit-to-page or fit-to-height.
-    if (this.isPagedMode_()) {
-      this.goToNextPage();
-      // Since we do the movement of the page.
-      e.preventDefault();
-    } else if (
-        /** @type {!{fromScriptingAPI: (boolean|undefined)}} */ (e)
-            .fromScriptingAPI) {
-      this.position.y += this.size.height;
+      this.position.y += direction * this.size.height;
     }
   }
 
@@ -1120,22 +1132,25 @@ export class Viewport {
   }
 
   /**
-   * @param {boolean} fromScriptingAPI
+   * @param {!KeyboardEvent} e
+   * @param {boolean} formFieldFocused
    * @private
    */
-  arrowDownHandler_(fromScriptingAPI) {
-    if (fromScriptingAPI) {
-      this.position.y += SCROLL_INCREMENT;
+  arrowUpDownHandler_(e, formFieldFocused) {
+    if (hasKeyModifiers(e)) {
+      return;
     }
-  }
 
-  /**
-   * @param {boolean} fromScriptingAPI
-   * @private
-   */
-  arrowUpHandler_(fromScriptingAPI) {
-    if (fromScriptingAPI) {
-      this.position.y -= SCROLL_INCREMENT;
+    // Go to the previous/next page if Presentation mode is on and no form field
+    // is focused.
+    if (!(document.fullscreenElement === null || formFieldFocused)) {
+      e.key === 'ArrowDown' ? this.goToNextPage() : this.goToPreviousPage();
+      e.preventDefault();
+    } else if (
+        /** @type {!{fromScriptingAPI: (boolean|undefined)}} */ (e)
+            .fromScriptingAPI) {
+      const direction = e.key === 'ArrowDown' ? 1 : -1;
+      this.position.y += direction * SCROLL_INCREMENT;
     }
   }
 
@@ -1147,36 +1162,21 @@ export class Viewport {
    * @return {boolean} Whether the event was handled.
    */
   handleDirectionalKeyEvent(e, formFieldFocused) {
-    // Certain scroll events may be sent from outside of the extension.
-    const fromScriptingAPI =
-        /** @type {!{fromScriptingAPI: (boolean|undefined)}} */ (e)
-            .fromScriptingAPI;
-
     switch (e.key) {
-      case '':
-        if (e.shiftKey) {
-          this.pageUpHandler_(e);
-        } else {
-          this.pageDownHandler_(e);
-        }
-        return true;
+      case ' ':
       case 'PageUp':
-        this.pageUpHandler_(e);
-        return true;
       case 'PageDown':
-        this.pageDownHandler_(e);
+        this.pageUpDownSpaceHandler_(e);
         return true;
       case 'ArrowLeft':
         this.arrowLeftHandler_(e, formFieldFocused);
         return true;
+      case 'ArrowDown':
       case 'ArrowUp':
-        this.arrowUpHandler_(!!fromScriptingAPI);
+        this.arrowUpDownHandler_(e, formFieldFocused);
         return true;
       case 'ArrowRight':
         this.arrowRightHandler_(e, formFieldFocused);
-        return true;
-      case 'ArrowDown':
-        this.arrowDownHandler_(!!fromScriptingAPI);
         return true;
       default:
         return false;
@@ -1239,7 +1239,7 @@ export class Viewport {
       // Unless we're in fit to page or fit to height mode, scroll above the
       // page by |this.topToolbarHeight_| so that the toolbar isn't covering it
       // initially.
-      if (!this.isPagedMode_() || this.topToolbarFixed_) {
+      if (!this.isPagedMode_()) {
         toolbarOffset = this.topToolbarHeight_;
       }
       this.position = {
@@ -1483,6 +1483,11 @@ export class Viewport {
    * @private
    */
   onPinchStart_(e) {
+    // Disable pinch gestures in Presentation  mode.
+    if (document.fullscreenElement !== null) {
+      return;
+    }
+
     // We also use rAF for pinch start, so that if there is a pinch end event
     // scheduled by rAF, this pinch start will be sent after.
     window.requestAnimationFrame(() => {

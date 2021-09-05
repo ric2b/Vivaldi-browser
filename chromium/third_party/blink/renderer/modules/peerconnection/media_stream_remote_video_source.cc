@@ -15,6 +15,7 @@
 #include "media/base/timestamp_constants.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom-blink.h"
 #include "third_party/blink/renderer/platform/scheduler/public/post_cross_thread_task.h"
 #include "third_party/blink/renderer/platform/webrtc/track_observer.h"
@@ -51,7 +52,7 @@ class WebRtcEncodedVideoFrame : public EncodedVideoFrame {
  public:
   explicit WebRtcEncodedVideoFrame(const webrtc::RecordableEncodedFrame& frame)
       : buffer_(frame.encoded_buffer()),
-        codec_(FromWebRtcVideoCodec(frame.codec())),
+        codec_(WebRtcToMediaVideoCodec(frame.codec())),
         is_key_frame_(frame.is_key_frame()),
         resolution_(frame.resolution().width, frame.resolution().height) {
     if (frame.color_space()) {
@@ -74,19 +75,6 @@ class WebRtcEncodedVideoFrame : public EncodedVideoFrame {
   gfx::Size Resolution() const override { return resolution_; }
 
  private:
-  static media::VideoCodec FromWebRtcVideoCodec(webrtc::VideoCodecType codec) {
-    switch (codec) {
-      case webrtc::kVideoCodecVP8:
-        return media::kCodecVP8;
-      case webrtc::kVideoCodecVP9:
-        return media::kCodecVP9;
-      case webrtc::kVideoCodecH264:
-        return media::kCodecH264;
-      default:
-        return media::kUnknownVideoCodec;
-    }
-  }
-
   rtc::scoped_refptr<const webrtc::EncodedImageBufferInterface> buffer_;
   media::VideoCodec codec_;
   bool is_key_frame_;
@@ -152,6 +140,10 @@ class MediaStreamRemoteVideoSource::RemoteVideoSourceDelegate
 
   // Offset between NTP clock and WebRTC clock.
   const int64_t ntp_offset_;
+
+  // Determined from a feature flag; if set WebRTC won't forward an unspecified
+  // color space.
+  const bool ignore_unspecified_color_space_;
 };
 
 MediaStreamRemoteVideoSource::RemoteVideoSourceDelegate::
@@ -173,7 +165,9 @@ MediaStreamRemoteVideoSource::RemoteVideoSourceDelegate::
                          base::TimeDelta::FromMicroseconds(rtc::TimeMicros())),
       clock_(webrtc::Clock::GetRealTimeClock()),
       ntp_offset_(clock_->TimeInMilliseconds() -
-                  clock_->CurrentNtpInMilliseconds()) {}
+                  clock_->CurrentNtpInMilliseconds()),
+      ignore_unspecified_color_space_(base::FeatureList::IsEnabled(
+          features::kWebRtcIgnoreUnspecifiedColorSpace)) {}
 
 MediaStreamRemoteVideoSource::RemoteVideoSourceDelegate::
     ~RemoteVideoSourceDelegate() = default;
@@ -284,11 +278,23 @@ void MediaStreamRemoteVideoSource::RemoteVideoSourceDelegate::OnFrame(
 
   // Rotation may be explicitly set sometimes.
   if (incoming_frame.rotation() != webrtc::kVideoRotation_0) {
-    video_frame->metadata()->rotation =
+    video_frame->metadata().rotation =
         WebRtcToMediaVideoRotation(incoming_frame.rotation());
   }
 
-  if (incoming_frame.color_space()) {
+  // The second clause of the condition is controlled by the feature flag
+  // WebRtcIgnoreUnspecifiedColorSpace. If the feature is enabled we won't try
+  // to guess a color space if the webrtc::ColorSpace is unspecified. If the
+  // feature is disabled (default), an unspecified color space will get
+  // converted into a gfx::ColorSpace set to BT709.
+  if (incoming_frame.color_space() &&
+      !(ignore_unspecified_color_space_ &&
+        incoming_frame.color_space()->primaries() ==
+            webrtc::ColorSpace::PrimaryID::kUnspecified &&
+        incoming_frame.color_space()->transfer() ==
+            webrtc::ColorSpace::TransferID::kUnspecified &&
+        incoming_frame.color_space()->matrix() ==
+            webrtc::ColorSpace::MatrixID::kUnspecified)) {
     video_frame->set_color_space(
         WebRtcToMediaVideoColorSpace(*incoming_frame.color_space())
             .ToGfxColorSpace());
@@ -297,25 +303,24 @@ void MediaStreamRemoteVideoSource::RemoteVideoSourceDelegate::OnFrame(
   // Run render smoothness algorithm only when we don't have to render
   // immediately.
   if (!render_immediately)
-    video_frame->metadata()->reference_time = render_time;
+    video_frame->metadata().reference_time = render_time;
 
   if (incoming_frame.max_composition_delay_in_frames()) {
-    video_frame->metadata()->maximum_composition_delay_in_frames =
+    video_frame->metadata().maximum_composition_delay_in_frames =
         *incoming_frame.max_composition_delay_in_frames();
   }
 
-  video_frame->metadata()->decode_end_time = current_time;
+  video_frame->metadata().decode_end_time = current_time;
 
   // RTP_TIMESTAMP, PROCESSING_TIME, and CAPTURE_BEGIN_TIME are all exposed
   // through the JavaScript callback mechanism
   // video.requestVideoFrameCallback().
-  video_frame->metadata()->rtp_timestamp =
+  video_frame->metadata().rtp_timestamp =
       static_cast<double>(incoming_frame.timestamp());
 
   if (incoming_frame.processing_time()) {
-    video_frame->metadata()->processing_time =
-        base::TimeDelta::FromMicroseconds(
-            incoming_frame.processing_time()->Elapsed().us());
+    video_frame->metadata().processing_time = base::TimeDelta::FromMicroseconds(
+        incoming_frame.processing_time()->Elapsed().us());
   }
 
   // Set capture time to the NTP time, which is the estimated capture time
@@ -326,7 +331,7 @@ void MediaStreamRemoteVideoSource::RemoteVideoSourceDelegate::OnFrame(
         base::TimeDelta::FromMilliseconds(incoming_frame.ntp_time_ms() +
                                           ntp_offset_) +
         time_diff_;
-    video_frame->metadata()->capture_begin_time = capture_time;
+    video_frame->metadata().capture_begin_time = capture_time;
   }
 
   // Set receive time to arrival of last packet.
@@ -342,7 +347,7 @@ void MediaStreamRemoteVideoSource::RemoteVideoSourceDelegate::OnFrame(
     const base::TimeTicks receive_time =
         base::TimeTicks() +
         base::TimeDelta::FromMilliseconds(last_packet_arrival_ms) + time_diff_;
-    video_frame->metadata()->receive_time = receive_time;
+    video_frame->metadata().receive_time = receive_time;
   }
 
   // Use our computed render time as estimated capture time. If timestamp_us()
@@ -492,6 +497,11 @@ void MediaStreamRemoteVideoSource::RequestRefreshFrame() {
   if (video_track->GetSource()) {
     video_track->GetSource()->GenerateKeyFrame();
   }
+}
+
+base::WeakPtr<MediaStreamVideoSource> MediaStreamRemoteVideoSource::GetWeakPtr()
+    const {
+  return weak_factory_.GetWeakPtr();
 }
 
 void MediaStreamRemoteVideoSource::OnEncodedSinkEnabled() {

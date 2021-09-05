@@ -159,7 +159,8 @@ std::string ComputeGuidFromBytes(base::span<const uint8_t> bytes) {
 std::string InferGuidForLegacyBookmark(
     const std::string& originator_cache_guid,
     const std::string& originator_client_item_id) {
-  DCHECK(!base::IsValidGUID(originator_client_item_id));
+  DCHECK(
+      !base::GUID::ParseCaseInsensitive(originator_client_item_id).is_valid());
 
   const std::string unique_tag =
       base::StrCat({originator_cache_guid, originator_client_item_id});
@@ -169,7 +170,7 @@ std::string InferGuidForLegacyBookmark(
   static_assert(base::kSHA1Length >= 16, "16 bytes needed to infer GUID");
 
   const std::string guid = ComputeGuidFromBytes(base::make_span(hash));
-  DCHECK(base::IsValidGUIDOutputString(guid));
+  DCHECK(base::GUID::ParseLowercase(guid).is_valid());
   return guid;
 }
 
@@ -222,12 +223,10 @@ sync_pb::EntitySpecifics CreateSpecificsFromBookmarkNode(
     bm_specifics->set_url(node->url().spec());
   }
 
-  DCHECK(!node->guid().empty());
-  DCHECK(base::IsValidGUIDOutputString(node->guid()))
-      << "Actual: " << node->guid();
+  DCHECK(node->guid().is_valid()) << "Actual: " << node->guid();
 
   if (include_guid) {
-    bm_specifics->set_guid(node->guid());
+    bm_specifics->set_guid(node->guid().AsLowercaseString());
   }
 
   const std::string node_title = base::UTF16ToUTF8(node->GetTitle());
@@ -277,17 +276,18 @@ const bookmarks::BookmarkNode* CreateBookmarkNodeFromSpecifics(
   DCHECK(parent);
   DCHECK(model);
   DCHECK(favicon_service);
-  DCHECK(base::IsValidGUIDOutputString(specifics.guid()));
+
+  base::GUID guid = base::GUID::ParseLowercase(specifics.guid());
+  DCHECK(guid.is_valid());
 
   bookmarks::BookmarkNode::MetaInfoMap metainfo =
       GetBookmarkMetaInfo(specifics);
 
   // NOTE(igor@vivaldi.com): A new partner gets its default thumbnail.
-  const std::string* vivaldi_partner =
-      vivaldi_bookmark_kit::GetPartner(metainfo);
-  if (vivaldi_partner) {
+  base::GUID vivaldi_partner = vivaldi_bookmark_kit::GetPartner(metainfo);
+  if (vivaldi_partner.is_valid()) {
     const std::string& thumbnail =
-        vivaldi_partners::GetThumbnailUrl(*vivaldi_partner);
+        vivaldi_partners::GetThumbnailUrl(vivaldi_partner);
     if (!thumbnail.empty()) {
       metainfo[vivaldi_bookmark_kit::ThumbnailString()] = thumbnail;
     }
@@ -296,7 +296,7 @@ const bookmarks::BookmarkNode* CreateBookmarkNodeFromSpecifics(
   const bookmarks::BookmarkNode* node;
   if (is_folder) {
     node = model->AddFolder(parent, index, NodeTitleFromSpecifics(specifics),
-                            &metainfo, specifics.guid());
+                            &metainfo, guid);
   } else {
     const int64_t create_time_us = specifics.creation_time_us();
     base::Time create_time = base::Time::FromDeltaSinceWindowsEpoch(
@@ -304,8 +304,7 @@ const bookmarks::BookmarkNode* CreateBookmarkNodeFromSpecifics(
         // always used the Windows epoch.
         base::TimeDelta::FromMicroseconds(create_time_us));
     node = model->AddURL(parent, index, NodeTitleFromSpecifics(specifics),
-                         GURL(specifics.url()), &metainfo, create_time,
-                         specifics.guid());
+                         GURL(specifics.url()), &metainfo, create_time, guid);
   }
   SetBookmarkFaviconFromSpecifics(specifics, node, favicon_service);
   return node;
@@ -322,8 +321,8 @@ void UpdateBookmarkNodeFromSpecifics(
   // We shouldn't try to update the properties of the BookmarkNode before
   // resolving any conflict in GUID. Either GUIDs are the same, or the GUID in
   // specifics is invalid, and hence we can ignore it.
-  DCHECK(specifics.guid() == node->guid() ||
-         !base::IsValidGUIDOutputString(specifics.guid()));
+  base::GUID guid = base::GUID::ParseLowercase(specifics.guid());
+  DCHECK(!guid.is_valid() || guid == node->guid());
 
   if (!node->is_folder()) {
     model->SetURL(node, GURL(specifics.url()));
@@ -352,9 +351,9 @@ void UpdateBookmarkNodeFromSpecifics(
 // parent nodes more efficiently.
 const bookmarks::BookmarkNode* ReplaceBookmarkNodeGUID(
     const bookmarks::BookmarkNode* node,
-    const std::string& guid,
+    const base::GUID& guid,
     bookmarks::BookmarkModel* model) {
-  DCHECK(base::IsValidGUIDOutputString(guid));
+  DCHECK(guid.is_valid());
 
   if (node->guid() == guid) {
     // Nothing to do.
@@ -387,7 +386,8 @@ bool IsValidBookmarkSpecifics(const sync_pb::BookmarkSpecifics& specifics,
     LogInvalidSpecifics(InvalidBookmarkSpecificsError::kEmptySpecifics);
     is_valid = false;
   }
-  if (!base::IsValidGUIDOutputString(specifics.guid())) {
+  base::GUID guid = base::GUID::ParseLowercase(specifics.guid());
+  if (!guid.is_valid()) {
     DLOG(ERROR) << "Invalid bookmark: invalid GUID in the specifics.";
     LogInvalidSpecifics(InvalidBookmarkSpecificsError::kInvalidGUID);
     is_valid = false;
@@ -429,7 +429,7 @@ bool IsValidBookmarkSpecifics(const sync_pb::BookmarkSpecifics& specifics,
 bool HasExpectedBookmarkGuid(const sync_pb::BookmarkSpecifics& specifics,
                              const std::string& originator_cache_guid,
                              const std::string& originator_client_item_id) {
-  DCHECK(base::IsValidGUIDOutputString(specifics.guid()));
+  DCHECK(base::GUID::ParseLowercase(specifics.guid()).is_valid());
 
   if (originator_client_item_id.empty()) {
     // This could be a future bookmark with a client tag instead of an
@@ -438,7 +438,7 @@ bool HasExpectedBookmarkGuid(const sync_pb::BookmarkSpecifics& specifics,
     return true;
   }
 
-  if (base::IsValidGUID(originator_client_item_id)) {
+  if (base::GUID::ParseCaseInsensitive(originator_client_item_id).is_valid()) {
     // Bookmarks created around 2016, between [M44..M52) use an uppercase GUID
     // as originator client item ID, so it needs to be lowercased to adhere to
     // the invariant that GUIDs in specifics are canonicalized.

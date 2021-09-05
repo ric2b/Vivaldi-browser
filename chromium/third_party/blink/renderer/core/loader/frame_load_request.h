@@ -29,8 +29,8 @@
 #include "base/memory/scoped_refptr.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/mojom/referrer_policy.mojom-blink.h"
-#include "third_party/blink/public/common/navigation/triggering_event_info.h"
 #include "third_party/blink/public/mojom/blob/blob_url_store.mojom-blink.h"
+#include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
 #include "third_party/blink/public/mojom/loader/request_context_frame_type.mojom-blink.h"
 #include "third_party/blink/public/platform/web_impression.h"
 #include "third_party/blink/public/web/web_window_features.h"
@@ -86,11 +86,11 @@ struct CORE_EXPORT FrameLoadRequest {
     navigation_policy_ = navigation_policy;
   }
 
-  TriggeringEventInfo GetTriggeringEventInfo() const {
+  mojom::blink::TriggeringEventInfo GetTriggeringEventInfo() const {
     return triggering_event_info_;
   }
-  void SetTriggeringEventInfo(TriggeringEventInfo info) {
-    DCHECK(info != TriggeringEventInfo::kUnknown);
+  void SetTriggeringEventInfo(mojom::blink::TriggeringEventInfo info) {
+    DCHECK(info != mojom::blink::TriggeringEventInfo::kUnknown);
     triggering_event_info_ = info;
   }
 
@@ -147,13 +147,22 @@ struct CORE_EXPORT FrameLoadRequest {
 
   // Impressions are set when a FrameLoadRequest is created for a click on an
   // anchor tag that has conversion measurement attributes.
-  void SetImpression(const WebImpression& impression) {
+  void SetImpression(const base::Optional<WebImpression>& impression) {
     impression_ = impression;
   }
 
-  const base::Optional<WebImpression>& Impression() { return impression_; }
+  const base::Optional<WebImpression>& Impression() const {
+    return impression_;
+  }
 
   bool CanDisplay(const KURL&) const;
+
+  void SetInitiatorFrameToken(const base::UnguessableToken& token) {
+    initiator_frame_token_ = token;
+  }
+  const base::UnguessableToken* GetInitiatorFrameToken() const {
+    return initiator_frame_token_ ? &(initiator_frame_token_.value()) : nullptr;
+  }
 
  private:
   LocalDOMWindow* origin_window_;
@@ -162,8 +171,8 @@ struct CORE_EXPORT FrameLoadRequest {
   ClientNavigationReason client_navigation_reason_ =
       ClientNavigationReason::kNone;
   NavigationPolicy navigation_policy_ = kNavigationPolicyCurrentTab;
-  TriggeringEventInfo triggering_event_info_ =
-      TriggeringEventInfo::kNotFromEvent;
+  mojom::blink::TriggeringEventInfo triggering_event_info_ =
+      mojom::blink::TriggeringEventInfo::kNotFromEvent;
   HTMLFormElement* form_ = nullptr;
   ShouldSendReferrer should_send_referrer_;
   scoped_refptr<const DOMWrapperWorld> world_;
@@ -174,6 +183,7 @@ struct CORE_EXPORT FrameLoadRequest {
       mojom::RequestContextFrameType::kNone;
   WebWindowFeatures window_features_;
   base::Optional<WebImpression> impression_;
+  base::Optional<base::UnguessableToken> initiator_frame_token_;
 };
 
 }  // namespace blink

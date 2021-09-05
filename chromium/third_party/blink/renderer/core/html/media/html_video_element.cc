@@ -259,8 +259,11 @@ void HTMLVideoElement::UpdatePictureInPictureAvailability() {
   if (!web_media_player_)
     return;
 
-  web_media_player_->OnPictureInPictureAvailabilityChanged(
-      SupportsPictureInPicture());
+  for (auto& observer : GetMediaPlayerObserverRemoteSet()) {
+    if (!observer.is_bound())
+      continue;
+    observer->OnPictureInPictureAvailabilityChanged(SupportsPictureInPicture());
+  }
 }
 
 // TODO(zqzhang): this callback could be used to hide native controls instead of
@@ -356,6 +359,17 @@ void HTMLVideoElement::OnLoadFinished() {
   }
 
   UpdatePictureInPictureAvailability();
+}
+
+void HTMLVideoElement::RequestEnterPictureInPicture() {
+  PictureInPictureController::From(GetDocument())
+      .EnterPictureInPicture(this, nullptr /* promise */,
+                             nullptr /* options */);
+}
+
+void HTMLVideoElement::RequestExitPictureInPicture() {
+  PictureInPictureController::From(GetDocument())
+      .ExitPictureInPicture(this, nullptr);
 }
 
 void HTMLVideoElement::PaintCurrentFrame(
@@ -577,7 +591,7 @@ scoped_refptr<Image> HTMLVideoElement::GetSourceImageForCanvas(
   // TODO(fserb): this should not be default software.
   std::unique_ptr<CanvasResourceProvider> resource_provider =
       CanvasResourceProvider::CreateBitmapProvider(
-          intrinsic_size, kLow_SkFilterQuality, CanvasColorParams(),
+          intrinsic_size, kLow_SkFilterQuality, CanvasResourceParams(),
           CanvasResourceProvider::ShouldInitialize::kNo);
   if (!resource_provider) {
     *status = kInvalidSourceImageStatus;
@@ -670,17 +684,6 @@ DisplayType HTMLVideoElement::GetDisplayType() const {
 
 bool HTMLVideoElement::IsInAutoPIP() const {
   return is_auto_picture_in_picture_;
-}
-
-void HTMLVideoElement::RequestEnterPictureInPicture() {
-  PictureInPictureController::From(GetDocument())
-      .EnterPictureInPicture(this, nullptr /* promise */,
-                             nullptr /* options */);
-}
-
-void HTMLVideoElement::RequestExitPictureInPicture() {
-  PictureInPictureController::From(GetDocument())
-      .ExitPictureInPicture(this, nullptr);
 }
 
 void HTMLVideoElement::OnPictureInPictureStateChange() {
@@ -783,6 +786,13 @@ void HTMLVideoElement::OnWebMediaPlayerCreated() {
     GetWebMediaPlayer()
         ->GetMediaElementEventDelegate()
         ->SendAddedEventToBrowser();
+  }
+}
+
+void HTMLVideoElement::OnWebMediaPlayerCleared() {
+  if (RuntimeEnabledFeatures::RequestVideoFrameCallbackEnabled()) {
+    if (auto* vfc_requester = VideoFrameCallbackRequester::From(*this))
+      vfc_requester->OnWebMediaPlayerCleared();
   }
 }
 

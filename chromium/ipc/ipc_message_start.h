@@ -24,7 +24,6 @@ enum IPCMessageStart {
   PrintMsgStart,
   ExtensionMsgStart,
   ChromotingMsgStart,
-  AndroidWebViewMsgStart,
   NaClHostMsgStart,
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
   MediaPipelineMsgStart,
@@ -37,7 +36,6 @@ enum IPCMessageStart {
   MediaPlayerDelegateMsgStart,
   ExtensionWorkerMsgStart,
   SubresourceFilterMsgStart,
-  UnfreezableFrameMsgStart,
   VivaldiMsgStart,
   LastIPCMsgStart  // Must come last.
 };

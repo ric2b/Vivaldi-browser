@@ -110,12 +110,13 @@ RequestFilterProxyingWebSocket::RequestFilterProxyingWebSocket(
             /*navigation_id=*/base::nullopt),
       proxies_(proxies) {
   // base::Unretained is safe here because the callback will be canceled when
-  // |shutdown_notifier_| is destroyed, and |proxies_| owns this.
-  shutdown_notifier_ = ShutdownNotifierFactory::GetInstance()
-                           ->Get(browser_context)
-                           ->Subscribe(base::BindRepeating(
-                               &RequestFilterManager::ProxySet::RemoveProxy,
-                               base::Unretained(proxies_), this));
+  // |shutdown_notifier_subscription_| is destroyed, and |proxies_| owns this.
+  shutdown_notifier_subscription_ =
+      ShutdownNotifierFactory::GetInstance()
+          ->Get(browser_context)
+          ->Subscribe(
+              base::BindRepeating(&RequestFilterManager::ProxySet::RemoveProxy,
+                                  base::Unretained(proxies_), this));
 }
 
 RequestFilterProxyingWebSocket::~RequestFilterProxyingWebSocket() {

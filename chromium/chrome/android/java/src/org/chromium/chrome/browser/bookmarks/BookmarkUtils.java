@@ -19,6 +19,7 @@ import androidx.browser.customtabs.CustomTabsIntent;
 
 import org.chromium.base.BuildInfo;
 import org.chromium.base.Callback;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.metrics.RecordHistogram;
@@ -189,6 +190,7 @@ public class BookmarkUtils {
      * Add an article to the reading list. If the article was already loaded, the entry will be
      * overwritten. After successful addition, a snackbar will be shown notifying the user about the
      * result of the operation.
+     *
      * @param url The associated URL.
      * @param title The title of the reading list item being added.
      * @param snackbarManager The snackbar manager that will be used to show a snackbar.
@@ -267,32 +269,64 @@ public class BookmarkUtils {
 
     /**
      * Shows bookmark main UI.
+     *
      * @param activity An activity to start the manager with.
      */
     public static void showBookmarkManager(Activity activity) {
+        showBookmarkManager(activity, null);
+    }
+
+    /**
+     * Shows bookmark main UI.
+     * @param activity An activity to start the manager with. If null, the bookmark manager will be
+     *         started as a new task.
+     * @param folderId The bookmark folder to open. If null, the bookmark manager will open the most
+     *         recent folder.
+     */
+    public static void showBookmarkManager(
+            @Nullable Activity activity, @Nullable BookmarkId folderId) {
         ThreadUtils.assertOnUiThread();
-        String url = getFirstUrlToLoad(activity);
+        Context context = activity == null ? ContextUtils.getApplicationContext() : activity;
+        String url = getFirstUrlToLoad(context, folderId);
         if (ChromeApplication.isVivaldi()) {
             PanelUtils.showPanel((ChromeActivity) activity, url, false);
             return;
         }
 
-        if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(activity)) {
-            openUrl(activity, url, activity.getComponentName());
-        } else {
-            Intent intent = new Intent(activity, BookmarkActivity.class);
-            intent.setData(Uri.parse(url));
+        // Tablet.
+        if (DeviceFormFactor.isNonMultiDisplayContextOnTablet(context)) {
+            openUrl(context, url, activity == null ? null : activity.getComponentName());
+            return;
+        }
+
+        // Phone.
+        Intent intent = new Intent(context, BookmarkActivity.class);
+        intent.setData(Uri.parse(url));
+        if (activity != null) {
+            // Start from an existing activity.
             intent.putExtra(IntentHandler.EXTRA_PARENT_COMPONENT, activity.getComponentName());
             activity.startActivity(intent);
+        } else {
+            // Start a new task.
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            IntentHandler.startActivityForTrustedIntent(intent);
         }
     }
 
     /**
-     * The initial url the bookmark manager shows depends some experiments we run.
+     * @return the bookmark folder URL to open.
      */
-    private static String getFirstUrlToLoad(Context context) {
-        String lastUsedUrl = getLastUsedUrl(context);
-        return TextUtils.isEmpty(lastUsedUrl) ? UrlConstants.BOOKMARKS_URL : lastUsedUrl;
+    private static String getFirstUrlToLoad(Context context, @Nullable BookmarkId folderId) {
+        String url;
+        if (folderId == null) {
+            // Load most recently visited bookmark folder.
+            url = getLastUsedUrl(context);
+        } else {
+            // Load a specific folder.
+            url = BookmarkUIState.createFolderUrl(folderId).toString();
+        }
+
+        return TextUtils.isEmpty(url) ? UrlConstants.BOOKMARKS_URL : url;
     }
 
     /**
@@ -337,7 +371,7 @@ public class BookmarkUtils {
     public static void startEditActivity(Context context, BookmarkId bookmarkId) {
         RecordUserAction.record("MobileBookmarkManagerEditBookmark");
         if (ChromeApplication.isVivaldi()) {
-            VivaldiBookmarkUtils.startEditActivity(context, bookmarkId);
+            VivaldiBookmarkUtils.startEditActivity(context, bookmarkId, false);
             return;
         }
         Intent intent = new Intent(context, BookmarkEditActivity.class);
@@ -352,6 +386,7 @@ public class BookmarkUtils {
 
     /**
      * Opens a bookmark and reports UMA.
+     *
      * @param context The current context used to launch the intent.
      * @param openBookmarkComponentName The component to use when opening a bookmark.
      * @param model Bookmarks model to manage the bookmark.
@@ -367,7 +402,8 @@ public class BookmarkUtils {
                 "Bookmarks.OpenBookmarkType", bookmarkId.getType(), BookmarkType.LAST + 1);
 
         BookmarkItem bookmarkItem = model.getBookmarkById(bookmarkId);
-        if (bookmarkItem.getId().getType() == BookmarkType.READING_LIST) {
+        if (bookmarkItem.getId().getType() == BookmarkType.READING_LIST
+                && !bookmarkItem.isFolder()) {
             model.setReadStatusForReadingList(bookmarkItem.getUrl(), true);
             openUrlInCustomTab(context, bookmarkItem.getUrl());
         } else {
@@ -452,6 +488,7 @@ public class BookmarkUtils {
 
     /**
      * Populates the top level bookmark folder ids.
+     *
      * @param bookmarkModel The bookmark model that talks to bookmark native backend.
      * @return The list of top level bookmark folder ids.
      */
@@ -508,5 +545,9 @@ public class BookmarkUtils {
     // Vivaldi
     public static BookmarkId getLastUsedParentPublic(Context context) {
         return getLastUsedParent(context);
+    }
+
+    public static void setLastUsedParentPublic(Context context, BookmarkId bookmarkId) {
+        setLastUsedParent(context, bookmarkId);
     }
 }

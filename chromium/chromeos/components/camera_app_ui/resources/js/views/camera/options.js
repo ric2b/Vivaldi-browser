@@ -8,9 +8,10 @@ import {Camera3DeviceInfo} from '../../device/camera3_device_info.js';
 // eslint-disable-next-line no-unused-vars
 import {DeviceInfoUpdater} from '../../device/device_info_updater.js';
 import * as dom from '../../dom.js';
+import {sendBarcodeEnabledEvent} from '../../metrics.js';
 import * as nav from '../../nav.js';
 import * as state from '../../state.js';
-import {Facing, PerfEvent, ViewName} from '../../type.js';
+import {Facing, Mode, PerfEvent, ViewName} from '../../type.js';
 import * as util from '../../util.js';
 
 /**
@@ -51,6 +52,13 @@ export class Options {
     this.toggleMirror_ = dom.get('#toggle-mirror', HTMLInputElement);
 
     /**
+     * @type {!HTMLInputElement}
+     * @private
+     * @const
+     */
+    this.toggleBarcode_ = dom.get('#toggle-barcode', HTMLInputElement);
+
+    /**
      * Device id of the camera device currently used or selected.
      * @type {?string}
      * @private
@@ -87,7 +95,6 @@ export class Options {
     this.audioTrack_ = null;
 
     [['#switch-device', () => this.switchDevice_()],
-     ['#toggle-grid', () => this.animatePreviewGrid_()],
      ['#open-settings', () => nav.open(ViewName.SETTINGS)],
     ]
         .forEach(
@@ -96,6 +103,14 @@ export class Options {
 
     this.toggleMic_.addEventListener('click', () => this.updateAudioByMic_());
     this.toggleMirror_.addEventListener('click', () => this.saveMirroring_());
+    this.toggleBarcode_.addEventListener('click', () => this.updateBarcode_());
+
+    state.addObserver(Mode.PHOTO, (inPhotoMode) => {
+      if (!inPhotoMode) {
+        this.toggleBarcode_.checked = false;
+        this.updateBarcode_();
+      }
+    });
 
     util.bindElementAriaLabelWithState({
       element: dom.get('#toggle-timer', Element),
@@ -148,15 +163,6 @@ export class Options {
     }
     const isSuccess = await this.doSwitchDevice_();
     state.set(PerfEvent.CAMERA_SWITCHING, false, {hasError: !isSuccess});
-  }
-
-  /**
-   * Animates the preview grid.
-   * @private
-   */
-  animatePreviewGrid_() {
-    Array.from(document.querySelector('#preview-grid').children)
-        .forEach((grid) => util.animateOnce(grid));
   }
 
   /**
@@ -233,12 +239,24 @@ export class Options {
   }
 
   /**
-   * Enables/disables the current audio track by the microphone option.
+   * Enables/disables the current audio track according to the microphone
+   * option.
    * @private
    */
   updateAudioByMic_() {
     if (this.audioTrack_) {
       this.audioTrack_.enabled = this.toggleMic_.checked;
+    }
+  }
+
+  /**
+   * Enables/disables barcode scanning according to the barcode option.
+   * @private
+   */
+  updateBarcode_() {
+    state.set(state.State.SCAN_BARCODE, this.toggleBarcode_.checked);
+    if (this.toggleBarcode_.checked) {
+      sendBarcodeEnabledEvent();
     }
   }
 

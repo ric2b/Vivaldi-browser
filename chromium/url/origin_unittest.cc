@@ -10,9 +10,12 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 #include "url/origin.h"
+#include "url/origin_abstract_tests.h"
 #include "url/url_util.h"
 
 namespace url {
+
+namespace {
 
 void ExpectParsedUrlsEqual(const GURL& a, const GURL& b) {
   EXPECT_EQ(a, b);
@@ -35,6 +38,8 @@ void ExpectParsedUrlsEqual(const GURL& a, const GURL& b) {
   EXPECT_EQ(a_parsed.ref.begin, b_parsed.ref.begin);
   EXPECT_EQ(a_parsed.ref.len, b_parsed.ref.len);
 }
+
+}  // namespace
 
 class OriginTest : public ::testing::Test {
  public:
@@ -224,8 +229,14 @@ TEST_F(OriginTest, OpaqueOriginComparison) {
       "local-but-nonstandar:foo",  // Prefix of registered scheme.
       "but-nonstandard:foo",       // Suffix of registered scheme.
       "local-and-standard:",       // Standard scheme needs a hostname.
-      "standard-but-noaccess:",    // Standard scheme needs a hostname.
       "blob:blob:http://www.example.com/guid-goes-here",  // Double blob.
+
+      // Scheme (registered in SetUp()) that's standard but marked as noaccess.
+      // See also SecurityOriginTest.StandardNoAccessScheme and
+      // NavigationUrlRewriteBrowserTest.RewriteToNoAccess.
+      "standard-but-noaccess:",     // Standard scheme needs a hostname.
+      "standard-but-noaccess:foo",  // Standard scheme needs a hostname.
+      "standard-but-noaccess://bar",
   };
 
   for (auto* test_url : urls) {
@@ -343,12 +354,6 @@ TEST_F(OriginTest, ConstructFromGURL) {
       {"local-but-nonstandard:foo", "local-but-nonstandard", "", 0},
       {"local-but-nonstandard://bar", "local-but-nonstandard", "", 0},
       {"also-local-but-nonstandard://bar", "also-local-but-nonstandard", "", 0},
-
-      // Scheme (registered in SetUp()) that's standard but marked as noaccess.
-      // url::Origin doesn't currently take the noaccess property into account,
-      // so these aren't expected to result in opaque origins.
-      {"standard-but-noaccess:foo", "standard-but-noaccess", "foo", 0},
-      {"standard-but-noaccess://bar", "standard-but-noaccess", "bar", 0},
 
       // file: URLs
       {"file:///etc/passwd", "file", "", 0},
@@ -671,15 +676,6 @@ TEST_F(OriginTest, NonStandardScheme) {
   EXPECT_TRUE(origin.opaque());
 }
 
-TEST_F(OriginTest, NonStandardSchemeWithAndroidWebViewHack) {
-  EnableNonStandardSchemesForAndroidWebView();
-  Origin origin = Origin::Create(GURL("cow://"));
-  EXPECT_FALSE(origin.opaque());
-  EXPECT_EQ("cow", origin.scheme());
-  EXPECT_EQ("", origin.host());
-  EXPECT_EQ(0, origin.port());
-}
-
 TEST_F(OriginTest, CanBeDerivedFrom) {
   AddStandardScheme("new-standard", SchemeType::SCHEME_WITH_HOST);
   Origin opaque_unique_origin = Origin();
@@ -818,10 +814,10 @@ TEST_F(OriginTest, CanBeDerivedFrom) {
       {"standard-but-noaccess://a.com/foo", &regular_origin, false},
       {"standard-but-noaccess://a.com/foo", &opaque_precursor_origin, false},
       {"standard-but-noaccess://a.com/foo", &opaque_unique_origin, true},
-      {"standard-but-noaccess://a.com/foo", &no_access_origin, false},
+      {"standard-but-noaccess://a.com/foo", &no_access_origin, true},
       {"standard-but-noaccess://a.com/foo", &no_access_opaque_precursor_origin,
-       false},
-      {"standard-but-noaccess://b.com/foo", &no_access_origin, false},
+       true},
+      {"standard-but-noaccess://b.com/foo", &no_access_origin, true},
       {"standard-but-noaccess://b.com/foo", &no_access_opaque_precursor_origin,
        true},
 
@@ -966,5 +962,32 @@ TEST_F(OriginTest, DeserializeValidNonce) {
   EXPECT_TRUE(DoEqualityComparisons(opaque, deserialized.value(), true));
   EXPECT_EQ(opaque.GetDebugString(), deserialized.value().GetDebugString());
 }
+
+class UrlOriginTestTraits final : public OriginTraitsBase<Origin> {
+ public:
+  OriginType CreateOriginFromString(base::StringPiece s) const override {
+    return Origin::Create(GURL(s));
+  }
+
+  bool IsOpaque(const OriginType& origin) const override {
+    return origin.opaque();
+  }
+
+  std::string GetScheme(const OriginType& origin) const override {
+    return origin.scheme();
+  }
+
+  std::string GetHost(const OriginType& origin) const override {
+    return origin.host();
+  }
+
+  uint16_t GetPort(const OriginType& origin) const override {
+    return origin.port();
+  }
+};
+
+INSTANTIATE_TYPED_TEST_SUITE_P(UrlOrigin,
+                               AbstractOriginTest,
+                               UrlOriginTestTraits);
 
 }  // namespace url

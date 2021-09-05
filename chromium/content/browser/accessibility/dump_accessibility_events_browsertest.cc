@@ -31,7 +31,7 @@
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
-#include "ui/accessibility/platform/inspect/tree_formatter.h"
+#include "ui/accessibility/platform/inspect/ax_tree_formatter.h"
 
 namespace content {
 
@@ -259,8 +259,14 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
   RunEventTest(FILE_PATH_LITERAL("aria-busy-changed.html"));
 }
 
-IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
-                       AccessibilityEventsAriaButtonExpand) {
+#if defined(OS_LINUX)
+#define DISABLED_ON_LINUX_TSAN_MSAN(name) DISABLED_##name
+#else
+#define DISABLED_ON_LINUX_TSAN_MSAN(name) name
+#endif
+IN_PROC_BROWSER_TEST_P(
+    DumpAccessibilityEventsTest,
+    DISABLED_ON_LINUX_TSAN_MSAN(AccessibilityEventsAriaButtonExpand)) {
   RunEventTest(FILE_PATH_LITERAL("aria-button-expand.html"));
 }
 
@@ -289,6 +295,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        DISABLED_AccessibilityEventsAriaComboBoxUneditable) {
   RunEventTest(FILE_PATH_LITERAL("aria-combo-box-uneditable.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsAriaCurrentChanged) {
+  RunEventTest(FILE_PATH_LITERAL("aria-current-changed.html"));
 }
 
 #if defined(OS_WIN)
@@ -512,6 +523,11 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsCaretMoveHiddenInput) {
+  RunEventTest(FILE_PATH_LITERAL("caret-move-hidden-input.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsCheckboxValidity) {
   RunEventTest(FILE_PATH_LITERAL("checkbox-validity.html"));
 }
@@ -553,6 +569,25 @@ IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
                        AccessibilityEventsAriaHiddenDescendants) {
   RunEventTest(FILE_PATH_LITERAL("aria-hidden-descendants.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,
+                       AccessibilityEventsAriaHiddenSingleDescendant) {
+  RunEventTest(FILE_PATH_LITERAL("aria-hidden-single-descendant.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(
+    DumpAccessibilityEventsTest,
+    AccessibilityEventsAriaHiddenSingleDescendantDisplayNone) {
+  RunEventTest(
+      FILE_PATH_LITERAL("aria-hidden-single-descendant-display-none.html"));
+}
+
+IN_PROC_BROWSER_TEST_P(
+    DumpAccessibilityEventsTest,
+    AccessibilityEventsAriaHiddenSingleDescendantVisibilityHidden) {
+  RunEventTest(FILE_PATH_LITERAL(
+      "aria-hidden-single-descendant-visibility-hidden.html"));
 }
 
 IN_PROC_BROWSER_TEST_P(DumpAccessibilityEventsTest,

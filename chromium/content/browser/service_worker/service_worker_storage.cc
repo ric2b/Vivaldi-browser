@@ -15,6 +15,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
+#include "base/stl_util.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/task_runner_util.h"
@@ -597,9 +598,13 @@ void ServiceWorkerStorage::CreateResourceReader(
       break;
   }
 
-  mojo::MakeSelfOwnedReceiver(std::make_unique<ServiceWorkerResourceReaderImpl>(
-                                  resource_id, disk_cache()->GetWeakPtr()),
-                              std::move(receiver));
+  uint64_t resource_operation_id = GetNextResourceOperationId();
+  DCHECK(!base::Contains(resource_readers_, resource_operation_id));
+  resource_readers_[resource_operation_id] =
+      std::make_unique<ServiceWorkerResourceReaderImpl>(
+          resource_id, disk_cache()->GetWeakPtr(), std::move(receiver),
+          base::BindOnce(&ServiceWorkerStorage::OnResourceReaderDisconnected,
+                         weak_factory_.GetWeakPtr(), resource_operation_id));
 }
 
 void ServiceWorkerStorage::CreateResourceWriter(
@@ -620,9 +625,13 @@ void ServiceWorkerStorage::CreateResourceWriter(
       break;
   }
 
-  mojo::MakeSelfOwnedReceiver(std::make_unique<ServiceWorkerResourceWriterImpl>(
-                                  resource_id, disk_cache()->GetWeakPtr()),
-                              std::move(receiver));
+  uint64_t resource_operation_id = GetNextResourceOperationId();
+  DCHECK(!base::Contains(resource_writers_, resource_operation_id));
+  resource_writers_[resource_operation_id] =
+      std::make_unique<ServiceWorkerResourceWriterImpl>(
+          resource_id, disk_cache()->GetWeakPtr(), std::move(receiver),
+          base::BindOnce(&ServiceWorkerStorage::OnResourceWriterDisconnected,
+                         weak_factory_.GetWeakPtr(), resource_operation_id));
 }
 
 void ServiceWorkerStorage::CreateResourceMetadataWriter(
@@ -643,10 +652,14 @@ void ServiceWorkerStorage::CreateResourceMetadataWriter(
       break;
   }
 
-  mojo::MakeSelfOwnedReceiver(
+  uint64_t resource_operation_id = GetNextResourceOperationId();
+  DCHECK(!base::Contains(resource_metadata_writers_, resource_operation_id));
+  resource_metadata_writers_[resource_operation_id] =
       std::make_unique<ServiceWorkerResourceMetadataWriterImpl>(
-          resource_id, disk_cache()->GetWeakPtr()),
-      std::move(receiver));
+          resource_id, disk_cache()->GetWeakPtr(), std::move(receiver),
+          base::BindOnce(
+              &ServiceWorkerStorage::OnResourceMetadataWriterDisconnected,
+              weak_factory_.GetWeakPtr(), resource_operation_id));
 }
 
 void ServiceWorkerStorage::StoreUncommittedResourceId(
@@ -1189,7 +1202,29 @@ void ServiceWorkerStorage::PurgeResources(
 
 void ServiceWorkerStorage::ApplyPolicyUpdates(
     const std::vector<storage::mojom::LocalStoragePolicyUpdatePtr>&
-        policy_updates) {
+        policy_updates,
+    DatabaseStatusCallback callback) {
+  switch (state_) {
+    case STORAGE_STATE_DISABLED:
+      std::move(callback).Run(ServiceWorkerDatabase::Status::kErrorDisabled);
+      return;
+    case STORAGE_STATE_INITIALIZING:
+    case STORAGE_STATE_UNINITIALIZED: {
+      // An explicit clone is needed to pass `policy_updates` to LazyInitialize.
+      std::vector<storage::mojom::LocalStoragePolicyUpdatePtr>
+          cloned_policy_updates;
+      for (const auto& entry : policy_updates)
+        cloned_policy_updates.push_back(entry.Clone());
+
+      LazyInitialize(base::BindOnce(
+          &ServiceWorkerStorage::ApplyPolicyUpdates, weak_factory_.GetWeakPtr(),
+          std::move(cloned_policy_updates), std::move(callback)));
+      return;
+    }
+    case STORAGE_STATE_INITIALIZED:
+      break;
+  }
+
   for (const auto& update : policy_updates) {
     GURL url = update->origin.GetURL();
     if (!update->purge_on_shutdown)
@@ -1197,6 +1232,8 @@ void ServiceWorkerStorage::ApplyPolicyUpdates(
     else
       origins_to_purge_on_shutdown_.insert(std::move(url));
   }
+
+  std::move(callback).Run(ServiceWorkerDatabase::Status::kOk);
 }
 
 ServiceWorkerStorage::ServiceWorkerStorage(
@@ -1555,6 +1592,24 @@ void ServiceWorkerStorage::ClearSessionOnlyOrigins() {
   database_task_runner_->PostTask(
       FROM_HERE, base::BindOnce(&DeleteAllDataForOriginsFromDB, database_.get(),
                                 origins_to_purge_on_shutdown_));
+}
+
+void ServiceWorkerStorage::OnResourceReaderDisconnected(
+    uint64_t resource_operation_id) {
+  DCHECK(base::Contains(resource_readers_, resource_operation_id));
+  resource_readers_.erase(resource_operation_id);
+}
+
+void ServiceWorkerStorage::OnResourceWriterDisconnected(
+    uint64_t resource_operation_id) {
+  DCHECK(base::Contains(resource_writers_, resource_operation_id));
+  resource_writers_.erase(resource_operation_id);
+}
+
+void ServiceWorkerStorage::OnResourceMetadataWriterDisconnected(
+    uint64_t resource_operation_id) {
+  DCHECK(base::Contains(resource_metadata_writers_, resource_operation_id));
+  resource_metadata_writers_.erase(resource_operation_id);
 }
 
 // static

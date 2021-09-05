@@ -39,7 +39,6 @@
 #import "ios/chrome/browser/ui/settings/cells/settings_switch_cell.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_switch_item.h"
 #import "ios/chrome/browser/ui/settings/clear_browsing_data/clear_browsing_data_ui_constants.h"
-#import "ios/chrome/browser/ui/settings/credit_card_scanner/credit_card_scanner_view_controller.h"
 #import "ios/chrome/browser/ui/settings/google_services/accounts_table_view_controller_constants.h"
 #import "ios/chrome/browser/ui/settings/google_services/google_services_settings_constants.h"
 #import "ios/chrome/browser/ui/settings/import_data_table_view_controller.h"
@@ -131,7 +130,7 @@ UIView* SubviewWithAccessibilityIdentifier(NSString* accessibility_id,
 
 + (id<GREYMatcher>)windowWithNumber:(int)windowNumber {
   return grey_allOf(
-      grey_accessibilityLabel([NSString stringWithFormat:@"%d", windowNumber]),
+      grey_accessibilityID([NSString stringWithFormat:@"%d", windowNumber]),
       grey_kindOfClass([UIWindow class]), nil);
 }
 
@@ -472,6 +471,10 @@ UIView* SubviewWithAccessibilityIdentifier(NSString* accessibility_id,
   return grey_accessibilityID(kSyncSettingsConfirmButtonId);
 }
 
++ (id<GREYMatcher>)autofillCreditCardEditTableView {
+  return grey_accessibilityID(kAutofillCreditCardEditTableViewId);
+}
+
 + (id<GREYMatcher>)addressesAndMoreButton {
   return [ChromeMatchersAppInterface
       buttonWithAccessibilityLabelID:(IDS_AUTOFILL_ADDRESSES_SETTINGS_TITLE)];
@@ -504,10 +507,6 @@ UIView* SubviewWithAccessibilityIdentifier(NSString* accessibility_id,
 
 + (id<GREYMatcher>)addCreditCardCancelButton {
   return grey_accessibilityID(kSettingsAddCreditCardCancelButtonID);
-}
-
-+ (id<GREYMatcher>)creditCardScannerView {
-  return grey_accessibilityID(kCreditCardScannerViewID);
 }
 
 + (id<GREYMatcher>)toolsMenuView {
@@ -699,6 +698,21 @@ UIView* SubviewWithAccessibilityIdentifier(NSString* accessibility_id,
 + (id<GREYMatcher>)systemSelectionCalloutCopyButton {
   return grey_allOf(grey_accessibilityLabel(@"Copy"),
                     [self systemSelectionCallout], nil);
+}
+
++ (id<GREYMatcher>)systemSelectionCalloutLinkToTextButton {
+  return grey_allOf(grey_accessibilityLabel(
+                        l10n_util::GetNSString(IDS_IOS_SHARE_LINK_TO_TEXT)),
+                    [self systemSelectionCallout], nil);
+}
+
++ (id<GREYMatcher>)copyActivityButton API_AVAILABLE(ios(13)) {
+  id<GREYMatcher> copyStaticText = [ChromeMatchersAppInterface
+      staticTextWithAccessibilityLabel:l10n_util::GetNSString(
+                                           IDS_IOS_SHARE_MENU_COPY)];
+  return grey_allOf(
+      copyStaticText,
+      grey_ancestor(grey_kindOfClassName(@"UIActivityActionGroupCell")), nil);
 }
 
 + (id<GREYMatcher>)copyLinkButtonWithUseNewString:(BOOL)useNewString {

@@ -6,8 +6,10 @@
 
 #include <sstream>
 #include <string>
+#include "base/base64url.h"
 #include "base/containers/flat_set.h"
 #include "base/ranges/algorithm.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
@@ -18,7 +20,6 @@
 #include "services/network/public/cpp/content_security_policy/csp_context.h"
 #include "services/network/public/cpp/content_security_policy/csp_source.h"
 #include "services/network/public/cpp/content_security_policy/csp_source_list.h"
-#include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "services/network/public/cpp/web_sandbox_flags.h"
 #include "url/gurl.h"
@@ -215,7 +216,7 @@ void ReportViolation(CSPContext* context,
   // ensure that these are not transmitted between different cross-origin
   // renderers.
   GURL blocked_url = (directive_name == CSPDirectiveName::FrameAncestors)
-                         ? GURL(ToString(context->self_source()))
+                         ? GURL(ToString(*policy->self_origin))
                          : url;
   auto safe_source_location =
       source_location ? source_location->Clone() : mojom::SourceLocation::New();
@@ -303,8 +304,10 @@ DirectivesMap ParseHeaderValue(base::StringPiece header) {
     // 5. Let directive value be the result of splitting token on ASCII
     // whitespace.
     base::StringPiece value;
-    if (pos != std::string::npos)
-      value = directive.substr(pos + 1);
+    if (pos != std::string::npos) {
+      value = base::TrimString(directive.substr(pos + 1),
+                               base::kWhitespaceASCII, base::TRIM_ALL);
+    }
 
     // 6. Let directive be a new directive whose name is directive name,
     // and value is directive value.
@@ -562,7 +565,18 @@ bool ParseHash(base::StringPiece expression, mojom::CSPHashSource* hash) {
         return false;
 
       hash->algorithm = item.type;
-      hash->value = subexpression.as_string();
+
+      // We lazily accept both base64url and base64-encoded data.
+      std::string normalized_value;
+      base::ReplaceChars(subexpression, "+", "-", &normalized_value);
+      base::ReplaceChars(normalized_value, "/", "_", &normalized_value);
+
+      std::string out;
+      if (!base::Base64UrlDecode(normalized_value,
+                                 base::Base64UrlDecodePolicy::IGNORE_PADDING,
+                                 &out))
+        return false;
+      hash->value = std::vector<uint8_t>(out.begin(), out.end());
       return true;
     }
   }
@@ -729,6 +743,85 @@ std::vector<std::string> ParsePluginTypes(
   return out;
 }
 
+// Parse the 'required-trusted-types-for' directive.
+// https://w3c.github.io/webappsec-trusted-types/dist/spec/#require-trusted-types-for-csp-directive
+network::mojom::CSPRequireTrustedTypesFor ParseRequireTrustedTypesFor(
+    base::StringPiece value,
+    std::vector<std::string>& parsing_errors) {
+  network::mojom::CSPRequireTrustedTypesFor out =
+      network::mojom::CSPRequireTrustedTypesFor::None;
+  for (const auto expression : base::SplitStringPiece(
+           value, base::kWhitespaceASCII, base::TRIM_WHITESPACE,
+           base::SPLIT_WANT_NONEMPTY)) {
+    if (expression == "'script'") {
+      out = network::mojom::CSPRequireTrustedTypesFor::Script;
+    } else {
+      const char* hint = nullptr;
+      if (expression == "script" || expression == "scripts" ||
+          expression == "'scripts'") {
+        hint = " Did you mean 'script'?";
+      }
+
+      parsing_errors.emplace_back(base::StringPrintf(
+          "Invalid expression in 'require-trusted-types-for' "
+          "Content Security Policy directive: %s.%s\n",
+          expression.as_string().c_str(), hint));
+    }
+  }
+  if (out == network::mojom::CSPRequireTrustedTypesFor::None)
+    parsing_errors.emplace_back(base::StringPrintf(
+        "'require-trusted-types-for' Content Security Policy "
+        "directive is empty; The directive has no effect.\n"));
+  return out;
+}
+
+// This implements tt-policy-name from
+// https://w3c.github.io/webappsec-trusted-types/dist/spec/#trusted-types-csp-directive/
+bool IsValidTrustedTypesPolicyName(base::StringPiece value) {
+  return base::ranges::all_of(value, [](char c) {
+    return base::IsAsciiAlpha(c) || base::IsAsciiDigit(c) ||
+           base::Contains("-#=_/@.%", c);
+  });
+}
+
+// Parse the 'trusted-types' directive.
+// https://w3c.github.io/webappsec-trusted-types/dist/spec/#trusted-types-csp-directive
+network::mojom::CSPTrustedTypesPtr ParseTrustedTypes(
+    base::StringPiece value,
+    std::vector<std::string>& parsing_errors) {
+  auto out = network::mojom::CSPTrustedTypes::New();
+  std::vector<base::StringPiece> pieces =
+      base::SplitStringPiece(value, base::kWhitespaceASCII,
+                             base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+
+  if (pieces.size() == 1 && pieces[0] == "'none'")
+    return out;
+
+  for (const auto expression : pieces) {
+    if (expression == "*")
+      out->allow_any = true;
+    else if (expression == "'allow-duplicates'")
+      out->allow_duplicates = true;
+    else if (expression == "'none'") {
+      parsing_errors.emplace_back(
+          "The value of the Content Security Policy directive "
+          "'trusted_types' contains an invalid policy: 'none'. "
+          "It will be ignored. "
+          "Note that 'none' has no effect unless it is the only "
+          "expression in the directive value.");
+    } else if (IsValidTrustedTypesPolicyName(expression))
+      out->list.emplace_back(expression);
+    else {
+      parsing_errors.emplace_back(base::StringPrintf(
+          "The value of the Content Security Policy directive "
+          "'trusted_types' contains an invalid policy: '%s'. "
+          "It will be ignored.",
+          expression.as_string().c_str()));
+    }
+  }
+  return out;
+}
+
 // Parses a reporting directive.
 // https://w3c.github.io/webappsec-csp/#directives-reporting
 // TODO(lfg): The report-to should be treated as a single token according to the
@@ -766,6 +859,33 @@ void ParseReportDirective(const GURL& request_url,
   }
 }
 
+void WarnIfDirectiveValueNotEmpty(
+    const std::pair<base::StringPiece, base::StringPiece>& directive,
+    std::vector<std::string>& parsing_errors) {
+  if (!directive.second.empty()) {
+    parsing_errors.emplace_back(base::StringPrintf(
+        "The Content Security Policy directive '%s' should be empty, but was "
+        "delivered with a value of '%s'. The directive has been applied, and "
+        "the value ignored.",
+        directive.first.as_string().c_str(),
+        directive.second.as_string().c_str()));
+  }
+}
+
+mojom::CSPSourcePtr ComputeSelfOrigin(const GURL& url) {
+  if (url.scheme() == url::kFileScheme) {
+    // Forget the host for file schemes. Host can anyway only be `localhost` or
+    // empty and this is platform dependent.
+    //
+    // TODO(antoniosartori): Consider returning mojom::CSPSource::New() for
+    // file: urls, so that 'self' for file: would match nothing.
+    return mojom::CSPSource::New(url::kFileScheme, "", url::PORT_UNSPECIFIED,
+                                 "", false, false);
+  }
+  return mojom::CSPSource::New(url.scheme(), url.host(), url.EffectiveIntPort(),
+                               "", false, false);
+}
+
 void AddContentSecurityPolicyFromHeader(base::StringPiece header,
                                         mojom::ContentSecurityPolicyType type,
                                         const GURL& base_url,
@@ -773,6 +893,7 @@ void AddContentSecurityPolicyFromHeader(base::StringPiece header,
   DirectivesMap directives = ParseHeaderValue(header);
   out->header = mojom::ContentSecurityPolicyHeader::New(
       header.as_string(), type, mojom::ContentSecurityPolicySource::kHTTP);
+  out->self_origin = ComputeSelfOrigin(base_url);
 
   for (auto directive : directives) {
     if (!base::ranges::all_of(directive.first, IsDirectiveNameCharacter)) {
@@ -784,25 +905,33 @@ void AddContentSecurityPolicyFromHeader(base::StringPiece header,
       continue;
     }
 
+    CSPDirectiveName directive_name =
+        ToCSPDirectiveName(directive.first.as_string());
+
+    if (directive_name == CSPDirectiveName::Unknown) {
+      out->parsing_errors.emplace_back(base::StringPrintf(
+          "Unrecognized Content-Security-Policy directive '%s'.",
+          directive.first.as_string().c_str()));
+      continue;
+    }
+
+    // A directive with this name has already been parsed. Skip further
+    // directives per
+    // https://www.w3.org/TR/CSP3/#parse-serialized-policy.
+    if (out->raw_directives.count(directive_name)) {
+      out->parsing_errors.emplace_back(base::StringPrintf(
+          "Ignoring duplicate Content-Security-Policy directive '%s'.",
+          directive.first.as_string().c_str()));
+      continue;
+    }
+    out->raw_directives[directive_name] = directive.second.as_string();
+
     if (!base::ranges::all_of(directive.second, IsDirectiveValueCharacter)) {
       out->parsing_errors.emplace_back(base::StringPrintf(
           "The value for the Content-Security-Policy directive '%s' contains "
           "one or more invalid characters. Non-whitespace characters outside "
           "ASCII 0x21-0x7E must be percent-encoded, as described in RFC 3986, "
           "section 2.1: http://tools.ietf.org/html/rfc3986#section-2.1.",
-          directive.first.as_string().c_str()));
-      continue;
-    }
-
-    CSPDirectiveName directive_name =
-        ToCSPDirectiveName(directive.first.as_string());
-
-    // A directive with this name has already been parsed. Skip further
-    // directives per
-    // https://www.w3.org/TR/CSP3/#parse-serialized-policy.
-    if (out->directives.count(directive_name)) {
-      out->parsing_errors.emplace_back(base::StringPrintf(
-          "Ignoring duplicate Content-Security-Policy directive '%s'.",
           directive.first.as_string().c_str()));
       continue;
     }
@@ -842,35 +971,24 @@ void AddContentSecurityPolicyFromHeader(base::StringPiece header,
             directive_name, directive.second, out->parsing_errors);
         break;
       case CSPDirectiveName::Sandbox:
-        // Note: |ParseSandboxPolicy(...).error_message| is ignored here.
-        // Blink's CSP parser is already in charge of displaying it.
+        // Note: Outside of CSP embedded enforcement,
+        // |ParseSandboxPolicy(...).error_message| isn't displayed to the user.
+        // Blink's CSP parser is already in charge of it.
         {
           auto sandbox = ParseWebSandboxPolicy(directive.second,
                                                mojom::WebSandboxFlags::kNone);
           out->sandbox = sandbox.flags;
-          out->parsing_errors.emplace_back(std::move(sandbox.error_message));
+          if (!sandbox.error_message.empty())
+            out->parsing_errors.emplace_back(std::move(sandbox.error_message));
         }
         break;
       case CSPDirectiveName::UpgradeInsecureRequests:
         out->upgrade_insecure_requests = true;
-        if (!directive.second.empty()) {
-          out->parsing_errors.emplace_back(base::StringPrintf(
-              "The Content Security Policy directive "
-              "'upgrade-insecure-requests' should be empty, but was delivered "
-              "with a value of '%s'. The directive has been applied, and the "
-              "value ignored.",
-              directive.second.as_string().c_str()));
-        }
+        WarnIfDirectiveValueNotEmpty(directive, out->parsing_errors);
         break;
       case CSPDirectiveName::TreatAsPublicAddress:
         out->treat_as_public_address = true;
-        if (!directive.second.empty()) {
-          out->parsing_errors.emplace_back(base::StringPrintf(
-              "The Content Security Policy directive 'treat-as-public-address' "
-              "should be empty, but was delivered with a value of '%s'. The "
-              "directive has been applied, and the value ignored.",
-              directive.second.as_string().c_str()));
-        }
+        WarnIfDirectiveValueNotEmpty(directive, out->parsing_errors);
         break;
       case CSPDirectiveName::PluginTypes:
         // If the plugin-types directive is present, then always initialize
@@ -880,13 +998,19 @@ void AddContentSecurityPolicyFromHeader(base::StringPiece header,
             ParsePluginTypes(directive.second, out->parsing_errors);
         break;
 
-        // We check the following three directives so that we do not trigger a
-        // warning because of an unrecognized directive. However, we skip
-        // parsing them for now since we do not need these directives here (they
-        // are parsed and enforced in the blink CSP parser).
-      case CSPDirectiveName::BlockAllMixedContent:
       case CSPDirectiveName::RequireTrustedTypesFor:
+        out->require_trusted_types_for =
+            ParseRequireTrustedTypesFor(directive.second, out->parsing_errors);
+        break;
+
       case CSPDirectiveName::TrustedTypes:
+        out->trusted_types =
+            ParseTrustedTypes(directive.second, out->parsing_errors);
+        break;
+
+      case CSPDirectiveName::BlockAllMixedContent:
+        out->block_all_mixed_content = true;
+        WarnIfDirectiveValueNotEmpty(directive, out->parsing_errors);
         break;
 
       case CSPDirectiveName::ReportTo:
@@ -902,9 +1026,6 @@ void AddContentSecurityPolicyFromHeader(base::StringPiece header,
                                &(out->report_endpoints));
         break;
       case CSPDirectiveName::Unknown:
-        out->parsing_errors.emplace_back(base::StringPrintf(
-            "Unrecognized Content-Security-Policy directive '%s'.",
-            directive.first.as_string().c_str()));
         break;
     }
   }
@@ -1015,9 +1136,6 @@ void AddContentSecurityPolicyFromHeaders(
 
 mojom::AllowCSPFromHeaderValuePtr ParseAllowCSPFromHeader(
     const net::HttpResponseHeaders& headers) {
-  if (!base::FeatureList::IsEnabled(features::kOutOfBlinkCSPEE))
-    return nullptr;
-
   std::string allow_csp_from;
   if (!headers.GetNormalizedHeader("Allow-CSP-From", &allow_csp_from))
     return nullptr;
@@ -1045,6 +1163,8 @@ bool CheckContentSecurityPolicy(const mojom::ContentSecurityPolicyPtr& policy,
                                 CSPContext* context,
                                 const mojom::SourceLocationPtr& source_location,
                                 bool is_form_submission) {
+  DCHECK(policy->self_origin);
+
   if (ShouldBypassContentSecurityPolicy(context, directive_name, url))
     return true;
 
@@ -1064,7 +1184,7 @@ bool CheckContentSecurityPolicy(const mojom::ContentSecurityPolicyPtr& policy,
       continue;
 
     const auto& source_list = directive->second;
-    bool allowed = CheckCSPSourceList(source_list, url, context,
+    bool allowed = CheckCSPSourceList(*source_list, url, *(policy->self_origin),
                                       has_followed_redirect, is_response_check);
 
     if (!allowed) {
@@ -1118,7 +1238,6 @@ void UpgradeInsecureRequest(GURL* url) {
 bool IsValidRequiredCSPAttr(
     const std::vector<mojom::ContentSecurityPolicyPtr>& policy,
     const mojom::ContentSecurityPolicy* context,
-    const url::Origin& origin,
     std::string& error_message) {
   DCHECK(policy.size() == 1);
   if (!policy[0])
@@ -1132,14 +1251,18 @@ bool IsValidRequiredCSPAttr(
     return false;
   }
 
-  if (!policy[0]->report_endpoints.empty()) {
+  if (!policy[0]->report_endpoints.empty() ||
+      // We really don't want any report directives, even with invalid/missing
+      // endpoints.
+      policy[0]->raw_directives.contains(mojom::CSPDirectiveName::ReportURI) ||
+      policy[0]->raw_directives.contains(mojom::CSPDirectiveName::ReportTo)) {
     error_message =
         "The csp attribute cannot contain the directives 'report-to' or "
         "'report-uri'.";
     return false;
   }
 
-  if (context && !Subsumes(*context, policy, origin)) {
+  if (context && !Subsumes(*context, policy)) {
     error_message =
         "The csp attribute Content-Security-Policy is not subsumed by the "
         "frame's parent csp attribute Content-Security-Policy.";
@@ -1150,8 +1273,7 @@ bool IsValidRequiredCSPAttr(
 }
 
 bool Subsumes(const mojom::ContentSecurityPolicy& policy_a,
-              const std::vector<mojom::ContentSecurityPolicyPtr>& policies_b,
-              const url::Origin& origin_b) {
+              const std::vector<mojom::ContentSecurityPolicyPtr>& policies_b) {
   if (policy_a.header->type == mojom::ContentSecurityPolicyType::kReport)
     return true;
 
@@ -1162,6 +1284,9 @@ bool Subsumes(const mojom::ContentSecurityPolicy& policy_a,
 
   if (policies_b.empty())
     return false;
+
+  // All policies in |policies_b| must have the same self_origin.
+  mojom::CSPSource* origin_b = policies_b[0]->self_origin.get();
 
   // A list of directives that we consider for subsumption.
   // See more about source lists here:

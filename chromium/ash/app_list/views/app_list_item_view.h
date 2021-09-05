@@ -25,7 +25,6 @@ class SimpleMenuModel;
 }  // namespace ui
 
 namespace views {
-class ImageView;
 class Label;
 }  // namespace views
 
@@ -60,6 +59,8 @@ class APP_LIST_EXPORT AppListItemView : public views::Button,
 
   void SetItemName(const base::string16& display_name,
                    const base::string16& full_name);
+
+  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
   void CancelContextMenu();
 
@@ -122,6 +123,7 @@ class APP_LIST_EXPORT AppListItemView : public views::Button,
 
   // views::Button overrides:
   void OnGestureEvent(ui::GestureEvent* event) override;
+  void OnThemeChanged() override;
 
   // views::View overrides:
   base::string16 GetTooltipText(const gfx::Point& p) const override;
@@ -258,7 +260,6 @@ class APP_LIST_EXPORT AppListItemView : public views::Button,
   AppsGridView* apps_grid_view_;                // Parent view, owns this.
   IconImageView* icon_ = nullptr;               // Strongly typed child view.
   views::Label* title_ = nullptr;               // Strongly typed child view.
-  views::ImageView* icon_shadow_ = nullptr;     // Strongly typed child view.
 
   std::unique_ptr<AppListMenuModelAdapter> context_menu_;
 

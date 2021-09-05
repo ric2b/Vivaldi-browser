@@ -240,6 +240,30 @@ const std::vector<SearchConcept>& GetMouseSearchConcepts() {
   return *tags;
 }
 
+const std::vector<SearchConcept>& GetPointingStickSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+      {IDS_OS_SETTINGS_TAG_POINTING_STICK_PRIMARY_BUTTON,
+       mojom::kPointersSubpagePath,
+       mojom::SearchResultIcon::kLaptop,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kPointingStickSwapPrimaryButtons}},
+      {IDS_OS_SETTINGS_TAG_POINTING_STICK_ACCELERATION,
+       mojom::kPointersSubpagePath,
+       mojom::SearchResultIcon::kLaptop,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kPointingStickAcceleration}},
+      {IDS_OS_SETTINGS_TAG_POINTING_STICK_SPEED,
+       mojom::kPointersSubpagePath,
+       mojom::SearchResultIcon::kLaptop,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kPointingStickSpeed}},
+  });
+  return *tags;
+}
+
 const std::vector<SearchConcept>& GetStylusSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
       {IDS_OS_SETTINGS_TAG_STYLUS_NOTE_APP,
@@ -538,7 +562,6 @@ void AddDeviceStylusStrings(content::WebUIDataSource* html_source) {
 void AddDeviceDisplayStrings(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kDisplayStrings[] = {
       {"displayTitle", IDS_SETTINGS_DISPLAY_TITLE},
-      {"displayArrangementText", IDS_SETTINGS_DISPLAY_ARRANGEMENT_TEXT},
       {"displayArrangementTitle", IDS_SETTINGS_DISPLAY_ARRANGEMENT_TITLE},
       {"displayMirror", IDS_SETTINGS_DISPLAY_MIRROR},
       {"displayMirrorDisplayName", IDS_SETTINGS_DISPLAY_MIRROR_DISPLAY_NAME},
@@ -621,6 +644,13 @@ void AddDeviceDisplayStrings(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_DISPLAY_TOUCH_CALIBRATION_TEXT}};
   AddLocalizedStringsBulk(html_source, kDisplayStrings);
 
+  html_source->AddLocalizedString(
+      "displayArrangementText",
+      base::FeatureList::IsEnabled(
+          ash::features::kKeyboardBasedDisplayArrangementInSettings)
+          ? IDS_SETTINGS_DISPLAY_ARRANGEMENT_WITH_KEYBOARD_TEXT
+          : IDS_SETTINGS_DISPLAY_ARRANGEMENT_TEXT);
+
   html_source->AddBoolean("unifiedDesktopAvailable",
                           IsUnifiedDesktopAvailable());
 
@@ -643,6 +673,11 @@ void AddDeviceDisplayStrings(content::WebUIDataSource* html_source) {
   html_source->AddBoolean(
       "allowDisplayAlignmentApi",
       base::FeatureList::IsEnabled(ash::features::kDisplayAlignAssist));
+
+  html_source->AddBoolean(
+      "allowKeyboardBasedDisplayArrangementInSettings",
+      base::FeatureList::IsEnabled(
+          ash::features::kKeyboardBasedDisplayArrangementInSettings));
 }
 
 void AddDeviceStorageStrings(content::WebUIDataSource* html_source,
@@ -885,6 +920,9 @@ void DeviceSection::RegisterHierarchy(HierarchyGenerator* generator) const {
       mojom::Setting::kTouchpadAcceleration,
       mojom::Setting::kTouchpadScrollAcceleration,
       mojom::Setting::kTouchpadSpeed,
+      mojom::Setting::kPointingStickSwapPrimaryButtons,
+      mojom::Setting::kPointingStickSpeed,
+      mojom::Setting::kPointingStickAcceleration,
       mojom::Setting::kMouseSwapPrimaryButtons,
       mojom::Setting::kMouseReverseScrolling,
       mojom::Setting::kMouseAcceleration,
@@ -990,7 +1028,12 @@ void DeviceSection::MouseExists(bool exists) {
 }
 
 void DeviceSection::PointingStickExists(bool exists) {
-  // TODO(crbug.com/1114828): manage search tags when the UI is implemented.
+  SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
+
+  if (exists)
+    updater.AddSearchTags(GetPointingStickSearchConcepts());
+  else
+    updater.RemoveSearchTags(GetPointingStickSearchConcepts());
 }
 
 void DeviceSection::OnDeviceListsComplete() {
@@ -1144,7 +1187,10 @@ void DeviceSection::AddDevicePointersStrings(
       {"pointerFast", IDS_SETTINGS_POINTER_SPEED_FAST_LABEL},
       {"mouseScrollSpeed", IDS_SETTINGS_MOUSE_SCROLL_SPEED_LABEL},
       {"mouseSpeed", IDS_SETTINGS_MOUSE_SPEED_LABEL},
+      {"pointingStickSpeed", IDS_SETTINGS_POINTING_STICK_SPEED_LABEL},
       {"mouseSwapButtons", IDS_SETTINGS_MOUSE_SWAP_BUTTONS_LABEL},
+      {"pointingStickPrimaryButton",
+       IDS_SETTINGS_POINTING_STICK_PRIMARY_BUTTON_LABEL},
       {"primaryMouseButtonLeft", IDS_SETTINGS_PRIMARY_MOUSE_BUTTON_LEFT_LABEL},
       {"primaryMouseButtonRight",
        IDS_SETTINGS_PRIMARY_MOUSE_BUTTON_RIGHT_LABEL},
@@ -1152,6 +1198,8 @@ void DeviceSection::AddDevicePointersStrings(
       {"mouseAccelerationLabel", IDS_SETTINGS_MOUSE_ACCELERATION_LABEL},
       {"mouseScrollAccelerationLabel",
        IDS_SETTINGS_MOUSE_SCROLL_ACCELERATION_LABEL},
+      {"pointingStickAccelerationLabel",
+       IDS_SETTINGS_POINTING_STICK_ACCELERATION_LABEL},
       {"touchpadAccelerationLabel", IDS_SETTINGS_TOUCHPAD_ACCELERATION_LABEL},
       {"touchpadScrollAccelerationLabel",
        IDS_SETTINGS_TOUCHPAD_SCROLL_ACCELERATION_LABEL},

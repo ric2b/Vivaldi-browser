@@ -7,6 +7,8 @@
 #include "third_party/blink/renderer/core/layout/layout_text.h"
 
 namespace blink {
+class HTMLUListElement;
+class HTMLOListElement;
 
 LayoutNGOutsideListMarker::LayoutNGOutsideListMarker(Element* element)
     : LayoutNGBlockFlowMixin<LayoutBlockFlow>(element) {}
@@ -35,7 +37,7 @@ bool LayoutNGOutsideListMarker::NeedsOccupyWholeLine() const {
 
 PositionWithAffinity LayoutNGOutsideListMarker::PositionForPoint(
     const PhysicalOffset&) const {
-  return CreatePositionWithAffinity(0);
+  return PositionBeforeThis();
 }
 
 }  // namespace blink

@@ -33,6 +33,10 @@ Polymer({
 
     showReset: Boolean,
 
+    showStartup: Boolean,
+
+    showKerberosSection: Boolean,
+
     allowCrostini_: Boolean,
 
     havePlayStoreApp: Boolean,
@@ -99,6 +103,18 @@ Polymer({
 
     /** @private {!settings.Route|undefined} */
     currentRoute_: Object,
+
+    /**
+     * True if redesign of account management flows is enabled.
+     * @private
+     */
+    isAccountManagementFlowsV2Enabled_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.getBoolean('isAccountManagementFlowsV2Enabled');
+      },
+      readOnly: true,
+    },
   },
 
   hostAttributes: {

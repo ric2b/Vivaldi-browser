@@ -30,43 +30,41 @@ GEN('#include "chromeos/constants/chromeos_features.h"');
  ['NetworkProxy', 'network/network_proxy_test.m.js'],
  ['NetworkSelect', 'network/network_select_test.m.js'],
  ['NetworkSiminfo', 'network/network_siminfo_test.m.js'],
-].forEach(test => registerTest('NetworkComponents', ...test));
+].forEach(test => registerTest('NetworkComponents', 'os-settings', ...test));
+
+[['RoutineGroup', 'network_health/routine_group_test.m.js'],
+].forEach(test => registerTest('NetworkHealth', 'connectivity-diagnostics', ...test));
 
 [['ActivationCodePage', 'cellular_setup/activation_code_page_test.m.js'],
  ['BasePage', 'cellular_setup/base_page_test.m.js'],
  ['ButtonBar', 'cellular_setup/button_bar_test.m.js'],
+ ['CellularEidPopup', 'cellular_setup/cellular_eid_popup_test.m.js'],
  ['CellularSetup', 'cellular_setup/cellular_setup_test.m.js'],
  ['EsimFlowUi', 'cellular_setup/esim_flow_ui_test.m.js'],
  ['FinalPage', 'cellular_setup/final_page_test.m.js'],
  ['ProvisioningPage', 'cellular_setup/provisioning_page_test.m.js'],
  ['PsimFlowUi', 'cellular_setup/psim_flow_ui_test.m.js'],
  ['SetupSelectionFlow', 'cellular_setup/setup_selection_flow_test.m.js'],
- ['SimDetectPage', 'cellular_setup/sim_detect_page_test.m.js'],
-].forEach(test => registerTest('CellularSetup', ...test));
+ ['SetupLoadingPage', 'cellular_setup/setup_loading_page_test.m.js'],
+].forEach(test => registerTest('CellularSetup', 'os-settings', ...test));
 // clang-format on
 
-function registerTest(componentName, testName, module, caseName) {
+function registerTest(componentName, webuiHost, testName, module, caseName) {
   const className = `${componentName}${testName}TestV3`;
   this[className] = class extends PolymerTest {
     /** @override */
     get browsePreload() {
       // TODO(jhawkins): Set up test_loader.html for internet-config-dialog
       // and use it here instead of os-settings.
-      return `chrome://os-settings/test_loader.html?module=cr_components/chromeos/${module}`;
-    }
-
-    /** @override */
-    get extraLibraries() {
-      return [
-        '//third_party/mocha/mocha.js',
-        '//chrome/test/data/webui/mocha_adapter.js',
-      ];
+      return `chrome://${
+          webuiHost}/test_loader.html?module=cr_components/chromeos/${module}`;
     }
 
     /** @override */
     get featureList() {
       return {
         enabled: [
+          'chromeos::features::kConnectivityDiagnosticsWebUi',
           'chromeos::features::kOsSettingsPolymer3',
           'chromeos::features::kUpdatedCellularActivationUi',
         ],

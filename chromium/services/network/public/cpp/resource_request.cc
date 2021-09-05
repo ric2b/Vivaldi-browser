@@ -7,6 +7,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/load_flags.h"
 #include "services/network/public/mojom/cookie_access_observer.mojom.h"
+#include "services/network/public/mojom/web_bundle_handle.mojom.h"
 
 namespace network {
 
@@ -32,6 +33,13 @@ bool OptionalTrustedParamsEqualsForTesting(
     const base::Optional<ResourceRequest::TrustedParams>& lhs,
     const base::Optional<ResourceRequest::TrustedParams>& rhs) {
   return (!lhs && !rhs) || (lhs && rhs && lhs->EqualsForTesting(*rhs));
+}
+
+bool OptionalWebBundleTokenParamsEqualsForTesting(  // IN-TEST
+    const base::Optional<ResourceRequest::WebBundleTokenParams>& lhs,
+    const base::Optional<ResourceRequest::WebBundleTokenParams>& rhs) {
+  return (!lhs && !rhs) ||
+         (lhs && rhs && lhs->EqualsForTesting(*rhs));  // IN-TEST
 }
 
 }  // namespace
@@ -63,6 +71,47 @@ bool ResourceRequest::TrustedParams::EqualsForTesting(
          client_security_state == trusted_params.client_security_state;
 }
 
+ResourceRequest::WebBundleTokenParams::WebBundleTokenParams() = default;
+ResourceRequest::WebBundleTokenParams::~WebBundleTokenParams() = default;
+
+ResourceRequest::WebBundleTokenParams::WebBundleTokenParams(
+    const WebBundleTokenParams& other) {
+  *this = other;
+}
+
+ResourceRequest::WebBundleTokenParams&
+ResourceRequest::WebBundleTokenParams::operator=(
+    const WebBundleTokenParams& other) {
+  token = other.token;
+  handle = other.CloneHandle();
+  return *this;
+}
+
+ResourceRequest::WebBundleTokenParams::WebBundleTokenParams(
+    const base::UnguessableToken& token,
+    mojo::PendingRemote<mojom::WebBundleHandle> handle)
+    : token(token), handle(std::move(handle)) {}
+
+bool ResourceRequest::WebBundleTokenParams::EqualsForTesting(
+    const WebBundleTokenParams& other) const {
+  return token == other.token &&
+         ((handle && other.handle) || (!handle && !other.handle));
+}
+
+mojo::PendingRemote<mojom::WebBundleHandle>
+ResourceRequest::WebBundleTokenParams::CloneHandle() const {
+  if (!handle)
+    return mojo::NullRemote();
+  mojo::Remote<network::mojom::WebBundleHandle> remote(std::move(
+      const_cast<mojo::PendingRemote<network::mojom::WebBundleHandle>&>(
+          handle)));
+  mojo::PendingRemote<network::mojom::WebBundleHandle> new_remote;
+  remote->Clone(new_remote.InitWithNewPipeAndPassReceiver());
+  const_cast<mojo::PendingRemote<network::mojom::WebBundleHandle>&>(handle) =
+      remote.Unbind();
+  return new_remote;
+}
+
 ResourceRequest::ResourceRequest() {}
 ResourceRequest::ResourceRequest(const ResourceRequest& request) = default;
 ResourceRequest::~ResourceRequest() {}
@@ -70,8 +119,6 @@ ResourceRequest::~ResourceRequest() {}
 bool ResourceRequest::EqualsForTesting(const ResourceRequest& request) const {
   return method == request.method && url == request.url &&
          site_for_cookies.IsEquivalent(request.site_for_cookies) &&
-         force_ignore_site_for_cookies ==
-             request.force_ignore_site_for_cookies &&
          update_first_party_url_on_redirect ==
              request.update_first_party_url_on_redirect &&
          request_initiator == request.request_initiator &&
@@ -91,8 +138,7 @@ bool ResourceRequest::EqualsForTesting(const ResourceRequest& request) const {
          originated_from_service_worker ==
              request.originated_from_service_worker &&
          skip_service_worker == request.skip_service_worker &&
-         corb_detachable == request.corb_detachable &&
-         corb_excluded == request.corb_excluded && mode == request.mode &&
+         corb_detachable == request.corb_detachable && mode == request.mode &&
          credentials_mode == request.credentials_mode &&
          redirect_mode == request.redirect_mode &&
          fetch_integrity == request.fetch_integrity &&
@@ -124,7 +170,9 @@ bool ResourceRequest::EqualsForTesting(const ResourceRequest& request) const {
          recursive_prefetch_token == request.recursive_prefetch_token &&
          OptionalTrustedParamsEqualsForTesting(trusted_params,
                                                request.trusted_params) &&
-         trust_token_params == request.trust_token_params;
+         trust_token_params == request.trust_token_params &&
+         OptionalWebBundleTokenParamsEqualsForTesting(  // IN-TEST
+             web_bundle_token_params, request.web_bundle_token_params);
 }
 
 bool ResourceRequest::SendsCookies() const {

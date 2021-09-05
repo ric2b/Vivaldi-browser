@@ -52,6 +52,10 @@ class DiceSignedInProfileCreatorShutdownNotifierFactory
 
 }  // namespace
 
+const void* const
+    DiceSignedInProfileCreator::kGuestSigninTokenTransferredUserDataKey =
+        &DiceSignedInProfileCreator::kGuestSigninTokenTransferredUserDataKey;
+
 // Waits until the tokens are loaded and calls the callback. The callback is
 // called immediately if the tokens are already loaded, and called with nullptr
 // if the profile is destroyed before the tokens are loaded.
@@ -74,14 +78,14 @@ class TokensLoadedCallbackRunner : public signin::IdentityManager::Observer {
 
   // signin::IdentityManager::Observer implementation:
   void OnRefreshTokensLoaded() override {
-    shutdown_subscription_.reset();
+    shutdown_subscription_ = {};
     scoped_identity_manager_observer_.RemoveAll();
     std::move(callback_).Run(profile_);
   }
 
   void OnShutdown() {
     scoped_identity_manager_observer_.RemoveAll();
-    shutdown_subscription_.reset();
+    shutdown_subscription_ = {};
     std::move(callback_).Run(nullptr);
   }
 
@@ -90,8 +94,7 @@ class TokensLoadedCallbackRunner : public signin::IdentityManager::Observer {
   ScopedObserver<signin::IdentityManager, signin::IdentityManager::Observer>
       scoped_identity_manager_observer_{this};
   base::OnceCallback<void(Profile*)> callback_;
-  std::unique_ptr<KeyedServiceShutdownNotifier::Subscription>
-      shutdown_subscription_;
+  base::CallbackListSubscription shutdown_subscription_;
 };
 
 // static
@@ -135,21 +138,36 @@ DiceSignedInProfileCreator::DiceSignedInProfileCreator(
     CoreAccountId account_id,
     const base::string16& local_profile_name,
     base::Optional<size_t> icon_index,
+    bool use_guest_profile,
     base::OnceCallback<void(Profile*)> callback)
     : source_profile_(source_profile),
       account_id_(account_id),
       callback_(std::move(callback)) {
-  ProfileAttributesStorage& storage =
-      g_browser_process->profile_manager()->GetProfileAttributesStorage();
-  if (!icon_index.has_value())
-    icon_index = storage.ChooseAvatarIconIndexForNewProfile();
-  base::string16 name = local_profile_name.empty()
-                            ? storage.ChooseNameForNewProfile(*icon_index)
-                            : local_profile_name;
-  ProfileManager::CreateMultiProfileAsync(
-      name, profiles::GetDefaultAvatarIconUrl(*icon_index),
-      base::BindRepeating(&DiceSignedInProfileCreator::OnNewProfileCreated,
-                          weak_pointer_factory_.GetWeakPtr()));
+  if (use_guest_profile) {
+    DCHECK(Profile::IsEphemeralGuestProfileEnabled());
+    // Make sure the callback is not called synchronously.
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&ProfileManager::CreateProfileAsync,
+                       base::Unretained(g_browser_process->profile_manager()),
+                       ProfileManager::GetGuestProfilePath(),
+                       base::BindRepeating(
+                           &DiceSignedInProfileCreator::OnNewProfileCreated,
+                           weak_pointer_factory_.GetWeakPtr()),
+                       base::string16(), std::string()));
+  } else {
+    ProfileAttributesStorage& storage =
+        g_browser_process->profile_manager()->GetProfileAttributesStorage();
+    if (!icon_index.has_value())
+      icon_index = storage.ChooseAvatarIconIndexForNewProfile();
+    base::string16 name = local_profile_name.empty()
+                              ? storage.ChooseNameForNewProfile(*icon_index)
+                              : local_profile_name;
+    ProfileManager::CreateMultiProfileAsync(
+        name, profiles::GetDefaultAvatarIconUrl(*icon_index),
+        base::BindRepeating(&DiceSignedInProfileCreator::OnNewProfileCreated,
+                            weak_pointer_factory_.GetWeakPtr()));
+  }
 }
 
 DiceSignedInProfileCreator::DiceSignedInProfileCreator(
@@ -231,6 +249,8 @@ void DiceSignedInProfileCreator::OnNewProfileTokensLoaded(
   auto* new_profile_accounts_mutator =
       IdentityManagerFactory::GetForProfile(new_profile)->GetAccountsMutator();
   accounts_mutator->MoveAccount(new_profile_accounts_mutator, account_id_);
+  if (new_profile->IsEphemeralGuestProfile())
+    GuestSigninTokenTransferredUserData::Set(new_profile);
   if (callback_)
     std::move(callback_).Run(new_profile);
 }

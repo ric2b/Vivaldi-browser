@@ -99,9 +99,6 @@ struct Appcast {
   // Minimum OS version required for update
   std::string MinOSVersion;
 
-  // Arguments passed on the the updater executable
-  std::string InstallerArguments;
-
   // Deltas
   std::vector<Delta> Deltas;
 };

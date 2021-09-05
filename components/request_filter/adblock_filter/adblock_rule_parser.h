@@ -13,15 +13,16 @@ namespace adblock_filter {
 class RuleParser {
  public:
   enum Result {
-    kFilterRule = 0,
+    kRequestFilterRule = 0,
     kCosmeticRule,
+    kScriptletInjectionRule,
     kComment,
     kMetadata,
     kUnsupported,
     kError
   };
 
-  explicit RuleParser(ParseResult* parse_result);
+  explicit RuleParser(ParseResult* parse_result, bool allow_abp_snippets);
   ~RuleParser();
 
   Result Parse(base::StringPiece rule_string);
@@ -29,17 +30,24 @@ class RuleParser {
  private:
   bool MaybeParseMetadata(base::StringPiece comment);
 
-  Result MaybeParseCosmeticRule(base::StringPiece rule_string,
+  Result IsContentInjectionRule(base::StringPiece rule_string,
                                 size_t separator,
-                                CosmeticRule* rule);
+                                ContentInjectionRuleCore* core);
+  bool ParseCosmeticRule(base::StringPiece body,
+                         ContentInjectionRuleCore rule_core);
+  bool ParseScriptletInjectionRule(base::StringPiece body,
+                                   ContentInjectionRuleCore rule_core);
   bool ParseDomains(base::StringPiece domain_string,
                     std::string separator,
                     std::vector<std::string>* included_domains,
                     std::vector<std::string>* excluded_domains);
-  Result ParseFilterRule(base::StringPiece rule_string, FilterRule* rule);
-  Result ParseFilterRuleOptions(base::StringPiece options, FilterRule* rule);
+  Result ParseRequestFilterRule(base::StringPiece rule_string,
+                                RequestFilterRule* rule);
+  Result ParseRequestFilterRuleOptions(base::StringPiece options,
+                                       RequestFilterRule* rule);
 
   ParseResult* parse_result_;
+  bool allow_abp_snippets_;
 
   DISALLOW_COPY_AND_ASSIGN(RuleParser);
 };

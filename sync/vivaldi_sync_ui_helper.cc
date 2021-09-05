@@ -3,9 +3,6 @@
 #include "sync/vivaldi_sync_ui_helper.h"
 
 #include "base/base64.h"
-#include "base/files/file_util.h"
-#include "base/task/task_traits.h"
-#include "base/task/thread_pool.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "components/os_crypt/os_crypt.h"
 #include "components/prefs/pref_service.h"
@@ -17,63 +14,6 @@
 #include "vivaldi_account/vivaldi_account_manager_factory.h"
 
 namespace vivaldi {
-namespace {
-bool DoBackupEncryptionToken(const base::FilePath& target,
-                             const std::string& packed_key) {
-  bool result = !packed_key.empty();
-
-  std::string decoded_key;
-  if (result && !base::Base64Decode(packed_key, &decoded_key)) {
-    DLOG(ERROR) << "Failed to decode explicit passphrase key.";
-    result = false;
-  }
-
-  std::string decrypted_key;
-  if (result && !OSCrypt::DecryptString(decoded_key, &decrypted_key)) {
-    DLOG(ERROR) << "Failed to decrypt explicit passphrase key.";
-    result = false;
-  }
-
-  std::string encoded_key;
-  base::Base64Encode(decrypted_key, &encoded_key);
-
-  return result && base::WriteFile(target, encoded_key);
-}
-
-void ReadEncryptionToken(
-    const base::FilePath& source,
-    scoped_refptr<base::SequencedTaskRunner> callback_task_runner,
-    VivaldiSyncUIHelper::ResultCallback result_callback,
-    base::OnceCallback<void(const std::string&)> token_callback) {
-  DCHECK(callback_task_runner);
-  std::string token;
-  bool result = base::ReadFileToString(source, &token);
-
-  std::string decoded_token;
-  if (result && !base::Base64Decode(token, &decoded_token)) {
-    DLOG(ERROR) << "Failed to decode token.";
-    result = false;
-  }
-
-  // The sync engine expects to receive an encrypted token.
-  std::string encrypted_token;
-  if (result && !OSCrypt::EncryptString(decoded_token, &encrypted_token)) {
-    DLOG(ERROR) << "Failed to encrypt token.";
-    result = false;
-  }
-
-  std::string encoded_token;
-  base::Base64Encode(encrypted_token, &encoded_token);
-
-  callback_task_runner->PostTask(
-      FROM_HERE, base::BindOnce(std::move(result_callback), result));
-  if (result)
-    callback_task_runner->PostTask(
-        FROM_HERE, base::BindOnce(std::move(token_callback), encoded_token));
-}
-
-}  // namespace
-
 VivaldiSyncUIHelper::VivaldiSyncUIHelper(
     Profile* profile,
     VivaldiProfileSyncService* sync_manager)
@@ -234,29 +174,53 @@ void VivaldiSyncUIHelper::OnStateChanged(syncer::SyncService* sync) {
   }
 }
 
-void VivaldiSyncUIHelper::BackupEncryptionToken(const base::FilePath& target,
-                                                ResultCallback callback) {
+std::string VivaldiSyncUIHelper::GetBackupEncryptionToken() {
   std::string packed_key = sync_manager_->GetEncryptionBootstrapToken();
 
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock()},
-      base::BindOnce(&DoBackupEncryptionToken, target, packed_key),
-      std::move(callback));
+  if (packed_key.empty())
+    return std::string();
+
+  std::string decoded_key;
+  if (!base::Base64Decode(packed_key, &decoded_key)) {
+    DLOG(ERROR) << "Failed to decode explicit passphrase key.";
+    return std::string();
+  }
+
+  std::string decrypted_key;
+  if (!OSCrypt::DecryptString(decoded_key, &decrypted_key)) {
+    DLOG(ERROR) << "Failed to decrypt explicit passphrase key.";
+    return std::string();
+  }
+
+  std::string encoded_key;
+  base::Base64Encode(decrypted_key, &encoded_key);
+  return encoded_key;
 }
 
-void VivaldiSyncUIHelper::RestoreEncryptionToken(const base::FilePath& source,
-                                                 ResultCallback callback) {
-  base::ThreadPool::PostTask(
-      FROM_HERE, {base::MayBlock()},
-      base::BindOnce(
-          &ReadEncryptionToken, source, base::SequencedTaskRunnerHandle::Get(),
-          std::move(callback),
-          base::BindOnce(
-              &VivaldiProfileSyncService::SetEncryptionBootstrapToken,
-              sync_manager_->AsWeakPtr())));
-}
+bool VivaldiSyncUIHelper::RestoreEncryptionToken(
+    const base::StringPiece& token) {
+  if (token.empty())
+    return false;
 
-void OnEncryptionTokenRead(const std::string& token);
+  std::string decoded_token;
+  if (!base::Base64Decode(token, &decoded_token)) {
+    DLOG(ERROR) << "Failed to decode token.";
+    return false;
+  }
+
+  // The sync engine expects to receive an encrypted token.
+  std::string encrypted_token;
+  if (!OSCrypt::EncryptString(decoded_token, &encrypted_token)) {
+    DLOG(ERROR) << "Failed to encrypt token.";
+    return false;
+  }
+
+  std::string encoded_token;
+  base::Base64Encode(encrypted_token, &encoded_token);
+  sync_manager_->SetEncryptionBootstrapToken(encoded_token);
+
+  return true;
+}
 
 void VivaldiSyncUIHelper::OnSyncShutdown(syncer::SyncService* sync) {
   sync->RemoveObserver(this);

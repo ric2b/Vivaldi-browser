@@ -124,7 +124,9 @@ void RenderViewHostTester::SendTouchEvent(
 
 RenderViewHostTestEnabler::RenderViewHostTestEnabler()
     : rph_factory_(new MockRenderProcessHostFactory()),
-      rvh_factory_(new TestRenderViewHostFactory(rph_factory_.get())),
+      asgh_factory_(new MockAgentSchedulingGroupHostFactory()),
+      rvh_factory_(new TestRenderViewHostFactory(rph_factory_.get(),
+                                                 asgh_factory_.get())),
       rfh_factory_(new TestRenderFrameHostFactory()),
       rwhi_factory_(new TestRenderWidgetHostFactory()),
       loader_factory_(new TestNavigationURLLoaderFactory()) {
@@ -167,6 +169,7 @@ RenderViewHostTestEnabler::~RenderViewHostTestEnabler() {
 // RenderViewHostTestHarness --------------------------------------------------
 
 RenderViewHostTestHarness::~RenderViewHostTestHarness() {
+  DCHECK(!task_environment_) << "TearDown() was not called.";
 }
 
 NavigationController& RenderViewHostTestHarness::controller() {

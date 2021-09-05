@@ -14,9 +14,9 @@
 
 #include "base/bind.h"
 #include "base/check_op.h"
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/macros.h"
-#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -265,8 +265,8 @@ void DbusAppmenu::Initialize(DbusMenu::InitializedCallback callback) {
   pref_change_registrar_.Init(browser_->profile()->GetPrefs());
   pref_change_registrar_.Add(
       bookmarks::prefs::kShowBookmarkBar,
-      base::Bind(&DbusAppmenu::OnBookmarkBarVisibilityChanged,
-                 base::Unretained(this)));
+      base::BindRepeating(&DbusAppmenu::OnBookmarkBarVisibilityChanged,
+                          base::Unretained(this)));
 
   top_sites_ = TopSitesFactory::GetForProfile(profile_);
   if (top_sites_) {
@@ -274,7 +274,7 @@ void DbusAppmenu::Initialize(DbusMenu::InitializedCallback callback) {
 
     // Register as TopSitesObserver so that we can update ourselves when the
     // TopSites changes.
-    scoped_observer_.Add(top_sites_.get());
+    scoped_observation_.Observe(top_sites_.get());
   }
 
   ProfileManager* profile_manager = g_browser_process->profile_manager();

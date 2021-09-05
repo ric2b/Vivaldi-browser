@@ -53,6 +53,11 @@ void LogStatus(Status status) {
                             status);
 }
 
+bool IsSuggestedContentEnabled(Profile* profile) {
+  return profile->GetPrefs()->GetBoolean(
+      chromeos::prefs::kSuggestedContentEnabled);
+}
+
 // Given an absolute path representing a file in the user's Drive, returns a
 // reparented version of the path within the user's drive fs mount.
 base::FilePath ReparentToDriveMount(
@@ -100,6 +105,10 @@ DriveZeroStateProvider::DriveZeroStateProvider(
       // OnFileSystemMounted.
       drive_service_->AddObserver(this);
     }
+  }
+  if (base::FeatureList::IsEnabled(
+          app_list_features::kEnableLauncherSearchNormalization)) {
+    normalizer_.emplace("drive_zero_state_provider", profile);
   }
 }
 
@@ -199,7 +208,7 @@ void DriveZeroStateProvider::OnFilePathsLocated(
 
     provider_results.emplace_back(
         MakeListResult(path_or_error->get_path(), score));
-    if (suggested_files_enabled_) {
+    if (suggested_files_enabled_ && IsSuggestedContentEnabled(profile_)) {
       provider_results.emplace_back(
           MakeChipResult(path_or_error->get_path(), score));
     }
@@ -214,6 +223,12 @@ void DriveZeroStateProvider::OnFilePathsLocated(
   }
 
   cache_results_.reset();
+
+  if (normalizer_.has_value()) {
+    normalizer_->Record(provider_results);
+    normalizer_->NormalizeResults(&provider_results);
+  }
+
   SwapResults(&provider_results);
 
   LogStatus(Status::kOk);

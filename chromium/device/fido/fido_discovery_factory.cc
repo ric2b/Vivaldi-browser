@@ -28,9 +28,9 @@
 #include "device/fido/mac/discovery.h"
 #endif  // defined(OSMACOSX)
 
-#if BUILDFLAG(IS_ASH)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "device/fido/cros/discovery.h"
-#endif  // BUILDFLAG(IS_ASH)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace device {
 
@@ -52,6 +52,7 @@ std::vector<std::unique_ptr<FidoDiscoveryBase>> FidoDiscoveryFactory::Create(
         if (qr_generator_key_.has_value()) {
           v2_discovery = std::make_unique<cablev2::Discovery>(
               network_context_, *qr_generator_key_, std::move(v2_pairings_),
+              cable_data_.value_or(std::vector<CableDiscoveryData>()),
               std::move(cable_pairing_callback_));
         }
         std::unique_ptr<FidoDiscoveryBase> v1_discovery =
@@ -71,7 +72,7 @@ std::vector<std::unique_ptr<FidoDiscoveryBase>> FidoDiscoveryFactory::Create(
       // TODO(https://crbug.com/825949): Add NFC support.
       return {};
     case FidoTransportProtocol::kInternal: {
-#if defined(OS_MAC) || BUILDFLAG(IS_ASH)
+#if defined(OS_MAC) || BUILDFLAG(IS_CHROMEOS_ASH)
       std::unique_ptr<FidoDiscoveryBase> discovery =
           MaybeCreatePlatformDiscovery();
       if (discovery) {
@@ -118,8 +119,7 @@ void FidoDiscoveryFactory::set_network_context(
 }
 
 void FidoDiscoveryFactory::set_cable_pairing_callback(
-    base::RepeatingCallback<void(std::unique_ptr<cablev2::Pairing>)>
-        pairing_callback) {
+    base::RepeatingCallback<void(cablev2::PairingEvent)> pairing_callback) {
   cable_pairing_callback_.emplace(std::move(pairing_callback));
 }
 
@@ -174,7 +174,7 @@ FidoDiscoveryFactory::MaybeCreatePlatformDiscovery() const {
 }
 #endif
 
-#if BUILDFLAG(IS_ASH)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 std::unique_ptr<FidoDiscoveryBase>
 FidoDiscoveryFactory::MaybeCreatePlatformDiscovery() const {
   return base::FeatureList::IsEnabled(kWebAuthCrosPlatformAuthenticator)

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/run_loop.h"
+#include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/background_sync/background_sync_controller_impl.h"
@@ -103,7 +104,9 @@ IN_PROC_BROWSER_TEST_F(BackgroundSyncBrowserTest, ZeroSiteEngagementPenalty) {
 }
 
 #if defined(OS_ANDROID)
-IN_PROC_BROWSER_TEST_F(BackgroundSyncBrowserTest, BackgroundSyncNotDisabled) {
+// TODO(crbug.com/1154332): Fix flaky test.
+IN_PROC_BROWSER_TEST_F(BackgroundSyncBrowserTest,
+                       DISABLED_BackgroundSyncNotDisabled) {
   auto* controller = BackgroundSyncControllerFactory::GetForBrowserContext(
       GetBrowserContext());
   ASSERT_TRUE(controller);
@@ -161,14 +164,10 @@ class IncognitoBackgroundSyncBrowserTest : public BackgroundSyncBrowserTest {
   IncognitoBackgroundSyncBrowserTest() { SetShellStartsInIncognitoMode(); }
 };
 
-#if defined(OS_ANDROID)
-// https://crbug.com/1147754
-#define MAYBE_OffTheRecordProfile DISABLED_OffTheRecordProfile
-#else
-#define MAYBE_OffTheRecordProfile OffTheRecordProfile
-#endif
 IN_PROC_BROWSER_TEST_F(IncognitoBackgroundSyncBrowserTest,
-                       MAYBE_OffTheRecordProfile) {
+                       OffTheRecordProfile) {
+  base::ScopedAllowBlockingForTesting allow_blocking;
+
   // TODO(crbug.com/1087486, 1091211): Make this use
   // BackgroundSyncController::ScheduleBrowserWakeup() once we support waking
   // the browser up.

@@ -176,9 +176,9 @@ void CreateTestAddressFormData(FormData* form,
   form->button_titles = {
       std::make_pair(ASCIIToUTF16("Submit"),
                      mojom::ButtonTitleType::BUTTON_ELEMENT_SUBMIT_TYPE)};
-  form->url = GURL("http://myform.com/form.html");
-  form->full_url = GURL("http://myform.com/form.html?foo=bar");
-  form->action = GURL("http://myform.com/submit.html");
+  form->url = GURL("https://myform.com/form.html");
+  form->full_url = GURL("https://myform.com/form.html?foo=bar");
+  form->action = GURL("https://myform.com/submit.html");
   form->is_action_empty = true;
   form->main_frame_origin =
       url::Origin::Create(GURL("https://myform_root.com/form.html"));
@@ -254,9 +254,9 @@ void CreateTestPersonalInformationFormData(FormData* form,
   form->unique_renderer_id = MakeFormRendererId();
   form->name =
       ASCIIToUTF16("MyForm") + ASCIIToUTF16(unique_id ? unique_id : "");
-  form->url = GURL("http://myform.com/form.html");
-  form->full_url = GURL("http://myform.com/form.html?foo=bar");
-  form->action = GURL("http://myform.com/submit.html");
+  form->url = GURL("https://myform.com/form.html");
+  form->full_url = GURL("https://myform.com/form.html?foo=bar");
+  form->action = GURL("https://myform.com/submit.html");
   form->main_frame_origin =
       url::Origin::Create(GURL("https://myform_root.com/form.html"));
 
@@ -281,7 +281,7 @@ void CreateTestCreditCardFormData(FormData* form,
       ASCIIToUTF16("MyForm") + ASCIIToUTF16(unique_id ? unique_id : "");
   if (is_https) {
     form->url = GURL("https://myform.com/form.html");
-    form->full_url = GURL("http://myform.com/form.html?foo=bar");
+    form->full_url = GURL("https://myform.com/form.html?foo=bar");
     form->action = GURL("https://myform.com/submit.html");
     form->main_frame_origin =
         url::Origin::Create(GURL("https://myform_root.com/form.html"));
@@ -875,26 +875,22 @@ std::string ObfuscatedCardDigitsAsUTF8(const std::string& str) {
 
 std::string NextMonth() {
   base::Time::Exploded now;
-  // Using AutofillClock here might cause test flakiness. See crbug/1108232.
-  base::Time::Now().LocalExplode(&now);
+  AutofillClock::Now().LocalExplode(&now);
   return base::StringPrintf("%02d", now.month % 12 + 1);
 }
 std::string LastYear() {
   base::Time::Exploded now;
-  // Using AutofillClock here might cause test flakiness. See crbug/1108232.
-  base::Time::Now().LocalExplode(&now);
+  AutofillClock::Now().LocalExplode(&now);
   return base::NumberToString(now.year - 1);
 }
 std::string NextYear() {
   base::Time::Exploded now;
-  // Using AutofillClock here might cause test flakiness. See crbug/1108232.
-  base::Time::Now().LocalExplode(&now);
+  AutofillClock::Now().LocalExplode(&now);
   return base::NumberToString(now.year + 1);
 }
 std::string TenYearsFromNow() {
   base::Time::Exploded now;
-  // Using AutofillClock here might cause test flakiness. See crbug/1108232.
-  base::Time::Now().LocalExplode(&now);
+  AutofillClock::Now().LocalExplode(&now);
   return base::NumberToString(now.year + 10);
 }
 
@@ -910,6 +906,43 @@ std::vector<FormSignature> GetEncodedSignatures(
   for (const FormStructure* form : forms)
     all_signatures.push_back(form->form_signature());
   return all_signatures;
+}
+
+void AddFieldSuggestionToForm(
+    const autofill::FormFieldData& field_data,
+    ServerFieldType field_type,
+    ::autofill::AutofillQueryResponse_FormSuggestion* form_suggestion) {
+  auto* field_suggestion = form_suggestion->add_field_suggestions();
+  field_suggestion->set_field_signature(
+      CalculateFieldSignatureForField(field_data).value());
+  field_suggestion->set_primary_type_prediction(field_type);
+}
+
+void AddFieldPredictionsToForm(
+    const autofill::FormFieldData& field_data,
+    const std::vector<int>& field_types,
+    ::autofill::AutofillQueryResponse_FormSuggestion* form_suggestion) {
+  std::vector<ServerFieldType> types;
+  for (auto type : field_types) {
+    types.emplace_back(static_cast<ServerFieldType>(type));
+  }
+  AddFieldPredictionsToForm(field_data, types, form_suggestion);
+}
+
+void AddFieldPredictionsToForm(
+    const autofill::FormFieldData& field_data,
+    const std::vector<ServerFieldType>& field_types,
+    ::autofill::AutofillQueryResponse_FormSuggestion* form_suggestion) {
+  // According to api_v1.proto, the first element is always set to primary type.
+  auto* field_suggestion = form_suggestion->add_field_suggestions();
+  field_suggestion->set_field_signature(
+      CalculateFieldSignatureForField(field_data).value());
+  field_suggestion->set_primary_type_prediction(*field_types.begin());
+  for (auto field_type : field_types) {
+    AutofillQueryResponse_FormSuggestion_FieldSuggestion_FieldPrediction*
+        prediction = field_suggestion->add_predictions();
+    prediction->set_type(field_type);
+  }
 }
 
 }  // namespace test

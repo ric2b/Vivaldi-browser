@@ -15,7 +15,7 @@
 #include "base/allocator/partition_allocator/page_allocator_constants.h"
 #include "base/allocator/partition_allocator/page_allocator_internal.h"
 #include "base/allocator/partition_allocator/partition_alloc_check.h"
-#include "base/bits.h"
+#include "base/allocator/partition_allocator/partition_alloc_constants.h"
 #include "base/lazy_instance.h"
 #include "base/notreached.h"
 #include "base/stl_util.h"
@@ -39,6 +39,7 @@ AddressPoolManager* AddressPoolManager::GetInstance() {
 
 namespace {
 
+// This will crash if the range cannot be decommitted.
 void DecommitPages(void* address, size_t size) {
 #if defined(OS_APPLE)
   // MAP_FIXED replaces an existing mapping with a new one, when the address is
@@ -50,21 +51,8 @@ void DecommitPages(void* address, size_t size) {
                    MAP_FIXED | MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
   PA_CHECK(ptr == address);
 #else
-  SetSystemPagesAccess(address, size, PageInaccessible);
-  DecommitSystemPages(address, size);
+  DecommitSystemPages(address, size, PageUpdatePermissions);
 #endif
-}
-
-bool WARN_UNUSED_RESULT CommitPages(void* address, size_t size) {
-#if defined(OS_APPLE)
-  SetSystemPagesAccess(address, size, PageReadWrite);
-#else
-  if (!RecommitSystemPages(address, size, PageReadWrite))
-    return false;
-  SetSystemPagesAccess(address, size, PageReadWrite);
-#endif
-
-  return true;
 }
 
 }  // namespace
@@ -96,16 +84,14 @@ void AddressPoolManager::Remove(pool_handle handle) {
   pool->Reset();
 }
 
-char* AddressPoolManager::Alloc(pool_handle handle, void*, size_t length) {
+char* AddressPoolManager::Reserve(pool_handle handle, void*, size_t length) {
   Pool* pool = GetPool(handle);
-  char* ptr = reinterpret_cast<char*>(pool->FindChunk(length));
-
-  if (UNLIKELY(!ptr) || !CommitPages(ptr, length))
-    return nullptr;
-  return ptr;
+  return reinterpret_cast<char*>(pool->FindChunk(length));
 }
 
-void AddressPoolManager::Free(pool_handle handle, void* ptr, size_t length) {
+void AddressPoolManager::UnreserveAndDecommit(pool_handle handle,
+                                              void* ptr,
+                                              size_t length) {
   PA_DCHECK(0 < handle && handle <= kNumPools);
   Pool* pool = GetPool(handle);
   PA_DCHECK(pool->IsInitialized());
@@ -142,8 +128,8 @@ void AddressPoolManager::Pool::Reset() {
 uintptr_t AddressPoolManager::Pool::FindChunk(size_t requested_size) {
   base::AutoLock scoped_lock(lock_);
 
-  const size_t required_size = bits::Align(requested_size, kSuperPageSize);
-  const size_t need_bits = required_size >> kSuperPageShift;
+  PA_DCHECK(!(requested_size & kSuperPageOffsetMask));
+  const size_t need_bits = requested_size >> kSuperPageShift;
 
   // Use first-fit policy to find an available chunk from free chunks. Start
   // from |bit_hint_|, because we know there are no free chunks before.
@@ -183,7 +169,7 @@ uintptr_t AddressPoolManager::Pool::FindChunk(size_t requested_size) {
       }
       uintptr_t address = address_begin_ + beg_bit * kSuperPageSize;
 #if DCHECK_IS_ON()
-      PA_DCHECK(address + required_size <= address_end_);
+      PA_DCHECK(address + requested_size <= address_end_);
 #endif
       return address;
     }
@@ -197,15 +183,15 @@ void AddressPoolManager::Pool::FreeChunk(uintptr_t address, size_t free_size) {
   base::AutoLock scoped_lock(lock_);
 
   PA_DCHECK(!(address & kSuperPageOffsetMask));
+  PA_DCHECK(!(free_size & kSuperPageOffsetMask));
 
-  const size_t size = bits::Align(free_size, kSuperPageSize);
-  DCHECK_LE(address_begin_, address);
+  PA_DCHECK(address_begin_ <= address);
 #if DCHECK_IS_ON()
-  PA_DCHECK(address + size <= address_end_);
+  PA_DCHECK(address + free_size <= address_end_);
 #endif
 
   const size_t beg_bit = (address - address_begin_) / kSuperPageSize;
-  const size_t end_bit = beg_bit + size / kSuperPageSize;
+  const size_t end_bit = beg_bit + free_size / kSuperPageSize;
   for (size_t i = beg_bit; i < end_bit; ++i) {
     PA_DCHECK(alloc_bitset_.test(i));
     alloc_bitset_.reset(i);
@@ -215,12 +201,6 @@ void AddressPoolManager::Pool::FreeChunk(uintptr_t address, size_t free_size) {
 
 AddressPoolManager::Pool::Pool() = default;
 AddressPoolManager::Pool::~Pool() = default;
-
-ALWAYS_INLINE AddressPoolManager::Pool* AddressPoolManager::GetPool(
-    pool_handle handle) {
-  PA_DCHECK(0 < handle && handle <= kNumPools);
-  return &pools_[handle - 1];
-}
 
 #else  // defined(PA_HAS_64_BITS_POINTERS)
 
@@ -271,13 +251,13 @@ static_assert(kSuperPageSize % PageAllocationGranularity() == 0,
               "AddressPoolManager depends on that kSuperPageSize is multiples "
               "of PageAllocationGranularity().");
 
-char* AddressPoolManager::Alloc(pool_handle handle,
-                                void* requested_address,
-                                size_t length) {
+char* AddressPoolManager::Reserve(pool_handle handle,
+                                  void* requested_address,
+                                  size_t length) {
   PA_DCHECK(!(length & PageAllocationGranularityOffsetMask()));
-  char* ptr = reinterpret_cast<char*>(AllocPages(requested_address, length,
-                                                 kSuperPageSize, PageReadWrite,
-                                                 PageTag::kPartitionAlloc));
+  char* ptr = reinterpret_cast<char*>(
+      AllocPages(requested_address, length, kSuperPageSize, PageInaccessible,
+                 PageTag::kPartitionAlloc));
   if (UNLIKELY(!ptr))
     return nullptr;
 
@@ -285,7 +265,9 @@ char* AddressPoolManager::Alloc(pool_handle handle,
   return ptr;
 }
 
-void AddressPoolManager::Free(pool_handle handle, void* ptr, size_t length) {
+void AddressPoolManager::UnreserveAndDecommit(pool_handle handle,
+                                              void* ptr,
+                                              size_t length) {
   uintptr_t ptr_as_uintptr = reinterpret_cast<uintptr_t>(ptr);
   PA_DCHECK(!(ptr_as_uintptr & kSuperPageOffsetMask));
   PA_DCHECK(!(length & PageAllocationGranularityOffsetMask()));

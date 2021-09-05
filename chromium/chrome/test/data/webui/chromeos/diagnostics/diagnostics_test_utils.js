@@ -102,5 +102,37 @@ export function getToggleTestReportButtonFromSection(element) {
  * @throws {Error}
  */
 export function assertElementContainsText(element, text) {
-  assertTrue(element.textContent.trim().indexOf(text) !== -1);
+  assertTextContains(element.textContent, text);
+}
+
+/**
+ * Helper function to check if a substring exists in a string.
+ * @param {string} text
+ * @param {string} subStr substring to check
+ * @throws {Error}
+ */
+export function assertTextContains(text, subStr) {
+  assertTrue(text.trim().indexOf(subStr) !== -1);
+}
+
+/**
+ * Helper function for getting the diagnostics-card from an element.
+ * @param {?Element} element
+ * @return {!DiagnosticsCardElement}
+ */
+export function getDiagnosticsCard(element) {
+  return /** @type {!DiagnosticsCardElement} */ (
+      element.shadowRoot.querySelector('diagnostics-card'));
+}
+
+/**
+ * Helper function for getting the routine-section from an element.
+ * @param {?Element} element
+ * @return {!RoutineSectionElement}
+ */
+export function getRoutineSection(element) {
+  const routineSection =
+      /** @type {!RoutineSectionElement} */ (element.$$('routine-section'));
+  assertTrue(!!routineSection);
+  return routineSection;
 }

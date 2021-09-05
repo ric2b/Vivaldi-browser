@@ -55,6 +55,7 @@
 #include "chrome/browser/chromeos/policy/status_collector/enterprise_activity_storage.h"
 #include "chrome/browser/chromeos/policy/status_collector/interval_map.h"
 #include "chrome/browser/chromeos/policy/status_collector/status_collector_state.h"
+#include "chrome/browser/chromeos/policy/status_collector/tpm_status_combiner.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/crash_upload_list/crash_upload_list.h"
@@ -64,11 +65,14 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/audio/cras_audio_handler.h"
+#include "chromeos/dbus/attestation/attestation_client.h"
 #include "chromeos/dbus/cryptohome/cryptohome_client.h"
 #include "chromeos/dbus/cryptohome/rpc.pb.h"
 #include "chromeos/dbus/cryptohome/tpm_util.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager/idle.pb.h"
+#include "chromeos/dbus/tpm_manager/tpm_manager.pb.h"
+#include "chromeos/dbus/tpm_manager/tpm_manager_client.h"
 #include "chromeos/dbus/update_engine_client.h"
 #include "chromeos/dbus/util/version_loader.h"
 #include "chromeos/disks/disk_mount_manager.h"
@@ -433,57 +437,23 @@ bool ReadAndroidStatus(
   return true;
 }
 
-// Converts the given GetTpmStatusReply to TpmStatusInfo.
-policy::TpmStatusInfo GetTpmStatusReplyToTpmStatusInfo(
-    const base::Optional<cryptohome::BaseReply>& reply) {
-  policy::TpmStatusInfo tpm_status_info;
-
-  if (!reply.has_value()) {
-    LOG(ERROR) << "GetTpmStatus call failed with empty reply.";
-    return tpm_status_info;
-  }
-  if (reply->has_error() &&
-      reply->error() != cryptohome::CRYPTOHOME_ERROR_NOT_SET) {
-    LOG(ERROR) << "GetTpmStatus failed with error: " << reply->error();
-    return tpm_status_info;
-  }
-  if (!reply->HasExtension(cryptohome::GetTpmStatusReply::reply)) {
-    LOG(ERROR)
-        << "GetTpmStatus failed with no GetTpmStatusReply extension in reply.";
-    return tpm_status_info;
-  }
-
-  auto reply_proto = reply->GetExtension(cryptohome::GetTpmStatusReply::reply);
-
-  tpm_status_info.enabled = reply_proto.enabled();
-  tpm_status_info.owned = reply_proto.owned();
-  tpm_status_info.initialized = reply_proto.initialized();
-  tpm_status_info.attestation_prepared = reply_proto.attestation_prepared();
-  tpm_status_info.attestation_enrolled = reply_proto.attestation_enrolled();
-  tpm_status_info.dictionary_attack_counter =
-      reply_proto.dictionary_attack_counter();
-  tpm_status_info.dictionary_attack_threshold =
-      reply_proto.dictionary_attack_threshold();
-  tpm_status_info.dictionary_attack_lockout_in_effect =
-      reply_proto.dictionary_attack_lockout_in_effect();
-  tpm_status_info.dictionary_attack_lockout_seconds_remaining =
-      reply_proto.dictionary_attack_lockout_seconds_remaining();
-  tpm_status_info.boot_lockbox_finalized = reply_proto.boot_lockbox_finalized();
-
-  return tpm_status_info;
-}
-
 void ReadTpmStatus(policy::DeviceStatusCollector::TpmStatusReceiver callback) {
   // D-Bus calls are allowed only on the UI thread.
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  chromeos::CryptohomeClient::Get()->GetTpmStatus(
-      cryptohome::GetTpmStatusRequest(),
-      base::BindOnce(
-          [](policy::DeviceStatusCollector::TpmStatusReceiver callback,
-             base::Optional<cryptohome::BaseReply> reply) {
-            std::move(callback).Run(GetTpmStatusReplyToTpmStatusInfo(reply));
-          },
-          std::move(callback)));
+  auto tpm_status_combiner =
+      base::MakeRefCounted<::policy::TpmStatusCombiner>(std::move(callback));
+  chromeos::TpmManagerClient::Get()->GetTpmNonsensitiveStatus(
+      ::tpm_manager::GetTpmNonsensitiveStatusRequest(),
+      base::BindOnce(&::policy::TpmStatusCombiner::OnGetTpmStatus,
+                     tpm_status_combiner));
+  chromeos::AttestationClient::Get()->GetStatus(
+      ::attestation::GetStatusRequest(),
+      base::BindOnce(&::policy::TpmStatusCombiner::OnGetEnrollmentStatus,
+                     tpm_status_combiner));
+  chromeos::TpmManagerClient::Get()->GetDictionaryAttackInfo(
+      ::tpm_manager::GetDictionaryAttackInfoRequest(),
+      base::BindOnce(&::policy::TpmStatusCombiner::OnGetDictionaryAttackInfo,
+                     tpm_status_combiner));
 }
 
 base::Version GetPlatformVersion() {
@@ -989,6 +959,10 @@ class DeviceStatusCollectorState : public StatusCollectorState {
 
         case cros_healthd::BatteryResult::Tag::BATTERY_INFO: {
           const auto& battery_info = battery_result->get_battery_info();
+          // Device does not have a battery.
+          if (battery_info.is_null())
+            break;
+
           em::PowerStatus* const power_status_out =
               response_params_.device_status->mutable_power_status();
           em::BatteryInfo* const battery_info_out =
@@ -1240,8 +1214,10 @@ class DeviceStatusCollectorState : public StatusCollectorState {
               system_status_out->set_vpd_sku_number(
                   system_info->product_sku_number.value());
             }
-            system_status_out->set_vpd_serial_number(
-                system_info->product_serial_number);
+            if (system_info->product_serial_number.has_value()) {
+              system_status_out->set_vpd_serial_number(
+                  system_info->product_serial_number.value());
+            }
           }
           if (report_system_info) {
             system_status_out->set_marketing_name(system_info->marketing_name);
@@ -1482,8 +1458,10 @@ DeviceStatusCollector::DeviceStatusCollector(
       base::BindOnce(&ReadFirmwareVersion),
       base::BindOnce(&DeviceStatusCollector::OnOSFirmware,
                      weak_factory_.GetWeakPtr()));
-  chromeos::tpm_util::GetTpmVersion(base::BindOnce(
-      &DeviceStatusCollector::OnTpmVersion, weak_factory_.GetWeakPtr()));
+  chromeos::TpmManagerClient::Get()->GetVersionInfo(
+      ::tpm_manager::GetVersionInfoRequest(),
+      base::BindOnce(&DeviceStatusCollector::OnGetTpmVersion,
+                     weak_factory_.GetWeakPtr()));
 
   pref_change_registrar_ = std::make_unique<PrefChangeRegistrar>();
   pref_change_registrar_->Init(pref_service_);
@@ -1543,6 +1521,8 @@ void DeviceStatusCollector::UpdateReportingSettings() {
     return;
   }
 
+  // Keep the default values in sync with DeviceReportingProto in
+  // components/policy/proto/chrome_device_policy.proto.
   if (!cros_settings_->GetBoolean(chromeos::kReportDeviceVersionInfo,
                                   &report_version_info_)) {
     report_version_info_ = true;
@@ -2048,12 +2028,12 @@ bool DeviceStatusCollector::GetVersionInfo(
 
   em::TpmVersionInfo* const tpm_version_info =
       status->mutable_tpm_version_info();
-  tpm_version_info->set_family(tpm_version_info_.family);
-  tpm_version_info->set_spec_level(tpm_version_info_.spec_level);
-  tpm_version_info->set_manufacturer(tpm_version_info_.manufacturer);
-  tpm_version_info->set_tpm_model(tpm_version_info_.tpm_model);
-  tpm_version_info->set_firmware_version(tpm_version_info_.firmware_version);
-  tpm_version_info->set_vendor_specific(tpm_version_info_.vendor_specific);
+  tpm_version_info->set_family(tpm_version_reply_.family());
+  tpm_version_info->set_spec_level(tpm_version_reply_.spec_level());
+  tpm_version_info->set_manufacturer(tpm_version_reply_.manufacturer());
+  tpm_version_info->set_tpm_model(tpm_version_reply_.tpm_model());
+  tpm_version_info->set_firmware_version(tpm_version_reply_.firmware_version());
+  tpm_version_info->set_vendor_specific(tpm_version_reply_.vendor_specific());
 
   return true;
 }
@@ -2704,9 +2684,12 @@ void DeviceStatusCollector::OnOSFirmware(
   firmware_fetch_error_ = version.second;
 }
 
-void DeviceStatusCollector::OnTpmVersion(
-    const chromeos::CryptohomeClient::TpmVersionInfo& tpm_version_info) {
-  tpm_version_info_ = tpm_version_info;
+void DeviceStatusCollector::OnGetTpmVersion(
+    const ::tpm_manager::GetVersionInfoReply& reply) {
+  if (reply.status() != ::tpm_manager::STATUS_SUCCESS) {
+    LOG(WARNING) << "Failed to get tpm version; status: " << reply.status();
+  }
+  tpm_version_reply_ = reply;
 }
 
 }  // namespace policy

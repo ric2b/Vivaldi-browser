@@ -17,14 +17,15 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/common/url_constants.h"
-#include "media/base/media_switches.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/mojom/autoplay/autoplay.mojom.h"
 
 #if !defined(OS_ANDROID)
 #include "chrome/browser/ui/tabs/tab_utils.h"
+#include "extensions/api/tabs/tabs_private_api.h"
 #endif
+
 
 SoundContentSettingObserver::SoundContentSettingObserver(
     content::WebContents* contents)
@@ -50,9 +51,6 @@ SoundContentSettingObserver::~SoundContentSettingObserver() = default;
 void SoundContentSettingObserver::ReadyToCommitNavigation(
     content::NavigationHandle* navigation_handle) {
   if (navigation_handle->IsSameDocument())
-    return;
-
-  if (!base::FeatureList::IsEnabled(media::kAutoplayWhitelistSettings))
     return;
 
   GURL url = navigation_handle->IsInMainFrame()
@@ -139,6 +137,12 @@ void SoundContentSettingObserver::MuteOrUnmuteIfNecessary() {
   if (reason == TabMutedReason::CONTENT_SETTING_CHROME &&
       web_contents()->GetLastCommittedURL().SchemeIs(
           content::kChromeUIScheme)) {
+    return;
+  }
+
+  // NOTE(andre@vivaldi.com) : Vivaldi can set a tab to muted in extdata. Do not
+  // override this here.
+  if (extensions::IsTabMuted(web_contents())){
     return;
   }
 

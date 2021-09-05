@@ -49,6 +49,7 @@ import android.widget.RemoteViews;
 import android.widget.TextView;
 
 import androidx.annotation.DrawableRes;
+import androidx.annotation.IdRes;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.browser.customtabs.CustomTabsCallback;
 import androidx.browser.customtabs.CustomTabsIntent;
@@ -90,8 +91,8 @@ import org.chromium.chrome.browser.WarmupManager;
 import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider.CustomTabsUiType;
-import org.chromium.chrome.browser.browserservices.OriginVerifier;
 import org.chromium.chrome.browser.browserservices.SessionDataHolder;
+import org.chromium.chrome.browser.browserservices.verification.OriginVerifier;
 import org.chromium.chrome.browser.contextmenu.RevampedContextMenuCoordinator;
 import org.chromium.chrome.browser.customtabs.CustomTabsTestUtils.OnFinishedForTest;
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityNavigationController.FinishReason;
@@ -104,6 +105,7 @@ import org.chromium.chrome.browser.history.BrowsingHistoryBridge;
 import org.chromium.chrome.browser.history.HistoryItem;
 import org.chromium.chrome.browser.history.TestBrowsingHistoryObserver;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
+import org.chromium.chrome.browser.metrics.LaunchCauseMetrics;
 import org.chromium.chrome.browser.metrics.PageLoadMetrics;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
@@ -147,6 +149,7 @@ import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.mojom.WindowOpenDisposition;
 import org.chromium.ui.test.util.UiRestriction;
 import org.chromium.ui.util.ColorUtils;
+import org.chromium.url.GURL;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -160,7 +163,6 @@ import java.util.concurrent.atomic.AtomicReference;
  * Instrumentation tests for app menu, context menu, and toolbar of a {@link CustomTabActivity}.
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
-@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class CustomTabActivityTest {
     @Rule
     public CustomTabActivityTestRule mCustomTabActivityTestRule = new CustomTabActivityTestRule();
@@ -347,6 +349,12 @@ public class CustomTabActivityTest {
         CustomTabsTestUtils.openAppMenuAndAssertMenuShown(mCustomTabActivityTestRule.getActivity());
     }
 
+    private void assertAppMenuItemNotVisible(Menu menu, @IdRes int id, String itemName) {
+        MenuItem item = menu.findItem(id);
+        Assert.assertNotNull(String.format("Cannot find <%s>", itemName), item);
+        Assert.assertFalse(String.format("<%s> is visible", itemName), item.isVisible());
+    }
+
     /**
      * @return The number of visible and enabled items in the given menu.
      */
@@ -497,6 +505,33 @@ public class CustomTabActivityTest {
         Assert.assertNotNull(menu.findItem(R.id.contextmenu_save_video));
     }
 
+    @Test
+    @SmallTest
+    public void testContextMenuEntriesBeforeFirstRun() throws Exception {
+        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(createMinimalCustomTabIntent());
+        // Mark the first run as not completed. This has to be done after we start the intent,
+        // otherwise we are going to hit the FRE.
+        TestThreadUtils.runOnUiThreadBlocking(() -> FirstRunStatus.setFirstRunFlowComplete(false));
+
+        // The context menu for images should not be built when the first run is not completed.
+        RevampedContextMenuCoordinator imageMenu = RevampedContextMenuUtils.openContextMenu(
+                mCustomTabActivityTestRule.getActivity().getActivityTab(), "logo");
+        Assert.assertNull(
+                "Context menu for images should not be built when first run is not finished.",
+                imageMenu);
+
+        // Options on the context menu for links should be limited when the first run is not
+        // completed.
+        RevampedContextMenuCoordinator linkMenu = RevampedContextMenuUtils.openContextMenu(
+                mCustomTabActivityTestRule.getActivity().getActivityTab(), "aboutLink");
+        final int expectedMenuItems = 4;
+        Assert.assertEquals("Menu item count does not match expectation.", expectedMenuItems,
+                linkMenu.getCount());
+
+        Assert.assertNotNull(linkMenu.findItem(R.id.contextmenu_copy_link_text));
+        Assert.assertNotNull(linkMenu.findItem(R.id.contextmenu_copy_link_address));
+    }
+
     /**
      * Test the entries in the app menu.
      */
@@ -604,6 +639,36 @@ public class CustomTabActivityTest {
         Assert.assertNotNull(icon_row_menu.findItem(R.id.reload_menu_id));
     }
 
+    @Test
+    @SmallTest
+    public void testAppMenuBeforeFirstRun() throws Exception {
+        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(createMinimalCustomTabIntent());
+        // Mark the first run as not completed. This has to be done after we start the intent,
+        // otherwise we are going to hit the FRE.
+        TestThreadUtils.runOnUiThreadBlocking(() -> FirstRunStatus.setFirstRunFlowComplete(false));
+
+        openAppMenuAndAssertMenuShown();
+        Menu menu = mCustomTabActivityTestRule.getMenu();
+        final int expectedMenuSize = 3;
+
+        Assert.assertNotNull("App menu is not initialized: ", menu);
+        assertEquals(expectedMenuSize, getActualMenuSize(menu));
+        assertEquals(expectedMenuSize, getVisibleMenuSize(menu));
+
+        // Checks the first row (icons).
+        Assert.assertNotNull(menu.findItem(R.id.forward_menu_id));
+        Assert.assertNotNull(menu.findItem(R.id.info_menu_id));
+        Assert.assertNotNull(menu.findItem(R.id.reload_menu_id));
+        assertAppMenuItemNotVisible(menu, R.id.offline_page_id, "offline_page");
+        assertAppMenuItemNotVisible(menu, R.id.bookmark_this_page_id, "bookmark_this_page");
+
+        // Following rows.
+        Assert.assertNotNull(menu.findItem(R.id.find_in_page_id));
+        Assert.assertNotNull(menu.findItem(R.id.request_desktop_site_row_menu_id));
+        assertAppMenuItemNotVisible(menu, R.id.open_in_browser_id, "open_in_browser");
+        assertAppMenuItemNotVisible(menu, R.id.add_to_homescreen_id, "add_to_homescreen");
+    }
+
     /**
      * Tests if the default share item can be shown in the app menu.
      */
@@ -702,13 +767,20 @@ public class CustomTabActivityTest {
         intent.setComponent(new ComponentName(
                 InstrumentationRegistry.getTargetContext(), ChromeLauncherActivity.class));
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        // These ensure the open in chrome chooser is not shown.
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_IS_OPENED_BY_CHROME, true);
+        IntentHandler.setForceIntentSenderChromeToTrue(true);
 
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
+        assertEquals(1,
+                RecordHistogram.getHistogramValueCountForTesting(
+                        LaunchCauseMetrics.LAUNCH_CAUSE_HISTOGRAM,
+                        LaunchCauseMetrics.LaunchCause.CUSTOM_TAB));
 
         IntentFilter filter = new IntentFilter(Intent.ACTION_VIEW);
         filter.addDataScheme(Uri.parse(mTestServer.getURL("/")).getScheme());
         final ActivityMonitor monitor =
-                InstrumentationRegistry.getInstrumentation().addMonitor(filter, null, false);
+                InstrumentationRegistry.getInstrumentation().addMonitor(filter, null, true);
         openAppMenuAndAssertMenuShown();
         PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> {
             MenuItem item =
@@ -722,6 +794,10 @@ public class CustomTabActivityTest {
         });
 
         callbackTriggered.waitForCallback(0);
+        // No additional LaunchCauses should have been recorded.
+        assertEquals(1,
+                RecordHistogram.getHistogramTotalCountForTesting(
+                        LaunchCauseMetrics.LAUNCH_CAUSE_HISTOGRAM));
     }
 
     /**
@@ -731,7 +807,15 @@ public class CustomTabActivityTest {
     @SmallTest
     public void testTabReparentingBasic() {
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(createMinimalCustomTabIntent());
+        assertEquals(1,
+                RecordHistogram.getHistogramValueCountForTesting(
+                        LaunchCauseMetrics.LAUNCH_CAUSE_HISTOGRAM,
+                        LaunchCauseMetrics.LaunchCause.CUSTOM_TAB));
         reparentAndVerifyTab();
+        // No additional LaunchCauses should have been recorded.
+        assertEquals(1,
+                RecordHistogram.getHistogramTotalCountForTesting(
+                        LaunchCauseMetrics.LAUNCH_CAUSE_HISTOGRAM));
     }
 
     /**
@@ -1067,7 +1151,7 @@ public class CustomTabActivityTest {
         final CallbackHelper pageLoadFinishedHelper = new CallbackHelper();
         tab.addObserver(new EmptyTabObserver() {
             @Override
-            public void onPageLoadFinished(Tab tab, String url) {
+            public void onPageLoadFinished(Tab tab, GURL url) {
                 pageLoadFinishedHelper.notifyCalled();
             }
         });
@@ -1139,7 +1223,7 @@ public class CustomTabActivityTest {
             }
 
             @Override
-            public void onPageLoadFinished(Tab tab, String url) {
+            public void onPageLoadFinished(Tab tab, GURL url) {
                 pageLoadFinishedHelper.notifyCalled();
             }
         });
@@ -1179,7 +1263,7 @@ public class CustomTabActivityTest {
             }
 
             @Override
-            public void onPageLoadFinished(Tab tab, String url) {
+            public void onPageLoadFinished(Tab tab, GURL url) {
                 pageLoadFinishedHelper.notifyCalled();
             }
         });
@@ -2127,8 +2211,8 @@ public class CustomTabActivityTest {
         ApplicationStatus.registerStateListenerForAllActivities(listener);
 
         PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> {
-            TabTestUtils.openNewTab(cctActivity.getActivityTab(), "about:blank", null, null,
-                    WindowOpenDisposition.OFF_THE_RECORD, false);
+            TabTestUtils.openNewTab(cctActivity.getActivityTab(), new GURL("about:blank"), null,
+                    null, WindowOpenDisposition.OFF_THE_RECORD, false);
         });
 
         mCctHiddenCallback.waitForCallback("CCT not hidden.", 0);
@@ -2157,10 +2241,10 @@ public class CustomTabActivityTest {
 
         final CustomTabActivity cctActivity = mCustomTabActivityTestRule.getActivity();
 
-        Assert.assertNotNull(cctActivity.getNightModeStateProvider());
+        Assert.assertNotNull(cctActivity.getNightModeStateProviderForTesting());
 
         Assert.assertTrue("Night mode should be enabled on K+ with dark color scheme set.",
-                cctActivity.getNightModeStateProvider().isInNightMode());
+                cctActivity.getNightModeStateProviderForTesting().isInNightMode());
 
         MenuButton menuButtonView = cctActivity.findViewById(R.id.menu_button_wrapper);
         assertTrue(menuButtonView.getUseLightDrawablesForTesting());
@@ -2176,8 +2260,8 @@ public class CustomTabActivityTest {
 
         final CustomTabActivity cctActivity = mCustomTabActivityTestRule.getActivity();
 
-        Assert.assertNotNull(cctActivity.getNightModeStateProvider());
-        Assert.assertFalse(cctActivity.getNightModeStateProvider().isInNightMode());
+        Assert.assertNotNull(cctActivity.getNightModeStateProviderForTesting());
+        Assert.assertFalse(cctActivity.getNightModeStateProviderForTesting().isInNightMode());
 
         MenuButton menuButtonView = cctActivity.findViewById(R.id.menu_button_wrapper);
         assertFalse(menuButtonView.getUseLightDrawablesForTesting());
@@ -2185,17 +2269,6 @@ public class CustomTabActivityTest {
 
     private void addColorSchemeToIntent(Intent intent, int colorScheme) {
         intent.putExtra(CustomTabsIntent.EXTRA_COLOR_SCHEME, colorScheme);
-    }
-
-    @Test
-    @MediumTest
-    public void testLaunchIncognitoCustomTabForPaymentRequest() {
-        Intent intent = createMinimalCustomTabIntent();
-        intent.putExtra(IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB, true);
-        CustomTabIntentDataProvider.addPaymentRequestUIExtras(intent);
-        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
-
-        Assert.assertTrue(mCustomTabActivityTestRule.getActivity().getActivityTab().isIncognito());
     }
 
     /** Maybe prerenders a URL with a referrer, then launch it with another one. */
@@ -2372,6 +2445,9 @@ public class CustomTabActivityTest {
                 InstrumentationRegistry.getTargetContext(), ChromeLauncherActivity.class));
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         intent.putExtra(CustomTabIntentDataProvider.EXTRA_HIDE_OMNIBOX_SUGGESTIONS_FROM_CCT, true);
+        // These ensure the open in chrome chooser is not shown.
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_IS_OPENED_BY_CHROME, true);
+        IntentHandler.setForceIntentSenderChromeToTrue(true);
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
 
         // The entry should have FROM_API_2.
@@ -2384,6 +2460,7 @@ public class CustomTabActivityTest {
         final ActivityMonitor monitor =
                 InstrumentationRegistry.getInstrumentation().addMonitor(filter, null, false);
         openAppMenuAndAssertMenuShown();
+        final Tab tab = mCustomTabActivityTestRule.getActivity().getActivityTab();
         PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> {
             MenuItem item =
                     AppMenuTestSupport.getMenu(mCustomTabActivityTestRule.getAppMenuCoordinator())
@@ -2398,10 +2475,9 @@ public class CustomTabActivityTest {
 
         // No new navigation should be there, and the navigation should still have FROM_API_2.
         Assert.assertEquals(PageTransition.FROM_API_2,
-                getVisibleEntryTransitionType() & PageTransition.FROM_API_2);
+                getVisibleEntryTransitionTypeForTab(tab) & PageTransition.FROM_API_2);
 
         // Navigate to another page.
-        final Tab tab = mCustomTabActivityTestRule.getActivity().getActivityTab();
         ChromeTabUtils.waitForTabPageLoaded(tab, null, () -> {
             JavaScriptUtils.executeJavaScript(
                     tab.getWebContents(), "location.href= '" + mTestPage2 + "';");
@@ -2415,7 +2491,8 @@ public class CustomTabActivityTest {
             Assert.assertNotEquals(navigationController.getVisibleEntry(),
                     navigationController.getNavigationHistory().getEntryAtIndex(0));
         });
-        Assert.assertEquals(0, getVisibleEntryTransitionType() & PageTransition.FROM_API_2);
+        Assert.assertEquals(
+                0, getVisibleEntryTransitionTypeForTab(tab) & PageTransition.FROM_API_2);
     }
 
     @Test
@@ -2476,6 +2553,9 @@ public class CustomTabActivityTest {
         intent.setData(Uri.parse(mTestPage));
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         intent.putExtra(CustomTabIntentDataProvider.EXTRA_HIDE_VISITS_FROM_CCT, true);
+        // These ensure the open in chrome chooser is not shown.
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_IS_OPENED_BY_CHROME, true);
+        IntentHandler.setForceIntentSenderChromeToTrue(true);
         CustomTabsSessionToken token = CustomTabsSessionToken.getSessionTokenFromIntent(intent);
         CustomTabsConnection connection = CustomTabsConnection.getInstance();
         connection.newSession(token);
@@ -2483,9 +2563,8 @@ public class CustomTabActivityTest {
                 token, "com.google.android.googlequicksearchbox");
 
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
-        Assert.assertTrue(mCustomTabActivityTestRule.getActivity()
-                                  .getActivityTab()
-                                  .getHideFutureNavigations());
+        Tab tab = mCustomTabActivityTestRule.getActivity().getActivityTab();
+        Assert.assertTrue(tab.getHideFutureNavigations());
 
         // Trigger open in browser.
         IntentFilter filter = new IntentFilter(Intent.ACTION_VIEW);
@@ -2504,9 +2583,7 @@ public class CustomTabActivityTest {
             return InstrumentationRegistry.getInstrumentation().checkMonitorHit(monitor, 1);
         });
         callbackTriggered.waitForCallback(0);
-        Assert.assertFalse(mCustomTabActivityTestRule.getActivity()
-                                   .getActivityTab()
-                                   .getHideFutureNavigations());
+        Assert.assertFalse(tab.getHideFutureNavigations());
     }
 
     @Test

@@ -7,7 +7,6 @@
 #include "base/bind.h"
 #include "chrome/browser/chromeos/borealis/borealis_context.h"
 #include "chrome/browser/chromeos/borealis/borealis_context_manager.h"
-#include "chrome/browser/chromeos/borealis/borealis_context_manager_factory.h"
 #include "chrome/browser/chromeos/borealis/borealis_features.h"
 #include "chrome/browser/chromeos/borealis/borealis_service.h"
 #include "chrome/browser/chromeos/borealis/borealis_util.h"
@@ -86,18 +85,19 @@ void BorealisAppLauncher::Launch(std::string app_id,
     return;
   }
 
-  BorealisContextManagerFactory::GetForProfile(profile_)->StartBorealis(
+  BorealisService::GetForProfile(profile_)->ContextManager().StartBorealis(
       base::BindOnce(
           [](std::string app_id,
              BorealisAppLauncher::OnLaunchedCallback callback,
-             BorealisContextManager::Result result) {
-            if (!result.Ok()) {
-              LOG(ERROR) << "Failed to launch " << app_id << ": "
-                         << result.FailureReason();
+             BorealisContextManager::ContextOrFailure result) {
+            if (!result) {
+              LOG(ERROR) << "Failed to launch " << app_id << "(code "
+                         << result.Error().error()
+                         << "): " << result.Error().description();
               std::move(callback).Run(LaunchResult::kError);
               return;
             }
-            BorealisAppLauncher::Launch(result.Success(), std::move(app_id),
+            BorealisAppLauncher::Launch(*result.Value(), std::move(app_id),
                                         std::move(callback));
           },
           std::move(app_id), std::move(callback)));

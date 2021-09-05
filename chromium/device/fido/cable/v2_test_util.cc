@@ -20,6 +20,8 @@
 #include "device/fido/cable/v2_discovery.h"
 #include "device/fido/fido_constants.h"
 #include "device/fido/virtual_ctap2_device.h"
+#include "net/base/net_errors.h"
+#include "net/http/http_status_code.h"
 #include "services/network/test/test_network_context.h"
 #include "url/gurl.h"
 
@@ -36,7 +38,7 @@ class TestNetworkContext : public network::TestNetworkContext {
       base::span<const uint8_t> pairing_id,
       base::span<const uint8_t, kClientNonceSize> client_nonce)>;
 
-  explicit TestNetworkContext(ContactCallback contact_callback)
+  explicit TestNetworkContext(base::Optional<ContactCallback> contact_callback)
       : contact_callback_(std::move(contact_callback)) {}
 
   void CreateWebSocket(
@@ -84,6 +86,16 @@ class TestNetworkContext : public network::TestNetworkContext {
 
       CHECK_EQ(additional_headers.size(), 1u);
       CHECK_EQ(additional_headers[0]->name, device::kCableClientPayloadHeader);
+
+      if (!contact_callback_) {
+        // Without a contact callback all attempts are rejected with a 410
+        // status to indicate the the contact ID will never work again.
+        mojo::Remote<network::mojom::WebSocketHandshakeClient>
+            bound_handshake_client(std::move(handshake_client));
+        bound_handshake_client->OnFailure("", net::OK, net::HTTP_GONE);
+        return;
+      }
+
       std::vector<uint8_t> client_payload_bytes;
       CHECK(base::HexStringToBytes(additional_headers[0]->value,
                                    &client_payload_bytes));
@@ -105,7 +117,7 @@ class TestNetworkContext : public network::TestNetworkContext {
       base::span<const uint8_t, kClientNonceSize> client_nonce(
           client_nonce_vec.data(), client_nonce_vec.size());
 
-      contact_callback_.Run(
+      contact_callback_->Run(
           tunnel_id,
           /*pairing_id=*/map.find(cbor::Value(1))->second.GetBytestring(),
           client_nonce);
@@ -158,7 +170,7 @@ class TestNetworkContext : public network::TestNetworkContext {
     void SendMessage(network::mojom::WebSocketMessageType type,
                      uint64_t length) override {
       if (!peer_ || !peer_->connected_) {
-        pending_messages_.emplace_back(std::make_tuple(type, length));
+        pending_messages_.emplace_back(std::make_pair(type, length));
       } else {
         peer_->client_receiver_->OnDataFrame(/*final=*/true, type, length);
       }
@@ -324,7 +336,7 @@ class TestNetworkContext : public network::TestNetworkContext {
   };
 
   std::map<std::string, std::unique_ptr<Connection>> connections_;
-  const ContactCallback contact_callback_;
+  const base::Optional<ContactCallback> contact_callback_;
 };
 
 class DummyBLEAdvert
@@ -457,7 +469,7 @@ class TestPlatform : public authenticator::Platform {
 }  // namespace
 
 std::unique_ptr<network::mojom::NetworkContext> NewMockTunnelServer(
-    ContactCallback contact_callback) {
+    base::Optional<ContactCallback> contact_callback) {
   return std::make_unique<TestNetworkContext>(std::move(contact_callback));
 }
 

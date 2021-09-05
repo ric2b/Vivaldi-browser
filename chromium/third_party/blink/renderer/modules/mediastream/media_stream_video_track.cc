@@ -391,8 +391,8 @@ MediaStreamVideoTrack::FrameDeliverer::GetBlackFrame(
     return nullptr;
 
   wrapped_black_frame->set_timestamp(reference_frame.timestamp());
-  wrapped_black_frame->metadata()->reference_time =
-      reference_frame.metadata()->reference_time;
+  wrapped_black_frame->metadata().reference_time =
+      reference_frame.metadata().reference_time;
 
   return wrapped_black_frame;
 }
@@ -672,7 +672,8 @@ void MediaStreamVideoTrack::GetSettings(
       settings.frame_rate = *computed_frame_rate_;
   }
 
-  settings.facing_mode = ToPlatformFacingMode(source_->device().video_facing);
+  settings.facing_mode = ToPlatformFacingMode(
+      static_cast<mojom::blink::FacingMode>(source_->device().video_facing));
   settings.resize_mode = WebString::FromASCII(std::string(
       adapter_settings().target_size() ? WebMediaStreamTrack::kResizeModeRescale
                                        : WebMediaStreamTrack::kResizeModeNone));

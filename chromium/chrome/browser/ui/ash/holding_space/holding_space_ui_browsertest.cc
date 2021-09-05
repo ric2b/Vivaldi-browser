@@ -4,15 +4,22 @@
 
 #include "chrome/browser/ui/ash/holding_space/holding_space_browsertest_base.h"
 
+#include <vector>
+
 #include "ash/public/cpp/ash_features.h"
+#include "ash/public/cpp/capture_mode_test_api.h"
+#include "ash/public/cpp/holding_space/holding_space_constants.h"
 #include "ash/public/cpp/holding_space/holding_space_controller.h"
 #include "ash/public/cpp/holding_space/holding_space_item.h"
 #include "ash/public/cpp/holding_space/holding_space_model.h"
 #include "ash/public/cpp/holding_space/holding_space_model_observer.h"
 #include "ash/public/cpp/holding_space/holding_space_prefs.h"
+#include "ash/public/cpp/holding_space/holding_space_test_api.h"
+#include "base/scoped_observation.h"
 #include "base/scoped_observer.h"
 #include "base/test/bind.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "content/public/test/browser_test.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -40,6 +47,14 @@ void FlushMessageLoop() {
   base::SequencedTaskRunnerHandle::Get()->PostTask(FROM_HERE,
                                                    run_loop.QuitClosure());
   run_loop.Run();
+}
+
+// Performs a click on `view`.
+void Click(const views::View* view) {
+  auto* root_window = HoldingSpaceBrowserTestBase::GetRootWindowForNewWindows();
+  ui::test::EventGenerator event_generator(root_window);
+  event_generator.MoveMouseTo(view->GetBoundsInScreen().CenterPoint());
+  event_generator.ClickLeftButton();
 }
 
 // Performs a double click on `view`.
@@ -85,6 +100,13 @@ void MouseDrag(const views::View* from, const views::View* to) {
   event_generator.ReleaseLeftButton();
 }
 
+// Moves mouse to `view` over `count` number of events.
+void MoveMouseTo(const views::View* view, size_t count = 1u) {
+  auto* root_window = HoldingSpaceBrowserTestBase::GetRootWindowForNewWindows();
+  ui::test::EventGenerator event_generator(root_window);
+  event_generator.MoveMouseTo(view->GetBoundsInScreen().CenterPoint(), count);
+}
+
 // Performs a press and release of the specified `key_code` with `flags`.
 void PressAndReleaseKey(ui::KeyboardCode key_code, int flags = ui::EF_NONE) {
   auto* root_window = HoldingSpaceBrowserTestBase::GetRootWindowForNewWindows();
@@ -116,12 +138,12 @@ class MockActivationChangeObserver : public wm::ActivationChangeObserver {
 class MockHoldingSpaceModelObserver : public HoldingSpaceModelObserver {
  public:
   MOCK_METHOD(void,
-              OnHoldingSpaceItemAdded,
-              (const HoldingSpaceItem* item),
+              OnHoldingSpaceItemsAdded,
+              (const std::vector<const HoldingSpaceItem*>& items),
               (override));
   MOCK_METHOD(void,
-              OnHoldingSpaceItemRemoved,
-              (const HoldingSpaceItem* item),
+              OnHoldingSpaceItemsRemoved,
+              (const std::vector<const HoldingSpaceItem*>& items),
               (override));
   MOCK_METHOD(void,
               OnHoldingSpaceItemFinalized,
@@ -179,6 +201,53 @@ class DropTargetView : public views::WidgetDelegateView {
   }
 
   base::FilePath copied_file_path_;
+};
+
+// ViewDrawnWaiter -------------------------------------------------------------
+
+class ViewDrawnWaiter : public views::ViewObserver {
+ public:
+  ViewDrawnWaiter() = default;
+  ViewDrawnWaiter(const ViewDrawnWaiter&) = delete;
+  ViewDrawnWaiter& operator=(const ViewDrawnWaiter&) = delete;
+  ~ViewDrawnWaiter() override = default;
+
+  void Wait(views::View* view) {
+    if (IsDrawn(view))
+      return;
+
+    DCHECK(!wait_loop_);
+    DCHECK(!view_observer_.IsObserving());
+
+    view_observer_.Observe(view);
+
+    wait_loop_ = std::make_unique<base::RunLoop>();
+    wait_loop_->Run();
+    wait_loop_.reset();
+
+    view_observer_.Reset();
+  }
+
+ private:
+  // views::ViewObserver:
+  void OnViewVisibilityChanged(views::View* view,
+                               views::View* starting_view) override {
+    if (IsDrawn(view))
+      wait_loop_->Quit();
+  }
+
+  void OnViewBoundsChanged(views::View* view) override {
+    if (IsDrawn(view))
+      wait_loop_->Quit();
+  }
+
+  bool IsDrawn(views::View* view) {
+    return view->IsDrawn() && !view->size().IsEmpty();
+  }
+
+  std::unique_ptr<base::RunLoop> wait_loop_;
+  base::ScopedObservation<views::View, views::ViewObserver> view_observer_{
+      this};
 };
 
 // HoldingSpaceUiBrowserTest ---------------------------------------------------
@@ -247,6 +316,9 @@ class HoldingSpaceUiDragAndDropBrowserTest
 
 // Verifies that drag-and-drop of holding space items works.
 IN_PROC_BROWSER_TEST_P(HoldingSpaceUiDragAndDropBrowserTest, DragAndDrop) {
+  ui::ScopedAnimationDurationScaleMode scoped_animation_duration_scale_mode(
+      ui::ScopedAnimationDurationScaleMode::ZERO_DURATION);
+
   // Verify drag-and-drop of download items.
   HoldingSpaceItem* const download_file = AddDownloadFile();
 
@@ -317,6 +389,9 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceUiBrowserTest, LockScreen) {
 
 // Verifies that opening holding space items works.
 IN_PROC_BROWSER_TEST_F(HoldingSpaceUiBrowserTest, OpenItem) {
+  ui::ScopedAnimationDurationScaleMode scoped_animation_duration_scale_mode(
+      ui::ScopedAnimationDurationScaleMode::ZERO_DURATION);
+
   auto* const activation_client = wm::GetActivationClient(
       HoldingSpaceBrowserTestBase::GetRootWindowForNewWindows());
 
@@ -367,6 +442,41 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceUiBrowserTest, OpenItem) {
   }
 }
 
+// Verifies that unpinning a pinned holding space item works as intended.
+IN_PROC_BROWSER_TEST_F(HoldingSpaceUiBrowserTest, UnpinItem) {
+  ui::ScopedAnimationDurationScaleMode scoped_animation_duration_scale_mode(
+      ui::ScopedAnimationDurationScaleMode::ZERO_DURATION);
+
+  // Add enough pinned items for there to be multiple rows in the section.
+  constexpr size_t kNumPinnedItems = 3u;
+  for (size_t i = 0; i < kNumPinnedItems; ++i)
+    AddPinnedFile();
+
+  Show();
+  ASSERT_TRUE(IsShowing());
+
+  std::vector<views::View*> pinned_file_chips = GetPinnedFileChips();
+  ASSERT_EQ(kNumPinnedItems, pinned_file_chips.size());
+
+  // Operate on the last `pinned_file_chip` as there was an easy to reproduce
+  // bug in which unpinning a chip *not* in the top row resulted in a crash on
+  // destruction due to its ink drop layer attempting to be reordered.
+  views::View* pinned_file_chip = pinned_file_chips.back();
+
+  // The pin button is only visible after mousing over the `pinned_file_chip`,
+  // so move the mouse and wait for the pin button to be drawn. Note that the
+  // mouse is moved over multiple events to ensure that the appropriate mouse
+  // enter event is also generated.
+  MoveMouseTo(pinned_file_chip, /*count=*/10);
+  auto* pin_btn = pinned_file_chip->GetViewByID(kHoldingSpaceItemPinButtonId);
+  ViewDrawnWaiter().Wait(pin_btn);
+
+  Click(pin_btn);
+
+  pinned_file_chips = GetPinnedFileChips();
+  ASSERT_EQ(kNumPinnedItems - 1, pinned_file_chips.size());
+}
+
 // Base class for holding space UI browser tests that test previews.
 class HoldingSpaceUiPreviewsBrowserTest : public HoldingSpaceUiBrowserTest {
  public:
@@ -383,42 +493,54 @@ class HoldingSpaceUiPreviewsBrowserTest : public HoldingSpaceUiBrowserTest {
 
 // Verifies that previews can be toggled via context menu.
 IN_PROC_BROWSER_TEST_F(HoldingSpaceUiPreviewsBrowserTest, TogglePreviews) {
+  ui::ScopedAnimationDurationScaleMode scoped_animation_duration_scale_mode(
+      ui::ScopedAnimationDurationScaleMode::ZERO_DURATION);
+
   ASSERT_TRUE(IsShowingInShelf());
 
-  auto* tray_icon = GetTrayIcon();
-  ASSERT_TRUE(tray_icon);
-  ASSERT_TRUE(tray_icon->layer());
+  // Initially, the default icon should be shown.
+  auto* default_tray_icon = GetDefaultTrayIcon();
+  ASSERT_TRUE(default_tray_icon);
+  EXPECT_TRUE(default_tray_icon->GetVisible());
 
-  // Initially the tray icon should be empty.
-  EXPECT_EQ(0u, tray_icon->layer()->children().size());
-
-  // It should have a single visible child which is the image view shown when
-  // previews are disabled or unavailable.
-  ASSERT_EQ(1u, tray_icon->children().size());
-  const views::View* no_previews_image_view = tray_icon->children()[0];
-  EXPECT_TRUE(no_previews_image_view->GetVisible());
+  auto* previews_tray_icon = GetPreviewsTrayIcon();
+  ASSERT_TRUE(previews_tray_icon);
+  ASSERT_TRUE(previews_tray_icon->layer());
+  ASSERT_EQ(1u, previews_tray_icon->layer()->children().size());
+  auto* previews_container_layer = previews_tray_icon->layer()->children()[0];
+  EXPECT_FALSE(previews_tray_icon->GetVisible());
 
   // After pinning a file, we should have a single preview in the tray icon.
   AddPinnedFile();
-  EXPECT_FALSE(no_previews_image_view->GetVisible());
-  EXPECT_EQ(1u, tray_icon->layer()->children().size());
-  EXPECT_EQ(gfx::Size(32, 32), tray_icon->size());
+  FlushMessageLoop();
+
+  EXPECT_FALSE(default_tray_icon->GetVisible());
+  EXPECT_TRUE(previews_tray_icon->GetVisible());
+
+  EXPECT_EQ(1u, previews_container_layer->children().size());
+  EXPECT_EQ(gfx::Size(32, 32), previews_tray_icon->size());
 
   // After downloading a file, we should have two previews in the tray icon.
   AddDownloadFile();
-  EXPECT_FALSE(no_previews_image_view->GetVisible());
-  EXPECT_EQ(2u, tray_icon->layer()->children().size());
-  EXPECT_EQ(gfx::Size(48, 32), tray_icon->size());
+  FlushMessageLoop();
+
+  EXPECT_FALSE(default_tray_icon->GetVisible());
+  EXPECT_TRUE(previews_tray_icon->GetVisible());
+  EXPECT_EQ(2u, previews_container_layer->children().size());
+  EXPECT_EQ(gfx::Size(48, 32), previews_tray_icon->size());
 
   // After taking a screenshot, we should have three previews in the tray icon.
   AddScreenshotFile();
-  EXPECT_FALSE(no_previews_image_view->GetVisible());
-  EXPECT_EQ(3u, tray_icon->layer()->children().size());
-  EXPECT_EQ(gfx::Size(64, 32), tray_icon->size());
+  FlushMessageLoop();
+
+  EXPECT_FALSE(default_tray_icon->GetVisible());
+  EXPECT_TRUE(previews_tray_icon->GetVisible());
+  EXPECT_EQ(3u, previews_container_layer->children().size());
+  EXPECT_EQ(gfx::Size(64, 32), previews_tray_icon->size());
 
   // Right click the tray icon, and expect a context menu to be shown which will
   // allow the user to hide previews.
-  RightClick(tray_icon);
+  RightClick(previews_tray_icon);
   ASSERT_TRUE(views::MenuController::GetActiveInstance());
 
   // Use the keyboard to select the context menu item to hide previews. Doing so
@@ -426,16 +548,18 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceUiPreviewsBrowserTest, TogglePreviews) {
   PressAndReleaseKey(ui::KeyboardCode::VKEY_DOWN);
   PressAndReleaseKey(ui::KeyboardCode::VKEY_RETURN);
   EXPECT_FALSE(views::MenuController::GetActiveInstance());
+  FlushMessageLoop();
 
   // The tray icon should now contain no previews, but have a single child which
   // contains the static image to show when previews are disabled.
-  EXPECT_TRUE(no_previews_image_view->GetVisible());
-  EXPECT_EQ(0u, tray_icon->layer()->children().size());
-  EXPECT_EQ(gfx::Size(32, 32), tray_icon->size());
+  EXPECT_TRUE(default_tray_icon->GetVisible());
+  EXPECT_FALSE(previews_tray_icon->GetVisible());
+
+  EXPECT_EQ(gfx::Size(32, 32), default_tray_icon->size());
 
   // Right click the tray icon, and expect a context menu to be shown which will
   // allow the user to show previews.
-  RightClick(tray_icon);
+  RightClick(default_tray_icon);
   ASSERT_TRUE(views::MenuController::GetActiveInstance());
 
   // Use the keyboard to select the context menu item to show previews. Doing so
@@ -443,11 +567,14 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceUiPreviewsBrowserTest, TogglePreviews) {
   PressAndReleaseKey(ui::KeyboardCode::VKEY_DOWN);
   PressAndReleaseKey(ui::KeyboardCode::VKEY_RETURN);
   EXPECT_FALSE(views::MenuController::GetActiveInstance());
+  FlushMessageLoop();
 
   // The tray icon should once again show three previews.
-  EXPECT_FALSE(no_previews_image_view->GetVisible());
-  EXPECT_EQ(3u, tray_icon->layer()->children().size());
-  EXPECT_EQ(gfx::Size(64, 32), tray_icon->size());
+  EXPECT_FALSE(default_tray_icon->GetVisible());
+  EXPECT_TRUE(previews_tray_icon->GetVisible());
+
+  EXPECT_EQ(3u, previews_container_layer->children().size());
+  EXPECT_EQ(gfx::Size(64, 32), previews_tray_icon->size());
 }
 
 // Base class for holding space UI browser tests that take screenshots.
@@ -497,14 +624,70 @@ IN_PROC_BROWSER_TEST_P(HoldingSpaceUiScreenshotBrowserTest, AddScreenshot) {
 
   // Expect and wait for a screenshot item to be added to holding space.
   base::RunLoop run_loop;
-  EXPECT_CALL(mock, OnHoldingSpaceItemAdded)
-      .WillOnce([&](const HoldingSpaceItem* item) {
-        if (item->type() == HoldingSpaceItem::Type::kScreenshot)
-          run_loop.Quit();
+  EXPECT_CALL(mock, OnHoldingSpaceItemsAdded)
+      .WillOnce([&](const std::vector<const HoldingSpaceItem*>& items) {
+        ASSERT_EQ(items.size(), 1u);
+        ASSERT_EQ(items[0]->type(), HoldingSpaceItem::Type::kScreenshot);
+        run_loop.Quit();
       });
   run_loop.Run();
 
   // Verify that the screenshot appears in holding space UI.
+  Show();
+  ASSERT_TRUE(IsShowing());
+  EXPECT_EQ(1u, GetScreenCaptureViews().size());
+}
+
+// Base class for holding space UI browser tests that take screen recordings.
+class HoldingSpaceUiScreenCaptureBrowserTest
+    : public HoldingSpaceUiBrowserTest {
+ public:
+  HoldingSpaceUiScreenCaptureBrowserTest() {
+    scoped_feature_list_.InitAndEnableFeature(features::kCaptureMode);
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+// Verifies that taking a screen recording adds a screen recording holding space
+// item.
+IN_PROC_BROWSER_TEST_F(HoldingSpaceUiScreenCaptureBrowserTest,
+                       AddScreenRecording) {
+  // Verify that no screen recordings exist in holding space UI.
+  Show();
+  ASSERT_TRUE(IsShowing());
+  EXPECT_TRUE(GetScreenCaptureViews().empty());
+
+  Close();
+  ASSERT_FALSE(IsShowing());
+  ash::CaptureModeTestApi capture_mode_test_api;
+  capture_mode_test_api.StartForFullscreen(/*for_video=*/true);
+  capture_mode_test_api.PerformCapture();
+  // Record a 100 ms long video.
+  base::RunLoop video_recording_time;
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE, video_recording_time.QuitClosure(),
+      base::TimeDelta::FromMilliseconds(100));
+  video_recording_time.Run();
+  capture_mode_test_api.StopVideoRecording();
+
+  // Bind an observer to watch for updates to the holding space model.
+  testing::NiceMock<MockHoldingSpaceModelObserver> mock;
+  ScopedObserver<HoldingSpaceModel, HoldingSpaceModelObserver> observer{&mock};
+  observer.Add(HoldingSpaceController::Get()->model());
+
+  base::RunLoop wait_for_item;
+  // Expect and wait for a screen recording item to be added to holding space.
+  EXPECT_CALL(mock, OnHoldingSpaceItemsAdded)
+      .WillOnce([&](const std::vector<const HoldingSpaceItem*>& items) {
+        ASSERT_EQ(items.size(), 1u);
+        ASSERT_EQ(items[0]->type(), HoldingSpaceItem::Type::kScreenRecording);
+        wait_for_item.Quit();
+      });
+  wait_for_item.Run();
+
+  // Verify that the screen recording appears in holding space UI.
   Show();
   ASSERT_TRUE(IsShowing());
   EXPECT_EQ(1u, GetScreenCaptureViews().size());

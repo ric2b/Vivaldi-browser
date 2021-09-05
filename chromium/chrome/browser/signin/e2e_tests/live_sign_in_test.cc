@@ -6,6 +6,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/signin/account_reconcilor_factory.h"
@@ -31,9 +32,9 @@
 #include "google_apis/gaia/gaia_urls.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/sync/sync_ui_util.h"
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace signin {
 namespace test {
@@ -64,10 +65,12 @@ class SignInTestObserver : public IdentityManager::Observer,
   }
 
   // IdentityManager::Observer:
-  void OnPrimaryAccountSet(const CoreAccountInfo&) override {
-    QuitIfConditionIsSatisfied();
-  }
-  void OnPrimaryAccountCleared(const CoreAccountInfo&) override {
+  void OnPrimaryAccountChanged(
+      const PrimaryAccountChangeEvent& event) override {
+    if (event.GetEventTypeFor(ConsentLevel::kSync) ==
+        PrimaryAccountChangeEvent::Type::kNone) {
+      return;
+    }
     QuitIfConditionIsSatisfied();
   }
   void OnRefreshTokenUpdatedForAccount(const CoreAccountInfo&) override {
@@ -326,10 +329,10 @@ IN_PROC_BROWSER_TEST_F(LiveSignInTest, MANUAL_WebSignOut) {
   EXPECT_TRUE(
       identity_manager()->HasAccountWithRefreshTokenInPersistentErrorState(
           primary_account.account_id));
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   EXPECT_EQ(sync_ui_util::GetAvatarSyncErrorType(browser()->profile()),
             sync_ui_util::AUTH_ERROR);
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 // This test can pass. Marked as manual because it TIMED_OUT on Win7.

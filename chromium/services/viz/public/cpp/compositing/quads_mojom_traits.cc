@@ -90,7 +90,7 @@ bool StructTraits<
   }
   quad->force_anti_aliasing_off = data.force_anti_aliasing_off();
   quad->backdrop_filter_quality = data.backdrop_filter_quality();
-  quad->can_use_backdrop_filter_cache = data.can_use_backdrop_filter_cache();
+  quad->intersects_damage_under = data.intersects_damage_under();
   return true;
 }
 
@@ -160,6 +160,7 @@ bool StructTraits<viz::mojom::TextureQuadStateDataView, viz::DrawQuad>::Read(
   quad->nearest_neighbor = data.nearest_neighbor();
   quad->secure_output_only = data.secure_output_only();
   quad->is_video_frame = data.is_video_frame();
+  quad->hw_protected_validation_id = data.hw_protected_validation_id();
   return true;
 }
 

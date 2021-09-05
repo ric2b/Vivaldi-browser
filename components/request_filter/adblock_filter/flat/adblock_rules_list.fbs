@@ -48,7 +48,7 @@ enum ResourceType : ushort (bit_flags) {
   OTHER,
 }
 
-table FilterRule {
+table RequestFilterRule {
   // Rule matching options, a bitmask consisting of OptionFlags.
   options : ubyte;
 
@@ -94,19 +94,30 @@ table FilterRule {
   ngram_search_string: string;
 }
 
+table ContentInjectionRuleCore {
+  is_allow_rule: bool = false;
+
+  domains_included: [string];
+  domains_excluded: [string];
+}
+
 table CosmeticRule {
-  is_allow_rule : bool = false;
-
-  domains_included : [string];
-  domains_excluded : [string];
-
+  core: ContentInjectionRuleCore;
   selector: string;
 }
 
+table ScriptletInjectionRule {
+  core: ContentInjectionRuleCore;
+  scriptlet_name: string;
+  // abp snippets only requires one "argument". uBO scriptlets can have
+  // multiple
+  arguments: [string];
+}
 
 table RulesList {
-  filter_rules_list: [FilterRule];
+  request_filter_rules_list: [RequestFilterRule];
   cosmetic_rules_list: [CosmeticRule];
+  scriptlet_injection_rules_list: [ScriptletInjectionRule];
 }
 
 root_type RulesList;

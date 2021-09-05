@@ -24,6 +24,10 @@ public:
       RenderViewContextMenuBase::ToolkitDelegate* toolkit_delegate);
   ~NotesSubMenuObserver() override;
 
+  // For configurable menus. Allows placement of the notes tree at a non-std
+  // location in the menu tree.
+  void SetRootModel(ui::SimpleMenuModel* model, int id, bool is_folder);
+
   // RenderViewContextMenuObserver implementation.
   void InitMenu(const content::ContextMenuParams& params) override;
   bool IsCommandIdSupported(int command_id) override;
@@ -31,22 +35,28 @@ public:
   bool IsCommandIdEnabled(int command_id) override;
   void ExecuteCommand(int command_id) override;
 
+  void RootMenuWillOpen();
   void PopulateModel(ui::SimpleMenuModel* model);
-  ui::SimpleMenuModel* get_root_model() { return models_.front().get(); }
-  int get_root_id() { return root_id_; }
+  ui::SimpleMenuModel* get_root_model() {
+      return root_menu_model_ ? root_menu_model_ : models_.front().get(); }
+  int GetRootId();
 
 private:
   typedef std::map<ui::MenuModel*, vivaldi::NoteNode*> MenuModelToNotesMap;
+  typedef std::map<int, bool> IdToBoolMap;
 
   std::unique_ptr<NotesSubMenuObserverHelper> helper_;
   // The interface for adding a submenu to the parent.
   RenderViewContextMenuProxy* proxy_;
+  ui::SimpleMenuModel* root_menu_model_ = nullptr;
+  bool root_is_folder_ = false;
   // Command id of element inserted into the parent menu
   int root_id_;
   int min_notes_id_ = 0;
   int max_notes_id_ = 0;
   std::vector<std::unique_ptr<ui::SimpleMenuModel>> models_;
   MenuModelToNotesMap menumodel_to_note_map_;
+  IdToBoolMap root_id_map_;
 
   DISALLOW_COPY_AND_ASSIGN(NotesSubMenuObserver);
 };

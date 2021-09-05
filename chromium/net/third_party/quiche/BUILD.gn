@@ -2,8 +2,13 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/chromeos/ui_mode.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
 import("//third_party/protobuf/proto_library.gni")
+
+config("quiche_config") {
+  include_dirs = [ "src" ]
+}
 
 # Since //net and //net/third_party/quiche have a circular dependency on each
 # other, exporting dependencies from the :quiche target directly does not work.
@@ -12,6 +17,7 @@ import("//third_party/protobuf/proto_library.gni")
 source_set("quiche_public_deps") {
   visibility = [ "//net:net_public_deps" ]
 
+  public_configs = [ ":quiche_config" ]
   public_deps = [ "//third_party/abseil-cpp:absl" ]
 }
 
@@ -24,6 +30,8 @@ source_set("quiche") {
   if (!is_nacl) {
     sources += [
       "src/common/platform/api/quiche_export.h",
+      "src/common/platform/api/quiche_flag_utils.h",
+      "src/common/platform/api/quiche_flags.h",
       "src/common/platform/api/quiche_logging.h",
       "src/common/platform/api/quiche_str_cat.h",
       "src/common/platform/api/quiche_string_piece.h",
@@ -64,6 +72,8 @@ source_set("quiche") {
       "src/http2/decoder/payload_decoders/ping_payload_decoder.h",
       "src/http2/decoder/payload_decoders/priority_payload_decoder.cc",
       "src/http2/decoder/payload_decoders/priority_payload_decoder.h",
+      "src/http2/decoder/payload_decoders/priority_update_payload_decoder.cc",
+      "src/http2/decoder/payload_decoders/priority_update_payload_decoder.h",
       "src/http2/decoder/payload_decoders/push_promise_payload_decoder.cc",
       "src/http2/decoder/payload_decoders/push_promise_payload_decoder.h",
       "src/http2/decoder/payload_decoders/rst_stream_payload_decoder.cc",
@@ -455,6 +465,8 @@ source_set("quiche") {
       "src/quic/core/quic_packet_writer.h",
       "src/quic/core/quic_packets.cc",
       "src/quic/core/quic_packets.h",
+      "src/quic/core/quic_path_validator.cc",
+      "src/quic/core/quic_path_validator.h",
       "src/quic/core/quic_protocol_flags_list.h",
       "src/quic/core/quic_received_packet_manager.cc",
       "src/quic/core/quic_received_packet_manager.h",
@@ -546,7 +558,6 @@ source_set("quiche") {
       "src/quic/platform/api/quic_socket_address.cc",
       "src/quic/platform/api/quic_socket_address.h",
       "src/quic/platform/api/quic_stack_trace.h",
-      "src/quic/platform/api/quic_string_utils.h",
       "src/quic/platform/api/quic_thread.h",
       "src/quic/platform/api/quic_uint128.h",
       "src/quic/quic_transport/quic_transport_client_session.cc",
@@ -634,6 +645,8 @@ proto_library("net_quic_proto") {
   cc_generator_options = "dllexport_decl=NET_EXPORT_PRIVATE:"
   cc_include = "net/base/net_export.h"
   component_build_force_source_set = true
+
+  proto_in_dir = "src"
 
   deps = [ "//net:net_export_header" ]
 
@@ -907,6 +920,8 @@ source_set("quic_test_tools_core") {
     "src/quic/test_tools/quic_interval_deque_peer.h",
     "src/quic/test_tools/quic_packet_creator_peer.cc",
     "src/quic/test_tools/quic_packet_creator_peer.h",
+    "src/quic/test_tools/quic_path_validator_peer.cc",
+    "src/quic/test_tools/quic_path_validator_peer.h",
     "src/quic/test_tools/quic_sent_packet_manager_peer.cc",
     "src/quic/test_tools/quic_sent_packet_manager_peer.h",
     "src/quic/test_tools/quic_server_session_base_peer.h",
@@ -1158,7 +1173,10 @@ if (!is_ios) {
 source_set("quiche_tests") {
   testonly = true
   sources = [
+    "src/common/platform/api/quiche_text_utils_test.cc",
+    "src/common/platform/api/quiche_time_utils_test.cc",
     "src/common/quiche_data_writer_test.cc",
+    "src/common/quiche_endian_test.cc",
     "src/common/simple_linked_hash_map_test.cc",
     "src/http2/decoder/decode_buffer_test.cc",
     "src/http2/decoder/decode_http2_structures_test.cc",
@@ -1179,6 +1197,7 @@ source_set("quiche_tests") {
     "src/http2/decoder/payload_decoders/payload_decoder_base_test_util.h",
     "src/http2/decoder/payload_decoders/ping_payload_decoder_test.cc",
     "src/http2/decoder/payload_decoders/priority_payload_decoder_test.cc",
+    "src/http2/decoder/payload_decoders/priority_update_payload_decoder_test.cc",
     "src/http2/decoder/payload_decoders/push_promise_payload_decoder_test.cc",
     "src/http2/decoder/payload_decoders/rst_stream_payload_decoder_test.cc",
     "src/http2/decoder/payload_decoders/settings_payload_decoder_test.cc",
@@ -1236,13 +1255,7 @@ source_set("quiche_tests") {
     "src/http2/tools/random_util.cc",
     "src/http2/tools/random_util.h",
     "src/quic/core/congestion_control/bandwidth_sampler_test.cc",
-
-    # TODO(rch): Re-enable once the SLOW_TEST annotation is added.
-    # "src/quic/core/congestion_control/bbr2_simulator_test.cc",
-    "src/common/platform/api/quiche_str_cat_test.cc",
-    "src/common/platform/api/quiche_text_utils_test.cc",
-    "src/common/platform/api/quiche_time_utils_test.cc",
-    "src/common/quiche_endian_test.cc",
+    "src/quic/core/congestion_control/bbr2_simulator_test.cc",
     "src/quic/core/congestion_control/bbr_sender_test.cc",
     "src/quic/core/congestion_control/cubic_bytes_test.cc",
     "src/quic/core/congestion_control/general_loss_algorithm_test.cc",
@@ -1349,6 +1362,7 @@ source_set("quiche_tests") {
     "src/quic/core/quic_packet_creator_test.cc",
     "src/quic/core/quic_packet_number_test.cc",
     "src/quic/core/quic_packets_test.cc",
+    "src/quic/core/quic_path_validator_test.cc",
     "src/quic/core/quic_received_packet_manager_test.cc",
     "src/quic/core/quic_sent_packet_manager_test.cc",
     "src/quic/core/quic_server_id_test.cc",
@@ -1382,7 +1396,6 @@ source_set("quiche_tests") {
     "src/quic/platform/api/quic_mem_slice_test.cc",
     "src/quic/platform/api/quic_reference_counted_test.cc",
     "src/quic/platform/api/quic_socket_address_test.cc",
-    "src/quic/platform/api/quic_string_utils_test.cc",
     "src/quic/quic_transport/quic_transport_client_session_test.cc",
     "src/quic/quic_transport/quic_transport_integration_test.cc",
     "src/quic/quic_transport/quic_transport_server_session_test.cc",
@@ -1416,9 +1429,6 @@ source_set("quiche_tests") {
     "src/spdy/core/mock_spdy_framer_visitor.h",
     "src/spdy/core/priority_write_scheduler_test.cc",
     "src/spdy/core/spdy_alt_svc_wire_format_test.cc",
-    "src/spdy/core/spdy_deframer_visitor.cc",
-    "src/spdy/core/spdy_deframer_visitor.h",
-    "src/spdy/core/spdy_deframer_visitor_test.cc",
     "src/spdy/core/spdy_frame_builder_test.cc",
     "src/spdy/core/spdy_frame_reader_test.cc",
     "src/spdy/core/spdy_framer_test.cc",
@@ -1451,7 +1461,7 @@ source_set("quiche_tests") {
   ]
   public_deps = []
 
-  if (is_linux) {
+  if (is_linux || is_chromeos_lacros) {
     public_deps += [ "//net:epoll_quic_tools" ]
   }
   if (is_linux || is_chromeos) {
@@ -1476,7 +1486,7 @@ source_set("quiche_tests") {
       "//net:epoll_server_test_tools",
     ]
 
-    if (!is_chromeos) {
+    if (!is_chromeos_ash) {
       sources += [ "src/quic/core/quic_udp_socket_test.cc" ]
     }
   }

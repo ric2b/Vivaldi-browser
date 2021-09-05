@@ -221,7 +221,6 @@ class SystemWebAppManagerTest : public WebAppTest {
 
     install_manager().Start();
     install_finalizer().Start();
-
   }
 
   void TearDown() override {
@@ -363,7 +362,6 @@ class SystemWebAppManagerTest : public WebAppTest {
   std::unique_ptr<TestWebAppUiManager> test_ui_manager_;
   TestWebAppUrlLoader* url_loader_ = nullptr;
   std::unique_ptr<TestDataRetrieverFactory> test_data_retriever_factory_;
-
 };
 
 // Test that System Apps do install with the feature enabled.
@@ -634,8 +632,9 @@ TEST_F(SystemWebAppManagerTest, InstallResultHistogram) {
   }
 
   pending_app_manager().SetHandleInstallRequestCallback(
-      base::BindLambdaForTesting([](const ExternalInstallOptions&) {
-        return InstallResultCode::kWebAppDisabled;
+      base::BindLambdaForTesting([](const ExternalInstallOptions&)
+                                     -> PendingAppManager::InstallResult {
+        return {.code = InstallResultCode::kWebAppDisabled};
       }));
 
   {
@@ -724,10 +723,11 @@ TEST_F(SystemWebAppManagerTest,
   system_web_app_manager().SetSystemAppsForTesting(system_apps);
 
   pending_app_manager().SetHandleInstallRequestCallback(
-      base::BindLambdaForTesting([](const ExternalInstallOptions& opts) {
+      base::BindLambdaForTesting([](const ExternalInstallOptions& opts)
+                                     -> PendingAppManager::InstallResult {
         if (opts.install_url == AppUrl1())
-          return InstallResultCode::kSuccessAlreadyInstalled;
-        return InstallResultCode::kSuccessNewInstall;
+          return {.code = InstallResultCode::kSuccessAlreadyInstalled};
+        return {.code = InstallResultCode::kSuccessNewInstall};
       }));
 
   StartAndWaitForAppsToSynchronize();
@@ -756,10 +756,11 @@ TEST_F(SystemWebAppManagerTest,
 
   {
     pending_app_manager().SetHandleInstallRequestCallback(
-        base::BindLambdaForTesting([](const ExternalInstallOptions& opts) {
+        base::BindLambdaForTesting([](const ExternalInstallOptions& opts)
+                                       -> PendingAppManager::InstallResult {
           if (opts.install_url == AppUrl1())
-            return InstallResultCode::kWriteDataFailed;
-          return InstallResultCode::kSuccessNewInstall;
+            return {.code = InstallResultCode::kWriteDataFailed};
+          return {.code = InstallResultCode::kSuccessNewInstall};
         }));
 
     StartAndWaitForAppsToSynchronize();
@@ -772,10 +773,11 @@ TEST_F(SystemWebAppManagerTest,
 
   {
     pending_app_manager().SetHandleInstallRequestCallback(
-        base::BindLambdaForTesting([](const ExternalInstallOptions& opts) {
+        base::BindLambdaForTesting([](const ExternalInstallOptions& opts)
+                                       -> PendingAppManager::InstallResult {
           if (opts.install_url == AppUrl1())
-            return InstallResultCode::kSuccessNewInstall;
-          return InstallResultCode::kSuccessAlreadyInstalled;
+            return {.code = InstallResultCode::kSuccessNewInstall};
+          return {.code = InstallResultCode::kSuccessAlreadyInstalled};
         }));
     StartAndWaitForAppsToSynchronize();
 
@@ -1045,6 +1047,37 @@ TEST_F(SystemWebAppManagerTest, ForceReinstallFeature) {
     EXPECT_TRUE(install_requests[1].force_reinstall);
     EXPECT_TRUE(IsInstalled(AppUrl1()));
   }
+}
+
+TEST_F(SystemWebAppManagerTest, IsSWABeforeSync) {
+  system_web_app_manager().SetUpdatePolicy(
+      SystemWebAppManager::UpdatePolicy::kOnVersionChange);
+
+  InitEmptyRegistrar();
+
+  // Set up and install a baseline
+  base::flat_map<SystemAppType, SystemAppInfo> system_apps;
+  system_apps.emplace(
+      SystemAppType::SETTINGS,
+      SystemAppInfo(kSettingsAppInternalName, AppUrl1(),
+                    base::BindRepeating(&GetApp1WebApplicationInfo)));
+  system_web_app_manager().SetSystemAppsForTesting(system_apps);
+
+  system_web_app_manager().set_current_version(base::Version("1.0.0.0"));
+  StartAndWaitForAppsToSynchronize();
+  EXPECT_TRUE(
+      system_web_app_manager().IsSystemWebApp(GenerateAppIdFromURL(AppUrl1())));
+
+  auto unsynced_system_web_app_manager =
+      std::make_unique<TestSystemWebAppManager>(profile());
+
+  unsynced_system_web_app_manager->SetSubsystems(
+      &pending_app_manager(), &controller().registrar(),
+      &controller().sync_bridge(), &ui_manager(),
+      &controller().os_integration_manager());
+
+  EXPECT_TRUE(unsynced_system_web_app_manager->IsSystemWebApp(
+      GenerateAppIdFromURL(AppUrl1())));
 }
 
 }  // namespace web_app

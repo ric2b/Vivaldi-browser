@@ -14,10 +14,10 @@ namespace vivaldi_default_bookmarks {
 
 extern bool g_bookmark_update_actve;
 
-using UpdateCallback = base::OnceCallback<void(bool ok, bool no_version)>;
+using UpdateCallback = base::OnceCallback<
+    void(bool ok, bool no_version, const std::string& locale)>;
 
 void UpdatePartners(Profile* profile,
-                    const std::string& locale,
                     UpdateCallback callback = UpdateCallback());
 
 }  // namespace vivaldi_default_bookmarks

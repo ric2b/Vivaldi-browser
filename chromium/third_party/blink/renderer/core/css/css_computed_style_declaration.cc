@@ -78,6 +78,7 @@ const CSSPropertyID kComputedPropertyArray[] = {
     CSSPropertyID::kBorderBottomLeftRadius,
     CSSPropertyID::kBorderBottomRightRadius, CSSPropertyID::kBorderBottomStyle,
     CSSPropertyID::kBorderBottomWidth, CSSPropertyID::kBorderCollapse,
+    CSSPropertyID::kBorderEndEndRadius, CSSPropertyID::kBorderEndStartRadius,
     CSSPropertyID::kBorderImageOutset, CSSPropertyID::kBorderImageRepeat,
     CSSPropertyID::kBorderImageSlice, CSSPropertyID::kBorderImageSource,
     CSSPropertyID::kBorderImageWidth, CSSPropertyID::kBorderInlineEndColor,
@@ -87,7 +88,8 @@ const CSSPropertyID kComputedPropertyArray[] = {
     CSSPropertyID::kBorderInlineStartWidth, CSSPropertyID::kBorderLeftColor,
     CSSPropertyID::kBorderLeftStyle, CSSPropertyID::kBorderLeftWidth,
     CSSPropertyID::kBorderRightColor, CSSPropertyID::kBorderRightStyle,
-    CSSPropertyID::kBorderRightWidth, CSSPropertyID::kBorderTopColor,
+    CSSPropertyID::kBorderRightWidth, CSSPropertyID::kBorderStartEndRadius,
+    CSSPropertyID::kBorderStartStartRadius, CSSPropertyID::kBorderTopColor,
     CSSPropertyID::kBorderTopLeftRadius, CSSPropertyID::kBorderTopRightRadius,
     CSSPropertyID::kBorderTopStyle, CSSPropertyID::kBorderTopWidth,
     CSSPropertyID::kBottom, CSSPropertyID::kBoxShadow,
@@ -278,20 +280,8 @@ CSSComputedStyleDeclaration::CSSComputedStyleDeclaration(
 CSSComputedStyleDeclaration::~CSSComputedStyleDeclaration() = default;
 
 String CSSComputedStyleDeclaration::cssText() const {
-  StringBuilder result;
-  static const Vector<const CSSProperty*>& properties =
-      ComputableProperties(GetExecutionContext());
-
-  for (unsigned i = 0; i < properties.size(); i++) {
-    if (i)
-      result.Append(' ');
-    result.Append(properties[i]->GetPropertyName());
-    result.Append(": ");
-    result.Append(GetPropertyValue(properties[i]->PropertyID()));
-    result.Append(';');
-  }
-
-  return result.ToString();
+  // CSSStyleDeclaration.cssText should return empty string for computed style.
+  return String();
 }
 
 void CSSComputedStyleDeclaration::setCSSText(const ExecutionContext*,
@@ -535,8 +525,8 @@ CSSRule* CSSComputedStyleDeclaration::parentRule() const {
 String CSSComputedStyleDeclaration::getPropertyValue(
     const String& property_name) {
   CSSPropertyID property_id =
-      cssPropertyID(GetExecutionContext(), property_name);
-  if (!isValidCSSPropertyID(property_id))
+      CssPropertyID(GetExecutionContext(), property_name);
+  if (!IsValidCSSPropertyID(property_id))
     return String();
   if (property_id == CSSPropertyID::kVariable) {
     const CSSValue* value = GetPropertyCSSValue(AtomicString(property_name));
@@ -596,7 +586,7 @@ const CSSValue* CSSComputedStyleDeclaration::GetPropertyCSSValueInternal(
 const CSSValue* CSSComputedStyleDeclaration::GetPropertyCSSValueInternal(
     AtomicString custom_property_name) {
   DCHECK_EQ(CSSPropertyID::kVariable,
-            cssPropertyID(GetExecutionContext(), custom_property_name));
+            CssPropertyID(GetExecutionContext(), custom_property_name));
   return GetPropertyCSSValue(custom_property_name);
 }
 

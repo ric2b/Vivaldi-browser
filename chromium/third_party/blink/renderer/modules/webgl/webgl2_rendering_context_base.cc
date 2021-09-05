@@ -854,7 +854,7 @@ void WebGL2RenderingContextBase::readPixels(GLint x,
                                         size))
     return;
 
-  ClearIfComposited();
+  ClearIfComposited(kClearCallerOther);
 
   {
     ScopedDrawingBufferBinder binder(GetDrawingBuffer(), framebuffer);
@@ -2114,7 +2114,7 @@ void WebGL2RenderingContextBase::copyTexSubImage3D(GLenum target,
   if (!ValidateReadBufferAndGetInfo("copyTexSubImage3D",
                                     read_framebuffer_binding))
     return;
-  ClearIfComposited();
+  ClearIfComposited(kClearCallerOther);
   ScopedDrawingBufferBinder binder(GetDrawingBuffer(),
                                    read_framebuffer_binding);
   ContextGL()->CopyTexSubImage3D(target, level, xoffset, yoffset, zoffset, x, y,
@@ -3477,6 +3477,7 @@ void WebGL2RenderingContextBase::drawArraysInstanced(GLenum mode,
                                                    drawing_buffer_.get());
   OnBeforeDrawCall();
   ContextGL()->DrawArraysInstancedANGLE(mode, first, count, instance_count);
+  RecordUKMCanvasDrawnToAtFirstDrawCall();
 }
 
 void WebGL2RenderingContextBase::drawElementsInstanced(GLenum mode,
@@ -3499,6 +3500,7 @@ void WebGL2RenderingContextBase::drawElementsInstanced(GLenum mode,
   ContextGL()->DrawElementsInstancedANGLE(
       mode, count, type, reinterpret_cast<void*>(static_cast<intptr_t>(offset)),
       instance_count);
+  RecordUKMCanvasDrawnToAtFirstDrawCall();
 }
 
 void WebGL2RenderingContextBase::drawRangeElements(GLenum mode,
@@ -3522,6 +3524,7 @@ void WebGL2RenderingContextBase::drawRangeElements(GLenum mode,
   ContextGL()->DrawRangeElements(
       mode, start, end, count, type,
       reinterpret_cast<void*>(static_cast<intptr_t>(offset)));
+  RecordUKMCanvasDrawnToAtFirstDrawCall();
 }
 
 void WebGL2RenderingContextBase::drawBuffers(const Vector<GLenum>& buffers) {
@@ -5524,7 +5527,6 @@ bool WebGL2RenderingContextBase::ValidateReadPixelsFormatAndType(
         return false;
       }
       return true;
-    case GL_UNSIGNED_SHORT:
     case GL_UNSIGNED_SHORT_5_6_5:
     case GL_UNSIGNED_SHORT_4_4_4_4:
     case GL_UNSIGNED_SHORT_5_5_5_1:
@@ -5533,6 +5535,23 @@ bool WebGL2RenderingContextBase::ValidateReadPixelsFormatAndType(
             GL_INVALID_OPERATION, "readPixels",
             "type UNSIGNED_SHORT but ArrayBufferView not Uint16Array");
         return false;
+      }
+      return true;
+    case GL_UNSIGNED_SHORT:
+      if (buffer && buffer->GetType() != DOMArrayBufferView::kTypeUint16) {
+        SynthesizeGLError(
+            GL_INVALID_OPERATION, "readPixels",
+            "type GL_UNSIGNED_SHORT but ArrayBufferView not Uint16Array");
+        return false;
+      }
+      if (format == GL_RGBA) {
+        if (!ExtensionEnabled(kEXTTextureNorm16Name)) {
+          SynthesizeGLError(
+              GL_INVALID_ENUM, "readPixels",
+              "invalid format/type combination RGBA/UNSIGNED_SHORT without "
+              "EXT_texture_norm16 support");
+          return false;
+        }
       }
       return true;
     case GL_SHORT:

@@ -16,7 +16,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
-#include "content/browser/file_system_access/fixed_native_file_system_permission_grant.h"
+#include "content/browser/file_system_access/fixed_file_system_access_permission_grant.h"
 #include "content/public/test/browser_task_environment.h"
 #include "mojo/public/cpp/bindings/interface_ptr_set.h"
 #include "net/base/io_buffer.h"
@@ -27,8 +27,6 @@
 #include "storage/browser/test/async_file_test_helper.h"
 #include "storage/browser/test/test_file_system_context.h"
 #include "testing/gtest/include/gtest/gtest.h"
-
-using storage::FileSystemURL;
 
 namespace content {
 
@@ -107,9 +105,9 @@ class NativeFileSystemFileHandleImplTest : public testing::Test {
 
   FileSystemURL test_file_url_;
 
-  scoped_refptr<FixedNativeFileSystemPermissionGrant> allow_grant_ =
-      base::MakeRefCounted<FixedNativeFileSystemPermissionGrant>(
-          FixedNativeFileSystemPermissionGrant::PermissionStatus::GRANTED,
+  scoped_refptr<FixedFileSystemAccessPermissionGrant> allow_grant_ =
+      base::MakeRefCounted<FixedFileSystemAccessPermissionGrant>(
+          FixedFileSystemAccessPermissionGrant::PermissionStatus::GRANTED,
           base::FilePath());
   std::unique_ptr<NativeFileSystemFileHandleImpl> handle_;
 };
@@ -123,7 +121,7 @@ TEST_F(NativeFileSystemFileHandleImplTest, CreateFileWriterOverLimitNotOK) {
           test_src_origin_, storage::kFileSystemTypeTest,
           base::FilePath::FromUTF8Unsafe("test.crswap"));
 
-  std::vector<mojo::PendingRemote<blink::mojom::NativeFileSystemFileWriter>>
+  std::vector<mojo::PendingRemote<blink::mojom::FileSystemAccessFileWriter>>
       writers;
   for (int i = 0; i < max_files; i++) {
     FileSystemURL swap_url;
@@ -138,12 +136,13 @@ TEST_F(NativeFileSystemFileHandleImplTest, CreateFileWriterOverLimitNotOK) {
 
     base::RunLoop loop;
     handle_->CreateFileWriter(
-        /*keepExistingData=*/false,
+        /*keep_existing_data=*/false,
+        /*auto_close=*/false,
         base::BindLambdaForTesting(
-            [&](blink::mojom::NativeFileSystemErrorPtr result,
-                mojo::PendingRemote<blink::mojom::NativeFileSystemFileWriter>
+            [&](blink::mojom::FileSystemAccessErrorPtr result,
+                mojo::PendingRemote<blink::mojom::FileSystemAccessFileWriter>
                     writer_remote) {
-              EXPECT_EQ(blink::mojom::NativeFileSystemStatus::kOk,
+              EXPECT_EQ(blink::mojom::FileSystemAccessStatus::kOk,
                         result->status);
               EXPECT_EQ("", ReadFile(swap_url));
               writers.push_back(std::move(writer_remote));
@@ -154,12 +153,13 @@ TEST_F(NativeFileSystemFileHandleImplTest, CreateFileWriterOverLimitNotOK) {
 
   base::RunLoop loop;
   handle_->CreateFileWriter(
-      /*keepExistingData=*/false,
+      /*keep_existing_data=*/false,
+      /*auto_close=*/false,
       base::BindLambdaForTesting(
-          [&](blink::mojom::NativeFileSystemErrorPtr result,
-              mojo::PendingRemote<blink::mojom::NativeFileSystemFileWriter>
+          [&](blink::mojom::FileSystemAccessErrorPtr result,
+              mojo::PendingRemote<blink::mojom::FileSystemAccessFileWriter>
                   writer_remote) {
-            EXPECT_EQ(blink::mojom::NativeFileSystemStatus::kOperationFailed,
+            EXPECT_EQ(blink::mojom::FileSystemAccessStatus::kOperationFailed,
                       result->status);
             loop.Quit();
           }));

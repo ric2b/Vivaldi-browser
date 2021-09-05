@@ -8,6 +8,7 @@
 
 #include "base/strings/strcat.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "net/base/schemeful_site.h"
 #include "net/cert/mock_cert_verifier.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/log/test_net_log.h"
@@ -22,10 +23,15 @@
 #include "net/url_request/url_request_context_builder.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "url/gurl.h"
+#include "url/origin.h"
 
 namespace net {
 namespace test {
 namespace {
+
+using ::quic::test::MemSliceFromString;
+using ::testing::_;
 
 class MockVisitor : public QuicTransportClient::Visitor {
  public:
@@ -39,6 +45,7 @@ class MockVisitor : public QuicTransportClient::Visitor {
   MOCK_METHOD1(OnDatagramReceived, void(base::StringPiece));
   MOCK_METHOD0(OnCanCreateNewOutgoingBidirectionalStream, void());
   MOCK_METHOD0(OnCanCreateNewOutgoingUnidirectionalStream, void());
+  MOCK_METHOD1(OnDatagramProcessed, void(base::Optional<quic::MessageStatus>));
 };
 
 // A clock that only mocks out WallNow(), but uses real Now() and
@@ -84,7 +91,8 @@ class QuicTransportEndToEndTest : public TestWithTaskEnvironment {
       quic::QuicEnableVersion(version);
     }
     origin_ = url::Origin::Create(GURL{"https://example.org"});
-    isolation_key_ = NetworkIsolationKey(origin_, origin_);
+    isolation_key_ =
+        NetworkIsolationKey(SchemefulSite(origin_), SchemefulSite(origin_));
 
     URLRequestContextBuilder builder;
     builder.set_proxy_resolution_service(
@@ -172,6 +180,22 @@ TEST_F(QuicTransportEndToEndTest, Connect) {
   Run();
   ASSERT_TRUE(client_->session() != nullptr);
   EXPECT_TRUE(client_->session()->IsSessionReady());
+}
+
+TEST_F(QuicTransportEndToEndTest, SendDatagram) {
+  StartServer();
+  client_ = std::make_unique<QuicTransportClient>(
+      GetURL("/discard"), origin_, &visitor_, isolation_key_, context_.get(),
+      QuicTransportClient::Parameters());
+  client_->Connect();
+  EXPECT_CALL(visitor_, OnConnected()).WillOnce(StopRunning());
+  Run();
+  ASSERT_TRUE(client_->session() != nullptr);
+  EXPECT_TRUE(client_->session()->IsSessionReady());
+
+  EXPECT_CALL(visitor_, OnDatagramProcessed(_)).Times(1);
+  client_->session()->datagram_queue()->SendOrQueueDatagram(
+      MemSliceFromString("test"));
 }
 
 TEST_F(QuicTransportEndToEndTest, EchoUnidirectionalStream) {
@@ -272,6 +296,11 @@ TEST_F(QuicTransportEndToEndTest, CertificateFingerprintMismatch) {
 }
 
 TEST_F(QuicTransportEndToEndTest, OldVersion) {
+  if (QuicTransportClient::QuicVersionsForWebTransportOriginTrial().size() ==
+      1) {
+    // This test shouldn't be run when there's only one supported version.
+    return;
+  }
   // Ensure all WebTransport versions are enabled except the first one.
   quic::QuicDisableVersion(
       QuicTransportClient::QuicVersionsForWebTransportOriginTrial().front());
@@ -293,6 +322,11 @@ TEST_F(QuicTransportEndToEndTest, OldVersion) {
       GetStringValueFromParams(events[0], "version"),
       quic::ParsedQuicVersionToString(
           QuicTransportClient::QuicVersionsForWebTransportOriginTrial()[1]));
+
+  // Ensure the observer is set correctly after the version negotiation process.
+  EXPECT_CALL(visitor_, OnDatagramProcessed(_)).Times(1);
+  client_->session()->datagram_queue()->SendOrQueueDatagram(
+      MemSliceFromString("test"));
 }
 
 }  // namespace

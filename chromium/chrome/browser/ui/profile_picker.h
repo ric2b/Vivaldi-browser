@@ -8,18 +8,29 @@
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/feature_list.h"
 #include "base/time/time.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "url/gurl.h"
 
+class GURL;
+
 namespace base {
-class CommandLine;
+class FilePath;
+}  // namespace base
+
+namespace content {
+class BrowserContext;
 }
 
 namespace views {
 class View;
 class WebView;
 }  // namespace views
+
+// Kill switch to disable showing the picker on startup. Has no effect if
+// features::kNewProfilePicker is disabled.
+extern const base::Feature kEnableProfilePickerOnStartupFeature;
 
 class ProfilePicker {
  public:
@@ -54,14 +65,34 @@ class ProfilePicker {
   // Starts the sign-in flow. The layout of the window gets updated for the
   // sign-in flow. At the same time, the new profile is created (with
   // `profile_color`) and the sign-in page is rendered using the new profile.
-  // If the creation of the new profile fails, `switch_failure_callback` gets
-  // called.
-  static void SwitchToSignIn(SkColor profile_color,
-                             base::OnceClosure switch_failure_callback);
+  // `switch_finished_callback` gets informed whether the creation of the new
+  // profile succeeded and the sign-in page gets displayed.
+  static void SwitchToSignIn(
+      SkColor profile_color,
+      base::OnceCallback<void(bool)> switch_finished_callback);
 
   // Finishes the sign-in flow by moving to the sync confirmation screen. It
   // uses the same new profile created by `SwitchToSignIn()`.
   static void SwitchToSyncConfirmation();
+
+  // Shows a dialog where the user can auth the profile or see the
+  // auth error message. If a dialog is already shown, this destroys the current
+  // dialog and creates a new one.
+  static void ShowDialog(content::BrowserContext* browser_context,
+                         const GURL& url,
+                         const base::FilePath& profile_path);
+
+  // Hides the dialog if it is showing.
+  static void HideDialog();
+
+  // Displays sign in error message that is created by Chrome but not GAIA
+  // without browser window. If the dialog is not currently shown, this does
+  // nothing.
+  static void DisplayErrorMessage();
+
+  // Getter of the path of profile which is selected in profile picker for force
+  // signin.
+  static base::FilePath GetForceSigninProfilePath();
 
   // Hides the profile picker.
   static void Hide();
@@ -75,17 +106,17 @@ class ProfilePicker {
   // Returns the web view (embedded in the picker) for testing.
   static views::WebView* GetWebViewForTesting();
 
+  // Returns the simple toolbar (embedded in the picker) for testing.
+  static views::View* GetToolbarForTesting();
+
   // Overrides the timeout delay for waiting for extended account info.
   static void SetExtendedAccountInfoTimeoutForTesting(base::TimeDelta timeout);
 
-  // Returns whether the profile picker at launch. This can be called on
+  // Returns whether to show profile picker at launch. This can be called on
   // startup or when Chrome is re-opened, e.g. when clicking on the dock icon on
   // MacOS when there are no windows, or from Windows tray icon.
-  // This returns true if this is a new session. Returns false if a specific
-  // profile is passed in the command line, or if some parameters (such as the
-  // URLs to launch) cannot be handled by the picker.
-  static bool ShouldShowAtLaunch(const base::CommandLine& command_line,
-                                 const std::vector<GURL>& urls_to_launch);
+  // This returns true if the user has multiple profiles and has not opted-out.
+  static bool ShouldShowAtLaunch();
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ProfilePicker);

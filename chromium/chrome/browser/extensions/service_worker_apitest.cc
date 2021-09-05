@@ -70,7 +70,6 @@
 #include "extensions/common/extensions_client.h"
 #include "extensions/common/manifest_handlers/background_info.h"
 #include "extensions/common/permissions/permissions_data.h"
-#include "extensions/common/scoped_worker_based_extensions_channel.h"
 #include "extensions/common/value_builder.h"
 #include "extensions/common/verifier_formats.h"
 #include "extensions/test/background_page_watcher.h"
@@ -79,7 +78,7 @@
 #include "extensions/test/test_extension_dir.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "third_party/blink/public/common/loader/network_utils.h"
+#include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "ui/message_center/public/cpp/notification.h"
 #include "url/url_constants.h"
 
@@ -153,19 +152,15 @@ class ErrorObserver : public ErrorConsole::Observer {
 };
 
 class ServiceWorkerTest : public ExtensionApiTest {
- public:
-  ServiceWorkerTest() : current_channel_(version_info::Channel::STABLE) {}
-  explicit ServiceWorkerTest(version_info::Channel channel)
-      : current_channel_(channel) {}
-
-  ~ServiceWorkerTest() override {}
+ protected:
+  ServiceWorkerTest() = default;
+  ~ServiceWorkerTest() override = default;
 
   void SetUpOnMainThread() override {
     ExtensionApiTest::SetUpOnMainThread();
     host_resolver()->AddRule("*", "127.0.0.1");
   }
 
- protected:
   // Returns the ProcessManager for the test's profile.
   ProcessManager* process_manager() { return ProcessManager::Get(profile()); }
 
@@ -238,27 +233,10 @@ class ServiceWorkerTest : public ExtensionApiTest {
         content::BrowserContext::GetDefaultStoragePartition(
             browser()->profile())
             ->GetServiceWorkerContext();
-    base::RunLoop run_loop;
-    size_t ref_count = 0;
-    auto set_ref_count = [](size_t* ref_count, base::RunLoop* run_loop,
-                            size_t external_request_count) {
-      *ref_count = external_request_count;
-      run_loop->Quit();
-    };
-    sw_context->CountExternalRequestsForTest(
-        origin, base::BindOnce(set_ref_count, &ref_count, &run_loop));
-    run_loop.Run();
-    return ref_count;
+    return sw_context->CountExternalRequestsForTest(origin);
   }
 
  private:
-  // Sets the channel to "stable".
-  // Not useful after we've opened extension Service Workers to stable
-  // channel.
-  // TODO(lazyboy): Remove this when ExtensionServiceWorkersEnabled() is
-  // removed.
-  ScopedCurrentChannel current_channel_;
-
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerTest);
 };
 
@@ -306,8 +284,6 @@ class ServiceWorkerBasedBackgroundTest : public ServiceWorkerTest {
   }
 
  private:
-  ScopedWorkerBasedExtensionsChannel channel_;
-
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerBasedBackgroundTest);
 };
 
@@ -637,11 +613,17 @@ class ServiceWorkerStartFailureObserver
 
   // ServiceWorkerTaskQueue::TestObserver:
   void DidStartWorkerFail(const ExtensionId& extension_id,
-                          size_t num_pending_tasks) override {
+                          size_t num_pending_tasks,
+                          blink::ServiceWorkerStatusCode status_code) override {
     if (extension_id == extension_id_) {
       pending_tasks_count_at_worker_failure_ = num_pending_tasks;
+      status_code_ = status_code;
       run_loop_.Quit();
     }
+  }
+
+  base::Optional<blink::ServiceWorkerStatusCode> status_code() {
+    return status_code_;
   }
 
  private:
@@ -651,6 +633,7 @@ class ServiceWorkerStartFailureObserver
 
   ExtensionId extension_id_;
   base::RunLoop run_loop_;
+  base::Optional<blink::ServiceWorkerStatusCode> status_code_;
 };
 
 // Test extension id at
@@ -896,8 +879,6 @@ class ServiceWorkerLazyBackgroundTest : public ServiceWorkerTest {
   }
 
  private:
-  ScopedWorkerBasedExtensionsChannel channel_;
-
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerLazyBackgroundTest);
 };
 
@@ -1506,7 +1487,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerTest, WebAccessibleResourcesIframeSrc) {
       embedded_test_server()->GetURL("a.com",
                                      "/extensions/api_test/service_worker/"
                                      "web_accessible_resources/webpage.html");
-  EXPECT_FALSE(blink::network_utils::IsOriginSecure(page_url));
+  EXPECT_FALSE(network::IsUrlPotentiallyTrustworthy(page_url));
 
   content::WebContents* web_contents =
       browsertest_util::AddTab(browser(), page_url);
@@ -2078,6 +2059,8 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
   // And the task count will be reset to zero afterwards.
   EXPECT_EQ(0u,
             service_worker_task_queue->GetNumPendingTasksForTest(context_id));
+  EXPECT_EQ(blink::ServiceWorkerStatusCode::kErrorNotFound,
+            worker_start_failure_observer.status_code());
 }
 
 IN_PROC_BROWSER_TEST_F(ServiceWorkerBasedBackgroundTest,
@@ -2503,8 +2486,8 @@ class ServiceWorkerCheckBindingsTest
     : public ServiceWorkerTest,
       public testing::WithParamInterface<version_info::Channel> {
  public:
-  ServiceWorkerCheckBindingsTest() : ServiceWorkerTest(GetParam()) {}
-  ~ServiceWorkerCheckBindingsTest() override {}
+  ServiceWorkerCheckBindingsTest() = default;
+  ~ServiceWorkerCheckBindingsTest() override = default;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerCheckBindingsTest);

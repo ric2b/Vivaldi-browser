@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/auto_reset.h"
-#include "base/stl_util.h"
+#include "base/containers/contains.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -202,6 +202,7 @@ void NavigationControllerImpl::Navigate(
     const JavaParamRef<jstring>& url,
     jboolean should_replace_current_entry,
     jboolean disable_intent_processing,
+    jboolean allow_intent_launches_in_background,
     jboolean disable_network_error_auto_reload,
     jboolean enable_auto_play,
     const base::android::JavaParamRef<jobject>& response) {
@@ -220,6 +221,9 @@ void NavigationControllerImpl::Navigate(
   if (disable_network_error_auto_reload)
     data->set_disable_network_error_auto_reload(true);
 
+  data->set_allow_intent_launches_in_background(
+      allow_intent_launches_in_background);
+
   if (!response.is_null()) {
     data->SetResponse(
         std::make_unique<embedder_support::WebResourceResponse>(response));
@@ -234,9 +238,7 @@ void NavigationControllerImpl::Navigate(
 }
 
 ScopedJavaLocalRef<jstring>
-NavigationControllerImpl::GetNavigationEntryDisplayUri(
-    JNIEnv* env,
-    int index) {
+NavigationControllerImpl::GetNavigationEntryDisplayUri(JNIEnv* env, int index) {
   return ScopedJavaLocalRef<jstring>(base::android::ConvertUTF8ToJavaString(
       env, GetNavigationEntryDisplayURL(index).spec()));
 }
@@ -252,6 +254,13 @@ bool NavigationControllerImpl::IsNavigationEntrySkippable(JNIEnv* env,
                                                           int index) {
   return IsNavigationEntrySkippable(index);
 }
+
+base::android::ScopedJavaGlobalRef<jobject>
+NavigationControllerImpl::GetNavigationImplFromId(JNIEnv* env, int64_t id) {
+  auto* navigation_impl = GetNavigationImplFromId(id);
+  return navigation_impl ? navigation_impl->java_navigation() : nullptr;
+}
+
 #endif
 
 void NavigationControllerImpl::WillRedirectRequest(

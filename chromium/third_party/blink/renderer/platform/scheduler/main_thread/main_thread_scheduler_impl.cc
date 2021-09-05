@@ -33,7 +33,6 @@
 #include "third_party/blink/public/common/page/launching_process_state.h"
 #include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
 #include "third_party/blink/public/platform/scheduler/web_renderer_process_type.h"
-#include "third_party/blink/renderer/platform/bindings/parkable_string_manager.h"
 #include "third_party/blink/renderer/platform/instrumentation/resource_coordinator/renderer_resource_coordinator.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/scheduler/common/features.h"
@@ -377,10 +376,10 @@ WebThreadScheduler* WebThreadScheduler::MainThreadScheduler() {
 
 MainThreadSchedulerImpl::MainThreadOnly::MainThreadOnly(
     MainThreadSchedulerImpl* main_thread_scheduler_impl,
-    const scoped_refptr<MainThreadTaskQueue>& compositor_task_runner,
+    const scoped_refptr<MainThreadTaskQueue>& compositor_task_queue,
     const base::TickClock* time_source,
     base::TimeTicks now)
-    : idle_time_estimator(compositor_task_runner,
+    : idle_time_estimator(compositor_task_queue,
                           time_source,
                           kShortIdlePeriodDurationSampleCount,
                           kShortIdlePeriodDurationPercentile),
@@ -605,6 +604,9 @@ MainThreadSchedulerImpl::SchedulingSettings::SchedulingSettings() {
       }
     }
   }
+
+  mbi_override_task_runner_handle =
+      base::FeatureList::IsEnabled(kMbiOverrideTaskRunnerHandle);
 }
 
 MainThreadSchedulerImpl::AnyThread::~AnyThread() = default;
@@ -1083,7 +1085,6 @@ void MainThreadSchedulerImpl::SetRendererBackgrounded(bool backgrounded) {
     main_thread_only().metrics_helper.OnRendererForegrounded(now);
   }
 
-  ParkableStringManager::Instance().SetRendererBackgrounded(backgrounded);
   memory_purge_manager_.SetRendererBackgrounded(backgrounded);
 }
 
@@ -2467,30 +2468,91 @@ MainThreadSchedulerImpl::GetCurrentAgentGroupScheduler() {
   return current_agent_group_scheduler_;
 }
 
-void MainThreadSchedulerImpl::SetCurrentAgentGroupScheduler(
-    WebAgentGroupScheduler* agent_group_scheduler) {
-  helper_.CheckOnValidThread();
-  if (current_agent_group_scheduler_) {
-    TRACE_EVENT_NESTABLE_ASYNC_END1(
-        TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
-        "scheduler.agent_scope", current_agent_group_scheduler_,
-        "agent_group_scheduler", current_agent_group_scheduler_);
+void MainThreadSchedulerImpl::BeginAgentGroupSchedulerScope(
+    WebAgentGroupScheduler* next_agent_group_scheduler) {
+  scoped_refptr<base::SingleThreadTaskRunner> next_task_runner;
+  const char* trace_event_scope_name;
+  void* trace_event_scope_id;
+
+  if (next_agent_group_scheduler) {
+    // If the |next_agent_group_scheduler| is not null, it means that a
+    // per-AgentSchedulingGroup task is about to start. In this case, a
+    // per-AgentGroupScheduler scope starts.
+    next_task_runner = next_agent_group_scheduler->DefaultTaskRunner(),
+    trace_event_scope_name = "scheduler.agent_scope";
+    trace_event_scope_id = next_agent_group_scheduler;
   } else {
-    TRACE_EVENT_NESTABLE_ASYNC_END0(
-        TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
-        "scheduler.thread_scope", this);
+    // If the |next_agent_group_scheduler| is null, it means that a
+    // per-thread task is about to start. In this case, a per-thread scope
+    // starts.
+    next_task_runner = helper_.DefaultTaskRunner();
+    trace_event_scope_name = "scheduler.thread_scope";
+    trace_event_scope_id = this;
   }
-  current_agent_group_scheduler_ = agent_group_scheduler;
-  if (current_agent_group_scheduler_) {
-    TRACE_EVENT_NESTABLE_ASYNC_BEGIN1(
-        TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
-        "scheduler.agent_scope", current_agent_group_scheduler_,
-        "agent_group_scheduler", current_agent_group_scheduler_);
-  } else {
-    TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
-        TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
-        "scheduler.thread_scope", this);
+
+  TRACE_EVENT_NESTABLE_ASYNC_BEGIN1(
+      TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"), trace_event_scope_name,
+      trace_event_scope_id, "agent_group_scheduler",
+      next_agent_group_scheduler);
+
+  WebAgentGroupScheduler* previous_agent_group_scheduler =
+      current_agent_group_scheduler_;
+  current_agent_group_scheduler_ = next_agent_group_scheduler;
+
+  scoped_refptr<base::SingleThreadTaskRunner> previous_task_runner =
+      base::ThreadTaskRunnerHandle::Get();
+  std::unique_ptr<base::ThreadTaskRunnerHandleOverride>
+      thread_task_runner_handle_override;
+  if (scheduling_settings().mbi_override_task_runner_handle &&
+      next_task_runner != previous_task_runner) {
+    // per-thread and per-AgentSchedulingGroup task runner allows nested
+    // runloop. |MainThreadSchedulerImpl| guarantees that
+    // |ThreadTaskRunnerHandle::Get()| and |SequencedTaskRunnerHandle::Get()|
+    // return a proper task runner even when a nested runloop is used. Because
+    // |MainThreadSchedulerImpl::OnTaskStarted()| always overrides
+    // TTRH/STRH::Get() properly. So there is no concern about returning an
+    // unexpected task runner from TTRH/STRH::Get() in this specific case.
+    thread_task_runner_handle_override =
+        std::unique_ptr<base::ThreadTaskRunnerHandleOverride>(
+            new base::ThreadTaskRunnerHandleOverride(
+                next_task_runner,
+                /*allow_nested_runloop=*/true));
   }
+
+  main_thread_only().agent_group_scheduler_scope_stack.emplace_back(
+      AgentGroupSchedulerScope{
+          std::move(thread_task_runner_handle_override),
+          previous_agent_group_scheduler, next_agent_group_scheduler,
+          std::move(previous_task_runner), std::move(next_task_runner),
+          trace_event_scope_name, trace_event_scope_id});
+}
+
+void MainThreadSchedulerImpl::EndAgentGroupSchedulerScope() {
+  AgentGroupSchedulerScope& agent_group_scheduler_scope =
+      main_thread_only().agent_group_scheduler_scope_stack.back();
+
+  if (scheduling_settings().mbi_override_task_runner_handle) {
+    DCHECK_EQ(base::ThreadTaskRunnerHandle::Get(),
+              agent_group_scheduler_scope.current_task_runner);
+    DCHECK_EQ(base::SequencedTaskRunnerHandle::Get(),
+              agent_group_scheduler_scope.current_task_runner);
+  }
+  agent_group_scheduler_scope.thread_task_runner_handle_override = nullptr;
+  DCHECK_EQ(base::ThreadTaskRunnerHandle::Get(),
+            agent_group_scheduler_scope.previous_task_runner);
+  DCHECK_EQ(base::SequencedTaskRunnerHandle::Get(),
+            agent_group_scheduler_scope.previous_task_runner);
+
+  current_agent_group_scheduler_ =
+      agent_group_scheduler_scope.previous_agent_group_scheduler;
+
+  TRACE_EVENT_NESTABLE_ASYNC_END1(
+      TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
+      agent_group_scheduler_scope.trace_event_scope_name,
+      agent_group_scheduler_scope.trace_event_scope_id, "agent_group_scheduler",
+      agent_group_scheduler_scope.current_agent_group_scheduler);
+
+  main_thread_only().agent_group_scheduler_scope_stack.pop_back();
 }
 
 std::unique_ptr<ThreadScheduler::RendererPauseHandle>
@@ -2605,8 +2667,10 @@ void MainThreadSchedulerImpl::OnTaskStarted(
     MainThreadTaskQueue* queue,
     const base::sequence_manager::Task& task,
     const TaskQueue::TaskTiming& task_timing) {
-  SetCurrentAgentGroupScheduler(queue ? queue->GetAgentGroupScheduler()
-                                      : nullptr);
+  if (scheduling_settings().mbi_override_task_runner_handle) {
+    BeginAgentGroupSchedulerScope(queue ? queue->GetAgentGroupScheduler()
+                                        : nullptr);
+  }
 
   main_thread_only().running_queues.push(queue);
   if (main_thread_only().nested_runloop)
@@ -2642,6 +2706,11 @@ void MainThreadSchedulerImpl::OnTaskCompleted(
   if (task_timing->has_wall_time() && queue && queue->GetFrameScheduler())
     queue->GetFrameScheduler()->AddTaskTime(task_timing->wall_duration());
   main_thread_only().running_queues.pop();
+
+  // The overriding TaskRunnerHandle scope ends here.
+  if (scheduling_settings().mbi_override_task_runner_handle)
+    EndAgentGroupSchedulerScope();
+
   if (main_thread_only().nested_runloop)
     return;
 
@@ -2668,10 +2737,6 @@ void MainThreadSchedulerImpl::OnTaskCompleted(
 
   find_in_page_budget_pool_controller_->OnTaskCompleted(queue.get(),
                                                         task_timing);
-
-  // GetCurrentAgentGroupScheduler() should return nullptr when
-  // it's running thread global task runners.
-  SetCurrentAgentGroupScheduler(nullptr);
 }
 
 void MainThreadSchedulerImpl::RecordTaskUkm(

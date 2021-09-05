@@ -4,6 +4,7 @@
 <translation id="1033008476608128425">Lanskap 3</translation>
 <translation id="1118377629180821201">Lanskap 12</translation>
 <translation id="1158503667684816647">Jangan tampilkan konfirmasi lagi</translation>
+<translation id="1222195720020481779">Meluncurkan pemasang...</translation>
 <translation id="1276145862619442150">Panggilan Cepat</translation>
 <translation id="1281950884873973195">Hewan 6</translation>
 <translation id="1411638389238344450">Kirim Tautan melalui Surat</translation>
@@ -21,11 +22,17 @@
 <translation id="1921101374471252440">&amp;Muat Ulang Gambar</translation>
 <translation id="1924750141060565109">Lanskap 15</translation>
 <translation id="19598411548897379">Umum</translation>
+<translation id="1985669426322966465">Pemutakhiran Software</translation>
 <translation id="2079036669923635404">Klik di sini untuk memperbarui Vivaldi ke versi <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Galat terjadi saat mengunduh berkas pembaruan. Mohon periksa sambungan internet Anda dan coba lagi nanti.</translation>
+<translation id="2339641773402824483">Memeriksa pemutakhiran...</translation>
 <translation id="2441056087170876076">Monster 2</translation>
 <translation id="2444387452209867610">Masukkan Catatan</translation>
 <translation id="2486841023299517366">Hewan 4</translation>
+<translation id="2612127540243995147">Siap memasang. Vivaldi akan ditutup dan diluncurkan ulang.</translation>
+<translation id="2613387515621326337">Tampilkan situs web pemutakhiran</translation>
+<translation id="2647368062414805334">Sayangnya, pengaturan Edge Anda tidak tersedia jika peramban tersebut sedang berjalan. Untuk mengimpor pengaturan ke Vivaldi, simpan pekerjaan Anda dan tutup semua jendela Edge. Lalu klik Lanjutkan.</translation>
+<translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Hewan 3</translation>
 <translation id="2873951654529031587">Tempat Sampah</translation>
 <translation id="292258461174562431">Monster 4</translation>
@@ -36,9 +43,12 @@
 <translation id="3084011186245865060">Lanskap 6</translation>
 <translation id="3127383884976966729">Hewan 7</translation>
 <translation id="3156398087075132709">Penanda Baru</translation>
+<translation id="3255747772218936245">Pasang pemutakhiran</translation>
 <translation id="3259769196742189631">Memvalidasi</translation>
 <translation id="3302905971452834934">Monster 1</translation>
 <translation id="3334610655141903168">(tidak ada judul)</translation>
+<translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> adalah versi terbaru yang tersedia sekarang.</translation>
+<translation id="3383198080133834965">Versi sudah mutakhir!</translation>
 <translation id="3402602684546832928">Pilih berkas penanda Opera</translation>
 <translation id="3451317331714872347">Lanskap 8</translation>
 <translation id="3457498675806041407">Konfirmasi Keluar</translation>
@@ -48,14 +58,17 @@
 <translation id="3542768452570884558">Buka Tautan di Jendela Baru</translation>
 <translation id="3588820906588687999">Buka gambar di Tab Baru</translation>
 <translation id="3601066750251199488">Monster 3</translation>
+<translation id="3680031241659195730">Versi baru Vivaldi sudah tersedia!</translation>
 <translation id="3708982624815781692">Unduhan dibatalkan.</translation>
 <translation id="3732157130969736834">Tandai Tautan</translation>
 <translation id="3732388226447288666">Hewan 2</translation>
 <translation id="3732439195215136813">Hewan 5</translation>
+<translation id="3795800845758778870">Sayangnya, pengaturan Brave Anda tidak tersedia jika peramban tersebut sedang berjalan. Untuk mengimpor pengaturan ke Vivaldi, simpan pekerjaan Anda dan tutup semua jendela Brave. Lalu klik Lanjutkan.</translation>
 <translation id="3832132597516774400">Lanskap 5</translation>
 <translation id="3914946330804881301">Diimpor dari Opera</translation>
 <translation id="3921292902397893431">Monster 8</translation>
 <translation id="3943857333388298514">Tempel</translation>
+<translation id="4005270918754737597">Lewati versi ini</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Jangan tampilkan lagi</translation>
 <translation id="4074744496918018786">Buka Gambar di Jendela Penyamaran</translation>
@@ -72,6 +85,7 @@
 <translation id="4677434526832593569">Hewan 8</translation>
 <translation id="474217410105706308">Bisukan Tab</translation>
 <translation id="4881695831933465202">Buka</translation>
+<translation id="498766871928286903"><ph name="DOWNLOADED" /> dari <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Diimpor dari Panggilan Cepat</translation>
 <translation id="5092656712000637858">Tambahkan Halaman ke Panel Web</translation>
 <translation id="5177818338935286353">Monster 7</translation>
@@ -87,6 +101,7 @@
 <translation id="5648110075441906505">Buka Gambar di Jendela Baru</translation>
 <translation id="5656371807944747581">Pembaruan Galat!</translation>
 <translation id="5716238312826274098">Mematikan notifikasi</translation>
+<translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> sudah tersedia (Anda memiliki <ph name="OLD_VERSION" />). Anda ingin mengunduhnya sekarang?</translation>
 <translation id="5770433027661640693">Lanskap 10</translation>
 <translation id="5857090052475505287">Folder Baru</translation>
 <translation id="588258955323874662">Layar Penuh</translation>
@@ -102,15 +117,21 @@
 <translation id="6538338088414940408">Buka tautan di tab latar belakang</translation>
 <translation id="6551219277044048123">Tambah ke Mesin Pe&amp;ncari...</translation>
 <translation id="6630781781151951863">Lanskap 18</translation>
+<translation id="6635049669875534328">Catatan rilis:</translation>
+<translation id="6693585104974197539">Pilih folder profil Edge untuk diimpor</translation>
+<translation id="6726279523566323394">Pilih folder profil Brave untuk diimpor</translation>
 <translation id="6804831687363620480">Sayangnya, semua pengaturan Opera 15+ anda tidak tersedia ketika peramban itu sedang berjalan. Untuk mengimpor pengaturan ke Vivaldi, simpan pekerjaan anda dan tutup semua jendela Opera 15+ . Kemudian klik Lanjutkan.</translation>
+<translation id="6892812721183419409">Buka Tautan sebagai <ph name="USER" /></translation>
 <translation id="6896758677409633944">Salin</translation>
 <translation id="7086554968911045110">Lanskap 7</translation>
 <translation id="7111492742514999492">Lanskap 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi terbentuk oleh proyek sumber terbuka <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> dan <ph name="BEGIN_LINK_OSS" />software sumber terbuka<ph name="END_LINK_OSS" /> lainnya.</translation>
 <translation id="7581266044164103589">Gagal meluncurkan pemasang pembaruan. Mohon periksa kecukupan memori atau ruang disk Anda dan coba lagi nanti.</translation>
+<translation id="7658239707568436148">Batal</translation>
 <translation id="7715497554424665066">&amp;Abaikan Pembaruan</translation>
 <translation id="7724603315864178912">Potong</translation>
+<translation id="7727481996062361502">Memverifikasi pemutakhiran...</translation>
 <translation id="7793738202466490491">Tambahkan sebagai Acara Kalender</translation>
 <translation id="7848222781052558334">Gagal memverifikasi tanda tangan digital berkas terunduh.</translation>
 <translation id="7865983598101744945">Konfirmasi keluar</translation>
@@ -121,9 +142,13 @@
 <translation id="8261506727792406068">Hapus</translation>
 <translation id="8331671104904436324">Buka di Tab Latar Belakang</translation>
 <translation id="8373293945112511707">Lanskap 1</translation>
+<translation id="8388552048012645975">Mengunduh pemutakhiran...</translation>
 <translation id="8427094907586191051">Lanskap 17</translation>
+<translation id="8439034818057146672">Versi baru Vivaldi siap dipasang.</translation>
 <translation id="8446668873108041390">Eksekusi JavaScript lewat AppleScript dimatikan. Di bawah Pengaturan &gt; Privasi &gt; Apple Events, ada pengaturan untuk mengizinkan JavaScript dari Apple Events.</translation>
 <translation id="8539196077526389150">Lanskap 13</translation>
+<translation id="8562339533180097902">Tutup Vivaldi dan pasang sekarang</translation>
+<translation id="8567452685425968223">Mengekstrak pemutakhiran...</translation>
 <translation id="8624587806981488221">Muat ulang gambar</translation>
 <translation id="864444594187862076">Opera versi 15+ (Developer)</translation>
 <translation id="8651348004684669199">Tambah Tab Aktif</translation>
@@ -131,12 +156,15 @@
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8768970203213061953">Lanskap 14</translation>
 <translation id="8773635261052182196">Anda tidak akan melihat lagi semua notifikasi ini. Anda dapat menyalakan mereka kembali di pengaturan vivaldi.</translation>
+<translation id="8813277370772331957">Ingatkan saya nanti</translation>
 <translation id="8894900864683381599">Tambahkan Tautan ke Panel Web</translation>
 <translation id="8912720443398351457">Anda Yakin Ingin Keluar Dari Vivaldi?</translation>
 <translation id="8947109330183116400">Pilih berkas penanda HTML</translation>
 <translation id="9017566390391482291">Pilih folder profil Vivaldi untuk diimpor</translation>
 <translation id="9065203028668620118">Edit</translation>
+<translation id="912022491595344261">Buka Gambar sebagai <ph name="USER" /></translation>
 <translation id="9157539936604258187">Buka Tautan</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Lanskap 16</translation>
 </translationbundle>

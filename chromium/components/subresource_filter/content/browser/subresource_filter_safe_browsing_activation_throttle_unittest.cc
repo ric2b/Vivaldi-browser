@@ -22,7 +22,9 @@
 #include "components/safe_browsing/core/db/database_manager.h"
 #include "components/safe_browsing/core/db/test_database_manager.h"
 #include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
+#include "components/subresource_filter/content/browser/devtools_interaction_tracker.h"
 #include "components/subresource_filter/content/browser/fake_safe_browsing_database_manager.h"
+#include "components/subresource_filter/content/browser/profile_interaction_manager.h"
 #include "components/subresource_filter/content/browser/subresource_filter_client.h"
 #include "components/subresource_filter/content/browser/subresource_filter_observer_test_utils.h"
 #include "components/subresource_filter/content/browser/subresource_filter_safe_browsing_client.h"
@@ -66,12 +68,19 @@ const char kSafeBrowsingCheckTime[] =
     "SubresourceFilter.SafeBrowsing.TotalCheckTime";
 const char kActivationListHistogram[] =
     "SubresourceFilter.PageLoad.ActivationList";
+const char kSubresourceFilterActionsHistogram[] = "SubresourceFilter.Actions2";
 
-class MockSubresourceFilterClient : public SubresourceFilterClient {
+class TestSafeBrowsingActivationThrottleDelegate
+    : public SubresourceFilterSafeBrowsingActivationThrottle::Delegate {
  public:
-  MockSubresourceFilterClient() = default;
-  ~MockSubresourceFilterClient() override = default;
+  TestSafeBrowsingActivationThrottleDelegate() = default;
+  ~TestSafeBrowsingActivationThrottleDelegate() override = default;
+  TestSafeBrowsingActivationThrottleDelegate(
+      const TestSafeBrowsingActivationThrottleDelegate&) = delete;
+  TestSafeBrowsingActivationThrottleDelegate& operator=(
+      const TestSafeBrowsingActivationThrottleDelegate&) = delete;
 
+  // SubresourceFilterSafeBrowsingActivationThrottle::Delegate:
   mojom::ActivationLevel OnPageActivationComputed(
       content::NavigationHandle* handle,
       mojom::ActivationLevel effective_level,
@@ -86,16 +95,6 @@ class MockSubresourceFilterClient : public SubresourceFilterClient {
     return effective_level;
   }
 
-  MOCK_METHOD0(ShowNotification, void());
-  MOCK_METHOD0(ForceActivationInCurrentWebContents, bool());
-  MOCK_METHOD2(OnAdsViolationTriggered,
-               void(content::RenderFrameHost*,
-                    subresource_filter::mojom::AdsViolation));
-  MOCK_METHOD0(
-      GetSafeBrowsingDatabaseManager,
-      const scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>());
-  MOCK_METHOD0(OnReloadRequested, void());
-
   void AllowlistInCurrentWebContents(const GURL& url) {
     ASSERT_TRUE(url.SchemeIsHTTPOrHTTPS());
     allowlisted_hosts_.insert(url.host());
@@ -105,7 +104,25 @@ class MockSubresourceFilterClient : public SubresourceFilterClient {
 
  private:
   std::set<std::string> allowlisted_hosts_;
+};
 
+class MockSubresourceFilterClient : public SubresourceFilterClient {
+ public:
+  MockSubresourceFilterClient() = default;
+  ~MockSubresourceFilterClient() override = default;
+
+  MOCK_METHOD0(ShowNotification, void());
+  MOCK_METHOD2(OnAdsViolationTriggered,
+               void(content::RenderFrameHost*,
+                    subresource_filter::mojom::AdsViolation));
+  MOCK_METHOD0(
+      GetSafeBrowsingDatabaseManager,
+      const scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>());
+  MOCK_METHOD0(GetProfileInteractionManager,
+               subresource_filter::ProfileInteractionManager*());
+  MOCK_METHOD0(OnReloadRequested, void());
+
+ private:
   DISALLOW_COPY_AND_ASSIGN(MockSubresourceFilterClient);
 };
 
@@ -212,7 +229,7 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
     if (navigation_handle->IsInMainFrame()) {
       navigation_handle->RegisterThrottleForTesting(
           std::make_unique<SubresourceFilterSafeBrowsingActivationThrottle>(
-              navigation_handle, client(), test_io_task_runner_,
+              navigation_handle, delegate(), test_io_task_runner_,
               fake_safe_browsing_database_));
     }
     std::vector<std::unique_ptr<content::NavigationThrottle>> throttles;
@@ -336,6 +353,7 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
 
   MockSubresourceFilterClient* client() { return client_; }
 
+  TestSafeBrowsingActivationThrottleDelegate* delegate() { return &delegate_; }
   base::TestMockTimeTaskRunner* test_io_task_runner() const {
     return test_io_task_runner_.get();
   }
@@ -351,6 +369,7 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
   testing::TestRulesetCreator test_ruleset_creator_;
   testing::TestRulesetPair test_ruleset_pair_;
 
+  TestSafeBrowsingActivationThrottleDelegate delegate_;
   std::unique_ptr<VerifiedRulesetDealer::Handle> ruleset_dealer_;
 
   std::unique_ptr<ContentSubresourceFilterThrottleManager> throttle_manager_;
@@ -518,7 +537,7 @@ TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
             *observer()->GetPageActivationForLastCommittedLoad());
 
   // Allowlisting occurs last, so the decision should still be DISABLED.
-  client()->AllowlistInCurrentWebContents(url);
+  delegate()->AllowlistInCurrentWebContents(url);
   SimulateNavigateAndCommit({url}, main_rfh());
   EXPECT_EQ(mojom::ActivationLevel::kDisabled,
             *observer()->GetPageActivationForLastCommittedLoad());
@@ -720,6 +739,63 @@ TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest, LogsUkmDryRun) {
   }
 }
 
+TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
+       ToggleForceActivation) {
+  auto* web_contents = RenderViewHostTestHarness::web_contents();
+  DevtoolsInteractionTracker::CreateForWebContents(web_contents);
+  auto* devtools_interaction_tracker =
+      DevtoolsInteractionTracker::FromWebContents(web_contents);
+
+  base::HistogramTester histogram_tester;
+  const GURL url("https://example.test/");
+
+  // Navigate initially, should be no activation.
+  SimulateNavigateAndCommit({url}, main_rfh());
+  EXPECT_CALL(*client(), ShowNotification()).Times(0);
+  EXPECT_TRUE(CreateAndNavigateDisallowedSubframe(main_rfh()));
+
+  // Simulate opening devtools and forcing activation.
+  devtools_interaction_tracker->ToggleForceActivation(true);
+  histogram_tester.ExpectBucketCount(
+      kSubresourceFilterActionsHistogram,
+      subresource_filter::SubresourceFilterAction::kForcedActivationEnabled, 1);
+
+  SimulateNavigateAndCommit({url}, main_rfh());
+  EXPECT_CALL(*client(), ShowNotification()).Times(1);
+  EXPECT_FALSE(CreateAndNavigateDisallowedSubframe(main_rfh()));
+
+  histogram_tester.ExpectBucketCount(
+      "SubresourceFilter.PageLoad.ActivationDecision",
+      subresource_filter::ActivationDecision::FORCED_ACTIVATION, 1);
+
+  // Simulate closing devtools.
+  devtools_interaction_tracker->ToggleForceActivation(false);
+
+  SimulateNavigateAndCommit({url}, main_rfh());
+  EXPECT_TRUE(CreateAndNavigateDisallowedSubframe(main_rfh()));
+  histogram_tester.ExpectBucketCount(
+      kSubresourceFilterActionsHistogram,
+      subresource_filter::SubresourceFilterAction::kForcedActivationEnabled, 1);
+}
+
+TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
+       ToggleOffForceActivation_AfterCommit) {
+  auto* web_contents = RenderViewHostTestHarness::web_contents();
+  DevtoolsInteractionTracker::CreateForWebContents(web_contents);
+  auto* devtools_interaction_tracker =
+      DevtoolsInteractionTracker::FromWebContents(web_contents);
+
+  base::HistogramTester histogram_tester;
+  devtools_interaction_tracker->ToggleForceActivation(true);
+  const GURL url("https://example.test/");
+  SimulateNavigateAndCommit({url}, main_rfh());
+  devtools_interaction_tracker->ToggleForceActivation(false);
+
+  // Resource should be disallowed, since navigation commit had activation.
+  EXPECT_CALL(*client(), ShowNotification()).Times(1);
+  EXPECT_FALSE(CreateAndNavigateDisallowedSubframe(main_rfh()));
+}
+
 TEST_P(SubresourceFilterSafeBrowsingActivationThrottleScopeTest,
        ActivateForScopeType) {
   const ActivationScopeTestData& test_data = GetParam();
@@ -734,7 +810,7 @@ TEST_P(SubresourceFilterSafeBrowsingActivationThrottleScopeTest,
   EXPECT_EQ(test_data.expected_activation_level,
             *observer()->GetPageActivationForLastCommittedLoad());
   if (test_data.url_matches_activation_list) {
-    client()->AllowlistInCurrentWebContents(test_url);
+    delegate()->AllowlistInCurrentWebContents(test_url);
     SimulateNavigateAndCommit({test_url}, main_rfh());
     EXPECT_EQ(mojom::ActivationLevel::kDisabled,
               *observer()->GetPageActivationForLastCommittedLoad());

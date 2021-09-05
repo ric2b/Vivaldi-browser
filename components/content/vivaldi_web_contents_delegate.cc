@@ -22,7 +22,7 @@ DownloadInformation::DownloadInformation(const DownloadInformation& old)
       mime_type(old.mime_type),
       suggested_filename(old.suggested_filename) {}
 
-DownloadInformation::DownloadInformation() : size(0) {}
+DownloadInformation::DownloadInformation() : size(-1) {}
 
 DownloadInformation::~DownloadInformation() {}
 

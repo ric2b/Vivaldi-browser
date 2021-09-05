@@ -28,6 +28,7 @@ class NavigationThrottle;
 namespace chromecast {
 
 class WebviewNavigationThrottle;
+class WebviewTest;
 
 // This owns a WebContents and CastWebContents and processes proto commands
 // to allow the web contents to be controlled and embedded.
@@ -62,6 +63,9 @@ class WebviewController : public CastWebContents::Delegate,
   void OnNavigationThrottleDestroyed(WebviewNavigationThrottle* throttle);
 
  protected:
+  FRIEND_TEST_ALL_PREFIXES(WebviewTest, SetInsets);
+  FRIEND_TEST_ALL_PREFIXES(WebviewTest, UserDataOverride);
+
   content::WebContents* GetWebContents() override;
 
  private:

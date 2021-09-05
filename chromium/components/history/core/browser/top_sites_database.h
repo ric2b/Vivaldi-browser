@@ -99,7 +99,7 @@ class TopSitesDatabase {
   // invoke recovery code.
   bool InitImpl(const base::FilePath& db_name);
 
-  sql::Database* CreateDB(const base::FilePath& db_name);
+  std::unique_ptr<sql::Database> CreateDB(const base::FilePath& db_name);
 
   // Vivaldi: Convert thumbnail images to a our own storage.
   bool ConvertThumbnailData(const base::FilePath db_path,

@@ -3,11 +3,11 @@
 // found in the LICENSE file.
 
 const AutomationNode = chrome.automation.AutomationNode;
-const SwitchAccessMenuAction =
+export const SwitchAccessMenuAction =
     chrome.accessibilityPrivate.SwitchAccessMenuAction;
 
 /** Constants used in Switch Access */
-const SAConstants = {
+export const SAConstants = {
 
   // ========================= Constants =========================
 
@@ -81,7 +81,7 @@ const SAConstants = {
    * @enum {number}
    * @const
    */
-  MenuType: {MAIN_MENU: 0, TEXT_NAVIGATION: 1},
+  MenuType: {MAIN_MENU: 0, TEXT_NAVIGATION: 1, POINT_SCAN_MENU: 2},
 
   /**
    * Preferences that are configurable in Switch Access.
@@ -92,9 +92,11 @@ const SAConstants = {
     AUTO_SCAN_TIME: 'settings.a11y.switch_access.auto_scan.speed_ms',
     AUTO_SCAN_KEYBOARD_TIME:
         'settings.a11y.switch_access.auto_scan.keyboard.speed_ms',
-    NEXT_SETTING: 'settings.a11y.switch_access.next.setting',
-    PREVIOUS_SETTING: 'settings.a11y.switch_access.previous.setting',
-    SELECT_SETTING: 'settings.a11y.switch_access.select.setting',
+    NEXT_DEVICE_KEY_CODES: 'settings.a11y.switch_access.next.device_key_codes',
+    PREVIOUS_DEVICE_KEY_CODES:
+        'settings.a11y.switch_access.previous.device_key_codes',
+    SELECT_DEVICE_KEY_CODES:
+        'settings.a11y.switch_access.select.device_key_codes',
   },
 
   // =========================== Sub-objects ===========================

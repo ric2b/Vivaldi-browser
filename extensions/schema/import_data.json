@@ -61,6 +61,10 @@
             "type": "boolean",
             "description": "Does profile support notes."
           },
+          "email": {
+            "type": "boolean",
+            "description": "Does profile support email."
+          },
           "supportsStandaloneImport": {
             "type": "boolean",
             "description": "Does profile support standalone import with a dialog."
@@ -76,6 +80,10 @@
           "profilePath": {
             "type": "string",
             "description": "Is the path on disk to the detected profile"
+          },
+          "mailPath": {
+            "type": "string",
+            "description": "The path on disk to the detected mail profile"
           },
           "UserProfiles": {
             "name": "Profiles",
@@ -131,6 +139,12 @@
               {
                 "name": "result",
                 "type": "string"
+              },
+              {
+                "name": "path",
+                "type": "string",
+                "optional": "true",
+                "description": "The file path the user selceted when using non-default profile location."
               }
             ]
           }

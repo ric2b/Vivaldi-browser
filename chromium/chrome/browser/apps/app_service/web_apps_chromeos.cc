@@ -12,6 +12,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
+#include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
 #include "base/stl_util.h"
@@ -21,6 +22,7 @@
 #include "chrome/browser/apps/app_service/app_service_metrics.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/apps/app_service/menu_util.h"
+#include "chrome/browser/badging/badge_manager_factory.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/arc/arc_web_contents_data.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
@@ -44,18 +46,57 @@
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/common/chrome_features.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/arc/arc_service_manager.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/full_restore/app_launch_info.h"
+#include "components/full_restore/full_restore_utils.h"
 #include "components/services/app_service/public/cpp/intent_filter_util.h"
+#include "components/sessions/core/session_id.h"
 #include "content/public/browser/clear_site_data_utils.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/common/constants.h"
 #include "ui/message_center/public/cpp/notification.h"
 #include "url/origin.h"
 
+namespace {
+
+std::string GetDesktopPWAsAttentionBadgingFlag() {
+  const base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
+  if (cmdline->HasSwitch(switches::kDesktopPWAsAttentionBadgingCrOS)) {
+    return cmdline->GetSwitchValueASCII(
+        switches::kDesktopPWAsAttentionBadgingCrOS);
+  }
+  return switches::kDesktopPWAsAttentionBadgingCrOSApiOnly;
+}
+
+}  // namespace
+
 namespace apps {
+
+WebAppsChromeOs::BadgeManagerDelegate::BadgeManagerDelegate(
+    const base::WeakPtr<WebAppsChromeOs>& web_apps_chrome_os)
+    : badging::BadgeManagerDelegate(web_apps_chrome_os->profile(),
+                                    web_apps_chrome_os->badge_manager_),
+      web_apps_chrome_os_(web_apps_chrome_os) {}
+
+WebAppsChromeOs::BadgeManagerDelegate::~BadgeManagerDelegate() = default;
+
+void WebAppsChromeOs::BadgeManagerDelegate::OnAppBadgeUpdated(
+    const web_app::AppId& app_id) {
+  if (!web_apps_chrome_os_) {
+    return;
+  }
+  apps::mojom::AppPtr app =
+      web_apps_chrome_os_->app_notifications_.GetAppWithHasBadgeStatus(
+          apps::mojom::AppType::kWeb, app_id);
+  app->has_badge = web_apps_chrome_os_->ShouldShowBadge(app_id, app->has_badge);
+  web_apps_chrome_os_->Publish(std::move(app),
+                               web_apps_chrome_os_->subscribers());
+}
 
 WebAppsChromeOs::WebAppsChromeOs(
     const mojo::Remote<apps::mojom::AppService>& app_service,
@@ -64,6 +105,13 @@ WebAppsChromeOs::WebAppsChromeOs(
     : WebAppsBase(app_service, profile), instance_registry_(instance_registry) {
   DCHECK(instance_registry_);
   Initialize();
+  badge_manager_ = badging::BadgeManagerFactory::GetForProfile(profile);
+  // badge_manager_ is nullptr in guest and incognito profiles.
+  if (badge_manager_) {
+    badge_manager_->SetDelegate(
+        std::make_unique<apps::WebAppsChromeOs::BadgeManagerDelegate>(
+            weak_ptr_factory_.GetWeakPtr()));
+  }
 }
 
 WebAppsChromeOs::~WebAppsChromeOs() {
@@ -241,7 +289,7 @@ void WebAppsChromeOs::ExecuteContextMenuCommand(const std::string& app_id,
   NOTIMPLEMENTED();
 }
 
-void WebAppsChromeOs::OnWebAppUninstalled(const web_app::AppId& app_id) {
+void WebAppsChromeOs::OnWebAppWillBeUninstalled(const web_app::AppId& app_id) {
   const web_app::WebApp* web_app = GetWebApp(app_id);
   if (!web_app || !Accepts(app_id)) {
     return;
@@ -250,7 +298,7 @@ void WebAppsChromeOs::OnWebAppUninstalled(const web_app::AppId& app_id) {
   app_notifications_.RemoveNotificationsForApp(app_id);
   paused_apps_.MaybeRemoveApp(app_id);
 
-  WebAppsBase::OnWebAppUninstalled(app_id);
+  WebAppsBase::OnWebAppWillBeUninstalled(app_id);
 }
 
 // If is_disabled is set, the app backed by |app_id| is published with readiness
@@ -315,9 +363,10 @@ void WebAppsChromeOs::OnNotificationClosed(const std::string& notification_id) {
   app_notifications_.RemoveNotification(notification_id);
 
   for (const auto& app_id : app_ids) {
-    Publish(app_notifications_.GetAppWithHasBadgeStatus(
-                apps::mojom::AppType::kWeb, app_id),
-            subscribers());
+    apps::mojom::AppPtr app = app_notifications_.GetAppWithHasBadgeStatus(
+        apps::mojom::AppType::kWeb, app_id);
+    app->has_badge = ShouldShowBadge(app_id, app->has_badge);
+    Publish(std::move(app), subscribers());
   }
 }
 
@@ -334,9 +383,10 @@ bool WebAppsChromeOs::MaybeAddNotification(const std::string& app_id,
   }
 
   app_notifications_.AddNotification(app_id, notification_id);
-  Publish(app_notifications_.GetAppWithHasBadgeStatus(
-              apps::mojom::AppType::kWeb, app_id),
-          subscribers());
+  apps::mojom::AppPtr app = app_notifications_.GetAppWithHasBadgeStatus(
+      apps::mojom::AppType::kWeb, app_id);
+  app->has_badge = ShouldShowBadge(app_id, app->has_badge);
+  Publish(std::move(app), subscribers());
   return true;
 }
 
@@ -383,9 +433,11 @@ apps::mojom::AppPtr WebAppsChromeOs::Convert(const web_app::WebApp* web_app,
   app->icon_key = icon_key_factory().MakeIconKey(
       GetIconEffects(web_app, paused, is_disabled));
 
-  app->has_badge = app_notifications_.HasNotification(web_app->app_id())
-                       ? apps::mojom::OptionalBool::kTrue
-                       : apps::mojom::OptionalBool::kFalse;
+  apps::mojom::OptionalBool has_notification =
+      app_notifications_.HasNotification(web_app->app_id())
+          ? apps::mojom::OptionalBool::kTrue
+          : apps::mojom::OptionalBool::kFalse;
+  app->has_badge = ShouldShowBadge(web_app->app_id(), has_notification);
   app->paused = paused ? apps::mojom::OptionalBool::kTrue
                        : apps::mojom::OptionalBool::kFalse;
   return app;
@@ -445,9 +497,70 @@ void WebAppsChromeOs::SetIconEffect(const std::string& app_id) {
   Publish(std::move(app), subscribers());
 }
 
+content::WebContents* WebAppsChromeOs::LaunchAppWithParams(
+    AppLaunchParams params) {
+  AppLaunchParams params_for_restore(params.app_id, params.container,
+                                     params.disposition, params.display_id,
+                                     params.launch_files, params.intent);
+
+  auto* web_contents = WebAppsBase::LaunchAppWithParams(std::move(params));
+
+  int session_id = GetSessionIdForRestoreFromWebContents(
+      params_for_restore.container, web_contents);
+  if (!SessionID::IsValidValue(session_id)) {
+    return web_contents;
+  }
+
+  const web_app::WebApp* web_app = GetWebApp(params_for_restore.app_id);
+  std::unique_ptr<full_restore::AppLaunchInfo> launch_info;
+  if (web_app && web_app->IsSystemApp()) {
+    // Save all launch information for system web apps, because the browser
+    // session restore can't restore system web apps.
+    launch_info = std::make_unique<full_restore::AppLaunchInfo>(
+        params_for_restore.app_id, session_id, params_for_restore.container,
+        params_for_restore.disposition, params_for_restore.display_id,
+        std::move(params_for_restore.launch_files),
+        std::move(params_for_restore.intent));
+  } else {
+    // If the app is not a system web app, the browser session restore can
+    // restore the app after reboot, so we don't need to save the launch
+    // parameters to launch the app after reboot. Only the browser session id is
+    // saved as the window id, to restore the window stack, snap, etc. The app
+    // id is modified as the Chrome browser id, so that it won't be launched
+    // after reboot. Also for web apps opened with tabs in one browser window,
+    // we don't need to save multiple records in the full restore data.
+    launch_info = std::make_unique<full_restore::AppLaunchInfo>(
+        extension_misc::kChromeAppId, session_id);
+  }
+
+  full_restore::SaveAppLaunchInfo(profile()->GetPath(), std::move(launch_info));
+  return web_contents;
+}
+
 bool WebAppsChromeOs::Accepts(const std::string& app_id) {
   // Crostini Terminal System App is handled by Crostini Apps.
   return app_id != crostini::kCrostiniTerminalSystemAppId;
 }
 
+apps::mojom::OptionalBool WebAppsChromeOs::ShouldShowBadge(
+    const std::string& app_id,
+    apps::mojom::OptionalBool has_notification) {
+  std::string flag = GetDesktopPWAsAttentionBadgingFlag();
+  if (flag == switches::kDesktopPWAsAttentionBadgingCrOSApiOnly) {
+    // Show a badge based only on the Web Badging API.
+    return badge_manager_ && badge_manager_->GetBadgeValue(app_id).has_value()
+               ? apps::mojom::OptionalBool::kTrue
+               : apps::mojom::OptionalBool::kFalse;
+  } else if (flag ==
+             switches::kDesktopPWAsAttentionBadgingCrOSNotificationsOnly) {
+    // Show a badge only if a notification is showing.
+    return has_notification;
+  } else {
+    // When the flag is set to "api-and-notifications" we show a badge if either
+    // a notification is showing or the Web Badging API has a badge set.
+    return badge_manager_ && badge_manager_->GetBadgeValue(app_id).has_value()
+               ? apps::mojom::OptionalBool::kTrue
+               : has_notification;
+  }
+}
 }  // namespace apps

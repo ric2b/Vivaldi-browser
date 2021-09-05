@@ -143,6 +143,11 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     std::array<base::sequence_manager::TaskQueue::QueuePriority,
                net::RequestPrioritySize::NUM_PRIORITIES>
         net_to_blink_priority;
+
+    // If enabled, base::ThreadTaskRunnerHandle::Get() and
+    // base::SequencedTaskRunnerHandle::Get() returns the current active
+    // per-ASG task runner instead of the per-thread task runner.
+    bool mbi_override_task_runner_handle;
   };
 
   static const char* UseCaseToString(UseCase use_case);
@@ -223,8 +228,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   scoped_refptr<base::SingleThreadTaskRunner> CompositorTaskRunner() override;
   std::unique_ptr<WebAgentGroupScheduler> CreateAgentGroupScheduler() override;
   WebAgentGroupScheduler* GetCurrentAgentGroupScheduler() override;
-  void SetCurrentAgentGroupScheduler(
-      WebAgentGroupScheduler* agent_group_scheduler);
   std::unique_ptr<ThreadScheduler::RendererPauseHandle> PauseScheduler()
       override;
   base::TimeTicks MonotonicallyIncreasingVirtualTime() override;
@@ -493,6 +496,21 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   static const char* TimeDomainTypeToString(TimeDomainType domain_type);
 
   void AddAgentGroupScheduler(AgentGroupSchedulerImpl*);
+
+  struct AgentGroupSchedulerScope {
+    std::unique_ptr<base::ThreadTaskRunnerHandleOverride>
+        thread_task_runner_handle_override;
+    WebAgentGroupScheduler* previous_agent_group_scheduler;
+    WebAgentGroupScheduler* current_agent_group_scheduler;
+    scoped_refptr<base::SingleThreadTaskRunner> previous_task_runner;
+    scoped_refptr<base::SingleThreadTaskRunner> current_task_runner;
+    const char* trace_event_scope_name;
+    void* trace_event_scope_id;
+  };
+
+  void BeginAgentGroupSchedulerScope(
+      WebAgentGroupScheduler* next_agent_group_scheduler);
+  void EndAgentGroupSchedulerScope();
 
   bool IsAnyMainFrameWaitingForFirstContentfulPaint() const;
   bool IsAnyMainFrameWaitingForFirstMeaningfulPaint() const;
@@ -862,7 +880,7 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   struct MainThreadOnly {
     MainThreadOnly(
         MainThreadSchedulerImpl* main_thread_scheduler_impl,
-        const scoped_refptr<MainThreadTaskQueue>& compositor_task_runner,
+        const scoped_refptr<MainThreadTaskQueue>& compositor_task_queue,
         const base::TickClock* time_source,
         base::TimeTicks now);
     ~MainThreadOnly();
@@ -965,6 +983,8 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     // kNormalPriority and is updated via UpdateCompositorTaskQueuePriority().
     TraceableState<TaskQueue::QueuePriority, TracingCategoryName::kDefault>
         compositor_priority;
+
+    WTF::Vector<AgentGroupSchedulerScope> agent_group_scheduler_scope_stack;
   };
 
   struct AnyThread {

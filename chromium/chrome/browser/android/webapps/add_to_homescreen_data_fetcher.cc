@@ -19,15 +19,14 @@
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chrome/browser/android/shortcut_helper.h"
-#include "chrome/browser/android/webapk/webapk_web_manifest_checker.h"
-#include "chrome/browser/favicon/favicon_service_factory.h"
-#include "chrome/browser/installable/installable_manager.h"
-#include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_constants.h"
 #include "components/dom_distiller/core/url_utils.h"
-#include "components/favicon/core/favicon_service.h"
+#include "components/favicon/content/large_favicon_provider_getter.h"
+#include "components/favicon/core/large_favicon_provider.h"
 #include "components/favicon_base/favicon_types.h"
+#include "components/webapps/browser/android/webapps_icon_utils.h"
+#include "components/webapps/browser/android/webapps_utils.h"
+#include "components/webapps/browser/installable/installable_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
@@ -37,6 +36,8 @@
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/favicon_size.h"
 #include "url/gurl.h"
+
+namespace webapps {
 
 namespace {
 
@@ -52,7 +53,7 @@ InstallableParams ParamsToPerformManifestAndIconFetch() {
   InstallableParams params;
   params.valid_primary_icon = true;
   params.prefer_maskable_icon =
-      ShortcutHelper::DoesAndroidSupportMaskableIcons();
+      WebappsIconUtils::DoesAndroidSupportMaskableIcons();
   params.wait_for_worker = true;
   return params;
 }
@@ -64,7 +65,7 @@ InstallableParams ParamsToPerformInstallableCheck() {
   params.has_worker = true;
   params.valid_primary_icon = true;
   params.prefer_maskable_icon =
-      ShortcutHelper::DoesAndroidSupportMaskableIcons();
+      WebappsIconUtils::DoesAndroidSupportMaskableIcons();
   params.wait_for_worker = true;
   return params;
 }
@@ -81,7 +82,7 @@ void CreateLauncherIconInBackground(
     scoped_refptr<base::SequencedTaskRunner> ui_thread_task_runner,
     base::OnceCallback<void(const SkBitmap&, bool)> callback) {
   bool is_generated = false;
-  SkBitmap primary_icon = ShortcutHelper::FinalizeLauncherIconInBackground(
+  SkBitmap primary_icon = WebappsIconUtils::FinalizeLauncherIconInBackground(
       icon, maskable, start_url, &is_generated);
   ui_thread_task_runner->PostTask(
       FROM_HERE,
@@ -251,9 +252,9 @@ void AddToHomescreenDataFetcher::OnDidGetManifestAndIcons(
 
   // Save the splash screen URL for the later download.
   shortcut_info_.ideal_splash_image_size_in_px =
-      ShortcutHelper::GetIdealSplashImageSizeInPx();
+      WebappsIconUtils::GetIdealSplashImageSizeInPx();
   shortcut_info_.minimum_splash_image_size_in_px =
-      ShortcutHelper::GetMinimumSplashImageSizeInPx();
+      WebappsIconUtils::GetMinimumSplashImageSizeInPx();
   shortcut_info_.splash_image_url =
       blink::ManifestIconSelector::FindBestMatchingSquareIcon(
           data.manifest->icons, shortcut_info_.ideal_splash_image_size_in_px,
@@ -274,8 +275,8 @@ void AddToHomescreenDataFetcher::OnDidPerformInstallableCheck(
     return;
 
   bool webapk_compatible =
-      (data.errors.empty() && data.valid_manifest && data.has_worker &&
-       AreWebManifestUrlsWebApkCompatible(*data.manifest));
+      (data.NoBlockingErrors() && data.valid_manifest && data.has_worker &&
+       WebappsUtils::AreWebManifestUrlsWebApkCompatible(*data.manifest));
   observer_->OnUserTitleAvailable(
       webapk_compatible ? shortcut_info_.name : shortcut_info_.user_title,
       shortcut_info_.url, webapk_compatible);
@@ -310,20 +311,16 @@ void AddToHomescreenDataFetcher::FetchFavicon() {
       {favicon_base::IconType::kTouchPrecomposedIcon,
        favicon_base::IconType::kTouchIcon}};
 
-  favicon::FaviconService* favicon_service =
-      FaviconServiceFactory::GetForProfile(
-          Profile::FromBrowserContext(web_contents()->GetBrowserContext()),
-          ServiceAccessType::EXPLICIT_ACCESS);
-
   // Using favicon if its size is not smaller than platform required size,
   // otherwise using the largest icon among all available icons.
   int threshold_to_get_any_largest_icon =
-      ShortcutHelper::GetIdealHomescreenIconSizeInPx() - 1;
-  favicon_service->GetLargestRawFaviconForPageURL(
-      shortcut_info_.url, icon_types, threshold_to_get_any_largest_icon,
-      base::BindOnce(&AddToHomescreenDataFetcher::OnFaviconFetched,
-                     weak_ptr_factory_.GetWeakPtr()),
-      &favicon_task_tracker_);
+      WebappsIconUtils::GetIdealHomescreenIconSizeInPx() - 1;
+  favicon::GetLargeFaviconProvider(web_contents()->GetBrowserContext())
+      ->GetLargestRawFaviconForPageURL(
+          shortcut_info_.url, icon_types, threshold_to_get_any_largest_icon,
+          base::BindOnce(&AddToHomescreenDataFetcher::OnFaviconFetched,
+                         weak_ptr_factory_.GetWeakPtr()),
+          &favicon_task_tracker_);
 }
 
 void AddToHomescreenDataFetcher::OnFaviconFetched(
@@ -382,3 +379,5 @@ void AddToHomescreenDataFetcher::OnIconCreated(bool use_for_launcher,
 
   observer_->OnDataAvailable(shortcut_info_, icon_for_view);
 }
+
+}  // namespace webapps

@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/files/file_util.h"
 #include "base/i18n/time_formatting.h"
 #include "base/lazy_instance.h"
 #include "base/strings/string_number_conversions.h"
@@ -38,6 +39,10 @@ using vivaldi::VivaldiProfileSyncServiceFactory;
 namespace extensions {
 
 namespace {
+bool WriteFileWrapper(const base::FilePath& filename,
+                      std::unique_ptr<std::string> data) {
+  return base::WriteFile(filename, *data);
+}
 
 vivaldi::sync::CycleStatus ToVivaldiCycleStatus(
     ::vivaldi::VivaldiSyncUIHelper::CycleStatus cycle_status) {
@@ -462,16 +467,29 @@ ExtensionFunction::ResponseAction SyncBackupEncryptionTokenFunction::Run() {
   if (!sync_manager->GetUserSettings()->IsEncryptEverythingEnabled())
     return RespondNow(Error("Encryption not enabled"));
 
-  sync_manager->ui_helper()->BackupEncryptionToken(
-      base::FilePath::FromUTF8Unsafe(params->target_file),
+  auto key = std::make_unique<std::string>(
+      sync_manager->ui_helper()->GetBackupEncryptionToken());
+
+  if (key->empty()) {
+    return RespondNow(ArgumentList(
+        vivaldi::sync::BackupEncryptionToken::Results::Create(false)));
+  }
+
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()},
+      base::BindOnce(&WriteFileWrapper,
+                     base::FilePath::FromUTF8Unsafe(params->target_file),
+                     std::move(key)),
       base::BindOnce(&SyncBackupEncryptionTokenFunction::OnBackupDone, this));
 
+  AddRef();
   return RespondLater();
 }
 
 void SyncBackupEncryptionTokenFunction::OnBackupDone(bool result) {
   Respond(ArgumentList(
       vivaldi::sync::BackupEncryptionToken::Results::Create(result)));
+  Release();  // Balances AddRef in Run()
 }
 
 ExtensionFunction::ResponseAction SyncRestoreEncryptionTokenFunction::Run() {
@@ -490,14 +508,34 @@ ExtensionFunction::ResponseAction SyncRestoreEncryptionTokenFunction::Run() {
     return RespondNow(
         Error("Sync currently isn't requiring an encryption password"));
 
-  sync_manager->ui_helper()->RestoreEncryptionToken(
-      base::FilePath::FromUTF8Unsafe(params->source_file),
-      base::BindOnce(&SyncRestoreEncryptionTokenFunction::OnRestoreDone, this));
+  auto token = std::make_unique<std::string>();
+  // token_ptr is expected to be valid as long as token is valid,
+  // which should be at least until OnRestoreDone is called. So, it should be
+  // safe to use during base::ReadFileToString
+  std::string* token_ptr = token.get();
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()},
+      base::BindOnce(&base::ReadFileToString,
+                     base::FilePath::FromUTF8Unsafe(params->source_file),
+                     token_ptr),
+      base::BindOnce(&SyncRestoreEncryptionTokenFunction::OnRestoreDone, this,
+                     std::move(token)));
 
   return RespondLater();
 }
 
-void SyncRestoreEncryptionTokenFunction::OnRestoreDone(bool result) {
+void SyncRestoreEncryptionTokenFunction::OnRestoreDone(
+    std::unique_ptr<std::string> token,
+    bool result) {
+  if (result) {
+    VivaldiProfileSyncService* sync_manager =
+        VivaldiProfileSyncServiceFactory::GetForProfileVivaldi(
+            Profile::FromBrowserContext(browser_context()));
+    if (!sync_manager)
+      return Respond(Error("Sync manager is unavailable"));
+    result = sync_manager->ui_helper()->RestoreEncryptionToken(*token);
+  }
+
   Respond(ArgumentList(
       vivaldi::sync::RestoreEncryptionToken::Results::Create(result)));
 }
@@ -610,21 +648,22 @@ SyncUpdateNotificationClientStatusFunction::Run() {
   if (!sync_manager)
     return RespondNow(Error("Sync manager is unavailable"));
 
-  syncer::InvalidatorState state =
+  invalidation::InvalidatorState state =
       (params->status == vivaldi::sync::SyncNotificationClientStatus::
                              SYNC_NOTIFICATION_CLIENT_STATUS_CONNECTED)
-          ? syncer::INVALIDATIONS_ENABLED
-          : syncer::DEFAULT_INVALIDATION_ERROR;
+          ? invalidation::INVALIDATIONS_ENABLED
+          : invalidation::DEFAULT_INVALIDATION_ERROR;
   sync_manager->invalidation_service()->UpdateInvalidatorState(state);
 
   // If notifications just got re-enabled, just invalidate everything to
   // compensate for potentially missed notifications.
-  if (state == syncer::INVALIDATIONS_ENABLED) {
-    syncer::TopicInvalidationMap invalidations;
+  if (state == invalidation::INVALIDATIONS_ENABLED) {
+    invalidation::TopicInvalidationMap invalidations;
     for (const auto model_type : syncer::ProtocolTypes()) {
-      syncer::Topic topic;
+      invalidation::Topic topic;
       syncer::RealModelTypeToNotificationType(model_type, &topic);
-      invalidations.Insert(syncer::Invalidation::InitUnknownVersion(topic));
+      invalidations.Insert(
+          invalidation::Invalidation::InitUnknownVersion(topic));
     }
     sync_manager->invalidation_service()->PerformInvalidation(invalidations);
   }
@@ -649,9 +688,9 @@ ExtensionFunction::ResponseAction SyncNotificationReceivedFunction::Run() {
       sync_manager->invalidation_service()->GetInvalidatorClientId()) {
     int64_t version;
     base::StringToInt64(params->version, &version);
-    syncer::TopicInvalidationMap invalidations;
-    invalidations.Insert(syncer::Invalidation::Init(
-        syncer::Topic(params->notification_type), version, ""));
+    invalidation::TopicInvalidationMap invalidations;
+    invalidations.Insert(invalidation::Invalidation::Init(
+        invalidation::Topic(params->notification_type), version, ""));
     sync_manager->invalidation_service()->PerformInvalidation(invalidations);
   }
 

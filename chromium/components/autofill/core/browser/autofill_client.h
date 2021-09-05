@@ -15,13 +15,14 @@
 #include "base/i18n/rtl.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
-#include "base/util/type_safety/strong_alias.h"
+#include "base/types/strong_alias.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/payments/legal_message_line.h"
 #include "components/autofill/core/browser/payments/risk_data_loader.h"
 #include "components/autofill/core/browser/ui/popup_item_ids.h"
 #include "components/autofill/core/browser/ui/popup_types.h"
+#include "components/profile_metrics/browser_profile_type.h"
 #include "components/security_state/core/security_state.h"
 #include "components/translate/core/browser/language_state.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
@@ -180,7 +181,7 @@ class AutofillClient : public RiskDataLoader {
   // Required arguments to create a dropdown showing autofill suggestions.
   struct PopupOpenArgs {
     using AutoselectFirstSuggestion =
-        ::util::StrongAlias<class AutoSelectFirstSuggestionTag, bool>;
+        ::base::StrongAlias<class AutoSelectFirstSuggestionTag, bool>;
 
     PopupOpenArgs();
     PopupOpenArgs(const gfx::RectF& element_bounds,
@@ -294,6 +295,11 @@ class AutofillClient : public RiskDataLoader {
   // Retrieves the country code of the user from Chrome variation service.
   // If the variation service is not available, return an empty string.
   virtual std::string GetVariationConfigCountryCode() const;
+
+  // Returns the profile type of the session.
+  // TODO(https://crbug.com/1169142): Replace by getting profile type directly
+  // from BrowserContext.
+  virtual profile_metrics::BrowserProfileType GetProfileType() const;
 
 #if !defined(OS_IOS)
   // Creates the appropriate implementation of InternalAuthenticator. May be

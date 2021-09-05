@@ -299,4 +299,6 @@ public class BookmarkAddEditFolderActivity extends SynchronousInitializationActi
     public void enableParentTextView(boolean enable) {
         mParentTextView.setEnabled(enable);
     }
+    public View getParentTextView() { return mParentTextView; }
+    public List<BookmarkId> getBookmarksToMove() { return mBookmarksToMove; }
 }

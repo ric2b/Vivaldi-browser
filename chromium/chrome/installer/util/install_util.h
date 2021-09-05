@@ -21,7 +21,7 @@
 #include "base/optional.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
-#include "base/util/type_safety/strong_alias.h"
+#include "base/types/strong_alias.h"
 #include "base/version.h"
 #include "base/win/registry.h"
 #include "base/win/scoped_handle.h"
@@ -78,10 +78,6 @@ class InstallUtil {
   // TODO(grt): consider replacing all callers with direct use of
   // InstallDetails.
   static bool IsPerUserInstall();
-
-  // [Vivaldi] Shows a modal messagebox with the installer result localized string
-  static void ShowInstallerResultMessage(installer::InstallStatus status,
-                                         int string_resource_id);
 
   // Returns true if the sentinel file exists (or the path cannot be obtained).
   static bool IsFirstRunSentinelPresent();
@@ -192,8 +188,8 @@ class InstallUtil {
   static std::vector<std::pair<std::wstring, std::wstring>>
   GetCloudManagementEnrollmentTokenRegistryPaths();
 
-  using ReadOnly = util::StrongAlias<class ReadOnlyTag, bool>;
-  using BrowserLocation = util::StrongAlias<class BrowserLocationTag, bool>;
+  using ReadOnly = base::StrongAlias<class ReadOnlyTag, bool>;
+  using BrowserLocation = base::StrongAlias<class BrowserLocationTag, bool>;
 
   // Returns the registry key and value name from/to which a cloud management DM
   // token may be read/written. |read_only| indicates whether they key is opened

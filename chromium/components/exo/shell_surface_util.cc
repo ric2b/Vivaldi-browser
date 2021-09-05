@@ -6,25 +6,25 @@
 
 #include <memory>
 
-#include "ash/public/cpp/app_types.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/trace_event/trace_event.h"
+#include "build/chromeos_buildflags.h"
 #include "components/exo/permission.h"
 #include "components/exo/shell_surface_base.h"
 #include "components/exo/surface.h"
 #include "components/exo/wm_helper.h"
-#include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/capture_client.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
 #include "ui/aura/window_targeter.h"
+#include "ui/events/base_event_utils.h"
 #include "ui/events/event.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/window_util.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chromeos/ui/base/window_properties.h"
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 DEFINE_UI_CLASS_PROPERTY_TYPE(exo::Permission*)
 
@@ -78,38 +78,28 @@ aura::WindowTargeter* FindTargeter(ui::EventTarget* target) {
 
 }  // namespace
 
-void SetShellApplicationId(aura::Window* window,
+void SetShellApplicationId(ui::PropertyHandler* property_handler,
                            const base::Optional<std::string>& id) {
   TRACE_EVENT1("exo", "SetApplicationId", "application_id", id ? *id : "null");
 
   if (id)
-    window->SetProperty(kApplicationIdKey, *id);
+    property_handler->SetProperty(kApplicationIdKey, *id);
   else
-    window->ClearProperty(kApplicationIdKey);
+    property_handler->ClearProperty(kApplicationIdKey);
 }
 
-const std::string* GetShellApplicationId(const aura::Window* window) {
-  return window->GetProperty(kApplicationIdKey);
+const std::string* GetShellApplicationId(const aura::Window* property_handler) {
+  return property_handler->GetProperty(kApplicationIdKey);
 }
 
-void SetArcAppType(aura::Window* window) {
-  window->SetProperty(aura::client::kAppType,
-                      static_cast<int>(ash::AppType::ARC_APP));
-}
-
-void SetLacrosAppType(aura::Window* window) {
-  window->SetProperty(aura::client::kAppType,
-                      static_cast<int>(ash::AppType::LACROS));
-}
-
-void SetShellStartupId(aura::Window* window,
+void SetShellStartupId(ui::PropertyHandler* property_handler,
                        const base::Optional<std::string>& id) {
   TRACE_EVENT1("exo", "SetStartupId", "startup_id", id ? *id : "null");
 
   if (id)
-    window->SetProperty(kStartupIdKey, *id);
+    property_handler->SetProperty(kStartupIdKey, *id);
   else
-    window->ClearProperty(kStartupIdKey);
+    property_handler->ClearProperty(kStartupIdKey);
 }
 
 const std::string* GetShellStartupId(aura::Window* window) {
@@ -117,13 +107,13 @@ const std::string* GetShellStartupId(aura::Window* window) {
 }
 
 void SetShellUseImmersiveForFullscreen(aura::Window* window, bool value) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   window->SetProperty(chromeos::kImmersiveImpliedByFullscreen, value);
 
   // Ensure the shelf is fully hidden in plain fullscreen, but shown
   // (auto-hides based on mouse movement) when in immersive fullscreen.
   window->SetProperty(chromeos::kHideShelfWhenFullscreenKey, !value);
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 void SetShellClientAccessibilityId(aura::Window* window,
@@ -150,8 +140,9 @@ bool IsShellMainSurfaceKey(const void* key) {
   return kMainSurfaceKey == key;
 }
 
-void SetShellMainSurface(aura::Window* window, Surface* surface) {
-  window->SetProperty(kMainSurfaceKey, surface);
+void SetShellMainSurface(ui::PropertyHandler* property_handler,
+                         Surface* surface) {
+  property_handler->SetProperty(kMainSurfaceKey, surface);
 }
 
 Surface* GetShellMainSurface(const aura::Window* window) {
@@ -269,6 +260,69 @@ std::unique_ptr<Permission> GrantPermissionToActivate(aura::Window* window,
 bool HasPermissionToActivate(aura::Window* window) {
   Permission* permission = window->GetProperty(kPermissionKey);
   return permission && permission->Check(Permission::Capability::kActivate);
+}
+
+bool ConsumedByIme(aura::Window* window, const ui::KeyEvent& event) {
+  // When IME is blocked, Exo can handle any key events.
+  if (WMHelper::GetInstance()->IsImeBlocked(window))
+    return false;
+
+  // Check if IME consumed the event, to avoid it to be doubly processed.
+  // First let us see whether IME is active and is in text input mode.
+  views::Widget* widget = views::Widget::GetTopLevelWidgetForNativeView(window);
+  ui::InputMethod* ime = widget ? widget->GetInputMethod() : nullptr;
+  if (!ime || ime->GetTextInputType() == ui::TEXT_INPUT_TYPE_NONE ||
+      ime->GetTextInputType() == ui::TEXT_INPUT_TYPE_NULL) {
+    return false;
+  }
+
+  // Case 1:
+  // When IME ate a key event but did not emit character insertion event yet
+  // (e.g., when it is still showing a candidate list UI to the user,) the
+  // consumed key event is re-sent after masked |key_code| by VKEY_PROCESSKEY.
+  if (event.key_code() == ui::VKEY_PROCESSKEY)
+    return true;
+
+  // Except for PROCESSKEY, never discard "key-up" events. A keydown not paired
+  // by a keyup can trigger a never-ending key repeat in the client, which can
+  // never be desirable.
+  if (event.type() == ui::ET_KEY_RELEASED)
+    return false;
+
+  // Case 2:
+  // When IME ate a key event and generated a single character input, it leaves
+  // the key event as-is, and in addition calls the active ui::TextInputClient's
+  // InsertChar() method. (In our case, arc::ArcImeService::InsertChar()).
+  //
+  // In Chrome OS (and Web) convention, the two calls won't cause duplicates,
+  // because key-down events do not mean any character inputs there.
+  // (InsertChar issues a DOM "keypress" event, which is distinct from keydown.)
+  // Unfortunately, this is not necessary the case for our clients that may
+  // treat keydown as a trigger of text inputs. We need suppression for keydown.
+  //
+  // Same condition as components/arc/ime/arc_ime_service.cc#InsertChar.
+  const base::char16 ch = event.GetCharacter();
+  const bool is_control_char =
+      (0x00 <= ch && ch <= 0x1f) || (0x7f <= ch && ch <= 0x9f);
+  if (!is_control_char && !ui::IsSystemKeyModifier(event.flags()))
+    return true;
+
+  // Case 3:
+  // Workaround for apps that doesn't handle hardware keyboard events well.
+  // Keys typically on software keyboard and lack of them are fatal, namely,
+  // unmodified enter and backspace keys, are sent through IME.
+  constexpr int kModifierMask = ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN |
+                                ui::EF_ALT_DOWN | ui::EF_COMMAND_DOWN |
+                                ui::EF_ALTGR_DOWN | ui::EF_MOD3_DOWN;
+  // Same condition as components/arc/ime/arc_ime_service.cc#InsertChar.
+  if ((event.flags() & kModifierMask) == 0) {
+    if (event.key_code() == ui::VKEY_RETURN ||
+        event.key_code() == ui::VKEY_BACK) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 }  // namespace exo

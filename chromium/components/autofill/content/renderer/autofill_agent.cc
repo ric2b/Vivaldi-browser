@@ -437,13 +437,12 @@ void AutofillAgent::TriggerRefillIfNeeded(const FormData& form) {
   if (FindFormAndFieldForFormControlElement(element_, field_data_manager_.get(),
                                             &updated_form, &field) &&
       (!element_.IsAutofilled() || !form.DynamicallySameFormAs(updated_form))) {
-    base::TimeTicks forms_seen_timestamp = AutofillTickClock::NowTicks();
     WebLocalFrame* frame = render_frame()->GetWebFrame();
     std::vector<FormData> forms;
     forms.push_back(updated_form);
     // Always communicate to browser process for topmost frame.
     if (!forms.empty() || !frame->Parent()) {
-      GetAutofillDriver()->FormsSeen(forms, forms_seen_timestamp);
+      GetAutofillDriver()->FormsSeen(forms);
     }
   }
 }
@@ -759,6 +758,10 @@ void AutofillAgent::SetAssistantActionState(bool running) {
   }
 }
 
+void AutofillAgent::EnableHeavyFormDataScraping() {
+  is_heavy_form_data_scraping_enabled_ = true;
+}
+
 void AutofillAgent::QueryAutofillSuggestions(
     const WebFormControlElement& element,
     bool autoselect_first_suggestion) {
@@ -826,17 +829,13 @@ void AutofillAgent::DoPreviewFieldWithValue(const base::string16& value,
 }
 
 void AutofillAgent::ProcessForms() {
-  // Record timestamp of when the forms are first seen. This is used to
-  // measure the overhead of the Autofill feature.
-  base::TimeTicks forms_seen_timestamp = AutofillTickClock::NowTicks();
-
   WebLocalFrame* frame = render_frame()->GetWebFrame();
   std::vector<FormData> forms =
       form_cache_.ExtractNewForms(field_data_manager_.get());
 
   // Always communicate to browser process for topmost frame.
   if (!forms.empty() || !frame->Parent()) {
-    GetAutofillDriver()->FormsSeen(forms, forms_seen_timestamp);
+    GetAutofillDriver()->FormsSeen(forms);
   }
 }
 

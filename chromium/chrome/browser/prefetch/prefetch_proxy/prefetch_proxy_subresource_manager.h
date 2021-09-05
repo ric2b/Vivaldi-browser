@@ -95,10 +95,6 @@ class PrefetchProxySubresourceManager
   void NotifyProbeFailed();
 
   // prerender::PrerenderHandle::Observer:
-  void OnPrerenderStart(prerender::PrerenderHandle* handle) override {}
-  void OnPrerenderStopLoading(prerender::PrerenderHandle* handle) override {}
-  void OnPrerenderDomContentLoaded(
-      prerender::PrerenderHandle* handle) override {}
   void OnPrerenderStop(prerender::PrerenderHandle* handle) override;
   void OnPrerenderNetworkBytesChanged(
       prerender::PrerenderHandle* handle) override {}
@@ -111,6 +107,7 @@ class PrefetchProxySubresourceManager
   void OnResourceNotEligible(const GURL& url,
                              PrefetchProxyPrefetchStatus status) override;
   void OnResourceThrottled(const GURL& url) override;
+  void OnProxyUnavailableForResource(const GURL& url) override;
   void OnResourceUsedFromCache(const GURL& url) override;
 
   PrefetchProxySubresourceManager(const PrefetchProxySubresourceManager&) =

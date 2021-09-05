@@ -17,9 +17,6 @@ namespace {
 // Default timeout for the hints to be received from the time navigation starts.
 const int64_t kHintsReceiveDefaultTimeoutSeconds = 5;
 
-bool IsSubresourceRedirectEnabled() {
-  return base::FeatureList::IsEnabled(blink::features::kSubresourceRedirect);
-}
 }  // namespace
 
 url::Origin GetSubresourceRedirectOrigin() {
@@ -28,19 +25,6 @@ url::Origin GetSubresourceRedirectOrigin() {
   if (lite_page_subresource_origin.empty())
     return url::Origin::Create(GURL("https://litepages.googlezip.net/"));
   return url::Origin::Create(GURL(lite_page_subresource_origin));
-}
-
-bool IsPublicImageHintsBasedCompressionEnabled() {
-  return IsSubresourceRedirectEnabled() &&
-         base::GetFieldTrialParamByFeatureAsBool(
-             blink::features::kSubresourceRedirect,
-             "enable_public_image_hints_based_compression", true);
-}
-
-bool ShouldCompressionServerRedirectSubresource() {
-  return base::GetFieldTrialParamByFeatureAsBool(
-      blink::features::kSubresourceRedirect,
-      "enable_subresource_server_redirect", true);
 }
 
 base::TimeDelta GetCompressionRedirectTimeout() {
@@ -61,6 +45,12 @@ base::TimeDelta GetRobotsRulesReceiveTimeout() {
       base::GetFieldTrialParamByFeatureAsInt(
           blink::features::kSubresourceRedirect, "robots_rules_receive_timeout",
           10));
+}
+
+int MaxRobotsRulesParsersCacheSize() {
+  return base::GetFieldTrialParamByFeatureAsInt(
+      blink::features::kSubresourceRedirect,
+      "max_robots_rules_parsers_cache_size", 20);
 }
 
 }  // namespace subresource_redirect

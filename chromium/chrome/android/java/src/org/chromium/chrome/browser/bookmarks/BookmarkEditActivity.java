@@ -70,11 +70,15 @@ public class BookmarkEditActivity extends SynchronousInitializationActivity {
                 return;
             }
         }
+        if (ChromeApplication.isVivaldi())
+            setContentView(R.layout.vivaldi_bookmark_edit);
+        else
         setContentView(R.layout.bookmark_edit);
         mTitleEditText = findViewById(R.id.title_text);
         mFolderTextView = (TextView) findViewById(R.id.folder_text);
         mUrlEditText = findViewById(R.id.url_text);
 
+        if (!ChromeApplication.isVivaldi())
         mFolderTextView.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -91,6 +95,7 @@ public class BookmarkEditActivity extends SynchronousInitializationActivity {
 
         View shadow = findViewById(R.id.shadow);
         View scrollView = findViewById(R.id.scroll_view);
+        if (!ChromeApplication.isVivaldi())
         scrollView.getViewTreeObserver().addOnScrollChangedListener(() -> {
             shadow.setVisibility(scrollView.getScrollY() > 0 ? View.VISIBLE : View.GONE);
         });

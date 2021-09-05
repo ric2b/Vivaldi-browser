@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "base/no_destructor.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/services/machine_learning/machine_learning_service.h"  // nogncheck
 #include "chrome/services/machine_learning/public/mojom/machine_learning_service.mojom.h"  // nogncheck
 #include "chrome/services/qrcode_generator/public/mojom/qrcode_generator.mojom.h"  // nogncheck
@@ -49,12 +50,12 @@
 #include "services/proxy_resolver/public/mojom/proxy_resolver.mojom.h"
 #endif  // !defined(OS_ANDROID)
 
-#if BUILDFLAG(ENABLE_PRINTING) && defined(OS_CHROMEOS)
+#if BUILDFLAG(ENABLE_PRINTING) && BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/services/ipp_parser/ipp_parser.h"  // nogncheck
 #include "chrome/services/ipp_parser/public/mojom/ipp_parser.mojom.h"  // nogncheck
 #endif
 
-#if BUILDFLAG(FULL_SAFE_BROWSING) || defined(OS_CHROMEOS)
+#if BUILDFLAG(FULL_SAFE_BROWSING) || BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/services/file_util/file_util_service.h"  // nogncheck
 #endif
 
@@ -88,10 +89,12 @@
 #include "components/services/paint_preview_compositor/paint_preview_compositor_collection_impl.h"
 #include "components/services/paint_preview_compositor/public/mojom/paint_preview_compositor.mojom.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/services/recording/recording_service.h"
 #include "chrome/services/sharing/sharing_impl.h"
 #include "chromeos/assistant/buildflags.h"  // nogncheck
+#include "chromeos/components/local_search_service/local_search_service.h"
+#include "chromeos/components/local_search_service/public/mojom/local_search_service.mojom.h"
 #include "chromeos/services/ime/ime_service.h"
 #include "chromeos/services/ime/public/mojom/input_engine.mojom.h"
 #include "chromeos/services/nearby/public/mojom/sharing.mojom.h"  // nogncheck
@@ -101,7 +104,7 @@
 #if BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
 #include "chromeos/services/assistant/audio_decoder/assistant_audio_decoder_factory.h"  // nogncheck
 #endif  // BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace {
 
@@ -177,14 +180,14 @@ auto RunSpeechRecognitionService(
 }
 #endif  // !defined(OS_ANDROID)
 
-#if BUILDFLAG(ENABLE_PRINTING) && defined(OS_CHROMEOS)
+#if BUILDFLAG(ENABLE_PRINTING) && BUILDFLAG(IS_CHROMEOS_ASH)
 auto RunCupsIppParser(
     mojo::PendingReceiver<ipp_parser::mojom::IppParser> receiver) {
   return std::make_unique<ipp_parser::IppParser>(std::move(receiver));
 }
 #endif
 
-#if BUILDFLAG(FULL_SAFE_BROWSING) || defined(OS_CHROMEOS)
+#if BUILDFLAG(FULL_SAFE_BROWSING) || BUILDFLAG(IS_CHROMEOS_ASH)
 auto RunFileUtil(
     mojo::PendingReceiver<chrome::mojom::FileUtilService> receiver) {
   return std::make_unique<FileUtilService>(std::move(receiver));
@@ -241,7 +244,7 @@ auto RunPrintCompositor(
 }
 #endif  // BUILDFLAG(ENABLE_PRINTING)
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 auto RunImeService(
     mojo::PendingReceiver<chromeos::ime::mojom::ImeService> receiver) {
   return std::make_unique<chromeos::ime::ImeService>(std::move(receiver));
@@ -260,6 +263,13 @@ auto RunSharing(mojo::PendingReceiver<sharing::mojom::Sharing> receiver) {
 auto RunTtsService(
     mojo::PendingReceiver<chromeos::tts::mojom::TtsService> receiver) {
   return std::make_unique<chromeos::tts::TtsService>(std::move(receiver));
+}
+
+auto RunLocalSearchService(
+    mojo::PendingReceiver<
+        chromeos::local_search_service::mojom::LocalSearchService> receiver) {
+  return std::make_unique<chromeos::local_search_service::LocalSearchService>(
+      std::move(receiver));
 }
 
 #if BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
@@ -302,11 +312,11 @@ void RegisterMainThreadServices(mojo::ServiceFactory& services) {
   services.Add(RunWindowsIconReader);
 #endif  // defined(OS_WIN)
 
-#if BUILDFLAG(ENABLE_PRINTING) && defined(OS_CHROMEOS)
+#if BUILDFLAG(ENABLE_PRINTING) && BUILDFLAG(IS_CHROMEOS_ASH)
   services.Add(RunCupsIppParser);
 #endif
 
-#if BUILDFLAG(FULL_SAFE_BROWSING) || defined(OS_CHROMEOS)
+#if BUILDFLAG(FULL_SAFE_BROWSING) || BUILDFLAG(IS_CHROMEOS_ASH)
   services.Add(RunFileUtil);
 #endif
 
@@ -336,11 +346,12 @@ void RegisterMainThreadServices(mojo::ServiceFactory& services) {
   services.Add(RunPaintPreviewCompositor);
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   services.Add(RunImeService);
   services.Add(RunRecordingService);
   services.Add(RunSharing);
   services.Add(RunTtsService);
+  services.Add(RunLocalSearchService);
 #if BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
   services.Add(RunAssistantAudioDecoder);
 #endif

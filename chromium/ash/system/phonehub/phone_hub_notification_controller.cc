@@ -13,9 +13,9 @@
 #include "ash/system/phonehub/phone_hub_metrics.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "base/bind.h"
+#include "base/containers/contains.h"
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
-#include "base/stl_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/timer/timer.h"
@@ -216,43 +216,45 @@ PhoneHubNotificationController::PhoneHubNotificationController() {
 PhoneHubNotificationController::~PhoneHubNotificationController() {
   if (manager_)
     manager_->RemoveObserver(this);
+  if (feature_status_provider_)
+    feature_status_provider_->RemoveObserver(this);
   if (tether_controller_)
     tether_controller_->RemoveObserver(this);
 }
 
 void PhoneHubNotificationController::SetManager(
     chromeos::phonehub::PhoneHubManager* phone_hub_manager) {
-  chromeos::phonehub::NotificationManager* notification_manager =
-      phone_hub_manager->GetNotificationManager();
-  chromeos::phonehub::FeatureStatusProvider* feature_status_provider =
-      phone_hub_manager->GetFeatureStatusProvider();
-  chromeos::phonehub::TetherController* tether_controller =
-      phone_hub_manager->GetTetherController();
-  phone_model_ = phone_hub_manager->GetPhoneModel();
-
-  if (manager_ == notification_manager &&
-      tether_controller_ == tether_controller &&
-      feature_status_provider_ == feature_status_provider) {
-    return;
-  }
-
   if (manager_)
     manager_->RemoveObserver(this);
-
-  manager_ = notification_manager;
-  manager_->AddObserver(this);
+  if (phone_hub_manager) {
+    manager_ = phone_hub_manager->GetNotificationManager();
+    manager_->AddObserver(this);
+  } else {
+    manager_ = nullptr;
+  }
 
   if (feature_status_provider_)
     feature_status_provider_->RemoveObserver(this);
-
-  feature_status_provider_ = feature_status_provider;
-  feature_status_provider_->AddObserver(this);
+  if (phone_hub_manager) {
+    feature_status_provider_ = phone_hub_manager->GetFeatureStatusProvider();
+    feature_status_provider_->AddObserver(this);
+  } else {
+    feature_status_provider_ = nullptr;
+  }
 
   if (tether_controller_)
     tether_controller_->RemoveObserver(this);
+  if (phone_hub_manager) {
+    tether_controller_ = phone_hub_manager->GetTetherController();
+    tether_controller_->AddObserver(this);
+  } else {
+    tether_controller_ = nullptr;
+  }
 
-  tether_controller_ = tether_controller;
-  tether_controller_->AddObserver(this);
+  if (phone_hub_manager)
+    phone_model_ = phone_hub_manager->GetPhoneModel();
+  else
+    phone_model_ = nullptr;
 }
 
 const base::string16 PhoneHubNotificationController::GetPhoneName() const {
@@ -286,7 +288,8 @@ void PhoneHubNotificationController::OnFeatureStatusChanged() {
 void PhoneHubNotificationController::OnNotificationsAdded(
     const base::flat_set<int64_t>& notification_ids) {
   for (int64_t id : notification_ids) {
-    CreateOrUpdateNotification(manager_->GetNotification(id));
+    SetNotification(manager_->GetNotification(id),
+                    /*is_update=*/false);
   }
 
   LogNotificationCount();
@@ -295,7 +298,8 @@ void PhoneHubNotificationController::OnNotificationsAdded(
 void PhoneHubNotificationController::OnNotificationsUpdated(
     const base::flat_set<int64_t>& notification_ids) {
   for (int64_t id : notification_ids) {
-    CreateOrUpdateNotification(manager_->GetNotification(id));
+    SetNotification(manager_->GetNotification(id),
+                    /*is_update=*/true);
   }
 }
 
@@ -375,8 +379,9 @@ void PhoneHubNotificationController::LogNotificationCount() {
   phone_hub_metrics::LogNotificationCount(count);
 }
 
-void PhoneHubNotificationController::CreateOrUpdateNotification(
-    const chromeos::phonehub::Notification* notification) {
+void PhoneHubNotificationController::SetNotification(
+    const chromeos::phonehub::Notification* notification,
+    bool is_update) {
   int64_t phone_hub_id = notification->id();
   std::string cros_id = base::StrCat(
       {kNotifierId, kNotifierIdSeparator, base::NumberToString(phone_hub_id)});
@@ -389,7 +394,8 @@ void PhoneHubNotificationController::CreateOrUpdateNotification(
   }
   NotificationDelegate* delegate = notification_map_[phone_hub_id].get();
 
-  auto cros_notification = CreateNotification(notification, cros_id, delegate);
+  auto cros_notification =
+      CreateNotification(notification, cros_id, delegate, is_update);
   cros_notification->set_custom_view_type(kNotificationCustomViewType);
   shown_notification_ids_.insert(phone_hub_id);
 
@@ -404,7 +410,8 @@ std::unique_ptr<message_center::Notification>
 PhoneHubNotificationController::CreateNotification(
     const chromeos::phonehub::Notification* notification,
     const std::string& cros_id,
-    NotificationDelegate* delegate) {
+    NotificationDelegate* delegate,
+    bool is_update) {
   message_center::NotifierId notifier_id(
       message_center::NotifierType::PHONE_HUB, kNotifierId);
 
@@ -428,28 +435,14 @@ PhoneHubNotificationController::CreateNotification(
 
   const gfx::Image& icon = notification->contact_image().value_or(gfx::Image());
 
-  switch (notification->importance()) {
-    case chromeos::phonehub::Notification::Importance::kNone:
-      FALLTHROUGH;
-    case chromeos::phonehub::Notification::Importance::kLow:
-      optional_fields.priority = message_center::MIN_PRIORITY;
-      break;
-    case chromeos::phonehub::Notification::Importance::kUnspecified:
-      FALLTHROUGH;
-    case chromeos::phonehub::Notification::Importance::kMin:
-      FALLTHROUGH;
-    case chromeos::phonehub::Notification::Importance::kDefault:
-      optional_fields.priority = message_center::LOW_PRIORITY;
-      break;
-    case chromeos::phonehub::Notification::Importance::kHigh:
-      // If the notification has already been shown in the past (even across
-      // disconnects), then downgrade the priority so it's not a pop-up.
-      if (base::Contains(shown_notification_ids_, notification->id()))
-        optional_fields.priority = message_center::LOW_PRIORITY;
-      else
-        optional_fields.priority = message_center::MAX_PRIORITY;
-      break;
-  }
+  optional_fields.priority =
+      GetSystemPriorityForNotification(notification, is_update);
+
+  // If the notification was updated, set renotify to true so that the
+  // notification pops up again and is visible to the user. See
+  // https://crbug.com/1159063.
+  if (is_update)
+    optional_fields.renotify = true;
 
   message_center::ButtonInfo reply_button;
   reply_button.title = l10n_util::GetStringUTF16(
@@ -466,6 +459,25 @@ PhoneHubNotificationController::CreateNotification(
       notification_type, cros_id, title, message, icon, display_source,
       /*origin_url=*/GURL(), notifier_id, optional_fields,
       delegate->AsScopedRefPtr());
+}
+
+int PhoneHubNotificationController::GetSystemPriorityForNotification(
+    const chromeos::phonehub::Notification* notification,
+    bool is_update) {
+  bool has_notification_been_shown =
+      base::Contains(shown_notification_ids_, notification->id());
+
+  // If the same notification was already shown and has not been updated,
+  // use LOW_PRIORITY so that the notification is silently added to the
+  // notification shade. This ensures that we don't spam users with the same
+  // information multiple times.
+  if (has_notification_been_shown && !is_update)
+    return message_center::LOW_PRIORITY;
+
+  // Use MAX_PRIORITY, which causes the notification to be shown in a popup
+  // so that users can see new messages come in as they are chatting. See
+  // https://crbug.com/1159063.
+  return message_center::MAX_PRIORITY;
 }
 
 // static

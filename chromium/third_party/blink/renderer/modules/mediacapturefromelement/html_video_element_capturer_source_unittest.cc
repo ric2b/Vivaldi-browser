@@ -26,6 +26,7 @@
 
 using base::test::RunOnceClosure;
 using ::testing::_;
+using ::testing::DoAll;
 using ::testing::InSequence;
 using ::testing::Mock;
 using ::testing::SaveArg;
@@ -40,7 +41,10 @@ class MockWebMediaPlayer : public WebMediaPlayer {
   MockWebMediaPlayer() {}
   ~MockWebMediaPlayer() override = default;
 
-  LoadTiming Load(LoadType, const WebMediaPlayerSource&, CorsMode) override {
+  LoadTiming Load(LoadType,
+                  const WebMediaPlayerSource&,
+                  CorsMode,
+                  bool is_cache_disabled) override {
     return LoadTiming::kImmediate;
   }
   void Play() override {}
@@ -50,8 +54,8 @@ class MockWebMediaPlayer : public WebMediaPlayer {
   void SetVolume(double) override {}
   void SetLatencyHint(double) override {}
   void SetPreservesPitch(bool) override {}
+  void SetAutoplayInitiated(bool) override {}
   void OnRequestPictureInPicture() override {}
-  void OnPictureInPictureAvailabilityChanged(bool available) override {}
   WebTimeRanges Buffered() const override { return WebTimeRanges(); }
   WebTimeRanges Seekable() const override { return WebTimeRanges(); }
   void SetSinkId(const WebString& sinkId,

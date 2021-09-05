@@ -7,12 +7,12 @@
 #include <utility>
 
 #include "base/command_line.h"
+#include "base/containers/contains.h"
 #include "base/containers/flat_set.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
 #include "base/no_destructor.h"
 #include "base/path_service.h"
-#include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
@@ -39,6 +39,7 @@
 #include "components/site_isolation/preloaded_isolated_origins.h"
 #include "components/site_isolation/site_isolation_policy.h"
 #include "components/strings/grit/components_locale_settings.h"
+#include "components/subresource_filter/content/browser/content_subresource_filter_throttle_manager.h"
 #include "components/subresource_filter/content/browser/ruleset_version.h"
 #include "components/user_prefs/user_prefs.h"
 #include "components/variations/service/variations_service.h"
@@ -54,7 +55,6 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/service_names.mojom.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/window_container_type.mojom.h"
 #include "mojo/public/cpp/bindings/binder_map.h"
@@ -135,7 +135,7 @@
 #include "weblayer/browser/weblayer_factory_impl_android.h"
 #endif
 
-#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
+#if defined(OS_LINUX) || defined(OS_ANDROID)
 #include "content/public/common/content_descriptors.h"
 #endif
 
@@ -181,6 +181,11 @@ bool IsNetworkErrorAutoReloadEnabled() {
 }
 
 bool IsInHostedApp(content::WebContents* web_contents) {
+  return false;
+}
+
+bool ShouldIgnoreInterstitialBecauseNavigationDefaultedToHttps(
+    content::NavigationHandle* handle) {
   return false;
 }
 
@@ -382,7 +387,7 @@ void ContentBrowserClientImpl::ConfigureNetworkContextParams(
 
 void ContentBrowserClientImpl::OnNetworkServiceCreated(
     network::mojom::NetworkService* network_service) {
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#if defined(OS_LINUX)
   network::mojom::CryptConfigPtr config = network::mojom::CryptConfig::New();
   content::GetNetworkService()->SetCryptConfig(std::move(config));
 #endif
@@ -437,7 +442,6 @@ ContentBrowserClientImpl::CreateURLLoaderThrottles(
   if (prerender_contents && prerender_contents->prerender_mode() !=
                                 prerender::mojom::PrerenderMode::kNoPrerender) {
     result.push_back(std::make_unique<prerender::PrerenderURLLoaderThrottle>(
-        prerender_contents->prerender_mode(),
         prerender::PrerenderHistograms::GetHistogramPrefix(
             prerender_contents->origin()),
         GetPrerenderCanceler(web_contents)));
@@ -707,7 +711,9 @@ ContentBrowserClientImpl::CreateThrottlesForNavigation(
 
   throttles.push_back(std::make_unique<SSLErrorNavigationThrottle>(
       handle, std::make_unique<SSLCertReporterImpl>(),
-      base::BindOnce(&HandleSSLErrorWrapper), base::BindOnce(&IsInHostedApp)));
+      base::BindOnce(&HandleSSLErrorWrapper), base::BindOnce(&IsInHostedApp),
+      base::BindOnce(
+          &ShouldIgnoreInterstitialBecauseNavigationDefaultedToHttps)));
 
   std::unique_ptr<security_interstitials::InsecureFormNavigationThrottle>
       insecure_form_throttle = security_interstitials::
@@ -716,6 +722,12 @@ ContentBrowserClientImpl::CreateThrottlesForNavigation(
               nullptr);
   if (insecure_form_throttle) {
     throttles.push_back(std::move(insecure_form_throttle));
+  }
+
+  if (auto* throttle_manager =
+          subresource_filter::ContentSubresourceFilterThrottleManager::
+              FromWebContents(handle->GetWebContents())) {
+    throttle_manager->MaybeAppendNavigationThrottles(handle, &throttles);
   }
 
 #if defined(OS_ANDROID)
@@ -835,7 +847,7 @@ SafeBrowsingService* ContentBrowserClientImpl::GetSafeBrowsingService() {
 }
 #endif
 
-#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
+#if defined(OS_LINUX) || defined(OS_ANDROID)
 void ContentBrowserClientImpl::GetAdditionalMappedFilesForChildProcess(
     const base::CommandLine& command_line,
     int child_process_id,
@@ -869,7 +881,7 @@ void ContentBrowserClientImpl::GetAdditionalMappedFilesForChildProcess(
     mappings->Share(kCrashDumpSignal, crash_signal_fd);
 #endif  // defined(OS_ANDROID)
 }
-#endif  // defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
+#endif  // defined(OS_LINUX)|| defined(OS_ANDROID)
 
 void ContentBrowserClientImpl::AppendExtraCommandLineSwitches(
     base::CommandLine* command_line,

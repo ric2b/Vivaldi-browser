@@ -8,9 +8,11 @@
 
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/scoped_observation.h"
 #include "base/strings/string16.h"
 #include "base/task/current_thread.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
@@ -34,8 +36,6 @@
 #include "ui/views/view_observer.h"
 #include "ui/views/widget/widget.h"
 
-#include "browser/menus/vivaldi_menus.h"
-
 using content::WebContents;
 
 class RenderViewContextMenuViews::SubmenuViewObserver
@@ -45,10 +45,10 @@ class RenderViewContextMenuViews::SubmenuViewObserver
   SubmenuViewObserver(RenderViewContextMenuViews* parent,
                       views::SubmenuView* submenu_view)
       : parent_(parent), submenu_view_(submenu_view) {
-    observed_submenu_view_.Add(submenu_view);
+    submenu_view_observation_.Observe(submenu_view);
     auto* widget = submenu_view_->host();
     if (widget)
-      observed_submenu_widget_.Add(widget);
+      submenu_widget_observation_.Observe(widget);
   }
 
   SubmenuViewObserver(const SubmenuViewObserver&) = delete;
@@ -74,7 +74,7 @@ class RenderViewContextMenuViews::SubmenuViewObserver
     DCHECK_EQ(submenu_view_, observed_view);
     auto* widget = submenu_view_->host();
     if (widget)
-      observed_submenu_widget_.Add(widget);
+      submenu_widget_observation_.Observe(widget);
   }
 
   // WidgetObserver:
@@ -94,9 +94,10 @@ class RenderViewContextMenuViews::SubmenuViewObserver
  private:
   RenderViewContextMenuViews* const parent_;
   views::SubmenuView* const submenu_view_;
-  ScopedObserver<views::View, views::ViewObserver> observed_submenu_view_{this};
-  ScopedObserver<views::Widget, views::WidgetObserver> observed_submenu_widget_{
-      this};
+  base::ScopedObservation<views::View, views::ViewObserver>
+      submenu_view_observation_{this};
+  base::ScopedObservation<views::Widget, views::WidgetObserver>
+      submenu_widget_observation_{this};
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -134,10 +135,6 @@ void RenderViewContextMenuViews::RunMenuAt(views::Widget* parent,
 bool RenderViewContextMenuViews::GetAcceleratorForCommandId(
     int command_id,
     ui::Accelerator* accel) const {
-
-  if (vivaldi::VivaldiGetAcceleratorForCommandId(this, command_id, accel))
-    return true;
-
   // There are no formally defined accelerators we can query so we assume
   // that Ctrl+C, Ctrl+V, Ctrl+X, Ctrl-A, etc do what they normally do.
   switch (command_id) {
@@ -218,7 +215,7 @@ bool RenderViewContextMenuViews::GetAcceleratorForCommandId(
         return true;
       }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
       // Chromebooks typically do not have an F11 key, so do not show an
       // accelerator here.
       return false;
@@ -252,7 +249,7 @@ bool RenderViewContextMenuViews::GetAcceleratorForCommandId(
 #endif
 
     case IDC_CONTENT_CLIPBOARD_HISTORY_MENU:
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
       *accel = ui::Accelerator(ui::VKEY_V, ui::EF_COMMAND_DOWN);
       return true;
 #else

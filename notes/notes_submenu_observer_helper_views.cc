@@ -36,9 +36,19 @@ void NotesSubMenuObserverHelperViews::ExecuteCommand(int command_id,
 void NotesSubMenuObserverHelperViews::InitMap() {
   if (menumodel_to_view_map_.empty()) {
     ui::SimpleMenuModel* menu_model = sub_menu_observer_->get_root_model();
-    int id = sub_menu_observer_->get_root_id();
+    int id = sub_menu_observer_->GetRootId();
     views::MenuItemView* root = toolkit_delegate_->vivaldi_get_menu_view();
     menumodel_to_view_map_[menu_model] = root->GetMenuItemByID(id);
+    // In case the top node is not displayed in the menu (ie, we have a flat
+    // view where the first level of notes are displayed directly), we have to
+    // map the views of the first level of folders too.
+    for (int i = 0; i < menu_model->GetItemCount(); i++) {
+      ui::MenuModel* sub_menu_model = menu_model->GetSubmenuModelAt(i);
+      if (sub_menu_model) {
+        menumodel_to_view_map_[sub_menu_model] = root->GetMenuItemByID(
+            menu_model->GetCommandIdAt(i));
+      }
+    }
   }
 }
 

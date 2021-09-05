@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "components/sessions/core/session_id.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom-forward.h"
 #include "ui/content/vivaldi_event_hooks.h"
 #include "ui/gfx/geometry/point_f.h"
 
@@ -110,7 +111,7 @@ class VivaldiUIEvents : public VivaldiEventHooks {
       const blink::WebMouseWheelEvent& event) override;
 
   bool DoHandleDragEnd(content::WebContents* web_contents,
-                       blink::DragOperation operation,
+                       ui::mojom::DragOperation operation,
                        bool cancelled,
                        int screen_x,
                        int screen_y) override;

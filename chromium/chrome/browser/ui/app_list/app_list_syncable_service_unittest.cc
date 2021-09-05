@@ -12,6 +12,7 @@
 #include "base/bind.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/test/scoped_command_line.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -21,6 +22,9 @@
 #include "chrome/browser/ui/app_list/page_break_constants.h"
 #include "chrome/browser/ui/app_list/test/fake_app_list_model_updater.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
+#include "chrome/browser/web_applications/components/web_app_id_constants.h"
+#include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/crx_file/id_util.h"
@@ -35,6 +39,8 @@ using crx_file::id_util::GenerateId;
 using testing::ElementsAre;
 
 namespace {
+
+const char kOsSettingsUrl[] = "chrome://os-settings/";
 
 scoped_refptr<extensions::Extension> MakeApp(
     const std::string& name,
@@ -224,6 +230,9 @@ class AppListSyncableServiceTest : public AppListTestBase {
   void SetUp() override {
     AppListTestBase::SetUp();
 
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        switches::kDisableDefaultApps);
+
     // Make sure we have a Profile Manager.
     DCHECK(temp_dir_.CreateUniqueTempDir());
     TestingBrowserProcess::GetGlobal()->SetProfileManager(
@@ -231,7 +240,7 @@ class AppListSyncableServiceTest : public AppListTestBase {
 
     model_updater_factory_scope_ = std::make_unique<
         app_list::AppListSyncableService::ScopedModelUpdaterFactoryForTest>(
-        base::Bind([]() -> std::unique_ptr<AppListModelUpdater> {
+        base::BindRepeating([]() -> std::unique_ptr<AppListModelUpdater> {
           return std::make_unique<FakeAppListModelUpdater>();
         }));
 
@@ -303,6 +312,7 @@ class AppListSyncableServiceTest : public AppListTestBase {
   }
 
  private:
+  base::test::ScopedCommandLine scoped_command_line_;
   base::ScopedTempDir temp_dir_;
   std::unique_ptr<AppListModelUpdater::TestApi> model_updater_test_api_;
   std::unique_ptr<app_list::AppListSyncableService> app_list_syncable_service_;
@@ -460,10 +470,14 @@ class AppListInternalAppSyncableServiceTest
   AppListInternalAppSyncableServiceTest() {
     chrome::SettingsWindowManager::ForceDeprecatedSettingsWindowForTesting();
   }
-  ~AppListInternalAppSyncableServiceTest() override = default;
 
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
+  void SetUp() override {
+    AppListSyncableServiceTest::SetUp();
+    web_app::InstallDummyWebApp(testing_profile(), kOsSettingsUrl,
+                                GURL(kOsSettingsUrl));
+  }
+
+  ~AppListInternalAppSyncableServiceTest() override = default;
 };
 
 TEST_F(AppListInternalAppSyncableServiceTest, ExistingDefaultPageBreak) {
@@ -509,7 +523,7 @@ TEST_F(AppListInternalAppSyncableServiceTest, DefaultPageBreakFirstTimeUser) {
 
   // Since internal apps are added by default, we'll use the settings apps to
   // test the ordering.
-  auto* settings_app_sync_item = GetSyncItem(ash::kInternalAppIdSettings);
+  auto* settings_app_sync_item = GetSyncItem(web_app::kOsSettingsAppId);
   auto* hosted_app_sync_item = GetSyncItem(kHostedAppId);
   ASSERT_TRUE(settings_app_sync_item);
   ASSERT_TRUE(hosted_app_sync_item);
@@ -1078,9 +1092,8 @@ TEST_F(AppListSyncableServiceTest, PageBreakWithOverflowItem) {
   auto ordered_items = GetIdsOfSortedItemsFromModelUpdater();
   EXPECT_THAT(
       ordered_items,
-      ElementsAre(kItemIdA1, kItemIdA2, kPageBreakItemId1,
-                  kItemIdB1, kItemIdB2, kItemIdB3, kPageBreakItemId2,
-                  kItemIdC1, kPageBreakItemId3));
+      ElementsAre(kItemIdA1, kItemIdA2, kPageBreakItemId1, kItemIdB1, kItemIdB2,
+                  kItemIdB3, kPageBreakItemId2, kItemIdC1, kPageBreakItemId3));
 
   // On device 1, move A1 from page 1 to page 2 and insert it between B1 and B2.
   // Device 2 should get the following 3 sync changes from device 1:
@@ -1135,9 +1148,9 @@ TEST_F(AppListSyncableServiceTest, PageBreakWithOverflowItem) {
   // B3 C1 [pagebreak 3]
   auto ordered_items_after_sync = GetIdsOfSortedItemsFromModelUpdater();
   EXPECT_THAT(ordered_items_after_sync,
-              ElementsAre(kItemIdA2, kPageBreakItemId1,
-                          kItemIdB1, kItemIdA1, kItemIdB2, kNewPageBreakItemId,
-                          kItemIdB3, kItemIdC1, kPageBreakItemId3));
+              ElementsAre(kItemIdA2, kPageBreakItemId1, kItemIdB1, kItemIdA1,
+                          kItemIdB2, kNewPageBreakItemId, kItemIdB3, kItemIdC1,
+                          kPageBreakItemId3));
 }
 
 TEST_F(AppListSyncableServiceTest, FirstAvailablePosition) {

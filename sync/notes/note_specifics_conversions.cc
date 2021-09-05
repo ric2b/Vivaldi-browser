@@ -66,7 +66,8 @@ std::string ComputeGuidFromBytes(base::span<const uint8_t> bytes) {
 std::string InferGuidForLegacyNote(
     const std::string& originator_cache_guid,
     const std::string& originator_client_item_id) {
-  DCHECK(!base::IsValidGUID(originator_client_item_id));
+  DCHECK(
+      !base::GUID::ParseCaseInsensitive(originator_client_item_id).is_valid());
 
   const std::string unique_tag =
       base::StrCat({originator_cache_guid, originator_client_item_id});
@@ -76,7 +77,7 @@ std::string InferGuidForLegacyNote(
   static_assert(base::kSHA1Length >= 16, "16 bytes needed to infer GUID");
 
   const std::string guid = ComputeGuidFromBytes(base::make_span(hash));
-  DCHECK(base::IsValidGUIDOutputString(guid));
+  DCHECK(base::GUID::ParseLowercase(guid).is_valid());
   return guid;
 }
 
@@ -133,12 +134,10 @@ sync_pb::EntitySpecifics CreateSpecificsFromNoteNode(
       }
   }
 
-  DCHECK(!node->guid().empty());
-  DCHECK(base::IsValidGUIDOutputString(node->guid()))
-      << "Actual: " << node->guid();
+  DCHECK(node->guid().is_valid()) << "Actual: " << node->guid();
 
   if (include_guid) {
-    notes_specifics->set_guid(node->guid());
+    notes_specifics->set_guid(node->guid().AsLowercaseString());
   }
 
   const std::string node_title = base::UTF16ToUTF8(node->GetTitle());
@@ -162,14 +161,16 @@ const vivaldi::NoteNode* CreateNoteNodeFromSpecifics(
     vivaldi::NotesModel* model) {
   DCHECK(parent);
   DCHECK(model);
-  DCHECK(base::IsValidGUIDOutputString(specifics.guid()));
   DCHECK(!is_folder ||
          specifics.special_node_type() != sync_pb::NotesSpecifics::SEPARATOR);
+
+  base::GUID guid = base::GUID::ParseLowercase(specifics.guid());
+  DCHECK(guid.is_valid());
 
   const vivaldi::NoteNode* node;
   if (is_folder) {
     node = model->AddFolder(parent, index, NodeTitleFromSpecifics(specifics),
-                            specifics.guid());
+                            guid);
   } else if (specifics.special_node_type() ==
              sync_pb::NotesSpecifics::SEPARATOR) {
     const int64_t create_time_us = specifics.creation_time_us();
@@ -178,7 +179,7 @@ const vivaldi::NoteNode* CreateNoteNodeFromSpecifics(
         // always used the Windows epoch.
         base::TimeDelta::FromMicroseconds(create_time_us));
     node = model->AddSeparator(parent, index, NodeTitleFromSpecifics(specifics),
-                               create_time, specifics.guid());
+                               create_time, guid);
   } else {
     const int64_t create_time_us = specifics.creation_time_us();
     base::Time create_time = base::Time::FromDeltaSinceWindowsEpoch(
@@ -187,7 +188,7 @@ const vivaldi::NoteNode* CreateNoteNodeFromSpecifics(
         base::TimeDelta::FromMicroseconds(create_time_us));
     node = model->AddNote(
         parent, index, NodeTitleFromSpecifics(specifics), GURL(specifics.url()),
-        base::UTF8ToUTF16(specifics.content()), create_time, specifics.guid());
+        base::UTF8ToUTF16(specifics.content()), create_time, guid);
 
     for (auto it : specifics.attachments()) {
       if (!it.has_checksum())
@@ -206,8 +207,8 @@ void UpdateNoteNodeFromSpecifics(const sync_pb::NotesSpecifics& specifics,
   // We shouldn't try to update the properties of the NoteNode before
   // resolving any conflict in GUID. Either GUIDs are the same, or the GUID in
   // specifics is invalid, and hence we can ignore it.
-  DCHECK(specifics.guid() == node->guid() ||
-         !base::IsValidGUIDOutputString(specifics.guid()));
+  base::GUID guid = base::GUID::ParseLowercase(specifics.guid());
+  DCHECK(!guid.is_valid() || guid == node->guid());
 
   if (!node->is_folder() && !node->is_separator()) {
     model->SetURL(node, GURL(specifics.url()));
@@ -227,9 +228,9 @@ void UpdateNoteNodeFromSpecifics(const sync_pb::NotesSpecifics& specifics,
 // TODO(crbug.com/1005219): Replace this function to move children between
 // parent nodes more efficiently.
 const vivaldi::NoteNode* ReplaceNoteNodeGUID(const vivaldi::NoteNode* node,
-                                             const std::string& guid,
+                                             const base::GUID& guid,
                                              vivaldi::NotesModel* model) {
-  DCHECK(base::IsValidGUIDOutputString(guid));
+  DCHECK(guid.is_valid());
 
   if (node->guid() == guid) {
     // Nothing to do.
@@ -271,7 +272,8 @@ bool IsValidNotesSpecifics(const sync_pb::NotesSpecifics& specifics,
     DLOG(ERROR) << "Invalid note: can't be both a folder and a separator.";
     is_valid = false;
   }
-  if (!base::IsValidGUIDOutputString(specifics.guid())) {
+  base::GUID guid = base::GUID::ParseLowercase(specifics.guid());
+  if (!guid.is_valid()) {
     DLOG(ERROR) << "Invalid note: invalid GUID in the specifics.";
     is_valid = false;
   }
@@ -282,7 +284,7 @@ bool IsValidNotesSpecifics(const sync_pb::NotesSpecifics& specifics,
 bool HasExpectedNoteGuid(const sync_pb::NotesSpecifics& specifics,
                          const std::string& originator_cache_guid,
                          const std::string& originator_client_item_id) {
-  DCHECK(base::IsValidGUIDOutputString(specifics.guid()));
+  DCHECK(base::GUID::ParseLowercase(specifics.guid()).is_valid());
 
   if (originator_client_item_id.empty()) {
     // This could be a future note with a client tag instead of an
@@ -291,7 +293,7 @@ bool HasExpectedNoteGuid(const sync_pb::NotesSpecifics& specifics,
     return true;
   }
 
-  if (base::IsValidGUID(originator_client_item_id)) {
+  if (base::GUID::ParseCaseInsensitive(originator_client_item_id).is_valid()) {
     // Notes created around 2016, between [M44..M52) use an uppercase GUID
     // as originator client item ID, so it needs to be lowercased to adhere to
     // the invariant that GUIDs in specifics are canonicalized.

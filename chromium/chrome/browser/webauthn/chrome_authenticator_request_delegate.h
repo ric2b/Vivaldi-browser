@@ -15,6 +15,7 @@
 #include "base/strings/string_piece.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/webauthn/authenticator_request_dialog_model.h"
 #include "content/public/browser/authenticator_request_client_delegate.h"
 #include "device/fido/cable/cable_discovery_data.h"
@@ -57,10 +58,10 @@ class ChromeAuthenticatorRequestDelegate
       override;
 #endif  // defined(OS_MAC)
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   ChromeOSGenerateRequestIdCallback GetGenerateRequestIdCallback(
       content::RenderFrameHost* render_frame_host) override;
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   base::WeakPtr<ChromeAuthenticatorRequestDelegate> AsWeakPtr();
 
@@ -110,13 +111,12 @@ class ChromeAuthenticatorRequestDelegate
   void BluetoothAdapterPowerChanged(bool is_powered_on) override;
   bool SupportsPIN() const override;
   void CollectPIN(
-      base::Optional<int> attempts,
-      base::OnceCallback<void(std::string)> provide_pin_cb) override;
+      CollectPINOptions options,
+      base::OnceCallback<void(base::string16)> provide_pin_cb) override;
   void StartBioEnrollment(base::OnceClosure next_callback) override;
   void OnSampleCollected(int bio_samples_remaining) override;
   void FinishCollectToken() override;
   void OnRetryUserVerification(int attempts) override;
-  void OnInternalUserVerificationLocked() override;
   void SetMightCreateResidentCredential(bool v) override;
 
   // AuthenticatorRequestDialogModel::Observer:
@@ -146,8 +146,7 @@ class ChromeAuthenticatorRequestDelegate
   virtual std::vector<std::unique_ptr<device::cablev2::Pairing>>
   GetCablePairings();
 
-  void StoreNewCablePairingInPrefs(
-      std::unique_ptr<device::cablev2::Pairing> pairing);
+  void HandleCablePairingEvent(device::cablev2::PairingEvent pairing);
 
   content::RenderFrameHost* const render_frame_host_;
   // Holds ownership of AuthenticatorRequestDialogModel until

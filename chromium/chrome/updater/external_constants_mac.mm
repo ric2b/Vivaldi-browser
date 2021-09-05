@@ -10,14 +10,17 @@
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/updater/constants.h"
 #include "chrome/updater/external_constants_impl.h"
-#include "chrome/updater/updater_version.h"
 #include "url/gurl.h"
+
+#include "base/logging.h"
 
 namespace updater {
 
 std::vector<GURL> DevOverrideProvider::UpdateURL() const {
   @autoreleasepool {
-    NSUserDefaults* userDefaults = [NSUserDefaults standardUserDefaults];
+    NSUserDefaults* userDefaults = [[NSUserDefaults alloc]
+        initWithSuiteName:[NSString
+                              stringWithUTF8String:kUserDefaultsSuiteName]];
     NSURL* url = [userDefaults
         URLForKey:[NSString stringWithUTF8String:kDevOverrideKeyUrl]];
     if (url == nil)
@@ -28,12 +31,28 @@ std::vector<GURL> DevOverrideProvider::UpdateURL() const {
 
 bool DevOverrideProvider::UseCUP() const {
   @autoreleasepool {
-    NSUserDefaults* userDefaults = [NSUserDefaults standardUserDefaults];
+    NSUserDefaults* userDefaults = [[NSUserDefaults alloc]
+        initWithSuiteName:[NSString
+                              stringWithUTF8String:kUserDefaultsSuiteName]];
     id use_cup = [userDefaults
         objectForKey:[NSString stringWithUTF8String:kDevOverrideKeyUseCUP]];
     if (use_cup)
       return [use_cup boolValue];
     return next_provider_->UseCUP();
+  }
+}
+
+int DevOverrideProvider::InitialDelay() const {
+  @autoreleasepool {
+    NSUserDefaults* userDefaults = [[NSUserDefaults alloc]
+        initWithSuiteName:[NSString
+                              stringWithUTF8String:kUserDefaultsSuiteName]];
+    id initial_delay = [userDefaults
+        objectForKey:[NSString
+                         stringWithUTF8String:kDevOverrideKeyInitialDelay]];
+    if (initial_delay)
+      return [initial_delay integerValue];
+    return next_provider_->InitialDelay();
   }
 }
 

@@ -776,7 +776,6 @@ TEST(PermissionsTest, PermissionMessages) {
   skip.insert(APIPermission::kSystemDisplay);
   skip.insert(APIPermission::kSystemMemory);
   skip.insert(APIPermission::kSystemNetwork);
-  skip.insert(APIPermission::kSystemPowerSource);
   skip.insert(APIPermission::kTts);
   skip.insert(APIPermission::kUnlimitedStorage);
   skip.insert(APIPermission::kWebcamPrivate);
@@ -796,7 +795,6 @@ TEST(PermissionsTest, PermissionMessages) {
   skip.insert(APIPermission::kCookie);
 
   // These are warned as part of host permission checks.
-  skip.insert(APIPermission::kDataReductionProxy);
   skip.insert(APIPermission::kDeclarativeContent);
   skip.insert(APIPermission::kPageCapture);
   skip.insert(APIPermission::kProxy);
@@ -830,7 +828,6 @@ TEST(PermissionsTest, PermissionMessages) {
   skip.insert(APIPermission::kCast);
   skip.insert(APIPermission::kCecPrivate);
   skip.insert(APIPermission::kChromeosInfoPrivate);
-  skip.insert(APIPermission::kCloudPrintPrivate);
   skip.insert(APIPermission::kCommandLinePrivate);
   skip.insert(APIPermission::kCrashReportPrivate);
   skip.insert(APIPermission::kDeveloperPrivate);

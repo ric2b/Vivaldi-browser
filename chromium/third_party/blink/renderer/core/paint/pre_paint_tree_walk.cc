@@ -24,11 +24,11 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_fragment_child_iterator.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_fragmentation_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
+#include "third_party/blink/renderer/core/mobile_metrics/mobile_friendliness_checker.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/compositing/composited_layer_mapping.h"
 #include "third_party/blink/renderer/core/paint/compositing/paint_layer_compositor.h"
-#include "third_party/blink/renderer/core/paint/ng/ng_paint_fragment.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_property_tree_printer.h"
 #include "third_party/blink/renderer/platform/graphics/paint/geometry_mapper.h"
@@ -233,11 +233,6 @@ void PrePaintTreeWalk::WalkTree(LocalFrameView& root_frame_view) {
 }
 
 void PrePaintTreeWalk::Walk(LocalFrameView& frame_view) {
-  if (frame_view.ShouldThrottleRendering()) {
-    // Skip the throttled frame. Will update it when it becomes unthrottled.
-    return;
-  }
-
   // We need to be careful not to have a reference to the parent context, since
   // this reference will be to the context_storage_ memory which may be
   // reallocated during this function call.
@@ -249,6 +244,24 @@ void PrePaintTreeWalk::Walk(LocalFrameView& frame_view) {
 
   bool needs_tree_builder_context_update =
       NeedsTreeBuilderContextUpdate(frame_view, parent_context());
+
+  if (frame_view.ShouldThrottleRendering()) {
+    // Skip the throttled frame, and set dirty bits that will be applied when it
+    // becomes unthrottled.
+    if (LayoutView* layout_view = frame_view.GetLayoutView()) {
+      if (needs_tree_builder_context_update) {
+        layout_view->AddSubtreePaintPropertyUpdateReason(
+            SubtreePaintPropertyUpdateReason::kPreviouslySkipped);
+      }
+      if (parent_context().paint_invalidator_context.NeedsSubtreeWalk())
+        layout_view->SetSubtreeShouldDoFullPaintInvalidation();
+      if (parent_context().effective_allowed_touch_action_changed)
+        layout_view->MarkEffectiveAllowedTouchActionChanged();
+      if (parent_context().blocking_wheel_event_handler_changed)
+        layout_view->MarkBlockingWheelEventHandlerChanged();
+    }
+    return;
+  }
 
   // Note that because we're emplacing an object constructed from
   // parent_context() (which is a reference to the vector itself), it's
@@ -290,6 +303,7 @@ void PrePaintTreeWalk::Walk(LocalFrameView& frame_view) {
   }
 
   frame_view.GetLayoutShiftTracker().NotifyPrePaintFinished();
+  frame_view.GetMobileFriendlinessChecker().NotifyPrePaintFinished();
   context_storage_.pop_back();
 }
 
@@ -473,7 +487,9 @@ bool PrePaintTreeWalk::ObjectRequiresTreeBuilderContext(
 bool PrePaintTreeWalk::ContextRequiresTreeBuilderContext(
     const PrePaintTreeWalkContext& context) {
   return context.tree_builder_context &&
-         context.tree_builder_context->force_subtree_update_reasons;
+         (context.tree_builder_context->force_subtree_update_reasons ||
+          // PaintInvalidator forced subtree walk implies geometry update.
+          context.paint_invalidator_context.NeedsSubtreeWalk());
 }
 
 #if DCHECK_IS_ON()
@@ -708,11 +724,6 @@ void PrePaintTreeWalk::WalkNGChildren(const LayoutObject* parent,
             tree_builder_context.fragments[0];
         containing_block_context = &context.current;
         containing_block_context->paint_offset += offset;
-
-        if (box_fragment->IsFragmentainerBox()) {
-          context.absolute_position = *containing_block_context;
-          context.fixed_position = *containing_block_context;
-        }
       }
       WalkChildren(/* parent */ nullptr, iterator,
                    is_wheel_event_regions_enabled);

@@ -295,8 +295,15 @@ IN_PROC_BROWSER_TEST_F(PortalBrowserTest, NavigatePortal) {
   }
 }
 
+#if defined(OS_MAC) && defined(ARCH_CPU_ARM64)
+// Bulk disabled as part of arm64 bot stabilization: https://crbug.com/1154345
+#define MAYBE_ActivatePortal DISABLED_ActivatePortal
+#else
+#define MAYBE_ActivatePortal ActivatePortal
+#endif
+
 // Tests that a portal can be activated.
-IN_PROC_BROWSER_TEST_F(PortalBrowserTest, ActivatePortal) {
+IN_PROC_BROWSER_TEST_F(PortalBrowserTest, MAYBE_ActivatePortal) {
   StartTracing();
   EXPECT_TRUE(NavigateToURL(
       shell(), embedded_test_server()->GetURL("portal.test", "/title1.html")));
@@ -339,10 +346,17 @@ class PortalDefaultActivationBrowserTest : public PortalBrowserTest {
   }
 };
 
+#if defined(OS_MAC) && defined(ARCH_CPU_ARM64)
+// Bulk disabled as part of arm64 bot stabilization: https://crbug.com/1154345
+#define MAYBE_DefaultActivatePortal DISABLED_DefaultActivatePortal
+#else
+#define MAYBE_DefaultActivatePortal DefaultActivatePortal
+#endif
+
 // Tests the correct trace events are generated when a portal is default
 // activated.
 IN_PROC_BROWSER_TEST_F(PortalDefaultActivationBrowserTest,
-                       DefaultActivatePortal) {
+                       MAYBE_DefaultActivatePortal) {
   StartTracing();
   EXPECT_TRUE(NavigateToURL(
       shell(), embedded_test_server()->GetURL("portal.test", "/title1.html")));
@@ -1403,8 +1417,7 @@ IN_PROC_BROWSER_TEST_F(PortalBrowserTest,
 
   // Get the portal renderer to access the WebContents.
   RenderProcessHostBadIpcMessageWaiter kill_waiter(portal_frame->GetProcess());
-  ExecuteScriptAsync(portal_frame,
-                     "window.portalHost.postMessage('message', '*');");
+  ExecuteScriptAsync(portal_frame, "window.portalHost.postMessage('message');");
   EXPECT_EQ(bad_message::RPH_MOJO_PROCESS_ERROR, kill_waiter.Wait());
 }
 
@@ -1612,9 +1625,9 @@ IN_PROC_BROWSER_TEST_F(PortalBrowserTest, PortalHistoryWithActivation) {
   // We have an additional navigation entry in the portal host's contents, so
   // that we test that we're retaining more than just the last committed entry
   // of the portal host.
-  GURL previous_url(
+  GURL previous_main_frame_url(
       embedded_test_server()->GetURL("portal.test", "/title1.html"));
-  EXPECT_TRUE(NavigateToURL(shell(), previous_url));
+  EXPECT_TRUE(NavigateToURL(shell(), previous_main_frame_url));
 
   GURL main_url(embedded_test_server()->GetURL("portal.test", "/title2.html"));
   EXPECT_TRUE(NavigateToURL(shell(), main_url));
@@ -1648,7 +1661,8 @@ IN_PROC_BROWSER_TEST_F(PortalBrowserTest, PortalHistoryWithActivation) {
 
   ASSERT_EQ(3, activated_controller.GetEntryCount());
   ASSERT_EQ(2, activated_controller.GetLastCommittedEntryIndex());
-  EXPECT_EQ(previous_url, activated_controller.GetEntryAtIndex(0)->GetURL());
+  EXPECT_EQ(previous_main_frame_url,
+            activated_controller.GetEntryAtIndex(0)->GetURL());
   EXPECT_EQ(main_url, activated_controller.GetEntryAtIndex(1)->GetURL());
   EXPECT_EQ(portal_url, activated_controller.GetEntryAtIndex(2)->GetURL());
 }
@@ -1871,6 +1885,103 @@ IN_PROC_BROWSER_TEST_F(PortalBrowserTest,
 
   EXPECT_EQ(portal_frame->browser_accessibility_manager()->GetRootManager(),
             portal_frame->browser_accessibility_manager());
+}
+
+IN_PROC_BROWSER_TEST_F(PortalBrowserTest, OrphanedPortalAccessibilityReset) {
+  EXPECT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL("portal.test", "/title1.html")));
+  WebContentsImpl* web_contents_impl =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+  RenderFrameHostImpl* main_frame = web_contents_impl->GetMainFrame();
+
+  // Create portal.
+  GURL url = embedded_test_server()->GetURL("a.com", "/title1.html");
+  Portal* portal = CreatePortalToUrl(web_contents_impl, url);
+  WebContentsImpl* portal_contents = portal->GetPortalContents();
+  RenderFrameHostImpl* portal_frame = portal_contents->GetMainFrame();
+
+  // Activate portal, keep in orphaned state for a while, and then adopt and
+  // insert predecessor.
+  // TODO(mcnee): Ideally, we would have a test interceptor to precisely
+  // control when to proceed with adoption.
+  const int TIME_IN_ORPHANED_STATE_MILLISECONDS = 2000;
+  EXPECT_TRUE(
+      ExecJs(portal_frame,
+             JsReplace("window.addEventListener('portalactivate', e => { "
+                       "  var stop = performance.now() + $1;"
+                       "  while (performance.now() < stop) {}"
+                       "  var portal = e.adoptPredecessor(); "
+                       "  document.body.appendChild(portal);"
+                       "});",
+                       TIME_IN_ORPHANED_STATE_MILLISECONDS)));
+  {
+    PortalActivatedObserver activated_observer(portal);
+    EXPECT_TRUE(ExecJs(main_frame,
+                       "let portal = document.querySelector('portal');"
+                       "portal.activate();"));
+    activated_observer.WaitForActivate();
+    // Forces an AXTree update to be sent while portal is orphaned.
+    AccessibilityNotificationWaiter waiter(web_contents_impl,
+                                           ui::kAXModeComplete,
+                                           ax::mojom::Event::kLayoutComplete);
+    waiter.WaitForNotification();
+    EXPECT_EQ(blink::mojom::PortalActivateResult::kPredecessorWasAdopted,
+              activated_observer.WaitForActivateResult());
+    waiter.WaitForNotification();
+  }
+  EXPECT_EQ(0, main_frame->accessibility_fatal_error_count_for_testing());
+}
+
+IN_PROC_BROWSER_TEST_F(PortalBrowserTest,
+                       OrphanedPortalActivateAccessibilityReset) {
+  EXPECT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL("portal.test", "/title1.html")));
+  WebContentsImpl* web_contents_impl =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+  RenderFrameHostImpl* main_frame = web_contents_impl->GetMainFrame();
+
+  // Create portal.
+  GURL url = embedded_test_server()->GetURL("a.com", "/title1.html");
+  Portal* portal = CreatePortalToUrl(web_contents_impl, url);
+  WebContentsImpl* portal_contents = portal->GetPortalContents();
+  RenderFrameHostImpl* portal_frame = portal_contents->GetMainFrame();
+
+  // Activate portal, keep in predecessor in orphaned state for a while,
+  // then adopt and activate predecessor.
+  // TODO(mcnee): Ideally, we would have a test interceptor to precisely
+  // control when to proceed with adoption.
+  const int TIME_IN_ORPHANED_STATE_MILLISECONDS = 2000;
+  EXPECT_TRUE(
+      ExecJs(portal_frame,
+             JsReplace("window.addEventListener('portalactivate', e => { "
+                       "  var stop = performance.now() + $1;"
+                       "  while (performance.now() < stop) {}"
+                       "  e.adoptPredecessor().activate(); "
+                       "});",
+                       TIME_IN_ORPHANED_STATE_MILLISECONDS)));
+  {
+    PortalActivatedObserver activated_observer(portal);
+    PortalCreatedObserver adoption_observer(main_frame);
+    EXPECT_TRUE(ExecJs(main_frame,
+                       "window.addEventListener('portalactivate',  e => {"
+                       "  document.body.appendChild(e.adoptPredecessor());"
+                       "});"
+                       "let portal = document.querySelector('portal');"
+                       "portal.activate().then(() => { "
+                       "  document.body.removeChild(portal); "
+                       "});"));
+    activated_observer.WaitForActivate();
+    // Forces an AXTree update to be sent while portal is orphaned.
+    AccessibilityNotificationWaiter waiter(web_contents_impl,
+                                           ui::kAXModeComplete,
+                                           ax::mojom::Event::kLayoutComplete);
+    waiter.WaitForNotification();
+    EXPECT_EQ(blink::mojom::PortalActivateResult::kPredecessorWasAdopted,
+              activated_observer.WaitForActivateResult());
+    adoption_observer.WaitUntilPortalCreated();
+    waiter.WaitForNotification();
+  }
+  EXPECT_EQ(0, main_frame->accessibility_fatal_error_count_for_testing());
 }
 
 IN_PROC_BROWSER_TEST_F(PortalBrowserTest,

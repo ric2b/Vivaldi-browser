@@ -1,5 +1,6 @@
 include_rules = [
   "+apps",
+  "+cc/input/browser_controls_state.h",
   "+cc/metrics",
   "+cc/paint",
   "+cc/test",
@@ -42,6 +43,7 @@ include_rules = [
   "+components/account_id",
   "+components/federated_learning",
   "+components/arc",
+  "+components/account_manager_core",
   "+components/assist_ranker",
   "+components/autofill_assistant/browser",
   "+components/autofill/content/browser",
@@ -57,6 +59,7 @@ include_rules = [
   "+components/bookmarks/common",
   "+components/bookmarks/managed",
   "+components/bookmarks/test",
+  "+components/browser_ui/photo_picker",
   "+components/browser_ui/settings",
   "+components/browser_ui/util",
   "+components/browser_ui/widget",
@@ -145,6 +148,7 @@ include_rules = [
   "+components/history/core/browser",
   "+components/history/core/common",
   "+components/history/core/test",
+  "+components/history/metrics",
   "+components/image_fetcher/core",
   "+components/infobars/content",
   "+components/infobars/core",
@@ -157,7 +161,6 @@ include_rules = [
   "+components/language/content/browser",
   "+components/language/core/browser",
   "+components/language/core/common",
-  "+components/language_usage_metrics",
   "+components/leveldb_proto/content",
   "+components/leveldb_proto/public",
   "+components/leveldb_proto/testing",
@@ -197,6 +200,7 @@ include_rules = [
   "+components/omnibox/browser",
   "+components/onc",
   "+components/open_from_clipboard",
+  "+components/optimization_guide/content",
   "+components/optimization_guide",
   "+components/os_crypt",
   "+components/ownership",
@@ -226,6 +230,7 @@ include_rules = [
   "+components/previews/core",
   "+components/printing/browser",
   "+components/printing/common",
+  "+components/privacy_sandbox",
   "+components/profile_metrics",
   "+components/proxy_config",
   "+components/query_parser",
@@ -318,10 +323,11 @@ include_rules = [
   "+components/viz/common",
   "+components/viz/host",
   "+components/web_cache/browser",
-  "+components/webdata/common",
-  "+components/webdata_services",
   "+components/web_modal",
   "+components/web_resource",
+  "+components/webapps/browser",
+  "+components/webdata/common",
+  "+components/webdata_services",
   "+components/webrtc_logging/browser",
   "+components/webrtc_logging/common",
   "+components/wifi",
@@ -431,7 +437,6 @@ include_rules = [
   "+chrome/browser/ui/views/chrome_browser_main_extra_parts_views_linux.h",
   "+chrome/browser/ui/views/chrome_browser_main_extra_parts_views_linux_x11.h",
   "+chrome/browser/ui/views/extensions/request_file_system_dialog_view.h",
-  "+chrome/browser/ui/views/sharesheet/sharesheet_bubble_view.h",
   "+chrome/browser/ui/views/try_chrome_dialog_win/try_chrome_dialog.h",
 
   # Ensure that only the public interface of performance_manager gets used.
@@ -449,6 +454,10 @@ include_rules = [
   # Allows in-process use of NetworkService for URLRequestContext configuration.
   # Should be removed once the actual network service ships.
   "+content/public/network",
+
+  # ASK TEXT-TO-SPEECH content/browser/speech/OWNERS BEFORE OVERRIDING THIS IN A
+  # SUBDIRECTORY.
+  "-content/public/browser/tts_controller.h",
 
   # Other libraries.
   "+third_party/google_toolbox_for_mac/src",
@@ -499,7 +508,7 @@ specific_include_rules = {
     "+ui/message_center/message_center.h",
   ],
   "input_method_engine.cc": [
-    # For GetInputMethodKeyboardController.
+    # For GetVirtualKeyboardController.
     "+ash/keyboard/ui/keyboard_ui_controller.h",
   ],
   "chrome_browsing_data_remover_delegate_unittest.cc": [
@@ -514,5 +523,8 @@ specific_include_rules = {
   ],
   "chrome_content_browser_client_receiver_bindings\.cc" : [
     "+chrome/browser/performance_manager/mechanisms/userspace_swap_chromeos.h",
+  ],
+  "chrome_content_browser_client\.cc" : [
+    "+content/public/browser/tts_controller.h",
   ],
 }

@@ -25,7 +25,7 @@ class CORE_EXPORT WorkerModuleScriptFetcher final
       public WorkerMainScriptLoaderClient {
  public:
   WorkerModuleScriptFetcher(WorkerGlobalScope*,
-                            util::PassKey<ModuleScriptLoader>);
+                            base::PassKey<ModuleScriptLoader>);
 
   // Implements ModuleScriptFetcher.
   void Fetch(FetchParameters&,
@@ -48,8 +48,7 @@ class CORE_EXPORT WorkerModuleScriptFetcher final
   String DebugName() const override { return "WorkerModuleScriptFetcher"; }
 
   void NotifyClient(const KURL& request_url,
-                    ModuleScriptCreationParams::ModuleType module_type,
-                    const network::mojom::CredentialsMode credentials_mode,
+                    ModuleType module_type,
                     const ParkableString& source_text,
                     const ResourceResponse& response,
                     SingleCachedMetadataHandler* cache_handler);

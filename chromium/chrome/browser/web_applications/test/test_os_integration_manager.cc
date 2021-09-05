@@ -7,23 +7,31 @@
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "chrome/browser/web_applications/components/app_shortcut_manager.h"
 #include "chrome/browser/web_applications/components/file_handler_manager.h"
+#include "chrome/browser/web_applications/components/protocol_handler_manager.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_ui_manager.h"
+#include "chrome/browser/web_applications/test/fake_protocol_handler_manager.h"
 #include "chrome/browser/web_applications/test/test_file_handler_manager.h"
 
 namespace web_app {
 TestOsIntegrationManager::TestOsIntegrationManager(
     Profile* profile,
     std::unique_ptr<AppShortcutManager> shortcut_manager,
-    std::unique_ptr<FileHandlerManager> file_handler_manager)
+    std::unique_ptr<FileHandlerManager> file_handler_manager,
+    std::unique_ptr<ProtocolHandlerManager> protocol_handler_manager)
     : OsIntegrationManager(profile,
                            std::move(shortcut_manager),
-                           std::move(file_handler_manager)) {
+                           std::move(file_handler_manager),
+                           std::move(protocol_handler_manager)) {
   if (!this->shortcut_manager()) {
     set_shortcut_manager(std::make_unique<TestShortcutManager>(profile));
   }
   if (!this->file_handler_manager()) {
     set_file_handler_manager(std::make_unique<TestFileHandlerManager>(profile));
+  }
+  if (!this->protocol_handler_manager()) {
+    set_protocol_handler_manager(
+        std::make_unique<FakeProtocolHandlerManager>(profile));
   }
 }
 
@@ -43,8 +51,10 @@ void TestOsIntegrationManager::InstallOsHooks(
   OsHooksResults os_hooks_results{false};
   last_options_ = options;
 
-  if (options.os_hooks[OsHookType::kFileHandlers])
+  if (options.os_hooks[OsHookType::kFileHandlers]) {
+    ++num_create_file_handlers_calls_;
     os_hooks_results[OsHookType::kFileHandlers] = true;
+  }
 
   did_add_to_desktop_ = options.add_to_desktop;
 
@@ -97,6 +107,11 @@ void TestOsIntegrationManager::UpdateOsHooks(
 void TestOsIntegrationManager::SetFileHandlerManager(
     std::unique_ptr<FileHandlerManager> file_handler_manager) {
   set_file_handler_manager(std::move(file_handler_manager));
+}
+
+void TestOsIntegrationManager::SetProtocolHandlerManager(
+    std::unique_ptr<ProtocolHandlerManager> protocol_handler_manager) {
+  set_protocol_handler_manager(std::move(protocol_handler_manager));
 }
 
 TestOsIntegrationManager*

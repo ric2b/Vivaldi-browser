@@ -24,6 +24,7 @@
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_types.h"
 #include "components/autofill/core/browser/proto/api_v1.pb.h"
+#include "components/autofill/core/common/language_code.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom.h"
 #include "components/autofill/core/common/renderer_id.h"
 #include "url/gurl.h"
@@ -359,16 +360,20 @@ class FormStructure {
   // - Name for Autofill of first field
   base::string16 GetIdentifierForRefill() const;
 
-  int developer_engagement_metrics() { return developer_engagement_metrics_; }
+  int developer_engagement_metrics() const {
+    return developer_engagement_metrics_;
+  }
 
   void set_randomized_encoder(std::unique_ptr<RandomizedEncoder> encoder);
 
   void set_is_rich_query_enabled(bool v) { is_rich_query_enabled_ = v; }
 
-  const std::string& page_language() const { return page_language_; }
+  const LanguageCode& current_page_language() const {
+    return current_page_language_;
+  }
 
-  void set_page_language(std::string language) {
-    page_language_ = std::move(language);
+  void set_current_page_language(LanguageCode language) {
+    current_page_language_ = std::move(language);
   }
 
   bool value_from_dynamic_change_form() const {
@@ -406,51 +411,9 @@ class FormStructure {
   FRIEND_TEST_ALL_PREFIXES(ParameterizedFormStructureTest,
                            RationalizePhoneNumber_RunsOncePerSection);
 
-  class SectionedFieldsIndexes {
-   public:
-    SectionedFieldsIndexes();
-    ~SectionedFieldsIndexes();
-
-    size_t LastFieldIndex() const {
-      if (sectioned_indexes.empty())
-        return (size_t)-1;  // Shouldn't happen.
-      return sectioned_indexes.back().back();
-    }
-
-    void AddFieldIndex(const size_t index, bool is_new_section) {
-      if (is_new_section || Empty()) {
-        sectioned_indexes.push_back(std::vector<size_t>(1, index));
-        return;
-      }
-      sectioned_indexes.back().push_back(index);
-    }
-
-    void WalkForwardToTheNextSection() { current_section_ptr++; }
-
-    bool IsFinished() const {
-      return current_section_ptr >= sectioned_indexes.size();
-    }
-
-    size_t CurrentIndex() const { return CurrentSection()[0]; }
-
-    std::vector<size_t> CurrentSection() const {
-      if (current_section_ptr < sectioned_indexes.size())
-        return sectioned_indexes[current_section_ptr];
-      return std::vector<size_t>(1, (size_t)-1);  // To handle edge cases.
-    }
-
-    void Reset() { current_section_ptr = 0; }
-
-    bool Empty() const { return sectioned_indexes.empty(); }
-
-   private:
-    // A vector of sections. Each section is a vector of some of the indexes
-    // that belong to the same section. The sections and indexes are sorted by
-    // their order of appearance on the form.
-    std::vector<std::vector<size_t>> sectioned_indexes;
-    // Points to a vector of indexes that belong to the same section.
-    size_t current_section_ptr = 0;
-  };
+  // This class wraps a vector of vectors of field indices. The indices of a
+  // vector belong to the same group.
+  class SectionedFieldsIndexes;
 
   // Parses the field types from the server query response. |forms| must be the
   // same as the one passed to EncodeQueryRequest when constructing the query.
@@ -547,6 +510,7 @@ class FormStructure {
   // If |has_author_specified_sections| is true, only the second pass --
   // distinguishing credit card sections from non-credit card ones -- is made.
   void IdentifySections(bool has_author_specified_sections);
+  void IdentifySectionsWithNewMethod();
 
   // Returns true if field should be skipped when talking to Autofill server.
   bool ShouldSkipField(const FormFieldData& field) const;
@@ -583,9 +547,9 @@ class FormStructure {
   static base::string16 FindLongestCommonPrefix(
       const std::vector<base::string16>& strings);
 
-  // The language detected for this form's page, prior to any translations
+  // The language detected for this form's page, before any translations
   // performed by Chrome.
-  std::string page_language_;
+  LanguageCode current_page_language_;
 
   // The id attribute of the form.
   base::string16 id_attribute_;

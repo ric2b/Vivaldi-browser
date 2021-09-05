@@ -11,6 +11,13 @@ import static androidx.test.espresso.matcher.RootMatchers.isDialog;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
+import static org.hamcrest.CoreMatchers.allOf;
+import static org.hamcrest.CoreMatchers.is;
+
+import static org.chromium.chrome.test.util.ViewUtils.onViewWaiting;
+
+import android.view.View;
+
 import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
 
@@ -18,6 +25,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.RuleChain;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
@@ -27,7 +35,7 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
-import org.chromium.chrome.browser.signin.IdentityServicesProvider;
+import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
 import org.chromium.chrome.browser.sync.settings.AccountManagementFragment;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
@@ -40,13 +48,17 @@ import org.chromium.content_public.browser.test.util.TestThreadUtils;
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class AccountManagementFragmentTest {
-    @Rule
     public final SettingsActivityTestRule<AccountManagementFragment> mSettingsActivityTestRule =
             new SettingsActivityTestRule<>(AccountManagementFragment.class);
 
-    @Rule
     public final ChromeTabbedActivityTestRule mActivityTestRule =
             new ChromeTabbedActivityTestRule();
+
+    // SettingsActivity has to be finished before the outer CTA can be finished or trying to finish
+    // CTA won't work.
+    @Rule
+    public final RuleChain mRuleChain =
+            RuleChain.outerRule(mActivityTestRule).around(mSettingsActivityTestRule);
 
     @Rule
     public final AccountManagerTestRule mAccountManagerTestRule = new AccountManagerTestRule();
@@ -67,8 +79,9 @@ public class AccountManagementFragmentTest {
     public void testAccountManagementFragmentViewLegacy() throws Exception {
         mAccountManagerTestRule.addTestAccountThenSigninAndEnableSync();
         mSettingsActivityTestRule.startSettingsActivity();
-        mRenderTestRule.render(mSettingsActivityTestRule.getFragment().getView(),
-                "account_management_fragment_view_legacy");
+        View view = mSettingsActivityTestRule.getFragment().getView();
+        onViewWaiting(allOf(is(view), isDisplayed()));
+        mRenderTestRule.render(view, "account_management_fragment_view_legacy");
     }
 
     @Test
@@ -78,8 +91,9 @@ public class AccountManagementFragmentTest {
     public void testAccountManagementFragmentView() throws Exception {
         mAccountManagerTestRule.addTestAccountThenSigninAndEnableSync();
         mSettingsActivityTestRule.startSettingsActivity();
-        mRenderTestRule.render(mSettingsActivityTestRule.getFragment().getView(),
-                "account_management_fragment_view");
+        View view = mSettingsActivityTestRule.getFragment().getView();
+        onViewWaiting(allOf(is(view), isDisplayed()));
+        mRenderTestRule.render(view, "account_management_fragment_view");
     }
 
     @Test
@@ -90,8 +104,9 @@ public class AccountManagementFragmentTest {
         mAccountManagerTestRule.addAccount("testSecondary@gmail.com");
         mAccountManagerTestRule.addTestAccountThenSigninAndEnableSync();
         mSettingsActivityTestRule.startSettingsActivity();
-        mRenderTestRule.render(mSettingsActivityTestRule.getFragment().getView(),
-                "account_management_fragment_signed_in_account_on_top");
+        View view = mSettingsActivityTestRule.getFragment().getView();
+        onViewWaiting(allOf(is(view), isDisplayed()));
+        mRenderTestRule.render(view, "account_management_fragment_signed_in_account_on_top");
     }
 
     @Test

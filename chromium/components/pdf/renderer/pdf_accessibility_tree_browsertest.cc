@@ -209,7 +209,7 @@ TEST_F(PdfAccessibilityTreeTest, TestEmptyPDFPage) {
   pdf_accessibility_tree.SetAccessibilityPageInfo(page_info_, text_runs_,
                                                   chars_, page_objects_);
 
-  EXPECT_EQ(ax::mojom::Role::kDocument,
+  EXPECT_EQ(ax::mojom::Role::kPdfRoot,
             pdf_accessibility_tree.GetRoot()->data().role);
 }
 
@@ -231,6 +231,45 @@ TEST_F(PdfAccessibilityTreeTest, TestAccessibilityDisabledDuringPDFLoad) {
 
   pdf_accessibility_tree.SetAccessibilityPageInfo(page_info_, text_runs_,
                                                   chars_, page_objects_);
+}
+
+TEST_F(PdfAccessibilityTreeTest, TestPdfAccessibilityTreeReload) {
+  content::RenderFrame* render_frame = view_->GetMainRenderFrame();
+  ASSERT_TRUE(render_frame);
+  render_frame->SetAccessibilityModeForTest(ui::AXMode::kWebContents);
+  ASSERT_TRUE(render_frame->GetRenderAccessibility());
+
+  FakeRendererPpapiHost host(view_->GetMainRenderFrame());
+  PP_Instance instance = 0;
+  pdf::PdfAccessibilityTree pdf_accessibility_tree(&host, instance);
+
+  // Make the accessibility tree with a portrait page and then remake with a
+  // landscape page.
+  gfx::RectF page_bounds = gfx::RectF(1, 2);
+  for (size_t i = 1; i <= 2; ++i) {
+    if (i == 2)
+      page_bounds.Transpose();
+
+    page_info_.bounds =
+        PP_MakeRectFromXYWH(page_bounds.x(), page_bounds.y(),
+                            page_bounds.width(), page_bounds.height());
+    pdf_accessibility_tree.SetAccessibilityViewportInfo(viewport_info_);
+    pdf_accessibility_tree.SetAccessibilityDocInfo(doc_info_);
+    pdf_accessibility_tree.SetAccessibilityPageInfo(page_info_, text_runs_,
+                                                    chars_, page_objects_);
+
+    ui::AXNode* root_node = pdf_accessibility_tree.GetRoot();
+    ASSERT_TRUE(root_node);
+    EXPECT_EQ(ax::mojom::Role::kPdfRoot, root_node->data().role);
+
+    // There should only be one page node.
+    ASSERT_EQ(1u, root_node->children().size());
+
+    ui::AXNode* page_node = root_node->children()[0];
+    ASSERT_TRUE(page_node);
+    EXPECT_EQ(ax::mojom::Role::kRegion, page_node->data().role);
+    EXPECT_EQ(page_bounds, page_node->data().relative_bounds.bounds);
+  }
 }
 
 TEST_F(PdfAccessibilityTreeTest, TestPdfAccessibilityTreeCreation) {
@@ -296,7 +335,7 @@ TEST_F(PdfAccessibilityTreeTest, TestPdfAccessibilityTreeCreation) {
 
   ui::AXNode* root_node = pdf_accessibility_tree.GetRoot();
   ASSERT_TRUE(root_node);
-  EXPECT_EQ(ax::mojom::Role::kDocument, root_node->data().role);
+  EXPECT_EQ(ax::mojom::Role::kPdfRoot, root_node->data().role);
   ASSERT_EQ(1u, root_node->children().size());
 
   ui::AXNode* page_node = root_node->children()[0];
@@ -406,7 +445,7 @@ TEST_F(PdfAccessibilityTreeTest, TestOverlappingAnnots) {
 
   ui::AXNode* root_node = pdf_accessibility_tree.GetRoot();
   ASSERT_TRUE(root_node);
-  EXPECT_EQ(ax::mojom::Role::kDocument, root_node->data().role);
+  EXPECT_EQ(ax::mojom::Role::kPdfRoot, root_node->data().role);
   ASSERT_EQ(1u, root_node->children().size());
 
   ui::AXNode* page_node = root_node->children()[0];
@@ -493,7 +532,7 @@ TEST_F(PdfAccessibilityTreeTest, TestHighlightCreation) {
 
   ui::AXNode* root_node = pdf_accessibility_tree.GetRoot();
   ASSERT_TRUE(root_node);
-  EXPECT_EQ(ax::mojom::Role::kDocument, root_node->data().role);
+  EXPECT_EQ(ax::mojom::Role::kPdfRoot, root_node->data().role);
   ASSERT_EQ(1u, root_node->children().size());
 
   ui::AXNode* page_node = root_node->children()[0];
@@ -616,7 +655,7 @@ TEST_F(PdfAccessibilityTreeTest, TestTextFieldNodeCreation) {
 
   ui::AXNode* root_node = pdf_accessibility_tree.GetRoot();
   ASSERT_TRUE(root_node);
-  EXPECT_EQ(ax::mojom::Role::kDocument, root_node->data().role);
+  EXPECT_EQ(ax::mojom::Role::kPdfRoot, root_node->data().role);
   ASSERT_EQ(1u, root_node->children().size());
 
   ui::AXNode* page_node = root_node->children()[0];
@@ -775,7 +814,7 @@ TEST_F(PdfAccessibilityTreeTest, TestButtonNodeCreation) {
 
   ui::AXNode* root_node = pdf_accessibility_tree.GetRoot();
   ASSERT_TRUE(root_node);
-  EXPECT_EQ(ax::mojom::Role::kDocument, root_node->data().role);
+  EXPECT_EQ(ax::mojom::Role::kPdfRoot, root_node->data().role);
   ASSERT_EQ(1u, root_node->children().size());
 
   ui::AXNode* page_node = root_node->children()[0];
@@ -968,7 +1007,7 @@ TEST_F(PdfAccessibilityTreeTest, TestListboxNodeCreation) {
 
   ui::AXNode* root_node = pdf_accessibility_tree.GetRoot();
   ASSERT_TRUE(root_node);
-  EXPECT_EQ(ax::mojom::Role::kDocument, root_node->data().role);
+  EXPECT_EQ(ax::mojom::Role::kPdfRoot, root_node->data().role);
   ASSERT_EQ(1u, root_node->children().size());
 
   ui::AXNode* page_node = root_node->children()[0];
@@ -1164,7 +1203,7 @@ TEST_F(PdfAccessibilityTreeTest, TestComboboxNodeCreation) {
 
   ui::AXNode* root_node = pdf_accessibility_tree.GetRoot();
   ASSERT_TRUE(root_node);
-  EXPECT_EQ(ax::mojom::Role::kDocument, root_node->data().role);
+  EXPECT_EQ(ax::mojom::Role::kPdfRoot, root_node->data().role);
   ASSERT_EQ(1u, root_node->children().size());
 
   ui::AXNode* page_node = root_node->children()[0];
@@ -1368,7 +1407,7 @@ TEST_F(PdfAccessibilityTreeTest, TestPreviousNextOnLine) {
 
   ui::AXNode* root_node = pdf_accessibility_tree.GetRoot();
   ASSERT_TRUE(root_node);
-  EXPECT_EQ(ax::mojom::Role::kDocument, root_node->data().role);
+  EXPECT_EQ(ax::mojom::Role::kPdfRoot, root_node->data().role);
   ASSERT_EQ(1u, root_node->children().size());
 
   ui::AXNode* page_node = root_node->children()[0];

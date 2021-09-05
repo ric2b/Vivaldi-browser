@@ -62,10 +62,11 @@ class SyncEngineBackend : public base::RefCountedThreadSafe<SyncEngineBackend>,
   void OnSyncStatusChanged(const SyncStatus& status) override;
 
   // Forwards an invalidation state change to the sync manager.
-  void DoOnInvalidatorStateChange(InvalidatorState state);
+  void DoOnInvalidatorStateChange(invalidation::InvalidatorState state);
 
   // Forwards an invalidation to the sync manager.
-  void DoOnIncomingInvalidation(const TopicInvalidationMap& invalidation_map);
+  void DoOnIncomingInvalidation(
+      const invalidation::TopicInvalidationMap& invalidation_map);
 
   // Note:
   //
@@ -138,7 +139,6 @@ class SyncEngineBackend : public base::RefCountedThreadSafe<SyncEngineBackend>,
 
   // Notify the syncer that the cookie jar has changed.
   void DoOnCookieJarChanged(bool account_mismatch,
-                            bool empty_jar,
                             base::OnceClosure callback);
 
   // Notify about change in client id.
@@ -154,8 +154,12 @@ class SyncEngineBackend : public base::RefCountedThreadSafe<SyncEngineBackend>,
   bool HasUnsyncedItemsForTest() const;
 
   // Called on each device infos change and might be called more than once with
-  // the same |active_devices|.
-  void DoOnActiveDevicesChanged(size_t active_devices);
+  // the same |active_devices|. |fcm_registration_tokens| contains a list of
+  // tokens for all known active devices (if available and excluding the local
+  // device if reflections are disabled).
+  void DoOnActiveDevicesChanged(
+      size_t active_devices,
+      std::vector<std::string> fcm_registration_tokens);
 
  private:
   friend class base::RefCountedThreadSafe<SyncEngineBackend>;
@@ -164,8 +168,9 @@ class SyncEngineBackend : public base::RefCountedThreadSafe<SyncEngineBackend>,
 
   // For the olg tango based invalidations method returns true if the
   // invalidation has version lower than last seen version for this datatype.
-  bool ShouldIgnoreRedundantInvalidation(const Invalidation& invalidation,
-                                         ModelType Type);
+  bool ShouldIgnoreRedundantInvalidation(
+      const invalidation::Invalidation& invalidation,
+      ModelType Type);
 
   void LoadAndConnectNigoriController();
 

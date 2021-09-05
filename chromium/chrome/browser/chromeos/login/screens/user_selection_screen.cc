@@ -50,6 +50,8 @@
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/cryptohome/cryptohome_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/tpm_manager/tpm_manager.pb.h"
+#include "chromeos/dbus/tpm_manager/tpm_manager_client.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/account_id/account_id.h"
 #include "components/arc/arc_util.h"
@@ -384,8 +386,8 @@ class UserSelectionScreen::DircryptoMigrationChecker {
   DISALLOW_COPY_AND_ASSIGN(DircryptoMigrationChecker);
 };
 
-// Helper class to call cryptohome to check whether tpm is locked and update
-// UI with time left to unlocking.
+// Helper class  to check whether tpm is locked and update UI with time left to
+// unlocking.
 class UserSelectionScreen::TpmLockedChecker {
  public:
   explicit TpmLockedChecker(UserSelectionScreen* owner) : owner_(owner) {}
@@ -405,36 +407,29 @@ class UserSelectionScreen::TpmLockedChecker {
       return;
     }
 
-    chromeos::CryptohomeClient::Get()->GetTpmStatus(
-        cryptohome::GetTpmStatusRequest(),
-        base::BindOnce(&TpmLockedChecker::OnGetTpmStatus,
+    // Though this function sends D-Bus call to tpm manager, it makes sense to
+    // still wait for cryptohome because the the side effect of the lock has to
+    // be propagated to cryptohome to cause the known issue of interest.
+    chromeos::TpmManagerClient::Get()->GetDictionaryAttackInfo(
+        ::tpm_manager::GetDictionaryAttackInfoRequest(),
+        base::BindOnce(&TpmLockedChecker::OnGetDictionaryAttackInfo,
                        weak_ptr_factory_.GetWeakPtr()));
   }
 
-  // Callback invoked when GetTpmStatus call is finished.
-  void OnGetTpmStatus(base::Optional<cryptohome::BaseReply> reply) {
+  // Callback invoked when GetDictionaryAttackInfo call is finished.
+  void OnGetDictionaryAttackInfo(
+      const ::tpm_manager::GetDictionaryAttackInfoReply& reply) {
     check_finised_ = base::TimeTicks::Now();
 
-    if (!reply.has_value()) {
+    if (reply.status() != ::tpm_manager::STATUS_SUCCESS)
       return;
-    }
-    if (reply->has_error() &&
-        reply->error() != cryptohome::CRYPTOHOME_ERROR_NOT_SET) {
-      return;
-    }
-    if (!reply->HasExtension(cryptohome::GetTpmStatusReply::reply)) {
-      return;
-    }
-    auto reply_proto =
-        reply->GetExtension(cryptohome::GetTpmStatusReply::reply);
 
-    if (reply_proto.dictionary_attack_lockout_in_effect()) {
-      int time_remaining =
-          reply_proto.dictionary_attack_lockout_seconds_remaining();
+    if (reply.dictionary_attack_lockout_in_effect()) {
       // Add `kWaitingOvertimeInSeconds` for safetiness, i.e hiding UI and
       // releasing `wake_lock_` happens after TPM becomes unlocked.
       dictionary_attack_lockout_time_remaining_ = base::TimeDelta::FromSeconds(
-          time_remaining + kWaitingOvertimeInSeconds);
+          reply.dictionary_attack_lockout_seconds_remaining() +
+          kWaitingOvertimeInSeconds);
       OnTpmIsLocked();
     } else {
       TpmIsUnlocked();
@@ -536,15 +531,16 @@ void UserSelectionScreen::FillUserDictionary(
     base::DictionaryValue* user_dict) {
   const bool is_public_session =
       user->GetType() == user_manager::USER_TYPE_PUBLIC_ACCOUNT;
-  const bool is_legacy_supervised_user =
-      user->GetType() == user_manager::USER_TYPE_SUPERVISED;
+  const bool is_deprecated_supervised_user =
+      user->GetType() == user_manager::USER_TYPE_SUPERVISED_DEPRECATED;
   const bool is_child_user = user->GetType() == user_manager::USER_TYPE_CHILD;
 
   user_dict->SetString(kKeyUsername, user->GetAccountId().Serialize());
   user_dict->SetString(kKeyEmailAddress, user->display_email());
   user_dict->SetString(kKeyDisplayName, user->GetDisplayName());
   user_dict->SetBoolean(kKeyPublicAccount, is_public_session);
-  user_dict->SetBoolean(kKeyLegacySupervisedUser, is_legacy_supervised_user);
+  user_dict->SetBoolean(kKeyLegacySupervisedUser,
+                        is_deprecated_supervised_user);
   user_dict->SetBoolean(kKeyChildUser, is_child_user);
   user_dict->SetBoolean(kKeyDesktopUser, false);
   user_dict->SetInteger(kKeyInitialAuthType, static_cast<int>(auth_type));
@@ -592,7 +588,7 @@ bool UserSelectionScreen::ShouldForceOnlineSignIn(
     return false;
 
   // Public sessions are always allowed to log in offline.
-  // Supervised users are always allowed to log in offline.
+  // Deprecated supervised users are always allowed to log in offline.
   // For all other users, force online sign in if:
   // * The flag to force online sign-in is set for the user.
   // * The user's OAuth token is invalid or unknown.
@@ -601,13 +597,14 @@ bool UserSelectionScreen::ShouldForceOnlineSignIn(
 
   const user_manager::User::OAuthTokenStatus token_status =
       user->oauth_token_status();
-  const bool is_supervised_user =
-      user->GetType() == user_manager::USER_TYPE_SUPERVISED;
+  // TODO(crbug/1155729): Check if this bool is ever true. If not, remove it.
+  const bool is_deprecated_supervised_user =
+      user->GetType() == user_manager::USER_TYPE_SUPERVISED_DEPRECATED;
   const bool is_public_session =
       user->GetType() == user_manager::USER_TYPE_PUBLIC_ACCOUNT;
   const bool has_gaia_account = user->HasGaiaAccount();
 
-  if (is_supervised_user)
+  if (is_deprecated_supervised_user)
     return false;
 
   if (is_public_session)

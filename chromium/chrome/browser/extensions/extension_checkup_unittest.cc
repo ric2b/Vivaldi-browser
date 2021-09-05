@@ -78,14 +78,27 @@ class ExtensionCheckupTest : public ExtensionServiceTestBase,
 };
 
 // Checkup is not shown if no extensions are installed.
-TEST_P(ExtensionCheckupTest, NoInstalledExtensions) {
+// Flaky on TSAN: https://crbug.com/1163813
+#if defined(THREAD_SANITIZER)
+#define MAYBE_NoInstalledExtensions DISABLED_NoInstalledExtensions
+#else
+#define MAYBE_NoInstalledExtensions NoInstalledExtensions
+#endif
+TEST_P(ExtensionCheckupTest, MAYBE_NoInstalledExtensions) {
   VerifyNonExperimentCheckupDisabled();
   EXPECT_FALSE(ShouldShowExperimentCheckup());
 }
 
 // Checkup is not shown if the only extensions installed are policy
 // installed, component extensions, or installed by default.
-TEST_P(ExtensionCheckupTest, NoUserInstalledExtensions) {
+//
+// Flaky on various Linux bots.  http://crbug.com/1163917
+#if defined(OS_LINUX)
+#define MAYBE_NoUserInstalledExtensions DISABLED_NoUserInstalledExtensions
+#else
+#define MAYBE_NoUserInstalledExtensions NoUserInstalledExtensions
+#endif
+TEST_P(ExtensionCheckupTest, MAYBE_NoUserInstalledExtensions) {
   AddExemptExtensions();
   VerifyNonExperimentCheckupDisabled();
   EXPECT_FALSE(ShouldShowExperimentCheckup());

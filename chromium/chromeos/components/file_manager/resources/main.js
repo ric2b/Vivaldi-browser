@@ -1,8 +1,14 @@
-// Copyright (c) 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import {BrowserProxy} from './browser_proxy.js'
+import {ScriptLoader} from './script_loader.js'
+
+/**
+ * @const {boolean}
+ */
+window.isSWA = true;
 
 /**
  * Represents file manager application. Starting point for the application
@@ -10,55 +16,37 @@ import {BrowserProxy} from './browser_proxy.js'
  */
 class FileManagerApp {
   constructor() {
-    console.info('File manager app created ...');
+    /**
+     * Creates a Mojo pipe to the C++ SWA container.
+     * @private @const {!BrowserProxy}
+     */
+    this.browserProxy_ = new BrowserProxy();
+  }
+
+  /** @return {!BrowserProxy} */
+  get browserProxy() {
+    return this.browserProxy_;
   }
 
   /**
-   * Lazily loads File App legacy code.
+   * Start-up: load the page scripts in order: fakes first (to provide chrome.*
+   * API that the files app foreground scripts expect for initial render), then
+   * the files app foreground scripts. Note main_scripts.js should have 'defer'
+   * true per crbug.com/496525.
    */
-  loadLegacyCode() {
-    const legacyLoader = document.createElement('script');
-    legacyLoader.src = 'legacy_main_scripts.js';
-    document.body.appendChild(legacyLoader);
-  }
+  async run() {
+    await Promise.all([
+        new ScriptLoader('file_manager_private_fakes.js').load(),
+        new ScriptLoader('file_manager_fakes.js').load(),
+    ]);
 
-  /**
-   * Demonstrates Mojo interactions.
-   */
-  demoMojo() {
-    // Basic example of establishing communication with the backend.
-    const browserProxy = new BrowserProxy();
-
-    // There must be only one listener returning values.
-    browserProxy.callbackRouter.getBar.addListener((foo) => {
-      console.log('GetBar(' + foo + ')');
-      return Promise.resolve({bar: 'baz'});
-    });
-
-    // Listen-only callbacks can be multiple.
-    browserProxy.callbackRouter.onSomethingHappened.addListener(
-        (something, other) => {
-          console.log('OnSomethingHappened(' + something + ', ' + other + ')');
-        });
-    browserProxy.callbackRouter.onSomethingHappened.addListener(
-        (something, other) => {
-          console.log('eh? ' + something + '. what? ' + other);
-        });
-
-    // Show the interaction via Mojo.
-    window.setTimeout(() => {
-      browserProxy.handler.setFoo('foo-value');
-      browserProxy.handler.doABarrelRoll();
-    }, 1000);
-  }
-
-  run() {
-    this.loadLegacyCode();
-    this.demoMojo();
+    await Promise.all([
+      new ScriptLoader('foreground/js/elements_importer.js').load(),
+      new ScriptLoader('foreground/js/main_scripts.js', {defer: true}).load(),
+    ]);
+    console.debug('Files app legacy UI loaded');
   }
 }
 
 const app = new FileManagerApp();
-document.addEventListener('DOMContentLoaded', () => {
-  app.run();
-});
+app.run();

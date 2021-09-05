@@ -18,6 +18,7 @@
 #include "chrome/browser/supervised_user/supervised_user_features.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
 #include "chrome/browser/ui/webui/signin/inline_login_dialog_chromeos_onboarding.h"
+#include "ui/aura/window.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace chromeos {
@@ -53,13 +54,17 @@ EduCoexistenceLoginScreen::EduCoexistenceLoginScreen(
 EduCoexistenceLoginScreen::~EduCoexistenceLoginScreen() {}
 
 bool EduCoexistenceLoginScreen::MaybeSkip(WizardContext* context) {
-  if (ProfileManager::GetActiveUserProfile()->IsChild() &&
-      base::FeatureList::IsEnabled(supervised_users::kEduCoexistenceFlowV2)) {
-    return false;
+  if (!base::FeatureList::IsEnabled(supervised_users::kEduCoexistenceFlowV2)) {
+    exit_callback_.Run(Result::SKIPPED);
+    return true;
   }
 
-  exit_callback_.Run(Result::SKIPPED);
-  return true;
+  if (!ProfileManager::GetActiveUserProfile()->IsChild()) {
+    exit_callback_.Run(Result::SKIPPED);
+    return true;
+  }
+
+  return false;
 }
 
 void EduCoexistenceLoginScreen::ShowImpl() {
@@ -77,6 +82,8 @@ void EduCoexistenceLoginScreen::ShowImpl() {
 
   dialog_delegate_ =
       std::make_unique<InlineLoginDialogChromeOSOnboarding::Delegate>(dialog);
+  dialog_delegate_->UpdateDialogBounds(
+      oobe_ui->GetNativeView()->GetBoundsInScreen());
 }
 
 void EduCoexistenceLoginScreen::HideImpl() {

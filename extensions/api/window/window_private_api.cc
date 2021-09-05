@@ -2,6 +2,7 @@
 
 #include "extensions/api/window/window_private_api.h"
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -14,11 +15,14 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/browser_list_observer.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "components/sessions/content/session_tab_helper.h"
+#include "content/public/browser/notification_observer.h"
+#include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
-#include "content/public/browser/render_frame_host.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/api/zoom/zoom_api.h"
@@ -28,39 +32,69 @@
 #include "ui/vivaldi_ui_utils.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
-using extensions::vivaldi::window_private::WindowState;
-
 namespace extensions {
 
-VivaldiWindowsAPI::VivaldiWindowsAPI(content::BrowserContext* context)
-    : browser_context_(context) {
+namespace {
+
+class VivaldiBrowserObserver : public BrowserListObserver,
+                               public content::NotificationObserver,
+                               public TabStripModelObserver {
+ public:
+  VivaldiBrowserObserver();
+
+  // This should not be called.
+  ~VivaldiBrowserObserver() override { NOTREACHED(); }
+
+  static VivaldiBrowserObserver& GetInstance();
+
+  void WindowsForProfileClosing(Profile* profile);
+
+  // If the browser is closing due to the profile closure, return the profile
+  // index. Otherwise return SIZE_MAX.
+  size_t FindClosingWindow(Browser* browser);
+
+ private:
+  friend class ::extensions::VivaldiWindowsAPI;
+
+  // chrome::BrowserListObserver implementation
+  void OnBrowserRemoved(Browser* browser) override;
+  void OnBrowserAdded(Browser* browser) override;
+  void OnBrowserSetLastActive(Browser* browser) override;
+
+  // content::NotificationObserver implementation.
+  void Observe(int type,
+               const content::NotificationSource& source,
+               const content::NotificationDetails& details) override;
+
+  // TabStripModelObserver implementation
+  void TabChangedAt(content::WebContents* contents,
+                    int index,
+                    TabChangeType change_type) override;
+  void OnTabStripModelChanged(
+      TabStripModel* tab_strip_model,
+      const TabStripModelChange& change,
+      const TabStripSelectionChange& selection) override;
+
+  content::NotificationRegistrar registrar_;
+
+  // Used to track windows being closed by profiles being closed, they should
+  // not have any confirmation dialogs.
+  std::vector<Browser*> closing_windows_;
+};
+
+VivaldiBrowserObserver& VivaldiBrowserObserver::GetInstance() {
+  static base::NoDestructor<VivaldiBrowserObserver> instance;
+  return *instance;
+}
+
+VivaldiBrowserObserver::VivaldiBrowserObserver() {
   BrowserList::GetInstance()->AddObserver(this);
 
   registrar_.Add(this, chrome::NOTIFICATION_BROWSER_CLOSE_CANCELLED,
                  content::NotificationService::AllSources());
 }
 
-VivaldiWindowsAPI::~VivaldiWindowsAPI() {}
-
-void VivaldiWindowsAPI::Shutdown() {
-  BrowserList::GetInstance()->RemoveObserver(this);
-}
-
-static base::LazyInstance<VivaldiWindowsAPI::Factory>::
-    DestructorAtExit g_factory_window = LAZY_INSTANCE_INITIALIZER;
-
-// static
-VivaldiWindowsAPI::Factory*
-VivaldiWindowsAPI::GetFactoryInstance() {
-  return g_factory_window.Pointer();
-}
-
-// static
-void VivaldiWindowsAPI::Init() {
-  GetFactoryInstance();
-}
-
-void VivaldiWindowsAPI::Observe(
+void VivaldiBrowserObserver::Observe(
     int type,
     const content::NotificationSource& source,
     const content::NotificationDetails& details) {
@@ -74,7 +108,7 @@ void VivaldiWindowsAPI::Observe(
           vivaldi::window_private::OnWindowCloseCancelled::kEventName,
           vivaldi::window_private::OnWindowCloseCancelled::Create(
               browser->session_id().id()),
-          browser_context_);
+          browser->profile());
       break;
     }
     default: {
@@ -84,38 +118,30 @@ void VivaldiWindowsAPI::Observe(
   }
 }
 
-// static
-void VivaldiWindowsAPI::WindowsForProfileClosing(Profile* profile) {
+void VivaldiBrowserObserver::WindowsForProfileClosing(Profile* profile) {
   if (profile->IsGuestSession()) {
     // We don't care about guest windows.
     return;
   }
-  VivaldiWindowsAPI* api = GetFactoryInstance()->Get(profile);
-  DCHECK(api);
-  if (!api)
-    return;
-
   for (auto* browser : *BrowserList::GetInstance()) {
     if (browser->profile()->GetOriginalProfile() ==
-        profile->GetOriginalProfile())
-      api->closing_windows_.push_back(browser);
+        profile->GetOriginalProfile()) {
+      closing_windows_.push_back(browser);
+    }
   }
 }
 
-// static
-bool VivaldiWindowsAPI::IsWindowClosingBecauseProfileClose(Browser* browser) {
-  VivaldiWindowsAPI* api = GetFactoryInstance()->Get(browser->profile());
-  DCHECK(api);
-  if (!api)
-    return false;
-  const auto& v = api->closing_windows_;
-  return std::find(v.begin(), v.end(), browser) != v.end();
+size_t VivaldiBrowserObserver::FindClosingWindow(Browser* browser) {
+  // STL is too verbose not to use a one-letter abbreviation.
+  const auto& v = closing_windows_;
+  auto i = std::find(v.begin(), v.end(), browser);
+  return (i != v.end()) ? std::distance(v.begin(), i) : SIZE_MAX;
 }
 
-void VivaldiWindowsAPI::OnBrowserAdded(Browser* browser) {
+void VivaldiBrowserObserver::OnBrowserAdded(Browser* browser) {
   browser->tab_strip_model()->AddObserver(this);
 
-  if (browser->is_vivaldi() && browser->profile() == browser_context_) {
+  if (browser->is_vivaldi()) {
     ZoomAPI::AddZoomObserver(browser);
   }
   int id = browser->session_id().id();
@@ -123,33 +149,29 @@ void VivaldiWindowsAPI::OnBrowserAdded(Browser* browser) {
   ::vivaldi::BroadcastEvent(
       extensions::vivaldi::window_private::OnWindowCreated::kEventName,
       extensions::vivaldi::window_private::OnWindowCreated::Create(id),
-      browser_context_);
+      browser->profile());
 }
 
-void VivaldiWindowsAPI::OnBrowserRemoved(Browser* browser) {
+void VivaldiBrowserObserver::OnBrowserRemoved(Browser* browser) {
   browser->tab_strip_model()->RemoveObserver(this);
 
   if (browser->is_vivaldi()) {
     ZoomAPI::RemoveZoomObserver(browser);
   }
-  for (auto it = closing_windows_.begin(); it != closing_windows_.end(); ++it) {
-    if ((*it) == browser) {
-      closing_windows_.erase(it);
-      break;
-    }
-  }
-  int id = browser->session_id().id();
 
+  size_t i = FindClosingWindow(browser);
+  if (i != SIZE_MAX) {
+    closing_windows_.erase(closing_windows_.begin() + i);
+  }
+
+  int id = browser->session_id().id();
   ::vivaldi::BroadcastEvent(
       vivaldi::window_private::OnWindowClosed::kEventName,
       vivaldi::window_private::OnWindowClosed::Create(id),
-      browser_context_);
+      browser->profile());
 
   if (chrome::GetTotalBrowserCount() == 1) {
-    BrowserList* browsers = BrowserList::GetInstance();
-    for (BrowserList::const_iterator iter = browsers->begin();
-         iter != browsers->end(); ++iter) {
-      const Browser* browser = *iter;
+    for (Browser* browser : *BrowserList::GetInstance()) {
       // If this is the last normal window, close the settings
       // window so shutdown can progress normally.
       if (browser->is_vivaldi() &&
@@ -162,18 +184,29 @@ void VivaldiWindowsAPI::OnBrowserRemoved(Browser* browser) {
   }
 }
 
-void VivaldiWindowsAPI::TabChangedAt(content::WebContents* web_contents,
-                                     int index,
-                                     TabChangeType change_type) {
-  TabsPrivateAPI::NotifyTabChange(web_contents, index, change_type);
+void VivaldiBrowserObserver::OnBrowserSetLastActive(Browser* browser) {
+  TabsPrivateAPI::FromBrowserContext(browser->profile())
+      ->NotifyTabSelectionChange(
+          browser->tab_strip_model()->GetActiveWebContents());
 }
 
-void VivaldiWindowsAPI::OnTabStripModelChanged(
+void VivaldiBrowserObserver::TabChangedAt(content::WebContents* web_contents,
+                                          int index,
+                                          TabChangeType change_type) {
+  TabsPrivateAPI::FromBrowserContext(web_contents->GetBrowserContext())
+      ->NotifyTabChange(web_contents);
+}
+
+void VivaldiBrowserObserver::OnTabStripModelChanged(
     TabStripModel* tab_strip_model,
     const TabStripModelChange& change,
     const TabStripSelectionChange& selection) {
   if (!selection.active_tab_changed() || !selection.new_contents)
     return;
+
+  TabsPrivateAPI::FromBrowserContext(
+      selection.new_contents->GetBrowserContext())
+      ->NotifyTabSelectionChange(selection.new_contents);
 
   // Lookup the proper ExtensionActionUtil based on tab WebContents.
   extensions::ExtensionActionUtil* utils =
@@ -185,7 +218,29 @@ void VivaldiWindowsAPI::OnTabStripModelChanged(
   utils->NotifyTabSelectionChange(selection.new_contents);
 }
 
-ui::WindowShowState ConvertToWindowShowState(WindowState state) {
+}  // namespace
+
+// static
+void VivaldiWindowsAPI::Init() {
+  VivaldiBrowserObserver::GetInstance();
+}
+
+// static
+void VivaldiWindowsAPI::WindowsForProfileClosing(Profile* profile) {
+  VivaldiBrowserObserver::GetInstance().WindowsForProfileClosing(profile);
+}
+
+// static
+bool VivaldiWindowsAPI::IsWindowClosingBecauseProfileClose(Browser* browser) {
+  size_t i = VivaldiBrowserObserver::GetInstance().FindClosingWindow(browser);
+  return i != SIZE_MAX;
+}
+
+namespace {
+
+ui::WindowShowState ConvertToWindowShowState(
+    vivaldi::window_private::WindowState state) {
+  using vivaldi::window_private::WindowState;
   switch (state) {
     case WindowState::WINDOW_STATE_NORMAL:
       return ui::SHOW_STATE_NORMAL;
@@ -217,6 +272,8 @@ VivaldiBrowserWindow::WindowType ConvertToVivaldiWindowType(
   NOTREACHED();
   return VivaldiBrowserWindow::WindowType::NORMAL;
 }
+
+}  // namespace
 
 ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   using vivaldi::window_private::Create::Params;

@@ -20,8 +20,12 @@ class MetadataBatch;
 
 namespace password_manager {
 
+struct CompromisedCredentials;
 struct PasswordForm;
 
+using ForceInitialSyncCycle =
+    base::StrongAlias<class ForceInitialSyncCycleTag, bool>;
+using FormPrimaryKey = base::StrongAlias<class FormPrimaryKeyTag, int>;
 using PrimaryKeyToFormMap = std::map<int, std::unique_ptr<PasswordForm>>;
 
 // This enum is used to determine result status when deleting undecryptable
@@ -122,6 +126,10 @@ class PasswordStoreSync {
   virtual FormRetrievalResult ReadAllLogins(
       PrimaryKeyToFormMap* key_to_form_map) WARN_UNUSED_RESULT = 0;
 
+  // Returns compromised credentials for the provided |parent_key|.
+  virtual std::vector<CompromisedCredentials> ReadSecurityIssues(
+      FormPrimaryKey parent_key) = 0;
+
   // Deletes logins that cannot be decrypted.
   virtual DatabaseCleanupResult DeleteUndecryptableLogins() = 0;
 
@@ -130,10 +138,22 @@ class PasswordStoreSync {
       const PasswordForm& form,
       AddLoginError* error = nullptr) = 0;
 
+  // Synchronous implementation to add compromised credentials. Operation will
+  // be terminated if any insertion into the database fails. Returns whether
+  // operation was successful.
+  virtual bool AddCompromisedCredentialsSync(
+      base::span<const CompromisedCredentials> issues) = 0;
+
   // Synchronous implementation to update the given login.
   virtual PasswordStoreChangeList UpdateLoginSync(
       const PasswordForm& form,
       UpdateLoginError* error = nullptr) = 0;
+
+  // Synchronous implementation to replace existing compromised credentials for
+  // the |form| with |credentials|.
+  virtual bool UpdateCompromisedCredentialsSync(
+      const PasswordForm& form,
+      base::span<const CompromisedCredentials> credentials) = 0;
 
   // Synchronous implementation to remove the given login.
   virtual PasswordStoreChangeList RemoveLoginSync(const PasswordForm& form) = 0;

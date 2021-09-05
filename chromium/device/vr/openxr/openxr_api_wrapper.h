@@ -15,6 +15,7 @@
 #include "base/macros.h"
 #include "base/optional.h"
 
+#include "device/vr/openxr/openxr_anchor_manager.h"
 #include "device/vr/openxr/openxr_util.h"
 #include "device/vr/public/mojom/vr_service.mojom.h"
 #include "device/vr/vr_export.h"
@@ -50,9 +51,12 @@ class OpenXrApiWrapper {
                        std::unique_ptr<OpenXRInputHelper>* input_helper,
                        const OpenXrExtensionHelper& extension_helper);
 
+  XrSpace GetReferenceSpace(device::mojom::XRReferenceSpaceType type) const;
+
   XrResult BeginFrame(Microsoft::WRL::ComPtr<ID3D11Texture2D>* texture);
   XrResult EndFrame();
   bool HasPendingFrame() const;
+  bool HasFrameState() const;
 
   XrResult GetHeadPose(base::Optional<gfx::Quaternion>* orientation,
                        base::Optional<gfx::Point3F>* position,
@@ -71,9 +75,14 @@ class OpenXrApiWrapper {
   void RegisterVisibilityChangeCallback(
       const base::RepeatingCallback<void(mojom::XRVisibilityState)>&
           visibility_changed_callback);
+  void RegisterOnSessionEndedCallback(
+      const base::RepeatingCallback<void()>& on_session_ended_callback);
 
   device::mojom::XREnvironmentBlendMode PickEnvironmentBlendModeForSession(
       device::mojom::XRSessionMode session_mode);
+
+  OpenXrAnchorManager* GetOrCreateAnchorManager(
+      const OpenXrExtensionHelper& extension_helper);
 
   bool CanEnableAntiAliasing() const;
 
@@ -107,7 +116,6 @@ class OpenXrApiWrapper {
   bool HasSession() const;
   bool HasColorSwapChain() const;
   bool HasSpace(XrReferenceSpaceType type) const;
-  bool HasFrameState() const;
 
   uint32_t GetRecommendedSwapchainSampleCount() const;
   XrResult UpdateStageBounds();
@@ -125,6 +133,7 @@ class OpenXrApiWrapper {
       interaction_profile_changed_callback_;
   base::RepeatingCallback<void(mojom::XRVisibilityState)>
       visibility_changed_callback_;
+  base::RepeatingCallback<void()> on_session_ended_callback_;
 
   // Testing objects
   static VRTestHook* test_hook_;
@@ -155,6 +164,8 @@ class OpenXrApiWrapper {
   std::vector<XrView> origin_from_eye_views_;
   std::vector<XrView> head_from_eye_views_;
   std::vector<XrCompositionLayerProjectionView> layer_projection_views_;
+
+  std::unique_ptr<OpenXrAnchorManager> anchor_manager_;
 
   base::WeakPtrFactory<OpenXrApiWrapper> weak_ptr_factory_{this};
 

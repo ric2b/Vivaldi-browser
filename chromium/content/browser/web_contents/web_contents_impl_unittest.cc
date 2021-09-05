@@ -113,9 +113,9 @@ class WebContentsImplTest : public RenderViewHostImplTestHarness {
     WebUIControllerFactory::RegisterFactory(
         ContentWebUIControllerFactory::GetInstance());
 
-    if (AreDefaultSiteInstancesEnabled()) {
-      // Isolate |isolated_cross_site_url()| so we can't get a default
-      // SiteInstance for it.
+    if (IsIsolatedOriginRequiredToGuaranteeDedicatedProcess()) {
+      // Isolate |isolated_cross_site_url()| so it cannot share a process
+      // with another site.
       ChildProcessSecurityPolicyImpl::GetInstance()->AddIsolatedOrigins(
           {url::Origin::Create(isolated_cross_site_url())},
           ChildProcessSecurityPolicy::IsolatedOriginSource::TEST,
@@ -263,11 +263,19 @@ TEST_F(WebContentsImplTest, UpdateTitle) {
   cont.LoadURL(GURL(url::kAboutBlankURL), Referrer(), ui::PAGE_TRANSITION_TYPED,
                std::string());
 
-  FrameHostMsg_DidCommitProvisionalLoad_Params params;
-  InitNavigateParams(&params, 0, true, GURL(url::kAboutBlankURL),
-                     ui::PAGE_TRANSITION_TYPED);
+  auto params = mojom::DidCommitProvisionalLoadParams::New();
+  params->url = GURL(url::kAboutBlankURL);
+  params->origin = url::Origin::Create(params->url);
+  params->referrer = blink::mojom::Referrer::New();
+  params->transition = ui::PAGE_TRANSITION_TYPED;
+  params->redirects = std::vector<GURL>();
+  params->should_update_history = false;
+  params->did_create_new_entry = true;
+  params->gesture = NavigationGestureUser;
+  params->method = "GET";
+  params->page_state = blink::PageState::CreateFromURL(params->url);
 
-  main_test_rfh()->SendNavigateWithParams(&params,
+  main_test_rfh()->SendNavigateWithParams(std::move(params),
                                           false /* was_within_same_document */);
 
   contents()->UpdateTitle(main_test_rfh(),
@@ -279,43 +287,6 @@ TEST_F(WebContentsImplTest, UpdateTitle) {
   EXPECT_TRUE(fake_delegate.loading_state_changed_was_called());
 
   contents()->SetDelegate(nullptr);
-}
-
-TEST_F(WebContentsImplTest, DownloadInvalidImage) {
-  TestWebContents* test_contents = contents();
-
-  GURL url("about:blank");
-
-  SkBitmap result_bitmap;
-  WebContents::ImageDownloadCallback cb = base::BindLambdaForTesting(
-      [&](int id, int http_status_code, const GURL& image_url,
-          const std::vector<SkBitmap>& bitmaps,
-          const std::vector<gfx::Size>& sizes) {
-        ASSERT_EQ(bitmaps.size(), 1u);
-        result_bitmap = bitmaps[0];
-      });
-
-  // In production this would go to the renderer, but TestWebContents just
-  // waits for us to give a reply.
-  test_contents->DownloadImage(url,
-                               /*is_favicon=*/false,
-                               /*preferred_size=*/false,
-                               /*max_bitmap_size=*/0,
-                               /*bypass_cache=*/false, std::move(cb));
-
-  SkBitmap badbitmap;
-  badbitmap.allocPixels(
-      SkImageInfo::Make(1, 1, kARGB_4444_SkColorType, kPremul_SkAlphaType));
-  badbitmap.eraseColor(SK_ColorGREEN);
-
-  SkBitmap n32bitmap;
-  EXPECT_TRUE(skia::SkBitmapToN32OpaqueOrPremul(badbitmap, &n32bitmap));
-
-  // The result from the renderer is not an N32 32bpp bitmap, so it should
-  // be converted before being given to the rest of the browser process.
-  test_contents->TestDidDownloadImage(url, 400, {badbitmap},
-                                      {gfx::Size(1000, 2000)});
-  EXPECT_TRUE(gfx::BitmapsAreEqual(result_bitmap, n32bitmap));
 }
 
 TEST_F(WebContentsImplTest, UpdateTitleBeforeFirstNavigation) {
@@ -596,16 +567,27 @@ TEST_F(WebContentsImplTest, CrossSiteBoundariesAfterCrash) {
   navigation_to_url2->ReadyToCommit();
 
   TestRenderFrameHost* new_rfh = main_test_rfh();
-  EXPECT_FALSE(contents()->CrossProcessNavigationPending());
-  EXPECT_EQ(nullptr, contents()->GetPendingMainFrame());
-  EXPECT_NE(orig_rfh, new_rfh);
-  EXPECT_EQ(orig_rvh_delete_count, 1);
+  if (ShouldSkipEarlyCommitPendingForCrashedFrame()) {
+    EXPECT_TRUE(contents()->CrossProcessNavigationPending());
+    EXPECT_NE(nullptr, contents()->GetPendingMainFrame());
+    EXPECT_EQ(orig_rfh, new_rfh);
+    EXPECT_EQ(orig_rvh_delete_count, 0);
+  } else {
+    EXPECT_FALSE(contents()->CrossProcessNavigationPending());
+    EXPECT_EQ(nullptr, contents()->GetPendingMainFrame());
+    EXPECT_NE(orig_rfh, new_rfh);
+    EXPECT_EQ(orig_rvh_delete_count, 1);
+  }
 
   navigation_to_url2->Commit();
   SiteInstance* instance2 = contents()->GetSiteInstance();
 
   EXPECT_FALSE(contents()->CrossProcessNavigationPending());
-  EXPECT_EQ(new_rfh, main_rfh());
+  if (ShouldSkipEarlyCommitPendingForCrashedFrame()) {
+    EXPECT_NE(new_rfh, main_rfh());
+  } else {
+    EXPECT_EQ(new_rfh, main_rfh());
+  }
   EXPECT_NE(instance1, instance2);
   EXPECT_EQ(nullptr, contents()->GetPendingMainFrame());
 
@@ -783,16 +765,15 @@ TEST_F(WebContentsImplTest, NavigateFromRestoredSitelessUrl) {
           false, std::string(), browser_context(),
           nullptr /* blob_url_loader_factory */);
   entries.push_back(std::move(new_entry));
-  controller().Restore(0, RestoreType::LAST_SESSION_EXITED_CLEANLY, &entries);
+  controller().Restore(0, RestoreType::kRestored, &entries);
   ASSERT_EQ(0u, entries.size());
   ASSERT_EQ(1, controller().GetEntryCount());
 
   EXPECT_TRUE(controller().NeedsReload());
   controller().LoadIfNecessary();
-  NavigationEntry* entry = controller().GetPendingEntry();
   orig_rfh->PrepareForCommit();
-  contents()->TestDidNavigate(orig_rfh, entry->GetUniqueID(), false,
-                              native_url, ui::PAGE_TRANSITION_RELOAD);
+  contents()->TestDidNavigate(orig_rfh, false, native_url,
+                              ui::PAGE_TRANSITION_RELOAD);
   EXPECT_EQ(orig_instance, contents()->GetSiteInstance());
   EXPECT_EQ(GURL(), contents()->GetSiteInstance()->GetSiteURL());
   EXPECT_FALSE(orig_instance->HasSite());
@@ -826,16 +807,15 @@ TEST_F(WebContentsImplTest, NavigateFromRestoredRegularUrl) {
           false, std::string(), browser_context(),
           nullptr /* blob_url_loader_factory */);
   entries.push_back(std::move(new_entry));
-  controller().Restore(0, RestoreType::LAST_SESSION_EXITED_CLEANLY, &entries);
+  controller().Restore(0, RestoreType::kRestored, &entries);
   ASSERT_EQ(0u, entries.size());
 
   ASSERT_EQ(1, controller().GetEntryCount());
   EXPECT_TRUE(controller().NeedsReload());
   controller().LoadIfNecessary();
-  NavigationEntry* entry = controller().GetPendingEntry();
   orig_rfh->PrepareForCommit();
-  contents()->TestDidNavigate(orig_rfh, entry->GetUniqueID(), false,
-                              regular_url, ui::PAGE_TRANSITION_RELOAD);
+  contents()->TestDidNavigate(orig_rfh, false, regular_url,
+                              ui::PAGE_TRANSITION_RELOAD);
   EXPECT_EQ(orig_instance, contents()->GetSiteInstance());
   EXPECT_TRUE(orig_instance->HasSite());
   EXPECT_EQ(AreDefaultSiteInstancesEnabled(),
@@ -1264,7 +1244,7 @@ TEST_F(WebContentsImplTest, CrossSiteNavigationBackOldNavigationIgnored) {
   EXPECT_EQ(entry1, controller().GetLastCommittedEntry());
 
   // When the second back commits, it should be ignored.
-  contents()->TestDidNavigate(google_rfh, entry2->GetUniqueID(), false, url2,
+  contents()->TestDidNavigate(google_rfh, false, url2,
                               ui::PAGE_TRANSITION_TYPED);
   EXPECT_EQ(entry1, controller().GetLastCommittedEntry());
 
@@ -1704,9 +1684,6 @@ TEST_F(WebContentsImplTest, CapturerOverridesPreferredSize) {
 }
 
 TEST_F(WebContentsImplTest, UpdateWebContentsVisibility) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(features::kWebContentsOcclusion);
-
   TestRenderWidgetHostView* view = static_cast<TestRenderWidgetHostView*>(
       main_test_rfh()->GetRenderViewHost()->GetWidget()->GetView());
   TestWebContentsObserver observer(contents());
@@ -1813,8 +1790,6 @@ TEST_F(WebContentsImplTest, HideWithCapturer) {
 }
 
 TEST_F(WebContentsImplTest, OccludeWithCapturer) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(features::kWebContentsOcclusion);
   HideOrOccludeWithCapturerTest(contents(), Visibility::OCCLUDED);
 }
 

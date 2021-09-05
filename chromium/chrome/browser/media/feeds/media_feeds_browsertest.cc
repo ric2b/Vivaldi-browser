@@ -53,7 +53,10 @@ constexpr base::FilePath::CharType kMediaFeedsTestDir[] =
 
 const char kMediaFeedsTestHTML[] =
     "  <!DOCTYPE html>"
-    "  <head>%s</head>";
+    "  <head>"
+    "  <link rel=\"icon\" type=\"image/png\" href=\"https://a.com/icon.png\">"
+    "  %s"
+    "  </head>";
 
 const char kMediaFeedsTestHeadHTML[] =
     "<link rel=media-feed type=\"application/ld+json\" "
@@ -266,6 +269,7 @@ IN_PROC_BROWSER_TEST_F(MediaFeedsBrowserTest, DiscoverAndFetch) {
   std::vector<media_feeds::mojom::MediaFeedPtr> discovered_feeds =
       GetDiscoveredFeeds();
   EXPECT_EQ(1u, discovered_feeds.size());
+  EXPECT_EQ(GURL("https://a.com/icon.png"), discovered_feeds[0]->favicon);
 
   base::RunLoop run_loop;
   GetMediaFeedsService()->FetchMediaFeed(
@@ -920,8 +924,9 @@ IN_PROC_BROWSER_TEST_F(MediaFeedsBrowserTest,
   }
 }
 
-// Flaky on lacros: crbug.com/1124983
-#if BUILDFLAG(IS_LACROS)
+// Flaky on lacros and windows: crbug.com/1124983
+#if BUILDFLAG(IS_CHROMEOS_LACROS) || defined(OS_WIN) || \
+    defined(UNDEFINED_SANITIZER)
 #define MAYBE_ResetMediaFeed_WebContentsDestroyed \
   DISABLED_ResetMediaFeed_WebContentsDestroyed
 #else

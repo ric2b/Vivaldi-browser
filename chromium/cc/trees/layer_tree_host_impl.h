@@ -41,6 +41,7 @@
 #include "cc/metrics/total_frame_counter.h"
 #include "cc/paint/discardable_image_map.h"
 #include "cc/paint/paint_worklet_job.h"
+#include "cc/raster/raster_query_queue.h"
 #include "cc/resources/ui_resource_client.h"
 #include "cc/scheduler/begin_frame_tracker.h"
 #include "cc/scheduler/commit_earlyout_reason.h"
@@ -372,11 +373,21 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   void DidScrollContent(ElementId element_id, bool animated) override;
   float DeviceScaleFactor() const override;
   float PageScaleFactor() const override;
+  gfx::Size VisualDeviceViewportSize() const override;
   const LayerTreeSettings& GetSettings() const override;
   LayerTreeHostImpl& GetImplDeprecated() override;
   const LayerTreeHostImpl& GetImplDeprecated() const override;
 
   FrameSequenceTrackerCollection& frame_trackers() { return frame_trackers_; }
+
+  // VisualDeviceViewportSize is the size of the global viewport across all
+  // compositors that are part of the scene that this compositor contributes to
+  // (i.e. the visual viewport), allowing for that scene to be broken up into
+  // multiple compositors that each contribute to the whole (e.g. cross-origin
+  // iframes are isolated from each other). This is a size instead of a rect
+  // because each compositor doesn't know its position relative to other
+  // compositors. This is specified in device viewport coordinate space.
+  void SetVisualDeviceViewportSize(const gfx::Size&);
 
   // Updates registered ElementIds present in |changed_list|. Call this after
   // changing the property trees for the |changed_list| trees.
@@ -422,14 +433,12 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
                                  ElementListType list_type,
                                  const PropertyAnimationState& mask,
                                  const PropertyAnimationState& state) override;
-  void AnimationScalesChanged(ElementId element_id,
-                              ElementListType list_type,
-                              float maximum_scale,
-                              float starting_scale) override;
+  void MaximumScaleChanged(ElementId element_id,
+                           ElementListType list_type,
+                           float maximum_scale) override;
   void OnCustomPropertyMutated(
-      ElementId element_id,
-      const std::string& custom_property_name,
-      PaintWorkletInput::PropertyValue custom_property_value) override;
+      PaintWorkletInput::PropertyKey property_key,
+      PaintWorkletInput::PropertyValue property_value) override;
 
   void ScrollOffsetAnimationFinished() override;
   gfx::ScrollOffset GetScrollOffsetForAnimation(
@@ -818,6 +827,10 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
     return client_->IsInSynchronousComposite();
   }
 
+  RasterQueryQueue* GetRasterQueryQueueForTesting() const {
+    return pending_raster_queries_.get();
+  }
+
  protected:
   LayerTreeHostImpl(
       const LayerTreeSettings& settings,
@@ -1012,6 +1025,7 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
       GpuRasterizationStatus::OFF_DEVICE;
   std::unique_ptr<RasterBufferProvider> raster_buffer_provider_;
   std::unique_ptr<ResourcePool> resource_pool_;
+  std::unique_ptr<RasterQueryQueue> pending_raster_queries_;
   std::unique_ptr<ImageDecodeCache> image_decode_cache_;
 
   GlobalStateThatImpactsTilePriority global_tile_state_;
@@ -1110,6 +1124,8 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   int consecutive_frame_with_damage_count_;
 
   std::unique_ptr<Viewport> viewport_;
+
+  gfx::Size visual_device_viewport_size_;
 
   std::unique_ptr<PendingTreeRasterDurationHistogramTimer>
       pending_tree_raster_duration_timer_;

@@ -284,8 +284,8 @@ This file contains the strings for ash.
       <message name="IDS_ASH_STATUS_TRAY_EXIT_PUBLIC" desc="The label used for the button in the status tray to terminate a public account session. If the label is long, indicate where it may be broken into two lines by inserting \n instead of a whitespace. [CHAR_LIMIT=20]">
         Exit session
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_PUBLIC_LABEL" desc="Text of the the ash system bubble's user card when the current session is a managed session.">
-        <ph name="DISPLAY_NAME">$1<ex>Internet kiosk</ex></ph> is a managed session managed by <ph name="DOMAIN">$2<ex>yourdomain.com</ex></ph>
+      <message name="IDS_ASH_STATUS_TRAY_PUBLIC_LABEL" desc="Text of the the ash system bubble's user card when the current session is a managed session. MANAGER can be a domain or an email address.">
+        <ph name="DISPLAY_NAME">$1<ex>Internet kiosk</ex></ph> is a managed session managed by <ph name="MANAGER">$2<ex>yourdomain.com</ex></ph>
       </message>
       <message name="IDS_ASH_STATUS_TRAY_LOCK" desc="The label used for the button in the status tray to lock the screen.">
         Lock
@@ -302,8 +302,8 @@ This file contains the strings for ash.
       <message name="IDS_ASH_STATUS_TRAY_MESSAGE_OUT_OF_USERS" desc="The error message when all the users are added into multi-profile session.">
         All available users have already been added to this session.
       </message>
-      <message name="IDS_ASH_STATUS_TRAY_NEARBY_SHARE_BUTTON_LABEL" desc="The shorter label used for the button in the status tray to toggle Nearby Share high visibility mode, which makes the device visible to all nearby devices for file sharing. [CHAR_LIMIT=14]">
-        Nearby Share
+      <message name="IDS_ASH_STATUS_TRAY_NEARBY_SHARE_BUTTON_LABEL" desc="The shorter label used for the button in the status tray to toggle Nearby Share high visibility mode, which makes the device visible to all nearby devices for file sharing.">
+        Nearby visibility
       </message>
       <message name="IDS_ASH_STATUS_TRAY_NEARBY_SHARE_OFF_STATE" desc="Sub-label for the Nearby Share system tray button." meaning="Nearby Share high visibility mode is currently inactive. [CHAR_LIMIT=14]">
         Off
@@ -509,11 +509,6 @@ This file contains the strings for ash.
       <message name="IDS_UPDATE_NOTIFICATION_TITLE" desc="The title of the notification to notify that the user should restart to get system updates.">
         Update available
       </message>
-      <if expr="is_chrome_branded">
-        <message name="IDS_UPDATE_NOTIFICATION_TITLE_FLASH_PLAYER" desc="The title of the notification to notify the user should restart to get system updates in order to update Flash Player.">
-          Adobe Flash Player update available
-        </message>
-      </if>
       <message name="IDS_ROLLBACK_NOTIFICATION_TITLE" desc="The title of the notification to notify that the user should restart to roll back the device.">
         Device will be rolled back
       </message>
@@ -558,6 +553,12 @@ This file contains the strings for ash.
       </message>
       <message name="IDS_DIALOG_MESSAGE_SLOW_BOOT" desc="The body of the Slow Boot Shutdown Confirmation Dialog.">
         Your screen will go blank for longer than usual (up to a minute) during this update. Please don't press the power button while the update is in progress.
+      </message>
+      <message name="IDS_UPDATE_NOTIFICATION_TITLE_LACROS" desc="The title of the notification to notify that the user should restart to get an update for the experimental 'Lacros' browser.">
+        Lacros update available
+      </message>
+      <message name="IDS_UPDATE_NOTIFICATION_MESSAGE_LACROS" desc="The body of the notification to notify that the user should restart to get an update for the experimental 'Lacros' browser.">
+        Device restart is required to apply the update.
       </message>
 
       <message name="IDS_ASH_FLOATING_ACCESSIBILITY_DETAILED_MENU" desc="The name of the quick settings view of floating accessibility menu.">
@@ -631,6 +632,12 @@ This file contains the strings for ash.
       </message>
       <message name="IDS_ASH_DRAG_HANDLE_NUDGE" desc="The text shown to users above the drag handle when the device is in tablet mode and showing the in-app shelf. Instructs them that they can transition to home screen by swiping up from the shelf.">
         Swipe up to go home
+      </message>
+      <message name="IDS_ASH_DRAG_HANDLE_HOTSEAT_SHOW_ACCESSIBLE_NAME" desc="The tooltip text indicate that users can use this as a button to show the hotseat/apps in shelf bar.">
+        Show apps in shelf
+      </message>
+      <message name="IDS_ASH_DRAG_HANDLE_HOTSEAT_HIDE_ACCESSIBLE_NAME" desc="The tooltip text indicate that users can use this as a button to hide the hotseat/apps in shelf bar.">
+        Hide apps in shelf
       </message>
       <message name="IDS_ASH_HOME_TO_OVERVIEW_CONTEXTUAL_NUDGE" desc="Text shown to the user below shelf on the home screen in tablet mode, instructing them that they can transition to overview UI by swiping up from the shelf and holding.">
         Swipe up and hold to see open apps
@@ -791,11 +798,17 @@ This file contains the strings for ash.
       <message name="IDS_ASH_SELECT_TO_SPEAK_PAUSE" desc="The label for the Select-to-speak pause button, that allows users to pause text-to-speech playback.">
         Pause
       </message>
-      <message name="IDS_ASH_SELECT_TO_SPEAK_RESUME" desc="The label for the Select-to-speak resume button, that allows users to resume text-to-speech playback.">
-        Resume
+      <message name="IDS_ASH_SELECT_TO_SPEAK_RESUME" desc="The label for the Select-to-speak resume button, that allows users to continue text-to-speech playback.">
+        Continue
       </message>
-      <message name="IDS_ASH_SELECT_TO_SPEAK_EXIT" desc="The label for the Select-to-speak exit button, that stops Select-to-speak.">
-        Exit Select-to-speak
+      <message name="IDS_ASH_SELECT_TO_SPEAK_READING_SPEED" desc="The label for the Select-to-speak reading speed button, that allows users to update the rate of text-to-speech playback.">
+        Reading speed
+      </message>
+      <message name="IDS_ASH_SELECT_TO_SPEAK_EXIT" desc="The label for the Select-to-speak close button, that stops Select-to-speak.">
+        Close Select-to-speak
+      </message>
+      <message name="IDS_ASH_SELECT_TO_SPEAK_MENU" desc="The name of the Select-to-speak floating menu.">
+        Select-to-speak menu
       </message>
       <message name="IDS_ASH_SWITCH_ACCESS_BACK_BUTTON_DESCRIPTION" desc="The tooltip text for the Switch Access back button. The back button allows users to exit the feature's current focus area.">
         Back button
@@ -827,6 +840,9 @@ This file contains the strings for ash.
       <message name="IDS_ASH_SWITCH_ACCESS_KEYBOARD" desc="The label for the Switch Access menu option to open the onscreen keyboard.">
         Keyboard
       </message>
+      <message name="IDS_ASH_SWITCH_ACCESS_LEFT_CLICK" desc="The label for the Switch Access menu option to left click.">
+        Left click
+      </message>
       <message name="IDS_ASH_SWITCH_ACCESS_MOVE_BACKWARD_ONE_CHAR_OF_TEXT" desc="The label for the Switch Access menu option to move the cursor backward one character of text.">
         Back by letter
       </message>
@@ -853,6 +869,9 @@ This file contains the strings for ash.
       </message>
       <message name="IDS_ASH_SWITCH_ACCESS_POINT_SCAN" desc="The label for the Switch Access menu option to start point scanning.">
         Point scanning
+      </message>
+      <message name="IDS_ASH_SWITCH_ACCESS_RIGHT_CLICK" desc="The label for the Switch Access menu option to right click.">
+        Right Click
       </message>
       <message name="IDS_ASH_SWITCH_ACCESS_SCROLL_DOWN" desc="The label for the Switch Access menu option to scroll the selected view down.">
         Scroll down
@@ -910,6 +929,9 @@ This file contains the strings for ash.
       </message>
       <message name="IDS_ASH_STATUS_TRAY_DATE" desc="The date displayed on ash system bubble, Depending on launguage, please choose the best separator(eg ',') between abbreviated weekday and date">
         <ph name="short_weekday">$1<ex>Fri</ex></ph>, <ph name="date">$2<ex>Aug 31, 2012</ex></ph>
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_DATE_TIME" desc="The time displayed on ash system tray, Depending on launguage, please choose the best separator(eg ',') between abbreviated date and time">
+        <ph name="date">$1<ex>Aug 31</ex></ph>, <ph name="time">$2<ex>03:00</ex></ph>
       </message>
       <message name="IDS_ASH_STATUS_TRAY_REBOOT" desc="The accessible text for the reboot button.">
         Restart
@@ -989,14 +1011,20 @@ This file contains the strings for ash.
       </message>
 
       <!-- Holding space tray-->
+      <message name="IDS_ASH_HOLDING_SPACE_A11Y_NAME" desc="A11y name of the holding space tray and bubble.">
+        Tote: recent screen captures, downloads, and pinned files
+      </message>
       <message name="IDS_ASH_HOLDING_SPACE_TITLE" desc="Title of the holding space tray and bubble.">
-        Recent screen captures and downloads
+        Tote
       </message>
       <message name="IDS_ASH_HOLDING_SPACE_PINNED_TITLE" desc="Title of the pinned files area in the holding space bubble.">
-        Pinned
+        Pinned files
       </message>
       <message name="IDS_ASH_HOLDING_SPACE_PINNED_EMPTY_PROMPT" desc="Prompt shown in the pinned files area of the holding space bubble if the user has no pinned files.">
-        Quickly access your important files. Right-click or touch &amp; hold a file to pin it.
+        You can pin your important files here. Open Files app to get started.
+      </message>
+      <message name="IDS_ASH_HOLDING_SPACE_PINNED_FILES_APP_CHIP_TEXT" desc="Text for chip which opens the Files app shown in the pinned files area of the holding space bubble if the user has no pinned files.">
+        Open Files
       </message>
       <message name="IDS_ASH_HOLDING_SPACE_DOWNLOADS_TITLE" desc="Title of the downloads area in the holding space bubble.">
         Downloads
@@ -1033,8 +1061,8 @@ This file contains the strings for ash.
       <message name="IDS_ASH_PHONE_HUB_MOBILE_STATUS_NO_NETWORK" desc="The tooltip text indicating the phone has a SIM, but it is not connected to a mobile network.">
         No mobile network
       </message>
-      <message name="IDS_ASH_PHONE_HUB_MOBILE_STATUS_NETWORK_STRENGTH" desc="The tooltip text indicating the strength of the phone's mobile network">
-        Mobile network. Signal strength of <ph name="SIGNAL_STRENGTH">$1<ex>1</ex></ph>
+      <message name="IDS_ASH_PHONE_HUB_MOBILE_STATUS_NETWORK_NAME_AND_STRENGTH" desc="The tooltip text indicating the name and strength of the phone's mobile network.">
+        <ph name="WIRELESS_PROVIDER">$1<ex>Google Fi</ex></ph>, Signal strength <ph name="SIGNAL_STRENGTH">$2<ex>1</ex></ph> percent.
       </message>
       <message name="IDS_ASH_PHONE_HUB_BATTERY_STATUS_NOT_CHARGING" desc="The tooltip text indicating the phone is currently not charging">
         Not charging
@@ -1044,6 +1072,9 @@ This file contains the strings for ash.
       </message>
       <message name="IDS_ASH_PHONE_HUB_BATTERY_STATUS_CHARGING_USB" desc="The tooltip text indicating the phone is currently charging via a USB connection.">
         Charging via USB
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_BATTERY_PERCENTAGE_ACCESSIBLE_TEXT" desc="The accessible text of the phone battery percentage displayed in the Phone Hub tray.">
+        Phone battery <ph name="BATTERY_PERCENTAGE">$1<ex>100</ex></ph>%
       </message>
       <message name="IDS_ASH_PHONE_HUB_BATTERY_SAVER_ON" desc="The tooltip text indicating the phone is currently in battery saver mode.">
         Battery saver mode is on
@@ -1109,7 +1140,7 @@ This file contains the strings for ash.
         Turn on Phone Hub
       </message>
       <message name="IDS_ASH_PHONE_HUB_ONBOARDING_DIALOG_DESCRIPTION" desc="The description of the onboarding dialog that pops up for existing multidevice users to ask for permission when the user enables this feature.">
-        Extend your phone’s internet connection, control Do Not Disturb and locate your device. View active Chrome tabs from your phone on your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>.
+        Connect to your phone’s hotspot, silence and locate your device, and view recent Chrome tabs open on your phone
       </message>
       <message name="IDS_ASH_PHONE_HUB_ONBOARDING_DIALOG_DISMISS_BUTTON" desc="Dimiss button on the onboarding dialog for user to opt out this feature.">
         Dismiss
@@ -1121,7 +1152,7 @@ This file contains the strings for ash.
         Set up Phone Hub later
       </message>
       <message name="IDS_ASH_PHONE_HUB_ONBOARDING_DISMISS_DIALOG_DESCRIPTION_PART_1" desc="The description of the dialog that pops up after user clicks the dismiss button on the onboarding dialog. Also see IDS_ASH_PHONE_HUB_ONBOARDING_DISMISS_DIALOG_DESCRIPTION_PART_2.">
-        Extend your phone’s internet connection, control Do Not Disturb and locate your phone. View active Chrome tabs from your phone on your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>.
+        Connect to your phone’s hotspot, silence and locate your device, and view recent Chrome tabs open on your phone
       </message>
       <message name="IDS_ASH_PHONE_HUB_ONBOARDING_DISMISS_DIALOG_DESCRIPTION_PART_2" desc="The description of the dialog that pops up after user clicks the dismiss button on the onboarding dialog. Also see IDS_ASH_PHONE_HUB_ONBOARDING_DISMISS_DIALOG_DESCRIPTION_PART_1.">
         You can always set up later from Settings.
@@ -1129,29 +1160,32 @@ This file contains the strings for ash.
       <message name="IDS_ASH_PHONE_HUB_ONBOARDING_DISMISS_DIALOG_OK_BUTTON" desc="Confirm button on the onboarding dismiss dialog to acknowledge.">
         OK
       </message>
-      <message name="IDS_ASH_PHONE_HUB_INITIAL_CONNECTING_DIALOG_TITLE" desc="The title of the initial connecting dialog that indicates the device is trying to connect to your phone after the user has opted in the Phone Hub feature.">
+      <message name="IDS_ASH_PHONE_HUB_PHONE_CONNECTING_DIALOG_TITLE" desc="The title of the generic connecting dialog that indicates the device is trying to connect to your phone.">
         Connecting...
       </message>
-      <message name="IDS_ASH_PHONE_HUB_INITIAL_CONNECTING_DIALOG_DESCRIPTION" desc="The description of the onboarding dialog that indicates the device is trying to connect to your phone after the user has opted in the Phone Hub feature.">
-        Make sure your phone is nearby with Bluetooth and Wi-Fi is turned on.
+      <message name="IDS_ASH_PHONE_HUB_TETHER_CONNECTION_PENDING_DIALOG_TITLE" desc="The title of the connecting dialog that indicates a tether connection to the phone is in progress.">
+        Connecting to hotspot...
       </message>
-      <message name="IDS_ASH_PHONE_HUB_CONNECTION_ERROR_DIALOG_TITLE" desc="The title of the dialog that pops up when the Phone Hub feature is not available because there is currently no active connection to the phone.">
-        Can’t find your phone
+      <message name="IDS_ASH_PHONE_HUB_PHONE_CONNECTING_DIALOG_DESCRIPTION" desc="The description of the generic connecting dialog that indicates the device is trying to connect to your phone.">
+        Make sure your phone is nearby and has Bluetooth turned on.
       </message>
-      <message name="IDS_ASH_PHONE_HUB_CONNECTION_ERROR_DIALOG_DESCRIPTION" desc="The description of the dialog that pops up when the Phone Hub feature is not available because there is currently no active connection to the phone.">
-        Looks like your phone is not online and we are not able to connect to it.
+      <message name="IDS_ASH_PHONE_HUB_PHONE_DISCONNECTED_DIALOG_TITLE" desc="The title of the dialog that pops up when the Phone Hub feature is not available because there is currently no active connection to the phone.">
+        Can't find your phone
       </message>
-      <message name="IDS_ASH_PHONE_HUB_CONNECTION_ERROR_DIALOG_REFRESH_BUTTON" desc="Refresh button on the connection error dialog to retry the connection attempt to the phone.">
+      <message name="IDS_ASH_PHONE_HUB_PHONE_DISCONNECTED_DIALOG_DESCRIPTION" desc="The description of the dialog that pops up when the Phone Hub feature is not available because there is currently no active connection to the phone. This message reminds users that Bluetooth must be enabled on the phone in order to use the feature.">
+        Check that Bluetooth is enabled on your phone to use Phone Hub
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_PHONE_DISCONNECTED_DIALOG_REFRESH_BUTTON" desc="Refresh button on the disconnected dialog to retry the connection attempt to the phone.">
         Refresh
       </message>
-      <message name="IDS_ASH_PHONE_HUB_CONNECTION_ERROR_DIALOG_LEARN_MORE_BUTTON" desc="Learn more button on the connection error dialog to show more related information.">
+      <message name="IDS_ASH_PHONE_HUB_PHONE_DISCONNECTED_DIALOG_LEARN_MORE_BUTTON" desc="Learn more button on the disconnected dialog to show more related information.">
         Learn more
       </message>
       <message name="IDS_ASH_PHONE_HUB_BLUETOOTH_DISABLED_DIALOG_TITLE" desc="The title of the dialog that pops up when the phone hub feature is not available because Bluetooth is disabled on this device.">
         Check your connection
       </message>
       <message name="IDS_ASH_PHONE_HUB_BLUETOOTH_DISABLED_DIALOG_DESCRIPTION" desc="The description of the dialog that pops up when the phone hub feature is not available because Bluetooth is disabled on this device.">
-        Looks like your Bluetooth or Wi-Fi is turned off on your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>. Please check your connection to use Phone Hub.
+        Looks like Bluetooth is turned off on your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>. Please turn on Bluetooth to use Phone Hub.
       </message>
       <message name="IDS_ASH_PHONE_HUB_BLUETOOTH_DISABLED_DIALOG_OK_BUTTON" desc="Confirm button on the bluetooth disabled dialog to acknowledge.">
         Ok, got it
@@ -1177,10 +1211,27 @@ This file contains the strings for ash.
       <message name="IDS_ASH_PHONE_HUB_NOTIFICATION_HOTSPOT_FAILED_MESSAGE" desc="Message inside a PhoneHub notification when enable hotspot failed to find a connection.">
         Tap to configure
       </message>
-      <message name="IDS_ASH_PHONE_HUB_SILENCE_BUTTON_NOT_AVAILABLE_TOOLTIP" translateable="false" desc="Tooltip message that indicates to the user that the Silence Phone feature is disabled because their phone is on a work profile.">
+      <message name="IDS_ASH_PHONE_HUB_CONTINUE_BROWSING_TAB_LABEL" desc="Label inside a Phone Hub continue browsing card that describes the index of the card, title of the webpage, and webpage url.">
+        Browser tab <ph name="INDEX">$1<ex>1</ex></ph> of <ph name="TOTAL_COUNT">$2<ex>2</ex></ph>. <ph name="SITE_TITLE">$3<ex>Google</ex></ph>, <ph name="SITE_URL">$4<ex>https://google.com</ex></ph>
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_CONNECTED_DEVICE_SETTINGS_LABEL" desc="Label for the settings button in the Phone Hub UI that lets users know that the button routes to the Chrome OS Settings app page for connected devices (e.g. to disable Phone Hub features, enable/disable Smartlock, etc)">
+        Connected devices settings
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_SILENCE_BUTTON_NOT_AVAILABLE_TOOLTIP" desc="Tooltip message that indicates to the user that the Silence Phone feature is disabled because their phone is on a work profile.">
         Silence phone is not available on work profile
       </message>
-
+      <message name="IDS_ASH_PHONE_HUB_LOCATE_BUTTON_NOT_AVAILABLE_TOOLTIP" desc="Tooltip message that indicates to the user that Phone Hub's 'Locate phone' feature is not available because the user disabled alarms that make sounds on their phone.">
+        Locate phone is not available when alarm sounds are disabled
+      </message>
+      <message name="IDS_ASH_PHONE_HUB_ENABLE_HOTSPOT_NO_RECEPTION_STATE_TOOLTIP" desc="Tooltip message that indicates to the user that the Enable Hotspot feature is disabled because their phone does not have mobile data.">
+        Your phone must have mobile data to provide a hotspot
+      </message>
+      <message name="IDS_ASH_STYLUS_BATTERY_LOW_LABEL" desc="The label next to the stylus battery indicator when the battery level is below 24%">
+        Low
+      </message>
+      <message name="IDS_ASH_STYLUS_BATTERY_PERCENT_ACCESSIBLE" desc="The message used by accessibility to show stylus battery level.">
+        Stylus battery at <ph name="percentage">$1<ex>56</ex></ph> percent.
+      </message>
       <message name="IDS_ASH_STYLUS_TOOLS_CAPTURE_REGION_ACTION" desc="Title of the capture region action in the stylus tools (a pop-up panel next to the status tray). This causes a partial screenshot to be taken (the user selects an area of the screen to take a screenshot of).">
         Capture region
       </message>
@@ -1304,6 +1355,9 @@ This file contains the strings for ash.
       <message name="IDS_ASH_OVERVIEW_WINDOW_CLOSING_A11Y_ALERT" desc="The accessibility alert read by screen readers to alert the user that a window in overview mode is closing.">
         Window <ph name="WINDOW_TITILE">$1<ex>1</ex></ph> closed.
       </message>
+      <message name="IDS_ASH_OVERVIEW_VISIBLE_ON_ALL_DESKS_TOAST" desc="The text for the toast that appears when user tries to drag a visible on all desks window to a desk.">
+        Already assigned to all desks.
+      </message>
 
       <!-- Virtual Desks -->
       <message name="IDS_ASH_DESKS_NEW_DESK_BUTTON" desc="The label of the new virtual desk (a.k.a. workspaces) button.">
@@ -1320,6 +1374,18 @@ This file contains the strings for ash.
       </message>
       <message name="IDS_ASH_DESKS_DESK_4_MINI_VIEW_TITLE" desc="The label of the fourth virtual desk thumbnail.">
         Desk 4
+      </message>
+      <message name="IDS_ASH_DESKS_DESK_5_MINI_VIEW_TITLE" desc="The label of the fifth virtual desk thumbnail.">
+        Desk 5
+      </message>
+      <message name="IDS_ASH_DESKS_DESK_6_MINI_VIEW_TITLE" desc="The label of the sixth virtual desk thumbnail.">
+        Desk 6
+      </message>
+      <message name="IDS_ASH_DESKS_DESK_7_MINI_VIEW_TITLE" desc="The label of the seventh virtual desk thumbnail.">
+        Desk 7
+      </message>
+      <message name="IDS_ASH_DESKS_DESK_8_MINI_VIEW_TITLE" desc="The label of the eighth virtual desk thumbnail.">
+        Desk 8
       </message>
       <message name="IDS_ASH_DESKS_MAX_NUM_REACHED" desc="Message shown to users when they attempt to add a new virtual desk when the maximum number of desks has been reached.">
         Maximum number of desks reached.
@@ -1489,6 +1555,9 @@ This file contains the strings for ash.
       </message>
       <message name="IDS_ASH_STATUS_TRAY_OTHER_WIFI" desc="The label used for the item to display other Wi-Fi networks.">
         Join other Wi-Fi networks
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_ADD_CELLULAR_LABEL" desc="The label for button in network quick settings that allows user to add new cellular networks.">
+        Add new cellular network
       </message>
       <message name="IDS_ASH_STATUS_TRAY_BLUETOOTH_DISCOVERABLE" desc="Notification shown when a Bluetooth adapter is discoverable.">
         Your computer is discoverable to nearby Bluetooth devices and will appear as "<ph name="NAME">$1<ex>Chromebook</ex></ph>" with address <ph name="ADDRESS">$2<ex>01:23:45:67:89:0A</ex></ph>
@@ -1678,6 +1747,17 @@ This file contains the strings for ash.
       </message>
       <message name="IDS_ASH_STATUS_TRAY_AUDIO_MIC_JACK_DEVICE" desc="label used for mic jack device">
         Mic jack
+      </message>
+
+      <!-- Status tray Live Caption strings. -->
+      <message name="IDS_ASH_STATUS_TRAY_LIVE_CAPTION_TOGGLE_TOOLTIP" desc="The tooltip text used for the button in the status tray to toggle the Live Caption feature on or off.">
+        Toggle Live Caption. <ph name="STATE_TEXT">$1<ex>Live Caption is on.</ex></ph>
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_LIVE_CAPTION_ENABLED_STATE_TOOLTIP" desc="The tooltip text indicating the Live Caption feature is on.">
+        Live Caption is on.
+      </message>
+      <message name="IDS_ASH_STATUS_TRAY_LIVE_CAPTION_DISABLED_STATE_TOOLTIP" desc="The tooltip text indicating the Live Caption feature is off.">
+        Live Caption is off.
       </message>
 
       <message name="IDS_AURA_SET_DESKTOP_WALLPAPER" desc="The label used for change wallpaper in context menu">
@@ -2301,8 +2381,8 @@ This file contains the strings for ash.
       <message name="IDS_ASH_PIN_KEYBOARD_DELETE_ACCESSIBLE_NAME" desc="Text to be spoken when the focus is set to the delete button of the PIN keyboard.">
         Delete
       </message>
-      <message name="IDS_ASH_LOGIN_MANAGED_DEVICE_INDICATOR" desc="Template for text shown as a bottom status on the login screen, informing the user that this device is managed.">
-        <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> managed by <ph name="DOMAIN">$2<ex>yourdomain.com</ex></ph>
+      <message name="IDS_ASH_LOGIN_MANAGED_DEVICE_INDICATOR" desc="Template for text shown as a bottom status on the login screen, informing the user that this device is managed. MANAGER can be a domain or an email address.">
+        <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> managed by <ph name="MANAGER">$2<ex>yourdomain.com</ex></ph>
       </message>
       <message name="IDS_ASH_LOGIN_POD_MANAGED_ACCESSIBLE_NAME" desc="Text to be spoken when the focus is set to the user pod when the user is managed.">
         <ph name="USER_EMAIL_ADDRESS">$1<ex>john.doe@example.com</ex></ph> Managed user
@@ -2331,8 +2411,11 @@ This file contains the strings for ash.
       <message name="IDS_ASH_LOGIN_POD_REMOVE_ACCOUNT_DIALOG_ACCESSIBLE_DESCRIPTION" desc="Text to be spoken to describe a way to close the dialog.">
         Press escape to close
       </message>
-      <message name="IDS_ASH_LOGIN_POD_REMOVE_ACCOUNT_DIALOG_BUTTON_ACCESSIBLE_NAME" desc="Text to be spoken when the focus is set to the button that opens the remove account dialog for a given user.">
+      <message name="IDS_ASH_LOGIN_POD_REMOVE_ACCOUNT_DIALOG_BUTTON_ACCESSIBLE_NAME" desc="Text to be spoken when the focus is set to the button that opens the info dialog for a given user, when the option to also remove the account is present, e.g. on the login screen.">
         Open remove dialog for <ph name="USER_EMAIL_ADDRESS">$1<ex>john.doe@example.com</ex></ph>
+      </message>
+      <message name="IDS_ASH_LOGIN_POD_ACCOUNT_DIALOG_BUTTON_ACCESSIBLE_NAME" desc="Text to be spoken when the focus is set to the button that opens the account info dialog for a given user, when the remove option is not present, e.g. on the lock screen.">
+        Open info dialog for <ph name="USER_EMAIL_ADDRESS">$1<ex>john.doe@example.com</ex></ph>
       </message>
       <message name="IDS_ASH_LOGIN_PUBLIC_ACCOUNT_MONITORING_WARNING" desc="Template for text shown in the public account user pod, informing the user that this is a public, managed account.">
         The device admin may monitor your browsing activity.
@@ -2584,6 +2667,12 @@ This file contains the strings for ash.
       </message>
       <message name="IDS_ASH_MULTI_DEVICE_SETUP_EXISTING_USER_NEW_CHROME_DEVICE_ADDED_MESSAGE" desc="Message shown as part of the notification shown to a user that has already completed the MultiDevice setup flow logging into a new Chrome device that all their Chrome devices are MultiDevice enabled.">
         This <ph name="DEVICE_NAME">$1<ex>Chromebook</ex></ph> and your phone will connect automatically
+      </message>
+      <message name="IDS_ASH_MULTI_DEVICE_WIFI_SYNC_AVAILABLE_TITLE" desc="Title of the notification shown to a user that is newly eligible for Wi-Fi Sync.">
+        Turn on Wi-Fi Sync
+      </message>
+      <message name="IDS_ASH_MULTI_DEVICE_WIFI_SYNC_AVAILABLE_MESSAGE" desc="Message shown as part of the notification shown to a user that has become eligible to enable Wi-Fi Sync.">
+        Wi-Fi networks will be shared between your phone and <ph name="DEVICE_NAME">$1<ex>Chromebook</ex></ph>
       </message>
 
       <!-- Window teleportation warning dialog -->
@@ -2912,10 +3001,13 @@ Here are some things you can try to get started.
 
       <!-- For CameraMicTrayItemView -->
       <message name="IDS_ASH_CAMERA_MIC_VM_USING_CAMERA" desc="Tooltip message shown at the systray camera indicator when a VM is using the camera">
-        A virtual machine is using your camera
+        An application is using your camera
+      </message>
+      <message name="IDS_ASH_CAMERA_MIC_VM_USING_CAMERA_AND_MIC" desc="Tooltip message shown at the systray camera indicator when a VM is using both the camera and mic">
+        An application is using your camera and microphone
       </message>
       <message name="IDS_ASH_CAMERA_MIC_VM_USING_MIC" desc="Tooltip message shown at the systray microphone indicator when a VM is using the microphone">
-        A virtual machine is using your microphone
+        An application is using your microphone
       </message>
 
       <message name="IDS_ASH_MESSAGE_CENTER_UNLOCK_TO_PERFORM_ACTION" desc="The short message to encourage user to unlock the device so that Chrome OS can perform the notification action selected by user after unlocking.">
@@ -3059,6 +3151,26 @@ Here are some things you can try to get started.
         Window <ph name="WINDOW_TITLE">$1<ex>Files</ex></ph> moved from Desk <ph name="ACTIVE_DESK">$2</ph> to Desk <ph name="TARGET_DESK">$3</ph>
       </message>
 
+      <!-- Alt Tab -->
+      <message name="IDS_ASH_ALT_TAB_ALL_DESKS_MODE" desc="Alt-tab shows windows from all desks.">
+        All desks
+      </message>
+      <message name="IDS_ASH_ALT_TAB_CURRENT_DESK_MODE" desc="Alt-tab shows only windows from the current desk.">
+        Current desk
+      </message>
+      <message name="IDS_ASH_ALT_TAB_ALL_DESKS_MODE_SELECTED_TITLE" desc="Accessibility text read by ChromeVox to indicate that alt-tab is in the all-desks mode.">
+        Show windows from all desks, radio button selected
+      </message>
+      <message name="IDS_ASH_ALT_TAB_CURRENT_DESK_MODE_SELECTED_TITLE" desc="Accessibility text read by ChromeVox to indicate that alt-tab is in the current-desk mode.">
+        Show windows from the current desk, radio button selected
+      </message>
+      <message name="IDS_ASH_ALT_TAB_FOCUS_WINDOW_LIST_TITLE" desc="Accessibility text read by ChromeVox to suggest that the user can continue cycling the window list by pressing Down arrow key.">
+        Press the Down arrow key to switch windows
+      </message>
+      <message name="IDS_ASH_ALT_TAB_WINDOW_SELECTED_TITLE" desc="Accessibility text read by ChromeVox to inform that the window is selected during alt-tab mode switching.">
+        <ph name="WINDOW_TITLE">$1<ex>Chrome New tab</ex></ph> window selected
+      </message>
+
       <!-- Back gesture -->
       <message name="IDS_ASH_BACK_GESTURE_CONTEXTUAL_NUDGE" desc="Information shown in the suggestion label for the contextual nudge of the back gesture in tablet mode">
         Swipe from the left to go back
@@ -3079,8 +3191,11 @@ Here are some things you can try to get started.
       <message name="IDS_ASH_SCREEN_CAPTURE_HDCP_BLOCKED_MESSAGE" desc="The text of the notification that informs the user the screen recording is blocked due to existence of protected content.">
         Screen capture is not allowed while protected content is present
       </message>
-      <message name="IDS_ASH_SCREEN_CAPTURE_DISABLED_TITLE" desc="The title of the notification when capture mode is disabled.">
-        Screen capture is blocked
+      <message name="IDS_ASH_SCREEN_CAPTURE_DLP_DISABLED_TITLE" desc="The title of the notification when capture mode is disabled because of confidential content.">
+        Can't capture confidential content
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_POLICY_DISABLED_TITLE" desc="The title of the notification when capture mode is disabled because of a policy.">
+        Can't capture content
       </message>
       <message name="IDS_ASH_SCREEN_CAPTURE_FAILURE_TITLE" desc="The title of the notification when capture mode fails.">
         An error occurred
@@ -3088,20 +3203,29 @@ Here are some things you can try to get started.
       <message name="IDS_ASH_SCREEN_CAPTURE_STOPPED_TITLE" desc="The title of the notification when video capture is stopped.">
         Screen recording stopped
       </message>
-      <message name="IDS_ASH_SCREEN_CAPTURE_DISABLED_MESSAGE" desc="The text of the notification when capture mode is disabled.">
-        Screen capture was blocked by your administrator due to content on your screen.
+      <message name="IDS_ASH_SCREEN_CAPTURE_DLP_STOPPED_TITLE" desc="The title of the notification when video capture is stopped because of confidential content.">
+        Can't record confidential content
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_DLP_DISABLED_MESSAGE" desc="The text of the notification when capture mode is disabled because of confidential content.">
+        Administrator policy disables screen capture when confidential content is visible
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_POLICY_DISABLED_MESSAGE" desc="The text of the notification when capture mode is disabled because of a policy.">
+        Administrator policy disables screen capture
       </message>
       <message name="IDS_ASH_SCREEN_CAPTURE_FAILURE_MESSAGE" desc="The text of the notification when capture mode fails.">
         Failed to capture screen
       </message>
-      <message name="IDS_ASH_SCREEN_CAPTURE_STOPPED_MESSAGE" desc="The text of the notification when video capture is stopped.">
-        Screen recording was stopped by your administrator due to content on your screen.
+      <message name="IDS_ASH_SCREEN_CAPTURE_DLP_STOPPED_MESSAGE" desc="The text of the notification when video capture is stopped because of confidential content.">
+        Administrator policy disables screen recording when confidential content is visible
       </message>
       <message name="IDS_ASH_SCREEN_CAPTURE_DISPLAY_SOURCE" desc="The name that is the display source of the screen capture notification.">
         Screen capture
       </message>
       <message name="IDS_ASH_SCREEN_CAPTURE_SCREENSHOT_TITLE" desc="The title of the notificaton which shows after a screenshot is taken.">
-        Screenshot taken and saved to clipboard
+        Screenshot taken
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_SCREENSHOT_COPIED_TO_CLIPBOARD" desc="The banner string shown above the notification which notifies the user that the screenshot has been copied to clipboard.">
+        Copied to clipboard
       </message>
       <message name="IDS_ASH_SCREEN_CAPTURE_RECORDING_TITLE" desc="The titile of the notification which shows after a screen recording is taken.">
         Screen recording taken
@@ -3124,10 +3248,10 @@ Here are some things you can try to get started.
       <message name="IDS_ASH_SCREEN_CAPTURE_LABEL_FULLSCREEN_IMAGE_CAPTURE_TABLET" desc="The capture label message which shows in the middle of the screen when in fullscreen image capture mode in tablet mode.">
         Tap anywhere to capture full screen
       </message>
-      <message name="IDS_ASH_SCREEN_CAPTURE_LABEL_FULLSCREEN_VIDEO_RECORD_CLAMSHELL" desc="The capture label message which shows in the middle of the screen when in fullscreen image capture mode in clamshell mode.">
+      <message name="IDS_ASH_SCREEN_CAPTURE_LABEL_FULLSCREEN_VIDEO_RECORD_CLAMSHELL" desc="The capture label message which shows in the middle of the screen when in fullscreen video record mode in clamshell mode.">
         Click anywhere to record full screen
       </message>
-      <message name="IDS_ASH_SCREEN_CAPTURE_LABEL_FULLSCREEN_VIDEO_RECORD_TABLET" desc="The capture label message which shows in the middle of the screen when in fullscreen image capture mode in tablet mode.">
+      <message name="IDS_ASH_SCREEN_CAPTURE_LABEL_FULLSCREEN_VIDEO_RECORD_TABLET" desc="The capture label message which shows in the middle of the screen when in fullscreen video record mode in tablet mode.">
         Tap anywhere to record full screen
       </message>
       <message name="IDS_ASH_SCREEN_CAPTURE_LABEL_REGION_IMAGE_CAPTURE" desc="The caputre label message which shows in the middle of the screen when in region image capture mode.">
@@ -3172,6 +3296,102 @@ Here are some things you can try to get started.
       <message name="IDS_ASH_SCREEN_CAPTURE_TOOLTIP_SCREENRECORD" desc="Tooltip of the toggle button indicates the video record mode.">
         Screen record
       </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_NAVIGATION_ALERT_SCREEN_RECORDING" desc="Alert spoken by screen readers when user tabs to screen recording.">
+        Screen recording mode
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_NAVIGATION_ALERT_SCREENSHOT" desc="Alert spoken by screen readers when user tabs to screenshot.">
+        Screenshot mode
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_NAVIGATION_ALERT_FULLSCREEN" desc="Alert spoken by screen readers when user tabs to full screen capture.">
+        Full screen capture
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_NAVIGATION_ALERT_REGION" desc="Alert spoken by screen readers when user tabs to partial capture.">
+        Partial capture
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_NAVIGATION_ALERT_WINDOW" desc="Alert spoken by screen readers when user tabs to window capture.">
+        Window capture
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_NAVIGATION_ALERT_CLOSE" desc="Alert spoken by screen readers when user tabs to the close button.">
+        Dismiss capture mode
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_NAVIGATION_ALERT_START_RECORD" desc="Alert spoken by screen readers when user tabs to record button.">
+        Start recording. Once recording has started use Alt + Shift + L to navigate to the shelf and find the stop recording button
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_NAVIGATION_ALERT_STOP_RECORD" desc="Alert spoken by screen readers when user tabs to stop recording pod.">
+        Stop recording
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_NAVIGATION_ALERT_CAPTURE" desc="Alert spoken by screen readers when user tabs to capture button.">
+        Take screenshot
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_ALERT_SETTINGS_OPENED" desc="Alert spoken by screen readers when the settings menu is opened.">
+        Settings menu opened
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_ALERT_SETTINGS_CLOSED" desc="Alert spoken by screen readers when the settings menu is closed.">
+        Settings menu closed
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_ALERT_RECORD_MICROPHONE_TOGGLE" desc="Alert spoken by screen readers when record microphone setting is toggled.">
+        Record microphone <ph name="STATE">$1<ex>off</ex></ph>
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_NAVIGATION_ALERT_RECORD_MICROPHONE" desc="Alert spoken by screen readers when user tabs to record microphone setting.">
+        Record microphone <ph name="CURRENT_STATE">$1<ex>off</ex></ph>, Press enter to turn microphone recording <ph name="NEW_STATE">$2<ex>on</ex></ph>
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_SETTING_ON_STATE" desc="Description for a setting toggle on state.">
+        on
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_SETTING_OFF_STATE" desc="Description for a setting toggle off state.">
+        off
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_ALERT_OPEN" desc="Alert spoken by screen readers on entering capture mode.">
+        Capture Mode, default is <ph name="SOURCE">$1<ex>partial</ex></ph> <ph name="TYPE">$2<ex>screenshot</ex></ph>.
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_SOURCE_FULLSCREEN" desc="Spoken by screen readers for the open alert with the source as full screen.">
+        full screen
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_SOURCE_PARTIAL" desc="Spoken by screen readers for the open alert with the source as partial.">
+        partial
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_SOURCE_WINDOW" desc="Spoken by screen readers for the open alert with the source as window.">
+        window
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_TYPE_SCREENSHOT" desc="Spoken by screen readers for the open alert with the type as screenshot.">
+        screenshot
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_TYPE_SCREEN_RECORDING" desc="Spoken by screen readers for the open alert with the type as screen recording.">
+        screen recording
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_ALERT_CLOSE" desc="Alert spoken by screen readers when exiting capture mode.">
+        Exit capture mode
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_ALERT_SELECT_TYPE_IMAGE" desc="Alert spoken by screen readers on selecting screenshot mode.">
+        Screenshot mode selected
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_ALERT_SELECT_TYPE_VIDEO" desc="Alert spoken by screen readers on selecting screen recording mode.">
+        Screen recording mode selected
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_ALERT_SELECT_SOURCE_FULLSCREEN" desc="Alert spoken by screen readers on selecting full screen as source.">
+        Selection area set to full screen
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_ALERT_SELECT_SOURCE_REGION" desc="Alert spoken by screen readers on selecting partial screen as source.">
+        Partial screenshot selected
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_ALERT_SELECT_SOURCE_WINDOW" desc="Alert spoken by screen readers on selecting window as source.">
+        Selection area set to window
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_ALERT_SCREENSHOT_CAPTURED" desc="Alert spoken by screen readers when screenshot captured.">
+        Screenshot captured
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_ALERT_RECORDING_STARTING" desc="Alert spoken by screen readers when recording starts.">
+        Recording starting in 3, 2, 1
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_ALERT_RECORDING_STOPPED" desc="Alert spoken by screen readers when recording stops.">
+        Screen recording completed
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_TOOLTIP_SETTINGS" desc="Tooltip of the settings button.">
+        Settings
+      </message>
+      <message name="IDS_ASH_SCREEN_CAPTURE_LABEL_MICROPHONE" desc="The capture label message for toggling microphone recording, found in the settings menu.">
+        Record microphone
+      </message>
 
       <!-- Switch Between TABLET/LAPTOP MODE-->
       <message name="IDS_ASH_SWITCH_TO_TABLET_MODE" desc="Alert of switching to tablet mode.">
@@ -3190,6 +3410,25 @@ Here are some things you can try to get started.
       </message>
       <message name="IDS_ASH_MULTIPASTE_CONTEXTUAL_NUDGE_SEARCH_KEY" desc="The name of the first key to be used for the keyboard shortcut for activating multipaste, when the device has a search key.">
         Search
+      </message>
+
+      <message name="IDS_APP_LIST_BLOCKED_APP" desc="The spoken feedback text when a focused app is blocked.">
+        Blocked
+      </message>
+      <message name="IDS_APP_LIST_PAUSED_APP" desc="The spoken feedback text when a focused app is paused.">
+        Paused
+      </message>
+      <message name="IDS_SHELF_ITEM_BLOCKED_APP" desc="Accessibility announcement notifying users that the currently focused shelf app is blocked.">
+        Blocked
+      </message>
+      <message name="IDS_SHELF_ITEM_PAUSED_APP" desc="Accessibility announcement notifying users that the currently focused shelf app is paused.">
+        Paused
+      </message>
+      <message name="IDS_APP_ACCESSIBILITY_BLOCKED_INSTALLED_APP_ANNOUNCEMENT" desc="Accessibility text to specify a search result is a blocked installed app.">
+        <ph name="APP_NAME">$1<ex>Files</ex></ph>, Installed App, Blocked
+      </message>
+      <message name="IDS_APP_ACCESSIBILITY_PAUSED_INSTALLED_APP_ANNOUNCEMENT" desc="Accessibility text to specify a search result is an paused installed app.">
+        <ph name="APP_NAME">$1<ex>Files</ex></ph>, Installed App, Paused
       </message>
     </messages>
   </release>

@@ -43,10 +43,8 @@ class VivaldiSyncUIHelper : public syncer::SyncServiceObserver {
 
   bool SetEncryptionPassword(const std::string& password);
 
-  void BackupEncryptionToken(const base::FilePath& target,
-                             ResultCallback callback);
-  void RestoreEncryptionToken(const base::FilePath& source,
-                              ResultCallback callback);
+  std::string GetBackupEncryptionToken();
+  bool RestoreEncryptionToken(const base::StringPiece& token);
 
   CycleData GetCycleData();
 

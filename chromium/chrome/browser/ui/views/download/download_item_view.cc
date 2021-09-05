@@ -33,8 +33,7 @@
 #include "chrome/browser/download/chrome_download_manager_delegate.h"
 #include "chrome/browser/download/download_stats.h"
 #include "chrome/browser/download/drag_download_item.h"
-#include "chrome/browser/enterprise/connectors/common.h"
-#include "chrome/browser/enterprise/connectors/connectors_manager.h"
+#include "chrome/browser/enterprise/connectors/connectors_service.h"
 #include "chrome/browser/icon_manager.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager_factory.h"
@@ -189,12 +188,24 @@ bool UseNewWarnings() {
   return base::FeatureList::IsEnabled(safe_browsing::kUseNewDownloadWarnings);
 }
 
+int GetFilenameStyle(const views::Label& label) {
+#if !defined(OS_LINUX) && !defined(OS_CHROMEOS)
+  if (UseNewWarnings())
+    return STYLE_EMPHASIZED;
+#endif
+  return label.GetTextStyle();
+}
+
 int GetFilenameStyle(const views::StyledLabel& label) {
 #if !defined(OS_LINUX) && !defined(OS_CHROMEOS)
   if (UseNewWarnings())
     return STYLE_EMPHASIZED;
 #endif
   return label.GetDefaultTextStyle();
+}
+
+void StyleFilename(views::Label& label, size_t pos, size_t len) {
+  label.SetTextStyleRange(GetFilenameStyle(label), gfx::Range(pos, pos + len));
 }
 
 void StyleFilename(views::StyledLabel& label, size_t pos, size_t len) {
@@ -246,11 +257,11 @@ DownloadItemView::DownloadItemView(DownloadUIModel::DownloadUIModelPtr model,
       accessible_alert_(accessible_alert),
       accessible_alert_timer_(
           FROM_HERE,
-          base::TimeDelta::FromSeconds(30),
+          base::TimeDelta::FromMinutes(3),
           base::BindRepeating(&DownloadItemView::AnnounceAccessibleAlert,
                               base::Unretained(this))) {
   views::InstallRectHighlightPathGenerator(this);
-  observer_.Add(this->model());
+  observation_.Observe(this->model());
 
   // TODO(pkasting): Use bespoke file-scope subclasses for some of these child
   // views to localize functionality and simplify this class.
@@ -259,7 +270,7 @@ DownloadItemView::DownloadItemView(DownloadUIModel::DownloadUIModelPtr model,
   open_button_->SetCallback(base::BindRepeating(
       &DownloadItemView::OpenButtonPressed, base::Unretained(this)));
 
-  file_name_label_ = AddChildView(std::make_unique<views::StyledLabel>());
+  file_name_label_ = AddChildView(std::make_unique<views::Label>());
   file_name_label_->SetTextContext(CONTEXT_DOWNLOAD_SHELF);
   file_name_label_->GetViewAccessibility().OverrideIsIgnored(true);
   const base::string16 filename = ElidedFilename(*file_name_label_);
@@ -450,7 +461,7 @@ void DownloadItemView::OnDownloadUpdated() {
 
 void DownloadItemView::OnDownloadOpened() {
   SetEnabled(false);
-  file_name_label_->SetDefaultTextStyle(views::style::STYLE_DISABLED);
+  file_name_label_->SetTextStyle(views::style::STYLE_DISABLED);
   const base::string16 filename = ElidedFilename(*file_name_label_);
   size_t filename_offset;
   file_name_label_->SetText(l10n_util::GetStringFUTF16(
@@ -462,7 +473,7 @@ void DownloadItemView::OnDownloadOpened() {
       return;
     view->SetEnabled(true);
     auto* label = view->file_name_label_;
-    label->SetDefaultTextStyle(views::style::STYLE_PRIMARY);
+    label->SetTextStyle(views::style::STYLE_PRIMARY);
     const base::string16 filename = view->ElidedFilename(*label);
     label->SetText(filename);
     StyleFilename(*label, 0, filename.length());
@@ -631,7 +642,7 @@ void DownloadItemView::OnThemeChanged() {
   const SkColor background_color =
       GetThemeProvider()->GetColor(ThemeProperties::COLOR_DOWNLOAD_SHELF);
   SetBackground(views::CreateSolidBackground(background_color));
-  file_name_label_->SetDisplayedOnBackgroundColor(background_color);
+  file_name_label_->SetBackgroundColor(background_color);
   status_label_->SetBackgroundColor(background_color);
   warning_label_->SetDisplayedOnBackgroundColor(background_color);
   deep_scanning_label_->SetDisplayedOnBackgroundColor(background_color);
@@ -684,7 +695,7 @@ void DownloadItemView::UpdateMode(Mode mode) {
   // notifications would be redundant.
 
   if (mode_ == Mode::kNormal) {
-    UpdateAccessibleAlertAndTimersForNormalMode();
+    UpdateAccessibleAlertAndAnimationsForNormalMode();
   } else if (is_download_warning(mode_)) {
     const auto danger_type = model_->GetDangerType();
     RecordDangerousDownloadWarningShown(danger_type);
@@ -697,6 +708,11 @@ void DownloadItemView::UpdateMode(Mode mode) {
       UpdateAccessibleAlert(model_->GetWarningText(unelided_filename, &ignore));
       accessible_alert_timer_.Stop();
     }
+  } else if (is_mixed_content(mode_)) {
+    announce_accessible_alert_soon_ = true;
+    UpdateAccessibleAlert(l10n_util::GetStringFUTF16(
+        IDS_PROMPT_DOWNLOAD_MIXED_CONTENT_BLOCKED_ACCESSIBLE_ALERT,
+        unelided_filename));
   } else if (mode_ == Mode::kDeepScanning) {
     UpdateAccessibleAlert(l10n_util::GetStringFUTF16(
         IDS_DEEP_SCANNING_ACCESSIBLE_ALERT, unelided_filename));
@@ -781,7 +797,8 @@ void DownloadItemView::UpdateButtons() {
 
   const bool allow_open_during_deep_scan =
       (mode_ == Mode::kDeepScanning) &&
-      !enterprise_connectors::ConnectorsManager::GetInstance()
+      !enterprise_connectors::ConnectorsServiceFactory::GetForBrowserContext(
+           model_->profile())
            ->DelayUntilVerdict(
                enterprise_connectors::AnalysisConnector::FILE_DOWNLOADED);
   open_button_->SetEnabled((mode_ == Mode::kNormal) || prompt_to_scan ||
@@ -800,7 +817,7 @@ void DownloadItemView::UpdateButtons() {
   dropdown_button_->SetVisible(model_->ShouldShowDropdown());
 }
 
-void DownloadItemView::UpdateAccessibleAlertAndTimersForNormalMode() {
+void DownloadItemView::UpdateAccessibleAlertAndAnimationsForNormalMode() {
   using State = download::DownloadItem::DownloadState;
   const State state = model_->GetState();
   if ((state == State::IN_PROGRESS) && !model_->IsPaused()) {
@@ -810,6 +827,11 @@ void DownloadItemView::UpdateAccessibleAlertAndTimersForNormalMode() {
       indeterminate_progress_start_time_ = base::TimeTicks::Now();
       indeterminate_progress_timer_.Reset();
     }
+
+    // For determinate progress, this function is called each time more data is
+    // received, which should result in updating the progress indicator.
+    if (model_->PercentComplete() > 0)
+      SchedulePaint();
     return;
   }
 
@@ -1001,7 +1023,7 @@ ui::ImageModel DownloadItemView::GetIcon() const {
     case download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS:
     case download::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT:
     case download::DOWNLOAD_DANGER_TYPE_USER_VALIDATED:
-    case download::DOWNLOAD_DANGER_TYPE_WHITELISTED_BY_POLICY:
+    case download::DOWNLOAD_DANGER_TYPE_ALLOWLISTED_BY_POLICY:
     case download::DOWNLOAD_DANGER_TYPE_MAX:
       break;
   }
@@ -1070,6 +1092,14 @@ gfx::Size DownloadItemView::GetButtonSize() const {
   if (scan_button_->GetVisible())
     size.SetToMax(scan_button_->GetPreferredSize());
   return size;
+}
+
+base::string16 DownloadItemView::ElidedFilename(
+    const views::Label& label) const {
+  const gfx::FontList& font_list =
+      views::style::GetFont(CONTEXT_DOWNLOAD_SHELF, GetFilenameStyle(label));
+  return gfx::ElideFilename(model_->GetFileNameToReportUser(), font_list,
+                            kTextWidth);
 }
 
 base::string16 DownloadItemView::ElidedFilename(

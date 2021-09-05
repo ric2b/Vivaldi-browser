@@ -119,7 +119,6 @@ FrameTreeNode::FrameTreeNode(
     const blink::mojom::FrameOwnerProperties& frame_owner_properties,
     blink::mojom::FrameOwnerElementType owner_type)
     : frame_tree_(frame_tree),
-      render_manager_(this, frame_tree->manager_delegate()),
       frame_tree_node_id_(next_frame_tree_node_id_++),
       parent_(parent),
       depth_(parent ? parent->frame_tree_node()->depth_ + 1 : 0u),
@@ -145,7 +144,8 @@ FrameTreeNode::FrameTreeNode(
       devtools_frame_token_(devtools_frame_token),
       frame_owner_properties_(frame_owner_properties),
       was_discarded_(false),
-      blame_context_(frame_tree_node_id_, FrameTreeNode::From(parent)) {
+      blame_context_(frame_tree_node_id_, FrameTreeNode::From(parent)),
+      render_manager_(this, frame_tree->manager_delegate()) {
   std::pair<FrameTreeNodeIdMap::iterator, bool> result =
       g_frame_tree_node_id_map.Get().insert(
           std::make_pair(frame_tree_node_id_, this));
@@ -176,6 +176,7 @@ FrameTreeNode::~FrameTreeNode() {
   frame_tree_->FrameRemoved(this);
   for (auto& observer : observers_)
     observer.OnFrameTreeNodeDestroyed(this);
+  observers_.Clear();
 
   if (opener_)
     opener_->RemoveObserver(opener_observer_.get());
@@ -235,12 +236,8 @@ bool FrameTreeNode::IsMainFrame() const {
   return frame_tree_->root() == this;
 }
 
-FrameTreeNode::ResetForNavigationResult FrameTreeNode::ResetForNavigation(
+void FrameTreeNode::ResetForNavigation(
     bool was_served_from_back_forward_cache) {
-  // TODO(altimin,carlscab): Remove this logic after the relevant states are
-  // moved to RenderFrameHost or BrowsingInstanceFrameState.
-  ResetForNavigationResult result;
-
   replication_state_.accumulated_csp_headers.clear();
   if (!was_served_from_back_forward_cache) {
     render_manager_.OnDidResetContentSecurityPolicy();
@@ -253,15 +250,9 @@ FrameTreeNode::ResetForNavigationResult FrameTreeNode::ResetForNavigation(
     // they already have the correct value.
   }
 
-  // Clear any CSP-set sandbox flags, and the declared feature policy for the
-  // frame.
-  // TODO(https://crbug.com/1145886): Remove this.
-  result.changed_frame_policy =
-      UpdateFramePolicyHeaders(network::mojom::WebSandboxFlags::kNone, {});
-
-  // This frame has had its user activation bits cleared in the renderer
-  // before arriving here. We just need to clear them here and in the other
-  // renderer processes that may have a reference to this frame.
+  // This frame has had its user activation bits cleared in the renderer before
+  // arriving here. We just need to clear them here and in the other renderer
+  // processes that may have a reference to this frame.
   //
   // We do not take user activation into account when calculating
   // |ResetForNavigationResult|, as we are using it to determine bfcache
@@ -269,8 +260,6 @@ FrameTreeNode::ResetForNavigationResult FrameTreeNode::ResetForNavigation(
   UpdateUserActivationState(
       blink::mojom::UserActivationUpdateType::kClearActivation,
       blink::mojom::UserActivationNotificationType::kNone);
-
-  return result;
 }
 
 size_t FrameTreeNode::GetFrameTreeSize() const {
@@ -600,8 +589,6 @@ bool FrameTreeNode::StopLoading() {
     navigation_request_->set_net_error(net::ERR_ABORTED);
   ResetNavigationRequest(false);
 
-  // TODO(nasko): see if child frames should send IPCs in site-per-process
-  // mode.
   if (!IsMainFrame())
     return true;
 
@@ -629,10 +616,12 @@ void FrameTreeNode::BeforeUnloadCanceled() {
       render_manager_.speculative_frame_host();
   if (speculative_frame_host)
     speculative_frame_host->ResetLoadingState();
-  // Note: there is no need to set an error code on the NavigationHandle here
-  // as it has not been created yet. It is only created when the
-  // BeforeUnloadCompleted callback is invoked.
-  if (navigation_request_)
+  // Note: there is no need to set an error code on the NavigationHandle as
+  // the observers have not been notified about its creation.
+  // We also reset navigation request only when this navigation request was
+  // responsible for this dialog, as a new navigation request might cancel
+  // existing unrelated dialog.
+  if (navigation_request_ && navigation_request_->IsWaitingForBeforeUnload())
     ResetNavigationRequest(false);
 }
 
@@ -785,14 +774,6 @@ void FrameTreeNode::PruneChildFrameNavigationEntries(
     } else {
       child->PruneChildFrameNavigationEntries(entry);
     }
-  }
-}
-
-void FrameTreeNode::SetOpenerFeaturePolicyState(
-    const blink::FeaturePolicyFeatureState& feature_state) {
-  DCHECK(IsMainFrame());
-  if (base::FeatureList::IsEnabled(features::kFeaturePolicyForSandbox)) {
-    replication_state_.opener_feature_state = feature_state;
   }
 }
 

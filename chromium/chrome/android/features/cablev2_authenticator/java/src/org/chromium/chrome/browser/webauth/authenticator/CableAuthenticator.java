@@ -9,6 +9,7 @@ import android.app.Activity;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.bluetooth.BluetoothAdapter;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentSender;
@@ -95,7 +96,7 @@ class CableAuthenticator {
 
     public CableAuthenticator(Context context, CableAuthenticatorUI ui, long networkContext,
             long registration, String activityClassName, boolean isFcmNotification,
-            UsbAccessory accessory) {
+            UsbAccessory accessory, byte[] serverLink) {
         mContext = context;
         mUi = ui;
 
@@ -115,6 +116,10 @@ class CableAuthenticator {
         if (isFcmNotification) {
             // The user tapped a notification that resulted from an FCM message.
             CableAuthenticatorJni.get().onInteractionReady(this);
+        }
+
+        if (serverLink != null) {
+            CableAuthenticatorJni.get().startServerLink(this, serverLink);
         }
 
         // Otherwise wait for a QR scan.
@@ -320,7 +325,7 @@ class CableAuthenticator {
 
     private boolean onRegisterResponse(int resultCode, Intent data) {
         if (resultCode != Activity.RESULT_OK || data == null) {
-            Log.e(TAG, "Failed with result code" + resultCode);
+            Log.e(TAG, "Failed with result code " + resultCode);
             onAuthenticatorAssertionResponse(CTAP2_ERR_OPERATION_DENIED, null, null, null, null);
             return false;
         }
@@ -369,7 +374,7 @@ class CableAuthenticator {
 
     private boolean onSignResponse(int resultCode, Intent data) {
         if (resultCode != Activity.RESULT_OK || data == null) {
-            Log.e(TAG, "Failed with result code" + resultCode);
+            Log.e(TAG, "Failed with result code " + resultCode);
             onAuthenticatorAssertionResponse(CTAP2_ERR_OPERATION_DENIED, null, null, null, null);
             return false;
         }
@@ -440,9 +445,9 @@ class CableAuthenticator {
      * @param value contents of the QR code, which will be a valid caBLE
      *              URL, i.e. "fido://"...
      */
-    void onQRCode(String value) {
+    void onQRCode(String value, boolean link) {
         assert mTaskRunner.belongsToCurrentThread();
-        CableAuthenticatorJni.get().startQR(this, getName(), value);
+        CableAuthenticatorJni.get().startQR(this, getName(), value, link);
         // TODO: show the user an error if that returned false.
         // that indicates that the QR code was invalid.
     }
@@ -463,16 +468,20 @@ class CableAuthenticator {
     }
 
     static String getName() {
+        final String name = BluetoothAdapter.getDefaultAdapter().getName();
+        if (name != null && name.length() > 0) {
+            return name;
+        }
         return Build.MANUFACTURER + " " + Build.MODEL;
     }
 
     /**
      * onCloudMessage is called by {@link CableAuthenticatorUI} when a GCM message is received.
      */
-    static void onCloudMessage(
-            long event, long systemNetworkContext, long registration, String activityClassName) {
+    static void onCloudMessage(long event, long systemNetworkContext, long registration,
+            String activityClassName, boolean needToDisableBluetooth) {
         setup(registration, activityClassName, systemNetworkContext);
-        CableAuthenticatorJni.get().onCloudMessage(event);
+        CableAuthenticatorJni.get().onCloudMessage(event, needToDisableBluetooth);
     }
 
     /**
@@ -536,6 +545,12 @@ class CableAuthenticator {
         notificationManager.cancel(NOTIFICATION_CHANNEL_ID, ID);
     }
 
+    @CalledByNative
+    public static void disableBluetooth() {
+        Log.i(TAG, "Operation complete. Disabling Bluetooth.");
+        BluetoothAdapter.getDefaultAdapter().disable();
+    }
+
     @NativeMethods
     interface Natives {
         /**
@@ -558,8 +573,14 @@ class CableAuthenticator {
          * should be human-meaningful. The qrUrl must be a caBLE URL, i.e. starting with
          * "fido://c1/"
          */
-        boolean startQR(
-                CableAuthenticator cableAuthenticator, String authenticatorName, String qrUrl);
+        boolean startQR(CableAuthenticator cableAuthenticator, String authenticatorName,
+                String qrUrl, boolean link);
+
+        /**
+         * Called to instruct the C++ code to start a new transaction based on the given link
+         * information which has been provided by the server.
+         */
+        boolean startServerLink(CableAuthenticator cableAuthenticator, byte[] serverLinkData);
 
         /**
          * unlink causes the root secret to be rotated and the FCM token to be rotated. This
@@ -581,11 +602,12 @@ class CableAuthenticator {
         void stop();
 
         /**
-         * Called when a GCM message is received. The argument is a pointer to a
+         * Called when a GCM message is received. The |event| argument is a pointer to a
          * |device::cablev2::authenticator::Registration::Event| object that the native code takes
-         * ownership of.
+         * ownership of. |needToDisableBluetooth| is true if Bluetooth was enabled for the purposes
+         * of processing this event and thus |disableBluetooth| should be called once complete.
          */
-        void onCloudMessage(long event);
+        void onCloudMessage(long event, boolean needToDisableBluetooth);
 
         /**
          * Called to alert native code of a response to a makeCredential request.

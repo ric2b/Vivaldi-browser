@@ -30,6 +30,7 @@ import static org.chromium.chrome.features.start_surface.StartSurfaceProperties.
 import static org.chromium.chrome.features.start_surface.StartSurfaceProperties.RESET_FEED_SURFACE_SCROLL_POSITION;
 import static org.chromium.chrome.features.start_surface.StartSurfaceProperties.TOP_MARGIN;
 
+import android.content.Context;
 import android.content.res.Resources;
 import android.view.View;
 
@@ -37,7 +38,6 @@ import androidx.annotation.IntDef;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
-import org.chromium.base.ContextUtils;
 import org.chromium.base.ObserverList;
 import org.chromium.base.StrictModeContext;
 import org.chromium.base.ThreadUtils;
@@ -49,7 +49,6 @@ import org.chromium.chrome.browser.feed.FeedSurfaceCoordinator;
 import org.chromium.chrome.browser.feed.shared.stream.Stream;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
-import org.chromium.chrome.browser.night_mode.NightModeStateProvider;
 import org.chromium.chrome.browser.ntp.FakeboxDelegate;
 import org.chromium.chrome.browser.omnibox.UrlFocusChangeListener;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
@@ -66,6 +65,7 @@ import org.chromium.chrome.browser.tasks.tab_management.TabSwitcher;
 import org.chromium.chrome.start_surface.R;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.ui.modelutil.PropertyModel;
+import org.chromium.ui.util.ColorUtils;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -132,7 +132,7 @@ class StartSurfaceMediator
     private boolean mIsIncognito;
     @Nullable
     private FakeboxDelegate mFakeboxDelegate;
-    private NightModeStateProvider mNightModeStateProvider;
+    private Context mContext;
     @Nullable
     UrlFocusChangeListener mUrlFocusChangeListener;
     @StartSurfaceState
@@ -173,7 +173,7 @@ class StartSurfaceMediator
     StartSurfaceMediator(TabSwitcher.Controller controller, TabModelSelector tabModelSelector,
             @Nullable PropertyModel propertyModel,
             @Nullable SecondaryTasksSurfaceInitializer secondaryTasksSurfaceInitializer,
-            @SurfaceMode int surfaceMode, NightModeStateProvider nightModeStateProvider,
+            @SurfaceMode int surfaceMode, Context context,
             BrowserControlsStateProvider browserControlsStateProvider,
             ActivityStateChecker activityStateChecker, boolean excludeMVTiles,
             boolean showStackTabSwitcher, OneshotSupplier<StartSurface> startSurfaceSupplier,
@@ -183,7 +183,7 @@ class StartSurfaceMediator
         mPropertyModel = propertyModel;
         mSecondaryTasksSurfaceInitializer = secondaryTasksSurfaceInitializer;
         mSurfaceMode = surfaceMode;
-        mNightModeStateProvider = nightModeStateProvider;
+        mContext = context;
         mBrowserControlsStateProvider = browserControlsStateProvider;
         mActivityStateChecker = activityStateChecker;
         mExcludeMVTiles = excludeMVTiles;
@@ -327,7 +327,7 @@ class StartSurfaceMediator
             // variations.
             if (surfaceMode != SurfaceMode.OMNIBOX_ONLY
                     && surfaceMode != SurfaceMode.TRENDY_TERMS) {
-                Resources resources = ContextUtils.getApplicationContext().getResources();
+                Resources resources = mContext.getResources();
                 mPropertyModel.set(TASKS_SURFACE_BODY_TOP_MARGIN,
                         resources.getDimensionPixelSize(R.dimen.tasks_surface_body_top_margin));
                 mPropertyModel.set(MV_TILES_CONTAINER_TOP_MARGIN,
@@ -525,9 +525,8 @@ class StartSurfaceMediator
             setMVTilesVisibility(!mIsIncognito);
             mPropertyModel.set(BOTTOM_BAR_HEIGHT,
                     mIsIncognito ? 0
-                                 : ContextUtils.getApplicationContext()
-                                           .getResources()
-                                           .getDimensionPixelSize(R.dimen.ss_bottom_bar_height));
+                                 : mContext.getResources().getDimensionPixelSize(
+                                         R.dimen.ss_bottom_bar_height));
             mPropertyModel.set(IS_BOTTOM_BAR_VISIBLE, !mIsIncognito);
 
         } else if (mStartSurfaceState == StartSurfaceState.SHOWN_TABSWITCHER_TASKS_ONLY) {
@@ -607,8 +606,7 @@ class StartSurfaceMediator
                     && mFeedSurfaceCreator != null) {
                 mPropertyModel.set(FEED_SURFACE_COORDINATOR,
                         mFeedSurfaceCreator.createFeedSurfaceCoordinator(
-                                mNightModeStateProvider.isInNightMode(),
-                                shouldShowFeedPlaceholder()));
+                                ColorUtils.inNightMode(mContext), shouldShowFeedPlaceholder()));
             }
             mTabModelSelector.addObserver(mTabModelSelectorObserver);
 
@@ -639,12 +637,6 @@ class StartSurfaceMediator
             }
         }
 
-        // Pressing back button on the Start surface homepage is handled by
-        // ChromeTabbedActivity#handleBackPressed().
-        if (mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE && !mShowStackTabSwitcher) {
-            return false;
-        }
-
         if (mPropertyModel != null && mPropertyModel.get(IS_EXPLORE_SURFACE_VISIBLE)
                 && mStartSurfaceState == StartSurfaceState.SHOWN_TABSWITCHER_TWO_PANES) {
             setExploreSurfaceVisibility(false);
@@ -652,7 +644,7 @@ class StartSurfaceMediator
             return true;
         }
 
-        return mController.onBackPressed();
+        return mController.onBackPressed(mStartSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE);
     }
 
     @Override
@@ -784,7 +776,7 @@ class StartSurfaceMediator
                 && !mActivityStateChecker.isFinishingOrDestroyed()) {
             mPropertyModel.set(FEED_SURFACE_COORDINATOR,
                     mFeedSurfaceCreator.createFeedSurfaceCoordinator(
-                            mNightModeStateProvider.isInNightMode(), shouldShowFeedPlaceholder()));
+                            ColorUtils.inNightMode(mContext), shouldShowFeedPlaceholder()));
         }
 
         mPropertyModel.set(IS_EXPLORE_SURFACE_VISIBLE, isVisible);

@@ -13,13 +13,12 @@
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/policy/dlp/dlp_content_manager.h"
-#include "chrome/browser/chromeos/web_applications/default_web_app_ids.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/service_sandbox_type.h"
 #include "chrome/browser/ui/ash/screenshot_area.h"
-#include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/web_applications/components/web_app_id_constants.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/login/login_state/login_state.h"
 #include "components/prefs/pref_service.h"
@@ -99,7 +98,7 @@ void ChromeCaptureModeDelegate::OpenScreenshotInImageEditor(
 
   // open the image with Essential App: Backlight.
   proxy->LaunchAppWithFiles(
-      chromeos::default_web_apps::kMediaAppId,
+      web_app::kMediaAppId,
       apps::mojom::LaunchContainer::kLaunchContainerWindow,
       apps::GetEventFlags(apps::mojom::LaunchContainer::kLaunchContainerWindow,
                           WindowOpenDisposition::NEW_WINDOW,
@@ -116,25 +115,23 @@ bool ChromeCaptureModeDelegate::Uses24HourFormat() const {
   return base::GetHourClockType() == base::k24HourClock;
 }
 
-bool ChromeCaptureModeDelegate::IsCaptureModeInitRestricted() const {
-  return is_screen_capture_locked_ || IsScreenCaptureDisabledByPolicy() ||
-         policy::DlpContentManager::Get()->IsCaptureModeInitRestricted();
+bool ChromeCaptureModeDelegate::IsCaptureModeInitRestrictedByDlp() const {
+  return policy::DlpContentManager::Get()->IsCaptureModeInitRestricted();
 }
 
-bool ChromeCaptureModeDelegate::IsCaptureAllowed(const aura::Window* window,
-                                                 const gfx::Rect& bounds,
-                                                 bool for_video) const {
-  if (is_screen_capture_locked_)
-    return false;
-
-  if (IsScreenCaptureDisabledByPolicy())
-    return false;
-
+bool ChromeCaptureModeDelegate::IsCaptureAllowedByDlp(
+    const aura::Window* window,
+    const gfx::Rect& bounds,
+    bool for_video) const {
   policy::DlpContentManager* dlp_content_manager =
       policy::DlpContentManager::Get();
   const ScreenshotArea area = ConvertToScreenshotArea(window, bounds);
   return for_video ? !dlp_content_manager->IsVideoCaptureRestricted(area)
                    : !dlp_content_manager->IsScreenshotRestricted(area);
+}
+
+bool ChromeCaptureModeDelegate::IsCaptureAllowedByPolicy() const {
+  return !is_screen_capture_locked_ && !IsScreenCaptureDisabledByPolicy();
 }
 
 void ChromeCaptureModeDelegate::StartObservingRestrictedContent(
@@ -154,12 +151,6 @@ void ChromeCaptureModeDelegate::StopObservingRestrictedContent() {
   policy::DlpContentManager::Get()->OnVideoCaptureStopped();
 }
 
-void ChromeCaptureModeDelegate::OpenFeedbackDialog() {
-  chrome::OpenFeedbackDialog(/*browser=*/nullptr,
-                             chrome::kFeedbackSourceCaptureMode,
-                             /*description_template=*/"#ScreenCapture\n\n");
-}
-
 mojo::Remote<recording::mojom::RecordingService>
 ChromeCaptureModeDelegate::LaunchRecordingService() {
   return content::ServiceProcessHost::Launch<
@@ -172,4 +163,8 @@ ChromeCaptureModeDelegate::LaunchRecordingService() {
 void ChromeCaptureModeDelegate::BindAudioStreamFactory(
     mojo::PendingReceiver<audio::mojom::StreamFactory> receiver) {
   content::GetAudioService().BindStreamFactory(std::move(receiver));
+}
+
+void ChromeCaptureModeDelegate::OnSessionStateChanged(bool started) {
+  is_session_active_ = started;
 }

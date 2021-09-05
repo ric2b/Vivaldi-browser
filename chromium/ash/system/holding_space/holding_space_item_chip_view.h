@@ -12,6 +12,10 @@
 #include "ash/system/holding_space/holding_space_item_view.h"
 #include "ui/views/metadata/metadata_header_macros.h"
 
+namespace ui {
+class LayerOwner;
+}  // namespace ui
+
 namespace views {
 class Label;
 }  // namespace views
@@ -35,12 +39,20 @@ class ASH_EXPORT HoldingSpaceItemChipView : public HoldingSpaceItemView {
   ~HoldingSpaceItemChipView() override;
 
  private:
+  // HoldingSpaceItemView:
+  views::View* GetTooltipHandlerForPoint(const gfx::Point& point) override;
+  void OnHoldingSpaceItemUpdated(const HoldingSpaceItem* item) override;
+  void OnPinVisiblityChanged(bool pin_visible) override;
+
   void UpdateImage();
+
+  std::unique_ptr<ui::LayerOwner> label_mask_layer_owner_;
 
   RoundedImageView* image_ = nullptr;
   views::Label* label_ = nullptr;
+  views::View* label_and_pin_button_container_ = nullptr;
 
-  std::unique_ptr<HoldingSpaceImage::Subscription> image_subscription_;
+  base::CallbackListSubscription image_subscription_;
 };
 
 }  // namespace ash

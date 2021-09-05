@@ -63,10 +63,29 @@ chrome.accessibilityPrivate.Gesture = {
 /**
  * @enum {string}
  */
+chrome.accessibilityPrivate.MagnifierCommand = {
+  MOVE_STOP: 'moveStop',
+  MOVE_UP: 'moveUp',
+  MOVE_DOWN: 'moveDown',
+  MOVE_LEFT: 'moveLeft',
+  MOVE_RIGHT: 'moveRight',
+};
+
+/**
+ * @enum {string}
+ */
 chrome.accessibilityPrivate.SwitchAccessCommand = {
   SELECT: 'select',
   NEXT: 'next',
   PREVIOUS: 'previous',
+};
+
+/**
+ * @enum {string}
+ */
+chrome.accessibilityPrivate.PointScanState = {
+  START: 'start',
+  STOP: 'stop',
 };
 
 /**
@@ -98,6 +117,7 @@ chrome.accessibilityPrivate.SwitchAccessMenuAction = {
   JUMP_TO_BEGINNING_OF_TEXT: 'jumpToBeginningOfText',
   JUMP_TO_END_OF_TEXT: 'jumpToEndOfText',
   KEYBOARD: 'keyboard',
+  LEFT_CLICK: 'leftClick',
   MOVE_BACKWARD_ONE_CHAR_OF_TEXT: 'moveBackwardOneCharOfText',
   MOVE_BACKWARD_ONE_WORD_OF_TEXT: 'moveBackwardOneWordOfText',
   MOVE_CURSOR: 'moveCursor',
@@ -107,6 +127,7 @@ chrome.accessibilityPrivate.SwitchAccessMenuAction = {
   MOVE_UP_ONE_LINE_OF_TEXT: 'moveUpOneLineOfText',
   PASTE: 'paste',
   POINT_SCAN: 'pointScan',
+  RIGHT_CLICK: 'rightClick',
   SCROLL_DOWN: 'scrollDown',
   SCROLL_LEFT: 'scrollLeft',
   SCROLL_RIGHT: 'scrollRight',
@@ -196,12 +217,22 @@ chrome.accessibilityPrivate.FocusType = {
 };
 
 /**
+ * @enum {string}
+ */
+chrome.accessibilityPrivate.FocusRingStackingOrder = {
+  ABOVE_ACCESSIBILITY_BUBBLES: 'aboveAccessibilityBubbles',
+  BELOW_ACCESSIBILITY_BUBBLES: 'belowAccessibilityBubbles',
+};
+
+/**
  * @typedef {{
  *   rects: !Array<!chrome.accessibilityPrivate.ScreenRect>,
  *   type: !chrome.accessibilityPrivate.FocusType,
  *   color: string,
  *   secondaryColor: (string|undefined),
  *   backgroundColor: (string|undefined),
+ *   stackingOrder:
+ * (!chrome.accessibilityPrivate.FocusRingStackingOrder|undefined),
  *   id: (string|undefined)
  * }}
  */
@@ -220,6 +251,20 @@ chrome.accessibilityPrivate.AcceleratorAction = {
  */
 chrome.accessibilityPrivate.AccessibilityFeature = {
   SELECT_TO_SPEAK_NAVIGATION_CONTROL: 'selectToSpeakNavigationControl',
+};
+
+/**
+ * @enum {string}
+ */
+chrome.accessibilityPrivate.SelectToSpeakPanelAction = {
+  PREVIOUS_PARAGRAPH: 'previousParagraph',
+  PREVIOUS_SENTENCE: 'previousSentence',
+  PAUSE: 'pause',
+  RESUME: 'resume',
+  NEXT_SENTENCE: 'nextSentence',
+  NEXT_PARAGRAPH: 'nextParagraph',
+  EXIT: 'exit',
+  CHANGE_SPEED: 'changeSpeed',
 };
 
 /**
@@ -301,9 +346,11 @@ chrome.accessibilityPrivate.forwardKeyEventsToSwitchAccess = function(shouldForw
 chrome.accessibilityPrivate.updateSwitchAccessBubble = function(bubble, show, anchor, actions) {};
 
 /**
- * Activates point scanning in Switch Access.
+ * Sets point scanning state Switch Access.
+ * @param {!chrome.accessibilityPrivate.PointScanState} state The point scanning
+ *     state to set.
  */
-chrome.accessibilityPrivate.activatePointScan = function() {};
+chrome.accessibilityPrivate.setPointScanState = function(state) {};
 
 /**
  * Sets current ARC app to use native ARC support.
@@ -319,10 +366,11 @@ chrome.accessibilityPrivate.setNativeChromeVoxArcSupportForCurrentApp = function
 chrome.accessibilityPrivate.sendSyntheticKeyEvent = function(keyEvent) {};
 
 /**
- * Enables or disables mouse events in ChromeVox.
- * @param {boolean} enabled True if ChromeVox should receive mouse events.
+ * Enables or disables mouse events in accessibility extensions
+ * @param {boolean} enabled True if accessibility component extensions should
+ *     receive mouse events.
  */
-chrome.accessibilityPrivate.enableChromeVoxMouseEvents = function(enabled) {};
+chrome.accessibilityPrivate.enableMouseEvents = function(enabled) {};
 
 /**
  * Sends a fabricated mouse event.
@@ -393,15 +441,15 @@ chrome.accessibilityPrivate.performAcceleratorAction = function(acceleratorActio
 chrome.accessibilityPrivate.isFeatureEnabled = function(feature, callback) {};
 
 /**
- * Updates properties on the Select-to-speak panel.
- * @param {boolean} show True if the panel should be shown, false otherwise
+ * Updates properties of the Select-to-speak panel.
+ * @param {boolean} show True to show panel, false to hide it
  * @param {!chrome.accessibilityPrivate.ScreenRect=} anchor A rectangle
  *     indicating the bounds of the object the panel should be displayed next
- * to.
- * @param {boolean=} isPaused Whether Select-to-speak playback is paused.
+ *     to.
+ * @param {boolean=} isPaused True if Select-to-speak playback is paused.
+ * @param {number=} speed Current reading speed (TTS speech rate).
  */
-chrome.accessibilityPrivate.updateSelectToSpeakPanel = function(
-    show, anchor, isPaused) {};
+chrome.accessibilityPrivate.updateSelectToSpeakPanel = function(show, anchor, isPaused, speed) {};
 
 /**
  * Fired whenever ChromeVox should output introduction.
@@ -438,6 +486,12 @@ chrome.accessibilityPrivate.onTwoFingerTouchStop;
 chrome.accessibilityPrivate.onSelectToSpeakStateChangeRequested;
 
 /**
+ * Fired when an action is performed in the Select-to-speak panel.
+ * @type {!ChromeEvent}
+ */
+chrome.accessibilityPrivate.onSelectToSpeakPanelAction;
+
+/**
  * Fired when Chrome OS has received a key event corresponding to a Switch
  * Access command.
  * @type {!ChromeEvent}
@@ -449,6 +503,13 @@ chrome.accessibilityPrivate.onSwitchAccessCommand;
  * @type {!ChromeEvent}
  */
 chrome.accessibilityPrivate.onPointScanSet;
+
+/**
+ * Fired when Chrome OS has received a key event corresponding to a Magnifier
+ * command.
+ * @type {!ChromeEvent}
+ */
+chrome.accessibilityPrivate.onMagnifierCommand;
 
 /**
  * Fired when an internal component within accessibility wants to force speech

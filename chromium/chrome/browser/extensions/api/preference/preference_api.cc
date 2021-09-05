@@ -11,12 +11,13 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/containers/contains.h"
 #include "base/lazy_instance.h"
 #include "base/memory/singleton.h"
-#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/extensions/api/content_settings/content_settings_service.h"
 #include "chrome/browser/extensions/api/preference/preference_api_constants.h"
 #include "chrome/browser/extensions/api/preference/preference_helpers.h"
@@ -28,7 +29,6 @@
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/common/pref_names.h"
-#include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
 #include "components/embedder_support/pref_names.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -49,7 +49,7 @@
 #include "extensions/common/permissions/permissions_data.h"
 #include "media/media_buildflags.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/public/cpp/ash_pref_names.h"  // nogncheck
 #endif
 
@@ -83,17 +83,6 @@ const char kConversionErrorMessage[] =
     "properly.";
 
 const PrefMappingEntry kPrefMapping[] = {
-    {"spdy_proxy.enabled", data_reduction_proxy::prefs::kDataSaverEnabled,
-     APIPermission::kDataReductionProxy, APIPermission::kDataReductionProxy},
-    {"data_reduction.daily_original_length",
-     data_reduction_proxy::prefs::kDailyHttpOriginalContentLength,
-     APIPermission::kDataReductionProxy, APIPermission::kDataReductionProxy},
-    {"data_reduction.daily_received_length",
-     data_reduction_proxy::prefs::kDailyHttpReceivedContentLength,
-     APIPermission::kDataReductionProxy, APIPermission::kDataReductionProxy},
-    {"data_usage_reporting.enabled",
-     data_reduction_proxy::prefs::kDataUsageReportingEnabled,
-     APIPermission::kDataReductionProxy, APIPermission::kDataReductionProxy},
     {"alternateErrorPagesEnabled",
      embedder_support::kAlternateErrorPagesEnabled, APIPermission::kPrivacy,
      APIPermission::kPrivacy},
@@ -141,7 +130,7 @@ const PrefMappingEntry kPrefMapping[] = {
     {"animationPolicy", prefs::kAnimationPolicy,
      APIPermission::kAccessibilityFeaturesRead,
      APIPermission::kAccessibilityFeaturesModify},
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     {"autoclick", ash::prefs::kAccessibilityAutoclickEnabled,
      APIPermission::kAccessibilityFeaturesRead,
      APIPermission::kAccessibilityFeaturesModify},

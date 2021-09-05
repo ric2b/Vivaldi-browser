@@ -9,6 +9,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/supervised_user/supervised_user_features.h"
+#include "components/account_manager_core/account_manager_facade.h"
 #include "ui/aura/window.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/widget/widget.h"
@@ -71,7 +72,8 @@ InlineLoginDialogChromeOSOnboarding* InlineLoginDialogChromeOSOnboarding::Show(
 
   base::UmaHistogramEnumeration(
       InlineLoginDialogChromeOS::kAccountAdditionSource,
-      InlineLoginDialogChromeOS::Source::kOnboarding);
+      ::account_manager::AccountManagerFacade::AccountAdditionSource::
+          kOnboarding);
 
   DCHECK(window);
 
@@ -85,7 +87,7 @@ InlineLoginDialogChromeOSOnboarding* InlineLoginDialogChromeOSOnboarding::Show(
 InlineLoginDialogChromeOSOnboarding::InlineLoginDialogChromeOSOnboarding(
     const gfx::Size& size,
     base::OnceCallback<void(void)> dialog_closed_callback)
-    : InlineLoginDialogChromeOS(InlineLoginDialogChromeOS::Source::kOnboarding),
+    : InlineLoginDialogChromeOS(false /*is_arc_source*/),
       size_(size),
       dialog_closed_callback_(std::move(dialog_closed_callback)) {
   set_modal_type(ui::MODAL_TYPE_CHILD);

@@ -10,6 +10,7 @@ import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
+import org.chromium.url.GURL;
 
 /**
  * Wrapper for the dom_distiller::url_utils.
@@ -34,15 +35,26 @@ public final class DomDistillerUrlUtils {
         return DomDistillerUrlUtilsJni.get().getDistillerViewUrlFromUrl(scheme, url, title);
     }
 
+    @Deprecated
+    public static String getOriginalUrlFromDistillerUrl(String url) {
+        if (TextUtils.isEmpty(url)) return url;
+        return DomDistillerUrlUtilsJni.get().getOriginalUrlFromDistillerUrl(url);
+    }
+
     /**
      * Returns the original URL of a distillation given the viewer URL.
      *
      * @param url The current viewer URL.
      * @return the URL of the original page.
      */
-    public static String getOriginalUrlFromDistillerUrl(String url) {
-        if (TextUtils.isEmpty(url)) return url;
-        return DomDistillerUrlUtilsJni.get().getOriginalUrlFromDistillerUrl(url);
+    public static String getOriginalUrlFromDistillerUrl(GURL url) {
+        if (url.isEmpty()) return url.getSpec();
+        return DomDistillerUrlUtilsJni.get().getOriginalUrlFromDistillerUrl(url.getSpec());
+    }
+
+    public static boolean isDistilledPage(String url) {
+        if (TextUtils.isEmpty(url)) return false;
+        return DomDistillerUrlUtilsJni.get().isDistilledPage(url);
     }
 
     /**
@@ -51,9 +63,8 @@ public final class DomDistillerUrlUtils {
      * @param url The url of the page.
      * @return whether the url is for a distilled page.
      */
-    public static boolean isDistilledPage(String url) {
-        if (TextUtils.isEmpty(url)) return false;
-        return DomDistillerUrlUtilsJni.get().isDistilledPage(url);
+    public static boolean isDistilledPage(GURL url) {
+        return isDistilledPage(url.getSpec());
     }
 
     public static String getValueForKeyInUrl(String url, String key) {

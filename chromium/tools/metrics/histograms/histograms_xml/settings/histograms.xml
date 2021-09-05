@@ -40,7 +40,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Settings.GivenShowHomeButton_HomePageIsNewTabPage"
-    enum="Boolean" expires_after="2021-05-02">
+    enum="Boolean" expires_after="2021-07-04">
   <owner>mpearson@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -60,7 +60,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Settings.Homepage.LocationType" enum="HomepageLocationType"
-    expires_after="2021-04-03">
+    expires_after="2021-06-06">
   <owner>bttk@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <owner>wenyufu@chromium.org</owner>
@@ -151,7 +151,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Settings.PrivacyElementInteractions"
-    enum="SettingsPrivacyElementInteractions" expires_after="M90">
+    enum="SettingsPrivacyElementInteractions" expires_after="2021-06-20">
   <owner>harrisonsean@chromium.org</owner>
   <owner>msramek@chromium.org</owner>
   <owner>sauski@chromium.org</owner>
@@ -162,12 +162,12 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Settings.SafetyCheck.ChromeCleanerResult"
-    enum="SafetyCheckChromeCleanerStatus" expires_after="M90">
+    enum="SafetyCheckChromeCleanerStatus" expires_after="M92">
   <owner>rainhard@chromium.org</owner>
   <owner>msramek@chromium.org</owner>
   <summary>
-    Resulting state of the safety check Chrome cleaner check. Value 4-9 got
-    added with M88.
+    Resulting state of the safety check Chrome cleaner check. Recorded when a
+    safety check is run by the user. Value 4-9 got added with M88.
   </summary>
 </histogram>
 
@@ -179,33 +179,33 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Settings.SafetyCheck.Interactions"
-    enum="SettingsSafetyCheckInteractions" expires_after="M90">
+    enum="SettingsSafetyCheckInteractions" expires_after="2021-06-20">
   <owner>rainhard@chromium.org</owner>
   <owner>msramek@chromium.org</owner>
   <owner>anaudrey@chromium.org</owner>
   <summary>
     Which user actions were taken in safety check. Recorded every time a user
     does an interaction in safety check. Value 5 and 6 got added with M86, 7-9
-    with M87, and 10 with M88.
+    with M87, 10 with M88, and 11 with M89.
   </summary>
 </histogram>
 
 <histogram name="Settings.SafetyCheck.PasswordsResult"
-    enum="SafetyCheckPasswordsStatus" expires_after="M90">
+    enum="SafetyCheckPasswordsStatus" expires_after="2021-06-20">
   <owner>andzaytsev@google.com</owner>
   <owner>msramek@chromium.org</owner>
   <summary>Resulting state of the safety check password check.</summary>
 </histogram>
 
 <histogram name="Settings.SafetyCheck.SafeBrowsingResult"
-    enum="SafetyCheckSafeBrowsingStatus" expires_after="M90">
+    enum="SafetyCheckSafeBrowsingStatus" expires_after="2021-06-20">
   <owner>andzaytsev@google.com</owner>
   <owner>msramek@chromium.org</owner>
   <summary>Resulting state of the safety check Safe Browsing check.</summary>
 </histogram>
 
 <histogram name="Settings.SafetyCheck.UpdatesResult"
-    enum="SafetyCheckUpdateStatus" expires_after="M90">
+    enum="SafetyCheckUpdateStatus" expires_after="2021-06-20">
   <owner>andzaytsev@google.com</owner>
   <owner>msramek@chromium.org</owner>
   <summary>Resulting state of the safety check updates check.</summary>
@@ -264,7 +264,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Settings.ShowHomeButton" enum="BooleanEnabled"
-    expires_after="2021-05-02">
+    expires_after="2021-07-04">
   <owner>mpearson@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -343,7 +343,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Settings.StartupPageLoadSettings" enum="SessionStartupPref"
-    expires_after="2021-05-09">
+    expires_after="2021-07-11">
   <owner>mpearson@chromium.org</owner>
   <owner>ramyan@chromium.org</owner>
   <owner>tiborg@chromium.org</owner>
@@ -360,7 +360,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="Settings.TimeUntilInteractive" units="ms" expires_after="M90">
+<histogram name="Settings.TimeUntilInteractive" units="ms"
+    expires_after="2021-06-20">
   <owner>dbeam@chromium.org</owner>
   <owner>dpapad@chromium.org</owner>
   <summary>
@@ -452,7 +453,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Settings.TrackedPreferenceUnchanged" enum="TrackedPreference"
-    expires_after="M90">
+    expires_after="2021-06-20">
   <owner>proberge@chromium.org</owner>
   <summary>
     The id of a tracked preference whose value has not changed since the last

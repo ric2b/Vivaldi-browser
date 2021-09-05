@@ -43,8 +43,7 @@ class MetricsReporterTest : public testing::Test {
   }
 
   void RecreateMetricsReporter() {
-    reporter_ = std::make_unique<MetricsReporter>(
-        task_environment_.GetMockTickClock(), &profile_prefs_);
+    reporter_ = std::make_unique<MetricsReporter>(&profile_prefs_);
   }
 
  protected:
@@ -161,6 +160,8 @@ TEST_F(MetricsReporterTest, NewVisitAfterInactivity) {
 TEST_F(MetricsReporterTest, ReportsLoadStreamStatus) {
   reporter_->OnLoadStream(LoadStreamStatus::kDataInStoreIsStale,
                           LoadStreamStatus::kLoadedFromNetwork,
+                          /*loaded_new_content_from_network=*/true,
+                          /*stored_content_age=*/base::TimeDelta::FromDays(5),
                           std::make_unique<LoadLatencyTimes>());
 
   histogram_.ExpectUniqueSample(
@@ -174,6 +175,8 @@ TEST_F(MetricsReporterTest, ReportsLoadStreamStatus) {
 TEST_F(MetricsReporterTest, ReportsLoadStreamStatusIgnoresNoStatusFromStore) {
   reporter_->OnLoadStream(LoadStreamStatus::kNoStatus,
                           LoadStreamStatus::kLoadedFromNetwork,
+                          /*loaded_new_content_from_network=*/true,
+                          /*stored_content_age=*/base::TimeDelta(),
                           std::make_unique<LoadLatencyTimes>());
 
   histogram_.ExpectUniqueSample(
@@ -183,6 +186,47 @@ TEST_F(MetricsReporterTest, ReportsLoadStreamStatusIgnoresNoStatusFromStore) {
       "ContentSuggestions.Feed.LoadStreamStatus.InitialFromStore", 0);
 }
 
+TEST_F(MetricsReporterTest, ReportsContentAgeBlockingRefresh) {
+  reporter_->OnLoadStream(LoadStreamStatus::kDataInStoreIsStale,
+                          LoadStreamStatus::kLoadedFromNetwork,
+                          /*loaded_new_content_from_network=*/true,
+                          /*stored_content_age=*/base::TimeDelta::FromDays(5),
+                          std::make_unique<LoadLatencyTimes>());
+
+  histogram_.ExpectUniqueTimeSample(
+      "ContentSuggestions.Feed.ContentAgeOnLoad.BlockingRefresh",
+      base::TimeDelta::FromDays(5), 1);
+}
+
+TEST_F(MetricsReporterTest, ReportsContentAgeNoRefresh) {
+  reporter_->OnLoadStream(LoadStreamStatus::kDataInStoreIsStale,
+                          LoadStreamStatus::kLoadedFromStore,
+                          /*loaded_new_content_from_network=*/false,
+                          /*stored_content_age=*/base::TimeDelta::FromDays(5),
+                          std::make_unique<LoadLatencyTimes>());
+
+  histogram_.ExpectUniqueTimeSample(
+      "ContentSuggestions.Feed.ContentAgeOnLoad.NotRefreshed",
+      base::TimeDelta::FromDays(5), 1);
+}
+
+TEST_F(MetricsReporterTest, DoNotReportContentAgeWhenNotPositive) {
+  reporter_->OnLoadStream(
+      LoadStreamStatus::kDataInStoreIsStale, LoadStreamStatus::kLoadedFromStore,
+      /*loaded_new_content_from_network=*/false,
+      /*stored_content_age=*/-base::TimeDelta::FromSeconds(1),
+      std::make_unique<LoadLatencyTimes>());
+  reporter_->OnLoadStream(LoadStreamStatus::kDataInStoreIsStale,
+                          LoadStreamStatus::kLoadedFromStore,
+                          /*loaded_new_content_from_network=*/false,
+                          /*stored_content_age=*/base::TimeDelta(),
+                          std::make_unique<LoadLatencyTimes>());
+  histogram_.ExpectTotalCount(
+      "ContentSuggestions.Feed.ContentAgeOnLoad.NotRefreshed", 0);
+  histogram_.ExpectTotalCount(
+      "ContentSuggestions.Feed.ContentAgeOnLoad.BlockingRefresh", 0);
+}
+
 TEST_F(MetricsReporterTest, ReportsLoadStepLatenciesOnFirstView) {
   {
     auto latencies = std::make_unique<LoadLatencyTimes>();
@@ -190,9 +234,10 @@ TEST_F(MetricsReporterTest, ReportsLoadStepLatenciesOnFirstView) {
     latencies->StepComplete(LoadLatencyTimes::kLoadFromStore);
     task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(50));
     latencies->StepComplete(LoadLatencyTimes::kUploadActions);
-    reporter_->OnLoadStream(LoadStreamStatus::kNoStatus,
-                            LoadStreamStatus::kLoadedFromNetwork,
-                            std::move(latencies));
+    reporter_->OnLoadStream(
+        LoadStreamStatus::kNoStatus, LoadStreamStatus::kLoadedFromNetwork,
+        /*loaded_new_content_from_network=*/true,
+        /*stored_content_age=*/base::TimeDelta(), std::move(latencies));
   }
   task_environment_.FastForwardBy(base::TimeDelta::FromMilliseconds(300));
   reporter_->FeedViewed(kSurfaceId);

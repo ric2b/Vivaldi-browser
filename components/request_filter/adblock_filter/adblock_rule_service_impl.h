@@ -14,6 +14,8 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "components/request_filter/adblock_filter/adblock_content_injection_provider.h"
+#include "components/request_filter/adblock_filter/adblock_known_sources_handler_impl.h"
 #include "components/request_filter/adblock_filter/adblock_metadata.h"
 #include "components/request_filter/adblock_filter/adblock_resources.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service.h"
@@ -41,21 +43,18 @@ class RuleServiceImpl : public RuleService {
   void Load();
   Delegate* delegate() { return delegate_; }
 
+  bool AddRulesSource(const KnownRuleSource& known_source);
+  void DeleteRuleSource(const KnownRuleSource& known_source);
+
   // Implementing RuleService
   void SetDelegate(Delegate* delegate) override;
   bool IsLoaded() const override;
   bool IsRuleGroupEnabled(RuleGroup group) const override;
   void SetRuleGroupEnabled(RuleGroup group, bool enabled) override;
-  base::Optional<uint32_t> AddRulesFromURL(RuleGroup group,
-                                           const GURL& url) override;
-  base::Optional<uint32_t> AddRulesFromFile(
-      RuleGroup group,
-      const base::FilePath& file) override;
   base::Optional<RuleSource> GetRuleSource(RuleGroup group,
                                            uint32_t source_id) override;
   std::map<uint32_t, RuleSource> GetRuleSources(RuleGroup group) const override;
   bool FetchRuleSourceNow(RuleGroup group, uint32_t source_id) override;
-  void DeleteRuleSource(RuleGroup group, uint32_t source_id) override;
   void SetActiveExceptionList(RuleGroup group, ExceptionsList list) override;
   ExceptionsList GetActiveExceptionList(RuleGroup group) const override;
 
@@ -117,6 +116,9 @@ class RuleServiceImpl : public RuleService {
   std::array<base::Optional<RulesIndexManager>, kRuleGroupCount>
       index_managers_;
 
+  std::array<base::Optional<ContentInjectionProvider>, kRuleGroupCount>
+      content_injection_providers_;
+
   // Keeps track of the request filters we have set up, to allow tearing them
   // down if needed. These pointers are not guaranteed to be valid at any time.
   std::array<AdBlockRequestFilter*, kRuleGroupCount> request_filters_ = {
@@ -127,7 +129,7 @@ class RuleServiceImpl : public RuleService {
   base::Optional<Resources> resources_;
 
   bool is_loaded_ = false;
-  base::Optional<KnownRuleSourcesHandler> known_sources_handler_;
+  base::Optional<KnownRuleSourcesHandlerImpl> known_sources_handler_;
 
   scoped_refptr<base::SequencedTaskRunner> file_task_runner_;
 

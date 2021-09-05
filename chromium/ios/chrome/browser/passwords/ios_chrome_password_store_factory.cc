@@ -9,6 +9,7 @@
 
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/no_destructor.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task/post_task.h"
@@ -18,16 +19,40 @@
 #include "components/keyed_service/ios/browser_state_dependency_manager.h"
 #include "components/password_manager/core/browser/login_database.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
-#include "components/password_manager/core/browser/password_store_default.h"
 #include "components/password_manager/core/browser/password_store_factory_util.h"
+#include "components/password_manager/core/browser/password_store_impl.h"
+#include "components/password_manager/core/browser/password_store_signin_notifier_impl.h"
+#include "components/password_manager/core/common/password_manager_features.h"
+#include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/sync/driver/sync_service.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/browser_state_otr_helper.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/passwords/credentials_cleaner_runner_factory.h"
+#include "ios/chrome/browser/signin/identity_manager_factory.h"
 #include "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #include "ios/chrome/browser/webdata_services/web_data_service_factory.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+
+namespace {
+
+bool IsPasswordReuseDetectionEnabled() {
+  return base::FeatureList::IsEnabled(
+      password_manager::features::kPasswordReuseDetectionEnabled);
+}
+
+std::string GetSyncUsername(signin::IdentityManager* identity_manager) {
+  return identity_manager ? identity_manager->GetPrimaryAccountInfo().email
+                          : std::string();
+}
+
+bool IsSignedIn(signin::IdentityManager* identity_manager) {
+  return identity_manager
+             ? !identity_manager->GetAccountsWithRefreshTokens().empty()
+             : false;
+}
+
+}  // namespace
 
 // static
 scoped_refptr<password_manager::PasswordStore>
@@ -69,6 +94,12 @@ IOSChromePasswordStoreFactory::IOSChromePasswordStoreFactory()
           "PasswordStore",
           BrowserStateDependencyManager::GetInstance()) {
   DependsOn(ios::WebDataServiceFactory::GetInstance());
+
+  if (IsPasswordReuseDetectionEnabled()) {
+    // TODO(crbug.com/715987). Remove when PasswordReuseDetector is decoupled
+    // from PasswordStore.
+    DependsOn(IdentityManagerFactory::GetInstance());
+  }
 }
 
 IOSChromePasswordStoreFactory::~IOSChromePasswordStoreFactory() {}
@@ -92,13 +123,26 @@ IOSChromePasswordStoreFactory::BuildServiceInstanceFor(
           {base::MayBlock(), base::TaskPriority::USER_VISIBLE}));
 
   scoped_refptr<password_manager::PasswordStore> store =
-      new password_manager::PasswordStoreDefault(std::move(login_db));
+      new password_manager::PasswordStoreImpl(std::move(login_db));
   if (!store->Init(nullptr)) {
     // TODO(crbug.com/479725): Remove the LOG once this error is visible in the
     // UI.
     LOG(WARNING) << "Could not initialize password store.";
     return nullptr;
   }
+
+  if (IsPasswordReuseDetectionEnabled()) {
+    signin::IdentityManager* identity_manager =
+        IdentityManagerFactory::GetForBrowserState(
+            ChromeBrowserState::FromBrowserState(context));
+
+    store->PreparePasswordHashData(GetSyncUsername(identity_manager),
+                                   IsSignedIn(identity_manager));
+    store->SetPasswordStoreSigninNotifier(
+        std::make_unique<password_manager::PasswordStoreSigninNotifierImpl>(
+            identity_manager));
+  }
+
   password_manager_util::RemoveUselessCredentials(
       CredentialsCleanerRunnerFactory::GetForBrowserState(context), store,
       ChromeBrowserState::FromBrowserState(context)->GetPrefs(),

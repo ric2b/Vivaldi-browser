@@ -31,11 +31,13 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/viewport_data.h"
+#include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/html_collection.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/html/html_iframe_element.h"
 #include "third_party/blink/renderer/core/html/html_span_element.h"
 #include "third_party/blink/renderer/core/html/html_style_element.h"
+#include "third_party/blink/renderer/core/layout/layout_counter.h"
 #include "third_party/blink/renderer/core/layout/layout_text_fragment.h"
 #include "third_party/blink/renderer/core/layout/layout_theme.h"
 #include "third_party/blink/renderer/core/page/viewport_description.h"
@@ -651,6 +653,29 @@ TEST_F(StyleEngineTest, AnalyzedInject) {
       t11->GetComputedStyle()->VisitedDependentColor(GetCSSPropertyColor()));
 }
 
+TEST_F(StyleEngineTest, InjectedUserNoAuthorFontFace) {
+  UpdateAllLifecyclePhases();
+
+  FontDescription font_description;
+  FontFaceCache* cache = GetStyleEngine().GetFontSelector()->GetFontFaceCache();
+  EXPECT_FALSE(cache->Get(font_description, "User"));
+
+  auto* user_sheet = MakeGarbageCollected<StyleSheetContents>(
+      MakeGarbageCollected<CSSParserContext>(GetDocument()));
+  user_sheet->ParseString(
+      "@font-face {"
+      "  font-family: 'User';"
+      "  src: url(font.ttf);"
+      "}");
+
+  StyleSheetKey user_key("user");
+  GetStyleEngine().InjectSheet(user_key, user_sheet, WebDocument::kUserOrigin);
+
+  UpdateAllLifecyclePhases();
+
+  EXPECT_TRUE(cache->Get(font_description, "User"));
+}
+
 TEST_F(StyleEngineTest, InjectedFontFace) {
   GetDocument().body()->setInnerHTML(R"HTML(
     <style>
@@ -899,22 +924,6 @@ TEST_F(StyleEngineTest, RuleSetInvalidationHostContext) {
             kRuleSetInvalidationFullRecalc);
   EXPECT_EQ(ScheduleInvalidationsForRules(
                 shadow_root, ":host-context(#host) { background: green}"),
-            kRuleSetInvalidationFullRecalc);
-}
-
-TEST_F(StyleEngineTest, RuleSetInvalidationV0BoundaryCrossing) {
-  GetDocument().body()->setInnerHTML("<div id=host></div>");
-  Element* host = GetDocument().getElementById("host");
-  ASSERT_TRUE(host);
-
-  ShadowRoot& shadow_root =
-      host->AttachShadowRootInternal(ShadowRootType::kOpen);
-
-  shadow_root.setInnerHTML("<div></div><div class=a></div><div></div>");
-  UpdateAllLifecyclePhases();
-
-  EXPECT_EQ(ScheduleInvalidationsForRules(
-                shadow_root, ".a ::content span { background: green}"),
             kRuleSetInvalidationFullRecalc);
 }
 
@@ -2033,14 +2042,19 @@ TEST_F(StyleEngineTest, GetComputedStyleOutsideFlatTreeCrash) {
       body, div { display: contents }
       div::before { display: contents; content: "" }
     </style>
-    <div id=inner></div>
+    <div id=host>
+      <!-- no slots here -->
+    </host>
+    <div id=non-slotted></div>
   )HTML");
 
-  GetDocument().documentElement()->CreateV0ShadowRootForTesting();
+  GetDocument().getElementById("host")->AttachShadowRootInternal(
+      ShadowRootType::kOpen);
   UpdateAllLifecyclePhases();
   GetDocument().body()->EnsureComputedStyle();
-  GetDocument().getElementById("inner")->SetInlineStyleProperty(
-      CSSPropertyID::kColor, "blue");
+  GetDocument()
+      .getElementById("non-slotted")
+      ->SetInlineStyleProperty(CSSPropertyID::kColor, "blue");
   UpdateAllLifecyclePhases();
 }
 
@@ -2712,30 +2726,6 @@ TEST_F(StyleEngineTest, SlottedWithEnsuredStyleOutsideFlatTree) {
   EXPECT_FALSE(span->GetComputedStyle());
 }
 
-TEST_F(StyleEngineTest, RecalcEnsuredStyleOutsideFlatTreeV0) {
-  GetDocument().body()->setInnerHTML(R"HTML(
-    <div id="host"><span></span></div>
-  )HTML");
-
-  auto* host = GetDocument().getElementById("host");
-  auto* span = To<Element>(host->firstChild());
-
-  host->CreateV0ShadowRootForTesting();
-  UpdateAllLifecyclePhases();
-
-  EXPECT_FALSE(span->FlatTreeParentForChildDirty());
-
-  // Ensure style outside the flat tree.
-  const ComputedStyle* style = span->EnsureComputedStyle();
-  ASSERT_TRUE(style);
-  EXPECT_TRUE(style->IsEnsuredOutsideFlatTree());
-  EXPECT_EQ(EDisplay::kInline, style->Display());
-
-  span->SetInlineStyleProperty(CSSPropertyID::kDisplay, "block");
-  EXPECT_FALSE(GetStyleRecalcRoot());
-  EXPECT_FALSE(GetDocument().body()->ChildNeedsStyleRecalc());
-}
-
 TEST_F(StyleEngineTest, ForceReattachRecalcRootAttachShadow) {
   GetDocument().body()->setInnerHTML(R"HTML(
     <div id="reattach"></div><div id="host"><span></span></div>
@@ -2914,29 +2904,6 @@ TEST_F(StyleEngineTest,
   EXPECT_EQ(1u, GetStyleEngine().StyleForElementCount() - initial_count);
   EXPECT_EQ(MakeRGB(0, 128, 0), div->GetComputedStyle()->VisitedDependentColor(
                                     GetCSSPropertyColor()));
-}
-
-TEST_F(StyleEngineTest, SummaryDisplayUseCount) {
-  // Should not be use-counted: wrong element type.
-  GetDocument().body()->setInnerHTML(
-      "<style>div { display: block; }</style><div></div>");
-  UpdateAllLifecyclePhases();
-  EXPECT_FALSE(GetDocument().IsUseCounted(
-      WebFeature::kSummaryElementWithDisplayBlockAuthorRule));
-
-  // Should not be use-counted: wrong display type:
-  GetDocument().body()->setInnerHTML(
-      "<style>summary { display: inline; }</style><summary></summary>");
-  UpdateAllLifecyclePhases();
-  EXPECT_FALSE(GetDocument().IsUseCounted(
-      WebFeature::kSummaryElementWithDisplayBlockAuthorRule));
-
-  // Should be use-counted:
-  GetDocument().body()->setInnerHTML(
-      "<style>summary { display: block; }</style><summary></summary>");
-  UpdateAllLifecyclePhases();
-  EXPECT_TRUE(GetDocument().IsUseCounted(
-      WebFeature::kSummaryElementWithDisplayBlockAuthorRule));
 }
 
 TEST_F(StyleEngineTest, RevertUseCount) {
@@ -3481,6 +3448,23 @@ TEST_F(StyleEngineTest, DisabledAdvanceOverrideDescriptor) {
   EXPECT_FALSE(font_face->HasFontMetricsOverride());
 }
 
+// Properties stored for forced colors mode should only be usable by the UA.
+TEST_F(StyleEngineTest, InternalForcedProperties) {
+  String properties_to_test[] = {
+      "-internal-forced-background-color", "-internal-forced-border-color",
+      "-internal-forced-color", "-internal-forced-outline-color",
+      "-internal-forced-visited-color"};
+  for (auto property : properties_to_test) {
+    String declaration = property + ":red";
+    ASSERT_TRUE(
+        css_test_helpers::ParseDeclarationBlock(declaration, kHTMLStandardMode)
+            ->IsEmpty());
+    ASSERT_TRUE(
+        !css_test_helpers::ParseDeclarationBlock(declaration, kUASheetMode)
+             ->IsEmpty());
+  }
+}
+
 class StyleEngineSimTest : public SimTest {};
 
 TEST_F(StyleEngineSimTest, OwnerColorScheme) {
@@ -3745,6 +3729,315 @@ TEST_F(StyleEngineTest, CSSPseudoHostDynamicSpecificity) {
   UpdateAllLifecyclePhases();
   EXPECT_TRUE(IsUseCounted(WebFeature::kCSSPseudoHostDynamicSpecificity));
   ClearUseCounter(WebFeature::kCSSPseudoHostDynamicSpecificity);
+}
+
+namespace {
+
+void SetDependsOnContainerQueries(Element& element) {
+  if (const ComputedStyle* style = element.GetComputedStyle()) {
+    scoped_refptr<ComputedStyle> cloned_style = ComputedStyle::Clone(*style);
+    cloned_style->SetDependsOnContainerQueries(true);
+    element.SetComputedStyle(cloned_style);
+  }
+}
+
+void SetDependsOnContainerQueries(HTMLCollection& affected) {
+  for (Element* element : affected)
+    SetDependsOnContainerQueries(*element);
+}
+
+}  // namespace
+
+TEST_F(StyleEngineTest, UpdateStyleAndLayoutTreeForContainer) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      .container {
+        contain: layout size;
+      }
+    </style>
+    <div id="container1" class="container">
+      <span class="affected"></span>
+      <div id="container2" class="container affected">
+        <span class="affected"></span>
+        <span></span>
+        <span class="affected"></span>
+        <span><span class="affected"></span></span>
+        <span class="affected"></span>
+        <div style="display:none" class="affected">
+          <span class="affected"></span>
+        </div>
+        <div style="display:none">
+          <span class="affected"></span>
+          <span class="affected"></span>
+        </div>
+      </div>
+      <span></span>
+      <div class="container">
+        <span class="affected"></span>
+        <span class="affected"></span>
+      </div>
+      <span class="container" style="display:inline-block">
+        <span class="affected"></span>
+      </span>
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhases();
+
+  auto* container1 = GetDocument().getElementById("container1");
+  auto* container2 = GetDocument().getElementById("container2");
+  auto* affected = GetDocument().getElementsByClassName("affected");
+  ASSERT_TRUE(container1);
+  ASSERT_TRUE(container2);
+  ASSERT_TRUE(affected);
+  SetDependsOnContainerQueries(*affected);
+
+  unsigned start_count = GetStyleEngine().StyleForElementCount();
+  GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(*container1);
+
+  // The first span.affected child and #container2
+  EXPECT_EQ(2u, GetStyleEngine().StyleForElementCount() - start_count);
+
+  start_count = GetStyleEngine().StyleForElementCount();
+  GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(*container2);
+
+  // Three direct span.affected children, and the two display:none elements.
+  EXPECT_EQ(6u, GetStyleEngine().StyleForElementCount() - start_count);
+}
+
+TEST_F(StyleEngineTest, ContainerQueriesContainmentNotApplying) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      .container {
+        contain: layout size;
+      }
+    </style>
+    <div id="container" class="container">
+      <div class="container" style="display:contents">
+        <span class="affected"></span>
+      </div>
+      <span class="container">
+        <span class="affected"></span>
+      </span>
+      <rt class="container">
+        <span class="affected"></span>
+      </rt>
+      <div class="container" style="display:table">
+        <span class="affected"></span>
+      </div>
+      <div class="container" style="display:table-cell">
+        <span class="affected"></span>
+      </div>
+      <div class="container" style="display:table-row">
+        <span class="affected"></span>
+      </div>
+      <div class="container" style="display:table-row-group">
+        <span class="affected"></span>
+      </div>
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhases();
+
+  auto* container = GetDocument().getElementById("container");
+  auto* affected = GetDocument().getElementsByClassName("affected");
+  ASSERT_TRUE(container);
+  ASSERT_TRUE(affected);
+  SetDependsOnContainerQueries(*affected);
+
+  unsigned start_count = GetStyleEngine().StyleForElementCount();
+  GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(*container);
+
+  // span.affected is updated because containment does not apply to the display
+  // types on the element styled with containment. All marked as affected are
+  // recalculated.
+  EXPECT_EQ(7u, GetStyleEngine().StyleForElementCount() - start_count);
+}
+
+TEST_F(StyleEngineTest, PseudoElementContainerQueryRecalc) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      #container { contain: layout size }
+      #container::before { content: " " }
+      span::before { content: " " }
+    </style>
+    <div id="container">
+      <span id="span"></span>
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhases();
+
+  auto* container = GetDocument().getElementById("container");
+  auto* span = GetDocument().getElementById("span");
+  ASSERT_TRUE(container);
+  ASSERT_TRUE(span);
+
+  auto* before = span->GetPseudoElement(kPseudoIdBefore);
+  ASSERT_TRUE(before);
+  SetDependsOnContainerQueries(*before);
+
+  before = container->GetPseudoElement(kPseudoIdBefore);
+  ASSERT_TRUE(before);
+  SetDependsOnContainerQueries(*before);
+
+  unsigned start_count = GetStyleEngine().StyleForElementCount();
+  GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(*container);
+
+  EXPECT_EQ(2u, GetStyleEngine().StyleForElementCount() - start_count);
+}
+
+TEST_F(StyleEngineTest, MarkStyleDirtyFromContainerRecalc) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <div id="container" style="contain: layout size">
+      <input id="input" type="text" class="affected">
+    </div>
+  )HTML");
+
+  UpdateAllLifecyclePhases();
+
+  auto* container = GetDocument().getElementById("container");
+  auto* input = GetDocument().getElementById("input");
+  auto* affected = GetDocument().getElementsByClassName("affected");
+  ASSERT_TRUE(container);
+  ASSERT_TRUE(input);
+  auto* inner_editor = DynamicTo<HTMLInputElement>(input)->InnerEditorElement();
+  ASSERT_TRUE(inner_editor);
+  ASSERT_TRUE(affected);
+  SetDependsOnContainerQueries(*affected);
+
+  scoped_refptr<const ComputedStyle> old_inner_style =
+      inner_editor->GetComputedStyle();
+  EXPECT_TRUE(old_inner_style);
+
+  unsigned start_count = GetStyleEngine().StyleForElementCount();
+  GetStyleEngine().UpdateStyleAndLayoutTreeForContainer(*container);
+
+  // Input elements mark their InnerEditorElement() style-dirty when they are
+  // recalculated. That means the UpdateStyleAndLayoutTreeForContainer() call
+  // above will involve marking ChildNeedsStyleRecalc all the way up to the
+  // documentElement. Check that we don't leave anything dirty.
+  EXPECT_FALSE(GetDocument().NeedsLayoutTreeUpdate());
+  EXPECT_FALSE(GetDocument().documentElement()->ChildNeedsStyleRecalc());
+
+  // The input element is recalculated. The inner editor element isn't counted
+  // because we don't do normal style resolution to create the ComputedStyle for
+  // it, but check that we have a new ComputedStyle object for it.
+  EXPECT_EQ(1u, GetStyleEngine().StyleForElementCount() - start_count);
+
+  const ComputedStyle* new_inner_style = inner_editor->GetComputedStyle();
+  EXPECT_TRUE(new_inner_style);
+  EXPECT_NE(old_inner_style, new_inner_style);
+}
+
+TEST_F(StyleEngineTest, FastRejectForHostChild) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      .notfound span {
+        color: pink;
+      }
+    </style>
+    <div id="host">
+      <span id="slotted"></span>
+    </div>
+  )HTML");
+
+  Element* host = GetDocument().getElementById("host");
+  ASSERT_TRUE(host);
+  ShadowRoot& shadow_root =
+      host->AttachShadowRootInternal(ShadowRootType::kOpen);
+  shadow_root.setInnerHTML(R"HTML(
+    <slot></slot>
+  )HTML");
+  UpdateAllLifecyclePhases();
+
+  StyleEngine& engine = GetStyleEngine();
+  // If the Stats() were already enabled, we would not start with 0 counts.
+  EXPECT_FALSE(engine.Stats());
+  engine.SetStatsEnabled(true);
+
+  StyleResolverStats* stats = engine.Stats();
+  ASSERT_TRUE(stats);
+  EXPECT_EQ(0u, stats->rules_fast_rejected);
+
+  Element* span = GetDocument().getElementById("slotted");
+  ASSERT_TRUE(span);
+  span->SetInlineStyleProperty(CSSPropertyID::kColor, "green");
+
+  GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);
+  GetStyleEngine().RecalcStyle();
+
+  // Should fast reject ".notfound span"
+  EXPECT_EQ(1u, stats->rules_fast_rejected);
+}
+
+TEST_F(StyleEngineTest, RejectSlottedSelector) {
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <div id="host">
+      <span id="slotted"></span>
+    </div>
+  )HTML");
+
+  Element* host = GetDocument().getElementById("host");
+  ASSERT_TRUE(host);
+  ShadowRoot& shadow_root =
+      host->AttachShadowRootInternal(ShadowRootType::kOpen);
+  shadow_root.setInnerHTML(R"HTML(
+    <style>
+      .notfound ::slotted(span) {
+        color: pink;
+      }
+    </style>
+    <slot></slot>
+  )HTML");
+  UpdateAllLifecyclePhases();
+
+  StyleEngine& engine = GetStyleEngine();
+  // If the Stats() were already enabled, we would not start with 0 counts.
+  EXPECT_FALSE(engine.Stats());
+  engine.SetStatsEnabled(true);
+
+  StyleResolverStats* stats = engine.Stats();
+  ASSERT_TRUE(stats);
+  EXPECT_EQ(0u, stats->rules_fast_rejected);
+
+  Element* span = GetDocument().getElementById("slotted");
+  ASSERT_TRUE(span);
+  span->SetInlineStyleProperty(CSSPropertyID::kColor, "green");
+
+  GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInStyleRecalc);
+  GetStyleEngine().RecalcStyle();
+
+  // Should fast reject ".notfound ::slotted(span)"
+  EXPECT_EQ(1u, stats->rules_fast_rejected);
+}
+
+// https://crbug.com/1172679
+TEST_F(StyleEngineTest, CounterContentNameCase) {
+  // Reproducible only with legacy counter styles
+  ScopedCSSAtRuleCounterStyleForTest disabled_scope(false);
+
+  GetDocument().body()->setInnerHTML(R"HTML(
+    <style>
+      body { counter-reset: a; }
+      #target::before {
+        counter-increment: a;
+        content: counter(a, Hiragana);
+      }
+    </style>
+    <p id="target"></p>
+  )HTML");
+
+  // Shouldn't crash
+  UpdateAllLifecyclePhases();
+
+  PseudoElement* before =
+      GetDocument().getElementById("target")->GetPseudoElement(kPseudoIdBefore);
+  LayoutCounter* counter =
+      To<LayoutCounter>(before->GetLayoutObject()->SlowFirstChild());
+
+  // Hiragana "A"
+  EXPECT_EQ(String(u"\u3042"), counter->GetText());
 }
 
 }  // namespace blink

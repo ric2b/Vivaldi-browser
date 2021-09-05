@@ -20,6 +20,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/strings/string_piece.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "cc/layers/deadline_policy.h"
@@ -92,7 +93,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
       public aura::client::FocusChangeObserver,
       public aura::client::CursorClientObserver {
  public:
-  RenderWidgetHostViewAura(RenderWidgetHost* host);
+  explicit RenderWidgetHostViewAura(RenderWidgetHost* host);
+  RenderWidgetHostViewAura(const RenderWidgetHostViewAura&) = delete;
+  RenderWidgetHostViewAura& operator=(const RenderWidgetHostViewAura&) = delete;
 
   // RenderWidgetHostView implementation.
   bool IsAura() const override;
@@ -119,7 +122,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   // Overridden from RenderWidgetHostViewBase:
   void InitAsPopup(RenderWidgetHostView* parent_host_view,
                    const gfx::Rect& pos) override;
-  void InitAsFullscreen(RenderWidgetHostView* reference_host_view) override;
   void Focus() override;
   void UpdateCursor(const WebCursor& cursor) override;
   void DisplayCursor(const WebCursor& cursor) override;
@@ -150,9 +152,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
       override;
   blink::mojom::InputEventResultState FilterInputEvent(
       const blink::WebInputEvent& input_event) override;
-  BrowserAccessibilityManager* CreateBrowserAccessibilityManager(
-      BrowserAccessibilityDelegate* delegate,
-      bool for_root_frame) override;
   gfx::AcceleratedWidget AccessibilityGetAcceleratedWidget() override;
   gfx::NativeViewAccessible AccessibilityGetNativeViewAccessible() override;
   void SetMainFrameAXTreeID(ui::AXTreeID id) override;
@@ -198,7 +197,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void SetCompositionText(const ui::CompositionText& composition) override;
   uint32_t ConfirmCompositionText(bool keep_selection) override;
   void ClearCompositionText() override;
-  void InsertText(const base::string16& text) override;
+  void InsertText(const base::string16& text,
+                  InsertTextCursorBehavior cursor_behavior) override;
   void InsertChar(const ui::KeyEvent& event) override;
   ui::TextInputType GetTextInputType() const override;
   ui::TextInputMode GetTextInputMode() const override;
@@ -236,9 +236,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   gfx::Range GetAutocorrectRange() const override;
   gfx::Rect GetAutocorrectCharacterBounds() const override;
-  bool SetAutocorrectRange(const base::string16& autocorrect_text,
-                           const gfx::Range& range) override;
-  void ClearAutocorrectRange() override;
+  bool SetAutocorrectRange(const gfx::Range& range) override;
 #endif
 
 #if defined(OS_WIN)
@@ -290,6 +288,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   void OnScrollEvent(ui::ScrollEvent* event) override;
   void OnTouchEvent(ui::TouchEvent* event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
+  base::StringPiece GetLogContext() const override;
 
   // Overridden from wm::ActivationDelegate:
   bool ShouldActivate() const override;
@@ -595,7 +594,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   aura::Window* window_;
 
   std::unique_ptr<DelegatedFrameHostClient> delegated_frame_host_client_;
-  // NOTE: this may be null.
+  // NOTE: this may be null during destruction.
   std::unique_ptr<DelegatedFrameHost> delegated_frame_host_;
 
   std::unique_ptr<WindowObserver> window_observer_;
@@ -603,9 +602,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   // Tracks the ancestors of the RWHVA window for window location changes.
   std::unique_ptr<WindowAncestorObserver> ancestor_window_observer_;
 
-  // Are we in the process of closing?  Tracked so fullscreen views can avoid
-  // sending a second shutdown request to the host when they lose the focus
-  // after requesting shutdown for another reason (e.g. Escape key).
+  // Are we in the process of closing?  Tracked so we don't try to shutdown
+  // again while inside shutdown, causing a double-free.
   bool in_shutdown_;
 
   // True if in the process of handling a window bounds changed notification.
@@ -722,8 +720,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   base::Optional<DisplayFeature> display_feature_;
 
   base::WeakPtrFactory<RenderWidgetHostViewAura> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewAura);
 };
 
 }  // namespace content

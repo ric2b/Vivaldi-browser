@@ -6,8 +6,8 @@
 
 #include <utility>
 
-#include "base/time/default_clock.h"
-#include "base/time/default_tick_clock.h"
+#include "base/command_line.h"
+#include "base/scoped_observation.h"
 #include "build/build_config.h"
 #include "components/feed/core/shared_prefs/pref_names.h"
 #include "components/feed/core/v2/feed_network_impl.h"
@@ -15,6 +15,7 @@
 #include "components/feed/core/v2/feed_stream.h"
 #include "components/feed/core/v2/image_fetcher.h"
 #include "components/feed/core/v2/metrics_reporter.h"
+#include "components/feed/core/v2/persistent_key_value_store_impl.h"
 #include "components/feed/core/v2/refresh_task_scheduler.h"
 #include "components/feed/feed_feature_list.h"
 #include "components/history/core/browser/history_service.h"
@@ -61,7 +62,7 @@ class FeedService::HistoryObserverImpl
       : feed_stream_(feed_stream), identity_manager_(identity_manager) {
     // May be null for some profiles.
     if (history_service)
-      history_service->AddObserver(this);
+      scoped_history_service_observer_.Observe(history_service);
   }
   HistoryObserverImpl(const HistoryObserverImpl&) = delete;
   HistoryObserverImpl& operator=(const HistoryObserverImpl&) = delete;
@@ -77,6 +78,9 @@ class FeedService::HistoryObserverImpl
  private:
   FeedStream* feed_stream_;
   signin::IdentityManager* identity_manager_;
+  base::ScopedObservation<history::HistoryService,
+                          history::HistoryServiceObserver>
+      scoped_history_service_observer_{this};
 };
 
 class FeedService::NetworkDelegateImpl : public FeedNetworkImpl::Delegate {
@@ -112,7 +116,11 @@ class FeedService::StreamDelegateImpl : public FeedStream::Delegate {
   }
 
   // FeedStream::Delegate.
-  bool IsEulaAccepted() override { return eula_notifier_.IsEulaAccepted(); }
+  bool IsEulaAccepted() override {
+    return eula_notifier_.IsEulaAccepted() ||
+           base::CommandLine::ForCurrentProcess()->HasSwitch(
+               "feedv2-accept-eula");
+  }
   bool IsOffline() override { return net::NetworkChangeNotifier::IsOffline(); }
   DisplayMetrics GetDisplayMetrics() override {
     return service_delegate_->GetDisplayMetrics();
@@ -146,13 +154,18 @@ class FeedService::IdentityManagerObserverImpl
   ~IdentityManagerObserverImpl() override {
     identity_manager_->RemoveObserver(this);
   }
-  void OnPrimaryAccountSet(
-      const CoreAccountInfo& primary_account_info) override {
-    feed_stream_->OnSignedIn();
-  }
-  void OnPrimaryAccountCleared(
-      const CoreAccountInfo& previous_primary_account_info) override {
-    feed_stream_->OnSignedOut();
+  void OnPrimaryAccountChanged(
+      const signin::PrimaryAccountChangeEvent& event) override {
+    switch (event.GetEventTypeFor(signin::ConsentLevel::kSync)) {
+      case signin::PrimaryAccountChangeEvent::Type::kSet:
+        feed_stream_->OnSignedIn();
+        return;
+      case signin::PrimaryAccountChangeEvent::Type::kCleared:
+        feed_stream_->OnSignedOut();
+        return;
+      case signin::PrimaryAccountChangeEvent::Type::kNone:
+        return;
+    }
   }
 
  private:
@@ -169,6 +182,8 @@ FeedService::FeedService(
     PrefService* profile_prefs,
     PrefService* local_state,
     std::unique_ptr<leveldb_proto::ProtoDatabase<feedstore::Record>> database,
+    std::unique_ptr<leveldb_proto::ProtoDatabase<feedkvstore::Entry>>
+        key_value_store_database,
     signin::IdentityManager* identity_manager,
     history::HistoryService* history_service,
     offline_pages::PrefetchService* prefetch_service,
@@ -182,20 +197,20 @@ FeedService::FeedService(
   stream_delegate_ = std::make_unique<StreamDelegateImpl>(
       local_state, delegate_.get(), identity_manager);
   network_delegate_ = std::make_unique<NetworkDelegateImpl>(delegate_.get());
-  metrics_reporter_ = std::make_unique<MetricsReporter>(
-      base::DefaultTickClock::GetInstance(), profile_prefs);
+  metrics_reporter_ = std::make_unique<MetricsReporter>(profile_prefs);
   feed_network_ = std::make_unique<FeedNetworkImpl>(
       network_delegate_.get(), identity_manager, api_key, url_loader_factory,
-      base::DefaultTickClock::GetInstance(), profile_prefs);
+      profile_prefs);
   image_fetcher_ = std::make_unique<ImageFetcher>(url_loader_factory);
   store_ = std::make_unique<FeedStore>(std::move(database));
+  persistent_key_value_store_ = std::make_unique<PersistentKeyValueStoreImpl>(
+      std::move(key_value_store_database));
 
   stream_ = std::make_unique<FeedStream>(
       refresh_task_scheduler_.get(), metrics_reporter_.get(),
       stream_delegate_.get(), profile_prefs, feed_network_.get(),
-      image_fetcher_.get(), store_.get(), prefetch_service, offline_page_model,
-      base::DefaultClock::GetInstance(), base::DefaultTickClock::GetInstance(),
-      chrome_info);
+      image_fetcher_.get(), store_.get(), persistent_key_value_store_.get(),
+      prefetch_service, offline_page_model, chrome_info);
 
   history_observer_ = std::make_unique<HistoryObserverImpl>(
       history_service, static_cast<FeedStream*>(stream_.get()),

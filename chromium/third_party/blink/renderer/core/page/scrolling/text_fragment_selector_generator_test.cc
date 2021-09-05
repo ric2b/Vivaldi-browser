@@ -18,6 +18,7 @@
 #include "third_party/blink/renderer/core/editing/ephemeral_range.h"
 #include "third_party/blink/renderer/core/editing/iterators/text_iterator.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
+#include "third_party/blink/renderer/core/testing/scoped_fake_ukm_recorder.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_request.h"
 #include "third_party/blink/renderer/core/testing/sim/sim_test.h"
 
@@ -47,15 +48,13 @@ class TextFragmentSelectorGeneratorTest : public SimTest {
     histogram_tester_.ExpectTotalCount("SharedHighlights.LinkGenerated.Error",
                                        0);
 
-    auto* recorder =
-        static_cast<ukm::TestUkmRecorder*>(GetDocument().UkmRecorder());
-    auto entries = recorder->GetEntriesByName(
+    auto entries = ukm_recorder()->GetEntriesByName(
         ukm::builders::SharedHighlights_LinkGenerated::kEntryName);
     ASSERT_EQ(1u, entries.size());
     const ukm::mojom::UkmEntry* entry = entries[0];
     EXPECT_EQ(GetDocument().UkmSourceID(), entry->source_id);
-    recorder->ExpectEntryMetric(entry, kSuccessUkmMetric, true);
-    EXPECT_FALSE(recorder->GetEntryMetric(entry, kErrorUkmMetric));
+    ukm_recorder()->ExpectEntryMetric(entry, kSuccessUkmMetric, true);
+    EXPECT_FALSE(ukm_recorder()->GetEntryMetric(entry, kErrorUkmMetric));
   }
 
   void VerifySelectorFails(Position selected_start,
@@ -67,21 +66,17 @@ class TextFragmentSelectorGeneratorTest : public SimTest {
     histogram_tester_.ExpectBucketCount("SharedHighlights.LinkGenerated.Error",
                                         error, 1);
 
-    auto* recorder =
-        static_cast<ukm::TestUkmRecorder*>(GetDocument().UkmRecorder());
-    auto entries = recorder->GetEntriesByName(
+    auto entries = ukm_recorder()->GetEntriesByName(
         ukm::builders::SharedHighlights_LinkGenerated::kEntryName);
     ASSERT_EQ(1u, entries.size());
     const ukm::mojom::UkmEntry* entry = entries[0];
     EXPECT_EQ(GetDocument().UkmSourceID(), entry->source_id);
-    recorder->ExpectEntryMetric(entry, kSuccessUkmMetric, false);
-    recorder->ExpectEntryMetric(entry, kErrorUkmMetric,
-                                static_cast<int64_t>(error));
+    ukm_recorder()->ExpectEntryMetric(entry, kSuccessUkmMetric, false);
+    ukm_recorder()->ExpectEntryMetric(entry, kErrorUkmMetric,
+                                      static_cast<int64_t>(error));
   }
 
   String GenerateSelector(Position selected_start, Position selected_end) {
-    StubUkmRecorder();
-
     GetDocument()
         .GetFrame()
         ->GetTextFragmentSelectorGenerator()
@@ -109,18 +104,12 @@ class TextFragmentSelectorGeneratorTest : public SimTest {
   }
 
  protected:
-  void StubUkmRecorder() {
-    // Needed to keep old recorders alive, as other instances might depend on
-    // one of them, causing tests to crash during teardown.
-    old_ukm_recorders_.push_back(std::move(GetDocument().ukm_recorder_));
-    GetDocument().ukm_recorder_ = std::make_unique<ukm::TestUkmRecorder>();
+  ukm::TestUkmRecorder* ukm_recorder() {
+    return scoped_ukm_recorder_.recorder();
   }
 
   base::HistogramTester histogram_tester_;
-
-  // TODO(crbug.com/1153990): Find a better mocking solution and clean up this
-  // variable.
-  std::vector<std::unique_ptr<ukm::UkmRecorder>> old_ukm_recorders_;
+  ScopedFakeUkmRecorder scoped_ukm_recorder_;
 };
 
 // Basic exact selector case.
@@ -589,6 +578,8 @@ text text text text text text text text text text and last text",
 
   VerifySelector(selected_start, selected_end, "First%20paragraph,last%20text");
 
+  scoped_ukm_recorder_.ResetRecorder();
+
   const auto& second_selected_start = Position(first_paragraph, 6);
   const auto& second_selected_end = Position(first_paragraph, 325);
   ASSERT_EQ(
@@ -809,7 +800,7 @@ TEST_F(TextFragmentSelectorGeneratorTest, StartsWithInlineBlockChild) {
   GetDocument().View()->UpdateAllLifecyclePhasesForTest();
   Node* img = GetDocument().getElementById("link1");
   Node* first_paragraph = GetDocument().getElementById("first")->firstChild();
-  const auto& start = Position(img, PositionAnchorType::kAfterChildren);
+  const auto& start = Position::LastPositionInNode(*img);
   const auto& end = Position(first_paragraph, 5);
   ASSERT_EQ("  \nFirst", PlainText(EphemeralRange(start, end)));
 
@@ -884,9 +875,7 @@ TEST_F(TextFragmentSelectorGeneratorTest, EndIsStartofNextBlock) {
 // Where [] indicate selection. In this case, when the selection is adjusted, we
 // want to ensure it correctly traverses the tree back to the previous text node
 // and not to the <div>(sibling of second <p>).
-//
-// crbug.com/1154308 - checks the use of Previous instead of
-// PreviousSkippingChildren in TextFragmentSelectorGenerator::AdjustSelection
+// See crbug.com/1154308 for more context.
 TEST_F(TextFragmentSelectorGeneratorTest, PrevNodeIsSiblingsChild) {
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -920,9 +909,7 @@ TEST_F(TextFragmentSelectorGeneratorTest, PrevNodeIsSiblingsChild) {
 // Where [] indicate selection. In this case, when the selection is adjusted, we
 // want to ensure it correctly traverses the tree back to the previous text by
 // correctly skipping the invisible div but not skipping the second <p>.
-//
-// crbug.com/1154308 - checks the use of Previous instead of
-// PreviousSkippingChildren in FindBuffer::BackwardVisibleTextNode
+// See crbug.com/1154308 for more context.
 TEST_F(TextFragmentSelectorGeneratorTest, PrevPrevNodeIsSiblingsChild) {
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -958,6 +945,72 @@ TEST_F(TextFragmentSelectorGeneratorTest, RangeSelector_SameNode_Interrupted) {
             PlainText(EphemeralRange(start, end)));
 
   VerifySelector(start, end, "First,paragraph");
+}
+
+// Checks the case when selection end position is a non text node.
+TEST_F(TextFragmentSelectorGeneratorTest, SelectionEndsWithNonText) {
+  SimRequest request("https://example.com/test.html", "text/html");
+  LoadURL("https://example.com/test.html");
+  request.Complete(R"HTML(
+  <!DOCTYPE html>
+  <div id='div'>
+    <p id='start'>First paragraph</p>
+    <p id='second'>Second paragraph</p>
+  </div>
+  )HTML");
+  GetDocument().UpdateStyleAndLayoutTree();
+  Node* first_paragraph = GetDocument().getElementById("start")->firstChild();
+  Node* div = GetDocument().getElementById("div");
+  const auto& start = Position(first_paragraph, 0);
+  const auto& end = Position(div, 2);
+  ASSERT_EQ("First paragraph\n\n", PlainText(EphemeralRange(start, end)));
+
+  VerifySelector(start, end, "First%20paragraph,-Second");
+}
+
+// Checks the case when selection end position is a non text node which doesn't
+// have text child node.
+TEST_F(TextFragmentSelectorGeneratorTest,
+       SelectionEndsWithNonTextWithNoTextChild) {
+  SimRequest request("https://example.com/test.html", "text/html");
+  LoadURL("https://example.com/test.html");
+  request.Complete(R"HTML(
+    <!DOCTYPE html>
+  <div id='div'><p id='start'>First paragraph</p><p id='second'>Second paragraph</p><img id="img">
+  </div>
+  )HTML");
+  GetDocument().UpdateStyleAndLayoutTree();
+  Node* first_paragraph = GetDocument().getElementById("start")->firstChild();
+  Node* div = GetDocument().getElementById("div");
+  const auto& start = Position(first_paragraph, 0);
+  const auto& end =
+      Position(div, 3);  // Points to the 3rd child of the div, which is <img>
+  ASSERT_EQ("First paragraph\n\nSecond paragraph\n\n",
+            PlainText(EphemeralRange(start, end)));
+
+  VerifySelector(start, end, "First%20paragraph,Second%20paragraph");
+}
+
+// Checks the case when selection end position is a non text node which doesn't
+// have text child node.
+TEST_F(TextFragmentSelectorGeneratorTest, SelectionEndsWithImageDiv) {
+  SimRequest request("https://example.com/test.html", "text/html");
+  LoadURL("https://example.com/test.html");
+  request.Complete(R"HTML(
+    <!DOCTYPE html>
+  <div id='div'><p id='start'>First paragraph</p><p id='second'>Second paragraph</p><div id='div_img'><img id="img"></div>
+  </div>
+  )HTML");
+  GetDocument().UpdateStyleAndLayoutTree();
+  Node* first_paragraph = GetDocument().getElementById("start")->firstChild();
+  Node* div = GetDocument().getElementById("div");
+  const auto& start = Position(first_paragraph, 0);
+  const auto& end =
+      Position(div, 3);  // Points to the 3rd child of the div, which is div_img
+  ASSERT_EQ("First paragraph\n\nSecond paragraph\n\n",
+            PlainText(EphemeralRange(start, end)));
+
+  VerifySelector(start, end, "First%20paragraph,Second%20paragraph");
 }
 
 // Basic test case for |GetNextTextBlock|.
@@ -1526,70 +1579,6 @@ TEST_F(TextFragmentSelectorGeneratorTest,
                                          .GetFrame()
                                          ->GetTextFragmentSelectorGenerator()
                                          ->GetNextTextBlockForTesting(end));
-}
-
-// Checks that selection in the same text node is considerered uninterrupted.
-TEST_F(TextFragmentSelectorGeneratorTest,
-       IsInSameUninterruptedBlock_OneTextNode) {
-  SimRequest request("https://example.com/test.html", "text/html");
-  LoadURL("https://example.com/test.html");
-  request.Complete(R"HTML(
-    <!DOCTYPE html>
-    <div id='first'>First paragraph text</div>
-  )HTML");
-  Node* first_paragraph = GetDocument().getElementById("first")->firstChild();
-  const auto& start = Position(first_paragraph, 0);
-  const auto& end = Position(first_paragraph, 15);
-  ASSERT_EQ("First paragraph", PlainText(EphemeralRange(start, end)));
-
-  EXPECT_TRUE(GetDocument()
-                  .GetFrame()
-                  ->GetTextFragmentSelectorGenerator()
-                  ->IsInSameUninterruptedBlockForTesting(start, end));
-}
-
-// Checks that selection in the same text node with nested non-block element is
-// considerered uninterrupted.
-TEST_F(TextFragmentSelectorGeneratorTest,
-       IsInSameUninterruptedBlock_NonBlockInterruption) {
-  SimRequest request("https://example.com/test.html", "text/html");
-  LoadURL("https://example.com/test.html");
-  request.Complete(R"HTML(
-    <!DOCTYPE html>
-    <div id='first'>First <i>styled text</i> paragraph text</div>
-  )HTML");
-  Node* first_paragraph = GetDocument().getElementById("first")->firstChild();
-  const auto& start = Position(first_paragraph, 0);
-  const auto& end = Position(first_paragraph->nextSibling()->nextSibling(), 10);
-  ASSERT_EQ("First styled text paragraph",
-            PlainText(EphemeralRange(start, end)));
-
-  EXPECT_TRUE(GetDocument()
-                  .GetFrame()
-                  ->GetTextFragmentSelectorGenerator()
-                  ->IsInSameUninterruptedBlockForTesting(start, end));
-}
-
-// Checks that selection in the same text node with nested block element is
-// considerered interrupted.
-TEST_F(TextFragmentSelectorGeneratorTest,
-       IsInSameUninterruptedBlock_BlockInterruption) {
-  SimRequest request("https://example.com/test.html", "text/html");
-  LoadURL("https://example.com/test.html");
-  request.Complete(R"HTML(
-    <!DOCTYPE html>
-    <div id='first'>First <div>block text</div> paragraph text</div>
-  )HTML");
-  Node* first_paragraph = GetDocument().getElementById("first")->firstChild();
-  const auto& start = Position(first_paragraph, 0);
-  const auto& end = Position(first_paragraph->nextSibling()->nextSibling(), 10);
-  ASSERT_EQ("First\nblock text\nparagraph",
-            PlainText(EphemeralRange(start, end)));
-
-  EXPECT_FALSE(GetDocument()
-                   .GetFrame()
-                   ->GetTextFragmentSelectorGenerator()
-                   ->IsInSameUninterruptedBlockForTesting(start, end));
 }
 
 }  // namespace blink

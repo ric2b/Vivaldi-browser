@@ -97,6 +97,7 @@
     "utilities",
     "videoCapture",
     "vivaldiAccount",
+    "webRequest",
     "webview",
     "webNavigation",
     "windowPrivate",

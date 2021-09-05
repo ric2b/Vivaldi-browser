@@ -133,7 +133,7 @@ extern const char kPolicyMissingMitigationMode[];
 COMPONENT_EXPORT(CHROMEOS_SETTINGS)
 extern const char kAllowRedeemChromeOsRegistrationOffers[];
 
-COMPONENT_EXPORT(CHROMEOS_SETTINGS) extern const char kStartUpFlags[];
+COMPONENT_EXPORT(CHROMEOS_SETTINGS) extern const char kFeatureFlags[];
 
 COMPONENT_EXPORT(CHROMEOS_SETTINGS) extern const char kKioskAppSettingsPrefix[];
 COMPONENT_EXPORT(CHROMEOS_SETTINGS)
@@ -189,9 +189,6 @@ extern const char kDeviceQuirksDownloadEnabled[];
 
 COMPONENT_EXPORT(CHROMEOS_SETTINGS)
 extern const char kLoginVideoCaptureAllowedUrls[];
-
-COMPONENT_EXPORT(CHROMEOS_SETTINGS)
-extern const char kDeviceLoginScreenExtensions[];
 
 COMPONENT_EXPORT(CHROMEOS_SETTINGS)
 extern const char kDeviceLoginScreenLocales[];

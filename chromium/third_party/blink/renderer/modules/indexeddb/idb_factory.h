@@ -70,12 +70,14 @@ class MODULES_EXPORT IDBFactory final : public ScriptWrappable {
               ExceptionState&);
 
   // These are not exposed to the web applications and only used by DevTools.
-  IDBRequest* GetDatabaseNames(ScriptState*, ExceptionState&);
   IDBOpenDBRequest* CloseConnectionsAndDeleteDatabase(ScriptState*,
                                                       const String& name,
                                                       ExceptionState&);
 
   ScriptPromise GetDatabaseInfo(ScriptState*, ExceptionState&);
+  // This method is exposed specifically for DevTools.
+  void GetDatabaseInfo(ScriptState*,
+                       std::unique_ptr<mojom::blink::IDBCallbacks> callbacks);
 
   void SetFactoryForTesting(mojo::Remote<mojom::blink::IDBFactory> factory);
 

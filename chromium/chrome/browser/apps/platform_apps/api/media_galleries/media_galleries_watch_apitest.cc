@@ -13,6 +13,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/browser/media_galleries/media_file_system_registry.h"
@@ -220,8 +221,17 @@ IN_PROC_BROWSER_TEST_F(MediaGalleriesGalleryWatchApiTest,
   EXPECT_TRUE(got_correct_details.WaitUntilSatisfied());
 }
 
+// Test is flaky on windows and linux: crbug.com/1150017.
+// TODO(crbug.com/1052397): Revisit once build flag switch of lacros-chrome is
+// complete.
+#if defined(OS_WIN) || (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
+#define MAYBE_RemoveListenerAndModifyGallery \
+  DISABLED_RemoveListenerAndModifyGallery
+#else
+#define MAYBE_RemoveListenerAndModifyGallery RemoveListenerAndModifyGallery
+#endif
 IN_PROC_BROWSER_TEST_F(MediaGalleriesGalleryWatchApiTest,
-                       RemoveListenerAndModifyGallery) {
+                       MAYBE_RemoveListenerAndModifyGallery) {
   if (!GalleryWatchesSupported())
     return;
 

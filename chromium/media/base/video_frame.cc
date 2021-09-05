@@ -233,6 +233,9 @@ static base::Optional<VideoFrameLayout> GetDefaultLayout(
       break;
 
     case PIXEL_FORMAT_ARGB:
+    case PIXEL_FORMAT_XRGB:
+    case PIXEL_FORMAT_ABGR:
+    case PIXEL_FORMAT_XBGR:
       planes = std::vector<ColorPlaneLayout>{ColorPlaneLayout(
           coded_size.width() * 4, 0, coded_size.GetArea() * 4)};
       break;
@@ -252,10 +255,8 @@ static base::Optional<VideoFrameLayout> GetDefaultLayout(
     default:
       // TODO(miu): This function should support any pixel format.
       // http://crbug.com/555909 .
-      DLOG(ERROR)
-          << "Only PIXEL_FORMAT_I420, PIXEL_FORMAT_Y16, PIXEL_FORMAT_NV12, "
-             "and PIXEL_FORMAT_ARGB formats are supported: "
-          << VideoPixelFormatToString(format);
+      DLOG(ERROR) << "Unsupported pixel format"
+                  << VideoPixelFormatToString(format);
       return base::nullopt;
   }
 
@@ -341,7 +342,7 @@ scoped_refptr<VideoFrame> VideoFrame::CreateVideoHoleFrame(
   scoped_refptr<VideoFrame> frame =
       new VideoFrame(*layout, StorageType::STORAGE_OPAQUE,
                      gfx::Rect(natural_size), natural_size, timestamp);
-  frame->metadata()->overlay_plane_id = overlay_plane_id;
+  frame->metadata().overlay_plane_id = overlay_plane_id;
   return frame;
 }
 
@@ -850,7 +851,7 @@ scoped_refptr<VideoFrame> VideoFrame::WrapVideoFrame(
                      natural_size, frame->timestamp()));
 
   // Copy all metadata to the wrapped frame->
-  wrapping_frame->metadata()->MergeMetadataFrom(frame->metadata());
+  wrapping_frame->metadata().MergeMetadataFrom(frame->metadata());
 
   if (frame->IsMappable()) {
     for (size_t i = 0; i < NumPlanes(format); ++i) {
@@ -882,7 +883,7 @@ scoped_refptr<VideoFrame> VideoFrame::CreateEOSFrame() {
   }
   scoped_refptr<VideoFrame> frame = new VideoFrame(
       *layout, STORAGE_UNKNOWN, gfx::Rect(), gfx::Size(), kNoTimestamp);
-  frame->metadata()->end_of_stream = true;
+  frame->metadata().end_of_stream = true;
   return frame;
 }
 
@@ -1258,13 +1259,15 @@ gpu::SyncToken VideoFrame::UpdateReleaseSyncToken(SyncTokenClient* client) {
 }
 
 std::string VideoFrame::AsHumanReadableString() const {
-  if (metadata()->end_of_stream)
+  if (metadata().end_of_stream)
     return "end of stream";
 
   std::ostringstream s;
   s << ConfigToString(format(), storage_type_, coded_size(), visible_rect_,
                       natural_size_)
     << " timestamp:" << timestamp_.InMicroseconds();
+  if (HasTextures())
+    s << " textures: " << NumTextures();
   return s.str();
 }
 

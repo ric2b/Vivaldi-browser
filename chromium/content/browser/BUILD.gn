@@ -4,8 +4,10 @@
 
 import("//build/buildflag_header.gni")
 import("//build/config/chromeos/ui_mode.gni")
+import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/features.gni")
 import("//build/config/linux/pangocairo/pangocairo.gni")
+import("//build/config/ozone.gni")
 import("//build/config/ui.gni")
 import("//chromeos/assistant/assistant.gni")
 import("//components/ui_devtools/devtools.gni")
@@ -119,6 +121,7 @@ source_set("browser") {
     "//content/public/browser:proto",
     "//content/public/common:common_sources",
     "//content/public/common:content_descriptor_keys",
+    "//content/public/common:trust_tokens_mojo_bindings",
     "//content/public/common/zygote:buildflags",
     "//crypto",
     "//device/base",
@@ -178,7 +181,6 @@ source_set("browser") {
     "//services/network/public/mojom",
     "//services/resource_coordinator:lib",
     "//services/resource_coordinator/public/cpp:resource_coordinator_cpp",
-    "//services/service_manager",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/mojom",
     "//services/shape_detection:lib",
@@ -229,6 +231,7 @@ source_set("browser") {
     "//ui/base/clipboard",
     "//ui/base/cursor:cursor_base",
     "//ui/base/cursor/mojom:cursor_type",
+    "//ui/base/dragdrop/mojom",
     "//ui/base/idle",
     "//ui/base/ime/init",
     "//ui/display",
@@ -254,7 +257,6 @@ source_set("browser") {
   ]
 
   public_deps = [
-    ":accessibility_buildflags",
     "//base/util/memory_pressure",
     "//base/util/type_safety",
     "//ipc",
@@ -262,6 +264,7 @@ source_set("browser") {
     "//third_party/blink/public/mojom:embedded_frame_sink_mojo_bindings",
     "//third_party/blink/public/mojom:mojom_broadcastchannel_bindings",
     "//third_party/leveldatabase",
+    "//ui/base/dragdrop/mojom:mojom_headers",
   ]
 
   sources = [
@@ -320,8 +323,6 @@ source_set("browser") {
     "about_url_loader_factory.h",
     "accessibility/accessibility_event_recorder.cc",
     "accessibility/accessibility_event_recorder.h",
-    "accessibility/accessibility_tree_formatter_base.cc",
-    "accessibility/accessibility_tree_formatter_base.h",
     "accessibility/accessibility_tree_formatter_blink.cc",
     "accessibility/accessibility_tree_formatter_blink.h",
     "accessibility/accessibility_tree_formatter_stub.cc",
@@ -649,6 +650,8 @@ source_set("browser") {
     "conversions/conversion_storage_delegate_impl.h",
     "conversions/conversion_storage_sql.cc",
     "conversions/conversion_storage_sql.h",
+    "conversions/conversion_storage_sql_migrations.cc",
+    "conversions/conversion_storage_sql_migrations.h",
     "conversions/storable_conversion.cc",
     "conversions/storable_conversion.h",
     "conversions/storable_impression.cc",
@@ -825,8 +828,8 @@ source_set("browser") {
     "file_system/file_system_url_loader_factory.h",
     "file_system_access/file_system_chooser.cc",
     "file_system_access/file_system_chooser.h",
-    "file_system_access/fixed_native_file_system_permission_grant.cc",
-    "file_system_access/fixed_native_file_system_permission_grant.h",
+    "file_system_access/fixed_file_system_access_permission_grant.cc",
+    "file_system_access/fixed_file_system_access_permission_grant.h",
     "file_system_access/native_file_system_directory_handle_impl.cc",
     "file_system_access/native_file_system_directory_handle_impl.h",
     "file_system_access/native_file_system_drag_drop_token_impl.cc",
@@ -1062,8 +1065,6 @@ source_set("browser") {
     "media/capture/desktop_streams_registry_impl.h",
     "media/capture/web_contents_audio_muter.cc",
     "media/capture/web_contents_audio_muter.h",
-    "media/capture/web_contents_tracker.cc",
-    "media/capture/web_contents_tracker.h",
     "media/cdm_registry_impl.cc",
     "media/cdm_registry_impl.h",
     "media/desktop_media_window_registry.cc",
@@ -1130,12 +1131,20 @@ source_set("browser") {
     "message_port_provider.cc",
     "mime_registry_impl.cc",
     "mime_registry_impl.h",
+    "mojo_binder_policy_applier.cc",
+    "mojo_binder_policy_applier.h",
+    "mojo_binder_policy_map_impl.cc",
+    "mojo_binder_policy_map_impl.h",
     "native_io/native_io_context.cc",
     "native_io/native_io_context.h",
     "native_io/native_io_file_host.cc",
     "native_io/native_io_file_host.h",
     "native_io/native_io_host.cc",
     "native_io/native_io_host.h",
+    "native_io/native_io_manager.cc",
+    "native_io/native_io_manager.h",
+    "native_io/native_io_quota_client.cc",
+    "native_io/native_io_quota_client.h",
     "navigation_subresource_loader_params.cc",
     "navigation_subresource_loader_params.h",
     "net/browser_online_state_observer.cc",
@@ -1233,10 +1242,9 @@ source_set("browser") {
     "quota/quota_context.h",
     "quota/quota_manager_host.cc",
     "quota/quota_manager_host.h",
-    "renderer_host/agent_metrics_collector.cc",
-    "renderer_host/agent_metrics_collector.h",
     "renderer_host/agent_scheduling_group_host.cc",
     "renderer_host/agent_scheduling_group_host.h",
+    "renderer_host/agent_scheduling_group_host_factory.h",
     "renderer_host/ancestor_throttle.cc",
     "renderer_host/ancestor_throttle.h",
     "renderer_host/back_forward_cache_can_store_document_result.cc",
@@ -1245,6 +1253,8 @@ source_set("browser") {
     "renderer_host/back_forward_cache_impl.h",
     "renderer_host/back_forward_cache_metrics.cc",
     "renderer_host/back_forward_cache_metrics.h",
+    "renderer_host/back_forward_cache_throttle.cc",
+    "renderer_host/back_forward_cache_throttle.h",
     "renderer_host/blocked_scheme_navigation_throttle.cc",
     "renderer_host/blocked_scheme_navigation_throttle.h",
     "renderer_host/clipboard_host_impl.cc",
@@ -1278,8 +1288,6 @@ source_set("browser") {
     "renderer_host/file_utilities_host_impl.h",
     "renderer_host/form_submission_throttle.cc",
     "renderer_host/form_submission_throttle.h",
-    "renderer_host/frame_metadata_util.cc",
-    "renderer_host/frame_metadata_util.h",
     "renderer_host/frame_navigation_entry.cc",
     "renderer_host/frame_navigation_entry.h",
     "renderer_host/frame_token_message_queue.cc",
@@ -1483,8 +1491,6 @@ source_set("browser") {
     "renderer_host/render_frame_host_impl.h",
     "renderer_host/render_frame_host_manager.cc",
     "renderer_host/render_frame_host_manager.h",
-    "renderer_host/render_frame_message_filter.cc",
-    "renderer_host/render_frame_message_filter.h",
     "renderer_host/render_frame_metadata_provider_impl.cc",
     "renderer_host/render_frame_metadata_provider_impl.h",
     "renderer_host/render_frame_proxy_host.cc",
@@ -1567,8 +1573,6 @@ source_set("browser") {
     "screenlock_monitor/screenlock_monitor_device_source.h",
     "screenlock_monitor/screenlock_monitor_source.cc",
     "screenlock_monitor/screenlock_monitor_source.h",
-    "service_manager/service_manager_context.cc",
-    "service_manager/service_manager_context.h",
     "service_process_host_impl.cc",
     "service_sandbox_type.h",
     "service_worker/embedded_worker_instance.cc",
@@ -1622,8 +1626,6 @@ source_set("browser") {
     "service_worker/service_worker_loader_helpers.h",
     "service_worker/service_worker_main_resource_handle.cc",
     "service_worker/service_worker_main_resource_handle.h",
-    "service_worker/service_worker_main_resource_handle_core.cc",
-    "service_worker/service_worker_main_resource_handle_core.h",
     "service_worker/service_worker_main_resource_loader.cc",
     "service_worker/service_worker_main_resource_loader.h",
     "service_worker/service_worker_main_resource_loader_interceptor.cc",
@@ -1722,12 +1724,8 @@ source_set("browser") {
     "storage_partition_impl.h",
     "storage_partition_impl_map.cc",
     "storage_partition_impl_map.h",
-    "system_connector_impl.cc",
-    "system_connector_impl.h",
     "theme_helper.cc",
     "theme_helper.h",
-    "tracing/background_memory_tracing_observer.cc",
-    "tracing/background_memory_tracing_observer.h",
     "tracing/background_startup_tracing_observer.cc",
     "tracing/background_startup_tracing_observer.h",
     "tracing/background_tracing_active_scenario.cc",
@@ -1744,8 +1742,8 @@ source_set("browser") {
     "tracing/file_tracing_provider_impl.h",
     "tracing/memory_instrumentation_util.cc",
     "tracing/memory_instrumentation_util.h",
-    "tracing/perfetto_file_tracer.cc",
-    "tracing/perfetto_file_tracer.h",
+    "tracing/startup_tracing_controller.cc",
+    "tracing/startup_tracing_controller.h",
     "tracing/tracing_controller_impl.cc",
     "tracing/tracing_controller_impl.h",
     "tracing/tracing_controller_impl_data_endpoint.cc",
@@ -1868,6 +1866,10 @@ source_set("browser") {
     "webauth/webauth_request_security_checker.h",
     "webid/federated_auth_request_impl.cc",
     "webid/federated_auth_request_impl.h",
+    "webid/id_token_request_callback_data.cc",
+    "webid/id_token_request_callback_data.h",
+    "webid/idp_network_request_manager.cc",
+    "webid/idp_network_request_manager.h",
     "webrtc/webrtc_internals.cc",
     "webrtc/webrtc_internals.h",
     "webrtc/webrtc_internals_connections_observer.h",
@@ -1935,6 +1937,7 @@ source_set("browser") {
       "accessibility/accessibility_event_recorder_mac.mm",
       "accessibility/accessibility_tools_utils_mac.h",
       "accessibility/accessibility_tools_utils_mac.mm",
+      "accessibility/accessibility_tree_formatter_mac.h",
       "accessibility/accessibility_tree_formatter_mac.mm",
       "accessibility/accessibility_tree_formatter_utils_mac.h",
       "accessibility/accessibility_tree_formatter_utils_mac.mm",
@@ -2096,6 +2099,14 @@ source_set("browser") {
     deps += [ "//ui/base/x" ]
   }
 
+  if (use_ozone) {
+    deps += [ "//ui/ozone:buildflags" ]
+  }
+
+  if (is_chromeos) {
+    deps += [ "//ui/base/ime/chromeos:chromeos" ]
+  }
+
   if (is_linux || is_chromeos) {
     sources += [
       "child_process_launcher_helper_linux.cc",
@@ -2113,6 +2124,16 @@ source_set("browser") {
       "zygote_host/zygote_host_impl_linux.h",
     ]
 
+    if (ozone_platform_x11 || use_x11) {
+      sources += [
+        "gpu_data_manager_visual_proxy_ozone_linux.cc",
+        "gpu_data_manager_visual_proxy_ozone_linux.h",
+      ]
+      if (use_x11) {
+        deps += [ "//ui/base/x:gl" ]
+      }
+    }
+
     public_deps += [ "//components/services/font/public/mojom" ]
 
     deps += [
@@ -2122,18 +2143,18 @@ source_set("browser") {
     ]
   }
 
-  if (is_chromeos) {
+  if (is_chromeos_ash) {
     sources +=
         [ "screenlock_monitor/screenlock_monitor_device_source_chromeos.cc" ]
   }
 
-  if (is_linux) {
+  if (is_linux || is_chromeos_lacros) {
     sources += [ "speech/tts_linux.cc" ]
     deps += [ "//third_party/speech-dispatcher" ]
   }
 
   # ChromeOS also defines linux but their memory-monitors conflict.
-  if (is_chromeos) {
+  if (is_chromeos_ash) {
     sources += [
       "media/keyboard_mic_registration.cc",
       "media/keyboard_mic_registration.h",
@@ -2219,18 +2240,22 @@ source_set("browser") {
 
   # Desktop/Window/WebContents screen capture implementations, conditionally
   # built depending on the available implementations for each platform.
-  if (enable_screen_capture && !is_android) {
+  if (enable_screen_capture) {
     sources += [
-      "media/capture/desktop_capture_device.cc",
-      "media/capture/desktop_capture_device.h",
       "media/capture/frame_sink_video_capture_device.cc",
       "media/capture/frame_sink_video_capture_device.h",
-      "media/capture/mouse_cursor_overlay_controller.cc",
-      "media/capture/mouse_cursor_overlay_controller.h",
       "media/capture/web_contents_video_capture_device.cc",
       "media/capture/web_contents_video_capture_device.h",
     ]
-    deps += [ "//third_party/webrtc_overrides:webrtc_component" ]
+    if (!is_android) {
+      sources += [
+        "media/capture/desktop_capture_device.cc",
+        "media/capture/desktop_capture_device.h",
+        "media/capture/mouse_cursor_overlay_controller.cc",
+        "media/capture/mouse_cursor_overlay_controller.h",
+      ]
+      deps += [ "//third_party/webrtc_overrides:webrtc_component" ]
+    }
     if (use_aura) {
       sources += [
         "media/capture/aura_window_video_capture_device.cc",
@@ -2239,7 +2264,7 @@ source_set("browser") {
       ]
       deps += [ "//ui/base/cursor" ]
     }
-    if (is_chromeos) {
+    if (is_chromeos_ash) {
       sources += [
         "media/capture/slow_capture_overlay_chromeos.cc",
         "media/capture/slow_capture_overlay_chromeos.h",
@@ -2254,7 +2279,7 @@ source_set("browser") {
         "//sandbox/mac:seatbelt_extension",
       ]
     }
-    if (chromeos_is_browser_only) {
+    if (is_chromeos_lacros) {
       sources += [
         "media/capture/desktop_capturer_lacros.cc",
         "media/capture/desktop_capturer_lacros.h",
@@ -2370,6 +2395,8 @@ source_set("browser") {
       "renderer_host/pepper/quota_reservation.h",
       "renderer_host/plugin_registry_impl.cc",
       "renderer_host/plugin_registry_impl.h",
+      "renderer_host/render_frame_message_filter.cc",
+      "renderer_host/render_frame_message_filter.h",
     ]
     deps += [
       "//ppapi/host",
@@ -2378,7 +2405,7 @@ source_set("browser") {
       "//ppapi/shared_impl",
     ]
 
-    if (is_chromeos) {
+    if (is_chromeos_ash) {
       sources += [
         "renderer_host/pepper/pepper_vpn_provider_message_filter_chromeos.cc",
         "renderer_host/pepper/pepper_vpn_provider_message_filter_chromeos.h",
@@ -2431,10 +2458,6 @@ source_set("browser") {
     deps += [
       "//ui/events/platform/x11",
       "//ui/gfx/x",
-    ]
-    sources += [
-      "gpu/gpu_memory_buffer_manager_singleton_x11.cc",
-      "gpu/gpu_memory_buffer_manager_singleton_x11.h",
     ]
   }
 
@@ -2671,7 +2694,7 @@ source_set("browser") {
     ]
   }
 
-  if (is_chromeos) {
+  if (is_chromeos_ash) {
     sources += [
       "gpu/chromeos/delegate_to_browser_gpu_service_accelerator_factory.cc",
       "gpu/chromeos/video_capture_dependencies.cc",
@@ -2706,7 +2729,7 @@ source_set("browser") {
       "renderer_host/render_widget_host_view_event_handler.h",
     ]
 
-    if (is_linux && !is_chromeos) {
+    if (is_linux || is_chromeos_lacros) {
       deps += [ "//ui/base/ime/linux" ]
     }
   } else {  # Not aura.
@@ -2823,12 +2846,6 @@ source_set("browser") {
       "//services/metrics/public/cpp:ukm_builders",
     ]
   }
-}
-
-buildflag_header("accessibility_buildflags") {
-  header = "accessibility_buildflags.h"
-  header_dir = "content/browser/accessibility"
-  flags = [ "USE_ATK=$use_atk" ]
 }
 
 if (is_android) {

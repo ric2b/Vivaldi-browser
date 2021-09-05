@@ -67,9 +67,9 @@
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
+#include "third_party/blink/renderer/core/frame/web_frame_widget_impl.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/frame/web_remote_frame_impl.h"
-#include "third_party/blink/renderer/core/frame/web_view_frame_widget.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
 #include "third_party/blink/renderer/core/html/forms/color_chooser.h"
 #include "third_party/blink/renderer/core/html/forms/color_chooser_client.h"
@@ -193,9 +193,8 @@ void ChromeClientImpl::SetWindowRect(const IntRect& r, LocalFrame& frame) {
 }
 
 IntRect ChromeClientImpl::RootWindowRect(LocalFrame& frame) {
-  // The WindowRect() for each WebWidgetClient will be the same rect of the top
-  // level window. Since there is not always a WebWidgetClient attached to the
-  // WebView, we ask the WebWidget associated with the |frame|'s local root.
+  // The WindowRect() for each WebFrameWidget will be the same rect of the top
+  // level window.
   return IntRect(frame.GetWidgetForLocalRoot()->WindowRect());
 }
 
@@ -246,7 +245,6 @@ Page* ChromeClientImpl::CreateWindowDelegate(
     const AtomicString& name,
     const WebWindowFeatures& features,
     network::mojom::blink::WebSandboxFlags sandbox_flags,
-    const FeaturePolicyFeatureState& opener_feature_state,
     const SessionStorageNamespaceId& session_storage_namespace_id,
     bool& consumed_user_gesture) {
   if (!web_view_->Client())
@@ -263,8 +261,8 @@ Page* ChromeClientImpl::CreateWindowDelegate(
           WebLocalFrameImpl::FromFrame(frame),
           WrappedResourceRequest(r.GetResourceRequest()), features, frame_name,
           static_cast<WebNavigationPolicy>(r.GetNavigationPolicy()),
-          sandbox_flags, opener_feature_state, session_storage_namespace_id,
-          consumed_user_gesture));
+          sandbox_flags, session_storage_namespace_id, consumed_user_gesture,
+          r.Impression()));
   if (!new_view)
     return nullptr;
   return new_view->GetPage();
@@ -275,8 +273,6 @@ void ChromeClientImpl::DidOverscroll(
     const gfx::Vector2dF& accumulated_overscroll,
     const gfx::PointF& position_in_viewport,
     const gfx::Vector2dF& velocity_in_viewport) {
-  // WebWidgetClient can be null when not compositing, and this behaviour only
-  // applies when compositing is enabled.
   if (!web_view_->does_composite())
     return;
   // TODO(darin): Change caller to pass LocalFrame.
@@ -313,13 +309,15 @@ void ChromeClientImpl::Show(const base::UnguessableToken& opener_frame_token,
                   user_gesture);
 }
 
-bool ChromeClientImpl::ShouldReportDetailedMessageForSource(
+bool ChromeClientImpl::ShouldReportDetailedMessageForSourceAndSeverity(
     LocalFrame& local_frame,
+    mojom::blink::ConsoleMessageLevel log_level,
     const String& url) {
   WebLocalFrameImpl* webframe =
       WebLocalFrameImpl::FromFrame(local_frame.LocalFrameRoot());
   return webframe && webframe->Client() &&
-         webframe->Client()->ShouldReportDetailedMessageForSource(url);
+         webframe->Client()->ShouldReportDetailedMessageForSourceAndSeverity(
+             log_level, url);
 }
 
 void ChromeClientImpl::AddMessageToConsole(LocalFrame* local_frame,
@@ -417,13 +415,7 @@ void ChromeClientImpl::ScheduleAnimation(const LocalFrameView* frame_view,
   // WebFrameWidget needs to be initialized before initializing the core frame?
   FrameWidget* widget = frame.GetWidgetForLocalRoot();
   if (widget) {
-    if (delay.is_zero()) {
-      // LocalRootFrameWidget() is a WebWidget, its client is the embedder.
-      WebWidgetClient* web_widget_client = widget->Client();
-      web_widget_client->ScheduleAnimation();
-    } else {
-      widget->RequestAnimationAfterDelay(delay);
-    }
+    widget->RequestAnimationAfterDelay(delay);
   }
 }
 
@@ -545,13 +537,13 @@ void ChromeClientImpl::ShowMouseOverURL(const HitTestResult& result) {
 void ChromeClientImpl::SetToolTip(LocalFrame& frame,
                                   const String& tooltip_text,
                                   TextDirection dir) {
-  WebFrameWidgetBase* widget =
+  WebFrameWidgetImpl* widget =
       WebLocalFrameImpl::FromFrame(frame)->LocalRootFrameWidget();
   if (!tooltip_text.IsEmpty()) {
     widget->SetToolTipText(tooltip_text, dir);
     did_request_non_empty_tool_tip_ = true;
   } else if (did_request_non_empty_tool_tip_) {
-    // WebFrameWidgetBase::SetToolTipText will send a Mojo message via
+    // WebFrameWidgetImpl::SetToolTipText will send a Mojo message via
     // mojom::blink::WidgetHost. We'd like to reduce the number of
     // SetToolTipText calls.
     widget->SetToolTipText(tooltip_text, dir);
@@ -712,7 +704,7 @@ void ChromeClientImpl::SetCursorOverridden(bool overridden) {
 void ChromeClientImpl::AutoscrollStart(const gfx::PointF& viewport_point,
                                        LocalFrame* local_frame) {
   // TODO(dcheng): Why is this null check necessary?
-  if (WebFrameWidgetBase* widget =
+  if (WebFrameWidgetImpl* widget =
           WebLocalFrameImpl::FromFrame(local_frame)->LocalRootFrameWidget())
     widget->AutoscrollStart(viewport_point);
 }
@@ -720,14 +712,14 @@ void ChromeClientImpl::AutoscrollStart(const gfx::PointF& viewport_point,
 void ChromeClientImpl::AutoscrollFling(const gfx::Vector2dF& velocity,
                                        LocalFrame* local_frame) {
   // TODO(dcheng): Why is this null check necessary?
-  if (WebFrameWidgetBase* widget =
+  if (WebFrameWidgetImpl* widget =
           WebLocalFrameImpl::FromFrame(local_frame)->LocalRootFrameWidget())
     widget->AutoscrollFling(velocity);
 }
 
 void ChromeClientImpl::AutoscrollEnd(LocalFrame* local_frame) {
   // TODO(dcheng): Why is this null check necessary?
-  if (WebFrameWidgetBase* widget =
+  if (WebFrameWidgetImpl* widget =
           WebLocalFrameImpl::FromFrame(local_frame)->LocalRootFrameWidget())
     widget->AutoscrollEnd();
 }
@@ -779,9 +771,13 @@ void ChromeClientImpl::ExitFullscreen(LocalFrame& frame) {
   web_view_->ExitFullscreen(frame);
 }
 
-void ChromeClientImpl::FullscreenElementChanged(Element* old_element,
-                                                Element* new_element) {
-  web_view_->FullscreenElementChanged(old_element, new_element);
+void ChromeClientImpl::FullscreenElementChanged(
+    Element* old_element,
+    Element* new_element,
+    const FullscreenOptions* options,
+    FullscreenRequestType request_type) {
+  web_view_->FullscreenElementChanged(old_element, new_element, options,
+                                      request_type);
 }
 
 void ChromeClientImpl::AnimateDoubleTapZoom(const gfx::Point& point,
@@ -876,13 +872,13 @@ void ChromeClientImpl::RequestDecode(LocalFrame* frame,
   widget->RequestDecode(image, std::move(callback));
 }
 
-void ChromeClientImpl::NotifySwapTime(LocalFrame& frame,
-                                      ReportTimeCallback callback) {
+void ChromeClientImpl::NotifyPresentationTime(LocalFrame& frame,
+                                              ReportTimeCallback callback) {
   FrameWidget* widget = frame.GetWidgetForLocalRoot();
   if (!widget)
     return;
-  widget->NotifySwapAndPresentationTimeInBlink(
-      base::NullCallback(), ConvertToBaseOnceCallback(std::move(callback)));
+  widget->NotifyPresentationTimeInBlink(
+      ConvertToBaseOnceCallback(std::move(callback)));
 }
 
 void ChromeClientImpl::RequestBeginMainFrameNotExpected(LocalFrame& frame,
@@ -932,7 +928,7 @@ cc::EventListenerProperties ChromeClientImpl::EventListenerProperties(
   if (!frame)
     return cc::EventListenerProperties::kNone;
 
-  WebFrameWidgetBase* widget =
+  WebFrameWidgetImpl* widget =
       WebLocalFrameImpl::FromFrame(frame)->LocalRootFrameWidget();
   if (!widget)
     return cc::EventListenerProperties::kNone;
@@ -979,7 +975,7 @@ void ChromeClientImpl::SetNeedsLowLatencyInput(LocalFrame* frame,
                                                bool needs_low_latency) {
   DCHECK(frame);
   WebLocalFrameImpl* web_frame = WebLocalFrameImpl::FromFrame(frame);
-  WebFrameWidgetBase* widget = web_frame->LocalRootFrameWidget();
+  WebFrameWidgetImpl* widget = web_frame->LocalRootFrameWidget();
   if (!widget)
     return;
 
@@ -990,7 +986,7 @@ void ChromeClientImpl::SetNeedsUnbufferedInputForDebugger(LocalFrame* frame,
                                                           bool unbuffered) {
   DCHECK(frame);
   WebLocalFrameImpl* web_frame = WebLocalFrameImpl::FromFrame(frame);
-  WebFrameWidgetBase* widget = web_frame->LocalRootFrameWidget();
+  WebFrameWidgetImpl* widget = web_frame->LocalRootFrameWidget();
   if (!widget)
     return;
 
@@ -1000,7 +996,7 @@ void ChromeClientImpl::SetNeedsUnbufferedInputForDebugger(LocalFrame* frame,
 void ChromeClientImpl::RequestUnbufferedInputEvents(LocalFrame* frame) {
   DCHECK(frame);
   WebLocalFrameImpl* web_frame = WebLocalFrameImpl::FromFrame(frame);
-  WebFrameWidgetBase* widget = web_frame->LocalRootFrameWidget();
+  WebFrameWidgetImpl* widget = web_frame->LocalRootFrameWidget();
   if (!widget)
     return;
 
@@ -1011,7 +1007,7 @@ void ChromeClientImpl::SetTouchAction(LocalFrame* frame,
                                       TouchAction touch_action) {
   DCHECK(frame);
   WebLocalFrameImpl* web_frame = WebLocalFrameImpl::FromFrame(frame);
-  WebFrameWidgetBase* widget = web_frame->LocalRootFrameWidget();
+  WebFrameWidgetImpl* widget = web_frame->LocalRootFrameWidget();
   if (!widget)
     return;
 
@@ -1173,7 +1169,7 @@ void ChromeClientImpl::SetDelegatedInkMetadata(
 }
 
 void ChromeClientImpl::BatterySavingsChanged(LocalFrame& main_frame,
-                                             WebBatterySavingsFlags savings) {
+                                             BatterySavingsFlags savings) {
   DCHECK(main_frame.IsMainFrame());
   WebLocalFrameImpl::FromFrame(main_frame)
       ->FrameWidgetImpl()

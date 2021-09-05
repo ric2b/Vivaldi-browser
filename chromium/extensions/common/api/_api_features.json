@@ -140,9 +140,11 @@
     "dependencies": ["permission:declarativeNetRequest"],
     "contexts": ["blessed_extension"]
   },
-  "declarativeNetRequest.getAvailableStaticRuleCount": {
-    // TODO(crbug.com/983299): Enable on stable once the global rules limit
-    // feature is enabled by default.
+  // TODO(crbug.com/1043200): Enable on Stable once implementation is complete.
+  "declarativeNetRequest.getSessionRules": {
+    "channel": "trunk"
+  },
+  "declarativeNetRequest.updateSessionRules": {
     "channel": "trunk"
   },
   "declarativeNetRequest.onRuleMatchedDebug": {
@@ -299,13 +301,17 @@
     "matches": [
       "chrome://bookmarks/*",
       "chrome://extensions/*",
+      "chrome://new-tab-page/*",
       "chrome://os-settings/*",
       "chrome://settings/*",
       "chrome://sync-confirmation/*",
+      "chrome://read-later/*",
       "chrome://tab-search/*",
       "chrome://tab-strip/*",
       "chrome://welcome/*",
-      "chrome://profile-picker/*"
+      "chrome://profile-picker/*",
+      "chrome://file-manager/*",
+      "chrome://help-app/*"
     ]
   }, {
     "channel": "stable",
@@ -560,10 +566,6 @@
   },
   "system.network": {
     "dependencies": ["permission:system.network"],
-    "contexts": ["blessed_extension"]
-  },
-  "system.powerSource": {
-    "dependencies": ["permission:system.powerSource"],
     "contexts": ["blessed_extension"]
   },
   "system.storage": {

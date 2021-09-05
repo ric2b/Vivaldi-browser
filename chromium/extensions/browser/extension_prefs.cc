@@ -24,8 +24,10 @@
 #include "components/crx_file/id_util.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
+#include "extensions/browser/allowlist_state.h"
 #include "extensions/browser/api/declarative_net_request/utils.h"
 #include "extensions/browser/app_sorting.h"
+#include "extensions/browser/blocklist_state.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_pref_store.h"
 #include "extensions/browser/extension_prefs_factory.h"
@@ -73,6 +75,9 @@ constexpr const char kPrefManifestVersion[] = "manifest.version";
 
 // Indicates whether an extension is blocklisted.
 constexpr const char kPrefBlocklist[] = "blacklist";
+
+// Indicates whether an extension is included in the Safe Browsing allowlist.
+constexpr const char kPrefAllowlist[] = "allowlist";
 
 // If extension is greylisted.
 constexpr const char kPrefBlocklistState[] = "blacklist_state";
@@ -964,17 +969,13 @@ bool ExtensionPrefs::HasDisableReason(
 void ExtensionPrefs::AddDisableReason(
     const std::string& extension_id,
     disable_reason::DisableReason disable_reason) {
-  // TODO(https://crbug.com/1073570): Extensions can be blocklisted but in
-  // enabled state. This checks the kPrefState which is the state of the
-  // extension.
-  DCHECK(!DoesExtensionHaveState(extension_id, Extension::ENABLED) ||
-         disable_reason == disable_reason::DISABLE_REMOTELY_FOR_MALWARE);
-  ModifyDisableReasons(extension_id, disable_reason, DISABLE_REASON_ADD);
+  AddDisableReasons(extension_id, disable_reason);
 }
 
 void ExtensionPrefs::AddDisableReasons(const std::string& extension_id,
                                        int disable_reasons) {
-  DCHECK(!DoesExtensionHaveState(extension_id, Extension::ENABLED));
+  DCHECK(!DoesExtensionHaveState(extension_id, Extension::ENABLED) ||
+         IsExtensionBlocklisted(extension_id));
   ModifyDisableReasons(extension_id, disable_reasons, DISABLE_REASON_ADD);
 }
 
@@ -1078,6 +1079,25 @@ std::set<std::string> ExtensionPrefs::GetBlocklistedExtensions() const {
 bool ExtensionPrefs::IsExtensionBlocklisted(const std::string& id) const {
   const base::DictionaryValue* ext_prefs = GetExtensionPref(id);
   return ext_prefs && IsBlocklistBitSet(ext_prefs);
+}
+
+AllowlistState ExtensionPrefs::GetExtensionAllowlistState(
+    const std::string& extension_id) const {
+  int value;
+  if (!ReadPrefAsInteger(extension_id, kPrefAllowlist, &value))
+    return ALLOWLIST_UNDEFINED;
+
+  return static_cast<AllowlistState>(value);
+}
+
+void ExtensionPrefs::SetExtensionAllowlistState(const std::string& extension_id,
+                                                AllowlistState state) {
+  DCHECK_NE(state, ALLOWLIST_UNDEFINED);
+
+  if (state != GetExtensionAllowlistState(extension_id)) {
+    UpdateExtensionPref(extension_id, kPrefAllowlist,
+                        std::make_unique<base::Value>(state));
+  }
 }
 
 namespace {
@@ -2308,7 +2328,6 @@ void ExtensionPrefs::RegisterProfilePrefs(
   registry->RegisterListPref(pref_names::kInstallAllowList);
   registry->RegisterListPref(pref_names::kInstallDenyList);
   registry->RegisterDictionaryPref(pref_names::kInstallForceList);
-  registry->RegisterDictionaryPref(pref_names::kLoginScreenExtensions);
   registry->RegisterListPref(pref_names::kAllowedTypes);
   registry->RegisterBooleanPref(pref_names::kStorageGarbageCollect, false);
   registry->RegisterListPref(pref_names::kAllowedInstallSites);

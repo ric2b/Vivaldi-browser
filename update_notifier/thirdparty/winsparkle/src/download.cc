@@ -28,10 +28,12 @@
 #include "update_notifier/thirdparty/winsparkle/src/config.h"
 #include "update_notifier/thirdparty/winsparkle/src/winsparkle-version.h"
 
+#include "base/logging.h"
+#include "base/strings/utf_string_conversions.h"
+
 #include <Windows.h>
 #include <wininet.h>
 #include <string>
-#include "base/strings/utf_string_conversions.h"
 
 namespace winsparkle {
 
@@ -95,12 +97,21 @@ FileDownloader::FileDownloader(const GURL& url, int flags, Error& error) {
 
   inet_handle_ =
       InternetOpen(MakeUserAgent().c_str(), INTERNET_OPEN_TYPE_PRECONFIG,
-                   NULL,  // lpszProxyName
-                   NULL,  // lpszProxyBypass
-                   0);    // dwFlags
+                   nullptr,  // lpszProxyName
+                   nullptr,  // lpszProxyBypass
+                   0);       // dwFlags
 
   if (!inet_handle_) {
     error.set(Error::kNetwork, LastWin32Error("InternetOpen"));
+    return;
+  }
+
+  connection_handle_ =
+      InternetConnectA(inet_handle_, url.host().c_str(), url.EffectiveIntPort(),
+                       nullptr, nullptr, INTERNET_SERVICE_HTTP, 0, 0);
+
+  if (!connection_handle_) {
+    error.set(Error::kNetwork, LastWin32Error("InternetConnectA"));
     return;
   }
 
@@ -110,18 +121,9 @@ FileDownloader::FileDownloader(const GURL& url, int flags, Error& error) {
   if (scheme == INTERNET_SCHEME_HTTPS)
     dwFlags |= INTERNET_FLAG_SECURE;
 
-  connection_handle_ =
-      InternetConnectA(inet_handle_, url.host().c_str(), url.EffectiveIntPort(),
-                       NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
-
-  if (!connection_handle_) {
-    error.set(Error::kNetwork, LastWin32Error("InternetConnectA"));
-    return;
-  }
-
   request_handle_ =
       HttpOpenRequestA(connection_handle_, "GET", url.PathForRequest().c_str(),
-                       NULL, NULL, NULL, dwFlags, 0);
+                       nullptr, nullptr, nullptr, dwFlags, 0);
 
   if (!request_handle_) {
     error.set(Error::kNetwork, LastWin32Error("HttpOpenRequestA"));
@@ -129,23 +131,42 @@ FileDownloader::FileDownloader(const GURL& url, int flags, Error& error) {
   }
 
 again:
-  HttpSendRequest(request_handle_, NULL, 0, NULL, 0);
+  if (!HttpSendRequest(request_handle_, nullptr, 0, nullptr, 0)) {
+    // Improve error message for common errors.
+    DWORD error_code = GetLastError();
+    std::string message;
+    switch (error_code) {
+      case ERROR_INTERNET_NAME_NOT_RESOLVED:
+        message = "Cannot resolve DNS name " + url.host();
+        break;
+      case ERROR_INTERNET_CANNOT_CONNECT:
+        message = "Cannot connect to " + url.host() + ":" +
+                  std::to_string(url.EffectiveIntPort());
+        break;
+      default:
+        message = "Internet connection error " + std::to_string(error_code) +
+                  "for " + url.spec();
+        break;
+    }
+    error.set(Error::kNetwork, std::move(message));
+    return;
+  }
 
-  DWORD dwErrorCode = 0;
-  DWORD dwSize = sizeof(DWORD);
+  DWORD http_status = 0;
+  if (!GetHttpNumericHeader(request_handle_, HTTP_QUERY_STATUS_CODE,
+                            http_status)) {
+    error.set(Error::kNetwork, "HTTP reply without status code");
+    return;
+  }
 
-  HttpQueryInfo(request_handle_,
-                HTTP_QUERY_STATUS_CODE | HTTP_QUERY_FLAG_NUMBER, &dwErrorCode,
-                &dwSize, NULL);
-
-  if (dwErrorCode == HTTP_STATUS_DENIED ||
-      dwErrorCode == HTTP_STATUS_PROXY_AUTH_REQ) {
+  if (http_status == HTTP_STATUS_DENIED ||
+      http_status == HTTP_STATUS_PROXY_AUTH_REQ) {
     DWORD dlg_flags = FLAGS_ERROR_UI_FILTER_FOR_ERRORS |
                       FLAGS_ERROR_UI_FLAGS_CHANGE_OPTIONS |
                       FLAGS_ERROR_UI_FLAGS_GENERATE_DATA;
     DWORD dwError =
         InternetErrorDlg(GetDesktopWindow(), request_handle_,
-                         ERROR_INTERNET_INCORRECT_PASSWORD, dlg_flags, NULL);
+                         ERROR_INTERNET_INCORRECT_PASSWORD, dlg_flags, nullptr);
 
     if (dwError == ERROR_INTERNET_FORCE_RETRY)
       goto again;
@@ -155,18 +176,9 @@ again:
     }
   }
 
-  DWORD statusCode = 0;
-  if (!GetHttpNumericHeader(request_handle_, HTTP_QUERY_STATUS_CODE,
-                            statusCode)) {
-    error.set(Error::kNetwork, "HTTP reply without status code");
-    return;
-  }
-
-  // Check returned status code - we need to detect 404 instead of
-  // downloading the human-readable 404 page:
-  if (statusCode >= 400) {
-    std::string message("DownloadFile: HTTP error code: ");
-    message += std::to_string(statusCode);
+  if (http_status >= 400) {
+    std::string message("DownloadFile: HTTP error status ");
+    message += std::to_string(http_status);
     error.set(Error::kNetwork, std::move(message));
     return;
   }
@@ -186,7 +198,7 @@ again:
   char contentDisposition[256] = {};
   DWORD cdSize = sizeof(contentDisposition);
   if (HttpQueryInfoA(request_handle_, HTTP_QUERY_CONTENT_DISPOSITION,
-                     contentDisposition, &cdSize, NULL)) {
+                     contentDisposition, &cdSize, nullptr)) {
     char* ptr = strstr(contentDisposition, "filename=");
     if (ptr) {
       ptr += 9;

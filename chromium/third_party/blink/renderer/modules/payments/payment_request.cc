@@ -808,13 +808,21 @@ ScriptPromise PaymentRequest::show(ScriptState* script_state,
     return ScriptPromise();
   }
 
-  // TODO(crbug.com/825270): Reject with SecurityError DOMException if triggered
-  // without user activation.
   bool is_user_gesture =
       LocalFrame::HasTransientUserActivation(DomWindow()->GetFrame());
   if (!is_user_gesture) {
     UseCounter::Count(GetExecutionContext(),
                       WebFeature::kPaymentRequestShowWithoutGesture);
+  }
+  if (RuntimeEnabledFeatures::PaymentRequestShowConsumesUserActivationEnabled(
+          GetExecutionContext())) {
+    if (!is_user_gesture) {
+      exception_state.ThrowDOMException(
+          DOMExceptionCode::kNotAllowedError,
+          "show() must be called with transient user activation");
+      return ScriptPromise();
+    }
+    // TODO(crbug.com/1130553): consume the user activation as well.
   }
 
   // TODO(crbug.com/825270): Pretend that a user gesture is provided to allow
@@ -1503,20 +1511,20 @@ void PaymentRequest::OnError(PaymentErrorReason error,
 
   switch (error) {
     case PaymentErrorReason::USER_CANCEL:
+    // Intentional fall through.
+    case PaymentErrorReason::INVALID_DATA_FROM_RENDERER:
+    // Intentional fall through.
+    case PaymentErrorReason::ALREADY_SHOWING:
       exception_code = DOMExceptionCode::kAbortError;
       break;
 
     case PaymentErrorReason::NOT_SUPPORTED:
-      exception_code = exception_code = DOMExceptionCode::kNotSupportedError;
+      exception_code = DOMExceptionCode::kNotSupportedError;
       break;
 
     case PaymentErrorReason::NOT_SUPPORTED_FOR_INVALID_ORIGIN_OR_SSL:
       exception_code = DOMExceptionCode::kNotSupportedError;
       not_supported_for_invalid_origin_or_ssl_error_ = error_message;
-      break;
-
-    case PaymentErrorReason::ALREADY_SHOWING:
-      exception_code = DOMExceptionCode::kAbortError;
       break;
 
     case PaymentErrorReason::UNKNOWN:

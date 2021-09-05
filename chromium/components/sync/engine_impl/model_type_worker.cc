@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/containers/contains.h"
 #include "base/format_macros.h"
 #include "base/guid.h"
 #include "base/logging.h"
@@ -27,6 +28,7 @@
 #include "components/sync/base/time.h"
 #include "components/sync/base/unique_position.h"
 #include "components/sync/engine/model_type_processor.h"
+#include "components/sync/engine/sync_engine_switches.h"
 #include "components/sync/engine_impl/bookmark_update_preprocessing.h"
 #include "components/sync/engine_impl/cancelation_signal.h"
 #include "components/sync/engine_impl/commit_contribution.h"
@@ -42,6 +44,12 @@ namespace {
 
 const char kTimeUntilEncryptionKeyFoundHistogramPrefix[] =
     "Sync.ModelTypeTimeUntilEncryptionKeyFound.";
+const char kUndecryptablePendingUpdatesDroppedHistogramPrefix[] =
+    "Sync.ModelTypeUndecryptablePendingUpdatesDropped.";
+const char kBlockedDueToUndecryptableUpdateHistogramName[] =
+    "Sync.ModelTypeBlockedDueToUndecryptableUpdate";
+
+const int kMinGuResponsesToIgnoreKey = 50;
 
 void AdaptClientTagForFullUpdateData(ModelType model_type,
                                      syncer::EntityData* data) {
@@ -106,6 +114,7 @@ ModelTypeWorker::ModelTypeWorker(
       cryptographer_(std::move(cryptographer)),
       passphrase_type_(passphrase_type),
       nudge_handler_(nudge_handler),
+      min_gu_responses_to_ignore_key_(kMinGuResponsesToIgnoreKey),
       cancelation_signal_(cancelation_signal) {
   DCHECK(model_type_processor_);
   DCHECK(type_ != PASSWORDS || cryptographer_);
@@ -223,17 +232,33 @@ SyncerError ModelTypeWorker::ProcessGetUpdatesResponse(
         // Override any previously undecryptable update for the same id.
         entries_pending_decryption_.erase(update_entity->id_string());
         break;
-      case DECRYPTION_PENDING:
-        // Cannot decrypt now, copy the sync entity for later decryption.
-        entries_pending_decryption_[update_entity->id_string()] =
-            *update_entity;
-        // If there's no entry for this unknown encryption key, create one.
-        DCHECK(!response_data.encryption_key_name.empty());
-        unknown_encryption_keys_by_name_.emplace(
-            response_data.encryption_key_name, UnknownEncryptionKeyInfo());
+      case DECRYPTION_PENDING: {
         SyncRecordModelTypeUpdateDropReason(
             UpdateDropReason::kDecryptionPending, type_);
+
+        const std::string& key_name = response_data.encryption_key_name;
+        DCHECK(!key_name.empty());
+        // If there's no entry for this unknown encryption key, create one.
+        unknown_encryption_keys_by_name_.emplace(key_name,
+                                                 UnknownEncryptionKeyInfo());
+
+        const std::string& server_id = update_entity->id_string();
+        if (ShouldIgnoreUpdatesEncryptedWith(key_name)) {
+          // Don't queue the incoming update. If there's a queued entry for
+          // |server_id|, don't clear it: outdated data is better than nothing.
+          // Such entry should be encrypted with another key, since |key_name|'s
+          // queued updates would've have been dropped by now.
+          DCHECK(!base::Contains(entries_pending_decryption_, server_id) ||
+                 GetEncryptionKeyName(entries_pending_decryption_[server_id]) !=
+                     key_name);
+          SyncRecordModelTypeUpdateDropReason(
+              UpdateDropReason::kDecryptionPendingForTooLong, type_);
+          break;
+        }
+        // Copy the sync entity for later decryption.
+        entries_pending_decryption_[server_id] = *update_entity;
         break;
+      }
       case FAILED_TO_DECRYPT:
         // Failed to decrypt the entity. Likely it is corrupt. Move on.
         SyncRecordModelTypeUpdateDropReason(UpdateDropReason::kFailedToDecrypt,
@@ -247,8 +272,18 @@ SyncerError ModelTypeWorker::ProcessGetUpdatesResponse(
   RemoveKeysNoLongerUnknown();
 
   if (!cryptographer_ || cryptographer_->CanEncrypt()) {
+    if (!entries_pending_decryption_.empty()) {
+      base::UmaHistogramEnumeration(
+          kBlockedDueToUndecryptableUpdateHistogramName,
+          ModelTypeHistogramValue(type_));
+    }
+
+    // Encryption keys should've been known in this state.
     for (auto& key_and_info : unknown_encryption_keys_by_name_) {
       key_and_info.second.gu_responses_while_should_have_been_known++;
+      // If the key is now missing for too long, drop pending updates encrypted
+      // with it. This eventually unblocks a worker having undecryptable data.
+      MaybeDropPendingUpdatesEncryptedWith(key_and_info.first);
     }
   }
 
@@ -559,7 +594,7 @@ void ModelTypeWorker::DecryptStoredEntities() {
     if (newly_found_key.gu_responses_while_should_have_been_known > 0) {
       base::UmaHistogramCounts1000(
           base::StrCat({kTimeUntilEncryptionKeyFoundHistogramPrefix,
-                        ModelTypeToString(GetModelType())}),
+                        ModelTypeToHistogramSuffix(type_)}),
           newly_found_key.gu_responses_while_should_have_been_known);
     }
   }
@@ -682,6 +717,40 @@ bool ModelTypeWorker::DecryptPasswordSpecifics(
     return false;
   }
   return true;
+}
+
+bool ModelTypeWorker::ShouldIgnoreUpdatesEncryptedWith(
+    const std::string& key_name) {
+  if (!base::Contains(unknown_encryption_keys_by_name_, key_name)) {
+    return false;
+  }
+  if (unknown_encryption_keys_by_name_.at(key_name)
+          .gu_responses_while_should_have_been_known <
+      min_gu_responses_to_ignore_key_) {
+    return false;
+  }
+  return base::FeatureList::IsEnabled(
+      switches::kIgnoreSyncEncryptionKeysLongMissing);
+}
+
+void ModelTypeWorker::MaybeDropPendingUpdatesEncryptedWith(
+    const std::string& key_name) {
+  if (!ShouldIgnoreUpdatesEncryptedWith(key_name)) {
+    return;
+  }
+
+  size_t updates_before_dropping = entries_pending_decryption_.size();
+  base::EraseIf(entries_pending_decryption_, [&](const auto& id_and_update) {
+    return key_name == GetEncryptionKeyName(id_and_update.second);
+  });
+
+  // If updates were dropped, record how many.
+  if (entries_pending_decryption_.size() < updates_before_dropping) {
+    base::UmaHistogramCounts1000(
+        base::StrCat({kUndecryptablePendingUpdatesDroppedHistogramPrefix,
+                      ModelTypeToHistogramSuffix(type_)}),
+        updates_before_dropping - entries_pending_decryption_.size());
+  }
 }
 
 std::vector<ModelTypeWorker::UnknownEncryptionKeyInfo>

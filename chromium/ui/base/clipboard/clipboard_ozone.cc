@@ -16,6 +16,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
 #include "ui/base/clipboard/clipboard_constants.h"
@@ -28,7 +29,7 @@
 #include "ui/ozone/public/ozone_platform.h"
 #include "ui/ozone/public/platform_clipboard.h"
 
-#if defined(OS_CHROMEOS) && BUILDFLAG(OZONE_PLATFORM_X11)
+#if BUILDFLAG(IS_CHROMEOS_ASH) && BUILDFLAG(OZONE_PLATFORM_X11)
 #include "base/command_line.h"
 #include "ui/base/clipboard/clipboard_non_backed.h"
 #include "ui/base/ui_base_switches.h"
@@ -200,7 +201,6 @@ class ClipboardOzone::AsyncClipboardOzone {
   void PerformRequestAndWaitForResult(ClipboardBuffer buffer,
                                       Request* request) {
     DCHECK(request);
-    DCHECK(!abort_timer_.IsRunning());
     DCHECK(!pending_request_);
 
     pending_request_ = request;
@@ -227,14 +227,10 @@ class ClipboardOzone::AsyncClipboardOzone {
     request->finish_closure = run_loop.QuitClosure();
 
     // Set a timeout timer after which the request will be aborted.
-    abort_timer_.Start(FROM_HERE, kRequestTimeout, this,
-                       &AsyncClipboardOzone::AbortStalledRequest);
+    base::OneShotTimer abort_timer;
+    abort_timer.Start(FROM_HERE, kRequestTimeout, this,
+                      &AsyncClipboardOzone::CompleteRequest);
     run_loop.Run();
-  }
-
-  void AbortStalledRequest() {
-    if (pending_request_ && pending_request_->finish_closure)
-      std::move(pending_request_->finish_closure).Run();
   }
 
   void DispatchReadRequest(ClipboardBuffer buffer, Request* request) {
@@ -274,7 +270,7 @@ class ClipboardOzone::AsyncClipboardOzone {
   void CompleteRequest() {
     if (!pending_request_)
       return;
-    abort_timer_.Stop();
+
     if (pending_request_->finish_closure)
       std::move(pending_request_->finish_closure).Run();
     pending_request_ = nullptr;
@@ -294,9 +290,6 @@ class ClipboardOzone::AsyncClipboardOzone {
   // A current pending request being processed.
   Request* pending_request_ = nullptr;
 
-  // Aborts |pending_request| after Request::timeout.
-  base::RepeatingTimer abort_timer_;
-
   // Provides communication to a system clipboard under ozone level.
   PlatformClipboard* const platform_clipboard_ = nullptr;
 
@@ -308,12 +301,16 @@ class ClipboardOzone::AsyncClipboardOzone {
 };
 
 // Uses the factory in the clipboard_linux otherwise.
-#if defined(OS_CHROMEOS) || !defined(OS_LINUX)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if !(defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
 // Clipboard factory method.
 Clipboard* Clipboard::Create() {
 // linux-chromeos uses non-backed clipboard by default, but supports ozone x11
 // with flag --use-system-clipbboard.
-#if defined(OS_CHROMEOS) && BUILDFLAG(OZONE_PLATFORM_X11)
+#if BUILDFLAG(IS_CHROMEOS_ASH) && BUILDFLAG(OZONE_PLATFORM_X11)
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kUseSystemClipboard)) {
     return new ClipboardNonBacked;

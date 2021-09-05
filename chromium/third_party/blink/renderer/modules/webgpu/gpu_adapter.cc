@@ -27,10 +27,11 @@ WGPUDeviceProperties AsDawnType(const GPUDeviceDescriptor* descriptor) {
   // TODO(crbug.com/1048603): We should validate that the extension_set is a
   // subset of the adapter's extension set.
   requested_device_properties.textureCompressionBC =
-      extension_set.Contains("texture-compression-bc") ||
-      extension_set.Contains("textureCompressionBC");
+      extension_set.Contains("texture-compression-bc");
   requested_device_properties.shaderFloat16 =
       extension_set.Contains("shader-float16");
+  requested_device_properties.pipelineStatisticsQuery =
+      extension_set.Contains("pipeline-statistics-query");
   requested_device_properties.timestampQuery =
       extension_set.Contains("timestamp-query");
 
@@ -82,10 +83,12 @@ void GPUAdapter::InitializeExtensionNameList() {
   DCHECK(extension_name_list_.IsEmpty());
   if (adapter_properties_.textureCompressionBC) {
     extension_name_list_.emplace_back("texture-compression-bc");
-    extension_name_list_.emplace_back("textureCompressionBC");
   }
   if (adapter_properties_.shaderFloat16) {
     extension_name_list_.emplace_back("shader-float16");
+  }
+  if (adapter_properties_.pipelineStatisticsQuery) {
+    extension_name_list_.emplace_back("pipeline-statistics-query");
   }
   if (adapter_properties_.timestampQuery) {
     extension_name_list_.emplace_back("timestamp-query");

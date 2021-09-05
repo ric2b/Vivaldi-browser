@@ -52,26 +52,6 @@ using content::WebContents;
 
 namespace {
 
-class InterstitialPageObserver : public content::WebContentsObserver {
- public:
-  InterstitialPageObserver(WebContents* web_contents,
-                           const base::Closure& callback)
-      : content::WebContentsObserver(web_contents), callback_(callback) {}
-  ~InterstitialPageObserver() override {}
-
-  void DidFinishNavigation(
-      content::NavigationHandle* navigation_handle) override {
-    // With committed interstitials, DidAttachInterstitialPage is not called, so
-    // call the callback from here if there was an error.
-    if (navigation_handle->IsErrorPage()) {
-      callback_.Run();
-    }
-  }
-
- private:
-  base::Closure callback_;
-};
-
 // Tests filtering for supervised users.
 class SupervisedUserURLFilterTest : public MixinBasedInProcessBrowserTest {
  public:
@@ -197,11 +177,8 @@ class TabClosingObserver : public TabStripModelObserver {
       return;
 
     auto* remove = change.GetRemove();
-    if (!remove->will_be_deleted)
-      return;
-
     for (const auto& contents : remove->contents) {
-      if (contents_ == contents.contents) {
+      if (contents_ == contents.contents && contents.will_be_deleted) {
         if (run_loop_.running())
           run_loop_.Quit();
         contents_ = nullptr;

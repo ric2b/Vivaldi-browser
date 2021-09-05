@@ -25,6 +25,11 @@ class PageActionsEventRouter : page_actions::Service::Observer {
 
   // page_actions::Service::Observer implementation.
   void OnScriptPathsChanged() override;
+  void OnScriptOverridesChanged(
+      content::WebContents* tab_contents,
+      const base::FilePath& script_path,
+      page_actions::Service::ScriptOverride script_override) override;
+
 
  private:
   content::BrowserContext* browser_context_;

@@ -142,8 +142,8 @@ size_t SearchController::AddGroup(size_t max_results) {
 void SearchController::AddProvider(size_t group_id,
                                    std::unique_ptr<SearchProvider> provider) {
   provider->set_result_changed_callback(
-      base::Bind(&SearchController::OnResultsChangedWithType,
-                 base::Unretained(this), provider->ResultType()));
+      base::BindRepeating(&SearchController::OnResultsChangedWithType,
+                          base::Unretained(this), provider->ResultType()));
   mixer_->AddProviderToGroup(group_id, provider.get());
   providers_.emplace_back(std::move(provider));
 }
@@ -194,7 +194,6 @@ void SearchController::OnSearchResultsDisplayed(
       result_types.push_back(
           RankingItemTypeFromSearchResult(*FindSearchResult(result.id)));
     }
-    LogZeroStateResultsListMetrics(result_types, launched_index);
   }
 }
 
@@ -227,7 +226,7 @@ void SearchController::Train(AppLaunchData&& app_launch_data) {
     base::Time::Exploded now_exploded;
     now.LocalExplode(&now_exploded);
 
-    metrics::structured::events::LauncherUsage()
+    metrics::structured::events::launcher_usage::LauncherUsage()
         .SetTarget(NormalizeId(app_launch_data.id))
         .SetApp(last_launched_app_id_)
         .SetSearchQuery(base::UTF16ToUTF8(last_query_))

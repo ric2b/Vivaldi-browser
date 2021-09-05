@@ -11,6 +11,8 @@
 #include "base/optional.h"
 #include "chrome/browser/ui/webui/chromeos/system_web_dialog_delegate.h"
 #include "chrome/browser/ui/webui/signin/inline_login_handler_modal_delegate.h"
+#include "chromeos/components/account_manager/account_manager.h"
+#include "components/account_manager_core/account_manager_facade.h"
 #include "components/web_modal/web_contents_modal_dialog_host.h"
 
 class GURL;
@@ -24,32 +26,6 @@ class InlineLoginDialogChromeOS : public SystemWebDialogDelegate,
                                   public web_modal::WebContentsModalDialogHost {
  public:
   static const char kAccountAdditionSource[];
-
-  // The source UX surface used for launching the account addition /
-  // re-authentication dialog. This should be as specific as possible.
-  // These values are persisted to logs. Entries should not be renumbered and
-  // numeric values should never be reused.
-  // Note: Please update |AccountManagerAccountAdditionSource| in enums.xml
-  // after adding new values.
-  enum class Source : int {
-    // Settings > Add account button.
-    kSettingsAddAccountButton = 0,
-    // Settings > Sign in again button.
-    kSettingsReauthAccountButton = 1,
-    // Launched from an ARC application.
-    kArc = 2,
-    // Launched automatically from Chrome content area. As of now, this is
-    // possible only when an account requires re-authentication.
-    kContentArea = 3,
-    // Print Preview dialog.
-    kPrintPreviewDialog = 4,
-    // Account Manager migration welcome screen.
-    kAccountManagerMigrationWelcomeScreen = 5,
-    // Onboarding.
-    kOnboarding = 6,
-
-    kMaxValue = kOnboarding
-  };
 
   // Represents the last reached step in the flow.
   // Keep in sync with
@@ -66,14 +42,25 @@ class InlineLoginDialogChromeOS : public SystemWebDialogDelegate,
     kMaxValue = kFlowCompleted
   };
 
+  static bool IsShown();
+
   // Displays the dialog. |email| pre-fills the account email field in the
   // sign-in dialog - useful for account re-authentication. |source| specifies
   // the source UX surface used for launching the dialog.
-  static void Show(const std::string& email, const Source& source);
+  // DEPRECATED: Use AccountManagerFacade instead (see
+  // https://crbug.com/1140469).
+  static void ShowDeprecated(
+      const std::string& email,
+      const ::account_manager::AccountManagerFacade::AccountAdditionSource&
+          source);
 
   // Displays the dialog for account addition. |source| specifies the source UX
   // surface used for launching the dialog.
-  static void Show(const Source& source);
+  // DEPRECATED: Use AccountManagerFacade instead (see
+  // https://crbug.com/1140469).
+  static void ShowDeprecated(
+      const ::account_manager::AccountManagerFacade::AccountAdditionSource&
+          source);
 
   // Updates the value of the last reached step in 'Add Account' flow for child
   // users. Before the dialog will close, this value will be reported to UMA.
@@ -91,22 +78,49 @@ class InlineLoginDialogChromeOS : public SystemWebDialogDelegate,
   void SetEduCoexistenceFlowResult(EduCoexistenceFlowResult result);
 
  protected:
-  explicit InlineLoginDialogChromeOS(const Source& source);
-  InlineLoginDialogChromeOS(const GURL& url, const Source& source);
+  // |is_arc_source| parameter is used to specify whether the dialog is opened
+  // from ARC. It's used to display the correct error message for Child users.
+  explicit InlineLoginDialogChromeOS(bool is_arc_source);
+  InlineLoginDialogChromeOS(const GURL& url, bool is_arc_source);
+
+  InlineLoginDialogChromeOS(const GURL& url,
+                            bool is_arc_source,
+                            base::OnceClosure close_dialog_closure);
   ~InlineLoginDialogChromeOS() override;
 
   // ui::WebDialogDelegate overrides
   void GetDialogSize(gfx::Size* size) const override;
+  ui::ModalType GetDialogModalType() const override;
   std::string GetDialogArgs() const override;
   bool ShouldShowDialogTitle() const override;
   void OnDialogShown(content::WebUI* webui) override;
   void OnDialogClosed(const std::string& json_retval) override;
 
  private:
+  // `Show` method can be called directly only by `AccountManagerUIImpl` class.
+  // To show the dialog, use `AccountManagerFacade`.
+  friend class AccountManagerUIImpl;
+
+  // Displays the dialog. |close_dialog_closure| will be called when the dialog
+  // is closed.
+  static void Show(base::OnceClosure close_dialog_closure);
+
+  // Displays the dialog. |email| pre-fills the account email field in the
+  // sign-in dialog - useful for account re-authentication.
+  // |close_dialog_closure| will be called when the dialog is closed.
+  static void Show(const std::string& email,
+                   base::OnceClosure close_dialog_closure);
+
+  static void ShowInternal(
+      const std::string& email,
+      bool is_arc_source,
+      base::OnceClosure close_dialog_closure = base::DoNothing());
+
   InlineLoginHandlerModalDelegate delegate_;
-  const Source source_;
+  const bool is_arc_source_;
   const GURL url_;
   base::Optional<EduCoexistenceFlowResult> edu_coexistence_flow_result_;
+  base::OnceClosure close_dialog_closure_;
 
   DISALLOW_COPY_AND_ASSIGN(InlineLoginDialogChromeOS);
 };

@@ -20,7 +20,6 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_split.h"
 #include "build/build_config.h"
-#include "content/browser/accessibility/accessibility_buildflags.h"
 #include "content/browser/accessibility/browser_accessibility_position.h"
 #include "content/common/content_export.h"
 #include "third_party/blink/public/web/web_ax_enums.h"
@@ -31,27 +30,7 @@
 #include "ui/accessibility/ax_range.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
 #include "ui/accessibility/platform/ax_platform_node_delegate.h"
-
-// Set PLATFORM_HAS_NATIVE_ACCESSIBILITY_IMPL if this platform has
-// a platform-specific subclass of BrowserAccessibility and
-// BrowserAccessibilityManager.
-#undef PLATFORM_HAS_NATIVE_ACCESSIBILITY_IMPL
-
-#if defined(OS_WIN)
-#define PLATFORM_HAS_NATIVE_ACCESSIBILITY_IMPL 1
-#endif
-
-#if defined(OS_MAC)
-#define PLATFORM_HAS_NATIVE_ACCESSIBILITY_IMPL 1
-#endif
-
-#if defined(OS_ANDROID) && !defined(USE_AURA)
-#define PLATFORM_HAS_NATIVE_ACCESSIBILITY_IMPL 1
-#endif
-
-#if BUILDFLAG(USE_ATK)
-#define PLATFORM_HAS_NATIVE_ACCESSIBILITY_IMPL 1
-#endif
+#include "ui/base/buildflags.h"
 
 #if defined(OS_MAC) && __OBJC__
 @class BrowserAccessibilityCocoa;
@@ -107,7 +86,10 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   // Return true if this object is equal to or a descendant of |ancestor|.
   bool IsDescendantOf(const BrowserAccessibility* ancestor) const;
 
-  bool IsDocument() const;
+  // Returns true if this object is at the root of what most accessibility APIs
+  // consider to be a document, such as the root of a webpage, an iframe, or a
+  // PDF.
+  bool IsPlatformDocument() const;
 
   bool IsIgnored() const;
 
@@ -424,6 +406,8 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   bool IsChildOfLeaf() const override;
   bool IsDescendantOfPlainTextField() const override;
   bool IsLeaf() const override;
+  bool IsFocused() const override;
+  bool IsInvisibleOrIgnored() const override;
   bool IsToplevelBrowserWindow() override;
   gfx::NativeViewAccessible GetClosestPlatformObject() const override;
 
@@ -453,7 +437,7 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
       ui::AXOffscreenResult* offscreen_result = nullptr) const override;
   gfx::NativeViewAccessible HitTestSync(int physical_pixel_x,
                                         int physical_pixel_y) const override;
-  gfx::NativeViewAccessible GetFocus() override;
+  gfx::NativeViewAccessible GetFocus() const override;
   ui::AXPlatformNode* GetFromNodeID(int32_t id) override;
   ui::AXPlatformNode* GetFromTreeIDAndNodeID(const ui::AXTreeID& ax_tree_id,
                                              int32_t id) override;

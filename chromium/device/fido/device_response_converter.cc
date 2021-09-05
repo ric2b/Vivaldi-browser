@@ -58,9 +58,8 @@ CtapDeviceResponseCode GetResponseCode(base::span<const uint8_t> buffer) {
   if (buffer.empty())
     return CtapDeviceResponseCode::kCtap2ErrInvalidCBOR;
 
-  auto code = static_cast<CtapDeviceResponseCode>(buffer[0]);
-  return base::Contains(kCtapResponseCodeList, code)
-             ? code
+  return kCtapResponseCodeList.contains(buffer[0])
+             ? static_cast<CtapDeviceResponseCode>(buffer[0])
              : CtapDeviceResponseCode::kCtap2ErrInvalidCBOR;
 }
 
@@ -196,9 +195,15 @@ base::Optional<AuthenticatorGetAssertionResponse> ReadCTAPGetAssertionResponse(
 
 base::Optional<AuthenticatorGetInfoResponse> ReadCTAPGetInfoResponse(
     base::span<const uint8_t> buffer) {
-  if (buffer.size() <= kResponseCodeLength ||
-      GetResponseCode(buffer) != CtapDeviceResponseCode::kSuccess)
+  if (buffer.size() <= kResponseCodeLength) {
+    FIDO_LOG(ERROR) << "-> (GetInfo response too short: " << buffer.size()
+                    << " bytes)";
     return base::nullopt;
+  }
+  if (GetResponseCode(buffer) != CtapDeviceResponseCode::kSuccess) {
+    FIDO_LOG(ERROR) << "-> (GetInfo CTAP2 error code " << +buffer[0] << ")";
+    return base::nullopt;
+  }
 
   cbor::Reader::DecoderError error;
   base::Optional<CBOR> decoded_response =
@@ -543,6 +548,34 @@ base::Optional<AuthenticatorGetInfoResponse> ReadCTAPGetInfoResponse(
 
       response.algorithms.push_back(alg);
     }
+  }
+
+  it = response_map.find(CBOR(0x0b));
+  if (it != response_map.end()) {
+    if (!it->second.is_unsigned()) {
+      return base::nullopt;
+    }
+
+    response.max_serialized_large_blob_array =
+        base::saturated_cast<uint32_t>(it->second.GetUnsigned());
+  }
+
+  it = response_map.find(CBOR(0x0c));
+  if (it != response_map.end()) {
+    if (!it->second.is_bool()) {
+      return base::nullopt;
+    }
+
+    response.force_pin_change = it->second.GetBool();
+  }
+
+  it = response_map.find(CBOR(0x0d));
+  if (it != response_map.end()) {
+    if (!it->second.is_unsigned()) {
+      return base::nullopt;
+    }
+    response.min_pin_length =
+        base::saturated_cast<uint32_t>(it->second.GetUnsigned());
   }
 
   it = response_map.find(CBOR(0x14));

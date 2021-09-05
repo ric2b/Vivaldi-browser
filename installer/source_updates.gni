@@ -11,6 +11,8 @@ if (is_win) {
       "//vivaldi/installer/util/vivaldi_install_dialog.h",
       "//vivaldi/installer/util/vivaldi_progress_dialog.cc",
       "//vivaldi/installer/util/vivaldi_progress_dialog.h",
+      "//vivaldi/installer/util/vivaldi_setup_util.cc",
+      "//vivaldi/installer/util/vivaldi_setup_util.h",
       "//vivaldi/installer/win/setup/setup.rc",
       "//vivaldi/installer/win/setup/setup_resource.h",
     ]
@@ -49,6 +51,8 @@ if (is_win) {
     sources += [
       "//vivaldi/installer/vivaldi_install_modes.cc",
       "//vivaldi/installer/vivaldi_install_modes.h",
+      "//vivaldi/installer/util/vivaldi_install_constants.cc",
+      "//vivaldi/installer/util/vivaldi_install_constants.h",
     ]
   }
 }
@@ -56,6 +60,8 @@ if (is_win) {
 update_target("//chrome/installer/util:with_no_strings") {
   if (is_win) {
     sources += [
+      "//vivaldi/installer/util/marker_file_work_item.cc",
+      "//vivaldi/installer/util/marker_file_work_item.h",
       "//vivaldi/installer/util/vivaldi_install_util.cc",
       "//vivaldi/installer/util/vivaldi_install_util.h",
     ]

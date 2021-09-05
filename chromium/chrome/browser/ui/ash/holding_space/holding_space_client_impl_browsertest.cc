@@ -39,6 +39,15 @@ constexpr char kTextFilePath[] = "text.txt";
 
 // Helpers ---------------------------------------------------------------------
 
+// Creates an empty holding space image.
+std::unique_ptr<HoldingSpaceImage> CreateTestHoldingSpaceImage(
+    HoldingSpaceItem::Type type,
+    const base::FilePath& file_path) {
+  return std::make_unique<HoldingSpaceImage>(
+      HoldingSpaceImage::GetMaxSizeForType(type), file_path,
+      /*async_bitmap_resolver=*/base::DoNothing());
+}
+
 // Copies the file for the `relative_path` in the test data directory to
 // downloads directory, and returns the path to the copy.
 base::FilePath TestFile(Profile* profile, const std::string& relative_path) {
@@ -135,6 +144,23 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceClientImplTest, DISABLED_OpenDownloads) {
   run_loop.Run();
 }
 
+// Verifies that `HoldingSpaceClient::OpenMyFiles()` works as intended.
+IN_PROC_BROWSER_TEST_F(HoldingSpaceClientImplTest, OpenMyFiles) {
+  ASSERT_TRUE(HoldingSpaceController::Get());
+
+  auto* holding_space_client = HoldingSpaceController::Get()->client();
+  ASSERT_TRUE(holding_space_client);
+
+  // We expect `HoldingSpaceClient::OpenMyFiles()` to succeed.
+  base::RunLoop run_loop;
+  holding_space_client->OpenMyFiles(
+      base::BindLambdaForTesting([&run_loop](bool success) {
+        EXPECT_TRUE(success);
+        run_loop.Quit();
+      }));
+  run_loop.Run();
+}
+
 // Verifies that `HoldingSpaceClient::OpenItems()` works as intended when
 // attempting to open holding space items backed by both non-existing and
 // existing files.
@@ -148,10 +174,7 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceClientImplTest, OpenItems) {
     // Create a holding space item backed by a non-existing file.
     auto holding_space_item = HoldingSpaceItem::CreateFileBackedItem(
         HoldingSpaceItem::Type::kDownload, base::FilePath("foo"),
-        GURL("filesystem:fake"),
-        std::make_unique<HoldingSpaceImage>(
-            /*placeholder=*/gfx::ImageSkia(),
-            /*async_bitmap_resolver=*/base::DoNothing()));
+        GURL("filesystem:fake"), base::BindOnce(&CreateTestHoldingSpaceImage));
 
     // We expect `HoldingSpaceClient::OpenItems()` to fail when the backing file
     // for `holding_space_item` does not exist.
@@ -201,10 +224,7 @@ IN_PROC_BROWSER_TEST_F(HoldingSpaceClientImplTest, MAYBE_ShowItemInFolder) {
     // Create a holding space item backed by a non-existing file.
     auto holding_space_item = HoldingSpaceItem::CreateFileBackedItem(
         HoldingSpaceItem::Type::kDownload, base::FilePath("foo"),
-        GURL("filesystem:fake"),
-        std::make_unique<HoldingSpaceImage>(
-            /*placeholder=*/gfx::ImageSkia(),
-            /*async_bitmap_resolver=*/base::DoNothing()));
+        GURL("filesystem:fake"), base::BindOnce(&CreateTestHoldingSpaceImage));
 
     // We expect `HoldingSpaceClient::ShowItemInFolder()` to fail when the
     // backing file for `holding_space_item` does not exist.

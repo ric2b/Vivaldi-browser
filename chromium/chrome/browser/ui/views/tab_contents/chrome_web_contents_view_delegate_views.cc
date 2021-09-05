@@ -20,6 +20,9 @@
 #include "content/public/browser/web_contents.h"
 #include "ui/views/widget/widget.h"
 
+#include "app/vivaldi_apptools.h"
+#include "browser/menus/vivaldi_render_view_context_menu.h"
+
 ChromeWebContentsViewDelegateViews::ChromeWebContentsViewDelegateViews(
     content::WebContents* web_contents)
     : ContextMenuDelegate(web_contents), web_contents_(web_contents) {
@@ -81,7 +84,13 @@ ChromeWebContentsViewDelegateViews::BuildMenu(
   // This happens if the frame has navigated to a different page before
   // ContextMenu message was received by the current RenderFrameHost.
   if (focused_frame) {
+    if (::vivaldi::IsVivaldiRunning() &&
+        ::vivaldi::VivaldiRenderViewContextMenu::Supports(params)) {
+      menu.reset(vivaldi::VivaldiRenderViewContextMenu::Create(focused_frame,
+          params));
+    } else {
     menu.reset(RenderViewContextMenuViews::Create(focused_frame, params));
+    }
     menu->Init();
   }
   return menu;

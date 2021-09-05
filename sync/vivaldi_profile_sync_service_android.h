@@ -38,14 +38,13 @@ class VivaldiProfileSyncServiceAndroid : public syncer::SyncServiceObserver {
   jboolean IsSetupInProgress(JNIEnv* env,
                              const base::android::JavaParamRef<jobject>& obj);
 
-  void BackupEncryptionToken(
+  base::android::ScopedJavaLocalRef<jstring> GetBackupEncryptionToken(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+  jboolean RestoreEncryptionToken(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
-      const base::android::JavaParamRef<jstring>& target_file);
-  void RestoreEncryptionToken(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj,
-      const base::android::JavaParamRef<jstring>& source_file);
+      const base::android::JavaParamRef<jstring>& token);
 
   // syncer::SyncServiceObserver implementation.
   void OnSyncCycleCompleted(syncer::SyncService* sync) override;

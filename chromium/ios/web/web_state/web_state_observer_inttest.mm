@@ -30,7 +30,7 @@
 #import "ios/web/public/session/crw_session_storage.h"
 #import "ios/web/public/test/error_test_util.h"
 #import "ios/web/public/test/fakes/async_web_state_policy_decider.h"
-#include "ios/web/public/test/fakes/test_web_state_observer.h"
+#include "ios/web/public/test/fakes/fake_web_state_observer.h"
 #import "ios/web/public/test/navigation_test_util.h"
 #import "ios/web/public/test/web_view_content_test_util.h"
 #import "ios/web/public/test/web_view_interaction_test_util.h"
@@ -998,9 +998,11 @@ TEST_F(WebStateObserverTest, FailedNavigation) {
   EXPECT_CALL(observer_,
               PageLoaded(web_state(), PageLoadCompletionStatus::FAILURE));
 
-  // Load error page HTML by [WKWebView loadHTMLString:baseURL:].
-  EXPECT_CALL(observer_, DidStartLoading(web_state()));
-  EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  if (!base::FeatureList::IsEnabled(features::kUseJSForErrorPage)) {
+    // Load error page HTML by [WKWebView loadHTMLString:baseURL:].
+    EXPECT_CALL(observer_, DidStartLoading(web_state()));
+    EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  }
 
   test::LoadUrl(web_state(), url);
 
@@ -1013,7 +1015,7 @@ TEST_F(WebStateObserverTest, FailedNavigation) {
                                          testing::CreateConnectionLostError(),
                                          /*is_post=*/false, /*is_otr=*/false,
                                          /*cert_status=*/0)));
-  DCHECK_EQ(item->GetTitle(), base::UTF8ToUTF16(kFailedTitle));
+  EXPECT_EQ(item->GetTitle(), base::UTF8ToUTF16(kFailedTitle));
 }
 
 // Tests navigation to a URL with /..; suffix. On iOS 12 and earlier this
@@ -1131,9 +1133,11 @@ TEST_F(WebStateObserverTest, WebViewUnsupportedSchemeNavigation) {
   EXPECT_CALL(observer_,
               PageLoaded(web_state(), PageLoadCompletionStatus::FAILURE));
 
-  // Load error page HTML by [WKWebView loadHTMLString:baseURL:].
-  EXPECT_CALL(observer_, DidStartLoading(web_state()));
-  EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  if (!base::FeatureList::IsEnabled(features::kUseJSForErrorPage)) {
+    // Load error page HTML by [WKWebView loadHTMLString:baseURL:].
+    EXPECT_CALL(observer_, DidStartLoading(web_state()));
+    EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  }
 
   test::LoadUrl(web_state(), url);
   NSError* error = testing::CreateErrorWithUnderlyingErrorChain(
@@ -1177,9 +1181,11 @@ TEST_F(WebStateObserverTest, WebViewUnsupportedUrlNavigation) {
   EXPECT_CALL(observer_,
               PageLoaded(web_state(), PageLoadCompletionStatus::FAILURE));
 
-  // Load error page HTML by [WKWebView loadHTMLString:baseURL:].
-  EXPECT_CALL(observer_, DidStartLoading(web_state()));
-  EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  if (!base::FeatureList::IsEnabled(features::kUseJSForErrorPage)) {
+    // Load error page HTML by [WKWebView loadHTMLString:baseURL:].
+    EXPECT_CALL(observer_, DidStartLoading(web_state()));
+    EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  }
 
   test::LoadUrl(web_state(), url);
   NSError* error = testing::CreateErrorWithUnderlyingErrorChain(
@@ -1993,9 +1999,11 @@ TEST_F(WebStateObserverTest, FLAKY_FailedLoad) {
   EXPECT_CALL(observer_,
               PageLoaded(web_state(), PageLoadCompletionStatus::FAILURE));
 
-  // Load error page HTML by [WKWebView loadHTMLString:baseURL:].
-  EXPECT_CALL(observer_, DidStartLoading(web_state()));
-  EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  if (!base::FeatureList::IsEnabled(features::kUseJSForErrorPage)) {
+    // Load error page HTML by [WKWebView loadHTMLString:baseURL:].
+    EXPECT_CALL(observer_, DidStartLoading(web_state()));
+    EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  }
 
   test::LoadUrl(web_state(), url);
 
@@ -2036,9 +2044,11 @@ TEST_F(WebStateObserverTest, FailedSslConnection) {
   EXPECT_CALL(observer_,
               PageLoaded(web_state(), PageLoadCompletionStatus::FAILURE));
 
-  // Finally, the error page itself is loaded.
-  EXPECT_CALL(observer_, DidStartLoading(web_state()));
-  EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  if (!base::FeatureList::IsEnabled(features::kUseJSForErrorPage)) {
+    // Finally, the error page itself is loaded.
+    EXPECT_CALL(observer_, DidStartLoading(web_state()));
+    EXPECT_CALL(observer_, DidStopLoading(web_state()));
+  }
 
   test::LoadUrl(web_state(), url);
   EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForPageLoadTimeout, ^{
@@ -2085,7 +2095,6 @@ TEST_F(WebStateObserverTest, DisallowRequestAndShowError) {
           WebStatePolicyDecider::PolicyDecision::CancelAndDisplayError(error)));
 
   EXPECT_CALL(observer_, DidStartNavigation(web_state(), _));
-  EXPECT_CALL(observer_, TitleWasSet(web_state()));
   EXPECT_CALL(observer_, DidStopLoading(web_state()));
   EXPECT_CALL(observer_, DidFinishNavigation(web_state(), _));
   EXPECT_CALL(observer_,
@@ -2270,9 +2279,9 @@ TEST_F(WebStateObserverTest, StopNavigationAfterPolicyDeciderCallback) {
                                                       &context, &nav_id));
 
   // Load the page and wait for DidFinishNavigation callback.
-  TestWebStateObserver page_loaded_observer(web_state());
+  FakeWebStateObserver page_loaded_observer(web_state());
   test::LoadUrl(web_state(), url);
-  TestWebStateObserver* page_loaded_observer_ptr = &page_loaded_observer;
+  FakeWebStateObserver* page_loaded_observer_ptr = &page_loaded_observer;
   EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForPageLoadTimeout, ^bool {
     return page_loaded_observer_ptr->did_finish_navigation_info();
   }));
@@ -2374,13 +2383,16 @@ TEST_F(WebStateObserverTest, IframeNavigation) {
   EXPECT_CALL(observer_, DidChangeBackForwardState(web_state()));
   test::TapWebViewElementWithIdInIframe(web_state(), "normal-link");
   EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForPageLoadTimeout, ^bool {
-    id URL = ExecuteJavaScript(@"window.frames[0].location.pathname;");
-    return [@"/pony.html" isEqual:URL] == YES;
+    std::unique_ptr<base::Value> URL =
+        ExecuteJavaScript(@"window.frames[0].location.pathname;");
+    return URL->is_string() && URL->GetString() == "/pony.html";
   }));
   ASSERT_TRUE(web_state()->GetNavigationManager()->CanGoBack());
   ASSERT_FALSE(web_state()->GetNavigationManager()->CanGoForward());
-  id history_length = ExecuteJavaScript(@"history.length;");
-  ASSERT_NSEQ(@2, history_length);
+  std::unique_ptr<base::Value> history_length =
+      ExecuteJavaScript(@"history.length;");
+  ASSERT_TRUE(history_length->is_double());
+  ASSERT_EQ(2, history_length->GetDouble());
 
   // Go back to top.
   EXPECT_CALL(observer_, DidStartLoading(web_state()));
@@ -2401,8 +2413,9 @@ TEST_F(WebStateObserverTest, IframeNavigation) {
 
   web_state()->GetNavigationManager()->GoBack();
   EXPECT_TRUE(WaitUntilConditionOrTimeout(kWaitForPageLoadTimeout, ^bool {
-    id URL = ExecuteJavaScript(@"window.frames[0].location.pathname;");
-    return [@"/links.html" isEqual:URL] == YES;
+    std::unique_ptr<base::Value> URL =
+        ExecuteJavaScript(@"window.frames[0].location.pathname;");
+    return URL->is_string() && URL->GetString() == "/links.html";
   }));
   ASSERT_TRUE(web_state()->GetNavigationManager()->CanGoForward());
   ASSERT_FALSE(web_state()->GetNavigationManager()->CanGoBack());

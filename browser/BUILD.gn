@@ -31,6 +31,7 @@ static_library("browser") {
     "//chrome/browser:resources",
     "//chrome/browser:theme_properties",
     "//chrome/browser/devtools",
+    "//chrome/common:buildflags",
     "//chrome/common:non_code_constants",
 
     "//components/bookmarks/browser",
@@ -115,12 +116,20 @@ static_library("browser") {
       "menus/vivaldi_context_menu_controller.cc",
       "menus/vivaldi_developertools_menu_controller.h",
       "menus/vivaldi_developertools_menu_controller.cc",
+      "menus/vivaldi_device_menu_controller.h",
+      "menus/vivaldi_device_menu_controller.cc",
+      "menus/vivaldi_extensions_menu_controller.h",
+      "menus/vivaldi_extensions_menu_controller.cc",
       "menus/vivaldi_menus.cpp",
       "menus/vivaldi_menus.h",
       "menus/vivaldi_menubar.cc",
       "menus/vivaldi_menubar.h",
+      "menus/vivaldi_profile_menu_controller.h",
+      "menus/vivaldi_profile_menu_controller.cc",
       "menus/vivaldi_pwa_menu_controller.h",
       "menus/vivaldi_pwa_menu_controller.cc",
+      "menus/vivaldi_render_view_context_menu.h",
+      "menus/vivaldi_render_view_context_menu.cc",
       "vivaldi_browser_finder.cc",
       "vivaldi_browser_finder.h",
       "vivaldi_webcontents_util.cc",
@@ -129,6 +138,8 @@ static_library("browser") {
   }
   if (is_mac) {
     sources += [
+      "menus/vivaldi_speech_menu_controller.h",
+      "menus/vivaldi_speech_menu_controller.cc",
       "vivaldi_app_observer.h",
       "vivaldi_app_observer.mm",
     ]

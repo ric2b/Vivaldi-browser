@@ -13,13 +13,26 @@ PolicyContainer::PolicyContainer(
       policy_container_host_remote_(std::move(remote)) {}
 
 // static
+std::unique_ptr<PolicyContainer> PolicyContainer::CreateEmpty() {
+  // Create a dummy PolicyContainerHost remote. All the messages will be
+  // ignored.
+  mojo::AssociatedRemote<mojom::blink::PolicyContainerHost> dummy_host;
+  ignore_result(dummy_host.BindNewEndpointAndPassDedicatedReceiver());
+
+  return std::make_unique<PolicyContainer>(
+      dummy_host.Unbind(),
+      mojom::blink::PolicyContainerDocumentPolicies::New());
+}
+
+// static
 std::unique_ptr<PolicyContainer> PolicyContainer::CreateFromWebPolicyContainer(
     std::unique_ptr<WebPolicyContainer> container) {
   if (!container)
     return nullptr;
   mojom::blink::PolicyContainerDocumentPoliciesPtr policies =
       mojom::blink::PolicyContainerDocumentPolicies::New(
-          container->policies.referrer_policy);
+          container->policies.referrer_policy,
+          container->policies.ip_address_space);
   return std::make_unique<PolicyContainer>(std::move(container->remote),
                                            std::move(policies));
 }
@@ -27,6 +40,11 @@ std::unique_ptr<PolicyContainer> PolicyContainer::CreateFromWebPolicyContainer(
 network::mojom::blink::ReferrerPolicy PolicyContainer::GetReferrerPolicy()
     const {
   return policies_->referrer_policy;
+}
+
+network::mojom::blink::IPAddressSpace PolicyContainer::GetIPAddressSpace()
+    const {
+  return policies_->ip_address_space;
 }
 
 void PolicyContainer::UpdateReferrerPolicy(

@@ -130,9 +130,9 @@ class CORE_EXPORT WebSettingsImpl final : public WebSettings {
                                UScriptCode = USCRIPT_COMMON) override;
   void SetPluginsEnabled(bool) override;
   void SetAvailablePointerTypes(int) override;
-  void SetPrimaryPointerType(ui::PointerType) override;
+  void SetPrimaryPointerType(mojom::blink::PointerType) override;
   void SetAvailableHoverTypes(int) override;
-  void SetPrimaryHoverType(ui::HoverType) override;
+  void SetPrimaryHoverType(mojom::blink::HoverType) override;
   void SetPreferHiddenVolumeControls(bool) override;
   void SetShouldProtectAgainstIpcFlooding(bool) override;
   void SetRenderVSyncNotificationEnabled(bool) override;

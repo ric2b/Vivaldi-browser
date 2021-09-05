@@ -10,6 +10,7 @@
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/login/test/guest_session_mixin.h"
 #include "chrome/browser/chromeos/login/test/oobe_base_test.h"
@@ -91,7 +92,7 @@ class MockAccessibilityObserver {
   bool observed_enabled_ = false;
   int observed_type_ = -1;
 
-  std::unique_ptr<AccessibilityStatusSubscription> accessibility_subscription_;
+  base::CallbackListSubscription accessibility_subscription_;
 
   DISALLOW_COPY_AND_ASSIGN(MockAccessibilityObserver);
 };
@@ -585,7 +586,7 @@ IN_PROC_BROWSER_TEST_F(AccessibilityManagerLoginTest, BrailleOnLoginScreen) {
   EXPECT_TRUE(IsSpokenFeedbackEnabled());
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #define MAYBE_Login DISABLED_Login
 #else
 #define MAYBE_Login Login

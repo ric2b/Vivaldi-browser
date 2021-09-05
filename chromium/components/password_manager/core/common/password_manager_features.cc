@@ -30,6 +30,12 @@ const base::Feature kDetectFormSubmissionOnFormClear = {
 const base::Feature kEditPasswordsInSettings = {
     "EditPasswordsInSettings", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables UI in settings that allows the user to move multiple passwords to the
+// account storage.
+const base::Feature kEnableMovingMultiplePasswordsToAccount = {
+    "EnableMovingMultiplePasswordsToAccount",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables the overwriting of prefilled username fields if the server predicted
 // the field to contain a placeholder value.
 const base::Feature kEnableOverwritingPlaceholderUsernames{
@@ -63,13 +69,19 @@ const base::Feature kPasswordChange = {"PasswordChange",
 const base::Feature kPasswordChangeInSettings = {
     "PasswordChangeInSettings", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables the bulk Password Check feature for signed in users.
-const base::Feature kPasswordCheck = {"PasswordCheck",
-                                      base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Controls the ability to import passwords from Chrome's settings page.
 const base::Feature kPasswordImport = {"PasswordImport",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables password reuse detection.
+const base::Feature kPasswordReuseDetectionEnabled = {
+    "PasswordReuseDetectionEnabled",
+#if defined(OS_IOS)
+    base::FEATURE_DISABLED_BY_DEFAULT
+#else
+    base::FEATURE_ENABLED_BY_DEFAULT
+#endif  // defined(OS_IOS)
+};
 
 // Enables password scripts fetching for the |PasswordChangeInSettings| feature.
 const base::Feature kPasswordScriptsFetching = {
@@ -94,6 +106,10 @@ const base::Feature kReparseServerPredictionsFollowingFormChange = {
 const base::Feature kSecondaryServerFieldPredictions = {
     "SecondaryServerFieldPredictions", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables syncing of compromised credentials.
+const base::Feature kSyncingCompromisedCredentials = {
+    "SyncingCompromisedCredentials", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Treat heuritistics to find new password fields as reliable. This enables
 // password generation on more forms, but could lead to false positives.
 const base::Feature kTreatNewPasswordHeuristicsAsReliable = {
@@ -106,10 +122,6 @@ const base::Feature kUseOfHashAffiliationFetcher = {
 // Enables support of filling and saving on username first flow.
 const base::Feature kUsernameFirstFlow = {"UsernameFirstFlow",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Enable support for .well-known/change-password URLs.
-const base::Feature kWellKnownChangePassword = {
-    "WellKnownChangePassword", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Field trial identifier for password generation requirements.
 const char kGenerationRequirementsFieldTrial[] =
@@ -147,6 +159,19 @@ const char kMaxMoveToAccountOffersForNonOptedInUser[] =
     "max_move_to_account_offers_for_non_opted_in_user";
 
 const int kMaxMoveToAccountOffersForNonOptedInUserDefaultValue = 5;
+
+// If set to true, Chrome will default to saving to the profile store for users
+// who haven't made an explicit choice yet.
+const char kSaveToProfileStoreByDefault[] = "save_to_profile_store_by_default";
+
+const bool kSaveToProfileStoreByDefaultDefaultValue = false;
+
+// If set to true, Chrome will set the default store to the account store when
+// the user opts in. This is mostly meaningful together with
+// |kSaveToProfileStoreByDefault|.
+const char kSaveToAccountStoreOnOptIn[] = "save_to_account_store_on_optin";
+
+const bool kSaveToAccountStoreOnOptInDefaultValue = false;
 
 }  // namespace features
 

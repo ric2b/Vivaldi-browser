@@ -19,6 +19,7 @@
 #include "ash/screen_util.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/style/ash_color_provider.h"
 #include "ash/wm/desks/desk.h"
 #include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/desks/desks_util.h"
@@ -37,9 +38,9 @@
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "base/auto_reset.h"
+#include "base/containers/contains.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
-#include "base/stl_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/hit_test.h"
@@ -62,9 +63,6 @@ constexpr int kNoItemsIndicatorHeightDp = 32;
 constexpr int kNoItemsIndicatorHorizontalPaddingDp = 16;
 constexpr int kNoItemsIndicatorRoundingDp = 16;
 constexpr int kNoItemsIndicatorVerticalPaddingDp = 8;
-constexpr SkColor kNoItemsIndicatorBackgroundColor =
-    SkColorSetA(SK_ColorBLACK, 204);
-constexpr SkColor kNoItemsIndicatorTextColor = SK_ColorWHITE;
 
 // Values for scrolling the grid by using the keyboard.
 // TODO(sammiequon): See if we can use the same values used for web scrolling.
@@ -1019,9 +1017,10 @@ void OverviewSession::OnKeyEvent(ui::KeyEvent* event) {
   // If any desk name is being modified, let the DeskNameView handle the key
   // events.
   // Note that Tab presses should commit any pending desk name changes.
+  const ui::KeyboardCode key_code = event->key_code();
   const bool is_key_press = event->type() == ui::ET_KEY_PRESSED;
   const bool should_commit_name_changes =
-      is_key_press && event->key_code() == ui::VKEY_TAB;
+      is_key_press && key_code == ui::VKEY_TAB;
   for (auto& grid : grid_list_) {
     if (grid->IsDeskNameBeingModified()) {
       if (!should_commit_name_changes)
@@ -1044,7 +1043,9 @@ void OverviewSession::OnKeyEvent(ui::KeyEvent* event) {
   if (!is_key_press)
     return;
 
-  switch (event->key_code()) {
+  bool is_control_down = event->IsControlDown();
+
+  switch (key_code) {
     case ui::VKEY_BROWSER_BACK:
     case ui::VKEY_ESCAPE:
       EndOverview();
@@ -1059,7 +1060,10 @@ void OverviewSession::OnKeyEvent(ui::KeyEvent* event) {
       break;
     case ui::VKEY_RIGHT:
       ++num_key_presses_;
-      Move(/*reverse=*/false);
+      if (!is_control_down ||
+          !highlight_controller_->MaybeSwapHighlightedView(/*right=*/true)) {
+        Move(/*reverse=*/false);
+      }
       break;
     case ui::VKEY_TAB: {
       const bool reverse = event->flags() & ui::EF_SHIFT_DOWN;
@@ -1069,7 +1073,10 @@ void OverviewSession::OnKeyEvent(ui::KeyEvent* event) {
     }
     case ui::VKEY_LEFT:
       ++num_key_presses_;
-      Move(/*reverse=*/true);
+      if (!is_control_down ||
+          !highlight_controller_->MaybeSwapHighlightedView(/*right=*/false)) {
+        Move(/*reverse=*/true);
+      }
       break;
     case ui::VKEY_W: {
       if (!(event->flags() & ui::EF_CONTROL_DOWN))
@@ -1149,7 +1156,7 @@ void OverviewSession::OnSplitViewDividerPositionChanged() {
 
 void OverviewSession::Move(bool reverse) {
   // Do not allow moving the highlight while in the middle of a drag.
-  if (window_util::IsAnyWindowDragged())
+  if (window_util::IsAnyWindowDragged() || desks_util::IsDraggingAnyDesk())
     return;
 
   highlight_controller_->MoveHighlight(reverse);
@@ -1217,9 +1224,12 @@ void OverviewSession::UpdateNoWindowsWidget() {
     params.name = "OverviewNoWindowsLabel";
     params.horizontal_padding = kNoItemsIndicatorHorizontalPaddingDp;
     params.vertical_padding = kNoItemsIndicatorVerticalPaddingDp;
-    params.background_color = kNoItemsIndicatorBackgroundColor;
-    params.foreground_color = kNoItemsIndicatorTextColor;
     params.rounding_dp = kNoItemsIndicatorRoundingDp;
+    auto* color_provider = AshColorProvider::Get();
+    params.background_color = color_provider->GetBaseLayerColor(
+        AshColorProvider::BaseLayerType::kTransparent80);
+    params.foreground_color = color_provider->GetContentLayerColor(
+        AshColorProvider::ContentLayerType::kTextColorPrimary);
     params.preferred_height = kNoItemsIndicatorHeightDp;
     params.message_id = IDS_ASH_OVERVIEW_NO_RECENT_ITEMS;
     params.parent = Shell::GetPrimaryRootWindow()->GetChildById(

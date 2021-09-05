@@ -12,6 +12,7 @@
 #include "base/notreached.h"
 #include "base/numerics/ranges.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_shader.h"
 #include "third_party/skia/include/core/SkPath.h"
@@ -255,7 +256,9 @@ void NativeThemeBase::Paint(cc::PaintCanvas* canvas,
     case kCheckbox:
       PaintCheckbox(canvas, state, rect, extra.button, color_scheme);
       break;
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
     case kFrameTopArea:
       PaintFrameTopArea(canvas, state, rect, extra.frame_top_area,
                         color_scheme);
@@ -1170,7 +1173,7 @@ void NativeThemeBase::PaintSliderTrack(cc::PaintCanvas* canvas,
     flags.setStyle(cc::PaintFlags::kStroke_Style);
     flags.setStrokeWidth(kBorderWidth);
     SkColor border_color = ControlsBorderColorForState(state, color_scheme);
-    if (!UsesHighContrastColors() && state != kDisabled &&
+    if (!UserHasContrastPreference() && state != kDisabled &&
         color_scheme != ColorScheme::kDark)
       border_color = SkColorSetA(border_color, 0x80);
     flags.setColor(border_color);
@@ -1335,7 +1338,7 @@ void NativeThemeBase::PaintProgressBar(
     flags.setStyle(cc::PaintFlags::kStroke_Style);
     flags.setStrokeWidth(kBorderWidth);
     SkColor border_color = GetControlColor(kBorder, color_scheme);
-    if (!UsesHighContrastColors() && color_scheme != ColorScheme::kDark)
+    if (!UserHasContrastPreference() && color_scheme != ColorScheme::kDark)
       border_color = SkColorSetA(border_color, 0x80);
     flags.setColor(border_color);
     track_rect.inset(kBorderWidth / 2, kBorderWidth / 2);
@@ -1604,10 +1607,8 @@ SkColor NativeThemeBase::ControlsBackgroundColorForState(
 
 SkColor NativeThemeBase::GetControlColor(ControlColorId color_id,
                                          ColorScheme color_scheme) const {
-#if defined(OS_WIN)
-  if (UsesHighContrastColors() && features::IsForcedColorsEnabled())
+  if (InForcedColorsMode() && features::IsForcedColorsEnabled())
     return GetHighContrastControlColor(color_id, color_scheme);
-#endif
 
   if(color_scheme == ColorScheme::kDark)
     return GetDarkModeControlColor(color_id);

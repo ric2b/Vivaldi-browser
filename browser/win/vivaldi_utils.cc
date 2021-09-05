@@ -121,8 +121,6 @@ namespace {
 namespace vivaldi {
 
 bool GetVivaldiStandaloneUserDataDirectory(base::FilePath* result) {
-  const wchar_t kStandaloneProfileHelper[] = L"stp.viv";
-
   // Allow IO temporarily, since this call will come before UI is displayed.
   base::ThreadRestrictions::ScopedAllowIO allow_io;
 
@@ -131,15 +129,14 @@ bool GetVivaldiStandaloneUserDataDirectory(base::FilePath* result) {
 
   // Check if we are launched with the --vivaldi-standalone switch.
   base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
-  bool is_standalone =
-      command_line.HasSwitch(vivaldi::constants::kVivaldiStandalone);
+  bool is_standalone = command_line.HasSwitch(constants::kVivaldiStandalone);
 
   // Check if the magic file exists. If so we are standalone.
   base::FilePath exe_file_path;
   PathService::Get(base::DIR_EXE, &exe_file_path);
   is_standalone =
       is_standalone ||
-      base::PathExists(exe_file_path.Append(kStandaloneProfileHelper));
+      base::PathExists(exe_file_path.Append(constants::kStandaloneMarkerFile));
 
   if (is_standalone && result) {
     *result = base::MakeAbsoluteFilePath(

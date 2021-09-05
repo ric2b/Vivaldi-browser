@@ -249,6 +249,10 @@ id<GREYMatcher> SyncSettingsConfirmButton() {
   return [ChromeMatchersAppInterface syncSettingsConfirmButton];
 }
 
+id<GREYMatcher> AutofillCreditCardEditTableView() {
+  return [ChromeMatchersAppInterface autofillCreditCardEditTableView];
+}
+
 id<GREYMatcher> AutofillCreditCardTableView() {
   return [ChromeMatchersAppInterface autofillCreditCardTableView];
 }
@@ -279,10 +283,6 @@ id<GREYMatcher> AddCreditCardButton() {
 
 id<GREYMatcher> AddCreditCardCancelButton() {
   return [ChromeMatchersAppInterface addCreditCardCancelButton];
-}
-
-id<GREYMatcher> CreditCardScannerView() {
-  return [ChromeMatchersAppInterface creditCardScannerView];
 }
 
 id<GREYMatcher> ToolsMenuView() {
@@ -429,8 +429,16 @@ id<GREYMatcher> SystemSelectionCallout() {
   return [ChromeMatchersAppInterface systemSelectionCallout];
 }
 
+id<GREYMatcher> SystemSelectionCalloutLinkToTextButton() {
+  return [ChromeMatchersAppInterface systemSelectionCalloutLinkToTextButton];
+}
+
 id<GREYMatcher> SystemSelectionCalloutCopyButton() {
   return [ChromeMatchersAppInterface systemSelectionCalloutCopyButton];
+}
+
+id<GREYMatcher> CopyActivityButton() API_AVAILABLE(ios(13)) {
+  return [ChromeMatchersAppInterface copyActivityButton];
 }
 
 id<GREYMatcher> CopyLinkButton(BOOL use_new_string) {

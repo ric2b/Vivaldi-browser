@@ -5,7 +5,7 @@
 <translation id="1029317248976101138">Зумирај</translation>
 <translation id="1031362278801463162">Учитавање прегледа</translation>
 <translation id="1047431265488717055">Копирај тек&amp;ст везе</translation>
-<translation id="1049795001945932310">Подешавања &amp;језика</translation>
+<translation id="1049795001945932310">&amp;Подешавања језика</translation>
 <translation id="1054153489933238809">Отвори оригиналну сл&amp;ику у новој картици</translation>
 <translation id="1056898198331236512">Упозорење</translation>
 <translation id="1084824384139382525">Копирај &amp;адресу везе</translation>
@@ -26,7 +26,7 @@
 <translation id="1433811987160647649">Питај пре приступања</translation>
 <translation id="1451375123200651445">Веб страница, једна датотека</translation>
 <translation id="1465176863081977902">К&amp;опирај адресу звучног записа</translation>
-<translation id="1476607407192946488">Подешавања &amp;језика</translation>
+<translation id="1476607407192946488">&amp;Подешавања језика</translation>
 <translation id="150411034776756821">Уклони <ph name="SITE" /></translation>
 <translation id="1546280085599573572">Ово проширење је променило страницу која се приказује када кликнете на дугме почетне странице.</translation>
 <translation id="15662109988763471">Изабрани штампач није доступан или није правилно инсталиран. Проверите штампач или изаберите неки други.</translation>
@@ -51,7 +51,7 @@
 <translation id="1779468444204342338">Минимално</translation>
 <translation id="1815083418640426271">Налепи као чист текст</translation>
 <translation id="1828901632669367785">Штампај помоћу системског дијалога...</translation>
-<translation id="1850508293116537636">Окрени у &amp;смеру кретања казаљке на сату</translation>
+<translation id="1850508293116537636">Окрени у &amp;смеру казаљке на сату</translation>
 <translation id="1886996562706621347">Дозволи сајтовима да питају да постану подразумевани руковаоци за протоколе (препоручено)</translation>
 <translation id="1901303067676059328">Изабери &amp;све</translation>
 <translation id="1921584744613111023"><ph name="DPI" /> тпи</translation>
@@ -234,7 +234,7 @@
 <translation id="4927753642311223124">Нема грешака, наставите.</translation>
 <translation id="4930714375720679147">Укључи</translation>
 <translation id="4988526792673242964">Странице</translation>
-<translation id="49896407730300355">Окрени у с&amp;меру супротном од кретања казаљке на сату</translation>
+<translation id="49896407730300355">Окрени у с&amp;меру супротном од казаљке на сату</translation>
 <translation id="4989966318180235467">Испитај &amp;страницу у позадини</translation>
 <translation id="4994474651455208930">Дозволи сајтовима да питају да постану подразумевани руковаоци за протоколе</translation>
 <translation id="5000922062037820727">Блокирано (препоручено)</translation>
@@ -265,7 +265,7 @@
 <translation id="5370819323174483825">Поново &amp;учитај</translation>
 <translation id="5398572795982417028">Превелика референца за странице, ограничење је <ph name="MAXIMUM_PAGE" /></translation>
 <translation id="5425042808445046667">Настави преузимање</translation>
-<translation id="5427459444770871191">Окрени &amp;у смеру кретања казаљке на сату</translation>
+<translation id="5427459444770871191">Окрени &amp;у смеру казаљке на сату</translation>
 <translation id="5431318178759467895">Боја</translation>
 <translation id="5483785310822538350">Опозови приступ датотекама и уређају</translation>
 <translation id="5485102783864353244">Додај апликацију</translation>
@@ -295,7 +295,7 @@
 <translation id="5828633471261496623">Штампање...</translation>
 <translation id="583281660410589416">Непознато</translation>
 <translation id="5860491529813859533">Укључи</translation>
-<translation id="5867841422488265304">Претражите или унесите веб адресу</translation>
+<translation id="5867841422488265304">Претражите или унесите адресу</translation>
 <translation id="5910363049092958439">Са&amp;чувај слику као...</translation>
 <translation id="5956585768868398362">Да ли је ово страница претраге коју сте очекивали?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (највише <ph name="NUM_KILOBYTES_LIVE" />)</translation>
@@ -394,7 +394,7 @@
 <translation id="7782102568078991263">Нема више предлога са Google-а</translation>
 <translation id="7786889348652477777">&amp;Поново учитај апликацију</translation>
 <translation id="7791543448312431591">Додај</translation>
-<translation id="7800518121066352902">Окрени у с&amp;меру супротном од кретања казаљке на сату</translation>
+<translation id="7800518121066352902">Окрени у с&amp;меру супротном од казаљке на сату</translation>
 <translation id="7814458197256864873">&amp;Копирај</translation>
 <translation id="7818135753970109980">Нова тема је додата (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="782057141565633384">К&amp;опирај адресу видео записа</translation>

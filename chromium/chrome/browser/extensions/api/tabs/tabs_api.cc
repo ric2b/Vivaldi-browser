@@ -384,7 +384,7 @@ ui::PageTransition HistoryExtensionTransitionToUiTransition(
     case extensions::api::history::TRANSITION_TYPE_KEYWORD_GENERATED:
       return ui::PAGE_TRANSITION_KEYWORD_GENERATED;
     default:
-      NOTREACHED();
+      if ((false)) NOTREACHED();
   }
   // We have to return something
   return ui::PAGE_TRANSITION_LINK;
@@ -1249,6 +1249,7 @@ ExtensionFunction::ResponseAction TabsCreateFunction::Run() {
   if (extension() && vivaldi::IsVivaldiApp(extension()->id())) {
     // Vivaldi-specific properties, no extension are allowed to
     // set them.
+    AssignOptionalValue(params->create_properties.ext_data, &options.ext_data);
     options.transition.reset(
         new ui::PageTransition(HistoryExtensionTransitionToUiTransition(
             params->create_properties.transition)));
@@ -2186,7 +2187,8 @@ ExtensionFunction::ResponseAction TabsDetectLanguageFunction::Run() {
   // Observe the WebContents' lifetime and navigations.
   Observe(contents);
   // Wait until the language is determined.
-  chrome_translate_client->translate_driver()->AddObserver(this);
+  chrome_translate_client->GetTranslateDriver()->AddLanguageDetectionObserver(
+      this);
   is_observing_ = true;
 
   return RespondLater();
@@ -2215,8 +2217,8 @@ void TabsDetectLanguageFunction::RespondWithLanguage(
   // Stop observing.
   if (is_observing_) {
     ChromeTranslateClient::FromWebContents(web_contents())
-        ->translate_driver()
-        ->RemoveObserver(this);
+        ->GetTranslateDriver()
+        ->RemoveLanguageDetectionObserver(this);
     Observe(nullptr);
   }
 

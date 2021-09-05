@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/media/webrtc/desktop_media_list.h"
 #include "chrome/browser/media/webrtc/desktop_media_picker_manager.h"
 #include "chrome/browser/ui/browser_dialogs.h"
@@ -17,6 +18,7 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/desktop_capture/desktop_media_source_view.h"
+#include "chrome/browser/ui/views/desktop_capture/get_current_browsing_context_media_dialog.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/constrained_window/constrained_window_views.h"
@@ -24,6 +26,7 @@
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/media_stream_request.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -34,6 +37,7 @@
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/tabbed_pane/tabbed_pane.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/widget/widget.h"
 
 #if defined(USE_AURA)
@@ -44,7 +48,7 @@ using content::DesktopMediaID;
 
 namespace {
 
-#if !defined(OS_CHROMEOS) && defined(USE_AURA)
+#if !BUILDFLAG(IS_CHROMEOS_ASH) && defined(USE_AURA)
 DesktopMediaID::Id AcceleratedWidgetToDesktopMediaId(
     gfx::AcceleratedWidget accelerated_widget) {
 #if defined(OS_WIN)
@@ -240,7 +244,7 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
     dialog_window_id = DesktopMediaID::RegisterNativeWindow(
         DesktopMediaID::TYPE_WINDOW, widget->GetNativeWindow());
 
-#if !defined(OS_CHROMEOS) && defined(USE_AURA)
+#if !BUILDFLAG(IS_CHROMEOS_ASH) && defined(USE_AURA)
     // Set native window ID if the windows is outside Ash.
     dialog_window_id.id = AcceleratedWidgetToDesktopMediaId(
         widget->GetNativeWindow()->GetHost()->GetAcceleratedWidget());
@@ -305,10 +309,6 @@ void DesktopMediaPickerDialogView::DetachParent() {
 gfx::Size DesktopMediaPickerDialogView::CalculatePreferredSize() const {
   static const size_t kDialogViewWidth = 600;
   return gfx::Size(kDialogViewWidth, GetHeightForWidth(kDialogViewWidth));
-}
-
-const char* DesktopMediaPickerDialogView::GetClassName() const {
-  return "DesktopMediaPickerDialogView";
 }
 
 ui::ModalType DesktopMediaPickerDialogView::GetModalType() const {
@@ -446,6 +446,9 @@ void DesktopMediaPickerDialogView::OnSourceListLayoutChanged() {
   GetWidget()->CenterWindow(new_size);
 }
 
+BEGIN_METADATA(DesktopMediaPickerDialogView, views::DialogDelegateView)
+END_METADATA
+
 constexpr bool DesktopMediaPickerViews::kScreenAudioShareSupportedOnPlatform;
 
 DesktopMediaPickerViews::DesktopMediaPickerViews() : dialog_(nullptr) {}
@@ -485,6 +488,12 @@ void DesktopMediaPickerViews::NotifyDialogResult(DesktopMediaID source) {
 }
 
 // static
-std::unique_ptr<DesktopMediaPicker> DesktopMediaPicker::Create() {
-  return std::unique_ptr<DesktopMediaPicker>(new DesktopMediaPickerViews());
+std::unique_ptr<DesktopMediaPicker> DesktopMediaPicker::Create(
+    const content::MediaStreamRequest* request) {
+  if (request &&
+      request->video_type ==
+          blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE_THIS_TAB) {
+    return std::make_unique<GetCurrentBrowsingContextMediaDialog>();
+  }
+  return std::make_unique<DesktopMediaPickerViews>();
 }

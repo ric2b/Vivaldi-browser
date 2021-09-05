@@ -3,12 +3,15 @@
 // found in the LICENSE file.
 
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
+import 'chrome://resources/cr_elements/hidden_style_css.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import 'chrome://resources/cr_elements/mwb_shared_style.js';
 import 'chrome://resources/cr_elements/mwb_shared_vars.js';
 import 'chrome://resources/polymer/v3_0/iron-selector/iron-selector.js';
+import './read_later_shared_style.js';
 
 import {assertNotReached} from 'chrome://resources/js/assert.m.js';
+import {listenOnce} from 'chrome://resources/js/util.m.js';
 import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {ReadLaterApiProxy, ReadLaterApiProxyImpl} from './read_later_api_proxy.js';
@@ -48,13 +51,21 @@ export class ReadLaterAppElement extends PolymerElement {
   /** @override */
   ready() {
     super.ready();
+
+    listenOnce(this.$.readLaterList, 'dom-change', () => {
+      // Push ShowUI() callback to the event queue to allow deferred rendering
+      // to take place.
+      setTimeout(() => {
+        this.apiProxy_.showUI();
+
+        // Record the first time it takes for the initial list of entries to
+        // render.
+        chrome.metricsPrivate.recordTime(
+            'ReadingList.WebUI.InitialEntriesRenderTime',
+            Math.round(window.performance.now()));
+      }, 0);
+    });
     this.updateItems_();
-    // Push ShowUI() callback to the event queue to allow deferred rendering to
-    // take place.
-    // TODO(corising): Determine the ideal place to make this call.
-    setTimeout(() => {
-      this.apiProxy_.showUI();
-    }, 0);
   }
 
   /** @override */
@@ -75,10 +86,34 @@ export class ReadLaterAppElement extends PolymerElement {
 
   /** @private */
   updateItems_() {
+    const getEntriesStartTimestamp = Date.now();
     this.apiProxy_.getReadLaterEntries().then(({entries}) => {
+      chrome.metricsPrivate.recordTime(
+          'ReadingList.WebUI.ReadingListDataReceived',
+          Math.round(Date.now() - getEntriesStartTimestamp));
+
       this.unreadItems_ = entries.unreadEntries;
       this.readItems_ = entries.readEntries;
     });
+  }
+
+  /**
+   * @param {!readLater.mojom.ReadLaterEntry} item
+   * @return {string}
+   * @private
+   */
+  ariaLabel_(item) {
+    return `${item.title} - ${item.displayUrl} - ${
+        item.displayTimeSinceUpdate}`;
+  }
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  isReadingListEmpty_() {
+    return (this.unreadItems_ === undefined || !this.unreadItems_.length) &&
+        (this.readItems_ === undefined || !this.readItems_.length);
   }
 
   /**

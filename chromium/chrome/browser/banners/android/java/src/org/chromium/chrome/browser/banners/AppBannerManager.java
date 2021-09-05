@@ -11,26 +11,21 @@ import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.ContextUtils;
-import org.chromium.base.Function;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
-import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.components.feature_engagement.FeatureConstants;
-import org.chromium.components.feature_engagement.Tracker;
+import org.chromium.components.webapps.WebappsUtils;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.ui.base.WindowAndroid;
 
 /**
- * Manages an AppBannerInfoBar for a Tab.
+ * Manages an AppBannerInfoBar for a WebContents.
  *
  * The AppBannerManager is responsible for fetching details about native apps to display in the
  * banner. The actual observation of the WebContents (which triggers the automatic creation and
  * removal of banners, among other things) is done by the native-side AppBannerManagerAndroid.
  */
-@JNINamespace("banners")
+@JNINamespace("webapps")
 public class AppBannerManager {
     /**
      * A struct containing the string resources IDs for the strings to show in the install
@@ -59,10 +54,29 @@ public class AppBannerManager {
     /** Retrieves information about a given package. */
     private static AppDetailsDelegate sAppDetailsDelegate;
 
-    private static Function<Profile, Tracker> sTrackerFromProfileFactory;
-
     /** Pointer to the native side AppBannerManager. */
     private long mNativePointer;
+
+    /** Whether add to home screen is permitted by the system. */
+    private static Boolean sIsSupported;
+
+    /**
+     * Checks if the add to home screen intent is supported.
+     * @return true if add to home screen is supported, false otherwise.
+     */
+    @CalledByNative
+    private static boolean isSupported() {
+        if (sIsSupported == null) {
+            sIsSupported = WebappsUtils.isAddToHomeIntentSupported();
+        }
+        return sIsSupported;
+    }
+
+    /** Overrides whether the system supports add to home screen. Used in testing. */
+    @VisibleForTesting
+    public static void setIsSupported(boolean state) {
+        sIsSupported = state;
+    }
 
     /**
      * Sets the delegate that provides information about a given package.
@@ -71,15 +85,6 @@ public class AppBannerManager {
     public static void setAppDetailsDelegate(AppDetailsDelegate delegate) {
         if (sAppDetailsDelegate != null) sAppDetailsDelegate.destroy();
         sAppDetailsDelegate = delegate;
-    }
-
-    /**
-     * Sets the factory to obtain a Tracker from.
-     * @param trackerFromProfileFactory The factory to use.
-     */
-    public static void setTrackerFromProfileFactory(
-            Function<Profile, Tracker> trackerFromProfileFactory) {
-        sTrackerFromProfileFactory = trackerFromProfileFactory;
     }
 
     /**
@@ -117,32 +122,6 @@ public class AppBannerManager {
                 createAppDetailsObserver(), url, packageName, referrer, iconSizeInPx);
     }
 
-    /**
-     * Request to show the in-product help for installing a PWA.
-     * @param webContents The current WebContents.
-     * @return An error message, if unsuccessful. Blank if the request was made.
-     */
-    @CalledByNative
-    private String showInProductHelp(WebContents webContents) {
-        // Consult the tracker to see if the IPH can be shown.
-        final Tracker tracker =
-                sTrackerFromProfileFactory.apply(Profile.fromWebContents(webContents));
-        if (!tracker.wouldTriggerHelpUI(FeatureConstants.PWA_INSTALL_AVAILABLE_FEATURE)) {
-            // Tracker replied that the request to show will not be honored. Return whether the
-            // limit of how often to show has been exceeded.
-            return "Trigger state: "
-                    + tracker.getTriggerState(FeatureConstants.PWA_INSTALL_AVAILABLE_FEATURE);
-        }
-
-        WindowAndroid window = webContents.getTopLevelNativeWindow();
-        if (window == null) return "No window";
-        AppBannerInProductHelpController controller =
-                AppBannerInProductHelpControllerProvider.from(window);
-        if (controller == null) return "No controller";
-        controller.requestInProductHelp();
-        return "";
-    }
-
     private AppDetailsDelegate.Observer createAppDetailsObserver() {
         return new AppDetailsDelegate.Observer() {
             /**
@@ -165,9 +144,10 @@ public class AppBannerManager {
     }
 
     /** Returns the language option to use for the add to homescreen dialog and menu item. */
-    public static InstallStringPair getHomescreenLanguageOption(Tab currentTab) {
-        AppBannerManager manager = currentTab != null ? AppBannerManager.forTab(currentTab) : null;
-        if (manager != null && manager.getIsPwa(currentTab)) {
+    public static InstallStringPair getHomescreenLanguageOption(WebContents webContents) {
+        AppBannerManager manager =
+                webContents != null ? AppBannerManager.forWebContents(webContents) : null;
+        if (manager != null && manager.getIsPwa(webContents)) {
             return PWA_PAIR;
         } else {
             return NON_PWA_PAIR;
@@ -205,19 +185,18 @@ public class AppBannerManager {
     }
 
     /** Returns the AppBannerManager object. This is owned by the C++ banner manager. */
-    public static AppBannerManager forTab(Tab tab) {
+    public static AppBannerManager forWebContents(WebContents contents) {
         ThreadUtils.assertOnUiThread();
-        return AppBannerManagerJni.get().getJavaBannerManagerForWebContents(tab.getWebContents());
+        return AppBannerManagerJni.get().getJavaBannerManagerForWebContents(contents);
     }
 
     /**
-     * Checks whether the tab has navigated to a PWA.
-     * @param tab The tab to check.
-     * @return true if the tab has been determined to contain a PWA.
+     * Checks whether the renderer has navigated to a PWA.
+     * @param contents The web contents to check.
+     * @return true if the site has been determined to contain a PWA.
      */
-    public boolean getIsPwa(Tab tab) {
-        return !TextUtils.equals(
-                "", AppBannerManagerJni.get().getInstallableWebAppName(tab.getWebContents()));
+    public boolean getIsPwa(WebContents contents) {
+        return !TextUtils.equals("", AppBannerManagerJni.get().getInstallableWebAppName(contents));
     }
 
     @NativeMethods

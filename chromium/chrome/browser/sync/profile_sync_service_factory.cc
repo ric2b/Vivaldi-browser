@@ -13,6 +13,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
@@ -73,11 +74,11 @@
 #include "chrome/browser/supervised_user/supervised_user_settings_service_factory.h"
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/chromeos/printing/synced_printers_manager_factory.h"
 #include "chrome/browser/sync/wifi_configuration_sync_service_factory.h"
 #include "chromeos/constants/chromeos_features.h"
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #include "app/vivaldi_apptools.h"
 #include "sync/vivaldi_profile_sync_service.h"
@@ -135,6 +136,15 @@ ProfileSyncServiceFactory::GetAsProfileSyncServiceForProfile(Profile* profile) {
   return static_cast<syncer::ProfileSyncService*>(GetForProfile(profile));
 }
 
+content::BrowserContext* ProfileSyncServiceFactory::GetBrowserContextToUse(
+    content::BrowserContext* context) const {
+  if (context->IsOffTheRecord())
+    return nullptr;
+  if (Profile::FromBrowserContext(context)->IsEphemeralGuestProfile())
+    return nullptr;
+  return context;
+}
+
 ProfileSyncServiceFactory::ProfileSyncServiceFactory()
     : BrowserContextKeyedServiceFactory(
         "ProfileSyncService",
@@ -180,10 +190,10 @@ ProfileSyncServiceFactory::ProfileSyncServiceFactory()
   DependsOn(extensions::StorageFrontend::GetFactoryInstance());
   DependsOn(web_app::WebAppProviderFactory::GetInstance());
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   DependsOn(chromeos::SyncedPrintersManagerFactory::GetInstance());
   DependsOn(WifiConfigurationSyncServiceFactory::GetInstance());
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 ProfileSyncServiceFactory::~ProfileSyncServiceFactory() = default;
@@ -216,7 +226,12 @@ KeyedService* ProfileSyncServiceFactory::BuildServiceInstanceFor(
 
 // Only check the local sync backend pref on the supported platforms of
 // Windows, Mac and Linux.
-#if defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX)
+// TODO(crbug.com/1052397): Reassess whether the following block needs to be
+// included
+// in lacros-chrome once build flag switch of lacros-chrome is
+// complete.
+#if defined(OS_WIN) || defined(OS_MAC) || \
+    (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
   syncer::SyncPrefs prefs(profile->GetPrefs());
   local_sync_backend_enabled = prefs.IsLocalSyncEnabled();
   UMA_HISTOGRAM_BOOLEAN("Sync.Local.Enabled", local_sync_backend_enabled);
@@ -234,7 +249,8 @@ KeyedService* ProfileSyncServiceFactory::BuildServiceInstanceFor(
 
     init_params.start_behavior = syncer::ProfileSyncService::AUTO_START;
   }
-#endif  // defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX)
+#endif  // defined(OS_WIN) || defined(OS_MAC) || (defined(OS_LINUX) ||
+        // BUILDFLAG(IS_CHROMEOS_LACROS))
 
   if (!local_sync_backend_enabled) {
     // Always create the GCMProfileService instance such that we can listen to
@@ -264,7 +280,7 @@ KeyedService* ProfileSyncServiceFactory::BuildServiceInstanceFor(
     // need to take care that ProfileSyncService doesn't get tripped up between
     // those two cases. Bug 88109.
     bool is_auto_start = browser_defaults::kSyncAutoStarts;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     if (chromeos::features::IsSplitSettingsSyncEnabled())
       is_auto_start = false;
 #endif
@@ -293,6 +309,7 @@ bool ProfileSyncServiceFactory::HasSyncService(Profile* profile) {
 // static
 bool ProfileSyncServiceFactory::IsSyncAllowed(Profile* profile) {
   DCHECK(profile);
+
   if (HasSyncService(profile)) {
     syncer::SyncService* sync_service = GetForProfile(profile);
     return !sync_service->HasDisableReason(

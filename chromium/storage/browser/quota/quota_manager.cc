@@ -386,7 +386,6 @@ class QuotaManager::UsageAndQuotaInfoGatherer : public QuotaTask {
 
   // Weak pointers are used to support cancelling work.
   base::WeakPtrFactory<UsageAndQuotaInfoGatherer> weak_factory_{this};
-  DISALLOW_COPY_AND_ASSIGN(UsageAndQuotaInfoGatherer);
 };
 
 class QuotaManager::EvictionRoundInfoHelper : public QuotaTask {
@@ -475,7 +474,6 @@ class QuotaManager::EvictionRoundInfoHelper : public QuotaTask {
   int64_t global_usage_ = 0;
   bool global_usage_is_complete_ = false;
   base::WeakPtrFactory<EvictionRoundInfoHelper> weak_factory_{this};
-  DISALLOW_COPY_AND_ASSIGN(EvictionRoundInfoHelper);
 };
 
 class QuotaManager::GetUsageInfoTask : public QuotaTask {
@@ -539,7 +537,6 @@ class QuotaManager::GetUsageInfoTask : public QuotaTask {
   int remaining_trackers_;
   base::WeakPtrFactory<GetUsageInfoTask> weak_factory_{this};
 
-  DISALLOW_COPY_AND_ASSIGN(GetUsageInfoTask);
 };
 
 class QuotaManager::OriginDataDeleter : public QuotaTask {
@@ -633,7 +630,6 @@ class QuotaManager::OriginDataDeleter : public QuotaTask {
   StatusCallback callback_;
 
   base::WeakPtrFactory<OriginDataDeleter> weak_factory_{this};
-  DISALLOW_COPY_AND_ASSIGN(OriginDataDeleter);
 };
 
 class QuotaManager::HostDataDeleter : public QuotaTask {
@@ -730,7 +726,6 @@ class QuotaManager::HostDataDeleter : public QuotaTask {
   StatusCallback callback_;
 
   base::WeakPtrFactory<HostDataDeleter> weak_factory_{this};
-  DISALLOW_COPY_AND_ASSIGN(HostDataDeleter);
 };
 
 class QuotaManager::StorageCleanupHelper : public QuotaTask {
@@ -788,7 +783,6 @@ class QuotaManager::StorageCleanupHelper : public QuotaTask {
   const QuotaClientTypes quota_client_types_;
   base::OnceClosure callback_;
   base::WeakPtrFactory<StorageCleanupHelper> weak_factory_{this};
-  DISALLOW_COPY_AND_ASSIGN(StorageCleanupHelper);
 };
 
 // Fetch origins that have been modified since the specified time. This is used
@@ -904,6 +898,7 @@ QuotaManager::QuotaManager(
     bool is_incognito,
     const base::FilePath& profile_path,
     scoped_refptr<base::SingleThreadTaskRunner> io_thread,
+    base::RepeatingClosure quota_change_callback,
     scoped_refptr<SpecialStoragePolicy> special_storage_policy,
     const GetQuotaSettingsFunc& get_settings_function)
     : RefCountedDeleteOnSequence<QuotaManager>(io_thread),
@@ -917,6 +912,7 @@ QuotaManager::QuotaManager(
           {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
            base::TaskShutdownBehavior::BLOCK_SHUTDOWN})),
       get_settings_function_(get_settings_function),
+      quota_change_callback_(std::move(quota_change_callback)),
       is_getting_eviction_origin_(false),
       special_storage_policy_(std::move(special_storage_policy)),
       get_volume_info_fn_(&QuotaManager::GetVolumeInfo) {
@@ -1536,8 +1532,9 @@ void QuotaManager::SimulateStoragePressure(const url::Origin origin) {
   storage_pressure_callback_.Run(origin);
 }
 
-void QuotaManager::DetermineStoragePressure(int64_t free_space,
-                                            int64_t total_space) {
+void QuotaManager::DetermineStoragePressure(int64_t total_space,
+                                            int64_t free_space) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!base::FeatureList::IsEnabled(features::kStoragePressureEvent)) {
     return;
   }
@@ -1548,10 +1545,8 @@ void QuotaManager::DetermineStoragePressure(int64_t free_space,
                            (kThresholdRandomizationPercent / 100.0)),
       kThresholdRandomizationPercent);
   threshold = std::min(threshold_bytes, threshold);
-
-  if (free_space < threshold) {
-    // TODO(https://crbug.com/1096549): Implement StoragePressureEvent
-    // dispatching.
+  if (free_space < threshold && !quota_change_callback_.is_null()) {
+    quota_change_callback_.Run();
   }
 }
 
@@ -1611,6 +1606,12 @@ base::Optional<int64_t> QuotaManager::GetQuotaOverrideForOrigin(
     return base::nullopt;
   }
   return devtools_overrides_[origin].quota_size;
+}
+
+void QuotaManager::SetQuotaChangeCallbackForTesting(
+    base::RepeatingClosure storage_pressure_event_callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  quota_change_callback_ = std::move(storage_pressure_event_callback);
 }
 
 void QuotaManager::ReportHistogram() {
@@ -1908,11 +1909,12 @@ void QuotaManager::ContinueIncognitoGetStorageCapacity(
 void QuotaManager::DidGetStorageCapacity(
     const std::tuple<int64_t, int64_t>& total_and_available) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  int64_t total_space = std::get<0>(total_and_available);
+  int64_t available_space = std::get<1>(total_and_available);
   cached_disk_stats_for_storage_pressure_ =
-      std::make_tuple(base::TimeTicks::Now(), std::get<0>(total_and_available),
-                      std::get<1>(total_and_available));
-  storage_capacity_callbacks_.Run(std::get<0>(total_and_available),
-                                  std::get<1>(total_and_available));
+      std::make_tuple(base::TimeTicks::Now(), total_space, available_space);
+  storage_capacity_callbacks_.Run(total_space, available_space);
+  DetermineStoragePressure(total_space, available_space);
 }
 
 void QuotaManager::DidDatabaseWork(bool success) {

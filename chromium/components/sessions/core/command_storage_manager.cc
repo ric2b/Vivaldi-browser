@@ -25,18 +25,29 @@ namespace {
 // backend.
 constexpr base::TimeDelta kSaveDelay = base::TimeDelta::FromMilliseconds(2500);
 
+scoped_refptr<base::SequencedTaskRunner> CreateDefaultBackendTaskRunner() {
+  return base::ThreadPool::CreateSequencedTaskRunner(
+      {base::MayBlock(), base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
+}
+
 }  // namespace
 
 CommandStorageManager::CommandStorageManager(
+    SessionType type,
     const base::FilePath& path,
     CommandStorageManagerDelegate* delegate,
-    bool enable_crypto)
-    : CommandStorageManager(base::MakeRefCounted<CommandStorageBackend>(
-                                CreateDefaultBackendTaskRunner(),
-                                path),
-                            delegate) {
-  use_crypto_ = enable_crypto;
-}
+    bool use_marker,
+    bool enable_crypto,
+    const std::vector<uint8_t>& decryption_key)
+    : backend_(base::MakeRefCounted<CommandStorageBackend>(
+          CreateDefaultBackendTaskRunner(),
+          path,
+          type,
+          use_marker,
+          decryption_key)),
+      use_crypto_(enable_crypto),
+      delegate_(delegate),
+      backend_task_runner_(backend_->owning_task_runner()) {}
 
 CommandStorageManager::~CommandStorageManager() = default;
 
@@ -120,11 +131,13 @@ void CommandStorageManager::Save() {
     crypto_key = CreateCryptoKey();
     delegate_->OnGeneratedNewCryptoKey(crypto_key);
   }
-  backend_task_runner()->PostNonNestableTask(
+  auto error_callback = base::BindOnce(
+      &CommandStorageManager::OnErrorWritingToFile, weak_factory_.GetWeakPtr());
+  backend_task_runner_->PostNonNestableTask(
       FROM_HERE,
       base::BindOnce(&CommandStorageBackend::AppendCommands, backend_,
-                     std::move(pending_commands_), pending_reset_, crypto_key));
-
+                     std::move(pending_commands_), pending_reset_,
+                     std::move(error_callback), crypto_key));
   if (pending_reset_) {
     commands_since_reset_ = 0;
     pending_reset_ = false;
@@ -135,28 +148,31 @@ bool CommandStorageManager::HasPendingSave() const {
   return weak_factory_for_timer_.HasWeakPtrs();
 }
 
-void CommandStorageManager::GetCurrentSessionCommands(
-    GetCommandsCallback callback,
-    const std::vector<uint8_t>& decryption_key) {
+void CommandStorageManager::MoveCurrentSessionToLastSession() {
+  Save();
+  backend_task_runner_->PostNonNestableTask(
+      FROM_HERE,
+      base::BindOnce(&CommandStorageBackend::MoveCurrentSessionToLastSession,
+                     backend()));
+}
+
+void CommandStorageManager::DeleteLastSession() {
+  backend_task_runner_->PostNonNestableTask(
+      FROM_HERE,
+      base::BindOnce(&CommandStorageBackend::DeleteLastSession, backend()));
+}
+
+void CommandStorageManager::GetLastSessionCommands(
+    GetCommandsCallback callback) {
   backend_task_runner_->PostTaskAndReplyWithResult(
       FROM_HERE,
-      base::BindOnce(&CommandStorageBackend::ReadCurrentSessionCommands,
-                     backend_.get(), decryption_key),
+      base::BindOnce(&CommandStorageBackend::ReadLastSessionCommands,
+                     backend()),
       std::move(callback));
 }
 
-CommandStorageManager::CommandStorageManager(
-    scoped_refptr<CommandStorageBackend> backend,
-    CommandStorageManagerDelegate* delegate)
-    : backend_(std::move(backend)),
-      delegate_(delegate),
-      backend_task_runner_(backend_->owning_task_runner()) {}
-
-// static
-scoped_refptr<base::SequencedTaskRunner>
-CommandStorageManager::CreateDefaultBackendTaskRunner() {
-  return base::ThreadPool::CreateSequencedTaskRunner(
-      {base::MayBlock(), base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
+void CommandStorageManager::OnErrorWritingToFile() {
+  delegate_->OnErrorWritingSessionCommands();
 }
 
 }  // namespace sessions

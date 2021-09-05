@@ -11,7 +11,9 @@
 #include "base/timer/timer.h"
 #include "browser/menus/vivaldi_developertools_menu_controller.h"
 #include "browser/menus/vivaldi_pwa_menu_controller.h"
+#include "components/renderer_context_menu/render_view_context_menu_base.h"
 #include "extensions/schema/context_menu.h"
+#include "ui/base/models/image_model.h"
 #include "ui/base/models/simple_menu_model.h"
 
 class Browser;
@@ -33,8 +35,8 @@ class Accelerator;
 }
 
 namespace vivaldi {
+class VivaldiRenderViewContextMenu;
 class VivaldiContextMenu;
-
 
 class ContextMenuPostitionDelegate {
  public:
@@ -53,15 +55,20 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
 
   class Delegate {
    public:
-    virtual void OnAction(int command, int event_state) {}
+    virtual void OnAction(int command_id, int event_state) {}
     virtual void OnHover(const std::string& url) {}
     virtual void OnOpened() {}
     virtual void OnClosed() {}
   };
 
+  // When 'rv_context_menu' is a non-nullptr we will treat the root model of
+  // that object as our root menu model. In that case it means it is the code of
+  // VivaldiRenderViewContextMenu that will control how long this object will
+  // live via MenuClosed.
   ContextMenuController(Delegate* delegate,
                         content::WebContents* web_contents,
                         content::WebContents* window_web_contents,
+                        VivaldiRenderViewContextMenu* rv_context_menu,
                         std::unique_ptr<Params> params);
   ~ContextMenuController() override;
 
@@ -76,6 +83,7 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
                                   ui::Accelerator* accelerator) const override;
   void VivaldiCommandIdHighlighted(int command_id) override;
   void ExecuteCommand(int command_id, int event_flags) override;
+  void OnMenuWillShow(ui::SimpleMenuModel* source) override;
   void MenuClosed(ui::SimpleMenuModel* source) override;
 
   // ContextMenuPostitionDelegate
@@ -86,7 +94,7 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
  private:
   void InitModel();
   void PopulateModel(const Element& child, ui::SimpleMenuModel* menu_model);
-  ui::SimpleMenuModel* GetContainerModel(const Container& container,
+  ui::SimpleMenuModel* GetContainerModel(const Container& container, int id,
       ui::SimpleMenuModel* menu_model);
   void SanitizeModel(ui::SimpleMenuModel* menu_model);
   void SetIcon(int command_id, const std::string& icon,
@@ -105,18 +113,23 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
   content::WebContents* web_contents_;  // Not owned by us.
   content::WebContents* window_web_contents_;
   Browser* browser_;
+  VivaldiRenderViewContextMenu* rv_context_menu_;
+  bool with_developer_tools_;
   std::unique_ptr<Params> params_;
 
   // Loading favicons
   base::CancelableTaskTracker cancelable_task_tracker_;
   favicon::FaviconService* favicon_service_ = nullptr;
 
-  ui::SimpleMenuModel* menu_model_ = nullptr;
+  ui::SimpleMenuModel* root_menu_model_ = nullptr;
   std::vector<std::unique_ptr<ui::SimpleMenuModel>> models_;
+  std::vector<ui::SimpleMenuModel*> container_folder_models_;
   std::unique_ptr<VivaldiContextMenu> menu_;
   IdToStringMap id_to_url_map_;
   IdToBoolMap id_to_checked_map_;
+  IdToBoolMap id_to_enabled_map_;
   IdToAcceleratorMap id_to_accelerator_map_;
+  IdToStringMap id_to_action_map_;
   gfx::Rect rect_;
 
   std::unique_ptr<DeveloperToolsMenuController> developertools_controller_;

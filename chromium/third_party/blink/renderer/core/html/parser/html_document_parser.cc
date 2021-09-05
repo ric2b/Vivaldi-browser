@@ -131,7 +131,9 @@ class HTMLDocumentParserState
         meta_csp_state_(MetaCSPTokenState::kNotSeen),
         mode_(mode),
         end_if_delayed_forbidden_(0),
-        should_complete_(0) {}
+        should_complete_(0),
+        needs_viewport_update_(false),
+        needs_link_header_dispatch_(true) {}
 
   void Trace(Visitor* v) const {}
 
@@ -151,6 +153,17 @@ class HTMLDocumentParserState
       case DeferredParserState::kScheduledWithEndIfDelayed:
         return "scheduled_with_end_if_delayed";
     }
+  }
+
+  bool NeedsLinkHeaderPreloadsDispatch() const {
+    return needs_link_header_dispatch_;
+  }
+  bool NeedsViewportUpdate() const { return needs_viewport_update_; }
+  void SetNeedsViewportUpdate() { needs_viewport_update_ = true; }
+  void DispatchedLinkHeaderPreloads() { needs_link_header_dispatch_ = false; }
+  void UpdatedViewport() {
+    needs_viewport_update_ = false;
+    needs_link_header_dispatch_ = true;
   }
 
   bool ShouldEndIfDelayed() const { return end_if_delayed_forbidden_ == 0; }
@@ -196,6 +209,8 @@ class HTMLDocumentParserState
   ParserSynchronizationPolicy mode_;
   int end_if_delayed_forbidden_;
   int should_complete_;
+  bool needs_viewport_update_;
+  bool needs_link_header_dispatch_;
 };
 
 class EndIfDelayedForbiddenScope {
@@ -283,36 +298,42 @@ class ScopedYieldTimer {
 };
 
 HTMLDocumentParser::HTMLDocumentParser(HTMLDocument& document,
-                                       ParserSynchronizationPolicy sync_policy)
-    : HTMLDocumentParser(document, kAllowScriptingContent, sync_policy) {
+                                       ParserSynchronizationPolicy sync_policy,
+                                       ParserPrefetchPolicy prefetch_policy)
+    : HTMLDocumentParser(document,
+                         kAllowScriptingContent,
+                         sync_policy,
+                         prefetch_policy) {
   script_runner_ =
       HTMLParserScriptRunner::Create(ReentryPermit(), &document, this);
 
   // Allow declarative shadow DOM for the document parser, if not explicitly
   // disabled.
-  bool allow_shadow_root = document.GetDeclarativeShadowRootAllowState() !=
-                           Document::DeclarativeShadowRootAllowState::kDeny;
+  bool include_shadow_roots = document.GetDeclarativeShadowRootAllowState() !=
+                              Document::DeclarativeShadowRootAllowState::kDeny;
   tree_builder_ = MakeGarbageCollected<HTMLTreeBuilder>(
-      this, document, kAllowScriptingContent, options_, allow_shadow_root);
+      this, document, kAllowScriptingContent, options_, include_shadow_roots);
 }
 
 HTMLDocumentParser::HTMLDocumentParser(
     DocumentFragment* fragment,
     Element* context_element,
-    ParserContentPolicy parser_content_policy)
+    ParserContentPolicy parser_content_policy,
+    ParserPrefetchPolicy parser_prefetch_policy)
     : HTMLDocumentParser(fragment->GetDocument(),
                          parser_content_policy,
-                         kForceSynchronousParsing) {
+                         kForceSynchronousParsing,
+                         parser_prefetch_policy) {
   // Allow declarative shadow DOM for the fragment parser only if explicitly
   // enabled.
-  bool allow_shadow_root =
+  bool include_shadow_roots =
       fragment->GetDocument().GetDeclarativeShadowRootAllowState() ==
       Document::DeclarativeShadowRootAllowState::kAllow;
 
   // No script_runner_ in fragment parser.
   tree_builder_ = MakeGarbageCollected<HTMLTreeBuilder>(
       this, fragment, context_element, parser_content_policy, options_,
-      allow_shadow_root);
+      include_shadow_roots);
 
   // For now document fragment parsing never reports errors.
   bool report_errors = false;
@@ -331,7 +352,8 @@ int GetMaxTokenizationBudget() {
 
 HTMLDocumentParser::HTMLDocumentParser(Document& document,
                                        ParserContentPolicy content_policy,
-                                       ParserSynchronizationPolicy sync_policy)
+                                       ParserSynchronizationPolicy sync_policy,
+                                       ParserPrefetchPolicy prefetch_policy)
     : ScriptableDocumentParser(document, content_policy),
       options_(&document),
       reentry_permit_(HTMLParserReentryPermit::Create()),
@@ -400,7 +422,8 @@ HTMLDocumentParser::HTMLDocumentParser(Document& document,
       !document.IsPrefetchOnly())
     return;
 
-  preloader_ = MakeGarbageCollected<HTMLResourcePreloader>(document);
+  if (prefetch_policy == kAllowPrefetching)
+    preloader_ = MakeGarbageCollected<HTMLResourcePreloader>(document);
 }
 
 HTMLDocumentParser::~HTMLDocumentParser() = default;
@@ -1231,22 +1254,13 @@ void HTMLDocumentParser::Append(const String& input_source) {
     // Return after the preload scanner, do not actually parse the document.
     return;
   }
-  if (preload_scanner_) {
-    if (input_.Current().IsEmpty() && !IsPaused()) {
-      // We have parsed until the end of the current input and so are now
-      // moving ahead of the preload scanner. Clear the scanner so we know to
-      // scan starting from the current input point if we block again.
-      preload_scanner_.reset();
-    } else {
-      preload_scanner_->AppendToEnd(source);
-      if (preloader_) {
-        if (!task_runner_state_->IsSynchronous() || IsPaused()) {
-          // Should scan and preload if the parser's paused and operating
-          // synchronously, or if the parser's operating in an asynchronous
-          // mode.
-          ScanAndPreload(preload_scanner_.get());
-        }
-      }
+  if (preload_scanner_ && preloader_) {
+    preload_scanner_->AppendToEnd(source);
+    if (!task_runner_state_->IsSynchronous() || IsPaused()) {
+      // Should scan and preload if the parser's paused and operating
+      // synchronously, or if the parser's operating in an asynchronous
+      // mode.
+      ScanAndPreload(preload_scanner_.get());
     }
   }
 
@@ -1672,8 +1686,42 @@ void HTMLDocumentParser::ScanAndPreload(HTMLPreloadScanner* scanner) {
   TRACE_EVENT0("blink", "HTMLDocumentParser::ScanAndPreload");
   DCHECK(preloader_);
   bool seen_csp_meta_tag = false;
-  PreloadRequestStream requests = scanner->Scan(
-      GetDocument()->ValidBaseElementURL(), nullptr, seen_csp_meta_tag);
+  base::Optional<ViewportDescription> viewport_description;
+  PreloadRequestStream requests =
+      scanner->Scan(GetDocument()->ValidBaseElementURL(), &viewport_description,
+                    seen_csp_meta_tag);
+  if (viewport_description.has_value()) {
+    task_runner_state_->SetNeedsViewportUpdate();
+  }
+  // Make sure that the viewport is up-to-date, so that the correct viewport
+  // dimensions will be fed to the background parser and preload scanner.
+  if (GetDocument()->Loader() &&
+      task_runner_state_->GetMode() == kAllowDeferredParsing) {
+    if (task_runner_state_->NeedsViewportUpdate()) {
+      GetDocument()->GetStyleEngine().UpdateViewport();
+      task_runner_state_->UpdatedViewport();
+    }
+    if (task_runner_state_->NeedsLinkHeaderPreloadsDispatch()) {
+      if (GetDocument()->Loader()->GetPrefetchedSignedExchangeManager()) {
+        TRACE_EVENT0("blink",
+                     "HTMLDocumentParser::DispatchSignedExchangeManager");
+        // Link header preloads for prefetched signed exchanges won't be started
+        // until StartPrefetchedLinkHeaderPreloads() is called. See the header
+        // comment of PrefetchedSignedExchangeManager.
+        GetDocument()
+            ->Loader()
+            ->GetPrefetchedSignedExchangeManager()
+            ->StartPrefetchedLinkHeaderPreloads();
+      } else {
+        TRACE_EVENT0("blink", "HTMLDocumentParser::DispatchLinkHeaderPreloads");
+        GetDocument()->Loader()->DispatchLinkHeaderPreloads(
+            base::OptionalOrNullptr(viewport_description),
+            PreloadHelper::kOnlyLoadMedia);
+      }
+      task_runner_state_->DispatchedLinkHeaderPreloads();
+    }
+  }
+
   task_runner_state_->SetSeenCSPMetaTag(seen_csp_meta_tag);
   for (auto& request : requests) {
     queued_preloads_.push_back(std::move(request));

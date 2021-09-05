@@ -26,6 +26,7 @@ const int kDecryptingClientId = 1;
 class TwoClientUserEventsSyncTest : public SyncTest {
  public:
   TwoClientUserEventsSyncTest() : SyncTest(TWO_CLIENT) {}
+
   ~TwoClientUserEventsSyncTest() override = default;
 
   bool UseVerifier() override {

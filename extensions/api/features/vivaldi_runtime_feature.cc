@@ -36,12 +36,15 @@ class FeatureService : public extensions::BrowserContextKeyedAPI {
 
   // BrowserContextKeyedAPI implementation.
   using Factory = extensions::BrowserContextKeyedAPIFactory<FeatureService>;
-  friend class extensions::BrowserContextKeyedAPIFactory<FeatureService>;
-  static Factory* GetFactoryInstance();
+  friend Factory;
   static const char* service_name() { return "FeatureService"; }
   static const bool kServiceIsNULLWhileTesting = false;
   static const bool kServiceIsCreatedWithBrowserContext = true;
   static const bool kServiceRedirectedInIncognito = true;
+  static Factory* GetFactoryInstance() {
+    static base::NoDestructor<Factory> instance;
+    return &*instance;
+  }
 
  private:
   bool LoadFlags(Profile* profile, base::Value json);
@@ -83,12 +86,6 @@ FeatureService::FeatureService(content::BrowserContext* browser_context) {
   }
 }
 
-/* static */
-FeatureService::Factory* FeatureService::GetFactoryInstance() {
-  static base::NoDestructor<Factory> instance;
-  return &*instance;
-}
-
 bool FeatureService::LoadFlags(Profile* profile, base::Value json) {
   if (!json.is_dict())
     return false;
@@ -120,21 +117,26 @@ bool FeatureService::LoadFlags(Profile* profile, base::Value json) {
       } else if (key == "internal_value") {
         if (sub_value.is_bool()) {
           entry.internal_default_enabled = sub_value.GetBool();
-#if !defined(OFFICIAL_BUILD)
-          entry.enabled = entry.internal_default_enabled;
-          if (entry.internal_default_enabled) {
-            // Features enabled by default in internal builds can't be turned
-            // off, they pop up again as enabled after restart. Disable the
-            // ability to turn them off in the UI to avoid confusion.
-            entry.force_value = true;
-          }
-#endif
         }
       }
     }
     entries.emplace_back(entry_name, std::move(entry));
   }
+
   entries_ = EntryMap(std::move(entries));
+
+#if !defined(OFFICIAL_BUILD)
+  for (auto& i : entries_) {
+    Entry& entry = i.second;
+    entry.enabled = entry.internal_default_enabled;
+    if (entry.internal_default_enabled) {
+      // Features enabled by default in internal builds can't be turned
+      // off, they pop up again as enabled after restart. Disable the
+      // ability to turn them off in the UI to avoid confusion.
+      entry.force_value = true;
+    }
+  }
+#endif
 
   // Check if this has been enabled or disabled on the cmd line.
   base::CommandLine* cl = base::CommandLine::ForCurrentProcess();

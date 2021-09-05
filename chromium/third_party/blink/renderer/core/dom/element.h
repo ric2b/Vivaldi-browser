@@ -40,6 +40,7 @@
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/trustedtypes/trusted_types_util.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
+#include "third_party/blink/renderer/platform/text/text_direction.h"
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string_table.h"
@@ -66,7 +67,6 @@ class ExceptionState;
 class FloatQuad;
 class FloatSize;
 class FocusOptions;
-class SetInnerHTMLOptions;
 class GetInnerHTMLOptions;
 class HTMLTemplateElement;
 class Image;
@@ -88,7 +88,7 @@ class SpaceSplitString;
 class StringOrTrustedHTMLOrTrustedScriptOrTrustedScriptURL;
 class StylePropertyMap;
 class StylePropertyMapReadOnly;
-class V0CustomElementDefinition;
+class StyleRecalcContext;
 
 enum class CSSPropertyID;
 enum class CSSValueID;
@@ -512,7 +512,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   virtual LayoutObject* CreateLayoutObject(const ComputedStyle&, LegacyLayout);
   virtual bool LayoutObjectIsNeeded(const ComputedStyle&) const;
-  void RecalcStyle(const StyleRecalcChange);
+  void RecalcStyle(const StyleRecalcChange, const StyleRecalcContext&);
   void RecalcStyleForTraversalRootAncestor();
   void RebuildLayoutTreeForTraversalRootAncestor() {
     RebuildFirstLetterLayoutTree();
@@ -521,10 +521,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   }
   bool NeedsRebuildLayoutTree(
       const WhitespaceAttacher& whitespace_attacher) const {
-    // TODO(futhark@chromium.org): !CanParticipateInFlatTree() can be removed
-    // when Shadow DOM V0 support is removed.
     return NeedsReattachLayoutTree() || ChildNeedsReattachLayoutTree() ||
-           !CanParticipateInFlatTree() ||
            (whitespace_attacher.TraverseIntoDisplayContents() &&
             HasDisplayContentsStyle());
   }
@@ -535,12 +532,6 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   void SetNeedsCompositingUpdate();
 
-  // If type of ShadowRoot (either closed or open) is explicitly specified,
-  // creation of multiple shadow roots is prohibited in any combination and
-  // throws an exception.  Multiple shadow roots are allowed only when
-  // createShadowRoot() is used without any parameters from JavaScript.
-  ShadowRoot* createShadowRoot(ExceptionState&);
-
   ShadowRoot* attachShadow(const ShadowRootInit*, ExceptionState&);
 
   void AttachDeclarativeShadowRoot(HTMLTemplateElement*,
@@ -548,9 +539,6 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
                                    FocusDelegation,
                                    SlotAssignmentMode);
 
-  ShadowRoot& CreateV0ShadowRootForTesting() {
-    return CreateShadowRootInternal();
-  }
   ShadowRoot& CreateUserAgentShadowRoot();
   ShadowRoot& AttachShadowRootInternal(
       ShadowRootType,
@@ -563,8 +551,6 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   ShadowRoot* ClosedShadowRoot() const;
   ShadowRoot* AuthorShadowRoot() const;
   ShadowRoot* UserAgentShadowRoot() const;
-
-  ShadowRoot* ShadowRootIfV1() const;
 
   ShadowRoot& EnsureUserAgentShadowRoot();
 
@@ -603,11 +589,11 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
     return GetCustomElementState() == CustomElementState::kUncustomized ||
            GetCustomElementState() == CustomElementState::kCustom;
   }
-  bool IsUpgradedV0CustomElement() {
-    return GetV0CustomElementState() == kV0Upgraded;
-  }
-  bool IsUnresolvedV0CustomElement() {
-    return GetV0CustomElementState() == kV0WaitingForUpgrade;
+
+  bool ComputeInheritedDirPseudoClass(TextDirection direction) const;
+  virtual bool MatchesDirPseudoClassForDirAutoAttribute(
+      TextDirection direction) const {
+    return false;
   }
 
   AtomicString ComputeInheritedLanguage() const;
@@ -681,7 +667,9 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
       Element* new_focused_element,
       InputDeviceCapabilities* source_capabilities = nullptr);
 
-  // The implementation of |innerText()| is found in "element_inner_text.cc".
+  // The implementations of |innerText()| and |GetInnerTextWithoutUpdate()| are
+  // found in "element_inner_text.cc".
+  String GetInnerTextWithoutUpdate();  // Avoids layout update.
   String innerText();
   String outerText();
 
@@ -698,9 +686,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   String innerHTML() const;
   String outerHTML() const;
   void setInnerHTML(const String&, ExceptionState& = ASSERT_NO_EXCEPTION);
-  void setInnerHTMLWithOptions(const String&,
-                               const SetInnerHTMLOptions*,
-                               ExceptionState& = ASSERT_NO_EXCEPTION);
+  void setInnerHTMLWithDeclarativeShadowDOMForTesting(const String& html);
   String getInnerHTML(const GetInnerHTMLOptions* options) const;
   void setOuterHTML(const String&, ExceptionState& = ASSERT_NO_EXCEPTION);
 
@@ -814,9 +800,6 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   virtual void BuildPendingResource() {}
 
-  void V0SetCustomElementDefinition(V0CustomElementDefinition*);
-  V0CustomElementDefinition* GetV0CustomElementDefinition() const;
-
   void SetCustomElementDefinition(CustomElementDefinition*);
   CustomElementDefinition* GetCustomElementDefinition() const;
   // https://dom.spec.whatwg.org/#concept-element-is-value
@@ -850,7 +833,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   bool IsSpellCheckingEnabled() const;
 
   // FIXME: public for LayoutTreeBuilder, we shouldn't expose this though.
-  scoped_refptr<ComputedStyle> StyleForLayoutObject();
+  scoped_refptr<ComputedStyle> StyleForLayoutObject(const StyleRecalcContext&);
 
   bool HasID() const;
   bool HasClass() const;
@@ -915,7 +898,11 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   HeapHashMap<Member<ResizeObserver>, Member<ResizeObservation>>&
   EnsureResizeObserverData();
 
-  DisplayLockContext* GetDisplayLockContext() const;
+  DisplayLockContext* GetDisplayLockContext() const {
+    if (LIKELY(!HasDisplayLockContext()))
+      return nullptr;
+    return GetDisplayLockContextFromRareData();
+  }
   DisplayLockContext& EnsureDisplayLockContext();
 
   bool ChildStyleRecalcBlockedByDisplayLock() const;
@@ -963,7 +950,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   virtual void WillRecalcStyle(const StyleRecalcChange);
   virtual void DidRecalcStyle(const StyleRecalcChange);
-  virtual scoped_refptr<ComputedStyle> CustomStyleForLayoutObject();
+  virtual scoped_refptr<ComputedStyle> CustomStyleForLayoutObject(
+      const StyleRecalcContext&);
 
   virtual NamedItemType GetNamedItemType() const {
     return NamedItemType::kNone;
@@ -994,7 +982,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   static bool AttributeValueIsJavaScriptURL(const Attribute&);
 
-  scoped_refptr<ComputedStyle> OriginalStyleForLayoutObject();
+  scoped_refptr<ComputedStyle> OriginalStyleForLayoutObject(
+      const StyleRecalcContext&);
 
   // Step 4 of http://domparsing.spec.whatwg.org/#insertadjacenthtml()
   Node* InsertAdjacent(const String& where, Node* new_child, ExceptionState&);
@@ -1040,7 +1029,6 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   bool IsDocumentNode() const =
       delete;  // This will catch anyone doing an unnecessary check.
 
-  ShadowRoot& CreateShadowRootInternal();
   bool CanAttachShadowRoot() const;
   const char* ErrorMessageForAttachShadow() const;
 
@@ -1060,7 +1048,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   // Recalculate the ComputedStyle for this element and return a
   // StyleRecalcChange for propagation/traversal into child nodes.
-  StyleRecalcChange RecalcOwnStyle(const StyleRecalcChange);
+  StyleRecalcChange RecalcOwnStyle(const StyleRecalcChange,
+                                   const StyleRecalcContext&);
 
   void RebuildPseudoElementLayoutTree(PseudoId, WhitespaceAttacher&);
   void RebuildFirstLetterLayoutTree();
@@ -1190,7 +1179,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
                                                         const AtomicString&);
 
   void SetInnerHTMLInternal(const String&,
-                            const SetInnerHTMLOptions*,
+                            bool include_shadow_roots,
                             ExceptionState&);
 
   ElementRareData* GetElementRareData() const;
@@ -1257,6 +1246,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void ForceLegacyLayoutInFragmentationContext(const ComputedStyle& new_style);
   void SynchronizeContentAttributeAndElementReference(
       const QualifiedName& name);
+
+  DisplayLockContext* GetDisplayLockContextFromRareData() const;
 
   Member<ElementData> element_data_;
 };

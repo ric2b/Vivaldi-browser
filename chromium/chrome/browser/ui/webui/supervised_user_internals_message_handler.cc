@@ -159,10 +159,10 @@ SupervisedUserInternalsMessageHandler::GetSupervisedUserService() {
 void SupervisedUserInternalsMessageHandler::HandleRegisterForEvents(
     const base::ListValue* args) {
   DCHECK(args->empty());
-  if (scoped_observer_.IsObservingSources())
+  if (scoped_observation_.IsObserving())
     return;
 
-  scoped_observer_.Add(GetSupervisedUserService()->GetURLFilter());
+  scoped_observation_.Observe(GetSupervisedUserService()->GetURLFilter());
 }
 
 void SupervisedUserInternalsMessageHandler::HandleGetBasicInfo(
@@ -255,7 +255,7 @@ void SupervisedUserInternalsMessageHandler::SendBasicInfo() {
   SupervisedUserSettingsService* settings_service =
       SupervisedUserSettingsServiceFactory::GetForKey(profile->GetProfileKey());
   user_settings_subscription_ =
-      settings_service->SubscribeForSettingsChange(base::Bind(
+      settings_service->SubscribeForSettingsChange(base::BindRepeating(
           &SupervisedUserInternalsMessageHandler::SendSupervisedUserSettings,
           weak_factory_.GetWeakPtr()));
 }

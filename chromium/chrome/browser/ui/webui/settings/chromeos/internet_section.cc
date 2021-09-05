@@ -575,6 +575,7 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       {"internetDeviceEnabling", IDS_SETTINGS_INTERNET_DEVICE_ENABLING},
       {"internetDeviceDisabling", IDS_SETTINGS_INTERNET_DEVICE_DISABLING},
       {"internetDeviceInitializing", IDS_SETTINGS_INTERNET_DEVICE_INITIALIZING},
+      {"internetDeviceBusy", IDS_SETTINGS_INTERNET_DEVICE_BUSY},
       {"internetJoinType", IDS_SETTINGS_INTERNET_JOIN_TYPE},
       {"internetKnownNetworksPageTitle", IDS_SETTINGS_INTERNET_KNOWN_NETWORKS},
       {"internetMobileSearching", IDS_SETTINGS_INTERNET_MOBILE_SEARCH},
@@ -701,6 +702,26 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       {"eSimNetworkNotSetup",
        IDS_SETTINGS_INTERNET_ESIM_NOT_SETUP_WITH_SETUP_LINK},
       {"cellularNetworkTetherLabel", IDS_SETTINGS_INTERNET_TETHER_LABEL},
+      {"showEidPopupButtonLabel",
+       IDS_SETTINGS_INTERNET_SHOW_EID_POPUP_BUTTON_LABEL},
+      {"eSimRenameProfileDialogLabel",
+       IDS_SETTINGS_INTERNET_NETWORK_RENAME_DIALOG_RENAME_PROFILE},
+      {"eSimRenameProfileDialogDone",
+       IDS_SETTINGS_INTERNET_NETWORK_RENAME_DIALOG_DONE},
+      {"eSimRenameProfileDialogCancel",
+       IDS_SETTINGS_INTERNET_NETWORK_RENAME_DIALOG_CANCEL},
+      {"eSimRenameProfileDialogError",
+       IDS_SETTINGS_INTERNET_NETWORK_RENAME_DIALOG_ERROR_MESSAGE},
+      {"eSimRemoveProfileDialogCancel",
+       IDS_SETTINGS_INTERNET_NETWORK_REMOVE_PROFILE_DIALOG_CANCEL},
+      {"esimRemoveProfileDialogTitle",
+       IDS_SETTINGS_INTERNET_NETWORK_REMOVE_PROFILE_DIALOG_TITLE},
+      {"eSimRemoveProfileDialogRemove",
+       IDS_SETTINGS_INTERNET_NETWORK_REMOVE_PROFILE_DIALOG_REMOVE},
+      {"eSimRemoveProfileDialogError",
+       IDS_SETTINGS_INTERNET_NETWORK_REMOVE_PROFILE_DIALOG_ERROR_MESSAGE},
+      {"eSimRemoveProfileDialogOkay",
+       IDS_SETTINGS_INTERNET_NETWORK_REMOVE_PROFILE_DIALOG_OKAY},
   };
   AddLocalizedStringsBulk(html_source, kLocalizedStrings);
 
@@ -709,6 +730,7 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   network_element::AddDetailsLocalizedStrings(html_source);
   network_element::AddConfigLocalizedStrings(html_source);
   network_element::AddErrorLocalizedStrings(html_source);
+  cellular_setup::AddNonStringLoadTimeData(html_source);
   if (base::FeatureList::IsEnabled(
           chromeos::features::kUpdatedCellularActivationUi)) {
     cellular_setup::AddLocalizedStrings(html_source);
@@ -722,10 +744,6 @@ void InternetSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
 
   html_source->AddString("networkGoogleNameserversLearnMoreUrl",
                          chrome::kGoogleNameserversLearnMoreURL);
-  html_source->AddBoolean(
-      "updatedCellularActivationUi",
-      base::FeatureList::IsEnabled(
-          chromeos::features::kUpdatedCellularActivationUi));
 
   html_source->AddString(
       "networkNotSynced",
@@ -974,7 +992,7 @@ void InternetSection::FetchNetworkList() {
           network_config::mojom::FilterType::kVisible,
           network_config::mojom::NetworkType::kAll,
           network_config::mojom::kNoLimit),
-      base::Bind(&InternetSection::OnNetworkList, base::Unretained(this)));
+      base::BindOnce(&InternetSection::OnNetworkList, base::Unretained(this)));
 }
 
 void InternetSection::OnNetworkList(

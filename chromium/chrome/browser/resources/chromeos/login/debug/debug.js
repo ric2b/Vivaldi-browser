@@ -499,22 +499,33 @@ cr.define('cr.ui.login.debug', function() {
     {
       id: 'gaia-signin',
       kind: ScreenKind.NORMAL,
+      handledSteps: 'allowlist-error',
       states: [
         {
-          // Generic offline GAIA
-          id: 'offline-gaia',
+          id: 'allowlist-customer',
           trigger: (screen) => {
-            screen.loadAuthExtension({
-              screenMode: 1,  // Offline
+            screen.showAllowlistCheckFailedError(true, {
+              enterpriseManaged: false,
             });
+          },
+        },
+      ],
+    },
+    {
+      id: 'offline-login',
+      kind: ScreenKind.NORMAL,
+      states: [
+        {
+          id: 'default',
+          trigger: (screen) => {
+            screen.loadParams({});
           },
         },
         {
           // kAccountsPrefLoginScreenDomainAutoComplete value is set
           id: 'offline-gaia-domain',
           trigger: (screen) => {
-            screen.loadAuthExtension({
-              screenMode: 1,  // Offline
+            screen.loadParams({
               emailDomain: 'somedomain.com',
             });
           },
@@ -523,8 +534,7 @@ cr.define('cr.ui.login.debug', function() {
           // Device is enterprise-managed.
           id: 'offline-gaia-enterprise',
           trigger: (screen) => {
-            screen.loadAuthExtension({
-              screenMode: 1,  // Offline
+            screen.loadParams({
               enterpriseDomainManager: 'example.com',
             });
           },
@@ -533,17 +543,8 @@ cr.define('cr.ui.login.debug', function() {
           // Retry after incorrect password attempt, user name is already known.
           id: 'offline-gaia-user',
           trigger: (screen) => {
-            screen.loadAuthExtension({
-              screenMode: 1,  // Offline
+            screen.loadParams({
               email: 'someone@example.com',
-            });
-          },
-        },
-        {
-          id: 'allowlist-customer',
-          trigger: (screen) => {
-            screen.showAllowlistCheckFailedError(true, {
-              enterpriseManaged: false,
             });
           },
         },
@@ -884,7 +885,7 @@ cr.define('cr.ui.login.debug', function() {
       }],
     },
     {
-      id: 'multidevice-setup',
+      id: 'multidevice-setup-screen',
       kind: ScreenKind.NORMAL,
     },
     {
@@ -897,14 +898,26 @@ cr.define('cr.ui.login.debug', function() {
       states: [
         {
           id: 'WithOptionToSubscribe',
-          trigger: (screen) => {
-            screen.setOptInVisibility(true);
+          data: {
+            optInVisibility: true,
+            optInDefaultState: true,
+            legalFooterVisibility: false,
           },
         },
         {
           id: 'NoOptionToSubscribe',
-          trigger: (screen) => {
-            screen.setOptInVisibility(false);
+          data: {
+            optInVisibility: false,
+            optInDefaultState: false,
+            legalFooterVisibility: false,
+          },
+        },
+        {
+          id: 'WithLegalFooter',
+          data: {
+            optInVisibility: true,
+            optInDefaultState: true,
+            legalFooterVisibility: true,
           },
         },
       ],

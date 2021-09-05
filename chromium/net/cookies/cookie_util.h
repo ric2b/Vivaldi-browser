@@ -21,16 +21,17 @@
 class GURL;
 
 namespace net {
+
+class IsolationInfo;
+class SchemefulSite;
+class CookieAccessDelegate;
+
 namespace cookie_util {
 
 // Constants for use in VLOG
 const int kVlogPerCookieMonster = 1;
 const int kVlogSetCookies = 7;
 const int kVlogGarbageCollection = 5;
-
-// Minimum name length for SameSite compatibility pair heuristic (see
-// IsSameSiteCompatPair() below.)
-const int kMinCompatPairNameLength = 3;
 
 // This enum must match the numbering for StorageAccessResult in
 // histograms/enums.xml. Do not reorder or remove items, only add new items
@@ -106,6 +107,14 @@ NET_EXPORT GURL CookieOriginToURL(const std::string& domain, bool is_https);
 // a source URL is required but only a source scheme may be available.
 NET_EXPORT GURL SimulatedCookieSource(const CanonicalCookie& cookie,
                                       const std::string& source_scheme);
+
+// Provisional evaluation of acceptability of setting secure cookies on
+// `source_url` based only on the `source_url`'s scheme and whether it
+// is a localhost URL.  If this returns kNonCryptographic, it may be upgraded to
+// kTrustworthy by a CookieAccessDelegate when the cookie operation is being
+// performed, as the delegate may have access to user settings like manually
+// configured test domains which declare additional things trustworthy.
+NET_EXPORT CookieAccessScheme ProvisionalAccessScheme(const GURL& source_url);
 
 // |domain| is the output of cookie.Domain() for some cookie. This returns true
 // if a |domain| indicates that the cookie can be accessed by |host|.
@@ -206,30 +215,28 @@ ComputeSameSiteContextForSubresource(const GURL& url,
                                      const SiteForCookies& site_for_cookies,
                                      bool force_ignore_site_for_cookies);
 
-// Evaluates a heuristic to determine whether |c1| and |c2| are likely to be a
-// "double cookie" pair used for SameSite=None compatibility reasons.
-//
-// This returns true if all of the following are true:
-//  1. The cookies are not equivalent (i.e. same name, domain, and path).
-//  2. One of them is SameSite=None and Secure; the other one has unspecified
-//     SameSite.
-//  3. Their domains are equal.
-//  4. Their paths are equal.
-//  5. Their values are equal.
-//  6. One of them has a name that is a prefix or suffix of the other and has
-//     length at least 3 characters.
-//
-// |options| is the CookieOptions object used to access (get/set) the cookies.
-// If the CookieOptions indicate that HttpOnly cookies are not allowed, this
-// will return false if either of |c1| or |c2| is HttpOnly.
-NET_EXPORT bool IsSameSiteCompatPair(const CanonicalCookie& c1,
-                                     const CanonicalCookie& c2,
-                                     const CookieOptions& options);
-
 // Returns whether the respective SameSite feature is enabled.
 NET_EXPORT bool IsSameSiteByDefaultCookiesEnabled();
 NET_EXPORT bool IsCookiesWithoutSameSiteMustBeSecureEnabled();
 NET_EXPORT bool IsSchemefulSameSiteEnabled();
+
+NET_EXPORT bool IsFirstPartySetsEnabled();
+
+// Compute SameParty context, determines which of the cookies for `request_url`
+// can be accessed. Returns either kCrossParty or kSameParty. `isolation_info`
+// must be fully populated. In Chrome, all requests with credentials enabled
+// have a fully populated IsolationInfo.  But that might not be true for other
+// embedders yet (including cast, WebView, etc).  Also not sure about iOS.
+NET_EXPORT CookieOptions::SamePartyCookieContextType ComputeSamePartyContext(
+    const net::SchemefulSite& request_url,
+    const IsolationInfo& isolation_info,
+    const CookieAccessDelegate* cookie_access_delegate);
+
+// Get the SameParty inclusion status. If the cookie is not SameParty, returns
+// kNoSamePartyEnforcement; if the cookie is SameParty but does not have a
+// valid context, returns kEnforceSamePartyExclude.
+NET_EXPORT CookieSamePartyStatus
+GetSamePartyStatus(const CanonicalCookie& cookie, const CookieOptions& options);
 
 // Takes a callback accepting a CookieAccessResult and returns a callback
 // that accepts a bool, setting the bool to true if the CookieInclusionStatus
@@ -249,6 +256,7 @@ StripAccessResults(const CookieAccessResultList& cookie_access_result_list);
 NET_EXPORT void RecordCookiePortOmniboxHistograms(const GURL& url);
 
 }  // namespace cookie_util
+
 }  // namespace net
 
 #endif  // NET_COOKIES_COOKIE_UTIL_H_

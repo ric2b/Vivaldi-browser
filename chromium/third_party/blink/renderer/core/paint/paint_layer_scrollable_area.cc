@@ -1122,7 +1122,7 @@ void PaintLayerScrollableArea::UpdateAfterLayout() {
         }
         LayoutObject* parent = GetLayoutBox()->Parent();
         if (parent && parent->IsFlexibleBox()) {
-          ToLayoutFlexibleBox(parent)->ClearCachedMainSizeForChild(
+          To<LayoutFlexibleBox>(parent)->ClearCachedMainSizeForChild(
               *GetLayoutBox());
         }
       }
@@ -1163,7 +1163,7 @@ void PaintLayerScrollableArea::ClampScrollOffsetAfterOverflowChange() {
   }
 
   const Document& document = GetLayoutBox()->GetDocument();
-  if (document.IsCapturingLayout()) {
+  if (document.IsPrintingOrPaintingPreview()) {
     // Scrollable elements may change size when generating layout for printing,
     // which may require them to change the scroll position in order to keep the
     // same content within view. In vertical-rl writing-mode, even the root
@@ -1356,6 +1356,9 @@ void PaintLayerScrollableArea::UpdateAfterStyleChange(
       previous_vertical_scrollbar_on_left_ = vertical_scrollbar_on_left;
     }
   }
+
+  if (!old_style || old_style->UsedColorScheme() != UsedColorScheme())
+    SetScrollControlsNeedFullPaintInvalidation();
 }
 
 void PaintLayerScrollableArea::UpdateAfterOverflowRecalc() {

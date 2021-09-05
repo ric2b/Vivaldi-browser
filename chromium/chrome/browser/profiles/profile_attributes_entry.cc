@@ -110,6 +110,7 @@ const char ProfileAttributesEntry::kIsOmittedFromProfileListKey[] =
 const char ProfileAttributesEntry::kAvatarIconKey[] = "avatar_icon";
 const char ProfileAttributesEntry::kBackgroundAppsKey[] = "background_apps";
 const char ProfileAttributesEntry::kProfileIsEphemeral[] = "is_ephemeral";
+const char ProfileAttributesEntry::kProfileIsGuest[] = "is_guest";
 const char ProfileAttributesEntry::kUserNameKey[] = "user_name";
 const char ProfileAttributesEntry::kGAIAIdKey[] = "gaia_id";
 const char ProfileAttributesEntry::kIsConsentedPrimaryAccountKey[] =
@@ -379,7 +380,7 @@ bool ProfileAttributesEntry::IsLegacySupervised() const {
 }
 
 bool ProfileAttributesEntry::IsOmitted() const {
-  return GetBool(kIsOmittedFromProfileListKey);
+  return is_omitted_ || GetBool(kIsOmittedFromProfileListKey);
 }
 
 bool ProfileAttributesEntry::IsSigninRequired() const {
@@ -392,6 +393,10 @@ std::string ProfileAttributesEntry::GetSupervisedUserId() const {
 
 bool ProfileAttributesEntry::IsEphemeral() const {
   return GetBool(kProfileIsEphemeral);
+}
+
+bool ProfileAttributesEntry::IsGuest() const {
+  return GetBool(kProfileIsGuest);
 }
 
 bool ProfileAttributesEntry::IsUsingDefaultName() const {
@@ -489,8 +494,11 @@ std::string ProfileAttributesEntry::GetHostedDomain() const {
   return GetString(kHostedDomain);
 }
 
-void ProfileAttributesEntry::SetLocalProfileName(const base::string16& name) {
-  if (SetString16(kNameKey, name))
+void ProfileAttributesEntry::SetLocalProfileName(const base::string16& name,
+                                                 bool is_default_name) {
+  bool changed = SetString16(kNameKey, name);
+  changed |= SetBool(kIsUsingDefaultNameKey, is_default_name);
+  if (changed)
     profile_info_cache_->NotifyIfProfileNamesHaveChanged();
 }
 
@@ -507,7 +515,13 @@ void ProfileAttributesEntry::SetActiveTimeToNow() {
 }
 
 void ProfileAttributesEntry::SetIsOmitted(bool is_omitted) {
-  if (SetBool(kIsOmittedFromProfileListKey, is_omitted))
+  bool old_value = IsOmitted();
+  // Set the in-memory bool as the only source of truth.
+  ClearValue(kIsOmittedFromProfileListKey);
+  is_omitted_ = is_omitted;
+
+  // Send a notification only if the value has really changed.
+  if (old_value != is_omitted_)
     profile_info_cache_->NotifyProfileIsOmittedChanged(GetPath());
 }
 
@@ -583,6 +597,10 @@ void ProfileAttributesEntry::SetIsEphemeral(bool value) {
   SetBool(kProfileIsEphemeral, value);
 }
 
+void ProfileAttributesEntry::SetIsGuest(bool value) {
+  SetBool(kProfileIsGuest, value);
+}
+
 void ProfileAttributesEntry::SetIsUsingDefaultName(bool value) {
   if (SetBool(kIsUsingDefaultNameKey, value))
     profile_info_cache_->NotifyIfProfileNamesHaveChanged();
@@ -644,7 +662,8 @@ void ProfileAttributesEntry::SetProfileThemeColors(
 }
 
 void ProfileAttributesEntry::SetHostedDomain(std::string hosted_domain) {
-  SetString(kHostedDomain, hosted_domain);
+  if (SetString(kHostedDomain, hosted_domain))
+    profile_info_cache_->NotifyProfileHostedDomainChanged(GetPath());
 }
 
 void ProfileAttributesEntry::SetAuthInfo(const std::string& gaia_id,
@@ -707,9 +726,7 @@ void ProfileAttributesEntry::ClearAccountCategories() {
 }
 
 size_t ProfileAttributesEntry::profile_index() const {
-  size_t index = profile_info_cache_->GetIndexOfProfileWithPath(profile_path_);
-  DCHECK(index < profile_info_cache_->GetNumberOfProfiles());
-  return index;
+  return profile_info_cache_->GetIndexOfProfileWithPath(profile_path_);
 }
 
 const gfx::Image* ProfileAttributesEntry::GetHighResAvatar() const {

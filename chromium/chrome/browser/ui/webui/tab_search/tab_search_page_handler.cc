@@ -15,6 +15,7 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "base/trace_event/trace_event.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/favicon/favicon_utils.h"
 #include "chrome/browser/profiles/profile.h"
@@ -31,7 +32,7 @@ namespace {
 constexpr base::TimeDelta kTabsChangeDelay =
     base::TimeDelta::FromMilliseconds(50);
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 constexpr char kFeedbackCategoryTag[] = "FromTabSearch";
 #else
 constexpr char kFeedbackCategoryTag[] = "FromTabSearchBrowser";
@@ -71,22 +72,26 @@ void TabSearchPageHandler::CloseTab(int32_t tab_id) {
   if (!optional_details)
     return;
 
-  const TabDetails& details = optional_details.value();
-  bool tab_closed = details.tab_strip_model->CloseWebContentsAt(
-      details.index, TabStripModel::CLOSE_CREATE_HISTORICAL_TAB);
-
   ++num_tabs_closed_;
 
-  if (tab_closed)
-    NotifyTabsChanged();
+  // CloseTab() can target the WebContents hosting Tab Search if the Tab Search
+  // WebUI is open in a chrome browser tab rather than its bubble. In this case
+  // CloseWebContentsAt() closes the WebContents hosting this
+  // TabSearchPageHandler object, causing it to be immediately destroyed. Ensure
+  // that no further actions are performed following the call to
+  // CloseWebContentsAt(). See (https://crbug.com/1175507).
+  auto* tab_strip_model = optional_details->tab_strip_model;
+  const int tab_index = optional_details->index;
+  tab_strip_model->CloseWebContentsAt(
+      tab_index, TabStripModel::CLOSE_CREATE_HISTORICAL_TAB);
+  // Do not add code past this point.
 }
 
 void TabSearchPageHandler::GetProfileTabs(GetProfileTabsCallback callback) {
-  TRACE_EVENT0("browser", "TabSearchPageHandler::GetProfileTabs");
+  TRACE_EVENT0("browser", "webui_metric:TabSearchPageHandler:GetProfileTabs");
   auto profile_tabs = tab_search::mojom::ProfileTabs::New();
-  Profile* profile = browser_->profile();
   for (auto* browser : *BrowserList::GetInstance()) {
-    if (browser->profile() != profile)
+    if (!ShouldTrackBrowser(browser))
       continue;
     TabStripModel* tab_strip_model = browser->tab_strip_model();
     auto window_tabs = tab_search::mojom::WindowTabs::New();
@@ -115,9 +120,8 @@ void TabSearchPageHandler::GetProfileTabs(GetProfileTabsCallback callback) {
 
 base::Optional<TabSearchPageHandler::TabDetails>
 TabSearchPageHandler::GetTabDetails(int32_t tab_id) {
-  Profile* profile = browser_->profile();
   for (auto* browser : *BrowserList::GetInstance()) {
-    if (browser->profile() != profile) {
+    if (!ShouldTrackBrowser(browser)) {
       continue;
     }
 
@@ -232,7 +236,7 @@ void TabSearchPageHandler::TabChangedAt(content::WebContents* contents,
   Browser* browser = chrome::FindBrowserWithWebContents(contents);
   if (!browser)
     return;
-  TRACE_EVENT0("browser", "TabSearchPageHandler::TabChangedAt");
+  TRACE_EVENT0("browser", "webui_metric:TabSearchPageHandler:TabChangedAt");
   page_->TabUpdated(GetTabData(browser->tab_strip_model(), contents, index));
 }
 
@@ -247,7 +251,8 @@ void TabSearchPageHandler::NotifyTabsChanged() {
 }
 
 bool TabSearchPageHandler::ShouldTrackBrowser(Browser* browser) {
-  return browser->profile() == browser_->profile();
+  return browser->profile() == browser_->profile() &&
+         browser->type() == Browser::Type::TYPE_NORMAL;
 }
 
 void TabSearchPageHandler::SetTimerForTesting(

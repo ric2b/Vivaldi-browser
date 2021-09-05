@@ -17,6 +17,7 @@
 #include "chrome/browser/chromeos/crostini/crostini_manager.h"
 #include "chromeos/dbus/concierge_client.h"
 #include "chromeos/dbus/vm_plugin_dispatcher_client.h"
+#include "chromeos/disks/disk_mount_manager.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -51,6 +52,8 @@ struct CrosUsbDeviceInfo {
   CrosUsbDeviceInfo(const CrosUsbDeviceInfo&);
   ~CrosUsbDeviceInfo();
 
+  int bus_number = 0;
+  int port_number = 0;
   std::string guid;
   base::string16 label;
   // Whether the device can be shared with guest OSes.
@@ -62,6 +65,10 @@ struct CrosUsbDeviceInfo {
   base::Optional<uint8_t> guest_port;
   // Interfaces shareable with guest OSes
   uint32_t allowed_interfaces_mask = 0;
+  // For a mass storage device, the mount points for active mounts.
+  std::set<std::string> mount_points;
+  // An internal flag to suppress observer events as mount_points empties.
+  bool is_unmounting = false;
   // TODO(nverne): Add current state and errors etc.
 };
 
@@ -75,7 +82,8 @@ class CrosUsbDeviceObserver : public base::CheckedObserver {
 // with CrOS, Web or GuestOSs.
 class CrosUsbDetector : public device::mojom::UsbDeviceManagerClient,
                         public chromeos::ConciergeClient::VmObserver,
-                        public chromeos::VmPluginDispatcherClient::Observer {
+                        public chromeos::VmPluginDispatcherClient::Observer,
+                        public disks::DiskMountManager::Observer {
  public:
   // Used to namespace USB notifications to avoid clashes with WebUsbDetector.
   static std::string MakeNotificationId(const std::string& guid);
@@ -102,7 +110,7 @@ class CrosUsbDetector : public device::mojom::UsbDeviceManagerClient,
   void OnDeviceRemoved(device::mojom::UsbDeviceInfoPtr device) override;
 
   // Attaches the device identified by |guid| into the VM identified by
-  // |vm_name|.
+  // |vm_name|. Will unmount filesystems and detach any already shared devices.
   void AttachUsbDeviceToVm(const std::string& vm_name,
                            const std::string& guid,
                            base::OnceCallback<void(bool success)> callback);
@@ -130,6 +138,10 @@ class CrosUsbDetector : public device::mojom::UsbDeviceManagerClient,
   // include all connected devices.
   std::vector<CrosUsbDeviceInfo> GetDevicesSharableWithCrostini() const;
 
+  // Returns whether we should prompt the user before sharing the device.
+  bool SharingRequiresReassignPrompt(
+      const CrosUsbDeviceInfo& device_info) const;
+
  private:
   // chromeos::ConciergeClient::VmObserver:
   void OnVmStarted(const vm_tools::concierge::VmStartedSignal& signal) override;
@@ -141,6 +153,12 @@ class CrosUsbDetector : public device::mojom::UsbDeviceManagerClient,
       override;
   void OnVmStateChanged(
       const vm_tools::plugin_dispatcher::VmStateChangedSignal& signal) override;
+
+  // disks::DiskMountManager::Observer:
+  void OnMountEvent(
+      disks::DiskMountManager::MountEvent event,
+      MountError error_code,
+      const disks::DiskMountManager::MountPointInfo& mount_info) override;
 
   // Called after USB device access has been checked.
   void OnDeviceChecked(device::mojom::UsbDeviceInfoPtr device,
@@ -156,6 +174,33 @@ class CrosUsbDetector : public device::mojom::UsbDeviceManagerClient,
   // Callback listing devices attached to the machine.
   void OnListAttachedDevices(
       std::vector<device::mojom::UsbDeviceInfoPtr> devices);
+
+  // Attaching a device goes through the flow:
+  // AttachUsbDeviceToVm() -> UnmountFilesystems() -> OnUnmountFilesystems()
+  //  -> AttachAfterDetach() -> OnAttachUsbDeviceOpened() -> DoVmAttach()
+  //  -> OnUsbDeviceAttachFinished().
+  // Unmounting filesystems and detaching devices is only needed in some cases,
+  // usually we will skip these.
+
+  // This prevents data corruption and suppresses the notification about
+  // ejecting USB drives. A corresponding mount step when detaching from a VM is
+  // not necessary as PermissionBroker reattaches the usb-storage drivers,
+  // causing the drive to get mounted as usual.
+  void UnmountFilesystems(const std::string& vm_name,
+                          const std::string& guid,
+                          base::OnceCallback<void(bool success)> callback);
+
+  void OnUnmountFilesystems(const std::string& vm_name,
+                            const std::string& guid,
+                            base::OnceCallback<void(bool success)> callback,
+                            bool unmount_success);
+
+  // Devices will be auto-detached if they are attached to another VM.
+  void AttachAfterDetach(const std::string& vm_name,
+                         const std::string& guid,
+                         uint32_t allowed_interfaces_mask,
+                         base::OnceCallback<void(bool success)> callback,
+                         bool detach_success);
 
   // Callback for AttachUsbDeviceToVm after opening a file handler.
   void OnAttachUsbDeviceOpened(const std::string& vm_name,
@@ -180,12 +225,6 @@ class CrosUsbDetector : public device::mojom::UsbDeviceManagerClient,
       const std::string& guid,
       base::OnceCallback<void(bool success)> callback,
       base::Optional<vm_tools::concierge::DetachUsbDeviceResponse> response);
-
-  // Devices will be auto-detached if they are attached to another VM.
-  void AttachAfterDetach(const std::string& vm_name,
-                         const std::string& guid,
-                         base::OnceCallback<void(bool success)> callback,
-                         bool success);
 
   // Returns true when a device should show a notification when attached.
   bool ShouldShowNotification(const device::mojom::UsbDeviceInfo& device_info,

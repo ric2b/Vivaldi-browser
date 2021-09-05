@@ -22,6 +22,7 @@ namespace ui {
 
 class AXTableInfo;
 struct AXLanguageInfo;
+struct AXTreeData;
 
 // One node in an AXTree.
 class AX_EXPORT AXNode final {
@@ -55,6 +56,8 @@ class AX_EXPORT AXNode final {
     virtual AXTableInfo* GetTableInfo(const AXNode* table_node) const = 0;
     // See AXTree::GetFromId.
     virtual AXNode* GetFromId(int32_t id) const = 0;
+    // See AXTree::data.
+    virtual const AXTreeData& data() const = 0;
 
     virtual base::Optional<int> GetPosInSet(const AXNode& node) = 0;
     virtual base::Optional<int> GetSetSize(const AXNode& node) = 0;
@@ -181,7 +184,7 @@ class AX_EXPORT AXNode final {
   // reference count and clear out the object's data.
   void Destroy();
 
-  // Return true if this object is equal to or a descendant of |ancestor|.
+  // Returns true if this node is equal to or a descendant of |ancestor|.
   bool IsDescendantOf(const AXNode* ancestor) const;
 
   // Gets the text offsets where new lines start either from the node's data or
@@ -425,6 +428,12 @@ class AX_EXPORT AXNode final {
   // Returns true if node has ignored state or ignored role.
   bool IsIgnored() const;
 
+  // Returns true if node is invisible or ignored.
+  bool IsInvisibleOrIgnored() const;
+
+  // Returns true if node is focused within this tree.
+  bool IsFocusedWithinThisTree() const;
+
   // Returns true if an ancestor of this node (not including itself) is a
   // leaf node, meaning that this node is not actually exposed to any
   // platform's accessibility layer.
@@ -462,7 +471,8 @@ class AX_EXPORT AXNode final {
   // an editable region is synonymous to a text field.
   AXNode* GetTextFieldAncestor() const;
 
-  // Returns true if the ancestor of the current node is a plain text field.
+  // Returns true if this node is either a plain text field , or one of its
+  // ancestors is.
   bool IsDescendantOfPlainTextField() const;
 
   // Finds and returns a pointer to ordered set containing node.

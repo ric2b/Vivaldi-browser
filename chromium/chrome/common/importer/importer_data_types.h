@@ -34,7 +34,8 @@ enum ImportItem {
   NOTES              = 1 << 7,
   MASTER_PASSWORD    = 1 << 8, // Requires a master password
   SPEED_DIAL         = 1 << 9, // Speed Dials
-  ALL                = (1 << 10) - 1  // All the bits should be 1, hence the -1.
+  EMAIL              = 1 << 10,
+  ALL                = (1 << 11) - 1  // All the bits should be 1, hence the -1.
 };
 
 // Contains information needed for importing bookmarks/search engine urls, etc.
@@ -52,6 +53,7 @@ struct SourceProfile {
   base::string16 importer_name;
   ImporterType importer_type;
   base::FilePath source_path;
+  base::FilePath mail_path;
   base::FilePath app_path;
   uint16_t services_supported;  // Bitmask of ImportItem.
   // The application locale. Stored because we can only access it from the UI

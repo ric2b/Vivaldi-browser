@@ -46,6 +46,7 @@ void AddStringResources(content::WebUIDataSource* source) {
       {"cancel", IDS_APP_CANCEL},
       {"learnMore", IDS_LEARN_MORE},
 
+      {"promptTitle", IDS_CROSTINI_INSTALLER_TITLE},
       {"installingTitle", IDS_CROSTINI_INSTALLER_INSTALLING},
       {"cancelingTitle", IDS_CROSTINI_INSTALLER_CANCELING_TITLE},
       {"errorTitle", IDS_CROSTINI_INSTALLER_ERROR_TITLE},
@@ -53,6 +54,7 @@ void AddStringResources(content::WebUIDataSource* source) {
       {"loadTerminaError", IDS_CROSTINI_INSTALLER_LOAD_TERMINA_ERROR},
       {"createDiskImageError", IDS_CROSTINI_INSTALLER_CREATE_DISK_IMAGE_ERROR},
       {"startTerminaVmError", IDS_CROSTINI_INSTALLER_START_TERMINA_VM_ERROR},
+      {"startLxdError", IDS_CROSTINI_INSTALLER_START_LXD_ERROR},
       {"startContainerError", IDS_CROSTINI_INSTALLER_START_CONTAINER_ERROR},
       {"configureContainerError",
        IDS_CROSTINI_INSTALLER_CONFIGURE_CONTAINER_ERROR},
@@ -66,6 +68,7 @@ void AddStringResources(content::WebUIDataSource* source) {
        IDS_CROSTINI_INSTALLER_CREATE_DISK_IMAGE_MESSAGE},
       {"startTerminaVmMessage",
        IDS_CROSTINI_INSTALLER_START_TERMINA_VM_MESSAGE},
+      {"startLxdMessage", IDS_CROSTINI_INSTALLER_START_LXD_MESSAGE},
       {"startContainerMessage", IDS_CROSTINI_INSTALLER_START_CONTAINER_MESSAGE},
       {"configureContainerMessage",
        IDS_CROSTINI_INSTALLER_CONFIGURE_CONTAINER_MESSAGE},
@@ -91,9 +94,6 @@ void AddStringResources(content::WebUIDataSource* source) {
 
   base::string16 device_name = ui::GetChromeOSDeviceName();
 
-  source->AddString(
-      "promptTitle",
-      l10n_util::GetStringFUTF8(IDS_CROSTINI_INSTALLER_TITLE, device_name));
   source->AddString("promptMessage",
                     l10n_util::GetStringFUTF8(
                         IDS_CROSTINI_INSTALLER_BODY,

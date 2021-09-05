@@ -26,6 +26,8 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.ContextUtils;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.banners.AppBannerManager;
+import org.chromium.chrome.browser.webapps.AddToHomescreenViewDelegate;
+import org.chromium.components.webapps.addtohomescreen.AppType;
 import org.chromium.ui.modaldialog.DialogDismissalCause;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modaldialog.ModalDialogProperties;

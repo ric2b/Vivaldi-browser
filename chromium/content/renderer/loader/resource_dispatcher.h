@@ -34,6 +34,7 @@
 #include "third_party/blink/public/mojom/frame/back_forward_cache_controller.mojom-forward.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom.h"
+#include "third_party/blink/public/platform/web_mojo_url_loader_client_observer.h"
 #include "third_party/blink/public/platform/web_url_loader.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "url/gurl.h"
@@ -43,6 +44,8 @@ class WaitableEvent;
 }
 
 namespace blink {
+class WebMojoURLLoaderClient;
+class WebRequestPeer;
 class ResourceLoadInfoNotifierWrapper;
 class ThrottlingURLLoader;
 struct SyncLoadResponse;
@@ -61,14 +64,13 @@ class URLLoaderFactory;
 }
 
 namespace content {
-class RequestPeer;
 class ResourceDispatcherDelegate;
-class URLLoaderClientImpl;
 
 // This class serves as a communication interface to the ResourceDispatcherHost
 // in the browser process. It can be used from any child process.
 // Virtual methods are for tests.
-class CONTENT_EXPORT ResourceDispatcher {
+class CONTENT_EXPORT ResourceDispatcher
+    : public blink::WebMojoURLLoaderClientObserver {
  public:
   // Generates ids for requests initiated by child processes unique to the
   // particular process, counted up from 0 (browser initiated requests count
@@ -80,7 +82,7 @@ class CONTENT_EXPORT ResourceDispatcher {
   static int MakeRequestID();
 
   ResourceDispatcher();
-  virtual ~ResourceDispatcher();
+  ~ResourceDispatcher() override;
 
   // Call this method to load the resource synchronously (i.e., in one shot).
   // This is an alternative to the StartAsync method. Be warned that this method
@@ -106,7 +108,7 @@ class CONTENT_EXPORT ResourceDispatcher {
       std::vector<std::unique_ptr<blink::URLLoaderThrottle>> throttles,
       base::TimeDelta timeout,
       mojo::PendingRemote<blink::mojom::BlobRegistry> download_to_blob_registry,
-      std::unique_ptr<RequestPeer> peer,
+      std::unique_ptr<blink::WebRequestPeer> peer,
       std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>
           resource_load_info_notifier_wrapper);
 
@@ -125,7 +127,7 @@ class CONTENT_EXPORT ResourceDispatcher {
       scoped_refptr<base::SingleThreadTaskRunner> loading_task_runner,
       const net::NetworkTrafficAnnotationTag& traffic_annotation,
       uint32_t loader_options,
-      std::unique_ptr<RequestPeer> peer,
+      std::unique_ptr<blink::WebRequestPeer> peer,
       scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
       std::vector<std::unique_ptr<blink::URLLoaderThrottle>> throttles,
       std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>
@@ -161,10 +163,11 @@ class CONTENT_EXPORT ResourceDispatcher {
     return weak_factory_.GetWeakPtr();
   }
 
-  void OnTransferSizeUpdated(int request_id, int32_t transfer_size_diff);
-
   void EvictFromBackForwardCache(blink::mojom::RendererEvictionReason reason,
-                                 int request_id);
+                                 int request_id) override;
+  void DidBufferLoadWhileInBackForwardCache(size_t num_bytes,
+                                            int request_id) override;
+  bool CanContinueBufferingWhileInBackForwardCache(int request_id) override;
 
   // Sets the CORS exempt header list for sanity checking.
   void SetCorsExemptHeaderList(const std::vector<std::string>& list);
@@ -188,7 +191,7 @@ class CONTENT_EXPORT ResourceDispatcher {
   friend class ResourceDispatcherTest;
 
   struct PendingRequestInfo {
-    PendingRequestInfo(std::unique_ptr<RequestPeer> peer,
+    PendingRequestInfo(std::unique_ptr<blink::WebRequestPeer> peer,
                        network::mojom::RequestDestination request_destination,
                        int render_frame_id,
                        const GURL& request_url,
@@ -197,7 +200,7 @@ class CONTENT_EXPORT ResourceDispatcher {
 
     ~PendingRequestInfo();
 
-    std::unique_ptr<RequestPeer> peer;
+    std::unique_ptr<blink::WebRequestPeer> peer;
     network::mojom::RequestDestination request_destination;
     int render_frame_id;
     blink::WebURLLoader::DeferType is_deferred =
@@ -223,7 +226,7 @@ class CONTENT_EXPORT ResourceDispatcher {
 
     // For mojo loading.
     std::unique_ptr<blink::ThrottlingURLLoader> url_loader;
-    std::unique_ptr<URLLoaderClientImpl> url_loader_client;
+    std::unique_ptr<blink::WebMojoURLLoaderClient> url_loader_client;
 
     // The Client Hints headers that need to be removed from a redirect.
     std::vector<std::string> removed_headers;
@@ -241,19 +244,27 @@ class CONTENT_EXPORT ResourceDispatcher {
   // Follows redirect, if any, for the given request.
   void FollowPendingRedirect(PendingRequestInfo* request_info);
 
-  // Message response handlers, called by the message handler for this process.
-  void OnUploadProgress(int request_id, int64_t position, int64_t size);
-  void OnReceivedResponse(int request_id, network::mojom::URLResponseHeadPtr);
-  void OnReceivedCachedMetadata(int request_id, mojo_base::BigBuffer data);
+  // Implements blink::WebMojoURLLoaderClientObserver.
+  void OnTransferSizeUpdated(int request_id,
+                             int32_t transfer_size_diff) override;
+  void OnUploadProgress(int request_id,
+                        int64_t position,
+                        int64_t size) override;
+  void OnReceivedResponse(int request_id,
+                          network::mojom::URLResponseHeadPtr) override;
+  void OnReceivedCachedMetadata(int request_id,
+                                mojo_base::BigBuffer data) override;
   void OnReceivedRedirect(
       int request_id,
       const net::RedirectInfo& redirect_info,
-      network::mojom::URLResponseHeadPtr response_head,
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner);
-  void OnStartLoadingResponseBody(int request_id,
-                                  mojo::ScopedDataPipeConsumerHandle body);
-  void OnRequestComplete(int request_id,
-                         const network::URLLoaderCompletionStatus& status);
+      network::mojom::URLResponseHeadPtr head,
+      scoped_refptr<base::SingleThreadTaskRunner> task_runner) override;
+  void OnStartLoadingResponseBody(
+      int request_id,
+      mojo::ScopedDataPipeConsumerHandle body) override;
+  void OnRequestComplete(
+      int request_id,
+      const network::URLLoaderCompletionStatus& status) override;
 
   void ToLocalURLResponseHead(
       const PendingRequestInfo& request_info,

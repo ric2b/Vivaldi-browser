@@ -73,10 +73,6 @@ class ResourceContext;
 // TODO(wjmaclean): Move this into its own .h file.
 class CONTENT_EXPORT ProcessLock {
  public:
-  // Error page processes are locked to a special error URL, to avoid loading
-  // real pages into the process.
-  static ProcessLock CreateForErrorPage();
-
   // Create a lock that that represents a process that is associated with at
   // least one SiteInstance, but is not locked to a specific site. Any request
   // that wants to commit in this process must have COOP/COEP information that
@@ -136,6 +132,10 @@ class CONTENT_EXPORT ProcessLock {
     return site_info_.has_value()
                ? site_info_->coop_coep_cross_origin_isolated_info()
                : CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated();
+  }
+
+  bool is_error_page() const {
+    return site_info_.has_value() && site_info_->is_error_page();
   }
 
   // Returns whether lock_url() is at least at the granularity of a site (i.e.,
@@ -306,6 +306,8 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
   std::vector<url::Origin> GetIsolatedOrigins(
       base::Optional<IsolatedOriginSource> source = base::nullopt,
       BrowserContext* browser_context = nullptr) override;
+  bool IsIsolatedSiteFromSource(const url::Origin& origin,
+                                IsolatedOriginSource source) override;
   void ClearIsolatedOriginsForTesting() override;
 
   // Identical to the above method, but takes url::Origin as input.
@@ -393,9 +395,12 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
                                      bool origin_requests_isolation);
 
   // This function adds |origin| to the master list of origins that have
-  // ever requested opt-in isolation, either via an OriginPolicy or opt-in
-  // header. Returns true if |origin| is not already in the list.
-  bool UpdateOriginIsolationOptInListIfNecessary(const url::Origin& origin);
+  // ever requested opt-in isolation in the given |browser_context|, either via
+  // an OriginPolicy or opt-in header. Returns true if |origin| is not already
+  // in the list.
+  bool UpdateOriginIsolationOptInListIfNecessary(
+      BrowserContext* browser_context,
+      const url::Origin& origin);
 
   // A version of GetMatchingIsolatedOrigin that takes in both the |origin| and
   // the |site_url| that |origin| corresponds to.  |site_url| is the key by
@@ -590,9 +595,10 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
   // all policy checks.
   Handle CreateHandle(int child_id);
 
-  // Returns true if we have seen an isolation request for this origin before
-  // in any BrowsingInstance.
-  bool HasOriginEverRequestedOptInIsolation(const url::Origin& origin);
+  // Returns true if we have seen an isolation request for this |origin| in the
+  // given |browser_context| before in any BrowsingInstance.
+  bool HasOriginEverRequestedOptInIsolation(BrowserContext* browser_context,
+                                            const url::Origin& origin);
 
   // Adds |origin| to the non-isolated list for the BrowsingInstance specified
   // by |isolation_context|, if we need to track it and it's not already in the
@@ -886,13 +892,17 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
   // prevent any record of sites visible in one profile from being visible to
   // another profile.
   base::Lock origins_isolation_opt_in_lock_;
-  // The set of all origins that have ever requested opt-in isolation. This is
-  // tracked so we know which origins need to be tracked when non-isolated in
-  // any given BrowsingInstance. Origins requesting isolation, if successful,
-  // are marked as isolated via ShouldOriginGetOptInIsolation's checking
-  // |origin_requests_isolation|.
-  base::flat_set<url::Origin> origin_isolation_opt_ins_
-      GUARDED_BY(origins_isolation_opt_in_lock_);
+  // The set of all origins that have ever requested opt-in isolation, organized
+  // by BrowserContext. This is tracked so we know which origins need to be
+  // tracked when non-isolated in any given BrowsingInstance. Origins requesting
+  // isolation, if successful, are marked as isolated via
+  // ShouldOriginGetOptInIsolation's checking |origin_requests_isolation|.
+  // Each BrowserContext's state is tracked separately so that timing attacks do
+  // not reveal whether an origin has been visited in another (e.g., incognito)
+  // BrowserContext. In general, the state of other BrowsingInstances is not
+  // observable outside such timing side channels.
+  base::flat_map<BrowserContext*, base::flat_set<url::Origin>>
+      origin_isolation_opt_ins_ GUARDED_BY(origins_isolation_opt_in_lock_);
   // A map to track origins that have been isolated within a given
   // BrowsingInstance.
   base::flat_map<BrowsingInstanceId, std::vector<url::Origin>>
@@ -909,8 +919,13 @@ class CONTENT_EXPORT ChildProcessSecurityPolicyImpl
 
   // When we are notified a BrowsingInstance has destructed, delay cleanup by
   // this amount to allow outstanding IO thread requests to complete. May be set
-  // to different values in tests.
-  int64_t browsing_instance_cleanup_delay_in_seconds_ = 10;
+  // to different values in tests. Note: the value is chosen to be slightly
+  // longer than the KeepAliveHandleFactory delay of 30 seconds, with the aim of
+  // covering the maximum time needed by any IncrementKeepAliveRefCount callers.
+  // TODO(wjmaclean): we know the IncrementKeepAliveRefCount API needs
+  // improvement, and with it the BrowsingInstance cleanup here can also be
+  // improved.
+  int64_t browsing_instance_cleanup_delay_in_seconds_;
 
   DISALLOW_COPY_AND_ASSIGN(ChildProcessSecurityPolicyImpl);
 };

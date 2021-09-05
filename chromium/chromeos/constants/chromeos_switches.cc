@@ -97,13 +97,19 @@ const char kArcDisableGmsCoreCache[] = "arc-disable-gms-core-cache";
 // 'en-US,en' as preferred languages.
 const char kArcDisableLocaleSync[] = "arc-disable-locale-sync";
 
-// Used for development of Android app that are included into ARC++ as system
-// default apps in order to be able to install them via adb.
-const char kArcDisableSystemDefaultApps[] = "arc-disable-system-default-apps";
+// Used to disable GMS scheduling of media store periodic indexing and corpora
+// maintenance tasks. Used in performance tests to prevent running during
+// testing which can cause unstable results or CPU not idle pre-test failures.
+const char kArcDisableMediaStoreMaintenance[] =
+    "arc-disable-media-store-maintenance";
 
 // Flag that disables ARC Play Auto Install flow that installs set of predefined
 // apps silently. Used in autotests to resolve racy conditions.
 const char kArcDisablePlayAutoInstall[] = "arc-disable-play-auto-install";
+
+// Used for development of Android app that are included into ARC as system
+// default apps in order to be able to install them via adb.
+const char kArcDisableSystemDefaultApps[] = "arc-disable-system-default-apps";
 
 // Flag that forces ARC to cache icons for apps.
 const char kArcForceCacheAppIcons[] = "arc-force-cache-app-icons";
@@ -230,6 +236,11 @@ const char kDisableMachineCertRequest[] = "disable-machine-cert-request";
 
 // Disables the multiple display layout UI.
 const char kDisableMultiDisplayLayout[] = "disable-multi-display-layout";
+
+// Disables the ChromeVox hint timer in OOBE, which can lead to unexpected
+// behavior during tests.
+const char kDisableOOBEChromeVoxHintTimerForTesting[] =
+    "disable-oobe-chromevox-hint-timer-for-testing";
 
 // Disables per-user timezone.
 const char kDisablePerUserTimezone[] = "disable-per-user-timezone";
@@ -418,6 +429,10 @@ const char kIgnoreArcVmDevConf[] = "ignore-arcvm-dev-conf";
 const char kIgnoreUserProfileMappingForTests[] =
     "ignore-user-profile-mapping-for-tests";
 
+// Decreases delay in uploading installation event logs for integration test.
+const char kInstallLogFastUploadForTests[] =
+    "install-log-fast-upload-for-tests";
+
 // If set, the Chrome settings will not expose the option to enable crostini
 // unless the enable-experimental-kernel-vm-support flag is set in
 // chrome://flags
@@ -547,6 +562,9 @@ const char kShowLoginDevOverlay[] = "show-login-dev-overlay";
 // testing. Limited to ChromeOS-on-linux and test images only.
 const char kShowOobeDevOverlay[] = "show-oobe-dev-overlay";
 
+// Enables OOBE testing API for tast tests.
+const char kEnableOobeTestAPI[] = "enable-oobe-test-api";
+
 // Specifies directory for screenshots taken with OOBE UI Debugger.
 const char kOobeScreenshotDirectory[] = "oobe-screenshot-dir";
 
@@ -662,6 +680,11 @@ bool ShouldOobeUseTabletModeFirstRun() {
 bool IsAueReachedForUpdateRequiredForTest() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       kUpdateRequiredAueForTest);
+}
+
+bool IsOOBEChromeVoxHintTimerDisabledForTesting() {
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      kDisableOOBEChromeVoxHintTimerForTesting);
 }
 
 }  // namespace switches

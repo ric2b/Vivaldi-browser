@@ -22,12 +22,11 @@
 #include "components/password_manager/core/browser/password_reuse_detector.h"
 #include "components/safe_browsing/content/password_protection/password_protection_navigation_throttle.h"
 #include "components/safe_browsing/content/password_protection/password_protection_request.h"
+#include "components/safe_browsing/core/common/thread_utils.h"
 #include "components/safe_browsing/core/common/utils.h"
 #include "components/safe_browsing/core/db/database_manager.h"
 #include "components/safe_browsing/core/features.h"
 #include "components/zoom/zoom_controller.h"
-#include "content/public/browser/browser_task_traits.h"
-#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "google_apis/google_api_keys.h"
@@ -35,7 +34,6 @@
 #include "net/base/url_util.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
 
-using content::BrowserThread;
 using content::WebContents;
 using history::HistoryService;
 using password_manager::metrics_util::PasswordType;
@@ -53,13 +51,13 @@ const char kPasswordProtectionRequestUrl[] =
 
 }  // namespace
 
-PasswordProtectionService::PasswordProtectionService(
+PasswordProtectionServiceBase::PasswordProtectionServiceBase(
     const scoped_refptr<SafeBrowsingDatabaseManager>& database_manager,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     HistoryService* history_service)
     : database_manager_(database_manager),
       url_loader_factory_(url_loader_factory) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK(CurrentlyOnThread(ThreadID::UI));
   if (history_service)
     history_service_observation_.Observe(history_service);
 
@@ -69,15 +67,15 @@ PasswordProtectionService::PasswordProtectionService(
                              "linkedin.com"};
 }
 
-PasswordProtectionService::~PasswordProtectionService() {
+PasswordProtectionServiceBase::~PasswordProtectionServiceBase() {
   tracker_.TryCancelAll();
   CancelPendingRequests();
-  if (history_service_observation_.IsObserving())
-    history_service_observation_.RemoveObservation();
+  history_service_observation_.Reset();
   weak_factory_.InvalidateWeakPtrs();
 }
 
-bool PasswordProtectionService::CanGetReputationOfURL(const GURL& url) {
+// static
+bool PasswordProtectionServiceBase::CanGetReputationOfURL(const GURL& url) {
   if (!safe_browsing::CanGetReputationOfUrl(url)) {
     return false;
   }
@@ -86,13 +84,13 @@ bool PasswordProtectionService::CanGetReputationOfURL(const GURL& url) {
 }
 
 #if defined(ON_FOCUS_PING_ENABLED)
-void PasswordProtectionService::MaybeStartPasswordFieldOnFocusRequest(
+void PasswordProtectionServiceBase::MaybeStartPasswordFieldOnFocusRequest(
     WebContents* web_contents,
     const GURL& main_frame_url,
     const GURL& password_form_action,
     const GURL& password_form_frame_url,
     const std::string& hosted_domain) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK(CurrentlyOnThread(ThreadID::UI));
   LoginReputationClientRequest::TriggerType trigger_type =
       LoginReputationClientRequest::UNFAMILIAR_LOGIN_PAGE;
   ReusedPasswordAccountType reused_password_account_type =
@@ -113,8 +111,7 @@ void PasswordProtectionService::MaybeStartPasswordFieldOnFocusRequest(
 }
 #endif
 
-#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
-void PasswordProtectionService::MaybeStartProtectedPasswordEntryRequest(
+void PasswordProtectionServiceBase::MaybeStartProtectedPasswordEntryRequest(
     WebContents* web_contents,
     const GURL& main_frame_url,
     const std::string& username,
@@ -122,7 +119,7 @@ void PasswordProtectionService::MaybeStartProtectedPasswordEntryRequest(
     const std::vector<password_manager::MatchingReusedCredential>&
         matching_reused_credentials,
     bool password_field_exists) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK(CurrentlyOnThread(ThreadID::UI));
   LoginReputationClientRequest::TriggerType trigger_type =
       LoginReputationClientRequest::PASSWORD_REUSE_EVENT;
   ReusedPasswordAccountType reused_password_account_type =
@@ -149,15 +146,13 @@ void PasswordProtectionService::MaybeStartProtectedPasswordEntryRequest(
       RequestOutcome reason = GetPingNotSentReason(
           trigger_type, main_frame_url, reused_password_account_type);
       LogNoPingingReason(trigger_type, reason, reused_password_account_type);
-#if defined(PASSWORD_REUSE_WARNING_ENABLED)
+
       if (reused_password_account_type.is_account_syncing())
         MaybeLogPasswordReuseLookupEvent(web_contents, reason, password_type,
                                          nullptr);
-#endif  // defined(PASSWORD_REUSE_WARNING_ENABLED)
     }
   }
 
-#if defined(PASSWORD_REUSE_WARNING_ENABLED)
   if (CanShowInterstitial(reused_password_account_type, main_frame_url)) {
     LogPasswordAlertModeOutcome(RequestOutcome::SUCCEEDED,
                                 reused_password_account_type);
@@ -166,12 +161,9 @@ void PasswordProtectionService::MaybeStartProtectedPasswordEntryRequest(
         reused_password_account_type;
     ShowInterstitial(web_contents, reused_password_account_type);
   }
-#endif  // defined(PASSWORD_REUSE_WARNING_ENABLED)
 }
-#endif  // defined(PASSWORD_REUSE_DETECTION_ENABLED)
 
-#if defined(PASSWORD_REUSE_WARNING_ENABLED)
-bool PasswordProtectionService::ShouldShowModalWarning(
+bool PasswordProtectionServiceBase::ShouldShowModalWarning(
     LoginReputationClientRequest::TriggerType trigger_type,
     ReusedPasswordAccountType password_type,
     LoginReputationClientResponse::VerdictType verdict_type) {
@@ -185,28 +177,8 @@ bool PasswordProtectionService::ShouldShowModalWarning(
          IsWarningEnabled(password_type);
 }
 
-void PasswordProtectionService::RemoveWarningRequestsByWebContents(
-    content::WebContents* web_contents) {
-  for (auto it = warning_requests_.begin(); it != warning_requests_.end();) {
-    if (it->get()->web_contents() == web_contents)
-      it = warning_requests_.erase(it);
-    else
-      ++it;
-  }
-}
-
-bool PasswordProtectionService::IsModalWarningShowingInWebContents(
-    content::WebContents* web_contents) {
-  for (const auto& request : warning_requests_) {
-    if (request->web_contents() == web_contents)
-      return true;
-  }
-  return false;
-}
-#endif
-
 LoginReputationClientResponse::VerdictType
-PasswordProtectionService::GetCachedVerdict(
+PasswordProtectionServiceBase::GetCachedVerdict(
     const GURL& url,
     LoginReputationClientRequest::TriggerType trigger_type,
     ReusedPasswordAccountType password_type,
@@ -214,14 +186,14 @@ PasswordProtectionService::GetCachedVerdict(
   return LoginReputationClientResponse::VERDICT_TYPE_UNSPECIFIED;
 }
 
-void PasswordProtectionService::CacheVerdict(
+void PasswordProtectionServiceBase::CacheVerdict(
     const GURL& url,
     LoginReputationClientRequest::TriggerType trigger_type,
     ReusedPasswordAccountType password_type,
     const LoginReputationClientResponse& verdict,
     const base::Time& receive_time) {}
 
-void PasswordProtectionService::StartRequest(
+void PasswordProtectionServiceBase::StartRequest(
     WebContents* web_contents,
     const GURL& main_frame_url,
     const GURL& password_form_action,
@@ -232,18 +204,18 @@ void PasswordProtectionService::StartRequest(
         matching_reused_credentials,
     LoginReputationClientRequest::TriggerType trigger_type,
     bool password_field_exists) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK(CurrentlyOnThread(ThreadID::UI));
   scoped_refptr<PasswordProtectionRequest> request(
       new PasswordProtectionRequest(
           web_contents, main_frame_url, password_form_action,
-          password_form_frame_url, username, password_type,
-          matching_reused_credentials, trigger_type, password_field_exists,
-          this, GetRequestTimeoutInMS()));
+          password_form_frame_url, web_contents->GetContentsMimeType(),
+          username, password_type, matching_reused_credentials, trigger_type,
+          password_field_exists, this, GetRequestTimeoutInMS()));
   request->Start();
   pending_requests_.insert(std::move(request));
 }
 
-bool PasswordProtectionService::CanSendPing(
+bool PasswordProtectionServiceBase::CanSendPing(
     LoginReputationClientRequest::TriggerType trigger_type,
     const GURL& main_frame_url,
     ReusedPasswordAccountType password_type) {
@@ -252,11 +224,11 @@ bool PasswordProtectionService::CanSendPing(
          !IsInExcludedCountry();
 }
 
-void PasswordProtectionService::RequestFinished(
+void PasswordProtectionServiceBase::RequestFinished(
     PasswordProtectionRequest* request,
     RequestOutcome outcome,
     std::unique_ptr<LoginReputationClientResponse> response) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK(CurrentlyOnThread(ThreadID::UI));
   DCHECK(request);
 
   if (response) {
@@ -283,7 +255,6 @@ void PasswordProtectionService::RequestFinished(
       return;
     }
 
-#if defined(PASSWORD_REUSE_WARNING_ENABLED)
     if (ShouldShowModalWarning(request->trigger_type(), password_type,
                                response->verdict_type())) {
       username_for_last_shown_warning_ = request->username();
@@ -294,12 +265,11 @@ void PasswordProtectionService::RequestFinished(
                        password_type);
       request->set_is_modal_warning_showing(true);
     }
-#endif
   }
 
   request->HandleDeferredNavigations();
 
-  // If the request is canceled, the PasswordProtectionService is already
+  // If the request is canceled, the PasswordProtectionServiceBase is already
   // partially destroyed, and we won't be able to log accurate metrics.
   if (outcome != RequestOutcome::CANCELED) {
     auto verdict =
@@ -337,8 +307,8 @@ void PasswordProtectionService::RequestFinished(
   }
 }
 
-void PasswordProtectionService::CancelPendingRequests() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+void PasswordProtectionServiceBase::CancelPendingRequests() {
+  DCHECK(CurrentlyOnThread(ThreadID::UI));
   for (auto it = pending_requests_.begin(); it != pending_requests_.end();) {
     PasswordProtectionRequest* request = it->get();
     // These are the requests for whom we're still waiting for verdicts.
@@ -350,28 +320,30 @@ void PasswordProtectionService::CancelPendingRequests() {
   DCHECK(pending_requests_.empty());
 }
 
-int PasswordProtectionService::GetStoredVerdictCount(
+int PasswordProtectionServiceBase::GetStoredVerdictCount(
     LoginReputationClientRequest::TriggerType trigger_type) {
   return -1;
 }
 
 scoped_refptr<SafeBrowsingDatabaseManager>
-PasswordProtectionService::database_manager() {
+PasswordProtectionServiceBase::database_manager() {
   return database_manager_;
 }
 
-GURL PasswordProtectionService::GetPasswordProtectionRequestUrl() {
+// static
+GURL PasswordProtectionServiceBase::GetPasswordProtectionRequestUrl() {
   GURL url(kPasswordProtectionRequestUrl);
   std::string api_key = google_apis::GetAPIKey();
   DCHECK(!api_key.empty());
   return url.Resolve("?key=" + net::EscapeQueryParamValue(api_key, true));
 }
 
-int PasswordProtectionService::GetRequestTimeoutInMS() {
+// static
+int PasswordProtectionServiceBase::GetRequestTimeoutInMS() {
   return kRequestTimeoutMs;
 }
 
-void PasswordProtectionService::FillUserPopulation(
+void PasswordProtectionServiceBase::FillUserPopulation(
     LoginReputationClientRequest::TriggerType trigger_type,
     LoginReputationClientRequest* request_proto) {
   ChromeUserPopulation* user_population = request_proto->mutable_population();
@@ -391,52 +363,25 @@ void PasswordProtectionService::FillUserPopulation(
   user_population->set_is_mbb_enabled(IsUserMBBOptedIn());
 }
 
-void PasswordProtectionService::OnURLsDeleted(
+void PasswordProtectionServiceBase::OnURLsDeleted(
     history::HistoryService* history_service,
     const history::DeletionInfo& deletion_info) {
-  content::GetUIThreadTaskRunner({})->PostTask(
-      FROM_HERE,
-      base::BindRepeating(&PasswordProtectionService::
-                              RemoveUnhandledSyncPasswordReuseOnURLsDeleted,
-                          GetWeakPtr(), deletion_info.IsAllHistory(),
-                          deletion_info.deleted_rows()));
+  GetTaskRunner(ThreadID::UI)
+      ->PostTask(
+          FROM_HERE,
+          base::BindRepeating(&PasswordProtectionServiceBase::
+                                  RemoveUnhandledSyncPasswordReuseOnURLsDeleted,
+                              GetWeakPtr(), deletion_info.IsAllHistory(),
+                              deletion_info.deleted_rows()));
 }
 
-void PasswordProtectionService::HistoryServiceBeingDeleted(
+void PasswordProtectionServiceBase::HistoryServiceBeingDeleted(
     history::HistoryService* history_service) {
   DCHECK(history_service_observation_.IsObservingSource(history_service));
-  history_service_observation_.RemoveObservation();
+  history_service_observation_.Reset();
 }
 
-std::unique_ptr<PasswordProtectionNavigationThrottle>
-PasswordProtectionService::MaybeCreateNavigationThrottle(
-    content::NavigationHandle* navigation_handle) {
-  if (!navigation_handle->IsRendererInitiated())
-    return nullptr;
-
-  content::WebContents* web_contents = navigation_handle->GetWebContents();
-  for (scoped_refptr<PasswordProtectionRequest> request : pending_requests_) {
-    if (request->web_contents() == web_contents &&
-        request->trigger_type() ==
-            safe_browsing::LoginReputationClientRequest::PASSWORD_REUSE_EVENT &&
-        IsSupportedPasswordTypeForModalWarning(
-            GetPasswordProtectionReusedPasswordAccountType(
-                request->password_type(), username_for_last_shown_warning()))) {
-      return std::make_unique<PasswordProtectionNavigationThrottle>(
-          navigation_handle, request, /*is_warning_showing=*/false);
-    }
-  }
-
-  for (scoped_refptr<PasswordProtectionRequest> request : warning_requests_) {
-    if (request->web_contents() == web_contents) {
-      return std::make_unique<PasswordProtectionNavigationThrottle>(
-          navigation_handle, request, /*is_warning_showing=*/true);
-    }
-  }
-  return nullptr;
-}
-
-bool PasswordProtectionService::IsWarningEnabled(
+bool PasswordProtectionServiceBase::IsWarningEnabled(
     ReusedPasswordAccountType password_type) {
   return GetPasswordProtectionWarningTriggerPref(password_type) ==
          PHISHING_REUSE;
@@ -444,7 +389,7 @@ bool PasswordProtectionService::IsWarningEnabled(
 
 // static
 ReusedPasswordType
-PasswordProtectionService::GetPasswordProtectionReusedPasswordType(
+PasswordProtectionServiceBase::GetPasswordProtectionReusedPasswordType(
     password_manager::metrics_util::PasswordType password_type) {
   switch (password_type) {
     case PasswordType::SAVED_PASSWORD:
@@ -465,7 +410,7 @@ PasswordProtectionService::GetPasswordProtectionReusedPasswordType(
 }
 
 ReusedPasswordAccountType
-PasswordProtectionService::GetPasswordProtectionReusedPasswordAccountType(
+PasswordProtectionServiceBase::GetPasswordProtectionReusedPasswordAccountType(
     password_manager::metrics_util::PasswordType password_type,
     const std::string& username) const {
   ReusedPasswordAccountType reused_password_account_type;
@@ -516,7 +461,7 @@ PasswordProtectionService::GetPasswordProtectionReusedPasswordAccountType(
 
 // static
 PasswordType
-PasswordProtectionService::ConvertReusedPasswordAccountTypeToPasswordType(
+PasswordProtectionServiceBase::ConvertReusedPasswordAccountTypeToPasswordType(
     ReusedPasswordAccountType password_type) {
   if (password_type.is_account_syncing()) {
     return PasswordType::PRIMARY_ACCOUNT_PASSWORD;
@@ -534,7 +479,7 @@ PasswordProtectionService::ConvertReusedPasswordAccountTypeToPasswordType(
   }
 }
 
-bool PasswordProtectionService::IsSupportedPasswordTypeForPinging(
+bool PasswordProtectionServiceBase::IsSupportedPasswordTypeForPinging(
     PasswordType password_type) const {
   switch (password_type) {
     case PasswordType::SAVED_PASSWORD:
@@ -554,9 +499,8 @@ bool PasswordProtectionService::IsSupportedPasswordTypeForPinging(
   return false;
 }
 
-bool PasswordProtectionService::IsSupportedPasswordTypeForModalWarning(
+bool PasswordProtectionServiceBase::IsSupportedPasswordTypeForModalWarning(
     ReusedPasswordAccountType password_type) const {
-
   if (password_type.account_type() ==
           ReusedPasswordAccountType::SAVED_PASSWORD &&
       base::FeatureList::IsEnabled(
@@ -583,11 +527,58 @@ bool PasswordProtectionService::IsSupportedPasswordTypeForModalWarning(
 }
 
 #if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
-void PasswordProtectionService::GetPhishingDetector(
+void PasswordProtectionServiceBase::GetPhishingDetector(
     service_manager::InterfaceProvider* provider,
     mojo::Remote<mojom::PhishingDetector>* phishing_detector) {
   provider->GetInterface(phishing_detector->BindNewPipeAndPassReceiver());
 }
 #endif
+
+std::unique_ptr<PasswordProtectionNavigationThrottle>
+PasswordProtectionService::MaybeCreateNavigationThrottle(
+    content::NavigationHandle* navigation_handle) {
+  if (!navigation_handle->IsRendererInitiated())
+    return nullptr;
+
+  content::WebContents* web_contents = navigation_handle->GetWebContents();
+  for (scoped_refptr<PasswordProtectionRequest> request : pending_requests_) {
+    if (request->web_contents() == web_contents &&
+        request->trigger_type() ==
+            safe_browsing::LoginReputationClientRequest::PASSWORD_REUSE_EVENT &&
+        IsSupportedPasswordTypeForModalWarning(
+            GetPasswordProtectionReusedPasswordAccountType(
+                request->password_type(), username_for_last_shown_warning()))) {
+      return std::make_unique<PasswordProtectionNavigationThrottle>(
+          navigation_handle, request, /*is_warning_showing=*/false);
+    }
+  }
+
+  for (scoped_refptr<PasswordProtectionRequest> request : warning_requests_) {
+    if (request->web_contents() == web_contents) {
+      return std::make_unique<PasswordProtectionNavigationThrottle>(
+          navigation_handle, request, /*is_warning_showing=*/true);
+    }
+  }
+  return nullptr;
+}
+
+void PasswordProtectionService::RemoveWarningRequestsByWebContents(
+    content::WebContents* web_contents) {
+  for (auto it = warning_requests_.begin(); it != warning_requests_.end();) {
+    if (it->get()->web_contents() == web_contents)
+      it = warning_requests_.erase(it);
+    else
+      ++it;
+  }
+}
+
+bool PasswordProtectionService::IsModalWarningShowingInWebContents(
+    content::WebContents* web_contents) {
+  for (const auto& request : warning_requests_) {
+    if (request->web_contents() == web_contents)
+      return true;
+  }
+  return false;
+}
 
 }  // namespace safe_browsing

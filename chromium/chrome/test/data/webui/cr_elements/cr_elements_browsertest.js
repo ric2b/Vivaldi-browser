@@ -17,11 +17,11 @@ GEN('#include "content/public/test/browser_test.h"');
 function CrElementsBrowserTest() {}
 
 CrElementsBrowserTest.prototype = {
-  __proto__: PolymerTest.prototype,
+  __proto__: Polymer2DeprecatedTest.prototype,
 
   /** @override */
   extraLibraries: [
-    ...PolymerTest.prototype.extraLibraries,
+    ...Polymer2DeprecatedTest.prototype.extraLibraries,
     '//ui/webui/resources/js/assert.js',
   ],
 
@@ -78,29 +78,6 @@ CrElementsSearchFieldTest.prototype = {
 };
 
 TEST_F('CrElementsSearchFieldTest', 'All', function() {
-  mocha.run();
-});
-
-/**
- * @constructor
- * @extends {CrElementsBrowserTest}
- */
-function CrElementsToolbarTest() {}
-
-CrElementsToolbarTest.prototype = {
-  __proto__: CrElementsBrowserTest.prototype,
-
-  /** @override */
-  browsePreload: 'chrome://resources/cr_elements/cr_toolbar/cr_toolbar.html',
-
-  /** @override */
-  extraLibraries: CrElementsBrowserTest.prototype.extraLibraries.concat([
-    '../test_util.js',
-    'cr_toolbar_tests.js',
-  ]),
-};
-
-TEST_F('CrElementsToolbarTest', 'All', function() {
   mocha.run();
 });
 

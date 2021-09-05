@@ -7,6 +7,9 @@
 
 namespace winsparkle {
 
+vivaldi::InstallType g_install_type = vivaldi::InstallType::kForCurrentUser;
+bool g_silent_update = false;
+
 namespace {
 
 const wchar_t kInstaller[] = L"Installer";

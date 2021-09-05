@@ -39,6 +39,10 @@ namespace blink {
 
 namespace {
 
+const char kFeaturePolicyBlocked[] =
+    "Access to the feature \"display-capture\" is disallowed by permission "
+    "policy.";
+
 class PromiseResolverCallbacks final : public UserMediaRequest::Callbacks {
  public:
   explicit PromiseResolverCallbacks(ScriptPromiseResolver* resolver)
@@ -185,6 +189,22 @@ ScriptPromise MediaDevices::getCurrentBrowsingContextMedia(
     ScriptState* script_state,
     const MediaStreamConstraints* options,
     ExceptionState& exception_state) {
+  const ExecutionContext* const context = GetExecutionContext();
+  if (!context) {
+    exception_state.ThrowDOMException(
+        DOMExceptionCode::kNotSupportedError,
+        "The implementation did not support the requested type of object or "
+        "operation.");
+    return ScriptPromise();
+  }
+
+  if (!context->IsFeatureEnabled(
+          mojom::blink::FeaturePolicyFeature::kDisplayCapture,
+          ReportOptions::kReportOnFailure)) {
+    exception_state.ThrowSecurityError(kFeaturePolicyBlocked);
+    return ScriptPromise();
+  }
+
   return SendUserMediaRequest(
       script_state,
       UserMediaRequest::MediaType::kGetCurrentBrowsingContextMedia, options,
@@ -297,7 +317,7 @@ namespace {
 void RecordEnumeratedDevices(ScriptPromiseResolver* resolver,
                              const MediaDeviceInfoVector& media_devices) {
   if (!IdentifiabilityStudySettings::Get()->IsWebFeatureAllowed(
-          WebFeature::kMediaDevicesEnumerateDevices)) {
+          WebFeature::kIdentifiabilityMediaDevicesEnumerateDevices)) {
     return;
   }
   Document* document = LocalDOMWindow::From(resolver->GetScriptState())
@@ -305,13 +325,13 @@ void RecordEnumeratedDevices(ScriptPromiseResolver* resolver,
                            ->GetDocument();
   IdentifiableTokenBuilder builder;
   for (const auto& device_info : media_devices) {
-    builder.AddToken(IdentifiabilityBenignStringToken(device_info->deviceId()));
+    // Ignore device_id since that varies per-site.
     builder.AddToken(IdentifiabilityBenignStringToken(device_info->kind()));
     builder.AddToken(IdentifiabilityBenignStringToken(device_info->label()));
-    builder.AddToken(IdentifiabilityBenignStringToken(device_info->groupId()));
+    // Ignore group_id since that is varies per-site.
   }
   IdentifiabilityMetricBuilder(document->UkmSourceID())
-      .SetWebfeature(WebFeature::kMediaDevicesEnumerateDevices,
+      .SetWebfeature(WebFeature::kIdentifiabilityMediaDevicesEnumerateDevices,
                      builder.GetToken())
       .Record(document->UkmRecorder());
 }

@@ -9,6 +9,10 @@
 
 #include <string>
 
+namespace base {
+class GUID;
+}  // namespace base
+
 namespace vivaldi {
 class NotesModel;
 class NoteNode;
@@ -62,7 +66,7 @@ void UpdateNoteNodeFromSpecifics(const sync_pb::NotesSpecifics& specifics,
 // modified despite being immutable within the NoteNode itself. Returns
 // the newly created node, and the original node gets deleted.
 const vivaldi::NoteNode* ReplaceNoteNodeGUID(const vivaldi::NoteNode* node,
-                                             const std::string& guid,
+                                             const base::GUID& guid,
                                              vivaldi::NotesModel* model);
 
 // Checks if a note specifics represents a valid note. |is_folder| is

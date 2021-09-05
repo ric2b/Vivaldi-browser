@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+
+function loadCommonComponents() {
+// TODO(crbug.com/1111387) - Remove excessive logging.
+  console.warn('loadCommonComponents() : Starting to load common components.');
 // This inclusion is types-only. No actual code to execute.
 // <include src="../components/oobe_types.js">
 
@@ -9,8 +13,7 @@
 // <include src="../components/login_screen_behavior.js">
 // <include src="../components/multi_step_behavior.js">
 // <include src="../components/oobe_buttons.js">
-// <include src="../components/oobe_dialog.js">
-// <include src="../components/oobe_help_dialog.js">
+// <include src="../components/oobe_modal_dialog.js">
 // <include src="../components/html-echo.js">
 // <include src="../notification_card.js">
 
@@ -25,7 +28,6 @@
 // <include src="../checking_downloading_update.js">
 
 // <include src="../screen_gaia_signin.js">
-// <include src="../offline_gaia.js">
 // <include src="../saml_confirm_password.js">
 // <include src="../offline_ad_login.js">
 // <include src="../arc_terms_of_service.js">
@@ -40,6 +42,7 @@
 // <include src="../marketing_opt_in.js">
 // <include src="../oobe_screen_assistant_optin_flow.js">
 // <include src="../multidevice_setup_first_run.js">
+// <include src="../screen_multidevice_setup.js">
 // <include src="../security_token_pin.js">
 // <include src="../gesture_navigation.js">
 // <include src="../screen_tpm_error.js">
@@ -50,5 +53,9 @@
 // <include src="../screen_signin_fatal_error.js">
 // <include src="../parental_handoff.js">
 // <include src="../screen_app_launch_splash.js">
+// <include src="../oobe_screen_autolaunch.js">
 
 // <include src="components_[OOBE].js">
+// TODO(crbug.com/1111387) - Remove excessive logging.
+  console.warn('loadCommonComponents() : Common components have loaded.');
+}

@@ -257,37 +257,57 @@ class AXPlatformNodeTextRangeProviderTest : public ui::AXPlatformNodeWinTest {
     std::reverse(word_end_offsets.begin(), word_end_offsets.end());
   }
 
-  ui::AXTreeUpdate BuildTextDocument(
+  AXTreeUpdate BuildTextDocument(
       const std::vector<std::string>& text_nodes_content,
-      bool build_word_boundaries_offsets = false) {
+      bool build_word_boundaries_offsets = false,
+      bool place_text_on_one_line = false) {
     int current_id = 0;
-    ui::AXNodeData root_data;
+    AXNodeData root_data;
     root_data.id = ++current_id;
     root_data.role = ax::mojom::Role::kRootWebArea;
 
-    ui::AXTreeUpdate update;
+    AXTreeUpdate update;
     update.tree_data.tree_id = ui::AXTreeID::CreateNewAXTreeID();
     update.has_tree_data = true;
 
     for (const std::string& text_content : text_nodes_content) {
-      ui::AXNodeData text_data;
-      text_data.id = ++current_id;
-      text_data.role = ax::mojom::Role::kStaticText;
-      text_data.SetName(text_content);
+      AXNodeData static_text_data;
+      static_text_data.id = ++current_id;
+      static_text_data.role = ax::mojom::Role::kStaticText;
+      static_text_data.SetName(text_content);
+      root_data.child_ids.push_back(static_text_data.id);
+
+      AXNodeData inline_box_data;
+      inline_box_data.id = ++current_id;
+      inline_box_data.role = ax::mojom::Role::kInlineTextBox;
+      inline_box_data.SetName(text_content);
+      static_text_data.child_ids = {inline_box_data.id};
 
       if (build_word_boundaries_offsets) {
         std::vector<int> word_end_offsets;
         std::vector<int> word_start_offsets;
         ComputeWordBoundariesOffsets(text_content, word_start_offsets,
                                      word_end_offsets);
-        text_data.AddIntListAttribute(ax::mojom::IntListAttribute::kWordStarts,
-                                      word_start_offsets);
-        text_data.AddIntListAttribute(ax::mojom::IntListAttribute::kWordEnds,
-                                      word_end_offsets);
+        inline_box_data.AddIntListAttribute(
+            ax::mojom::IntListAttribute::kWordStarts, word_start_offsets);
+        inline_box_data.AddIntListAttribute(
+            ax::mojom::IntListAttribute::kWordEnds, word_end_offsets);
       }
 
-      root_data.child_ids.push_back(text_data.id);
-      update.nodes.push_back(text_data);
+      if (place_text_on_one_line && !update.nodes.empty()) {
+        AXNodeData* previous_inline_box_data = &update.nodes.back();
+        static_text_data.AddIntAttribute(
+            ax::mojom::IntAttribute::kPreviousOnLineId,
+            previous_inline_box_data->id);
+        inline_box_data.AddIntAttribute(
+            ax::mojom::IntAttribute::kPreviousOnLineId,
+            previous_inline_box_data->id);
+        previous_inline_box_data->AddIntAttribute(
+            ax::mojom::IntAttribute::kNextOnLineId, inline_box_data.id);
+      }
+
+      update.nodes.push_back(static_text_data);
+      update.nodes.push_back(inline_box_data);
     }
 
     update.nodes.insert(update.nodes.begin(), root_data);
@@ -356,6 +376,7 @@ class AXPlatformNodeTextRangeProviderTest : public ui::AXPlatformNodeWinTest {
 
     text_field.role = ax::mojom::Role::kTextField;
     text_field.AddState(ax::mojom::State::kEditable);
+    text_field.AddBoolAttribute(ax::mojom::BoolAttribute::kEditableRoot, true);
     text_field.SetValue(ALL_TEXT);
     text_field.AddIntListAttribute(
         ax::mojom::IntListAttribute::kCachedLineStarts,
@@ -577,7 +598,7 @@ class AXPlatformNodeTextRangeProviderTest : public ui::AXPlatformNodeWinTest {
     return update;
   }
 
-  ui::AXTreeUpdate BuildAXTreeForMoveByFormat() {
+  AXTreeUpdate BuildAXTreeForMoveByFormat() {
     //                    1
     //                    |
     //    -------------------------------------
@@ -588,120 +609,133 @@ class AXPlatformNodeTextRangeProviderTest : public ui::AXPlatformNodeWinTest {
     //    |   |   |   |   |    |    |    |    |
     //    3   5   6   7   9   11   13   15   17
 
-    ui::AXNodeData group1_data;
+    AXNodeData group1_data;
     group1_data.id = 2;
     group1_data.role = ax::mojom::Role::kGenericContainer;
     group1_data.AddStringAttribute(ax::mojom::StringAttribute::kFontFamily,
                                    "test font");
+    group1_data.AddBoolAttribute(
+        ax::mojom::BoolAttribute::kIsLineBreakingObject, true);
 
-    ui::AXNodeData text_data;
+    AXNodeData text_data;
     text_data.id = 3;
     text_data.role = ax::mojom::Role::kStaticText;
-    std::string text_content = "Text with formatting";
-    text_data.SetName(text_content);
-    group1_data.child_ids = {3};
+    text_data.SetName("Text with formatting");
+    group1_data.child_ids = {text_data.id};
 
-    ui::AXNodeData group2_data;
+    AXNodeData group2_data;
     group2_data.id = 4;
     group2_data.role = ax::mojom::Role::kGenericContainer;
+    group2_data.AddBoolAttribute(
+        ax::mojom::BoolAttribute::kIsLineBreakingObject, true);
 
-    ui::AXNodeData line_break1_data;
+    AXNodeData line_break1_data;
     line_break1_data.id = 5;
     line_break1_data.role = ax::mojom::Role::kLineBreak;
+    line_break1_data.SetName("\n");
 
-    ui::AXNodeData standalone_text_data;
+    AXNodeData standalone_text_data;
     standalone_text_data.id = 6;
     standalone_text_data.role = ax::mojom::Role::kStaticText;
-    text_content = "Standalone line with no formatting";
-    standalone_text_data.SetName(text_content);
+    standalone_text_data.SetName("Standalone line with no formatting");
 
-    ui::AXNodeData line_break2_data;
+    AXNodeData line_break2_data;
     line_break2_data.id = 7;
     line_break2_data.role = ax::mojom::Role::kLineBreak;
+    line_break2_data.SetName("\n");
 
-    group2_data.child_ids = {5, 6, 7};
+    group2_data.child_ids = {line_break1_data.id, standalone_text_data.id,
+                             line_break2_data.id};
 
-    ui::AXNodeData group3_data;
+    AXNodeData group3_data;
     group3_data.id = 8;
     group3_data.role = ax::mojom::Role::kGenericContainer;
     group3_data.AddIntAttribute(
         ax::mojom::IntAttribute::kTextStyle,
         static_cast<int32_t>(ax::mojom::TextStyle::kBold));
+    group3_data.AddBoolAttribute(
+        ax::mojom::BoolAttribute::kIsLineBreakingObject, true);
 
-    ui::AXNodeData bold_text_data;
+    AXNodeData bold_text_data;
     bold_text_data.id = 9;
     bold_text_data.role = ax::mojom::Role::kStaticText;
-    text_content = "bold text";
-    bold_text_data.SetName(text_content);
-    group3_data.child_ids = {9};
+    bold_text_data.SetName("bold text");
+    group3_data.child_ids = {bold_text_data.id};
 
-    ui::AXNodeData paragraph1_data;
+    AXNodeData paragraph1_data;
     paragraph1_data.id = 10;
     paragraph1_data.role = ax::mojom::Role::kParagraph;
     paragraph1_data.AddIntAttribute(ax::mojom::IntAttribute::kColor, 100);
+    paragraph1_data.AddBoolAttribute(
+        ax::mojom::BoolAttribute::kIsLineBreakingObject, true);
 
-    ui::AXNodeData paragraph1_text_data;
+    AXNodeData paragraph1_text_data;
     paragraph1_text_data.id = 11;
     paragraph1_text_data.role = ax::mojom::Role::kStaticText;
-    text_content = "Paragraph 1";
-    paragraph1_text_data.SetName(text_content);
-    paragraph1_data.child_ids = {11};
+    paragraph1_text_data.SetName("Paragraph 1");
+    paragraph1_data.child_ids = {paragraph1_text_data.id};
 
-    ui::AXNodeData paragraph2_data;
+    AXNodeData paragraph2_data;
     paragraph2_data.id = 12;
     paragraph2_data.role = ax::mojom::Role::kParagraph;
     paragraph2_data.AddFloatAttribute(ax::mojom::FloatAttribute::kFontSize,
                                       1.0f);
+    paragraph2_data.AddBoolAttribute(
+        ax::mojom::BoolAttribute::kIsLineBreakingObject, true);
 
-    ui::AXNodeData paragraph2_text_data;
+    AXNodeData paragraph2_text_data;
     paragraph2_text_data.id = 13;
     paragraph2_text_data.role = ax::mojom::Role::kStaticText;
-    text_content = "Paragraph 2";
-    paragraph2_text_data.SetName(text_content);
-    paragraph2_data.child_ids = {13};
+    paragraph2_text_data.SetName("Paragraph 2");
+    paragraph2_data.child_ids = {paragraph2_text_data.id};
 
-    ui::AXNodeData paragraph3_data;
+    AXNodeData paragraph3_data;
     paragraph3_data.id = 14;
     paragraph3_data.role = ax::mojom::Role::kParagraph;
     paragraph3_data.AddFloatAttribute(ax::mojom::FloatAttribute::kFontSize,
                                       1.0f);
+    paragraph3_data.AddBoolAttribute(
+        ax::mojom::BoolAttribute::kIsLineBreakingObject, true);
 
-    ui::AXNodeData paragraph3_text_data;
+    AXNodeData paragraph3_text_data;
     paragraph3_text_data.id = 15;
     paragraph3_text_data.role = ax::mojom::Role::kStaticText;
-    text_content = "Paragraph 3";
-    paragraph3_text_data.SetName(text_content);
-    paragraph3_data.child_ids = {15};
+    paragraph3_text_data.SetName("Paragraph 3");
+    paragraph3_data.child_ids = {paragraph3_text_data.id};
 
-    ui::AXNodeData paragraph4_data;
+    AXNodeData paragraph4_data;
     paragraph4_data.id = 16;
     paragraph4_data.role = ax::mojom::Role::kParagraph;
     paragraph4_data.AddFloatAttribute(ax::mojom::FloatAttribute::kFontSize,
                                       2.0f);
+    paragraph4_data.AddBoolAttribute(
+        ax::mojom::BoolAttribute::kIsLineBreakingObject, true);
 
-    ui::AXNodeData paragraph4_text_data;
+    AXNodeData paragraph4_text_data;
     paragraph4_text_data.id = 17;
     paragraph4_text_data.role = ax::mojom::Role::kStaticText;
-    text_content = "Paragraph 4";
-    paragraph4_text_data.SetName(text_content);
-    paragraph4_data.child_ids = {17};
+    paragraph4_text_data.SetName("Paragraph 4");
+    paragraph4_data.child_ids = {paragraph4_text_data.id};
 
-    ui::AXNodeData root_data;
+    AXNodeData root_data;
     root_data.id = 1;
     root_data.role = ax::mojom::Role::kRootWebArea;
-    root_data.child_ids = {2, 4, 8, 10, 12, 14, 16};
+    root_data.child_ids = {group1_data.id,     group2_data.id,
+                           group3_data.id,     paragraph1_data.id,
+                           paragraph2_data.id, paragraph3_data.id,
+                           paragraph4_data.id};
 
-    ui::AXTreeUpdate update;
+    AXTreeUpdate update;
     update.has_tree_data = true;
     update.root_id = root_data.id;
     update.nodes = {root_data,
                     group1_data,
                     text_data,
                     group2_data,
-                    group3_data,
                     line_break1_data,
                     standalone_text_data,
                     line_break2_data,
+                    group3_data,
                     bold_text_data,
                     paragraph1_data,
                     paragraph1_text_data,
@@ -718,7 +752,7 @@ class AXPlatformNodeTextRangeProviderTest : public ui::AXPlatformNodeWinTest {
   ui::AXTreeUpdate BuildAXTreeForMoveByPage() {
     ui::AXNodeData root_data;
     root_data.id = 1;
-    root_data.role = ax::mojom::Role::kDocument;
+    root_data.role = ax::mojom::Role::kPdfRoot;
 
     ui::AXNodeData page_1_data;
     page_1_data.id = 2;
@@ -923,7 +957,9 @@ TEST_F(AXPlatformNodeTextRangeProviderTest, TestITextRangeProviderClone) {
 
 TEST_F(AXPlatformNodeTextRangeProviderTest,
        TestITextRangeProviderCompareEndpoints) {
-  Init(BuildTextDocument({"some text", "more text"}));
+  Init(BuildTextDocument({"some text", "more text"},
+                         false /* build_word_boundaries_offsets */,
+                         true /* place_text_on_one_line */));
 
   AXNode* root_node = GetRootAsAXNode();
 
@@ -1244,8 +1280,8 @@ TEST_F(AXPlatformNodeTextRangeProviderTest,
 
   EXPECT_UIA_TEXTRANGE_EQ(
       text_range_provider,
-      L"Text with formattingStandalone line with no formattingbold "
-      L"textParagraph 1Paragraph 2Paragraph 3Paragraph 4");
+      L"Text with formatting\nStandalone line with no formatting\nbold "
+      L"text\nParagraph 1\nParagraph 2\nParagraph 3\nParagraph 4");
 
   // https://docs.microsoft.com/en-us/windows/win32/api/uiautomationclient/nf-uiautomationclient-iuiautomationtextrange-expandtoenclosingunit
   // Consider two consecutive text units A and B.
@@ -1258,22 +1294,21 @@ TEST_F(AXPlatformNodeTextRangeProviderTest,
   ASSERT_HRESULT_SUCCEEDED(text_range_provider->Clone(&units_a_b_provider));
   int count;
   ASSERT_HRESULT_SUCCEEDED(units_a_b_provider->MoveEndpointByUnit(
-      TextPatternRangeEndpoint_Start, TextUnit_Character, /*count*/ 63,
-      &count));
-  ASSERT_EQ(63, count);
+      TextPatternRangeEndpoint_Start, TextUnit_Line, /*count*/ 5, &count));
+  ASSERT_EQ(5, count);
   ASSERT_HRESULT_SUCCEEDED(units_a_b_provider->MoveEndpointByUnit(
-      TextPatternRangeEndpoint_End, TextUnit_Character, /*count*/ -11, &count));
-  ASSERT_EQ(-11, count);
+      TextPatternRangeEndpoint_End, TextUnit_Line, /*count*/ -1, &count));
+  ASSERT_EQ(-1, count);
   EXPECT_UIA_TEXTRANGE_EQ(units_a_b_provider,
-                          L"Paragraph 1Paragraph 2Paragraph 3");
+                          L"Paragraph 1\nParagraph 2\nParagraph 3");
 
   // Create a range encompassing node 11 which will serve as our expected
   // value of a range from start of A to end of A.
   ComPtr<ITextRangeProvider> unit_a_provider;
   ASSERT_HRESULT_SUCCEEDED(units_a_b_provider->Clone(&unit_a_provider));
   ASSERT_HRESULT_SUCCEEDED(unit_a_provider->MoveEndpointByUnit(
-      TextPatternRangeEndpoint_End, TextUnit_Character, /*count*/ -22, &count));
-  ASSERT_EQ(-22, count);
+      TextPatternRangeEndpoint_End, TextUnit_Line, /*count*/ -2, &count));
+  ASSERT_EQ(-2, count);
   EXPECT_UIA_TEXTRANGE_EQ(unit_a_provider, L"Paragraph 1");
 
   // Case 1: Degenerate range at start of A.
@@ -1336,7 +1371,7 @@ TEST_F(AXPlatformNodeTextRangeProviderTest,
     ASSERT_HRESULT_SUCCEEDED(test_case_provider->MoveEndpointByUnit(
         TextPatternRangeEndpoint_End, TextUnit_Character, /*count*/ 4, &count));
     ASSERT_EQ(4, count);
-    EXPECT_UIA_TEXTRANGE_EQ(test_case_provider, L"Paragraph 1Para");
+    EXPECT_UIA_TEXTRANGE_EQ(test_case_provider, L"Paragraph 1\nPara");
 
     ASSERT_HRESULT_SUCCEEDED(
         test_case_provider->ExpandToEnclosingUnit(TextUnit_Format));
@@ -1422,7 +1457,7 @@ TEST_F(AXPlatformNodeTextRangeProviderTest,
     ASSERT_HRESULT_SUCCEEDED(test_case_provider->MoveEndpointByUnit(
         TextPatternRangeEndpoint_End, TextUnit_Character, /*count*/ 4, &count));
     ASSERT_EQ(4, count);
-    EXPECT_UIA_TEXTRANGE_EQ(test_case_provider, L"graph 1Para");
+    EXPECT_UIA_TEXTRANGE_EQ(test_case_provider, L"graph 1\nPara");
 
     ASSERT_HRESULT_SUCCEEDED(
         test_case_provider->ExpandToEnclosingUnit(TextUnit_Format));
@@ -1776,35 +1811,36 @@ TEST_F(AXPlatformNodeTextRangeProviderTest, TestITextRangeProviderMoveFormat) {
   GetTextRangeProviderFromTextNode(text_range_provider, root_node);
 
   // Moving by 0 should have no effect.
-  EXPECT_UIA_MOVE(text_range_provider, TextUnit_Format,
-                  /*count*/ 0,
-                  /*expected_text*/
-                  L"Text with formattingStandalone line with no formattingbold "
-                  L"textParagraph 1Paragraph 2Paragraph 3Paragraph 4",
-                  /*expected_count*/ 0);
+  EXPECT_UIA_MOVE(
+      text_range_provider, TextUnit_Format,
+      /*count*/ 0,
+      /*expected_text*/
+      L"Text with formatting\nStandalone line with no formatting\nbold "
+      L"text\nParagraph 1\nParagraph 2\nParagraph 3\nParagraph 4",
+      /*expected_count*/ 0);
 
   // Move forward.
   EXPECT_UIA_MOVE(text_range_provider, TextUnit_Format,
                   /*count*/ 1,
-                  /*expected_text*/ L"Standalone line with no formatting",
+                  /*expected_text*/ L"\nStandalone line with no formatting\n",
                   /*expected_count*/ 1);
   EXPECT_UIA_MOVE(text_range_provider, TextUnit_Format,
                   /*count*/ 2,
-                  /*expected_text*/ L"Paragraph 1",
+                  /*expected_text*/ L"\nParagraph 1",
                   /*expected_count*/ 2);
   EXPECT_UIA_MOVE(text_range_provider, TextUnit_Format,
                   /*count*/ 1,
-                  /*expected_text*/ L"Paragraph 2Paragraph 3",
+                  /*expected_text*/ L"\nParagraph 2\nParagraph 3",
                   /*expected_count*/ 1);
   EXPECT_UIA_MOVE(text_range_provider, TextUnit_Format,
                   /*count*/ 1,
-                  /*expected_text*/ L"Paragraph 4",
+                  /*expected_text*/ L"\nParagraph 4",
                   /*expected_count*/ 1);
 
   // Trying to move past the last format should have no effect.
   EXPECT_UIA_MOVE(text_range_provider, TextUnit_Format,
                   /*count*/ 1,
-                  /*expected_text*/ L"Paragraph 4",
+                  /*expected_text*/ L"\nParagraph 4",
                   /*expected_count*/ 0);
 
   // Move backward.
@@ -1814,7 +1850,7 @@ TEST_F(AXPlatformNodeTextRangeProviderTest, TestITextRangeProviderMoveFormat) {
                   /*expected_count*/ -3);
   EXPECT_UIA_MOVE(text_range_provider, TextUnit_Format,
                   /*count*/ -1,
-                  /*expected_text*/ L"Standalone line with no formatting",
+                  /*expected_text*/ L"\nStandalone line with no formatting\n",
                   /*expected_count*/ -1);
   EXPECT_UIA_MOVE(text_range_provider, TextUnit_Format,
                   /*count*/ -1,
@@ -1844,7 +1880,7 @@ TEST_F(AXPlatformNodeTextRangeProviderTest, TestITextRangeProviderMoveFormat) {
   // Test degenerate range creation at the end of the document.
   EXPECT_UIA_MOVE(text_range_provider, TextUnit_Format,
                   /*count*/ 5,
-                  /*expected_text*/ L"Paragraph 4",
+                  /*expected_text*/ L"\nParagraph 4",
                   /*expected_count*/ 5);
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_Start, TextUnit_Format,
@@ -1912,7 +1948,7 @@ TEST_F(AXPlatformNodeTextRangeProviderTest, TestITextRangeProviderMovePage) {
       L"some text on page 1\nsome text on page 2some more text on page 3",
       /*expected_count*/ 0);
 
-  // Backwards endpoint moves
+  // Backwards endpoint moves.
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Page,
       /*count*/ -1,
@@ -1925,7 +1961,7 @@ TEST_F(AXPlatformNodeTextRangeProviderTest, TestITextRangeProviderMovePage) {
                                    /*expected_text*/ L"",
                                    /*expected_count*/ -2);
 
-  // Forwards endpoint move
+  // Forwards endpoint move.
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Page,
       /*count*/ 5,
@@ -1933,7 +1969,7 @@ TEST_F(AXPlatformNodeTextRangeProviderTest, TestITextRangeProviderMovePage) {
       L"some text on page 1\nsome text on page 2some more text on page 3",
       /*expected_count*/ 3);
 
-  // Range moves
+  // Range moves.
   EXPECT_UIA_MOVE(text_range_provider, TextUnit_Page,
                   /*count*/ 1,
                   /*expected_text*/ L"some text on page 2",
@@ -1950,7 +1986,7 @@ TEST_F(AXPlatformNodeTextRangeProviderTest, TestITextRangeProviderMovePage) {
                   /*expected_count*/ -1);
 
   // ExpandToEnclosingUnit - first move by character so it's not on a
-  // page boundary before calling ExpandToEnclosingUnit
+  // page boundary before calling ExpandToEnclosingUnit.
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Character,
       /*count*/ -2,
@@ -2283,7 +2319,7 @@ TEST_F(AXPlatformNodeTextRangeProviderTest,
 
   EXPECT_UIA_MOVE(text_range_provider, TextUnit_Document, /*count*/ -1,
                   /*expected_text*/ tree_for_move_full_text.data(),
-                  /*expected_count*/ -1);
+                  /*expected_count*/ 0);
   EXPECT_UIA_MOVE(text_range_provider, TextUnit_Document, /*count*/ 2,
                   /*expected_text*/ tree_for_move_full_text.data(),
                   /*expected_count*/ 0);
@@ -2814,29 +2850,28 @@ TEST_F(AXPlatformNodeTextRangeProviderTest,
 
   EXPECT_UIA_TEXTRANGE_EQ(
       text_range_provider,
-      L"Text with formattingStandalone line with no formattingbold "
-      L"textParagraph 1Paragraph 2Paragraph 3Paragraph 4");
+      L"Text with formatting\nStandalone line with no formatting\nbold "
+      L"text\nParagraph 1\nParagraph 2\nParagraph 3\nParagraph 4");
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Format,
       /*count*/ -2,
       /*expected_text*/
-      L"Text with formattingStandalone line with no formattingbold "
-      L"textParagraph 1",
+      L"Text with formatting\nStandalone line with no formatting\nbold "
+      L"text\nParagraph 1\n",
       /*expected_count*/ -2);
 
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Format,
       /*count*/ -1,
       /*expected_text*/
-      L"Text with formattingStandalone line with no formattingbold text",
-
+      L"Text with formatting\nStandalone line with no formatting\nbold text\n",
       /*expected_count*/ -1);
 
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
       text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Format,
       /*count*/ -1,
       /*expected_text*/
-      L"Text with formattingStandalone line with no formatting",
+      L"Text with formatting\nStandalone line with no formatting\n",
       /*expected_count*/ -1);
 
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
@@ -2855,8 +2890,8 @@ TEST_F(AXPlatformNodeTextRangeProviderTest,
       text_range_provider, TextPatternRangeEndpoint_End, TextUnit_Format,
       /*count*/ 7,
       /*expected_text*/
-      L"Text with formattingStandalone line with no formattingbold "
-      L"textParagraph 1Paragraph 2Paragraph 3Paragraph 4",
+      L"Text with formatting\nStandalone line with no formatting\nbold "
+      L"text\nParagraph 1\nParagraph 2\nParagraph 3\nParagraph 4",
       /*expected_count*/ 6);
 
   EXPECT_UIA_MOVE_ENDPOINT_BY_UNIT(
@@ -3419,7 +3454,7 @@ TEST_F(AXPlatformNodeTextRangeProviderTest, TestITextRangeProviderGetChildren) {
   // Set up ax tree with the following structure:
   //
   // ++1 kRootWebArea
-  // ++++2 kDocument ignored
+  // ++++2 kGenericContainer editable richlyEditable
   // ++++++3 kStaticText
   // ++++++++4 kInlineTextBox
   // ++++++++5 kInlineTextBox
@@ -3430,7 +3465,7 @@ TEST_F(AXPlatformNodeTextRangeProviderTest, TestITextRangeProviderGetChildren) {
   // ++++++++10 kStaticText
 
   AXNodeData root_1;
-  AXNodeData document_2;
+  AXNodeData generic_container_2;
   AXNodeData static_text_3;
   AXNodeData inline_box_4;
   AXNodeData inline_box_5;
@@ -3441,7 +3476,7 @@ TEST_F(AXPlatformNodeTextRangeProviderTest, TestITextRangeProviderGetChildren) {
   AXNodeData static_text_10;
 
   root_1.id = 1;
-  document_2.id = 2;
+  generic_container_2.id = 2;
   static_text_3.id = 3;
   inline_box_4.id = 4;
   inline_box_5.id = 5;
@@ -3452,12 +3487,15 @@ TEST_F(AXPlatformNodeTextRangeProviderTest, TestITextRangeProviderGetChildren) {
   static_text_10.id = 10;
 
   root_1.role = ax::mojom::Role::kRootWebArea;
-  root_1.child_ids = {document_2.id};
+  root_1.child_ids = {generic_container_2.id};
 
-  document_2.role = ax::mojom::Role::kDocument;
-  document_2.AddState(ax::mojom::State::kIgnored);
-  document_2.child_ids = {static_text_3.id, static_text_6.id, static_text_7.id,
-                          button_8.id};
+  generic_container_2.role = ax::mojom::Role::kGenericContainer;
+  generic_container_2.AddState(ax::mojom::State::kEditable);
+  generic_container_2.AddState(ax::mojom::State::kRichlyEditable);
+  generic_container_2.AddBoolAttribute(ax::mojom::BoolAttribute::kEditableRoot,
+                                       true);
+  generic_container_2.child_ids = {static_text_3.id, static_text_6.id,
+                                   static_text_7.id, button_8.id};
 
   static_text_3.role = ax::mojom::Role::kStaticText;
   static_text_3.child_ids = {inline_box_4.id, inline_box_5.id};
@@ -3487,29 +3525,24 @@ TEST_F(AXPlatformNodeTextRangeProviderTest, TestITextRangeProviderGetChildren) {
   update.tree_data = tree_data;
   update.has_tree_data = true;
   update.root_id = root_1.id;
-  update.nodes.push_back(root_1);
-  update.nodes.push_back(document_2);
-  update.nodes.push_back(static_text_3);
-  update.nodes.push_back(inline_box_4);
-  update.nodes.push_back(inline_box_5);
-  update.nodes.push_back(static_text_6);
-  update.nodes.push_back(static_text_7);
-  update.nodes.push_back(button_8);
-  update.nodes.push_back(image_9);
-  update.nodes.push_back(static_text_10);
+  update.nodes = {
+      root_1,       generic_container_2, static_text_3, inline_box_4,
+      inline_box_5, static_text_6,       static_text_7, button_8,
+      image_9,      static_text_10};
 
   Init(update);
 
   // Set up variables from the tree for testing.
-  AXNode* document_2_node = GetRootAsAXNode()->children()[0];
-  AXNode* static_text_3_node = document_2_node->children()[0];
+  AXNode* generic_container_2_node = GetRootAsAXNode()->children()[0];
+  AXNode* static_text_3_node = generic_container_2_node->children()[0];
   AXNode* inline_box_4_node = static_text_3_node->children()[0];
   AXNode* inline_box_5_node = static_text_3_node->children()[1];
-  AXNode* static_text_6_node = document_2_node->children()[1];
-  AXNode* button_8_node = document_2_node->children()[3];
+  AXNode* static_text_6_node = generic_container_2_node->children()[1];
+  AXNode* button_8_node = generic_container_2_node->children()[3];
 
-  ComPtr<IRawElementProviderSimple> document_2_raw =
-      QueryInterfaceFromNode<IRawElementProviderSimple>(document_2_node);
+  ComPtr<IRawElementProviderSimple> generic_container_2_raw =
+      QueryInterfaceFromNode<IRawElementProviderSimple>(
+          generic_container_2_node);
   ComPtr<IRawElementProviderSimple> static_text_3_raw =
       QueryInterfaceFromNode<IRawElementProviderSimple>(static_text_3_node);
   ComPtr<IRawElementProviderSimple> inline_box_4_raw =
@@ -3593,8 +3626,8 @@ TEST_F(AXPlatformNodeTextRangeProviderTest, TestITextRangeProviderGetChildren) {
   // Test document_2 - children should not include ignored nodes and nodes under
   // a node that should hide its children.
   {
-    EXPECT_HRESULT_SUCCEEDED(
-        document_2_raw->GetPatternProvider(UIA_TextPatternId, &text_provider));
+    EXPECT_HRESULT_SUCCEEDED(generic_container_2_raw->GetPatternProvider(
+        UIA_TextPatternId, &text_provider));
 
     EXPECT_HRESULT_SUCCEEDED(
         text_provider->get_DocumentRange(&text_range_provider));
@@ -4361,8 +4394,8 @@ TEST_F(AXPlatformNodeTextRangeProviderTest, TestITextRangeProviderSelect) {
 
     // Verify selection.
     AXTree::Selection unignored_selection = delegate->GetUnignoredSelection();
-    EXPECT_EQ(2, unignored_selection.anchor_object_id);
-    EXPECT_EQ(2, unignored_selection.focus_object_id);
+    EXPECT_EQ(3, unignored_selection.anchor_object_id);
+    EXPECT_EQ(3, unignored_selection.focus_object_id);
     EXPECT_EQ(0, unignored_selection.anchor_offset);
     EXPECT_EQ(9, unignored_selection.focus_offset);
 
@@ -4389,8 +4422,8 @@ TEST_F(AXPlatformNodeTextRangeProviderTest, TestITextRangeProviderSelect) {
 
     // Verify selection
     AXTree::Selection unignored_selection = delegate->GetUnignoredSelection();
-    EXPECT_EQ(3, unignored_selection.anchor_object_id);
-    EXPECT_EQ(3, unignored_selection.focus_object_id);
+    EXPECT_EQ(5, unignored_selection.anchor_object_id);
+    EXPECT_EQ(5, unignored_selection.focus_object_id);
     EXPECT_EQ(0, unignored_selection.anchor_offset);
     EXPECT_EQ(10, unignored_selection.focus_offset);
 
@@ -4417,8 +4450,8 @@ TEST_F(AXPlatformNodeTextRangeProviderTest, TestITextRangeProviderSelect) {
 
     // Verify selection.
     AXTree::Selection unignored_selection = delegate->GetUnignoredSelection();
-    EXPECT_EQ(2, unignored_selection.anchor_object_id);
-    EXPECT_EQ(3, unignored_selection.focus_object_id);
+    EXPECT_EQ(3, unignored_selection.anchor_object_id);
+    EXPECT_EQ(5, unignored_selection.focus_object_id);
     EXPECT_EQ(0, unignored_selection.anchor_offset);
     EXPECT_EQ(10, unignored_selection.focus_offset);
 
@@ -4448,8 +4481,8 @@ TEST_F(AXPlatformNodeTextRangeProviderTest, TestITextRangeProviderSelect) {
 
     // Verify selection.
     AXTree::Selection unignored_selection = delegate->GetUnignoredSelection();
-    EXPECT_EQ(2, unignored_selection.anchor_object_id);
-    EXPECT_EQ(2, unignored_selection.focus_object_id);
+    EXPECT_EQ(3, unignored_selection.anchor_object_id);
+    EXPECT_EQ(3, unignored_selection.focus_object_id);
     EXPECT_EQ(9, unignored_selection.anchor_offset);
     EXPECT_EQ(9, unignored_selection.focus_offset);
 
@@ -4541,7 +4574,9 @@ TEST_F(AXPlatformNodeTextRangeProviderTest,
 }
 
 TEST_F(AXPlatformNodeTextRangeProviderTest, TestITextRangeProviderFindText) {
-  Init(BuildTextDocument({"some text", "more text"}));
+  Init(BuildTextDocument({"some text", "more text"},
+                         false /* build_word_boundaries_offsets */,
+                         true /* place_text_on_one_line */));
 
   AXNode* root_node = GetRootAsAXNode();
   ComPtr<ITextRangeProvider> range;
@@ -4577,16 +4612,18 @@ TEST_F(AXPlatformNodeTextRangeProviderTest, TestITextRangeProviderFindText) {
   text_range_provider_found->QueryInterface(
       IID_PPV_ARGS(&text_range_provider_win));
   ASSERT_TRUE(GetStart(text_range_provider_win.Get())->IsTextPosition());
-  ASSERT_EQ(3, GetStart(text_range_provider_win.Get())->anchor_id());
-  ASSERT_EQ(0, GetStart(text_range_provider_win.Get())->text_offset());
+  EXPECT_EQ(5, GetStart(text_range_provider_win.Get())->anchor_id());
+  EXPECT_EQ(0, GetStart(text_range_provider_win.Get())->text_offset());
   ASSERT_TRUE(GetEnd(text_range_provider_win.Get())->IsTextPosition());
-  ASSERT_EQ(3, GetEnd(text_range_provider_win.Get())->anchor_id());
-  ASSERT_EQ(9, GetEnd(text_range_provider_win.Get())->text_offset());
+  EXPECT_EQ(5, GetEnd(text_range_provider_win.Get())->anchor_id());
+  EXPECT_EQ(9, GetEnd(text_range_provider_win.Get())->text_offset());
 }
 
 TEST_F(AXPlatformNodeTextRangeProviderTest,
        TestITextRangeProviderFindTextBackwards) {
-  Init(BuildTextDocument({"text", "some", "text"}));
+  Init(BuildTextDocument({"text", "some", "text"},
+                         false /* build_word_boundaries_offsets */,
+                         true /* place_text_on_one_line */));
   AXNode* root_node = GetRootAsAXNode();
 
   ComPtr<ITextRangeProvider> root_range_provider;
@@ -4600,7 +4637,7 @@ TEST_F(AXPlatformNodeTextRangeProviderTest,
   base::win::ScopedBstr find_string(L"text");
   BOOL range_equal;
 
-  // Forward search finds the text_node1
+  // Forward search finds the text_node1.
   EXPECT_HRESULT_SUCCEEDED(root_range_provider->FindText(
       find_string.Get(), false, false, &text_range_provider_found));
   EXPECT_UIA_TEXTRANGE_EQ(text_range_provider_found, find_string.Get());
@@ -4610,7 +4647,7 @@ TEST_F(AXPlatformNodeTextRangeProviderTest,
       text_range_provider_found->Compare(text_node1_range.Get(), &range_equal));
   EXPECT_TRUE(range_equal);
 
-  // Backwards search finds the text_node3
+  // Backwards search finds the text_node3.
   EXPECT_HRESULT_SUCCEEDED(root_range_provider->FindText(
       find_string.Get(), true, false, &text_range_provider_found));
   EXPECT_UIA_TEXTRANGE_EQ(text_range_provider_found, find_string.Get());
@@ -5150,8 +5187,14 @@ TEST_F(AXPlatformNodeTextRangeProviderTest,
 
   tree_update.nodes[1].id = 2;
   tree_update.nodes[1].child_ids = {3, 4, 5, 6, 7, 8};
+  // According to the existing Blink code, editable roots are never ignored.
+  // However, we can still create this tree structure only for test purposes.
   tree_update.nodes[1].AddState(ax::mojom::State::kIgnored);
-  tree_update.nodes[1].role = ax::mojom::Role::kDocument;
+  tree_update.nodes[1].AddState(ax::mojom::State::kEditable);
+  tree_update.nodes[1].AddState(ax::mojom::State::kRichlyEditable);
+  tree_update.nodes[1].AddBoolAttribute(ax::mojom::BoolAttribute::kEditableRoot,
+                                        true);
+  tree_update.nodes[1].role = ax::mojom::Role::kGenericContainer;
 
   tree_update.nodes[2].id = 3;
   tree_update.nodes[2].role = ax::mojom::Role::kStaticText;
@@ -5596,6 +5639,8 @@ TEST_F(AXPlatformNodeTextRangeProviderTest,
   image_3.role = ax::mojom::Role::kImage;
 
   text_field_4.role = ax::mojom::Role::kTextField;
+  text_field_4.AddState(ax::mojom::State::kEditable);
+  text_field_4.AddBoolAttribute(ax::mojom::BoolAttribute::kEditableRoot, true);
   text_field_4.child_ids = {generic_container_5.id};
   text_field_4.SetValue("3.14");
 

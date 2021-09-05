@@ -34,6 +34,7 @@ import org.chromium.chrome.browser.ui.native_page.NativePage.NativePageType;
 import org.chromium.chrome.browser.ui.native_page.NativePageHost;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.content_public.browser.LoadUrlParams;
+import org.chromium.ui.util.ColorUtils;
 
 import org.chromium.chrome.browser.ChromeApplication;
 import org.vivaldi.browser.common.VivaldiUrlConstants;
@@ -98,9 +99,8 @@ public class NativePageFactory {
             return new NewTabPage(mActivity, mActivity.getBrowserControlsManager(),
                     mActivity.getActivityTabProvider(), mActivity.getSnackbarManager(),
                     mActivity.getLifecycleDispatcher(), mActivity.getTabModelSelector(),
-                    mActivity.isTablet(), mUma.get(),
-                    mActivity.getNightModeStateProvider().isInNightMode(), nativePageHost, tab,
-                    mBottomSheetController);
+                    mActivity.isTablet(), mUma.get(), ColorUtils.inNightMode(mActivity),
+                    nativePageHost, tab, mBottomSheetController);
         }
 
         protected NativePage buildBookmarksPage(Tab tab) {
@@ -113,7 +113,8 @@ public class NativePageFactory {
         }
 
         protected NativePage buildExploreSitesPage(Tab tab) {
-            return new ExploreSitesPage(mActivity, new TabShim(tab, mActivity), tab);
+            return new ExploreSitesPage(
+                    mActivity, new TabShim(tab, mActivity), tab, mActivity.getTabModelSelector());
         }
 
         protected NativePage buildHistoryPage(Tab tab) {
@@ -253,6 +254,11 @@ public class NativePageFactory {
         public DestroyableObservableSupplier<Rect> createDefaultMarginSupplier() {
             return new BrowserControlsMarginSupplier(mBrowserControlsStateProvider);
         }
+    }
+
+    /** Destroy and unhook objects at destruction. */
+    public void destroy() {
+        if (mNewTabPageUma != null) mNewTabPageUma.destroy();
     }
 
     /** Vivaldi **/

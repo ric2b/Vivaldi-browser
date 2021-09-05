@@ -639,38 +639,20 @@ bool MovePastBreakpoint(const NGConstraintSpace& space,
         builder->SetBreakAppeal(appeal_inside);
       return true;
     }
-  } else {
-    bool need_break;
-    if (refuse_break_before) {
-      need_break = false;
-    } else if (child.IsMonolithic()) {
-      // If the monolithic piece of content (e.g. a line, or block-level
-      // replaced content) doesn't fit, we need a break.
-      need_break = fragment.BlockSize() > space_left;
-    } else {
-      // If the block-offset is past the fragmentainer boundary (or exactly at
-      // the boundary), no part of the fragment is going to fit in the current
-      // fragmentainer. Fragments may be pushed past the fragmentainer boundary
-      // by margins. We shouldn't break before a zero-size block that's exactly
-      // at a fragmentainer boundary, though.
-      need_break = space_left < LayoutUnit() ||
-                   (space_left == LayoutUnit() && fragment.BlockSize());
+  } else if (refuse_break_before || fragment.BlockSize() <= space_left) {
+    // The child either fits, or we are not allowed to break. So we can move
+    // past this breakpoint.
+    if (child.IsBlock() && builder) {
+      // We're tentatively not going to break before or inside this child, but
+      // we'll check the appeal of breaking there anyway. It may be the best
+      // breakpoint we'll ever find. (Note that we only do this for block
+      // children, since, when it comes to inline layout, we first need to lay
+      // out all the line boxes, so that we know what do to in order to honor
+      // orphans and widows, if at all possible.)
+      UpdateEarlyBreakAtBlockChild(space, To<NGBlockNode>(child), layout_result,
+                                   appeal_before, builder);
     }
-
-    if (!need_break) {
-      if (child.IsBlock() && builder) {
-        // If this doesn't happen, though, we're tentatively not going to break
-        // before or inside this child, but we'll check the appeal of breaking
-        // there anyway. It may be the best breakpoint we'll ever find. (Note
-        // that we only do this for block children, since, when it comes to
-        // inline layout, we first need to lay out all the line boxes, so that
-        // we know what do to in order to honor orphans and widows, if at all
-        // possible.)
-        UpdateEarlyBreakAtBlockChild(space, To<NGBlockNode>(child),
-                                     layout_result, appeal_before, builder);
-      }
-      return true;
-    }
+    return true;
   }
 
   // We don't want to break inside, so we should attempt to break before.
@@ -743,6 +725,7 @@ NGConstraintSpace CreateConstraintSpaceForColumns(
       parent_space, parent_space.GetWritingDirection(), /* is_new_fc */ true);
   space_builder.SetAvailableSize(column_size);
   space_builder.SetPercentageResolutionSize(percentage_resolution_size);
+  space_builder.SetStretchInlineSizeIfAuto(true);
 
   // To ensure progression, we need something larger than 0 here. The spec
   // actually says that fragmentainers have to accept at least 1px of content.
@@ -765,7 +748,6 @@ NGConstraintSpace CreateConstraintSpaceForColumns(
     space_builder.SetDiscardingMarginStrut();
   }
 
-  space_builder.SetNeedsBaseline(parent_space.NeedsBaseline());
   space_builder.SetBaselineAlgorithmType(parent_space.BaselineAlgorithmType());
 
   return space_builder.ToConstraintSpace();

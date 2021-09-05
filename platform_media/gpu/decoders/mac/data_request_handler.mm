@@ -170,6 +170,13 @@ void DataRequestHandler::Load(AVAssetResourceLoadingRequest* request) {
   }
 
   if (is_streaming_) {
+    if (!source_buffer_) {
+      VLOG(1)
+          << " PROPMEDIA(GPU) : " << __FUNCTION__
+          << " Attempt to perform streaming request while waiting for a reply";
+      CancelRequest(request);
+      return;
+    }
     // No concurrent reads nor jumps into future when streaming.
     if (IsHandlingDataRequests()) {
       VLOG(1)

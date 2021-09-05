@@ -16,6 +16,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "content/common/ax_serialization_utils.h"
 #include "content/public/common/content_features.h"
 #include "content/renderer/accessibility/ax_image_annotator.h"
@@ -51,8 +52,6 @@
 using base::ASCIIToUTF16;
 using base::UTF16ToUTF8;
 using blink::WebAXObject;
-using blink::WebAXObjectAttribute;
-using blink::WebAXObjectVectorAttribute;
 using blink::WebDocument;
 using blink::WebElement;
 using blink::WebFrame;
@@ -82,56 +81,6 @@ void AddIntListAttributeFromWebObjects(ax::mojom::IntListAttribute attr,
     dst->AddIntListAttribute(attr, ids);
 }
 
-class AXNodeDataSparseAttributeAdapter
-    : public blink::WebAXSparseAttributeClient {
- public:
-  explicit AXNodeDataSparseAttributeAdapter(ui::AXNodeData* dst) : dst_(dst) {
-    DCHECK(dst_);
-  }
-  ~AXNodeDataSparseAttributeAdapter() override = default;
-
- private:
-  ui::AXNodeData* dst_;
-
-  void AddObjectAttribute(WebAXObjectAttribute attribute,
-                          const WebAXObject& value) override {
-    switch (attribute) {
-      case WebAXObjectAttribute::kAriaActiveDescendant:
-        // TODO(dmazzoni): WebAXObject::ActiveDescendant currently returns
-        // more information than the sparse interface does.
-        // ******** Why is this a TODO? ********
-        break;
-      case WebAXObjectAttribute::kAriaErrorMessage:
-        // Use WebAXObject::ErrorMessage(), which provides both ARIA error
-        // messages as well as built-in HTML form validation messages.
-        break;
-      default:
-        NOTREACHED();
-    }
-  }
-
-  void AddObjectVectorAttribute(
-      WebAXObjectVectorAttribute attribute,
-      const blink::WebVector<WebAXObject>& value) override {
-    switch (attribute) {
-      case WebAXObjectVectorAttribute::kAriaControls:
-        AddIntListAttributeFromWebObjects(
-            ax::mojom::IntListAttribute::kControlsIds, value, dst_);
-        break;
-      case WebAXObjectVectorAttribute::kAriaDetails:
-        AddIntListAttributeFromWebObjects(
-            ax::mojom::IntListAttribute::kDetailsIds, value, dst_);
-        break;
-      case WebAXObjectVectorAttribute::kAriaFlowTo:
-        AddIntListAttributeFromWebObjects(
-            ax::mojom::IntListAttribute::kFlowtoIds, value, dst_);
-        break;
-      default:
-        NOTREACHED();
-    }
-  }
-};
-
 WebAXObject ParentObjectUnignored(WebAXObject child) {
   WebAXObject parent = child.ParentObject();
   while (!parent.IsDetached() && !parent.AccessibilityIsIncludedInTree())
@@ -160,13 +109,13 @@ bool SearchForExactlyOneInnerImage(WebAXObject obj,
 
   // If it's the first image, set |inner_image|. If we already
   // found an image, fail.
-  if (obj.Role() == ax::mojom::Role::kImage) {
+  if (ui::IsImage(obj.Role())) {
     if (!inner_image->IsDetached())
       return false;
     *inner_image = obj;
   } else {
     // If we found something else with a name, fail.
-    if (!ui::IsDocument(obj.Role()) && !ui::IsLink(obj.Role())) {
+    if (!ui::IsPlatformDocument(obj.Role()) && !ui::IsLink(obj.Role())) {
       blink::WebString web_name = obj.GetName();
       if (!base::ContainsOnlyChars(web_name.Utf8(), base::kWhitespaceASCII)) {
         return false;
@@ -275,10 +224,13 @@ void BlinkAXTreeSource::Freeze() {
     focus_ = WebAXObject::FromWebDocumentFocused(document_);
   else
     focus_ = WebAXObject();
+
+  WebAXObject::Freeze(document_);
 }
 
 void BlinkAXTreeSource::Thaw() {
   CHECK(frozen_);
+  WebAXObject::Thaw(document_);
   frozen_ = false;
 }
 
@@ -485,6 +437,12 @@ void BlinkAXTreeSource::GetChildren(
         child.Role() == ax::mojom::Role::kTableHeaderContainer)
       continue;
 
+    // If an optional exclude_offscreen flag is set (only intended to be
+    // used for a one-time snapshot of the accessibility tree), prune any
+    // node that's entirely offscreen from the tree.
+    if (exclude_offscreen() && child.IsOffScreen())
+      continue;
+
     out_children->push_back(child);
   }
 }
@@ -550,26 +508,6 @@ void BlinkAXTreeSource::SerializeNode(WebAXObject src,
 
   SerializeNameAndDescriptionAttributes(src, dst);
 
-  if (accessibility_mode_.has_mode(ui::AXMode::kScreenReader) ||
-      accessibility_mode_.has_mode(ui::AXMode::kPDF)) {
-    // Heading level.
-    if (ui::IsHeading(dst->role) && src.HeadingLevel()) {
-      dst->AddIntAttribute(ax::mojom::IntAttribute::kHierarchicalLevel,
-                           src.HeadingLevel());
-    }
-
-    WebAXObject parent = ParentObjectUnignored(src);
-    if (src.Language().length()) {
-      // TODO(chrishall): should we still trim redundant languages off here?
-      if (parent.IsNull() || parent.Language() != src.Language()) {
-        TruncateAndAddStringAttribute(
-            dst, ax::mojom::StringAttribute::kLanguage, src.Language().Utf8());
-      }
-    }
-
-    SerializeListAttributes(src, dst);
-  }
-
   if (accessibility_mode_.has_mode(ui::AXMode::kPDF)) {
     // Return early. None of the following attributes are needed for PDFs.
     return;
@@ -578,7 +516,6 @@ void BlinkAXTreeSource::SerializeNode(WebAXObject src,
   SerializeBoundingBoxAttributes(src, dst);
   cached_bounding_boxes_[dst->id] = dst->relative_bounds;
 
-  SerializeSparseAttributes(src, dst);
   SerializeChooserPopupAttributes(src, dst);
 
   if (accessibility_mode_.has_mode(ui::AXMode::kScreenReader)) {
@@ -621,10 +558,6 @@ void BlinkAXTreeSource::SerializeNode(WebAXObject src,
                              indirect_child_ids);
   }
 
-  if (src.IsScrollableContainer()) {
-    SerializeScrollAttributes(src, dst);
-  }
-
   if (dst->id == image_data_node_id_) {
     // In general, string attributes should be truncated using
     // TruncateAndAddStringAttribute, but ImageDataUrl contains a data url
@@ -646,12 +579,6 @@ void BlinkAXTreeSource::SerializeBoundingBoxAttributes(
     dst->AddBoolAttribute(ax::mojom::BoolAttribute::kIsLineBreakingObject,
                           true);
   }
-}
-
-void BlinkAXTreeSource::SerializeSparseAttributes(WebAXObject src,
-                                                  ui::AXNodeData* dst) const {
-  AXNodeDataSparseAttributeAdapter sparse_attribute_adapter(dst);
-  src.GetSparseAXAttributes(sparse_attribute_adapter);
 }
 
 void BlinkAXTreeSource::SerializeNameAndDescriptionAttributes(
@@ -778,39 +705,6 @@ void BlinkAXTreeSource::SerializeLiveRegionAttributes(
   TruncateAndAddStringAttribute(
       dst, ax::mojom::StringAttribute::kContainerLiveRelevant,
       src.ContainerLiveRegionRelevant().Utf8());
-}
-
-void BlinkAXTreeSource::SerializeListAttributes(WebAXObject src,
-                                                ui::AXNodeData* dst) const {
-  if (src.SetSize())
-    dst->AddIntAttribute(ax::mojom::IntAttribute::kSetSize, src.SetSize());
-
-  if (src.PosInSet())
-    dst->AddIntAttribute(ax::mojom::IntAttribute::kPosInSet, src.PosInSet());
-}
-
-void BlinkAXTreeSource::SerializeScrollAttributes(WebAXObject src,
-                                                  ui::AXNodeData* dst) const {
-  // Only mark as scrollable if user has actual scrollbars to use.
-  dst->AddBoolAttribute(ax::mojom::BoolAttribute::kScrollable,
-                        src.IsUserScrollable());
-  // Provide x,y scroll info if scrollable in any way (programmatically or via
-  // user).
-  const gfx::Point& scroll_offset = src.GetScrollOffset();
-  dst->AddIntAttribute(ax::mojom::IntAttribute::kScrollX, scroll_offset.x());
-  dst->AddIntAttribute(ax::mojom::IntAttribute::kScrollY, scroll_offset.y());
-
-  const gfx::Point& min_scroll_offset = src.MinimumScrollOffset();
-  dst->AddIntAttribute(ax::mojom::IntAttribute::kScrollXMin,
-                       min_scroll_offset.x());
-  dst->AddIntAttribute(ax::mojom::IntAttribute::kScrollYMin,
-                       min_scroll_offset.y());
-
-  const gfx::Point& max_scroll_offset = src.MaximumScrollOffset();
-  dst->AddIntAttribute(ax::mojom::IntAttribute::kScrollXMax,
-                       max_scroll_offset.x());
-  dst->AddIntAttribute(ax::mojom::IntAttribute::kScrollYMax,
-                       max_scroll_offset.y());
 }
 
 void BlinkAXTreeSource::SerializeChooserPopupAttributes(
@@ -961,18 +855,19 @@ void BlinkAXTreeSource::SerializeOtherScreenReaderAttributes(
     dst->AddBoolAttribute(ax::mojom::BoolAttribute::kModal, src.IsModal());
   }
 
-  if (dst->role == ax::mojom::Role::kRootWebArea)
+  if (ui::IsPlatformDocument(dst->role)) {
     TruncateAndAddStringAttribute(dst, ax::mojom::StringAttribute::kHtmlTag,
                                   "#document");
+  }
 
-  if (dst->role == ax::mojom::Role::kImage)
+  if (ui::IsImage(dst->role))
     AddImageAnnotations(src, dst);
 
   // If a link or web area isn't otherwise labeled and contains exactly one
   // image (searching only to a max depth of 2), and the link doesn't have
   // accessible text from an attribute like aria-label, then annotate the
   // link/web area with the image's annotation, too.
-  if ((ui::IsLink(dst->role) || ui::IsDocument(dst->role)) &&
+  if ((ui::IsLink(dst->role) || ui::IsPlatformDocument(dst->role)) &&
       dst->GetNameFrom() != ax::mojom::NameFrom::kAttribute) {
     WebAXObject inner_image;
     if (FindExactlyOneInnerImageInMaxDepthThree(src, &inner_image))
@@ -1036,7 +931,7 @@ void BlinkAXTreeSource::SerializeHTMLAttributes(WebAXObject src,
 
 // TODO(nektar): Turn off kHTMLAccessibilityMode for automation and Mac
 // and remove ifdef.
-#if defined(OS_WIN) || defined(OS_CHROMEOS)
+#if defined(OS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
   if (dst->role == ax::mojom::Role::kMath && element.InnerHTML().length()) {
     TruncateAndAddStringAttribute(dst, ax::mojom::StringAttribute::kInnerHtml,
                                   element.InnerHTML().Utf8());
@@ -1127,7 +1022,7 @@ void BlinkAXTreeSource::AddImageAnnotations(blink::WebAXObject& src,
   // If so, we can treat the name as empty and give it an annotation.
   std::string dst_name =
       dst->GetStringAttribute(ax::mojom::StringAttribute::kName);
-  if (dst->role == ax::mojom::Role::kRootWebArea) {
+  if (ui::IsPlatformDocument(dst->role)) {
     std::string filename = GURL(document().Url()).ExtractFileName();
     if (base::StartsWith(dst_name, filename, base::CompareCase::SENSITIVE))
       should_annotate_image_with_nonempty_name = true;

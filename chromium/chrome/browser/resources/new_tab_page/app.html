@@ -56,7 +56,9 @@
     display: flex;
     flex-direction: column;
     height: calc(100vh - var(--ntp-one-google-bar-height));
+    min-width: fit-content;  /* Prevents OneGoogleBar cutoff at 500% zoom. */
     position: relative;
+    z-index: 1;
   }
 
   :host([iframe-one-google-bar-enabled_]) #content {
@@ -70,7 +72,7 @@
 
   ntp-fakebox,
   ntp-realbox {
-    margin-bottom: 32px;
+    margin-bottom: 16px;
   }
 
   ntp-fakebox,
@@ -78,15 +80,6 @@
   ntp-module-wrapper {
     flex-shrink: 0;
     width: var(--ntp-search-box-width);
-  }
-
-  :host([modules-enabled_]) ntp-middle-slot-promo {
-    width: var(--ntp-search-box-width);
-  }
-
-  :host(:not([modules-enabled_])) ntp-middle-slot-promo {
-    bottom: 16px;
-    position: fixed;
   }
 
   ntp-realbox {
@@ -103,7 +96,9 @@
     --tile-hover-color: rgba(255, 255, 255, .1);
   }
 
-  ntp-middle-slot-promo:not([hidden]) + ntp-module-wrapper,
+  /* ~ because the dom-if results in a template between the middle-slot-promo
+     and the first ntp-module-wrapper. */
+  ntp-middle-slot-promo:not([hidden]) ~ ntp-module-wrapper,
   ntp-module-wrapper + ntp-module-wrapper {
     margin-top: 16px;
   }
@@ -198,6 +193,7 @@
     padding: 8px;
     position: fixed;
     text-shadow: var(--ntp-theme-text-shadow);
+    z-index: -1;
   }
 
   :host-context([dir='ltr']) #backgroundImageAttribution {
@@ -243,19 +239,6 @@
     font-size: .75rem;
   }
 
-  @keyframes fadein {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
-  }
-
-  .fadein {
-    animation: 100ms ease-in-out fadein;
-  }
-
   svg {
     position: fixed;
   }
@@ -270,9 +253,13 @@
         hidden$="[[!oneGoogleBarLoaded_]]">
     </ntp-iframe>
   </template>
+  <!-- TODO(crbug.com/1168361): Instead of hidden$="[[!logoEnabled_]]" it would
+       be nicer to use a dom-if. However, that breaks
+       StartupBrowserCreatorPickerNoParamsTest.ShowPickerWhenAlreadyLaunched on
+       the msan builder. See crbug.com/1169070. -->
   <ntp-logo id="logo" doodle-allowed$="[[doodleAllowed_]]"
       single-colored$="[[singleColoredLogo_]]" dark="[[theme_.isDark]]"
-      background-color="[[backgroundColor_]]">
+      background-color="[[backgroundColor_]]" hidden$="[[!logoEnabled_]]">
   </ntp-logo>
   <ntp-fakebox id="fakebox" on-open-voice-search="onOpenVoiceSearch_"
       hidden$="[[realboxEnabled_]]">
@@ -283,13 +270,17 @@
   </ntp-realbox>
   <dom-if if="[[lazyRender_]]" on-dom-change="onLazyRendered_">
     <template>
-      <ntp-most-visited id="mostVisited" dark$="[[theme_.isDark]]"
-          use-white-add-icon$="[[theme_.shortcutUseWhiteAddIcon]]"
-          use-title-pill$="[[theme_.shortcutUseTitlePill]]">
-      </ntp-most-visited>
-      <ntp-middle-slot-promo
-          on-ntp-middle-slot-promo-loaded="onMiddleSlotPromoLoaded_">
-      </ntp-middle-slot-promo>
+      <template is="dom-if" if="[[shortcutsEnabled_]]">
+        <ntp-most-visited id="mostVisited" dark$="[[theme_.isDark]]"
+            use-white-add-icon$="[[theme_.shortcutUseWhiteAddIcon]]"
+            use-title-pill$="[[theme_.shortcutUseTitlePill]]">
+        </ntp-most-visited>
+      </template>
+      <template is="dom-if" if="[[middleSlotPromoEnabled_]]">
+        <ntp-middle-slot-promo
+            on-ntp-middle-slot-promo-loaded="onMiddleSlotPromoLoaded_">
+        </ntp-middle-slot-promo>
+      </template>
       <template is="dom-repeat" items="[[moduleDescriptors_]]" id="modules"
           on-dom-change="onModulesLoaded_">
         <ntp-module-wrapper descriptor="[[item]]"
@@ -348,7 +339,7 @@
 <dom-if if="[[lazyRender_]]" restamp>
   <template>
     <cr-toast id="dismissModuleToast" duration="10000">
-      <div id="dismissModuleToastMessage">[[dismissModuleToastMessage_]]</div>
+      <div id="dismissModuleToastMessage">[[dismissedModuleData_.message]]</div>
       <cr-button id="undoDismissModuleButton"
           aria-label="$i18n{undoDescription}"
           on-click="onUndoDismissModuleButtonClick_">

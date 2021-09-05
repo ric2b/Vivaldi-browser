@@ -17,6 +17,7 @@
 
 #include "base/memory/ref_counted.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/test/base/testing_browser_process_platform_part.h"
@@ -102,8 +103,6 @@ class TestingBrowserProcess : public BrowserProcess {
       override;
   federated_learning::FlocSortingLshClustersService*
   floc_sorting_lsh_clusters_service() override;
-  optimization_guide::OptimizationGuideService* optimization_guide_service()
-      override;
   BrowserProcessPlatformPart* platform_part() override;
 
   extensions::EventRouterForwarder* extension_event_router_forwarder() override;
@@ -125,15 +124,13 @@ class TestingBrowserProcess : public BrowserProcess {
   DownloadRequestLimiter* download_request_limiter() override;
   StartupData* startup_data() override;
 
-#if (defined(OS_WIN) || defined(OS_LINUX)) && !defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit once build flag switch of lacros-chrome is
+// complete.
+#if defined(OS_WIN) || defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   void StartAutoupdateTimer() override {}
 #endif
 
   component_updater::ComponentUpdateService* component_updater() override;
-#if BUILDFLAG(ENABLE_SUPERVISED_USERS)
-  component_updater::SupervisedUserWhitelistInstaller*
-  supervised_user_whitelist_installer() override;
-#endif
   MediaFileSystemRegistry* media_file_system_registry() override;
 
   WebRtcLogUploader* webrtc_log_uploader() override;
@@ -158,9 +155,6 @@ class TestingBrowserProcess : public BrowserProcess {
   void SetFlocSortingLshClustersService(
       std::unique_ptr<federated_learning::FlocSortingLshClustersService>
           service);
-  void SetOptimizationGuideService(
-      std::unique_ptr<optimization_guide::OptimizationGuideService>
-          optimization_guide_service);
   void SetSharedURLLoaderFactory(
       scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory);
   void SetNotificationUIManager(
@@ -212,8 +206,6 @@ class TestingBrowserProcess : public BrowserProcess {
       subresource_filter_ruleset_service_;
   std::unique_ptr<federated_learning::FlocSortingLshClustersService>
       floc_sorting_lsh_clusters_service_;
-  std::unique_ptr<optimization_guide::OptimizationGuideService>
-      optimization_guide_service_;
 
   std::unique_ptr<network_time::NetworkTimeTracker> network_time_tracker_;
 

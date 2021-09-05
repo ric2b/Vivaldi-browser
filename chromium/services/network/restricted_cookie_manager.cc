@@ -20,6 +20,7 @@
 #include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "net/cookies/canonical_cookie.h"
 #include "net/cookies/cookie_access_result.h"
 #include "net/cookies/cookie_constants.h"
 #include "net/cookies/cookie_options.h"
@@ -39,7 +40,9 @@ net::CookieOptions MakeOptionsForSet(
     mojom::RestrictedCookieManagerRole role,
     const GURL& url,
     const net::SiteForCookies& site_for_cookies,
-    const CookieSettings* cookie_settings) {
+    const net::IsolationInfo& isolation_info,
+    const CookieSettings* cookie_settings,
+    const net::CookieAccessDelegate* cookie_access_delegate) {
   net::CookieOptions options;
   bool force_ignore_site_for_cookies =
       cookie_settings->ShouldIgnoreSameSiteRestrictions(
@@ -56,6 +59,21 @@ net::CookieOptions MakeOptionsForSet(
         net::cookie_util::ComputeSameSiteContextForSubresource(
             url, site_for_cookies, force_ignore_site_for_cookies));
   }
+  net::SchemefulSite request_site(url);
+  options.set_same_party_cookie_context_type(
+      net::cookie_util::ComputeSamePartyContext(request_site, isolation_info,
+                                                cookie_access_delegate));
+  if (isolation_info.party_context().has_value()) {
+    // Count the top-frame site since it's not in the party_context.
+    options.set_full_party_context_size(isolation_info.party_context()->size() +
+                                        1);
+  }
+  bool is_in_nontrivial_first_party_set =
+      cookie_access_delegate &&
+      cookie_access_delegate->IsInNontrivialFirstPartySet(request_site);
+  options.set_is_in_nontrivial_first_party_set(
+      is_in_nontrivial_first_party_set);
+
   return options;
 }
 
@@ -63,7 +81,9 @@ net::CookieOptions MakeOptionsForGet(
     mojom::RestrictedCookieManagerRole role,
     const GURL& url,
     const net::SiteForCookies& site_for_cookies,
-    const CookieSettings* cookie_settings) {
+    const net::IsolationInfo& isolation_info,
+    const CookieSettings* cookie_settings,
+    const net::CookieAccessDelegate* cookie_access_delegate) {
   // TODO(https://crbug.com/925311): Wire initiator here.
   net::CookieOptions options;
   bool force_ignore_site_for_cookies =
@@ -82,33 +102,22 @@ net::CookieOptions MakeOptionsForGet(
         net::cookie_util::ComputeSameSiteContextForSubresource(
             url, site_for_cookies, force_ignore_site_for_cookies));
   }
-  return options;
-}
+  net::SchemefulSite request_site(url);
+  options.set_same_party_cookie_context_type(
+      net::cookie_util::ComputeSamePartyContext(request_site, isolation_info,
+                                                cookie_access_delegate));
+  if (isolation_info.party_context().has_value()) {
+    // Count the top-frame site since it's not in the party_context.
+    options.set_full_party_context_size(isolation_info.party_context()->size() +
+                                        1);
+  }
+  bool is_in_nontrivial_first_party_set =
+      cookie_access_delegate &&
+      cookie_access_delegate->IsInNontrivialFirstPartySet(request_site);
+  options.set_is_in_nontrivial_first_party_set(
+      is_in_nontrivial_first_party_set);
 
-void MarkSameSiteCompatPairs(
-    std::vector<net::CookieWithAccessResult>& cookie_list,
-    const net::CookieOptions& options) {
-  // If the context is same-site then there cannot be any SameSite-by-default
-  // warnings, so the compat pair warning is irrelevant.
-  if (options.same_site_cookie_context().GetContextForCookieInclusion() >
-      net::CookieOptions::SameSiteCookieContext::ContextType::
-          SAME_SITE_LAX_METHOD_UNSAFE) {
-    return;
-  }
-  if (cookie_list.size() < 2)
-    return;
-  for (size_t i = 0; i < cookie_list.size() - 1; ++i) {
-    const net::CanonicalCookie& c1 = cookie_list[i].cookie;
-    for (size_t j = i + 1; j < cookie_list.size(); ++j) {
-      const net::CanonicalCookie& c2 = cookie_list[j].cookie;
-      if (net::cookie_util::IsSameSiteCompatPair(c1, c2, options)) {
-        cookie_list[i].access_result.status.AddWarningReason(
-            net::CookieInclusionStatus::WARN_SAMESITE_COMPAT_PAIR);
-        cookie_list[j].access_result.status.AddWarningReason(
-            net::CookieInclusionStatus::WARN_SAMESITE_COMPAT_PAIR);
-      }
-    }
-  }
+  return options;
 }
 
 }  // namespace
@@ -122,7 +131,8 @@ class RestrictedCookieManager::Listener : public base::LinkNode<Listener> {
            const url::Origin& top_frame_origin,
            net::CookieOptions options,
            mojo::PendingRemote<mojom::CookieChangeListener> mojo_listener)
-      : restricted_cookie_manager_(restricted_cookie_manager),
+      : cookie_store_(cookie_store),
+        restricted_cookie_manager_(restricted_cookie_manager),
         url_(url),
         site_for_cookies_(site_for_cookies),
         top_frame_origin_(top_frame_origin),
@@ -151,9 +161,23 @@ class RestrictedCookieManager::Listener : public base::LinkNode<Listener> {
   // net::CookieChangeDispatcher callback.
   void OnCookieChange(const net::CookieChangeInfo& change) {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+    bool delegate_treats_url_as_trustworthy =
+        cookie_store_->cookie_access_delegate() &&
+        cookie_store_->cookie_access_delegate()->ShouldTreatUrlAsTrustworthy(
+            url_);
+
+    // CookieChangeDispatcher doesn't check for inclusion against `options_`, so
+    // we need to double-check that.
+    net::CookieSamePartyStatus same_party_status =
+        net::cookie_util::GetSamePartyStatus(change.cookie, options_);
+
     if (!change.cookie
-             .IncludeForRequestURL(url_, options_,
-                                   change.access_result.access_semantics)
+             .IncludeForRequestURL(
+                 url_, options_,
+                 net::CookieAccessParams{change.access_result.access_semantics,
+                                         delegate_treats_url_as_trustworthy,
+                                         same_party_status})
              .status.IsInclude()) {
       return;
     }
@@ -169,6 +193,9 @@ class RestrictedCookieManager::Listener : public base::LinkNode<Listener> {
 
     mojo_listener_->OnCookieChange(change);
   }
+
+  // Expected to outlive |restricted_cookie_manager_| which outlives this.
+  const net::CookieStore* cookie_store_;
 
   // The CookieChangeDispatcher subscription used by this listener.
   std::unique_ptr<net::CookieChangeSubscription> cookie_store_subscription_;
@@ -202,17 +229,19 @@ RestrictedCookieManager::RestrictedCookieManager(
     net::CookieStore* cookie_store,
     const CookieSettings* cookie_settings,
     const url::Origin& origin,
-    const net::SiteForCookies& site_for_cookies,
-    const url::Origin& top_frame_origin,
+    const net::IsolationInfo& isolation_info,
     mojo::PendingRemote<mojom::CookieAccessObserver> cookie_observer)
     : role_(role),
       cookie_store_(cookie_store),
       cookie_settings_(cookie_settings),
       origin_(origin),
-      site_for_cookies_(site_for_cookies),
-      top_frame_origin_(top_frame_origin),
+      site_for_cookies_(isolation_info.site_for_cookies()),
+      top_frame_origin_(isolation_info.top_frame_origin().value()),
+      isolation_info_(isolation_info),
       cookie_observer_(std::move(cookie_observer)) {
   DCHECK(cookie_store);
+  CHECK(origin_ == isolation_info_.frame_origin().value() ||
+        role_ != mojom::RestrictedCookieManagerRole::SCRIPT);
 }
 
 RestrictedCookieManager::~RestrictedCookieManager() {
@@ -242,8 +271,9 @@ void RestrictedCookieManager::GetAllForUrl(
 
   // TODO(morlovich): Try to validate site_for_cookies as well.
 
-  net::CookieOptions net_options =
-      MakeOptionsForGet(role_, url, site_for_cookies, cookie_settings());
+  net::CookieOptions net_options = MakeOptionsForGet(
+      role_, url, site_for_cookies, isolation_info_, cookie_settings(),
+      cookie_store_->cookie_access_delegate());
   // TODO(https://crbug.com/977040): remove set_return_excluded_cookies() once
   //                                 removing deprecation warnings.
   net_options.set_return_excluded_cookies();
@@ -275,11 +305,6 @@ void RestrictedCookieManager::CookieListToGetAllForUrlCallback(
 
   // TODO(https://crbug.com/977040): Remove once samesite tightening up is
   // rolled out.
-  // |on_cookies_accessed_result| is populated with excluded cookies here based
-  // on warnings present before WARN_SAMESITE_COMPAT_PAIR can be applied by
-  // MarkSameSiteCompatPairs(). This is ok because WARN_SAMESITE_COMPAT_PAIR is
-  // irrelevant unless WARN_SAMESITE_UNSPECIFIED_CROSS_SITE_CONTEXT is already
-  // present.
   for (const auto& cookie_and_access_result : excluded_cookies) {
     if (cookie_and_access_result.access_result.status.ShouldWarn()) {
       on_cookies_accessed_result.push_back(cookie_and_access_result);
@@ -318,10 +343,6 @@ void RestrictedCookieManager::CookieListToGetAllForUrlCallback(
   }
 
   if (cookie_observer_) {
-    // Mark the CookieInclusionStatuses of items in |result_with_access_result|
-    // if they are part of a presumed SameSite compatibility pair.
-    MarkSameSiteCompatPairs(on_cookies_accessed_result, net_options);
-
     cookie_observer_->OnCookiesAccessed(mojom::CookieAccessDetails::New(
         mojom::CookieAccessDetails::Type::kRead, url, site_for_cookies,
         on_cookies_accessed_result, base::nullopt));
@@ -381,6 +402,7 @@ void RestrictedCookieManager::SetCanonicalCookie(
   // Update the creation and last access times.
   base::Time now = base::Time::NowFromSystemTime();
   // TODO(http://crbug.com/1024053): Log metrics
+  const GURL& origin_url = origin_.GetURL();
   net::CookieSourceScheme source_scheme =
       GURL::SchemeIsCryptographic(origin_.scheme())
           ? net::CookieSourceScheme::kSecure
@@ -393,14 +415,15 @@ void RestrictedCookieManager::SetCanonicalCookie(
   DCHECK(sanitized_cookie);
   net::CanonicalCookie cookie_copy = *sanitized_cookie;
 
-  net::CookieOptions options =
-      MakeOptionsForSet(role_, url, site_for_cookies, cookie_settings());
+  net::CookieOptions options = MakeOptionsForSet(
+      role_, url, site_for_cookies, isolation_info_, cookie_settings(),
+      cookie_store_->cookie_access_delegate());
   // TODO(chlily): |url| is validated to be the same origin as |origin_|, but
   // the path is not checked. If we ever decide to enforce the path constraint
   // for setting a cookie, we would need to validate the path of |url| somehow
   // and pass |url| instead of |origin_.GetURL()|.
   cookie_store_->SetCanonicalCookieAsync(
-      std::move(sanitized_cookie), origin_.GetURL(), options,
+      std::move(sanitized_cookie), origin_url, options,
       base::BindOnce(&RestrictedCookieManager::SetCanonicalCookieResult,
                      weak_ptr_factory_.GetWeakPtr(), url, site_for_cookies,
                      cookie_copy, options, std::move(callback)));
@@ -442,8 +465,9 @@ void RestrictedCookieManager::AddChangeListener(
     return;
   }
 
-  net::CookieOptions net_options =
-      MakeOptionsForGet(role_, url, site_for_cookies, cookie_settings());
+  net::CookieOptions net_options = MakeOptionsForGet(
+      role_, url, site_for_cookies, isolation_info_, cookie_settings(),
+      cookie_store_->cookie_access_delegate());
   auto listener = std::make_unique<Listener>(
       cookie_store_, this, url, site_for_cookies, top_frame_origin, net_options,
       std::move(mojo_listener));

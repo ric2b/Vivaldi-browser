@@ -26,11 +26,11 @@ import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.status_indicator.StatusIndicatorCoordinator;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabSelectionType;
-import org.chromium.chrome.browser.tab.TabThemeColorHelper;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorObserver;
+import org.chromium.chrome.browser.theme.TopUiThemeColorProvider;
 import org.chromium.chrome.browser.toolbar.ToolbarColors;
 import org.chromium.chrome.browser.toolbar.top.TopToolbarCoordinator;
 import org.chromium.components.browser_ui.styles.ChromeColors;
@@ -41,7 +41,6 @@ import org.chromium.ui.util.ColorUtils;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.tab.TabImpl;
 import org.vivaldi.browser.common.VivaldiColorUtils;
-import org.vivaldi.browser.common.VivaldiUtils;
 import org.vivaldi.browser.speeddial.SpeedDialPage;
 
 /**
@@ -78,7 +77,7 @@ public class StatusBarColorController
     private final StatusBarColorProvider mStatusBarColorProvider;
     private final ActivityTabProvider.ActivityTabTabObserver mStatusBarColorTabObserver;
     private final TabModelSelectorObserver mTabModelSelectorObserver;
-
+    private final TopUiThemeColorProvider mTopUiThemeColor;
     private final @ColorInt int mStandardPrimaryBgColor;
     private final @ColorInt int mIncognitoPrimaryBgColor;
     private final @ColorInt int mStandardDefaultThemeColor;
@@ -109,12 +108,13 @@ public class StatusBarColorController
      * @param overviewModeBehaviorSupplier Supplies the overview mode behavior.
      * @param activityLifecycleDispatcher Allows observation of the activity lifecycle.
      * @param tabProvider The {@link ActivityTabProvider} to get current tab of the activity.
+     * @param topUiThemeColorProvider The {@link ThemeColorProvider} for top UI.
      */
     public StatusBarColorController(Window window, boolean isTablet, Resources resources,
             StatusBarColorProvider statusBarColorProvider,
             OneshotSupplier<OverviewModeBehavior> overviewModeBehaviorSupplier,
             ActivityLifecycleDispatcher activityLifecycleDispatcher,
-            ActivityTabProvider tabProvider) {
+            ActivityTabProvider tabProvider, TopUiThemeColorProvider topUiThemeColorProvider) {
         mWindow = window;
         mIsTablet = isTablet;
         mStatusBarColorProvider = statusBarColorProvider;
@@ -218,6 +218,7 @@ public class StatusBarColorController
         }
 
         activityLifecycleDispatcher.register(this);
+        mTopUiThemeColor = topUiThemeColorProvider;
     }
 
     // Destroyable implementation.
@@ -285,10 +286,7 @@ public class StatusBarColorController
         setStatusBarColor(statusBarColor);
 
         // Note(david@vivaldi.com): We also apply color to the navigation bar.
-        if (VivaldiUtils.isTopToolbarOn() && mIsIncognito && !mIsInOverviewMode)
-            VivaldiColorUtils.setNavigationBarColor(mWindow, mIncognitoDefaultThemeColor);
-        else
-            VivaldiColorUtils.setNavigationBarColor(mWindow, statusBarColor);
+        VivaldiColorUtils.setNavigationBarColor(mWindow, mCurrentTab, mIsInOverviewMode);
     }
 
     // TODO(sinansahin): Confirm pre-M expectations with UX and update as needed.
@@ -330,21 +328,17 @@ public class StatusBarColorController
         if (isLocationBarShownInNTP()) {
             if (shouldDarkenStatusBarColor()) return Color.BLACK;
 
-            return ColorUtils.getColorWithOverlay(
-                    TabThemeColorHelper.getBackgroundColor(mCurrentTab),
-                    TabThemeColorHelper.getColor(mCurrentTab), mToolbarUrlExpansionPercentage);
+            return ColorUtils.getColorWithOverlay(mTopUiThemeColor.getBackgroundColor(mCurrentTab),
+                    mTopUiThemeColor.getThemeColor(), mToolbarUrlExpansionPercentage);
         }
 
         // Return status bar color to match the toolbar.
-        if (mCurrentTab != null && !TabThemeColorHelper.isDefaultColorUsed(mCurrentTab)) {
-            return TabThemeColorHelper.getColor(mCurrentTab);
-        }
-
         // Note(david@vivaldi.com): Always return the current tab color.
         if (ChromeApplication.isVivaldi() && mCurrentTab != null)
-            return TabThemeColorHelper.getColor(mCurrentTab);
+            return mCurrentTab.getThemeColor();
 
-        return calculateDefaultStatusBarColor();
+        return mTopUiThemeColor.getThemeColorOrFallback(
+                mCurrentTab, calculateDefaultStatusBarColor());
     }
 
     /**

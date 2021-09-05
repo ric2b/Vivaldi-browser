@@ -601,7 +601,8 @@ void MediaCodecVideoDecoder::OnSurfaceDestroyed(AndroidOverlay* overlay) {
   if (target_surface_bundle_ && target_surface_bundle_->overlay() == overlay)
     target_surface_bundle_ = texture_owner_bundle_;
 
-  // Transition the codec away from the overlay if necessary.
+  // Transition the codec away from the overlay if necessary.  This must be
+  // complete before this function returns.
   if (SurfaceTransitionPending())
     TransitionToTargetSurface();
 }
@@ -966,6 +967,16 @@ bool MediaCodecVideoDecoder::DequeueOutput() {
   std::unique_ptr<ScopedAsyncTrace> async_trace =
       ScopedAsyncTrace::CreateIfEnabled(
           "MediaCodecVideoDecoder::CreateVideoFrame");
+  // Make sure that we're notified when this is rendered.  Otherwise, if we're
+  // waiting for all output buffers to drain so that we can swap the output
+  // surface, we might not realize that we may continue.  If we're using
+  // SurfaceControl overlays, then this isn't needed; there is never a surface
+  // transition anyway.
+  if (!is_surface_control_enabled_) {
+    output_buffer->set_render_cb(BindToCurrentLoop(
+        base::BindOnce(&MediaCodecVideoDecoder::StartTimerOrPumpCodec,
+                       weak_factory_.GetWeakPtr())));
+  }
   video_frame_factory_->CreateVideoFrame(
       std::move(output_buffer), presentation_time,
       GetNaturalSize(visible_rect, decoder_config_.GetPixelAspectRatio()),
@@ -1010,7 +1021,7 @@ void MediaCodecVideoDecoder::ForwardVideoFrame(
   if (reset_generation == reset_generation_) {
     // TODO(liberato): We might actually have a SW decoder.  Consider setting
     // this to false if so, especially for higher bitrates.
-    frame->metadata()->power_efficient = true;
+    frame->metadata().power_efficient = true;
     output_cb_.Run(std::move(frame));
   }
 }

@@ -17,6 +17,7 @@
 #include "build/build_config.h"
 #include "net/base/features.h"
 #include "net/base/network_isolation_key.h"
+#include "net/base/schemeful_site.h"
 #include "net/base/test_completion_callback.h"
 #include "net/cert/cert_verify_result.h"
 #include "net/http/transport_security_state.h"
@@ -68,6 +69,7 @@
 #include "net/third_party/quiche/src/spdy/core/spdy_test_utils.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "url/gurl.h"
 
 using testing::_;
 
@@ -313,9 +315,6 @@ INSTANTIATE_TEST_SUITE_P(VersionIncludeStreamDependencySequence,
                          QuicChromiumClientSessionTest,
                          ::testing::ValuesIn(GetTestParams()),
                          ::testing::PrintToStringParamName());
-
-// TODO(crbug.com/950069): Add testing for frame_origin in NetworkIsolationKey
-// using kAppendInitiatingFrameOriginToNetworkIsolationKey.
 
 // Basic test of ProofVerifyDetailsChromium is converted to SSLInfo retrieved
 // through QuicChromiumClientSession::GetSSLInfo(). Doesn't test some of the
@@ -942,7 +941,7 @@ TEST_P(QuicChromiumClientSessionTest, ConnectionCloseBeforeStreamRequest) {
   CompleteCryptoHandshake();
 
   // Send a ping so that client has outgoing traffic before receiving packets.
-  session_->SendPing();
+  session_->connection()->SendPing();
 
   // Pump the message loop to read the connection close packet.
   base::RunLoop().RunUntilIdle();
@@ -1025,7 +1024,7 @@ TEST_P(QuicChromiumClientSessionTest, ConnectionCloseWithPendingStreamRequest) {
   CompleteCryptoHandshake();
 
   // Send a ping so that client has outgoing traffic before receiving packets.
-  session_->SendPing();
+  session_->connection()->SendPing();
 
   // Open the maximum number of streams so that a subsequent request
   // can not proceed immediately.
@@ -1618,7 +1617,7 @@ TEST_P(QuicChromiumClientSessionTest, CanPool) {
       QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
                      NetworkIsolationKey(), false /* disable_secure_dns */)));
 
-  const auto kOriginFoo = url::Origin::Create(GURL("http://foo.test/"));
+  const SchemefulSite kSiteFoo(GURL("http://foo.test/"));
 
   // Check that NetworkIsolationKey is respected when feature is enabled.
   {
@@ -1628,7 +1627,7 @@ TEST_P(QuicChromiumClientSessionTest, CanPool) {
     EXPECT_TRUE(session_->CanPool(
         "mail.example.com",
         QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
-                       NetworkIsolationKey(kOriginFoo, kOriginFoo),
+                       NetworkIsolationKey(kSiteFoo, kSiteFoo),
                        false /* disable_secure_dns */)));
   }
   {
@@ -1638,7 +1637,7 @@ TEST_P(QuicChromiumClientSessionTest, CanPool) {
     EXPECT_FALSE(session_->CanPool(
         "mail.example.com",
         QuicSessionKey("foo", 1234, PRIVACY_MODE_DISABLED, SocketTag(),
-                       NetworkIsolationKey(kOriginFoo, kOriginFoo),
+                       NetworkIsolationKey(kSiteFoo, kSiteFoo),
                        false /* disable_secure_dns */)));
   }
 }
@@ -1728,10 +1727,10 @@ TEST_P(QuicChromiumClientSessionTest, CanPoolWithNetworkIsolationKey) {
   feature_list.InitAndEnableFeature(
       features::kPartitionConnectionsByNetworkIsolationKey);
 
-  const auto kOriginFoo = url::Origin::Create(GURL("http://foo.test/"));
-  const auto kOriginBar = url::Origin::Create(GURL("http://bar.test/"));
-  const NetworkIsolationKey kNetworkIsolationKey1(kOriginFoo, kOriginFoo);
-  const NetworkIsolationKey kNetworkIsolationKey2(kOriginBar, kOriginBar);
+  const SchemefulSite kSiteFoo(GURL("http://foo.test/"));
+  const SchemefulSite kSiteBar(GURL("http://bar.test/"));
+  const NetworkIsolationKey kNetworkIsolationKey1(kSiteFoo, kSiteFoo);
+  const NetworkIsolationKey kNetworkIsolationKey2(kSiteBar, kSiteBar);
 
   session_key_ = QuicSessionKey(
       kServerHostname, kServerPort, PRIVACY_MODE_DISABLED, SocketTag(),
@@ -2038,7 +2037,7 @@ TEST_P(QuicChromiumClientSessionTest, MigrateToSocketReadError) {
   CompleteCryptoHandshake();
 
   if (!VersionUsesHttp3(version_.transport_version))
-    session_->SendPing();
+    session_->connection()->SendPing();
   MockWrite writes[] = {
       MockWrite(SYNCHRONOUS, client_ping->data(), client_ping->length(), 1)};
   MockRead new_reads[] = {
@@ -2148,7 +2147,7 @@ TEST_P(QuicChromiumClientSessionTest, RetransmittableOnWireTimeout) {
 
   // Send PING, which will be ACKed by the server. After the ACK, there will be
   // no retransmittable packets on the wire, so the alarm should be set.
-  session_->SendPing();
+  session_->connection()->SendPing();
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(alarm->IsSet());
   EXPECT_EQ(
@@ -2447,7 +2446,7 @@ TEST_P(QuicChromiumClientSessionTest, WriteErrorAfterHandshakeConfirmed) {
   CompleteCryptoHandshake();
 
   // Send a ping so that client has outgoing traffic before receiving packets.
-  session_->SendPing();
+  session_->connection()->SendPing();
 
   // Verify error count is properly recorded.
   EXPECT_EQ(1u, connectivity_monitor_->GetCountForWriteErrorCode(

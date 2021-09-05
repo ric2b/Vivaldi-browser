@@ -166,11 +166,6 @@ void VivaldiSubresourceFilterAdblockingThrottle::NotifyResult() {
     activation_level = subresource_filter::mojom::ActivationLevel::kDisabled;
   }
 
-  // Let the embedder get the last word when it comes to activation level.
-  // TODO(csharrison): Move all ActivationDecision code to the embedder.
-  activation_level = filter_client_->OnPageActivationComputed(
-      navigation_handle(), activation_level, &activation_decision);
-
   LogMetricsOnChecksComplete(selection.matched_list, activation_decision,
     activation_level);
 

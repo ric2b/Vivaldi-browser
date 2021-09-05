@@ -95,14 +95,17 @@ history::HistoryAddPageArgs HistoryTabHelper::CreateHistoryAddPageArgs(
     page_transition = ui::PageTransitionFromInt(ui::PAGE_TRANSITION_FROM_API_3 |
                                                 page_transition);
   }
+
+  // Note: floc_allowed is set to false initially and is later updated by the
+  // floc eligibility observer. Eventually it will be removed from the history
+  // service API.
   history::HistoryAddPageArgs add_page_args(
       navigation_handle->GetURL(), timestamp,
       history::ContextIDForWebContents(web_contents()), nav_entry_id,
       navigation_handle->GetReferrer().url,
       navigation_handle->GetRedirectChain(), page_transition, hidden,
       history::SOURCE_BROWSED, navigation_handle->DidReplaceEntry(),
-      !content_suggestions_navigation,
-      navigation_handle->GetSocketAddress().address().IsPubliclyRoutable(),
+      !content_suggestions_navigation, /*floc_allowed=*/false,
       navigation_handle->IsSameDocument()
           ? base::Optional<base::string16>(
                 navigation_handle->GetWebContents()->GetTitle())
@@ -216,7 +219,7 @@ void HistoryTabHelper::DidActivatePortal(
       /* redirects */ {}, ui::PAGE_TRANSITION_LINK,
       /* hidden */ false, history::SOURCE_BROWSED, did_replace_entry,
       /* consider_for_ntp_most_visited */ true,
-      /* publicly_routable */ false, last_committed_entry->GetTitle());
+      /* floc_allowed */ false, last_committed_entry->GetTitle());
   hs->AddPage(add_page_args);
 }
 

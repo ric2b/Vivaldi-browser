@@ -8,7 +8,7 @@
 
 #include "base/check.h"
 #include "base/metrics/histogram_functions.h"
-#include "base/util/type_safety/pass_key.h"
+#include "base/types/pass_key.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/touch_to_fill/touch_to_fill_view.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliation_utils.h"
@@ -21,6 +21,7 @@
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
+#include "url/origin.h"
 
 using ShowVirtualKeyboard =
     password_manager::PasswordManagerDriver::ShowVirtualKeyboard;
@@ -28,7 +29,7 @@ using password_manager::PasswordManagerDriver;
 using password_manager::UiCredential;
 
 TouchToFillController::TouchToFillController(
-    util::PassKey<TouchToFillControllerTest>) {}
+    base::PassKey<TouchToFillControllerTest>) {}
 
 TouchToFillController::TouchToFillController(
     ChromePasswordManagerClient* password_client)
@@ -58,14 +59,16 @@ void TouchToFillController::Show(base::span<const UiCredential> credentials,
     view_ = TouchToFillViewFactory::Create(this);
 
   const GURL& url = driver_->GetLastCommittedURL();
-  view_->Show(url,
-              TouchToFillView::IsOriginSecure(
-                  network::IsUrlPotentiallyTrustworthy(url)),
-              credentials);
+  view_->Show(
+      url,
+      TouchToFillView::IsOriginSecure(
+          network::IsOriginPotentiallyTrustworthy(url::Origin::Create(url))),
+      credentials);
 }
 
 void TouchToFillController::OnCredentialSelected(
     const UiCredential& credential) {
+  view_.reset();
   if (!driver_)
     return;
 
@@ -81,6 +84,7 @@ void TouchToFillController::OnCredentialSelected(
 }
 
 void TouchToFillController::OnManagePasswordsSelected() {
+  view_.reset();
   if (!driver_)
     return;
 
@@ -95,6 +99,7 @@ void TouchToFillController::OnManagePasswordsSelected() {
 }
 
 void TouchToFillController::OnDismiss() {
+  view_.reset();
   if (!driver_)
     return;
 

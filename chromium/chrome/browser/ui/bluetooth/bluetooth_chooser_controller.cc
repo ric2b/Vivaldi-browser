@@ -10,6 +10,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/net/referrer.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/bluetooth/bluetooth_chooser_desktop.h"
@@ -20,11 +21,11 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/common/webui_url_constants.h"
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace {
 
@@ -69,6 +70,14 @@ base::string16 BluetoothChooserController::GetOkButtonLabel() const {
       IDS_BLUETOOTH_DEVICE_CHOOSER_PAIR_BUTTON_TEXT);
 }
 
+std::pair<base::string16, base::string16>
+BluetoothChooserController::GetThrobberLabelAndTooltip() const {
+  return {
+      l10n_util::GetStringUTF16(IDS_BLUETOOTH_DEVICE_CHOOSER_SCANNING_LABEL),
+      l10n_util::GetStringUTF16(
+          IDS_BLUETOOTH_DEVICE_CHOOSER_SCANNING_LABEL_TOOLTIP)};
+}
+
 size_t BluetoothChooserController::NumOptions() const {
   return devices_.size();
 }
@@ -108,7 +117,7 @@ void BluetoothChooserController::RefreshOptions() {
 }
 
 void BluetoothChooserController::OpenAdapterOffHelpUrl() const {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Chrome OS can directly link to the OS setting to turn on the adapter.
   chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
       GetBrowser()->profile(),
@@ -120,10 +129,6 @@ void BluetoothChooserController::OpenAdapterOffHelpUrl() const {
       WindowOpenDisposition::NEW_FOREGROUND_TAB,
       ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false /* is_renderer_initialized */));
 #endif
-}
-
-base::string16 BluetoothChooserController::GetStatus() const {
-  return status_text_;
 }
 
 void BluetoothChooserController::Select(const std::vector<size_t>& indices) {
@@ -167,15 +172,12 @@ void BluetoothChooserController::OnAdapterPresenceChanged(
       NOTREACHED();
       break;
     case content::BluetoothChooser::AdapterPresence::POWERED_OFF:
-      status_text_ = base::string16();
       if (view()) {
         view()->OnAdapterEnabledChanged(
             false /* Bluetooth adapter is turned off */);
       }
       break;
     case content::BluetoothChooser::AdapterPresence::POWERED_ON:
-      status_text_ =
-          l10n_util::GetStringUTF16(IDS_BLUETOOTH_DEVICE_CHOOSER_RE_SCAN);
       if (view()) {
         view()->OnAdapterEnabledChanged(
             true /* Bluetooth adapter is turned on */);
@@ -188,8 +190,6 @@ void BluetoothChooserController::OnDiscoveryStateChanged(
     content::BluetoothChooser::DiscoveryState state) {
   switch (state) {
     case content::BluetoothChooser::DiscoveryState::DISCOVERING:
-      status_text_ =
-          l10n_util::GetStringUTF16(IDS_BLUETOOTH_DEVICE_CHOOSER_SCANNING);
       if (view()) {
         view()->OnRefreshStateChanged(
             true /* Refreshing options is in progress */);
@@ -197,8 +197,6 @@ void BluetoothChooserController::OnDiscoveryStateChanged(
       break;
     case content::BluetoothChooser::DiscoveryState::IDLE:
     case content::BluetoothChooser::DiscoveryState::FAILED_TO_START:
-      status_text_ =
-          l10n_util::GetStringUTF16(IDS_BLUETOOTH_DEVICE_CHOOSER_RE_SCAN);
       if (view()) {
         view()->OnRefreshStateChanged(
             false /* Refreshing options is complete */);

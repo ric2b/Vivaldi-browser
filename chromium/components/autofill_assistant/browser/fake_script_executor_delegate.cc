@@ -37,6 +37,10 @@ WebController* FakeScriptExecutorDelegate::GetWebController() {
   return web_controller_;
 }
 
+ElementStore* FakeScriptExecutorDelegate::GetElementStore() const {
+  return element_store_;
+}
+
 TriggerContext* FakeScriptExecutorDelegate::GetTriggerContext() {
   return trigger_context_.get();
 }
@@ -82,15 +86,29 @@ std::string FakeScriptExecutorDelegate::GetStatusMessage() const {
 }
 
 void FakeScriptExecutorDelegate::SetBubbleMessage(const std::string& message) {
-  status_message_ = message;
+  bubble_message_ = message;
 }
 
 std::string FakeScriptExecutorDelegate::GetBubbleMessage() const {
-  return status_message_;
+  return bubble_message_;
 }
 
-void FakeScriptExecutorDelegate::SetDetails(std::unique_ptr<Details> details) {
-  details_ = std::move(details);
+void FakeScriptExecutorDelegate::SetDetails(std::unique_ptr<Details> details,
+                                            base::TimeDelta delay) {
+  // We ignore |delay|.
+  if (details) {
+    details_ = {*details};
+  } else {
+    details_ = {};
+  }
+}
+
+void FakeScriptExecutorDelegate::AppendDetails(std::unique_ptr<Details> details,
+                                               base::TimeDelta delay) {
+  // We ignore |delay|.
+  if (details) {
+    details_.push_back(*details);
+  }
 }
 
 void FakeScriptExecutorDelegate::SetInfoBox(const InfoBox& info_box) {
@@ -245,5 +263,11 @@ void FakeScriptExecutorDelegate::SetOverlayBehavior(
     ConfigureUiStateProto::OverlayBehavior overaly_behavior) {}
 
 void FakeScriptExecutorDelegate::SetBrowseModeInvisible(bool invisible) {}
+
+void FakeScriptExecutorDelegate::SetShowFeedbackChip(bool show_feedback_chip) {}
+
+bool FakeScriptExecutorDelegate::ShouldShowWarning() {
+  return true;
+}
 
 }  // namespace autofill_assistant

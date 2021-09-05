@@ -34,8 +34,6 @@ namespace chromeos {
 // LoginDisplayWebUI, public: --------------------------------------------------
 
 LoginDisplayWebUI::~LoginDisplayWebUI() {
-  if (webui_handler_)
-    webui_handler_->ResetSigninScreenHandlerDelegate();
   ui::UserActivityDetector* activity_detector = ui::UserActivityDetector::Get();
   if (activity_detector && activity_detector->HasObserver(this))
     activity_detector->RemoveObserver(this);
@@ -168,16 +166,6 @@ void LoginDisplayWebUI::ShowError(int error_msg_id,
                             help_topic_id);
 }
 
-void LoginDisplayWebUI::ShowPasswordChangedDialog(bool show_password_error,
-                                                  const AccountId& account_id) {
-  NOTIMPLEMENTED();
-}
-
-void LoginDisplayWebUI::ShowSigninUI(const std::string& email) {
-  if (webui_handler_)
-    webui_handler_->ShowSigninUI(email);
-}
-
 void LoginDisplayWebUI::ShowAllowlistCheckFailedError() {
   if (webui_handler_)
     webui_handler_->ShowAllowlistCheckFailedError();
@@ -209,11 +197,6 @@ void LoginDisplayWebUI::OnSigninScreenReady() {
 void LoginDisplayWebUI::ShowEnterpriseEnrollmentScreen() {
   if (delegate_)
     delegate_->OnStartEnterpriseEnrollment();
-}
-
-void LoginDisplayWebUI::ShowKioskEnableScreen() {
-  if (delegate_)
-    delegate_->OnStartKioskEnableScreen();
 }
 
 void LoginDisplayWebUI::ShowKioskAutolaunchScreen() {

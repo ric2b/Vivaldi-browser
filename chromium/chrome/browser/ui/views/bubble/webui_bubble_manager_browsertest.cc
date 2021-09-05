@@ -7,6 +7,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/views/bubble/webui_bubble_dialog_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/test/browser_test.h"
 
@@ -15,18 +16,22 @@ namespace {
 class TestWebUIBubbleManager : public WebUIBubbleManagerBase {
  public:
   explicit TestWebUIBubbleManager(Browser* browser)
-      : WebUIBubbleManagerBase(BrowserView::GetBrowserViewForBrowser(browser),
-                               browser->profile(),
-                               GURL("chrome://about")) {}
+      : WebUIBubbleManagerBase(BrowserView::GetBrowserViewForBrowser(browser)),
+        browser_context_(browser->profile()) {}
   TestWebUIBubbleManager(const TestWebUIBubbleManager&) = delete;
   const TestWebUIBubbleManager& operator=(const TestWebUIBubbleManager&) =
       delete;
   ~TestWebUIBubbleManager() override = default;
 
+  // WebUIBubbleManagerBase:
+  void WebViewHidden() override {}
+
  private:
   std::unique_ptr<WebUIBubbleView> CreateWebView() override {
-    return std::make_unique<WebUIBubbleView>(browser_context());
+    return std::make_unique<WebUIBubbleView>(browser_context_);
   }
+
+  content::BrowserContext* browser_context_;
 };
 
 }  // namespace

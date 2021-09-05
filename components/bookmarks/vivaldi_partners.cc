@@ -7,7 +7,6 @@
 #endif
 #include "base/containers/flat_set.h"
 #include "base/files/file_util.h"
-#include "base/guid.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/path_service.h"
@@ -114,11 +113,12 @@ bool ParsePartnerDatabaseDetailsList(
       } else if (property == kGuidKey || property == kGuid2Key) {
         if (!v.is_string())
           return error(property + " is not a string");
-        std::string* guid =
+        base::GUID guid_value = base::GUID::ParseCaseInsensitive(v.GetString());
+        if (!guid_value.is_valid())
+          return error(property + " is not a valid GUID - " + v.GetString());
+        base::GUID* guid =
             (property == kGuidKey ? &details.guid : &details.guid2);
-        *guid = std::move(v.GetString());
-        if (!base::IsValidGUID(*guid))
-          return error(property + " is not a valid GUID - " + *guid);
+        *guid = std::move(guid_value);
         if (property == kGuid2Key) {
           bookmark_only = true;
         }
@@ -154,14 +154,14 @@ bool ParsePartnerDatabaseDetailsList(
     }
     if (details.name.empty())
       return error(std::string("missing ") + kNameKey + " property");
-    if (details.guid.empty())
+    if (!details.guid.is_valid())
       return error(std::string("missing ") + kGuidKey + " property");
     if (is_folder) {
       if (details.title.empty()) {
         details.title = details.name;
       }
     } else {
-      if (details.guid2.empty())
+      if (!details.guid2.is_valid())
         return error(std::string("missing ") + kGuid2Key + " property");
     }
     details_list.push_back(std::move(details));
@@ -187,7 +187,6 @@ std::string AssetReader::GetPath() const {
 }
 
 base::Optional<base::Value> AssetReader::ReadJson(base::StringPiece name) {
-  not_found_ = false;
   base::StringPiece json_text;
 #if defined(OS_ANDROID)
   path_ = kAssetsDir;
@@ -197,15 +196,15 @@ base::Optional<base::Value> AssetReader::ReadJson(base::StringPiece name) {
   base::MemoryMappedFile mapped_file;
   int json_fd = base::android::OpenApkAsset(path_, &region);
   if (json_fd < 0) {
-    not_found_ = true;
-  } else {
-    if (!mapped_file.Initialize(base::File(json_fd), region)) {
-      LOG(ERROR) << "failed to initialize memory mapping for " << path_;
-      return base::nullopt;
-    }
-    json_text = base::StringPiece(reinterpret_cast<char*>(mapped_file.data()),
-                                  mapped_file.length());
+    LOG(ERROR) << "failed to open the asset at " << path_;
+    return base::nullopt;
   }
+  if (!mapped_file.Initialize(base::File(json_fd), region)) {
+    LOG(ERROR) << "failed to initialize memory mapping for " << path_;
+    return base::nullopt;
+  }
+  json_text = base::StringPiece(reinterpret_cast<char*>(mapped_file.data()),
+                                mapped_file.length());
 #else
   if (asset_dir_.empty()) {
     base::PathService::Get(base::DIR_ASSETS, &asset_dir_);
@@ -216,27 +215,17 @@ base::Optional<base::Value> AssetReader::ReadJson(base::StringPiece name) {
   }
   path_ = asset_dir_.AppendASCII(name);
   std::string json_buffer;
-  if (!base::PathExists(path_)) {
-    not_found_ = true;
-  } else {
-    if (!base::ReadFileToString(path_, &json_buffer)) {
-      LOG(ERROR) << "failed to read " << path_;
-      return base::nullopt;
-    }
-    json_text = base::StringPiece(json_buffer);
-  }
-#endif  //  OS_ANDROID
-  if (not_found_) {
-    if (log_not_found_) {
-      LOG(ERROR) << GetPath() << ": path not found";
-    }
+  if (!base::ReadFileToString(path_, &json_buffer)) {
+    LOG(ERROR) << "failed to read " << path_;
     return base::nullopt;
   }
-
+  json_text = base::StringPiece(json_buffer);
+#endif  //  OS_ANDROID
   base::JSONReader::ValueWithError v =
       base::JSONReader::ReadAndReturnValueWithError(json_text);
   if (!v.value) {
-    LOG(ERROR) << GetPath() << ":" << v.error_line << ":" << v.error_column << ": JSON error - " << v.error_message;
+    LOG(ERROR) << GetPath() << ":" << v.error_line << ":" << v.error_column
+               << ": JSON error - " << v.error_message;
   }
   return std::move(v.value);
 }
@@ -249,9 +238,9 @@ PartnerDetails& PartnerDetails::operator=(PartnerDetails&&) = default;
 namespace {
 
 class PartnerDatabase {
-public:
+ public:
   PartnerDatabase() = default;
-  ~PartnerDatabase()= default;
+  ~PartnerDatabase() = default;
 
   static std::unique_ptr<PartnerDatabase> Read();
 
@@ -263,43 +252,43 @@ public:
   }
 
   const PartnerDetails* FindDetailsByPartner(
-      base::StringPiece partner_id) const {
+      const base::GUID& partner_id) const {
     auto i = locale_id_guid_map_.find(partner_id);
+    const base::GUID* id = &partner_id;
     if (i != locale_id_guid_map_.end()) {
-      partner_id = i->second;
+      id = &i->second;
     }
-    auto i2 = guid_index_.find(partner_id);
+    auto i2 = guid_index_.find(*id);
     if (i2 == guid_index_.end())
       return nullptr;
     return i2->second;
   }
 
-  bool MapLocaleIdToGUID(std::string& id) const {
+  bool MapLocaleIdToGUID(base::GUID& id) const {
     auto i = locale_id_guid_map_.find(id);
     if (i == locale_id_guid_map_.end())
       return false;
-    base::StringPiece guid = i->second;
-    id.assign(guid.data(), guid.length());
+    id = i->second;
     return true;
   }
 
-private:
- bool ParseJson(base::Value root, base::Value partners_locale_value);
+ private:
+  bool ParseJson(base::Value root, base::Value partners_locale_value);
 
- std::vector<PartnerDetails> details_list_;
+  std::vector<PartnerDetails> details_list_;
 
- // Map partner details name to its details.
- base::flat_map<base::StringPiece, const PartnerDetails*> name_index_;
+  // Map partner details name to its details.
+  base::flat_map<base::StringPiece, const PartnerDetails*> name_index_;
 
- // Map locale-independent guid or guid2 to its details.
- base::flat_map<base::StringPiece, const PartnerDetails*> guid_index_;
+  // Map locale-independent guid or guid2 to its details.
+  base::flat_map<base::GUID, const PartnerDetails*> guid_index_;
 
- // Map old locale-based partner id to the guid or guid2 if the old id is for
- // an url under Bookmarks folder.
- base::flat_map<std::string, base::StringPiece> locale_id_guid_map_;
+  // Map old locale-based partner id to the guid or guid2 if the old id is for
+  // an url under Bookmarks folder.
+  base::flat_map<base::GUID, base::GUID> locale_id_guid_map_;
 
- // The maps above contains references, so prevent copy/assignment for safety.
- DISALLOW_COPY_AND_ASSIGN(PartnerDatabase);
+  // The maps above contains references, so prevent copy/assignment for safety.
+  DISALLOW_COPY_AND_ASSIGN(PartnerDatabase);
 };
 
 // Global singleton.
@@ -308,7 +297,6 @@ const PartnerDatabase* g_partner_db = nullptr;
 // static
 std::unique_ptr<PartnerDatabase> PartnerDatabase::Read() {
   AssetReader reader;
-  reader.set_log_not_found();
   base::Optional<base::Value> partner_db_value =
       reader.ReadJson(kPartnerDBFile);
   if (!partner_db_value)
@@ -327,9 +315,8 @@ std::unique_ptr<PartnerDatabase> PartnerDatabase::Read() {
   return db;
 }
 
-bool PartnerDatabase::ParseJson(
-    base::Value root,
-    base::Value partners_locale_value) {
+bool PartnerDatabase::ParseJson(base::Value root,
+                                base::Value partners_locale_value) {
   auto error = [](base::StringPiece message) -> bool {
     LOG(ERROR) << "Partner database JSON error: " << message;
     return false;
@@ -356,12 +343,12 @@ bool PartnerDatabase::ParseJson(
   // for unique values.
   std::vector<std::pair<base::StringPiece, const PartnerDetails*>> names;
   names.reserve(details_list_.size());
-  std::vector<std::pair<base::StringPiece, const PartnerDetails*>> guids;
+  std::vector<std::pair<base::GUID, const PartnerDetails*>> guids;
   guids.reserve(details_list_.size() * 2);
   for (const PartnerDetails& details : details_list_) {
     names.emplace_back(details.name, &details);
     guids.emplace_back(details.guid, &details);
-    if (!details.guid2.empty()) {
+    if (details.guid2.is_valid()) {
       guids.emplace_back(details.guid2, &details);
     }
   }
@@ -370,13 +357,13 @@ bool PartnerDatabase::ParseJson(
   if (name_index_.size() != details_list_.size())
     return error("duplicatd names");
   size_t added_guids = guids.size();
-  guid_index_ = base::flat_map<base::StringPiece, const PartnerDetails*>(
-      std::move(guids));
+  guid_index_ =
+      base::flat_map<base::GUID, const PartnerDetails*>(std::move(guids));
   if (guid_index_.size() != added_guids)
     return error("duplicatd GUIDs");
 
   // Parse mapping from old locale-based ids to the new universal ids.
-  std::vector<std::pair<std::string, base::StringPiece>> locale_id_guid_list;
+  std::vector<std::pair<base::GUID, base::GUID>> locale_id_guid_list;
   if (!partners_locale_value.is_dict())
     return error("partner local map json is not an object");
   for (auto name_key_value : partners_locale_value.DictItems()) {
@@ -393,7 +380,7 @@ bool PartnerDatabase::ParseJson(
     for (auto guid_key_value : locale_dict.DictItems()) {
       const std::string& guid_key = guid_key_value.first;
       base::Value& v = guid_key_value.second;
-      base::StringPiece guid;
+      base::GUID guid;
       if (guid_key == kGuidKey) {
         guid = details->guid;
       } else if (guid_key == kGuid2Key) {
@@ -411,17 +398,20 @@ bool PartnerDatabase::ParseJson(
           return error(std::string("Partner id in ") +
                        std::string(kPartnerLocaleMapFile) + "." + name + "." +
                        guid_key + " is not a string");
-        std::string locale_id = std::move(id_value.GetString());
-        if (!base::IsValidGUID(locale_id))
+        base::GUID locale_id =
+            base::GUID::ParseCaseInsensitive(id_value.GetString());
+        if (!locale_id.is_valid()) {
           return error(std::string("Partner id in ") +
                        std::string(kPartnerLocaleMapFile) + "." + name + "." +
-                       guid_key + " is not a valid GUID - " + locale_id);
-        locale_id_guid_list.emplace_back(std::move(locale_id), guid);
+                       guid_key + " is not a valid GUID - " +
+                       id_value.GetString());
+        }
+        locale_id_guid_list.emplace_back(std::move(locale_id), std::move(guid));
       }
     }
   }
-  locale_id_guid_map_ = base::flat_map<std::string, base::StringPiece>(
-      std::move(locale_id_guid_list));
+  locale_id_guid_map_ =
+      base::flat_map<base::GUID, base::GUID>(std::move(locale_id_guid_list));
   return true;
 }
 
@@ -433,13 +423,14 @@ const PartnerDetails* FindDetailsByName(base::StringPiece name) {
   return g_partner_db->FindDetailsByName(name);
 }
 
-bool MapLocaleIdToGUID(std::string& id) {
+bool MapLocaleIdToGUID(base::GUID& id) {
   if (!g_partner_db)
     return false;
   return g_partner_db->MapLocaleIdToGUID(id);
 }
 
-const std::string& GetThumbnailUrl(const std::string& partner_id) {
+const std::string& GetThumbnailUrl(const base::GUID& partner_id) {
+  DCHECK(partner_id.is_valid());
   if (!g_partner_db)
     return base::EmptyString();
   const PartnerDetails* details =

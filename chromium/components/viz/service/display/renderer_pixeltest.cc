@@ -560,7 +560,7 @@ scoped_refptr<media::VideoFrame> CreateHighbitVideoFrame(
       video_frame->natural_size(), video_frame->timestamp());
 
   // Copy all metadata.
-  ret->metadata()->MergeMetadataFrom(video_frame->metadata());
+  ret->metadata().MergeMetadataFrom(video_frame->metadata());
 
   for (int plane = media::VideoFrame::kYPlane;
        plane <= media::VideoFrame::kVPlane; ++plane) {
@@ -3096,7 +3096,7 @@ class GLRendererPixelTestWithBackdropFilter : public VizPixelTest {
           gfx::RectF(),                // tex_coord_rect
           false,                       // force_anti_aliasing_off
           backdrop_filter_quality_,    // backdrop_filter_quality
-          can_use_backdrop_filter_cache_);
+          intersects_damage_under_);
     }
 
     const int kGridWidth = device_viewport_rect.width() / 3;
@@ -3136,7 +3136,7 @@ class GLRendererPixelTestWithBackdropFilter : public VizPixelTest {
   cc::FilterOperations backdrop_filters_;
   base::Optional<gfx::RRectF> backdrop_filter_bounds_;
   float backdrop_filter_quality_ = 1.0f;
-  bool can_use_backdrop_filter_cache_ = false;
+  bool intersects_damage_under_ = true;
   gfx::Transform filter_pass_to_target_transform_;
   gfx::Rect filter_pass_layer_rect_;
 };
@@ -3152,6 +3152,8 @@ TEST_F(GLRendererPixelTestWithBackdropFilter, FilterQuality) {
       &this->pass_list_,
       base::FilePath(FILE_PATH_LITERAL("gl_backdrop_filter_1.png")),
       cc::FuzzyPixelOffByOneComparator(true)));
+  if (this->context_provider()->ContextCapabilities().major_version < 3)
+    return;
   this->backdrop_filter_quality_ = 0.33f;
   this->SetUpRenderPassList();
   EXPECT_TRUE(this->RunPixelTest(
@@ -3167,7 +3169,7 @@ TEST_F(GLRendererPixelTestWithBackdropFilter, CachedResultOfBackdropFilter) {
       gfx::RRectF(gfx::RectF(this->filter_pass_layer_rect_));
   // Set the flag to use cached backdrop filtered texture. This makes the
   // GLRenderer cache backdrop filtered result.
-  this->can_use_backdrop_filter_cache_ = true;
+  this->intersects_damage_under_ = false;
   this->SetUpRenderPassList();
 
   EXPECT_TRUE(this->RunPixelTest(
@@ -3195,9 +3197,9 @@ TEST_F(GLRendererPixelTestWithBackdropFilter, CachedResultOfBackdropFilter) {
       base::FilePath(FILE_PATH_LITERAL("gl_backdrop_filter_1.png")),
       cc::FuzzyPixelOffByOneComparator(true)));
 
-  // Set|can_use_backdrop_filter_cache_| to false to make GLRenderer re-run the
+  // Set |intersects_damage_under_| to true to make GLRenderer re-run the
   // backdrop filter calculation
-  this->can_use_backdrop_filter_cache_ = false;
+  this->intersects_damage_under_ = true;
   this->SetUpRenderPassList();
   background_quad = *pass_list_.back()->quad_list.rbegin();
   static_cast<SolidColorDrawQuad*>(background_quad)->color = SK_ColorYELLOW;
@@ -3500,7 +3502,7 @@ TEST_P(GPURendererPixelTest, RenderPassDrawQuadForceAntiAliasingOff) {
   bool needs_blending = false;
   bool force_anti_aliasing_off = true;
   float backdrop_filter_quality = 1.0f;
-  bool can_use_backdrop_filter_cache = false;
+  bool intersects_damage_under = true;
   gfx::Transform hole_pass_to_target_transform;
   hole_pass_to_target_transform.Translate(50, 50);
   hole_pass_to_target_transform.Scale(0.5f + 1.0f / (rect.width() * 2.0f),
@@ -3513,7 +3515,7 @@ TEST_P(GPURendererPixelTest, RenderPassDrawQuadForceAntiAliasingOff) {
                     child_pass_id, 0, gfx::RectF(), gfx::Size(),
                     gfx::Vector2dF(), gfx::PointF(), gfx::RectF(rect),
                     force_anti_aliasing_off, backdrop_filter_quality,
-                    can_use_backdrop_filter_cache);
+                    intersects_damage_under);
 
   gfx::Transform green_quad_to_target_transform;
   SharedQuadState* green_shared_state = CreateTestSharedQuadState(

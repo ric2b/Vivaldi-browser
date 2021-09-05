@@ -149,13 +149,13 @@ public class ExternalNavigationDelegateImpl implements ExternalNavigationDelegat
     }
 
     @Override
-    public @OverrideUrlLoadingResult int handleIncognitoIntentTargetingSelf(
+    public OverrideUrlLoadingResult handleIncognitoIntentTargetingSelf(
             final Intent intent, final String referrerUrl, final String fallbackUrl) {
         String primaryUrl = intent.getDataString();
         boolean isUrlLoadedInTheSameTab = ExternalNavigationHandler.loadUrlFromIntent(
                 referrerUrl, primaryUrl, fallbackUrl, this, false, true);
-        return (isUrlLoadedInTheSameTab) ? OverrideUrlLoadingResult.OVERRIDE_WITH_CLOBBERING_TAB
-                                         : OverrideUrlLoadingResult.OVERRIDE_WITH_EXTERNAL_INTENT;
+        return (isUrlLoadedInTheSameTab) ? OverrideUrlLoadingResult.forClobberingTab()
+                                         : OverrideUrlLoadingResult.forExternalIntent();
     }
 
     @Override

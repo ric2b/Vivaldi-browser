@@ -13,21 +13,26 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
+#include "base/numerics/clamped_math.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_preferences_util.h"
 #include "chrome/browser/resource_coordinator/tab_manager.h"
 #include "chrome/browser/ui/browser_finder.h"
-#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/browser_list.h"
+#include "chrome/browser/ui/recently_audible_helper.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
 #include "chrome/common/extensions/api/tabs.h"
 #include "chrome/common/extensions/command.h"
+#include "components/content_settings/core/browser/content_settings_observer.h"
+#include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/javascript_dialogs/app_modal_dialog_controller.h"
 #include "components/permissions/permission_util.h"
 #include "components/prefs/pref_service.h"
@@ -50,6 +55,7 @@
 #include "extensions/schema/window_private.h"
 #include "extensions/tools/vivaldi_tools.h"
 #include "prefs/vivaldi_gen_prefs.h"
+#include "prefs/vivaldi_gen_pref_enums.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "prefs/vivaldi_tab_zoom_pref.h"
 #include "renderer/vivaldi_render_messages.h"
@@ -71,6 +77,7 @@
 #include "ui/vivaldi_ui_utils.h"
 
 using content::WebContents;
+using vivaldiprefs::TabsAutoMutingValues;
 
 namespace extensions {
 
@@ -81,6 +88,17 @@ const int& VivaldiPrivateTabObserver::kUserDataKey =
     VivaldiTabCheck::kVivaldiTabObserverContextKey;
 
 namespace tabs_private = vivaldi::tabs_private;
+
+bool IsTabMuted(const WebContents* web_contents) {
+  std::string extdata = web_contents->GetExtData();
+  base::JSONParserOptions options = base::JSON_PARSE_RFC;
+  base::Optional<base::Value> json = base::JSONReader::Read(extdata, options);
+  base::Optional<bool> mute = base::nullopt;
+  if (json && json->is_dict()) {
+    mute = json->FindBoolKey(kVivaldiTabMuted);
+  }
+  return mute ? *mute : false;
+}
 
 namespace {
 
@@ -118,10 +136,6 @@ class JSDialogObserver: public javascript_dialogs::AppModalDialogObserver {
         dialog->web_contents()->GetBrowserContext());
   }
 };
-
-}  // namespace
-
-namespace {
 
 static const std::vector<tabs_private::TabAlertState> ConvertTabAlertState(
     const std::vector<TabAlertState>& states) {
@@ -166,30 +180,173 @@ static const std::vector<tabs_private::TabAlertState> ConvertTabAlertState(
     }
   }
 
-  // NOTE(andre@vivaldi.com) : We should only use the first type returned, if
-  // any. See comment for GetTabAlertStatesForContents.
-  if (types.empty()) {
-    types.push_back(tabs_private::TabAlertState::TAB_ALERT_STATE_EMPTY);
-  }
-
   return types;
 }
 
 }  // namespace
 
-/* static */
-void TabsPrivateAPI::Init() {
-  JSDialogObserver::Init();
+class TabMutingHandler : public content_settings::Observer {
+  HostContentSettingsMap* host_content_settings_map_;
+  PrefChangeRegistrar prefs_registrar_;
+  Profile* profile_;
+  TabsAutoMutingValues muteRule_ = TabsAutoMutingValues::kOff;
+  // NOTE(andre@vivaldi.com) : This is per profile so make sure the handler
+  // takes this into account.
+  ScopedObserver<HostContentSettingsMap, content_settings::Observer> observer_{
+      this};
+
+  void OnContentSettingChanged(const ContentSettingsPattern& primary_pattern,
+                               const ContentSettingsPattern& secondary_pattern,
+                               ContentSettingsType content_type) override {
+    if (content_type != ContentSettingsType::SOUND)
+      return;
+
+    UpdateMuting();
+  }
+
+  bool ContentSettingIsMuted(WebContents* web_contents) {
+    GURL url = web_contents->GetLastCommittedURL();
+    bool contentsetting_says_mute =
+        host_content_settings_map_->GetContentSetting(
+            url, url, ContentSettingsType::SOUND) == CONTENT_SETTING_BLOCK;
+    return contentsetting_says_mute;
+  }
+
+  WebContents* FindActiveTabContentsInThisProfile() {
+    BrowserList* browser_list = BrowserList::GetInstance();
+    for (BrowserList::const_reverse_iterator browser_iterator =
+             browser_list->begin_last_active();
+         browser_iterator != browser_list->end_last_active();
+         ++browser_iterator) {
+      Browser* browser = *browser_iterator;
+      // TODO: Make this into an utility-method.
+      bool is_vivaldi_settings = (browser->is_vivaldi() &&
+          static_cast<VivaldiBrowserWindow*>(browser->window())->type() ==
+              VivaldiBrowserWindow::WindowType::SETTINGS);
+      if (browser->profile()->GetOriginalProfile() == profile_ &&
+          !is_vivaldi_settings) {
+        return browser->tab_strip_model()->GetActiveWebContents();
+      }
+    }
+    return nullptr;
+  }
+
+  void OnPrefsChanged(const std::string& path) {
+    if (path == vivaldiprefs::kTabsAutoMuting) {
+      UpdateMuting();
+    }
+  }
+
+ public:
+  TabMutingHandler(Profile* profile) : profile_(profile) {
+    host_content_settings_map_ =
+        HostContentSettingsMapFactory::GetForProfile(profile_);
+    observer_.Add(host_content_settings_map_);
+
+    prefs_registrar_.Init(profile_->GetPrefs());
+    // NOTE(andre@vivaldi.com) : Unretained is safe as this will live along
+    // prefs_registrar_.
+    prefs_registrar_.Add(vivaldiprefs::kTabsAutoMuting,
+                         base::BindRepeating(&TabMutingHandler::OnPrefsChanged,
+                                             base::Unretained(this)));
+  }
+  ~TabMutingHandler() override {}
+
+  void NotifyTabSelectionChange(WebContents* active_contents) {
+    UpdateMuting(active_contents);
+  }
+
+  // Called when a tabs audio-state might have changed, or when the active tab
+  // is changed.
+  void UpdateMuting(WebContents* active_contents = nullptr) {
+
+    if (!active_contents) {
+      active_contents = FindActiveTabContentsInThisProfile();
+    }
+
+    const TabsAutoMutingValues muteRule = static_cast<TabsAutoMutingValues>
+        (profile_->GetPrefs()->GetInteger(vivaldiprefs::kTabsAutoMuting));
+    // active muteRule
+    if ((muteRule_ == TabsAutoMutingValues::kOff && (muteRule_ == muteRule)) ||
+        !active_contents) {
+      return;
+    }
+    muteRule_ = muteRule;
+    RecentlyAudibleHelper* audible_helper =
+        active_contents
+            ? RecentlyAudibleHelper::FromWebContents(active_contents)
+            : nullptr;
+
+    bool active_is_audible =
+        audible_helper ? audible_helper->WasRecentlyAudible() : false;
+
+    for (auto* browser : *BrowserList::GetInstance()) {
+      if (browser->profile()->GetOriginalProfile() == profile_) {
+        for (int i = 0, tab_count = browser->tab_strip_model()->count();
+             i < tab_count; ++i) {
+          WebContents* tab = browser->tab_strip_model()->GetWebContentsAt(i);
+          if (!ContentSettingIsMuted(tab) && !IsTabMuted(tab)) {
+            bool is_active = (tab == active_contents);
+            bool mute = (muteRule_ != TabsAutoMutingValues::kOff);
+            if (muteRule_ == TabsAutoMutingValues::kOnlyactive) {
+              mute = !is_active;
+            } else if (muteRule_ == TabsAutoMutingValues::kPrioritizeactive) {
+              // Only unmute background tabs if the active is not audible.
+              mute = (active_is_audible && !is_active);
+            }
+            tab->SetAudioMuted(mute);
+          }
+        }
+      }
+    }
+  }
+
+};
+
+// static
+TabsPrivateAPI* TabsPrivateAPI::FromBrowserContext(
+    content::BrowserContext* browser_context) {
+  TabsPrivateAPI* api = GetFactoryInstance()->Get(browser_context);
+  DCHECK(api);
+  return api;
 }
 
-/* static */
-void TabsPrivateAPI::NotifyTabChange(content::WebContents* web_contents,
-                                     int index,
-                                     TabChangeType change_type) {
+// static
+BrowserContextKeyedAPIFactory<TabsPrivateAPI>*
+TabsPrivateAPI::GetFactoryInstance() {
+  static base::NoDestructor<
+      BrowserContextKeyedAPIFactory<TabsPrivateAPI>>
+      instance;
+  return instance.get();
+}
+
+TabsPrivateAPI::TabsPrivateAPI(content::BrowserContext* context)
+    : profile_(Profile::FromBrowserContext(context)) {
+  tabmuting_handler_.reset(new TabMutingHandler(profile_));
+}
+
+TabsPrivateAPI::~TabsPrivateAPI() {}
+
+void TabsPrivateAPI::UpdateMuting(content::WebContents* active_contents = nullptr) {
+  tabmuting_handler_->UpdateMuting(active_contents);
+}
+
+void TabsPrivateAPI::NotifyTabSelectionChange(
+    content::WebContents* active_contents) {
+  // |active_contents| will be null if opening a settingswindow.
+  if (active_contents) {
+    tabmuting_handler_->NotifyTabSelectionChange(active_contents);
+  }
+}
+
+void TabsPrivateAPI::NotifyTabChange(content::WebContents* web_contents) {
   if (!web_contents || !static_cast<content::WebContentsImpl*>(web_contents)
                             ->GetMainFrame()
-                            ->GetProcess())
+                            ->GetProcess()) {
     return;
+  }
+  // Sound state might have changed, check if any tabs should play or be muted.
+  UpdateMuting();
 
   std::vector<tabs_private::TabAlertState> states =
       ConvertTabAlertState(chrome::GetTabAlertStatesForContents(web_contents));
@@ -202,6 +359,14 @@ void TabsPrivateAPI::NotifyTabChange(content::WebContents* web_contents,
       tabs_private::OnMediaStateChanged::Create(tabId, windowId, states),
       web_contents->GetBrowserContext());
 }
+
+// static
+void TabsPrivateAPI::Init() {
+  TabsPrivateAPI::GetFactoryInstance();
+  JSDialogObserver::Init();
+}
+
+// ============================================================================
 
 VivaldiPrivateTabObserver::VivaldiPrivateTabObserver(
     content::WebContents* web_contents)
@@ -236,13 +401,8 @@ void VivaldiPrivateTabObserver::OnPrefsChanged(const std::string& path) {
   }
 }
 
-void VivaldiPrivateTabObserver::BroadcastTabInfo() {
-  tabs_private::UpdateTabInfo info;
-  info.show_images.reset(new bool(show_images()));
-  info.load_from_cache_only.reset(new bool(load_from_cache_only()));
-  info.enable_plugins.reset(new bool(enable_plugins()));
-  info.mime_type.reset(new std::string(contents_mime_type()));
-  info.mute_tab.reset(new bool(mute()));
+void VivaldiPrivateTabObserver::BroadcastTabInfo(
+    tabs_private::UpdateTabInfo& info) {
   int id = sessions::SessionTabHelper::IdForTab(web_contents()).id();
 
   ::vivaldi::BroadcastEvent(tabs_private::OnTabUpdated::kEventName,
@@ -299,11 +459,7 @@ void VivaldiPrivateTabObserver::RenderViewCreated(
     }
   }
 
-  base::Optional<bool> mute =
-      json ? json->FindBoolKey(kVivaldiTabMuted) : base::nullopt;
-  if (mute) {
-    mute_ = *mute;
-  }
+  mute_ = IsTabMuted(web_contents());
 
   // This is not necessary for each RVH-change.
   SetMuted(mute_);
@@ -508,7 +664,9 @@ void VivaldiPrivateTabObserver::DidFinishLoad(
     content::RenderFrameHost* render_frame_host,
     const GURL& validated_url) {
   SetContentsMimeType(web_contents()->GetContentsMimeType());
-  BroadcastTabInfo();
+  tabs_private::UpdateTabInfo info;
+  info.mime_type.reset(new std::string(contents_mime_type()));
+  BroadcastTabInfo(info);
 }
 
 void VivaldiPrivateTabObserver::GetAccessKeys(AccessKeysCallback callback) {
@@ -607,7 +765,7 @@ void VivaldiPrivateTabObserver::WebContentsDidAttach() {
       tabs_private::OnTabIsAttached::kEventName,
       tabs_private::OnTabIsAttached::Create(
           tab_id, ExtensionTabUtil::GetWindowIdOfTab(web_contents()),
-          states[0]),
+          states),
       web_contents()->GetBrowserContext());
 }
 
@@ -645,6 +803,12 @@ VivaldiPrivateTabObserver* VivaldiPrivateTabObserver::FromTabId(
   }
 
   return observer;
+}
+
+void VivaldiPrivateTabObserver::NavigationEntryCommitted(
+    const content::LoadCommittedDetails& load_details) {
+  TabsPrivateAPI::FromBrowserContext(web_contents()->GetBrowserContext())
+      ->UpdateMuting();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -698,7 +862,7 @@ ExtensionFunction::ResponseAction TabsPrivateUpdateFunction::Run() {
     tab_api->SetMuted(*info->mute_tab.get());
   }
   tab_api->CommitSettings();
-  tab_api->BroadcastTabInfo();
+  tab_api->BroadcastTabInfo(*info);
 
   return RespondNow(ArgumentList(Results::Create(*info)));
 }
@@ -770,11 +934,56 @@ ExtensionFunction::ResponseAction TabsPrivateStartDragFunction::Run() {
   image_offset_.set_x(params->drag_data.cursor_x);
   image_offset_.set_y(params->drag_data.cursor_y);
 
-  StartUICapture(
-      GetSenderWebContents(), params->drag_data.pos_x, params->drag_data.pos_y,
-      params->drag_data.width, params->drag_data.height,
-      base::BindOnce(&TabsPrivateStartDragFunction::OnCaptureDone, this));
-  return did_respond() ? AlreadyResponded() : RespondLater();
+  double width = params->drag_data.width;
+  double height = params->drag_data.height;
+  if (width <= 0.0 || height <= 0.0 || width > 10000.0 || height > 10000)
+    return RespondNow(Error("Invalid image size"));
+
+  if (params->drag_data.image_data) {
+    int w = static_cast<int>(width);
+    int h = static_cast<int>(height);
+    int size = base::ClampedNumeric<int>(w) * base::ClampedNumeric<int>(h) * 4;
+    if (static_cast<size_t>(size) != params->drag_data.image_data->size())
+      return RespondNow(Error("Invalid image bitmap size"));
+    if (kN32_SkColorType != kRGBA_8888_SkColorType) {
+      static_assert(kN32_SkColorType == kBGRA_8888_SkColorType ||
+                      kN32_SkColorType == kRGBA_8888_SkColorType,
+                  "only two native orders exists");
+      // The native order is BGRA and we must use that to construct SkBitmap
+      // that is passed to gfx::ImageSkia(). Swap red and blue.
+      // TODO(igor@vivaldi.com): Find out if there is a utility in Chromium for
+      // doing this conversion in place. SkOpts::RGBA_to_BGRA() is not suitable
+      // as it does the conversion when copying the bytes.
+      uint8_t* p = params->drag_data.image_data->data();
+      for (uint8_t* end = p + size; p < end; p += 4) {
+        std::swap(p[0], p[2]);
+      }
+    }
+    SkBitmap bitmap;
+    SkImageInfo image_info = SkImageInfo::MakeN32Premul(w, h);
+
+    // SkBitmap::installPixels takes ownership of data and calls the release callback to delete them in all cases including on errors.
+    using ImageVector = std::vector<uint8_t>;
+    ImageVector* raw_image = params->drag_data.image_data.release();
+    auto release_pixels = [](void* addr, void* context) {
+      // Let unique_ptr to call delete.
+      std::unique_ptr<ImageVector> image_data(
+          static_cast<ImageVector*>(context));
+      CHECK(addr == image_data->data());
+    };
+    bool success = bitmap.installPixels(image_info, raw_image->data(),
+                                        image_info.minRowBytes(),
+                                        release_pixels, raw_image);
+    OnCaptureDone(success, 1.0, bitmap);
+    return AlreadyResponded();
+  } else {
+    double x = params->drag_data.pos_x ? *params->drag_data.pos_x : 0.0;
+    double y = params->drag_data.pos_y ? *params->drag_data.pos_y : 0.0;
+    StartUICapture(
+        GetSenderWebContents(), x, y, width, height,
+        base::BindOnce(&TabsPrivateStartDragFunction::OnCaptureDone, this));
+    return RespondLater();
+  }
 }
 
 void TabsPrivateStartDragFunction::OnCaptureDone(bool success,
@@ -803,7 +1012,7 @@ void TabsPrivateStartDragFunction::OnCaptureDone(bool success,
         rvh->GetDelegate()->GetDelegateView();
     blink::DragOperationsMask allowed_ops =
         static_cast<blink::DragOperationsMask>(
-            blink::DragOperation::kDragOperationMove);
+            ui::mojom::DragOperation::kMove);
     gfx::ImageSkia image(gfx::ImageSkiaRep(bitmap, device_scale_factor));
 
     // On Linux and Windows StartDragging is synchronous, so enable tab dragging

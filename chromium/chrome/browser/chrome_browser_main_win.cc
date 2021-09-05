@@ -53,6 +53,7 @@
 #include "chrome/browser/safe_browsing/settings_reset_prompt/settings_reset_prompt_config.h"
 #include "chrome/browser/safe_browsing/settings_reset_prompt/settings_reset_prompt_util_win.h"
 #include "chrome/browser/shell_integration_win.h"
+#include "chrome/browser/ui/accessibility_util.h"
 #include "chrome/browser/ui/simple_message_box.h"
 #include "chrome/browser/ui/uninstall_browser_prompt.h"
 #include "chrome/browser/web_applications/chrome_pwa_launcher/last_browser_file_util.h"
@@ -60,6 +61,7 @@
 #include "chrome/browser/web_applications/chrome_pwa_launcher/launcher_update.h"
 #include "chrome/browser/web_applications/components/web_app_handler_registration_utils_win.h"
 #include "chrome/browser/web_applications/components/web_app_shortcut.h"
+#include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/win/browser_util.h"
 #include "chrome/browser/win/chrome_elf_init.h"
 #include "chrome/browser/win/conflicts/enumerate_input_method_editors.h"
@@ -96,7 +98,6 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
-#include "extensions/browser/extension_registry.h"
 #include "ui/base/cursor/cursor_loader_win.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_win.h"
@@ -467,20 +468,20 @@ void UpdatePwaLaunchersForProfile(const base::FilePath& profile_dir) {
     // The profile was unloaded.
     return;
   }
+  auto* provider = web_app::WebAppProvider::Get(profile);
+  if (!provider)
+    return;
+  web_app::AppRegistrar& registrar = provider->registrar();
 
   // Create a vector of all PWA-launcher paths in |profile_dir|.
   std::vector<base::FilePath> pwa_launcher_paths;
-  for (const auto& extension :
-       extensions::ExtensionRegistry::Get(profile)->enabled_extensions()) {
-    if (extension->from_bookmark()) {
-      base::FilePath web_app_path =
-          web_app::GetOsIntegrationResourcesDirectoryForApp(
-              profile_dir, extension->id(), GURL());
-      web_app_path =
-          web_app_path.Append(web_app::GetAppSpecificLauncherFilename(
-              base::UTF8ToUTF16(extension->name())));
-      pwa_launcher_paths.push_back(std::move(web_app_path));
-    }
+  for (const web_app::AppId& app_id : registrar.GetAppIds()) {
+    base::FilePath web_app_path =
+        web_app::GetOsIntegrationResourcesDirectoryForApp(profile_dir, app_id,
+                                                          GURL());
+    web_app_path = web_app_path.Append(web_app::GetAppSpecificLauncherFilename(
+        base::UTF8ToUTF16(registrar.GetAppShortName(app_id))));
+    pwa_launcher_paths.push_back(std::move(web_app_path));
   }
 
   base::ThreadPool::PostTask(
@@ -651,10 +652,10 @@ void ChromeBrowserMainPartsWin::PostProfileInit() {
   // is enabled or not.
   //
   // What truly controls if the blocking is enabled is the presence of the
-  // module blacklist cache file. This means that to disable the feature, the
+  // module blocklist cache file. This means that to disable the feature, the
   // cache must be deleted and the browser relaunched.
   if (!ModuleDatabase::IsThirdPartyBlockingPolicyEnabled() ||
-      !ModuleBlacklistCacheUpdater::IsBlockingEnabled())
+      !ModuleBlocklistCacheUpdater::IsBlockingEnabled())
     ThirdPartyConflictsManager::DisableThirdPartyModuleBlocking(
         base::ThreadPool::CreateTaskRunner(
             {base::TaskPriority::BEST_EFFORT,
@@ -681,7 +682,8 @@ void ChromeBrowserMainPartsWin::PostBrowserStart() {
   // complete run of the Chrome Cleanup tool. If post-cleanup settings reset is
   // enabled, we delay checks for settings reset prompt until the scheduled
   // reset is finished.
-  if (safe_browsing::PostCleanupSettingsResetter::IsEnabled()) {
+  if (safe_browsing::PostCleanupSettingsResetter::IsEnabled() &&
+      !parsed_command_line().HasSwitch(switches::kAppId)) {
     // Using last opened profiles, because we want to find reset the profile
     // that was open in the last Chrome run, which may not be open yet in
     // the current run.
@@ -737,6 +739,11 @@ void ChromeBrowserMainPartsWin::PostBrowserStart() {
                                   base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})
       ->PostTask(FROM_HERE,
                  base::BindOnce(&MigratePinnedTaskBarShortcutsIfNeeded));
+
+  // Send an accessibility announcement if this launch originated from the
+  // installer.
+  if (parsed_command_line().HasSwitch(switches::kFromInstaller))
+    AnnounceInActiveBrowser(l10n_util::GetStringUTF16(IDS_WELCOME_TO_CHROME));
 
   base::ImportantFileWriterCleaner::GetInstance().Start();
 }
@@ -906,6 +913,10 @@ base::CommandLine ChromeBrowserMainPartsWin::GetRestartCommandLine(
 
   // Remove flag switches added by about::flags.
   about_flags::RemoveFlagsSwitches(&switches);
+
+  // Remove switches that should never be conveyed to the restart.
+  switches.erase(switches::kFromInstaller);
+
   // Add remaining switches, but not non-switch arguments.
   for (const auto& it : switches)
     restart_command.AppendSwitchNative(it.first, it.second);

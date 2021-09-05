@@ -6,9 +6,10 @@ update_target("//chrome/browser:browser") {
   public_deps += [
     "//vivaldi/components:adverse_adblocking",
     "//vivaldi/components:content_adverse_adblocking",
+    "//vivaldi/components/bookmarks:bookmark_locales_include",
+    "//vivaldi/components/content_injection",
     "//vivaldi/components/request_filter",
     "//vivaldi/components/request_filter/adblock_filter",
-    "//vivaldi/components/content_injection",
     "//vivaldi/components/page_actions",
   ]
   allow_circular_includes_from += [

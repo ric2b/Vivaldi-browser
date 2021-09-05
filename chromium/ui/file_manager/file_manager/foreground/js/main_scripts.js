@@ -87,6 +87,7 @@
 // <include src="../../common/js/util.js">
 // <include src="../../common/js/progress_center_common.js">
 // <include src="../../common/js/importer_common.js">
+// <include src="../../common/js/trash.js">
 //
 // <include src="constants.js">
 // <include src="crossover_search_utils.js">
@@ -129,6 +130,7 @@
 // <include src="folder_shortcuts_data_model.js">
 // <include src="sort_menu_controller.js">
 // <include src="gear_menu_controller.js">
+// <include src="holding_space_util.js">
 // <include src="import_controller.js">
 // <include src="last_modified_controller.js">
 // <include src="launch_param.js">
@@ -146,7 +148,6 @@
 // <include src="navigation_list_model.js">
 // <include src="navigation_uma.js">
 // <include src="path_component.js">
-// <include src="progress_center_item_group.js">
 // <include src="quick_view_controller.js">
 // <include src="quick_view_model.js">
 // <include src="quick_view_uma.js">

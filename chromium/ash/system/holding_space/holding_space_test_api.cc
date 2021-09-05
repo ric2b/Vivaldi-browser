@@ -55,6 +55,7 @@ HoldingSpaceTestApi::HoldingSpaceTestApi()
                               ->shelf_widget()
                               ->status_area_widget()
                               ->holding_space_tray()) {
+  holding_space_tray_->set_use_zero_previews_update_delay_for_testing(true);
   // Holding space tests perform drag/drop so we need to disable blocking.
   auto* drag_drop_controller = ShellTestApi().drag_drop_controller();
   drag_drop_controller->set_should_block_during_drag_drop(false);
@@ -64,6 +65,7 @@ HoldingSpaceTestApi::~HoldingSpaceTestApi() {
   if (!Shell::HasInstance())
     return;
 
+  holding_space_tray_->set_use_zero_previews_update_delay_for_testing(false);
   // Enable blocking during drag/drop that was disabled for holding space tests.
   auto* drag_drop_controller = ShellTestApi().drag_drop_controller();
   drag_drop_controller->set_should_block_during_drag_drop(true);
@@ -98,7 +100,7 @@ std::vector<views::View*> HoldingSpaceTestApi::GetDownloadChips() {
   if (holding_space_tray_->GetBubbleView()) {
     FindDescendentsOfClass<HoldingSpaceItemChipView>(
         holding_space_tray_->GetBubbleView()->GetViewByID(
-            kHoldingSpaceRecentFilesContainerId),
+            kHoldingSpaceRecentFilesBubbleId),
         &download_chips);
   }
   return download_chips;
@@ -109,7 +111,7 @@ std::vector<views::View*> HoldingSpaceTestApi::GetPinnedFileChips() {
   if (holding_space_tray_->GetBubbleView()) {
     FindDescendentsOfClass<HoldingSpaceItemChipView>(
         holding_space_tray_->GetBubbleView()->GetViewByID(
-            kHoldingSpacePinnedFilesContainerId),
+            kHoldingSpacePinnedFilesBubbleId),
         &pinned_file_chips);
   }
   return pinned_file_chips;
@@ -120,7 +122,7 @@ std::vector<views::View*> HoldingSpaceTestApi::GetScreenCaptureViews() {
   if (holding_space_tray_->GetBubbleView()) {
     FindDescendentsOfClass<HoldingSpaceItemScreenCaptureView>(
         holding_space_tray_->GetBubbleView()->GetViewByID(
-            kHoldingSpaceRecentFilesContainerId),
+            kHoldingSpaceRecentFilesBubbleId),
         &screen_capture_views);
   }
   return screen_capture_views;
@@ -130,26 +132,37 @@ views::View* HoldingSpaceTestApi::GetTray() {
   return holding_space_tray_;
 }
 
-views::View* HoldingSpaceTestApi::GetTrayIcon() {
-  return holding_space_tray_->GetViewByID(kHoldingSpaceTrayIconId);
+views::View* HoldingSpaceTestApi::GetDefaultTrayIcon() {
+  return holding_space_tray_->GetViewByID(kHoldingSpaceTrayDefaultIconId);
 }
 
-bool HoldingSpaceTestApi::PinnedFilesContainerShown() const {
+views::View* HoldingSpaceTestApi::GetPreviewsTrayIcon() {
+  return holding_space_tray_->GetViewByID(kHoldingSpaceTrayPreviewsIconId);
+}
+
+views::View* HoldingSpaceTestApi::GetPinnedFilesBubble() {
+  if (!holding_space_tray_->GetBubbleView())
+    return nullptr;
+  return holding_space_tray_->GetBubbleView()->GetViewByID(
+      kHoldingSpacePinnedFilesBubbleId);
+}
+
+bool HoldingSpaceTestApi::PinnedFilesBubbleShown() const {
   if (!holding_space_tray_->GetBubbleView())
     return false;
 
-  views::View* container = holding_space_tray_->GetBubbleView()->GetViewByID(
-      kHoldingSpacePinnedFilesContainerId);
-  return container && container->GetVisible();
+  views::View* bubble = holding_space_tray_->GetBubbleView()->GetViewByID(
+      kHoldingSpacePinnedFilesBubbleId);
+  return bubble && bubble->GetVisible();
 }
 
-bool HoldingSpaceTestApi::RecentFilesContainerShown() const {
+bool HoldingSpaceTestApi::RecentFilesBubbleShown() const {
   if (!holding_space_tray_->GetBubbleView())
     return false;
 
-  views::View* container = holding_space_tray_->GetBubbleView()->GetViewByID(
-      kHoldingSpaceRecentFilesContainerId);
-  return container && container->GetVisible();
+  views::View* bubble = holding_space_tray_->GetBubbleView()->GetViewByID(
+      kHoldingSpaceRecentFilesBubbleId);
+  return bubble && bubble->GetVisible();
 }
 
 }  // namespace ash

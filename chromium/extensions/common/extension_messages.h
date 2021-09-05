@@ -30,9 +30,11 @@
 #include "extensions/common/draggable_region.h"
 #include "extensions/common/event_filtering_info.h"
 #include "extensions/common/extension.h"
+#include "extensions/common/extension_guid.h"
 #include "extensions/common/extensions_client.h"
 #include "extensions/common/host_id.h"
 #include "extensions/common/message_bundle.h"
+#include "extensions/common/mojom/feature_session_type.mojom.h"
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/socket_permission_data.h"
 #include "extensions/common/permissions/usb_device_permission_data.h"
@@ -405,6 +407,9 @@ struct ExtensionMsg_Loaded_Params {
   // Send creation flags so extension is initialized identically.
   int creation_flags;
 
+  // Reuse the extension guid when creating the extension in the renderer.
+  extensions::ExtensionGuid guid;
+
  private:
   DISALLOW_COPY_AND_ASSIGN(ExtensionMsg_Loaded_Params);
 };
@@ -563,18 +568,9 @@ IPC_MESSAGE_ROUTED4(ExtensionMsg_MessageInvoke,
 IPC_MESSAGE_ROUTED1(ExtensionMsg_SetFrameName,
                     std::string /* frame_name */)
 
-// Tell the renderer process the platforms system font.
-IPC_MESSAGE_CONTROL2(ExtensionMsg_SetSystemFont,
-                     std::string /* font_family */,
-                     std::string /* font_size */)
-
 // Notifies the renderer that extensions were loaded in the browser.
 IPC_MESSAGE_CONTROL1(ExtensionMsg_Loaded,
                      std::vector<ExtensionMsg_Loaded_Params>)
-
-// Notifies the renderer that an extension was unloaded in the browser.
-IPC_MESSAGE_CONTROL1(ExtensionMsg_Unloaded,
-                     std::string)
 
 // Updates the scripting allowlist for extensions in the render process. This is
 // only used for testing.
@@ -610,7 +606,7 @@ IPC_MESSAGE_CONTROL4(ExtensionMsg_UpdateUserScripts,
 IPC_MESSAGE_ROUTED4(ExtensionMsg_ExecuteDeclarativeScript,
                     int /* tab identifier */,
                     extensions::ExtensionId /* extension identifier */,
-                    int /* script identifier */,
+                    std::string /* script identifier */,
                     GURL /* page URL where script should be injected */)
 
 // Tell the render view which browser window it's being attached to.
@@ -705,13 +701,6 @@ IPC_MESSAGE_ROUTED3(ExtensionMsg_DispatchOnDisconnect,
                     int /* worker_thread_id */,
                     extensions::PortId /* port_id */,
                     std::string /* error_message */)
-
-// Informs the renderer what channel (dev, beta, stable, etc) and user session
-// type is running.
-IPC_MESSAGE_CONTROL3(ExtensionMsg_SetSessionInfo,
-                     version_info::Channel /* channel */,
-                     extensions::FeatureSessionType /* session_type */,
-                     bool /* is_lock_screen_context */)
 
 // Notify the renderer that its window has closed.
 IPC_MESSAGE_ROUTED1(ExtensionMsg_AppWindowClosed, bool /* send_onclosed */)

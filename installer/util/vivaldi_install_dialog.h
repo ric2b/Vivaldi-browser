@@ -13,31 +13,25 @@
 #include "chrome/installer/util/l10n_string_util.h"
 #include "chrome/installer/util/util_constants.h"
 
+#include "installer/util/vivaldi_install_util.h"
+
 namespace installer {
 
 class VivaldiInstallDialog {
-
- class VivaldiTranslationDelegate : public installer::TranslationDelegate {
-  public:
+  class VivaldiTranslationDelegate : public installer::TranslationDelegate {
+   public:
     base::string16 GetLocalizedString(int installer_string_id) override;
     void SetLanguage(const std::wstring& language_code);
 
-  private:
+   private:
     int offset_ = 0;
- };
+  };
 
  public:
   enum DlgResult {
     INSTALL_DLG_ERROR = -1,   // Dialog could not be shown.
     INSTALL_DLG_CANCEL = 0,   // The user cancelled install.
     INSTALL_DLG_INSTALL = 1,  // The user clicked the install button.
-  };
-
-  enum InstallType {
-    INSTALL_UNDEFINED = -1,
-    INSTALL_FOR_ALL_USERS = 0,     // Install for all users, system level.
-    INSTALL_FOR_CURRENT_USER = 1,  // Install for current user.
-    INSTALL_STANDALONE = 2         // Install Vivaldi standalone.
   };
 
   enum Scaling {
@@ -49,8 +43,8 @@ class VivaldiInstallDialog {
   };
 
   VivaldiInstallDialog(HINSTANCE instance,
-                       const bool set_as_default_browser,
-                       const InstallType default_install_type,
+                       bool set_as_default_browser,
+                       vivaldi::InstallType default_install_type,
                        const base::FilePath& destination_folder);
 
   virtual ~VivaldiInstallDialog();
@@ -60,13 +54,10 @@ class VivaldiInstallDialog {
   const base::FilePath& GetDestinationFolder() const {
     return destination_folder_;
   }
-  InstallType GetInstallType() const { return install_type_; }
+  vivaldi::InstallType GetInstallType() const { return install_type_; }
   bool GetSetAsDefaultBrowser() const { return set_as_default_browser_; }
   std::wstring GetLanguageCode() const { return language_code_; }
   bool GetRegisterBrowser() const;
-
-  static bool IsVivaldiInstalled(const base::FilePath& path,
-                                 InstallType* installed_type);
 
  private:
   void InitDialog();
@@ -118,7 +109,7 @@ class VivaldiInstallDialog {
 
   base::FilePath destination_folder_;
   base::FilePath last_standalone_folder_;
-  InstallType install_type_ = INSTALL_UNDEFINED;
+  vivaldi::InstallType install_type_ = vivaldi::InstallType::kForCurrentUser;
   bool set_as_default_browser_ = false;
   bool register_browser_ = false;
   bool is_upgrade_ = false;

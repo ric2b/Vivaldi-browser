@@ -42,7 +42,7 @@ void ChromeHistoryClient::OnHistoryServiceCreated(
 }
 
 void ChromeHistoryClient::Shutdown() {
-  favicons_changed_subscription_.reset();
+  favicons_changed_subscription_ = {};
   StopObservingBookmarkModel();
 }
 

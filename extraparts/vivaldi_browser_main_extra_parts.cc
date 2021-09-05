@@ -34,6 +34,7 @@
 #include "ui/webui/vivaldi_web_ui_controller_factory.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
+#include "extensions/api/auto_update/auto_update_api.h"
 #include "extensions/api/bookmark_context_menu/bookmark_context_menu_api.h"
 #include "extensions/api/bookmarks/bookmarks_private_api.h"
 #include "extensions/api/calendar/calendar_api.h"
@@ -45,6 +46,7 @@
 #include "extensions/api/import_data/import_data_api.h"
 #include "extensions/api/menu_content/menu_content_api.h"
 #include "extensions/api/notes/notes_api.h"
+#include "extensions/api/page_actions/page_actions_api.h"
 #include "extensions/api/prefs/prefs_api.h"
 #include "extensions/api/runtime/runtime_api.h"
 #include "extensions/api/settings/settings_api.h"
@@ -72,27 +74,14 @@ void VivaldiBrowserMainExtraParts::PostEarlyInitialization() {
   stats_reporter_ = vivaldi::StatsReporter::CreateInstance();
 #if defined(OS_LINUX) || defined(OS_MAC)
   base::FilePath messaging(
-    // Hardcoded from chromium/chrome/common/chrome_paths.cc
+  // Hardcoded from chromium/chrome/common/chrome_paths.cc
 #if defined(OS_MAC)
-    FILE_PATH_LITERAL("/Library/Google/Chrome/NativeMessagingHosts")
+      FILE_PATH_LITERAL("/Library/Google/Chrome/NativeMessagingHosts")
 #else   // OS_MAC
-    FILE_PATH_LITERAL("/etc/opt/chrome/native-messaging-hosts")
+      FILE_PATH_LITERAL("/etc/opt/chrome/native-messaging-hosts")
 #endif  // OS_MAC
   );
   base::PathService::Override(chrome::DIR_NATIVE_MESSAGING, messaging);
-#endif
-#if defined(OS_LINUX)
-  {
-    base::FilePath cur;
-    std::unique_ptr<base::Environment> env(base::Environment::Create());
-    cur = base::nix::GetXDGDirectory(
-        env.get(), base::nix::kXdgConfigHomeEnvVar, base::nix:: kDotConfigDir);
-    cur = cur.Append("google-chrome");
-    cur = cur.Append(FILE_PATH_LITERAL("PepperFlash"));
-    cur = cur.Append(FILE_PATH_LITERAL("latest-component-updated-flash"));
-
-    base::PathService::Override(chrome::FILE_COMPONENT_FLASH_HINT, cur);
-  }
 #endif
 }
 
@@ -107,6 +96,7 @@ void VivaldiBrowserMainExtraParts::
   VivaldiDataSourcesAPI::InitFactory();
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   vivaldi_runtime_feature::Init();
+  extensions::AutoUpdateAPI::Init();
   extensions::BookmarkContextMenuAPI::GetFactoryInstance();
   extensions::CalendarAPI::GetFactoryInstance();
   extensions::ContactsAPI::GetFactoryInstance();
@@ -123,6 +113,7 @@ void VivaldiBrowserMainExtraParts::
   extensions::VivaldiAccountAPI::GetFactoryInstance();
   extensions::VivaldiExtensionInit::GetFactoryInstance();
   extensions::VivaldiPrefsApiNotificationFactory::GetInstance();
+  extensions::PageActionsAPI::GetFactoryInstance();
   extensions::RuntimeAPI::Init();
   extensions::VivaldiUtilitiesAPI::GetFactoryInstance();
   extensions::VivaldiWindowsAPI::Init();
@@ -142,7 +133,7 @@ void VivaldiBrowserMainExtraParts::PreProfileInit() {
 
 void VivaldiBrowserMainExtraParts::PostProfileInit() {
   content::WebUIControllerFactory::RegisterFactory(
-    vivaldi::VivaldiWebUIControllerFactory::GetInstance());
+      vivaldi::VivaldiWebUIControllerFactory::GetInstance());
 
 #if !defined(OS_ANDROID)
   vivaldi::CommandLineAppendSwitchNoDup(base::CommandLine::ForCurrentProcess(),
@@ -158,14 +149,13 @@ void VivaldiBrowserMainExtraParts::PostProfileInit() {
       ContentSettingsType::NOTIFICATIONS,
       ContentSettingsType::POPUPS,
       ContentSettingsType::SENSORS,
-      ContentSettingsType::SOUND
-  };
+      ContentSettingsType::SOUND};
 
   Profile* profile =
       g_browser_process->profile_manager()->GetActiveUserProfile();
 
   HostContentSettingsMap* content_settings_map =
-    HostContentSettingsMapFactory::GetForProfile(profile);
+      HostContentSettingsMapFactory::GetForProfile(profile);
 
   std::list<ContentSettingsType>::iterator it;
   for (it = ui_exposed_settings.begin(); it != ui_exposed_settings.end();
@@ -189,5 +179,5 @@ void VivaldiBrowserMainExtraParts::PostProfileInit() {
                                                      default_setting);
     }
   }
-#endif //OS_ANDROID
+#endif  // OS_ANDROID
 }

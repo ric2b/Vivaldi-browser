@@ -74,14 +74,13 @@ namespace {
 Position GetNextSoftBreak(const NGOffsetMapping& mapping,
                           NGInlineCursor& cursor) {
   while (cursor) {
-    DCHECK(cursor.Current().IsLineBox()) << cursor.Current();
+    DCHECK(cursor.Current().IsLineBox()) << cursor;
     const auto* break_token = cursor.Current().InlineBreakToken();
-    DCHECK(break_token);
     cursor.MoveToNextLine();
     // We don't need to emit a LF for the last line.
     if (!cursor)
       return Position();
-    if (!break_token->IsForcedBreak())
+    if (break_token && !break_token->IsForcedBreak())
       return mapping.GetFirstPosition(break_token->TextOffset());
   }
   return Position();
@@ -780,7 +779,7 @@ void TextControlElement::SelectionChanged(bool user_triggered) {
     return;
   const SelectionInDOMTree& selection =
       frame->Selection().GetSelectionInDOMTree();
-  if (selection.Type() != kRangeSelection)
+  if (!selection.IsRange())
     return;
   DispatchEvent(*Event::CreateBubble(event_type_names::kSelect));
 }

@@ -17,8 +17,7 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
-import org.chromium.chrome.browser.ShortcutHelper;
-import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -31,6 +30,7 @@ import org.chromium.components.background_task_scheduler.BackgroundTaskScheduler
 import org.chromium.components.background_task_scheduler.TaskIds;
 import org.chromium.components.background_task_scheduler.TaskInfo;
 import org.chromium.components.embedder_support.util.UrlUtilities;
+import org.chromium.components.webapps.WebappsIconUtils;
 import org.chromium.webapk.lib.client.WebApkVersion;
 
 import java.util.List;
@@ -49,7 +49,7 @@ public class WebApkUpdateManager implements WebApkUpdateDataFetcher.Observer, De
     // Maximum wait time for WebAPK update to be scheduled.
     private static final long UPDATE_TIMEOUT_MILLISECONDS = DateUtils.SECOND_IN_MILLIS * 30;
 
-    private final ChromeActivity<?> mActivity;
+    private final ActivityTabProvider mTabProvider;
 
     /** Whether updates are enabled. Some tests disable updates. */
     private static boolean sUpdatesEnabled = true;
@@ -73,8 +73,8 @@ public class WebApkUpdateManager implements WebApkUpdateDataFetcher.Observer, De
 
     @Inject
     public WebApkUpdateManager(
-            ChromeActivity<?> activity, ActivityLifecycleDispatcher lifecycleDispatcher) {
-        mActivity = activity;
+            ActivityTabProvider tabProvider, ActivityLifecycleDispatcher lifecycleDispatcher) {
+        mTabProvider = tabProvider;
         lifecycleDispatcher.register(this);
     }
 
@@ -87,7 +87,7 @@ public class WebApkUpdateManager implements WebApkUpdateDataFetcher.Observer, De
         mStorage = storage;
         mInfo = WebappInfo.create(intentDataProvider);
 
-        Tab tab = mActivity.getActivityTab();
+        Tab tab = mTabProvider.get();
 
         if (tab == null || !shouldCheckIfWebManifestUpdated(mInfo)) return;
 
@@ -384,7 +384,7 @@ public class WebApkUpdateManager implements WebApkUpdateDataFetcher.Observer, De
             return WebApkUpdateReason.WEB_SHARE_TARGET_DIFFERS;
         } else if (oldInfo.isIconAdaptive() != fetchedInfo.isIconAdaptive()
                 && (!fetchedInfo.isIconAdaptive()
-                        || ShortcutHelper.doesAndroidSupportMaskableIcons())) {
+                        || WebappsIconUtils.doesAndroidSupportMaskableIcons())) {
             return WebApkUpdateReason.PRIMARY_ICON_MASKABLE_DIFFERS;
         } else if (shortcutsDiffer(oldInfo.shortcutItems(), fetchedInfo.shortcutItems())) {
             return WebApkUpdateReason.SHORTCUTS_DIFFER;

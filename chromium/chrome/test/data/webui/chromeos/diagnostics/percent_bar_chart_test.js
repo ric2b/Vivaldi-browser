@@ -58,10 +58,6 @@ export function percentBarChartTestSuite() {
 
       assertEquals(
           header, percentBarChartElement.$$('#chartName').textContent.trim());
-      dx_utils.assertElementContainsText(
-          /** @type {!HTMLElement} */ (
-              percentBarChartElement.$$('#percentageLabel')),
-          `${percent}`);
 
       assertFalse(!!percentBarChartElement.$$('#headerIcon'));
     });
@@ -75,6 +71,16 @@ export function percentBarChartTestSuite() {
     return initializePercentBarChart(header, value, max, icon).then(() => {
       assertEquals(icon, percentBarChartElement.headerIcon);
       assertTrue(!!percentBarChartElement.$$('#headerIcon'));
+    });
+  });
+
+  test('ClampsToMaxValue', () => {
+    const header = 'Test header';
+    const value = 101;
+    const max = 100;
+    return initializePercentBarChart(header, value, max).then(() => {
+      const paperProgress = percentBarChartElement.$$('paper-progress');
+      assertEquals(paperProgress.value, paperProgress.max);
     });
   });
 }

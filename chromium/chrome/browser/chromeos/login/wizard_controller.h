@@ -33,13 +33,16 @@
 #include "chrome/browser/chromeos/login/screens/eula_screen.h"
 #include "chrome/browser/chromeos/login/screens/family_link_notice_screen.h"
 #include "chrome/browser/chromeos/login/screens/fingerprint_setup_screen.h"
+#include "chrome/browser/chromeos/login/screens/gaia_password_changed_screen.h"
 #include "chrome/browser/chromeos/login/screens/gaia_screen.h"
 #include "chrome/browser/chromeos/login/screens/gesture_navigation_screen.h"
 #include "chrome/browser/chromeos/login/screens/hid_detection_screen.h"
 #include "chrome/browser/chromeos/login/screens/kiosk_autolaunch_screen.h"
+#include "chrome/browser/chromeos/login/screens/locale_switch_screen.h"
 #include "chrome/browser/chromeos/login/screens/marketing_opt_in_screen.h"
 #include "chrome/browser/chromeos/login/screens/multidevice_setup_screen.h"
 #include "chrome/browser/chromeos/login/screens/network_screen.h"
+#include "chrome/browser/chromeos/login/screens/offline_login_screen.h"
 #include "chrome/browser/chromeos/login/screens/packaged_license_screen.h"
 #include "chrome/browser/chromeos/login/screens/parental_handoff_screen.h"
 #include "chrome/browser/chromeos/login/screens/pin_setup_screen.h"
@@ -108,13 +111,16 @@ class WizardController {
   static void SkipEnrollmentPromptsForTesting();
 
   // Forces screens that should only appear in chrome branded builds to show.
-  static std::unique_ptr<base::AutoReset<bool>> ForceBrandedBuildForTesting();
+  static std::unique_ptr<base::AutoReset<bool>> ForceBrandedBuildForTesting(
+      bool value);
 
   // Returns true if OOBE is operating under the
   // Zero-Touch Hands-Off Enrollment Flow.
   static bool UsingHandsOffEnrollment();
 
-  static bool IsBrandedBuildForTesting() { return is_branded_build_; }
+  // Returns true if this is a branded build, value could be overwritten by
+  // `ForceBrandedBuildForTesting`.
+  static bool IsBrandedBuild() { return is_branded_build_; }
 
   bool is_initialized() { return is_initialized_; }
 
@@ -298,6 +304,7 @@ class WizardController {
   void OnKioskAutolaunchScreenExit(KioskAutolaunchScreen::Result result);
   void OnDemoPreferencesScreenExit(DemoPreferencesScreen::Result result);
   void OnDemoSetupScreenExit(DemoSetupScreen::Result result);
+  void OnLocaleSwitchScreenExit(LocaleSwitchScreen::Result result);
   void OnTermsOfServiceScreenExit(TermsOfServiceScreen::Result result);
   void OnFingerprintSetupScreenExit(FingerprintSetupScreen::Result result);
   void OnSyncConsentScreenExit(SyncConsentScreen::Result result);
@@ -320,11 +327,13 @@ class WizardController {
   void OnFamilyLinkNoticeScreenExit(FamilyLinkNoticeScreen::Result result);
   void OnUserCreationScreenExit(UserCreationScreen::Result result);
   void OnGaiaScreenExit(GaiaScreen::Result result);
+  void OnPasswordChangeScreenExit(GaiaPasswordChangedScreen::Result result);
   void OnActiveDirectoryLoginScreenExit();
   void OnSignInFatalErrorScreenExit();
   void OnEduCoexistenceLoginScreenExit(
       EduCoexistenceLoginScreen::Result result);
   void OnParentalHandoffScreenExit(ParentalHandoffScreen::Result result);
+  void OnOfflineLoginScreenExit(OfflineLoginScreen::Result result);
 
   // Callback invoked once it has been determined whether the device is disabled
   // or not.
@@ -402,6 +411,7 @@ class WizardController {
   // Gaia credentials. If it is false, the screen may return after trying
   // attestation-based enrollment if appropriate.
   void StartEnrollmentScreen(bool force_interactive);
+  void ShowEnrollmentScreenIfEligible();
 
   void NotifyScreenChanged();
 
@@ -469,7 +479,7 @@ class WizardController {
   friend class WizardControllerScreenPriorityTest;
   friend class WizardControllerSupervisionTransitionOobeTest;
 
-  std::unique_ptr<AccessibilityStatusSubscription> accessibility_subscription_;
+  base::CallbackListSubscription accessibility_subscription_;
 
   std::unique_ptr<SimpleGeolocationProvider> geolocation_provider_;
   std::unique_ptr<TimeZoneProvider> timezone_provider_;

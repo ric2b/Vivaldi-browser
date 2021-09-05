@@ -122,14 +122,12 @@ void RendererStartupHelper::InitializeProcess(
   // renderers may have content scripts.
   bool is_lock_screen_context =
       client->IsLockScreenContext(process->GetBrowserContext());
-  process->Send(new ExtensionMsg_SetSessionInfo(GetCurrentChannel(),
-                                                GetCurrentFeatureSessionType(),
-                                                is_lock_screen_context));
+  renderer->SetSessionInfo(GetCurrentChannel(), GetCurrentFeatureSessionType(),
+                           is_lock_screen_context);
 
   // Platform apps need to know the system font.
   // TODO(dbeam): this is not the system font in all cases.
-  process->Send(new ExtensionMsg_SetSystemFont(webui::GetFontFamily(),
-                                               webui::GetFontSize()));
+  renderer->SetSystemFont(webui::GetFontFamily(), webui::GetFontSize());
 
   // Scripting allowlist. This is modified by tests and must be communicated
   // to renderers.
@@ -290,8 +288,9 @@ void RendererStartupHelper::OnExtensionUnloaded(const Extension& extension) {
   const std::set<content::RenderProcessHost*>& loaded_process_set =
       extension_process_map_[extension.id()];
   for (content::RenderProcessHost* process : loaded_process_set) {
-    DCHECK(base::Contains(process_mojo_map_, process));
-    process->Send(new ExtensionMsg_Unloaded(extension.id()));
+    mojom::Renderer* renderer = GetRenderer(process);
+    if (renderer)
+      renderer->UnloadExtension(extension.id());
   }
 
   // Resets registered origin access lists in the BrowserContext asynchronously.
@@ -318,8 +317,10 @@ RendererStartupHelper::BindNewRendererRemote(
 
 mojom::Renderer* RendererStartupHelper::GetRenderer(
     content::RenderProcessHost* process) {
-  DCHECK(base::Contains(process_mojo_map_, process));
-  return process_mojo_map_.find(process)->second.get();
+  auto it = process_mojo_map_.find(process);
+  if (it == process_mojo_map_.end())
+    return nullptr;
+  return it->second.get();
 }
 //////////////////////////////////////////////////////////////////////////////
 

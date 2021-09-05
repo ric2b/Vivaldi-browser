@@ -85,19 +85,12 @@ class WebWidget {
   // is called. |settings| is typically null. When |settings| is null
   // the default settings will be used, tests may provide a |settings| object to
   // override the defaults.
-  virtual cc::LayerTreeHost* InitializeCompositing(
+  virtual void InitializeCompositing(
       scheduler::WebThreadScheduler* main_thread_scheduler,
       cc::TaskGraphRunner* task_graph_runner,
-      bool for_child_local_root_frame,
       const ScreenInfo& screen_info,
       std::unique_ptr<cc::UkmRecorderFactory> ukm_recorder_factory,
       const cc::LayerTreeSettings* settings) = 0;
-
-  // This method closes and deletes the WebWidget. If a |cleanup_task| is
-  // provided it should run on the |cleanup_runner| after the WebWidget has
-  // added its own tasks to the |cleanup_runner|.
-  virtual void Close(
-      scoped_refptr<base::SingleThreadTaskRunner> cleanup_runner = nullptr) {}
 
   // Set the compositor as visible. If |visible| is true, then the compositor
   // will request a new layer frame sink and begin producing frames from the

@@ -10,6 +10,8 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/timer/timer.h"
+#include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/accessibility/magnification_manager.h"
 #include "chrome/browser/ui/browser.h"
@@ -158,8 +160,15 @@ class MagnificationControllerTest : public InProcessBrowserTest {
   DISALLOW_COPY_AND_ASSIGN(MagnificationControllerTest);
 };
 
+// Test is flaky on ChromeOS: crbug.com/1150753
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#define MAYBE_FollowFocusOnWebButtonContained \
+  DISABLED_FollowFocusOnWebButtonContained
+#else
+#define MAYBE_FollowFocusOnWebButtonContained FollowFocusOnWebButtonContained
+#endif
 IN_PROC_BROWSER_TEST_F(MagnificationControllerTest,
-                       FollowFocusOnWebButtonContained) {
+                       MAYBE_FollowFocusOnWebButtonContained) {
   DCHECK(IsMagnifierEnabled());
   ASSERT_NO_FATAL_FAILURE(ui_test_utils::NavigateToURL(
       browser(), GURL(std::string(kDataURIPrefix) + kTestHtmlContent)));

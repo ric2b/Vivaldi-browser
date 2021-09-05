@@ -166,6 +166,12 @@
 // Returns the index of active tab in normal mode.
 + (NSUInteger)indexOfActiveNormalTab;
 
+// Resets Close All Tabs Confirmation feature to its default value.
++ (void)resetCloseAllTabsConfirmation;
+
+// Disables Close All Tabs Confirmation feature.
++ (void)disableCloseAllTabsConfirmation;
+
 #pragma mark - Window utilities (EG2)
 
 // Returns the number of windows, including background and disconnected or
@@ -279,7 +285,7 @@
 
 #pragma mark - Sync Utilities (EG2)
 
-// Clears fake sync server data.
+// Clears fake sync server data if the server is running.
 + (void)clearSyncServerData;
 
 // Starts the sync server. The server should not be running when calling this.
@@ -297,6 +303,10 @@
 // Returns the current sync cache GUID. The sync server must be running when
 // calling this.
 + (NSString*)syncCacheGUID;
+
+// Waits for sync invalidation field presence in the DeviceInfo data type on the
+// server.
++ (NSError*)waitForSyncInvalidationFields;
 
 // Whether or not the fake sync server has been setup.
 + (BOOL)isFakeSyncServerSetUp;
@@ -423,9 +433,6 @@
 // Returns YES if kTestFeature is enabled.
 + (BOOL)isTestFeatureEnabled;
 
-// Returns YES if CreditCardScanner feature is enabled.
-+ (BOOL)isCreditCardScannerEnabled WARN_UNUSED_RESULT;
-
 // Returns YES if DemographicMetricsReporting feature is enabled.
 + (BOOL)isDemographicMetricsReportingEnabled WARN_UNUSED_RESULT;
 
@@ -511,6 +518,10 @@
 // Retrieves the currently stored string on the pasteboard from the tested app's
 // perspective.
 + (NSString*)pasteboardString;
+
+// Retrieves the currently stored URL on the pasteboard from the tested app's
+// perspective.
++ (NSString*)pasteboardURLSpec;
 
 @end
 

@@ -9,6 +9,8 @@
 
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "components/content_injection/content_injection_service.h"
+#include "components/content_injection/content_injection_service_factory.h"
 #include "components/request_filter/adblock_filter/adblock_cosmetic_filter.h"
 #include "components/request_filter/adblock_filter/adblock_known_sources_handler.h"
 #include "components/request_filter/adblock_filter/adblock_request_filter.h"
@@ -19,16 +21,6 @@
 #include "components/request_filter/request_filter_manager_factory.h"
 
 namespace adblock_filter {
-
-namespace {
-const std::string kDuckDuckGoList =
-    "https://downloads.vivaldi.com/ddg/tds-v2-current.json";
-const std::string kEasyList =
-    "https://downloads.vivaldi.com/easylist/easylist-current.txt";
-const std::string kPartnersList =
-    "https://downloads.vivaldi.com/lists/vivaldi/partners-current.txt";
-}  // namespace
-
 RuleServiceImpl::RuleServiceImpl(content::BrowserContext* context)
     : context_(context) {}
 RuleServiceImpl::~RuleServiceImpl() {
@@ -75,7 +67,7 @@ void RuleServiceImpl::Shutdown() {
 
 void RuleServiceImpl::AddRequestFilter(RuleGroup group) {
   auto request_filter = std::make_unique<AdBlockRequestFilter>(
-      group, index_managers_[static_cast<size_t>(group)]->AsWeakPtr(),
+      index_managers_[static_cast<size_t>(group)]->AsWeakPtr(),
       blocked_urls_reporter_->AsWeakPtr(), resources_->AsWeakPtr());
   request_filters_[static_cast<size_t>(group)] = request_filter.get();
   vivaldi::RequestFilterManagerFactory::GetForBrowserContext(context_)
@@ -154,20 +146,19 @@ void RuleServiceImpl::OnStateLoaded(
                             base::Unretained(this)),
         file_task_runner_);
 
+    content_injection_providers_[static_cast<size_t>(group)].emplace(
+        &(index_managers_[static_cast<size_t>(group)].value()));
+    content_injection::ServiceFactory::GetInstance()
+        ->GetForBrowserContext(context_)
+        ->AddProvider(&(
+            content_injection_providers_[static_cast<size_t>(group)].value()));
+
     if (load_result->groups_enabled[static_cast<size_t>(group)]) {
       AddRequestFilter(group);
     }
 
     exceptions_[static_cast<size_t>(group)].swap(
         load_result->exceptions[static_cast<size_t>(group)]);
-  }
-
-  if (load_result->storage_version < 1) {
-    AddRulesFromURL(RuleGroup::kTrackingRules, GURL(kDuckDuckGoList));
-    AddRulesFromURL(RuleGroup::kAdBlockingRules, GURL(kEasyList));
-  }
-  if (load_result->storage_version < 3) {
-    AddRulesFromURL(RuleGroup::kAdBlockingRules, GURL(kPartnersList));
   }
 
   known_sources_handler_.emplace(
@@ -181,51 +172,22 @@ void RuleServiceImpl::OnStateLoaded(
     observer.OnRuleServiceStateLoaded(this);
 }
 
-base::Optional<uint32_t> RuleServiceImpl::AddRulesFromFile(
-    RuleGroup group,
-    const base::FilePath& file) {
-  if (file.empty() || !file.IsAbsolute() || file.ReferencesParent() ||
-      file.EndsWithSeparator())
-    return base::nullopt;
-
-  RuleSource rule_source(file, group);
-  // since the id is just a hash of the file path, if a source with the same id
-  // exist, we have a source with the exact same path already.
-  auto& rule_sources = GetSourceMap(group);
-  if (rule_sources.find(rule_source.id) != rule_sources.end())
-    return base::nullopt;
+bool RuleServiceImpl::AddRulesSource(const KnownRuleSource& known_source) {
+  // If a source with the same id exists, that means the corresponding known
+  // source was already added
+  auto& rule_sources = GetSourceMap(known_source.group);
+  if (rule_sources.find(known_source.id) != rule_sources.end())
+    return false;
   // base::Unretained is safe. We own both the rule_sources and the
   // blocked_urls_reporter
-  rule_sources[rule_source.id] = std::make_unique<RuleSourceHandler>(
-      context_, rule_source, file_task_runner_,
+  rule_sources[known_source.id] = std::make_unique<RuleSourceHandler>(
+      context_, RuleSource(known_source), file_task_runner_,
       base::BindRepeating(&RuleServiceImpl::OnSourceUpdated,
                           base::Unretained(this)),
       base::BindRepeating(&BlockedUrlsReporter::OnTrackerInfosUpdated,
                           base::Unretained(&blocked_urls_reporter_.value())));
-  rule_sources[rule_source.id]->FetchNow();
-  return rule_source.id;
-}
-
-base::Optional<uint32_t> RuleServiceImpl::AddRulesFromURL(RuleGroup group,
-                                                          const GURL& url) {
-  if (!url.is_valid())
-    return base::nullopt;
-  RuleSource rule_source(url, group);
-  // since the id is just a hash of the url spec, if a source with the same id
-  // exist, we have a source with the exact same path already.
-  auto& rule_sources = GetSourceMap(group);
-  if (rule_sources.find(rule_source.id) != rule_sources.end())
-    return base::nullopt;
-  // base::Unretained is safe. We own both the rule_sources and the
-  // blocked_urls_reporter
-  rule_sources[rule_source.id] = std::make_unique<RuleSourceHandler>(
-      context_, rule_source, file_task_runner_,
-      base::BindRepeating(&RuleServiceImpl::OnSourceUpdated,
-                          base::Unretained(this)),
-      base::BindRepeating(&BlockedUrlsReporter::OnTrackerInfosUpdated,
-                          base::Unretained(&blocked_urls_reporter_.value())));
-  rule_sources[rule_source.id]->FetchNow();
-  return rule_source.id;
+  rule_sources[known_source.id]->FetchNow();
+  return known_source.id;
 }
 
 std::map<uint32_t, RuleSource> RuleServiceImpl::GetRuleSources(
@@ -258,10 +220,10 @@ bool RuleServiceImpl::FetchRuleSourceNow(RuleGroup group, uint32_t source_id) {
   return true;
 }
 
-void RuleServiceImpl::DeleteRuleSource(RuleGroup group, uint32_t source_id) {
-  auto& rule_sources = GetSourceMap(group);
+void RuleServiceImpl::DeleteRuleSource(const KnownRuleSource& known_source) {
+  auto& rule_sources = GetSourceMap(known_source.group);
 
-  const auto& rule_source = rule_sources.find(source_id);
+  const auto& rule_source = rule_sources.find(known_source.id);
   if (rule_source == rule_sources.end())
     return;
 
@@ -271,7 +233,7 @@ void RuleServiceImpl::DeleteRuleSource(RuleGroup group, uint32_t source_id) {
   state_store_->ScheduleSave();
 
   for (Observer& observer : observers_)
-    observer.OnRuleSourceDeleted(source_id, group);
+    observer.OnRuleSourceDeleted(known_source.id, known_source.group);
 }
 
 void RuleServiceImpl::SetActiveExceptionList(RuleGroup group,

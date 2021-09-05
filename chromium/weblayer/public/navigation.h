@@ -70,6 +70,14 @@ class Navigation {
   // NavigationObserver::NavigationFailed.
   virtual bool IsDownload() = 0;
 
+  // Whether the target URL can be handled by the browser's internal protocol
+  // handlers, i.e., has a scheme that the browser knows how to process
+  // internally. Examples of such URLs are http(s) URLs, data URLs, and file
+  // URLs. A typical example of a URL for which there is no internal protocol
+  // handler (and for which this method would return false) is an intent:// URL.
+  // Added in 89.
+  virtual bool IsKnownProtocol() = 0;
+
   // Returns true if the navigation was stopped before it could complete because
   // NavigationController::Stop() was called.
   virtual bool WasStopCalled() = 0;
@@ -132,6 +140,20 @@ class Navigation {
   // * page-initiated reloads, e.g. location.reload()
   // * reloads when the network interface is reconnected
   virtual bool IsReload() = 0;
+
+  // Whether the navigation is restoring a page from back-forward cache (see
+  // https://web.dev/bfcache/). Since a previously loaded page is being reused,
+  // there are some things embedders have to keep in mind such as:
+  //   * there will be no NavigationObserver::onFirstContentfulPaint callbacks
+  //   * if an embedder injects code using Tab::ExecuteScript there is no need
+  //     to reinject scripts
+  virtual bool IsServedFromBackForwardCache() = 0;
+
+  // Returns true if this navigation was initiated by a form submission.
+  virtual bool IsFormSubmission() = 0;
+
+  // Returns the referrer for this request.
+  virtual GURL GetReferrer() = 0;
 };
 
 }  // namespace weblayer

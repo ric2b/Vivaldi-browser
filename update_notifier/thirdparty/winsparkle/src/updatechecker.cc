@@ -30,6 +30,8 @@
 #include "update_notifier/thirdparty/winsparkle/src/download.h"
 #include "update_notifier/thirdparty/winsparkle/src/settings.h"
 
+#include "base/logging.h"
+
 #include <inttypes.h>
 #include <algorithm>
 #include <cstdlib>
@@ -101,15 +103,11 @@ vector<string> SplitVersionString(const string& version) {
   return list;
 }
 
-bool CheckForInsecureURL(const GURL& url, const std::string& purpose) {
+void CheckForInsecureURL(const GURL& url, const std::string& purpose) {
   if (!url.SchemeIs("https")) {
-    LogError("----------------------------");
-    LogError("*** USING INSECURE URL: " + purpose + " from " +
-             url.possibly_invalid_spec() + " ***");
-    LogError("----------------------------");
-    return false;
+    LOG(ERROR) << "*** USING INSECURE URL: " << purpose << " from "
+               << url.possibly_invalid_spec() << " ***";
   }
-  return true;
 }
 
 }  // anonymous namespace
@@ -221,6 +219,7 @@ std::unique_ptr<Appcast> CheckForUpdates(bool manual, Error& error) {
     // through caches yet.
     download_flags = Download_NoCached;
   }
+  LOG(INFO) << "Downloading an appcast from " << url.spec();
   FileDownloader downloader(url, download_flags, error);
   std::string appcast_xml = downloader.FetchAll(error);
   if (error)

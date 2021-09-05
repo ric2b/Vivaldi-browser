@@ -148,7 +148,7 @@ void DuckDuckGoRulesParser::Parse(const base::Value& root) {
     }
   }
 
-  if (parse_result_->filter_rules.empty()) {
+  if (parse_result_->request_filter_rules.empty()) {
     parse_result_->fetch_result = FetchResult::kFileUnsupported;
   } else {
     parse_result_->fetch_result = FetchResult::kSuccess;
@@ -161,10 +161,10 @@ void DuckDuckGoRulesParser::Parse(const base::Value& root) {
 void DuckDuckGoRulesParser::AddBlockingRuleForDomain(
     const std::string& domain,
     const base::Value* excluded_origins) {
-  FilterRule rule;
+  RequestFilterRule rule;
   rule.resource_types.set();
   rule.party.set();
-  rule.anchor_type.set(FilterRule::kAnchorHost);
+  rule.anchor_type.set(RequestFilterRule::kAnchorHost);
   rule.host = domain;
   rule.pattern = domain;
 
@@ -176,7 +176,7 @@ void DuckDuckGoRulesParser::AddBlockingRuleForDomain(
     }
   }
 
-  parse_result_->filter_rules.push_back(std::move(rule));
+  parse_result_->request_filter_rules.push_back(std::move(rule));
   parse_result_->rules_info.valid_rules++;
 }
 
@@ -215,7 +215,7 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
   const base::Value* exceptions = rule.FindDictKey(kExceptionsKey);
   const base::Value* options = rule.FindDictKey(kOptionssKey);
 
-  bool make_filter_rule = false;
+  bool make_request_filter_rule = false;
   bool make_redirect_rule = false;
   if (!surrogate || ignore) {
     if (!default_ignore && !ignore && !exceptions) {
@@ -225,19 +225,19 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
       parse_result_->rules_info.unsupported_rules++;
       return;
     }
-    make_filter_rule = true;
+    make_request_filter_rule = true;
   } else {  // surrogate && !ignore
     // All block rules with surrogates result in a redirect rule. In this case
     // the rule is not redundant if the tracker default is block. If the rule
     // has exceptions, those result in a separate allow rule.
     if (default_ignore == ignore && exceptions)
-      make_filter_rule = true;
+      make_request_filter_rule = true;
     make_redirect_rule = true;
   }
 
-  base::Optional<std::bitset<FilterRule::kTypeCount>> exception_types;
+  base::Optional<std::bitset<RequestFilterRule::kTypeCount>> exception_types;
   base::Optional<std::vector<std::string>> exception_domains;
-  base::Optional<std::bitset<FilterRule::kTypeCount>> option_types;
+  base::Optional<std::bitset<RequestFilterRule::kTypeCount>> option_types;
   base::Optional<std::vector<std::string>> option_domains;
   if (exceptions) {
     exception_types = GetTypes(exceptions);
@@ -277,11 +277,11 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
   if (plain_pattern.empty())
     ngram_search_string = BuildNgramSearchString(*pattern);
 
-  if (make_filter_rule) {
-    FilterRule filter_rule;
-    filter_rule.party.set();
+  if (make_request_filter_rule) {
+    RequestFilterRule rule;
+    rule.party.set();
     if (!default_ignore)
-      filter_rule.is_allow_rule = true;
+      rule.is_allow_rule = true;
     if (default_ignore == ignore) {
       DCHECK(ignore == false);
       DCHECK(exceptions);
@@ -326,62 +326,61 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
             }
           }
           if (!potential_domain.empty()) {
-            filter_rule.included_domains.push_back(
-                potential_domain.as_string());
+            rule.included_domains.push_back(potential_domain.as_string());
           }
         }
       } else if (option_domains) {
-        filter_rule.included_domains.swap(option_domains.value());
+        rule.included_domains.swap(option_domains.value());
       } else if (exception_domains) {
-        filter_rule.included_domains.swap(exception_domains.value());
+        rule.included_domains.swap(exception_domains.value());
       }
-      filter_rule.resource_types = option_types.value();
+      rule.resource_types = option_types.value();
       if (exception_types)
-        filter_rule.resource_types &= exception_types.value();
+        rule.resource_types &= exception_types.value();
     } else {
       if (option_domains)
-        filter_rule.included_domains.swap(option_domains.value());
-      filter_rule.resource_types = option_types.value();
+        rule.included_domains.swap(option_domains.value());
+      rule.resource_types = option_types.value();
       if (!ignore) {
-        DCHECK(default_ignore && !filter_rule.is_allow_rule);
+        DCHECK(default_ignore && !rule.is_allow_rule);
         // Under the DDG implementation, exceptions always mean ignore, so
         // they're only meaningful for block rules
         if (exception_domains)
-          filter_rule.excluded_domains.swap(exception_domains.value());
+          rule.excluded_domains.swap(exception_domains.value());
         // Exceptions have priority over options.
         if (exception_types)
-          filter_rule.resource_types &= ~exception_types.value();
+          rule.resource_types &= ~exception_types.value();
       }
     }
 
-    if (filter_rule.resource_types.none()) {
+    if (rule.resource_types.none()) {
       parse_result_->rules_info.unsupported_rules++;
       return;
     }
 
     if (plain_pattern.empty()) {
-      filter_rule.pattern_type = FilterRule::kRegex;
-      filter_rule.pattern = *pattern;
-      filter_rule.ngram_search_string = ngram_search_string;
+      rule.pattern_type = RequestFilterRule::kRegex;
+      rule.pattern = *pattern;
+      rule.ngram_search_string = ngram_search_string;
     } else {
-      filter_rule.pattern = plain_pattern;
+      rule.pattern = plain_pattern;
     }
-    filter_rule.host = domain;
+    rule.host = domain;
 
     if (excluded_origins) {
       DCHECK(excluded_origins->is_list());
       for (const auto& origin : excluded_origins->GetList()) {
         if (origin.is_string())
-          filter_rule.excluded_domains.push_back(origin.GetString());
+          rule.excluded_domains.push_back(origin.GetString());
       }
     }
 
-    parse_result_->filter_rules.push_back(std::move(filter_rule));
+    parse_result_->request_filter_rules.push_back(std::move(rule));
     parse_result_->rules_info.valid_rules++;
   }
 
   if (make_redirect_rule) {
-    FilterRule redirect_rule;
+    RequestFilterRule redirect_rule;
     redirect_rule.party.set();
     if (option_domains)
       redirect_rule.included_domains.swap(option_domains.value());
@@ -400,7 +399,7 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
     }
 
     if (plain_pattern.empty()) {
-      redirect_rule.pattern_type = FilterRule::kRegex;
+      redirect_rule.pattern_type = RequestFilterRule::kRegex;
       redirect_rule.pattern = *pattern;
       redirect_rule.ngram_search_string = ngram_search_string;
     } else {
@@ -418,14 +417,14 @@ void DuckDuckGoRulesParser::ParseRule(const base::Value& rule,
 
     redirect_rule.redirect = *surrogate;
 
-    parse_result_->filter_rules.push_back(std::move(redirect_rule));
+    parse_result_->request_filter_rules.push_back(std::move(redirect_rule));
     parse_result_->rules_info.valid_rules++;
   }
 }
 
-base::Optional<std::bitset<FilterRule::kTypeCount>>
+base::Optional<std::bitset<RequestFilterRule::kTypeCount>>
 DuckDuckGoRulesParser::GetTypes(const base::Value* rule_properties) {
-  std::bitset<FilterRule::kTypeCount> types;
+  std::bitset<RequestFilterRule::kTypeCount> types;
   const base::Value* types_value = rule_properties->FindListKey(kTypesKey);
   if (!types_value)
     return base::nullopt;
@@ -434,7 +433,7 @@ DuckDuckGoRulesParser::GetTypes(const base::Value* rule_properties) {
     if (!type_name.is_string())
       continue;
 
-    const auto type = kTypeStringMap.find(type_name.GetString());
+    auto* type = kTypeStringMap.find(type_name.GetString());
     if (type == kTypeStringMap.end())
       continue;
     else

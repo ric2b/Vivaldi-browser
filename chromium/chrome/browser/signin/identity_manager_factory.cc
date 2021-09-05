@@ -9,6 +9,7 @@
 
 #include "base/files/file_path.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/image_fetcher/image_decoder_impl.h"
 #include "chrome/browser/profiles/profile.h"
@@ -30,7 +31,7 @@
 #include "components/signin/core/browser/cookie_settings_util.h"
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chromeos/components/account_manager/account_manager_factory.h"
@@ -114,15 +115,14 @@ KeyedService* IdentityManagerFactory::BuildServiceInstanceFor(
       profile, ServiceAccessType::EXPLICIT_ACCESS);
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   chromeos::AccountManagerFactory* factory =
       g_browser_process->platform_part()->GetAccountManagerFactory();
   DCHECK(factory);
   params.account_manager =
       factory->GetAccountManager(profile->GetPath().value());
   params.is_regular_profile =
-      !chromeos::ProfileHelper::IsSigninProfile(profile) &&
-      !chromeos::ProfileHelper::IsLockScreenAppProfile(profile);
+      chromeos::ProfileHelper::IsRegularProfile(profile);
 #endif
 
 #if defined(OS_WIN)

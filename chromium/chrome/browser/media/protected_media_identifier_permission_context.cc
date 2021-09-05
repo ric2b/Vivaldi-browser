@@ -10,6 +10,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/strings/string_split.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -21,13 +22,14 @@
 #include "content/public/browser/web_contents.h"
 #include "media/base/media_switches.h"
 #include "net/base/url_util.h"
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include <utility>
 
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/chromeos/attestation/platform_verification_dialog.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chromeos/constants/chromeos_switches.h"
+#include "chromeos/dbus/constants/dbus_switches.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/permissions/permission_request_impl.h"
 #include "components/permissions/permission_uma_util.h"
@@ -38,7 +40,7 @@
 #error This file currently only supports Chrome OS and Android.
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 using chromeos::attestation::PlatformVerificationDialog;
 #endif
 
@@ -48,7 +50,7 @@ ProtectedMediaIdentifierPermissionContext::
     : PermissionContextBase(browser_context,
                             ContentSettingsType::PROTECTED_MEDIA_IDENTIFIER,
                             blink::mojom::FeaturePolicyFeature::kEncryptedMedia)
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 
 #endif
 {
@@ -58,7 +60,7 @@ ProtectedMediaIdentifierPermissionContext::
     ~ProtectedMediaIdentifierPermissionContext() {
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 void ProtectedMediaIdentifierPermissionContext::DecidePermission(
     content::WebContents* web_contents,
     const permissions::PermissionRequestID& id,
@@ -102,7 +104,7 @@ void ProtectedMediaIdentifierPermissionContext::DecidePermission(
   pending_requests_.insert(
       std::make_pair(web_contents, std::make_pair(widget, id)));
 }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 ContentSetting
 ProtectedMediaIdentifierPermissionContext::GetPermissionStatusInternal(
@@ -181,7 +183,7 @@ bool ProtectedMediaIdentifierPermissionContext::IsRestrictedToSecureOrigins()
 // across platforms.
 bool ProtectedMediaIdentifierPermissionContext::
     IsProtectedMediaIdentifierEnabled() const {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   Profile* profile = Profile::FromBrowserContext(browser_context());
   // Platform verification is not allowed in incognito or guest mode.
   if (profile->IsOffTheRecord() || profile->IsGuestSession()) {
@@ -213,7 +215,7 @@ bool ProtectedMediaIdentifierPermissionContext::
   return true;
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 
 void ProtectedMediaIdentifierPermissionContext::
     OnPlatformVerificationConsentResponse(

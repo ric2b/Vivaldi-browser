@@ -9,7 +9,6 @@
 #include "base/check_op.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/vector_icons/vector_icons.h"
-#include "chrome/browser/payments/ssl_validity_checker.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -20,6 +19,8 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/omnibox/browser/location_bar_model_util.h"
 #include "components/payments/content/icon/icon_size.h"
+#include "components/payments/content/payment_handler_navigation_throttle.h"
+#include "components/payments/content/ssl_validity_checker.h"
 #include "components/payments/core/features.h"
 #include "components/payments/core/native_error_strings.h"
 #include "components/payments/core/payments_experimental_features.h"
@@ -239,6 +240,8 @@ void PaymentHandlerWebFlowViewController::FillContentView(
   auto* web_view =
       content_view->AddChildView(std::make_unique<views::WebView>(profile_));
   Observe(web_view->GetWebContents());
+  PaymentHandlerNavigationThrottle::MarkPaymentHandlerWebContents(
+      web_contents());
   web_contents()->SetDelegate(this);
   DCHECK_NE(log_.web_contents(), web_contents());
   content::PaymentAppProvider::GetOrCreateForWebContents(

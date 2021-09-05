@@ -27,6 +27,7 @@
 #include "base/test/metrics/user_action_tester.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -200,8 +201,10 @@ class TabClosingObserver : public TabStripModelObserver {
       return;
 
     auto* remove = change.GetRemove();
-    if (remove->will_be_deleted)
-      closing_count_ += remove->contents.size();
+    for (const auto& contents : remove->contents) {
+      if (contents.will_be_deleted)
+        closing_count_ += 1;
+    }
   }
 
   int closing_count() const { return closing_count_; }
@@ -519,7 +522,13 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, NoJavaScriptDialogsActivateTab) {
 // verifying that we don't crash when we pass this limit.
 // Warning: this test can take >30 seconds when running on a slow (low
 // memory?) Mac builder.
-IN_PROC_BROWSER_TEST_F(BrowserTest, ThirtyFourTabs) {
+// Test is flaky on Win: https://crbug.com/1099186.
+#if defined(OS_WIN)
+#define MAYBE_ThirtyFourTabs DISABLED_ThirtyFourTabs
+#else
+#define MAYBE_ThirtyFourTabs ThirtyFourTabs
+#endif
+IN_PROC_BROWSER_TEST_F(BrowserTest, MAYBE_ThirtyFourTabs) {
   GURL url(ui_test_utils::GetTestUrl(
       base::FilePath(base::FilePath::kCurrentDirectory),
       base::FilePath(kTitle2File)));
@@ -861,30 +870,7 @@ class BrowserTestWithTabGroupsAutoCreateEnabled : public BrowserTest {
 };
 
 IN_PROC_BROWSER_TEST_F(BrowserTestWithTabGroupsAutoCreateEnabled,
-                       NewTabFromLinkInGroupedTabOpensInGroup) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-
-  // Add a grouped tab.
-  TabStripModel* const model = browser()->tab_strip_model();
-  ui_test_utils::NavigateToURL(browser(),
-                               embedded_test_server()->GetURL("/empty.html"));
-  const tab_groups::TabGroupId group_id = model->AddToNewGroup({0});
-
-  // Open a new background tab.
-  WebContents* const contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  OpenURLFromTab(
-      contents,
-      OpenURLParams(embedded_test_server()->GetURL("/empty.html"), Referrer(),
-                    WindowOpenDisposition::NEW_BACKGROUND_TAB,
-                    ui::PAGE_TRANSITION_TYPED, false));
-
-  // It should have inherited the tab group from the first tab.
-  EXPECT_EQ(group_id, model->GetTabGroupForTab(1));
-}
-
-IN_PROC_BROWSER_TEST_F(BrowserTestWithTabGroupsAutoCreateEnabled,
-                       NewTabFromLinkWithSameDomainCreatesGroup) {
+                       FirstNewTabFromLinkWithSameDomainDoesNotCreateGroup) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Open a tab not in a group.
@@ -903,13 +889,47 @@ IN_PROC_BROWSER_TEST_F(BrowserTestWithTabGroupsAutoCreateEnabled,
                     ui::PAGE_TRANSITION_TYPED, false));
 
   // The new tab which has the same domain as the tab it originated from should
-  // be grouped with its parent tab.
-  EXPECT_TRUE(model->GetTabGroupForTab(0).has_value());
-  EXPECT_TRUE(model->GetTabGroupForTab(1).has_value());
-  EXPECT_EQ(model->GetTabGroupForTab(0).value(),
-            model->GetTabGroupForTab(1).value());
+  // not create a new group.
+  EXPECT_FALSE(model->GetTabGroupForTab(0).has_value());
+  EXPECT_FALSE(model->GetTabGroupForTab(1).has_value());
 }
 
+IN_PROC_BROWSER_TEST_F(BrowserTestWithTabGroupsAutoCreateEnabled,
+                       SecondNewTabFromLinkWithSameDomainCreatesGroup) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  // Open a tab not in a group.
+  TabStripModel* const model = browser()->tab_strip_model();
+  GURL url1("http://www.example.com/empty.html");
+  ui_test_utils::NavigateToURL(browser(), url1);
+  ASSERT_FALSE(model->GetTabGroupForTab(0).has_value());
+
+  // Open two new background tabs with the same domain as the active tab.
+  WebContents* const contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  GURL url2("http://www.example.com/");
+  OpenURLFromTab(
+      contents,
+      OpenURLParams(url2, Referrer(), WindowOpenDisposition::NEW_BACKGROUND_TAB,
+                    ui::PAGE_TRANSITION_TYPED, false));
+  OpenURLFromTab(
+      contents,
+      OpenURLParams(url2, Referrer(), WindowOpenDisposition::NEW_BACKGROUND_TAB,
+                    ui::PAGE_TRANSITION_TYPED, false));
+
+  // Opening the second tab from the source will result in the source tab and
+  // the two tabs opened from the source to be added in a new group.
+  ASSERT_EQ(model->count(), 3);
+  EXPECT_TRUE(model->GetTabGroupForTab(0).has_value());
+  EXPECT_TRUE(model->GetTabGroupForTab(1).has_value());
+  EXPECT_TRUE(model->GetTabGroupForTab(2).has_value());
+  EXPECT_EQ(model->GetTabGroupForTab(0).value(),
+            model->GetTabGroupForTab(1).value());
+  EXPECT_EQ(model->GetTabGroupForTab(0).value(),
+            model->GetTabGroupForTab(2).value());
+}
+
+// TODO(crbug.com/997344): Test this with implicitly-created links.
 IN_PROC_BROWSER_TEST_F(BrowserTestWithTabGroupsAutoCreateEnabled,
                        NewTabFromLinkWithDifferentDomainDoesNotCreateGroup) {
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -935,6 +955,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTestWithTabGroupsAutoCreateEnabled,
   EXPECT_FALSE(model->GetTabGroupForTab(1).has_value());
 }
 
+// TODO(crbug.com/997344): Test this with implicitly-created links.
 IN_PROC_BROWSER_TEST_F(BrowserTest, TargetBlankLinkOpensInGroup) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -955,8 +976,27 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, TargetBlankLinkOpensInGroup) {
   EXPECT_EQ(group_id, browser()->tab_strip_model()->GetTabGroupForTab(1));
 }
 
-// TODO(crbug.com/997344): Test the above two scenarios with implicitly-created
-// links, if still applicable.
+IN_PROC_BROWSER_TEST_F(BrowserTest, NewTabFromLinkInGroupedTabOpensInGroup) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  // Add a grouped tab.
+  TabStripModel* const model = browser()->tab_strip_model();
+  ui_test_utils::NavigateToURL(browser(),
+                               embedded_test_server()->GetURL("/empty.html"));
+  const tab_groups::TabGroupId group_id = model->AddToNewGroup({0});
+
+  // Open a new background tab.
+  WebContents* const contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  OpenURLFromTab(
+      contents,
+      OpenURLParams(embedded_test_server()->GetURL("/empty.html"), Referrer(),
+                    WindowOpenDisposition::NEW_BACKGROUND_TAB,
+                    ui::PAGE_TRANSITION_TYPED, false));
+
+  // It should have inherited the tab group from the first tab.
+  EXPECT_EQ(group_id, model->GetTabGroupForTab(1));
+}
 
 // BeforeUnloadAtQuitWithTwoWindows is a regression test for
 // http://crbug.com/11842. It opens two windows, one of which has a
@@ -1016,7 +1056,7 @@ IN_PROC_BROWSER_TEST_F(BeforeUnloadAtQuitWithTwoWindows,
   // everything but ChromeOS allows unload handlers to block exit. On that
   // platform, though, it exits unconditionally. See the comment and bug ID
   // in AttemptUserExit() in application_lifetime.cc.
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   chrome::AttemptExit();
 #else
   chrome::ExecuteCommand(second_window, IDC_EXIT);
@@ -1311,18 +1351,12 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, AppIdSwitch) {
   base::CommandLine command_line(base::CommandLine::NO_PROGRAM);
   command_line.AppendSwitchASCII(switches::kAppId, extension_app->id());
 
-  chrome::startup::IsFirstRun first_run =
-      first_run::IsChromeFirstRun() ? chrome::startup::IS_FIRST_RUN
-                                    : chrome::startup::IS_NOT_FIRST_RUN;
-  StartupBrowserCreatorImpl launch(base::FilePath(), command_line, first_run);
-
-  // The app should open as a tab.
-  EXPECT_TRUE(launch.Launch(browser()->profile(), std::vector<GURL>(),
-                            /*process_startup=*/false,
-                            std::make_unique<LaunchModeRecorder>()));
+  EXPECT_TRUE(StartupBrowserCreator().ProcessCmdLineImpl(
+      command_line, base::FilePath(), /*process_startup=*/false,
+      browser()->profile(), {}));
 
   {
-    // From startup_browser_creator_impl.cc:
+    // From launch_mode_recorder.cc:
     constexpr char kLaunchModesHistogram[] = "Launch.Modes";
     const base::HistogramBase::Sample LM_AS_WEBAPP_IN_TAB = 21;
 
@@ -1459,7 +1493,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, ReattachDevToolsWindow) {
 
 // Chromeos defaults to restoring the last session, so this test isn't
 // applicable.
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 // Makes sure pinned tabs are restored correctly on start.
 IN_PROC_BROWSER_TEST_F(BrowserTest, RestorePinnedTabs) {
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -1515,13 +1549,13 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, RestorePinnedTabs) {
   EXPECT_TRUE(new_model->IsTabPinned(1));
   EXPECT_FALSE(new_model->IsTabPinned(2));
 }
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 // TODO(1126339): fix the way how exo creates accelerated widgets. At the
 // moment, they are created only after the client attaches a buffer to a surface,
 // which is incorrect and results in the "[destroyed object]: error 1: popup
 // parent not constructed" error.
-#if BUILDFLAG(IS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
 #define MAYBE_CloseWithAppMenuOpen DISABLED_CloseWithAppMenuOpen
 #else
 #define MAYBE_CloseWithAppMenuOpen CloseWithAppMenuOpen
@@ -1691,7 +1725,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, DisableMenuItemsWhenIncognitoIsForced) {
   EXPECT_TRUE(new_command_updater->IsCommandEnabled(IDC_NEW_INCOGNITO_WINDOW));
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 IN_PROC_BROWSER_TEST_F(BrowserTest, ArcBrowserWindowFeaturesSetCorrectly) {
   Browser* new_browser = Browser::Create(
       Browser::CreateParams(Browser::TYPE_CUSTOM_TAB, browser()->profile(),
@@ -1844,12 +1878,12 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, PageZoom) {
     base::OnceClosure quit_closure = loop_runner->QuitClosure();
     content::HostZoomMap::ZoomLevelChangedCallback callback =
         base::BindRepeating(&OnZoomLevelChanged, &quit_closure);
-    std::unique_ptr<content::HostZoomMap::Subscription> sub =
+    base::CallbackListSubscription subscription =
         content::HostZoomMap::GetDefaultForBrowserContext(browser()->profile())
             ->AddZoomLevelChangedCallback(std::move(callback));
     chrome::Zoom(browser(), content::PAGE_ZOOM_IN);
     loop_runner->Run();
-    sub.reset();
+    subscription = {};
     EXPECT_EQ(GetZoomPercent(contents, &enable_plus, &enable_minus), 110);
     EXPECT_TRUE(enable_plus);
     EXPECT_TRUE(enable_minus);
@@ -1861,12 +1895,12 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, PageZoom) {
     base::OnceClosure quit_closure = loop_runner->QuitClosure();
     content::HostZoomMap::ZoomLevelChangedCallback callback =
         base::BindRepeating(&OnZoomLevelChanged, &quit_closure);
-    std::unique_ptr<content::HostZoomMap::Subscription> sub =
+    base::CallbackListSubscription subscription =
         content::HostZoomMap::GetDefaultForBrowserContext(browser()->profile())
             ->AddZoomLevelChangedCallback(std::move(callback));
     chrome::Zoom(browser(), content::PAGE_ZOOM_RESET);
     loop_runner->Run();
-    sub.reset();
+    subscription = {};
     EXPECT_EQ(GetZoomPercent(contents, &enable_plus, &enable_minus), 100);
     EXPECT_TRUE(enable_plus);
     EXPECT_TRUE(enable_minus);
@@ -1878,12 +1912,12 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, PageZoom) {
     base::OnceClosure quit_closure = loop_runner->QuitClosure();
     content::HostZoomMap::ZoomLevelChangedCallback callback =
         base::BindRepeating(&OnZoomLevelChanged, &quit_closure);
-    std::unique_ptr<content::HostZoomMap::Subscription> sub =
+    base::CallbackListSubscription subscription =
         content::HostZoomMap::GetDefaultForBrowserContext(browser()->profile())
             ->AddZoomLevelChangedCallback(std::move(callback));
     chrome::Zoom(browser(), content::PAGE_ZOOM_OUT);
     loop_runner->Run();
-    sub.reset();
+    subscription = {};
     EXPECT_EQ(GetZoomPercent(contents, &enable_plus, &enable_minus), 90);
     EXPECT_TRUE(enable_plus);
     EXPECT_TRUE(enable_minus);
@@ -2037,13 +2071,15 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, DISABLED_WindowOpenClose3) {
 
 // TODO(linux_aura) http://crbug.com/163931
 // Mac disabled: http://crbug.com/169820
-#if !defined(OS_MAC) && !(defined(OS_LINUX) && !defined(OS_CHROMEOS))
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if !defined(OS_MAC) && !(defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
 IN_PROC_BROWSER_TEST_F(BrowserTest, FullscreenBookmarkBar) {
   chrome::ToggleBookmarkBar(browser());
   EXPECT_EQ(BookmarkBar::SHOW, browser()->bookmark_bar_state());
   chrome::ToggleFullscreenMode(browser());
   EXPECT_TRUE(browser()->window()->IsFullscreen());
-#if defined(OS_MAC) || defined(OS_CHROMEOS)
+#if defined(OS_MAC) || BUILDFLAG(IS_CHROMEOS_ASH)
   // Mac and Chrome OS both have an "immersive style" fullscreen where the
   // bookmark bar is visible when the top views slide down.
   EXPECT_EQ(BookmarkBar::SHOW, browser()->bookmark_bar_state());
@@ -2075,7 +2111,9 @@ class KioskModeTest : public BrowserTest {
   }
 };
 
-#if defined(OS_MAC) || (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_MAC) || (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
 // Mac: http://crbug.com/103912
 // Linux: http://crbug.com/163931
 #define MAYBE_EnableKioskModeTest DISABLED_EnableKioskModeTest
@@ -2210,7 +2248,7 @@ IN_PROC_BROWSER_TEST_F(NoStartupWindowTest, NoStartupWindowBasicTest) {
 
 // Chromeos needs to track app windows because it considers them to be part of
 // session state.
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 IN_PROC_BROWSER_TEST_F(NoStartupWindowTest, DontInitSessionServiceForApps) {
   Profile* profile = ProfileManager::GetActiveUserProfile();
 
@@ -2224,7 +2262,7 @@ IN_PROC_BROWSER_TEST_F(NoStartupWindowTest, DontInitSessionServiceForApps) {
 
   ASSERT_FALSE(ProcessedAnyCommands(command_storage_manager));
 }
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 // This test needs to be placed outside the anonymous namespace because we
 // need to access private type of Browser.

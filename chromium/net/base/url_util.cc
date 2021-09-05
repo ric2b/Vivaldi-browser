@@ -23,6 +23,7 @@
 #include "url/url_canon.h"
 #include "url/url_canon_ip.h"
 #include "url/url_constants.h"
+#include "url/url_util.h"
 
 namespace net {
 
@@ -380,7 +381,7 @@ bool HostStringIsLocalhost(base::StringPiece host) {
   IPAddress ip_address;
   if (ip_address.AssignFromIPLiteral(host))
     return ip_address.IsLoopback();
-  return IsLocalHostname(host, nullptr);
+  return IsLocalHostname(host);
 }
 
 GURL SimplifyUrlForRequest(const GURL& url) {
@@ -401,6 +402,20 @@ GURL ChangeWebSocketSchemeToHttpScheme(const GURL& url) {
   replace_scheme.SetSchemeStr(url.SchemeIs(url::kWssScheme) ? url::kHttpsScheme
                                                             : url::kHttpScheme);
   return url.ReplaceComponents(replace_scheme);
+}
+
+bool IsStandardSchemeWithNetworkHost(base::StringPiece scheme) {
+  // file scheme is special. Windows file share origins can have network hosts.
+  if (scheme == url::kFileScheme)
+    return true;
+
+  url::SchemeType scheme_type;
+  if (!url::GetStandardSchemeType(
+          scheme.data(), url::Component(0, scheme.length()), &scheme_type)) {
+    return false;
+  }
+  return scheme_type == url::SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION ||
+         scheme_type == url::SCHEME_WITH_HOST_AND_PORT;
 }
 
 void GetIdentityFromURL(const GURL& url,
@@ -444,23 +459,13 @@ bool IsTLS13ExperimentHost(base::StringPiece host) {
          host == "gmail.com";
 }
 
-bool IsLocalHostname(base::StringPiece host, bool* is_local6) {
+bool IsLocalHostname(base::StringPiece host) {
   std::string normalized_host = base::ToLowerASCII(host);
   // Remove any trailing '.'.
   if (!normalized_host.empty() && *normalized_host.rbegin() == '.')
     normalized_host.resize(normalized_host.size() - 1);
 
-  if (normalized_host == "localhost6" ||
-      normalized_host == "localhost6.localdomain6") {
-    if (is_local6)
-      *is_local6 = true;
-    return true;
-  }
-
-  if (is_local6)
-    *is_local6 = false;
   return normalized_host == "localhost" ||
-         normalized_host == "localhost.localdomain" ||
          IsNormalizedLocalhostTLD(normalized_host);
 }
 

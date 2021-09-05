@@ -38,7 +38,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/blink/public/common/messaging/message_port_channel.h"
 #include "third_party/blink/public/common/messaging/message_port_descriptor.h"
-#include "third_party/blink/public/mojom/file_system_access/native_file_system_transfer_token.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/file_system_access/file_system_access_transfer_token.mojom-blink-forward.h"
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/transferables.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -102,8 +102,8 @@ class CORE_EXPORT SerializedScriptValue
   using TransferredWasmModulesArray = WTF::Vector<v8::CompiledWasmModule>;
   using MessagePortChannelArray = Vector<MessagePortChannel>;
   using StreamArray = Vector<Stream>;
-  using NativeFileSystemTokensArray =
-      Vector<mojo::PendingRemote<mojom::blink::NativeFileSystemTransferToken>>;
+  using FileSystemAccessTokensArray =
+      Vector<mojo::PendingRemote<mojom::blink::FileSystemAccessTransferToken>>;
 
   // Increment this for each incompatible change to the wire format.
   // Version 2: Added StringUCharTag for UChar v8 strings.
@@ -275,8 +275,8 @@ class CORE_EXPORT SerializedScriptValue
     return shared_array_buffers_contents_;
   }
   BlobDataHandleMap& BlobDataHandles() { return blob_data_handles_; }
-  NativeFileSystemTokensArray& NativeFileSystemTokens() {
-    return native_file_system_tokens_;
+  FileSystemAccessTokensArray& FileSystemAccessTokens() {
+    return file_system_access_tokens_;
   }
   MojoScopedHandleArray& MojoHandles() { return mojo_handles_; }
   ArrayBufferContentsArray& GetArrayBufferContentsArray() {
@@ -396,7 +396,7 @@ class CORE_EXPORT SerializedScriptValue
   BlobDataHandleMap blob_data_handles_;
   MojoScopedHandleArray mojo_handles_;
   SharedArrayBufferContentsArray shared_array_buffers_contents_;
-  NativeFileSystemTokensArray native_file_system_tokens_;
+  FileSystemAccessTokensArray file_system_access_tokens_;
   HashMap<const void* const*, std::unique_ptr<Attachment>> attachments_;
 
   bool has_registered_external_allocation_;

@@ -177,7 +177,21 @@ class RealboxElement extends PolymerElement {
         type: Number,
         value: -1,
       },
+
+      /**
+       * The value of the input element's 'aria-live' attribute.
+       * @type {string}
+       * @private
+       */
+      inputAriaLive_: {
+        type: String,
+        computed: `computeInputAriaLive_(selectedMatch_)`,
+      },
     };
+  }
+
+  computeInputAriaLive_() {
+    return this.selectedMatch_ ? 'off' : 'polite';
   }
 
   constructor() {
@@ -267,8 +281,10 @@ class RealboxElement extends PolymerElement {
     const firstMatch = hasMatches ? this.result_.matches[0] : null;
     if (firstMatch && firstMatch.allowedToBeDefaultMatch) {
       this.$.matches.selectFirst();
-      this.updateInput_(
-          {inline: decodeString16(firstMatch.inlineAutocompletion)});
+      this.updateInput_({
+        text: this.lastQueriedInput_,
+        inline: decodeString16(firstMatch.inlineAutocompletion) || '',
+      });
 
       // Navigate to the default up-to-date match if the user typed and pressed
       // 'Enter' too fast.
@@ -348,16 +364,28 @@ class RealboxElement extends PolymerElement {
   }
 
   /**
+   * @param {!FocusEvent} e
    * @private
    */
-  onInputFocus_() {
+  onInputFocus_(e) {
     this.lastInputFocusTime_ = window.performance.now();
+    e.target.placeholder = '';
   }
 
   /**
+   * @param {!FocusEvent} e
    * @private
    */
-  onInputInput_() {
+  onInputBlur_(e) {
+    e.target.placeholder = loadTimeData.getString('realboxHint');
+  }
+
+  /**
+   * @param {!InputEvent} e
+   * @suppress {missingProperties} 'isComposing' is not defined on InputEvent.
+   * @private
+   */
+  onInputInput_(e) {
     const inputValue = this.$.input.value;
     this.updateInput_({text: inputValue, inline: ''});
 
@@ -370,9 +398,11 @@ class RealboxElement extends PolymerElement {
         charTyped ? this.charTypedTime_ || window.performance.now() : 0;
 
     if (inputValue.trim()) {
-      this.queryAutocomplete_(inputValue);
+      // TODO(crbug.com/1149769): Rather than disabling inline autocompletion
+      // when the input event is fired within a composition session, change the
+      // mechanism via which inline autocompletion is shown in the realbox.
+      this.queryAutocomplete_(inputValue, e.isComposing);
     } else {
-      this.matchesAreVisible = false;
       this.clearAutocompleteMatches_();
     }
 
@@ -462,20 +492,21 @@ class RealboxElement extends PolymerElement {
     // of the realbox wrapper.
     const relatedTarget = /** @type {Element} */ (e.relatedTarget);
     if (!this.$.inputWrapper.contains(relatedTarget)) {
-      // Unselect the selected match and clear the input if the input was empty
-      // when the matches arrived.
       if (this.lastQueriedInput_ === '') {
-        this.$.matches.unselect();
+        // Clear the input as well as the matches if the input was empty when
+        // the matches arrived.
         this.updateInput_({text: '', inline: ''});
-      }
-      this.matchesAreVisible = false;
+        this.clearAutocompleteMatches_();
+      } else {
+        this.matchesAreVisible = false;
 
-      // Stop autocomplete but leave (potentially stale) results and continue
-      // listening for key presses. These stale results should never be shown.
-      // They correspond to the potentially stale suggestion left in the realbox
-      // when blurred. That stale result may be navigated to by focusing and
-      // pressing 'Enter'.
-      this.pageHandler_.stopAutocomplete(/*clearResult=*/ false);
+        // Stop autocomplete but leave (potentially stale) results and continue
+        // listening for key presses. These stale results should never be shown.
+        // They correspond to the potentially stale suggestion left in the
+        // realbox when blurred. That stale result may be navigated to by
+        // focusing and pressing 'Enter'.
+        this.pageHandler_.stopAutocomplete(/*clearResult=*/ false);
+      }
     }
   }
 
@@ -521,7 +552,9 @@ class RealboxElement extends PolymerElement {
 
     if (e.key === 'Enter') {
       if ([this.$.matches, this.$.input].includes(e.target)) {
-        if (this.lastQueriedInput_ === decodeString16(this.result_.input)) {
+        if (this.lastQueriedInput_ !== null &&
+            this.lastQueriedInput_.trimLeft() ===
+                decodeString16(this.result_.input)) {
           if (this.selectedMatch_) {
             this.navigateToMatch_(this.selectedMatchIndex_, e);
           }
@@ -551,9 +584,10 @@ class RealboxElement extends PolymerElement {
       return;
     }
 
-    if (e.key === 'Escape' && this.selectedMatchIndex_ === 0) {
+    // Clear the input as well as the matches when 'Escape' is pressed if the
+    // the first match is selected or there are no selected matches.
+    if (e.key === 'Escape' && this.selectedMatchIndex_ <= 0) {
       this.updateInput_({text: '', inline: ''});
-      this.matchesAreVisible = false;
       this.clearAutocompleteMatches_();
       e.preventDefault();
       return;
@@ -660,6 +694,7 @@ class RealboxElement extends PolymerElement {
    * @private
    */
   clearAutocompleteMatches_() {
+    this.matchesAreVisible = false;
     this.result_ = null;
     this.$.matches.unselect();
     this.pageHandler_.stopAutocomplete(/*clearResult=*/ true);
@@ -687,13 +722,14 @@ class RealboxElement extends PolymerElement {
 
   /**
    * @param {string} input
+   * @param {boolean} preventInlineAutocomplete
    * @private
    */
-  queryAutocomplete_(input) {
+  queryAutocomplete_(input, preventInlineAutocomplete = false) {
     this.lastQueriedInput_ = input;
 
     const caretNotAtEnd = this.$.input.selectionStart !== input.length;
-    const preventInlineAutocomplete =
+    preventInlineAutocomplete = preventInlineAutocomplete ||
         this.isDeletingInput_ || this.pastedInInput_ || caretNotAtEnd;
     this.pageHandler_.queryAutocomplete(
         mojoString16(input), preventInlineAutocomplete);

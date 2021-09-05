@@ -38,7 +38,7 @@
 <translation id="1620510694547887537">カメラ</translation>
 <translation id="1627276047960621195">ファイル記述子</translation>
 <translation id="1682548588986054654">新しいプライベートウィンドウ</translation>
-<translation id="1698122934742150150">現在のシークレット モード セッションのみ</translation>
+<translation id="1698122934742150150">現在のプライベートモードセッションのみ</translation>
 <translation id="1706625117072057435">拡大縮小レベル</translation>
 <translation id="1708338024780164500">(非アクティブ)</translation>
 <translation id="1723824996674794290">新しいウィンドウ (&amp;N)</translation>
@@ -443,7 +443,7 @@
 <translation id="8605428685123651449">SQLiteメモリー</translation>
 <translation id="8615618338313291042">プライベートアプリ: <ph name="APP_NAME" /></translation>
 <translation id="862750493060684461">CSSキャッシュ</translation>
-<translation id="8661290697478713397">シークレットウインドウでリンクを開く (&amp;G)</translation>
+<translation id="8661290697478713397">プライベートウインドウでリンクを開く (&amp;G)</translation>
 <translation id="8664389313780386848">ページのソースを表示 (&amp;V)</translation>
 <translation id="8708000541097332489">終了時に消去</translation>
 <translation id="8714838604780058252">背景のグラフィック</translation>

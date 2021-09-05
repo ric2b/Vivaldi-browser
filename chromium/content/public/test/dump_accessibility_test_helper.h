@@ -8,8 +8,10 @@
 #include "base/files/file_path.h"
 #include "base/gtest_prod_util.h"
 #include "base/optional.h"
+#include "content/public/browser/ax_inspect_factory.h"
 
 namespace base {
+class CommandLine;
 class FilePath;
 }
 
@@ -23,6 +25,7 @@ namespace content {
 // A helper class for writing accessibility tree dump tests.
 class DumpAccessibilityTestHelper {
  public:
+  explicit DumpAccessibilityTestHelper(AXInspectFactory::Type type);
   explicit DumpAccessibilityTestHelper(const char* expectation_type);
   ~DumpAccessibilityTestHelper() = default;
 
@@ -30,6 +33,9 @@ class DumpAccessibilityTestHelper {
   // suitable expectation file can be found, logs an error message and returns
   // an empty path.
   base::FilePath GetExpectationFilePath(const base::FilePath& test_file_path);
+
+  // Sets up a command line for the test.
+  void SetUpCommandLine(base::CommandLine*) const;
 
   // Parses property filter directive, if the line is a valid property filter
   // directive, then a new property filter is created and appneded to the list,
@@ -74,6 +80,9 @@ class DumpAccessibilityTestHelper {
 
   // Parses directives from the given line.
   Directive ParseDirective(const std::string& line) const;
+
+  // Returns a platform-dependent list of inspect types used in dump testing.
+  static std::vector<AXInspectFactory::Type> TestPasses();
 
   // Loads the given expectation file and returns the contents. An expectation
   // file may be empty, in which case an empty vector is returned.

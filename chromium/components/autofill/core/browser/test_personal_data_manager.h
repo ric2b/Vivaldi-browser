@@ -32,7 +32,8 @@ class TestPersonalDataManager : public PersonalDataManager {
   // or to make things easier in general to toggle.
   void OnSyncServiceInitialized(syncer::SyncService* sync_service) override;
   AutofillSyncSigninState GetSyncSigninState() const override;
-  void RecordUseOf(const AutofillDataModel& data_model) override;
+  void RecordUseOf(absl::variant<const AutofillProfile*, const CreditCard*>
+                       profile_or_credit_card) override;
   std::string SaveImportedProfile(
       const AutofillProfile& imported_profile) override;
   std::string SaveImportedCreditCard(
@@ -145,6 +146,11 @@ class TestPersonalDataManager : public PersonalDataManager {
   void SetAccountInfoForPayments(const CoreAccountInfo& account_info) {
     account_info_ = account_info;
   }
+
+  // Calls
+  // AlternativeStateNameMapUpdater::PopulateAlternativeStateNameMapForTesting,
+  // used for testing purposes.
+  void PopulateAlternativeStateNameMap(base::OnceClosure callback);
 
  private:
   std::string timezone_country_code_;

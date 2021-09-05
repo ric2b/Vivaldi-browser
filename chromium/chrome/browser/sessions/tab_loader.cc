@@ -14,7 +14,6 @@
 #include "base/time/default_tick_clock.h"
 #include "build/build_config.h"
 #include "chrome/browser/sessions/session_restore.h"
-#include "chrome/browser/sessions/session_restore_stats_collector.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "components/favicon/content/content_favicon_driver.h"
@@ -120,12 +119,6 @@ void TabLoader::RestoreTabs(const std::vector<RestoredTab>& tabs,
     // issues with this in the transition to GuestViewCrossProcessFrames. See
     // bugs VB-39149, VB-38823 et al.
     return;
-
-  SessionRestoreStatsCollector::GetOrCreateInstance(
-      restore_started,
-      std::make_unique<
-          SessionRestoreStatsCollector::UmaStatsReportingDelegate>())
-      ->TrackTabs(tabs);
 
   // TODO(chrisha): Mix overlapping session tab restore priorities. Right now
   // the lowest priority tabs from the first session restore will load before

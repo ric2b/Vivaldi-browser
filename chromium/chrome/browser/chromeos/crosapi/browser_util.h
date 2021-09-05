@@ -7,6 +7,7 @@
 
 #include "base/callback_forward.h"
 #include "base/containers/flat_map.h"
+#include "base/feature_list.h"
 #include "base/token.h"
 #include "chrome/browser/chromeos/crosapi/environment_provider.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
@@ -35,6 +36,14 @@ enum class Channel;
 namespace crosapi {
 namespace browser_util {
 
+extern const base::Feature kLacrosAllowOnStableChannel;
+
+// A command-line switch that can also be set from chrome://flags that affects
+// the frequency of Lacros updates.
+extern const char kLacrosStabilitySwitch[];
+extern const char kLacrosStabilityLessStable[];
+extern const char kLacrosStabilityMoreStable[];
+
 // Boolean preference. Whether to launch lacros-chrome on login.
 extern const char kLaunchOnLoginPref[];
 
@@ -44,12 +53,15 @@ void RegisterProfilePrefs(PrefRegistrySimple* registry);
 // Returns the user directory for lacros-chrome.
 base::FilePath GetUserDataDir();
 
-// Returns true if lacros is allowed for the current user type, chrome channel,
-// etc.
-bool IsLacrosAllowed();
+// Returns true if the Lacros feature is enabled and Lacros is allowed for the
+// current user type, chrome channel, and enterprise policy.
+bool IsLacrosEnabled();
 
 // As above, but takes a channel. Exposed for testing.
-bool IsLacrosAllowed(version_info::Channel channel);
+bool IsLacrosEnabled(version_info::Channel channel);
+
+// Forces IsLacrosEnabled() to return true for testing.
+void SetLacrosEnabledForTest(bool force_enabled);
 
 // Returns true if |window| is an exo ShellSurface window representing a Lacros
 // browser.
@@ -69,6 +81,11 @@ SendMojoInvitationToLacrosChrome(
     base::OnceCallback<
         void(mojo::PendingReceiver<crosapi::mojom::AshChromeService>)>
         ash_chrome_service_callback);
+
+// Creates a memory backed file containing the serialized |params|,
+// and returns its FD.
+base::ScopedFD CreateStartupData(
+    ::crosapi::EnvironmentProvider* environment_provider);
 
 }  // namespace browser_util
 }  // namespace crosapi

@@ -172,10 +172,6 @@
         "description": "Update default bookmarks",
         "parameters": [
           {
-            "name": "locale",
-            "type": "string"
-          },
-          {
             "name": "callback",
             "type": "function",
             "parameters": [
@@ -187,6 +183,11 @@
                 "name": "noVersion",
                 "type": "boolean",
                 "description": "The version is missing indicating perhaps an older setup."
+              },
+              {
+                "name": "locale",
+                "type": "string",
+                "description": "The locale of the used bookmark file."
               }
             ]
           }

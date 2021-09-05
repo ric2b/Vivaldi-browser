@@ -29,8 +29,8 @@ class EndFingerprintAuthSessionRequest;
 class FlushAndSignBootAttributesRequest;
 class GetBootAttributeRequest;
 class GetKeyDataRequest;
+class GetLoginStatusRequest;
 class GetSupportedKeyPoliciesRequest;
-class GetTpmStatusRequest;
 class LockToSingleUserMountUntilRebootRequest;
 class MassRemoveKeysRequest;
 class MigrateKeyRequest;
@@ -43,7 +43,6 @@ class SetBootAttributeRequest;
 class SetFirmwareManagementParametersRequest;
 class StartFingerprintAuthSessionRequest;
 class UnmountRequest;
-class UpdateKeyRequest;
 
 }  // namespace cryptohome
 
@@ -72,12 +71,6 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) CryptohomeClient {
     virtual void AsyncCallStatusWithData(int async_id,
                                          bool return_status,
                                          const std::string& data) {}
-
-    // Called when TpmInitStatus signal is received, when the status of the TPM
-    // initialization is changed.
-    virtual void TpmInitStatusUpdated(bool ready,
-                                      bool owned,
-                                      bool was_owned_this_boot) {}
 
     // Called when LowDiskSpace signal is received, when the cryptohome
     // partition is running out of disk space.
@@ -125,17 +118,6 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) CryptohomeClient {
     // Corresponds to a CK_SLOT_ID for the PKCS #11 API and reliably
     // identifies the token for the duration of the signed-in session.
     int slot = -1;
-  };
-
-  // Holds TPM version info. Mirrors cryptohome::Tpm::TpmVersionInfo from CrOS
-  // side.
-  struct TpmVersionInfo {
-    uint32_t family = 0;
-    uint64_t spec_level = 0;
-    uint32_t manufacturer = 0;
-    uint32_t tpm_model = 0;
-    uint64_t firmware_version = 0;
-    std::string vendor_specific;
   };
 
   // Creates and initializes the global instance. |bus| must not be null.
@@ -230,48 +212,6 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) CryptohomeClient {
   virtual void GetRsuDeviceId(
       DBusMethodCallback<cryptohome::BaseReply> callback) = 0;
 
-  // Calls TpmIsReady method.
-  virtual void TpmIsReady(DBusMethodCallback<bool> callback) = 0;
-
-  // Calls TpmIsEnabled method.
-  virtual void TpmIsEnabled(DBusMethodCallback<bool> callback) = 0;
-
-  // Calls TpmIsEnabled method and returns true when the call succeeds.
-  // This method blocks until the call returns.
-  // TODO(hashimoto): Remove this method. crbug.com/141006
-  virtual bool CallTpmIsEnabledAndBlock(bool* enabled) = 0;
-
-  // Calls TpmGetPassword method.
-  virtual void TpmGetPassword(DBusMethodCallback<std::string> callback) = 0;
-
-  // Calls TpmIsOwned method.
-  virtual void TpmIsOwned(DBusMethodCallback<bool> callback) = 0;
-
-  // Calls TpmIsOwned method and returns true when the call succeeds.
-  // This method blocks until the call returns.
-  // TODO(hashimoto): Remove this method. crbug.com/141012
-  virtual bool CallTpmIsOwnedAndBlock(bool* owned) = 0;
-
-  // Calls TpmIsBeingOwned method.
-  virtual void TpmIsBeingOwned(DBusMethodCallback<bool> callback) = 0;
-
-  // Calls TpmIsBeingOwned method and returns true when the call succeeds.
-  // This method blocks until the call returns.
-  // TODO(hashimoto): Remove this method. crbug.com/141011
-  virtual bool CallTpmIsBeingOwnedAndBlock(bool* owning) = 0;
-
-  // Calls TpmCanAttemptOwnership method.
-  // This method tells the service that it is OK to attempt ownership.
-  virtual void TpmCanAttemptOwnership(VoidDBusMethodCallback callback) = 0;
-
-  // Calls TpmClearStoredPasswordMethod.
-  virtual void TpmClearStoredPassword(VoidDBusMethodCallback callback) = 0;
-
-  // Calls TpmClearStoredPassword method and returns true when the call
-  // succeeds.  This method blocks until the call returns.
-  // TODO(hashimoto): Remove this method. crbug.com/141010
-  virtual bool CallTpmClearStoredPasswordAndBlock() = 0;
-
   // Calls Pkcs11IsTpmTokenReady method.
   virtual void Pkcs11IsTpmTokenReady(DBusMethodCallback<bool> callback) = 0;
 
@@ -316,9 +256,13 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) CryptohomeClient {
   // succeeds. This method blocks until the call returns.
   virtual bool InstallAttributesIsFirstInstall(bool* is_first_install) = 0;
 
-  // Asynchronously gets the underlying TPM version information and passes it to
-  // the given callback.
-  virtual void TpmGetVersion(DBusMethodCallback<TpmVersionInfo> callback) = 0;
+  // Asynchronously calls the GetLoginStatus method. |callback| will be invoked
+  // with the reply protobuf.
+  // GetLoginStatus returns information about the current status of user login.
+  // For example, it tells if cryptohome is locked to single user until reboot.
+  virtual void GetLoginStatus(
+      const cryptohome::GetLoginStatusRequest& request,
+      DBusMethodCallback<cryptohome::BaseReply> callback) = 0;
 
   // Asynchronously calls the GetKeyDataEx method. |callback| will be invoked
   // with the reply protobuf.
@@ -373,17 +317,6 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) CryptohomeClient {
   virtual void AddDataRestoreKey(
       const cryptohome::AccountIdentifier& id,
       const cryptohome::AuthorizationRequest& auth,
-      DBusMethodCallback<cryptohome::BaseReply> callback) = 0;
-
-  // Asynchronously calls UpdateKeyEx method. |callback| is called after method
-  // call, and with reply protobuf. Reply will contain MountReply extension.
-  // UpdateKeyEx replaces key used for authorization, without affecting any
-  // other keys. If specified at home dir creation time, new key may have
-  // to be signed and/or encrypted.
-  virtual void UpdateKeyEx(
-      const cryptohome::AccountIdentifier& id,
-      const cryptohome::AuthorizationRequest& auth,
-      const cryptohome::UpdateKeyRequest& request,
       DBusMethodCallback<cryptohome::BaseReply> callback) = 0;
 
   // Asynchronously calls RemoveKeyEx method. |callback| is called after method
@@ -446,12 +379,6 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) CryptohomeClient {
       const cryptohome::FlushAndSignBootAttributesRequest& request,
       DBusMethodCallback<cryptohome::BaseReply> callback) = 0;
 
-  // Asynchronously gets the underlying TPM status information and passes it to
-  // the given callback with reply protobuf.
-  virtual void GetTpmStatus(
-      const cryptohome::GetTpmStatusRequest& request,
-      DBusMethodCallback<cryptohome::BaseReply> callback) = 0;
-
   // Asynchronously calls MigrateToDircrypto method. It tells cryptohomed to
   // start migration, and is immediately called back by |callback|. The actual
   // result response is done via DircryptoMigrationProgress callback with its
@@ -501,6 +428,22 @@ class COMPONENT_EXPORT(CRYPTOHOME_CLIENT) CryptohomeClient {
   // gid (a shifted gid).
   virtual void GetCurrentSpaceForGid(const gid_t android_gid,
                                      DBusMethodCallback<int64_t> callback) = 0;
+
+  // Calls GetCurrentSpaceForProjectId to get the current disk space for a
+  // project ID.
+  virtual void GetCurrentSpaceForProjectId(
+      const int project_id,
+      DBusMethodCallback<int64_t> callback) = 0;
+
+  // Calls SetProjectId to set the project ID to the file/directory pointed by
+  // path. |parent_path|, |child_path| and |account_id| are used for
+  // constructing the target path.
+  virtual void SetProjectId(
+      const int project_id,
+      const cryptohome::SetProjectIdAllowedPathType parent_path,
+      const std::string& child_path,
+      const cryptohome::AccountIdentifier& account_id,
+      DBusMethodCallback<bool> callback) = 0;
 
   // Calls CheckHealth to get current health state.
   virtual void CheckHealth(

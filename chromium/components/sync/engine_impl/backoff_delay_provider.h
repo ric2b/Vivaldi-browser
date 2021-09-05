@@ -5,6 +5,8 @@
 #ifndef COMPONENTS_SYNC_ENGINE_IMPL_BACKOFF_DELAY_PROVIDER_H_
 #define COMPONENTS_SYNC_ENGINE_IMPL_BACKOFF_DELAY_PROVIDER_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "base/time/time.h"
 
@@ -16,7 +18,7 @@ struct ModelNeutralState;
 class BackoffDelayProvider {
  public:
   // Factory function to create a standard BackoffDelayProvider.
-  static BackoffDelayProvider* FromDefaults();
+  static std::unique_ptr<BackoffDelayProvider> FromDefaults();
 
   // Similar to above, but causes sync to retry very quickly (see
   // polling_constants.h) when it encounters an error before exponential
@@ -24,7 +26,7 @@ class BackoffDelayProvider {
   //
   // *** NOTE *** This should only be used if kSyncShortInitialRetryOverride
   // was passed to command line.
-  static BackoffDelayProvider* WithShortInitialRetryOverride();
+  static std::unique_ptr<BackoffDelayProvider> WithShortInitialRetryOverride();
 
   virtual ~BackoffDelayProvider();
 
@@ -36,6 +38,12 @@ class BackoffDelayProvider {
   // Helper to calculate the initial value for exponential backoff.
   // See possible values and comments in polling_constants.h.
   virtual base::TimeDelta GetInitialDelay(const ModelNeutralState& state) const;
+
+  // Test-only variant that avoids randomness in tests. |jitter_sign| must be -1
+  // or 1 and determines whether the jitter in the delay will be positive or
+  // negative.
+  base::TimeDelta GetDelayForTesting(base::TimeDelta last_delay,
+                                     int jitter_sign);
 
  protected:
   BackoffDelayProvider(const base::TimeDelta& default_initial_backoff,

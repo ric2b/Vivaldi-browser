@@ -45,7 +45,9 @@ class NearbySharingService : public KeyedService {
     // register Receive Surface when
     // sending a file.)
     kTransferAlreadyInProgress = 4,
-    kMaxValue = kTransferAlreadyInProgress
+    // There is no available connection medium to use.
+    kNoAvailableConnectionMedium = 5,
+    kMaxValue = kNoAvailableConnectionMedium
   };
 
   enum class ReceiveSurfaceState {
@@ -68,6 +70,7 @@ class NearbySharingService : public KeyedService {
 
   class Observer : public base::CheckedObserver {
    public:
+    virtual void OnHighVisibilityChangeRequested() {}
     virtual void OnHighVisibilityChanged(bool in_high_visibility) = 0;
 
     // Called during the |KeyedService| shutdown, but before everything has been
@@ -111,6 +114,9 @@ class NearbySharingService : public KeyedService {
   // Returns true if a foreground receive surface is registered.
   virtual bool IsInHighVisibility() = 0;
 
+  // Returns true if there is an ongoing file transfer.
+  virtual bool IsTransferring() const = 0;
+
   // Sends |attachments| to the remote |share_target|.
   virtual StatusCodes SendAttachments(
       const ShareTarget& share_target,
@@ -131,6 +137,9 @@ class NearbySharingService : public KeyedService {
   // Opens attachments from the remote |share_target|.
   virtual void Open(const ShareTarget& share_target,
                     StatusCodesCallback status_codes_callback) = 0;
+
+  // Opens an url target on a browser instance.
+  virtual void OpenURL(GURL url) = 0;
 
   // Gets a delegate to handle events for |notification_id| or nullptr.
   virtual NearbyNotificationDelegate* GetNotificationDelegate(

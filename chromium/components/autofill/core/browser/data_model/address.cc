@@ -8,10 +8,10 @@
 #include <algorithm>
 
 #include "base/check_op.h"
+#include "base/containers/contains.h"
 #include "base/feature_list.h"
 #include "base/i18n/case_conversion.h"
 #include "base/notreached.h"
-#include "base/stl_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -48,11 +48,27 @@ bool Address::operator==(const Address& other) const {
     return structured_address_ == other.structured_address_;
   }
 
+  bool are_states_equal = (state_ == other.state_);
+  if (base::FeatureList::IsEnabled(
+          features::kAutofillUseAlternativeStateNameMap) &&
+      !are_states_equal) {
+    // If the canonical state name exists for |state_| and |other.state_|, they
+    // are compared otherwise.
+    base::Optional<AlternativeStateNameMap::CanonicalStateName>
+        canonical_state_name_cur = GetCanonicalizedStateName();
+    base::Optional<AlternativeStateNameMap::CanonicalStateName>
+        canonical_state_name_other = other.GetCanonicalizedStateName();
+    if (canonical_state_name_cur && canonical_state_name_other) {
+      are_states_equal =
+          (canonical_state_name_cur == canonical_state_name_other);
+    }
+  }
+
   return street_address_ == other.street_address_ &&
          dependent_locality_ == other.dependent_locality_ &&
-         city_ == other.city_ && state_ == other.state_ &&
-         zip_code_ == other.zip_code_ && sorting_code_ == other.sorting_code_ &&
-         country_code_ == other.country_code_ &&
+         city_ == other.city_ && zip_code_ == other.zip_code_ &&
+         sorting_code_ == other.sorting_code_ &&
+         country_code_ == other.country_code_ && are_states_equal &&
          street_name_ == other.street_name_ &&
          dependent_street_name_ == other.dependent_street_name_ &&
          house_number_ == other.house_number_ &&
@@ -84,6 +100,11 @@ bool Address::MergeStructuredAddress(const Address& newer,
                                      bool newer_was_more_recently_used) {
   return structured_address_.MergeWithComponent(newer.GetStructuredAddress(),
                                                 newer_was_more_recently_used);
+}
+
+base::Optional<AlternativeStateNameMap::CanonicalStateName>
+Address::GetCanonicalizedStateName() const {
+  return AlternativeStateNameMap::GetCanonicalStateName(country_code_, state_);
 }
 
 bool Address::IsStructuredAddressMergeable(const Address& newer) const {
@@ -134,6 +155,9 @@ base::string16 Address::GetRawInfo(ServerFieldType type) const {
       return base::JoinString(street_address_, base::ASCIIToUTF16("\n"));
 
     case ADDRESS_HOME_APT_NUM:
+      return base::string16();
+
+    case ADDRESS_HOME_FLOOR:
       return base::string16();
 
     // The following tokens are used for creating new type votes but should not
@@ -278,6 +302,14 @@ void Address::SetRawInfoWithVerificationStatus(ServerFieldType type,
       subpremise_ = value;
       break;
 
+    // Not implemented for unstructured addresses.
+    case ADDRESS_HOME_APT_NUM:
+      break;
+
+    // Not implemented for unstructured addresses.
+    case ADDRESS_HOME_FLOOR:
+      break;
+
     default:
       NOTREACHED();
   }
@@ -313,6 +345,7 @@ void Address::GetMatchingTypes(const base::string16& text,
   if (!entered_country_code.empty() && country_code == entered_country_code)
     matching_types->insert(ADDRESS_HOME_COUNTRY);
 
+  l10n::CaseInsensitiveCompare compare;
   AutofillProfileComparator comparator(app_locale);
   // Check to see if the |text| could be the full name or abbreviation of a
   // state.
@@ -321,8 +354,8 @@ void Address::GetMatchingTypes(const base::string16& text,
   base::string16 state_abbreviation;
   state_names::GetNameAndAbbreviation(canon_text, &state_name,
                                       &state_abbreviation);
+
   if (!state_name.empty() || !state_abbreviation.empty()) {
-    l10n::CaseInsensitiveCompare compare;
     base::string16 canon_profile_state = comparator.NormalizeForComparison(
         GetInfo(AutofillType(ADDRESS_HOME_STATE), app_locale));
     if ((!state_name.empty() &&

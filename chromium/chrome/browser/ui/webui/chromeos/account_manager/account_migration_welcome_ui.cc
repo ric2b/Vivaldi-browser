@@ -17,6 +17,7 @@
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/account_manager_core/account_manager_facade.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "net/base/url_util.h"
@@ -56,9 +57,10 @@ class MigrationMessageHandler : public content::WebUIMessageHandler {
     CHECK(!args->GetList().empty());
     const std::string& account_email = args->GetList()[0].GetString();
 
-    InlineLoginDialogChromeOS::Show(account_email,
-                                    InlineLoginDialogChromeOS::Source::
-                                        kAccountManagerMigrationWelcomeScreen);
+    InlineLoginDialogChromeOS::ShowDeprecated(
+        account_email,
+        ::account_manager::AccountManagerFacade::AccountAdditionSource::
+            kAccountManagerMigrationWelcomeScreen);
     HandleCloseDialog(args);
   }
 

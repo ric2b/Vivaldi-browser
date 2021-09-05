@@ -128,7 +128,6 @@ class ProfileSyncService : public SyncService,
   bool IsSetupInProgress() const override;
   ModelTypeSet GetPreferredDataTypes() const override;
   ModelTypeSet GetActiveDataTypes() const override;
-  ModelTypeSet GetBackedOffDataTypes() const override;
   void StopAndClear() override;
   void OnDataTypeRequestsSyncStartup(ModelType type) override;
   void TriggerRefresh(const ModelTypeSet& types) override;
@@ -244,6 +243,7 @@ class ProfileSyncService : public SyncService,
                                   create_http_post_provider_factory_cb);
 
   ModelTypeSet GetRegisteredDataTypesForTest() const;
+  ModelTypeSet GetThrottledDataTypesForTest() const;
 
   // Simulates that all policies just got loaded. This does nothing if the
   // policies were already loaded.
@@ -284,11 +284,12 @@ class ProfileSyncService : public SyncService,
   // Callbacks for SyncUserSettingsImpl.
   void SyncAllowedByPlatformChanged(bool allowed);
 
-  bool IsEngineAllowedToRun() const;
+  // A wrapper around SyncUserSettings::SetSyncRequested(), such that the
+  // notification which is synchronously triggered will be ignored in the
+  // implementation of OnSyncRequestedPrefChange().
+  void SetSyncRequestedAndIgnoreNotification(bool is_requested);
 
-  // Same as GetTransportState() returning PAUSED. In this state, the engine
-  // shouldn't run.
-  bool IsInPausedState() const;
+  bool IsEngineAllowedToRun() const;
 
   // Reconfigures the data type manager with the latest enabled types.
   // Note: Does not initialize the engine if it is not already initialized.
@@ -501,9 +502,9 @@ class ProfileSyncService : public SyncService,
   // IsPassphrasePrompted sync preference.
   bool passphrase_prompt_triggered_by_version_;
 
-  // Used by StopAndClear() to remember that clearing of data is needed (as
-  // sync is stopped after a callback from |user_settings_|).
-  bool is_stopping_and_clearing_;
+  // Used in OnSyncRequestedPrefChange() to know whether the notification was
+  // caused by the service itself setting the pref.
+  bool is_setting_sync_requested_;
 
   // Used for UMA to determine whether TrustedVaultErrorShownOnStartup
   // histogram needs to recorded. Set to false iff histogram was already

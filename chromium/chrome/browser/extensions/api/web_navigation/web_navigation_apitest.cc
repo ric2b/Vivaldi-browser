@@ -50,8 +50,8 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
-#include "third_party/blink/public/common/context_menu_data/media_type.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/mojom/context_menu/context_menu.mojom.h"
 
 using content::WebContents;
 
@@ -194,7 +194,7 @@ class WebNavigationApiTest : public ExtensionApiTest {
  public:
   WebNavigationApiTest() {
     embedded_test_server()->RegisterRequestHandler(
-        base::Bind(&HandleTestRequest));
+        base::BindRepeating(&HandleTestRequest));
   }
   ~WebNavigationApiTest() override {}
 
@@ -333,7 +333,7 @@ IN_PROC_BROWSER_TEST_F(WebNavigationApiTest, UserAction) {
   // This corresponds to "Open link in new tab".
   content::ContextMenuParams params;
   params.is_editable = false;
-  params.media_type = blink::ContextMenuDataMediaType::kNone;
+  params.media_type = blink::mojom::ContextMenuDataMediaType::kNone;
   params.page_url = url;
   params.link_url = extension->GetResourceURL("b.html");
 

@@ -24,6 +24,7 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/page_load_metrics/observers/aborts_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/core/ukm_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/observers/document_write_page_load_metrics_observer.h"
@@ -73,7 +74,6 @@
 #include "content/public/common/referrer.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
-#include "content/public/test/content_browser_test_utils.h"
 #include "content/public/test/download_test_observer.h"
 #include "content/public/test/navigation_handle_observer.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -1936,7 +1936,7 @@ class SessionRestorePageLoadMetricsBrowserTest
 
     SessionStartupPref::SetStartupPref(
         profile, SessionStartupPref(SessionStartupPref::LAST));
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     SessionServiceTestHelper helper(
         SessionServiceFactory::GetForProfile(profile));
     helper.SetForceBrowserNotAliveWithNoWindows(true);
@@ -3221,6 +3221,19 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, EarlyHints) {
   EXPECT_EQ(timing.early_hints_for_first_request_time,
             timing.early_hints_for_final_request_time);
 
+  // The Early Hints response (informational response) start time should be
+  // equal to the response start time.
+  EXPECT_FALSE(timing.first_response_start_time.is_null());
+  EXPECT_FALSE(timing.final_response_start_time.is_null());
+  EXPECT_EQ(timing.first_response_start_time,
+            timing.early_hints_for_first_request_time);
+  EXPECT_EQ(timing.final_response_start_time,
+            timing.early_hints_for_first_request_time);
+  // The non-informational response start time should be recorded separately.
+  EXPECT_FALSE(timing.final_non_informational_response_start_time.is_null());
+  EXPECT_LT(timing.final_response_start_time,
+            timing.final_non_informational_response_start_time);
+
   // The timings of the Early Hints response should be recorded.
   histogram_tester_->ExpectTotalCount(
       internal::kHistogramEarlyHintsFirstRequestStartToEarlyHints, 1);
@@ -3250,6 +3263,12 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, EarlyHints_NoHints) {
   // No Early Hints responses were received.
   EXPECT_TRUE(timing.early_hints_for_first_request_time.is_null());
   EXPECT_TRUE(timing.early_hints_for_final_request_time.is_null());
+  // There were no informational responses, so the final response start time
+  // should be equal to the final non-informational response start time.
+  EXPECT_FALSE(timing.final_response_start_time.is_null());
+  EXPECT_FALSE(timing.final_non_informational_response_start_time.is_null());
+  EXPECT_EQ(timing.final_response_start_time,
+            timing.final_non_informational_response_start_time);
 
   // The timings of the Early Hints response should not be recorded.
   histogram_tester_->ExpectTotalCount(
@@ -3284,6 +3303,19 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest, EarlyHints_MultipleHints) {
   EXPECT_EQ(timing.early_hints_for_first_request_time,
             timing.early_hints_for_final_request_time);
 
+  // The Early Hints response (informational response) start time should be
+  // equal to the response start time.
+  EXPECT_FALSE(timing.first_response_start_time.is_null());
+  EXPECT_FALSE(timing.final_response_start_time.is_null());
+  EXPECT_EQ(timing.first_response_start_time,
+            timing.early_hints_for_first_request_time);
+  EXPECT_EQ(timing.final_response_start_time,
+            timing.early_hints_for_first_request_time);
+  // The non-informational response start time should be recorded separately.
+  EXPECT_FALSE(timing.final_non_informational_response_start_time.is_null());
+  EXPECT_LT(timing.final_response_start_time,
+            timing.final_non_informational_response_start_time);
+
   // The timings of the Early Hints responses should be recorded only one time.
   histogram_tester_->ExpectTotalCount(
       internal::kHistogramEarlyHintsFirstRequestStartToEarlyHints, 1);
@@ -3315,6 +3347,14 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest,
   // redirected request.
   EXPECT_FALSE(timing.early_hints_for_first_request_time.is_null());
   EXPECT_TRUE(timing.early_hints_for_final_request_time.is_null());
+
+  // There were no informational responses for the redirected request, so the
+  // final response start time should be equal to the final non-informational
+  // response start time.
+  EXPECT_FALSE(timing.final_response_start_time.is_null());
+  EXPECT_FALSE(timing.final_non_informational_response_start_time.is_null());
+  EXPECT_EQ(timing.final_response_start_time,
+            timing.final_non_informational_response_start_time);
 
   // The timings of the Early Hints response should be recorded only for the
   // first request.
@@ -3348,6 +3388,16 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest,
   // first request.
   EXPECT_TRUE(timing.early_hints_for_first_request_time.is_null());
   EXPECT_FALSE(timing.early_hints_for_final_request_time.is_null());
+
+  // The Early Hints response (informational response) start time should be
+  // equal to the final response start time.
+  EXPECT_FALSE(timing.final_response_start_time.is_null());
+  EXPECT_EQ(timing.final_response_start_time,
+            timing.early_hints_for_final_request_time);
+  // The non-informational response start time should be recorded separately.
+  EXPECT_FALSE(timing.final_non_informational_response_start_time.is_null());
+  EXPECT_LT(timing.final_response_start_time,
+            timing.final_non_informational_response_start_time);
 
   // The timings of the Early Hints response should be recorded only for the
   // redirected request.
@@ -3383,6 +3433,16 @@ IN_PROC_BROWSER_TEST_F(PageLoadMetricsBrowserTest,
   EXPECT_FALSE(timing.early_hints_for_final_request_time.is_null());
   EXPECT_LT(timing.early_hints_for_first_request_time,
             timing.early_hints_for_final_request_time);
+
+  // The Early Hints response (informational response) start time should be
+  // equal to the final response start time.
+  EXPECT_FALSE(timing.final_response_start_time.is_null());
+  EXPECT_EQ(timing.final_response_start_time,
+            timing.early_hints_for_final_request_time);
+  // The non-informational response start time should be recorded separately.
+  EXPECT_FALSE(timing.final_non_informational_response_start_time.is_null());
+  EXPECT_LT(timing.final_response_start_time,
+            timing.final_non_informational_response_start_time);
 
   // The timings of the Early Hints response should be recorded.
   histogram_tester_->ExpectTotalCount(

@@ -19,8 +19,6 @@ const char kErrorResourceTypeDuplicated[] =
 const char kErrorInvalidRuleKey[] =
     "Rule with id * has an invalid value for * key. This should be greater "
     "than or equal to *.";
-const char kErrorEmptyRulePriority[] =
-    "Rule with id * does not specify the value for priority key.";
 const char kErrorNoApplicableResourceTypes[] =
     "Rule with id * is not applicable to any resource type.";
 const char kErrorEmptyList[] =
@@ -108,6 +106,11 @@ const char kEnabledRulesetsRegexRuleCountExceeded[] =
     "limit.";
 const char kInternalErrorUpdatingEnabledRulesets[] = "Internal error.";
 
+const char kTabNotFoundError[] = "No tab with id: *.";
+const char kIncrementActionCountWithoutUseAsBadgeTextError[] =
+    "Cannot increment action count unless displaying action count as badge "
+    "text.";
+
 const char kIndexAndPersistRulesTimeHistogram[] =
     "Extensions.DeclarativeNetRequest.IndexAndPersistRulesTime";
 const char kManifestRulesCountHistogram[] =
@@ -130,9 +133,6 @@ const char kErrorGetMatchedRulesMissingPermissions[] =
     "The extension must have the declarativeNetRequestFeedback permission or "
     "have activeTab granted for the specified tab ID in order to call this "
     "function.";
-
-const base::Feature kDeclarativeNetRequestGlobalRules{
-    "DeclarativeNetRequestGlobalRules", base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace declarative_net_request
 }  // namespace extensions

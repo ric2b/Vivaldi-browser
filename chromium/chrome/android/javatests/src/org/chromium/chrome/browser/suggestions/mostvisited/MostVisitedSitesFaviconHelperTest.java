@@ -19,6 +19,7 @@ import org.junit.runner.RunWith;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.suggestions.SiteSuggestion;
@@ -68,6 +69,7 @@ public class MostVisitedSitesFaviconHelperTest {
 
     @Test
     @MediumTest
+    @DisabledTest(message = "crbug.com/1149856")
     public void testSaveFaviconsToFile() {
         // Add sites' URLs into the urlsToUpdate, except the last one.
         Set<GURL> urlsToUpdate = new HashSet<>();
@@ -110,14 +112,14 @@ public class MostVisitedSitesFaviconHelperTest {
         siteSuggestions.add(new SiteSuggestion("0 TOP_SITES", new GURL("https://www.foo.com"), "",
                 TileTitleSource.TITLE_TAG, TileSource.TOP_SITES, TileSectionType.PERSONALIZED,
                 new Date()));
-        siteSuggestions.add(new SiteSuggestion("1 WHITELIST", new GURL("https://www.bar.com"),
-                "/not_exist.png", TileTitleSource.UNKNOWN, TileSource.WHITELIST,
+        siteSuggestions.add(new SiteSuggestion("1 ALLOWLIST", new GURL("https://www.bar.com"),
+                "/not_exist.png", TileTitleSource.UNKNOWN, TileSource.ALLOWLIST,
                 TileSectionType.PERSONALIZED, new Date()));
         siteSuggestions.add(new SiteSuggestion("2 TOP_SITES", new GURL("https://www.baz.com"),
-                createBitmapAndWriteToFile(), TileTitleSource.UNKNOWN, TileSource.WHITELIST,
+                createBitmapAndWriteToFile(), TileTitleSource.UNKNOWN, TileSource.ALLOWLIST,
                 TileSectionType.PERSONALIZED, new Date()));
         siteSuggestions.add(new SiteSuggestion("3 TOP_SITES", new GURL("https://www.qux.com"), "",
-                TileTitleSource.UNKNOWN, TileSource.WHITELIST, TileSectionType.PERSONALIZED,
+                TileTitleSource.UNKNOWN, TileSource.ALLOWLIST, TileSectionType.PERSONALIZED,
                 new Date()));
         siteSuggestions.get(0).faviconId = 0;
         siteSuggestions.get(1).faviconId = 1;

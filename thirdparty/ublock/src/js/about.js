@@ -36,5 +36,23 @@
     const appData = await vAPI.messaging.send('dashboard', {
         what: 'getAppData',
     });
+
     uDom('#aboutNameVer').text(appData.name + ' v' + appData.version);
+
+    if ( appData.canBenchmark !== true ) { return; }
+
+    document.getElementById('dev').classList.add('enabled');
+
+    document.getElementById('sfneBenchmark').addEventListener('click', ev => {
+        const button = ev.target;
+        button.setAttribute('disabled', '');
+        vAPI.messaging.send('dashboard', {
+            what: 'sfneBenchmark',
+        }).then(result => {
+            document.getElementById('sfneBenchmarkResult').prepend(
+                document.createTextNode(result.trim() + '\n')
+            );
+            button.removeAttribute('disabled');
+        });
+    });
 })();

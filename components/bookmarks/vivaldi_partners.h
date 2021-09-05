@@ -5,6 +5,7 @@
 
 #include "base/containers/flat_map.h"
 #include "base/files/file_path.h"
+#include "base/guid.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/values.h"
 
@@ -22,21 +23,12 @@ class AssetReader {
   AssetReader();
   ~AssetReader();
 
-  // Log not found paths as errors.
-  void set_log_not_found() {
-    log_not_found_ = true;
-  }
-
   // Read bookmark-related json asset. Return nullopt on errors or when the file
   // was not found. Use is_not_found() to distinguish these cases.
   base::Optional<base::Value> ReadJson(base::StringPiece name);
 
   // Get full path of the file that ReadJson() tried to read.
   std::string GetPath() const;
-
-  bool is_not_found() const {
-    return not_found_;
-  }
 
  private:
 #if defined(OS_ANDROID)
@@ -45,8 +37,6 @@ class AssetReader {
   base::FilePath asset_dir_;
   base::FilePath path_;
 #endif  // OS_ANDROID
-  bool not_found_ = false;
-  bool log_not_found_ = false;
 };
 
 struct PartnerDetails {
@@ -61,8 +51,8 @@ struct PartnerDetails {
   // will be used instead.
   std::string name;
   std::string title;
-  std::string guid;
-  std::string guid2;
+  base::GUID guid;
+  base::GUID guid2;
   std::string thumbnail;
   bool folder = false;
   bool speeddial = false;
@@ -75,11 +65,11 @@ const PartnerDetails* FindDetailsByName(base::StringPiece name);
 // If id is an old locale-based partner id, change it to the coresponding
 // locale-independent GUID and return true. Otherwise return false and leave
 // the id unchanged.
-bool MapLocaleIdToGUID(std::string& id);
+bool MapLocaleIdToGUID(base::GUID& id);
 
 // Return an empty string if partner_id is not known or does not have a
 // thumbnail.
-const std::string& GetThumbnailUrl(const std::string& partner_id);
+const std::string& GetThumbnailUrl(const base::GUID& partner_id);
 
 // Load the partner database from a worker thread and store the result on the
 // main thread using passed reference.

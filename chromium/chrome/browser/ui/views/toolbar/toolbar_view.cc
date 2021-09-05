@@ -16,6 +16,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/command_updater.h"
 #include "chrome/browser/media/router/media_router_feature.h"
@@ -32,6 +33,7 @@
 #include "chrome/browser/ui/intent_picker_tab_helper.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/toolbar/chrome_labs_prefs.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_bubble_view.h"
@@ -51,6 +53,7 @@
 #include "chrome/browser/ui/views/toolbar/back_forward_button.h"
 #include "chrome/browser/ui/views/toolbar/browser_actions_container.h"
 #include "chrome/browser/ui/views/toolbar/browser_app_menu_button.h"
+#include "chrome/browser/ui/views/toolbar/chrome_labs_button.h"
 #include "chrome/browser/ui/views/toolbar/home_button.h"
 #include "chrome/browser/ui/views/toolbar/reload_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_account_icon_container_view.h"
@@ -81,6 +84,7 @@
 #include "ui/native_theme/native_theme_aura.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/flex_layout.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/view_class_properties.h"
 #include "ui/views/widget/tooltip_manager.h"
 #include "ui/views/widget/widget.h"
@@ -94,7 +98,7 @@
 #include "chrome/browser/ui/views/critical_notification_bubble_view.h"
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chromeos/constants/chromeos_features.h"
 #else
 #include "chrome/browser/signin/signin_global_error_factory.h"
@@ -113,14 +117,14 @@ namespace {
 
 // Gets the display mode for a given browser.
 ToolbarView::DisplayMode GetDisplayMode(Browser* browser) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (browser->is_type_custom_tab())
     return ToolbarView::DisplayMode::CUSTOM_TAB;
 #endif
 
   // Checked in this order because even tabbed PWAs use the CUSTOM_TAB
   // display mode.
-  if (web_app::AppBrowserController::IsForWebAppBrowser(browser))
+  if (web_app::AppBrowserController::IsWebApp(browser))
     return ToolbarView::DisplayMode::CUSTOM_TAB;
 
   if (browser->SupportsWindowFeature(Browser::FEATURE_TABSTRIP))
@@ -140,9 +144,6 @@ const base::flat_map<int, int>& GetViewCommandMap() {
 }
 
 }  // namespace
-
-// static
-const char ToolbarView::kViewClassName[] = "ToolbarView";
 
 ////////////////////////////////////////////////////////////////////////////////
 // ToolbarView, public:
@@ -241,7 +242,7 @@ void ToolbarView::Init() {
   std::unique_ptr<ToolbarAccountIconContainerView>
       toolbar_account_icon_container;
   bool show_avatar_toolbar_button = true;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (!base::FeatureList::IsEnabled(chromeos::features::kAvatarToolbarButton)) {
     // ChromeOS only badges Incognito and Guest icons in the browser window.
     show_avatar_toolbar_button = browser_->profile()->IsOffTheRecord() ||
@@ -268,6 +269,18 @@ void ToolbarView::Init() {
 
   if (extensions_container)
     extensions_container_ = AddChildView(std::move(extensions_container));
+
+  if (base::FeatureList::IsEnabled(features::kChromeLabs)) {
+    chrome_labs_button_ = AddChildView(std::make_unique<ChromeLabsButton>());
+    profile_pref_service_ = browser_->profile()->GetPrefs();
+    profile_registrar_ = std::make_unique<PrefChangeRegistrar>();
+    profile_registrar_->Init(profile_pref_service_);
+    profile_registrar_->Add(
+        chrome_labs_prefs::kBrowserLabsEnabled,
+        base::BindRepeating(&ToolbarView::OnChromeLabsPrefChanged,
+                            base::Unretained(this)));
+    OnChromeLabsPrefChanged();
+  }
 
   if (cast)
     cast_ = AddChildView(std::move(cast));
@@ -301,12 +314,12 @@ void ToolbarView::Init() {
   LoadImages();
 
   // Start global error services now so we set the icon on the menu correctly.
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   SigninGlobalErrorFactory::GetForProfile(browser_->profile());
 #if defined(OS_WIN) || defined(OS_MAC)
   RecoveryInstallGlobalErrorFactory::GetForProfile(browser_->profile());
 #endif
-#endif  // OS_CHROMEOS
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   // Set the button icon based on the system state. Do this after
   // |app_menu_button_| has been added as a bubble may be shown that needs
@@ -407,7 +420,7 @@ void ToolbarView::SetPaneFocusAndFocusAppMenu() {
     SetPaneFocus(app_menu_button_);
 }
 
-bool ToolbarView::IsAppMenuFocused() {
+bool ToolbarView::GetAppMenuFocused() const {
   return app_menu_button_ && app_menu_button_->HasFocus();
 }
 
@@ -440,7 +453,7 @@ void ToolbarView::ShowBookmarkBubble(
       GetPageActionIconView(PageActionIconType::kBookmarkStar);
 
   std::unique_ptr<BubbleSyncPromoDelegate> delegate;
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   // ChromeOS does not show the signin promo.
   delegate = std::make_unique<BookmarkBubbleSignInDelegate>(browser_);
 #endif
@@ -629,10 +642,6 @@ void ToolbarView::OnThemeChanged() {
   SchedulePaint();
 }
 
-const char* ToolbarView::GetClassName() const {
-  return kViewClassName;
-}
-
 bool ToolbarView::AcceleratorPressed(const ui::Accelerator& accelerator) {
   const views::View* focused_view = focus_manager()->GetFocusedView();
   if (focused_view && (focused_view->GetID() == VIEW_ID_OMNIBOX))
@@ -647,26 +656,18 @@ void ToolbarView::ChildPreferredSizeChanged(views::View* child) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// ToolbarView, protected:
+// ToolbarView, private:
 
 // Override this so that when the user presses F6 to rotate toolbar panes,
 // the location bar gets focus, not the first control in the toolbar - and
 // also so that it selects all content in the location bar.
-bool ToolbarView::SetPaneFocusAndFocusDefault() {
-  if (!location_bar_->HasFocus()) {
-    SetPaneFocus(location_bar_);
-    location_bar_->FocusLocation(true);
-    return true;
-  }
-
-  if (!AccessiblePaneView::SetPaneFocusAndFocusDefault())
-    return false;
-  browser_->window()->RotatePaneFocus(true);
-  return true;
+views::View* ToolbarView::GetDefaultFocusableChild() {
+  return location_bar_;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// ToolbarView, private:
+void ToolbarView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  node_data->role = ax::mojom::Role::kToolbar;
+}
 
 void ToolbarView::InitLayout() {
   const int default_margin = GetLayoutConstant(TOOLBAR_ELEMENT_PADDING);
@@ -706,7 +707,7 @@ void ToolbarView::InitLayout() {
   } else if (extensions_container_) {
     const views::FlexSpecification extensions_flex_rule =
         views::FlexSpecification(
-            extensions_container_->animating_layout_manager()
+            extensions_container_->GetAnimatingLayoutManager()
                 ->GetDefaultFlexRule())
             .WithOrder(kExtensionsFlexOrder);
 
@@ -887,6 +888,11 @@ views::View* ToolbarView::GetViewForDrop() {
   return this;
 }
 
+void ToolbarView::OnChromeLabsPrefChanged() {
+  chrome_labs_button_->SetVisible(profile_pref_service_->GetBoolean(
+      chrome_labs_prefs::kBrowserLabsEnabled));
+}
+
 void ToolbarView::LoadImages() {
   DCHECK_EQ(display_mode_, DisplayMode::NORMAL);
 
@@ -910,7 +916,7 @@ void ToolbarView::ShowCriticalNotification() {
 }
 
 void ToolbarView::ShowOutdatedInstallNotification(bool auto_update_enabled) {
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   OutdatedUpgradeBubbleView::ShowBubble(app_menu_button_, browser_,
                                         auto_update_enabled);
 #endif
@@ -952,3 +958,7 @@ void ToolbarView::AppMenuButtonPressed(const ui::Event& event) {
                                  ? views::MenuRunner::SHOULD_SHOW_MNEMONICS
                                  : views::MenuRunner::NO_FLAGS);
 }
+
+BEGIN_METADATA(ToolbarView, views::AccessiblePaneView)
+ADD_READONLY_PROPERTY_METADATA(bool, AppMenuFocused)
+END_METADATA

@@ -87,8 +87,16 @@ const char kDiscoverFeedUserActionHideStory[] =
     "ContentSuggestions.Feed.CardAction.HideStory";
 const char kDiscoverFeedUserActionCloseContextMenu[] =
     "ContentSuggestions.Feed.CardAction.ClosedContextMenu";
+const char kDiscoverFeedUserActionNativeActionSheetOpened[] =
+    "ContentSuggestions.Feed.CardAction.OpenNativeActionSheet";
 const char kDiscoverFeedUserActionNativeContextMenuOpened[] =
-    "ContentSuggestions.Feed.CardAction.NativeContextMenu";
+    "ContentSuggestions.Feed.CardAction.OpenNativeContextMenu";
+const char kDiscoverFeedUserActionNativeContextMenuClosed[] =
+    "ContentSuggestions.Feed.CardAction.CloseNativeContextMenu";
+const char kDiscoverFeedUserActionNativePulldownMenuOpened[] =
+    "ContentSuggestions.Feed.CardAction.OpenNativePulldownMenu";
+const char kDiscoverFeedUserActionNativePulldownMenuClosed[] =
+    "ContentSuggestions.Feed.CardAction.CloseNativePulldownMenu";
 const char kDiscoverFeedUserActionReportContentOpened[] =
     "ContentSuggestions.Feed.CardAction.ReportContent";
 const char kDiscoverFeedUserActionReportContentClosed[] =
@@ -146,6 +154,10 @@ const char kDiscoverFeedUploadActionsNetworkDurationFailure[] =
 // operation.
 const char kDiscoverFeedNetworkDuration[] =
     "ContentSuggestions.Feed.Network.Duration";
+
+// Histogram name to measure opened URL's regardless of the surface they were
+// opened in.
+const char kDiscoverFeedURLOpened[] = "NewTabPage.ContentSuggestions.Opened";
 
 // Minimum scrolling amount to record a FeedEngagementType::kFeedEngaged due to
 // scrolling.
@@ -230,6 +242,7 @@ const int kMinutesBetweenSessions = 5;
       recordDiscoverFeedUserActionHistogram:FeedUserActionType::kTappedOnCard];
   base::RecordAction(
       base::UserMetricsAction(kDiscoverFeedUserActionOpenSameTab));
+  [self recordOpenURL];
 }
 
 - (void)recordOpenURLInNewTab {
@@ -237,6 +250,7 @@ const int kMinutesBetweenSessions = 5;
                                                   kTappedOpenInNewTab];
   base::RecordAction(
       base::UserMetricsAction(kDiscoverFeedUserActionOpenNewTab));
+  [self recordOpenURL];
 }
 
 - (void)recordOpenURLInIncognitoTab {
@@ -244,6 +258,7 @@ const int kMinutesBetweenSessions = 5;
                                                   kTappedOpenInNewIncognitoTab];
   base::RecordAction(
       base::UserMetricsAction(kDiscoverFeedUserActionOpenIncognitoTab));
+  [self recordOpenURL];
 }
 
 - (void)recordAddURLToReadLater {
@@ -276,9 +291,9 @@ const int kMinutesBetweenSessions = 5;
 
 - (void)recordOpenNativeBackOfCardMenu {
   [self recordDiscoverFeedUserActionHistogram:FeedUserActionType::
-                                                  kOpenedNativeContextMenu];
+                                                  kOpenedNativeActionSheet];
   base::RecordAction(
-      base::UserMetricsAction(kDiscoverFeedUserActionNativeContextMenuOpened));
+      base::UserMetricsAction(kDiscoverFeedUserActionNativeActionSheetOpened));
 }
 
 - (void)recordShowDialog {
@@ -365,6 +380,34 @@ const int kMinutesBetweenSessions = 5;
   [self recordNetworkRequestDurationInSeconds:durationInSeconds];
 }
 
+- (void)recordNativeContextMenuVisibilityChanged:(BOOL)shown {
+  if (shown) {
+    [self recordDiscoverFeedUserActionHistogram:FeedUserActionType::
+                                                    kOpenedNativeContextMenu];
+    base::RecordAction(base::UserMetricsAction(
+        kDiscoverFeedUserActionNativeContextMenuOpened));
+  } else {
+    [self recordDiscoverFeedUserActionHistogram:FeedUserActionType::
+                                                    kClosedNativeContextMenu];
+    base::RecordAction(base::UserMetricsAction(
+        kDiscoverFeedUserActionNativeContextMenuClosed));
+  }
+}
+
+- (void)recordNativePulldownMenuVisibilityChanged:(BOOL)shown {
+  if (shown) {
+    [self recordDiscoverFeedUserActionHistogram:FeedUserActionType::
+                                                    kOpenedNativePulldownMenu];
+    base::RecordAction(base::UserMetricsAction(
+        kDiscoverFeedUserActionNativePulldownMenuOpened));
+  } else {
+    [self recordDiscoverFeedUserActionHistogram:FeedUserActionType::
+                                                    kClosedNativePulldownMenu];
+    base::RecordAction(base::UserMetricsAction(
+        kDiscoverFeedUserActionNativePulldownMenuClosed));
+  }
+}
+
 #pragma mark - Private
 
 // Records histogram metrics for Discover feed user actions.
@@ -434,6 +477,13 @@ const int kMinutesBetweenSessions = 5;
     (NSTimeInterval)durationInSeconds {
   UMA_HISTOGRAM_MEDIUM_TIMES(kDiscoverFeedNetworkDuration,
                              base::TimeDelta::FromSeconds(durationInSeconds));
+}
+
+// Records that a URL was opened regardless of the target surface (e.g. New Tab,
+// Same Tab, Incognito Tab, etc.)
+- (void)recordOpenURL {
+  // TODO(crbug.com/1174088): Add card Index and the max number of suggestions.
+  UMA_HISTOGRAM_EXACT_LINEAR(kDiscoverFeedURLOpened, 0, 1);
 }
 
 @end

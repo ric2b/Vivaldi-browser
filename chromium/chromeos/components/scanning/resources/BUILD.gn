@@ -15,6 +15,7 @@ js_type_check("closure_compile_module") {
     ":mojo_interface_provider",
     ":page_size_select",
     ":resolution_select",
+    ":scan_done_section",
     ":scan_preview",
     ":scan_to_select",
     ":scanner_select",
@@ -24,12 +25,6 @@ js_type_check("closure_compile_module") {
     ":scanning_browser_proxy",
     ":select_behavior",
     ":source_select",
-  ]
-}
-
-js_library("icons") {
-  deps = [
-    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
   ]
 }
 
@@ -72,6 +67,15 @@ js_library("resolution_select") {
   ]
 }
 
+js_library("scan_done_section") {
+  deps = [
+    ":scanning_app_types",
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/js:i18n_behavior.m",
+    "//ui/webui/resources/js:load_time_data.m",
+  ]
+}
+
 js_library("scan_preview") {
   deps = [
     ":scanning_app_types",
@@ -107,7 +111,6 @@ js_library("scanning_app") {
   deps = [
     ":color_mode_select",
     ":file_type_select",
-    ":icons",
     ":mojo_interface_provider",
     ":page_size_select",
     ":resolution_select",
@@ -119,6 +122,8 @@ js_library("scanning_app") {
     ":scanning_browser_proxy",
     ":source_select",
     "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+    "//ui/webui/resources/cr_elements:cr_container_shadow_behavior.m",
+    "//ui/webui/resources/cr_elements/cr_toast:cr_toast.m",
     "//ui/webui/resources/js:i18n_behavior.m",
   ]
 }
@@ -157,10 +162,10 @@ html_to_js("web_components") {
   js_files = [
     "color_mode_select.js",
     "file_type_select.js",
-    "icons.js",
     "page_size_select.js",
     "resolution_select.js",
     "scan_preview.js",
+    "scan_done_section.js",
     "scan_settings_section.js",
     "scanner_select.js",
     "scan_to_select.js",

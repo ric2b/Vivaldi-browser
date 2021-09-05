@@ -13,19 +13,41 @@
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/transitions/grid_transition_animation_layout_providing.h"
 
 @protocol ApplicationCommands;
+@protocol IncognitoReauthCommands;
+@protocol IncognitoReauthConsumer;
 @protocol GridConsumer;
 @protocol GridCommands;
 @protocol GridDragDropHandler;
 @protocol GridImageDataSource;
 @protocol RecentTabsConsumer;
 @class RecentTabsTableViewController;
+@class TabGridViewController;
 
 // Delegate protocol for an object that can handle presenting ("opening") tabs
 // from the tab grid.
 @protocol TabPresentationDelegate <NSObject>
 // Show the active tab in |page|, presented on top of the tab grid.  The
-// omnibox will be focused after the animation if |focusOmnibox| is YES.
-- (void)showActiveTabInPage:(TabGridPage)page focusOmnibox:(BOOL)focusOmnibox;
+// omnibox will be focused after the animation if |focusOmnibox| is YES. If
+// |closeTabGrid| is NO, then the tab grid will not be closed, and the active
+// tab will simply be displayed in its current position.
+// This last parameter is used for the thumb strip, where the
+// BVCContainerViewController is never dismissed.
+- (void)showActiveTabInPage:(TabGridPage)page
+               focusOmnibox:(BOOL)focusOmnibox
+               closeTabGrid:(BOOL)closeTabGrid;
+@end
+
+@protocol TabGridViewControllerDelegate <NSObject>
+
+// Asks the delegate for the page that should currently be active.
+- (TabGridPage)activePageForTabGridViewController:
+    (TabGridViewController*)tabGridViewController;
+
+// Notifies the delegate that the tab grid was dismissed via the
+// ViewRevealingAnimatee.
+- (void)tabGridViewControllerDidDismiss:
+    (TabGridViewController*)tabGridViewController;
+
 @end
 
 // View controller representing a tab switcher. The tab switcher has an
@@ -37,13 +59,17 @@
                         ViewRevealingAnimatee>
 
 @property(nonatomic, weak) id<ApplicationCommands> handler;
+@property(nonatomic, weak) id<IncognitoReauthCommands> reauthHandler;
 
 // Delegate for this view controller to handle presenting tab UI.
 @property(nonatomic, weak) id<TabPresentationDelegate> tabPresentationDelegate;
 
+@property(nonatomic, weak) id<TabGridViewControllerDelegate> delegate;
+
 // Consumers send updates from the model layer to the UI layer.
 @property(nonatomic, readonly) id<GridConsumer> regularTabsConsumer;
-@property(nonatomic, readonly) id<GridConsumer> incognitoTabsConsumer;
+@property(nonatomic, readonly) id<GridConsumer, IncognitoReauthConsumer>
+    incognitoTabsConsumer;
 @property(nonatomic, readonly) id<RecentTabsConsumer> remoteTabsConsumer;
 
 // Delegates send updates from the UI layer to the model layer.

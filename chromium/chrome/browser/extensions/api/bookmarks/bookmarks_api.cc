@@ -219,7 +219,13 @@ const BookmarkNode* BookmarksFunction::CreateBookmarkNode(
     vivaldi_meta.SetThumbnail(*details.thumbnail);
   }
   if (details.partner) {
-    vivaldi_meta.SetPartner(*details.partner);
+    base::GUID vivaldi_partner =
+        base::GUID::ParseCaseInsensitive(*details.partner);
+    if (!vivaldi_partner.is_valid()) {
+      *error = "Partner id string is not a valid GUID - " + *details.partner;
+      return nullptr;
+    }
+    vivaldi_meta.SetPartner(vivaldi_partner);
   }
   meta_info = vivaldi_meta.map();
 
@@ -824,6 +830,15 @@ ExtensionFunction::ResponseValue BookmarksUpdateFunction::RunOnReady() {
     return Error(vivaldi::kNicknameExists);
   }
 
+  base::GUID vivaldi_partner;
+  if (params->changes.partner) {
+    vivaldi_partner =
+        base::GUID::ParseCaseInsensitive(*params->changes.partner);
+    if (!vivaldi_partner.is_valid()) {
+      return Error("partner is not a valid GUID" + *params->changes.partner);
+    }
+  }
+
   if (has_title)
     model->SetTitle(node, title);
   if (!url.is_empty())
@@ -843,8 +858,8 @@ ExtensionFunction::ResponseValue BookmarksUpdateFunction::RunOnReady() {
   if (params->changes.thumbnail) {
     vivaldi_meta.SetThumbnail(*params->changes.thumbnail);
   }
-  if (params->changes.partner) {
-    vivaldi_meta.SetPartner(*params->changes.partner);
+  if (vivaldi_partner.is_valid()) {
+    vivaldi_meta.SetPartner(vivaldi_partner);
   }
   if (params->changes.speeddial) {
     vivaldi_meta.SetSpeeddial(*params->changes.speeddial);

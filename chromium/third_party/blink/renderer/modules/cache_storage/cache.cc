@@ -589,7 +589,7 @@ class Cache::FetchHandler final : public ScriptFunction {
     // If we return our real result and an exception occurs then unhandled
     // promise errors will occur.
     ScriptValue rtn =
-        ScriptPromise::CastUndefined(GetScriptState()).GetScriptValue();
+        ScriptPromise::CastUndefined(GetScriptState()).AsScriptValue();
 
     // If there is no loader, we were created as a reject handler.
     if (!response_loader_) {
@@ -1212,7 +1212,8 @@ void Cache::PutImpl(ScriptPromiseResolver* resolver,
     BytesConsumer* consumer =
         MakeGarbageCollected<BlobBytesConsumer>(context, blob_list[i]);
     BodyStreamBuffer* buffer =
-        BodyStreamBuffer::Create(script_state, consumer, /*signal=*/nullptr);
+        BodyStreamBuffer::Create(script_state, consumer, /*signal=*/nullptr,
+                                 /*cached_metadata_handler=*/nullptr);
     FetchDataLoader* loader = FetchDataLoader::CreateLoaderAsArrayBuffer();
     buffer->StartLoading(loader,
                          MakeGarbageCollected<CodeCacheHandleCallbackForPut>(

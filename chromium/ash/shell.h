@@ -96,11 +96,11 @@ class AssistantControllerImpl;
 class AutoclickController;
 class BackGestureEventHandler;
 class BacklightsForcedOffSetter;
-class BloomUiControllerImpl;
 class BluetoothNotificationController;
 class BluetoothPowerController;
 class BrightnessControlDelegate;
 class CaptureModeController;
+class ControlVHistogramRecorder;
 class CrosDisplayConfig;
 class DesksController;
 class DetachableBaseHandler;
@@ -151,8 +151,8 @@ class OverlayEventFilter;
 class OverviewController;
 class ParentAccessController;
 class PartialMagnificationController;
+class PeripheralBatteryListener;
 class PeripheralBatteryNotifier;
-class PeripheralBatteryTracker;
 class PersistentWindowController;
 class PolicyRecommendationRestorer;
 class PowerButtonController;
@@ -453,6 +453,9 @@ class ASH_EXPORT Shell : public SessionObserver,
   PartialMagnificationController* partial_magnification_controller() {
     return partial_magnification_controller_.get();
   }
+  PeripheralBatteryListener* peripheral_battery_listener() {
+    return peripheral_battery_listener_.get();
+  }
   PolicyRecommendationRestorer* policy_recommendation_restorer() {
     return policy_recommendation_restorer_.get();
   }
@@ -679,7 +682,6 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<AshDBusServices> ash_dbus_services_;
   std::unique_ptr<AssistantControllerImpl> assistant_controller_;
   std::unique_ptr<BacklightsForcedOffSetter> backlights_forced_off_setter_;
-  std::unique_ptr<BloomUiControllerImpl> bloom_ui_controller_;
   std::unique_ptr<BrightnessControlDelegate> brightness_control_delegate_;
   std::unique_ptr<CrosDisplayConfig> cros_display_config_;
   std::unique_ptr<DesksController> desks_controller_;
@@ -724,6 +726,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<ShelfWindowWatcher> shelf_window_watcher_;
   std::unique_ptr<ShellDelegate> shell_delegate_;
   std::unique_ptr<CaptureModeController> capture_mode_controller_;
+  std::unique_ptr<ControlVHistogramRecorder> control_v_histogram_recorder_;
   std::unique_ptr<ShutdownControllerImpl> shutdown_controller_;
   std::unique_ptr<SystemNotificationController> system_notification_controller_;
   std::unique_ptr<SystemTrayModel> system_tray_model_;
@@ -789,8 +792,8 @@ class ASH_EXPORT Shell : public SessionObserver,
 
   std::unique_ptr<ScreenPinningController> screen_pinning_controller_;
 
+  std::unique_ptr<PeripheralBatteryListener> peripheral_battery_listener_;
   std::unique_ptr<PeripheralBatteryNotifier> peripheral_battery_notifier_;
-  std::unique_ptr<PeripheralBatteryTracker> peripheral_battery_tracker_;
   std::unique_ptr<PowerEventObserver> power_event_observer_;
   std::unique_ptr<PowerPrefs> power_prefs_;
   std::unique_ptr<ui::UserActivityPowerManagerNotifier> user_activity_notifier_;

@@ -28,7 +28,6 @@ import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bun
 import {HatsBrowserProxyImpl} from '../hats_browser_proxy.js';
 import {loadTimeData} from '../i18n_setup.js';
 import {MetricsBrowserProxy, MetricsBrowserProxyImpl, PrivacyElementInteractions} from '../metrics_browser_proxy.js';
-import {SyncBrowserProxyImpl, SyncStatus} from '../people_page/sync_browser_proxy.m.js';
 import {PrefsBehavior} from '../prefs/prefs_behavior.m.js';
 import {routes} from '../route.js';
 import {RouteObserverBehavior, Router} from '../router.m.js';
@@ -65,12 +64,6 @@ Polymer({
       type: Object,
       notify: true,
     },
-
-    /**
-     * The current sync status, supplied by SyncBrowserProxy.
-     * @type {?SyncStatus}
-     */
-    syncStatus: Object,
 
     /** @private */
     isGuest_: {
@@ -165,6 +158,12 @@ Polymer({
           loadTimeData.getBoolean('enableWebBluetoothNewPermissionsBackend'),
     },
 
+    /** @private */
+    enablePrivacySandboxSettings_: {
+      type: Boolean,
+      value: () => loadTimeData.getBoolean('privacySandboxSettingsEnabled'),
+    },
+
     /** @private {!Map<string, string>} */
     focusConfig_: {
       type: Object,
@@ -230,26 +229,12 @@ Polymer({
         'onBlockAutoplayStatusChanged',
         this.onBlockAutoplayStatusChanged_.bind(this));
 
-    SyncBrowserProxyImpl.getInstance().getSyncStatus().then(
-        this.handleSyncStatus_.bind(this));
-    this.addWebUIListener(
-        'sync-status-changed', this.handleSyncStatus_.bind(this));
-
     SiteSettingsPrefsBrowserProxyImpl.getInstance()
         .getCookieSettingDescription()
         .then(description => this.cookieSettingDescription_ = description);
     this.addWebUIListener(
         'cookieSettingDescriptionChanged',
         description => this.cookieSettingDescription_ = description);
-  },
-
-  /**
-   * Handler for when the sync state is pushed from the browser.
-   * @param {?SyncStatus} syncStatus
-   * @private
-   */
-  handleSyncStatus_(syncStatus) {
-    this.syncStatus = syncStatus;
   },
 
   /** @protected */
@@ -306,7 +291,11 @@ Polymer({
   /** @private */
   onDialogClosed_() {
     Router.getInstance().navigateTo(assert(routes.CLEAR_BROWSER_DATA.parent));
-    focusWithoutInk(assert(this.$$('#clearBrowsingData')));
+    setTimeout(() => {
+      // Focus after a timeout to ensure any a11y messages get read before
+      // screen readers read out the newly focused element.
+      focusWithoutInk(assert(this.$$('#clearBrowsingData')));
+    });
   },
 
   /** @private */
@@ -322,6 +311,13 @@ Polymer({
     this.metricsBrowserProxy_.recordAction(
         'SafeBrowsing.Settings.ShowedFromParentSettings');
     Router.getInstance().navigateTo(routes.SECURITY);
+  },
+
+  /** @private */
+  onPrivacySandboxClick_() {
+    // TODO(crbug/1159942): Replace this with an ordinary OpenWindowProxy call
+    // once crbug/1159942 is fixed.
+    window.location = 'chrome://settings/privacySandbox';
   },
 
   /** @private */

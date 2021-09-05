@@ -17,11 +17,13 @@
 #include "base/metrics/histogram_functions.h"
 #include "chrome/browser/apps/user_type_filter.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/login/login_pref_names.h"
 #include "chrome/browser/chromeos/login/marketing_backend_connector.h"
 #include "chrome/browser/chromeos/login/screen_manager.h"
 #include "chrome/browser/chromeos/login/screens/gesture_navigation_screen.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager_util.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
+#include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/webui/chromeos/login/gesture_navigation_screen_handler.h"
@@ -29,8 +31,10 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "components/prefs/pref_service.h"
+#include "components/sync_preferences/pref_service_syncable.h"
 #include "third_party/icu/source/common/unicode/utypes.h"
 #include "third_party/icu/source/i18n/unicode/timezone.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -97,13 +101,16 @@ MarketingOptInScreen::MarketingOptInScreen(
 }
 
 MarketingOptInScreen::~MarketingOptInScreen() {
-  view_->Bind(nullptr);
+  if (view_)
+    view_->Bind(nullptr);
 }
 
 bool MarketingOptInScreen::MaybeSkip(WizardContext* context) {
-  if (!base::FeatureList::IsEnabled(features::kOobeMarketingScreen) ||
+  Initialize();
+
+  if (!base::FeatureList::IsEnabled(::features::kOobeMarketingScreen) ||
       chrome_user_manager_util::IsPublicSessionOrEphemeralLogin() ||
-      IsCurrentUserManaged() /*skip for enterprise and supervised users*/) {
+      IsCurrentUserManaged()) {
     exit_callback_.Run(Result::NOT_APPLICABLE);
     return true;
   }
@@ -112,25 +119,19 @@ bool MarketingOptInScreen::MaybeSkip(WizardContext* context) {
 }
 
 void MarketingOptInScreen::ShowImpl() {
+  DCHECK(initialized_);
+
+  // Show a verbose legal footer for Canada. (https://crbug.com/1124956)
+  const bool legal_footer_visible =
+      email_opt_in_visible_ && countries_with_legal_footer.count(country_);
+
+  view_->Show(/*opt_in_visible=*/email_opt_in_visible_,
+              /*opt_in_default_state=*/IsDefaultOptInCountry(),
+              /*legal_footer_visible=*/legal_footer_visible);
+
+  // Mark the screen as shown for this user.
   PrefService* prefs = ProfileManager::GetActiveUserProfile()->GetPrefs();
-
-  // Set the country to be used based on the timezone
-  // and supported country list.
-  SetCountryFromTimezoneIfAvailable(g_browser_process->local_state()->GetString(
-      prefs::kSigninScreenTimezone));
-
-  view_->Show();
-
-  // Hide the marketing opt-in option if:
-  //   1) the user is managed. (enterprise-managed, guest, child, supervised)
-  // OR
-  //   2) The country is not a supported country. (empty)
-  //
-  email_opt_in_visible_ = !(IsCurrentUserManaged() || (country_.empty()));
-  view_->SetOptInVisibility(email_opt_in_visible_);
-
-  // Set the default state of the email opt-in toggle.
-  view_->SetEmailToggleState(IsDefaultOptInCountry());
+  prefs->SetBoolean(prefs::kOobeMarketingOptInScreenFinished, true);
 
   // Only show the link for accessibility settings if the gesture navigation
   // screen was shown.
@@ -163,15 +164,20 @@ void MarketingOptInScreen::HideImpl() {
 }
 
 void MarketingOptInScreen::OnGetStarted(bool chromebook_email_opt_in) {
-  Profile* profile = ProfileManager::GetPrimaryUserProfile();
+  DCHECK(initialized_);
 
   // UMA Metrics & API call only when the toggle is visible
   if (email_opt_in_visible_) {
-    RecordOptInAndOptOutRates(chromebook_email_opt_in /*user_opted_in*/,
-                              IsDefaultOptInCountry() /*opt_in_by_default*/,
-                              country_ /*country*/);
+    RecordOptInAndOptOutRates(/*user_opted_in=*/chromebook_email_opt_in,
+                              /*opt_in_by_default=*/IsDefaultOptInCountry(),
+                              /*country=*/country_);
 
-    if ((profile != nullptr) && chromebook_email_opt_in) {
+    // Store the user's preference regarding marketing emails
+    Profile* profile = ProfileManager::GetActiveUserProfile();
+    DCHECK(profile);
+    profile->GetPrefs()->SetBoolean(prefs::kOobeMarketingOptInChoice,
+                                    chromebook_email_opt_in);
+    if (chromebook_email_opt_in) {
       // Call Chromebook Email Service API
       MarketingBackendConnector::UpdateEmailPreferences(profile, country_);
     }
@@ -191,11 +197,24 @@ void MarketingOptInScreen::OnA11yShelfNavigationButtonPrefChanged() {
 }
 
 bool MarketingOptInScreen::IsCurrentUserManaged() {
-  Profile* profile = ProfileManager::GetPrimaryUserProfile();
+  Profile* profile = ProfileManager::GetActiveUserProfile();
   if (profile->IsOffTheRecord())
     return false;
   const std::string user_type = apps::DetermineUserType(profile);
   return (user_type != apps::kUserTypeUnmanaged);
+}
+
+void MarketingOptInScreen::Initialize() {
+  // Set the country to be used based on the timezone
+  // and supported country list.
+  SetCountryFromTimezoneIfAvailable(g_browser_process->local_state()->GetString(
+      ::prefs::kSigninScreenTimezone));
+
+  // Only show the opt in option if this is a supported region, and if the user
+  // never made a choice regarding emails.
+  email_opt_in_visible_ = !country_.empty() && ShouldShowOptionToSubscribe();
+
+  initialized_ = true;
 }
 
 void MarketingOptInScreen::SetCountryFromTimezoneIfAvailable(
@@ -223,15 +242,42 @@ void MarketingOptInScreen::SetCountryFromTimezoneIfAvailable(
   const bool is_extended_country =
       additional_countries_.count(region_str) &&
       base::FeatureList::IsEnabled(
-          features::kOobeMarketingAdditionalCountriesSupported);
+          ::features::kOobeMarketingAdditionalCountriesSupported);
   const bool is_double_optin_country =
       double_opt_in_countries_.count(region_str) &&
       base::FeatureList::IsEnabled(
-          features::kOobeMarketingDoubleOptInCountriesSupported);
+          ::features::kOobeMarketingDoubleOptInCountriesSupported);
 
   if (is_default_country || is_extended_country || is_double_optin_country) {
     country_ = region_str;
   }
+}
+
+bool MarketingOptInScreen::ShouldShowOptionToSubscribe() {
+  // Directly access PrefServiceSyncable instead of PrefService because
+  // we need to know whether the prefs have been loaded.
+  sync_preferences::PrefServiceSyncable* prefs =
+      PrefServiceSyncableFromProfile(ProfileManager::GetActiveUserProfile());
+  const bool sync_complete =
+      ignore_pref_sync_for_testing_ ||
+      (features::IsSplitSettingsSyncEnabled() ? prefs->AreOsPrefsSyncing()
+                                              : prefs->IsSyncing());
+  // Do not show if the preferences cannot be synced
+  if (!sync_complete)
+    return false;
+
+  // Show if the screen was never shown before.
+  if (!prefs->GetBoolean(prefs::kOobeMarketingOptInScreenFinished))
+    return true;
+
+  // Show if we haven't recorded the user's choice yet. The screen was shown
+  // in the past, but the option to sign up was not (due to not being
+  // available in the user's region).
+  if (prefs->FindPreference(prefs::kOobeMarketingOptInChoice)->IsDefaultValue())
+    return true;
+
+  // The screen was shown before and the user has made its choice.
+  return false;
 }
 
 }  // namespace chromeos

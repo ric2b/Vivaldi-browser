@@ -8,12 +8,14 @@
 #include <string>
 #include <utility>
 
-#include "base/command_line.h"
 #include "base/i18n/rtl.h"
 #include "base/stl_util.h"
 #include "base/strings/string_split.h"
 #include "components/policy/content/safe_sites_navigation_throttle.h"
+#include "components/site_isolation/features.h"
+#include "components/site_isolation/preloaded_isolated_origins.h"
 #include "components/version_info/version_info.h"
+#include "content/public/browser/client_certificate_delegate.h"
 #include "content/public/browser/devtools_manager_delegate.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/network_service_instance.h"
@@ -105,22 +107,13 @@ std::string WebEngineContentBrowserClient::GetProduct() {
 }
 
 std::string WebEngineContentBrowserClient::GetUserAgent() {
-  std::string user_agent;
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kUseLegacyAndroidUserAgent)) {
-    user_agent =
-        content::BuildUserAgentFromOSAndProduct("Linux; Android", GetProduct());
-  } else {
-    user_agent = content::BuildUserAgentFromProduct(GetProduct());
-  }
-
+  std::string user_agent = content::BuildUserAgentFromProduct(GetProduct());
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kUserAgentProductAndVersion)) {
     user_agent +=
         " " + base::CommandLine::ForCurrentProcess()->GetSwitchValueNative(
                   switches::kUserAgentProductAndVersion);
   }
-
   return user_agent;
 }
 
@@ -209,6 +202,16 @@ std::string WebEngineContentBrowserClient::GetAcceptLangs(
       ->GetPreferredLanguages();
 }
 
+base::OnceClosure WebEngineContentBrowserClient::SelectClientCertificate(
+    content::WebContents* web_contents,
+    net::SSLCertRequestInfo* cert_request_info,
+    net::ClientCertIdentityList client_certs,
+    std::unique_ptr<content::ClientCertificateDelegate> delegate) {
+  // Continue without a certificate.
+  delegate->ContinueWithCertificate(nullptr, nullptr);
+  return base::OnceClosure();
+}
+
 std::vector<std::unique_ptr<content::NavigationThrottle>>
 WebEngineContentBrowserClient::CreateThrottlesForNavigation(
     content::NavigationHandle* navigation_handle) {
@@ -270,4 +273,18 @@ void WebEngineContentBrowserClient::ConfigureNetworkContextParams(
   // starting with the headers passed in via
   // |CreateContextParams.cors_exempt_headers|.
   network_context_params->cors_exempt_header_list = cors_exempt_headers_;
+}
+
+std::vector<url::Origin>
+WebEngineContentBrowserClient::GetOriginsRequiringDedicatedProcess() {
+  std::vector<url::Origin> isolated_origin_list;
+
+  // Include additional origins preloaded with specific browser configurations,
+  // if any.
+  auto built_in_origins =
+      site_isolation::GetBrowserSpecificBuiltInIsolatedOrigins();
+  std::move(std::begin(built_in_origins), std::end(built_in_origins),
+            std::back_inserter(isolated_origin_list));
+
+  return isolated_origin_list;
 }

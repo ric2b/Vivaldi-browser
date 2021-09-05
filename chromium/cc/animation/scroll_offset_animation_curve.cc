@@ -136,7 +136,8 @@ ScrollOffsetAnimationCurve::ScrollOffsetAnimationCurve(
       animation_type_(animation_type),
       duration_behavior_(duration_behavior),
       has_set_initial_value_(false) {
-  DCHECK_EQ((animation_type == AnimationType::kEaseInOut),
+  DCHECK_EQ((animation_type == AnimationType::kEaseInOut ||
+             animation_type == AnimationType::kImpulse),
             duration_behavior.has_value());
   switch (animation_type) {
     case AnimationType::kEaseInOut:
@@ -162,7 +163,8 @@ ScrollOffsetAnimationCurve::ScrollOffsetAnimationCurve(
       animation_type_(animation_type),
       duration_behavior_(duration_behavior),
       has_set_initial_value_(false) {
-  DCHECK_EQ((animation_type == AnimationType::kEaseInOut),
+  DCHECK_EQ((animation_type == AnimationType::kEaseInOut ||
+             animation_type == AnimationType::kImpulse),
             duration_behavior.has_value());
 }
 
@@ -359,6 +361,11 @@ void ScrollOffsetAnimationCurve::UpdateTarget(
   DCHECK_NE(animation_type_, AnimationType::kLinear)
       << "UpdateTarget is not supported on linear scroll animations.";
 
+  // UpdateTarget is still called for linear animations occasionally. This is
+  // tracked via crbug.com/1164008.
+  if (animation_type_ == AnimationType::kLinear)
+    return;
+
   // If the new UpdateTarget actually happened before the previous one, keep
   // |t| as the most recent, but reduce the duration of any generated
   // animation.
@@ -399,11 +406,8 @@ void ScrollOffsetAnimationCurve::UpdateTarget(
     return;
   }
 
-  base::TimeDelta new_duration =
-      (animation_type_ == AnimationType::kEaseInOut)
-          ? EaseInOutBoundedSegmentDuration(new_delta, t, delayed_by)
-          : ImpulseSegmentDuration(new_delta, delayed_by);
-
+  const base::TimeDelta new_duration =
+      EaseInOutBoundedSegmentDuration(new_delta, t, delayed_by);
   if (new_duration.InSecondsF() < kEpsilon) {
     // The duration is (close to) 0, so stop the animation.
     target_value_ = new_target;
@@ -417,19 +421,17 @@ void ScrollOffsetAnimationCurve::UpdateTarget(
   double new_slope =
       velocity * (new_duration.InSecondsF() / MaximumDimension(new_delta));
 
-  if (animation_type_ == AnimationType::kEaseInOut) {
-    timing_function_ = EaseInOutWithInitialSlope(new_slope);
-  } else {
-    DCHECK_EQ(animation_type_, AnimationType::kImpulse);
-    if (IsNewTargetInOppositeDirection(current_position, target_value_,
-                                       new_target)) {
-      // Prevent any rubber-banding by setting the velocity (and subsequently,
-      // the slope) to 0 when moving in the opposite direciton.
-      new_slope = 0;
-    }
-    timing_function_ = ImpulseCurveWithInitialSlope(new_slope);
+  DCHECK(animation_type_ == AnimationType::kImpulse ||
+         animation_type_ == AnimationType::kEaseInOut);
+  if (animation_type_ == AnimationType::kImpulse &&
+      IsNewTargetInOppositeDirection(current_position, target_value_,
+                                     new_target)) {
+    // Prevent any rubber-banding by setting the velocity (and subsequently, the
+    // slope) to 0 when moving in the opposite direciton.
+    new_slope = 0;
   }
 
+  timing_function_ = EaseInOutWithInitialSlope(new_slope);
   initial_value_ = current_position;
   target_value_ = new_target;
   total_animation_duration_ = t + new_duration;

@@ -4,6 +4,7 @@
 <translation id="1033008476608128425">Paysage 3</translation>
 <translation id="1118377629180821201">Paysage 12</translation>
 <translation id="1158503667684816647">Ne plus afficher cette boîte de dialogue de confirmation</translation>
+<translation id="1222195720020481779">Démarrage du programme d’installation…</translation>
 <translation id="1276145862619442150">Speed Dials</translation>
 <translation id="1281950884873973195">Animal 6</translation>
 <translation id="1411638389238344450">Envoyer le lien par mail</translation>
@@ -21,11 +22,17 @@
 <translation id="1921101374471252440">&amp;Rafraîchir l’image</translation>
 <translation id="1924750141060565109">Paysage 15</translation>
 <translation id="19598411548897379">Générique</translation>
+<translation id="1985669426322966465">Mise à jour du logiciel</translation>
 <translation id="2079036669923635404">Cliquer ici pour mettre à jour Vivaldi en version <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Une erreur est survenue lors du téléchargement des fichiers de mise à jour. Merci de vérifier votre connexion et d’essayer plus tard.</translation>
+<translation id="2339641773402824483">Recherche des mises à jour…</translation>
 <translation id="2441056087170876076">Monstre 2</translation>
 <translation id="2444387452209867610">Insérer une note</translation>
 <translation id="2486841023299517366">Animal 4</translation>
+<translation id="2612127540243995147">La nouvelle version est prête à être installée. Vivaldi sera fermé puis relancé automatiquement.</translation>
+<translation id="2613387515621326337">Afficher le site de la mise à jour</translation>
+<translation id="2647368062414805334">Malheureusement, vos paramètres Edge ne sont pas disponibles lorsque ce navigateur est lancé. Pour importer ces paramètres sur Vivaldi, enregistrez votre travail et fermez toutes les fenêtres de Edge. Cliquez ensuite sur Continuer.</translation>
+<translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Animal 3</translation>
 <translation id="2873951654529031587">Corbeille</translation>
 <translation id="292258461174562431">Monstre 4</translation>
@@ -36,9 +43,12 @@
 <translation id="3084011186245865060">Paysage 6</translation>
 <translation id="3127383884976966729">Animal 7</translation>
 <translation id="3156398087075132709">Nouveau signet</translation>
+<translation id="3255747772218936245">Installer la mise à jour</translation>
 <translation id="3259769196742189631">Valider cette page (W3C)</translation>
 <translation id="3302905971452834934">Monstre 1</translation>
 <translation id="3334610655141903168">(pas de titre)</translation>
+<translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> est actuellement la dernière version disponible.</translation>
+<translation id="3383198080133834965">Vivaldi est bien à jour !</translation>
 <translation id="3402602684546832928">Sélectionner le fichier de signets d’Opera</translation>
 <translation id="3451317331714872347">Paysage 8</translation>
 <translation id="3457498675806041407">Confirmer la fermeture</translation>
@@ -48,14 +58,17 @@
 <translation id="3542768452570884558">Ouvrir le lien dans une nouvelle &amp;fenêtre</translation>
 <translation id="3588820906588687999">Ouvrir l’image dans un nouvel onglet</translation>
 <translation id="3601066750251199488">Monstre 3</translation>
+<translation id="3680031241659195730">Une nouvelle version de Vivaldi est disponible !</translation>
 <translation id="3708982624815781692">Le téléchargement a été annulé.</translation>
 <translation id="3732157130969736834">Enregistrer le lien dans les signets</translation>
 <translation id="3732388226447288666">Animal 2</translation>
 <translation id="3732439195215136813">Animal 5</translation>
+<translation id="3795800845758778870">Malheureusement, vos paramètres Brave ne sont pas disponibles lorsque celui-ci est lancé. Pour importer ces paramètres sur Vivaldi, enregistrez votre travail et fermez toutes les fenêtres de Brave. Cliquez ensuite sur Continuer.</translation>
 <translation id="3832132597516774400">Paysage 5</translation>
 <translation id="3914946330804881301">Importés d’Opera</translation>
 <translation id="3921292902397893431">Monstre 8</translation>
 <translation id="3943857333388298514">Coller</translation>
+<translation id="4005270918754737597">Ignorer cette version</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Ne plus afficher</translation>
 <translation id="4074744496918018786">Ouvrir l’image dans une fenêtre de navigation privée</translation>
@@ -72,6 +85,7 @@
 <translation id="4677434526832593569">Animal 8</translation>
 <translation id="474217410105706308">Mettre l’onglet en sourdine</translation>
 <translation id="4881695831933465202">Ouvrir</translation>
+<translation id="498766871928286903"><ph name="DOWNLOADED" /> sur <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Speed Dials importés</translation>
 <translation id="5092656712000637858">Ajouter cette page à un panneau Web</translation>
 <translation id="5177818338935286353">Monstre 7</translation>
@@ -87,6 +101,7 @@
 <translation id="5648110075441906505">Ouvrir l’image dans une nouvelle fenêtre</translation>
 <translation id="5656371807944747581">Erreur durant la mise à jour !</translation>
 <translation id="5716238312826274098">Désactivation des notifications</translation>
+<translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> est désormais disponible (vous avez actuellement <ph name="OLD_VERSION" />). Voulez-vous faire la mise à jour maintenant ?</translation>
 <translation id="5770433027661640693">Paysage 10</translation>
 <translation id="5857090052475505287">Nouveau dossier</translation>
 <translation id="588258955323874662">Plein écran</translation>
@@ -102,15 +117,21 @@
 <translation id="6538338088414940408">Ouvrir le lien dans un nouvel onglet en a&amp;rrière-plan</translation>
 <translation id="6551219277044048123">Ajouter en tant que moteur de rec&amp;herche…</translation>
 <translation id="6630781781151951863">Paysage 18</translation>
+<translation id="6635049669875534328">Notes de version :</translation>
+<translation id="6693585104974197539">Sélectionner le profil de Edge à importer</translation>
+<translation id="6726279523566323394">Sélectionner le dossier de profil Brave à importer</translation>
 <translation id="6804831687363620480">Malheureusement, les données d’Opera 15+ ne sont pas accessibles lorsque ce navigateur est lancé. Pour importer ces données dans Vivaldi, enregistrez votre travail en cours et fermez toutes les fenêtres Opera 15+. Puis cliquez sur « Continuer ».</translation>
+<translation id="6892812721183419409">Ouvrir le lien en tant que <ph name="USER" /></translation>
 <translation id="6896758677409633944">Copier</translation>
 <translation id="7086554968911045110">Paysage 7</translation>
 <translation id="7111492742514999492">Paysage 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi est rendu possible grâce au projet Open Source <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> et <ph name="BEGIN_LINK_OSS" />open source software<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">Échec de lancement de l’installeur de la mise à jour. Merci de vérifier que l’ordinateur dispose d’assez de mémoire et d’espace disque et de réessayer plus tard.</translation>
+<translation id="7658239707568436148">Annuler</translation>
 <translation id="7715497554424665066">&amp;Ignorer la mise à jour</translation>
 <translation id="7724603315864178912">Couper</translation>
+<translation id="7727481996062361502">Vérification de la mise à jour…</translation>
 <translation id="7793738202466490491">Ajouter en tant qu’événement de calendrier</translation>
 <translation id="7848222781052558334">Échec lors de la vérification de la signature numérique des fichiers téléchargés.</translation>
 <translation id="7865983598101744945">Confirmer la fermeture de la fenêtre</translation>
@@ -121,9 +142,13 @@
 <translation id="8261506727792406068">Supprimer</translation>
 <translation id="8331671104904436324">Ouvrir dans un nouvel onglet en arrière-plan</translation>
 <translation id="8373293945112511707">Paysage 1</translation>
+<translation id="8388552048012645975">Téléchargement dela mise à jour…</translation>
 <translation id="8427094907586191051">Paysage 17</translation>
+<translation id="8439034818057146672">Une nouvelle version de Vivaldi est prête à être installée.</translation>
 <translation id="8446668873108041390">L’exécution de JavaScript via AppleScript est désactivée. Dans Paramètres &gt; Confidentialité &gt; Événements Apple, il y a un paramètre pour autoriser JavaScript à partir des événements Apple.</translation>
 <translation id="8539196077526389150">Paysage 13</translation>
+<translation id="8562339533180097902">Fermer VIvaldi et procéder à l’installation</translation>
+<translation id="8567452685425968223">Extraction de la mise à jour…</translation>
 <translation id="8624587806981488221">&amp;Recharger l’image</translation>
 <translation id="864444594187862076">Opera version 15+ (Dév.)</translation>
 <translation id="8651348004684669199">Ajouter l’onglet actif aux signets</translation>
@@ -131,12 +156,15 @@
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8768970203213061953">Paysage 14</translation>
 <translation id="8773635261052182196">Vous ne verrez plus ces notifications. Vous pourrez toujours les rétablir dans les réglages de Vivaldi.</translation>
+<translation id="8813277370772331957">Me le rappeler ultérieurement</translation>
 <translation id="8894900864683381599">Ajouter le lien à un panneau Web</translation>
 <translation id="8912720443398351457">Voulez-vous vraiment fermer Vivaldi ?</translation>
 <translation id="8947109330183116400">Sélectionner le fichier HTML contenant des signets</translation>
-<translation id="9017566390391482291">Sélectionner le répertoire du profil Vivaldi à importer</translation>
+<translation id="9017566390391482291">Sélectionner le dossier du profil Vivaldi à importer</translation>
 <translation id="9065203028668620118">Modifier</translation>
+<translation id="912022491595344261">Ouvrir l’image en tant que <ph name="USER" /></translation>
 <translation id="9157539936604258187">Ouvrir le lien</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Paysage 16</translation>
 </translationbundle>

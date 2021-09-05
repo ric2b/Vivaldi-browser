@@ -11,7 +11,6 @@
 #include "ash/public/cpp/test/shell_test_api.h"
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
 #include "base/optional.h"
 #include "base/test/scoped_feature_list.h"
@@ -154,7 +153,7 @@ void WaitForGaiaSignInScreen(bool arc_available) {
   if (arc_available) {
     test::OobeJS()
         .CreateHasClassWaiter(true, "arc-tos-loaded",
-                              {"arc-tos-root", "arcTosDialog"})
+                              {"arc-tos", "arcTosDialog"})
         ->Wait();
   }
 
@@ -225,17 +224,17 @@ void HandleArcTermsOfServiceScreen() {
   EXPECT_FALSE(ash::LoginScreenTestApi::IsAddUserButtonShown());
 
   test::OobeJS()
-      .CreateEnabledWaiter(true, {"arc-tos-root", "arcTosNextButton"})
+      .CreateEnabledWaiter(true, {"arc-tos", "arcTosNextButton"})
       ->Wait();
-  test::OobeJS().TapOnPath({"arc-tos-root", "arcTosNextButton"});
+  test::OobeJS().TapOnPath({"arc-tos", "arcTosNextButton"});
   test::OobeJS()
-      .CreateVisibilityWaiter(true, {"arc-tos-root", "arcLocationService"})
+      .CreateVisibilityWaiter(true, {"arc-tos", "arcLocationService"})
       ->Wait();
   test::OobeJS()
-      .CreateVisibilityWaiter(true, {"arc-tos-root", "arcTosAcceptButton"})
+      .CreateVisibilityWaiter(true, {"arc-tos", "arcTosAcceptButton"})
       ->Wait();
 
-  test::OobeJS().TapOnPath({"arc-tos-root", "arcTosAcceptButton"});
+  test::OobeJS().TapOnPath({"arc-tos", "arcTosAcceptButton"});
 
   OobeScreenExitWaiter(ArcTermsOfServiceScreenView::kScreenId).Wait();
   LOG(INFO) << "OobeInteractiveUITest: 'arc-tos' screen done.";
@@ -593,8 +592,6 @@ class OobeEndToEndTestSetupMixin : public InProcessBrowserTestMixin {
   }
 
   void SetUpOnMainThread() override {
-    ASSERT_TRUE(arc_temp_dir_.CreateUniqueTempDir());
-
     if (params_.is_tablet)
       ash::ShellTestApi().SetTabletModeEnabledForTest(true);
 
@@ -604,8 +601,7 @@ class OobeEndToEndTestSetupMixin : public InProcessBrowserTestMixin {
       arc::ArcSessionManager::Get()->SetArcSessionRunnerForTesting(
           std::make_unique<arc::ArcSessionRunner>(
               base::BindRepeating(arc::FakeArcSession::Create)));
-      EXPECT_TRUE(arc::ExpandPropertyFilesForTesting(
-          arc::ArcSessionManager::Get(), arc_temp_dir_.GetPath()));
+      arc::ExpandPropertyFilesForTesting(arc::ArcSessionManager::Get());
     }
   }
   void TearDownInProcessBrowserTestFixture() override {
@@ -645,7 +641,6 @@ class OobeEndToEndTestSetupMixin : public InProcessBrowserTestMixin {
   std::unique_ptr<ScopedTestRecommendAppsFetcherFactory>
       recommend_apps_fetcher_factory_;
   net::EmbeddedTestServer* arc_tos_server_;
-  base::ScopedTempDir arc_temp_dir_;
 
   DISALLOW_COPY_AND_ASSIGN(OobeEndToEndTestSetupMixin);
 };
@@ -657,10 +652,8 @@ class OobeInteractiveUITest : public OobeBaseTest,
                                   std::tuple<bool, bool, bool, ArcState>> {
  public:
   OobeInteractiveUITest() {
-    // TODO(https://crbug.com/1130502): Merge these functions into one.
-    branded_build_override_ = WizardController::ForceBrandedBuildForTesting();
-    sync_branded_build_override_ =
-        SyncConsentScreen::ForceBrandedBuildForTesting(true);
+    branded_build_override_ =
+        WizardController::ForceBrandedBuildForTesting(true);
   }
   ~OobeInteractiveUITest() override = default;
 
@@ -698,7 +691,6 @@ class OobeInteractiveUITest : public OobeBaseTest,
 
  private:
   std::unique_ptr<base::AutoReset<bool>> branded_build_override_;
-  std::unique_ptr<base::AutoReset<bool>> sync_branded_build_override_;
   FakeGaiaMixin fake_gaia_{&mixin_host_, embedded_test_server()};
   FakeEulaMixin fake_eula_{&mixin_host_, embedded_test_server()};
 

@@ -12,6 +12,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/unguessable_token.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/serial/serial_blocklist.h"
 #include "chrome/browser/serial/serial_chooser_context_factory.h"
 #include "chrome/browser/serial/serial_chooser_histograms.h"
 #include "chrome/grit/generated_resources.h"
@@ -48,12 +49,23 @@ SerialChooserController::~SerialChooserController() {
     RunCallback(/*port=*/nullptr);
 }
 
+bool SerialChooserController::ShouldShowHelpButton() const {
+  return false;
+}
+
 base::string16 SerialChooserController::GetNoOptionsText() const {
   return l10n_util::GetStringUTF16(IDS_DEVICE_CHOOSER_NO_DEVICES_FOUND_PROMPT);
 }
 
 base::string16 SerialChooserController::GetOkButtonLabel() const {
   return l10n_util::GetStringUTF16(IDS_SERIAL_PORT_CHOOSER_CONNECT_BUTTON_TEXT);
+}
+
+std::pair<base::string16, base::string16>
+SerialChooserController::GetThrobberLabelAndTooltip() const {
+  return {
+      l10n_util::GetStringUTF16(IDS_SERIAL_PORT_CHOOSER_LOADING_LABEL),
+      l10n_util::GetStringUTF16(IDS_SERIAL_PORT_CHOOSER_LOADING_LABEL_TOOLTIP)};
 }
 
 size_t SerialChooserController::NumOptions() const {
@@ -114,7 +126,7 @@ void SerialChooserController::OpenHelpCenterUrl() const {
 
 void SerialChooserController::OnPortAdded(
     const device::mojom::SerialPortInfo& port) {
-  if (!FilterMatchesAny(port))
+  if (!DisplayDevice(port))
     return;
 
   ports_.push_back(port.Clone());
@@ -148,7 +160,7 @@ void SerialChooserController::OnGetDevices(
             });
 
   for (auto& port : ports) {
-    if (FilterMatchesAny(*port))
+    if (DisplayDevice(*port))
       ports_.push_back(std::move(port));
   }
 
@@ -156,8 +168,11 @@ void SerialChooserController::OnGetDevices(
     view()->OnOptionsInitialized();
 }
 
-bool SerialChooserController::FilterMatchesAny(
+bool SerialChooserController::DisplayDevice(
     const device::mojom::SerialPortInfo& port) const {
+  if (SerialBlocklist::Get().IsExcluded(port))
+    return false;
+
   if (filters_.empty())
     return true;
 

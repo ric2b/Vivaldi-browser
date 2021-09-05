@@ -18,6 +18,7 @@
 #include "content/browser/devtools/service_worker_devtools_agent_host.h"
 #include "content/browser/devtools/service_worker_devtools_manager.h"
 #include "content/browser/loader/navigation_url_loader_impl.h"
+#include "content/browser/loader/single_request_url_loader_factory.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/navigation_request.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
@@ -353,13 +354,25 @@ class ServiceWorkerFetchDispatcher::ResponseCallback
       ServiceWorkerVersion* version)
       : receiver_(this, std::move(receiver)),
         fetch_dispatcher_(fetch_dispatcher),
-        version_(version) {}
+        version_(version) {
+    receiver_.set_disconnect_handler(base::BindOnce(
+        &ResponseCallback::OnDisconnected, base::Unretained(this)));
+  }
 
   ~ResponseCallback() override { DCHECK(fetch_event_id_.has_value()); }
 
   void set_fetch_event_id(int id) {
     DCHECK(!fetch_event_id_);
     fetch_event_id_ = id;
+  }
+
+  void OnDisconnected() {
+    version_->FinishRequest(fetch_event_id_.value(), /*was_handled=*/false);
+    // HandleResponse() is not needed to be called here because
+    // OnFetchEventFinished() should be called with an error code when
+    // disconnecting without response, and it lets the request failed.
+
+    // Do not add code here because FinishRequest() removes `this`.
   }
 
   // Implements blink::mojom::ServiceWorkerFetchResponseCallback.
@@ -538,8 +551,7 @@ void ServiceWorkerFetchDispatcher::StartWorker() {
       base::BindOnce(&ServiceWorkerFetchDispatcher::DidStartWorker,
                      weak_factory_.GetWeakPtr()));
 
-  if (ServiceWorkerContext::IsServiceWorkerOnUIEnabled() &&
-      version_->is_endpoint_ready()) {
+  if (version_->is_endpoint_ready()) {
     // For an active service worker, the endpoint becomes ready synchronously
     // with StartWorker(). In that case, we can dispatch FetchEvent immediately.
     DispatchFetchEvent();
@@ -557,6 +569,7 @@ void ServiceWorkerFetchDispatcher::DidStartWorker(
     DidFail(status);
     return;
   }
+
   if (!IsEventDispatched()) {
     DispatchFetchEvent();
   }
@@ -757,6 +770,21 @@ bool ServiceWorkerFetchDispatcher::MaybeStartNavigationPreload(
   url_loader_client->Bind(&url_loader_client_to_pass);
   mojo::PendingRemote<network::mojom::URLLoader> url_loader;
 
+  // Allow the embedder to intercept the URLLoader request if necessary. This
+  // must be a synchronous decision by the embedder. In the future, we may wish
+  // to support asynchronous decisions using |URLLoaderRequestInterceptor| in
+  // the same fashion that they are used for navigation requests.
+  ContentBrowserClient::URLLoaderRequestHandler embedder_url_loader_handler =
+      GetContentClient()
+          ->browser()
+          ->CreateURLLoaderHandlerForServiceWorkerNavigationPreload(
+              frame_tree_node_id, resource_request);
+
+  if (!embedder_url_loader_handler.is_null()) {
+    factory = base::MakeRefCounted<content::SingleRequestURLLoaderFactory>(
+        std::move(embedder_url_loader_handler));
+  }
+
   factory->CreateLoaderAndStart(
       url_loader.InitWithNewPipeAndPassReceiver(), -1 /* routing_id? */,
       GlobalRequestID::MakeBrowserInitiated().request_id,
@@ -782,13 +810,16 @@ bool ServiceWorkerFetchDispatcher::IsEventDispatched() const {
   return request_.is_null();
 }
 
+// static
 void ServiceWorkerFetchDispatcher::OnFetchEventFinished(
+    base::WeakPtr<ServiceWorkerFetchDispatcher> fetch_dispatcher,
     ServiceWorkerVersion* version,
     int event_finish_id,
     scoped_refptr<URLLoaderAssets> url_loader_assets,
     blink::mojom::ServiceWorkerEventStatus status) {
-  if (status == blink::mojom::ServiceWorkerEventStatus::TIMEOUT) {
-    DidFail(blink::ServiceWorkerStatusCode::kErrorTimeout);
+  if (fetch_dispatcher &&
+      status == blink::mojom::ServiceWorkerEventStatus::TIMEOUT) {
+    fetch_dispatcher->DidFail(blink::ServiceWorkerStatusCode::kErrorTimeout);
   }
   version->FinishRequest(
       event_finish_id,

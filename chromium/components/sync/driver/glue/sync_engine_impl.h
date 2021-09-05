@@ -52,7 +52,7 @@ class SyncPrefs;
 // The only real implementation of the SyncEngine. See that interface's
 // definition for documentation of public methods.
 class SyncEngineImpl : public SyncEngine,
-                       public InvalidationHandler,
+                       public invalidation::InvalidationHandler,
                        public InvalidationsListener {
  public:
   using Status = SyncStatus;
@@ -93,15 +93,14 @@ class SyncEngineImpl : public SyncEngine,
   void RequestBufferedProtocolEventsAndEnableForwarding() override;
   void DisableProtocolEventForwarding() override;
   void OnCookieJarChanged(bool account_mismatch,
-                          bool empty_jar,
                           base::OnceClosure callback) override;
   void SetInvalidationsForSessionsEnabled(bool enabled) override;
   void GetNigoriNodeForDebugging(AllNodesCallback callback) override;
 
   // InvalidationHandler implementation.
-  void OnInvalidatorStateChange(InvalidatorState state) override;
+  void OnInvalidatorStateChange(invalidation::InvalidatorState state) override;
   void OnIncomingInvalidation(
-      const TopicInvalidationMap& invalidation_map) override;
+      const invalidation::TopicInvalidationMap& invalidation_map) override;
   std::string GetOwnerName() const override;
   void OnInvalidatorClientIdChange(const std::string& client_id) override;
 

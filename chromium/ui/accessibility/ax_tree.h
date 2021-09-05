@@ -58,7 +58,7 @@ class AX_EXPORT AXTree : public AXNode::OwnerTree {
 
   AXNode* root() const { return root_; }
 
-  const AXTreeData& data() const { return data_; }
+  const AXTreeData& data() const override;
 
   // Destroys the tree and notifies all observers.
   void Destroy();
@@ -174,6 +174,13 @@ class AX_EXPORT AXTree : public AXNode::OwnerTree {
   const std::vector<AXEventIntent>& event_intents() const {
     return event_intents_;
   }
+
+  // Notify the delegate that the tree manager for |previous_tree_id| will be
+  // removed from the AXTreeManagerMap. Because we sometimes remove the tree
+  // manager after the tree's id has been modified, we need to pass the (old)
+  // tree id associated with the manager we are removing even though it is the
+  // same tree.
+  void NotifyTreeManagerWillBeRemoved(AXTreeID previous_tree_id);
 
  private:
   friend class AXTableInfoTest;

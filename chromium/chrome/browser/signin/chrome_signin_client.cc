@@ -14,6 +14,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -50,16 +51,15 @@
 #include "chrome/browser/supervised_user/supervised_user_constants.h"
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/chromeos/net/delay_network_call.h"
 #endif
 
 #if !defined(OS_ANDROID)
-#include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/profiles/profile_window.h"
 #endif
 
-#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+#if !defined(OS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/user_manager.h"
 #endif
@@ -94,13 +94,13 @@ SigninClient::SignoutDecision IsSignoutAllowed(
 }  // namespace
 
 ChromeSigninClient::ChromeSigninClient(Profile* profile) : profile_(profile) {
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   content::GetNetworkConnectionTracker()->AddNetworkConnectionObserver(this);
 #endif
 }
 
 ChromeSigninClient::~ChromeSigninClient() {
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   content::GetNetworkConnectionTracker()->RemoveNetworkConnectionObserver(this);
 #endif
 }
@@ -162,7 +162,7 @@ void ChromeSigninClient::PreSignOut(
   DCHECK(!on_signout_decision_reached_) << "SignOut already in-progress!";
   on_signout_decision_reached_ = std::move(on_signout_decision_reached);
 
-#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+#if !defined(OS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
 
   // These sign out won't remove the policy cache, keep the window opened.
   bool keep_window_opened =
@@ -171,8 +171,8 @@ void ChromeSigninClient::PreSignOut(
       signout_source_metric == signin_metrics::SERVER_FORCED_DISABLE ||
       signout_source_metric == signin_metrics::SIGNOUT_PREF_CHANGED;
   if (signin_util::IsForceSigninEnabled() && !profile_->IsSystemProfile() &&
-      !profile_->IsGuestSession() && !profile_->IsSupervised() &&
-      !keep_window_opened) {
+      !profile_->IsGuestSession() && !profile_->IsEphemeralGuestProfile() &&
+      !profile_->IsSupervised() && !keep_window_opened) {
     if (signout_source_metric ==
         signin_metrics::SIGNIN_PREF_CHANGED_DURING_SIGNIN) {
       // SIGNIN_PREF_CHANGED_DURING_SIGNIN will be triggered when
@@ -242,7 +242,7 @@ void ChromeSigninClient::OnAccessTokenAvailable(
   oauth_client_->GetTokenInfo(access_token_info.token, 3 /* retries */, this);
 }
 
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 void ChromeSigninClient::OnConnectionChanged(
     network::mojom::ConnectionType type) {
   if (type == network::mojom::ConnectionType::CONNECTION_NONE)
@@ -256,7 +256,7 @@ void ChromeSigninClient::OnConnectionChanged(
 #endif
 
 void ChromeSigninClient::DelayNetworkCall(base::OnceClosure callback) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   chromeos::DelayNetworkCall(
       base::TimeDelta::FromMilliseconds(chromeos::kDefaultNetworkRetryDelayMS),
       std::move(callback));
@@ -284,7 +284,7 @@ std::unique_ptr<GaiaAuthFetcher> ChromeSigninClient::CreateGaiaAuthFetcher(
 }
 
 void ChromeSigninClient::VerifySyncToken() {
-#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+#if !defined(OS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
   // We only verifiy the token once when Profile is just created.
   if (signin_util::IsForceSigninEnabled() && !force_signin_verifier_)
     force_signin_verifier_ = std::make_unique<ForceSigninVerifier>(
@@ -293,7 +293,7 @@ void ChromeSigninClient::VerifySyncToken() {
 }
 
 void ChromeSigninClient::MaybeFetchSigninTokenHandle() {
-#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+#if !defined(OS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
   // We get a "handle" that can be used to reference the signin token on the
   // server.  We fetch this if we don't have one so that later we can check
   // it to know if the signin token to which it is attached has been revoked
@@ -343,7 +343,7 @@ void ChromeSigninClient::SetURLLoaderFactoryForTest(
 void ChromeSigninClient::OnCloseBrowsersSuccess(
     const signin_metrics::ProfileSignout signout_source_metric,
     const base::FilePath& profile_path) {
-#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+#if !defined(OS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
   if (signin_util::IsForceSigninEnabled() && force_signin_verifier_.get()) {
     force_signin_verifier_->Cancel();
   }
@@ -383,7 +383,7 @@ void ChromeSigninClient::LockForceSigninProfile(
 }
 
 void ChromeSigninClient::ShowUserManager(const base::FilePath& profile_path) {
-#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+#if !defined(OS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
   UserManager::Show(profile_path,
                     profiles::USER_MANAGER_SELECT_PROFILE_NO_ACTION);
 #endif

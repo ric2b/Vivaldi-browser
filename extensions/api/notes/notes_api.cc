@@ -7,8 +7,8 @@
 #include <utility>
 #include <vector>
 
-#include "base/i18n/string_search.h"
 #include "base/guid.h"
+#include "base/i18n/string_search.h"
 #include "base/lazy_instance.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -18,21 +18,22 @@
 #include "extensions/browser/event_router.h"
 #include "extensions/schema/notes.h"
 #include "extensions/tools/vivaldi_tools.h"
+#include "notes/note_node.h"
 #include "notes/notes_factory.h"
 #include "notes/notes_model.h"
-#include "notes/note_node.h"
 #include "ui/base/models/tree_node_iterator.h"
 
-using vivaldi::NotesModelFactory;
-using vivaldi::NotesModel;
-using vivaldi::NoteNode;
-using extensions::vivaldi::notes::NoteTreeNode;
 using extensions::vivaldi::notes::NoteAttachment;
+using extensions::vivaldi::notes::NoteTreeNode;
+using vivaldi::NoteNode;
+using vivaldi::NotesModel;
+using vivaldi::NotesModelFactory;
 
 namespace extensions {
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<NotesAPI> >::
-    DestructorAtExit g_factory_notes = LAZY_INSTANCE_INITIALIZER;
+static base::LazyInstance<
+    BrowserContextKeyedAPIFactory<NotesAPI>>::DestructorAtExit g_factory_notes =
+    LAZY_INSTANCE_INITIALIZER;
 
 // static
 BrowserContextKeyedAPIFactory<NotesAPI>* NotesAPI::GetFactoryInstance() {
@@ -185,7 +186,7 @@ NoteTreeNode MakeTreeNode(NoteNode* node) {
 
   if (node->is_folder()) {
     std::vector<NoteTreeNode> children;
-    for (auto& it: node->children()) {
+    for (auto& it : node->children()) {
       children.push_back(MakeTreeNode(it.get()));
     }
     notes_tree_node.children.reset(
@@ -202,7 +203,7 @@ NoteNode* GetNodeFromId(NoteNode* node, int64_t id) {
   if (node->id() == id) {
     return node;
   }
-  for (auto& it: node->children()) {
+  for (auto& it : node->children()) {
     NoteNode* childnode = GetNodeFromId(it.get(), id);
     if (childnode) {
       return childnode;
@@ -212,8 +213,8 @@ NoteNode* GetNodeFromId(NoteNode* node, int64_t id) {
 }
 
 NoteNode* ParseNoteId(NotesModel* model,
-                        const std::string& id_str,
-                        std::string* error) {
+                      const std::string& id_str,
+                      std::string* error) {
   int64_t id;
   if (!base::StringToInt64(id_str, &id)) {
     *error = "Note id is not a number - " + id_str;
@@ -230,7 +231,6 @@ NoteNode* ParseNoteId(NotesModel* model,
 }  // namespace
 
 ///// TODO MOVE TO SEPARATE FILE  ^^^
-
 
 ExtensionFunction::ResponseAction NotesGetFunction::Run() {
   std::unique_ptr<vivaldi::notes::Get::Params> params(
@@ -282,8 +282,8 @@ void NotesGetTreeFunction::SendGetTreeResponse(NotesModel* model) {
   NoteTreeNode new_note = MakeTreeNode(root);
   new_note.children->push_back(MakeTreeNode(model->trash_node()));
   // After the above push the condition is always true
-  //if (new_note.children->size()) {  // Do not return root.
-    notes.push_back(std::move(new_note));
+  // if (new_note.children->size()) {  // Do not return root.
+  notes.push_back(std::move(new_note));
   //}
   Respond(ArgumentList(vivaldi::notes::GetTree::Results::Create(notes)));
 }
@@ -323,7 +323,7 @@ ExtensionFunction::ResponseAction NotesCreateFunction::Run() {
   }
 
   std::unique_ptr<NoteNode> newnode =
-      std::make_unique<NoteNode>(id, base::GenerateGUID(), type);
+      std::make_unique<NoteNode>(id, base::GUID::GenerateRandomV4(), type);
   NoteNode* newnode_ptr = newnode.get();
   // Lots of optionals, make sure to check for the contents.
   if (params->note.title.get()) {
@@ -591,7 +591,7 @@ ExtensionFunction::ResponseAction NotesMoveFunction::Run() {
   if (params->destination.index.get()) {  // Optional (defaults to end).
     index = *params->destination.index;
     if (index > parent->children().size() || index < 0) {
-       // Todo move to constant
+      // Todo move to constant
       return RespondNow(Error("Index out of bounds."));
     }
   } else {
@@ -614,8 +614,8 @@ ExtensionFunction::ResponseAction NotesMoveFunction::Run() {
   SendMoved(browser_context(), node->id(), parent->id(), index, old_parent_id,
             old_index);
 
-  return RespondNow(ArgumentList(
-      vivaldi::notes::Move::Results::Create(MakeTreeNode(node))));
+  return RespondNow(
+      ArgumentList(vivaldi::notes::Move::Results::Create(MakeTreeNode(node))));
 }
 
 ExtensionFunction::ResponseAction NotesEmptyTrashFunction::Run() {

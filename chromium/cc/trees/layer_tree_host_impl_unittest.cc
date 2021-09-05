@@ -423,6 +423,7 @@ class LayerTreeHostImplTest : public testing::Test,
     auto* root =
         SetupRootLayer<LayerImpl>(layer_tree_impl, inner_viewport_size);
     SetupViewport(root, outer_viewport_size, content_size);
+    host_impl_->SetVisualDeviceViewportSize(inner_viewport_size);
 
     UpdateDrawProperties(layer_tree_impl);
     layer_tree_impl->DidBecomeActive();
@@ -518,7 +519,7 @@ class LayerTreeHostImplTest : public testing::Test,
       ASSERT_EQ(ScrollThread::SCROLL_ON_IMPL_THREAD, status.thread);
       ASSERT_TRUE(status.needs_main_thread_hit_test);
     } else {
-      ASSERT_EQ(ScrollThread::SCROLL_UNKNOWN, status.thread);
+      ASSERT_EQ(ScrollThread::SCROLL_ON_MAIN_THREAD, status.thread);
       ASSERT_EQ(MainThreadScrollingReason::kFailedHitTest,
                 status.main_thread_scrolling_reasons);
     }
@@ -533,7 +534,7 @@ class LayerTreeHostImplTest : public testing::Test,
       ASSERT_EQ(ScrollThread::SCROLL_ON_IMPL_THREAD, status.thread);
       ASSERT_TRUE(status.needs_main_thread_hit_test);
     } else {
-      ASSERT_EQ(ScrollThread::SCROLL_UNKNOWN, status.thread);
+      ASSERT_EQ(ScrollThread::SCROLL_ON_MAIN_THREAD, status.thread);
       ASSERT_EQ(MainThreadScrollingReason::kFailedHitTest,
                 status.main_thread_scrolling_reasons);
     }
@@ -1635,7 +1636,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest,
               status.main_thread_scrolling_reasons);
     EXPECT_TRUE(status.needs_main_thread_hit_test);
   } else {
-    EXPECT_EQ(ScrollThread::SCROLL_UNKNOWN, status.thread);
+    EXPECT_EQ(ScrollThread::SCROLL_ON_MAIN_THREAD, status.thread);
     EXPECT_EQ(MainThreadScrollingReason::kFailedHitTest,
               status.main_thread_scrolling_reasons);
   }
@@ -2025,7 +2026,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest,
                 status.main_thread_scrolling_reasons);
       ASSERT_TRUE(status.needs_main_thread_hit_test);
     } else {
-      ASSERT_EQ(ScrollThread::SCROLL_UNKNOWN, status.thread);
+      ASSERT_EQ(ScrollThread::SCROLL_ON_MAIN_THREAD, status.thread);
       ASSERT_EQ(MainThreadScrollingReason::kFailedHitTest,
                 status.main_thread_scrolling_reasons);
     }
@@ -2081,7 +2082,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest,
                 status.main_thread_scrolling_reasons);
       EXPECT_TRUE(status.needs_main_thread_hit_test);
     } else {
-      EXPECT_EQ(ScrollThread::SCROLL_UNKNOWN, status.thread);
+      EXPECT_EQ(ScrollThread::SCROLL_ON_MAIN_THREAD, status.thread);
       EXPECT_EQ(MainThreadScrollingReason::kFailedHitTest,
                 status.main_thread_scrolling_reasons);
     }
@@ -2290,7 +2291,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, FixedLayerOverNonFixedLayer) {
                 status.main_thread_scrolling_reasons);
       EXPECT_TRUE(status.needs_main_thread_hit_test);
     } else {
-      EXPECT_EQ(ScrollThread::SCROLL_UNKNOWN, status.thread);
+      EXPECT_EQ(ScrollThread::SCROLL_ON_MAIN_THREAD, status.thread);
       EXPECT_EQ(MainThreadScrollingReason::kFailedHitTest,
                 status.main_thread_scrolling_reasons);
     }
@@ -11651,7 +11652,7 @@ TEST_P(LayerTreeHostImplTestWithRenderer, ShutdownReleasesContext) {
 // LayerTreeHostImpl::IsInitialScrollHitTestReliable for details.
 TEST_P(ScrollUnifiedLayerTreeHostImplTest, ScrollHitTestIsNotReliable) {
   // If we ray cast a scroller that is not on the first layer's ancestor chain,
-  // we should return ScrollThread::SCROLL_UNKNOWN.
+  // we should return ScrollThread::SCROLL_ON_MAIN_THREAD.
   gfx::Size viewport_size(50, 50);
   gfx::Size content_size(100, 100);
   SetupViewportLayersOuterScrolls(viewport_size, content_size);
@@ -11677,7 +11678,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, ScrollHitTestIsNotReliable) {
     EXPECT_EQ(ScrollThread::SCROLL_ON_IMPL_THREAD, status.thread);
     EXPECT_TRUE(status.needs_main_thread_hit_test);
   } else {
-    EXPECT_EQ(ScrollThread::SCROLL_UNKNOWN, status.thread);
+    EXPECT_EQ(ScrollThread::SCROLL_ON_MAIN_THREAD, status.thread);
     EXPECT_EQ(MainThreadScrollingReason::kFailedHitTest,
               status.main_thread_scrolling_reasons);
   }
@@ -11688,7 +11689,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, ScrollHitTestIsNotReliable) {
 TEST_P(ScrollUnifiedLayerTreeHostImplTest, ScrollHitTestAncestorMismatch) {
   // If we ray cast a scroller this is on the first layer's ancestor chain, but
   // is not the first scroller we encounter when walking up from the layer, we
-  // should also return ScrollThread::SCROLL_UNKNOWN.
+  // should also return ScrollThread::SCROLL_ON_MAIN_THREAD.
   gfx::Size viewport_size(50, 50);
   gfx::Size content_size(100, 100);
   SetupViewportLayersOuterScrolls(viewport_size, content_size);
@@ -11720,7 +11721,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, ScrollHitTestAncestorMismatch) {
     EXPECT_EQ(ScrollThread::SCROLL_ON_IMPL_THREAD, status.thread);
     EXPECT_TRUE(status.needs_main_thread_hit_test);
   } else {
-    EXPECT_EQ(ScrollThread::SCROLL_UNKNOWN, status.thread);
+    EXPECT_EQ(ScrollThread::SCROLL_ON_MAIN_THREAD, status.thread);
     EXPECT_EQ(MainThreadScrollingReason::kFailedHitTest,
               status.main_thread_scrolling_reasons);
   }
@@ -14252,7 +14253,7 @@ TEST_F(LayerTreeHostImplTest, JumpOnScrollbarClick) {
     InputHandlerPointerResult result = GetInputHandler().MouseDown(
         gfx::PointF(350, 400), /*jump_key_modifier*/ true);
     EXPECT_EQ(result.type, PointerResultType::kScrollbarScroll);
-    EXPECT_EQ(result.scroll_offset.y(), 2194);
+    EXPECT_FLOAT_EQ(result.scroll_offset.y(), 2194.2856f);
     result = GetInputHandler().MouseUp(gfx::PointF(350, 400));
     EXPECT_EQ(result.type, PointerResultType::kScrollbarScroll);
     EXPECT_EQ(result.scroll_offset.y(), 0);
@@ -14265,7 +14266,7 @@ TEST_F(LayerTreeHostImplTest, JumpOnScrollbarClick) {
     InputHandlerPointerResult result = GetInputHandler().MouseDown(
         gfx::PointF(350, 400), /*jump_key_modifier*/ false);
     EXPECT_EQ(result.type, PointerResultType::kScrollbarScroll);
-    EXPECT_EQ(result.scroll_offset.y(), 2194);
+    EXPECT_FLOAT_EQ(result.scroll_offset.y(), 2194.2856f);
     result = GetInputHandler().MouseUp(gfx::PointF(350, 400));
     EXPECT_EQ(result.type, PointerResultType::kScrollbarScroll);
     EXPECT_EQ(result.scroll_offset.y(), 0);
@@ -14342,7 +14343,8 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, ThumbDragAfterJumpClick) {
             gfx::PointF(350, 560), /*jump_key_modifier*/ true);
 
     // This verifies that the jump click took place as expected.
-    EXPECT_EQ(gfx::ScrollOffset(0, 243), result.scroll_offset);
+    EXPECT_EQ(0, result.scroll_offset.x());
+    EXPECT_FLOAT_EQ(result.scroll_offset.y(), 243.80952f);
 
     // This verifies that the drag_state_ was initialized when a jump click
     // occurred.
@@ -14351,10 +14353,10 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, ThumbDragAfterJumpClick) {
                     ->drag_state_.has_value());
 
     // This verifies that the jump click delta was accounted for correctly.
-    EXPECT_EQ(GetInputHandler()
-                  .scrollbar_controller_for_testing()
-                  ->drag_state_->scroll_position_at_start_,
-              243);
+    EXPECT_FLOAT_EQ(GetInputHandler()
+                        .scrollbar_controller_for_testing()
+                        ->drag_state_->scroll_position_at_start_,
+                    243.80952f);
   }
 
   // Tear down the LayerTreeHostImpl before the InputHandlerClient.
@@ -14530,7 +14532,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, ThumbDragScrollerLengthIncrease) {
   host_impl_->WillBeginImplFrame(begin_frame_args);
 
   result = GetInputHandler().MouseMoveAt(gfx::Point(350, 20));
-  EXPECT_EQ(result.scroll_offset.y(), 12);
+  EXPECT_FLOAT_EQ(result.scroll_offset.y(), 12.190476f);
 
   // This is intentional. The thumb drags that follow will test the behavior
   // *after* the scroller length expansion.
@@ -14563,7 +14565,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, ThumbDragScrollerLengthIncrease) {
   begin_frame_args.frame_id.sequence_number++;
   host_impl_->WillBeginImplFrame(begin_frame_args);
   result = GetInputHandler().MouseMoveAt(gfx::Point(350, 26));
-  EXPECT_EQ(result.scroll_offset.y(), 49);
+  EXPECT_FLOAT_EQ(result.scroll_offset.y(), 48.761906f);
   GetInputHandler().MouseUp(gfx::PointF(350, 26));
   host_impl_->DidFinishImplFrame(begin_frame_args);
 
@@ -17403,7 +17405,7 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, PercentBasedScrollbarDeltasDSF3) {
   GetInputHandler().BindToClient(&input_handler_client);
 
   // Test scrolling with device scale factor = 3.
-  const float expected_delta = floorf(kPercentDeltaForDirectionalScroll * 500);
+  const float expected_delta = kPercentDeltaForDirectionalScroll * 500;
 
   host_impl_->active_tree()->set_painted_device_scale_factor(3);
 

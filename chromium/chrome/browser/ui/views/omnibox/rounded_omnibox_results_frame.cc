@@ -15,6 +15,7 @@
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/views/bubble/bubble_border.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 
 #if defined(USE_AURA)
 #include "ui/aura/window.h"
@@ -166,8 +167,8 @@ RoundedOmniboxResultsFrame::RoundedOmniboxResultsFrame(
 
   // Initialize the shadow.
   auto border = std::make_unique<views::BubbleBorder>(
-      views::BubbleBorder::Arrow::NONE, views::BubbleBorder::Shadow::BIG_SHADOW,
-      gfx::kPlaceholderColor);
+      views::BubbleBorder::Arrow::NONE,
+      views::BubbleBorder::Shadow::STANDARD_SHADOW, gfx::kPlaceholderColor);
   border->SetCornerRadius(corner_radius);
   border->set_md_shadow_elevation(kElevation);
   SetBorder(std::move(border));
@@ -213,10 +214,6 @@ gfx::Insets RoundedOmniboxResultsFrame::GetLocationBarAlignmentInsets() {
 // static
 gfx::Insets RoundedOmniboxResultsFrame::GetShadowInsets() {
   return views::BubbleBorder::GetBorderAndShadowInsets(kElevation);
-}
-
-const char* RoundedOmniboxResultsFrame::GetClassName() const {
-  return "RoundedOmniboxResultsFrame";
 }
 
 void RoundedOmniboxResultsFrame::Layout() {
@@ -284,3 +281,6 @@ void RoundedOmniboxResultsFrame::OnThemeChanged() {
                                   : gfx::kGoogleGrey800);
   SchedulePaint();
 }
+
+BEGIN_METADATA(RoundedOmniboxResultsFrame, views::View)
+END_METADATA

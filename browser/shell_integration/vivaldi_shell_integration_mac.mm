@@ -5,6 +5,10 @@
 
 #include "browser/shell_integration/vivaldi_shell_integration.h"
 
+#include "base/mac/foundation_util.h"
+#include "base/mac/mac_util.h"
+#include "base/mac/scoped_cftyperef.h"
+#include "base/strings/sys_string_conversions.h"
 #import "third_party/mozilla/NSWorkspace+Utils.h"
 
 namespace vivaldi {
@@ -14,15 +18,14 @@ namespace {
 // Copied from chromium/chrome/browser/shell_integration_mac.mm
 // Returns true if |identifier| is the bundle id of the default browser.
 bool IsIdentifierDefaultBrowser(NSString* identifier) {
-  NSString* default_browser =
-      [[NSWorkspace sharedWorkspace] defaultBrowserIdentifier];
+  base::ScopedCFTypeRef<CFStringRef> default_browser(
+      LSCopyDefaultHandlerForURLScheme(CFSTR("http")));
   if (!default_browser)
     return false;
 
-  // We need to ensure we do the comparison case-insensitive as LS doesn't
-  // persist the case of our bundle id.
+  // Do the comparison case-insensitively as LS smashes the case.
   NSComparisonResult result =
-      [default_browser caseInsensitiveCompare:identifier];
+     [base::mac::CFToNSCast(default_browser) caseInsensitiveCompare:identifier];
   return result == NSOrderedSame;
 }
 

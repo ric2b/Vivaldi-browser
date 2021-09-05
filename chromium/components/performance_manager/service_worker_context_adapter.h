@@ -58,9 +58,7 @@ class ServiceWorkerContextAdapter
   content::ServiceWorkerExternalRequestResult FinishedExternalRequest(
       int64_t service_worker_version_id,
       const std::string& request_uuid) override;
-  void CountExternalRequestsForTest(
-      const url::Origin& origin,
-      CountExternalRequestsCallback callback) override;
+  size_t CountExternalRequestsForTest(const url::Origin& origin) override;
   bool MaybeHasRegistrationForOrigin(const url::Origin& origin) override;
   void GetInstalledRegistrationOrigins(
       base::Optional<std::string> host_filter,
@@ -74,9 +72,10 @@ class ServiceWorkerContextAdapter
   void CheckOfflineCapability(const GURL& url,
                               CheckOfflineCapabilityCallback callback) override;
   void ClearAllServiceWorkersForTest(base::OnceClosure callback) override;
-  void StartWorkerForScope(const GURL& scope,
-                           StartWorkerCallback info_callback,
-                           base::OnceClosure failure_callback) override;
+  void StartWorkerForScope(
+      const GURL& scope,
+      StartWorkerCallback info_callback,
+      StartWorkerFailureCallback failure_callback) override;
   void StartServiceWorkerAndDispatchMessage(
       const GURL& scope,
       blink::TransferableMessage message,

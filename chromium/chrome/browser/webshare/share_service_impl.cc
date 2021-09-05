@@ -10,6 +10,7 @@
 #include "base/feature_list.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/common/chrome_features.h"
 #include "content/public/browser/web_contents.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
@@ -25,7 +26,7 @@
 ShareServiceImpl::ShareServiceImpl(content::RenderFrameHost& render_frame_host)
     : content::WebContentsObserver(
           content::WebContents::FromRenderFrameHost(&render_frame_host)),
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
       sharesheet_client_(web_contents()),
 #endif
       render_frame_host_(&render_frame_host) {
@@ -139,11 +140,13 @@ void ShareServiceImpl::Share(const std::string& title,
   content::WebContents* const web_contents =
       content::WebContents::FromRenderFrameHost(render_frame_host_);
   if (!web_contents) {
+    VLOG(1) << "Cannot share after navigating away";
     std::move(callback).Run(blink::mojom::ShareError::PERMISSION_DENIED);
     return;
   }
 
   if (files.size() > kMaxSharedFileCount) {
+    VLOG(1) << "Share too large: " << files.size() << " files";
     std::move(callback).Run(blink::mojom::ShareError::PERMISSION_DENIED);
     return;
   }
@@ -156,6 +159,8 @@ void ShareServiceImpl::Share(const std::string& title,
 
     if (IsDangerousFilename(file->name) ||
         IsDangerousMimeType(file->blob->content_type)) {
+      VLOG(1) << "File type is not supported: " << file->name
+              << " has mime type " << file->blob->content_type;
       std::move(callback).Run(blink::mojom::ShareError::PERMISSION_DENIED);
       return;
     }
@@ -167,13 +172,14 @@ void ShareServiceImpl::Share(const std::string& title,
     // the blobs.
   }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   sharesheet_client_.Share(title, text, share_url, std::move(files),
                            std::move(callback));
 #elif defined(OS_WIN)
   auto share_operation = std::make_unique<webshare::ShareOperation>(
       title, text, share_url, std::move(files), web_contents);
-  share_operation->Run(base::BindOnce(
+  auto* const share_operation_ptr = share_operation.get();
+  share_operation_ptr->Run(base::BindOnce(
       [](std::unique_ptr<webshare::ShareOperation> share_operation,
          ShareCallback callback,
          blink::mojom::ShareError result) { std::move(callback).Run(result); },

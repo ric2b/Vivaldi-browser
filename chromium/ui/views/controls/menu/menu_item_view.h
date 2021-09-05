@@ -239,7 +239,7 @@ class VIEWS_EXPORT MenuItemView : public View {
 
   // Adds a callback subscription associated with the above selected property.
   // The callback will be invoked whenever the selected property changes.
-  PropertyChangedSubscription AddSelectedChangedCallback(
+  base::CallbackListSubscription AddSelectedChangedCallback(
       PropertyChangedCallback callback) WARN_UNUSED_RESULT;
 
   // Sets whether the submenu area of an ACTIONABLE_SUBMENU is selected.
@@ -362,6 +362,10 @@ class VIEWS_EXPORT MenuItemView : public View {
   // Returns whether or not a "new" badge should be shown on this menu item.
   // Takes into account whether the badging feature is enabled.
   bool ShouldShowNewBadge() const;
+
+  // Returns whether keyboard navigation through the menu should stop on this
+  // item.
+  bool IsTraversableByKeyboard() const;
 
  protected:
   // Creates a MenuItemView. This is used by the various AddXXX methods.

@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2018 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -8,9 +8,12 @@
 #include <utility>
 
 #include "ash/public/cpp/app_types.h"
+#include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shell.h"
+#include "ash/wm/desks/desks_controller.h"
+#include "ash/wm/desks/desks_util.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/window_positioner.h"
@@ -21,7 +24,9 @@
 #include "ash/wm/workspace/workspace_layout_manager.h"
 #include "ash/wm/workspace_controller.h"
 #include "base/containers/adapters.h"
+#include "base/containers/contains.h"
 #include "base/stl_util.h"
+#include "chromeos/ui/base/window_properties.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window_tracker.h"
 #include "ui/display/screen.h"
@@ -65,6 +70,42 @@ bool CanMoveWindowOutOfDeskContainer(aura::Window* window) {
          static_cast<int>(AppType::NON_APP);
 }
 
+// Adjusts the z-order stacking of |window_to_fix| in its parent to match its
+// order in the MRU window list. This is done after the window is moved from one
+// desk container to another by means of calling AddChild() which adds it as the
+// top-most window, which doesn't necessarily match the MRU order.
+// |window_to_fix| must be a child of a desk container, and the root of a
+// transient hierarchy (if it belongs to one).
+// This function must be called AddChild() was called to add the |window_to_fix|
+// (i.e. |window_to_fix| is the top-most window or the top-most window is a
+// transient child of |window_to_fix|).
+void FixWindowStackingAccordingToGlobalMru(aura::Window* window_to_fix) {
+  aura::Window* container = window_to_fix->parent();
+  DCHECK(desks_util::IsDeskContainer(container));
+  DCHECK_EQ(window_to_fix, wm::GetTransientRoot(window_to_fix));
+  DCHECK(window_to_fix == container->children().back() ||
+         window_to_fix == wm::GetTransientRoot(container->children().back()));
+
+  const auto mru_windows =
+      Shell::Get()->mru_window_tracker()->BuildWindowListIgnoreModal(
+          DesksMruType::kAllDesks);
+  // Find the closest sibling that is not a transient descendant, which
+  // |window_to_fix| should be stacked below.
+  aura::Window* closest_sibling_above_window = nullptr;
+  for (auto* window : mru_windows) {
+    if (window == window_to_fix) {
+      if (closest_sibling_above_window)
+        container->StackChildBelow(window_to_fix, closest_sibling_above_window);
+      return;
+    }
+
+    if (window->parent() == container &&
+        !wm::HasTransientAncestor(window, window_to_fix)) {
+      closest_sibling_above_window = window;
+    }
+  }
+}
+
 // Used to temporarily turn off the automatic window positioning while windows
 // are being moved between desks.
 class ScopedWindowPositionerDisabler {
@@ -100,6 +141,7 @@ class DeskContainerObserver : public aura::WindowObserver {
     // this window addition here. Consider ignoring these windows if they cause
     // problems.
     owner_->AddWindowToDesk(new_window);
+    MaybeNotifyAllDesksOfContentChange(new_window);
   }
 
   void OnWindowRemoved(aura::Window* removed_window) override {
@@ -107,6 +149,7 @@ class DeskContainerObserver : public aura::WindowObserver {
     // since we want to refresh the mini_views only after the window has been
     // removed from the window tree hierarchy.
     owner_->RemoveWindowFromDesk(removed_window);
+    MaybeNotifyAllDesksOfContentChange(removed_window);
   }
 
   void OnWindowDestroyed(aura::Window* window) override {
@@ -117,6 +160,16 @@ class DeskContainerObserver : public aura::WindowObserver {
   }
 
  private:
+  void MaybeNotifyAllDesksOfContentChange(aura::Window* window) {
+    // If a visible on all desks window is added/removed from a desk, only the
+    // desks directly involved will know about their contents changing since it
+    // only resides on the active desk. Since visible on all desks windows
+    // appear in each desks' preview view, we need to notify each desk.
+    auto* desks_controller = DesksController::Get();
+    if (desks_controller->visible_on_all_desks_windows().contains(window))
+      desks_controller->NotifyAllDesksForContentChanged();
+  }
+
   Desk* const owner_;
   aura::Window* const container_;
 
@@ -193,18 +246,31 @@ void Desk::AddWindowToDesk(aura::Window* window) {
   DCHECK(!base::Contains(windows_, window));
   windows_.push_back(window);
   // No need to refresh the mini_views if the destroyed window doesn't show up
-  // there in the first place.
-  if (!window->GetProperty(kHideInDeskMiniViewKey))
+  // there in the first place. Also don't refresh for visible on all desks
+  // windows since they're already refreshed in OnWindowAdded().
+  if (!window->GetProperty(kHideInDeskMiniViewKey) &&
+      !window->GetProperty(aura::client::kVisibleOnAllWorkspacesKey)) {
     NotifyContentChanged();
+  }
+
+  // Update the window's workspace to this parent desk.
+  if (features::IsBentoEnabled() && !is_desk_being_removed_) {
+    auto* desks_controller = DesksController::Get();
+    window->SetProperty(aura::client::kWindowWorkspaceKey,
+                        desks_controller->GetDeskIndex(this));
+  }
 }
 
 void Desk::RemoveWindowFromDesk(aura::Window* window) {
   DCHECK(base::Contains(windows_, window));
   base::Erase(windows_, window);
   // No need to refresh the mini_views if the destroyed window doesn't show up
-  // there in the first place.
-  if (!window->GetProperty(kHideInDeskMiniViewKey))
+  // there in the first place. Also don't refresh for visible on all desks
+  // windows since they're already refreshed in OnWindowRemoved().
+  if (!window->GetProperty(kHideInDeskMiniViewKey) &&
+      !window->GetProperty(aura::client::kVisibleOnAllWorkspacesKey)) {
     NotifyContentChanged();
+  }
 }
 
 base::AutoReset<bool> Desk::GetScopedNotifyContentChangedDisabler() {
@@ -370,12 +436,16 @@ void Desk::MoveWindowToDesk(aura::Window* window,
     //  by `wm::TransientWindowManager::OnWindowHierarchyChanged()`.
     aura::Window* transient_root = ::wm::GetTransientRoot(window);
     MoveWindowToDeskInternal(transient_root, target_desk, target_root);
+    FixWindowStackingAccordingToGlobalMru(transient_root);
 
     // Unminimize the window so that it shows up in the mini_view after it had
-    // been dragged and moved to another desk.
+    // been dragged and moved to another desk. Don't unminimize if the window is
+    // visible on all desks since it's being moved during desk activation.
     auto* window_state = WindowState::Get(transient_root);
-    if (window_state->IsMinimized())
+    if (window_state->IsMinimized() &&
+        !window->GetProperty(aura::client::kVisibleOnAllWorkspacesKey)) {
       window_state->Unminimize();
+    }
   }
 
   NotifyContentChanged();
@@ -412,6 +482,10 @@ void Desk::NotifyContentChanged() {
 void Desk::UpdateDeskBackdrops() {
   for (auto* root : Shell::GetAllRootWindows())
     UpdateBackdropController(GetDeskContainerForRoot(root));
+}
+
+void Desk::SetDeskBeingRemoved() {
+  is_desk_being_removed_ = true;
 }
 
 void Desk::MoveWindowToDeskInternal(aura::Window* window,

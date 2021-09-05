@@ -31,14 +31,6 @@ this['DiagnosticsApp'] = class extends PolymerTest {
   }
 
   /** @override */
-  get extraLibraries() {
-    return [
-      '//third_party/mocha/mocha.js',
-      '//chrome/test/data/webui/mocha_adapter.js',
-    ];
-  }
-
-  /** @override */
   get featureList() {
     return {
       enabled: [
@@ -52,11 +44,11 @@ this['DiagnosticsApp'] = class extends PolymerTest {
 // You must register all suites in unified test here as well for consistency,
 // although technically is not necessary.
 const debug_suites_list = [
-  'App', 'BatteryStatusCard', 'CpuCard', 'DataPoint', 'FakeMethodProvider',
-  'FakeMojoInterface', 'FakeObservables', 'FakeSystemDataProvider',
-  'FakeSystemRoutineContoller', 'MemoryCard', 'OverviewCard', 'PercentBarChart',
-  'RealtimeCpuChart', 'RoutineListExecutor', 'RoutineResultEntry',
-  'RoutineResultList', 'RoutineSection', 'TextBadge'
+  'App', 'BatteryStatusCard', 'CpuCard', 'DataPoint', 'DiagnosticsUtils',
+  'FakeMethodProvider', 'FakeMojoInterface', 'FakeObservables',
+  'FakeSystemDataProvider', 'FakeSystemRoutineContoller', 'MemoryCard',
+  'OverviewCard', 'PercentBarChart', 'RealtimeCpuChart', 'RoutineListExecutor',
+  'RoutineResultEntry', 'RoutineResultList', 'RoutineSection', 'TextBadge'
 ];
 
 TEST_F('DiagnosticsApp', 'BrowserTest', function() {

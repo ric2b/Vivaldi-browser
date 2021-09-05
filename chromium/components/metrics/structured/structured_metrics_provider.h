@@ -12,7 +12,9 @@
 #include "base/files/file_path.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/values.h"
 #include "components/metrics/metrics_provider.h"
+#include "components/metrics/structured/event_base.h"
 #include "components/metrics/structured/key_data.h"
 #include "components/metrics/structured/recorder.h"
 #include "components/prefs/persistent_pref_store.h"
@@ -84,6 +86,11 @@ class StructuredMetricsProvider : public metrics::MetricsProvider,
   friend class Recorder;
   friend class StructuredMetricsProviderTest;
 
+  enum class StorageType {
+    kAssociated,
+    kIndependent,
+  };
+
   // An error delegate called when |storage_| has finished reading prefs from
   // disk.
   class PrefStoreErrorDelegate : public PersistentPrefStore::ReadErrorDelegate {
@@ -95,11 +102,21 @@ class StructuredMetricsProvider : public metrics::MetricsProvider,
     void OnError(PersistentPrefStore::PrefReadError error) override;
   };
 
+  StructuredMetricsProvider::StorageType StorageTypeForIdType(
+      EventBase::IdentifierType type);
+  base::StringPiece ListKeyForStorageType(
+      StructuredMetricsProvider::StorageType type);
+  base::Value* GetEventsList(StorageType type);
+
   // metrics::MetricsProvider:
   void OnRecordingEnabled() override;
   void OnRecordingDisabled() override;
   void ProvideCurrentSessionData(
       metrics::ChromeUserMetricsExtension* uma_proto) override;
+  bool HasIndependentMetrics() override;
+  void ProvideIndependentMetrics(base::OnceCallback<void(bool)> done_callback,
+                                 ChromeUserMetricsExtension* uma_proto,
+                                 base::HistogramSnapshotManager*) override;
 
   // Recorder::Observer:
   void OnRecord(const EventBase& event) override;
@@ -146,9 +163,12 @@ class StructuredMetricsProvider : public metrics::MetricsProvider,
   // For details of key storage, see key_data.h
   //
   // Unsent logs are stored in hashed, ready-to-upload form in the structure:
-  //  logs[i].event
-  //         .metrics[j].name
-  //                    .value
+  //
+  //  events.<events_list>[i].metrics[j].name
+  //                                    .value
+  //
+  // The <events_list> key is either "associated" or "independent", for storing
+  // events that are or aren't associated with the UMA client_id.
   scoped_refptr<JsonPrefStore> storage_;
 
   // Storage for all event's keys, and hashing logic for values. This stores

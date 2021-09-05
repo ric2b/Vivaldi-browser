@@ -7,8 +7,10 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/memory/weak_ptr.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/sequence_checker.h"
+#include "base/timer/elapsed_timer.h"
 #include "components/cbor/reader.h"
 #include "components/cbor/values.h"
 #include "components/cbor/writer.h"
@@ -37,6 +39,55 @@ using base::android::ToJavaByteArray;
 using base::android::ToJavaIntArray;
 
 namespace {
+
+// CableV2MobileEvent enumerates several steps that occur during a caBLEv2
+// transaction. Do not change the assigned value since they are used in
+// histograms, only append new values. Keep synced with enums.xml.
+enum class CableV2MobileEvent {
+  kQRRead = 0,
+  kServerLink = 1,
+  kCloudMessage = 2,
+  kUSB = 3,
+  kSetup = 4,
+  kTunnelServerConnected = 5,
+  kHandshakeCompleted = 6,
+  kRequestReceived = 7,
+  kCTAPError = 8,
+  kUnlink = 9,
+  kNeedInteractive = 10,
+  kInteractionReady = 11,
+  kLinkingNotRequested = 12,
+
+  kMaxValue = 12,
+};
+
+void RecordEvent(CableV2MobileEvent event) {
+  base::UmaHistogramEnumeration("WebAuthentication.CableV2MobileEvent", event);
+}
+
+// CableV2MobileResult enumerates the outcome of a caBLEv2 transction. Do not
+// change the assigned value since they are used in histograms, only append new
+// values. Keep synced with enums.xml.
+enum class CableV2MobileResult {
+  kSuccess = 0,
+  kUnexpectedEOF = 1,
+  kTunnelServerConnectFailed = 2,
+  kHandshakeFailed = 3,
+  kDecryptFailure = 4,
+  kInvalidCBOR = 5,
+  kInvalidCTAP = 6,
+  kUnknownCommand = 7,
+  kInternalError = 8,
+  kInvalidQR = 9,
+  kInvalidServerLink = 10,
+
+  kMaxValue = 10,
+};
+
+void RecordResult(CableV2MobileResult result) {
+  base::UmaHistogramEnumeration("WebAuthentication.CableV2MobileResult",
+                                result);
+}
 
 // ParseState converts the bytes stored by Java into a root secret value.
 base::Optional<std::array<uint8_t, device::cablev2::kRootSecretSize>>
@@ -85,6 +136,29 @@ base::span<const uint8_t> JavaByteArrayToSpan(
   const size_t data_len = env->GetArrayLength(data);
   const jbyte* data_bytes = env->GetByteArrayElements(data, /*iscopy=*/nullptr);
   return base::as_bytes(base::make_span(data_bytes, data_len));
+}
+
+// JavaByteArrayToFixedSpan returns a span that aliases |data|, or |nullopt| if
+// the span is not of the correct length. Be aware that the reference for |data|
+// must outlive the span.
+template <size_t N>
+base::Optional<base::span<const uint8_t, N>> JavaByteArrayToFixedSpan(
+    JNIEnv* env,
+    const JavaParamRef<jbyteArray>& data) {
+  static_assert(N != 0,
+                "Zero case is different from JavaByteArrayToSpan as null "
+                "inputs will always be rejected here.");
+
+  if (data.is_null()) {
+    return base::nullopt;
+  }
+
+  const size_t data_len = env->GetArrayLength(data);
+  if (data_len != N) {
+    return base::nullopt;
+  }
+  const jbyte* data_bytes = env->GetByteArrayElements(data, /*iscopy=*/nullptr);
+  return base::as_bytes(base::make_span<N>(data_bytes, data_len));
 }
 
 // GlobalData holds all the state for ongoing security key operations. Since
@@ -182,7 +256,9 @@ class AndroidPlatform : public device::cablev2::authenticator::Platform {
       InteractionNeededCallback;
 
   AndroidPlatform(JNIEnv* env, const JavaRef<jobject>& cable_authenticator)
-      : env_(env), cable_authenticator_(cable_authenticator) {
+      : env_(env),
+        cable_authenticator_(cable_authenticator),
+        need_to_disable_bluetooth_(false) {
     DCHECK(env_->IsInstanceOf(
         cable_authenticator_.obj(),
         org_chromium_chrome_browser_webauth_authenticator_CableAuthenticator_clazz(
@@ -198,13 +274,18 @@ class AndroidPlatform : public device::cablev2::authenticator::Platform {
   // when ready, call the passed callback with a reference to it. The pending
   // action will then complete as normal.
   AndroidPlatform(JNIEnv* env,
-                  InteractionNeededCallback interaction_needed_callback)
+                  InteractionNeededCallback interaction_needed_callback,
+                  bool need_to_disable_bluetooth)
       : env_(env),
-        interaction_needed_callback_(std::move(interaction_needed_callback)) {}
+        interaction_needed_callback_(std::move(interaction_needed_callback)),
+        need_to_disable_bluetooth_(need_to_disable_bluetooth) {}
 
   ~AndroidPlatform() override {
     if (notification_showing_) {
       Java_CableAuthenticator_dropNotification(env_);
+    }
+    if (need_to_disable_bluetooth_) {
+      Java_CableAuthenticator_disableBluetooth(env_);
     }
   }
 
@@ -239,6 +320,30 @@ class AndroidPlatform : public device::cablev2::authenticator::Platform {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     LOG(ERROR) << __func__ << " " << static_cast<int>(status);
 
+    CableV2MobileEvent event;
+    switch (status) {
+      case Status::TUNNEL_SERVER_CONNECT:
+        event = CableV2MobileEvent::kTunnelServerConnected;
+        tunnel_server_connect_time_.emplace();
+        break;
+      case Status::HANDSHAKE_COMPLETE:
+        if (tunnel_server_connect_time_) {
+          base::UmaHistogramMediumTimes(
+              "WebAuthentication.CableV2RendezvousTime",
+              tunnel_server_connect_time_->Elapsed());
+          tunnel_server_connect_time_.reset();
+        }
+        event = CableV2MobileEvent::kHandshakeCompleted;
+        break;
+      case Status::REQUEST_RECEIVED:
+        event = CableV2MobileEvent::kRequestReceived;
+        break;
+      case Status::CTAP_ERROR:
+        event = CableV2MobileEvent::kCTAPError;
+        break;
+    }
+    RecordEvent(event);
+
     if (!cable_authenticator_) {
       return;
     }
@@ -250,6 +355,37 @@ class AndroidPlatform : public device::cablev2::authenticator::Platform {
   void OnCompleted(base::Optional<Error> maybe_error) override {
     LOG(ERROR) << __func__ << " "
                << (maybe_error ? static_cast<int>(*maybe_error) : -1);
+
+    CableV2MobileResult result = CableV2MobileResult::kSuccess;
+    if (maybe_error) {
+      switch (*maybe_error) {
+        case Error::UNEXPECTED_EOF:
+          result = CableV2MobileResult::kUnexpectedEOF;
+          break;
+        case Error::TUNNEL_SERVER_CONNECT_FAILED:
+          result = CableV2MobileResult::kTunnelServerConnectFailed;
+          break;
+        case Error::HANDSHAKE_FAILED:
+          result = CableV2MobileResult::kHandshakeFailed;
+          break;
+        case Error::DECRYPT_FAILURE:
+          result = CableV2MobileResult::kDecryptFailure;
+          break;
+        case Error::INVALID_CBOR:
+          result = CableV2MobileResult::kInvalidCBOR;
+          break;
+        case Error::INVALID_CTAP:
+          result = CableV2MobileResult::kInvalidCTAP;
+          break;
+        case Error::UNKNOWN_COMMAND:
+          result = CableV2MobileResult::kUnknownCommand;
+          break;
+        case Error::INTERNAL_ERROR:
+          result = CableV2MobileResult::kInternalError;
+          break;
+      }
+    }
+    RecordResult(result);
 
     // The transaction might fail before interactive mode, thus
     // |cable_authenticator_| may be empty.
@@ -326,6 +462,8 @@ class AndroidPlatform : public device::cablev2::authenticator::Platform {
         cable_authenticator.obj(),
         org_chromium_chrome_browser_webauth_authenticator_CableAuthenticator_clazz(
             env_)));
+
+    RecordEvent(CableV2MobileEvent::kInteractionReady);
     cable_authenticator_ = std::move(cable_authenticator);
     notification_showing_ = false;
 
@@ -344,6 +482,13 @@ class AndroidPlatform : public device::cablev2::authenticator::Platform {
   std::unique_ptr<MakeCredentialParams> pending_make_credential_;
   std::unique_ptr<GetAssertionParams> pending_get_assertion_;
   InteractionNeededCallback interaction_needed_callback_;
+  base::Optional<base::ElapsedTimer> tunnel_server_connect_time_;
+
+  // need_to_disable_bluetooth_ is true if Bluetooth was enabled on the system
+  // in order to handle this message and thus should be disabled once handling
+  // is complete.
+  const bool need_to_disable_bluetooth_;
+
   SEQUENCE_CHECKER(sequence_checker_);
   base::WeakPtrFactory<AndroidPlatform> weak_factory_{this};
 };
@@ -399,6 +544,8 @@ class USBTransport : public device::cablev2::authenticator::Transport {
 // OnNeedInteractive is called by |AndroidPlatform| when it needs to move from
 // the background to the foreground in order to show UI.
 void OnNeedInteractive(AndroidPlatform::InteractionReadyCallback callback) {
+  RecordEvent(CableV2MobileEvent::kNeedInteractive);
+
   GlobalData& global_data = GetGlobalData();
   global_data.interaction_ready_callback = std::move(callback);
   Java_CableAuthenticator_showNotification(
@@ -428,6 +575,8 @@ static ScopedJavaLocalRef<jbyteArray> JNI_CableAuthenticator_Setup(
     // indicate that no update is needed.
     return ToJavaByteArray(env, serialized_state);
   }
+
+  RecordEvent(CableV2MobileEvent::kSetup);
 
   base::Optional<std::array<uint8_t, device::cablev2::kRootSecretSize>>
       maybe_root_secret = ParseState(JavaByteArrayToSpan(env, state_bytes));
@@ -459,6 +608,8 @@ static void JNI_CableAuthenticator_StartUSB(
     JNIEnv* env,
     const JavaParamRef<jobject>& cable_authenticator,
     const JavaParamRef<jobject>& usb_device) {
+  RecordEvent(CableV2MobileEvent::kUSB);
+
   GlobalData& global_data = GetGlobalData();
 
   auto transport = std::make_unique<USBTransport>(
@@ -477,14 +628,22 @@ static jboolean JNI_CableAuthenticator_StartQR(
     JNIEnv* env,
     const JavaParamRef<jobject>& cable_authenticator,
     const JavaParamRef<jstring>& authenticator_name,
-    const JavaParamRef<jstring>& qr_url) {
+    const JavaParamRef<jstring>& qr_url,
+    jboolean link) {
+  RecordEvent(CableV2MobileEvent::kQRRead);
+
   GlobalData& global_data = GetGlobalData();
   const std::string& qr_string = ConvertJavaStringToUTF8(qr_url);
   base::Optional<device::cablev2::qr::Components> decoded_qr(
       device::cablev2::qr::Parse(qr_string));
   if (!decoded_qr) {
     FIDO_LOG(ERROR) << "Failed to decode QR: " << qr_string;
+    RecordResult(CableV2MobileResult::kInvalidQR);
     return false;
+  }
+
+  if (!link) {
+    RecordEvent(CableV2MobileEvent::kLinkingNotRequested);
   }
 
   global_data.current_transaction =
@@ -492,13 +651,49 @@ static jboolean JNI_CableAuthenticator_StartQR(
           std::make_unique<AndroidPlatform>(env, cable_authenticator),
           global_data.network_context, global_data.root_secret,
           ConvertJavaStringToUTF8(authenticator_name), decoded_qr->secret,
-          decoded_qr->peer_identity, global_data.registration->contact_id());
+          decoded_qr->peer_identity,
+          link ? global_data.registration->contact_id() : base::nullopt);
+
+  return true;
+}
+
+static jboolean JNI_CableAuthenticator_StartServerLink(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& cable_authenticator,
+    const JavaParamRef<jbyteArray>& server_link_data_java) {
+  RecordEvent(CableV2MobileEvent::kServerLink);
+
+  constexpr size_t kDataSize =
+      device::kP256X962Length + device::cablev2::kQRSecretSize;
+  const base::Optional<base::span<const uint8_t, kDataSize>> server_link_data =
+      JavaByteArrayToFixedSpan<kDataSize>(env, server_link_data_java);
+
+  if (!server_link_data) {
+    FIDO_LOG(ERROR) << "Bad length server-link data length";
+    RecordResult(CableV2MobileResult::kInvalidServerLink);
+    return false;
+  }
+
+  // Sending pairing information is disabled when doing a server-linked
+  // connection, thus the root secret and authenticator name will not be used.
+  std::array<uint8_t, device::cablev2::kRootSecretSize> dummy_root_secret = {0};
+  std::string dummy_authenticator_name = "";
+  GlobalData& global_data = GetGlobalData();
+  global_data
+      .current_transaction = device::cablev2::authenticator::TransactFromQRCode(
+      std::make_unique<AndroidPlatform>(env, cable_authenticator),
+      global_data.network_context, dummy_root_secret, dummy_authenticator_name,
+      server_link_data
+          ->subspan<device::kP256X962Length, device::cablev2::kQRSecretSize>(),
+      server_link_data->subspan<0, device::kP256X962Length>(), base::nullopt);
 
   return true;
 }
 
 static ScopedJavaLocalRef<jbyteArray> JNI_CableAuthenticator_Unlink(
     JNIEnv* env) {
+  RecordEvent(CableV2MobileEvent::kUnlink);
+
   std::vector<uint8_t> serialized_state;
   std::array<uint8_t, device::cablev2::kRootSecretSize> root_secret;
   std::tie(root_secret, serialized_state) = NewState();
@@ -522,8 +717,12 @@ static void JNI_CableAuthenticator_Stop(JNIEnv* env) {
   ResetGlobalData();
 }
 
-static void JNI_CableAuthenticator_OnCloudMessage(JNIEnv* env,
-                                                  jlong event_long) {
+static void JNI_CableAuthenticator_OnCloudMessage(
+    JNIEnv* env,
+    jlong event_long,
+    jboolean need_to_disable_bluetooth) {
+  RecordEvent(CableV2MobileEvent::kCloudMessage);
+
   static_assert(sizeof(jlong) >= sizeof(void*), "");
   std::unique_ptr<device::cablev2::authenticator::Registration::Event> event(
       reinterpret_cast<device::cablev2::authenticator::Registration::Event*>(
@@ -531,15 +730,14 @@ static void JNI_CableAuthenticator_OnCloudMessage(JNIEnv* env,
 
   GlobalData& global_data = GetGlobalData();
 
-  // TODO(agl): should enable Bluetooth here as needed.
-
   // There is deliberately no check for |!global_data.current_transaction|
   // because multiple Cloud messages may come in from different paired devices.
   // Only the most recent is processed.
   global_data.current_transaction =
       device::cablev2::authenticator::TransactFromFCM(
           std::make_unique<AndroidPlatform>(env,
-                                            base::BindOnce(&OnNeedInteractive)),
+                                            base::BindOnce(&OnNeedInteractive),
+                                            need_to_disable_bluetooth),
           global_data.network_context, global_data.root_secret,
           event->routing_id, event->tunnel_id, event->pairing_id,
           event->client_nonce);

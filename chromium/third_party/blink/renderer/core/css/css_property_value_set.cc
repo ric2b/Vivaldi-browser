@@ -126,7 +126,7 @@ static bool IsPropertyMatch(const CSSPropertyValueMetadata& metadata,
 // TODO(hjkim3323@gmail.com): Remove kInternalFontSizeDelta bypassing hack
 #if DCHECK_IS_ON()
   DCHECK(!result || property_id == CSSPropertyID::kInternalFontSizeDelta ||
-         CSSProperty::Get(resolveCSSPropertyID(property_id)).IsWebExposed());
+         CSSProperty::Get(ResolveCSSPropertyID(property_id)).IsWebExposed());
 #endif
   return result;
 }
@@ -356,14 +356,14 @@ MutableCSSPropertyValueSet::SetResult MutableCSSPropertyValueSet::SetProperty(
     bool important,
     SecureContextMode secure_context_mode,
     StyleSheetContents* context_style_sheet) {
-  DCHECK_GE(unresolved_property, firstCSSProperty);
+  DCHECK_GE(unresolved_property, kFirstCSSProperty);
 
   // Setting the value to an empty string just removes the property in both IE
   // and Gecko. Setting it to null seems to produce less consistent results, but
   // we treat it just the same.
   if (value.IsEmpty()) {
     bool did_parse = true;
-    bool did_change = RemoveProperty(resolveCSSPropertyID(unresolved_property));
+    bool did_change = RemoveProperty(ResolveCSSPropertyID(unresolved_property));
     return SetResult{did_parse, did_change};
   }
 
@@ -417,11 +417,26 @@ bool MutableCSSPropertyValueSet::SetProperty(const CSSPropertyValue& property,
                                              CSSPropertyValue* slot) {
   CSSPropertyValue* to_replace =
       slot ? slot : FindCSSPropertyWithName(property.Name());
-  if (to_replace && *to_replace == property)
-    return false;
   if (to_replace) {
-    *to_replace = property;
-    return true;
+    const CSSProperty& prop = CSSProperty::Get(property.Id());
+    if (prop.IsInLogicalPropertyGroup()) {
+      DCHECK(property_vector_.Contains(*to_replace));
+      int to_replace_index = to_replace - property_vector_.begin();
+      for (int n = property_vector_.size() - 1; n > to_replace_index; --n) {
+        if (prop.IsInSameLogicalPropertyGroupWithDifferentMappingLogic(
+                PropertyAt(n).Id())) {
+          RemovePropertyAtIndex(to_replace_index, nullptr);
+          to_replace = nullptr;
+          break;
+        }
+      }
+    }
+    if (to_replace) {
+      if (*to_replace == property)
+        return false;
+      *to_replace = property;
+      return true;
+    }
   }
   property_vector_.push_back(property);
   return true;

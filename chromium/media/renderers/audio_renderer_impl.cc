@@ -727,6 +727,7 @@ void AudioRendererImpl::OnWaiting(WaitingReason reason) {
 
 void AudioRendererImpl::SetVolume(float volume) {
   DCHECK(task_runner_->BelongsToCurrentThread());
+  was_unmuted_ = was_unmuted_ || volume != 0;
   if (state_ == kUninitialized || state_ == kInitializing) {
     volume_ = volume;
     return;
@@ -793,6 +794,12 @@ void AudioRendererImpl::SetPreservesPitch(bool preserves_pitch) {
 
   if (algorithm_)
     algorithm_->SetPreservesPitch(preserves_pitch);
+}
+
+void AudioRendererImpl::SetAutoplayInitiated(bool autoplay_initiated) {
+  base::AutoLock auto_lock(lock_);
+
+  autoplay_initiated_ = autoplay_initiated;
 }
 
 void AudioRendererImpl::OnSuspend() {
@@ -959,8 +966,11 @@ bool AudioRendererImpl::HandleDecodedBuffer_Locked(
       first_packet_timestamp_ = buffer->timestamp();
 
 #if !defined(OS_ANDROID)
-    if (transcribe_audio_callback_ && volume_ > 0)
+    // Do not transcribe muted streams initiated by autoplay if the stream was
+    // never unmuted.
+    if (transcribe_audio_callback_ && !(autoplay_initiated_ && !was_unmuted_)) {
       transcribe_audio_callback_.Run(buffer);
+    }
 #endif
 
     if (state_ != kUninitialized)

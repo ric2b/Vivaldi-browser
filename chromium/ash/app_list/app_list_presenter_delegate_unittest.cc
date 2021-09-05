@@ -60,6 +60,7 @@
 #include "ash/shell.h"
 #include "ash/system/unified/unified_system_tray.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/test/test_window_builder.h"
 #include "ash/wallpaper/wallpaper_controller_test_api.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/overview_controller.h"
@@ -303,20 +304,8 @@ class PopulatedAppListTest : public AshTestBase,
   void CreateAndOpenAppList() {
     app_list_view_ = new AppListView(app_list_test_delegate_.get());
     app_list_view_->InitView(GetContext());
-    app_list_view_->Show(false /*is_side_shelf*/);
-  }
-
-  void ShowAppListInAppsFullScreen() {
-    // Press the ExpandArrowView and check that the AppListView is in
-    // fullscreen.
-    gfx::Point click_point = app_list_view_->app_list_main_view()
-                                 ->contents_view()
-                                 ->expand_arrow_view()
-                                 ->GetBoundsInScreen()
-                                 .CenterPoint();
-    GetEventGenerator()->GestureTapAt(click_point);
-    EXPECT_EQ(AppListViewState::kFullscreenAllApps,
-              app_list_view_->app_list_state());
+    app_list_view_->Show(AppListViewState::kFullscreenAllApps,
+                         false /*is_side_shelf*/);
   }
 
   void InitializeAppsGrid() {
@@ -468,9 +457,8 @@ TEST_F(AppListPresenterDelegateTest, ClickSearchBoxInTabletMode) {
 TEST_F(AppListPresenterDelegateTest, RemoveSuggestionShowsConfirmDialog) {
   ShowZeroStateSearchInHalfState();
 
-  // Mark the privacy notices as dismissed so that they do not interfere with
-  // the layout.
-  Shell::Get()->app_list_controller()->MarkAssistantPrivacyInfoDismissed();
+  // Mark the suggested content info as dismissed so that it does not interfere
+  // with the layout.
   Shell::Get()->app_list_controller()->MarkSuggestedContentInfoDismissed();
   GetAppListView()
       ->app_list_main_view()
@@ -804,7 +792,6 @@ TEST_F(AppListPresenterDelegateTest,
 TEST_F(PopulatedAppListTest, MouseDragAppsGridViewHandledByAppList) {
   InitializeAppsGrid();
   app_list_test_model_->PopulateApps(2);
-  ShowAppListInAppsFullScreen();
 
   // Calculate the drag start/end points.
   gfx::Point drag_start_point = apps_grid_view_->GetBoundsInScreen().origin();
@@ -831,7 +818,6 @@ TEST_F(PopulatedAppListTest,
   InitializeAppsGrid();
   app_list_test_model_->PopulateApps(apps_grid_test_api_->TilesPerPage(0) + 1);
   EXPECT_EQ(2, apps_grid_view_->pagination_model()->total_pages());
-  ShowAppListInAppsFullScreen();
 
   // Calculate the drag start/end points. |drag_start_point| is between the
   // first and the second AppListItem. Because in this test case, we want
@@ -863,7 +849,6 @@ TEST_F(PopulatedAppListTest,
 TEST_F(PopulatedAppListTest, CancelItemDragOnMouseCaptureLoss) {
   InitializeAppsGrid();
   app_list_test_model_->PopulateApps(apps_grid_test_api_->TilesPerPage(0) + 1);
-  ShowAppListInAppsFullScreen();
 
   AppListItemView* const dragged_view = apps_grid_view_->GetItemViewAt(0);
 
@@ -900,7 +885,6 @@ TEST_F(PopulatedAppListTest,
   InitializeAppsGrid();
   const int kItemCount = 5;
   app_list_test_model_->PopulateApps(kItemCount);
-  ShowAppListInAppsFullScreen();
 
   ui::ScopedAnimationDurationScaleMode non_zero_duration_mode(
       ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
@@ -949,7 +933,6 @@ TEST_F(PopulatedAppListTest, ScreenRotationDuringAppsGridItemDrag) {
 
   InitializeAppsGrid();
   app_list_test_model_->PopulateApps(apps_grid_test_api_->TilesPerPage(0) + 1);
-  ShowAppListInAppsFullScreen();
 
   AppListItemView* const dragged_view = apps_grid_view_->GetItemViewAt(0);
 
@@ -993,7 +976,6 @@ TEST_F(PopulatedAppListTest,
 
   InitializeAppsGrid();
   app_list_test_model_->PopulateApps(apps_grid_test_api_->TilesPerPage(0) + 1);
-  ShowAppListInAppsFullScreen();
 
   AppListItemView* const dragged_view = apps_grid_view_->GetItemViewAt(0);
 
@@ -1039,7 +1021,6 @@ TEST_F(PopulatedAppListTest, ScreenRotationDuringFolderItemDrag) {
   AppListFolderItem* folder =
       app_list_test_model_->CreateAndPopulateFolderWithApps(3);
   app_list_test_model_->PopulateApps(10);
-  ShowAppListInAppsFullScreen();
 
   // Tap the folder item to show it.
   ui::test::EventGenerator* event_generator = GetEventGenerator();
@@ -1092,7 +1073,6 @@ TEST_F(PopulatedAppListTest, ScreenRotationDuringAppsGridItemReparentDrag) {
   AppListFolderItem* folder =
       app_list_test_model_->CreateAndPopulateFolderWithApps(3);
   app_list_test_model_->PopulateApps(10);
-  ShowAppListInAppsFullScreen();
 
   // Tap the folder item to show it.
   ui::test::EventGenerator* event_generator = GetEventGenerator();
@@ -1149,7 +1129,6 @@ TEST_F(PopulatedAppListTest, AppsGridItemReparentToFolderDrag) {
   AppListFolderItem* folder =
       app_list_test_model_->CreateAndPopulateFolderWithApps(3);
   app_list_test_model_->PopulateApps(10);
-  ShowAppListInAppsFullScreen();
 
   // Tap the folder item to show it.
   ui::test::EventGenerator* event_generator = GetEventGenerator();
@@ -1196,7 +1175,6 @@ TEST_F(PopulatedAppListTest, RemoveFolderItemAfterFolderCreation) {
   InitializeAppsGrid();
   const int kItemCount = 5;
   app_list_test_model_->PopulateApps(kItemCount);
-  ShowAppListInAppsFullScreen();
 
   // Dragging the item with index 4.
   AppListItemView* const dragged_view = apps_grid_view_->GetItemViewAt(4);
@@ -1303,7 +1281,6 @@ TEST_F(PopulatedAppListTest, FolderItemDroppedRemovesBlankPage) {
   InitializeAppsGrid();
   app_list_test_model_->CreateAndPopulateFolderWithApps(3);
   app_list_test_model_->PopulateApps(2);
-  ShowAppListInAppsFullScreen();
   ASSERT_EQ(1, apps_grid_view_->pagination_model()->total_pages());
 
   // Tap the folder item to show its contents.
@@ -2551,7 +2528,8 @@ TEST_F(AppListPresenterDelegateTest,
   GetAppListTestHelper()->ShowAndRunLoop(GetPrimaryDisplayId());
   GetAppListTestHelper()->CheckState(AppListViewState::kPeeking);
 
-  GetAppListView()->HandleScroll(gfx::Vector2d(0, -30), ui::ET_MOUSEWHEEL);
+  GetAppListView()->HandleScroll(gfx::Point(0, 0), gfx::Vector2d(0, 30),
+                                 ui::ET_MOUSEWHEEL);
 
   GetAppListTestHelper()->CheckState(AppListViewState::kFullscreenAllApps);
 }
@@ -3788,10 +3766,11 @@ TEST_P(AppListPresenterDelegateHomeLauncherTest, BackgroundOpacity) {
   // The opacity should be set on the color, not the layer. Setting opacity on
   // the layer will change the opacity of the blur effect, which is not desired.
   const U8CPU clamshell_background_opacity = static_cast<U8CPU>(255 * 0.8);
-  EXPECT_EQ(
-      SkColorSetA(AppListColorProvider::Get()->GetAppListBackgroundColor(),
-                  clamshell_background_opacity),
-      GetAppListView()->GetAppListBackgroundShieldColorForTest());
+  EXPECT_EQ(SkColorSetA(AppListColorProvider::Get()->GetAppListBackgroundColor(
+                            /*is_tablet_mode*/
+                            false),
+                        clamshell_background_opacity),
+            GetAppListView()->GetAppListBackgroundShieldColorForTest());
   EXPECT_EQ(1, GetAppListView()
                    ->GetAppListBackgroundShieldForTest()
                    ->layer()
@@ -3801,10 +3780,11 @@ TEST_P(AppListPresenterDelegateHomeLauncherTest, BackgroundOpacity) {
   EnableTabletMode(true);
 
   const U8CPU tablet_background_opacity = static_cast<U8CPU>(0);
-  EXPECT_EQ(
-      SkColorSetA(AppListColorProvider::Get()->GetAppListBackgroundColor(),
-                  tablet_background_opacity),
-      GetAppListView()->GetAppListBackgroundShieldColorForTest());
+  EXPECT_EQ(SkColorSetA(AppListColorProvider::Get()->GetAppListBackgroundColor(
+                            /*is_tablet_mode*/
+                            true),
+                        tablet_background_opacity),
+            GetAppListView()->GetAppListBackgroundShieldColorForTest());
   EXPECT_EQ(1, GetAppListView()
                    ->GetAppListBackgroundShieldForTest()
                    ->layer()

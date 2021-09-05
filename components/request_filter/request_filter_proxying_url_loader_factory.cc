@@ -1007,7 +1007,7 @@ bool RequestFilterProxyingURLLoaderFactory::InProgressRequest::IsRedirectSafe(
     if (!extension)
       return false;
     return extensions::WebAccessibleResourcesInfo::IsResourceWebAccessible(
-        extension, to_url.path());
+        extension, to_url.path(), original_initiator_);
   }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
   return content::IsSafeRedirectTarget(from_url, to_url);
@@ -1041,13 +1041,14 @@ RequestFilterProxyingURLLoaderFactory::RequestFilterProxyingURLLoaderFactory(
       loader_factory_type_(loader_factory_type) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   // base::Unretained is safe here because the callback will be
-  // canceled when |shutdown_notifier_| is destroyed, and |proxies_|
-  // owns this.
-  shutdown_notifier_ = ShutdownNotifierFactory::GetInstance()
-                           ->Get(browser_context)
-                           ->Subscribe(base::BindRepeating(
-                               &RequestFilterManager::ProxySet::RemoveProxy,
-                               base::Unretained(proxies_), this));
+  // canceled when |shutdown_notifier_subscription_| is destroyed, and
+  // |proxies_| owns this.
+  shutdown_notifier_subscription_ =
+      ShutdownNotifierFactory::GetInstance()
+          ->Get(browser_context)
+          ->Subscribe(
+              base::BindRepeating(&RequestFilterManager::ProxySet::RemoveProxy,
+                                  base::Unretained(proxies_), this));
 
   target_factory_.Bind(std::move(target_factory_remote));
   target_factory_.set_disconnect_handler(base::BindOnce(

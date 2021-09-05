@@ -37,6 +37,7 @@ import org.chromium.chrome.browser.DefaultBrowserInfo;
 import org.chromium.chrome.browser.DeferredStartupHandler;
 import org.chromium.chrome.browser.DevToolsServer;
 import org.chromium.chrome.browser.app.video_tutorials.VideoTutorialShareHelper;
+import org.chromium.chrome.browser.banners.AppBannerInProductHelpControllerProvider;
 import org.chromium.chrome.browser.banners.AppBannerManager;
 import org.chromium.chrome.browser.bookmarkswidget.BookmarkWidgetProvider;
 import org.chromium.chrome.browser.contacts_picker.ChromePickerAdapter;
@@ -49,6 +50,7 @@ import org.chromium.chrome.browser.download.DownloadManagerService;
 import org.chromium.chrome.browser.download.OfflineContentAvailabilityStatusProvider;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.firstrun.ForcedSigninProcessor;
+import org.chromium.chrome.browser.firstrun.TosDialogBehaviorSharedPrefInvalidator;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.history.HistoryDeletionBridge;
@@ -62,6 +64,7 @@ import org.chromium.chrome.browser.metrics.PackageMetrics;
 import org.chromium.chrome.browser.metrics.WebApkUma;
 import org.chromium.chrome.browser.net.spdyproxy.DataReductionProxySettings;
 import org.chromium.chrome.browser.notifications.channels.ChannelsUpdater;
+import org.chromium.chrome.browser.offline.measurements.OfflineMeasurementsBackgroundTask;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.photo_picker.DecoderService;
 import org.chromium.chrome.browser.policy.EnterpriseInfo;
@@ -72,7 +75,7 @@ import org.chromium.chrome.browser.rlz.RevenueStats;
 import org.chromium.chrome.browser.searchwidget.SearchWidgetProvider;
 import org.chromium.chrome.browser.share.clipboard.ClipboardImageFileProvider;
 import org.chromium.chrome.browser.sharing.shared_clipboard.SharedClipboardShareActivity;
-import org.chromium.chrome.browser.signin.SigninHelper;
+import org.chromium.chrome.browser.signin.SigninHelperProvider;
 import org.chromium.chrome.browser.sync.SyncController;
 import org.chromium.chrome.browser.uid.UniqueIdentificationGeneratorFactory;
 import org.chromium.chrome.browser.uid.UuidBasedUniqueIdentificationGenerator;
@@ -124,6 +127,9 @@ public class ProcessInitializationHandler {
     /** Prevents race conditions when deleting snapshot database. */
     private static final Object SNAPSHOT_DATABASE_LOCK = new Object();
     private static final String SNAPSHOT_DATABASE_NAME = "snapshots.db";
+
+    // The feature param for determining whether the PhotoPicker should animate thumbnails.
+    private static final String FEATURE_PARAM_ANIMATE_THUMBNAILS = "animate_thumbnails";
 
     private static ProcessInitializationHandler sInstance;
 
@@ -216,36 +222,36 @@ public class ProcessInitializationHandler {
         ChromeActivitySessionTracker.getInstance().initializeWithNative();
         ProfileManagerUtils.removeSessionCookiesForAllProfiles();
         AppBannerManager.setAppDetailsDelegate(AppHooks.get().createAppDetailsDelegate());
-        AppBannerManager.setTrackerFromProfileFactory(TrackerFactory::getTrackerForProfile);
+        AppBannerInProductHelpControllerProvider.setTrackerFromProfileFactory(
+                TrackerFactory::getTrackerForProfile);
         ChromeLifetimeController.initialize();
         Clipboard.getInstance().setImageFileProvider(new ClipboardImageFileProvider());
 
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.NEW_PHOTO_PICKER)) {
-            DecoderServiceHost.setIntentSupplier(() -> {
-                return new Intent(ContextUtils.getApplicationContext(), DecoderService.class);
-            });
+        DecoderServiceHost.setIntentSupplier(() -> {
+            return new Intent(ContextUtils.getApplicationContext(), DecoderService.class);
+        });
 
-            SelectFileDialog.setPhotoPickerDelegate(new PhotoPickerDelegate() {
-                @Override
-                public PhotoPicker showPhotoPicker(WindowAndroid windowAndroid,
-                        PhotoPickerListener listener, boolean allowMultiple,
-                        List<String> mimeTypes) {
-                    PhotoPickerDialog dialog = new PhotoPickerDialog(windowAndroid,
-                            windowAndroid.getContext().get().getContentResolver(), listener,
-                            allowMultiple, mimeTypes);
-                    dialog.getWindow().getAttributes().windowAnimations =
-                            R.style.PickerDialogAnimation;
-                    dialog.show();
-                    return dialog;
-                }
+        SelectFileDialog.setPhotoPickerDelegate(new PhotoPickerDelegate() {
+            @Override
+            public PhotoPicker showPhotoPicker(WindowAndroid windowAndroid,
+                    PhotoPickerListener listener, boolean allowMultiple, List<String> mimeTypes) {
+                PhotoPickerDialog dialog = new PhotoPickerDialog(windowAndroid,
+                        windowAndroid.getContext().get().getContentResolver(), listener,
+                        allowMultiple,
+                        ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
+                                ChromeFeatureList.PHOTO_PICKER_VIDEO_SUPPORT,
+                                FEATURE_PARAM_ANIMATE_THUMBNAILS, false),
+                        mimeTypes);
+                dialog.getWindow().getAttributes().windowAnimations = R.style.PickerDialogAnimation;
+                dialog.show();
+                return dialog;
+            }
 
-                @Override
-                public boolean supportsVideos() {
-                    return ChromeFeatureList.isEnabled(
-                            ChromeFeatureList.PHOTO_PICKER_VIDEO_SUPPORT);
-                }
-            });
-        }
+            @Override
+            public boolean supportsVideos() {
+                return ChromeFeatureList.isEnabled(ChromeFeatureList.PHOTO_PICKER_VIDEO_SUPPORT);
+            }
+        });
 
         ContactsPicker.setContactsPickerDelegate(
                 (WindowAndroid windowAndroid, ContactsPickerListener listener,
@@ -368,13 +374,13 @@ public class ProcessInitializationHandler {
         deferredStartupHandler.addDeferredTask(new Runnable() {
             @Override
             public void run() {
-                ForcedSigninProcessor.start(null);
+                ForcedSigninProcessor.start();
                 AccountManagerFacadeProvider.getInstance().addObserver(
                         new AccountsChangeObserver() {
                             @Override
                             public void onAccountsChanged() {
                                 PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT,
-                                        () -> { ForcedSigninProcessor.start(null); });
+                                        () -> { ForcedSigninProcessor.start(); });
                             }
                         });
             }
@@ -383,7 +389,7 @@ public class ProcessInitializationHandler {
         deferredStartupHandler.addDeferredTask(new Runnable() {
             @Override
             public void run() {
-                SigninHelper.get().onMainActivityStart();
+                SigninHelperProvider.get().onMainActivityStart();
                 RevenueStats.getInstance();
             }
         });
@@ -437,6 +443,10 @@ public class ProcessInitializationHandler {
                 () -> EnterpriseInfo.getInstance().logDeviceEnterpriseInfo());
         deferredStartupHandler.addDeferredTask(
                 () -> VideoTutorialShareHelper.saveUrlsToSharedPrefs());
+        deferredStartupHandler.addDeferredTask(
+                () -> TosDialogBehaviorSharedPrefInvalidator.refreshSharedPreferenceIfTosSkipped());
+        deferredStartupHandler.addDeferredTask(
+                () -> OfflineMeasurementsBackgroundTask.maybeScheduleTaskAndReportMetrics());
     }
 
     private void initChannelsAsync() {

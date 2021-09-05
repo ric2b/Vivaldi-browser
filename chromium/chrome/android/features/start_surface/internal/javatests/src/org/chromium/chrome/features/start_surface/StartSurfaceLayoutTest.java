@@ -63,6 +63,7 @@ import android.widget.ImageView;
 
 import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.test.espresso.Espresso;
 import androidx.test.espresso.NoMatchingViewException;
@@ -142,6 +143,7 @@ import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.test.util.DisableAnimationsTestRule;
 import org.chromium.ui.test.util.UiRestriction;
+import org.chromium.ui.util.ColorUtils;
 import org.chromium.ui.widget.ChipView;
 import org.chromium.ui.widget.ChromeImageView;
 import org.chromium.ui.widget.ViewLookupCachingFrameLayout;
@@ -285,6 +287,28 @@ public class StartSurfaceLayoutTest {
         enterGTSWithThumbnailRetry();
         // Make sure the grid tab switcher is scrolled down to show the selected tab.
         mRenderTestRule.render(cta.findViewById(R.id.tab_list_view), "10_web_tabs-select_last");
+    }
+
+    @Test
+    @MediumTest
+    @CommandLineFlags.Add({BASE_PARAMS})
+    public void testSwitchTabModel_ScrollToSelectedTab() throws IOException {
+        ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        prepareTabs(10, 0, "about:blank");
+        assertEquals(9, cta.getCurrentTabModel().index());
+        createTabs(cta, true, 1);
+        CriteriaHelper.pollUiThread(() -> cta.getCurrentTabModel().isIncognito());
+        enterTabSwitcher(cta);
+        switchTabModel(cta, false);
+        TabUiTestHelper.verifyAllTabsHaveThumbnail(cta.getCurrentTabModel());
+        // Make sure the grid tab switcher is scrolled down to show the selected tab.
+        onView(withId(R.id.tab_list_view)).check((v, noMatchException) -> {
+            if (noMatchException != null) throw noMatchException;
+            assertTrue(v instanceof RecyclerView);
+            LinearLayoutManager layoutManager =
+                    (LinearLayoutManager) ((RecyclerView) v).getLayoutManager();
+            assertEquals(9, layoutManager.findLastVisibleItemPosition());
+        });
     }
 
     @Test
@@ -2043,7 +2067,7 @@ public class StartSurfaceLayoutTest {
                 () -> ChromeNightModeTestUtils.setUpNightModeForChromeActivity(true));
         cta = ActivityUtils.waitForActivity(
                 InstrumentationRegistry.getInstrumentation(), ChromeTabbedActivity.class);
-        assertTrue(cta.getNightModeStateProvider().isInNightMode());
+        assertTrue(ColorUtils.inNightMode(cta));
         CriteriaHelper.pollUiThread(cta.getTabModelSelector()::isTabStateInitialized);
         enterTabSwitcher(cta);
         verifyTabSwitcherCardCount(cta, 2);

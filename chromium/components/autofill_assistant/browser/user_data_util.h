@@ -8,11 +8,15 @@
 #include <vector>
 #include "components/autofill/core/browser/data_model/autofill_profile.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
+#include "components/autofill_assistant/browser/action_value.pb.h"
 #include "components/autofill_assistant/browser/client_status.h"
 #include "components/autofill_assistant/browser/service.pb.h"
 #include "components/autofill_assistant/browser/user_data.h"
 
 namespace autofill_assistant {
+
+std::unique_ptr<autofill::AutofillProfile> MakeUniqueFromProfile(
+    const autofill::AutofillProfile& profile);
 
 // Sorts the given autofill profiles based on completeness, and returns a
 // vector of profile indices in sorted order. Full profiles will be ordered
@@ -76,9 +80,15 @@ bool IsCompleteCreditCard(
     const autofill::AutofillProfile* billing_profile,
     const CollectUserDataOptions& collect_user_data_options);
 
+// Get a formatted autofill value. The replacement is treated as strict,
+// meaning a missing value will lead to a failed ClientStatus.
 ClientStatus GetFormattedAutofillValue(const AutofillValue& autofill_value,
                                        const UserData* user_data,
                                        std::string* out_value);
+ClientStatus GetFormattedAutofillValue(
+    const AutofillValueRegexp& autofill_value,
+    const UserData* user_data,
+    std::string* out_value);
 
 }  // namespace autofill_assistant
 

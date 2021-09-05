@@ -3,6 +3,8 @@
 // found in the LICENSE file.
 
 import {ScanningBrowserProxy, SelectedPath} from 'chrome://scanning/scanning_browser_proxy.js';
+
+import {assertEquals} from '../../chai_assert.js';
 import {TestBrowserProxy} from '../../test_browser_proxy.m.js';
 
 /**
@@ -14,10 +16,16 @@ export class TestScanningBrowserProxy extends TestBrowserProxy {
     super([
       'initialize',
       'requestScanToLocation',
+      'showFileInLocation',
+      'getPluralString',
+      'recordScanJobSettings',
     ]);
 
     /** @private {?SelectedPath} */
     this.selectedPath_ = null;
+
+    /** @private {?string} */
+    this.pathToFile_ = null;
   }
 
   /** @override */
@@ -34,8 +42,36 @@ export class TestScanningBrowserProxy extends TestBrowserProxy {
     return Promise.resolve(this.selectedPath_);
   }
 
+  /** @param {string} pathToFile */
+  showFileInLocation(pathToFile) {
+    this.methodCalled('showFileInLocation');
+    return Promise.resolve(this.pathToFile_ === pathToFile);
+  }
+
+  /**
+   * @param {string} name
+   * @param {number} count
+   */
+  getPluralString(name, count) {
+    this.methodCalled('getPluralString');
+    return Promise.resolve(
+        count === 1 ?
+            'Your file has been successfully scanned and saved to ' +
+                '<a id="folderLink">$1</a>.' :
+            'Your files have been successfully scanned and saved to ' +
+                '<a id="folderLink">$1</a>.');
+  }
+
+  /** @override */
+  recordScanJobSettings() {}
+
   /** @param {!SelectedPath} selectedPath */
   setSelectedPath(selectedPath) {
     this.selectedPath_ = selectedPath;
+  }
+
+  /** @param {string} pathToFile */
+  setPathToFile(pathToFile) {
+    this.pathToFile_ = pathToFile;
   }
 }

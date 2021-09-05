@@ -27,18 +27,18 @@ void ClassicScript::Trace(Visitor* visitor) const {
 
 void ClassicScript::RunScript(LocalDOMWindow* window) {
   return RunScript(window,
-                   ScriptController::kDoNotExecuteScriptWhenScriptsDisabled);
+                   ExecuteScriptPolicy::kDoNotExecuteScriptWhenScriptsDisabled);
 }
 
 void ClassicScript::RunScript(LocalDOMWindow* window,
-                              ScriptController::ExecuteScriptPolicy policy) {
+                              ExecuteScriptPolicy policy) {
   v8::HandleScope handle_scope(window->GetIsolate());
   RunScriptAndReturnValue(window, policy);
 }
 
 v8::Local<v8::Value> ClassicScript::RunScriptAndReturnValue(
     LocalDOMWindow* window,
-    ScriptController::ExecuteScriptPolicy policy) {
+    ExecuteScriptPolicy policy) {
   return window->GetScriptController().EvaluateScriptInMainWorld(
       GetScriptSourceCode(), BaseURL(), sanitize_script_errors_, FetchOptions(),
       policy);
@@ -55,11 +55,11 @@ bool ClassicScript::RunScriptOnWorkerOrWorklet(
     WorkerOrWorkletGlobalScope& global_scope) {
   DCHECK(global_scope.IsContextThread());
 
-  ScriptState::Scope scope(global_scope.ScriptController()->GetScriptState());
+  v8::HandleScope handle_scope(
+      global_scope.ScriptController()->GetScriptState()->GetIsolate());
   ScriptEvaluationResult result =
       global_scope.ScriptController()->EvaluateAndReturnValue(
-          GetScriptSourceCode(), sanitize_script_errors_,
-          global_scope.GetV8CacheOptions());
+          GetScriptSourceCode(), sanitize_script_errors_);
   return result.GetResultType() == ScriptEvaluationResult::ResultType::kSuccess;
 }
 

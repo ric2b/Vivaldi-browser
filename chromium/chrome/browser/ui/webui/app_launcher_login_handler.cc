@@ -13,6 +13,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_attributes_entry.h"
@@ -31,6 +32,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/base/signin_metrics.h"
 #include "components/signin/public/base/signin_pref_names.h"
+#include "components/signin/public/identity_manager/consent_level.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
@@ -82,14 +84,14 @@ AppLauncherLoginHandler::~AppLauncherLoginHandler() {}
 void AppLauncherLoginHandler::RegisterMessages() {
   profile_info_watcher_ = std::make_unique<ProfileInfoWatcher>(
       Profile::FromWebUI(web_ui()),
-      base::Bind(&AppLauncherLoginHandler::UpdateLogin,
-                 base::Unretained(this)));
+      base::BindRepeating(&AppLauncherLoginHandler::UpdateLogin,
+                          base::Unretained(this)));
 
   web_ui()->RegisterMessageCallback(
       "initializeSyncLogin",
       base::BindRepeating(&AppLauncherLoginHandler::HandleInitializeSyncLogin,
                           base::Unretained(this)));
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
   web_ui()->RegisterMessageCallback(
       "showSyncLoginUI",
       base::BindRepeating(&AppLauncherLoginHandler::HandleShowSyncLoginUI,
@@ -102,7 +104,7 @@ void AppLauncherLoginHandler::HandleInitializeSyncLogin(
   UpdateLogin();
 }
 
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 void AppLauncherLoginHandler::HandleShowSyncLoginUI(
     const base::ListValue* args) {
   Profile* profile = Profile::FromWebUI(web_ui());
@@ -125,7 +127,7 @@ void AppLauncherLoginHandler::HandleShowSyncLoginUI(
       web_contents->GetURL().spec() == chrome::kChromeUIAppsURL
           ? signin_metrics::AccessPoint::ACCESS_POINT_APPS_PAGE_LINK
           : signin_metrics::AccessPoint::ACCESS_POINT_NTP_LINK;
-  chrome::ShowBrowserSignin(browser, access_point);
+  chrome::ShowBrowserSignin(browser, access_point, signin::ConsentLevel::kSync);
   RecordInHistogram(NTP_SIGN_IN_PROMO_CLICKED);
 }
 #endif
@@ -164,7 +166,7 @@ void AppLauncherLoginHandler::UpdateLogin() {
       }
     }
   } else {
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
     // Chromeos does not show this status header.
     bool is_signin_allowed =
         profile->GetOriginalProfile()->GetPrefs()->GetBoolean(
@@ -202,7 +204,7 @@ void AppLauncherLoginHandler::UpdateLogin() {
 
 // static
 bool AppLauncherLoginHandler::ShouldShow(Profile* profile) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // For now we don't care about showing sync status on Chrome OS. The promo
   // UI and the avatar menu don't exist on that platform.
   return false;

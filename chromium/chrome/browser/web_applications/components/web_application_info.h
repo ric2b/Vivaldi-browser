@@ -189,6 +189,11 @@ struct WebApplicationInfo {
   // User preference as to whether to auto run the app on OS login.
   // Currently only supported in Windows platform.
   bool run_on_os_login = false;
+
+  // The link capturing behaviour to use for navigations into in the app's
+  // scope.
+  blink::mojom::CaptureLinks capture_links =
+      blink::mojom::CaptureLinks::kUndefined;
 };
 
 std::ostream& operator<<(std::ostream& out,
@@ -202,5 +207,8 @@ bool operator==(const WebApplicationShortcutsMenuItemInfo::Icon& icon1,
 
 bool operator==(const WebApplicationShortcutsMenuItemInfo& shortcut_info1,
                 const WebApplicationShortcutsMenuItemInfo& shortcut_info2);
+
+std::ostream& operator<<(std::ostream& out,
+                         const WebApplicationShortcutsMenuItemInfo& info);
 
 #endif  // CHROME_BROWSER_WEB_APPLICATIONS_COMPONENTS_WEB_APPLICATION_INFO_H_

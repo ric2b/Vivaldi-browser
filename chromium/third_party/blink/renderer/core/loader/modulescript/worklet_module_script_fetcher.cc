@@ -4,13 +4,14 @@
 
 #include "third_party/blink/renderer/core/loader/modulescript/worklet_module_script_fetcher.h"
 
+#include "third_party/blink/renderer/bindings/core/v8/script_source_location_type.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 
 namespace blink {
 
 WorkletModuleScriptFetcher::WorkletModuleScriptFetcher(
     WorkletModuleResponsesMap* module_responses_map,
-    util::PassKey<ModuleScriptLoader> pass_key)
+    base::PassKey<ModuleScriptLoader> pass_key)
     : ModuleScriptFetcher(pass_key),
       module_responses_map_(module_responses_map) {}
 
@@ -19,6 +20,7 @@ void WorkletModuleScriptFetcher::Fetch(
     ResourceFetcher* fetch_client_settings_object_fetcher,
     ModuleGraphLevel level,
     ModuleScriptFetcher::Client* client) {
+  DCHECK_EQ(fetch_params.GetScriptType(), mojom::blink::ScriptType::kModule);
   if (module_responses_map_->GetEntry(
           fetch_params.Url(), client,
           fetch_client_settings_object_fetcher->GetTaskRunner())) {
@@ -44,14 +46,17 @@ void WorkletModuleScriptFetcher::NotifyFinished(Resource* resource) {
   ClearResource();
 
   base::Optional<ModuleScriptCreationParams> params;
-  ScriptResource* script_resource = ToScriptResource(resource);
+  auto* script_resource = To<ScriptResource>(resource);
   HeapVector<Member<ConsoleMessage>> error_messages;
-  ModuleScriptCreationParams::ModuleType module_type;
+  ModuleType module_type;
   if (WasModuleLoadSuccessful(script_resource, &error_messages, &module_type)) {
-    params.emplace(script_resource->GetResponse().CurrentRequestUrl(),
-                   module_type, script_resource->SourceText(),
-                   script_resource->CacheHandler(),
-                   script_resource->GetResourceRequest().GetCredentialsMode());
+    const KURL& url = script_resource->GetResponse().CurrentRequestUrl();
+    // Create an external module script where base_url == source_url.
+    // https://html.spec.whatwg.org/multipage/webappapis.html#concept-script-base-url
+    params.emplace(/*source_url=*/url, /*base_url=*/url,
+                   ScriptSourceLocationType::kExternalFile, module_type,
+                   script_resource->SourceText(),
+                   script_resource->CacheHandler());
   }
 
   // This will eventually notify |client| passed to

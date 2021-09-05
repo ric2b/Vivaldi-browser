@@ -299,6 +299,7 @@ const char* PseudoTypeToString(CSSSelector::PseudoType pseudo_type) {
     DEFINE_STRING_MAPPING(PseudoEnabled)
     DEFINE_STRING_MAPPING(PseudoFullPageMedia)
     DEFINE_STRING_MAPPING(PseudoDefault)
+    DEFINE_STRING_MAPPING(PseudoDir)
     DEFINE_STRING_MAPPING(PseudoDisabled)
     DEFINE_STRING_MAPPING(PseudoOptional)
     DEFINE_STRING_MAPPING(PseudoPlaceholderShown)
@@ -316,6 +317,7 @@ const char* PseudoTypeToString(CSSSelector::PseudoType pseudo_type) {
     DEFINE_STRING_MAPPING(PseudoLang)
     DEFINE_STRING_MAPPING(PseudoNot)
     DEFINE_STRING_MAPPING(PseudoPlaceholder)
+    DEFINE_STRING_MAPPING(PseudoFileSelectorButton)
     DEFINE_STRING_MAPPING(PseudoResizer)
     DEFINE_STRING_MAPPING(PseudoRoot)
     DEFINE_STRING_MAPPING(PseudoScope)
@@ -351,12 +353,9 @@ const char* PseudoTypeToString(CSSSelector::PseudoType pseudo_type) {
     DEFINE_STRING_MAPPING(PseudoCue)
     DEFINE_STRING_MAPPING(PseudoFutureCue)
     DEFINE_STRING_MAPPING(PseudoPastCue)
-    DEFINE_STRING_MAPPING(PseudoUnresolved)
     DEFINE_STRING_MAPPING(PseudoDefined)
-    DEFINE_STRING_MAPPING(PseudoContent)
     DEFINE_STRING_MAPPING(PseudoHost)
     DEFINE_STRING_MAPPING(PseudoHostContext)
-    DEFINE_STRING_MAPPING(PseudoShadow)
     DEFINE_STRING_MAPPING(PseudoSlotted)
     DEFINE_STRING_MAPPING(PseudoSpatialNavigationFocus)
     DEFINE_STRING_MAPPING(PseudoSpatialNavigationInterest)
@@ -370,6 +369,8 @@ const char* PseudoTypeToString(CSSSelector::PseudoType pseudo_type) {
     DEFINE_STRING_MAPPING(PseudoXrOverlay)
     DEFINE_STRING_MAPPING(PseudoTargetText)
     DEFINE_STRING_MAPPING(PseudoModal)
+    DEFINE_STRING_MAPPING(PseudoSpellingError)
+    DEFINE_STRING_MAPPING(PseudoGrammarError)
 #undef DEFINE_STRING_MAPPING
   }
 
@@ -434,6 +435,8 @@ const char* NotStreamedReasonString(ScriptStreamer::NotStreamingReason reason) {
       return "no data pipe received";
     case ScriptStreamer::NotStreamingReason::kDisabledByFeatureList:
       return "streaming disabled from the feature list";
+    case ScriptStreamer::NotStreamingReason::kNonJavascriptModule:
+      return "not a javascript module";
     case ScriptStreamer::NotStreamingReason::kLoadingCancelled:
       return "loading was cancelled";
     case ScriptStreamer::NotStreamingReason::kDidntTryToStartStreaming:

@@ -212,11 +212,10 @@ password_manager::PasswordForm BuildFormFromLoginAndURL(
 }
 
 CompromisedCredentials CreateCompromised(const PasswordForm& form) {
-  return CompromisedCredentials{
-      .signon_realm = form.signon_realm,
-      .username = form.username_value,
-      .compromise_type = password_manager::CompromiseType::kLeaked,
-  };
+  return CompromisedCredentials(form.signon_realm, form.username_value,
+                                base::Time(),
+                                password_manager::CompromiseType::kLeaked,
+                                password_manager::IsMuted(false));
 }
 
 }  // namespace
@@ -320,7 +319,7 @@ ManagePasswordsUIControllerTest::CreateFormManagerWithBestMatches(
   EXPECT_CALL(*form_manager, GetURL())
       .Times(AtMost(1))
       .WillOnce(ReturnRef(test_local_form_.url));
-  EXPECT_CALL(*form_manager, IsBlacklisted())
+  EXPECT_CALL(*form_manager, IsBlocklisted())
       .Times(AtMost(1))
       .WillOnce(Return(is_blocklisted));
   EXPECT_CALL(*form_manager, GetInteractionsStats())

@@ -4,6 +4,7 @@
 <translation id="1033008476608128425">Пейзаж 3</translation>
 <translation id="1118377629180821201">Пейзаж 12</translation>
 <translation id="1158503667684816647">Повече не показвай потвърждението</translation>
+<translation id="1222195720020481779">Зареждане на инсталатора…</translation>
 <translation id="1276145862619442150">Номератори</translation>
 <translation id="1281950884873973195">Животно 6</translation>
 <translation id="1411638389238344450">Изпрати препратката по е-поща</translation>
@@ -21,11 +22,17 @@
 <translation id="1921101374471252440">Пре&amp;зареди картината</translation>
 <translation id="1924750141060565109">Пейзаж 15</translation>
 <translation id="19598411548897379">Основен</translation>
+<translation id="1985669426322966465">Обновяване на софтуера</translation>
 <translation id="2079036669923635404">Щракнете за обновяване на Vivaldi до <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Възникна грешка при изтегляне на файловете с обновяване. Моля, проверете свързването с интернет и по-късно опитайте отново.</translation>
+<translation id="2339641773402824483">Проверка за обновяване…</translation>
 <translation id="2441056087170876076">Чудовище 2</translation>
 <translation id="2444387452209867610">Вмъкни записка</translation>
 <translation id="2486841023299517366">Животно 4</translation>
+<translation id="2612127540243995147">Готовност за инсталиране. Vivaldi ще бъде затворен и презареден.</translation>
+<translation id="2613387515621326337">Покажи сайта на обновяването</translation>
+<translation id="2647368062414805334">Настройките на вашия Edge са, уви, недостъпни, докато браузърът работи. За тяхното внасяне във Vivaldi, приключете работа и затворете всички прозорци на Edge. После натиснете „Напред“.</translation>
+<translation id="2721334646575696520">Edge на Microsoft</translation>
 <translation id="2848085334714181751">Животно 3</translation>
 <translation id="2873951654529031587">Кошче</translation>
 <translation id="292258461174562431">Чудовище 4</translation>
@@ -36,9 +43,12 @@
 <translation id="3084011186245865060">Пейзаж 6</translation>
 <translation id="3127383884976966729">Животно 7</translation>
 <translation id="3156398087075132709">Създай отметка</translation>
+<translation id="3255747772218936245">Инсталирай обновяването</translation>
 <translation id="3259769196742189631">Удостовери във W3C</translation>
 <translation id="3302905971452834934">Чудовище 1</translation>
 <translation id="3334610655141903168">(без название)</translation>
+<translation id="3372505110412186107">Vivaldi <ph name="VERSION" /> е най-новата версия в момента.</translation>
+<translation id="3383198080133834965">Всичко е обновено!</translation>
 <translation id="3402602684546832928">Изберете файл с отметки на Opera.</translation>
 <translation id="3451317331714872347">Пейзаж 8</translation>
 <translation id="3457498675806041407">Потвърждение при изход</translation>
@@ -48,14 +58,17 @@
 <translation id="3542768452570884558">Отвори препратката в нов прозорец</translation>
 <translation id="3588820906588687999">Отвори картината в нов раздел</translation>
 <translation id="3601066750251199488">Чудовище 3</translation>
+<translation id="3680031241659195730">Има нова версия на Vivaldi!</translation>
 <translation id="3708982624815781692">Изтеглянето е отменено.</translation>
 <translation id="3732157130969736834">Отметни препратката</translation>
 <translation id="3732388226447288666">Животно 2</translation>
 <translation id="3732439195215136813">Животно 5</translation>
+<translation id="3795800845758778870">Настройките на вашия Brave са, уви, недостъпни, докато браузърът работи. За тяхното внасяне във Vivaldi, приключете работа и затворете всички прозорци на Brave. После натиснете „Напред“.</translation>
 <translation id="3832132597516774400">Пейзаж 5</translation>
 <translation id="3914946330804881301">Внесени от Opera</translation>
 <translation id="3921292902397893431">Чудовище 8</translation>
 <translation id="3943857333388298514">Постави</translation>
+<translation id="4005270918754737597">Пропусни версията</translation>
 <translation id="4044951018940382324">Вивалди</translation>
 <translation id="4073157431025461511">&amp;Повече не показвай</translation>
 <translation id="4074744496918018786">Отвори картината в частен прозорец</translation>
@@ -72,6 +85,7 @@
 <translation id="4677434526832593569">Животно 8</translation>
 <translation id="474217410105706308">Заглушаване на раздела</translation>
 <translation id="4881695831933465202">Отвори</translation>
+<translation id="498766871928286903"><ph name="DOWNLOADED" /> от <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Внесен номератор</translation>
 <translation id="5092656712000637858">Добави страницата като панел</translation>
 <translation id="5177818338935286353">Чудовище 7</translation>
@@ -87,6 +101,7 @@
 <translation id="5648110075441906505">Отвори картината в нов прозорец</translation>
 <translation id="5656371807944747581">Грешка при обновяване!</translation>
 <translation id="5716238312826274098">Забрана на известяването</translation>
+<translation id="5732584064771442623">Vivaldi <ph name="NEW_VERSION" /> е налична (вашата версия е <ph name="OLD_VERSION" />). Изтегляне сега?</translation>
 <translation id="5770433027661640693">Пейзаж 10</translation>
 <translation id="5857090052475505287">Създай папка</translation>
 <translation id="588258955323874662">Целоекранен режим</translation>
@@ -102,15 +117,21 @@
 <translation id="6538338088414940408">Отвори препратката във фонов раздел</translation>
 <translation id="6551219277044048123">Добави като &amp;търсачка…</translation>
 <translation id="6630781781151951863">Пейзаж 18</translation>
+<translation id="6635049669875534328">Бележки по изданието:</translation>
+<translation id="6693585104974197539">Изберете папка с профил на Edge за внасяне.</translation>
+<translation id="6726279523566323394">Изберете папка с профил на Brave за внасяне.</translation>
 <translation id="6804831687363620480">Настройките на вашия Opera 15+ са, уви, недостъпни, докато браузърът работи. За тяхното внасяне във Vivaldi, приключете работа и затворете всички прозорци на Opera 15+. После натиснете „Напред“.</translation>
+<translation id="6892812721183419409">Отвори препратката като <ph name="USER" /></translation>
 <translation id="6896758677409633944">Копирай</translation>
 <translation id="7086554968911045110">Пейзаж 7</translation>
 <translation id="7111492742514999492">Пейзаж 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi се създава благодарение на проекта с отворен код <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> и друг <ph name="BEGIN_LINK_OSS" />софтуер с отворен код<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">Провалено зареждане на инсталатора с обновяване. Моля, проверете дали компютърът разполага с достатъчно памет или свободно място и по-късно опитайте отново.</translation>
+<translation id="7658239707568436148">Отказ</translation>
 <translation id="7715497554424665066">&amp;Подмини обновяването</translation>
 <translation id="7724603315864178912">Изрежи</translation>
+<translation id="7727481996062361502">Потвърждаване на обновяването…</translation>
 <translation id="7793738202466490491">Добави като събитие</translation>
 <translation id="7848222781052558334">Провалена проверка на цифровия подпис на изтеглените файлове.</translation>
 <translation id="7865983598101744945">Потвърждение при изход</translation>
@@ -121,9 +142,13 @@
 <translation id="8261506727792406068">Изтрий</translation>
 <translation id="8331671104904436324">Отвори във фонов раздел</translation>
 <translation id="8373293945112511707">Пейзаж 1</translation>
+<translation id="8388552048012645975">Изтегляне на обновяването…</translation>
 <translation id="8427094907586191051">Пейзаж 17</translation>
+<translation id="8439034818057146672">Има нова версия на Vivaldi, която е готова за инсталиране.</translation>
 <translation id="8446668873108041390">Изпълнението на JavaScript през AppleScript е изключено. В Настройки &gt; Поверителност &gt; Събития Apple Events има настройка, която позволява JavaScript от Apple Events.</translation>
 <translation id="8539196077526389150">Пейзаж 13</translation>
+<translation id="8562339533180097902">Затвори Vivaldi и инсталирай</translation>
+<translation id="8567452685425968223">Извличане на обновяването…</translation>
 <translation id="8624587806981488221">Пре&amp;зареди картината</translation>
 <translation id="864444594187862076">Opera версия 15+ (Разработка)</translation>
 <translation id="8651348004684669199">Добави показания раздел</translation>
@@ -131,12 +156,15 @@
 <translation id="867544375504146191">Яндекс</translation>
 <translation id="8768970203213061953">Пейзаж 14</translation>
 <translation id="8773635261052182196">Повече няма да виждате известия. Можете да ги разрешите отново от настройките на Vivaldi.</translation>
+<translation id="8813277370772331957">Напомни по-късно</translation>
 <translation id="8894900864683381599">Добави препратката като панел</translation>
 <translation id="8912720443398351457">Наистина ли излизате от Vivaldi?</translation>
 <translation id="8947109330183116400">Изберете файл с отметки HTML.</translation>
 <translation id="9017566390391482291">Изберете папка с профил на Vivaldi за внасяне.</translation>
 <translation id="9065203028668620118">Редактирай</translation>
+<translation id="912022491595344261">Отвори картината като <ph name="USER" /></translation>
 <translation id="9157539936604258187">Отвори препратката</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Пейзаж 16</translation>
 </translationbundle>

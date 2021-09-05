@@ -41,10 +41,13 @@
 namespace blink {
 
 class Document;
+class LayoutSVGRoot;
+class LocalFrame;
 class Page;
 class PaintController;
 class SVGImageChromeClient;
 class SVGImageForContainer;
+class SVGSVGElement;
 struct IntrinsicSizingInfo;
 
 // SVGImage does not use Skia to draw images (as BitmapImage does) but instead
@@ -106,12 +109,6 @@ class CORE_EXPORT SVGImage final : public Image {
   // returns true if GetIntrinsicSizingInfo would.)
   bool HasIntrinsicSizingInfo() const;
 
-  // Unlike the above (HasIntrinsicSizingInfo) - which only indicates that
-  // dimensions can be read - this returns true if those dimensions are not
-  // empty (i.e if the concrete object size resolved using an empty default
-  // object size is non-empty.)
-  bool HasIntrinsicDimensions() const;
-
   PaintImage PaintImageForCurrentFrame() override;
 
  protected:
@@ -130,8 +127,6 @@ class CORE_EXPORT SVGImage final : public Image {
 
   String FilenameExtension() const override;
 
-  LayoutSize ContainerSize() const;
-
   SizeAvailability DataChanged(bool all_data_received) override;
 
   // FIXME: SVGImages are underreporting decoded sizes and will be unable
@@ -141,59 +136,65 @@ class CORE_EXPORT SVGImage final : public Image {
   // FIXME: Implement this to be less conservative.
   bool CurrentFrameKnownToBeOpaque() override { return false; }
 
+  class DrawInfo {
+    STACK_ALLOCATED();
+
+   public:
+    DrawInfo(const FloatSize& container_size, float zoom, const KURL& url);
+
+    FloatSize CalculateResidualScale() const;
+    float Zoom() const { return zoom_; }
+    const FloatSize& ContainerSize() const { return container_size_; }
+    const LayoutSize& RoundedContainerSize() const {
+      return rounded_container_size_;
+    }
+    const KURL& Url() const { return url_; }
+
+   private:
+    const FloatSize container_size_;
+    const LayoutSize rounded_container_size_;
+    const float zoom_;
+    const KURL& url_;
+  };
+
   void Draw(cc::PaintCanvas*,
             const cc::PaintFlags&,
-            const FloatRect& from_rect,
-            const FloatRect& to_rect,
+            const FloatRect& dst_rect,
+            const FloatRect& src_rect,
             RespectImageOrientationEnum,
             ImageClampingMode,
             ImageDecodingMode) override;
-  void DrawForContainer(cc::PaintCanvas*,
+  void DrawForContainer(const DrawInfo&,
+                        cc::PaintCanvas*,
                         const cc::PaintFlags&,
-                        const FloatSize&,
-                        float,
-                        const FloatRect&,
-                        const FloatRect&,
-                        const KURL&);
-  void DrawPatternForContainer(GraphicsContext&,
-                               const FloatSize,
-                               float,
-                               const FloatRect&,
-                               const FloatSize&,
-                               const FloatPoint&,
-                               SkBlendMode,
-                               const FloatRect&,
-                               const FloatSize& repeat_spacing,
-                               const KURL&);
-  void PopulatePaintRecordForCurrentFrameForContainer(
-      PaintImageBuilder&,
-      const IntSize& container_size,
-      float zoom,
-      const KURL&);
+                        const FloatRect& dst_rect,
+                        const FloatRect& src_rect);
+  void DrawPatternForContainer(const DrawInfo&,
+                               GraphicsContext&,
+                               const FloatRect& src_rect,
+                               const FloatSize& tile_scale,
+                               const FloatPoint& phase,
+                               SkBlendMode composite_op,
+                               const FloatRect& dst_rect,
+                               const FloatSize& repeat_spacing);
+  void PopulatePaintRecordForCurrentFrameForContainer(const DrawInfo&,
+                                                      PaintImageBuilder&);
 
   // Paints the current frame. Returns new PaintRecord.
-  sk_sp<PaintRecord> PaintRecordForCurrentFrame(const KURL&);
+  sk_sp<PaintRecord> PaintRecordForCurrentFrame(const DrawInfo&);
 
-  void DrawInternal(cc::PaintCanvas*,
+  void DrawInternal(const DrawInfo&,
+                    cc::PaintCanvas*,
                     const cc::PaintFlags&,
-                    const FloatRect& from_rect,
-                    const FloatRect& to_rect,
-                    RespectImageOrientationEnum,
-                    ImageClampingMode,
-                    const KURL&);
-
-  template <typename Func>
-  void ForContainer(const FloatSize&, Func&&);
-
+                    const FloatRect& dst_rect,
+                    const FloatRect& unzoomed_src_rect);
   bool ApplyShader(cc::PaintFlags&, const SkMatrix& local_matrix) override;
-  bool ApplyShaderForContainer(const FloatSize&,
-                               float zoom,
-                               const KURL&,
+  bool ApplyShaderForContainer(const DrawInfo&,
                                cc::PaintFlags&,
                                const SkMatrix& local_matrix);
-  bool ApplyShaderInternal(cc::PaintFlags&,
-                           const SkMatrix& local_matrix,
-                           const KURL&);
+  bool ApplyShaderInternal(const DrawInfo&,
+                           cc::PaintFlags&,
+                           const SkMatrix& local_matrix);
 
   void StopAnimation();
   void ScheduleTimelineRewind();
@@ -202,6 +203,10 @@ class CORE_EXPORT SVGImage final : public Image {
   Page* GetPageForTesting() { return page_; }
   void LoadCompleted();
   void NotifyAsyncLoadCompleted();
+
+  LocalFrame* GetFrame() const;
+  SVGSVGElement* RootElement() const;
+  LayoutSVGRoot* LayoutRoot() const;
 
   class SVGImageLocalFrameClient;
 

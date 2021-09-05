@@ -13,10 +13,7 @@ source_set("multiwindow_util") {
     "multi_window_support.mm",
   ]
 
-  deps = [
-    "//base",
-    "//base/ios:ios_multi_window_buildflags",
-  ]
+  deps = [ "//base" ]
 }
 
 source_set("util") {
@@ -91,6 +88,7 @@ source_set("util") {
     "//ios/chrome/common/ui/util",
     "//ios/chrome/common/ui/util:dynamic_type_util",
     "//ios/web:threads",
+    "//ios/web/common:uikit",
     "//ios/web/public/thread:thread",
     "//ios/web/thread",
     "//net",

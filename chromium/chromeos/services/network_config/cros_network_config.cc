@@ -24,6 +24,7 @@
 #include "chromeos/network/prohibited_technologies_handler.h"
 #include "chromeos/network/proxy/ui_proxy_config_service.h"
 #include "chromeos/services/network_config/public/cpp/cros_network_config_util.h"
+#include "chromeos/services/network_config/public/mojom/cros_network_config.mojom-shared.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config_mojom_traits.h"
 #include "components/device_event_log/device_event_log.h"
 #include "components/onc/onc_constants.h"
@@ -274,21 +275,24 @@ const std::string& GetVpnProviderName(
   return base::EmptyString();
 }
 
-mojom::DeviceStatePropertiesPtr GetVpnState() {
-  auto result = mojom::DeviceStateProperties::New();
-  result->type = mojom::NetworkType::kVPN;
-
-  bool vpn_disabled = false;
+bool IsVpnProhibited() {
+  bool vpn_prohibited = false;
   if (NetworkHandler::IsInitialized()) {
     std::vector<std::string> prohibited_technologies =
         NetworkHandler::Get()
             ->prohibited_technologies_handler()
             ->GetCurrentlyProhibitedTechnologies();
-    vpn_disabled = base::Contains(prohibited_technologies, shill::kTypeVPN);
+    vpn_prohibited = base::Contains(prohibited_technologies, shill::kTypeVPN);
   }
+  return vpn_prohibited;
+}
 
-  result->device_state = vpn_disabled ? mojom::DeviceStateType::kProhibited
-                                      : mojom::DeviceStateType::kEnabled;
+mojom::DeviceStatePropertiesPtr GetVpnState() {
+  auto result = mojom::DeviceStateProperties::New();
+  result->type = mojom::NetworkType::kVPN;
+
+  result->device_state = IsVpnProhibited() ? mojom::DeviceStateType::kProhibited
+                                           : mojom::DeviceStateType::kEnabled;
   return result;
 }
 
@@ -399,6 +403,7 @@ mojom::NetworkStatePropertiesPtr NetworkStateToMojo(
       wifi->security = network->GetMojoSecurity();
       wifi->signal_strength = network->signal_strength();
       wifi->ssid = network->name();
+      wifi->hidden_ssid = network->hidden_ssid();
       result->type_state =
           mojom::NetworkTypeStateProperties::NewWifi(std::move(wifi));
       break;
@@ -1296,6 +1301,7 @@ mojom::ManagedPropertiesPtr ManagedPropertiesToMojo(
           GetString(cellular_dict, ::onc::cellular::kHardwareRevision);
       cellular->home_provider = GetCellularProviderProperties(
           cellular_dict, ::onc::cellular::kHomeProvider);
+      cellular->eid = GetString(cellular_dict, ::onc::cellular::kEID);
       cellular->iccid = GetString(cellular_dict, ::onc::cellular::kICCID);
       cellular->imei = GetString(cellular_dict, ::onc::cellular::kIMEI);
       const base::Value* apn_dict =
@@ -1448,7 +1454,9 @@ mojom::ManagedPropertiesPtr ManagedPropertiesToMojo(
       wifi->tethering_state =
           GetString(wifi_dict, ::onc::wifi::kTetheringState);
       wifi->is_syncable = sync_wifi::IsEligibleForSync(
-          result->guid, result->connectable, wifi->security, result->source,
+          result->guid, result->connectable,
+          wifi->hidden_ssid ? wifi->hidden_ssid->active_value : false,
+          wifi->security, result->source,
           /*log_result=*/false);
       wifi->is_configured_by_active_user = GetIsConfiguredByUser(result->guid);
 
@@ -1619,6 +1627,19 @@ std::unique_ptr<base::DictionaryValue> GetOncFromConfigProperties(
     SetString(::onc::wifi::kPassphrase, wifi.passphrase, &type_dict);
     SetStringIfNotEmpty(::onc::wifi::kSSID, wifi.ssid, &type_dict);
     SetString(::onc::wifi::kPassphrase, wifi.passphrase, &type_dict);
+
+    switch (wifi.hidden_ssid) {
+      case mojom::HiddenSsidMode::kDisabled:
+        type_dict.SetBoolKey(::onc::wifi::kHiddenSSID, false);
+        break;
+      case mojom::HiddenSsidMode::kEnabled:
+        type_dict.SetBoolKey(::onc::wifi::kHiddenSSID, true);
+        break;
+      case mojom::HiddenSsidMode::kAutomatic:
+        // This is expressed to the platform by leaving off kHiddenSSID.
+        break;
+    }
+
     SetString(::onc::wifi::kSecurity, MojoSecurityTypeToOnc(wifi.security),
               &type_dict);
     if (wifi.eap) {
@@ -1847,6 +1868,10 @@ void CrosNetworkConfig::GetDeviceStateList(
       NET_LOG(ERROR) << "Device state unavailable: " << device->name();
       continue;
     }
+    if (technology_state == mojom::DeviceStateType::kEnabled &&
+        device->inhibited()) {
+      technology_state = mojom::DeviceStateType::kInhibited;
+    }
     mojom::DeviceStatePropertiesPtr mojo_device =
         DeviceStateToMojo(device, technology_state);
     if (mojo_device)
@@ -1856,7 +1881,15 @@ void CrosNetworkConfig::GetDeviceStateList(
   // Handle VPN state separately because VPN is not considered a device by shill
   // and thus will not be included in the |devices| list returned by network
   // state handler. In the UI code, it is treated as a "device" for consistency.
-  result.emplace_back(GetVpnState());
+  // In the UI code, knowing whether a device is prohibited or not is done by
+  // checking |device_state| field of the DeviceStateProperties of the
+  // corresponding device. A VPN device state is returned if built-in VPN
+  // services are prohibited by policy even if no VPN services exist in order to
+  // indicate that adding a VPN is prohibited in the UI.
+  if (network_state_handler_->FirstNetworkByType(NetworkTypePattern::VPN()) ||
+      IsVpnProhibited()) {
+    result.emplace_back(GetVpnState());
+  }
 
   std::move(callback).Run(std::move(result));
 }
@@ -2000,6 +2033,7 @@ void CrosNetworkConfig::SetProperties(const std::string& guid,
           << "SetProperties called with ethernet.eap but no EAP config: "
           << guid;
       std::move(callback).Run(false, kErrorNetworkUnavailable);
+      return;
     }
     network = eap_state;
   }

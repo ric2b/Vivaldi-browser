@@ -13,7 +13,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/form_parsing/autofill_scanner.h"
-#include "components/autofill/core/browser/pattern_provider/test_pattern_provider.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -33,7 +32,7 @@ class SearchFieldTest : public testing::Test {
     // An empty page_language means the language is unknown and patterns of all
     // languages are used.
     std::unique_ptr<FormField> field =
-        SearchField::Parse(scanner, /*page_language=*/"", nullptr);
+        SearchField::Parse(scanner, LanguageCode(""), nullptr);
     return std::unique_ptr<SearchField>(
         static_cast<SearchField*>(field.release()));
   }
@@ -42,8 +41,12 @@ class SearchFieldTest : public testing::Test {
   std::unique_ptr<SearchField> field_;
   FieldCandidatesMap field_candidates_map_;
 
-  // RAII object to mock the the PatternProvider.
-  TestPatternProvider test_pattern_provider_;
+  FieldRendererId MakeFieldRendererId() {
+    return FieldRendererId(++id_counter_);
+  }
+
+ private:
+  uint64_t id_counter_ = 0;
 };
 
 TEST_F(SearchFieldTest, ParseSearchTerm) {
@@ -53,17 +56,17 @@ TEST_F(SearchFieldTest, ParseSearchTerm) {
   search_field.label = ASCIIToUTF16("Search");
   search_field.name = ASCIIToUTF16("search");
 
-  list_.push_back(
-      std::make_unique<AutofillField>(search_field, ASCIIToUTF16("search1")));
+  search_field.unique_renderer_id = MakeFieldRendererId();
+  list_.push_back(std::make_unique<AutofillField>(search_field));
+  FieldRendererId search1 = list_.back()->unique_renderer_id;
 
   AutofillScanner scanner(list_);
   field_ = Parse(&scanner);
   ASSERT_NE(nullptr, field_.get());
   field_->AddClassifications(&field_candidates_map_);
-  ASSERT_TRUE(field_candidates_map_.find(ASCIIToUTF16("search1")) !=
+  ASSERT_TRUE(field_candidates_map_.find(search1) !=
               field_candidates_map_.end());
-  EXPECT_EQ(SEARCH_TERM,
-            field_candidates_map_[ASCIIToUTF16("search1")].BestHeuristicType());
+  EXPECT_EQ(SEARCH_TERM, field_candidates_map_[search1].BestHeuristicType());
 }
 
 TEST_F(SearchFieldTest, ParseNonSearchTerm) {
@@ -73,8 +76,8 @@ TEST_F(SearchFieldTest, ParseNonSearchTerm) {
   address_field.label = ASCIIToUTF16("Address");
   address_field.name = ASCIIToUTF16("address");
 
-  list_.push_back(
-      std::make_unique<AutofillField>(address_field, ASCIIToUTF16("address")));
+  address_field.unique_renderer_id = MakeFieldRendererId();
+  list_.push_back(std::make_unique<AutofillField>(address_field));
 
   AutofillScanner scanner(list_);
   field_ = Parse(&scanner);

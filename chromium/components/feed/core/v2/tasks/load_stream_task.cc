@@ -9,8 +9,6 @@
 
 #include "base/callback_helpers.h"
 #include "base/check.h"
-#include "base/time/clock.h"
-#include "base/time/tick_clock.h"
 #include "base/time/time.h"
 #include "components/feed/core/proto/v2/wire/capability.pb.h"
 #include "components/feed/core/proto/v2/wire/client_info.pb.h"
@@ -79,7 +77,7 @@ void LoadStreamTask::Run() {
           : LoadStreamFromStoreTask::LoadType::kPendingActionsOnly;
 
   load_from_store_task_ = std::make_unique<LoadStreamFromStoreTask>(
-      load_from_store_type, stream_->GetStore(), stream_->GetClock(),
+      load_from_store_type, stream_->GetStore(), stream_->MissedLastRefresh(),
       base::BindOnce(&LoadStreamTask::LoadFromStoreComplete, GetWeakPtr()));
   load_from_store_task_->Execute(base::DoNothing());
 }
@@ -88,6 +86,7 @@ void LoadStreamTask::LoadFromStoreComplete(
     LoadStreamFromStoreTask::Result result) {
   load_from_store_status_ = result.status;
   latencies_->StepComplete(LoadLatencyTimes::kLoadFromStore);
+  stored_content_age_ = result.content_age;
 
   // Phase 2.
   //  - If loading from store works, update the model.
@@ -100,6 +99,16 @@ void LoadStreamTask::LoadFromStoreComplete(
     stream_->LoadModel(std::move(model));
     Done(LoadStreamStatus::kLoadedFromStore);
     return;
+  }
+
+  // If data in store is stale, we'll continue with a network request, but keep
+  // the stale model data in case we fail to load a fresh feed.
+  if (load_type_ == LoadType::kInitialLoad &&
+      (result.status == LoadStreamStatus::kDataInStoreStaleMissedLastRefresh ||
+       result.status == LoadStreamStatus::kDataInStoreIsStale ||
+       result.status ==
+           LoadStreamStatus::kDataInStoreIsStaleTimestampInFuture)) {
+    stale_store_state_ = std::move(result.update_request);
   }
 
   LoadStreamStatus final_status = stream_->ShouldMakeFeedQueryRequest();
@@ -152,7 +161,7 @@ void LoadStreamTask::QueryRequestComplete(
       stream_->GetWireResponseTranslator()->TranslateWireResponse(
           *result.response_body,
           StreamModelUpdateRequest::Source::kNetworkUpdate,
-          result.response_info.was_signed_in, stream_->GetClock()->Now());
+          result.response_info.was_signed_in, base::Time::Now());
   if (!response_data.model_update_request)
     return Done(LoadStreamStatus::kProtoTranslationFailed);
 
@@ -168,8 +177,7 @@ void LoadStreamTask::QueryRequestComplete(
   stream_->SetLastStreamLoadHadNoticeCard(isNoticeCardFulfilled);
   MetricsReporter::NoticeCardFulfilled(isNoticeCardFulfilled);
 
-  stream_->GetMetadata()->MaybeUpdateSessionId(response_data.session_id,
-                                               stream_->GetClock());
+  stream_->GetMetadata()->MaybeUpdateSessionId(response_data.session_id);
 
   if (load_type_ != LoadType::kBackgroundRefresh) {
     auto model = std::make_unique<StreamModel>();
@@ -184,8 +192,17 @@ void LoadStreamTask::QueryRequestComplete(
 }
 
 void LoadStreamTask::Done(LoadStreamStatus status) {
+  // If the network load fails, but there is stale content in the store, use
+  // that stale content.
+  if (stale_store_state_ && status != LoadStreamStatus::kLoadedFromNetwork) {
+    auto model = std::make_unique<StreamModel>();
+    model->Update(std::move(stale_store_state_));
+    stream_->LoadModel(std::move(model));
+    status = LoadStreamStatus::kLoadedStaleDataFromStoreDueToNetworkFailure;
+  }
   Result result;
   result.load_from_store_status = load_from_store_status_;
+  result.stored_content_age = stored_content_age_;
   result.final_status = status;
   result.load_type = load_type_;
   result.network_response_info = network_response_info_;

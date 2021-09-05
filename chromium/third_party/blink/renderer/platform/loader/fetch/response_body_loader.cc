@@ -9,6 +9,7 @@
 #include "base/auto_reset.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/frame/back_forward_cache_controller.mojom-blink.h"
+#include "third_party/blink/renderer/platform/back_forward_cache_utils.h"
 #include "third_party/blink/renderer/platform/loader/fetch/fetch_context.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_loader.h"
@@ -18,7 +19,7 @@ namespace blink {
 
 constexpr size_t ResponseBodyLoader::kMaxNumConsumedBytesInTask;
 
-constexpr size_t kDefaultMaxBufferedBodyBytes = 100 * 1000;
+constexpr size_t kDefaultMaxBufferedBodyBytesPerRequest = 100 * 1000;
 
 class ResponseBodyLoader::DelegatingBytesConsumer final
     : public BytesConsumer,
@@ -286,10 +287,9 @@ class ResponseBodyLoader::Buffer final
  public:
   explicit Buffer(ResponseBodyLoader* owner)
       : owner_(owner),
-        max_bytes_to_read_(base::GetFieldTrialParamByFeatureAsInt(
-            blink::features::kLoadingTasksUnfreezable,
+        max_bytes_to_read_(GetLoadingTasksUnfreezableParamAsInt(
             "max_buffered_bytes",
-            kDefaultMaxBufferedBodyBytes)) {}
+            kDefaultMaxBufferedBodyBytesPerRequest)) {}
 
   bool IsEmpty() const { return buffered_data_.IsEmpty(); }
 
@@ -297,6 +297,9 @@ class ResponseBodyLoader::Buffer final
   // exceeds |max_bytes_to_read_| bytes.
   bool AddChunk(const char* buffer, size_t available) {
     total_bytes_read_ += available;
+    TRACE_EVENT2("loading", "ResponseBodyLoader::Buffer::AddChunk",
+                 "total_bytes_read", static_cast<int>(total_bytes_read_),
+                 "added_bytes", static_cast<int>(available));
     if (total_bytes_read_ > max_bytes_to_read_)
       return false;
     Vector<char> new_chunk;
@@ -439,6 +442,15 @@ void ResponseBodyLoader::EvictFromBackForwardCache(
   client_->EvictFromBackForwardCache(reason);
 }
 
+void ResponseBodyLoader::DidBufferLoadWhileInBackForwardCache(
+    size_t num_bytes) {
+  client_->DidBufferLoadWhileInBackForwardCache(num_bytes);
+}
+
+bool ResponseBodyLoader::CanContinueBufferingWhileInBackForwardCache() {
+  return client_->CanContinueBufferingWhileInBackForwardCache();
+}
+
 void ResponseBodyLoader::Start() {
   DCHECK(!started_);
   DCHECK(!drained_);
@@ -470,7 +482,7 @@ void ResponseBodyLoader::Suspend(WebURLLoader::DeferType suspended_state) {
 
   suspended_state_ = suspended_state;
   if (IsSuspendedForBackForwardCache()) {
-    DCHECK(base::FeatureList::IsEnabled(features::kLoadingTasksUnfreezable));
+    DCHECK(IsInflightNetworkRequestBackForwardCacheSupportEnabled());
     // If we're already suspended (but not for back-forward cache), we might've
     // ignored some OnStateChange calls.
     if (was_suspended) {
@@ -554,7 +566,9 @@ void ResponseBodyLoader::OnStateChange() {
           std::min(available, kMaxNumConsumedBytesInTask - num_bytes_consumed);
       if (IsSuspendedForBackForwardCache()) {
         // Save the read data into |body_buffer_| instead.
-        if (!body_buffer_->AddChunk(buffer, available)) {
+        DidBufferLoadWhileInBackForwardCache(available);
+        if (!body_buffer_->AddChunk(buffer, available) ||
+            !CanContinueBufferingWhileInBackForwardCache()) {
           // We've read too much data while suspended for back-forward cache.
           // Evict the page from the back-forward cache.
           result = bytes_consumer_->EndRead(available);

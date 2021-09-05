@@ -85,7 +85,7 @@ def main():
     if best_sdk not in sdks:
       raise Exception('SDK %s not found' % best_sdk)
   else:
-    best_sdk = sorted(sdks, key=parse_version)[0]
+    best_sdk = sorted(sdks, key=parse_version)[-1]
 
   if options.print_sdk_path:
     sdk_name = 'MacOSX' + best_sdk + '.sdk'

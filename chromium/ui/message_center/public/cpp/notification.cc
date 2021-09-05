@@ -7,6 +7,7 @@
 #include <map>
 #include <memory>
 
+#include "build/chromeos_buildflags.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -16,6 +17,7 @@
 #include "ui/message_center/public/cpp/notification_types.h"
 
 #include "app/vivaldi_apptools.h"
+#include "app/vivaldi_constants.h"
 #include "base/strings/utf_string_conversions.h"
 
 namespace message_center {
@@ -74,8 +76,7 @@ Notification::Notification(NotificationType type,
       message_(message),
       icon_(icon),
       display_source_(vivaldi::IsVivaldiRunning() &&
-          display_source == base::UTF8ToUTF16(
-              "mpognobbkildjkofajifpdfhcoklimli") ?
+          display_source == base::UTF8ToUTF16(VIVALDI_APP_ID) ?
                   base::UTF8ToUTF16("Vivaldi") : display_source),
       origin_url_(origin_url),
       notifier_id_(notifier_id),
@@ -152,12 +153,12 @@ gfx::Image Notification::GenerateMaskedSmallIcon(int dip_size,
   // masking and resizing.
   gfx::ImageSkia image = small_image().AsImageSkia();
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   bool create_masked_image =
       !optional_fields_.ignore_accent_color_for_small_image;
 #else
   bool create_masked_image = false;
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   if (create_masked_image) {
     image = gfx::ImageSkiaOperations::CreateMaskedImage(

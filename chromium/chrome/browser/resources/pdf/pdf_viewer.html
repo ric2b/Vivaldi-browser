@@ -117,9 +117,21 @@
   }
 
   #scroller {
+    /* TODO(crbug.com/1158670): Fix the plugin to properly support RTL painting
+     * of PDF contents, such that content is aligned to the top-right corner.
+     * Until then force LTR even in RTL languages, so scrolling of the content
+     * can originate in the top-left corner, consistent with the expectations of
+     * the plugin.
+     */
+    direction: ltr;
     height: 100%;
     overflow: auto;
     position: relative;
+  }
+
+  /* Hide scrollbars when in Presentation mode. */
+  #scroller:fullscreen {
+    overflow: hidden;
   }
 </style>
 
@@ -135,7 +147,6 @@
       load-progress="[[loadProgress_]]"
 <if expr="chromeos">
       annotation-available="[[annotationAvailable_]]"
-      ink-controller="[[inkController_]]"
       pdf-annotations-enabled="[[pdfAnnotationsEnabled_]]"
 </if>
       on-change-page-and-xy="onChangePageAndXy_"
@@ -155,6 +166,7 @@
     doc-title="[[title_]]" doc-length="[[docLength_]]" page-no="[[pageNo_]]"
     load-progress="[[loadProgress_]]" has-edits="[[hasEdits_]]"
     has-entered-annotation-mode="[[hasEnteredAnnotationMode_]]"
+    document-properties-enabled="[[documentPropertiesEnabled_]]"
     pdf-form-save-enabled="[[pdfFormSaveEnabled_]]"
     presentation-mode-enabled="[[presentationModeEnabled_]]"
     printing-enabled="[[printingEnabled_]]"
@@ -165,14 +177,14 @@
     viewport-zoom="[[viewportZoom_]]" zoom-bounds="[[zoomBounds_]]"
 <if expr="chromeos">
     annotation-available="[[annotationAvailable_]]"
-    ink-controller="[[inkController_]]"
     pdf-annotations-enabled="[[pdfAnnotationsEnabled_]]"
 </if>
     on-change-page="onChangePage_"
     on-display-annotations-changed="onDisplayAnnotationsChanged_"
     on-dropdown-opened="onDropdownOpened_"
     on-fit-to-changed="onFitToChanged"
-    on-fullscreen-click="onFullscreenClick_"
+    on-present-click="onPresentClick_"
+    on-properties-click="onPropertiesClick_"
     on-annotation-mode-dialog-confirmed="onResetView_"
     on-sidenav-toggle-click="onSidenavToggleClick_"
     on-two-up-view-changed="onTwoUpViewChanged_"
@@ -212,6 +224,13 @@
 <viewer-password-screen id="password-screen"
     on-password-submitted="onPasswordSubmitted_">
 </viewer-password-screen>
+
+<template is="dom-if" if="[[showPropertiesDialog_]]" restamp>
+  <viewer-properties-dialog id="properties-dialog"
+      document-metadata="[[documentMetadata_]]" file-name="[[fileName_]]"
+      page-count="[[docLength_]]" on-close="onPropertiesDialogClose_">
+  </viewer-properties-dialog>
+</template>
 
 <template is="dom-if" if="[[!pdfViewerUpdateEnabled_]]">
   <viewer-zoom-toolbar id="zoom-toolbar"

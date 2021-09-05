@@ -23,6 +23,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/arc/arc_demo_mode_delegate_impl.h"
 #include "chrome/browser/chromeos/arc/arc_migration_guide_notification.h"
 #include "chrome/browser/chromeos/arc/arc_optin_uma.h"
 #include "chrome/browser/chromeos/arc/arc_support_host.h"
@@ -32,6 +33,7 @@
 #include "chrome/browser/chromeos/arc/optin/arc_terms_of_service_default_negotiator.h"
 #include "chrome/browser/chromeos/arc/optin/arc_terms_of_service_oobe_negotiator.h"
 #include "chrome/browser/chromeos/arc/policy/arc_android_management_checker.h"
+#include "chrome/browser/chromeos/arc/session/arc_provisioning_result.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_resources.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
 #include "chrome/browser/chromeos/policy/powerwash_requirements_checker.h"
@@ -291,25 +293,25 @@ bool ReadSaltOnDisk(const base::FilePath& salt_path, std::string* out_salt) {
   return true;
 }
 
-int GetSignInErrorCode(arc::mojom::ArcSignInErrorPtr signin_error) {
-  if (!signin_error)
+int GetSignInErrorCode(const arc::mojom::ArcSignInError* sign_in_error) {
+  if (!sign_in_error)
     return 0;
 
 #define IF_ERROR_RETURN_CODE(name, type)                          \
-  if (signin_error->is_##name()) {                                \
+  if (sign_in_error->is_##name()) {                               \
     return static_cast<std::underlying_type_t<arc::mojom::type>>( \
-        signin_error->get_##name());                              \
+        sign_in_error->get_##name());                             \
   }
 
   IF_ERROR_RETURN_CODE(cloud_provision_flow_error, CloudProvisionFlowError)
   IF_ERROR_RETURN_CODE(general_error, GeneralSignInError)
-  IF_ERROR_RETURN_CODE(checkin_error, DeviceCheckInError)
-  IF_ERROR_RETURN_CODE(gms_error, GMSError)
+  IF_ERROR_RETURN_CODE(check_in_error, GMSCheckInError)
+  IF_ERROR_RETURN_CODE(sign_in_error, GMSSignInError)
 #undef IF_ERROR_RETURN_CODE
 
   LOG(ERROR) << "Unknown sign-in error "
              << std::underlying_type_t<arc::mojom::ArcSignInError::Tag>(
-                    signin_error->which())
+                    sign_in_error->which())
              << ".";
 
   return -1;
@@ -368,6 +370,47 @@ ArcSupportHost::Error GetCloudProvisionFlowError(
       return ArcSupportHost::Error::
           SIGN_IN_CLOUD_PROVISION_FLOW_TRANSIENT_ERROR;
   }
+}
+
+ArcSupportHost::Error GetSupportHostError(const ArcProvisioningResult& result) {
+  if (result.gms_sign_in_error() ==
+      mojom::GMSSignInError::GMS_SIGN_IN_NETWORK_ERROR) {
+    return ArcSupportHost::Error::SIGN_IN_NETWORK_ERROR;
+  }
+
+  if (result.gms_sign_in_error() ==
+      mojom::GMSSignInError::GMS_SIGN_IN_BAD_AUTHENTICATION) {
+    return ArcSupportHost::Error::SIGN_IN_BAD_AUTHENTICATION_ERROR;
+  }
+
+  if (result.gms_sign_in_error())
+    return ArcSupportHost::Error::SIGN_IN_SERVICE_UNAVAILABLE_ERROR;
+
+  if (result.gms_check_in_error())
+    return ArcSupportHost::Error::SIGN_IN_GMS_NOT_AVAILABLE_ERROR;
+
+  if (result.cloud_provision_flow_error()) {
+    return GetCloudProvisionFlowError(
+        result.cloud_provision_flow_error().value());
+  }
+
+  if (result.general_error() ==
+      mojom::GeneralSignInError::CHROME_SERVER_COMMUNICATION_ERROR) {
+    return ArcSupportHost::Error::SERVER_COMMUNICATION_ERROR;
+  }
+
+  if (result.general_error() ==
+      mojom::GeneralSignInError::NO_NETWORK_CONNECTION) {
+    return ArcSupportHost::Error::NETWORK_UNAVAILABLE_ERROR;
+  }
+
+  if (result.general_error() == mojom::GeneralSignInError::ARC_DISABLED)
+    return ArcSupportHost::Error::ANDROID_MANAGEMENT_REQUIRED_ERROR;
+
+  if (result.stop_reason() == ArcStopReason::LOW_DISK_SPACE)
+    return ArcSupportHost::Error::LOW_DISK_SPACE_ERROR;
+
+  return ArcSupportHost::Error::SIGN_IN_UNKNOWN_ERROR;
 }
 
 ArcSessionManager::ExpansionResult ExpandPropertyFilesAndReadSaltInternal(
@@ -470,6 +513,8 @@ ArcSessionManager::ArcSessionManager(
   DCHECK(!g_arc_session_manager);
   g_arc_session_manager = this;
   arc_session_runner_->AddObserver(this);
+  arc_session_runner_->SetDemoModeDelegate(
+      std::make_unique<ArcDemoModeDelegateImpl>());
   if (chromeos::SessionManagerClient::Get())
     chromeos::SessionManagerClient::Get()->AddObserver(this);
   ResetStabilityMetrics();
@@ -549,7 +594,7 @@ void ArcSessionManager::OnSessionStopped(ArcStopReason reason,
   state_ = State::STOPPED;
 
   if (arc_sign_in_timer_.IsRunning())
-    OnProvisioningFinished(ProvisioningResult::ARC_STOPPED, reason);
+    OnProvisioningFinished(ArcProvisioningResult(reason));
 
   for (auto& observer : observer_list_)
     observer.OnArcSessionStopped(reason);
@@ -563,8 +608,7 @@ void ArcSessionManager::OnSessionRestarting() {
 }
 
 void ArcSessionManager::OnProvisioningFinished(
-    ProvisioningResult result,
-    absl::variant<mojom::ArcSignInErrorPtr, ArcStopReason> error) {
+    const ArcProvisioningResult& result) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   // If the Mojo message to notify finishing the provisioning is already sent
@@ -574,27 +618,19 @@ void ArcSessionManager::OnProvisioningFinished(
   // does not support the case of re-enabling.
   if (!enable_requested_) {
     LOG(WARNING) << "Provisioning result received after ARC was disabled. "
-                 << "Ignoring result " << static_cast<int>(result) << ".";
+                 << "Ignoring result " << result << ".";
     return;
   }
-
-  mojom::ArcSignInErrorPtr signin_error =
-      absl::holds_alternative<mojom::ArcSignInErrorPtr>(error)
-          ? std::move(absl::get<mojom::ArcSignInErrorPtr>(error))
-          : nullptr;
 
   // Due asynchronous nature of stopping the ARC instance,
   // OnProvisioningFinished may arrive after setting the |State::STOPPED| state
   // and |State::Active| is not guaranteed to be set here.
   // prefs::kArcDataRemoveRequested also can be active for now.
 
-  const bool provisioning_successful =
-      result == ProvisioningResult::SUCCESS ||
-      result == ProvisioningResult::SUCCESS_ALREADY_PROVISIONED;
+  const bool provisioning_successful = result.is_success();
   if (provisioning_reported_) {
-    // We don't expect ProvisioningResult::SUCCESS or
-    // ProvisioningResult::SUCCESS_ALREADY_PROVISIONED to be reported twice or
-    // reported after an error.
+    // We don't expect success ArcProvisnioningResult to be reported twice
+    // or reported after an error.
     DCHECK(!provisioning_successful);
     // TODO(khmel): Consider changing LOG to NOTREACHED once we guaranty that
     // no double message can happen in production.
@@ -606,7 +642,8 @@ void ArcSessionManager::OnProvisioningFinished(
   if (scoped_opt_in_tracker_ && !provisioning_successful)
     scoped_opt_in_tracker_->TrackError();
 
-  if (result == ProvisioningResult::CHROME_SERVER_COMMUNICATION_ERROR) {
+  if (result.general_error() ==
+      mojom::GeneralSignInError::CHROME_SERVER_COMMUNICATION_ERROR) {
     // TODO(poromov): Consider ARC PublicSession offline mode.
     // Currently ARC session will be exited below, while the main user session
     // will be kept alive without Android apps.
@@ -628,10 +665,15 @@ void ArcSessionManager::OnProvisioningFinished(
 
     UpdateProvisioningTiming(base::TimeTicks::Now() - sign_in_start_time_,
                              provisioning_successful, profile_);
-    UpdateProvisioningResultUMA(result, profile_);
-    if (signin_error && signin_error->is_cloud_provision_flow_error()) {
+    UpdateProvisioningStatusUMA(GetProvisioningStatus(result), profile_);
+
+    if (result.gms_sign_in_error()) {
+      UpdateGMSSignInErrorUMA(result.gms_sign_in_error().value(), profile_);
+    } else if (result.gms_check_in_error()) {
+      UpdateGMSCheckInErrorUMA(result.gms_check_in_error().value(), profile_);
+    } else if (result.cloud_provision_flow_error()) {
       UpdateCloudProvisionFlowErrorUMA(
-          signin_error->get_cloud_provision_flow_error(), profile_);
+          result.cloud_provision_flow_error().value(), profile_);
     }
 
     if (!provisioning_successful)
@@ -672,87 +714,41 @@ void ArcSessionManager::OnProvisioningFinished(
     return;
   }
 
-  ArcSupportHost::Error support_error;
   VLOG(1) << "ARC provisioning failed: " << result << ".";
-  switch (result) {
-    case ProvisioningResult::GMS_NETWORK_ERROR:
-      support_error = ArcSupportHost::Error::SIGN_IN_NETWORK_ERROR;
-      break;
-    case ProvisioningResult::GMS_SERVICE_UNAVAILABLE:
-    case ProvisioningResult::GMS_SIGN_IN_FAILED:
-    case ProvisioningResult::GMS_SIGN_IN_TIMEOUT:
-    case ProvisioningResult::GMS_SIGN_IN_INTERNAL_ERROR:
-      support_error = ArcSupportHost::Error::SIGN_IN_SERVICE_UNAVAILABLE_ERROR;
-      break;
-    case ProvisioningResult::GMS_BAD_AUTHENTICATION:
-      support_error = ArcSupportHost::Error::SIGN_IN_BAD_AUTHENTICATION_ERROR;
-      break;
-    case ProvisioningResult::DEVICE_CHECK_IN_FAILED:
-    case ProvisioningResult::DEVICE_CHECK_IN_TIMEOUT:
-    case ProvisioningResult::DEVICE_CHECK_IN_INTERNAL_ERROR:
-      support_error = ArcSupportHost::Error::SIGN_IN_GMS_NOT_AVAILABLE_ERROR;
-      break;
-    case ProvisioningResult::CLOUD_PROVISION_FLOW_ERROR:
-      DCHECK(signin_error && signin_error->is_cloud_provision_flow_error());
-      support_error = GetCloudProvisionFlowError(
-          signin_error->get_cloud_provision_flow_error());
-      break;
-    case ProvisioningResult::CHROME_SERVER_COMMUNICATION_ERROR:
-      support_error = ArcSupportHost::Error::SERVER_COMMUNICATION_ERROR;
-      break;
-    case ProvisioningResult::NO_NETWORK_CONNECTION:
-      support_error = ArcSupportHost::Error::NETWORK_UNAVAILABLE_ERROR;
-      break;
-    case ProvisioningResult::ARC_DISABLED:
-      support_error = ArcSupportHost::Error::ANDROID_MANAGEMENT_REQUIRED_ERROR;
-      break;
-    case ProvisioningResult::ARC_STOPPED:
-      DCHECK(absl::holds_alternative<ArcStopReason>(error));
-      support_error =
-          absl::get<ArcStopReason>(error) == ArcStopReason::LOW_DISK_SPACE
-              ? ArcSupportHost::Error::LOW_DISK_SPACE_ERROR
-              : ArcSupportHost::Error::SIGN_IN_UNKNOWN_ERROR;
-      break;
-    default:
-      support_error = ArcSupportHost::Error::SIGN_IN_UNKNOWN_ERROR;
-      break;
-  }
 
   // When ARC provisioning fails due to Chrome failing to talk to server, we
   // don't need to keep the ARC session running as the logs necessary to
   // investigate are already present. ARC session will not provide any useful
   // context.
-  if (result == ProvisioningResult::ARC_STOPPED ||
-      result == ProvisioningResult::CHROME_SERVER_COMMUNICATION_ERROR) {
+  if (result.stop_reason() ||
+      result.general_error() ==
+          mojom::GeneralSignInError::CHROME_SERVER_COMMUNICATION_ERROR) {
     if (profile_->GetPrefs()->HasPrefPath(prefs::kArcSignedIn))
       profile_->GetPrefs()->SetBoolean(prefs::kArcSignedIn, false);
     VLOG(1) << "Stopping ARC due to provisioning failure";
     ShutdownSession();
   }
 
-  if (result == ProvisioningResult::CLOUD_PROVISION_FLOW_ERROR ||
+  if (result.cloud_provision_flow_error() ||
       // OVERALL_SIGN_IN_TIMEOUT might be an indication that ARC believes it is
       // fully setup, but Chrome does not.
-      result == ProvisioningResult::OVERALL_SIGN_IN_TIMEOUT ||
+      result.is_timedout() ||
       // Just to be safe, remove data if we don't know the cause.
-      result == ProvisioningResult::UNKNOWN_ERROR) {
+      result.general_error() == mojom::GeneralSignInError::UNKNOWN_ERROR) {
     VLOG(1) << "ARC provisioning failed permanently. Removing user data";
     RequestArcDataRemoval();
   }
 
-  int error_code;
+  base::Optional<int> error_code;
+  ArcSupportHost::Error support_error = GetSupportHostError(result);
   if (support_error == ArcSupportHost::Error::SIGN_IN_UNKNOWN_ERROR) {
-    error_code =
-        static_cast<std::underlying_type_t<ProvisioningResult>>(result);
-  } else if (signin_error) {
-    error_code = GetSignInErrorCode(std::move(signin_error));
-  } else {
-    error_code = 0;
+    error_code = static_cast<std::underlying_type_t<ProvisioningStatus>>(
+        GetProvisioningStatus(result));
+  } else if (result.sign_in_error()) {
+    error_code = GetSignInErrorCode(result.sign_in_error());
   }
-  // TODO(mhasank): Introduce a struct that encapsulates error with an optional
-  // argument
-  ShowArcSupportHostError(support_error, error_code,
-                          true /* = show send feedback button */);
+  ShowArcSupportHostError({support_error, error_code} /* error_info */,
+                          true /* should_show_send_feedback */);
 }
 
 bool ArcSessionManager::IsAllowed() const {
@@ -773,10 +769,21 @@ void ArcSessionManager::SetProfile(Profile* profile) {
 
 void ArcSessionManager::SetUserInfo() {
   DCHECK(profile_);
-  DCHECK(arc_salt_on_disk_);
 
   const AccountId account(multi_user_util::GetAccountIdFromProfile(profile_));
   const cryptohome::Identification cryptohome_id(account);
+  const std::string user_id_hash =
+      chromeos::ProfileHelper::GetUserIdHashFromProfile(profile_);
+
+  std::string serialno = GetSerialNumber();
+  arc_session_runner_->SetUserInfo(cryptohome_id, user_id_hash, serialno);
+}
+
+std::string ArcSessionManager::GetSerialNumber() const {
+  DCHECK(profile_);
+  DCHECK(arc_salt_on_disk_);
+
+  const AccountId account(multi_user_util::GetAccountIdFromProfile(profile_));
   const std::string user_id_hash =
       chromeos::ProfileHelper::GetUserIdHashFromProfile(profile_);
 
@@ -788,8 +795,7 @@ void ArcSessionManager::SetUserInfo() {
     serialno = GetOrCreateSerialNumber(g_browser_process->local_state(),
                                        chromeos_user, *arc_salt_on_disk_);
   }
-
-  arc_session_runner_->SetUserInfo(cryptohome_id, user_id_hash, serialno);
+  return serialno;
 }
 
 void ArcSessionManager::Initialize() {
@@ -901,6 +907,8 @@ void ArcSessionManager::ShutdownSession() {
 }
 
 void ArcSessionManager::ResetArcState() {
+  pre_start_time_ = base::TimeTicks();
+  start_time_ = base::TimeTicks();
   arc_sign_in_timer_.Stop();
   playstore_launcher_.reset();
   terms_of_service_negotiator_.reset();
@@ -935,7 +943,7 @@ void ArcSessionManager::StopAndEnableArc() {
 
 void ArcSessionManager::OnArcSignInTimeout() {
   LOG(ERROR) << "Timed out waiting for first sign in.";
-  OnProvisioningFinished(ProvisioningResult::OVERALL_SIGN_IN_TIMEOUT, {});
+  OnProvisioningFinished(ArcProvisioningResult(ChromeProvisioningTimeout()));
 }
 
 void ArcSessionManager::CancelAuthCode() {
@@ -1050,7 +1058,6 @@ bool ArcSessionManager::RequestEnableImpl() {
   const bool start_arc_directly = signed_in || ShouldArcAlwaysStart() ||
                                   IsRobotOrOfflineDemoAccountMode() ||
                                   IsArcOptInVerificationDisabled();
-
   // When ARC is blocked because of filesystem compatibility, do not proceed
   // to starting ARC nor follow further state transitions.
   if (IsArcBlockedDueToIncompatibleFileSystem(profile_)) {
@@ -1076,11 +1083,9 @@ bool ArcSessionManager::RequestEnableImpl() {
   if (!arc_ui_availability_reporter_) {
     arc_ui_availability_reporter_ = std::make_unique<ArcUiAvailabilityReporter>(
         profile_,
-        opt_in_start
-            ? ArcUiAvailabilityReporter::Mode::kOobeProvisioning
-            : signed_in
-                  ? ArcUiAvailabilityReporter::Mode::kAlreadyProvisioned
-                  : ArcUiAvailabilityReporter::Mode::kInSessionProvisioning);
+        opt_in_start ? ArcUiAvailabilityReporter::Mode::kOobeProvisioning
+        : signed_in  ? ArcUiAvailabilityReporter::Mode::kAlreadyProvisioned
+                     : ArcUiAvailabilityReporter::Mode::kInSessionProvisioning);
   }
 
   if (!pai_starter_ && IsPlayStoreAvailable())
@@ -1218,6 +1223,10 @@ void ArcSessionManager::MaybeStartTermsOfServiceNegotiation() {
             profile_->GetPrefs(), support_host_.get());
   }
 
+  // Start the mini-container here to save time starting the container if the
+  // user decides to opt-in.
+  StartMiniArc();
+
   if (!terms_of_service_negotiator_) {
     // The only case reached here is when g_ui_enabled is false so
     // 1. ARC support host is not created in SetProfile(), and
@@ -1233,10 +1242,6 @@ void ArcSessionManager::MaybeStartTermsOfServiceNegotiation() {
     }
     return;
   }
-
-  // Start the mini-container here to save time starting the container if the
-  // user decides to opt-in.
-  arc_session_runner_->RequestStartMiniInstance();
 
   terms_of_service_negotiator_->StartNegotiation(
       base::BindOnce(&ArcSessionManager::OnTermsOfServiceNegotiated,
@@ -1268,8 +1273,8 @@ void ArcSessionManager::StartAndroidManagementCheck() {
 
   // State::STOPPED appears here in following scenario.
   // Initial provisioning finished with state
-  // ProvisioningResult::ArcStop or
-  // ProvisioningResult::CHROME_SERVER_COMMUNICATION_ERROR.
+  // ProvisioningStatus::ArcStop or
+  // ProvisioningStatus::CHROME_SERVER_COMMUNICATION_ERROR.
   // At this moment |prefs::kArcTermsAccepted| is set to true, once user
   // confirmed ToS prior to provisioning flow. Once user presses "Try Again"
   // button, OnRetryClicked calls this immediately.
@@ -1318,13 +1323,16 @@ void ArcSessionManager::OnAndroidManagementChecked(
       break;
     case policy::AndroidManagementClient::Result::MANAGED:
       ShowArcSupportHostError(
-          ArcSupportHost::Error::ANDROID_MANAGEMENT_REQUIRED_ERROR,
-          0 /* error_code */, false);
+          ArcSupportHost::ErrorInfo(
+              ArcSupportHost::Error::ANDROID_MANAGEMENT_REQUIRED_ERROR),
+          false /* should_show_send_feedback */);
       UpdateOptInCancelUMA(OptInCancelReason::ANDROID_MANAGEMENT_REQUIRED);
       break;
     case policy::AndroidManagementClient::Result::ERROR:
-      ShowArcSupportHostError(ArcSupportHost::Error::SERVER_COMMUNICATION_ERROR,
-                              0 /* error_code */, true);
+      ShowArcSupportHostError(
+          ArcSupportHost::ErrorInfo(
+              ArcSupportHost::Error::SERVER_COMMUNICATION_ERROR),
+          true /* should_show_send_feedback */);
       UpdateOptInCancelUMA(OptInCancelReason::NETWORK_ERROR);
       break;
   }
@@ -1386,7 +1394,10 @@ void ArcSessionManager::StartArc() {
   for (auto& observer : observer_list_)
     observer.OnArcStarted();
 
-  arc_start_time_ = base::TimeTicks::Now();
+  start_time_ = base::TimeTicks::Now();
+  // In case ARC started without mini-ARC |pre_start_time_| is not set.
+  if (pre_start_time_.is_null())
+    pre_start_time_ = start_time_;
   provisioning_reported_ = false;
 
   std::string locale;
@@ -1515,6 +1526,11 @@ void ArcSessionManager::MaybeStartTimer() {
                      weak_ptr_factory_.GetWeakPtr()));
 }
 
+void ArcSessionManager::StartMiniArc() {
+  pre_start_time_ = base::TimeTicks::Now();
+  arc_session_runner_->RequestStartMiniInstance();
+}
+
 void ArcSessionManager::OnWindowClosed() {
   CancelAuthCode();
 }
@@ -1543,10 +1559,9 @@ void ArcSessionManager::OnRetryClicked() {
   } else {
     // Otherwise, we start ARC once it is stopped now. Usually ARC container is
     // left active after provisioning failure but in case
-    // ProvisioningResult::ARC_STOPPED and
-    // ProvisioningResult::CHROME_SERVER_COMMUNICATION_ERROR failures container
-    // is stopped.
-    // At this point ToS is already accepted and
+    // ProvisioningStatus::ARC_STOPPED and
+    // ProvisioningStatus::CHROME_SERVER_COMMUNICATION_ERROR failures
+    // container is stopped. At this point ToS is already accepted and
     // IsArcTermsOfServiceNegotiationNeeded returns true or ToS needs not to be
     // shown at all. However there is an exception when this does not happen in
     // case an error page is shown when re-opt-in right after opt-out (this is a
@@ -1583,13 +1598,12 @@ void ArcSessionManager::SetAttemptUserExitCallbackForTesting(
 }
 
 void ArcSessionManager::ShowArcSupportHostError(
-    ArcSupportHost::Error error,
-    int error_code,
+    ArcSupportHost::ErrorInfo error_info,
     bool should_show_send_feedback) {
   if (support_host_)
-    support_host_->ShowError(error, error_code, should_show_send_feedback);
+    support_host_->ShowError(error_info, should_show_send_feedback);
   for (auto& observer : observer_list_)
-    observer.OnArcErrorShowRequested(error, error_code);
+    observer.OnArcErrorShowRequested(error_info);
 }
 
 void ArcSessionManager::EmitLoginPromptVisibleCalled() {
@@ -1599,7 +1613,7 @@ void ArcSessionManager::EmitLoginPromptVisibleCalled() {
   if (!IsArcAvailable())
     return;
 
-  arc_session_runner_->RequestStartMiniInstance();
+  StartMiniArc();
 }
 
 void ArcSessionManager::ExpandPropertyFilesAndReadSalt() {

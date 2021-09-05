@@ -132,20 +132,18 @@ const VivaldiMetaNames& GetMetaNames() {
   return *instance;
 }
 
-const std::string* GetMetaString(const BookmarkNode::MetaInfoMap& meta_info_map,
+const std::string& GetMetaString(const BookmarkNode::MetaInfoMap& meta_info_map,
                                  const std::string& key) {
   auto i = meta_info_map.find(key);
-  if (i == meta_info_map.end() || i->second.empty())
-    return nullptr;
-  return &i->second;
+  if (i == meta_info_map.end())
+    return base::EmptyString();
+  return i->second;
 }
 
 const std::string& GetMetaString(const BookmarkNode* node,
                                  const std::string& key) {
   if (const BookmarkNode::MetaInfoMap* meta_info_map = node->GetMetaInfoMap()) {
-    const std::string* value = GetMetaString(*meta_info_map, key);
-    if (value)
-      return *value;
+    return GetMetaString(*meta_info_map, key);
   }
   return base::EmptyString();
 }
@@ -221,8 +219,8 @@ void CustomMetaInfo::SetDescription(const std::string& description) {
   SetMetaString(&map_, GetMetaNames().description, description);
 }
 
-void CustomMetaInfo::SetPartner(const std::string& partner) {
-  SetMetaString(&map_, GetMetaNames().partner, partner);
+void CustomMetaInfo::SetPartner(const base::GUID& partner) {
+  SetMetaString(&map_, GetMetaNames().partner, partner.AsLowercaseString());
 }
 
 void CustomMetaInfo::SetThumbnail(const std::string& thumbnail) {
@@ -245,12 +243,30 @@ const std::string& GetDescription(const BookmarkNode* node) {
   return GetMetaString(node, GetMetaNames().description);
 }
 
-const std::string* GetPartner(const BookmarkNode::MetaInfoMap& meta_info_map) {
-  return GetMetaString(meta_info_map, GetMetaNames().partner);
+const base::GUID GetPartner(const BookmarkNode::MetaInfoMap& meta_info_map) {
+  base::GUID partner_id;
+  const std::string& partner_string =
+      GetMetaString(meta_info_map, GetMetaNames().partner);
+  if (!partner_string.empty()) {
+    partner_id = base::GUID::ParseCaseInsensitive(partner_string);
+    if (!partner_id.is_valid()) {
+      LOG(ERROR) << "Invalid GUID as a partner id - " << partner_string;
+    }
+  }
+  return partner_id;
 }
 
-const std::string& GetPartner(const BookmarkNode* node) {
-  return GetMetaString(node, GetMetaNames().partner);
+const base::GUID GetPartner(const BookmarkNode* node) {
+  base::GUID partner_id;
+  const std::string& partner_string =
+      GetMetaString(node, GetMetaNames().partner);
+  if (!partner_string.empty()) {
+    partner_id = base::GUID::ParseCaseInsensitive(partner_string);
+    if (!partner_id.is_valid()) {
+      LOG(ERROR) << "Invalid GUID as a partner id - " << partner_string;
+    }
+  }
+  return partner_id;
 }
 
 const std::string& GetThumbnail(const BookmarkNode* node) {
@@ -298,6 +314,10 @@ bool SetBookmarkThumbnail(BookmarkModel* model,
   }
   model->SetNodeMetaInfo(node, GetMetaNames().thumbnail, url);
   return true;
+}
+
+void RemovePartnerId(BookmarkModel* model, const BookmarkNode* node) {
+  model->DeleteNodeMetaInfo(node, GetMetaNames().partner);
 }
 
 void SetNodeNickname(BookmarkModel* model,

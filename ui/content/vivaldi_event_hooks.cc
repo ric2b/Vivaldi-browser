@@ -57,7 +57,7 @@ bool VivaldiEventHooks::HandleKeyboardEvent(
 }
 
 bool VivaldiEventHooks::HandleDragEnd(content::WebContents* web_contents,
-                                      blink::DragOperation operation,
+                                      ui::mojom::DragOperation operation,
                                       bool cancelled,
                                       int screen_x,
                                       int screen_y) {

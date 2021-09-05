@@ -41,7 +41,7 @@ import './a11y_page/a11y_page.js';
 import './downloads_page/downloads_page.js';
 import './languages_page/languages_page.js';
 import './reset_page/reset_page.js';
-// <if expr="not chromeos">
+// <if expr="not chromeos and not lacros">
 import './system_page/system_page.js';
 // </if>
 
@@ -73,6 +73,7 @@ export {LanguagesBrowserProxy, LanguagesBrowserProxyImpl} from './languages_page
 export {LanguagesMetricsProxy, LanguagesMetricsProxyImpl, LanguagesPageInteraction} from './languages_page/languages_metrics_proxy.js';
 // </if>
 export {kMenuCloseDelay} from './languages_page/languages_page.js';
+export {LanguageSettingsActionType, LanguageSettingsMetricsProxy, LanguageSettingsMetricsProxyImpl} from './languages_page/languages_settings_metrics_proxy.js';
 // <if expr="not chromeos">
 export {ImportDataBrowserProxyImpl, ImportDataStatus} from './people_page/import_data_browser_proxy.js';
 export {ManageProfileBrowserProxyImpl, ProfileShortcutStatus} from './people_page/manage_profile_browser_proxy.js';
@@ -94,7 +95,7 @@ export {kControlledByLookup} from './site_settings/site_settings_behavior.js';
 export {ContentSettingProvider, DefaultContentSetting, RawChooserException, RawSiteException, RecentSitePermissions, SiteException, SiteGroup, SiteSettingsPrefsBrowserProxy, SiteSettingsPrefsBrowserProxyImpl, ZoomLevelEntry} from './site_settings/site_settings_prefs_browser_proxy.js';
 export {WebsiteUsageBrowserProxyImpl} from './site_settings/website_usage_browser_proxy.js';
 export {defaultSettingLabel} from './site_settings_page/site_settings_list.js';
-// <if expr="not chromeos">
+// <if expr="not chromeos and not lacros">
 export {SystemPageBrowserProxyImpl} from './system_page/system_page_browser_proxy.js';
 
 // </if>

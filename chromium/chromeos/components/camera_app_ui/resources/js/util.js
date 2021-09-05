@@ -24,8 +24,7 @@ import {WaitableEvent} from './waitable_event.js';
  *     Returns canvas element and the context for 2D drawing.
  */
 export function newDrawingCanvas({width, height}) {
-  const canvas =
-      assertInstanceof(document.createElement('canvas'), HTMLCanvasElement);
+  const canvas = dom.create('canvas', HTMLCanvasElement);
   canvas.width = width;
   canvas.height = height;
   const ctx =
@@ -57,7 +56,7 @@ export function animateCancel(element) {
  *     cancelled.
  */
 function waitAnimationCompleted(element) {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     let animationCount = 0;
     const onStart = (event) =>
         void (event.target === element && animationCount++);
@@ -151,8 +150,8 @@ export function openHelp() {
 
 /**
  * Sets up i18n messages on DOM subtree by i18n attributes.
- * @param {!Node} rootElement Root of DOM subtree to be set up
- *     with.
+ * @param {!Element|!DocumentFragment} rootElement Root of DOM subtree to be set
+ *     up with.
  */
 export function setupI18nElements(rootElement) {
   const getElements = (attr) => rootElement.querySelectorAll('[' + attr + ']');
@@ -214,17 +213,13 @@ export function getDefaultFacing() {
  * @return {!Promise<!Blob>} Promise for the result.
  */
 export async function scalePicture(blob, isVideo, width, height = undefined) {
-  const element =
-      /** @type {(!HTMLImageElement|!HTMLVideoElement)} */ (
-          document.createElement(isVideo ? 'video' : 'img'));
-  if (isVideo) {
-    element.preload = 'auto';
-  }
+  const element = isVideo ? dom.create('video', HTMLVideoElement) :
+                            dom.create('img', HTMLImageElement);
   try {
-    await new Promise((resolve, reject) => {
-      element.addEventListener(isVideo ? 'canplay' : 'load', resolve);
-      element.addEventListener('error', () => {
-        if (isVideo) {
+    let requestFrameTimeout = false;
+    if (isVideo) {
+      await new Promise((resolve, reject) => {
+        element.addEventListener('error', () => {
           let msg = 'Failed to load video';
           /**
            * https://developer.mozilla.org/en-US/docs/Web/API/HTMLMediaElement/error
@@ -235,12 +230,42 @@ export async function scalePicture(blob, isVideo, width, height = undefined) {
             msg += `: ${err.message}`;
           }
           reject(new Error(msg));
-        } else {
-          reject(new Error('Failed to load image'));
-        }
+        });
+        /**
+         * For resolving https://goo.gl/LdLk22 asynchronous play-pause problem.
+         * @type {!Promise}
+         */
+        let playing = Promise.resolve();
+        Promise
+            .race([
+              new Promise(
+                  (resolve) =>
+                      element.requestVideoFrameCallback(() => resolve(false))),
+              // The |requestVideoFrameCallback| may not be triggerred when
+              // playing malformatted video. Set 300ms timeout here to prevent
+              // UI be blocked forever.
+              new Promise((resolve) => setTimeout(() => resolve(true), 300)),
+            ])
+            .then((isTimeout) => {
+              requestFrameTimeout = isTimeout;
+              return playing;
+            })
+            .then(() => {
+              element.pause();
+              resolve();
+            });
+        element.preload = 'auto';
+        element.src = URL.createObjectURL(blob);
+        playing = assertInstanceof(element.play(), Promise);
       });
-      element.src = URL.createObjectURL(blob);
-    });
+    } else {
+      await new Promise((resolve, reject) => {
+        element.addEventListener(
+            'error', () => reject(new Error('Failed to load image')));
+        element.addEventListener('load', resolve);
+        element.src = URL.createObjectURL(blob);
+      });
+    }
     if (height === undefined) {
       const ratio = isVideo ? element.videoHeight / element.videoWidth :
                               element.height / element.width;
@@ -254,9 +279,16 @@ export async function scalePicture(blob, isVideo, width, height = undefined) {
      */
     const data = ctx.getImageData(0, 0, width, height).data;
     if (data.every((byte) => byte === 0)) {
+      let msg =
+          `The ${isVideo ? 'video' : 'photo'} thumbnail content is broken.`;
+      if (requestFrameTimeout) {
+        msg += ' ; while requestVideoFrameCallback is timeout.';
+      }
       reportError(
-          ErrorType.BROKEN_THUMBNAIL, ErrorLevel.ERROR,
-          new Error('The thumbnail content is broken.'));
+          ErrorType.BROKEN_THUMBNAIL,
+          ErrorLevel.ERROR,
+          new Error(msg),
+      );
       // Do not throw an error here. A black thumbnail is still better than no
       // thumbnail to let user open the corresponding picutre in gallery.
     }
@@ -321,13 +353,14 @@ export function setInkdropEffect(el) {
 /**
  * Instantiates template with the target selector.
  * @param {string} selector
- * @return {!Node}
+ * @return {!DocumentFragment}
  */
 export function instantiateTemplate(selector) {
   const tpl = dom.get(selector, HTMLTemplateElement);
-  const node = document.importNode(tpl.content, true);
-  setupI18nElements(node);
-  return node;
+  const doc = assertInstanceof(
+      document.importNode(tpl.content, true), DocumentFragment);
+  setupI18nElements(doc);
+  return doc;
 }
 
 /**
@@ -339,8 +372,7 @@ export function instantiateTemplate(selector) {
  */
 export async function createUntrustedJSModule(scriptUrl, origin) {
   const untrustedPageReady = new WaitableEvent();
-  const iFrame =
-      /** @type {!HTMLIFrameElement} */ (document.createElement('iframe'));
+  const iFrame = dom.create('iframe', HTMLIFrameElement);
   iFrame.addEventListener('load', () => untrustedPageReady.signal());
   iFrame.setAttribute('src', `${origin}/views/untrusted_script_loader.html`);
   iFrame.hidden = true;

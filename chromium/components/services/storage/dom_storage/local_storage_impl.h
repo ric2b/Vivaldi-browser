@@ -51,6 +51,7 @@ class LocalStorageImpl : public base::trace_event::MemoryDumpProvider,
                    scoped_refptr<base::SequencedTaskRunner> task_runner,
                    scoped_refptr<base::SequencedTaskRunner> legacy_task_runner,
                    mojo::PendingReceiver<mojom::LocalStorageControl> receiver);
+  ~LocalStorageImpl() override;
 
   void FlushOriginForTesting(const url::Origin& origin);
 
@@ -61,10 +62,11 @@ class LocalStorageImpl : public base::trace_event::MemoryDumpProvider,
   void SetForceKeepSessionState() { force_keep_session_state_ = true; }
 
   // Called when the owning BrowserContext is ending.
-  // Schedules the commit of any unsaved changes and will delete
-  // and keep data on disk per the content settings and special storage
-  // policies.
-  void ShutdownAndDelete();
+  // Schedules the commit of any unsaved changes and will delete or keep data on
+  // disk per the content settings and special storage policies.  `callback` is
+  // invoked when shutdown is complete, which may happen even before ShutDown
+  // returns.
+  void ShutDown(base::OnceClosure callback);
 
   // Clears unused storage areas, when thresholds are reached.
   void PurgeUnusedAreasIfNeeded();
@@ -105,12 +107,14 @@ class LocalStorageImpl : public base::trace_event::MemoryDumpProvider,
 
   class StorageAreaHolder;
 
-  ~LocalStorageImpl() override;
-
   // Runs |callback| immediately if already connected to a database, otherwise
   // delays running |callback| untill after a connection has been established.
   // Initiates connecting to the database if no connection is in progres yet.
   void RunWhenConnected(base::OnceClosure callback);
+
+  // StorageAreas held by this LocalStorageImpl retain an unmanaged reference to
+  // `database_`. This deletes them and is used any time `database_` is reset.
+  void PurgeAllStorageAreas();
 
   // Part of our asynchronous directory opening called from RunWhenConnected().
   void InitiateConnection(bool in_memory_only = false);
@@ -131,7 +135,8 @@ class LocalStorageImpl : public base::trace_event::MemoryDumpProvider,
 
   void OnGotStorageUsageForShutdown(
       std::vector<mojom::LocalStorageUsageInfoPtr> usage);
-  void OnShutdownComplete(leveldb::Status status);
+  void OnOriginsDeleted(leveldb::Status status);
+  void OnShutdownComplete();
 
   void GetStatistics(size_t* total_cache_size, size_t* unused_area_count);
   void OnCommitResult(leveldb::Status status);
@@ -190,6 +195,8 @@ class LocalStorageImpl : public base::trace_event::MemoryDumpProvider,
   const char* open_result_histogram_ = nullptr;
 
   mojo::Receiver<mojom::LocalStorageControl> control_receiver_{this};
+
+  base::OnceClosure shutdown_complete_callback_;
 
   base::WeakPtrFactory<LocalStorageImpl> weak_ptr_factory_{this};
 };

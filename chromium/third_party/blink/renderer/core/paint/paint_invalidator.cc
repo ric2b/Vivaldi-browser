@@ -19,10 +19,10 @@
 #include "third_party/blink/renderer/core/layout/ng/legacy_layout_tree_walking.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_fragment_child_iterator.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
+#include "third_party/blink/renderer/core/mobile_metrics/mobile_friendliness_checker.h"
 #include "third_party/blink/renderer/core/page/link_highlight.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/paint/clip_path_clipper.h"
-#include "third_party/blink/renderer/core/paint/ng/ng_paint_fragment.h"
 #include "third_party/blink/renderer/core/paint/object_paint_properties.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
@@ -64,8 +64,12 @@ void PaintInvalidator::UpdatePaintingLayer(const LayoutObject& object,
        IsLayoutNGContainingBlock(object.ContainingBlock())))
     context.painting_layer->SetNeedsPaintPhaseFloat();
 
-  if (object != context.painting_layer->GetLayoutObject() &&
-      object.StyleRef().HasOutline())
+  if (!context.painting_layer->NeedsPaintPhaseDescendantOutlines() &&
+      ((object != context.painting_layer->GetLayoutObject() &&
+        object.StyleRef().HasOutline()) ||
+       // If this is a block-in-inline, it may need to paint outline.
+       // See |StyleForContinuationOutline|.
+       (layout_block_flow && layout_block_flow->StyleForContinuationOutline())))
     context.painting_layer->SetNeedsPaintPhaseDescendantOutlines();
 }
 
@@ -170,6 +174,11 @@ void PaintInvalidator::UpdateLayoutShiftTracking(
     PaintInvalidatorContext& context) {
   if (!object.ShouldCheckGeometryForPaintInvalidation())
     return;
+
+  if (tree_builder_context.this_or_ancestor_opacity_is_zero) {
+    object.GetMutableForPainting().SetShouldSkipNextLayoutShiftTracking(true);
+    return;
+  }
 
   auto& layout_shift_tracker = object.GetFrameView()->GetLayoutShiftTracker();
   if (!layout_shift_tracker.NeedsToTrack(object)) {
@@ -351,6 +360,9 @@ bool PaintInvalidator::InvalidatePaint(
         UpdateFromTreeBuilderContext(fragment_tree_builder_context, context);
         UpdateLayoutShiftTracking(object, fragment_tree_builder_context,
                                   context);
+        object.GetFrameView()
+            ->GetMobileFriendlinessChecker()
+            .NotifyInvalidatePaint(object);
       } else {
         context.old_paint_offset = fragment_data->PaintOffset();
       }

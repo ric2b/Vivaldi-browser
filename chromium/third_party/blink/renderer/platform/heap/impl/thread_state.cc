@@ -233,6 +233,10 @@ void ThreadState::AttachToIsolate(
 }
 
 void ThreadState::DetachFromIsolate() {
+  FinishIncrementalMarkingIfRunning(
+      BlinkGC::CollectionType::kMajor, BlinkGC::kHeapPointersOnStack,
+      BlinkGC::kAtomicMarking, BlinkGC::kEagerSweeping,
+      BlinkGC::GCReason::kThreadTerminationGC);
   if (isolate_) {
     isolate_->SetEmbedderHeapTracer(nullptr);
     if (v8::HeapProfiler* profiler = isolate_->GetHeapProfiler()) {
@@ -1214,7 +1218,7 @@ bool ThreadState::ConcurrentMarkingStep() {
     }
     return false;
   }
-  return marker_handle_.IsCompleted();
+  return !marker_handle_.IsActive();
 }
 
 void ThreadState::IncrementalMarkingFinalize() {

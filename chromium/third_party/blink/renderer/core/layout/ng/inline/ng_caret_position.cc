@@ -13,9 +13,6 @@
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_node.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_offset_mapping.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_physical_line_box_fragment.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/ng_physical_text_fragment.h"
-#include "third_party/blink/renderer/core/paint/ng/ng_paint_fragment.h"
-#include "third_party/blink/renderer/core/paint/ng/ng_paint_fragment_traversal.h"
 
 namespace blink {
 
@@ -329,7 +326,17 @@ NGCaretPosition ComputeNGCaretPosition(
 
   const unsigned offset = *maybe_offset;
   const TextAffinity affinity = position_with_affinity.Affinity();
-  return ComputeNGCaretPosition(*context, offset, affinity, layout_text);
+  // For upstream position, we use offset before ZWS to distinguish downstream
+  // and upstream position when line breaking before ZWS.
+  // "    Zabc" where "Z" represents zero-width-space.
+  // See AccessibilitySelectionTest.FromCurrentSelectionInTextareaWithAffinity
+  const unsigned adjusted_offset =
+      affinity == TextAffinity::kUpstream && offset &&
+              mapping->GetText()[offset - 1] == kZeroWidthSpaceCharacter
+          ? offset - 1
+          : offset;
+  return ComputeNGCaretPosition(*context, adjusted_offset, affinity,
+                                layout_text);
 }
 
 Position NGCaretPosition::ToPositionInDOMTree() const {

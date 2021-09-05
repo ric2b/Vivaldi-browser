@@ -15,10 +15,9 @@ import androidx.preference.PreferenceViewHolder;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.signin.IdentityServicesProvider;
-import org.chromium.chrome.browser.signin.PersonalizedSigninPromoView;
-import org.chromium.chrome.browser.signin.ProfileDataCache;
-import org.chromium.chrome.browser.sync.AndroidSyncSettings;
+import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
+import org.chromium.chrome.browser.signin.services.ProfileDataCache;
+import org.chromium.chrome.browser.signin.ui.PersonalizedSigninPromoView;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.chrome.browser.sync.settings.SyncSettingsUtils.SyncError;
 import org.chromium.components.signin.base.CoreAccountInfo;
@@ -27,8 +26,7 @@ import org.chromium.components.signin.identitymanager.ConsentLevel;
 import java.util.Collections;
 
 public class SyncErrorCardPreference extends Preference
-        implements AndroidSyncSettings.AndroidSyncSettingsObserver,
-                   ProfileSyncService.SyncStateChangedListener, ProfileDataCache.Observer {
+        implements ProfileSyncService.SyncStateChangedListener, ProfileDataCache.Observer {
     /**
      * Listener for the buttons in the error card.
      */
@@ -68,7 +66,6 @@ public class SyncErrorCardPreference extends Preference
     public void onAttached() {
         super.onAttached();
         mProfileDataCache.addObserver(this);
-        AndroidSyncSettings.get().registerObserver(this);
         ProfileSyncService syncService = ProfileSyncService.get();
         if (syncService != null) {
             syncService.addSyncStateChangedListener(this);
@@ -80,7 +77,6 @@ public class SyncErrorCardPreference extends Preference
     public void onDetached() {
         super.onDetached();
         mProfileDataCache.removeObserver(this);
-        AndroidSyncSettings.get().unregisterObserver(this);
         ProfileSyncService syncService = ProfileSyncService.get();
         if (syncService != null) {
             syncService.removeSyncStateChangedListener(this);
@@ -173,18 +169,10 @@ public class SyncErrorCardPreference extends Preference
     }
 
     /**
-     * {@link AndroidSyncSettings.AndroidSyncSettingsObserver} implementation.
-     */
-    @Override
-    public void androidSyncSettingsChanged() {
-        update();
-    }
-
-    /**
      * {@link ProfileDataCache.Observer} implementation.
      */
     @Override
-    public void onProfileDataUpdated(String accountId) {
+    public void onProfileDataUpdated(String accountEmail) {
         update();
     }
 }

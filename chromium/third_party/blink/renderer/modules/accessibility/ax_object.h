@@ -80,13 +80,6 @@ enum class AOMFloatProperty;
 enum class AOMRelationProperty;
 enum class AOMRelationListProperty;
 
-class AXSparseAttributeClient {
- public:
-  virtual void AddObjectAttribute(AXObjectAttribute, AXObject&) = 0;
-  virtual void AddObjectVectorAttribute(AXObjectVectorAttribute,
-                                        HeapVector<Member<AXObject>>*) = 0;
-};
-
 class IgnoredReason {
   DISALLOW_NEW();
 
@@ -395,8 +388,6 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
 
   void TokenVectorFromAttribute(Vector<String>&, const QualifiedName&) const;
 
-  void GetSparseAXAttributes(AXSparseAttributeClient&) const;
-
   // Serialize the properties of this node into |node_data|.
   //
   // TODO(crbug.com/1068668): AX onion soup - finish migrating
@@ -418,17 +409,15 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   virtual bool IsProgressIndicator() const;
   virtual bool IsAXRadioInput() const;
   virtual bool IsSlider() const;
-  virtual bool IsAXSVGRoot() const;
   virtual bool IsValidationMessage() const;
   virtual bool IsVirtualObject() const;
 
   // Check object role or purpose.
-  virtual ax::mojom::blink::Role RoleValue() const;
+  ax::mojom::blink::Role RoleValue() const;
   bool IsARIATextControl() const;
   bool IsAnchor() const;
   bool IsButton() const;
   bool IsCanvas() const;
-  bool IsCheckbox() const;
   bool IsCheckboxOrRadio() const;
   bool IsColorWell() const;
   virtual bool IsControl() const;
@@ -453,9 +442,6 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   virtual bool IsPasswordField() const;
   bool IsPasswordFieldAndShouldHideValue() const;
   bool IsPresentational() const;
-  bool IsRadioButton() const {
-    return RoleValue() == ax::mojom::blink::Role::kRadioButton;
-  }
   bool IsRangeValueSupported() const;
   bool IsScrollbar() const {
     return RoleValue() == ax::mojom::blink::Role::kScrollBar;
@@ -487,7 +473,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   virtual bool IsLineBreakingObject() const { return false; }
   virtual bool IsLinked() const { return false; }
   virtual bool IsLoaded() const { return false; }
-  virtual bool IsModal() const { return false; }
+  virtual bool IsModal() const;
   virtual bool IsMultiSelectable() const { return false; }
   virtual bool IsOffScreen() const { return false; }
   virtual bool IsRequired() const { return false; }
@@ -825,8 +811,8 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   bool IsLiveRegionRoot() const;  // Any live region, including polite="off".
   bool IsActiveLiveRegionRoot() const;  // Live region that is not polite="off".
   AXObject* LiveRegionRoot() const;  // Container that controls live politeness.
-  virtual const AtomicString& LiveRegionStatus() const { return g_null_atom; }
-  virtual const AtomicString& LiveRegionRelevant() const { return g_null_atom; }
+  virtual const AtomicString& LiveRegionStatus() const;
+  virtual const AtomicString& LiveRegionRelevant() const;
   bool LiveRegionAtomic() const;
 
   const AtomicString& ContainerLiveRegionStatus() const;
@@ -1066,28 +1052,14 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   AXObject* ContainerWidget() const;
   bool IsContainerWidget() const;
 
-  // Low-level accessibility tree exploration, only for use within the
-  // accessibility module.
-
-  // Returns the AXObject's first child, skipping over any children that
-  // represent continuations in the layout tree. If the AXObject has no
-  // children, returns the AXObject representing the next in pre-order
-  // continuation in the layout tree, if any.
-  //
-  // In the accessibility tree, this results in continuations becoming
-  // descendants of the nodes they "continue".
-  virtual AXObject* RawFirstChild() const { return nullptr; }
-
-  // Returns the AXObject's next sibling, skipping over any siblings that
-  // represent continuations in the layout tree. If this is the last child,
-  // returns the AXObject representing the next in pre-order continuation in the
-  // layout tree, if any.
-  //
-  // In the accessibility tree, this results in continuations becoming
-  // descendants of the nodes they "continue".
-  virtual AXObject* RawNextSibling() const { return nullptr; }
-
   virtual void AddChildren() {}
+  // There are two types of traversal for obtaining children:
+  // 1. LayoutTreeBuilderTraversal. Despite the name, this traverses a flattened
+  // DOM tree that includes pseudo element children such as ::before, and where
+  // shadow DOM slotting has been run.
+  // 2. LayoutObject traversal. This is necessary if there is no parent node,
+  // or if the parent node is a pseudo element.
+  bool ShouldUseLayoutObjectTraversalForChildren() const;
   virtual bool CanHaveChildren() const { return true; }
   bool HasChildren() const { return have_children_; }
   virtual void UpdateChildrenIfNecessary();
@@ -1290,8 +1262,6 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
     return nullptr;
   }
 
-  bool NameFromSelectedOption(bool recursive) const;
-
   ax::mojom::blink::Role ButtonRoleType() const;
 
   virtual LayoutObject* LayoutObjectForRelativeBounds() const {
@@ -1340,10 +1310,11 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   void UpdateCachedAttributeValuesIfNeeded() const;
 
   // Helpers for serialization.
-  // TODO(meredithl): Serialize all sparse/table attributes and rename.
-  void SerializePartialSparseAttributes(ui::AXNodeData* node_data);
   void SerializeStyleAttributes(ui::AXNodeData* node_data);
+  void SerializeSparseAttributes(ui::AXNodeData* node_data);
   void SerializeTableAttributes(ui::AXNodeData* node_data);
+  void SerializeListAttributes(ui::AXNodeData* node_data);
+  void SerializeScrollAttributes(ui::AXNodeData* node_data);
 
  private:
   void UpdateDistributionForFlatTreeTraversal() const;

@@ -27,6 +27,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "net/base/network_isolation_key.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-forward.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
@@ -156,6 +157,8 @@ class CONTENT_EXPORT SharedWorkerHost : public blink::mojom::SharedWorkerHost,
 
   base::WeakPtr<SharedWorkerHost> AsWeakPtr();
 
+  net::NetworkIsolationKey GetNetworkIsolationKey() const;
+
   void ReportNoBinderForInterface(const std::string& error);
 
   // Creates a network factory params for subresource requests from this worker.
@@ -245,7 +248,7 @@ class CONTENT_EXPORT SharedWorkerHost : public blink::mojom::SharedWorkerHost,
   mojo::Remote<blink::mojom::SharedWorkerFactory> factory_;
 
   BrowserInterfaceBrokerImpl<SharedWorkerHost, const url::Origin&> broker_{
-      this};
+      this, /*policy_applier=*/nullptr};
   mojo::Receiver<blink::mojom::BrowserInterfaceBroker> broker_receiver_{
       &broker_};
 

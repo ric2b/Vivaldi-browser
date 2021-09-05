@@ -4,7 +4,7 @@
 
 // Utilities that are used in multiple tests.
 
-import {LayoutOptions, Viewport} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/viewport.js';
+import {LayoutOptions, Viewport} from 'chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai/pdf_viewer_wrapper.js';
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 export class MockWindow {
@@ -318,7 +318,7 @@ export function getZoomableViewport(
   const viewport = new Viewport(
       /** @type {!HTMLElement} */ (scrollParent),
       /** @type {!HTMLDivElement} */ (sizer), dummyContent, scrollbarWidth,
-      defaultZoom, topToolbarHeight, false);
+      defaultZoom, topToolbarHeight);
   viewport.setZoomFactorRange([0.25, 0.4, 0.5, 1, 2]);
   return viewport;
 }
@@ -335,4 +335,21 @@ export function waitFor(predicate) {
   return new Promise(resolve => setTimeout(() => {
                        resolve(waitFor(predicate));
                      }, 0));
+}
+
+/**
+ * @param {number} deltaY
+ * @param {{clientX: number, clientY: number}} position
+ * @param {boolean} ctrlKey
+ * @return {!WheelEvent}
+ */
+export function createWheelEvent(deltaY, position, ctrlKey) {
+  return new WheelEvent('wheel', {
+    deltaY,
+    clientX: position.clientX,
+    clientY: position.clientY,
+    ctrlKey,
+    // Necessary for preventDefault() to work.
+    cancelable: true,
+  });
 }

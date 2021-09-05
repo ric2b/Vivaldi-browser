@@ -9,10 +9,10 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/containers/contains.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/optional.h"
-#include "base/stl_util.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
@@ -30,7 +30,7 @@
 #include "chrome/test/base/testing_profile.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "components/password_manager/core/browser/bulk_leak_check_service.h"
-#include "components/password_manager/core/browser/compromised_credentials_table.h"
+#include "components/password_manager/core/browser/insecure_credentials_table.h"
 #include "components/password_manager/core/browser/leak_detection/bulk_leak_check.h"
 #include "components/password_manager/core/browser/leak_detection/leak_detection_delegate_interface.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
@@ -80,6 +80,7 @@ using password_manager::CompromisedCredentials;
 using password_manager::CompromiseType;
 using password_manager::InsecureCredentialTypeFlags;
 using password_manager::IsLeaked;
+using password_manager::IsMuted;
 using password_manager::LeakCheckCredential;
 using password_manager::PasswordForm;
 using password_manager::SavedPasswordsPresenter;
@@ -141,12 +142,9 @@ CompromisedCredentials MakeCompromised(
     base::StringPiece username,
     base::TimeDelta time_since_creation = base::TimeDelta(),
     CompromiseType compromise_type = CompromiseType::kLeaked) {
-  return {
-      std::string(signon_realm),
-      base::ASCIIToUTF16(username),
-      base::Time::Now() - time_since_creation,
-      compromise_type,
-  };
+  return CompromisedCredentials(
+      std::string(signon_realm), base::ASCIIToUTF16(username),
+      base::Time::Now() - time_since_creation, compromise_type, IsMuted(false));
 }
 
 PasswordForm MakeSavedPassword(base::StringPiece signon_realm,
@@ -246,11 +244,6 @@ class PasswordCheckDelegateTest : public ::testing::Test {
   BulkLeakCheckService* service() { return bulk_leak_check_service_; }
   SavedPasswordsPresenter& presenter() { return presenter_; }
   PasswordCheckDelegate& delegate() { return delegate_; }
-
-  void DisableWellKnownChangePasswordFeatureFlag() {
-    scoped_feature_list_.InitAndDisableFeature(
-        password_manager::features::kWellKnownChangePassword);
-  }
 
  private:
   content::BrowserTaskEnvironment task_env_{
@@ -576,6 +569,8 @@ TEST_F(PasswordCheckDelegateTest, OnGetCompromisedCredentials) {
 
   // Verify that a subsequent call to AddCompromisedCredentials results in the
   // expected event.
+  store().AddLogin(MakeSavedPassword(kExampleCom, kUsername1));
+  RunUntilIdle();
   store().AddCompromisedCredentials(MakeCompromised(kExampleCom, kUsername1));
   RunUntilIdle();
   EXPECT_EQ(events::PASSWORDS_PRIVATE_ON_COMPROMISED_CREDENTIALS_INFO_CHANGED,
@@ -820,12 +815,9 @@ TEST_F(PasswordCheckDelegateTest, OnLeakFoundCreatesCredential) {
   RunUntilIdle();
 
   EXPECT_THAT(store().compromised_credentials(),
-              ElementsAre(CompromisedCredentials{
-                  .signon_realm = kExampleCom,
-                  .username = base::ASCIIToUTF16(kUsername1),
-                  .create_time = base::Time::Now(),
-                  .compromise_type = CompromiseType::kLeaked,
-              }));
+              ElementsAre(CompromisedCredentials(
+                  kExampleCom, base::ASCIIToUTF16(kUsername1),
+                  base::Time::Now(), CompromiseType::kLeaked, IsMuted(false))));
 }
 
 // Test that a found leak creates a compromised credential in the password
@@ -852,32 +844,21 @@ TEST_F(PasswordCheckDelegateTest, OnLeakFoundCreatesMultipleCredential) {
       IsLeaked(true));
   RunUntilIdle();
 
-  EXPECT_THAT(store().compromised_credentials(),
-              UnorderedElementsAre(
-                  CompromisedCredentials{
-                      .signon_realm = kExampleCom,
-                      .username = base::ASCIIToUTF16(kUsername1),
-                      .create_time = base::Time::Now(),
-                      .compromise_type = CompromiseType::kLeaked,
-                  },
-                  CompromisedCredentials{
-                      .signon_realm = kExampleOrg,
-                      .username = base::ASCIIToUTF16(kUsername1),
-                      .create_time = base::Time::Now(),
-                      .compromise_type = CompromiseType::kLeaked,
-                  },
-                  CompromisedCredentials{
-                      .signon_realm = kExampleCom,
-                      .username = base::ASCIIToUTF16(kUsername2Upper),
-                      .create_time = base::Time::Now(),
-                      .compromise_type = CompromiseType::kLeaked,
-                  },
-                  CompromisedCredentials{
-                      .signon_realm = kExampleOrg,
-                      .username = base::ASCIIToUTF16(kUsername2Email),
-                      .create_time = base::Time::Now(),
-                      .compromise_type = CompromiseType::kLeaked,
-                  }));
+  EXPECT_THAT(
+      store().compromised_credentials(),
+      UnorderedElementsAre(
+          CompromisedCredentials(kExampleCom, base::ASCIIToUTF16(kUsername1),
+                                 base::Time::Now(), CompromiseType::kLeaked,
+                                 IsMuted(false)),
+          CompromisedCredentials(kExampleOrg, base::ASCIIToUTF16(kUsername1),
+                                 base::Time::Now(), CompromiseType::kLeaked,
+                                 IsMuted(false)),
+          CompromisedCredentials(
+              kExampleCom, base::ASCIIToUTF16(kUsername2Upper),
+              base::Time::Now(), CompromiseType::kLeaked, IsMuted(false)),
+          CompromisedCredentials(
+              kExampleOrg, base::ASCIIToUTF16(kUsername2Email),
+              base::Time::Now(), CompromiseType::kLeaked, IsMuted(false))));
 }
 
 // Verifies that the case where the user has no saved passwords is reported
@@ -1143,8 +1124,7 @@ TEST_F(PasswordCheckDelegateTest,
   RunUntilIdle();
 }
 
-TEST_F(PasswordCheckDelegateTest,
-       WellKnownChangePasswordUrlFeatureFlag_enabled) {
+TEST_F(PasswordCheckDelegateTest, WellKnownChangePasswordUrl) {
   store().AddLogin(MakeSavedPassword(kExampleCom, kUsername1));
   store().AddCompromisedCredentials(
       MakeCompromised(kExampleCom, kUsername1, base::TimeDelta::FromMinutes(1),
@@ -1157,8 +1137,7 @@ TEST_F(PasswordCheckDelegateTest,
             password_manager::kWellKnownChangePasswordPath);
 }
 
-TEST_F(PasswordCheckDelegateTest,
-       WellKnownChangePasswordUrlFeatureFlagEnabled_androidrealm) {
+TEST_F(PasswordCheckDelegateTest, WellKnownChangePasswordUrl_androidrealm) {
   store().AddLogin(
       MakeSavedAndroidPassword(kExampleApp, kUsername1, "", kExampleCom));
   store().AddCompromisedCredentials(
@@ -1178,36 +1157,6 @@ TEST_F(PasswordCheckDelegateTest,
       GURL(*delegate().GetCompromisedCredentials().at(1).change_password_url)
           .path(),
       password_manager::kWellKnownChangePasswordPath);
-}
-
-TEST_F(PasswordCheckDelegateTest,
-       WellKnownChangePasswordUrlFeatureFlagDisabled_androidrealm) {
-  DisableWellKnownChangePasswordFeatureFlag();
-
-  store().AddLogin(MakeSavedAndroidPassword(kExampleApp, kUsername2,
-                                            "Example App", kExampleCom));
-  store().AddCompromisedCredentials(
-      MakeCompromised(MakeAndroidRealm(kExampleApp), kUsername2,
-                      base::TimeDelta::FromDays(3), CompromiseType::kPhished));
-
-  RunUntilIdle();
-  EXPECT_EQ(*delegate().GetCompromisedCredentials().at(0).change_password_url,
-            kExampleCom);
-}
-
-TEST_F(PasswordCheckDelegateTest,
-       WellKnownChangePasswordUrlFeatureFlag_disabled) {
-  DisableWellKnownChangePasswordFeatureFlag();
-
-  store().AddLogin(MakeSavedPassword(kExampleCom, kUsername1));
-  store().AddCompromisedCredentials(
-      MakeCompromised(kExampleCom, kUsername1, base::TimeDelta::FromMinutes(1),
-                      CompromiseType::kLeaked));
-  RunUntilIdle();
-  GURL change_password_url(
-      *delegate().GetCompromisedCredentials().at(0).change_password_url);
-  EXPECT_NE(change_password_url.path(),
-            password_manager::kWellKnownChangePasswordPath);
 }
 
 }  // namespace extensions

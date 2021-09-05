@@ -180,10 +180,10 @@ FrameTreeNode* FrameTree::AddFrame(
     RenderFrameHostImpl* parent,
     int process_id,
     int new_routing_id,
-    mojo::PendingReceiver<service_manager::mojom::InterfaceProvider>
-        interface_provider_receiver,
     mojo::PendingReceiver<blink::mojom::BrowserInterfaceBroker>
         browser_interface_broker_receiver,
+    mojo::PendingAssociatedReceiver<blink::mojom::PolicyContainerHost>
+        policy_container_host_receiver,
     blink::mojom::TreeScopeType scope,
     const std::string& frame_name,
     const std::string& frame_unique_name,
@@ -225,13 +225,14 @@ FrameTreeNode* FrameTree::AddFrame(
   FrameTreeNode* added_node = parent->AddChild(std::move(new_node), process_id,
                                                new_routing_id, frame_token);
 
-  DCHECK(interface_provider_receiver.is_valid());
-  added_node->current_frame_host()->BindInterfaceProviderReceiver(
-      std::move(interface_provider_receiver));
-
   DCHECK(browser_interface_broker_receiver.is_valid());
   added_node->current_frame_host()->BindBrowserInterfaceBrokerReceiver(
       std::move(browser_interface_broker_receiver));
+
+  if (policy_container_host_receiver) {
+    added_node->current_frame_host()->policy_container_host()->Bind(
+        std::move(policy_container_host_receiver));
+  }
 
   // The last committed NavigationEntry may have a FrameNavigationEntry with the
   // same |frame_unique_name|, since we don't remove FrameNavigationEntries if
@@ -250,7 +251,7 @@ FrameTreeNode* FrameTree::AddFrame(
   if (added_node->frame_owner_element_type() !=
       blink::mojom::FrameOwnerElementType::kPortal) {
     // Portals do not have a live RenderFrame in the renderer process.
-    added_node->current_frame_host()->SetRenderFrameCreated(true);
+    added_node->current_frame_host()->RenderFrameCreated();
   }
   return added_node;
 }
@@ -394,11 +395,12 @@ void FrameTree::SetFrameRemoveListener(
 scoped_refptr<RenderViewHostImpl> FrameTree::CreateRenderViewHost(
     SiteInstance* site_instance,
     int32_t main_frame_routing_id,
-    bool swapped_out) {
+    bool swapped_out,
+    bool renderer_initiated_creation) {
   RenderViewHostImpl* rvh =
       static_cast<RenderViewHostImpl*>(RenderViewHostFactory::Create(
           site_instance, render_view_delegate_, render_widget_delegate_,
-          main_frame_routing_id, swapped_out));
+          main_frame_routing_id, swapped_out, renderer_initiated_creation));
   return base::WrapRefCounted(rvh);
 }
 

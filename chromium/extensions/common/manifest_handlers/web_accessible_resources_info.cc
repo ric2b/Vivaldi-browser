@@ -10,6 +10,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "components/crx_file/id_util.h"
+#include "extensions/common/constants.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/common/extension_id.h"
 #include "extensions/common/manifest.h"
@@ -34,7 +35,8 @@ base::Optional<URLPattern> GetPatternOrError(const base::Value& path,
   URLPattern pattern(URLPattern::SCHEME_EXTENSION);
   if (!path.is_string()) {
     *error = ErrorUtils::FormatErrorMessageUTF16(
-        errors::kInvalidWebAccessibleResource, base::NumberToString(i));
+        errors::kInvalidWebAccessibleResource, base::NumberToString(i),
+        "Value is not a string.");
     return base::nullopt;
   }
   std::string relative_path = path.GetString();
@@ -68,9 +70,8 @@ std::unique_ptr<WebAccessibleResourcesInfo> ParseResourceStringList(
 
   // In extensions where only a resource list is provided (as is the case in
   // manifest_version 2), resources are embeddable by any site. To handle
-  // this, have |matches| match anything.
+  // this, have |matches| match the specified schemes.
   URLPatternSet matches;
-
   matches.AddPattern(
       URLPattern(URLPattern::SCHEME_ALL, URLPattern::kAllUrlsPattern));
   info->web_accessible_resources.emplace_back(
@@ -84,16 +85,17 @@ std::unique_ptr<WebAccessibleResourcesInfo> ParseEntryList(
     const Extension& extension,
     base::string16* error) {
   auto info = std::make_unique<WebAccessibleResourcesInfo>();
-  auto get_error = [](size_t i) {
+  auto get_error = [](size_t i, base::StringPiece message) {
     return ErrorUtils::FormatErrorMessageUTF16(
-        errors::kInvalidWebAccessibleResource, base::NumberToString(i));
+        errors::kInvalidWebAccessibleResource, base::NumberToString(i),
+        message);
   };
 
   int i = 0;
   for (const base::Value& value : entries.GetList()) {
     // Get and validate index element dictionary.
     if (!value.is_dict()) {
-      *error = get_error(i);
+      *error = get_error(i, "Entry must be a dictionary value.");
       return nullptr;
     }
 
@@ -101,31 +103,33 @@ std::unique_ptr<WebAccessibleResourcesInfo> ParseEntryList(
     const base::Value* resources =
         value.FindKey(keys::kWebAccessibleResourcesResources);
     if (!resources || !resources->is_list()) {
-      *error = get_error(i);
+      *error = get_error(i, "Invalid value for 'resources'.");
       return nullptr;
     }
     const base::Value* matches =
         value.FindKey(keys::kWebAccessibleResourcesMatches);
     if (matches && !matches->is_list()) {
-      *error = get_error(i);
+      *error = get_error(i, "Invalid value for 'matches'.");
       return nullptr;
     }
     const base::Value* extension_ids =
         value.FindKey(keys::kWebAccessibleResourcesExtensionIds);
     if (extension_ids && !extension_ids->is_list()) {
-      *error = get_error(i);
+      *error = get_error(i, "Invalid value for 'extension_ids'.");
       return nullptr;
     }
     const base::Value* use_dynamic_url =
         value.FindKey(keys::kWebAccessibleResourcesUseDynamicUrl);
     if (use_dynamic_url && !use_dynamic_url->is_bool()) {
-      *error = get_error(i);
+      *error = get_error(i, "Invalid value for 'use_dynamic_url'.");
       return nullptr;
     }
 
-    // Entry must at least have resources, and one other valid key.
-    if (!(matches || extension_ids || use_dynamic_url)) {
-      *error = get_error(i);
+    bool use_dynamic_url_bool = use_dynamic_url && use_dynamic_url->GetBool();
+
+    if (!matches && !extension_ids && !use_dynamic_url_bool) {
+      *error = get_error(
+          i, "Entry must at least have resources, and one other valid key.");
       return nullptr;
     }
 
@@ -142,9 +146,11 @@ std::unique_ptr<WebAccessibleResourcesInfo> ParseEntryList(
     if (matches) {
       for (const auto& match : matches->GetList()) {
         URLPattern pattern(URLPattern::SCHEME_ALL);
-        if (!match.is_string() || pattern.Parse(match.GetString()) !=
-                                      URLPattern::ParseResult::kSuccess) {
-          *error = get_error(i);
+        if (!match.is_string() ||
+            pattern.Parse(match.GetString()) !=
+                URLPattern::ParseResult::kSuccess ||
+            pattern.path() != "/*") {
+          *error = get_error(i, "Invalid match pattern.");
           return nullptr;
         }
         match_set.AddPattern(pattern);
@@ -154,20 +160,16 @@ std::unique_ptr<WebAccessibleResourcesInfo> ParseEntryList(
     if (extension_ids) {
       for (const auto& extension_id : extension_ids->GetList()) {
         if (!extension_id.is_string()) {
-          *error = get_error(i);
+          *error = get_error(i, "Extension ID must be a string.");
           return nullptr;
         }
         const std::string& extension_id_str = extension_id.GetString();
         if (!crx_file::id_util::IdIsValid(extension_id_str)) {
-          *error = get_error(i);
+          *error = get_error(i, "Invalid extension id.");
           return nullptr;
         }
         extension_id_list.emplace_back(extension_id_str);
       }
-    }
-    bool use_dynamic_url_bool = false;
-    if (use_dynamic_url) {
-      use_dynamic_url_bool = use_dynamic_url->GetBool();
     }
 
     info->web_accessible_resources.emplace_back(
@@ -187,14 +189,27 @@ WebAccessibleResourcesInfo::~WebAccessibleResourcesInfo() = default;
 // static
 bool WebAccessibleResourcesInfo::IsResourceWebAccessible(
     const Extension* extension,
-    const std::string& relative_path) {
+    const std::string& relative_path,
+    const base::Optional<url::Origin>& initiator_origin) {
+  auto initiator_url =
+      initiator_origin.has_value() ? initiator_origin->GetURL() : GURL();
   const WebAccessibleResourcesInfo* info = GetResourcesInfo(extension);
   if (!info) {  // No web-accessible resources
     return false;
   }
   for (const auto& entry : info->web_accessible_resources) {
     if (extension->ResourceMatches(entry.resources, relative_path)) {
-      return true;
+      // Prior to MV3, web-accessible resources were accessible by any
+      // site. Preserve this behavior.
+      if (extension->manifest_version() < 3)
+        return true;
+
+      if (entry.matches.MatchesURL(initiator_url))
+        return true;
+      if (initiator_url.SchemeIs(extensions::kExtensionScheme) &&
+          base::Contains(entry.extension_ids, initiator_url.host())) {
+        return true;
+      }
     }
   }
   return false;

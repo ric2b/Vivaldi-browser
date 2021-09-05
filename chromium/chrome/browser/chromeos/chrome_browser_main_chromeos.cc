@@ -42,6 +42,8 @@
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_mode_idle_app_name_notification.h"
 #include "chrome/browser/chromeos/app_mode/web_app/web_kiosk_app_manager.h"
+#include "chrome/browser/chromeos/arc/enterprise/arc_data_snapshotd_delegate.h"
+#include "chrome/browser/chromeos/arc/enterprise/arc_force_installed_apps_tracker.h"
 #include "chrome/browser/chromeos/arc/session/arc_service_launcher.h"
 #include "chrome/browser/chromeos/boot_times_recorder.h"
 #include "chrome/browser/chromeos/crosapi/browser_manager.h"
@@ -136,6 +138,7 @@
 #include "chrome/browser/ui/ash/assistant/assistant_state_client.h"
 #include "chrome/browser/ui/ash/image_downloader_impl.h"
 #include "chrome/browser/ui/ash/keyboard/chrome_keyboard_controller_client.h"
+#include "chrome/browser/ui/webui/chromeos/emoji/emoji_dialog.h"
 #include "chrome/browser/ui/webui/chromeos/login/discover/discover_manager.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_constants.h"
@@ -148,6 +151,7 @@
 #include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/components/chromebox_for_meetings/buildflags/buildflags.h"  // PLATFORM_CFM
 #include "chromeos/components/drivefs/fake_drivefs_launcher_client.h"
+#include "chromeos/components/local_search_service/public/cpp/local_search_service_proxy_factory.h"
 #include "chromeos/components/power/dark_resume_controller.h"
 #include "chromeos/components/sensors/sensor_hal_dispatcher.h"
 #include "chromeos/constants/chromeos_features.h"
@@ -158,6 +162,7 @@
 #include "chromeos/cryptohome/system_salt_getter.h"
 #include "chromeos/dbus/constants/cryptohome_key_delegate_constants.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/pciguard/pciguard_client.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/dbus/power/power_policy_controller.h"
 #include "chromeos/dbus/services/cros_dbus_service.h"
@@ -207,6 +212,7 @@
 #include "rlz/buildflags/buildflags.h"
 #include "services/audio/public/cpp/sounds/sounds_manager.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
+#include "ui/base/emoji/emoji_panel_helper.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/ime/chromeos/input_method_util.h"
@@ -686,6 +692,8 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
   arc_data_snapshotd_manager_ =
       std::make_unique<arc::data_snapshotd::ArcDataSnapshotdManager>(
           g_browser_process->local_state(),
+          std::make_unique<arc::data_snapshotd::ArcDataSnapshotdDelegate>(),
+          std::make_unique<arc::data_snapshotd::ArcForceInstalledAppsTracker>(),
           base::BindOnce(chrome::AttemptUserExit));
   if (base::FeatureList::IsEnabled(::features::kWilcoDtc))
     wilco_dtc_supportd_manager_ = std::make_unique<WilcoDtcSupportdManager>();
@@ -706,6 +714,11 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
   // keyboard::KeyboardController initializes ChromeKeyboardUI which depends
   // on ChromeKeyboardControllerClient.
   chrome_keyboard_controller_client_ = ChromeKeyboardControllerClient::Create();
+
+  if (base::FeatureList::IsEnabled(chromeos::features::kImeSystemEmojiPicker)) {
+    ui::SetShowEmojiKeyboardCallback(
+        base::BindRepeating(&EmojiPickerDialog::Show));
+  }
 
   // ProfileHelper has to be initialized after UserManager instance is created.
   ProfileHelper::Get()->Initialize();
@@ -761,6 +774,12 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
   if (base::FeatureList::IsEnabled(features::kEnableHostnameSetting)) {
     DeviceNameStore::GetInstance()->Initialize(
         g_browser_process->local_state());
+  }
+
+  if (base::FeatureList::IsEnabled(features::kEnableLocalSearchService)) {
+    // Set |local_state| for LocalSearchServiceProxyFactory.
+    local_search_service::LocalSearchServiceProxyFactory::GetInstance()
+        ->SetLocalState(g_browser_process->local_state());
   }
 
   // Make sure that wallpaper boot transition and other delays in OOBE
@@ -900,12 +919,12 @@ void GuestLanguageSetCallbackData::Callback(
 void SetGuestLocale(Profile* const profile) {
   std::unique_ptr<GuestLanguageSetCallbackData> data(
       new GuestLanguageSetCallbackData(profile));
-  locale_util::SwitchLanguageCallback callback(base::Bind(
+  locale_util::SwitchLanguageCallback callback(base::BindOnce(
       &GuestLanguageSetCallbackData::Callback, base::Passed(std::move(data))));
   const user_manager::User* const user =
       ProfileHelper::Get()->GetUserByProfile(profile);
-  UserSessionManager::GetInstance()->RespectLocalePreference(profile, user,
-                                                             callback);
+  UserSessionManager::GetInstance()->RespectLocalePreference(
+      profile, user, std::move(callback));
 }
 
 void ChromeBrowserMainPartsChromeos::PostProfileInit() {
@@ -999,10 +1018,11 @@ void ChromeBrowserMainPartsChromeos::PostProfileInit() {
   // available.
   idle_action_warning_observer_ = std::make_unique<IdleActionWarningObserver>();
 
-  // Start watching for low disk space events to notify the user if it is not a
-  // guest profile.
-  if (!user_manager::UserManager::Get()->IsLoggedInAsGuest())
+  if (!user_manager::UserManager::Get()->IsLoggedInAsGuest()) {
+    // Start watching for low disk space events to notify the user if it is not
+    // a guest profile.
     low_disk_notification_ = std::make_unique<LowDiskNotification>();
+  }
 
   gnubby_notification_ = std::make_unique<GnubbyNotification>();
   demo_mode_resources_remover_ = DemoModeResourcesRemover::CreateIfNeeded(
@@ -1093,6 +1113,14 @@ void ChromeBrowserMainPartsChromeos::PostBrowserStart() {
                  base::BindOnce(&CrosUsbDetector::ConnectToDeviceManager,
                                 base::Unretained(cros_usb_detector_.get())));
 
+  // External PCI devices are only allowed in non-guest, primary users.
+  if (!user_manager::UserManager::Get()->IsLoggedInAsGuest() &&
+      ProfileHelper::IsPrimaryProfile(profile())) {
+    PciguardClient::Get()->SendExternalPciDevicesPermissionState(
+        base::FeatureList::IsEnabled(
+            features::kDisablePeripheralDataAccessProtection));
+  }
+
   crostini_unsupported_action_notifier_ =
       std::make_unique<crostini::CrostiniUnsupportedActionNotifier>();
 
@@ -1134,7 +1162,8 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
 
   assistant_state_client_.reset();
 
-  ash::Shell::Get()->RemovePreTargetHandler(MagnificationManager::Get());
+  if (pre_profile_init_called_)
+    ash::Shell::Get()->RemovePreTargetHandler(MagnificationManager::Get());
 
   // Unregister CrosSettings observers before CrosSettings is destroyed.
   shutdown_policy_forwarder_.reset();
@@ -1243,6 +1272,12 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
               language::prefs::kApplicationLocale));
     }
   }
+
+#if BUILDFLAG(PLATFORM_CFM)
+  // Cleanly shutdown all Chromebox For Meetings services before DBus and other
+  // critical services are destroyed
+  chromeos::cfm::ShutdownCfmServices();
+#endif  // BUILDFLAG(PLATFORM_CFM)
 
   // Cleans up dbus services depending on ash.
   dbus_services_->PreAshShutdown();

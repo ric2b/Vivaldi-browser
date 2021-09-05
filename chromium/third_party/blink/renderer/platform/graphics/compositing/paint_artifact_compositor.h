@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
+#include "cc/input/layer_selection_bound.h"
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/layer_collections.h"
 #include "cc/layers/picture_layer.h"
@@ -29,6 +30,7 @@
 
 namespace cc {
 class ScrollbarLayerBase;
+class DocumentTransitionRequest;
 }
 
 namespace blink {
@@ -104,10 +106,11 @@ class SynthesizedClip : private cc::ContentLayerClient {
 
  private:
   // ContentLayerClient implementation.
-  gfx::Rect PaintableRegion() final { return gfx::Rect(layer_->bounds()); }
-  bool FillsBoundsCompletely() const final { return false; }
-
+  gfx::Rect PaintableRegion() const final {
+    return gfx::Rect(layer_->bounds());
+  }
   scoped_refptr<cc::DisplayItemList> PaintContentsToDisplayList() final;
+  bool FillsBoundsCompletely() const final { return false; }
 
  private:
   scoped_refptr<cc::PictureLayer> layer_;
@@ -153,10 +156,11 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
   // noncomposited nodes, and is used for Scroll Unification to generate scroll
   // nodes for noncomposited scrollers to complete the compositor's scroll
   // property tree.
-  void Update(const Vector<PreCompositedLayerInfo>&,
-              const ViewportProperties& viewport_properties,
-              const Vector<const TransformPaintPropertyNode*>&
-                  scroll_translation_nodes);
+  void Update(
+      const Vector<PreCompositedLayerInfo>&,
+      const ViewportProperties& viewport_properties,
+      const Vector<const TransformPaintPropertyNode*>& scroll_translation_nodes,
+      Vector<std::unique_ptr<cc::DocumentTransitionRequest>> requests);
 
   void UpdateRepaintedLayerProperties() const;
 
@@ -268,18 +272,23 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
       return compositing_type != kOverlap && compositing_type != kOther;
     }
 
+    bool PropertyTreeStateChanged() const;
+
     // The rects are in the space of property_tree_state.
     FloatRect bounds;
     FloatRect rect_known_to_be_opaque;
     PaintChunkSubset chunks;
     PropertyTreeState property_tree_state;
     FloatPoint offset_of_decomposited_transforms;
+    PaintPropertyChangeType change_of_decomposited_transforms =
+        PaintPropertyChangeType::kUnchanged;
     const GraphicsLayer* graphics_layer = nullptr;
     CompositingType compositing_type;
   };
 
   static void UpdateLayerProperties(cc::Layer&,
                                     const PendingLayer&,
+                                    cc::LayerSelection& layer_selection,
                                     PropertyTreeManager* = nullptr);
 
   void DecompositeTransforms();
@@ -321,8 +330,6 @@ class PLATFORM_EXPORT PaintArtifactCompositor final
           new_content_layer_clients,
       Vector<scoped_refptr<cc::Layer>>& new_scroll_hit_test_layers,
       Vector<scoped_refptr<cc::ScrollbarLayerBase>>& new_scrollbar_layers);
-
-  bool PropertyTreeStateChanged(const PropertyTreeState&) const;
 
   const TransformPaintPropertyNode& NearestScrollTranslationForLayer(
       const PendingLayer&);

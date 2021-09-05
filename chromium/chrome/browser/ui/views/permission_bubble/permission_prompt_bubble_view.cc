@@ -22,6 +22,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/permissions/features.h"
 #include "components/permissions/permission_request.h"
+#include "components/permissions/request_type.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/elide_url.h"
 #include "components/vector_icons/vector_icons.h"
@@ -122,16 +123,7 @@ PermissionPromptBubbleView::PermissionPromptBubbleView(
         &PermissionPromptBubbleView::DenyPermission, base::Unretained(this)));
   }
 
-  // If bubble hanging off the padlock icon, with no chip showing, it shouldn't
-  // close on deactivate and it should stick until user makes a decision.
-  // Otherwise, the chip is indicating the pending permission request and so the
-  // bubble can be opened and closed repeatedly.
-  if (prompt_style == PermissionPromptStyle::kBubbleOnly) {
-    set_close_on_deactivate(false);
-    DialogDelegate::SetCloseCallback(
-        base::BindOnce(&PermissionPromptBubbleView::ClosingPermission,
-                       base::Unretained(this)));
-  }
+  SetPromptStyle(prompt_style);
 
   SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(),
@@ -150,22 +142,6 @@ PermissionPromptBubbleView::PermissionPromptBubbleView(
         AddChildView(std::make_unique<views::Label>(extra_text.value()));
     extra_text_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     extra_text_label->SetMultiLine(true);
-  }
-
-  if (visible_requests_[0]->GetContentSettingsType() ==
-      ContentSettingsType::PLUGINS) {
-    auto* learn_more_button =
-        SetExtraView(views::CreateVectorImageButtonWithNativeTheme(
-            base::BindRepeating(
-                [](Browser* browser) {
-                  chrome::AddSelectedTabWithURL(
-                      browser, GURL(chrome::kFlashDeprecationLearnMoreURL),
-                      ui::PAGE_TRANSITION_LINK);
-                },
-                base::Unretained(browser)),
-            vector_icons::kHelpOutlineIcon));
-    learn_more_button->SetTooltipText(
-        l10n_util::GetStringUTF16(IDS_LEARN_MORE));
   }
 }
 
@@ -204,15 +180,13 @@ PermissionPromptBubbleView::GetVisibleRequests() {
 
 bool PermissionPromptBubbleView::ShouldShowPermissionRequest(
     permissions::PermissionRequest* request) {
-  if (request->GetContentSettingsType() !=
-      ContentSettingsType::MEDIASTREAM_CAMERA) {
+  if (request->GetRequestType() != permissions::RequestType::kCameraStream)
     return true;
-  }
 
   // Hide camera request only if camera PTZ request is present as well.
   for (permissions::PermissionRequest* request : delegate_->Requests()) {
-    if (request->GetContentSettingsType() ==
-        ContentSettingsType::CAMERA_PAN_TILT_ZOOM) {
+    if (request->GetRequestType() ==
+        permissions::RequestType::kCameraPanTiltZoom) {
       return false;
     }
   }
@@ -233,8 +207,9 @@ void PermissionPromptBubbleView::AddPermissionRequestLine(
 
   constexpr int kPermissionIconSize = 18;
   auto* icon = line_container->AddChildView(
-      std::make_unique<views::ColorTrackingIconView>(request->GetIconId(),
-                                                     kPermissionIconSize));
+      std::make_unique<views::ColorTrackingIconView>(
+          permissions::GetIconId(request->GetRequestType()),
+          kPermissionIconSize));
   icon->SetVerticalAlignment(views::ImageView::Alignment::kLeading);
 
   auto* label = line_container->AddChildView(
@@ -257,6 +232,23 @@ void PermissionPromptBubbleView::UpdateAnchorPosition() {
   if (!configuration.anchor_view)
     SetAnchorRect(bubble_anchor_util::GetPageInfoAnchorRect(browser_));
   SetArrow(configuration.bubble_arrow);
+}
+
+void PermissionPromptBubbleView::SetPromptStyle(
+    PermissionPromptStyle prompt_style) {
+  // If bubble hanging off the padlock icon, with no chip showing, it shouldn't
+  // close on deactivate and it should stick until user makes a decision.
+  // Otherwise, the chip is indicating the pending permission request and so the
+  // bubble can be opened and closed repeatedly.
+  if (prompt_style == PermissionPromptStyle::kBubbleOnly) {
+    set_close_on_deactivate(false);
+    DialogDelegate::SetCloseCallback(
+        base::BindOnce(&PermissionPromptBubbleView::ClosingPermission,
+                       base::Unretained(this)));
+  } else {
+    set_close_on_deactivate(true);
+    DialogDelegate::SetCloseCallback(base::OnceClosure());
+  }
 }
 
 void PermissionPromptBubbleView::AddedToWidget() {
@@ -341,12 +333,8 @@ PermissionPromptBubbleView::GetDisplayNameOrOrigin() const {
 
 base::Optional<base::string16> PermissionPromptBubbleView::GetExtraText()
     const {
-  switch (visible_requests_[0]->GetContentSettingsType()) {
-    case ContentSettingsType::PLUGINS:
-      // TODO(crbug.com/1058401): Remove this warning text once flash is
-      // deprecated.
-      return l10n_util::GetStringUTF16(IDS_FLASH_PERMISSION_WARNING_FRAGMENT);
-    case ContentSettingsType::STORAGE_ACCESS:
+  switch (visible_requests_[0]->GetRequestType()) {
+    case permissions::RequestType::kStorageAccess:
       return l10n_util::GetStringFUTF16(
           IDS_STORAGE_ACCESS_PERMISSION_EXPLANATION,
           url_formatter::FormatUrlForSecurityDisplay(
@@ -394,6 +382,6 @@ bool PermissionPromptBubbleView::ShouldShowAllowThisTimeButton() const {
   if (delegate_->Requests().size() > 1)
     return false;
   CHECK_GT(delegate_->Requests().size(), 0u);
-  return delegate_->Requests()[0]->GetContentSettingsType() ==
-         ContentSettingsType::GEOLOCATION;
+  return delegate_->Requests()[0]->GetRequestType() ==
+         permissions::RequestType::kGeolocation;
 }

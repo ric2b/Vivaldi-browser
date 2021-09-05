@@ -26,8 +26,8 @@
 //   class MyClass {
 //    public:
 //     MyClass() {
-//       // It's sometimes useful to detach on construction for objects that are
-//       // constructed in one place and forever after used from another
+//       // Detaching on construction is necessary for objects that are
+//       // constructed on one sequence and forever after used from another
 //       // sequence.
 //       DETACH_FROM_SEQUENCE(my_sequence_checker_);
 //     }
@@ -88,9 +88,10 @@ namespace base {
 //
 // Note: You should almost always use the SequenceChecker class (through the
 // above macros) to get the right version for your build configuration.
-// Note: This is only a check, not a "lock". It is marked "LOCKABLE" only in
-// order to support thread_annotations.h.
-class LOCKABLE SequenceCheckerDoNothing {
+// Note: This is marked with "context" capability in order to support
+// thread_annotations.h.
+class THREAD_ANNOTATION_ATTRIBUTE__(capability("context"))
+    SequenceCheckerDoNothing {
  public:
   SequenceCheckerDoNothing() = default;
 
@@ -107,11 +108,9 @@ class LOCKABLE SequenceCheckerDoNothing {
 };
 
 #if DCHECK_IS_ON()
-class SequenceChecker : public SequenceCheckerImpl {
-};
+using SequenceChecker = SequenceCheckerImpl;
 #else
-class SequenceChecker : public SequenceCheckerDoNothing {
-};
+using SequenceChecker = SequenceCheckerDoNothing;
 #endif  // DCHECK_IS_ON()
 
 class SCOPED_LOCKABLE ScopedValidateSequenceChecker {

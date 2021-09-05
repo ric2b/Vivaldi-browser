@@ -15,7 +15,6 @@
 #include "base/allocator/partition_allocator/partition_alloc_forward.h"
 #include "base/allocator/partition_allocator/partition_bucket.h"
 #include "base/allocator/partition_allocator/partition_freelist_entry.h"
-#include "base/allocator/partition_allocator/partition_tag_bitmap.h"
 #include "base/allocator/partition_allocator/random.h"
 #include "base/check_op.h"
 #include "base/thread_annotations.h"
@@ -131,6 +130,15 @@ struct __attribute__((packed)) SlotSpanMetadata {
     if (LIKELY(!CanStoreRawSize()))
       return bucket->slot_size;
     return GetRawSize();
+  }
+
+  // Returns the total size of the slots that are currently provisioned.
+  ALWAYS_INLINE size_t GetProvisionedSize() const {
+    size_t num_provisioned_slots =
+        bucket->get_slots_per_span() - num_unprovisioned_slots;
+    size_t provisioned_size = num_provisioned_slots * bucket->slot_size;
+    PA_DCHECK(provisioned_size <= bucket->get_bytes_per_span());
+    return provisioned_size;
   }
 
   ALWAYS_INLINE void Reset();
@@ -252,15 +260,15 @@ ALWAYS_INLINE QuarantineBitmap* SuperPageQuarantineBitmaps(
     char* super_page_base) {
   PA_DCHECK(
       !(reinterpret_cast<uintptr_t>(super_page_base) % kSuperPageAlignment));
-  return reinterpret_cast<QuarantineBitmap*>(
-      super_page_base + PartitionPageSize() + ReservedTagBitmapSize());
+  return reinterpret_cast<QuarantineBitmap*>(super_page_base +
+                                             PartitionPageSize());
 }
 
 ALWAYS_INLINE char* SuperPagePayloadBegin(char* super_page_base,
                                           bool with_pcscan) {
   PA_DCHECK(
       !(reinterpret_cast<uintptr_t>(super_page_base) % kSuperPageAlignment));
-  return super_page_base + PartitionPageSize() + ReservedTagBitmapSize() +
+  return super_page_base + PartitionPageSize() +
          (with_pcscan ? ReservedQuarantineBitmapsSize() : 0);
 }
 
@@ -292,8 +300,8 @@ ALWAYS_INLINE char* GetSlotStartInSuperPage(char* maybe_inner_ptr) {
       reinterpret_cast<uintptr_t>(maybe_inner_ptr) & kSuperPageBaseMask);
   auto* extent = reinterpret_cast<PartitionSuperPageExtentEntry<thread_safe>*>(
       PartitionSuperPageToMetadataArea(super_page_ptr));
-  PA_DCHECK(IsWithinSuperPagePayload(maybe_inner_ptr,
-                                     extent->root->pcscan.has_value()));
+  PA_DCHECK(
+      IsWithinSuperPagePayload(maybe_inner_ptr, extent->root->IsScanEnabled()));
   auto* slot_span = SlotSpanMetadata<thread_safe>::FromPointerNoAlignmentCheck(
       maybe_inner_ptr);
   // Check if the slot span is actually used and valid.
@@ -305,7 +313,12 @@ ALWAYS_INLINE char* GetSlotStartInSuperPage(char* maybe_inner_ptr) {
   const ptrdiff_t ptr_offset = maybe_inner_ptr - slot_span_begin;
   PA_DCHECK(0 <= ptr_offset &&
             ptr_offset < static_cast<ptrdiff_t>(
-                             slot_span->bucket->get_bytes_per_span()));
+                             slot_span->bucket->get_pages_per_slot_span() *
+                             PartitionPageSize()));
+  // Slot span size in bytes is not necessarily multiple of partition page.
+  if (ptr_offset >=
+      static_cast<ptrdiff_t>(slot_span->bucket->get_bytes_per_span()))
+    return nullptr;
   const size_t slot_size = slot_span->bucket->slot_size;
   const size_t slot_number = slot_span->bucket->GetSlotNumber(ptr_offset);
   char* const result = slot_span_begin + (slot_number * slot_size);
@@ -391,19 +404,9 @@ SlotSpanMetadata<thread_safe>::FromPointer(void* ptr) {
 
 template <bool thread_safe>
 ALWAYS_INLINE bool SlotSpanMetadata<thread_safe>::CanStoreRawSize() const {
-  // For direct-map as well as single-slot slot spans (recognized by checking
-  // against |kMaxPartitionPagesPerSlotSpan|), we have some spare metadata space
-  // in subsequent PartitionPage to store the raw size. It isn't only metadata
-  // space though, slot spans that have more than one slot can't have raw size
-  // stored, because we wouldn't know which slot it applies to.
-  if (LIKELY(bucket->slot_size <=
-             MaxSystemPagesPerSlotSpan() * SystemPageSize()))
-    return false;
-
-  PA_DCHECK((bucket->slot_size % SystemPageSize()) == 0);
-  PA_DCHECK(bucket->is_direct_mapped() || bucket->get_slots_per_span() == 1);
-
-  return true;
+  // The answer is the same for all slot spans in a bucket, because it's based
+  // on the slot size.
+  return bucket->CanStoreRawSize();
 }
 
 template <bool thread_safe>

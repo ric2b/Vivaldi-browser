@@ -11,10 +11,10 @@
 #include "base/macros.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "ui/gfx/geometry/point_f.h"
-#include "ui/wm/public/activation_change_observer.h"
 
 namespace ash {
 enum class SwitchAccessCommand;
+enum class MagnifierCommand;
 }
 
 // Passes key events from Ash's EventRewriter to accessibility component
@@ -23,8 +23,7 @@ enum class SwitchAccessCommand;
 // TODO(http://crbug.com/839541): Avoid reposting unhandled events.
 class AccessibilityEventRewriterDelegate
     : public ash::AccessibilityEventRewriterDelegate,
-      public content::WebContentsDelegate,
-      public wm::ActivationChangeObserver {
+      public content::WebContentsDelegate {
  public:
   AccessibilityEventRewriterDelegate();
   AccessibilityEventRewriterDelegate(
@@ -36,9 +35,10 @@ class AccessibilityEventRewriterDelegate
   // ash::AccessibilityEventRewriterDelegate:
   void DispatchKeyEventToChromeVox(std::unique_ptr<ui::Event> event,
                                    bool capture) override;
-  void DispatchMouseEventToChromeVox(std::unique_ptr<ui::Event> event) override;
+  void DispatchMouseEvent(std::unique_ptr<ui::Event> event) override;
   void SendSwitchAccessCommand(ash::SwitchAccessCommand command) override;
   void SendPointScanPoint(const gfx::PointF& point) override;
+  void SendMagnifierCommand(ash::MagnifierCommand command) override;
 
  private:
   // Reports unhandled key events to the EventRewriterController for dispatch.
@@ -48,13 +48,6 @@ class AccessibilityEventRewriterDelegate
   bool HandleKeyboardEvent(
       content::WebContents* source,
       const content::NativeWebKeyboardEvent& event) override;
-
-  // wm::ActivationChangeObserver overrides.
-  void OnWindowActivated(ActivationReason reason,
-                         aura::Window* gained_active,
-                         aura::Window* lost_active) override;
-
-  bool is_arc_window_active_ = false;
 };
 
 #endif  // CHROME_BROWSER_CHROMEOS_ACCESSIBILITY_ACCESSIBILITY_EVENT_REWRITER_DELEGATE_H_

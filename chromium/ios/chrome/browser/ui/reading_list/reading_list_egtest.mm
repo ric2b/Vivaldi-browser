@@ -15,7 +15,6 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #import "base/test/ios/wait_util.h"
-#import "ios/chrome/browser/ui/page_info/features.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_constants.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_app_interface.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_constants.h"
@@ -434,7 +433,6 @@ void AssertIsShowingDistillablePage(bool online, const GURL& distillable_url) {
 
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration config;
-  config.features_enabled.push_back(kPageInfoRefactoring);
 
   // Error page Workflow Feature is enabled by test name. This is done because
   // it is inefficient to use ensureAppLaunchedWithConfiguration for each test.
@@ -1028,6 +1026,10 @@ void AssertIsShowingDistillablePage(bool online, const GURL& distillable_url) {
 
 // Tests that the VC can be dismissed by swiping down.
 - (void)testSwipeDownDismiss {
+  // TODO(crbug.com/1129589): Test disabled on iOS14 iPhones.
+  if (base::ios::IsRunningOnIOS14OrLater() && ![ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_DISABLED(@"Fails on iOS14 iPhones.");
+  }
   if (!base::ios::IsRunningOnOrLater(13, 0, 0)) {
     EARL_GREY_TEST_SKIPPED(@"Test disabled on iOS 12 and lower.");
   }

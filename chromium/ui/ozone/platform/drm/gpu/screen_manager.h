@@ -68,7 +68,7 @@ class ScreenManager {
   void RemoveDisplayControllers(const CrtcsWithDrmList& controllers_to_remove);
 
   // Enables/Disables the display controller based on if a mode exists.
-  base::flat_map<int64_t, bool> ConfigureDisplayControllers(
+  bool ConfigureDisplayControllers(
       const ControllerConfigsList& controllers_params);
 
   // Returns a reference to the display controller configured to display within
@@ -105,13 +105,8 @@ class ScreenManager {
       const scoped_refptr<DrmDevice>& drm,
       uint32_t crtc);
 
-  base::flat_map<int64_t, bool> TestAndModeset(
-      const ControllerConfigsList& controllers_params);
-
   bool TestModeset(const ControllerConfigsList& controllers_params);
-
-  base::flat_map<int64_t, bool> Modeset(
-      const ControllerConfigsList& controllers_params);
+  bool Modeset(const ControllerConfigsList& controllers_params);
 
   // Configures a display controller to be enabled. The display controller is
   // identified by (|crtc|, |connector|) and the controller is to be modeset
@@ -135,12 +130,13 @@ class ScreenManager {
       const scoped_refptr<DrmDevice>& drm,
       uint32_t crtc);
 
-  void UpdateControllerStateAfterModeset(const ControllerConfigParams& config,
+  void UpdateControllerStateAfterModeset(const scoped_refptr<DrmDevice>& drm,
                                          const CommitRequest& commit_request,
                                          bool did_succeed);
 
   void HandleMirrorIfExists(
-      const ControllerConfigParams& config,
+      const scoped_refptr<DrmDevice>& drm,
+      const CrtcCommitRequest& crtc_request,
       const HardwareDisplayControllers::iterator& controller);
 
   // Returns an iterator into |controllers_| for the controller located at
@@ -156,7 +152,8 @@ class ScreenManager {
 
   DrmOverlayPlane GetModesetBuffer(HardwareDisplayController* controller,
                                    const gfx::Rect& bounds,
-                                   const std::vector<uint64_t>& modifiers);
+                                   const std::vector<uint64_t>& modifiers,
+                                   bool is_testing);
 
   // Gets props for modesetting the |controller| using |origin| and |mode|.
   void GetModesetControllerProps(CommitRequest* commit_request,

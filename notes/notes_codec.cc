@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/base64.h"
+#include "base/containers/contains.h"
 #include "base/guid.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/memory/ptr_util.h"
@@ -48,9 +49,7 @@ const char NotesCodec::kTypeTrash[] = "trash";
 static const int kCurrentVersion = 1;
 
 NotesCodec::NotesCodec()
-    : ids_reassigned_(false),
-      ids_valid_(true),
-      maximum_id_(0) {}
+    : ids_reassigned_(false), ids_valid_(true), maximum_id_(0) {}
 
 NotesCodec::~NotesCodec() {}
 
@@ -102,8 +101,10 @@ bool NotesCodec::Decode(NoteNode* notes_node,
                         const base::Value& value,
                         std::string* sync_metadata_str) {
   ids_.clear();
-  guids_ = {NoteNode::kRootNodeGuid, NoteNode::kMainNodeGuid,
-            NoteNode::kOtherNotesNodeGuid, NoteNode::kTrashNodeGuid};
+  guids_ = {base::GUID::ParseLowercase(NoteNode::kRootNodeGuid),
+            base::GUID::ParseLowercase(NoteNode::kMainNodeGuid),
+            base::GUID::ParseLowercase(NoteNode::kOtherNotesNodeGuid),
+            base::GUID::ParseLowercase(NoteNode::kTrashNodeGuid)};
   ids_reassigned_ = false;
   ids_valid_ = true;
   maximum_id_ = 0;
@@ -134,7 +135,7 @@ std::unique_ptr<base::Value> NotesCodec::EncodeNode(
   value->SetString(NotesCodec::kSubjectKey, subject);
   UpdateChecksum(subject);
 
-  const std::string& guid = node->guid();
+  const std::string& guid = node->guid().AsLowercaseString();
   value->SetString(kGuidKey, guid);
 
   std::string type;
@@ -276,7 +277,7 @@ bool NotesCodec::DecodeNode(const base::DictionaryValue& value,
     UpdateChecksum(title_string);
   }
 
-  std::string guid;
+  base::GUID guid;
   // |node| is only passed in for notes of type NotePermanentNode, in
   // which case we do not need to check for GUID validity as their GUIDs are
   // hard-coded and not read from the persisted file.
@@ -284,22 +285,20 @@ bool NotesCodec::DecodeNode(const base::DictionaryValue& value,
     // GUIDs can be empty for notes that were created before GUIDs were
     // required. When encountering one such note we thus assign to it a new
     // GUID. The same applies if the stored GUID is invalid or a duplicate.
-    if (!value.GetString(kGuidKey, &guid) || guid.empty() ||
-        !base::IsValidGUID(guid)) {
-      guid = base::GenerateGUID();
+    const std::string* guid_str = value.FindStringKey(kGuidKey);
+    if (guid_str && !guid_str->empty()) {
+      guid = base::GUID::ParseCaseInsensitive(*guid_str);
+    }
+
+    if (!guid.is_valid()) {
+      guid = base::GUID::GenerateRandomV4();
       guids_reassigned_ = true;
     }
 
-    // GUIDs are case insensitive as per RFC 4122. To prevent collisions due to
-    // capitalization differences, all GUIDs are canonicalized to lowercase
-    // during JSON-parsing.
-    guid = base::ToLowerASCII(guid);
-    DCHECK(base::IsValidGUIDOutputString(guid));
-
     // Guard against GUID collisions, which would violate BookmarkModel's
     // invariant that each GUID is unique.
-    if (guids_.count(guid) != 0) {
-      guid = base::GenerateGUID();
+    if (base::Contains(guids_, guid)) {
+      guid = base::GUID::GenerateRandomV4();
       guids_reassigned_ = true;
     }
 
@@ -341,10 +340,12 @@ bool NotesCodec::DecodeNode(const base::DictionaryValue& value,
       return false;
     UpdateChecksum(content_string);
 
-    if (!node)
+    if (!node) {
+      DCHECK(guid.is_valid());
       node = new NoteNode(id, guid, type);
-    else
+    } else {
       return false;
+    }
 
     node->SetContent(content_string);
 
@@ -378,10 +379,12 @@ bool NotesCodec::DecodeNode(const base::DictionaryValue& value,
     if (child_list->type() != base::Value::Type::LIST)
       return false;
 
-    if (!node)
+    if (!node) {
+      DCHECK(guid.is_valid());
       node = new NoteNode(id, guid, type);
-    else
+    } else {
       node->set_id(id);
+    }
 
     if (parent)
       parent->Add(base::WrapUnique(node));
@@ -414,10 +417,13 @@ bool NotesCodec::DecodeNode(const base::DictionaryValue& value,
   } else {
     DCHECK(type_string == kTypeSeparator);
 
-    if (!node)
+    if (!node) {
+      DCHECK(guid.is_valid());
+
       node = new NoteNode(id, guid, type);
-    else
+    } else {
       node->set_id(id);
+    }
 
     if (parent)
       parent->Add(base::WrapUnique(node));

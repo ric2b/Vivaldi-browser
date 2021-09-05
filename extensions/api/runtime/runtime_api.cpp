@@ -99,17 +99,8 @@ ProfileStorageObserver& ProfileStorageObserver::GetInstance() {
 }
 
 void ProfileStorageObserver::UpdateProfiles() {
-  ProfileManager* profile_manager = g_browser_process->profile_manager();
-  std::vector<Profile*> active_profiles = profile_manager->GetLoadedProfiles();
-
-  // We need to notify all profiles.
-  for (Profile* profile : active_profiles) {
-    DCHECK(profile);
-    auto args = std::make_unique<base::ListValue>();
-    ::vivaldi::BroadcastEvent(
-        vivaldi::runtime_private::OnProfilesUpdated::kEventName,
-        std::move(args), profile);
-  }
+  ::vivaldi::BroadcastEventToAllProfiles(
+      vivaldi::runtime_private::OnProfilesUpdated::kEventName);
 }
 
 void ProfileStorageObserver::OnProfileAdded(

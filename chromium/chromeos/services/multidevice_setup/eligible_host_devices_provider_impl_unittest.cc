@@ -10,6 +10,7 @@
 #include "base/macros.h"
 #include "base/stl_util.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/time/time_override.h"
 #include "chromeos/components/multidevice/remote_device_test_util.h"
 #include "chromeos/components/multidevice/software_feature.h"
 #include "chromeos/components/multidevice/software_feature_state.h"
@@ -30,7 +31,7 @@ const size_t kNumTestDevices = 5;
 }  // namespace
 
 class MultiDeviceSetupEligibleHostDevicesProviderImplTest
-    : public testing::TestWithParam<bool> {
+    : public ::testing::TestWithParam<std::tuple<bool, bool>> {
  protected:
   MultiDeviceSetupEligibleHostDevicesProviderImplTest()
       : test_devices_(
@@ -39,10 +40,25 @@ class MultiDeviceSetupEligibleHostDevicesProviderImplTest
 
   // testing::Test:
   void SetUp() override {
-    use_get_devices_activity_status_ = GetParam();
-    scoped_feature_list_.InitWithFeatureState(
-        chromeos::features::kCryptAuthV2DeviceActivityStatus,
-        use_get_devices_activity_status_);
+    std::vector<base::Feature> enabled_features;
+    std::vector<base::Feature> disabled_features;
+    use_get_devices_activity_status_ = std::get<0>(GetParam());
+    use_connectivity_status_ = std::get<1>(GetParam());
+    if (use_get_devices_activity_status_) {
+      enabled_features.push_back(
+          chromeos::features::kCryptAuthV2DeviceActivityStatus);
+    } else {
+      disabled_features.push_back(
+          chromeos::features::kCryptAuthV2DeviceActivityStatus);
+    }
+    if (use_connectivity_status_) {
+      enabled_features.push_back(
+          chromeos::features::kCryptAuthV2DeviceActivityStatusUseConnectivity);
+    } else {
+      disabled_features.push_back(
+          chromeos::features::kCryptAuthV2DeviceActivityStatusUseConnectivity);
+    }
+    scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
 
     fake_device_sync_client_ =
         std::make_unique<device_sync::FakeDeviceSyncClient>();
@@ -83,9 +99,11 @@ class MultiDeviceSetupEligibleHostDevicesProviderImplTest
         multidevice::SoftwareFeatureState::kNotSupported;
   }
 
-  bool use_get_devices_activity_status() {
+  bool use_get_devices_activity_status() const {
     return use_get_devices_activity_status_;
   }
+
+  bool use_connectivity_status() const { return use_connectivity_status_; }
 
  private:
   multidevice::RemoteDeviceRefList test_devices_;
@@ -95,6 +113,7 @@ class MultiDeviceSetupEligibleHostDevicesProviderImplTest
   std::unique_ptr<EligibleHostDevicesProvider> provider_;
 
   bool use_get_devices_activity_status_;
+  bool use_connectivity_status_;
 
   base::test::ScopedFeatureList scoped_feature_list_;
 
@@ -162,6 +181,11 @@ TEST_P(MultiDeviceSetupEligibleHostDevicesProviderImplTest,
   fake_device_sync_client()->set_synced_devices(devices);
   fake_device_sync_client()->NotifyNewDevicesSynced();
 
+  // Set current time so that no devices are filtered out based on their last
+  // activity time
+  base::subtle::ScopedTimeClockOverrides time_now_override(
+      []() { return base::Time::FromTimeT(20000); }, nullptr, nullptr);
+
   std::vector<device_sync::mojom::DeviceActivityStatusPtr>
       device_activity_statuses;
   device_activity_statuses.emplace_back(
@@ -190,19 +214,20 @@ TEST_P(MultiDeviceSetupEligibleHostDevicesProviderImplTest,
       provider()->GetEligibleActiveHostDevices();
   EXPECT_EQ(4u, eligible_active_devices.size());
 
+  // Verify sorting.
   if (use_get_devices_activity_status()) {
-    EXPECT_EQ(test_devices()[2], eligible_active_devices[0].remote_device);
-    EXPECT_EQ(test_devices()[3], eligible_active_devices[1].remote_device);
-    EXPECT_EQ(test_devices()[0], eligible_active_devices[2].remote_device);
-    EXPECT_EQ(test_devices()[1], eligible_active_devices[3].remote_device);
-    EXPECT_EQ(cryptauthv2::ConnectivityStatus::ONLINE,
-              eligible_active_devices[0].connectivity_status);
-    EXPECT_EQ(cryptauthv2::ConnectivityStatus::ONLINE,
-              eligible_active_devices[1].connectivity_status);
-    EXPECT_EQ(cryptauthv2::ConnectivityStatus::ONLINE,
-              eligible_active_devices[2].connectivity_status);
-    EXPECT_EQ(cryptauthv2::ConnectivityStatus::OFFLINE,
-              eligible_active_devices[3].connectivity_status);
+    if (use_connectivity_status()) {
+      EXPECT_EQ(test_devices()[2], eligible_active_devices[0].remote_device);
+      EXPECT_EQ(test_devices()[3], eligible_active_devices[1].remote_device);
+      EXPECT_EQ(test_devices()[0], eligible_active_devices[2].remote_device);
+      EXPECT_EQ(test_devices()[1], eligible_active_devices[3].remote_device);
+    } else {
+      // Ignore online/offline statuses during sorting.
+      EXPECT_EQ(test_devices()[2], eligible_active_devices[0].remote_device);
+      EXPECT_EQ(test_devices()[1], eligible_active_devices[1].remote_device);
+      EXPECT_EQ(test_devices()[3], eligible_active_devices[2].remote_device);
+      EXPECT_EQ(test_devices()[0], eligible_active_devices[3].remote_device);
+    }
   } else {
     multidevice::RemoteDeviceRefList eligible_devices =
         provider()->GetEligibleHostDevices();
@@ -215,11 +240,85 @@ TEST_P(MultiDeviceSetupEligibleHostDevicesProviderImplTest,
     for (size_t i = 0; i < 4; i++) {
       EXPECT_EQ(eligible_devices[i], eligible_active_devices[i].remote_device);
     }
+  }
+
+  // Verify connectivity statuses.
+  if (use_get_devices_activity_status() && use_connectivity_status()) {
+    EXPECT_EQ(cryptauthv2::ConnectivityStatus::ONLINE,
+              eligible_active_devices[0].connectivity_status);
+    EXPECT_EQ(cryptauthv2::ConnectivityStatus::ONLINE,
+              eligible_active_devices[1].connectivity_status);
+    EXPECT_EQ(cryptauthv2::ConnectivityStatus::ONLINE,
+              eligible_active_devices[2].connectivity_status);
+    EXPECT_EQ(cryptauthv2::ConnectivityStatus::OFFLINE,
+              eligible_active_devices[3].connectivity_status);
+  } else {
     for (size_t i = 0; i < 4; i++) {
       EXPECT_EQ(cryptauthv2::ConnectivityStatus::UNKNOWN_CONNECTIVITY,
                 eligible_active_devices[i].connectivity_status);
     }
   }
+}
+
+TEST_P(MultiDeviceSetupEligibleHostDevicesProviderImplTest,
+       GetDevicesActivityStatusRemovesInactiveDevices) {
+  if (!use_get_devices_activity_status()) {
+    return;
+  }
+
+  SetBitsOnTestDevices();
+
+  base::subtle::ScopedTimeClockOverrides time_now_override(
+      []() {
+        return base::Time() +
+               EligibleHostDevicesProviderImpl::kInactiveDeviceThresholdInDays +
+               base::TimeDelta::FromDays(1000);
+      },
+      nullptr, nullptr);
+
+  multidevice::RemoteDeviceRefList devices{test_devices()[0], test_devices()[1],
+                                           test_devices()[2], test_devices()[3],
+                                           test_devices()[4]};
+  fake_device_sync_client()->set_synced_devices(devices);
+  fake_device_sync_client()->NotifyNewDevicesSynced();
+
+  std::vector<device_sync::mojom::DeviceActivityStatusPtr>
+      device_activity_statuses;
+  device_activity_statuses.emplace_back(
+      device_sync::mojom::DeviceActivityStatus::New(
+          test_devices()[0].instance_id(), base::Time(),
+          cryptauthv2::ConnectivityStatus::ONLINE));
+  device_activity_statuses.emplace_back(
+      device_sync::mojom::DeviceActivityStatus::New(
+          test_devices()[1].instance_id(),
+          base::Time::Now() -
+              EligibleHostDevicesProviderImpl::kInactiveDeviceThresholdInDays -
+              base::TimeDelta::FromDays(1),
+          cryptauthv2::ConnectivityStatus::OFFLINE));
+  device_activity_statuses.emplace_back(
+      device_sync::mojom::DeviceActivityStatus::New(
+          test_devices()[2].instance_id(),
+          base::Time::Now() -
+              EligibleHostDevicesProviderImpl::kInactiveDeviceThresholdInDays -
+              base::TimeDelta::FromDays(10),
+          cryptauthv2::ConnectivityStatus::ONLINE));
+  device_activity_statuses.emplace_back(
+      device_sync::mojom::DeviceActivityStatus::New(
+          test_devices()[3].instance_id(),
+          base::Time::Now() -
+              EligibleHostDevicesProviderImpl::kInactiveDeviceThresholdInDays,
+          cryptauthv2::ConnectivityStatus::ONLINE));
+
+  fake_device_sync_client()->InvokePendingGetDevicesActivityStatusCallback(
+      device_sync::mojom::NetworkRequestResult::kSuccess,
+      std::move(device_activity_statuses));
+
+  multidevice::DeviceWithConnectivityStatusList eligible_active_devices =
+      provider()->GetEligibleActiveHostDevices();
+
+  EXPECT_EQ(2u, eligible_active_devices.size());
+  EXPECT_EQ(test_devices()[3], eligible_active_devices[0].remote_device);
+  EXPECT_EQ(test_devices()[0], eligible_active_devices[1].remote_device);
 }
 
 TEST_P(MultiDeviceSetupEligibleHostDevicesProviderImplTest,
@@ -260,7 +359,8 @@ TEST_P(MultiDeviceSetupEligibleHostDevicesProviderImplTest,
 
 INSTANTIATE_TEST_SUITE_P(All,
                          MultiDeviceSetupEligibleHostDevicesProviderImplTest,
-                         testing::Bool());
+                         ::testing::Combine(::testing::Bool(),
+                                            ::testing::Bool()));
 
 }  // namespace multidevice_setup
 

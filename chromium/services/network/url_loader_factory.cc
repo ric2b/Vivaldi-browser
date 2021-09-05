@@ -29,6 +29,7 @@
 #include "services/network/trust_tokens/local_trust_token_operation_delegate_impl.h"
 #include "services/network/trust_tokens/trust_token_request_helper_factory.h"
 #include "services/network/url_loader.h"
+#include "services/network/web_bundle_url_loader_factory.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -127,6 +128,31 @@ void URLLoaderFactory::CreateLoaderAndStart(
     UMA_HISTOGRAM_BOOLEAN(
         "NetworkService.URLLoaderFactory.OriginHeaderSameAsRequestOrigin",
         origin_head_same_as_request_origin);
+  }
+
+  if (url_request.web_bundle_token_params.has_value() &&
+      url_request.destination !=
+          network::mojom::RequestDestination::kWebBundle) {
+    // Load a subresource from a WebBundle.
+    base::WeakPtr<WebBundleURLLoaderFactory> web_bundle_url_loader_factory =
+        context_->GetWebBundleManager().GetWebBundleURLLoaderFactory(
+            url_request.web_bundle_token_params->token);
+    if (web_bundle_url_loader_factory) {
+      web_bundle_url_loader_factory->CreateLoaderAndStart(
+          std::move(receiver), routing_id, request_id, options, url_request,
+          std::move(client), traffic_annotation);
+      return;
+    }
+    // Fails if the token is missing in the WebBundleManager. This can happen
+    // when the network process crashes. In normal cases, our assumption is this
+    // shouldn't happen as long as requests from a renderer are ordered.
+    //
+    // TODO(crbug.com/1082020): Re-visit this case to be more robust.
+    URLLoaderCompletionStatus status;
+    status.error_code = net::ERR_INVALID_WEB_BUNDLE;  // Tentative.
+    status.completion_time = base::TimeTicks::Now();
+    mojo::Remote<mojom::URLLoaderClient>(std::move(client))->OnComplete(status);
+    return;
   }
 
   mojom::NetworkServiceClient* network_service_client = nullptr;
@@ -247,6 +273,16 @@ void URLLoaderFactory::CreateLoaderAndStart(
     cookie_observer_->Clone(cookie_observer.InitWithNewPipeAndPassReceiver());
   }
 
+  if (url_request.destination ==
+      network::mojom::RequestDestination::kWebBundle) {
+    DCHECK(url_request.web_bundle_token_params.has_value());
+    base::WeakPtr<WebBundleURLLoaderFactory> web_bundle_url_loader_factory =
+        context_->GetWebBundleManager().CreateWebBundleURLLoaderFactory(
+            url_request.url, *url_request.web_bundle_token_params, params_);
+    client =
+        web_bundle_url_loader_factory->WrapURLLoaderClient(std::move(client));
+  }
+
   auto loader = std::make_unique<URLLoader>(
       context_->url_request_context(), network_service_client,
       context_->client(),
@@ -256,12 +292,13 @@ void URLLoaderFactory::CreateLoaderAndStart(
       std::move(data_pipe_use_tracker),
       static_cast<net::NetworkTrafficAnnotationTag>(traffic_annotation),
       params_.get(), coep_reporter_ ? coep_reporter_.get() : nullptr,
-      request_id, keepalive_request_size, resource_scheduler_client_,
+      request_id, keepalive_request_size,
+      context_->require_network_isolation_key(), resource_scheduler_client_,
       std::move(keepalive_statistics_recorder),
       std::move(network_usage_accumulator),
       header_client_.is_bound() ? header_client_.get() : nullptr,
       context_->origin_policy_manager(), std::move(trust_token_factory),
-      std::move(cookie_observer));
+      context_->cors_origin_access_list(), std::move(cookie_observer));
 
   cors_url_loader_factory_->OnLoaderCreated(std::move(loader));
 }

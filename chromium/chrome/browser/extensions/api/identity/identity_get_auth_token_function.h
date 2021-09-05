@@ -13,6 +13,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/scoped_observer.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/extensions/api/identity/gaia_remote_consent_flow.h"
 #include "chrome/browser/extensions/api/identity/gaia_web_auth_flow.h"
 #include "chrome/browser/extensions/api/identity/identity_mint_queue.h"
@@ -53,7 +54,7 @@ class IdentityGetAuthTokenFunction : public ExtensionFunction,
                                      public GaiaRemoteConsentFlow::Delegate,
                                      public IdentityMintRequestQueue::Request,
                                      public signin::IdentityManager::Observer,
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
                                      public OAuth2AccessTokenManager::Consumer,
 #endif
                                      public OAuth2MintTokenFlow::Delegate {
@@ -91,7 +92,7 @@ class IdentityGetAuthTokenFunction : public ExtensionFunction,
 // TODO(blundell): Investigate feasibility of moving the ChromeOS use case
 // to use the Identity Service instead of being an
 // OAuth2AccessTokenManager::Consumer.
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   void OnGetTokenSuccess(
       const OAuth2AccessTokenManager::Request* request,
       const OAuth2AccessTokenConsumer::TokenResponse& token_response) override;
@@ -164,8 +165,8 @@ class IdentityGetAuthTokenFunction : public ExtensionFunction,
   void OnAccountsInCookieUpdated(
       const signin::AccountsInCookieJarInfo& accounts_in_cookie_jar_info,
       const GoogleServiceAuthError& error) override;
-  void OnPrimaryAccountSet(
-      const CoreAccountInfo& primary_account_info) override;
+  void OnPrimaryAccountChanged(
+      const signin::PrimaryAccountChangeEvent& event_details) override;
 
   // Attempts to show the signin UI after the service auth error if this error
   // isn't transient.
@@ -202,7 +203,7 @@ class IdentityGetAuthTokenFunction : public ExtensionFunction,
   void OnRemoteConsentSuccess(
       const RemoteConsentResolutionData& resolution_data) override;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Starts a login access token request for device robot account. This method
   // will be called only in Chrome OS for:
   // 1. Enterprise kiosk mode.
@@ -257,8 +258,7 @@ class IdentityGetAuthTokenFunction : public ExtensionFunction,
   bool remote_consent_approved_ = false;
 
   // Invoked when IdentityAPI is shut down.
-  std::unique_ptr<base::OnceCallbackList<void()>::Subscription>
-      identity_api_shutdown_subscription_;
+  base::CallbackListSubscription identity_api_shutdown_subscription_;
 
   ScopedObserver<signin::IdentityManager, signin::IdentityManager::Observer>
       scoped_identity_manager_observer_{this};

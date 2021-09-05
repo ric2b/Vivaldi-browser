@@ -339,8 +339,8 @@ DownloadTargetDeterminer::DoSetMixedContentStatus() {
 
   delegate_->GetMixedContentStatus(
       download_, virtual_path_,
-      base::Bind(&DownloadTargetDeterminer::GetMixedContentStatusDone,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(&DownloadTargetDeterminer::GetMixedContentStatusDone,
+                     weak_ptr_factory_.GetWeakPtr()));
   return QUIT_DOLOOP;
 }
 
@@ -373,9 +373,10 @@ DownloadTargetDeterminer::Result
       download_->GetState() != DownloadItem::IN_PROGRESS)
     return CONTINUE;
 
-  delegate_->NotifyExtensions(download_, virtual_path_,
-      base::Bind(&DownloadTargetDeterminer::NotifyExtensionsDone,
-                 weak_ptr_factory_.GetWeakPtr()));
+  delegate_->NotifyExtensions(
+      download_, virtual_path_,
+      base::BindOnce(&DownloadTargetDeterminer::NotifyExtensionsDone,
+                     weak_ptr_factory_.GetWeakPtr()));
   return QUIT_DOLOOP;
 }
 
@@ -585,10 +586,9 @@ DownloadTargetDeterminer::Result
   next_state_ = STATE_DETERMINE_MIME_TYPE;
 
   delegate_->DetermineLocalPath(
-      download_,
-      virtual_path_,
-      base::Bind(&DownloadTargetDeterminer::DetermineLocalPathDone,
-                 weak_ptr_factory_.GetWeakPtr()));
+      download_, virtual_path_,
+      base::BindOnce(&DownloadTargetDeterminer::DetermineLocalPathDone,
+                     weak_ptr_factory_.GetWeakPtr()));
   return QUIT_DOLOOP;
 }
 
@@ -623,8 +623,8 @@ DownloadTargetDeterminer::Result
   if (virtual_path_ == local_path_) {
     delegate_->GetFileMimeType(
         local_path_,
-        base::Bind(&DownloadTargetDeterminer::DetermineMimeTypeDone,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::BindOnce(&DownloadTargetDeterminer::DetermineMimeTypeDone,
+                       weak_ptr_factory_.GetWeakPtr()));
     return QUIT_DOLOOP;
   }
   return CONTINUE;
@@ -646,9 +646,9 @@ void DownloadTargetDeterminer::DetermineMimeTypeDone(
 namespace {
 
 void InvokeClosureAfterGetPluginCallback(
-    const base::Closure& closure,
+    base::OnceClosure closure,
     const std::vector<content::WebPluginInfo>& unused) {
-  closure.Run();
+  std::move(closure).Run();
 }
 
 enum ActionOnStalePluginList {
@@ -661,7 +661,7 @@ void IsHandledBySafePlugin(int render_process_id,
                            const GURL& url,
                            const std::string& mime_type,
                            ActionOnStalePluginList stale_plugin_action,
-                           const base::Callback<void(bool)>& callback) {
+                           base::OnceCallback<void(bool)> callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(!mime_type.empty());
   using content::WebPluginInfo;
@@ -681,8 +681,9 @@ void IsHandledBySafePlugin(int render_process_id,
     // after a single retry in order to avoid retrying indefinitely.
     plugin_service->GetPlugins(base::BindOnce(
         &InvokeClosureAfterGetPluginCallback,
-        base::Bind(&IsHandledBySafePlugin, render_process_id, routing_id, url,
-                   mime_type, IGNORE_IF_STALE_PLUGIN_LIST, callback)));
+        base::BindOnce(&IsHandledBySafePlugin, render_process_id, routing_id,
+                       url, mime_type, IGNORE_IF_STALE_PLUGIN_LIST,
+                       std::move(callback))));
     return;
   }
   // In practice, we assume that retrying once is enough.
@@ -693,7 +694,7 @@ void IsHandledBySafePlugin(int render_process_id,
        plugin_info.type == WebPluginInfo::PLUGIN_TYPE_PEPPER_OUT_OF_PROCESS ||
        plugin_info.type == WebPluginInfo::PLUGIN_TYPE_BROWSER_PLUGIN);
   content::GetUIThreadTaskRunner({})->PostTask(
-      FROM_HERE, base::BindOnce(callback, is_handled_safely));
+      FROM_HERE, base::BindOnce(std::move(callback), is_handled_safely));
 }
 
 }  // namespace
@@ -728,8 +729,8 @@ DownloadTargetDeterminer::Result
   IsHandledBySafePlugin(
       render_process_id, routing_id, net::FilePathToFileURL(local_path_),
       mime_type_, RETRY_IF_STALE_PLUGIN_LIST,
-      base::Bind(&DownloadTargetDeterminer::DetermineIfHandledSafelyDone,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(&DownloadTargetDeterminer::DetermineIfHandledSafelyDone,
+                     weak_ptr_factory_.GetWeakPtr()));
   return QUIT_DOLOOP;
 #else
   return CONTINUE;
@@ -797,10 +798,9 @@ DownloadTargetDeterminer::Result
     return CONTINUE;
 
   delegate_->CheckDownloadUrl(
-      download_,
-      virtual_path_,
-      base::Bind(&DownloadTargetDeterminer::CheckDownloadUrlDone,
-                 weak_ptr_factory_.GetWeakPtr()));
+      download_, virtual_path_,
+      base::BindOnce(&DownloadTargetDeterminer::CheckDownloadUrlDone,
+                     weak_ptr_factory_.GetWeakPtr()));
   return QUIT_DOLOOP;
 }
 
@@ -822,7 +822,7 @@ DownloadTargetDeterminer::Result
   // danger level of the download depends on the file type.
   if (danger_type_ != download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS &&
       danger_type_ != download::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT &&
-      danger_type_ != download::DOWNLOAD_DANGER_TYPE_WHITELISTED_BY_POLICY) {
+      danger_type_ != download::DOWNLOAD_DANGER_TYPE_ALLOWLISTED_BY_POLICY) {
     return CONTINUE;
   }
 

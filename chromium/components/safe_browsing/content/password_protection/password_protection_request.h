@@ -5,28 +5,47 @@
 #ifndef COMPONENTS_SAFE_BROWSING_CONTENT_PASSWORD_PROTECTION_PASSWORD_PROTECTION_REQUEST_H_
 #define COMPONENTS_SAFE_BROWSING_CONTENT_PASSWORD_PROTECTION_PASSWORD_PROTECTION_REQUEST_H_
 
+#include <memory>
+#include <string>
 #include <vector>
 
-#include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/memory/weak_ptr.h"
+#include "base/sequenced_task_runner_helpers.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_reuse_detector.h"
 #include "components/safe_browsing/buildflags.h"
-#include "components/safe_browsing/content/common/safe_browsing.mojom.h"
-#include "components/safe_browsing/content/password_protection/metrics_util.h"
 #include "components/safe_browsing/content/password_protection/password_protection_service.h"
+#include "components/safe_browsing/core/password_protection/metrics_util.h"
+#include "components/safe_browsing/core/password_protection/request_canceler.h"
 #include "components/safe_browsing/core/proto/csd.pb.h"
-#include "content/public/browser/browser_thread.h"
-#include "content/public/browser/web_contents_observer.h"
+
+#if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+#include "components/safe_browsing/content/common/safe_browsing.mojom.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+
+#if BUILDFLAG(FULL_SAFE_BROWSING)
 #include "third_party/skia/include/core/SkBitmap.h"
+#endif  // BUILDFLAG(FULL_SAFE_BROWSING)
+
+#if defined(OS_IOS)
+// TODO(crbug.com/1147967): Enable in iOS once this file is moved to /core.
+#else
+#include "content/public/browser/browser_thread.h"
+#endif  // defined(OS_IOS)
 
 class GURL;
 
 namespace network {
 class SimpleURLLoader;
+}
+
+namespace content {
+class WebContents;
 }
 
 namespace safe_browsing {
@@ -35,11 +54,18 @@ class PasswordProtectionNavigationThrottle;
 
 using password_manager::metrics_util::PasswordType;
 
+#if defined(OS_IOS)
+using DeleteOnUIThread = web::WebThread::DeleteOnThread<web::WebThread::UI>;
+#else
+using DeleteOnUIThread =
+    content::BrowserThread::DeleteOnThread<content::BrowserThread::UI>;
+#endif  // defined(OS_IOS)
+
 // A request for checking if an unfamiliar login form or a password reuse event
 // is safe. PasswordProtectionRequest objects are owned by
-// PasswordProtectionService indicated by |password_protection_service_|.
-// PasswordProtectionService is RefCountedThreadSafe such that it can post task
-// safely between IO and UI threads. It can only be destroyed on UI thread.
+// PasswordProtectionServiceBase indicated by |password_protection_service_|.
+// PasswordProtectionServiceBase is RefCountedThreadSafe such that it can post
+// task safely between IO and UI threads. It can only be destroyed on UI thread.
 //
 // PasswordProtectionRequest flow:
 // Step| Thread |                    Task
@@ -54,24 +80,30 @@ using password_manager::metrics_util::PasswordType;
 // (8) |   UI   | On receiving response, handle response and finish.
 //     |        | On request timeout, cancel request.
 //     |        | On deletion of |password_protection_service_|, cancel request.
-class PasswordProtectionRequest : public base::RefCountedThreadSafe<
-                                      PasswordProtectionRequest,
-                                      content::BrowserThread::DeleteOnUIThread>,
-                                  public content::WebContentsObserver {
+class PasswordProtectionRequest
+    : public CancelableRequest,
+      public base::RefCountedThreadSafe<PasswordProtectionRequest,
+                                        DeleteOnUIThread> {
  public:
   PasswordProtectionRequest(
       content::WebContents* web_contents,
       const GURL& main_frame_url,
       const GURL& password_form_action,
       const GURL& password_form_frame_url,
+      const std::string& mime_type,
       const std::string& username,
       PasswordType password_type,
       const std::vector<password_manager::MatchingReusedCredential>&
           matching_reused_credentials,
       LoginReputationClientRequest::TriggerType type,
       bool password_field_exists,
-      PasswordProtectionService* pps,
+      PasswordProtectionServiceBase* pps,
       int request_timeout_in_ms);
+
+  // Not copyable or movable
+  PasswordProtectionRequest(const PasswordProtectionRequest&) = delete;
+  PasswordProtectionRequest& operator=(const PasswordProtectionRequest&) =
+      delete;
 
   base::WeakPtr<PasswordProtectionRequest> GetWeakPtr() {
     return weakptr_factory_.GetWeakPtr();
@@ -81,9 +113,8 @@ class PasswordProtectionRequest : public base::RefCountedThreadSafe<
   // conditions.
   void Start();
 
-  // Cancels the current request. |timed_out| indicates if this cancellation is
-  // due to timeout. This function will call Finish() to destroy |this|.
-  void Cancel(bool timed_out);
+  // CancelableRequest implementation
+  void Cancel(bool timed_out) override;
 
   // Processes the received response.
   void OnURLLoaderComplete(std::unique_ptr<std::string> response_body);
@@ -137,15 +168,11 @@ class PasswordProtectionRequest : public base::RefCountedThreadSafe<
   // Cancels navigation if there is modal warning showing, resumes it otherwise.
   void HandleDeferredNavigations();
 
-  // WebContentsObserver implementation
-  void WebContentsDestroyed() override;
-
  protected:
   friend class base::RefCountedThreadSafe<PasswordProtectionRequest>;
 
  private:
-  friend struct content::BrowserThread::DeleteOnThread<
-      content::BrowserThread::UI>;
+  friend DeleteOnUIThread;
   friend class base::DeleteHelper<PasswordProtectionRequest>;
   friend class PasswordProtectionServiceTest;
   friend class ChromePasswordProtectionServiceTest;
@@ -170,6 +197,9 @@ class PasswordProtectionRequest : public base::RefCountedThreadSafe<
   void FillRequestProto(bool is_sampled_ping);
 
 #if BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+  // Extracts DOM features.
+  void GetDomFeatures();
+
   // Called when the DOM feature extraction is complete.
   void OnGetDomFeatures(mojom::PhishingDetectorResult result,
                         const std::string& verdict);
@@ -180,7 +210,7 @@ class PasswordProtectionRequest : public base::RefCountedThreadSafe<
   // If appropriate, collects visual features, otherwise continues on to sending
   // the request.
   void MaybeCollectVisualFeatures();
-#endif
+#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
 
 #if BUILDFLAG(FULL_SAFE_BROWSING)
   // Collects visual features from the current login page.
@@ -192,7 +222,7 @@ class PasswordProtectionRequest : public base::RefCountedThreadSafe<
   // Called when the visual feature extraction is complete.
   void OnVisualFeatureCollectionDone(
       std::unique_ptr<VisualFeatures> visual_features);
-#endif
+#endif  // BUILDFLAG(FULL_SAFE_BROWSING)
 
   // Initiates network request to Safe Browsing backend.
   void SendRequest();
@@ -215,6 +245,9 @@ class PasswordProtectionRequest : public base::RefCountedThreadSafe<
 
   // Frame url of the detected password form.
   const GURL password_form_frame_url_;
+
+  // The contents MIME type.
+  const std::string& mime_type_;
 
   // The username of the reused password hash. The username can be an email or
   // a username for a non-GAIA or saved-password reuse. No validation has been
@@ -247,9 +280,9 @@ class PasswordProtectionRequest : public base::RefCountedThreadSafe<
   // SimpleURLLoader instance for sending request and receiving response.
   std::unique_ptr<network::SimpleURLLoader> url_loader_;
 
-  // The PasswordProtectionService instance owns |this|.
+  // The PasswordProtectionServiceBase instance owns |this|.
   // Can only be accessed on UI thread.
-  PasswordProtectionService* password_protection_service_;
+  PasswordProtectionServiceBase* password_protection_service_;
 
   // The outcome of the password protection request.
   RequestOutcome request_outcome_;
@@ -289,10 +322,12 @@ class PasswordProtectionRequest : public base::RefCountedThreadSafe<
   // Whether the DOM features collection is finished, either by timeout or by
   // successfully gathering the features.
   bool dom_features_collection_complete_;
-#endif
+#endif  // BUILDFLAG(SAFE_BROWSING_AVAILABLE)
+
+  // Cancels the request when it is no longer valid.
+  std::unique_ptr<RequestCanceler> request_canceler_;
 
   base::WeakPtrFactory<PasswordProtectionRequest> weakptr_factory_{this};
-  DISALLOW_COPY_AND_ASSIGN(PasswordProtectionRequest);
 };
 
 }  // namespace safe_browsing

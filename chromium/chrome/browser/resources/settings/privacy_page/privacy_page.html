@@ -30,7 +30,7 @@
         focus-config="[[focusConfig_]]">
       <div route-path="default">
         <cr-link-row id="clearBrowsingData"
-            class="hr" start-icon="cr:delete"
+            start-icon="cr:delete"
             label="$i18n{clearBrowsingData}"
             sub-label="$i18n{clearBrowsingDataDescription}"
             on-click="onClearBrowsingDataTap_"></cr-link-row>
@@ -48,6 +48,15 @@
             class="hr" label="$i18n{siteSettings}"
             sub-label="$i18n{permissionsPageDescription}"
             on-click="onPermissionsPageClick_"
+            role-description="$i18n{subpageArrowRoleDescription}"></cr-link-row>
+        <cr-link-row id="privacySandboxLinkRow"
+            start-icon="settings20:experiment"
+            class="hr"
+            label="$i18n{privacySandboxTitle}"
+            sub-label="$i18n{privacySandboxTitle}"
+            on-click="onPrivacySandboxClick_"
+            hidden="[[!enablePrivacySandboxSettings_]]"
+            external
             role-description="$i18n{subpageArrowRoleDescription}"></cr-link-row>
       </div>
 
@@ -86,8 +95,7 @@
             associated-control="[[$$('#securityLinkRow')]]"
             learn-more-url="$i18n{safeBrowsingHelpCenterURL}">
           <settings-security-page prefs="{{prefs}}"
-              focus-config="[[focusConfig_]]"
-              sync-status="[[syncStatus]]">
+              focus-config="[[focusConfig_]]">
           </settings-security-page>
         </settings-subpage>
       </template>

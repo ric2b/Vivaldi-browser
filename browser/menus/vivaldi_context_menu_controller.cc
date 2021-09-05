@@ -5,8 +5,9 @@
 
 #include "base/base64.h"
 #include "base/strings/utf_string_conversions.h"
+#include "browser/menus/vivaldi_menu_enums.h"
+#include "browser/menus/vivaldi_render_view_context_menu.h"
 #include "browser/vivaldi_browser_finder.h"
-#include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/grit/generated_resources.h"
@@ -14,19 +15,28 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/context_menu_params.h"
 #include "extensions/tools/vivaldi_tools.h"
+#include "include/core/SkBitmap.h"
+#include "ui/gfx/favicon_size.h"
 #include "ui/vivaldi_context_menu.h"
+#include "skia/ext/image_operations.h"
 
 namespace vivaldi {
+
+#define ICON_SIZE 16
 
 ContextMenuController::ContextMenuController(
     Delegate* delegate,
     content::WebContents* web_contents,
     content::WebContents* window_web_contents,
+    VivaldiRenderViewContextMenu* rv_context_menu,
     std::unique_ptr<Params> params)
   :delegate_(delegate),
    web_contents_(web_contents),
    window_web_contents_(window_web_contents),
    browser_(FindBrowserForEmbedderWebContents(web_contents)),
+   rv_context_menu_(rv_context_menu),
+   with_developer_tools_(!rv_context_menu_ ||
+                         rv_context_menu_->SupportsInspectTools()),
    params_(std::move(params)) {
 
   using Origin = extensions::vivaldi::context_menu::Origin;
@@ -46,12 +56,20 @@ ContextMenuController::ContextMenuController(
   int width = params_->properties.rect.width;
 
   gfx::RectF rect(point.x(), point.y(), width, height);
-  FromUICoordinates(window_web_contents_, &rect);
+  // Document context menu coordinates are not affected by UI zoom.
+  if (!rv_context_menu_) {
+    FromUICoordinates(window_web_contents_, &rect);
+  }
   rect_ = gfx::Rect(round(rect.x()), round(rect.y()), round(rect.width()),
                     round(rect.height()));
 
   developertools_controller_.reset(
       new DeveloperToolsMenuController(window_web_contents_, rect_.origin()));
+
+  if (rv_context_menu_) {
+    rv_context_menu_->SetDelegate(this);
+  }
+
 }
 
 ContextMenuController::~ContextMenuController() {
@@ -60,39 +78,55 @@ ContextMenuController::~ContextMenuController() {
 void ContextMenuController::Show() {
   using Origin = extensions::vivaldi::context_menu::Origin;
 
+  // Mac needs the views version for certain origins as we can not position the
+  // menu properly on mac/cocoa.
+  bool force_views = params_->properties.origin != Origin::ORIGIN_POINTER;
+  menu_.reset(CreateVivaldiContextMenu(window_web_contents_, nullptr, rect_,
+                                       force_views));
+
+  if (rv_context_menu_) {
+    // Give access to the toolkit delegate. Needed for containers that populate
+    // content on demand (when folder opens).
+    rv_context_menu_->SetToolkitDelegate(menu_->GetToolkitDelegate());
+  }
+
+  // Populate model.
   InitModel();
   delegate_->OnOpened();
   // We do not know if count is 0 until after InitModel, but let OnOpened and
   // OnClosed be called as normal.
-  if (menu_model_->GetItemCount() == 0) {
-    MenuClosed(menu_model_);
+  if (root_menu_model_->GetItemCount() == 0) {
+    MenuClosed(root_menu_model_);
     return;
   }
 
-  // Mac needs the views version for certain origins as we can not place the
-  // menu properly on mac/cocoa.
-  bool force_views = params_->properties.origin != Origin::ORIGIN_POINTER;
-  menu_.reset(CreateVivaldiContextMenu(window_web_contents_, menu_model_, rect_,
-                                       force_views,
-                                       force_views ? this : nullptr));
-  menu_->Show();
+  menu_->Init(root_menu_model_, force_views ? this : nullptr);
+  if (!menu_->Show()) {
+    MenuClosed(root_menu_model_);
+  }
 }
 
 void ContextMenuController::InitModel() {
   namespace context_menu = extensions::vivaldi::context_menu;
 
-  menu_model_ = new ui::SimpleMenuModel(this);
-  models_.push_back(base::WrapUnique(menu_model_));
+  if (rv_context_menu_) {
+    root_menu_model_ = rv_context_menu_->root_menu_model();
+  } else {
+    root_menu_model_ = new ui::SimpleMenuModel(this);
+    models_.push_back(base::WrapUnique(root_menu_model_));
+  }
 
   // Add items from JS
   for (const context_menu::Element& child: params_->properties.children) {
-    PopulateModel(child, menu_model_);
+    PopulateModel(child, root_menu_model_);
   }
 
   // Add developer tools items
-  developertools_controller_->PopulateModel(menu_model_);
+  if (with_developer_tools_) {
+    developertools_controller_->PopulateModel(root_menu_model_);
+  }
 
-  SanitizeModel(menu_model_);
+  SanitizeModel(root_menu_model_);
 }
 
 void ContextMenuController::PopulateModel(const Element& child,
@@ -100,9 +134,26 @@ void ContextMenuController::PopulateModel(const Element& child,
   namespace context_menu = extensions::vivaldi::context_menu;
   if (child.item) {
     const Item& item = *child.item;
-    int id = item.id + IDC_EXTENSIONS_CONTEXT_CUSTOM_FIRST + 1;
+    int id = item.id + IDC_VIV_MENU_FIRST + 1;
+    if (rv_context_menu_) {
+      if (item.action) {
+        // Check if action is mapped with a known command id. If this is the
+        // case the action is in most cases executed in C++ only.
+        int idc = rv_context_menu_->GetStaticIdForAction(*item.action);
+        if (idc != -1) {
+          // JS can (depending on idc) be called using second id.
+          rv_context_menu_->SetCommandId(idc, id);
+          id = idc;
+        } else {
+          // No second id. JS will always be called with the first.
+          rv_context_menu_->SetCommandId(id, -1);
+        }
+      } else {
+        // No second id. JS will always be called with the first.
+        rv_context_menu_->SetCommandId(id, -1);
+      }
+    }
     const base::string16 label = base::UTF8ToUTF16(item.name);
-
     switch (item.type) {
       case context_menu::ITEM_TYPE_COMMAND:
         menu_model->AddItem(id, label);
@@ -117,7 +168,12 @@ void ContextMenuController::PopulateModel(const Element& child,
         break;
       case context_menu::ITEM_TYPE_FOLDER:
         {
-          ui::SimpleMenuModel* child_menu_model = new ui::SimpleMenuModel(this);
+          ui::SimpleMenuModel* child_menu_model;
+          if (rv_context_menu_) {
+            child_menu_model = new ui::SimpleMenuModel(rv_context_menu_);
+          } else {
+            child_menu_model = new ui::SimpleMenuModel(this);
+          }
           models_.push_back(base::WrapUnique(child_menu_model));
 
           menu_model->AddSubMenu(id, label, child_menu_model);
@@ -130,9 +186,15 @@ void ContextMenuController::PopulateModel(const Element& child,
       case context_menu::ITEM_TYPE_NONE:
         return;
     }
-    if (item.shortcut) {
+    if (item.shortcut && !item.shortcut->empty()) {
       id_to_accelerator_map_[id] = ::vivaldi::ParseShortcut(
           *item.shortcut, true);
+    }
+    if (item.action) {
+      id_to_action_map_[id] = item.action.get();
+    }
+    if (item.enabled) {
+      id_to_enabled_map_[id] = *item.enabled;
     }
     if (item.url && !item.url->empty()) {
        // Set default document icon
@@ -144,15 +206,27 @@ void ContextMenuController::PopulateModel(const Element& child,
       // Fixed for now. Using same format as main menus api.
       bool dark_text_color = true;
       SetIcon(id, item.icons->at(dark_text_color ? 0 : 1), menu_model);
+    } else if (rv_context_menu_ && item.action) {
+      ui::ImageModel img = rv_context_menu_->GetImageForAction(*item.action);
+      if (!img.IsEmpty()) {
+        menu_model->SetIcon(menu_model->GetIndexOfCommandId(id), img);
+      }
     }
   } else if (child.container) {
     const Container& container = *child.container;
+    int id = container.id + IDC_VIV_MENU_FIRST + 1;
     switch (container.content) {
       case context_menu::CONTAINER_CONTENT_PWA:
         pwa_controller_.reset(new PWAMenuController(web_contents_));
-        pwa_controller_->PopulateModel(GetContainerModel(container, menu_model));
+        pwa_controller_->PopulateModel(GetContainerModel(
+            container, id, menu_model));
         break;
-      case context_menu::CONTAINER_CONTENT_NONE:
+      default:
+        if (rv_context_menu_ && rv_context_menu_->HasContainerContent
+            (container)) {
+          rv_context_menu_->PopulateContainer(container, id,
+              GetContainerModel(container, id, menu_model));
+        }
         break;
     }
   } else if (child.separator) {
@@ -161,14 +235,20 @@ void ContextMenuController::PopulateModel(const Element& child,
 }
 
 ui::SimpleMenuModel* ContextMenuController::GetContainerModel(
-    const Container& container, ui::SimpleMenuModel* menu_model) {
+    const Container& container, int id, ui::SimpleMenuModel* menu_model) {
   namespace context_menu = extensions::vivaldi::context_menu;
 
   if (container.mode == context_menu::CONTAINER_MODE_FOLDER) {
-    int id = container.id + IDC_EXTENSIONS_CONTEXT_CUSTOM_FIRST + 1;
     const base::string16 label = base::UTF8ToUTF16(container.name);
-    ui::SimpleMenuModel* child_menu_model = new ui::SimpleMenuModel(this);
+    ui::SimpleMenuModel* child_menu_model;
+    if (rv_context_menu_) {
+      child_menu_model = new ui::SimpleMenuModel(rv_context_menu_);
+      rv_context_menu_->SetCommandId(id, -1);
+    } else {
+      child_menu_model = new ui::SimpleMenuModel(this);
+    }
     models_.push_back(base::WrapUnique(child_menu_model));
+    container_folder_models_.push_back(child_menu_model);
     menu_model->AddSubMenu(id, label, child_menu_model);
     return child_menu_model;
   } else {
@@ -222,6 +302,18 @@ void ContextMenuController::SetIcon(int command_id, const std::string& icon,
       gfx::Image img = gfx::Image::CreateFrom1xPNGBytes(
           reinterpret_cast<const unsigned char*>(png_data.c_str()),
           png_data.length());
+      if (img.Width() > ICON_SIZE || img.Height() > ICON_SIZE) {
+        int width = img.Width();
+        int height = img.Height();
+        gfx::CalculateFaviconTargetSize(&width, &height);
+        SkBitmap bitmap(*img.ToSkBitmap());
+        img = gfx::Image::CreateFrom1xBitmap(
+            skia::ImageOperations::Resize(bitmap,
+                                          skia::ImageOperations::RESIZE_GOOD,
+                                          width,
+                                          height));
+      }
+
       menu_model->SetIcon(menu_model->GetIndexOfCommandId(command_id),
                           ui::ImageModel::FromImage(img));
     }
@@ -262,7 +354,8 @@ bool ContextMenuController::IsCommandIdChecked(int command_id) const {
 }
 
 bool ContextMenuController::IsCommandIdEnabled(int command_id) const {
-  return true;
+   auto it = id_to_enabled_map_.find(command_id);
+   return it != id_to_enabled_map_.end() ? it->second : true;
 }
 
 bool ContextMenuController::IsItemForCommandIdDynamic(int command_id) const {
@@ -293,7 +386,8 @@ bool ContextMenuController::GetAcceleratorForCommandId(
     return true;
   }
 
-  if (developertools_controller_->GetAcceleratorForCommandId(command_id,
+  if (with_developer_tools_ &&
+      developertools_controller_->GetAcceleratorForCommandId(command_id,
                                                              accelerator)) {
     return true;
   }
@@ -313,9 +407,31 @@ void ContextMenuController::ExecuteCommand(int command_id, int event_flags) {
   }
 }
 
+void ContextMenuController::OnMenuWillShow(ui::SimpleMenuModel* source) {
+  if (rv_context_menu_) {
+    for (unsigned i = 0; i < container_folder_models_.size(); i++) {
+      if (container_folder_models_.at(i) == source &&
+          source->GetItemCount() == 0) {
+        rv_context_menu_->ContainerWillOpen(source);
+        break;
+      }
+    }
+  }
+}
+
 void ContextMenuController::MenuClosed(ui::SimpleMenuModel* source) {
-  source->SetMenuModelDelegate(nullptr);
-  if (source == menu_model_) {
+  if (source == root_menu_model_) {
+    if (rv_context_menu_) {
+      // The object should no longer access us.
+      rv_context_menu_->SetDelegate(nullptr);
+      // And do not access this object anymore as its root model has signalled.
+      rv_context_menu_ = nullptr;
+    } else {
+      // Prevent the root model we have created from accessing us while we wait
+      // to close.
+      source->SetMenuModelDelegate(nullptr);
+    }
+
     // TODO(espen): Closing by clicking outside the menu triggers a crash on
     // Mac. It seems to be access to data after a "delete this" which the
     // OnClosed call to the delegate starts, but the crash log is hard to make

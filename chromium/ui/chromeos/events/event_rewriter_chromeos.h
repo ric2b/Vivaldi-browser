@@ -150,6 +150,13 @@ class EventRewriterChromeOS : public EventRewriter {
     privacy_screen_supported_ = supported;
   }
 
+  // Enable/disable alt + key or mouse event remapping. For Alt + left click
+  // mapping to the right click, it only applies if the feature
+  // `chromeos::features::kUseSearchClickForRightClick` is not enabled.
+  void set_alt_down_remapping_enabled(bool enabled) {
+    is_alt_down_remapping_enabled_ = enabled;
+  }
+
   // EventRewriter overrides:
   EventDispatchDetails RewriteEvent(const Event& event,
                                     const Continuation continuation) override;
@@ -215,7 +222,8 @@ class EventRewriterChromeOS : public EventRewriter {
   // Returns true if this event should be remapped to a right-click.
   // |matched_mask| will be set to the variant (Alt+Click or Search+Click)
   // that was used to match based on flag/feature settings. |matched_mask|
-  // only has a valid value when returning true.
+  // only has a valid value when returning true. However, Alt+Click will not
+  // be remapped if |is_alt_left_click_remapping_enabled_| is false.
   bool ShouldRemapToRightClick(const MouseEvent& mouse_event,
                                int flags,
                                int* matched_mask) const;
@@ -324,6 +332,13 @@ class EventRewriterChromeOS : public EventRewriter {
   int pressed_modifier_latches_;
   int latched_modifier_latches_;
   int used_modifier_latches_;
+
+  // True if alt + key and mouse event remapping is allowed. In some scenario,
+  // such as clicking a button in the Alt-Tab UI, this remapping undesirably
+  // prevents button clicking when alt + left turns into right click. Also,
+  // user needs to be able to use an up arrow key to navigate and focus
+  // different component, but remapping can turn alt + up arrow into PageUp.
+  bool is_alt_down_remapping_enabled_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(EventRewriterChromeOS);
 };

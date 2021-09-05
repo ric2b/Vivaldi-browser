@@ -29,6 +29,12 @@ void ExternalProcessImporterHost::ShowChromeWarningDialog() {
   } else if (source_profile_.importer_type == importer::TYPE_YANDEX) {
     importerLockString =
         l10n_util::GetStringUTF16(IDS_YANDEX_IMPORTER_LOCK_TEXT);
+  }  else if (source_profile_.importer_type == importer::TYPE_BRAVE) {
+    importerLockString =
+        l10n_util::GetStringUTF16(IDS_BRAVE_IMPORTER_LOCK_TEXT);
+  }  else if (source_profile_.importer_type == importer::TYPE_EDGE_CHROMIUM) {
+    importerLockString =
+        l10n_util::GetStringUTF16(IDS_EDGE_CHROMIUM_IMPORTER_LOCK_TEXT);
   }
 
   DCHECK(!headless_);
@@ -64,6 +70,8 @@ bool ExternalProcessImporterHost::CheckForChromeLock(
       source_profile.importer_type != importer::TYPE_OPERA_OPIUM &&
       source_profile.importer_type != importer::TYPE_OPERA_OPIUM_BETA &&
       source_profile.importer_type != importer::TYPE_OPERA_OPIUM_DEV &&
+      source_profile.importer_type != importer::TYPE_BRAVE &&
+      source_profile.importer_type != importer::TYPE_EDGE_CHROMIUM &&
       source_profile.importer_type != importer::TYPE_VIVALDI)
     return true;
 

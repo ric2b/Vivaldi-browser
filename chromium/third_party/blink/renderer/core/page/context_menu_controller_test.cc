@@ -10,12 +10,13 @@
 #include "third_party/blink/public/common/context_menu_data/edit_flags.h"
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/common/input/web_menu_source_type.h"
+#include "third_party/blink/public/mojom/context_menu/context_menu.mojom-blink.h"
 #include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/web/web_context_menu_data.h"
 #include "third_party/blink/renderer/core/dom/xml_document.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
-#include "third_party/blink/renderer/core/frame/web_frame_widget_base.h"
+#include "third_party/blink/renderer/core/frame/web_frame_widget_impl.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/geometry/dom_rect.h"
 #include "third_party/blink/renderer/core/html/html_document.h"
@@ -54,12 +55,14 @@ class TestWebFrameClientImpl : public frame_test_helpers::TestWebFrameClient {
     context_menu_data_ = data;
   }
 
-  WebMediaPlayer* CreateMediaPlayer(const WebMediaPlayerSource&,
-                                    WebMediaPlayerClient*,
-                                    blink::MediaInspectorContext*,
-                                    WebMediaPlayerEncryptedMediaClient*,
-                                    WebContentDecryptionModule*,
-                                    const WebString& sink_id) override {
+  WebMediaPlayer* CreateMediaPlayer(
+      const WebMediaPlayerSource&,
+      WebMediaPlayerClient*,
+      blink::MediaInspectorContext*,
+      WebMediaPlayerEncryptedMediaClient*,
+      WebContentDecryptionModule*,
+      const WebString& sink_id,
+      const cc::LayerTreeSettings& settings) override {
     return new MockWebMediaPlayerForContextMenu();
   }
 
@@ -159,7 +162,8 @@ TEST_F(ContextMenuControllerTest, VideoNotLoaded) {
   // Context menu info are sent to the WebLocalFrameClient.
   WebContextMenuData context_menu_data =
       GetWebFrameClient().GetContextMenuData();
-  EXPECT_EQ(ContextMenuDataMediaType::kVideo, context_menu_data.media_type);
+  EXPECT_EQ(mojom::blink::ContextMenuDataMediaType::kVideo,
+            context_menu_data.media_type);
   EXPECT_EQ(video_url, context_menu_data.src_url.GetString());
 
   const Vector<std::pair<WebContextMenuData::MediaFlags, bool>>
@@ -220,7 +224,8 @@ TEST_F(ContextMenuControllerTest, VideoWithAudioOnly) {
   // Context menu info are sent to the WebLocalFrameClient.
   WebContextMenuData context_menu_data =
       GetWebFrameClient().GetContextMenuData();
-  EXPECT_EQ(ContextMenuDataMediaType::kAudio, context_menu_data.media_type);
+  EXPECT_EQ(mojom::blink::ContextMenuDataMediaType::kAudio,
+            context_menu_data.media_type);
   EXPECT_EQ(video_url, context_menu_data.src_url.GetString());
 
   const Vector<std::pair<WebContextMenuData::MediaFlags, bool>>
@@ -277,7 +282,8 @@ TEST_F(ContextMenuControllerTest, PictureInPictureEnabledVideoLoaded) {
   // Context menu info are sent to the WebLocalFrameClient.
   WebContextMenuData context_menu_data =
       GetWebFrameClient().GetContextMenuData();
-  EXPECT_EQ(ContextMenuDataMediaType::kVideo, context_menu_data.media_type);
+  EXPECT_EQ(mojom::blink::ContextMenuDataMediaType::kVideo,
+            context_menu_data.media_type);
   EXPECT_EQ(video_url, context_menu_data.src_url.GetString());
 
   const Vector<std::pair<WebContextMenuData::MediaFlags, bool>>
@@ -334,7 +340,8 @@ TEST_F(ContextMenuControllerTest, PictureInPictureDisabledVideoLoaded) {
   // Context menu info are sent to the WebLocalFrameClient.
   WebContextMenuData context_menu_data =
       GetWebFrameClient().GetContextMenuData();
-  EXPECT_EQ(ContextMenuDataMediaType::kVideo, context_menu_data.media_type);
+  EXPECT_EQ(mojom::blink::ContextMenuDataMediaType::kVideo,
+            context_menu_data.media_type);
   EXPECT_EQ(video_url, context_menu_data.src_url.GetString());
 
   const Vector<std::pair<WebContextMenuData::MediaFlags, bool>>
@@ -393,7 +400,8 @@ TEST_F(ContextMenuControllerTest, MediaStreamVideoLoaded) {
   // Context menu info are sent to the WebLocalFrameClient.
   WebContextMenuData context_menu_data =
       GetWebFrameClient().GetContextMenuData();
-  EXPECT_EQ(ContextMenuDataMediaType::kVideo, context_menu_data.media_type);
+  EXPECT_EQ(mojom::blink::ContextMenuDataMediaType::kVideo,
+            context_menu_data.media_type);
 
   const Vector<std::pair<WebContextMenuData::MediaFlags, bool>>
       expected_media_flags = {
@@ -455,7 +463,8 @@ TEST_F(ContextMenuControllerTest, InfiniteDurationVideoLoaded) {
   // Context menu info are sent to the WebLocalFrameClient.
   WebContextMenuData context_menu_data =
       GetWebFrameClient().GetContextMenuData();
-  EXPECT_EQ(ContextMenuDataMediaType::kVideo, context_menu_data.media_type);
+  EXPECT_EQ(mojom::blink::ContextMenuDataMediaType::kVideo,
+            context_menu_data.media_type);
   EXPECT_EQ(video_url, context_menu_data.src_url.GetString());
 
   const Vector<std::pair<WebContextMenuData::MediaFlags, bool>>
@@ -511,7 +520,8 @@ TEST_F(ContextMenuControllerTest, EditingActionsEnabledInSVGDocument) {
 
   WebContextMenuData context_menu_data =
       GetWebFrameClient().GetContextMenuData();
-  EXPECT_EQ(context_menu_data.media_type, ContextMenuDataMediaType::kNone);
+  EXPECT_EQ(context_menu_data.media_type,
+            mojom::blink::ContextMenuDataMediaType::kNone);
   EXPECT_EQ(context_menu_data.edit_flags, ContextMenuDataEditFlags::kCanCopy);
   EXPECT_EQ(context_menu_data.selected_text, "able tex");
 
@@ -521,7 +531,8 @@ TEST_F(ContextMenuControllerTest, EditingActionsEnabledInSVGDocument) {
   EXPECT_TRUE(ShowContextMenuForElement(editable_element, kMenuSourceMouse));
 
   context_menu_data = GetWebFrameClient().GetContextMenuData();
-  EXPECT_EQ(context_menu_data.media_type, ContextMenuDataMediaType::kNone);
+  EXPECT_EQ(context_menu_data.media_type,
+            mojom::blink::ContextMenuDataMediaType::kNone);
   EXPECT_EQ(context_menu_data.edit_flags,
             ContextMenuDataEditFlags::kCanCut |
                 ContextMenuDataEditFlags::kCanCopy |
@@ -553,7 +564,8 @@ TEST_F(ContextMenuControllerTest, EditingActionsEnabledInXMLDocument) {
 
   WebContextMenuData context_menu_data =
       GetWebFrameClient().GetContextMenuData();
-  EXPECT_EQ(context_menu_data.media_type, ContextMenuDataMediaType::kNone);
+  EXPECT_EQ(context_menu_data.media_type,
+            mojom::blink::ContextMenuDataMediaType::kNone);
   EXPECT_EQ(context_menu_data.edit_flags, ContextMenuDataEditFlags::kCanCopy);
   EXPECT_EQ(context_menu_data.selected_text, "Blue text");
 }
@@ -632,7 +644,8 @@ TEST_F(ContextMenuControllerTest,
 
   WebContextMenuData context_menu_data =
       GetWebFrameClient().GetContextMenuData();
-  EXPECT_EQ(context_menu_data.media_type, ContextMenuDataMediaType::kImage);
+  EXPECT_EQ(context_menu_data.media_type,
+            mojom::blink::ContextMenuDataMediaType::kImage);
 }
 #endif
 

@@ -149,8 +149,21 @@ void HitTestResult::SetNodeAndPosition(
     Node* node,
     scoped_refptr<const NGPhysicalBoxFragment> box_fragment,
     const PhysicalOffset& position) {
-  SetBoxFragment(std::move(box_fragment));
-  SetNodeAndPosition(node, position);
+  local_point_ = position;
+  SetInnerNodeAndBoxFragment(node, std::move(box_fragment));
+}
+
+void HitTestResult::OverrideNodeAndPosition(Node* node,
+                                            PhysicalOffset position) {
+  // We are replacing the inner node. Reset any box fragment previously found.
+  box_fragment_.reset();
+
+  // The new inner node needs to be monolithic.
+  DCHECK(!node->GetLayoutBox() ||
+         node->GetLayoutBox()->PhysicalFragmentCount() <= 1);
+
+  local_point_ = position;
+  SetInnerNode(node);
 }
 
 void HitTestResult::SetBoxFragment(
@@ -160,9 +173,10 @@ void HitTestResult::SetBoxFragment(
 }
 
 PositionWithAffinity HitTestResult::GetPosition() const {
-  if (!inner_possibly_pseudo_node_)
+  const Node* node = inner_possibly_pseudo_node_;
+  if (!node)
     return PositionWithAffinity();
-  LayoutObject* layout_object = GetLayoutObject();
+  LayoutObject* layout_object = node->GetLayoutObject();
   if (!layout_object)
     return PositionWithAffinity();
 
@@ -173,23 +187,56 @@ PositionWithAffinity HitTestResult::GetPosition() const {
   // the node as the position. This is because we don't paint contents of the
   // element. Furthermore, any caret adjustments below can access layout-dirty
   // state in the subtree of this object.
-  if (layout_object->ChildPaintBlockedByDisplayLock()) {
-    return PositionWithAffinity(Position(*inner_node_, 0),
-                                TextAffinity::kDefault);
+  if (layout_object->ChildPaintBlockedByDisplayLock())
+    return PositionWithAffinity(Position(*node, 0), TextAffinity::kDefault);
+
+  if (node->IsPseudoElement() && node->GetPseudoId() == kPseudoIdBefore) {
+    return PositionWithAffinity(
+        MostForwardCaretPosition(Position::FirstPositionInNode(*inner_node_)));
   }
 
-  if (inner_possibly_pseudo_node_->IsPseudoElement() &&
-      inner_possibly_pseudo_node_->GetPseudoId() == kPseudoIdBefore) {
-    return PositionWithAffinity(MostForwardCaretPosition(
-        Position(inner_node_, PositionAnchorType::kBeforeChildren)));
+  // TODO(crbug.com/1152696): We have to use PostLayout() here, but maybe it
+  // should rather be illegal to call GetPosition() on a HitTestResult after
+  // relayout?
+  if (box_fragment_ &&
+      RuntimeEnabledFeatures::LayoutNGFullPositionForPointEnabled() &&
+      !box_fragment_->IsLayoutObjectDestroyedOrMoved()) {
+    if (const NGPhysicalBoxFragment* fragment = box_fragment_->PostLayout())
+      return fragment->PositionForPoint(LocalPoint());
   }
-  if (box_fragment_ && NGPhysicalBoxFragment::SupportsPositionForPoint())
-    return box_fragment_->PositionForPoint(LocalPoint());
   return layout_object->PositionForPoint(LocalPoint());
 }
 
-LayoutObject* HitTestResult::GetLayoutObject() const {
-  return inner_node_ ? inner_node_->GetLayoutObject() : nullptr;
+PositionWithAffinity HitTestResult::GetPositionForInnerNodeOrImageMapImage()
+    const {
+  Node* node = InnerPossiblyPseudoNode();
+  if (node && !node->IsPseudoElement())
+    node = InnerNodeOrImageMapImage();
+  if (!node)
+    return PositionWithAffinity();
+  LayoutObject* layout_object = node->GetLayoutObject();
+  if (!layout_object)
+    return PositionWithAffinity();
+  // We should never have a layout object that is within a locked subtree.
+  CHECK(!DisplayLockUtilities::NearestLockedExclusiveAncestor(*layout_object));
+
+  // If the layout object is blocked by display lock, we return the beginning of
+  // the node as the position. This is because we don't paint contents of the
+  // element. Furthermore, any caret adjustments below can access layout-dirty
+  // state in the subtree of this object.
+  if (layout_object->ChildPaintBlockedByDisplayLock())
+    return PositionWithAffinity(Position(*node, 0), TextAffinity::kDefault);
+
+  PositionWithAffinity position;
+  if (box_fragment_ &&
+      RuntimeEnabledFeatures::LayoutNGFullPositionForPointEnabled() &&
+      layout_object == InnerPossiblyPseudoNode()->GetLayoutObject())
+    position = box_fragment_->PositionForPoint(LocalPoint());
+  else
+    position = layout_object->PositionForPoint(LocalPoint());
+  if (position.IsNull())
+    return PositionWithAffinity(FirstPositionInOrBeforeNode(*node));
+  return position;
 }
 
 void HitTestResult::SetToShadowHostIfInRestrictedShadowRoot() {
@@ -207,11 +254,13 @@ void HitTestResult::SetToShadowHostIfInRestrictedShadowRoot() {
           IsA<SVGUseElement>(containing_shadow_root->host()))) {
     shadow_host = &containing_shadow_root->host();
     containing_shadow_root = shadow_host->ContainingShadowRoot();
-    SetInnerNode(node->OwnerShadowHost());
+    // TODO(layout-dev): Not updating local_point_ here seems like a mistake?
+    OverrideNodeAndPosition(node->OwnerShadowHost(), local_point_);
   }
 
+  // TODO(layout-dev): Not updating local_point_ here seems like a mistake?
   if (shadow_host)
-    SetInnerNode(shadow_host);
+    OverrideNodeAndPosition(shadow_host, local_point_);
 }
 
 CompositorElementId HitTestResult::GetScrollableContainer() const {
@@ -262,10 +311,17 @@ HTMLAreaElement* HitTestResult::ImageAreaForImage() const {
 }
 
 void HitTestResult::SetInnerNode(Node* n) {
+  SetInnerNodeAndBoxFragment(n, /* box_fragment */ nullptr);
+}
+
+void HitTestResult::SetInnerNodeAndBoxFragment(
+    Node* n,
+    scoped_refptr<const NGPhysicalBoxFragment> box_fragment) {
   if (!n) {
     inner_possibly_pseudo_node_ = nullptr;
     inner_node_ = nullptr;
     inner_element_ = nullptr;
+    DCHECK(!box_fragment);
     box_fragment_ = nullptr;
     return;
   }
@@ -286,7 +342,9 @@ void HitTestResult::SetInnerNode(Node* n) {
     }
   }
 
-  if (NGPhysicalBoxFragment::SupportsPositionForPoint()) {
+  if (box_fragment) {
+    SetBoxFragment(std::move(box_fragment));
+  } else if (RuntimeEnabledFeatures::LayoutNGFullPositionForPointEnabled()) {
     if (const LayoutBox* layout_box = n->GetLayoutBox()) {
       // Fragmentation-aware code will set the correct box fragment on its own,
       // but sometimes we enter legacy layout code when hit-testing, e.g. for
@@ -353,8 +411,6 @@ String HitTestResult::Title(TextDirection& dir) const {
   // Find the title in the nearest enclosing DOM node.
   // For <area> tags in image maps, walk the tree for the <area>, not the <img>
   // using it.
-  if (inner_node_.Get())
-    inner_node_->UpdateDistributionForFlatTreeTraversal();
   for (Node* title_node = inner_node_.Get(); title_node;
        title_node = FlatTreeTraversal::Parent(*title_node)) {
     if (auto* element = DynamicTo<Element>(title_node)) {

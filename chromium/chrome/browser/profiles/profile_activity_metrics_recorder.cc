@@ -35,7 +35,8 @@ int GetMetricsBucketIndex(const Profile* profile) {
     return 0;
 
   ProfileAttributesEntry* entry;
-  if (!g_browser_process->profile_manager()
+  if (!g_browser_process->profile_manager() ||
+      !g_browser_process->profile_manager()
            ->GetProfileAttributesStorage()
            .GetProfileAttributesWithPath(profile->GetPath(), &entry)) {
     // This can happen if the profile is deleted.
@@ -98,6 +99,8 @@ void RecordProfilesState() {
 
 void RecordAccountMetrics(const Profile* profile) {
   DCHECK(profile);
+  if (profile->IsEphemeralGuestProfile())
+    return;
 
   ProfileAttributesEntry* entry;
   if (!g_browser_process->profile_manager()
@@ -200,8 +203,8 @@ void ProfileActivityMetricsRecorder::OnProfileWillBeDestroyed(
 ProfileActivityMetricsRecorder::ProfileActivityMetricsRecorder() {
   BrowserList::AddObserver(this);
   metrics::DesktopSessionDurationTracker::Get()->AddObserver(this);
-  action_callback_ = base::Bind(&ProfileActivityMetricsRecorder::OnUserAction,
-                                base::Unretained(this));
+  action_callback_ = base::BindRepeating(
+      &ProfileActivityMetricsRecorder::OnUserAction, base::Unretained(this));
   base::AddActionCallback(action_callback_);
 }
 

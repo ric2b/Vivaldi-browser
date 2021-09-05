@@ -95,7 +95,8 @@ void PopulateBookmarkTreeNode(
   out_bookmark_tree_node->speeddial = vivaldi_bookmark_kit::GetSpeeddial(node);
   out_bookmark_tree_node->bookmarkbar =
       vivaldi_bookmark_kit::GetBookmarkbar(node);
-  out_bookmark_tree_node->partner = vivaldi_bookmark_kit::GetPartner(node);
+  out_bookmark_tree_node->partner =
+      vivaldi_bookmark_kit::GetPartner(node).AsLowercaseString();
   out_bookmark_tree_node->trash =
       (node->type() == bookmarks::BookmarkNode::TRASH);
 

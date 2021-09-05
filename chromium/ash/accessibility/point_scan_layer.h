@@ -6,7 +6,7 @@
 #define ASH_ACCESSIBILITY_POINT_SCAN_LAYER_H_
 
 #include "ash/accessibility/accessibility_layer.h"
-#include "ash/accessibility/layer_animation_info.h"
+#include "ash/accessibility/point_scan_layer_animation_info.h"
 #include "ash/ash_export.h"
 
 namespace ash {
@@ -21,11 +21,15 @@ class PointScanLayer : public AccessibilityLayer {
 
   // Begins sweeping a line horizontally across the screen, for the user to pick
   // an x-coordinate.
-  // TODO(crbug/1061537): Animate the line across the screen.
+  void StartHorizontalRangeScanning();
   void StartHorizontalScanning();
-  void PauseHorizontalScanning();
+  void StartVerticalRangeScanning();
   void StartVerticalScanning();
+  void PauseHorizontalScanning();
+  void PauseHorizontalRangeScanning();
   void PauseVerticalScanning();
+  void PauseVerticalRangeScanning();
+
   gfx::Rect GetBounds() const;
   bool IsMoving() const;
 
@@ -37,7 +41,7 @@ class PointScanLayer : public AccessibilityLayer {
  private:
   // ui:LayerDelegate overrides:
   void OnPaintLayer(const ui::PaintContext& context) override;
-  void OnLayerChange(LayerAnimationInfo* animation_info);
+  void OnLayerChange(PointScanLayerAnimationInfo* animation_info);
 
   struct Line {
     gfx::Point start;
@@ -50,7 +54,11 @@ class PointScanLayer : public AccessibilityLayer {
   // The line currently being drawn.
   Line line_;
 
-  bool is_moving_;
+  bool is_moving_ = false;
+
+  bool is_range_scan_ = false;
+
+  bool is_horizontal_range_ = false;
 };
 
 }  // namespace ash

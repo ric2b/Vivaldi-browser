@@ -42,7 +42,6 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/svg/line/svg_root_inline_box.h"
 #include "third_party/blink/renderer/core/layout/vertical_position_cache.h"
-#include "third_party/blink/renderer/core/paint/ng/ng_paint_fragment.h"
 #include "third_party/blink/renderer/platform/text/bidi_resolver.h"
 #include "third_party/blink/renderer/platform/text/character.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
@@ -2422,17 +2421,7 @@ void LayoutBlockFlow::AddVisualOverflowFromInlineChildren() {
   DCHECK(!NeedsLayout());
   DCHECK(!ChildPrePaintBlockedByDisplayLock());
 
-  if (const NGPaintFragment* paint_fragment = PaintFragment()) {
-    for (const NGPaintFragment* child : paint_fragment->Children()) {
-      if (child->HasSelfPaintingLayer())
-        continue;
-      PhysicalRect child_rect = child->InkOverflow();
-      if (!child_rect.IsEmpty()) {
-        child_rect.offset += child->Offset();
-        AddContentsVisualOverflow(child_rect);
-      }
-    }
-  } else if (PhysicalFragmentCount()) {
+  if (PhysicalFragmentCount()) {
     // TODO(crbug.com/1144203): This should compute in the stitched coordinate
     // system, but overflows in the block direction is converted to the inline
     // direction in the multicol container. Just unite overflows in the inline
@@ -2447,7 +2436,7 @@ void LayoutBlockFlow::AddVisualOverflowFromInlineChildren() {
             continue;
           PhysicalRect child_rect = child->InkOverflow();
           if (!child_rect.IsEmpty()) {
-            child_rect.offset += child->OffsetInContainerBlock();
+            child_rect.offset += child->OffsetInContainerFragment();
             AddContentsVisualOverflow(child_rect);
           }
         }
@@ -2476,13 +2465,14 @@ void LayoutBlockFlow::AddVisualOverflowFromInlineChildren() {
     if (!IsInlineWithOutlineAndContinuation(o))
       continue;
 
+    const ComputedStyle& style = o.StyleRef();
     Vector<PhysicalRect> outline_rects;
     To<LayoutInline>(o).AddOutlineRectsForContinuations(
         outline_rects, PhysicalOffset(),
-        o.OutlineRectsShouldIncludeBlockVisualOverflow());
+        style.OutlineRectsShouldIncludeBlockVisualOverflow());
     if (!outline_rects.IsEmpty()) {
       PhysicalRect outline_bounds = UnionRect(outline_rects);
-      outline_bounds.Inflate(LayoutUnit(o.StyleRef().OutlineOutsetExtent()));
+      outline_bounds.Inflate(LayoutUnit(style.OutlineOutsetExtent()));
       outline_bounds_of_all_continuations.Unite(outline_bounds);
     }
   }
@@ -2510,7 +2500,7 @@ void LayoutBlockFlow::AddLayoutOverflowFromInlineChildren() {
             continue;
           const NGFragmentItem& child = *cursor.CurrentItem();
           LogicalRect logical_rect =
-              fragment->ConvertChildToLogical(child.RectInContainerBlock());
+              fragment->ConvertChildToLogical(child.RectInContainerFragment());
           logical_rect.size.inline_size += 1;
           AddLayoutOverflow(
               fragment->ConvertChildToPhysical(logical_rect).ToLayoutRect());
@@ -2836,11 +2826,6 @@ LayoutUnit LayoutBlockFlow::StartAlignedOffsetForLine(
 void LayoutBlockFlow::SetShouldDoFullPaintInvalidationForFirstLine() {
   NOT_DESTROYED();
   DCHECK(ChildrenInline());
-
-  if (const NGPaintFragment* paint_fragment = PaintFragment()) {
-    paint_fragment->SetShouldDoFullPaintInvalidationForFirstLine();
-    return;
-  }
 
   const auto fragments = PhysicalFragments();
   if (!fragments.IsEmpty()) {

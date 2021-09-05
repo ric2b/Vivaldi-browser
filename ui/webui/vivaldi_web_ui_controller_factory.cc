@@ -82,18 +82,6 @@ bool VivaldiWebUIControllerFactory::UseWebUIForURL(
   return GetWebUIType(browser_context, url) != WebUI::kNoWebUI;
 }
 
-bool VivaldiWebUIControllerFactory::UseWebUIBindingsForURL(
-    content::BrowserContext* browser_context,
-    const GURL& url) {
-  // Extensions are rendered via WebUI in tabs, but don't actually need WebUI
-  // bindings (see the ExtensionWebUI constructor).
-  return
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-      !NeedsExtensionWebUI(Profile::FromBrowserContext(browser_context), url) &&
-#endif
-      UseWebUIForURL(browser_context, url);
-}
-
 std::unique_ptr<content::WebUIController>
 VivaldiWebUIControllerFactory::CreateWebUIControllerForURL(
     content::WebUI* web_ui,

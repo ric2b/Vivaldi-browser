@@ -75,6 +75,7 @@ const char kCertificateProviderErrorTimeout[] =
 const char kCertificateProviderErrorInvalidId[] = "Invalid requestId";
 const char kCertificateProviderErrorUnexpectedError[] =
     "Error supplied with non-empty data.";
+const char kCertificateProviderErrorNoAlgorithms[] = "Algorithm list is empty.";
 
 // requestPin constants.
 const char kCertificateProviderNoActiveDialog[] =
@@ -208,6 +209,10 @@ bool ParseCertificateInfo(
         return false;
     }
   }
+  if (out_info->supported_algorithms.empty()) {
+    *out_error_message = kCertificateProviderErrorNoAlgorithms;
+    return false;
+  }
   return true;
 }
 
@@ -247,10 +252,23 @@ bool ParseClientCertificateInfo(
       case api_cp::ALGORITHM_RSASSA_PKCS1_V1_5_SHA512:
         out_info->supported_algorithms.push_back(SSL_SIGN_RSA_PKCS1_SHA512);
         break;
+      case api_cp::ALGORITHM_RSASSA_PSS_SHA256:
+        out_info->supported_algorithms.push_back(SSL_SIGN_RSA_PSS_RSAE_SHA256);
+        break;
+      case api_cp::ALGORITHM_RSASSA_PSS_SHA384:
+        out_info->supported_algorithms.push_back(SSL_SIGN_RSA_PSS_RSAE_SHA384);
+        break;
+      case api_cp::ALGORITHM_RSASSA_PSS_SHA512:
+        out_info->supported_algorithms.push_back(SSL_SIGN_RSA_PSS_RSAE_SHA512);
+        break;
       case api_cp::ALGORITHM_NONE:
         NOTREACHED();
         return false;
     }
+  }
+  if (out_info->supported_algorithms.empty()) {
+    *out_error_message = kCertificateProviderErrorNoAlgorithms;
+    return false;
   }
   return true;
 }

@@ -29,11 +29,12 @@ _JAVAC_EXTRACTOR = os.path.join(build_utils.DIR_SOURCE_ROOT, 'third_party',
                                 'android_prebuilts', 'build_tools', 'common',
                                 'framework', 'javac_extractor.jar')
 
+# Add a check here to cause the suggested fix to be applied while compiling.
+# Use this when trying to enable more checks.
+ERRORPRONE_CHECKS_TO_APPLY = []
+
 # Full list of checks: https://errorprone.info/bugpatterns
 ERRORPRONE_WARNINGS_TO_DISABLE = [
-    # These should really be turned on.
-    'CollectionUndefinedEquality',
-    'ModifyCollectionInEnhancedForLoop',
     # The following are super useful, but existing issues need to be fixed first
     # before they can start failing the build on new errors.
     'InvalidParam',
@@ -46,7 +47,6 @@ ERRORPRONE_WARNINGS_TO_DISABLE = [
     'MutablePublicArray',
     'UnescapedEntity',
     'NonCanonicalType',
-    'ProtectedMembersInFinalClass',
     'AlmostJavadoc',
     # TODO(crbug.com/834807): Follow steps in bug
     'DoubleBraceInitialization',
@@ -60,8 +60,6 @@ ERRORPRONE_WARNINGS_TO_DISABLE = [
     'CatchFail',
     # TODO(crbug.com/803485): Follow steps in bug.
     'JUnitAmbiguousTestClass',
-    # TODO(crbug.com/1027683): Follow steps in bug.
-    'UnnecessaryParentheses',
     # Android platform default is always UTF-8.
     # https://developer.android.com/reference/java/nio/charset/Charset.html#defaultCharset()
     'DefaultCharset',
@@ -168,6 +166,8 @@ ERRORPRONE_WARNINGS_TO_DISABLE = [
     # We already have presubmit checks for this. Not necessary to warn on
     # every build.
     'RemoveUnusedImports',
+    # We do not care about unnecessary parenthesis enough to check for them.
+    'UnnecessaryParentheses',
 ]
 
 # Full list of checks: https://errorprone.info/bugpatterns
@@ -207,6 +207,8 @@ def ProcessJavacOutput(output):
       r'(Note: .* uses? unchecked or unsafe operations.)$')
   recompile_re = re.compile(r'(Note: Recompile with -Xlint:.* for details.)$')
 
+  activity_re = re.compile(r'^(?P<prefix>\s*location: )class Activity$')
+
   warning_color = ['full_message', colorama.Fore.YELLOW + colorama.Style.DIM]
   error_color = ['full_message', colorama.Fore.MAGENTA + colorama.Style.BRIGHT]
   marker_color = ['marker', colorama.Fore.BLUE + colorama.Style.BRIGHT]
@@ -222,6 +224,13 @@ def ProcessJavacOutput(output):
     return not (deprecated_re.match(line) or unchecked_re.match(line)
                 or recompile_re.match(line))
 
+  def Elaborate(line):
+    if activity_re.match(line):
+      prefix = ' ' * activity_re.match(line).end('prefix')
+      return '{}\n{}Expecting a FragmentActivity? See {}'.format(
+          line, prefix, 'docs/ui/android/bytecode_rewriting.md')
+    return line
+
   def ApplyColors(line):
     if warning_re.match(line):
       line = Colorize(line, warning_re, warning_color)
@@ -231,17 +240,9 @@ def ProcessJavacOutput(output):
       line = Colorize(line, marker_re, marker_color)
     return line
 
-  return '\n'.join(map(ApplyColors, filter(ApplyFilters, output.split('\n'))))
-
-
-def CheckErrorproneStderrWarning(jar_path, expected_warning_regex,
-                                 javac_output):
-  if not re.search(expected_warning_regex, javac_output):
-    raise Exception('Expected `{}` warning when compiling `{}`'.format(
-        expected_warning_regex, os.path.basename(jar_path)))
-
-  # Do not print warning
-  return ''
+  lines = (l for l in output.split('\n') if ApplyFilters(l))
+  lines = (ApplyColors(Elaborate(l)) for l in lines)
+  return '\n'.join(lines)
 
 
 def _ParsePackageAndClassNames(java_file):
@@ -491,22 +492,12 @@ def _RunCompiler(options, javac_cmd, java_files, classpath, jar_path,
         f.write(' '.join(java_files))
       cmd += ['@' + java_files_rsp_path]
 
-
-      # |errorprone_expected_warning_regex| is used in tests for errorprone
-      # warnings. Fail compile if expected warning is not present.
-      stderr_filter = ProcessJavacOutput
-      if (options.enable_errorprone
-          and options.errorprone_expected_warning_regex):
-        stderr_filter = functools.partial(
-            CheckErrorproneStderrWarning, options.jar_path,
-            options.errorprone_expected_warning_regex)
-
       logging.debug('Build command %s', cmd)
       start = time.time()
       build_utils.CheckOutput(cmd,
                               print_stdout=options.chromium_code,
                               stdout_filter=ProcessJavacOutput,
-                              stderr_filter=stderr_filter,
+                              stderr_filter=ProcessJavacOutput,
                               fail_on_output=options.warnings_as_errors)
       end = time.time() - start
       logging.info('Java compilation took %ss', end)
@@ -591,10 +582,6 @@ def _ParseOptions(argv):
       action='store_true',
       help='Enable errorprone checks')
   parser.add_option(
-      '--errorprone-expected-warning-regex',
-      help='When set, throws an exception if the errorprone compile does not '
-      'log a warning which matches the regex.')
-  parser.add_option(
       '--warnings-as-errors',
       action='store_true',
       help='Treat all warnings as errors.')
@@ -672,15 +659,26 @@ def main(argv):
     # Make everything a warning so that when treat_warnings_as_errors is false,
     # they do not fail the build.
     errorprone_flags += ['-XepAllErrorsAsWarnings']
-    for warning in ERRORPRONE_WARNINGS_TO_DISABLE:
-      errorprone_flags.append('-Xep:{}:OFF'.format(warning))
-    for warning in ERRORPRONE_WARNINGS_TO_ENABLE:
-      errorprone_flags.append('-Xep:{}:WARN'.format(warning))
+    # Don't check generated files.
+    errorprone_flags += ['-XepDisableWarningsInGeneratedCode']
+    errorprone_flags.extend('-Xep:{}:OFF'.format(x)
+                            for x in ERRORPRONE_WARNINGS_TO_DISABLE)
+    errorprone_flags.extend('-Xep:{}:WARN'.format(x)
+                            for x in ERRORPRONE_WARNINGS_TO_ENABLE)
+
+    if ERRORPRONE_CHECKS_TO_APPLY:
+      errorprone_flags += [
+          '-XepPatchLocation:IN_PLACE',
+          '-XepPatchChecks:,' + ','.join(ERRORPRONE_CHECKS_TO_APPLY)
+      ]
+
     javac_args += ['-XDcompilePolicy=simple', ' '.join(errorprone_flags)]
+
     # This flag quits errorprone after checks and before code generation, since
     # we do not need errorprone outputs, this speeds up errorprone by 4 seconds
     # for chrome_java.
-    javac_args += ['-XDshould-stop.ifNoError=FLOW']
+    if not ERRORPRONE_CHECKS_TO_APPLY:
+      javac_args += ['-XDshould-stop.ifNoError=FLOW']
 
   if options.java_version:
     javac_args.extend([

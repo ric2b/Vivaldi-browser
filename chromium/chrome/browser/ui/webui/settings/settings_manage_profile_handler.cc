@@ -86,12 +86,12 @@ void ManageProfileHandler::RegisterMessages() {
 }
 
 void ManageProfileHandler::OnJavascriptAllowed() {
-  observer_.Add(
+  observation_.Observe(
       &g_browser_process->profile_manager()->GetProfileAttributesStorage());
 }
 
 void ManageProfileHandler::OnJavascriptDisallowed() {
-  observer_.RemoveAll();
+  observation_.Reset();
 }
 
 void ManageProfileHandler::OnProfileHighResAvatarLoaded(
@@ -258,8 +258,8 @@ void ManageProfileHandler::HandleRequestProfileShortcutStatus(
   DCHECK(shortcut_manager);
   shortcut_manager->HasProfileShortcuts(
       profile_->GetPath(),
-      base::Bind(&ManageProfileHandler::OnHasProfileShortcuts,
-                 weak_factory_.GetWeakPtr(), callback_id));
+      base::BindOnce(&ManageProfileHandler::OnHasProfileShortcuts,
+                     weak_factory_.GetWeakPtr(), callback_id));
 }
 
 void ManageProfileHandler::OnHasProfileShortcuts(

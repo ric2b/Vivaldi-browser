@@ -27,7 +27,7 @@
 #include "base/optional.h"
 #include "base/strings/string16.h"
 #include "base/time/time.h"
-#include "base/util/type_safety/pass_key.h"
+#include "base/types/pass_key.h"
 #include "build/build_config.h"
 #include "cc/mojom/render_frame_metadata.mojom.h"
 #include "content/child/child_thread_impl.h"
@@ -88,6 +88,7 @@ class GpuChannelHost;
 }
 
 namespace media {
+class DecoderFactory;
 class GpuVideoAcceleratorFactories;
 }
 
@@ -106,6 +107,7 @@ namespace content {
 class AgentSchedulingGroup;
 class CategorizedWorkerPool;
 class GpuVideoAcceleratorFactoriesImpl;
+class MediaInterfaceFactory;
 class RenderThreadObserver;
 class RendererBlinkPlatformImpl;
 class ResourceDispatcher;
@@ -197,26 +199,23 @@ class CONTENT_EXPORT RenderThreadImpl
   scoped_refptr<base::SingleThreadTaskRunner> GetIOTaskRunner() override;
 
   // CompositorDependencies implementation.
-  bool IsLcdTextEnabled() override;
-  bool IsElasticOverscrollEnabled() override;
   bool IsUseZoomForDSFEnabled() override;
-  bool IsSingleThreaded() override;
-  scoped_refptr<base::SingleThreadTaskRunner> GetCleanupTaskRunner() override;
   blink::scheduler::WebThreadScheduler* GetWebMainThreadScheduler() override;
   cc::TaskGraphRunner* GetTaskGraphRunner() override;
-  bool IsScrollAnimatorEnabled() override;
   std::unique_ptr<cc::UkmRecorderFactory> CreateUkmRecorderFactory() override;
+
+  bool IsLcdTextEnabled();
+  bool IsElasticOverscrollEnabled();
+  bool IsScrollAnimatorEnabled();
 
   // TODO(crbug.com/1111231): The `enable_scroll_animator` flag is currently
   // being passed as part of `CreateViewParams`, despite it looking like a
   // global setting. It should probably be moved to some `mojom::Renderer` API
   // and this method should be removed.
   void SetScrollAnimatorEnabled(bool enable_scroll_animator,
-                                util::PassKey<AgentSchedulingGroup>);
+                                base::PassKey<AgentSchedulingGroup>);
 
   bool IsThreadedAnimationEnabled();
-  scoped_refptr<base::SingleThreadTaskRunner>
-  GetCompositorMainThreadTaskRunner();
 
   // viz::mojom::CompositingModeWatcher implementation.
   void CompositingModeFallbackToSoftware() override;
@@ -298,37 +297,10 @@ class CONTENT_EXPORT RenderThreadImpl
   SharedCompositorWorkerContextProvider(bool try_gpu_rasterization);
 
   media::GpuVideoAcceleratorFactories* GetGpuFactories();
+  media::DecoderFactory* GetMediaDecoderFactory();
 
   scoped_refptr<viz::ContextProviderCommandBuffer>
   SharedMainThreadContextProvider();
-
-  class UnfreezableMessageFilter : public IPC::MessageFilter {
-   public:
-    explicit UnfreezableMessageFilter(RenderThreadImpl* render_thread_impl);
-    bool OnMessageReceived(const IPC::Message& message) override;
-
-    // Adds |unfreezable_task_runner| for the task to be executed later.
-    void AddListenerUnfreezableTaskRunner(
-        int32_t routing_id,
-        scoped_refptr<base::SingleThreadTaskRunner> unfreezable_task_runner);
-
-    // Removes |unfreezable_task_runner| for the task to be executed later.
-    void RemoveListenerUnfreezableTaskRunner(
-        int32_t routing_id);
-
-    // Called on the I/O thread.
-    // Returns the unfreezable task runner associated with |routing_id|.
-    scoped_refptr<base::SingleThreadTaskRunner> GetUnfreezableTaskRunner(
-        int32_t routing_id);
-
-   private:
-    ~UnfreezableMessageFilter() override;
-    RenderThreadImpl* render_thread_impl_;
-    base::Lock unfreezable_task_runners_lock_;
-    // Map of routing_id and listener's thread unfreezable task runner.
-    std::map<int32_t, scoped_refptr<base::SingleThreadTaskRunner>>
-        unfreezable_task_runners_ GUARDED_BY(unfreezable_task_runners_lock_);
-  };
 
   // For producing custom V8 histograms. Custom histograms are produced if all
   // RenderViews share the same host, and the host is in the pre-specified set
@@ -356,7 +328,6 @@ class CONTENT_EXPORT RenderThreadImpl
     FRIEND_TEST_ALL_PREFIXES(RenderThreadImplUnittest,
                              IdentifyAlexaTop10NonGoogleSite);
     friend class RenderThreadImplUnittest;
-    friend class UnfreezableMessageFilter;
 
     // Converts a host name to a suffix for histograms
     std::string HostToCustomHistogramSuffix(const std::string& host);
@@ -446,13 +417,8 @@ class CONTENT_EXPORT RenderThreadImpl
 
   // mojom::Renderer:
   void CreateAgentSchedulingGroup(
-      mojo::PendingRemote<mojom::AgentSchedulingGroupHost>
-          agent_scheduling_group_host,
-      mojo::PendingReceiver<mojom::AgentSchedulingGroup> agent_scheduling_group)
-      override;
+      mojo::PendingReceiver<IPC::mojom::ChannelBootstrap> bootstrap) override;
   void CreateAssociatedAgentSchedulingGroup(
-      mojo::PendingAssociatedRemote<mojom::AgentSchedulingGroupHost>
-          agent_scheduling_group_host,
       mojo::PendingAssociatedReceiver<mojom::AgentSchedulingGroup>
           agent_scheduling_group) override;
   void OnNetworkConnectionChanged(
@@ -520,9 +486,6 @@ class CONTENT_EXPORT RenderThreadImpl
   std::unique_ptr<ResourceDispatcher> resource_dispatcher_;
   std::unique_ptr<URLLoaderThrottleProvider> url_loader_throttle_provider_;
 
-  // Filter out unfreezable messages and pass it to unfreezable task runners.
-  scoped_refptr<UnfreezableMessageFilter> unfreezable_message_filter_;
-
   // Used on the render thread.
   std::unique_ptr<blink::WebVideoCaptureImplManager> vc_manager_;
 
@@ -550,6 +513,10 @@ class CONTENT_EXPORT RenderThreadImpl
   // http://crbug.com/580386 is fixed.
   // NOTE(dcastagna): At worst this accumulates a few bytes per context lost.
   std::vector<std::unique_ptr<GpuVideoAcceleratorFactoriesImpl>> gpu_factories_;
+
+  // Utility classes to allow WebRTC to create video decoders.
+  std::unique_ptr<MediaInterfaceFactory> media_interface_factory_;
+  std::unique_ptr<media::DecoderFactory> media_decoder_factory_;
 
   // Thread for running multimedia operations (e.g., video decoding).
   std::unique_ptr<base::Thread> media_thread_;
@@ -585,9 +552,6 @@ class CONTENT_EXPORT RenderThreadImpl
   std::unique_ptr<viz::Gpu> gpu_;
 
   std::unique_ptr<VariationsRenderThreadObserver> variations_observer_;
-
-  scoped_refptr<base::SingleThreadTaskRunner>
-      main_thread_compositor_task_runner_;
 
   // Compositor settings.
   int gpu_rasterization_msaa_sample_count_;

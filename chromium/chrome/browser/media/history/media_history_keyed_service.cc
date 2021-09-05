@@ -352,12 +352,15 @@ void MediaHistoryKeyedService::GetURLsInTableForTest(
       std::move(callback));
 }
 
-void MediaHistoryKeyedService::DiscoverMediaFeed(const GURL& url,
-                                                 base::OnceClosure callback) {
+void MediaHistoryKeyedService::DiscoverMediaFeed(
+    const GURL& url,
+    const base::Optional<GURL>& favicon,
+    base::OnceClosure callback) {
   if (auto* store = store_->GetForWrite()) {
     store->db_task_runner_->PostTaskAndReply(
         FROM_HERE,
-        base::BindOnce(&MediaHistoryStore::DiscoverMediaFeed, store, url),
+        base::BindOnce(&MediaHistoryStore::DiscoverMediaFeed, store, url,
+                       favicon),
         std::move(callback));
   } else {
     std::move(callback).Run();
@@ -427,6 +430,13 @@ MediaHistoryKeyedService::GetMediaFeedsRequest
 MediaHistoryKeyedService::GetMediaFeedsRequest::CreateSelectedFeedsForFetch() {
   GetMediaFeedsRequest request;
   request.type = Type::kSelectedFeedsForFetch;
+  return request;
+}
+
+MediaHistoryKeyedService::GetMediaFeedsRequest
+MediaHistoryKeyedService::GetMediaFeedsRequest::CreateNewFeeds() {
+  GetMediaFeedsRequest request;
+  request.type = Type::kNewFeeds;
   return request;
 }
 
@@ -559,37 +569,6 @@ void MediaHistoryKeyedService::GetMediaFeedFetchDetails(
       base::BindOnce(&MediaHistoryStore::GetMediaFeedFetchDetails,
                      store_->GetForRead(), feed_id),
       std::move(callback));
-}
-
-void MediaHistoryKeyedService::SetKaleidoscopeData(
-    media::mojom::GetCollectionsResponsePtr data,
-    const std::string& gaia_id) {
-  if (auto* store = store_->GetForWrite()) {
-    store->db_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&MediaHistoryStore::SetKaleidoscopeData,
-                                  store, std::move(data), gaia_id));
-  }
-}
-
-void MediaHistoryKeyedService::GetKaleidoscopeData(
-    const std::string& gaia_id,
-    GetKaleidoscopeDataCallback callback) {
-  if (auto* store = store_->GetForWrite()) {
-    base::PostTaskAndReplyWithResult(
-        store_->GetForRead()->db_task_runner_.get(), FROM_HERE,
-        base::BindOnce(&MediaHistoryStore::GetKaleidoscopeData, store, gaia_id),
-        std::move(callback));
-  } else {
-    std::move(callback).Run(nullptr);
-  }
-}
-
-void MediaHistoryKeyedService::DeleteKaleidoscopeData() {
-  if (auto* store = store_->GetForWrite()) {
-    store->db_task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce(&MediaHistoryStore::DeleteKaleidoscopeData, store));
-  }
 }
 
 }  // namespace media_history

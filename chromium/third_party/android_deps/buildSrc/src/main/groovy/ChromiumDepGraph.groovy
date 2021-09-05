@@ -19,12 +19,8 @@ import org.gradle.maven.MavenPomArtifact
  */
 class ChromiumDepGraph {
     final def dependencies = new HashMap<String, DependencyDescription>()
+    final def lowerVersionOverride = new HashSet<String>()
 
-    // Override to use the lower version of the library when
-    // resolving which library version to use.
-    final def LOWER_VERSION_OVERRIDE = [
-         'com_google_guava_listenablefuture',
-    ]
     // Some libraries don't properly fill their POM with the appropriate licensing information.
     // It is provided here from manual lookups. Note that licenseUrl must provide textual content
     // rather than be an html page.
@@ -81,6 +77,10 @@ class ChromiumDepGraph {
             licenseUrl: "https://www.apache.org/licenses/LICENSE-2.0.txt",
             licenseName: "Apache 2.0"),
         'com_google_guava_guava': new PropertyOverride(
+            url: "https://github.com/google/guava",
+            licenseUrl: "https://www.apache.org/licenses/LICENSE-2.0.txt",
+            licenseName: "Apache 2.0"),
+        'com_google_guava_guava_android': new PropertyOverride(
             url: "https://github.com/google/guava",
             licenseUrl: "https://www.apache.org/licenses/LICENSE-2.0.txt",
             licenseName: "Apache 2.0"),
@@ -286,6 +286,8 @@ class ChromiumDepGraph {
 
     void collectDependencies() {
         def compileConfig = project.configurations.getByName('compile').resolvedConfiguration
+        def compileListenableFutureConfig = project.configurations.getByName(
+            'compileListenableFuture').resolvedConfiguration
         def buildCompileConfig = project.configurations.getByName('buildCompile').resolvedConfiguration
         def testCompileConfig = project.configurations.getByName('testCompile').resolvedConfiguration
         def androidTestCompileConfig = project.configurations.getByName(
@@ -293,9 +295,14 @@ class ChromiumDepGraph {
         List<String> topLevelIds = []
         Set<ResolvedConfiguration> deps = []
         deps += compileConfig.firstLevelModuleDependencies
+        deps += compileListenableFutureConfig.firstLevelModuleDependencies
         deps += buildCompileConfig.firstLevelModuleDependencies
         deps += testCompileConfig.firstLevelModuleDependencies
         deps += androidTestCompileConfig.firstLevelModuleDependencies
+
+        compileListenableFutureConfig.firstLevelModuleDependencies.each { dependency ->
+            lowerVersionOverride.add(makeModuleId(dependency.module))
+        }
 
         deps.each { dependency ->
             topLevelIds.add(makeModuleId(dependency.module))
@@ -325,7 +332,9 @@ class ChromiumDepGraph {
             dep.testOnly = false
         }
 
-        compileConfig.resolvedArtifacts.each { artifact ->
+        def compileResolvedArtifacts = compileConfig.resolvedArtifacts
+        compileResolvedArtifacts += compileListenableFutureConfig.resolvedArtifacts
+        compileResolvedArtifacts.each { artifact ->
             def id = makeModuleId(artifact)
             def dep = dependencies.get(id)
             assert dep != null : "No dependency collected for artifact ${artifact.name}"
@@ -358,13 +367,16 @@ class ChromiumDepGraph {
     private void collectDependenciesInternal(ResolvedDependency dependency) {
         def id = makeModuleId(dependency.module)
         if (dependencies.containsKey(id)) {
-            if (id in LOWER_VERSION_OVERRIDE &&
-                   dependencies.get(id).version <= dependency.module.id.version) {
+            if (dependencies.get(id).version == dependency.module.id.version) return
+
+            // Default to using largest version for version conflict resolution. See
+            // crbug.com/1040958
+            // https://docs.gradle.org/current/userguide/dependency_resolution.html#sec:version-conflict
+            def useLowerVersion = (id in lowerVersionOverride)
+            def versionIsLower = dependency.module.id.version < dependencies.get(id).version 
+            if (useLowerVersion != versionIsLower) {
                 return
             }
-            // Use largest version for version conflict resolution. See crbug.com/1040958
-            // https://docs.gradle.org/current/userguide/dependency_resolution.html#sec:version-conflict
-            if (dependencies.get(id).version >= dependency.module.id.version) return
         }
 
         def childModules = []
@@ -391,7 +403,14 @@ class ChromiumDepGraph {
         // Does not include version because by default the resolution strategy for gradle is to use
         // the newest version among the required ones. We want to be able to match it in the
         // BUILD.gn file.
-        return sanitize("${module.id.group}_${module.id.name}")
+        def moduleId = sanitize("${module.id.group}_${module.id.name}")
+
+        // Add 'android' suffix for guava-android so that its module name is distinct from the
+        // module for guava.
+        if (module.id.name == "guava" && module.id.version.contains("android")) {
+            moduleId += "_android"
+        }
+        return moduleId
     }
 
     static String makeModuleId(ResolvedArtifact artifact) {
@@ -399,7 +418,14 @@ class ChromiumDepGraph {
         // the newest version among the required ones. We want to be able to match it in the
         // BUILD.gn file.
         def componentId = artifact.id.componentIdentifier
-        return sanitize("${componentId.group}_${componentId.module}")
+        def moduleId = sanitize("${componentId.group}_${componentId.module}")
+
+        // Add 'android' suffix for guava-android so that its module name is distinct from the
+        // module for guava.
+        if (componentId.module == "guava" && componentId.version.contains("android")) {
+            moduleId += "_android"
+        }
+        return moduleId
     }
 
     private static String sanitize(String input) {

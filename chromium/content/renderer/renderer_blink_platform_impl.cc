@@ -37,7 +37,7 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/gpu_stream_constants.h"
-#include "content/public/common/service_names.mojom.h"
+#include "content/public/common/url_utils.h"
 #include "content/public/common/webplugininfo.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/public/renderer/render_frame.h"
@@ -233,15 +233,15 @@ RendererBlinkPlatformImpl::WrapSharedURLLoaderFactory(
       std::move(factory));
 }
 
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
 void RendererBlinkPlatformImpl::SetDisplayThreadPriority(
     base::PlatformThreadId thread_id) {
-#if defined(OS_LINUX) || defined(OS_CHROMEOS)
   if (RenderThreadImpl* render_thread = RenderThreadImpl::current()) {
     render_thread->render_message_filter()->SetThreadPriority(
         thread_id, base::ThreadPriority::DISPLAY);
   }
-#endif
 }
+#endif
 
 blink::BlameContext* RendererBlinkPlatformImpl::GetTopLevelBlameContext() {
   return &top_level_blame_context_;
@@ -343,6 +343,13 @@ void RendererBlinkPlatformImpl::PopulateURLResponse(
     int request_id) {
   WebURLLoaderImpl::PopulateURLResponse(url, head, response,
                                         report_security_info, request_id);
+}
+
+bool RendererBlinkPlatformImpl::IsRedirectSafe(const GURL& from_url,
+                                               const GURL& to_url) {
+  return IsSafeRedirectTarget(from_url, to_url) &&
+         (!GetContentClient()->renderer() ||  // null in unit tests.
+          GetContentClient()->renderer()->IsSafeRedirectTarget(to_url));
 }
 
 void RendererBlinkPlatformImpl::CacheMetadataInCacheStorage(
@@ -954,6 +961,21 @@ RendererBlinkPlatformImpl::GetGpuFactories() {
     return nullptr;
 
   return render_thread->GetGpuFactories();
+}
+
+scoped_refptr<base::SingleThreadTaskRunner>
+RendererBlinkPlatformImpl::MediaThreadTaskRunner() {
+  auto* render_thread = RenderThreadImpl::current();
+  if (!render_thread)
+    return nullptr;
+
+  return render_thread->GetMediaThreadTaskRunner();
+}
+
+media::DecoderFactory* RendererBlinkPlatformImpl::GetMediaDecoderFactory() {
+  auto* render_thread = RenderThreadImpl::current();
+  DCHECK(!!render_thread);
+  return render_thread->GetMediaDecoderFactory();
 }
 
 void RendererBlinkPlatformImpl::SetRenderingColorSpace(

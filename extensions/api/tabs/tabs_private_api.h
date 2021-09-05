@@ -22,6 +22,7 @@
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/extension_event_histogram_value.h"
 #include "extensions/browser/extension_function.h"
+#include "extensions/schema/tabs_private.h"
 #include "renderer/vivaldi_render_messages.h"
 #include "third_party/blink/public/mojom/page/drag.mojom.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -39,13 +40,40 @@ typedef base::OnceCallback<void(int, int)>
 
 namespace extensions {
 
-class TabsPrivateAPI {
+class TabMutingHandler;
+
+bool IsTabMuted(const content::WebContents* web_contents);
+
+class TabsPrivateAPI : public BrowserContextKeyedAPI {
+  friend class BrowserContextKeyedAPIFactory<TabsPrivateAPI>;
+  std::unique_ptr<TabMutingHandler> tabmuting_handler_;
+  Profile* profile_;
+
+  // BrowserContextKeyedAPI implementation.
+  static const char* service_name() { return "TabsPrivateAPI"; }
+  static const bool kServiceIsNULLWhileTesting = true;
+  static const bool kServiceRedirectedInIncognito = true;
+
  public:
+  explicit TabsPrivateAPI(content::BrowserContext* context);
+
+  ~TabsPrivateAPI() override;
+
   static void Init();
 
-  static void NotifyTabChange(content::WebContents* web_contents,
-                              int index,
-                              TabChangeType change_type);
+  static TabsPrivateAPI* FromBrowserContext(
+      content::BrowserContext* browser_context);
+
+  void UpdateMuting(content::WebContents* active_contents);
+
+  void NotifyTabSelectionChange(content::WebContents* active_contents);
+
+  // BrowserContextKeyedAPI implementation.
+  static BrowserContextKeyedAPIFactory<TabsPrivateAPI>* GetFactoryInstance();
+
+  void NotifyTabChange(content::WebContents* web_contents);
+
+  DISALLOW_COPY_AND_ASSIGN(TabsPrivateAPI);
 };
 
 // Tab contents observer that forward private settings to any new renderer.
@@ -64,7 +92,7 @@ class VivaldiPrivateTabObserver
       int tab_id,
       std::string* error);
 
-  void BroadcastTabInfo();
+  void BroadcastTabInfo(vivaldi::tabs_private::UpdateTabInfo& info);
 
   // content::WebContentsObserver implementation.
   void DidChangeThemeColor() override;
@@ -80,6 +108,8 @@ class VivaldiPrivateTabObserver
                          const base::TimeTicks& proceed_time) override;
   bool OnMessageReceived(const IPC::Message& message,
                          content::RenderFrameHost* render_frame_host) override;
+  void NavigationEntryCommitted(
+      const content::LoadCommittedDetails& load_details) override;
 
   void SetShowImages(bool show_images);
   void SetLoadFromCacheOnly(bool load_from_cache_only);

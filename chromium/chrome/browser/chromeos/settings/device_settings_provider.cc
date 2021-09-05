@@ -13,12 +13,12 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
+#include "base/containers/contains.h"
 #include "base/json/json_reader.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/optional.h"
-#include "base/stl_util.h"
 #include "base/syslog_logging.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/values.h"
@@ -82,7 +82,6 @@ const char* const kKnownSettings[] = {
     kDeviceDisplayResolution,
     kDeviceDockMacAddressSource,
     kDeviceHostnameTemplate,
-    kDeviceLoginScreenExtensions,
     kDeviceLoginScreenInputMethods,
     kDeviceLoginScreenLocales,
     kDeviceLoginScreenSystemInfoEnforced,
@@ -106,6 +105,7 @@ const char* const kKnownSettings[] = {
     kDeviceWilcoDtcAllowed,
     kDisplayRotationDefault,
     kExtensionCacheSize,
+    kFeatureFlags,
     kHeartbeatEnabled,
     kHeartbeatFrequency,
     kLoginAuthenticationBehavior,
@@ -146,7 +146,6 @@ const char* const kKnownSettings[] = {
     kSamlLoginAuthenticationType,
     kServiceAccountIdentity,
     kSignedDataRoamingEnabled,
-    kStartUpFlags,
     kStatsReportingPref,
     kSystemLogUploadEnabled,
     kSystemProxySettings,
@@ -375,14 +374,15 @@ void DecodeLoginPolicies(const em::ChromeDeviceSettingsProto& policy,
       kAccountsPrefDeviceLocalAccountPromptForNetworkWhenOffline,
       policy.device_local_accounts().prompt_for_network_when_offline());
 
-  if (policy.has_start_up_flags()) {
-    std::vector<base::Value> list;
-    const em::StartUpFlagsProto& flags_proto = policy.start_up_flags();
-    const RepeatedPtrField<std::string>& flags = flags_proto.flags();
-    for (const std::string& entry : flags) {
-      list.push_back(base::Value(entry));
+  if (policy.has_feature_flags()) {
+    std::vector<base::Value> feature_flags_list;
+    for (const std::string& entry : policy.feature_flags().feature_flags()) {
+      feature_flags_list.push_back(base::Value(entry));
     }
-    new_values_cache->SetValue(kStartUpFlags, base::Value(std::move(list)));
+    if (!feature_flags_list.empty()) {
+      new_values_cache->SetValue(kFeatureFlags,
+                                 base::Value(std::move(feature_flags_list)));
+    }
   }
 
   if (policy.has_saml_settings()) {
@@ -424,17 +424,6 @@ void DecodeLoginPolicies(const em::ChromeDeviceSettingsProto& policy,
     }
     new_values_cache->SetValue(kLoginVideoCaptureAllowedUrls,
                                base::Value(std::move(list)));
-  }
-
-  if (policy.has_device_login_screen_extensions()) {
-    std::vector<base::Value> apps;
-    const em::DeviceLoginScreenExtensionsProto& proto(
-        policy.device_login_screen_extensions());
-    for (const auto& app : proto.device_login_screen_extensions()) {
-      apps.push_back(base::Value(app));
-    }
-    new_values_cache->SetValue(kDeviceLoginScreenExtensions,
-                               base::Value(std::move(apps)));
   }
 
   if (policy.has_login_screen_locales()) {

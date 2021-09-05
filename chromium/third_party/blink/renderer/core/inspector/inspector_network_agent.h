@@ -196,7 +196,14 @@ class CORE_EXPORT InspectorNetworkAgent final
                                const char* payload,
                                size_t payload_length);
   void DidReceiveWebSocketMessageError(uint64_t identifier, const String&);
+
+  void WebTransportCreated(ExecutionContext*,
+                           uint64_t transport_id,
+                           const KURL& request_url);
+  void WebTransportClosed(uint64_t transport_id);
+
   void SetDevToolsIds(ResourceRequest& request, const FetchInitiatorInfo&);
+  void IsCacheDisabled(bool* is_cache_disabled) const;
 
   // Called from frontend
   protocol::Response enable(Maybe<int> total_buffer_size,

@@ -130,7 +130,11 @@ IN_PROC_BROWSER_TEST_F(
                 browser()->tab_strip_model()->GetActiveWebContents(), nullptr));
 }
 
-IN_PROC_BROWSER_TEST_F(PortalBrowserTest, HttpBasicAuthenticationInPortal) {
+// TODO(mcnee): Disabled due to the initial fix for this causing a regression.
+// See https://crbug.com/1076696 . Investigate the cause of this regression and
+// re-enable.
+IN_PROC_BROWSER_TEST_F(PortalBrowserTest,
+                       DISABLED_HttpBasicAuthenticationInPortal) {
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url(embedded_test_server()->GetURL("/title1.html"));
   ui_test_utils::NavigateToURL(browser(), url);
@@ -307,7 +311,7 @@ IN_PROC_BROWSER_TEST_F(PortalBrowserTest, PdfViewerLoadsInPortal) {
   ASSERT_EQ(1u, inner_web_contents.size());
   WebContents* portal_contents = inner_web_contents[0];
 
-  EXPECT_TRUE(pdf_extension_test_util::EnsurePDFHasLoaded(portal_contents));
+  ASSERT_TRUE(pdf_extension_test_util::EnsurePDFHasLoaded(portal_contents));
 }
 
 // Test that we do not show main frame interstitials in portal contents. We

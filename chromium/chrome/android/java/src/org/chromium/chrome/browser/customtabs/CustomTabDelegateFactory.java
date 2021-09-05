@@ -20,7 +20,7 @@ import org.chromium.base.IntentUtils;
 import org.chromium.base.Log;
 import org.chromium.base.PackageManagerUtils;
 import org.chromium.base.supplier.Supplier;
-import org.chromium.chrome.browser.AppHooks;
+import org.chromium.cc.input.BrowserControlsState;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.app.ChromeActivity;
@@ -34,7 +34,6 @@ import org.chromium.chrome.browser.contextmenu.ChromeContextMenuPopulatorFactory
 import org.chromium.chrome.browser.contextmenu.ContextMenuPopulatorFactory;
 import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabBrowserControlsVisibilityDelegate;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
-import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
 import org.chromium.chrome.browser.externalnav.ExternalNavigationDelegateImpl;
 import org.chromium.chrome.browser.flags.ActivityType;
 import org.chromium.chrome.browser.multiwindow.MultiWindowUtils;
@@ -61,10 +60,11 @@ import org.chromium.components.browser_ui.util.ComposedBrowserControlsVisibility
 import org.chromium.components.embedder_support.delegate.WebContentsDelegateAndroid;
 import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.external_intents.ExternalNavigationHandler;
+import org.chromium.components.externalauth.ExternalAuthUtils;
 import org.chromium.content_public.browser.LoadUrlParams;
-import org.chromium.content_public.common.BrowserControlsState;
 import org.chromium.content_public.common.ResourceRequestBody;
 import org.chromium.ui.mojom.WindowOpenDisposition;
+import org.chromium.url.GURL;
 
 import javax.inject.Inject;
 
@@ -289,7 +289,7 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
         }
 
         @Override
-        public void openNewTab(String url, String extraHeaders, ResourceRequestBody postData,
+        public void openNewTab(GURL url, String extraHeaders, ResourceRequestBody postData,
                 int disposition, boolean isRendererInitiated) {
             // If attempting to open an incognito tab, always send the user to tabbed mode.
             if (disposition == WindowOpenDisposition.OFF_THE_RECORD) {
@@ -297,7 +297,7 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
                     throw new IllegalStateException(
                             "Invalid attempt to open an incognito tab from the renderer");
                 }
-                LoadUrlParams loadUrlParams = new LoadUrlParams(url);
+                LoadUrlParams loadUrlParams = new LoadUrlParams(url.getSpec());
                 loadUrlParams.setVerbatimHeaders(extraHeaders);
                 loadUrlParams.setPostData(postData);
                 loadUrlParams.setIsRendererInitiated(isRendererInitiated);
@@ -316,7 +316,7 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
         }
 
         @Override
-        protected @WebDisplayMode int getDisplayMode() {
+        public @WebDisplayMode int getDisplayMode() {
             return mDisplayMode;
         }
 
@@ -493,7 +493,7 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
         Supplier<ShareDelegate> shareDelegateSupplier =
                 mActivity == null ? null : mActivity.getShareDelegateSupplier();
         return new ChromeContextMenuPopulatorFactory(createTabContextMenuItemDelegate(tab),
-                shareDelegateSupplier, contextMenuMode, AppHooks.get().getExternalAuthUtils());
+                shareDelegateSupplier, contextMenuMode, ExternalAuthUtils.getInstance());
     }
 
     @Override

@@ -13,7 +13,8 @@
   },
   "action": {
     "channel": "stable",
-    "extension_types": ["extension"]
+    "extension_types": ["extension"],
+    "min_manifest_version": 3
   },
   "app.icon_color": {
     "channel": "stable",
@@ -167,7 +168,7 @@
   "minimum_chrome_version": {
     "channel": "stable",
     "extension_types": [
-      "extension", "legacy_packaged_app", "hosted_app", "platform_app"
+      "extension", "legacy_packaged_app", "hosted_app", "platform_app", "theme"
     ]
   },
   "natively_connectable": {
@@ -208,14 +209,6 @@
   "short_name": {
     "channel": "stable",
     "extension_types": "all"
-  },
-  "signature": {
-    "channel": "stable",
-    "extension_types": "all"
-  },
-  "spellcheck": {
-    "channel": "dev",
-    "extension_types": ["extension"]
   },
   "storage": {
     "channel": "stable",

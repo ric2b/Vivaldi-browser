@@ -4,6 +4,7 @@
 
 #include "chrome/browser/nearby_sharing/nearby_share_settings.h"
 
+#include "base/metrics/histogram_functions.h"
 #include "base/values.h"
 #include "chrome/browser/nearby_sharing/common/nearby_share_enums.h"
 #include "chrome/browser/nearby_sharing/common/nearby_share_prefs.h"
@@ -34,6 +35,11 @@ NearbyShareSettings::NearbyShareSettings(
                           base::Unretained(this)));
 
   local_device_data_manager_->AddObserver(this);
+
+  if (GetEnabled()) {
+    base::UmaHistogramEnumeration("Nearby.Share.VisibilityChoice",
+                                  GetVisibility());
+  }
 }
 
 NearbyShareSettings::~NearbyShareSettings() {
@@ -71,6 +77,16 @@ const std::vector<std::string> NearbyShareSettings::GetAllowedContacts() const {
   return allowed_contacts;
 }
 
+bool NearbyShareSettings::IsOnboardingComplete() const {
+  return pref_service_->GetBoolean(
+      prefs::kNearbySharingOnboardingCompletePrefName);
+}
+
+bool NearbyShareSettings::IsDisabledByPolicy() const {
+  return !GetEnabled() && pref_service_->IsManagedPreference(
+                              prefs::kNearbySharingEnabledPrefName);
+}
+
 void NearbyShareSettings::AddSettingsObserver(
     ::mojo::PendingRemote<nearby_share::mojom::NearbyShareSettingsObserver>
         observer) {
@@ -89,6 +105,11 @@ void NearbyShareSettings::SetEnabled(bool enabled) {
     pref_service_->SetBoolean(prefs::kNearbySharingOnboardingCompletePrefName,
                               true);
   }
+}
+
+void NearbyShareSettings::IsOnboardingComplete(
+    base::OnceCallback<void(bool)> callback) {
+  std::move(callback).Run(IsOnboardingComplete());
 }
 
 void NearbyShareSettings::GetDeviceName(

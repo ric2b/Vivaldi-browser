@@ -293,7 +293,7 @@ void MenuScrollViewContainer::CreateDefaultBorder() {
   const ui::NativeTheme* native_theme = GetNativeTheme();
   bool use_outer_border =
       menu_config.use_outer_border ||
-      (native_theme && native_theme->UsesHighContrastColors());
+      (native_theme && native_theme->UserHasContrastPreference());
   corner_radius_ = menu_config.CornerRadiusForMenu(
       content_view_->GetMenuItem()->GetMenuController());
   int padding = use_outer_border && corner_radius_ > 0
@@ -327,7 +327,8 @@ void MenuScrollViewContainer::CreateDefaultBorder() {
 void MenuScrollViewContainer::CreateBubbleBorder() {
   const SkColor color = GetNativeTheme()->GetSystemColor(
       ui::NativeTheme::kColorId_MenuBackgroundColor);
-  bubble_border_ = new BubbleBorder(arrow_, BubbleBorder::SMALL_SHADOW, color);
+  bubble_border_ =
+      new BubbleBorder(arrow_, BubbleBorder::STANDARD_SHADOW, color);
   if (content_view_->GetMenuItem()
           ->GetMenuController()
           ->use_touchable_layout()) {
@@ -351,6 +352,7 @@ BubbleBorder::Arrow MenuScrollViewContainer::BubbleBorderTypeFromAnchor(
     MenuAnchorPosition anchor) {
   switch (anchor) {
     case MenuAnchorPosition::kBubbleAbove:
+    case MenuAnchorPosition::kBubbleBelow:
     case MenuAnchorPosition::kBubbleLeft:
     case MenuAnchorPosition::kBubbleRight:
       return BubbleBorder::FLOAT;

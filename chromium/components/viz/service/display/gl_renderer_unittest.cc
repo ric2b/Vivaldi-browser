@@ -102,7 +102,8 @@ class GLRendererTest : public testing::Test {
                      gfx::DisplayColorSpaces()) {
     SurfaceDamageRectList surface_damage_rect_list;
     renderer->DrawFrame(&render_passes_in_draw_order_, 1.f, viewport_size,
-                        display_color_spaces, &surface_damage_rect_list);
+                        display_color_spaces,
+                        std::move(surface_damage_rect_list));
   }
 
   static const Program* current_program(GLRenderer* renderer) {
@@ -363,57 +364,45 @@ class GLRendererShaderPixelTest : public cc::PixelTest {
                                       false));
   }
 
-  void TestShadersWithPrecisionAndSampler(TexCoordPrecision precision,
-                                          SamplerType sampler) {
-    TestShader(ProgramKey::Texture(precision, sampler, PREMULTIPLIED_ALPHA,
-                                   false, true, false, false));
-    TestShader(ProgramKey::Texture(precision, sampler, PREMULTIPLIED_ALPHA,
-                                   false, false, false, false));
-    TestShader(ProgramKey::Texture(precision, sampler, PREMULTIPLIED_ALPHA,
-                                   true, true, false, false));
-    TestShader(ProgramKey::Texture(precision, sampler, PREMULTIPLIED_ALPHA,
-                                   true, false, false, false));
-    TestShader(ProgramKey::Texture(precision, sampler, NON_PREMULTIPLIED_ALPHA,
-                                   false, true, false, false));
-    TestShader(ProgramKey::Texture(precision, sampler, NON_PREMULTIPLIED_ALPHA,
-                                   false, false, false, false));
-    TestShader(ProgramKey::Texture(precision, sampler, NON_PREMULTIPLIED_ALPHA,
-                                   true, true, false, false));
-    TestShader(ProgramKey::Texture(precision, sampler, NON_PREMULTIPLIED_ALPHA,
-                                   true, false, false, false));
+  void TestShadersWithPrecisionAndSampler(
+      TexCoordPrecision precision,
+      SamplerType sampler,
+      PremultipliedAlphaMode premultipliedAlpha,
+      bool has_background_color,
+      bool has_tex_clamp_rect) {
+    TestShader(ProgramKey::Texture(precision, sampler, premultipliedAlpha,
+                                   has_background_color, has_tex_clamp_rect,
+                                   false, false));
+  }
 
-    TestShader(ProgramKey::Tile(precision, sampler, USE_AA, PREMULTIPLIED_ALPHA,
+  void TestShadersWithPrecisionAndSamplerTiledAA(
+      TexCoordPrecision precision,
+      SamplerType sampler,
+      PremultipliedAlphaMode premultipliedAlpha) {
+    TestShader(ProgramKey::Tile(precision, sampler, USE_AA, premultipliedAlpha,
                                 false, false, false, false));
-    TestShader(ProgramKey::Tile(precision, sampler, NO_AA, PREMULTIPLIED_ALPHA,
-                                false, false, false, false));
-    TestShader(ProgramKey::Tile(precision, sampler, NO_AA, PREMULTIPLIED_ALPHA,
-                                true, false, false, false));
-    TestShader(ProgramKey::Tile(precision, sampler, NO_AA, PREMULTIPLIED_ALPHA,
-                                false, true, false, false));
-    TestShader(ProgramKey::Tile(precision, sampler, NO_AA, PREMULTIPLIED_ALPHA,
-                                true, true, false, false));
-    TestShader(ProgramKey::Tile(precision, sampler, USE_AA,
-                                NON_PREMULTIPLIED_ALPHA, false, false, false,
-                                false));
-    TestShader(ProgramKey::Tile(precision, sampler, NO_AA,
-                                NON_PREMULTIPLIED_ALPHA, false, false, false,
-                                false));
-    TestShader(ProgramKey::Tile(precision, sampler, NO_AA,
-                                NON_PREMULTIPLIED_ALPHA, true, false, false,
-                                false));
-    TestShader(ProgramKey::Tile(precision, sampler, NO_AA,
-                                NON_PREMULTIPLIED_ALPHA, false, true, false,
-                                false));
-    TestShader(ProgramKey::Tile(precision, sampler, NO_AA,
-                                NON_PREMULTIPLIED_ALPHA, true, true, false,
-                                false));
+  }
 
+  void TestShadersWithPrecisionAndSamplerTiled(
+      TexCoordPrecision precision,
+      SamplerType sampler,
+      PremultipliedAlphaMode premultipliedAlpha,
+      bool is_opaque,
+      bool has_tex_clamp_rect) {
+    TestShader(ProgramKey::Tile(precision, sampler, NO_AA, premultipliedAlpha,
+                                is_opaque, has_tex_clamp_rect, false, false));
+  }
+
+  void TestYUVShadersWithPrecisionAndSampler(TexCoordPrecision precision,
+                                             SamplerType sampler) {
     // Iterate over alpha plane and nv12 parameters.
     UVTextureMode uv_modes[2] = {UV_TEXTURE_MODE_UV, UV_TEXTURE_MODE_U_V};
     YUVAlphaTextureMode a_modes[2] = {YUV_NO_ALPHA_TEXTURE,
                                       YUV_HAS_ALPHA_TEXTURE};
     for (auto uv_mode : uv_modes) {
+      SCOPED_TRACE(uv_mode);
       for (auto a_mode : a_modes) {
+        SCOPED_TRACE(a_mode);
         TestShader(ProgramKey::YUVVideo(precision, sampler, a_mode, uv_mode,
                                         false, false));
       }
@@ -458,6 +447,9 @@ static const SamplerType kSamplerList[] = {
     SAMPLER_TYPE_2D, SAMPLER_TYPE_2D_RECT, SAMPLER_TYPE_EXTERNAL_OES,
 };
 
+static const PremultipliedAlphaMode kPremultipliedAlphaModeList[] = {
+    PREMULTIPLIED_ALPHA, NON_PREMULTIPLIED_ALPHA};
+
 TEST_F(GLRendererShaderPixelTest, BasicShadersCompile) {
   TestBasicShaders();
 }
@@ -497,18 +489,107 @@ INSTANTIATE_TEST_SUITE_P(
 class PrecisionSamplerShaderPixelTest
     : public GLRendererShaderPixelTest,
       public ::testing::WithParamInterface<
-          std::tuple<TexCoordPrecision, SamplerType>> {};
+          std::tuple<TexCoordPrecision,
+                     SamplerType,
+                     PremultipliedAlphaMode,
+                     bool,       // has_background_color
+                     bool>> {};  // has_tex_clamp_rect
 
 TEST_P(PrecisionSamplerShaderPixelTest, ShadersCompile) {
   SamplerType sampler = std::get<1>(GetParam());
   if (sampler != SAMPLER_TYPE_2D_RECT ||
       context_provider()->ContextCapabilities().texture_rectangle) {
-    TestShadersWithPrecisionAndSampler(std::get<0>(GetParam()), sampler);
+    TestShadersWithPrecisionAndSampler(
+        std::get<0>(GetParam()),  // TexCoordPrecision
+        sampler,
+        std::get<2>(GetParam()),   // PremultipliedAlphaMode
+        std::get<3>(GetParam()),   // has_background_color
+        std::get<4>(GetParam()));  // has_tex_clamp_rect
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    PrecisionSamplerShadersCompile,
+    PrecisionSamplerShaderPixelTest,
+    ::testing::Combine(::testing::ValuesIn(kPrecisionList),
+                       ::testing::ValuesIn(kSamplerList),
+                       ::testing::ValuesIn(kPremultipliedAlphaModeList),
+                       ::testing::Bool(),    // has_background_color
+                       ::testing::Bool()));  // has_tex_clamp_rect
+
+class PrecisionSamplerShaderPixelTestTiled
+    : public GLRendererShaderPixelTest,
+      public ::testing::WithParamInterface<
+          std::tuple<TexCoordPrecision,
+                     SamplerType,
+                     PremultipliedAlphaMode,
+                     bool,   // is_opaque
+                     bool>>  // has_tex_clamp_rect
+{};
+
+TEST_P(PrecisionSamplerShaderPixelTestTiled, ShadersCompile) {
+  SamplerType sampler = std::get<1>(GetParam());
+  if (sampler != SAMPLER_TYPE_2D_RECT ||
+      context_provider()->ContextCapabilities().texture_rectangle) {
+    TestShadersWithPrecisionAndSamplerTiled(
+        std::get<0>(GetParam()),  // TexCoordPrecision
+        sampler,
+        std::get<2>(GetParam()),   // PremultipliedAlphaMode
+        std::get<3>(GetParam()),   // is_opaque
+        std::get<4>(GetParam()));  // has_tex_clamp_rect
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    PrecisionSamplerShadersCompile,
+    PrecisionSamplerShaderPixelTestTiled,
+    ::testing::Combine(::testing::ValuesIn(kPrecisionList),
+                       ::testing::ValuesIn(kSamplerList),
+                       ::testing::ValuesIn(kPremultipliedAlphaModeList),
+                       ::testing::Bool(),    // is_opaque
+                       ::testing::Bool()));  // has_tex_clamp_rect
+
+class PrecisionSamplerShaderPixelTestTiledAA
+    : public GLRendererShaderPixelTest,
+      public ::testing::WithParamInterface<
+          std::tuple<TexCoordPrecision, SamplerType, PremultipliedAlphaMode>> {
+};
+
+TEST_P(PrecisionSamplerShaderPixelTestTiledAA, ShadersCompile) {
+  SamplerType sampler = std::get<1>(GetParam());
+  if (sampler != SAMPLER_TYPE_2D_RECT ||
+      context_provider()->ContextCapabilities().texture_rectangle) {
+    TestShadersWithPrecisionAndSamplerTiledAA(
+        std::get<0>(GetParam()),  // TexCoordPrecision
+        sampler,
+        std::get<2>(GetParam()));  // PremultipliedAlphaMode
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    PrecisionSamplerShadersCompile,
+    PrecisionSamplerShaderPixelTestTiledAA,
+    ::testing::Combine(::testing::ValuesIn(kPrecisionList),
+                       ::testing::ValuesIn(kSamplerList),
+                       ::testing::ValuesIn(kPremultipliedAlphaModeList)));
+
+class PrecisionSamplerYUVShaderPixelTest
+    : public GLRendererShaderPixelTest,
+      public ::testing::WithParamInterface<
+          std::tuple<TexCoordPrecision, SamplerType>> {};
+
+TEST_P(PrecisionSamplerYUVShaderPixelTest, ShadersCompile) {
+  SamplerType sampler = std::get<1>(GetParam());
+  if (sampler != SAMPLER_TYPE_2D_RECT ||
+      context_provider()->ContextCapabilities().texture_rectangle) {
+    TestYUVShadersWithPrecisionAndSampler(
+        std::get<0>(GetParam()),  // TexCoordPrecision
+        sampler);
   }
 }
 
 INSTANTIATE_TEST_SUITE_P(PrecisionSamplerShadersCompile,
-                         PrecisionSamplerShaderPixelTest,
+                         PrecisionSamplerYUVShaderPixelTest,
                          ::testing::Combine(::testing::ValuesIn(kPrecisionList),
                                             ::testing::ValuesIn(kSamplerList)));
 
@@ -2496,7 +2577,7 @@ class MockOutputSurfaceTest : public GLRendererTest {
     SurfaceDamageRectList surface_damage_rect_list;
     renderer_->DrawFrame(&render_passes_in_draw_order_, device_scale_factor,
                          viewport_size, gfx::DisplayColorSpaces(),
-                         &surface_damage_rect_list);
+                         std::move(surface_damage_rect_list));
   }
 
   RendererSettings settings_;
@@ -2535,7 +2616,7 @@ class MockDCLayerOverlayProcessor : public DCLayerOverlayProcessor {
                     const FilterOperationsMap& render_pass_backdrop_filters,
                     AggregatedRenderPassList* render_passes,
                     gfx::Rect* damage_rect,
-                    SurfaceDamageRectList* surface_damage_rect_list,
+                    SurfaceDamageRectList surface_damage_rect_list,
                     DCLayerOverlayList* dc_layer_overlays));
 
  protected:
@@ -2603,6 +2684,32 @@ class TestOverlayProcessor : public OverlayProcessorUsingStrategy {
                  primary_surface,
              OverlayCandidateList* candidates,
              std::vector<gfx::Rect>* content_bounds));
+
+    void ProposePrioritized(
+        const SkMatrix44& output_color_matrix,
+        const FilterOperationsMap& render_pass_backdrop_filters,
+        DisplayResourceProvider* resource_provider,
+        AggregatedRenderPassList* render_pass_list,
+        SurfaceDamageRectList* surface_damage_rect_list,
+        const PrimaryPlane* primary_plane,
+        OverlayProposedCandidateList* candidates,
+        std::vector<gfx::Rect>* content_bounds) override {
+      auto* render_pass = render_pass_list->back().get();
+      QuadList& quad_list = render_pass->quad_list;
+      OverlayCandidate candidate;
+      candidates->push_back({quad_list.end(), candidate, this});
+    }
+
+    MOCK_METHOD9(AttemptPrioritized,
+                 bool(const SkMatrix44& output_color_matrix,
+                      const FilterOperationsMap& render_pass_backdrop_filters,
+                      DisplayResourceProvider* resource_provider,
+                      AggregatedRenderPassList* render_pass_list,
+                      SurfaceDamageRectList* surface_damage_rect_list,
+                      const PrimaryPlane* primary_plane,
+                      OverlayCandidateList* candidates,
+                      std::vector<gfx::Rect>* content_bounds,
+                      OverlayProposedCandidate* proposed_candidate));
   };
 
   bool IsOverlaySupported() const override { return true; }
@@ -2626,6 +2733,8 @@ class TestOverlayProcessor : public OverlayProcessorUsingStrategy {
   explicit TestOverlayProcessor(OutputSurface* output_surface)
       : OverlayProcessorUsingStrategy() {
     strategies_.push_back(std::make_unique<Strategy>());
+    prioritization_config_.changing_threshold = false;
+    prioritization_config_.damage_rate_threshold = false;
   }
   ~TestOverlayProcessor() override = default;
 };
@@ -2734,7 +2843,14 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
   // any attempt to overlay, which there shouldn't be. We can't use the quad
   // list because the render pass is cleaned up by DrawFrame.
 #if defined(USE_OZONE) || defined(OS_ANDROID)
-  EXPECT_CALL(processor->strategy(), Attempt(_, _, _, _, _, _, _, _)).Times(0);
+  if (features::IsOverlayPrioritizationEnabled()) {
+    EXPECT_CALL(processor->strategy(),
+                AttemptPrioritized(_, _, _, _, _, _, _, _, _))
+        .Times(0);
+  } else {
+    EXPECT_CALL(processor->strategy(), Attempt(_, _, _, _, _, _, _, _))
+        .Times(0);
+  }
 #elif defined(OS_APPLE)
   EXPECT_CALL(*mock_ca_processor, ProcessForCALayerOverlays(_, _, _, _, _, _))
       .Times(0);
@@ -2766,7 +2882,14 @@ TEST_F(GLRendererTest, DontOverlayWithCopyRequests) {
       SK_ColorTRANSPARENT, vertex_opacity, flipped, nearest_neighbor,
       /*secure_output_only=*/false, gfx::ProtectedVideoType::kClear);
 #if defined(USE_OZONE) || defined(OS_ANDROID)
-  EXPECT_CALL(processor->strategy(), Attempt(_, _, _, _, _, _, _, _)).Times(1);
+  if (features::IsOverlayPrioritizationEnabled()) {
+    EXPECT_CALL(processor->strategy(),
+                AttemptPrioritized(_, _, _, _, _, _, _, _, _))
+        .Times(1);
+  } else {
+    EXPECT_CALL(processor->strategy(), Attempt(_, _, _, _, _, _, _, _))
+        .Times(1);
+  }
 #elif defined(OS_APPLE)
   EXPECT_CALL(*mock_ca_processor, ProcessForCALayerOverlays(_, _, _, _, _, _))
       .Times(1);
@@ -2790,6 +2913,8 @@ class SingleOverlayOnTopProcessor : public OverlayProcessorUsingStrategy {
   SingleOverlayOnTopProcessor() : OverlayProcessorUsingStrategy() {
     strategies_.push_back(std::make_unique<OverlayStrategySingleOnTop>(this));
     strategies_.push_back(std::make_unique<OverlayStrategyUnderlay>(this));
+    prioritization_config_.changing_threshold = false;
+    prioritization_config_.damage_rate_threshold = false;
   }
 
   bool NeedsSurfaceDamageRectList() const override { return true; }
@@ -3815,6 +3940,38 @@ class ContentBoundsOverlayProcessor : public OverlayProcessorUsingStrategy {
       return true;
     }
 
+    void ProposePrioritized(
+        const SkMatrix44& output_color_matrix,
+        const FilterOperationsMap& render_pass_backdrop_filters,
+        DisplayResourceProvider* resource_provider,
+        AggregatedRenderPassList* render_pass_list,
+        SurfaceDamageRectList* surface_damage_rect_list,
+        const PrimaryPlane* primary_plane,
+        OverlayProposedCandidateList* candidates,
+        std::vector<gfx::Rect>* content_bounds) override {
+      auto* render_pass = render_pass_list->back().get();
+      QuadList& quad_list = render_pass->quad_list;
+      OverlayCandidate candidate;
+      // Adding a mock candidate to the propose list so that
+      // 'AttemptPrioritized' will be called.
+      candidates->push_back({quad_list.end(), candidate, this});
+    }
+
+    bool AttemptPrioritized(
+        const SkMatrix44& output_color_matrix,
+        const FilterOperationsMap& render_pass_backdrop_filters,
+        DisplayResourceProvider* resource_provider,
+        AggregatedRenderPassList* render_pass_list,
+        SurfaceDamageRectList* surface_damage_rect_list,
+        const PrimaryPlane* primary_plane,
+        OverlayCandidateList* candidates,
+        std::vector<gfx::Rect>* content_bounds,
+        OverlayProposedCandidate* proposed_candidate) override {
+      content_bounds->insert(content_bounds->end(), content_bounds_.begin(),
+                             content_bounds_.end());
+      return true;
+    }
+
    private:
     const std::vector<gfx::Rect> content_bounds_;
   };
@@ -3824,6 +3981,8 @@ class ContentBoundsOverlayProcessor : public OverlayProcessorUsingStrategy {
       : OverlayProcessorUsingStrategy(), content_bounds_(content_bounds) {
     strategies_.push_back(
         std::make_unique<Strategy>(std::move(content_bounds_)));
+    prioritization_config_.changing_threshold = false;
+    prioritization_config_.damage_rate_threshold = false;
   }
 
   Strategy& strategy() { return static_cast<Strategy&>(*strategies_.back()); }

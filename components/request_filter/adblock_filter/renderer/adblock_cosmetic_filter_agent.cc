@@ -22,31 +22,8 @@ CosmeticFilterAgent::CosmeticFilterAgent(content::RenderFrame* render_frame)
 
 CosmeticFilterAgent::~CosmeticFilterAgent() = default;
 
-// static
-CosmeticFilterAgent* CosmeticFilterAgent::FromWebFrame(
-    blink::WebLocalFrame* frame) {
-  return Get(content::RenderFrame::FromWebFrame(frame));
-}
-
 void CosmeticFilterAgent::OnDestruct() {
   delete this;
-}
-
-void CosmeticFilterAgent::DidCreateNewDocument() {
-  // Unretained is safe because cosmetic_filter_ cancels all callbacks when
-  // destroyed.
-  if (cosmetic_filter_)
-    cosmetic_filter_->GetStyleSheet(
-        render_frame()->GetWebFrame()->GetDocument().Url(),
-        base::BindOnce(&CosmeticFilterAgent::InjectStyleSheet,
-                       base::Unretained(this)));
-}
-
-void CosmeticFilterAgent::InjectStyleSheet(const std::string& stylesheet_code) {
-  if (render_frame())
-    render_frame()->GetWebFrame()->GetDocument().InsertStyleSheet(
-        blink::WebString::FromUTF8(stylesheet_code), nullptr,
-        blink::WebDocument::kUserOrigin);
 }
 
 void CosmeticFilterAgent::BlockWebRTCIfNeeded(

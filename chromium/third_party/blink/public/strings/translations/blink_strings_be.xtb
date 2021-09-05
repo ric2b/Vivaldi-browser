@@ -39,7 +39,7 @@
 <translation id="1921819250265091946">дд</translation>
 <translation id="1930711995431081526">стан</translation>
 <translation id="1938124657309484470">Час павінен быць указаны не пазнейшы, чым <ph name="MAXIMUM_DATE_OR_TIME" />.</translation>
-<translation id="1946271899482435442">Паказаць сродак выбару даты</translation>
+<translation id="1946271899482435442">Паказаць інструмент выбару даты</translation>
 <translation id="1993104285338243655">Пераключана на адлюстраванне</translation>
 <translation id="2031987842108996681">Чырвоны канал</translation>
 <translation id="2060505056492490888">Сімвал "<ph name="DOT" />" у адрасе "<ph name="INVALIDDOMAIN" />" размешчаны няправільна.</translation>
@@ -101,7 +101,7 @@
 <translation id="3920932319529768807">заключэнне</translation>
 <translation id="3924558731517983934">праграма</translation>
 <translation id="3944740393230681990">пралог</translation>
-<translation id="3960700977367013758">панэль прагорткі</translation>
+<translation id="3960700977367013758">паласа прагорткі</translation>
 <translation id="4103419683916926126">Мілісекунды</translation>
 <translation id="4151657705144244502">графічны аб'ект</translation>
 <translation id="4160057747563657758">тэлефон</translation>
@@ -151,12 +151,13 @@
 <translation id="5307600278924710095">Адрас "<ph name="INVALIDADDRESS" />" – няпоўны. Увядзіце частку перад сімвалам "<ph name="ATSIGN" />".</translation>
 <translation id="5334352251556557839">Не ўдалося прайграць мультымедыйны файл.</translation>
 <translation id="537648784377940524">Мінімальная дата (<ph name="MIN_DATE_OR_TIME" />) павінна быць ранейшая за максімальную (<ph name="MAX_DATE_OR_TIME" />).</translation>
+<translation id="5378437566635403538">– разгорнута, дыялогавае акно адкрыта.</translation>
 <translation id="5406322316791861025">фігура</translation>
 <translation id="5425179576310518467">бягучая дата</translation>
 <translation id="5453733299334684579">элемент дрэва</translation>
 <translation id="5466621249238537318">Выберыце адзін або некалькі файлаў.</translation>
 <translation id="5468998798572797635">выключыць поўнаэкранны рэжым</translation>
-<translation id="5516424706154626233">выбар даты</translation>
+<translation id="5516424706154626233">інструмент выбару даты</translation>
 <translation id="5537725057119320332">Трансліраваць</translation>
 <translation id="5546461542133609677">уключыць гук</translation>
 <translation id="5608153257855394627">вылучэнне</translation>
@@ -167,6 +168,7 @@
 <translation id="5677946354068040947">дадатковыя параметры</translation>
 <translation id="576709008726043716">уводзіны</translation>
 <translation id="57838592816432529">Выключыць</translation>
+<translation id="5787939484346677755">– разгорнута, варыянты аўтазапаўнення даступныя.</translation>
 <translation id="5860033963881614850">Выключана</translation>
 <translation id="588258955323874662">Поўнаэкранны рэжым</translation>
 <translation id="5888666972993069672">Ідзе трансляцыя на прыладу <ph name="DEVICE_FRIENDLY_NAME" /></translation>
@@ -180,6 +182,7 @@
 <translation id="6023896073578205740">поле спіса</translation>
 <translation id="6150588977291308318">бібліяграфія</translation>
 <translation id="6164829606128959761">лічыльнік</translation>
+<translation id="6165053282446038410">– разгорнута, даступных варыянтаў аўтазапаўнення: <ph name="COUNT" />.</translation>
 <translation id="6166809985690652833">пасляслоўе</translation>
 <translation id="6209276755895393898">Здаецца, гэта наступнае: <ph name="DESCRIPTION" /></translation>
 <translation id="6212595056017402527">бягучая старонка</translation>
@@ -214,12 +217,14 @@
 <translation id="693476918119313863">загаловак</translation>
 <translation id="6941933287844615239">спампаваць мультымедыя</translation>
 <translation id="6981594929165378967">устаўка</translation>
+<translation id="698788488269350478">– разгорнута.</translation>
 <translation id="6989848892321993519">Павялічце колькасць сімвалаў у гэтым тэксце як мінімум да <ph name="MIN_CHARACTERS" /> (зараз у вас 1 сімвал).</translation>
 <translation id="7034405885550056553">прапанова</translation>
 <translation id="709897737746224366">Прытрымлівайцеся ўказанага фармату.</translation>
 <translation id="7102274145889307184">бягучае месцазнаходжанне</translation>
 <translation id="7118469954320184356">Няма апісання.</translation>
 <translation id="7139483182332611405">прадмова</translation>
+<translation id="7198226213493847604">усплывальная кнопка меню</translation>
 <translation id="7214187073215825913">звесткі пра змесціва</translation>
 <translation id="7238347055216017155">выдзяленне</translation>
 <translation id="7263440858009898357">Выберыце пункт са спіса</translation>
@@ -281,11 +286,13 @@
 <translation id="8613126697340063924">кіраваць аддаленым прайграваннем</translation>
 <translation id="862370744433916922">субцітр</translation>
 <translation id="8634971699417195529">Паказаць сродак выбару месяца</translation>
+<translation id="8668988909814782445">Пераносіць радкі</translation>
 <translation id="8711688047404765493">выхад</translation>
 <translation id="8750798805984357768">Выберыце адзін з варыянтаў.</translation>
 <translation id="8808573423886751634">глава</translation>
 <translation id="8845239796550121995">Ідзе трансляцыя на тэлевізар</translation>
 <translation id="8851136666856101339">галоўны</translation>
+<translation id="8861621546968757188">усплывальная кнопка дыялогавага акна</translation>
 <translation id="8875657656876809964">Памылка прайгравання відэа</translation>
 <translation id="8889402386540077796">Адценне</translation>
 <translation id="8901569739625249689"><ph name="QUANTITY" /> КБ</translation>

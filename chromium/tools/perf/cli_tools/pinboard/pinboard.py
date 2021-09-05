@@ -96,9 +96,9 @@ ACTIVE_STORIES = set([
     'browse:social:twitter:2018',
     'browse:social:tumblr_infinite_scroll:2018',
     'browse:media:googleplaystore:2018',
-    'browse:search:google:2018',
+    'browse:search:google:2020',
     'browse:news:cnn:2018',
-    'browse:news:reddit:2018',
+    'browse:news:reddit:2020',
     'browse:search:google_india:2018',
     'browse:media:youtubetv:2019',
 
@@ -129,10 +129,12 @@ def StartPinpointJobs(state, date):
     logging.info(output)
     assert 'https://pinpoint' in output
     bot = config['configuration']
+    patch = config['patch']
     item['jobs'].append({
         'id': output.split('/')[-1],
         'status': 'queued',
-        'bot': bot
+        'bot': bot,
+        'patch': patch,
     })
   state.append(item)
   state.sort(key=lambda p: p['timestamp'])  # Keep items sorted by date.
@@ -324,13 +326,16 @@ def GetRevisionResults(item):
       df['timestamp'] - pd.DateOffset(years=1))
 
   df['bot'] = 'unknown'
+  df['patch'] = 'unknown'
   for j in item['jobs']:
     bot = j.get('bot', 'unknown')
+    patch = j.get('patch', 'unknown')
     df.loc[df['job_id'].str.contains(str(j['id'])), 'bot'] = bot
+    df.loc[df['job_id'].str.contains(str(j['id'])), 'patch'] = patch
 
   return df[[
-      'revision', 'timestamp', 'bot', 'label', 'benchmark', 'name', 'mean',
-      'count'
+      'revision', 'timestamp', 'bot', 'patch', 'label', 'benchmark', 'name',
+      'mean', 'count'
   ]]
 
 

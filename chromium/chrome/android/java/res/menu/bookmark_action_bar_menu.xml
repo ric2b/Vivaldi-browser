@@ -16,6 +16,7 @@
             app:iconTint="?attr/vivaldiIconTint" />
         <item
             android:id="@+id/search_menu_id"
+
             android:icon="@drawable/ic_search"
             android:title="@string/search"
             android:visible="false"
@@ -24,11 +25,41 @@
         <!-- Vivaldi -->
         <item
             android:id="@+id/sort_bookmarks_id"
-            android:title=""
+            android:title="@string/panel_sort"
             android:icon="@drawable/vivaldi_sort_button_24dp"
-            app:showAsAction="ifRoom"
+            app:showAsAction="always"
             app:iconTint="?attr/vivaldiIconTint"
-            />
+            >
+            <menu>
+                <group
+                    android:checkableBehavior="single">
+                    <item
+                        android:id="@+id/sort_manual_id"
+                        android:checked="false"
+                        android:title="@string/sort_manual"/>
+                    <item
+                        android:id="@+id/sort_by_title_id"
+                        android:checked="false"
+                        android:title="@string/sort_by_title"/>
+                    <item
+                        android:id="@+id/sort_by_address_id"
+                        android:checked="false"
+                        android:title="@string/sort_by_address" />
+                    <item
+                        android:id="@+id/sort_by_nickname_id"
+                        android:checked="false"
+                        android:title="@string/sort_by_nickname"/>
+                    <item
+                        android:id="@+id/sort_by_description_id"
+                        android:checked="false"
+                        android:title="@string/sort_by_description" />
+                    <item
+                        android:id="@+id/sort_by_date_id"
+                        android:checked="false"
+                        android:title="@string/sort_by_date"/>
+                </group>
+            </menu>
+        </item>
         <item
             android:id="@+id/close_menu_id"
             android:icon="@drawable/vivaldi_close_mobile_24dp"

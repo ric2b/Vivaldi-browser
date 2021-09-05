@@ -20,6 +20,7 @@
 #include "components/permissions/prediction_service/prediction_request_features.h"
 #include "components/permissions/prediction_service/prediction_service_common.h"
 #include "components/permissions/prediction_service/prediction_service_messages.pb.h"
+#include "components/permissions/request_type.h"
 #include "google/protobuf/message_lite.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_response_headers.h"
@@ -36,33 +37,33 @@ namespace {
 // A request that has all counts 0. With user gesture.
 const permissions::PredictionRequestFeatures kFeaturesAllCountsZero = {
     permissions::PermissionRequestGestureType::GESTURE,
-    permissions::PermissionRequestType::PERMISSION_NOTIFICATIONS,
+    permissions::RequestType::kNotifications,
     {0, 0, 0, 0},
     {0, 0, 0, 0}};
 // A request that has all counts 5 expect for "grants" which are 6. Without user
 // gesture.
 const permissions::PredictionRequestFeatures kFeaturesCountsNeedingRounding = {
     permissions::PermissionRequestGestureType::NO_GESTURE,
-    permissions::PermissionRequestType::PERMISSION_NOTIFICATIONS,
+    permissions::RequestType::kNotifications,
     {6, 5, 5, 5},
     {6, 5, 5, 5}};
 // A request that has all counts 50. With user gesture.
 const permissions::PredictionRequestFeatures kFeaturesEvenCountsOver100 = {
     permissions::PermissionRequestGestureType::GESTURE,
-    permissions::PermissionRequestType::PERMISSION_NOTIFICATIONS,
+    permissions::RequestType::kNotifications,
     {50, 50, 50, 50},
     {50, 50, 50, 50}};
 // A request that has all counts 100. With user gesture.
 const permissions::PredictionRequestFeatures kFeaturesEvenCountsOver100Alt = {
     permissions::PermissionRequestGestureType::GESTURE,
-    permissions::PermissionRequestType::PERMISSION_NOTIFICATIONS,
+    permissions::RequestType::kNotifications,
     {100, 100, 100, 100},
     {100, 100, 100, 100}};
 // A request that has generic counts 50, and notification counts 0. Without user
 // gesture.
 const permissions::PredictionRequestFeatures kFeaturesDifferentCounts = {
     permissions::PermissionRequestGestureType::NO_GESTURE,
-    permissions::PermissionRequestType::PERMISSION_NOTIFICATIONS,
+    permissions::RequestType::kNotifications,
     {0, 0, 0, 0},
     {50, 50, 50, 50}};
 
@@ -111,8 +112,7 @@ void InitializeProtoHelperObjects() {
   permission_feature->mutable_permission_stats()->set_avg_grant_rate(0);
   permission_feature->mutable_permission_stats()->set_avg_ignore_rate(0);
   permission_feature->mutable_permission_stats()->set_prompts_count(0);
-  permission_feature->mutable_notification_permission()
-      ->InitAsDefaultInstance();
+  permission_feature->mutable_notification_permission()->Clear();
 
   kRequestRoundedCounts.mutable_client_features()
       ->mutable_client_stats()
@@ -140,8 +140,7 @@ void InitializeProtoHelperObjects() {
   permission_feature->mutable_permission_stats()->set_avg_grant_rate(0.29);
   permission_feature->mutable_permission_stats()->set_avg_ignore_rate(0.24);
   permission_feature->mutable_permission_stats()->set_prompts_count(21);
-  permission_feature->mutable_notification_permission()
-      ->InitAsDefaultInstance();
+  permission_feature->mutable_notification_permission()->Clear();
 
   kRequestEqualCountsTotal100.mutable_client_features()
       ->mutable_client_stats()
@@ -169,8 +168,7 @@ void InitializeProtoHelperObjects() {
   permission_feature->mutable_permission_stats()->set_avg_grant_rate(.25);
   permission_feature->mutable_permission_stats()->set_avg_ignore_rate(.25);
   permission_feature->mutable_permission_stats()->set_prompts_count(100);
-  permission_feature->mutable_notification_permission()
-      ->InitAsDefaultInstance();
+  permission_feature->mutable_notification_permission()->Clear();
 
   kRequestDifferentCounts.mutable_client_features()
       ->mutable_client_stats()
@@ -198,8 +196,7 @@ void InitializeProtoHelperObjects() {
   permission_feature->mutable_permission_stats()->set_avg_grant_rate(0);
   permission_feature->mutable_permission_stats()->set_avg_ignore_rate(0);
   permission_feature->mutable_permission_stats()->set_prompts_count(0);
-  permission_feature->mutable_notification_permission()
-      ->InitAsDefaultInstance();
+  permission_feature->mutable_notification_permission()->Clear();
 
   auto* prediction = kResponseLikely.mutable_suggestion()->Add();
   prediction->mutable_grant_likelihood()->set_discretized_likelihood(

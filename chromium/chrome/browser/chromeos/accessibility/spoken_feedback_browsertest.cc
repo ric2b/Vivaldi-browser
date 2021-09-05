@@ -20,13 +20,16 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/task/post_task.h"
+#include "base/test/simple_test_tick_clock.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/apps/app_service/app_service_proxy.h"
+#include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
-#include "chrome/browser/chromeos/login/screens/sync_consent_screen.h"
 #include "chrome/browser/chromeos/login/test/device_state_mixin.h"
 #include "chrome/browser/chromeos/login/test/login_manager_mixin.h"
 #include "chrome/browser/chromeos/login/test/oobe_base_test.h"
+#include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
@@ -50,6 +53,8 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/test/ui_controls.h"
 #include "ui/base/ui_base_features.h"
+#include "ui/events/base_event_utils.h"
+#include "ui/events/test/event_generator.h"
 #include "ui/views/widget/widget.h"
 
 namespace {
@@ -433,7 +438,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, SpeakingTextUnderMouseForShelfItem) {
     }
 
     // Enable the function of speaking text under mouse.
-    ash::EventRewriterController::Get()->SetSendMouseEventsToDelegate(true);
+    ash::EventRewriterController::Get()->SetSendMouseEvents(true);
 
     // Focus on the Shelf because voice text for focusing on Shelf is fixed.
     // Wait until voice announcements are finished.
@@ -513,6 +518,103 @@ IN_PROC_BROWSER_TEST_P(ShelfNotificationBadgeSpokenFeedbackTest,
   sm_.Replay();
 }
 
+// Verifies that an announcement is triggered when focusing a paused app
+// ShelfItem.
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest,
+                       ShelfPausedAppIconBadgeAnnouncement) {
+  EnableChromeVox();
+
+  std::string app_id = "TestApp";
+
+  // Set the app status as paused;
+  std::vector<apps::mojom::AppPtr> apps;
+  apps::mojom::AppPtr app = apps::mojom::App::New();
+  app->app_type = apps::mojom::AppType::kBuiltIn;
+  app->app_id = app_id;
+  app->readiness = apps::mojom::Readiness::kReady;
+  app->paused = apps::mojom::OptionalBool::kTrue;
+  apps.push_back(std::move(app));
+  apps::AppServiceProxyFactory::GetForProfile(
+      chromeos::AccessibilityManager::Get()->profile())
+      ->AppRegistryCache()
+      .OnApps(std::move(apps));
+
+  // Create and add a test app to the shelf model.
+  ash::ShelfItem item;
+  item.id = ash::ShelfID(app_id);
+  item.title = base::ASCIIToUTF16("TestAppTitle");
+  item.type = ash::ShelfItemType::TYPE_APP;
+  item.app_status = ash::AppStatus::kPaused;
+  ash::ShelfModel::Get()->Add(item);
+
+  // Focus on the shelf.
+  sm_.Call([this]() { PerformAcceleratorAction(ash::FOCUS_SHELF); });
+  sm_.ExpectSpeech("Launcher");
+  sm_.ExpectSpeech("Button");
+  sm_.ExpectSpeech("Shelf");
+  sm_.ExpectSpeech("Tool bar");
+
+  // Press right key twice to focus the test app.
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_RIGHT); });
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_RIGHT); });
+  sm_.ExpectSpeech("TestAppTitle");
+  sm_.ExpectSpeech("Button");
+
+  // Check that when a paused app shelf item is focused, the correct
+  // announcement occurs.
+  sm_.ExpectSpeech("Paused");
+
+  sm_.Replay();
+}
+
+// Verifies that an announcement is triggered when focusing a blocked app
+// ShelfItem.
+IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest,
+                       ShelfBlockedAppIconBadgeAnnouncement) {
+  EnableChromeVox();
+
+  std::string app_id = "TestApp";
+
+  // Set the app status as paused;
+  std::vector<apps::mojom::AppPtr> apps;
+  apps::mojom::AppPtr app = apps::mojom::App::New();
+  app->app_type = apps::mojom::AppType::kBuiltIn;
+  app->app_id = app_id;
+  app->readiness = apps::mojom::Readiness::kDisabledByPolicy;
+  apps.push_back(std::move(app));
+  apps::AppServiceProxyFactory::GetForProfile(
+      chromeos::AccessibilityManager::Get()->profile())
+      ->AppRegistryCache()
+      .OnApps(std::move(apps));
+
+  // Create and add a test app to the shelf model.
+  ash::ShelfItem item;
+  item.id = ash::ShelfID(app_id);
+  item.title = base::ASCIIToUTF16("TestAppTitle");
+  item.type = ash::ShelfItemType::TYPE_APP;
+  item.app_status = ash::AppStatus::kBlocked;
+  ash::ShelfModel::Get()->Add(item);
+
+  // Focus on the shelf.
+  sm_.Call([this]() { PerformAcceleratorAction(ash::FOCUS_SHELF); });
+  sm_.ExpectSpeech("Launcher");
+  sm_.ExpectSpeech("Button");
+  sm_.ExpectSpeech("Shelf");
+  sm_.ExpectSpeech("Tool bar");
+
+  // Press right key twice to focus the test app.
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_RIGHT); });
+  sm_.Call([this]() { SendKeyPressWithSearch(ui::VKEY_RIGHT); });
+  sm_.ExpectSpeech("TestAppTitle");
+  sm_.ExpectSpeech("Button");
+
+  // Check that when a blocked shelf app shelf item is focused, the correct
+  // announcement occurs.
+  sm_.ExpectSpeech("Blocked");
+
+  sm_.Replay();
+}
+
 IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, OpenStatusTray) {
   EnableChromeVox();
 
@@ -533,7 +635,7 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, NavigateSystemTray) {
 
   sm_.Call(
       [this]() { (PerformAcceleratorAction(ash::TOGGLE_SYSTEM_TRAY_BUBBLE)); });
-  sm_.ExpectSpeechPattern(
+  sm_.ExpectSpeech(
       "Quick Settings, Press search plus left to access the notification "
       "center., window");
 
@@ -682,15 +784,36 @@ IN_PROC_BROWSER_TEST_P(SpokenFeedbackTest, TouchExploreStatusTray) {
   EnableChromeVox();
   sm_.Call([this]() { SimulateTouchScreenInChromeVox(); });
 
-  // Send an accessibility hover event on the system tray, which is
-  // what we get when you tap it on a touch screen when ChromeVox is on.
-  sm_.Call([]() {
-    ash::TrayBackgroundView* tray = ash::Shell::Get()
+  base::SimpleTestTickClock clock;
+  auto* clock_ptr = &clock;
+  ui::SetEventTickClockForTesting(clock_ptr);
+
+  auto* root_window = ash::Shell::Get()->GetPrimaryRootWindow();
+  ui::test::EventGenerator generator(root_window);
+  auto* generator_ptr = &generator;
+
+  // Touch the status tray.
+  sm_.Call([clock_ptr, generator_ptr]() {
+    const gfx::Point& tray_center = ash::Shell::Get()
                                         ->GetPrimaryRootWindowController()
                                         ->GetStatusAreaWidget()
-                                        ->unified_system_tray();
-    tray->NotifyAccessibilityEvent(ax::mojom::Event::kHover, true);
+                                        ->unified_system_tray()
+                                        ->GetBoundsInScreen()
+                                        .CenterPoint();
+
+    ui::TouchEvent touch_press(
+        ui::ET_TOUCH_PRESSED, tray_center, base::TimeTicks::Now(),
+        ui::PointerDetails(ui::EventPointerType::kTouch, 0));
+    generator_ptr->Dispatch(&touch_press);
+
+    clock_ptr->Advance(base::TimeDelta::FromSeconds(1));
+
+    ui::TouchEvent touch_move(
+        ui::ET_TOUCH_MOVED, tray_center, base::TimeTicks::Now(),
+        ui::PointerDetails(ui::EventPointerType::kTouch, 0));
+    generator_ptr->Dispatch(&touch_move);
   });
+
   sm_.ExpectSpeechPattern("Status tray, time* Battery at* percent*");
   sm_.ExpectSpeech("Button");
 
@@ -963,7 +1086,7 @@ class OobeSpokenFeedbackTest : public OobeBaseTest {
         chromeos::switches::kDisableHIDDetectionOnOOBEForTesting);
   }
 
-  SpeechMonitor sm_;
+  test::SpeechMonitor sm_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(OobeSpokenFeedbackTest);
@@ -1042,7 +1165,7 @@ class SigninToUserProfileSwitchTest : public OobeSpokenFeedbackTest {
 // user) and announces the sync consent screen correctly.
 IN_PROC_BROWSER_TEST_F(SigninToUserProfileSwitchTest, LoginAsNewUser) {
   // Force sync screen.
-  auto reset = SyncConsentScreen::ForceBrandedBuildForTesting(true);
+  auto reset = WizardController::ForceBrandedBuildForTesting(true);
   AccessibilityManager::Get()->EnableSpokenFeedback(true);
   sm_.ExpectSpeechPattern("*");
 
@@ -1050,6 +1173,14 @@ IN_PROC_BROWSER_TEST_F(SigninToUserProfileSwitchTest, LoginAsNewUser) {
     ASSERT_EQ(chromeos::AccessibilityManager::Get()->profile(),
               ProfileHelper::GetSigninProfile());
     login_manager_.LoginAsNewRegularUser();
+  });
+
+  sm_.ExpectSpeechPattern("Welcome to the ChromeVox tutorial*");
+
+  // The tutorial can be exited by pressing Escape.
+  sm_.Call([]() {
+    ASSERT_TRUE(ui_test_utils::SendKeyPressToWindowSync(
+        nullptr, ui::VKEY_ESCAPE, false, false, false, false));
   });
 
   std::string button_title =

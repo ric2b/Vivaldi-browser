@@ -12,12 +12,12 @@
 #include "build/build_config.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/core/browser/autofill_client.h"
-#include "components/autofill/core/browser/autofill_external_delegate.h"
 #include "components/autofill/core/browser/autofill_handler_proxy.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/browser/payments/payments_service_url.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/version_info/channel.h"
 #include "content/public/browser/back_forward_cache.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_controller.h"
@@ -36,13 +36,31 @@
 #include "ui/gfx/geometry/size_f.h"
 #include "url/origin.h"
 
+namespace {
+
+bool ShouldEnableHeavyFormDataScraping(const version_info::Channel channel) {
+  switch (channel) {
+    case version_info::Channel::CANARY:
+    case version_info::Channel::DEV:
+      return true;
+    case version_info::Channel::STABLE:
+    case version_info::Channel::BETA:
+    case version_info::Channel::UNKNOWN:
+      return false;
+  }
+  NOTREACHED();
+  return false;
+}
+
+}  // namespace
+
 namespace autofill {
 
 ContentAutofillDriver::ContentAutofillDriver(
     content::RenderFrameHost* render_frame_host,
     AutofillClient* client,
     const std::string& app_locale,
-    AutofillManager::AutofillDownloadManagerState enable_download_manager,
+    AutofillHandler::AutofillDownloadManagerState enable_download_manager,
     AutofillProvider* provider)
     : render_frame_host_(render_frame_host),
       autofill_manager_(nullptr),
@@ -51,10 +69,13 @@ ContentAutofillDriver::ContentAutofillDriver(
   // AutofillManager isn't used if provider is valid, Autofill provider is
   // currently used by Android WebView only.
   if (provider) {
-    SetAutofillProvider(provider);
+    SetAutofillProvider(provider, enable_download_manager);
   } else {
     SetAutofillManager(std::make_unique<AutofillManager>(
         this, client, app_locale, enable_download_manager));
+  }
+  if (client && ShouldEnableHeavyFormDataScraping(client->GetChannel())) {
+    GetAutofillAgent()->EnableHeavyFormDataScraping();
   }
 }
 
@@ -136,8 +157,10 @@ void ContentAutofillDriver::SendFormDataToRenderer(
 
 void ContentAutofillDriver::PropagateAutofillPredictions(
     const std::vector<FormStructure*>& forms) {
-  autofill_manager_->client()->PropagateAutofillPredictions(render_frame_host_,
-                                                            forms);
+  AutofillHandler* handler =
+      autofill_manager_ ? autofill_manager_ : autofill_handler_.get();
+  DCHECK(handler);
+  handler->PropagateAutofillPredictions(render_frame_host_, forms);
 }
 
 void ContentAutofillDriver::HandleParsedForms(
@@ -216,12 +239,11 @@ gfx::RectF ContentAutofillDriver::TransformBoundingBoxToViewportCoordinates(
 }
 
 net::IsolationInfo ContentAutofillDriver::IsolationInfo() {
-  return render_frame_host_->GetIsolationInfoForSubresources();
+  return render_frame_host_->GetPendingIsolationInfoForSubresources();
 }
 
-void ContentAutofillDriver::FormsSeen(const std::vector<FormData>& forms,
-                                      base::TimeTicks timestamp) {
-  autofill_handler_->OnFormsSeen(forms, timestamp);
+void ContentAutofillDriver::FormsSeen(const std::vector<FormData>& forms) {
+  autofill_handler_->OnFormsSeen(forms);
 }
 
 void ContentAutofillDriver::SetFormToBeProbablySubmitted(
@@ -334,9 +356,6 @@ void ContentAutofillDriver::SetAutofillManager(
     std::unique_ptr<AutofillManager> manager) {
   autofill_handler_ = std::move(manager);
   autofill_manager_ = static_cast<AutofillManager*>(autofill_handler_.get());
-  autofill_external_delegate_ =
-      std::make_unique<AutofillExternalDelegate>(autofill_manager_, this);
-  autofill_manager_->SetExternalDelegate(autofill_external_delegate_.get());
 }
 
 ContentAutofillDriver::ContentAutofillDriver()
@@ -381,9 +400,11 @@ void ContentAutofillDriver::RemoveHandler(
   view->GetRenderWidgetHost()->RemoveKeyPressEventCallback(handler);
 }
 
-void ContentAutofillDriver::SetAutofillProvider(AutofillProvider* provider) {
-  autofill_handler_ =
-      std::make_unique<AutofillHandlerProxy>(this, log_manager_, provider);
+void ContentAutofillDriver::SetAutofillProvider(
+    AutofillProvider* provider,
+    AutofillHandler::AutofillDownloadManagerState enable_download_manager) {
+  autofill_handler_ = std::make_unique<AutofillHandlerProxy>(
+      this, log_manager_, provider, enable_download_manager);
   GetAutofillAgent()->SetUserGestureRequired(false);
   GetAutofillAgent()->SetSecureContextRequired(true);
   GetAutofillAgent()->SetFocusRequiresScroll(false);
@@ -429,7 +450,8 @@ void ContentAutofillDriver::ReportAutofillWebOTPMetrics(
 
 void ContentAutofillDriver::SetAutofillProviderForTesting(
     AutofillProvider* provider) {
-  SetAutofillProvider(provider);
+  SetAutofillProvider(provider, AutofillHandler::AutofillDownloadManagerState::
+                                    DISABLE_AUTOFILL_DOWNLOAD_MANAGER);
   // AutofillManager isn't used if provider is valid.
   autofill_manager_ = nullptr;
 }

@@ -11,11 +11,12 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
+#include "base/containers/contains.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/optional.h"
-#include "base/stl_util.h"
 #include "base/values.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/chromeos/platform_keys/key_permissions/extension_key_permissions_service.h"
 #include "chrome/browser/chromeos/platform_keys/key_permissions/extension_key_permissions_service_factory.h"
 #include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_service.h"
@@ -40,7 +41,7 @@ namespace chromeos {
 
 namespace {
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 
 // Verify the allowlisted kKeyPermissionsInLoginScreen feature behaviors.
 bool IsExtensionAllowlisted(const extensions::Extension* extension) {
@@ -56,7 +57,7 @@ bool IsExtensionAllowlisted(const extensions::Extension* extension) {
   return key_permissions_in_login_screen->IsAvailableToExtension(extension)
       .is_available();
 }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 }  // namespace
 
@@ -163,12 +164,31 @@ class ExtensionPlatformKeysService::GenerateKeyTask : public Task {
       return;
     }
 
-    // TODO(crbug.com/1131436): Delete public key if corporate registration
-    // failed.
     LOG(ERROR) << "Corporate key registration failed: "
                << platform_keys::StatusToString(status);
+
+    service_->platform_keys_service_->RemoveKey(
+        token_id_, public_key_spki_der_,
+        base::BindOnce(&GenerateKeyTask::RemoveKeyCallback,
+                       base::Unretained(this),
+                       /*corporate_key_registration_error_status=*/status));
+  }
+
+  void RemoveKeyCallback(
+      platform_keys::Status corporate_key_registration_error_status,
+      platform_keys::Status remove_key_status) {
+    if (remove_key_status != platform_keys::Status::kSuccess) {
+      LOG(ERROR)
+          << "Failed to remove a dangling key with error: "
+          << platform_keys::StatusToString(remove_key_status)
+          << ", after failing to register key for corporate usage with error: "
+          << platform_keys::StatusToString(
+                 corporate_key_registration_error_status);
+    }
+
     next_step_ = Step::DONE;
-    callback_.Run(std::string() /* no public key */, status);
+    callback_.Run(std::string() /* no public key */,
+                  corporate_key_registration_error_status);
     DoStep();
   }
 
@@ -269,7 +289,7 @@ class ExtensionPlatformKeysService::SignTask : public Task {
            platform_keys::KeyType key_type,
            platform_keys::HashAlgorithm hash_algorithm,
            const std::string& extension_id,
-           const SignCallback& callback,
+           SignCallback callback,
            ExtensionPlatformKeysService* service)
       : token_id_(token_id),
         data_(data),
@@ -278,7 +298,7 @@ class ExtensionPlatformKeysService::SignTask : public Task {
         key_type_(key_type),
         hash_algorithm_(hash_algorithm),
         extension_id_(extension_id),
-        callback_(callback),
+        callback_(std::move(callback)),
         service_(service) {}
 
   ~SignTask() override {}
@@ -350,8 +370,9 @@ class ExtensionPlatformKeysService::SignTask : public Task {
 
   void OnCanUseKeyForSigningKnown(bool allowed) {
     if (!allowed) {
-      callback_.Run(std::string() /* no signature */,
-                    platform_keys::Status::kErrorKeyNotAllowedForSigning);
+      std::move(callback_).Run(
+          std::string() /* no signature */,
+          platform_keys::Status::kErrorKeyNotAllowedForSigning);
       next_step_ = Step::DONE;
       DoStep();
       return;
@@ -373,7 +394,7 @@ class ExtensionPlatformKeysService::SignTask : public Task {
       LOG(ERROR) << "Marking a key used for signing failed: "
                  << platform_keys::StatusToString(status);
       next_step_ = Step::DONE;
-      callback_.Run(std::string() /* no signature */, status);
+      std::move(callback_).Run(std::string() /* no signature */, status);
       DoStep();
       return;
     }
@@ -408,7 +429,7 @@ class ExtensionPlatformKeysService::SignTask : public Task {
   }
 
   void DidSign(const std::string& signature, platform_keys::Status status) {
-    callback_.Run(signature, status);
+    std::move(callback_).Run(signature, status);
     DoStep();
   }
 
@@ -425,7 +446,7 @@ class ExtensionPlatformKeysService::SignTask : public Task {
   const platform_keys::KeyType key_type_;
   const platform_keys::HashAlgorithm hash_algorithm_;
   const std::string extension_id_;
-  const SignCallback callback_;
+  SignCallback callback_;
   std::unique_ptr<platform_keys::ExtensionKeyPermissionsService>
       extension_key_permissions_service_;
   ExtensionPlatformKeysService* const service_;
@@ -795,12 +816,12 @@ void ExtensionPlatformKeysService::SignDigest(
     platform_keys::KeyType key_type,
     platform_keys::HashAlgorithm hash_algorithm,
     const std::string& extension_id,
-    const SignCallback& callback) {
+    SignCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   StartOrQueueTask(
       std::make_unique<SignTask>(token_id, data, public_key_spki_der,
                                  /*raw_pkcs1=*/false, key_type, hash_algorithm,
-                                 extension_id, callback, this));
+                                 extension_id, std::move(callback), this));
 }
 
 void ExtensionPlatformKeysService::SignRSAPKCS1Raw(
@@ -808,12 +829,13 @@ void ExtensionPlatformKeysService::SignRSAPKCS1Raw(
     const std::string& data,
     const std::string& public_key_spki_der,
     const std::string& extension_id,
-    const SignCallback& callback) {
+    SignCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   StartOrQueueTask(std::make_unique<SignTask>(
       token_id, data, public_key_spki_der,
       /*raw_pkcs1=*/true, /*key_type=*/platform_keys::KeyType::kRsassaPkcs1V15,
-      platform_keys::HASH_ALGORITHM_NONE, extension_id, callback, this));
+      platform_keys::HASH_ALGORITHM_NONE, extension_id, std::move(callback),
+      this));
 }
 
 void ExtensionPlatformKeysService::SelectClientCertificates(

@@ -388,6 +388,11 @@
                 "$ref": "history.TransitionType",
                 "optional": true,
                 "description": "The type of page transition to use when opening the tab. Specific to Vivaldi"
+              },
+              "extData": {
+                "type": "string",
+                "optional": true,
+                "description": "Ext data for the tab."
               }
             }
           }

@@ -25,8 +25,10 @@
 #include "chromeos/network/network_state_test_helper.h"
 #include "chromeos/network/network_type_pattern.h"
 #include "chromeos/network/onc/onc_utils.h"
+#include "chromeos/network/prohibited_technologies_handler.h"
 #include "chromeos/network/proxy/ui_proxy_config_service.h"
 #include "chromeos/services/network_config/public/cpp/cros_network_config_test_observer.h"
+#include "chromeos/services/network_config/public/mojom/cros_network_config.mojom-shared.h"
 #include "components/onc/onc_constants.h"
 #include "components/onc/onc_pref_names.h"
 #include "components/prefs/testing_pref_service.h"
@@ -173,11 +175,11 @@ class CrosNetworkConfigTest : public testing::Test {
         R"({"GUID": "eth_guid", "Type": "ethernet", "State": "online"})");
     wifi1_path_ = helper().ConfigureService(
         R"({"GUID": "wifi1_guid", "Type": "wifi", "State": "ready",
-            "Strength": 50, "AutoConnect": true})");
+            "Strength": 50, "AutoConnect": true, "WiFi.HiddenSSID": false})");
     helper().ConfigureService(
         R"({"GUID": "wifi2_guid", "Type": "wifi", "SSID": "wifi2",
             "State": "idle", "SecurityClass": "psk", "Strength": 100,
-            "Profile": "user_profile_path"})");
+            "Profile": "user_profile_path", "WiFi.HiddenSSID": true})");
     helper().ConfigureService(base::StringPrintf(
         R"({"GUID": "cellular_guid", "Type": "cellular",  "State": "idle",
             "Strength": 0, "Cellular.NetworkTechnology": "LTE",
@@ -485,6 +487,16 @@ class CrosNetworkConfigTest : public testing::Test {
     run_loop.Run();
   }
 
+  bool ContainsVpnDeviceState(
+      std::vector<mojom::DeviceStatePropertiesPtr> devices) {
+    for (auto& device : devices) {
+      if (device->type == mojom::NetworkType::kVPN) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   NetworkStateTestHelper& helper() { return helper_; }
   CrosNetworkConfigTestObserver* observer() { return observer_.get(); }
   CrosNetworkConfig* cros_network_config() {
@@ -538,6 +550,7 @@ TEST_F(CrosNetworkConfigTest, GetNetworkState) {
   EXPECT_EQ(mojom::SecurityType::kNone,
             network->type_state->get_wifi()->security);
   EXPECT_EQ(50, network->type_state->get_wifi()->signal_strength);
+  EXPECT_EQ(false, network->type_state->get_wifi()->hidden_ssid);
   EXPECT_EQ(mojom::OncSource::kNone, network->source);
 
   network = GetNetworkState("wifi2_guid");
@@ -551,6 +564,7 @@ TEST_F(CrosNetworkConfigTest, GetNetworkState) {
   EXPECT_EQ(mojom::SecurityType::kWpaPsk,
             network->type_state->get_wifi()->security);
   EXPECT_EQ(100, network->type_state->get_wifi()->signal_strength);
+  EXPECT_EQ(true, network->type_state->get_wifi()->hidden_ssid);
   EXPECT_EQ(mojom::OncSource::kUserPolicy, network->source);
 
   network = GetNetworkState("wifi3_guid");
@@ -682,6 +696,32 @@ TEST_F(CrosNetworkConfigTest, GetDeviceStateList) {
   ASSERT_EQ(4u, devices.size());
   EXPECT_EQ(mojom::NetworkType::kWiFi, devices[0]->type);
   EXPECT_EQ(mojom::DeviceStateType::kDisabled, devices[0]->device_state);
+}
+
+// Tests that no VPN device state is returned by GetDeviceStateList if no VPN
+// services exist and built-in VPN is not prohibited.
+TEST_F(CrosNetworkConfigTest, GetDeviceStateListNoVpnServices) {
+  helper().ClearServices();
+
+  std::vector<std::string> prohibited_technologies =
+      NetworkHandler::Get()
+          ->prohibited_technologies_handler()
+          ->GetCurrentlyProhibitedTechnologies();
+  ASSERT_FALSE(base::Contains(prohibited_technologies, shill::kTypeVPN));
+
+  EXPECT_FALSE(ContainsVpnDeviceState(GetDeviceStateList()));
+}
+
+// Tests that a VPN device state is returned by GetDeviceStateList if built-in
+// VPN is not prohibited even if no VPN services exist.
+TEST_F(CrosNetworkConfigTest, GetDeviceStateListNoVpnServicesAndVpnProhibited) {
+  helper().ClearServices();
+
+  NetworkHandler::Get()
+      ->prohibited_technologies_handler()
+      ->AddGloballyProhibitedTechnology(shill::kTypeVPN);
+
+  EXPECT_TRUE(ContainsVpnDeviceState(GetDeviceStateList()));
 }
 
 // Test a sampling of properties, ensuring that string property types are
@@ -945,6 +985,7 @@ TEST_F(CrosNetworkConfigTest, ConfigureNetwork) {
   config->name = ssid;
   auto wifi = mojom::WiFiConfigProperties::New();
   wifi->ssid = ssid;
+  wifi->hidden_ssid = mojom::HiddenSsidMode::kDisabled;
   config->type_config =
       mojom::NetworkTypeConfigProperties::NewWifi(std::move(wifi));
   std::string guid = ConfigureNetwork(std::move(config), shared);
@@ -959,6 +1000,29 @@ TEST_F(CrosNetworkConfigTest, ConfigureNetwork) {
   ASSERT_TRUE(network->type_state);
   ASSERT_TRUE(network->type_state->is_wifi());
   EXPECT_EQ(ssid, network->type_state->get_wifi()->ssid);
+  ASSERT_FALSE(network->type_state->get_wifi()->hidden_ssid);
+}
+
+TEST_F(CrosNetworkConfigTest, ConfigureNetwork_AutomaticHiddenSSID) {
+  const std::string ssid = "new_wifi_ssid";
+  auto config = mojom::ConfigProperties::New();
+  config->name = ssid;
+  auto wifi = mojom::WiFiConfigProperties::New();
+  wifi->ssid = ssid;
+  wifi->hidden_ssid = mojom::HiddenSsidMode::kAutomatic;
+  config->type_config =
+      mojom::NetworkTypeConfigProperties::NewWifi(std::move(wifi));
+  std::string guid = ConfigureNetwork(std::move(config), true);
+  EXPECT_FALSE(guid.empty());
+
+  // Verify the configuration.
+  mojom::NetworkStatePropertiesPtr network = GetNetworkState(guid);
+  ASSERT_TRUE(network);
+  EXPECT_EQ(guid, network->guid);
+
+  // For the purposes of this test, the wifi network is considered "in range"
+  // and therefore the fake platform will not set the network to hidden.
+  ASSERT_FALSE(network->type_state->get_wifi()->hidden_ssid);
 }
 
 TEST_F(CrosNetworkConfigTest, ConfigureNetworkExistingGuid) {
@@ -972,11 +1036,15 @@ TEST_F(CrosNetworkConfigTest, ConfigureNetworkExistingGuid) {
   config->name = ssid;
   auto wifi = mojom::WiFiConfigProperties::New();
   wifi->ssid = ssid;
+  wifi->hidden_ssid = mojom::HiddenSsidMode::kEnabled;
   config->type_config =
       mojom::NetworkTypeConfigProperties::NewWifi(std::move(wifi));
   std::string config_guid = ConfigureNetwork(std::move(config), shared);
   // The new guid should be the same as the existing guid.
   EXPECT_EQ(config_guid, guid);
+
+  mojom::NetworkStatePropertiesPtr network = GetNetworkState(guid);
+  ASSERT_TRUE(network->type_state->get_wifi()->hidden_ssid);
 }
 
 TEST_F(CrosNetworkConfigTest, ForgetNetwork) {

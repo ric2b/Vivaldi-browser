@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/values.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/extensions/extension_management_constants.h"
 #include "chrome/browser/extensions/external_provider_impl.h"
 #include "chrome/browser/extensions/forced_extensions/install_stage_tracker.h"
@@ -13,12 +14,13 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/prefs/pref_service.h"
 #include "extensions/browser/install/crx_install_error.h"
+#include "extensions/browser/install/sandboxed_unpacker_failure_reason.h"
 #include "extensions/browser/pref_names.h"
 #include "extensions/common/extension_urls.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "components/arc/arc_prefs.h"
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace extensions {
 
@@ -200,7 +202,14 @@ bool ForceInstalledTracker::IsMisconfiguration(
     }
   }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // REPLACED_BY_SYSTEM_APP is a misconfiguration because these apps are legacy
+  // apps and are replaced by system apps.
+  if (installation_data.failure_reason ==
+      InstallStageTracker::FailureReason::REPLACED_BY_SYSTEM_APP) {
+    return true;
+  }
+
   // REPLACED_BY_ARC_APP error is a misconfiguration if ARC++ is enabled for
   // the device.
   if (profile_->GetPrefs()->IsManagedPreference(arc::prefs::kArcEnabled) &&
@@ -209,7 +218,7 @@ bool ForceInstalledTracker::IsMisconfiguration(
           InstallStageTracker::FailureReason::REPLACED_BY_ARC_APP) {
     return true;
   }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   if (installation_data.failure_reason ==
       InstallStageTracker::FailureReason::NOT_PERFORMING_NEW_INSTALL) {

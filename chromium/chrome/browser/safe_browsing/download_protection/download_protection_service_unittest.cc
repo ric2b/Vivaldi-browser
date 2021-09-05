@@ -37,7 +37,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/enterprise/connectors/connectors_manager.h"
+#include "chrome/browser/enterprise/connectors/connectors_service.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router_factory.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/password_manager/account_password_store_factory.h"
@@ -47,7 +47,7 @@
 #include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service_factory.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_test_utils.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/test_binary_upload_service.h"
-#include "chrome/browser/safe_browsing/download_protection/check_native_file_system_write_request.h"
+#include "chrome/browser/safe_browsing/download_protection/check_file_system_access_write_request.h"
 #include "chrome/browser/safe_browsing/download_protection/download_feedback_service.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
 #include "chrome/browser/safe_browsing/download_protection/ppapi_download_request.h"
@@ -109,7 +109,7 @@
 
 using base::RunLoop;
 using content::BrowserThread;
-using content::NativeFileSystemWriteItem;
+using content::FileSystemAccessWriteItem;
 using ::testing::_;
 using ::testing::Assign;
 using ::testing::ContainerEq;
@@ -333,8 +333,8 @@ class DownloadProtectionServiceTestBase
             base::BindRepeating(
                 &DownloadProtectionServiceTestBase::OnPPAPIDownloadRequest,
                 base::Unretained(this)));
-    native_file_system_write_request_subscription_ =
-        download_service_->RegisterNativeFileSystemWriteRequestCallback(
+    file_system_access_write_request_subscription_ =
+        download_service_->RegisterFileSystemAccessWriteRequestCallback(
             base::BindRepeating(
                 &DownloadProtectionServiceTestBase::OnPPAPIDownloadRequest,
                 base::Unretained(this)));
@@ -371,16 +371,12 @@ class DownloadProtectionServiceTestBase
 
     identity_test_env_adaptor_ =
         std::make_unique<IdentityTestEnvironmentProfileAdaptor>(profile());
-
-    enterprise_connectors::ConnectorsManager::GetInstance()->SetUpForTesting();
   }
 
   void TearDown() override {
-    enterprise_connectors::ConnectorsManager::GetInstance()
-        ->TearDownForTesting();
-    client_download_request_subscription_.reset();
-    ppapi_download_request_subscription_.reset();
-    native_file_system_write_request_subscription_.reset();
+    client_download_request_subscription_ = {};
+    ppapi_download_request_subscription_ = {};
+    file_system_access_write_request_subscription_ = {};
     sb_service_->ShutDown();
     // Flush all of the thread message loops to ensure that there are no
     // tasks currently running.
@@ -557,24 +553,24 @@ class DownloadProtectionServiceTestBase
     EXPECT_CALL(*item, GetRemoteAddress()).WillRepeatedly(Return(""));
   }
 
-  std::unique_ptr<NativeFileSystemWriteItem>
-  PrepareBasicNativeFileSystemWriteItem(
+  std::unique_ptr<FileSystemAccessWriteItem>
+  PrepareBasicFileSystemAccessWriteItem(
       const base::FilePath::StringType& tmp_path_literal,
       const base::FilePath::StringType& final_path_literal) {
     base::FilePath tmp_path = temp_dir_.GetPath().Append(tmp_path_literal);
     base::FilePath final_path = temp_dir_.GetPath().Append(final_path_literal);
-    return PrepareBasicNativeFileSystemWriteItemWithFullPaths(tmp_path,
+    return PrepareBasicFileSystemAccessWriteItemWithFullPaths(tmp_path,
                                                               final_path);
   }
 
-  std::unique_ptr<NativeFileSystemWriteItem>
-  PrepareBasicNativeFileSystemWriteItemWithFullPaths(
+  std::unique_ptr<FileSystemAccessWriteItem>
+  PrepareBasicFileSystemAccessWriteItemWithFullPaths(
       const base::FilePath& tmp_path,
       const base::FilePath& final_path) {
     tmp_path_ = tmp_path;
     final_path_ = final_path;
     hash_ = "hash";
-    auto result = std::make_unique<NativeFileSystemWriteItem>();
+    auto result = std::make_unique<FileSystemAccessWriteItem>();
     result->target_file_path = final_path;
     result->full_path = tmp_path;
     result->sha256_hash = hash_;
@@ -586,9 +582,9 @@ class DownloadProtectionServiceTestBase
     return result;
   }
 
-  std::unique_ptr<NativeFileSystemWriteItem> CloneNativeFileSystemWriteItem(
-      NativeFileSystemWriteItem* in) {
-    auto result = std::make_unique<NativeFileSystemWriteItem>();
+  std::unique_ptr<FileSystemAccessWriteItem> CloneFileSystemAccessWriteItem(
+      FileSystemAccessWriteItem* in) {
+    auto result = std::make_unique<FileSystemAccessWriteItem>();
     result->target_file_path = in->target_file_path;
     result->full_path = in->full_path;
     result->sha256_hash = in->sha256_hash;
@@ -716,10 +712,9 @@ class DownloadProtectionServiceTestBase
   std::unique_ptr<content::InProcessUtilityThreadHelper>
       in_process_utility_thread_helper_;
   base::FilePath testdata_path_;
-  ClientDownloadRequestSubscription client_download_request_subscription_;
-  PPAPIDownloadRequestSubscription ppapi_download_request_subscription_;
-  NativeFileSystemWriteRequestSubscription
-      native_file_system_write_request_subscription_;
+  base::CallbackListSubscription client_download_request_subscription_;
+  base::CallbackListSubscription ppapi_download_request_subscription_;
+  base::CallbackListSubscription file_system_access_write_request_subscription_;
   std::unique_ptr<ClientDownloadRequest> last_client_download_request_;
   // The following 5 fields are used by PrepareBasicDownloadItem() function to
   // store attributes of the last download item. They can be modified
@@ -2253,6 +2248,11 @@ TEST_F(DownloadProtectionServiceTest, TestCheckDownloadUrl) {
   EXPECT_CALL(item, GetReferrerUrl()).WillRepeatedly(ReturnRef(referrer));
   EXPECT_CALL(item, GetHash()).WillRepeatedly(ReturnRef(hash));
 
+  std::unique_ptr<content::WebContents> web_contents(
+      content::WebContentsTester::CreateTestWebContents(profile(), nullptr));
+  content::DownloadItemUtils::AttachInfo(&item, profile(), web_contents.get());
+  profile()->GetPrefs()->SetBoolean(prefs::kSafeBrowsingEnabled, true);
+
   {
     // CheckDownloadURL returns immediately which means the client object
     // callback will never be called.  Nevertheless the callback provided
@@ -2702,7 +2702,7 @@ TEST_F(DownloadProtectionServiceTest,
       default_file_path, alternate_extensions, profile(),
       base::BindOnce(&DownloadProtectionServiceTest::SyncCheckDoneCallback,
                      base::Unretained(this)));
-  ASSERT_TRUE(IsResult(DownloadCheckResult::WHITELISTED_BY_POLICY));
+  ASSERT_TRUE(IsResult(DownloadCheckResult::ALLOWLISTED_BY_POLICY));
 }
 
 TEST_F(DownloadProtectionServiceTest,
@@ -2801,7 +2801,7 @@ TEST_F(DownloadProtectionServiceTest, CheckClientDownloadWhitelistedByPolicy) {
   run_loop.Run();
 
   EXPECT_FALSE(HasClientDownloadRequest());
-  EXPECT_TRUE(IsResult(DownloadCheckResult::WHITELISTED_BY_POLICY));
+  EXPECT_TRUE(IsResult(DownloadCheckResult::ALLOWLISTED_BY_POLICY));
 }
 
 TEST_F(DownloadProtectionServiceTest, CheckOffTheRecordDoesNotSendFeedback) {
@@ -3016,7 +3016,8 @@ TEST_P(DeepScanningDownloadTest, PasswordProtectedArchivesBlockedByPreference) {
       enterprise_connectors::ContentAnalysisResponse());
 
   {
-    SetAnalysisConnector(enterprise_connectors::FILE_DOWNLOADED, R"(
+    SetAnalysisConnector(profile()->GetPrefs(),
+                         enterprise_connectors::FILE_DOWNLOADED, R"(
                          {
                            "service_provider": "google",
                            "enable": [
@@ -3037,7 +3038,8 @@ TEST_P(DeepScanningDownloadTest, PasswordProtectedArchivesBlockedByPreference) {
   }
 
   {
-    SetAnalysisConnector(enterprise_connectors::FILE_DOWNLOADED, R"(
+    SetAnalysisConnector(profile()->GetPrefs(),
+                         enterprise_connectors::FILE_DOWNLOADED, R"(
                          {
                            "service_provider": "google",
                            "enable": [
@@ -3089,7 +3091,8 @@ TEST_P(DeepScanningDownloadTest, LargeFileBlockedByPreference) {
       enterprise_connectors::ContentAnalysisResponse());
 
   {
-    SetAnalysisConnector(enterprise_connectors::FILE_DOWNLOADED, R"(
+    SetAnalysisConnector(profile()->GetPrefs(),
+                         enterprise_connectors::FILE_DOWNLOADED, R"(
                          {
                            "service_provider": "google",
                            "enable": [
@@ -3110,7 +3113,8 @@ TEST_P(DeepScanningDownloadTest, LargeFileBlockedByPreference) {
   }
 
   {
-    SetAnalysisConnector(enterprise_connectors::FILE_DOWNLOADED, R"(
+    SetAnalysisConnector(profile()->GetPrefs(),
+                         enterprise_connectors::FILE_DOWNLOADED, R"(
                          {
                            "service_provider": "google",
                            "enable": [
@@ -3169,7 +3173,8 @@ TEST_P(DeepScanningDownloadTest, UnsupportedFiletypeBlockedByPreference) {
       .Times(2);
 
   {
-    SetAnalysisConnector(enterprise_connectors::FILE_DOWNLOADED, R"(
+    SetAnalysisConnector(profile()->GetPrefs(),
+                         enterprise_connectors::FILE_DOWNLOADED, R"(
                          {
                            "service_provider": "google",
                            "enable": [
@@ -3190,7 +3195,8 @@ TEST_P(DeepScanningDownloadTest, UnsupportedFiletypeBlockedByPreference) {
   }
 
   {
-    SetAnalysisConnector(enterprise_connectors::FILE_DOWNLOADED, R"(
+    SetAnalysisConnector(profile()->GetPrefs(),
+                         enterprise_connectors::FILE_DOWNLOADED, R"(
                          {
                            "service_provider": "google",
                            "enable": [
@@ -3212,13 +3218,13 @@ TEST_P(DeepScanningDownloadTest, UnsupportedFiletypeBlockedByPreference) {
   }
 }
 
-TEST_F(DownloadProtectionServiceTest, NativeFileSystemWriteRequest_NotABinary) {
-  auto item = PrepareBasicNativeFileSystemWriteItem(
-      /*tmp_path=*/FILE_PATH_LITERAL("a.txt.crswap"),
-      /*final_path=*/FILE_PATH_LITERAL("a.txt"));
+TEST_F(DownloadProtectionServiceTest, FileSystemAccessWriteRequest_NotABinary) {
+  auto item = PrepareBasicFileSystemAccessWriteItem(
+      /*tmp_path_literal=*/FILE_PATH_LITERAL("a.txt.crswap"),
+      /*final_path_literal=*/FILE_PATH_LITERAL("a.txt"));
 
   RunLoop run_loop;
-  download_service_->CheckNativeFileSystemWrite(
+  download_service_->CheckFileSystemAccessWrite(
       std::move(item),
       base::BindOnce(&DownloadProtectionServiceTest::CheckDoneCallback,
                      base::Unretained(this), run_loop.QuitClosure()));
@@ -3228,13 +3234,13 @@ TEST_F(DownloadProtectionServiceTest, NativeFileSystemWriteRequest_NotABinary) {
 }
 
 TEST_F(DownloadProtectionServiceTest,
-       NativeFileSystemWriteRequest_SampledFile) {
+       FileSystemAccessWriteRequest_SampledFile) {
   // Server response will be discarded.
   PrepareResponse(ClientDownloadResponse::DANGEROUS, net::HTTP_OK, net::OK);
 
-  auto item = PrepareBasicNativeFileSystemWriteItem(
-      /*tmp_path=*/FILE_PATH_LITERAL("a.txt.crswap"),
-      /*final_path=*/FILE_PATH_LITERAL("a.txt"));
+  auto item = PrepareBasicFileSystemAccessWriteItem(
+      /*tmp_path_literal=*/FILE_PATH_LITERAL("a.txt.crswap"),
+      /*final_path_literal=*/FILE_PATH_LITERAL("a.txt"));
 
   EXPECT_CALL(*binary_feature_extractor_.get(), CheckSignature(tmp_path_, _))
       .Times(1);
@@ -3254,7 +3260,7 @@ TEST_F(DownloadProtectionServiceTest,
     item->browser_context = profile()->GetPrimaryOTRProfile();
 
     RunLoop run_loop;
-    download_service_->CheckNativeFileSystemWrite(
+    download_service_->CheckFileSystemAccessWrite(
         std::move(item),
         base::BindOnce(&DownloadProtectionServiceTest::CheckDoneCallback,
                        base::Unretained(this), run_loop.QuitClosure()));
@@ -3265,11 +3271,11 @@ TEST_F(DownloadProtectionServiceTest,
   {
     // Case (2): is_extended_reporting && !is_incognito.
     //           A "light" ClientDownloadRequest should be sent.
-    item = PrepareBasicNativeFileSystemWriteItem(
-        /*tmp_path=*/FILE_PATH_LITERAL("a.txt.crswap"),
-        /*final_path=*/FILE_PATH_LITERAL("a.txt"));
+    item = PrepareBasicFileSystemAccessWriteItem(
+        /*tmp_path_literal=*/FILE_PATH_LITERAL("a.txt.crswap"),
+        /*final_path_literal=*/FILE_PATH_LITERAL("a.txt"));
     RunLoop run_loop;
-    download_service_->CheckNativeFileSystemWrite(
+    download_service_->CheckFileSystemAccessWrite(
         std::move(item),
         base::BindOnce(&DownloadProtectionServiceTest::CheckDoneCallback,
                        base::Unretained(this), run_loop.QuitClosure()));
@@ -3293,13 +3299,13 @@ TEST_F(DownloadProtectionServiceTest,
     // Case (3): !is_extended_reporting && is_incognito.
     //           ClientDownloadRequest should NOT be sent.
     SetExtendedReportingPreference(false);
-    item = PrepareBasicNativeFileSystemWriteItem(
-        /*tmp_path=*/FILE_PATH_LITERAL("a.txt.crswap"),
-        /*final_path=*/FILE_PATH_LITERAL("a.txt"));
+    item = PrepareBasicFileSystemAccessWriteItem(
+        /*tmp_path_literal=*/FILE_PATH_LITERAL("a.txt.crswap"),
+        /*final_path_literal=*/FILE_PATH_LITERAL("a.txt"));
     item->browser_context = profile()->GetPrimaryOTRProfile();
 
     RunLoop run_loop;
-    download_service_->CheckNativeFileSystemWrite(
+    download_service_->CheckFileSystemAccessWrite(
         std::move(item),
         base::BindOnce(&DownloadProtectionServiceTest::CheckDoneCallback,
                        base::Unretained(this), run_loop.QuitClosure()));
@@ -3310,11 +3316,11 @@ TEST_F(DownloadProtectionServiceTest,
   {
     // Case (4): !is_extended_reporting && !is_incognito.
     //           ClientDownloadRequest should NOT be sent.
-    item = PrepareBasicNativeFileSystemWriteItem(
-        /*tmp_path=*/FILE_PATH_LITERAL("a.txt.crswap"),
-        /*final_path=*/FILE_PATH_LITERAL("a.txt"));
+    item = PrepareBasicFileSystemAccessWriteItem(
+        /*tmp_path_literal=*/FILE_PATH_LITERAL("a.txt.crswap"),
+        /*final_path_literal=*/FILE_PATH_LITERAL("a.txt"));
     RunLoop run_loop;
-    download_service_->CheckNativeFileSystemWrite(
+    download_service_->CheckFileSystemAccessWrite(
         std::move(item),
         base::BindOnce(&DownloadProtectionServiceTest::CheckDoneCallback,
                        base::Unretained(this), run_loop.QuitClosure()));
@@ -3325,14 +3331,14 @@ TEST_F(DownloadProtectionServiceTest,
 }
 
 TEST_F(DownloadProtectionServiceTest,
-       NativeFileSystemWriteRequest_FetchFailed) {
+       FileSystemAccessWriteRequest_FetchFailed) {
   // HTTP request will fail.
   PrepareResponse(ClientDownloadResponse::SAFE, net::HTTP_INTERNAL_SERVER_ERROR,
                   net::ERR_FAILED);
 
-  auto item = PrepareBasicNativeFileSystemWriteItem(
-      /*tmp_path=*/FILE_PATH_LITERAL("a.exe.crswap"),
-      /*final_path=*/FILE_PATH_LITERAL("a.exe"));
+  auto item = PrepareBasicFileSystemAccessWriteItem(
+      /*tmp_path_literal=*/FILE_PATH_LITERAL("a.exe.crswap"),
+      /*final_path_literal=*/FILE_PATH_LITERAL("a.exe"));
 
   EXPECT_CALL(*sb_service_->mock_database_manager(),
               MatchDownloadWhitelistUrl(_))
@@ -3342,7 +3348,7 @@ TEST_F(DownloadProtectionServiceTest,
               ExtractImageFeatures(
                   tmp_path_, BinaryFeatureExtractor::kDefaultOptions, _, _));
   RunLoop run_loop;
-  download_service_->CheckNativeFileSystemWrite(
+  download_service_->CheckFileSystemAccessWrite(
       std::move(item),
       base::BindOnce(&DownloadProtectionServiceTest::CheckDoneCallback,
                      base::Unretained(this), run_loop.QuitClosure()));
@@ -3350,12 +3356,12 @@ TEST_F(DownloadProtectionServiceTest,
   EXPECT_TRUE(IsResult(DownloadCheckResult::UNKNOWN));
 }
 
-TEST_F(DownloadProtectionServiceTest, NativeFileSystemWriteRequest_Success) {
+TEST_F(DownloadProtectionServiceTest, FileSystemAccessWriteRequest_Success) {
   PrepareResponse(ClientDownloadResponse::SAFE, net::HTTP_OK, net::OK);
 
-  auto item = PrepareBasicNativeFileSystemWriteItem(
-      /*tmp_path=*/FILE_PATH_LITERAL("a.exe.crswap"),
-      /*final_path=*/FILE_PATH_LITERAL("a.exe"));
+  auto item = PrepareBasicFileSystemAccessWriteItem(
+      /*tmp_path_literal=*/FILE_PATH_LITERAL("a.exe.crswap"),
+      /*final_path_literal=*/FILE_PATH_LITERAL("a.exe"));
 
   EXPECT_CALL(*sb_service_->mock_database_manager(),
               MatchDownloadWhitelistUrl(_))
@@ -3370,8 +3376,8 @@ TEST_F(DownloadProtectionServiceTest, NativeFileSystemWriteRequest_Success) {
 
   {
     RunLoop run_loop;
-    download_service_->CheckNativeFileSystemWrite(
-        CloneNativeFileSystemWriteItem(item.get()),
+    download_service_->CheckFileSystemAccessWrite(
+        CloneFileSystemAccessWriteItem(item.get()),
         base::BindOnce(&DownloadProtectionServiceTest::CheckDoneCallback,
                        base::Unretained(this), run_loop.QuitClosure()));
     run_loop.Run();
@@ -3386,8 +3392,8 @@ TEST_F(DownloadProtectionServiceTest, NativeFileSystemWriteRequest_Success) {
         PPAPIDownloadRequest::GetDownloadRequestUrl().spec(),
         invalid_response.SerializePartialAsString());
     RunLoop run_loop;
-    download_service_->CheckNativeFileSystemWrite(
-        CloneNativeFileSystemWriteItem(item.get()),
+    download_service_->CheckFileSystemAccessWrite(
+        CloneFileSystemAccessWriteItem(item.get()),
         base::BindOnce(&DownloadProtectionServiceTest::CheckDoneCallback,
                        base::Unretained(this), run_loop.QuitClosure()));
     run_loop.Run();
@@ -3412,8 +3418,8 @@ TEST_F(DownloadProtectionServiceTest, NativeFileSystemWriteRequest_Success) {
   for (const auto& test_case : kExpectedResults) {
     PrepareResponse(test_case.verdict, net::HTTP_OK, net::OK);
     RunLoop run_loop;
-    download_service_->CheckNativeFileSystemWrite(
-        CloneNativeFileSystemWriteItem(item.get()),
+    download_service_->CheckFileSystemAccessWrite(
+        CloneFileSystemAccessWriteItem(item.get()),
         base::BindOnce(&DownloadProtectionServiceTest::CheckDoneCallback,
                        base::Unretained(this), run_loop.QuitClosure()));
     run_loop.Run();
@@ -3424,14 +3430,14 @@ TEST_F(DownloadProtectionServiceTest, NativeFileSystemWriteRequest_Success) {
 }
 
 TEST_F(DownloadProtectionServiceTest,
-       NativeFileSystemWriteRequest_WhitelistedByPolicy) {
+       FileSystemAccessWriteRequest_WhitelistedByPolicy) {
   AddDomainToEnterpriseWhitelist("example.com");
 
-  auto item = PrepareBasicNativeFileSystemWriteItem(
-      /*tmp_path=*/FILE_PATH_LITERAL("a.txt.crswap"),
-      /*final_path=*/FILE_PATH_LITERAL("a.txt"));
+  auto item = PrepareBasicFileSystemAccessWriteItem(
+      /*tmp_path_literal=*/FILE_PATH_LITERAL("a.txt.crswap"),
+      /*final_path_literal=*/FILE_PATH_LITERAL("a.txt"));
   item->frame_url = GURL("https://example.com/foo");
-  download_service_->CheckNativeFileSystemWrite(
+  download_service_->CheckFileSystemAccessWrite(
       std::move(item),
       base::BindOnce(&DownloadProtectionServiceTest::SyncCheckDoneCallback,
                      base::Unretained(this)));
@@ -3439,14 +3445,14 @@ TEST_F(DownloadProtectionServiceTest,
   // be posted.
   EXPECT_FALSE(has_result_);
   base::RunLoop().RunUntilIdle();
-  ASSERT_TRUE(IsResult(DownloadCheckResult::WHITELISTED_BY_POLICY));
+  ASSERT_TRUE(IsResult(DownloadCheckResult::ALLOWLISTED_BY_POLICY));
 }
 
 TEST_F(DownloadProtectionServiceTest,
-       NativeFileSystemWriteRequest_CheckRequest) {
-  auto item = PrepareBasicNativeFileSystemWriteItem(
-      /*tmp_path=*/FILE_PATH_LITERAL("a.exe.crswap"),
-      /*final_path=*/FILE_PATH_LITERAL("a.exe"));
+       FileSystemAccessWriteRequest_CheckRequest) {
+  auto item = PrepareBasicFileSystemAccessWriteItem(
+      /*tmp_path_literal=*/FILE_PATH_LITERAL("a.exe.crswap"),
+      /*final_path_literal=*/FILE_PATH_LITERAL("a.exe"));
   item->frame_url = GURL("http://www.google.com/");
 
   GURL tab_url("http://tab.com/final");
@@ -3484,8 +3490,8 @@ TEST_F(DownloadProtectionServiceTest,
     PrepareResponse(ClientDownloadResponse::SAFE, net::HTTP_OK, net::OK);
 
     RunLoop run_loop;
-    download_service_->CheckNativeFileSystemWrite(
-        CloneNativeFileSystemWriteItem(item.get()),
+    download_service_->CheckFileSystemAccessWrite(
+        CloneFileSystemAccessWriteItem(item.get()),
         base::BindOnce(&DownloadProtectionServiceTest::CheckDoneCallback,
                        base::Unretained(this), run_loop.QuitClosure()));
     interceptor_run_loop.Run();
@@ -3495,7 +3501,7 @@ TEST_F(DownloadProtectionServiceTest,
 
     ClientDownloadRequest request;
     EXPECT_TRUE(request.ParseFromString(upload_data));
-    EXPECT_EQ("blob:http://www.google.com/native-file-system-write",
+    EXPECT_EQ("blob:http://www.google.com/file-system-access-write",
               request.url());
     EXPECT_EQ(hash_, request.digests().sha256());
     EXPECT_EQ(item->size, request.length());
@@ -3503,7 +3509,7 @@ TEST_F(DownloadProtectionServiceTest,
     EXPECT_EQ(2, request.resources_size());
     EXPECT_TRUE(RequestContainsResource(
         request, ClientDownloadRequest::DOWNLOAD_URL,
-        "blob:http://www.google.com/native-file-system-write",
+        "blob:http://www.google.com/file-system-access-write",
         referrer_.spec()));
     EXPECT_TRUE(RequestContainsResource(request, ClientDownloadRequest::TAB_URL,
                                         tab_url.spec(), tab_referrer.spec()));
@@ -3553,8 +3559,8 @@ TEST_F(DownloadProtectionServiceTest,
     PrepareResponse(ClientDownloadResponse::SAFE, net::HTTP_OK, net::OK);
 
     RunLoop run_loop;
-    download_service_->CheckNativeFileSystemWrite(
-        CloneNativeFileSystemWriteItem(item.get()),
+    download_service_->CheckFileSystemAccessWrite(
+        CloneFileSystemAccessWriteItem(item.get()),
         base::BindOnce(&DownloadProtectionServiceTest::CheckDoneCallback,
                        base::Unretained(this), run_loop.QuitClosure()));
     interceptor_run_loop.Run();
@@ -3563,7 +3569,7 @@ TEST_F(DownloadProtectionServiceTest,
     ClearClientDownloadRequest();
     ClientDownloadRequest request;
     EXPECT_TRUE(request.ParseFromString(upload_data));
-    EXPECT_EQ("blob:http://www.google.com/native-file-system-write",
+    EXPECT_EQ("blob:http://www.google.com/file-system-access-write",
               request.url());
     EXPECT_EQ(hash_, request.digests().sha256());
     EXPECT_EQ(item->size, request.length());
@@ -3571,7 +3577,7 @@ TEST_F(DownloadProtectionServiceTest,
     EXPECT_EQ(4, request.resources_size());
     EXPECT_TRUE(RequestContainsResource(
         request, ClientDownloadRequest::DOWNLOAD_URL,
-        "blob:http://www.google.com/native-file-system-write",
+        "blob:http://www.google.com/file-system-access-write",
         referrer_.spec()));
     EXPECT_TRUE(RequestContainsResource(request,
                                         ClientDownloadRequest::TAB_REDIRECT,
@@ -3898,7 +3904,8 @@ TEST_P(DeepScanningDownloadTest, PolicyEnabled) {
               ExtractImageFeatures(
                   tmp_path_, BinaryFeatureExtractor::kDefaultOptions, _, _));
 
-  SetAnalysisConnector(enterprise_connectors::FILE_DOWNLOADED,
+  SetAnalysisConnector(profile()->GetPrefs(),
+                       enterprise_connectors::FILE_DOWNLOADED,
                        R"({
                             "service_provider": "google",
                             "enable": [
@@ -3953,7 +3960,8 @@ TEST_P(DeepScanningDownloadTest, PolicyDisabled) {
               ExtractImageFeatures(
                   tmp_path_, BinaryFeatureExtractor::kDefaultOptions, _, _));
 
-  ClearAnalysisConnector(enterprise_connectors::FILE_DOWNLOADED);
+  ClearAnalysisConnector(profile()->GetPrefs(),
+                         enterprise_connectors::FILE_DOWNLOADED);
 
   TestBinaryUploadService* test_upload_service =
       static_cast<TestBinaryUploadService*>(
@@ -4000,7 +4008,8 @@ TEST_P(DeepScanningDownloadTest, SafeVerdictPrecedence) {
                 ExtractImageFeatures(
                     tmp_path_, BinaryFeatureExtractor::kDefaultOptions, _, _));
 
-    SetAnalysisConnector(enterprise_connectors::FILE_DOWNLOADED, R"(
+    SetAnalysisConnector(profile()->GetPrefs(),
+                         enterprise_connectors::FILE_DOWNLOADED, R"(
                          {
                            "service_provider": "google",
                            "enable": [
@@ -4033,5 +4042,120 @@ TEST_P(DeepScanningDownloadTest, SafeVerdictPrecedence) {
 }
 
 INSTANTIATE_TEST_SUITE_P(, DeepScanningDownloadTest, testing::Bool());
+
+// Test fixture with the enterprise CSD checks either enabled or disabled.
+class EnterpriseCsdDownloadTest : public DownloadProtectionServiceTestBase,
+                                  public ::testing::WithParamInterface<bool> {
+ public:
+  EnterpriseCsdDownloadTest() {
+    // Enable the feature early to prevent race condition trying to access
+    // the enabled features set.  This happens for example when the history
+    // service is started below.
+    if (flag_enabled())
+      EnableFeatures({kSafeBrowsingEnterpriseCsd,
+                      kSafeBrowsingDisableConsumerCsdForEnterprise});
+    else
+      DisableFeatures({kSafeBrowsingEnterpriseCsd,
+                       kSafeBrowsingDisableConsumerCsdForEnterprise});
+  }
+
+  bool flag_enabled() const { return GetParam(); }
+};
+
+TEST_P(EnterpriseCsdDownloadTest, SkipsConsumerCsdWhenEnabled) {
+  NiceMockDownloadItem item;
+  PrepareBasicDownloadItem(&item, {"http://www.evil.com/a.exe"},  // url_chain
+                           "http://www.google.com/",              // referrer
+                           FILE_PATH_LITERAL("a.tmp"),            // tmp_path
+                           FILE_PATH_LITERAL("a.exe"));           // final_path
+  content::DownloadItemUtils::AttachInfo(&item, profile(), nullptr);
+
+  if (!flag_enabled()) {
+    EXPECT_CALL(*sb_service_->mock_database_manager(),
+                MatchDownloadWhitelistUrl(_))
+        .WillRepeatedly(Return(false));
+    EXPECT_CALL(*binary_feature_extractor_.get(), CheckSignature(tmp_path_, _));
+    EXPECT_CALL(*binary_feature_extractor_.get(),
+                ExtractImageFeatures(
+                    tmp_path_, BinaryFeatureExtractor::kDefaultOptions, _, _));
+  }
+
+  SetAnalysisConnector(profile()->GetPrefs(),
+                       enterprise_connectors::FILE_DOWNLOADED, R"(
+                         {
+                           "service_provider": "google",
+                           "enable": [
+                             {"url_list": ["*"], "tags": ["malware"]}
+                           ]
+                         })");
+
+  TestBinaryUploadService* test_upload_service =
+      static_cast<TestBinaryUploadService*>(
+          BinaryUploadServiceFactory::GetForProfile(profile()));
+
+  PrepareResponse(ClientDownloadResponse::SAFE, net::HTTP_OK, net::OK);
+  test_upload_service->SetResponse(
+      BinaryUploadService::Result::SUCCESS,
+      enterprise_connectors::ContentAnalysisResponse());
+
+  RunLoop run_loop;
+  download_service_->MaybeCheckClientDownload(
+      &item,
+      base::BindRepeating(&DownloadProtectionServiceTest::CheckDoneCallback,
+                          base::Unretained(this), run_loop.QuitClosure()));
+  run_loop.Run();
+
+  EXPECT_EQ(HasClientDownloadRequest(), !flag_enabled());
+  EXPECT_TRUE(test_upload_service->was_called());
+}
+
+TEST_P(EnterpriseCsdDownloadTest, PopulatesCsdFieldWhenEnabled) {
+  NiceMockDownloadItem item;
+  PrepareBasicDownloadItem(&item, {"http://www.evil.com/a.exe"},  // url_chain
+                           "http://www.google.com/",              // referrer
+                           FILE_PATH_LITERAL("a.tmp"),            // tmp_path
+                           FILE_PATH_LITERAL("a.exe"));           // final_path
+  content::DownloadItemUtils::AttachInfo(&item, profile(), nullptr);
+  if (!flag_enabled()) {
+    EXPECT_CALL(*sb_service_->mock_database_manager(),
+                MatchDownloadWhitelistUrl(_))
+        .WillRepeatedly(Return(false));
+    EXPECT_CALL(*binary_feature_extractor_.get(), CheckSignature(tmp_path_, _));
+    EXPECT_CALL(*binary_feature_extractor_.get(),
+                ExtractImageFeatures(
+                    tmp_path_, BinaryFeatureExtractor::kDefaultOptions, _, _));
+  }
+
+  SetAnalysisConnector(profile()->GetPrefs(),
+                       enterprise_connectors::FILE_DOWNLOADED,
+                       R"({
+                           "service_provider": "google",
+                           "enable": [
+                             {"url_list": ["*"], "tags": ["malware"]}
+                           ]
+                         })");
+
+  TestBinaryUploadService* test_upload_service =
+      static_cast<TestBinaryUploadService*>(
+          BinaryUploadServiceFactory::GetForProfile(profile()));
+
+  PrepareResponse(ClientDownloadResponse::SAFE, net::HTTP_OK, net::OK);
+  test_upload_service->SetResponse(
+      BinaryUploadService::Result::SUCCESS,
+      enterprise_connectors::ContentAnalysisResponse());
+
+  RunLoop run_loop;
+  download_service_->MaybeCheckClientDownload(
+      &item,
+      base::BindRepeating(&DownloadProtectionServiceTest::CheckDoneCallback,
+                          base::Unretained(this), run_loop.QuitClosure()));
+  run_loop.Run();
+
+  EXPECT_TRUE(test_upload_service->was_called());
+  EXPECT_EQ(test_upload_service->last_request().request_data().has_csd(),
+            flag_enabled());
+}
+
+INSTANTIATE_TEST_SUITE_P(, EnterpriseCsdDownloadTest, testing::Bool());
 
 }  // namespace safe_browsing

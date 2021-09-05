@@ -125,8 +125,9 @@ struct ServiceWorkerUserData {
 // Currently this is consumed and implemented in the browser process, but the
 // implementation will eventually live in the Storage Service.
 interface ServiceWorkerStorageControl {
-  // Disables the storage.
-  Disable();
+  // Disables the storage. The callback is invoked after the storage is
+  // disabled.
+  Disable() => ();
 
   // Deletes the whole storage.
   Delete() => (ServiceWorkerDatabaseStatus status);
@@ -287,7 +288,8 @@ interface ServiceWorkerStorageControl {
 
   // Applies changes to data retention policy which are relevant at shutdown.
   // This is analogous to LocalStorageControl::ApplyPolicyUpdates.
-  ApplyPolicyUpdates(array<LocalStoragePolicyUpdate> policy_updates);
+  ApplyPolicyUpdates(array<LocalStoragePolicyUpdate> policy_updates) =>
+      (ServiceWorkerDatabaseStatus status);
 
   // Get resource ids which are scheduled to purge.
   GetPurgingResourceIdsForTest() => (ServiceWorkerDatabaseStatus status,

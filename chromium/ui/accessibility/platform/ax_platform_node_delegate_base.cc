@@ -160,6 +160,14 @@ bool AXPlatformNodeDelegateBase::IsLeaf() const {
   return !GetChildCount();
 }
 
+bool AXPlatformNodeDelegateBase::IsFocused() const {
+  return false;
+}
+
+bool AXPlatformNodeDelegateBase::IsInvisibleOrIgnored() const {
+  return false;
+}
+
 bool AXPlatformNodeDelegateBase::IsToplevelBrowserWindow() {
   return false;
 }
@@ -313,7 +321,7 @@ gfx::NativeViewAccessible AXPlatformNodeDelegateBase::HitTestSync(
   return nullptr;
 }
 
-gfx::NativeViewAccessible AXPlatformNodeDelegateBase::GetFocus() {
+gfx::NativeViewAccessible AXPlatformNodeDelegateBase::GetFocus() const {
   return nullptr;
 }
 
@@ -439,13 +447,23 @@ base::Optional<int> AXPlatformNodeDelegateBase::GetTableCellRowSpan() const {
 
 base::Optional<int> AXPlatformNodeDelegateBase::GetTableCellAriaColIndex()
     const {
-  return GetData().GetIntAttribute(
-      ax::mojom::IntAttribute::kAriaCellColumnIndex);
+  if (GetData().HasIntAttribute(
+          ax::mojom::IntAttribute::kAriaCellColumnIndex)) {
+    return GetData().GetIntAttribute(
+        ax::mojom::IntAttribute::kAriaCellColumnIndex);
+  }
+
+  return base::nullopt;
 }
 
 base::Optional<int> AXPlatformNodeDelegateBase::GetTableCellAriaRowIndex()
     const {
-  return GetData().GetIntAttribute(ax::mojom::IntAttribute::kAriaCellRowIndex);
+  if (GetData().HasIntAttribute(ax::mojom::IntAttribute::kAriaCellRowIndex)) {
+    return GetData().GetIntAttribute(
+        ax::mojom::IntAttribute::kAriaCellRowIndex);
+  }
+
+  return base::nullopt;
 }
 
 base::Optional<int32_t> AXPlatformNodeDelegateBase::GetCellId(
@@ -553,7 +571,7 @@ bool AXPlatformNodeDelegateBase::IsWebContent() const {
 }
 
 bool AXPlatformNodeDelegateBase::HasVisibleCaretOrSelection() const {
-  return false;
+  return IsDescendantOfPlainTextField();
 }
 
 AXPlatformNode* AXPlatformNodeDelegateBase::GetTargetNodeForRelation(

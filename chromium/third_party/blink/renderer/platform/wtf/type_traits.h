@@ -32,7 +32,7 @@
 
 #if BUILDFLAG(USE_V8_OILPAN)
 #include "v8/include/cppgc/type-traits.h"  // nogncheck
-#else
+#else                                      // !BUILDFLAG(USE_V8_OILPAN)
 namespace blink {
 template <typename T>
 class Member;
@@ -40,7 +40,7 @@ class Visitor;
 template <typename T>
 class WeakMember;
 }  // namespace blink
-#endif  // BUILDFLAG(BLINK_HEAP_USE_V8_OILPAN)
+#endif                                     // !BUILDFLAG(USE_V8_OILPAN)
 
 namespace WTF {
 
@@ -134,6 +134,9 @@ struct IsMemberOrWeakMemberType
                              cppgc::IsMemberTypeV<T> ||
                                  cppgc::IsWeakMemberTypeV<T>> {};
 
+template <typename T>
+struct IsMemberType : std::integral_constant<bool, cppgc::IsMemberTypeV<T>> {};
+
 #else  // !USE_V8_OILPAN
 
 namespace internal {
@@ -225,6 +228,12 @@ struct IsMemberOrWeakMemberType
           bool,
           WTF::IsSubclassOfTemplate<T, blink::Member>::value ||
               WTF::IsSubclassOfTemplate<T, blink::WeakMember>::value> {};
+
+template <typename T>
+struct IsMemberType : std::integral_constant<
+                          bool,
+                          WTF::IsSubclassOfTemplate<T, blink::Member>::value> {
+};
 
 #endif  // !USE_V8_OILPAN
 

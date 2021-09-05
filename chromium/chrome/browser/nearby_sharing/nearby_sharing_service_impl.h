@@ -103,6 +103,7 @@ class NearbySharingServiceImpl
               StatusCodesCallback status_codes_callback) override;
   void Open(const ShareTarget& share_target,
             StatusCodesCallback status_codes_callback) override;
+  void OpenURL(GURL url) override;
   NearbyNotificationDelegate* GetNotificationDelegate(
       const std::string& notification_id) override;
   NearbyShareSettings* GetSettings() override;
@@ -120,6 +121,8 @@ class NearbySharingServiceImpl
   void OnIncomingConnection(const std::string& endpoint_id,
                             const std::vector<uint8_t>& endpoint_info,
                             NearbyConnection* connection) override;
+
+  bool IsTransferring() const override;
 
   // Test methods
   void FlushMojoForTesting();
@@ -216,6 +219,7 @@ class NearbySharingServiceImpl
                                 StatusCodesCallback status_codes_callback);
 
   void OnOutgoingConnection(const ShareTarget& share_target,
+                            base::TimeTicks connect_start_time,
                             NearbyConnection* connection);
   void SendIntroduction(const ShareTarget& share_target,
                         base::Optional<std::string> four_digit_token);
@@ -395,6 +399,9 @@ class NearbySharingServiceImpl
   // TODO(crbug/1085068) update this map when handling payloads
   base::flat_map<base::UnguessableToken, OutgoingShareTargetInfo>
       outgoing_share_target_info_map_;
+  // For metrics. The IDs of ShareTargets that are cancelled while trying to
+  // establish an outgoing connection.
+  base::flat_set<base::UnguessableToken> cancelled_share_target_ids_;
 
   // A mapping of Attachment Id to additional AttachmentInfo related to the
   // Attachment.

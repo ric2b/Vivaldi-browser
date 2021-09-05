@@ -101,7 +101,7 @@ void SVGUseElement::Trace(Visitor* visitor) const {
   visitor->Trace(target_id_observer_);
   SVGGraphicsElement::Trace(visitor);
   SVGURIReference::Trace(visitor);
-  SVGExternalDocumentCache::Client::Trace(visitor);
+  ResourceClient::Trace(visitor);
 }
 
 #if DCHECK_IS_ON()
@@ -195,6 +195,7 @@ void SVGUseElement::UpdateTargetReference() {
   element_url_ = GetDocument().CompleteURL(url_string);
   element_url_is_local_ = url_string.StartsWith('#');
   if (!IsStructurallyExternal() || !GetDocument().IsActive()) {
+    ClearResource();
     cache_entry_ = nullptr;
     return;
   }
@@ -217,7 +218,9 @@ void SVGUseElement::UpdateTargetReference() {
                      ->Get(this, element_url_, localName());
 }
 
-void SVGUseElement::SvgAttributeChanged(const QualifiedName& attr_name) {
+void SVGUseElement::SvgAttributeChanged(
+    const SvgAttributeChangedParams& params) {
+  const QualifiedName& attr_name = params.name;
   if (attr_name == svg_names::kXAttr || attr_name == svg_names::kYAttr ||
       attr_name == svg_names::kWidthAttr ||
       attr_name == svg_names::kHeightAttr) {
@@ -249,7 +252,7 @@ void SVGUseElement::SvgAttributeChanged(const QualifiedName& attr_name) {
     return;
   }
 
-  SVGGraphicsElement::SvgAttributeChanged(attr_name);
+  SVGGraphicsElement::SvgAttributeChanged(params);
 }
 
 static bool IsDisallowedElement(const Element& element) {
@@ -585,12 +588,12 @@ void SVGUseElement::DispatchPendingEvent() {
   DispatchEvent(*Event::Create(event_type_names::kLoad));
 }
 
-void SVGUseElement::NotifyFinished(Document* external_document) {
+void SVGUseElement::NotifyFinished(Resource* resource) {
   if (!isConnected())
     return;
 
   InvalidateShadowTree();
-  if (!external_document) {
+  if (resource->ErrorOccurred() || !cache_entry_->GetDocument()) {
     DispatchEvent(*Event::Create(event_type_names::kError));
   } else {
     if (have_fired_load_event_)
@@ -604,6 +607,10 @@ void SVGUseElement::NotifyFinished(Document* external_document) {
         ->PostTask(FROM_HERE, WTF::Bind(&SVGUseElement::DispatchPendingEvent,
                                         WrapPersistent(this)));
   }
+}
+
+String SVGUseElement::DebugName() const {
+  return "SVGUseElement";
 }
 
 }  // namespace blink

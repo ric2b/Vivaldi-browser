@@ -233,9 +233,9 @@ const char kPolicyMissingMitigationMode[] =
 const char kAllowRedeemChromeOsRegistrationOffers[] =
     "cros.echo.allow_redeem_chrome_os_registration_offers";
 
-// A list pref storing the flags that need to be applied to the browser upon
-// start-up.
-const char kStartUpFlags[] = "cros.startup_flags";
+// A list pref storing the feature flags (in the chrome://flags sense) that
+// should to be applied at the login screen.
+const char kFeatureFlags[] = "cros.feature_flags";
 
 // A string pref for the restrict parameter to be appended to the Variations URL
 // when pinging the Variations server.
@@ -326,12 +326,6 @@ const char kDeviceQuirksDownloadEnabled[] =
 // during SAML logins.
 const char kLoginVideoCaptureAllowedUrls[] =
     "cros.device.login_video_capture_allowed_urls";
-
-// A list pref storing the apps or extensions to install on the login page. It
-// is a list of strings, each string contains an extension ID and an update URL,
-// delimited by a semicolon. This preference is set by an admin policy.
-const char kDeviceLoginScreenExtensions[] =
-    "cros.device.login_screen_extensions";
 
 // A list pref specifying the locales allowed on the login screen. Currently
 // only the first value is used, as the single locale allowed on the login

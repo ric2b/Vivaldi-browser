@@ -93,19 +93,13 @@ class CONTENT_EXPORT FrameTreeNode {
 
   bool IsMainFrame() const;
 
-  struct ResetForNavigationResult {
-    bool changed_frame_policy = false;
-  };
-
-  // Clears any state in this node which was set by the document itself (CSP
-  // Headers, Feature Policy Headers, and CSP-set sandbox flags), and notifies
-  // proxies as appropriate. Invoked after committing navigation to a new
-  // document (since the new document comes with a fresh set of CSP and
-  // Feature-Policy HTTP headers).
-  // Returns the details of the reset result — whether any important state (e.g.
-  // frame policy headers) was lost during the update.
-  ResetForNavigationResult ResetForNavigation(
-      bool was_served_from_back_forward_cache);
+  // Clears any state in this node which was set by the document itself (CSP &
+  // UserActivationState) and notifies proxies as appropriate. Invoked after
+  // committing navigation to a new document (since the new document comes with
+  // a fresh set of CSP).
+  // TODO(arthursonzogni): Remove this function. The frame/document must not be
+  // left temporarily with lax state.
+  void ResetForNavigation(bool was_served_from_back_forward_cache);
 
   FrameTree* frame_tree() const { return frame_tree_; }
   Navigator& navigator() { return frame_tree()->navigator(); }
@@ -440,11 +434,6 @@ class CONTENT_EXPORT FrameTreeNode {
   blink::mojom::FrameOwnerElementType frame_owner_element_type() const {
     return replication_state_.frame_owner_element_type;
   }
-  // Only meaningful to call on a root frame. The value of |feature_state| will
-  // be nontrivial if there is an opener which is restricted in some of the
-  // feature policies.
-  void SetOpenerFeaturePolicyState(
-      const blink::FeaturePolicyFeatureState& feature_state);
 
   void SetAdFrameType(blink::mojom::AdFrameType ad_frame_type);
 
@@ -497,9 +486,6 @@ class CONTENT_EXPORT FrameTreeNode {
 
   // The FrameTree that owns us.
   FrameTree* frame_tree_;  // not owned.
-
-  // Manages creation and swapping of RenderFrameHosts for this frame.
-  RenderFrameHostManager render_manager_;
 
   // A browser-global identifier for the frame in the page, which stays stable
   // even if the frame does a cross-process navigation.
@@ -612,6 +598,18 @@ class CONTENT_EXPORT FrameTreeNode {
   // browser process activities to this node (when possible).  It is unrelated
   // to the core logic of FrameTreeNode.
   FrameTreeNodeBlameContext blame_context_;
+
+  // Manages creation and swapping of RenderFrameHosts for this frame.
+  //
+  // This field needs to be declared last, because destruction of
+  // RenderFrameHostManager may call arbitrary callbacks (e.g. via
+  // WebContentsObserver::DidFinishNavigation fired after RenderFrameHostManager
+  // destructs a RenderFrameHostImpl and its NavigationRequest).  Such callbacks
+  // may try to use FrameTreeNode's fields above - this would be an undefined
+  // behavior if the fields (even trivially-destructible ones) were destructed
+  // before the RenderFrameHostManager's destructor runs.  See also
+  // https://crbug.com/1157988.
+  RenderFrameHostManager render_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(FrameTreeNode);
 };

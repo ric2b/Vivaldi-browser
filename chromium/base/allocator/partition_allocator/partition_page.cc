@@ -5,12 +5,15 @@
 #include "base/allocator/partition_allocator/partition_page.h"
 
 #include "base/allocator/partition_allocator/address_pool_manager.h"
+#include "base/allocator/partition_allocator/page_allocator.h"
+#include "base/allocator/partition_allocator/page_allocator_constants.h"
 #include "base/allocator/partition_allocator/partition_address_space.h"
 #include "base/allocator/partition_allocator/partition_alloc.h"
 #include "base/allocator/partition_allocator/partition_alloc_check.h"
 #include "base/allocator/partition_allocator/partition_alloc_features.h"
 #include "base/allocator/partition_allocator/partition_alloc_forward.h"
 #include "base/allocator/partition_allocator/partition_direct_map_extent.h"
+#include "base/bits.h"
 #include "base/check.h"
 #include "base/feature_list.h"
 #include "base/notreached.h"
@@ -27,7 +30,6 @@ PartitionDirectUnmap(SlotSpanMetadata<thread_safe>* slot_span) {
   auto* root = PartitionRoot<thread_safe>::FromSlotSpan(slot_span);
   root->lock_.AssertAcquired();
   auto* extent = PartitionDirectMapExtent<thread_safe>::FromSlotSpan(slot_span);
-  size_t unmap_size = extent->map_size;
 
   // Maintain the doubly-linked list of all direct mappings.
   if (extent->prev_extent) {
@@ -41,27 +43,23 @@ PartitionDirectUnmap(SlotSpanMetadata<thread_safe>* slot_span) {
     extent->next_extent->prev_extent = extent->prev_extent;
   }
 
-  // Add the size of the trailing guard page (32-bit only) and preceding
-  // partition page.
-  unmap_size += PartitionPageSize();
-#if !defined(ARCH_CPU_64_BITS)
-  unmap_size += SystemPageSize();
-#endif
+  // The actual decommit is deferred, when releasing the reserved memory region.
+  root->DecreaseCommittedPages(slot_span->bucket->slot_size);
 
-  size_t uncommitted_page_size =
-      slot_span->bucket->slot_size + SystemPageSize();
-  root->DecreaseCommittedPages(uncommitted_page_size);
-  PA_DCHECK(root->total_size_of_direct_mapped_pages >= uncommitted_page_size);
-  root->total_size_of_direct_mapped_pages -= uncommitted_page_size;
-
-  PA_DCHECK(!(unmap_size & PageAllocationGranularityOffsetMask()));
+  size_t reserved_size =
+      extent->map_size +
+      PartitionRoot<thread_safe>::GetDirectMapMetadataAndGuardPagesSize();
+  PA_DCHECK(!(reserved_size & PageAllocationGranularityOffsetMask()));
+  PA_DCHECK(root->total_size_of_direct_mapped_pages >= reserved_size);
+  root->total_size_of_direct_mapped_pages -= reserved_size;
+  PA_DCHECK(!(reserved_size & PageAllocationGranularityOffsetMask()));
 
   char* ptr = reinterpret_cast<char*>(
       SlotSpanMetadata<thread_safe>::ToPointer(slot_span));
   // Account for the mapping starting a partition page before the actual
   // allocation address.
   ptr -= PartitionPageSize();
-  return {ptr, unmap_size};
+  return {ptr, reserved_size};
 }
 
 template <bool thread_safe>
@@ -171,7 +169,17 @@ void SlotSpanMetadata<thread_safe>::Decommit(PartitionRoot<thread_safe>* root) {
   PA_DCHECK(is_empty());
   PA_DCHECK(!bucket->is_direct_mapped());
   void* addr = SlotSpanMetadata::ToPointer(this);
-  root->DecommitSystemPages(addr, bucket->get_bytes_per_span());
+  size_t size_to_decommit =
+#if defined(OS_WIN)
+      // Windows uses lazy commit, thus only provisioned slots are committed.
+      bits::Align(GetProvisionedSize(), SystemPageSize());
+#else
+      bucket->get_bytes_per_span();
+#endif
+  // Not decommitted slot span must've had at least 1 allocation.
+  PA_DCHECK(size_to_decommit > 0);
+  root->DecommitSystemPagesForData(addr, size_to_decommit,
+                                   PageKeepPermissionsIfPossible);
 
   // We actually leave the decommitted slot span in the active list. We'll sweep
   // it on to the decommitted list when we next walk the active list.
@@ -202,7 +210,7 @@ void DeferredUnmap::Unmap() {
   // changes, the if statement below has to be updated.
   PA_DCHECK(!IsManagedByPartitionAllocNormalBuckets(ptr));
   if (IsManagedByPartitionAllocDirectMap(ptr)) {
-    internal::AddressPoolManager::GetInstance()->Free(
+    internal::AddressPoolManager::GetInstance()->UnreserveAndDecommit(
         internal::GetDirectMapPool(), ptr, size);
   } else {
     FreePages(ptr, size);

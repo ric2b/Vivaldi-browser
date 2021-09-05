@@ -13,10 +13,11 @@
 #include "base/system/sys_info.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/obsolete_system/obsolete_system.h"
-#include "chrome/browser/ui/webui/management_ui.h"
+#include "chrome/browser/ui/webui/management/management_ui.h"
 #include "chrome/browser/ui/webui/settings/about_handler.h"
+#include "chrome/browser/ui/webui/settings/chromeos/device_name_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/search/search_tag_registry.h"
-#include "chrome/browser/ui/webui/version_ui.h"
+#include "chrome/browser/ui/webui/version/version_ui.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/pref_names.h"
@@ -98,6 +99,19 @@ const std::vector<SearchConcept>& GetAboutSearchConcepts() {
   return *tags;
 }
 
+const std::vector<SearchConcept>& GetDiagnosticsAppSearchConcepts() {
+  static const base::NoDestructor<std::vector<SearchConcept>> tags({
+      {IDS_OS_SETTINGS_TAG_ABOUT_DIAGNOSTICS,
+       mojom::kAboutChromeOsDetailsSubpagePath,
+       mojom::SearchResultIcon::kChrome,
+       mojom::SearchResultDefaultRank::kMedium,
+       mojom::SearchResultType::kSetting,
+       {.setting = mojom::Setting::kDiagnostics},
+       {IDS_OS_SETTINGS_TAG_ABOUT_DIAGNOSTICS_ALT1, SearchConcept::kAltTagEnd}},
+  });
+  return *tags;
+}
+
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 const std::vector<SearchConcept>& GetAboutTermsOfServiceSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
@@ -167,6 +181,10 @@ AboutSection::AboutSection(Profile* profile,
     : OsSettingsSection(profile, search_tag_registry) {
   SearchTagRegistry::ScopedTagUpdater updater = registry()->StartUpdate();
   updater.AddSearchTags(GetAboutSearchConcepts());
+
+  if (base::FeatureList::IsEnabled(chromeos::features::kDiagnosticsApp)) {
+    updater.AddSearchTags(GetDiagnosticsAppSearchConcepts());
+  }
 }
 
 AboutSection::~AboutSection() = default;
@@ -178,6 +196,7 @@ void AboutSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
     {"aboutReportAnIssue", IDS_SETTINGS_ABOUT_PAGE_REPORT_AN_ISSUE},
 #endif
+    {"aboutDiagnostics", IDS_SETTINGS_ABOUT_PAGE_DIAGNOSTICS},
     {"aboutRelaunch", IDS_SETTINGS_ABOUT_PAGE_RELAUNCH},
     {"aboutUpgradeCheckStarted", IDS_SETTINGS_ABOUT_UPGRADE_CHECK_STARTED},
     {"aboutUpgradeRelaunch", IDS_SETTINGS_UPGRADE_SUCCESSFUL_RELAUNCH},
@@ -328,6 +347,10 @@ void AboutSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
   std::string safetyInfoLink = GetSafetyInfoLink();
   html_source->AddBoolean("shouldShowSafetyInfo", !safetyInfoLink.empty());
 
+  html_source->AddBoolean(
+      "diagnosticsAppEnabled",
+      base::FeatureList::IsEnabled(chromeos::features::kDiagnosticsApp));
+
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   html_source->AddString("aboutTermsURL", chrome::kChromeUITermsURL);
   html_source->AddLocalizedString("aboutProductTos",
@@ -343,6 +366,7 @@ void AboutSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
 void AboutSection::AddHandlers(content::WebUI* web_ui) {
   web_ui->AddMessageHandler(
       std::make_unique<::settings::AboutHandler>(profile()));
+  web_ui->AddMessageHandler(std::make_unique<DeviceNameHandler>());
 }
 
 int AboutSection::GetSectionNameMessageId() const {
@@ -373,9 +397,9 @@ void AboutSection::RegisterHierarchy(HierarchyGenerator* generator) const {
       mojom::SearchResultIcon::kChrome, mojom::SearchResultDefaultRank::kMedium,
       mojom::kAboutChromeOsDetailsSubpagePath);
   static constexpr mojom::Setting kAboutChromeOsDetailsSettings[] = {
-      mojom::Setting::kCheckForOsUpdate, mojom::Setting::kSeeWhatsNew,
+      mojom::Setting::kCheckForOsUpdate,    mojom::Setting::kSeeWhatsNew,
       mojom::Setting::kGetHelpWithChromeOs, mojom::Setting::kReportAnIssue,
-      mojom::Setting::kTermsOfService};
+      mojom::Setting::kTermsOfService,      mojom::Setting::kDiagnostics};
   RegisterNestedSettingBulk(mojom::Subpage::kAboutChromeOsDetails,
                             kAboutChromeOsDetailsSettings, generator);
 

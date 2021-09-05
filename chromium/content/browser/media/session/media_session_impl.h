@@ -335,6 +335,7 @@ class MediaSessionImpl : public MediaSession,
   void OnImageDownloadComplete(GetMediaImageBitmapCallback callback,
                                int minimum_size_px,
                                int desired_size_px,
+                               bool source_icon,
                                int id,
                                int http_status_code,
                                const GURL& image_url,
@@ -409,11 +410,12 @@ class MediaSessionImpl : public MediaSession,
   void DidReceiveAction(media_session::mojom::MediaSessionAction action,
                         blink::mojom::MediaSessionActionDetailsPtr details);
 
-  // Returns the media audio video state. This is whether the players associated
-  // with the media session are audio-only or have audio and video. If we have
-  // a |routed_service_| then we limit to players on that frame because this
-  // should align with the metadata.
-  media_session::mojom::MediaAudioVideoState GetMediaAudioVideoState();
+  // Returns the media audio video state for each player. This is whether the
+  // players associated with the media session are audio-only, video-only, or
+  // have both audio and video. If we have a |routed_service_| then we limit to
+  // players on that frame because this should align with the metadata.
+  std::vector<media_session::mojom::MediaAudioVideoState>
+  GetMediaAudioVideoStates();
 
   // Calls the callback with each |PlayerIdentifier| for every player associated
   // with this media session.
@@ -476,6 +478,9 @@ class MediaSessionImpl : public MediaSession,
   base::flat_map<media_session::mojom::MediaSessionImageType,
                  std::vector<media_session::MediaImage>>
       images_;
+
+  // Cache of images that have been requested by clients.
+  base::flat_map<GURL, SkBitmap> image_cache_;
 
   // The collection of all managed services (non-owned pointers). The services
   // are owned by RenderFrameHost and should be registered on creation and

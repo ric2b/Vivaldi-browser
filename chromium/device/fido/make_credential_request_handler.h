@@ -150,11 +150,12 @@ class COMPONENT_EXPORT(DEVICE_FIDO) MakeCredentialRequestHandler
   // AuthTokenRequester::Delegate:
   void AuthenticatorSelectedForPINUVAuthToken(
       FidoAuthenticator* authenticator) override;
-  void CollectNewPIN(ProvidePINCallback provide_pin_cb) override;
-  void CollectExistingPIN(int attempts,
-                          ProvidePINCallback provide_pin_cb) override;
+  void CollectPIN(pin::PINEntryReason reason,
+                  pin::PINEntryError error,
+                  uint32_t min_pin_length,
+                  int attempts,
+                  ProvidePINCallback provide_pin_cb) override;
   void PromptForInternalUVRetry(int attempts) override;
-  void InternalUVLockedForAuthToken() override;
   void HavePINUVAuthTokenResultForAuthenticator(
       FidoAuthenticator* authenticator,
       AuthTokenRequester::Result result,
@@ -168,7 +169,8 @@ class COMPONENT_EXPORT(DEVICE_FIDO) MakeCredentialRequestHandler
   void OnEnrollmentError(CtapDeviceResponseCode status) override;
 
   void ObtainPINUVAuthToken(FidoAuthenticator* authenticator,
-                            bool skip_pin_touch);
+                            bool skip_pin_touch,
+                            bool internal_uv_locked);
 
   void HandleResponse(
       FidoAuthenticator* authenticator,
@@ -176,7 +178,6 @@ class COMPONENT_EXPORT(DEVICE_FIDO) MakeCredentialRequestHandler
       base::ElapsedTimer request_timer,
       CtapDeviceResponseCode response_code,
       base::Optional<AuthenticatorMakeCredentialResponse> response);
-  void HandleInternalUvLocked(FidoAuthenticator* authenticator);
   void HandleInapplicableAuthenticator(
       FidoAuthenticator* authenticator,
       std::unique_ptr<CtapMakeCredentialRequest> request);
@@ -193,6 +194,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) MakeCredentialRequestHandler
 
   CompletionCallback completion_callback_;
   State state_ = State::kWaitingForTouch;
+  bool suppress_attestation_ = false;
   CtapMakeCredentialRequest request_;
   base::Optional<base::RepeatingClosure> bio_enrollment_complete_barrier_;
   const Options options_;

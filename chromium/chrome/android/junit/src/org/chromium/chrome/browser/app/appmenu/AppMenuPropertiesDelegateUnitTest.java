@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 
 import android.content.Context;
 import android.view.Menu;
+import android.view.MenuItem;
 import android.view.SubMenu;
 import android.view.View;
 import android.widget.PopupMenu;
@@ -42,6 +43,8 @@ import org.chromium.chrome.browser.app.appmenu.AppMenuPropertiesDelegateImpl.Men
 import org.chromium.chrome.browser.banners.AppBannerManager;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
+import org.chromium.chrome.browser.device.DeviceConditions;
+import org.chromium.chrome.browser.device.ShadowDeviceConditions;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.multiwindow.MultiWindowModeStateDispatcher;
@@ -63,10 +66,14 @@ import org.chromium.content.browser.ContentFeatureListImplJni;
 import org.chromium.content_public.browser.ContentFeatureList;
 import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.net.ConnectionType;
 import org.chromium.ui.modaldialog.ModalDialogManager;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Unit tests for {@link AppMenuPropertiesDelegateImpl}.
@@ -157,6 +164,7 @@ public class AppMenuPropertiesDelegateUnitTest {
     public void tearDown() {
         ThreadUtils.setThreadAssertsDisabledForTesting(false);
         ChromeAccessibilityUtil.get().setAccessibilityEnabledForTesting(false);
+        ChromeAccessibilityUtil.get().setTouchExplorationEnabledForTesting(false);
     }
 
     @Test
@@ -566,6 +574,8 @@ public class AppMenuPropertiesDelegateUnitTest {
         assertMenuItemsAreEqual(menu, expectedItems);
         assertActionBarItemsAreEqual(menu, expectedActionBarItems);
         assertAddToItemsAreEqual(menu, expectedAddToItems);
+        assertAddToItemsEnableState(
+                menu, new HashSet<>(Arrays.asList(R.id.add_to_reading_list_menu_id)), null);
     }
 
     @Test
@@ -646,7 +656,7 @@ public class AppMenuPropertiesDelegateUnitTest {
     }
 
     @Test
-    public void testMenuItems_Accessibility() {
+    public void testMenuItems_Accessibility_ImageDescriptions() {
         setUpMocksForPageMenu();
         when(mTab.getUrlString()).thenReturn("https://google.com");
         when(mTab.isNativePage()).thenReturn(false);
@@ -671,6 +681,7 @@ public class AppMenuPropertiesDelegateUnitTest {
         // Test specific setup
         ThreadUtils.setThreadAssertsDisabledForTesting(true);
         ChromeAccessibilityUtil.get().setAccessibilityEnabledForTesting(true);
+        ChromeAccessibilityUtil.get().setTouchExplorationEnabledForTesting(true);
 
         Menu menu = createTestMenu();
         mAppMenuPropertiesDelegate.prepareMenu(menu, null);
@@ -695,6 +706,17 @@ public class AppMenuPropertiesDelegateUnitTest {
         mAppMenuPropertiesDelegate.prepareMenu(menu, null);
         Assert.assertEquals("Stop image descriptions",
                 menu.findItem(R.id.get_image_descriptions_id).getTitle());
+
+        // Setup no wifi condition, and "only on wifi" user option.
+        DeviceConditions noWifi =
+                new DeviceConditions(false, 75, ConnectionType.CONNECTION_2G, false, false, true);
+        ShadowDeviceConditions.setCurrentConditions(noWifi);
+        when(mPrefService.getBoolean(Pref.ACCESSIBILITY_IMAGE_LABELS_ONLY_ON_WIFI))
+                .thenReturn(true);
+
+        mAppMenuPropertiesDelegate.prepareMenu(menu, null);
+        Assert.assertEquals(
+                "Get image descriptions", menu.findItem(R.id.get_image_descriptions_id).getTitle());
     }
 
     @Test
@@ -892,6 +914,20 @@ public class AppMenuPropertiesDelegateUnitTest {
 
         Assert.assertThat("Populated add to items were:" + getMenuTitles(addToSubMenu), actualItems,
                 Matchers.containsInAnyOrder(expectedItems));
+    }
+
+    private void assertAddToItemsEnableState(
+            Menu menu, Set<Integer> enabledItems, Set<Integer> disabledItems) {
+        SubMenu addToSubMenu = menu.findItem(R.id.add_to_menu_id).getSubMenu();
+        for (int i = 0; i < addToSubMenu.size(); i++) {
+            MenuItem item = addToSubMenu.getItem(i);
+            if (enabledItems != null && enabledItems.contains(item.getItemId())) {
+                Assert.assertTrue(item.isEnabled());
+            }
+            if (disabledItems != null && disabledItems.contains(item.getItemId())) {
+                Assert.assertFalse(item.isEnabled());
+            }
+        }
     }
 
     private String getMenuTitles(Menu menu) {

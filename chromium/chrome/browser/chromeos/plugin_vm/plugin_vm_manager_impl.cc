@@ -21,6 +21,7 @@
 #include "chrome/browser/ui/ash/launcher/shelf_spinner_item_controller.h"
 #include "chrome/browser/ui/simple_message_box.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/debug_daemon/debug_daemon_client.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
@@ -119,10 +120,13 @@ void PluginVmManagerImpl::OnPrimaryUserSessionStarted() {
   request.set_owner_id(owner_id_);
   request.set_vm_name_uuid(kPluginVmName);
 
-  // TODO(b/167491603): We need to reset these permissions until we have
-  // permission indicators/notifications working.
-  profile_->GetPrefs()->SetBoolean(prefs::kPluginVmCameraAllowed, false);
-  profile_->GetPrefs()->SetBoolean(prefs::kPluginVmMicAllowed, false);
+  // We need to reset these permissions unless we have permission
+  // indicators/notifications enabled.
+  if (!base::FeatureList::IsEnabled(
+          chromeos::features::kVmCameraMicIndicatorsAndNotifications)) {
+    profile_->GetPrefs()->SetBoolean(prefs::kPluginVmCameraAllowed, false);
+    profile_->GetPrefs()->SetBoolean(prefs::kPluginVmMicAllowed, false);
+  }
 
   // Probe the dispatcher.
   chromeos::DBusThreadManager::Get()->GetVmPluginDispatcherClient()->ListVms(
@@ -347,17 +351,13 @@ void PluginVmManagerImpl::OnVmStateChanged(
   }
 }
 
-void PluginVmManagerImpl::UpdateVmState(
-    base::OnceCallback<void(bool)> success_callback,
-    base::OnceClosure error_callback) {
+void PluginVmManagerImpl::StartDispatcher(
+    base::OnceCallback<void(bool)> callback) const {
   chromeos::DBusThreadManager::Get()
       ->GetDebugDaemonClient()
-      ->StartPluginVmDispatcher(
-          owner_id_, g_browser_process->GetApplicationLocale(),
-          base::BindOnce(&PluginVmManagerImpl::OnStartDispatcher,
-                         weak_ptr_factory_.GetWeakPtr(),
-                         std::move(success_callback),
-                         std::move(error_callback)));
+      ->StartPluginVmDispatcher(owner_id_,
+                                g_browser_process->GetApplicationLocale(),
+                                std::move(callback));
 }
 
 vm_tools::plugin_dispatcher::VmState PluginVmManagerImpl::vm_state() const {
@@ -385,7 +385,9 @@ void PluginVmManagerImpl::OnInstallPluginVmDlc(
     base::OnceClosure error_callback,
     const chromeos::DlcserviceClient::InstallResult& install_result) {
   if (install_result.error == dlcservice::kErrorNone) {
-    UpdateVmState(std::move(success_callback), std::move(error_callback));
+    StartDispatcher(base::BindOnce(
+        &PluginVmManagerImpl::OnStartDispatcher, weak_ptr_factory_.GetWeakPtr(),
+        std::move(success_callback), std::move(error_callback)));
   } else {
     // TODO(kimjae): Unify the dlcservice error handler with
     // PluginVmInstaller.

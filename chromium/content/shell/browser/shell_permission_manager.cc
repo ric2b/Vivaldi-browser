@@ -45,7 +45,6 @@ bool IsWhitelistedPermissionType(PermissionType permission) {
     case PermissionType::DURABLE_STORAGE:
     case PermissionType::AUDIO_CAPTURE:
     case PermissionType::VIDEO_CAPTURE:
-    case PermissionType::FLASH:
     case PermissionType::CLIPBOARD_READ_WRITE:
     case PermissionType::CLIPBOARD_SANITIZED_WRITE:
     case PermissionType::NUM:
@@ -56,6 +55,7 @@ bool IsWhitelistedPermissionType(PermissionType permission) {
     case PermissionType::CAMERA_PAN_TILT_ZOOM:
     case PermissionType::WINDOW_PLACEMENT:
     case PermissionType::FONT_ACCESS:
+    case PermissionType::DISPLAY_CAPTURE:
       return false;
   }
 

@@ -15,6 +15,7 @@ import static org.junit.Assert.assertTrue;
 
 import static org.chromium.chrome.browser.customtabs.CustomTabsTestUtils.addActionButtonToIntent;
 import static org.chromium.chrome.browser.customtabs.CustomTabsTestUtils.createTestBitmap;
+import static org.chromium.chrome.browser.customtabs.IncognitoCustomTabIntentDataProvider.EXTRA_FORCE_ENABLE_FOR_EXPERIMENT;
 
 import android.annotation.TargetApi;
 import android.app.NotificationManager;
@@ -55,6 +56,7 @@ import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabToolbar;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.incognito.IncognitoDataTestUtils;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.browser_ui.styles.ChromeColors;
@@ -72,13 +74,15 @@ import java.util.concurrent.TimeoutException;
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.FORCE_FIRST_RUN_FLOW_COMPLETE_FOR_TESTING})
 public class CustomTabActivityIncognitoTest {
-    private String mTestPage;
     private static final String TEST_PAGE = "/chrome/test/data/android/google.html";
     private static final String TEST_MENU_TITLE = "testMenuTitle";
     private static int sIdToIncrement = 1;
 
+    private String mTestPage;
+
     @Rule
-    public IncognitoCustomTabActivityTestRule mCustomTabActivityTestRule = new IncognitoCustomTabActivityTestRule();
+    public IncognitoCustomTabActivityTestRule mCustomTabActivityTestRule =
+            new IncognitoCustomTabActivityTestRule();
 
     @Rule
     public TestRule mProcessor = new Features.InstrumentationProcessor();
@@ -89,7 +93,6 @@ public class CustomTabActivityIncognitoTest {
     @Before
     public void setUp() throws TimeoutException {
         mTestPage = mEmbeddedTestServerRule.getServer().getURL(TEST_PAGE);
-
         // Ensuring native is initialized before we access the CCT_INCOGNITO feature flag.
         IncognitoDataTestUtils.fireAndWaitForCctWarmup();
     }
@@ -162,6 +165,15 @@ public class CustomTabActivityIncognitoTest {
         return mCustomTabActivityTestRule.getActivity();
     }
 
+    private void assertProfileUsedIsNonPrimary() throws TimeoutException {
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Profile profile = Profile.fromWebContents(
+                    mCustomTabActivityTestRule.getActivity().getCurrentWebContents());
+            assertTrue(profile.isOffTheRecord());
+            assertFalse(profile.isPrimaryOTRProfile());
+        });
+    }
+
     @Test
     @MediumTest
     @Features.EnableFeatures({ChromeFeatureList.CCT_INCOGNITO})
@@ -169,6 +181,7 @@ public class CustomTabActivityIncognitoTest {
         Intent intent = createMinimalIncognitoCustomTabIntent();
         CustomTabActivity activity = launchIncognitoCustomTab(intent);
         assertTrue(activity.getActivityTab().isIncognito());
+        assertProfileUsedIsNonPrimary();
     }
 
     @Test
@@ -195,7 +208,7 @@ public class CustomTabActivityIncognitoTest {
     public void toolbarHasIncognitoLogo() throws Exception {
         Intent intent = createMinimalIncognitoCustomTabIntent();
         launchIncognitoCustomTab(intent);
-        Espresso.onView(withId(R.id.incognito_cct_logo_button)).check(matches(isDisplayed()));
+        Espresso.onView(withId(R.id.incognito_cct_logo_image_view)).check(matches(isDisplayed()));
     }
 
     @Test
@@ -204,7 +217,38 @@ public class CustomTabActivityIncognitoTest {
     public void toolbarDoesNotHaveIncognitoLogo() throws Exception {
         Intent intent = createMinimalIncognitoCustomTabIntent();
         launchIncognitoCustomTab(intent);
-        Espresso.onView(withId(R.id.incognito_cct_logo_button)).check(matches(not(isDisplayed())));
+        Espresso.onView(withId(R.id.incognito_cct_logo_image_view))
+                .check(matches(not(isDisplayed())));
+    }
+
+    @Test
+    @MediumTest
+    @Features.EnableFeatures({ChromeFeatureList.CCT_INCOGNITO})
+    public void toolbarHasNonPrimaryIncognitoProfile_ForIncognitoCCT() throws Exception {
+        Intent intent = createMinimalIncognitoCustomTabIntent();
+        launchIncognitoCustomTab(intent);
+
+        CustomTabToolbar customTabToolbar =
+                mCustomTabActivityTestRule.getActivity().findViewById(R.id.toolbar);
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Profile profile = customTabToolbar.getToolbarDataProvider().getProfile();
+            assertTrue(profile.isOffTheRecord());
+            assertFalse(profile.isPrimaryOTRProfile());
+        });
+    }
+
+    @Test
+    @MediumTest
+    public void toolbarHasRegularProfile_ForRegularCCT() {
+        Intent intent = CustomTabsTestUtils.createMinimalCustomTabIntent(
+                InstrumentationRegistry.getContext(), "about:blank");
+        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
+        CustomTabToolbar customTabToolbar =
+                mCustomTabActivityTestRule.getActivity().findViewById(R.id.toolbar);
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Profile profile = customTabToolbar.getToolbarDataProvider().getProfile();
+            assertFalse(profile.isOffTheRecord());
+        });
     }
 
     @Test
@@ -212,27 +256,27 @@ public class CustomTabActivityIncognitoTest {
     @Features.DisableFeatures({ChromeFeatureList.CCT_INCOGNITO})
     public void canLaunchFirstPartyIncognitoWithExtraWhenDisabled() throws Exception {
         Intent intent = createMinimalIncognitoCustomTabIntent();
-        intent.putExtra(
-                IncognitoCustomTabIntentDataProvider.EXTRA_FORCE_ENABLE_FOR_EXPERIMENT, true);
+        intent.putExtra(EXTRA_FORCE_ENABLE_FOR_EXPERIMENT, true);
         CustomTabActivity activity = launchIncognitoCustomTab(intent);
         assertTrue(activity.getActivityTab().isIncognito());
+        assertProfileUsedIsNonPrimary();
     }
 
     @Test
     @MediumTest
-    @Features.DisableFeatures({ChromeFeatureList.CCT_INCOGNITO})
+    @Features.EnableFeatures({ChromeFeatureList.CCT_INCOGNITO})
     public void canHideToolbarIncognitoLogo() throws Exception {
         Intent intent = createMinimalIncognitoCustomTabIntent();
         // The icon is only hidden if an extra is supplied.
         intent.putExtra(IncognitoCustomTabIntentDataProvider.EXTRA_HIDE_INCOGNITO_ICON, true);
         launchIncognitoCustomTab(intent);
-        Espresso.onView(withId(R.id.incognito_cct_logo_button))
+        Espresso.onView(withId(R.id.incognito_cct_logo_image_view))
                 .check(matches(not(isDisplayed())));
     }
 
     @Test
     @MediumTest
-    @Features.DisableFeatures({ChromeFeatureList.CCT_INCOGNITO})
+    @Features.EnableFeatures({ChromeFeatureList.CCT_INCOGNITO})
     public void canCustomizeToolbarColor() throws Exception {
         Intent intent = createMinimalIncognitoCustomTabIntent();
         // The color is only allowed if an extra is supplied.

@@ -10,8 +10,10 @@
 #include "base/bind.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "ui/aura/client/drag_drop_delegate.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
+#include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom-shared.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/platform_window/platform_window.h"
@@ -158,20 +160,36 @@ class FakeDragDropDelegate : public aura::client::DragDropDelegate {
  private:
   // aura::client::DragDropDelegate:
   void OnDragEntered(const ui::DropTargetEvent& event) override {
+    // The event must always have valid data.  This will crash if it doesn't.
+    // See crbug.com/1151836.
+    auto dummy_copy = event.data().provider().Clone();
+
     ++num_enters_;
     last_event_flags_ = event.flags();
   }
 
-  int OnDragUpdated(const ui::DropTargetEvent& event) override {
+  aura::client::DragUpdateInfo OnDragUpdated(
+      const ui::DropTargetEvent& event) override {
+    // The event must always have valid data.  This will crash if it doesn't.
+    // See crbug.com/1151836.
+    auto dummy_copy = event.data().provider().Clone();
+
     ++num_updates_;
     last_event_flags_ = event.flags();
-    return destination_operation_;
+
+    return aura::client::DragUpdateInfo(
+        destination_operation_,
+        ui::DataTransferEndpoint(ui::EndpointType::kDefault));
   }
 
   void OnDragExited() override { ++num_exits_; }
 
   int OnPerformDrop(const ui::DropTargetEvent& event,
                     std::unique_ptr<ui::OSExchangeData> data) override {
+    // The event must always have valid data.  This will crash if it doesn't.
+    // See crbug.com/1151836.
+    auto dummy_copy = event.data().provider().Clone();
+
     ++num_drops_;
     received_data_ = std::move(data);
     last_event_flags_ = event.flags();
@@ -405,6 +423,22 @@ TEST_F(DesktopDragDropClientOzoneTest, TargetDestroyedDuringDrag) {
   EXPECT_EQ(1, another_dragdrop_delegate->num_updates());
   EXPECT_EQ(0, another_dragdrop_delegate->num_drops());
   EXPECT_EQ(0, another_dragdrop_delegate->num_exits());
+}
+
+// crbug.com/1151836 was null dereference during drag and drop.
+//
+// A possible reason was invalid sequence of events, so here we just drop data
+// without any notifications that should come before (like drag enter or drag
+// motion).  Before this change, that would hit some DCHECKS in the debug build
+// or cause crash in the release one, now it is handled properly.  Methods of
+// FakeDragDropDelegate ensure that data in the event is always valid.
+//
+// The error message rendered in the console when this test is running is the
+// expected and valid side effect.
+//
+// See more information in the bug.
+TEST_F(DesktopDragDropClientOzoneTest, Bug1151836) {
+  platform_window_->OnDragDrop(nullptr);
 }
 
 }  // namespace views

@@ -31,11 +31,19 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.task.AsyncTask;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.consent_auditor.ConsentAuditorFeature;
-import org.chromium.chrome.browser.externalauth.UserRecoverableErrorHandler;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.signin.account_picker.AccountPickerCoordinator;
+import org.chromium.chrome.browser.signin.services.DisplayableProfileData;
+import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
+import org.chromium.chrome.browser.signin.services.ProfileDataCache;
+import org.chromium.chrome.browser.signin.ui.ConfirmSyncDataStateMachine;
+import org.chromium.chrome.browser.signin.ui.ConfirmSyncDataStateMachineDelegate;
+import org.chromium.chrome.browser.signin.ui.ConsentTextTracker;
+import org.chromium.chrome.browser.signin.ui.SigninView;
+import org.chromium.chrome.browser.signin.ui.account_picker.AccountPickerCoordinator;
+import org.chromium.chrome.browser.signin.ui.account_picker.AccountPickerDialogFragment;
 import org.chromium.chrome.browser.sync.SyncUserDataWiper;
+import org.chromium.components.externalauth.UserRecoverableErrorHandler;
 import org.chromium.components.signin.AccountManagerDelegateException;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.AccountManagerResult;
@@ -336,12 +344,12 @@ public abstract class SigninFragmentBase
         if (!TextUtils.isEmpty(fullName)) {
             mConsentTextTracker.setTextNonRecordable(mView.getAccountTextPrimary(), fullName);
             mConsentTextTracker.setTextNonRecordable(
-                    mView.getAccountTextSecondary(), profileData.getAccountName());
+                    mView.getAccountTextSecondary(), profileData.getAccountEmail());
             mView.getAccountTextSecondary().setVisibility(View.VISIBLE);
         } else {
             // Full name is not available, show the email in the primary TextView.
             mConsentTextTracker.setTextNonRecordable(
-                    mView.getAccountTextPrimary(), profileData.getAccountName());
+                    mView.getAccountTextPrimary(), profileData.getAccountEmail());
             mView.getAccountTextSecondary().setVisibility(View.GONE);
         }
     }
@@ -516,7 +524,7 @@ public abstract class SigninFragmentBase
 
                     // AccountManagerFacade couldn't create intent, use SigninUtils to open settings
                     // instead.
-                    SigninUtils.openSettingsForAllAccounts(getContext());
+                    SigninUtils.openSettingsForAllAccounts(getActivity());
                 });
     }
 

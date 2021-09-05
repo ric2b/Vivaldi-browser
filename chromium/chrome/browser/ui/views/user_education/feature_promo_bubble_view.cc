@@ -47,6 +47,9 @@ constexpr base::TimeDelta kDelayDefault = base::TimeDelta::FromSeconds(10);
 // user stops hovering over it.
 constexpr base::TimeDelta kDelayShort = base::TimeDelta::FromSeconds(3);
 
+// Maximum width of the bubble. Longer strings will cause wrapping.
+constexpr int kBubbleMaxWidthDip = 340;
+
 // The insets from the bubble border to the text inside.
 constexpr gfx::Insets kBubbleContentsInsets(12, 16);
 
@@ -125,21 +128,21 @@ class MdIPHBubbleButton : public MdTextButton {
 // outline in dark mode on Mac. Use our own shadow instead. The shadow type is
 // the same for all other platforms.
 FeaturePromoBubbleView::FeaturePromoBubbleView(
-    const FeaturePromoBubbleParams& params,
+    CreateParams params,
     base::RepeatingClosure snooze_callback,
     base::RepeatingClosure dismiss_callback)
     : BubbleDialogDelegateView(params.anchor_view,
                                params.arrow,
-                               views::BubbleBorder::SMALL_SHADOW),
-      focusable_(params.allow_focus),
+                               views::BubbleBorder::STANDARD_SHADOW),
+      focusable_(params.focusable),
       persist_on_blur_(params.persist_on_blur),
-      snoozable_(params.allow_snooze),
+      snoozable_(params.snoozable),
       preferred_width_(params.preferred_width) {
   DCHECK(params.anchor_view);
-  DCHECK(!params.allow_snooze || params.allow_focus)
+  DCHECK(!params.snoozable || params.focusable)
       << "A snoozable bubble must be focusable to allow keyboard "
          "accessibility.";
-  DCHECK(!params.persist_on_blur || params.allow_focus)
+  DCHECK(!params.persist_on_blur || params.focusable)
       << "A bubble that persists on blur must be focusable.";
   UseCompactMargins();
 
@@ -150,21 +153,12 @@ FeaturePromoBubbleView::FeaturePromoBubbleView(
         params.timeout_short ? *params.timeout_short : kDelayShort);
   }
 
-  const base::string16 body_text =
-      params.body_string_specifier != -1
-          ? l10n_util::GetStringUTF16(params.body_string_specifier)
-          : params.body_text_raw;
+  const base::string16 body_text = std::move(params.body_text);
 
-  if (!params.screenreader_string_specifier) {
+  if (params.screenreader_text)
+    accessible_name_ = std::move(*params.screenreader_text);
+  else
     accessible_name_ = body_text;
-  } else if (params.feature_accelerator) {
-    accessible_name_ = l10n_util::GetStringFUTF16(
-        *params.screenreader_string_specifier,
-        params.feature_accelerator->GetShortcutText());
-  } else {
-    accessible_name_ =
-        l10n_util::GetStringUTF16(*params.screenreader_string_specifier);
-  }
 
   // We get the theme provider from the anchor view since our widget hasn't been
   // created yet.
@@ -193,9 +187,9 @@ FeaturePromoBubbleView::FeaturePromoBubbleView(
   SetLayoutManager(std::move(box_layout));
 
   ChromeTextContext body_label_context;
-  if (params.title_string_specifier.has_value()) {
+  if (params.title_text.has_value()) {
     auto* title_label = AddChildView(std::make_unique<views::Label>(
-        l10n_util::GetStringUTF16(params.title_string_specifier.value()),
+        std::move(*params.title_text),
         ChromeTextContext::CONTEXT_IPH_BUBBLE_TITLE));
     title_label->SetBackgroundColor(background_color);
     title_label->SetEnabledColor(text_color);
@@ -214,9 +208,7 @@ FeaturePromoBubbleView::FeaturePromoBubbleView(
   body_label->SetBackgroundColor(background_color);
   body_label->SetEnabledColor(text_color);
   body_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-
-  if (params.preferred_width.has_value())
-    body_label->SetMultiLine(true);
+  body_label->SetMultiLine(true);
 
   if (snoozable_) {
     auto* button_container = AddChildView(std::make_unique<views::View>());
@@ -291,12 +283,18 @@ FeaturePromoBubbleView::FeaturePromoBubbleView(
 
 FeaturePromoBubbleView::~FeaturePromoBubbleView() = default;
 
+FeaturePromoBubbleView::CreateParams::CreateParams() = default;
+FeaturePromoBubbleView::CreateParams::CreateParams(CreateParams&&) = default;
+FeaturePromoBubbleView::CreateParams::~CreateParams() = default;
+
 // static
 FeaturePromoBubbleView* FeaturePromoBubbleView::Create(
-    const FeaturePromoBubbleParams& params,
+    CreateParams params,
     base::RepeatingClosure snooze_callback,
     base::RepeatingClosure dismiss_callback) {
-  return new FeaturePromoBubbleView(params, snooze_callback, dismiss_callback);
+  return new FeaturePromoBubbleView(std::move(params),
+                                    std::move(snooze_callback),
+                                    std::move(dismiss_callback));
 }
 
 void FeaturePromoBubbleView::CloseBubble() {
@@ -319,17 +317,6 @@ void FeaturePromoBubbleView::OnMouseExited(const ui::MouseEvent& event) {
     feature_promo_bubble_timeout_->OnMouseExited();
 }
 
-gfx::Rect FeaturePromoBubbleView::GetBubbleBounds() {
-  gfx::Rect bounds = BubbleDialogDelegateView::GetBubbleBounds();
-  if (!focusable_) {
-    if (base::i18n::IsRTL())
-      bounds.Offset(5, 0);
-    else
-      bounds.Offset(-5, 0);
-  }
-  return bounds;
-}
-
 ax::mojom::Role FeaturePromoBubbleView::GetAccessibleWindowRole() {
   // Since we don't have any controls for the user to interact with (we're just
   // an information bubble), override our role to kAlert.
@@ -344,9 +331,16 @@ gfx::Size FeaturePromoBubbleView::CalculatePreferredSize() const {
   if (preferred_width_.has_value()) {
     return gfx::Size(preferred_width_.value(),
                      GetHeightForWidth(preferred_width_.value()));
-  } else {
-    return View::CalculatePreferredSize();
   }
+
+  gfx::Size layout_manager_preferred_size = View::CalculatePreferredSize();
+
+  // Wrap if the width is larger than |kBubbleMaxWidthDip|.
+  if (layout_manager_preferred_size.width() > kBubbleMaxWidthDip) {
+    return gfx::Size(kBubbleMaxWidthDip, GetHeightForWidth(kBubbleMaxWidthDip));
+  }
+
+  return layout_manager_preferred_size;
 }
 
 views::Button* FeaturePromoBubbleView::GetDismissButtonForTesting() const {

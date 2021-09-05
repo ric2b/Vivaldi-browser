@@ -160,7 +160,10 @@ class WebMediaPlayer {
 
   virtual ~WebMediaPlayer() = default;
 
-  virtual LoadTiming Load(LoadType, const WebMediaPlayerSource&, CorsMode) = 0;
+  virtual LoadTiming Load(LoadType,
+                          const WebMediaPlayerSource&,
+                          CorsMode,
+                          bool is_cache_disabled) = 0;
 
   // Playback controls.
   virtual void Play() = 0;
@@ -179,12 +182,13 @@ class WebMediaPlayer {
   // adjustments when using a playback rate other than 1.0.
   virtual void SetPreservesPitch(bool preserves_pitch) = 0;
 
+  // Sets a flag indicating whether the audio stream was initiated by autoplay.
+  virtual void SetAutoplayInitiated(bool autoplay_initiated) = 0;
+
   // The associated media element is going to enter Picture-in-Picture. This
   // method should make sure the player is set up for this and has a SurfaceId
   // as it will be needed.
   virtual void OnRequestPictureInPicture() = 0;
-
-  virtual void OnPictureInPictureAvailabilityChanged(bool available) = 0;
 
   // Called to notify about changes of the associated media element's media
   // time, playback rate, and duration. During uninterrupted playback, the

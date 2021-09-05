@@ -10,14 +10,12 @@
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/usb/usb_chooser_context.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
 #include "chrome/browser/usb/usb_chooser_context_mock_device_observer.h"
 #include "chrome/common/chrome_constants.h"
-#include "chrome/common/pref_names.h"
-#include "chrome/test/base/scoped_testing_local_state.h"
-#include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/pref_names.h"
@@ -705,12 +703,11 @@ TEST_F(UsbChooserContextTest,
                                          *unrelated_device_info));
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 
 class DeviceLoginScreenWebUsbChooserContextTest : public UsbChooserContextTest {
  public:
-  DeviceLoginScreenWebUsbChooserContextTest()
-      : testing_local_state_(TestingBrowserProcess::GetGlobal()) {
+  DeviceLoginScreenWebUsbChooserContextTest() {
     TestingProfile::Builder builder;
     builder.SetPath(base::FilePath(FILE_PATH_LITERAL(chrome::kInitialProfile)));
     signin_profile_ = builder.Build();
@@ -721,7 +718,6 @@ class DeviceLoginScreenWebUsbChooserContextTest : public UsbChooserContextTest {
   Profile* GetSigninProfile() { return signin_profile_.get(); }
 
  private:
-  ScopedTestingLocalState testing_local_state_;
   std::unique_ptr<Profile> signin_profile_;
 };
 
@@ -770,8 +766,8 @@ TEST_F(DeviceLoginScreenWebUsbChooserContextTest,
   ExpectNoPermissions(user_store, *specific_device_info);
   ExpectNoPermissions(signin_store, *specific_device_info);
 
-  g_browser_process->local_state()->Set(
-      prefs::kDeviceLoginScreenWebUsbAllowDevicesForUrls,
+  signin_profile->GetPrefs()->Set(
+      prefs::kManagedWebUsbAllowDevicesForUrls,
       *base::JSONReader::ReadDeprecated(kPolicySetting));
 
   ExpectNoPermissions(user_store, *specific_device_info);
@@ -779,7 +775,7 @@ TEST_F(DeviceLoginScreenWebUsbChooserContextTest,
                            kInvalidRequestingOrigins, *specific_device_info);
 }
 
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace {
 

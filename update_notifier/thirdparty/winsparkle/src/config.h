@@ -4,8 +4,11 @@
 #define UPDATE_NOTIFIER_THIRDPARTY_WINSPARKLE_SRC_CONFIG_H_
 
 #include <string>
+
 #include "base/files/file_path.h"
 #include "url/gurl.h"
+
+#include "installer/util/vivaldi_install_util.h"
 
 namespace winsparkle {
 
@@ -34,6 +37,9 @@ const Config& GetConfig();
 
 // Initialize global configuration.
 void InitConfig(Config config);
+
+extern vivaldi::InstallType g_install_type;
+extern bool g_silent_update;
 
 }  // namespace winsparkle
 

@@ -19,7 +19,6 @@
 #include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_form_test_utils.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
-#include "components/autofill/core/browser/pattern_provider/test_pattern_provider.h"
 #include "components/autofill/core/browser/proto/api_v1.pb.h"
 #include "components/autofill/core/browser/randomized_encoder.h"
 #include "components/autofill/core/common/autofill_features.h"
@@ -64,6 +63,19 @@ void AddFieldSuggestionToForm(
   field_suggestion->set_field_signature(
       CalculateFieldSignatureForField(field_data).value());
   field_suggestion->set_primary_type_prediction(field_type);
+}
+
+void AddFieldOverrideToForm(
+    ::autofill::AutofillQueryResponse_FormSuggestion* form_suggestion,
+    autofill::FormFieldData field_data,
+    ServerFieldType field_type) {
+  AddFieldSuggestionToForm(form_suggestion, field_data, field_type);
+
+  DCHECK_GT(form_suggestion->field_suggestions().size(), 0);
+  form_suggestion
+      ->mutable_field_suggestions(form_suggestion->field_suggestions().size() -
+                                  1)
+      ->set_primary_type_prediction_is_override(true);
 }
 
 }  // namespace
@@ -125,9 +137,6 @@ class FormStructureTestImpl : public test::FormStructureTest {
   FieldRendererId MakeFieldRendererId() {
     return FieldRendererId(++id_counter_);
   }
-
- protected:
-  TestPatternProvider test_pattern_provider_;
 
  private:
   void EnableAutofillMetadataFieldTrial() {
@@ -638,23 +647,28 @@ TEST_F(FormStructureTestImpl, StripCommonNameAffix) {
 
   field.label = ASCIIToUTF16("First Name");
   field.name = ASCIIToUTF16("ctl01$ctl00$ShippingAddressCreditPhone$firstname");
+  field.unique_renderer_id = MakeFieldRendererId();
   form.fields.push_back(field);
 
   field.label = ASCIIToUTF16("Last Name");
   field.name = ASCIIToUTF16("ctl01$ctl00$ShippingAddressCreditPhone$lastname");
+  field.unique_renderer_id = MakeFieldRendererId();
   form.fields.push_back(field);
 
   field.label = ASCIIToUTF16("Email");
   field.name = ASCIIToUTF16("ctl01$ctl00$ShippingAddressCreditPhone$email");
+  field.unique_renderer_id = MakeFieldRendererId();
   form.fields.push_back(field);
 
   field.label = ASCIIToUTF16("Phone");
   field.name = ASCIIToUTF16("ctl01$ctl00$ShippingAddressCreditPhone$phone");
+  field.unique_renderer_id = MakeFieldRendererId();
   form.fields.push_back(field);
 
   field.label = base::string16();
   field.name = ASCIIToUTF16("ctl01$ctl00$ShippingAddressCreditPhone$submit");
   field.form_control_type = "submit";
+  field.unique_renderer_id = MakeFieldRendererId();
   form.fields.push_back(field);
 
   std::unique_ptr<FormStructure> form_structure(new FormStructure(form));
@@ -5294,6 +5308,102 @@ TEST_F(FormStructureTestImpl, PossibleValues) {
   EXPECT_EQ(0U, form_structure2.PossibleValues(ADDRESS_BILLING_COUNTRY).size());
 }
 
+// Test that server predictions get precedence over htmll types if they are
+// overrides.
+TEST_F(FormStructureTestImpl, ParseQueryResponse_ServerPredictionIsOverride) {
+  FormData form_data;
+  FormFieldData field;
+  form_data.url = GURL("http://foo.com");
+  field.form_control_type = "text";
+
+  // Just some field.
+  field.label = ASCIIToUTF16("some field");
+  field.name = ASCIIToUTF16("some_field");
+  // But this field has an autocomplete attribute.
+  field.autocomplete_attribute = "name";
+  field.unique_renderer_id = MakeFieldRendererId();
+  form_data.fields.push_back(field);
+
+  // Some other field.
+  field.label = ASCIIToUTF16("some other field");
+  field.name = ASCIIToUTF16("some_other_field");
+  // Which has the same attribute.
+  field.autocomplete_attribute = "name";
+  field.unique_renderer_id = MakeFieldRendererId();
+  form_data.fields.push_back(field);
+
+  // Setup the query response with an override for the name field to be a first
+  // name.
+  AutofillQueryResponse response;
+  auto* form_suggestion = response.add_form_suggestions();
+  AddFieldOverrideToForm(form_suggestion, form_data.fields[0], NAME_FIRST);
+  AddFieldSuggestionToForm(form_suggestion, form_data.fields[1], NAME_LAST);
+
+  std::string response_string = SerializeAndEncode(response);
+
+  // Disable the feature which gives overrides precedence.
+  {
+    base::test::ScopedFeatureList scoped_feature;
+    scoped_feature.InitAndDisableFeature(
+        features::kAutofillServerTypeTakesPrecedence);
+
+    // Parse the response and update the field type predictions.
+    FormStructure form(form_data);
+    form.DetermineHeuristicTypes(nullptr);
+    std::vector<FormStructure*> forms{&form};
+    FormStructure::ParseApiQueryResponse(
+        response_string, forms, test::GetEncodedSignatures(forms), nullptr);
+    ASSERT_EQ(form.field_count(), 2U);
+
+    // Validate the type predictions.
+    EXPECT_EQ(UNKNOWN_TYPE, form.field(0)->heuristic_type());
+    EXPECT_EQ(HTML_TYPE_NAME, form.field(0)->html_type());
+    EXPECT_EQ(NAME_FIRST, form.field(0)->server_type());
+    EXPECT_EQ(UNKNOWN_TYPE, form.field(1)->heuristic_type());
+    EXPECT_EQ(HTML_TYPE_NAME, form.field(1)->html_type());
+    EXPECT_EQ(NAME_LAST, form.field(1)->server_type());
+
+    // Validate that the overrides are set correctly.
+    EXPECT_TRUE(form.field(0)->server_type_prediction_is_override());
+    EXPECT_FALSE(form.field(1)->server_type_prediction_is_override());
+
+    // Validate that the html prediction won.
+    EXPECT_EQ(form.field(0)->Type().GetStorableType(), NAME_FULL);
+    EXPECT_EQ(form.field(1)->Type().GetStorableType(), NAME_FULL);
+  }
+
+  // Enable the feature to give overrides precedence.
+  {
+    base::test::ScopedFeatureList scoped_feature;
+    scoped_feature.InitAndEnableFeature(
+        features::kAutofillServerTypeTakesPrecedence);
+
+    // Parse the response and update the field type predictions.
+    FormStructure form(form_data);
+    form.DetermineHeuristicTypes(nullptr);
+    std::vector<FormStructure*> forms{&form};
+    FormStructure::ParseApiQueryResponse(
+        response_string, forms, test::GetEncodedSignatures(forms), nullptr);
+    ASSERT_EQ(form.field_count(), 2U);
+
+    // Validate the type predictions.
+    EXPECT_EQ(UNKNOWN_TYPE, form.field(0)->heuristic_type());
+    EXPECT_EQ(HTML_TYPE_NAME, form.field(0)->html_type());
+    EXPECT_EQ(NAME_FIRST, form.field(0)->server_type());
+    EXPECT_EQ(UNKNOWN_TYPE, form.field(1)->heuristic_type());
+    EXPECT_EQ(HTML_TYPE_NAME, form.field(1)->html_type());
+    EXPECT_EQ(NAME_LAST, form.field(1)->server_type());
+
+    // Validate that the overrides are set correctly.
+    EXPECT_TRUE(form.field(0)->server_type_prediction_is_override());
+    EXPECT_FALSE(form.field(1)->server_type_prediction_is_override());
+
+    // Validate that the server prediction won for the first field.
+    EXPECT_EQ(form.field(0)->Type().GetStorableType(), NAME_FIRST);
+    EXPECT_EQ(form.field(1)->Type().GetStorableType(), NAME_FULL);
+  }
+}
+
 // Test the heuristic prediction for NAME_LAST_SECOND overrides server
 // predictions.
 TEST_F(FormStructureTestImpl,
@@ -5310,18 +5420,21 @@ TEST_F(FormStructureTestImpl,
   // First name field.
   field.label = ASCIIToUTF16("Nombre");
   field.name = ASCIIToUTF16("Nombre");
+  field.unique_renderer_id = MakeFieldRendererId();
   form_data.fields.push_back(field);
 
   // First last name field.
   // Should be identified by local heuristics.
   field.label = ASCIIToUTF16("Apellido Paterno");
   field.name = ASCIIToUTF16("apellido_paterno");
+  field.unique_renderer_id = MakeFieldRendererId();
   form_data.fields.push_back(field);
 
   // Second last name field.
   // Should be identified by local heuristics.
   field.label = ASCIIToUTF16("Apellido Materno");
   field.name = ASCIIToUTF16("apellido materno");
+  field.unique_renderer_id = MakeFieldRendererId();
   form_data.fields.push_back(field);
 
   FormStructure form(form_data);
@@ -5393,21 +5506,25 @@ TEST_F(FormStructureTestImpl,
   // Field for the name.
   field.label = ASCIIToUTF16("Name");
   field.name = ASCIIToUTF16("Name");
+  field.unique_renderer_id = MakeFieldRendererId();
   form_data.fields.push_back(field);
 
   // Field for the street name.
   field.label = ASCIIToUTF16("Street Name");
   field.name = ASCIIToUTF16("street_name");
+  field.unique_renderer_id = MakeFieldRendererId();
   form_data.fields.push_back(field);
 
   // Field for the house number.
   field.label = ASCIIToUTF16("House Number");
   field.name = ASCIIToUTF16("house_number");
+  field.unique_renderer_id = MakeFieldRendererId();
   form_data.fields.push_back(field);
 
   // Field for the postal code.
   field.label = ASCIIToUTF16("ZIP");
   field.name = ASCIIToUTF16("ZIP");
+  field.unique_renderer_id = MakeFieldRendererId();
   form_data.fields.push_back(field);
 
   FormStructure form(form_data);
@@ -5474,15 +5591,18 @@ TEST_F(FormStructureTestImpl, ParseQueryResponse_TooManyTypes) {
 
   field.label = ASCIIToUTF16("First Name");
   field.name = ASCIIToUTF16("fname");
+  field.unique_renderer_id = MakeFieldRendererId();
   form_data.fields.push_back(field);
 
   field.label = ASCIIToUTF16("Last Name");
   field.name = ASCIIToUTF16("lname");
+  field.unique_renderer_id = MakeFieldRendererId();
   form_data.fields.push_back(field);
 
   field.label = ASCIIToUTF16("email");
   field.name = ASCIIToUTF16("email");
   field.autocomplete_attribute = "address-level2";
+  field.unique_renderer_id = MakeFieldRendererId();
   form_data.fields.push_back(field);
 
   FormStructure form(form_data);
@@ -7490,14 +7610,8 @@ INSTANTIATE_TEST_SUITE_P(All, ParameterizedFormStructureTest, testing::Bool());
 // Tests that, when the flag is off, we will not set the predicted type to
 // unknown for fields that have no server data and autocomplete off, and when
 // the flag is ON, we will overwrite the predicted type.
-TEST_P(ParameterizedFormStructureTest,
+TEST_F(ParameterizedFormStructureTest,
        NoServerData_AutocompleteOff_FlagDisabled_NoOverwrite) {
-  base::test::ScopedFeatureList scoped_features;
-
-  bool flag_enabled = GetParam();
-  scoped_features.InitWithFeatureState(features::kAutofillOffNoServerData,
-                                       flag_enabled);
-
   FormData form;
   form.url = GURL("http://foo.com");
   FormFieldData field;
@@ -7554,8 +7668,7 @@ TEST_P(ParameterizedFormStructureTest,
   ASSERT_EQ(4U, forms[0]->field_count());
 
   // Only NAME_LAST should be affected by the flag.
-  EXPECT_EQ(flag_enabled ? UNKNOWN_TYPE : NAME_LAST,
-            forms[0]->field(1)->Type().GetStorableType());
+  EXPECT_EQ(NAME_LAST, forms[0]->field(1)->Type().GetStorableType());
 
   EXPECT_EQ(NAME_FIRST, forms[0]->field(0)->Type().GetStorableType());
   EXPECT_EQ(ADDRESS_HOME_LINE1, forms[0]->field(2)->Type().GetStorableType());
@@ -7564,13 +7677,7 @@ TEST_P(ParameterizedFormStructureTest,
 
 // Tests that we never overwrite the CVC heuristic-predicted type, even if there
 // is no server data (votes) for every CC fields.
-TEST_P(ParameterizedFormStructureTest, NoServerDataCCFields_CVC_NoOverwrite) {
-  base::test::ScopedFeatureList scoped_features;
-
-  bool flag_enabled = GetParam();
-  scoped_features.InitWithFeatureState(features::kAutofillOffNoServerData,
-                                       flag_enabled);
-
+TEST_F(ParameterizedFormStructureTest, NoServerDataCCFields_CVC_NoOverwrite) {
   FormData form;
   form.url = GURL("http://foo.com");
   FormFieldData field;
@@ -7623,18 +7730,11 @@ TEST_P(ParameterizedFormStructureTest, NoServerDataCCFields_CVC_NoOverwrite) {
   ASSERT_EQ(1U, forms.size());
   ASSERT_EQ(4U, forms[0]->field_count());
 
-  // If flag is enabled, fields should have been overwritten to Unknown.
-  if (flag_enabled) {
-    EXPECT_EQ(UNKNOWN_TYPE, forms[0]->field(0)->Type().GetStorableType());
-    EXPECT_EQ(UNKNOWN_TYPE, forms[0]->field(1)->Type().GetStorableType());
-    EXPECT_EQ(UNKNOWN_TYPE, forms[0]->field(2)->Type().GetStorableType());
-  } else {
-    EXPECT_EQ(CREDIT_CARD_NAME_FULL,
-              forms[0]->field(0)->Type().GetStorableType());
-    EXPECT_EQ(CREDIT_CARD_NUMBER, forms[0]->field(1)->Type().GetStorableType());
-    EXPECT_EQ(CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR,
-              forms[0]->field(2)->Type().GetStorableType());
-  }
+  EXPECT_EQ(CREDIT_CARD_NAME_FULL,
+            forms[0]->field(0)->Type().GetStorableType());
+  EXPECT_EQ(CREDIT_CARD_NUMBER, forms[0]->field(1)->Type().GetStorableType());
+  EXPECT_EQ(CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR,
+            forms[0]->field(2)->Type().GetStorableType());
 
   // Regardless of the flag, the CVC field should not have been overwritten.
   EXPECT_EQ(CREDIT_CARD_VERIFICATION_CODE,
@@ -7643,13 +7743,7 @@ TEST_P(ParameterizedFormStructureTest, NoServerDataCCFields_CVC_NoOverwrite) {
 
 // Tests that we never overwrite the CVC heuristic-predicted type, even if there
 // is server data (votes) for every other CC fields.
-TEST_P(ParameterizedFormStructureTest, WithServerDataCCFields_CVC_NoOverwrite) {
-  base::test::ScopedFeatureList scoped_features;
-
-  bool flag_enabled = GetParam();
-  scoped_features.InitWithFeatureState(features::kAutofillOffNoServerData,
-                                       flag_enabled);
-
+TEST_F(ParameterizedFormStructureTest, WithServerDataCCFields_CVC_NoOverwrite) {
   FormData form;
   form.url = GURL("http://foo.com");
   FormFieldData field;

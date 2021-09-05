@@ -41,7 +41,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/safe_browsing_navigation_observer.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
-#include "chrome/browser/ui/android/infobars/chrome_confirm_infobar.h"
 #include "chrome/browser/ui/android/infobars/framebust_block_infobar.h"
 #include "chrome/browser/ui/android/tab_model/tab_model_list.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
@@ -199,9 +198,8 @@ void TabWebContentsDelegateAndroid::CreateSmsPrompt(
     base::OnceClosure on_cancel) {
   auto* web_contents = content::WebContents::FromRenderFrameHost(host);
   sms::SmsInfoBar::Create(
-      web_contents, InfoBarService::FromWebContents(web_contents),
-      ChromeConfirmInfoBar::GetResourceIdMapper(), origin, one_time_code,
-      std::move(on_confirm), std::move(on_cancel));
+      web_contents, InfoBarService::FromWebContents(web_contents), origin,
+      one_time_code, std::move(on_confirm), std::move(on_cancel));
 }
 
 bool TabWebContentsDelegateAndroid::ShouldFocusLocationBarByDefault(
@@ -218,18 +216,6 @@ bool TabWebContentsDelegateAndroid::ShouldFocusLocationBarByDefault(
     }
   }
   return false;
-}
-
-blink::mojom::DisplayMode TabWebContentsDelegateAndroid::GetDisplayMode(
-    const WebContents* web_contents) {
-  JNIEnv* env = base::android::AttachCurrentThread();
-
-  ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
-  if (obj.is_null())
-    return blink::mojom::DisplayMode::kUndefined;
-
-  return static_cast<blink::mojom::DisplayMode>(
-      Java_TabWebContentsDelegateAndroidImpl_getDisplayMode(env, obj));
 }
 
 void TabWebContentsDelegateAndroid::FindReply(

@@ -7,7 +7,6 @@
 #include <algorithm>
 
 #include "base/memory/ref_counted_memory.h"
-#include "base/run_loop.h"
 #include "ui/base/x/selection_owner.h"
 #include "ui/base/x/selection_utils.h"
 #include "ui/base/x/x11_util.h"
@@ -15,6 +14,7 @@
 #include "ui/events/platform/x11/x11_event_source.h"
 #include "ui/gfx/x/x11_atom_cache.h"
 #include "ui/gfx/x/xproto.h"
+#include "ui/gfx/x/xproto_util.h"
 
 namespace ui {
 
@@ -27,7 +27,7 @@ const char kChromeSelection[] = "CHROME_SELECTION";
 const int KSelectionRequestorTimerPeriodMs = 100;
 
 // The amount of time to wait for a request to complete before aborting it.
-const int kRequestTimeoutMs = 10000;
+const int kRequestTimeoutMs = 1000;
 
 static_assert(KSelectionRequestorTimerPeriodMs <= kRequestTimeoutMs,
               "timer period must be <= request timeout");
@@ -50,12 +50,12 @@ std::vector<uint8_t> CombineData(
 }  // namespace
 
 SelectionRequestor::SelectionRequestor(x11::Window x_window,
-                                       XEventDispatcher* dispatcher)
+                                       x11::EventObserver* observer)
     : x_window_(x_window),
       x_property_(x11::Atom::None),
-      dispatcher_(dispatcher),
+      observer_(observer),
       current_request_index_(0u) {
-  x_property_ = gfx::GetAtom(kChromeSelection);
+  x_property_ = x11::GetAtom(kChromeSelection);
 }
 
 SelectionRequestor::~SelectionRequestor() = default;
@@ -98,7 +98,8 @@ void SelectionRequestor::PerformBlockingConvertSelectionWithParameter(
     x11::Atom selection,
     x11::Atom target,
     const std::vector<x11::Atom>& parameter) {
-  SetAtomArrayProperty(x_window_, kChromeSelection, "ATOM", parameter);
+  SetArrayProperty(x_window_, x11::GetAtom(kChromeSelection), x11::Atom::ATOM,
+                   parameter);
   PerformBlockingConvertSelection(selection, target, nullptr, nullptr);
 }
 
@@ -126,7 +127,7 @@ void SelectionRequestor::OnSelectionNotify(
       request->target != selection.target) {
     // ICCCM requires us to delete the property passed into SelectionNotify.
     if (event_property != x11::Atom::None)
-      ui::DeleteProperty(x_window_, event_property);
+      x11::DeleteProperty(x_window_, event_property);
     return;
   }
 
@@ -141,9 +142,9 @@ void SelectionRequestor::OnSelectionNotify(
     }
   }
   if (event_property != x11::Atom::None)
-    ui::DeleteProperty(x_window_, event_property);
+    x11::DeleteProperty(x_window_, event_property);
 
-  if (request->out_type == gfx::GetAtom(kIncr)) {
+  if (request->out_type == x11::GetAtom(kIncr)) {
     request->data_sent_incrementally = true;
     request->out_data.clear();
     request->out_type = x11::Atom::None;
@@ -154,13 +155,14 @@ void SelectionRequestor::OnSelectionNotify(
   }
 }
 
-bool SelectionRequestor::CanDispatchPropertyEvent(const x11::Event& event) {
-  const auto* prop = event.As<x11::PropertyNotifyEvent>();
-  return prop->window == x_window_ && prop->atom == x_property_ &&
-         prop->state == x11::Property::NewValue;
+bool SelectionRequestor::CanDispatchPropertyEvent(
+    const x11::PropertyNotifyEvent& prop) {
+  return prop.window == x_window_ && prop.atom == x_property_ &&
+         prop.state == x11::Property::NewValue;
 }
 
-void SelectionRequestor::OnPropertyEvent(const x11::Event& event) {
+void SelectionRequestor::OnPropertyEvent(
+    const x11::PropertyNotifyEvent& event) {
   Request* request = GetCurrentRequest();
   if (!request || !request->data_sent_incrementally)
     return;
@@ -183,7 +185,7 @@ void SelectionRequestor::OnPropertyEvent(const x11::Event& event) {
   request->out_type = out_type;
 
   // Delete the property to tell the selection owner to send the next chunk.
-  ui::DeleteProperty(x_window_, x_property_);
+  x11::DeleteProperty(x_window_, x_property_);
 
   request->timeout = base::TimeTicks::Now() +
                      base::TimeDelta::FromMilliseconds(kRequestTimeoutMs);
@@ -234,37 +236,30 @@ void SelectionRequestor::ConvertSelectionForCurrentRequest() {
 }
 
 void SelectionRequestor::BlockTillSelectionNotifyForRequest(Request* request) {
-  if (X11EventSource::HasInstance()) {
-    if (!abort_timer_.IsRunning()) {
-      abort_timer_.Start(
-          FROM_HERE,
-          base::TimeDelta::FromMilliseconds(KSelectionRequestorTimerPeriodMs),
-          this, &SelectionRequestor::AbortStaleRequests);
-    }
-
-    base::RunLoop run_loop(base::RunLoop::Type::kNestableTasksAllowed);
-    request->quit_closure = run_loop.QuitClosure();
-    run_loop.Run();
-
-    // We cannot put logic to process the next request here because the RunLoop
-    // might be nested. For instance, request 'B' may start a RunLoop while the
-    // RunLoop for request 'A' is running. It is not possible to end the RunLoop
-    // for request 'A' without first ending the RunLoop for request 'B'.
-  } else {
-    // This occurs if PerformBlockingConvertSelection() is called during
-    // shutdown and the X11EventSource has already been destroyed.
-    auto* conn = x11::Connection::Get();
-    auto& events = conn->events();
-    while (!request->completed && request->timeout > base::TimeTicks::Now()) {
-      conn->Flush();
-      conn->ReadResponses();
-      if (!conn->events().empty()) {
-        x11::Event event = std::move(events.front());
-        events.pop_front();
-        dispatcher_->DispatchXEvent(&event);
+  auto* connection = x11::Connection::Get();
+  auto& events = connection->events();
+  size_t i = 0;
+  while (!request->completed && request->timeout > base::TimeTicks::Now()) {
+    connection->Flush();
+    connection->ReadResponses();
+    size_t events_size = events.size();
+    for (; i < events_size; ++i) {
+      auto& event = events[i];
+      if (auto* notify = event.As<x11::SelectionNotifyEvent>()) {
+        if (notify->requestor == x_window_) {
+          OnSelectionNotify(*notify);
+          event = x11::Event();
+        }
+      } else if (auto* prop = event.As<x11::PropertyNotifyEvent>()) {
+        if (CanDispatchPropertyEvent(*prop)) {
+          OnPropertyEvent(*prop);
+          event = x11::Event();
+        }
       }
     }
+    DCHECK_EQ(events_size, events.size());
   }
+  AbortStaleRequests();
 }
 
 SelectionRequestor::Request* SelectionRequestor::GetCurrentRequest() {

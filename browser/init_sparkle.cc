@@ -79,15 +79,16 @@ Config GetConfig(const base::CommandLine& command_line) {
 
   if (command_line.HasSwitch(switches::kVivaldiUpdateURL)) {
     // Ref. VB-7983: If the --vuu switch is specified,
-    // show the update url in a messagebox/stdout
-    config.show_appcast = true;
+    // show the update url in stdout
     std::string update_url =
         command_line.GetSwitchValueASCII(switches::kVivaldiUpdateURL);
     if (!update_url.empty()) {
       GURL gurl(update_url);
       if (gurl.is_valid()) {
         // Use the supplied url for update.
-        config.appcast_url = gurl;
+        config.appcast_url = std::move(gurl);
+        config.with_custom_url = true;
+        LOG(INFO) << "Vivaldi Update URL: " << config.appcast_url.spec();
       }
     }
   }
@@ -101,9 +102,6 @@ void Initialize(const base::CommandLine& command_line) {
   if (!vivaldi_updater_initialized) {
     Config config = GetConfig(command_line);
     SparkleUtil::SetFeedURL(config.appcast_url.spec().c_str());
-    if (config.show_appcast) {
-      LOG(INFO) << "Vivaldi Update URL: " << config.appcast_url.spec();
-    }
     vivaldi_updater_initialized = true;
   }
 }

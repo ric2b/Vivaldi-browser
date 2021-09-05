@@ -43,6 +43,7 @@ tools/metrics/histograms/histograms_xml/geolocation/histograms.xml
 tools/metrics/histograms/histograms_xml/google/histograms.xml
 tools/metrics/histograms/histograms_xml/gpu/histograms.xml
 tools/metrics/histograms/histograms_xml/hang_watcher/histograms.xml
+tools/metrics/histograms/histograms_xml/help_app/histograms.xml
 tools/metrics/histograms/histograms_xml/histogram_suffixes_list.xml
 tools/metrics/histograms/histograms_xml/history/histograms.xml
 tools/metrics/histograms/histograms_xml/holding_space/histograms.xml
@@ -51,6 +52,7 @@ tools/metrics/histograms/histograms_xml/input/histograms.xml
 tools/metrics/histograms/histograms_xml/installer/histograms.xml
 tools/metrics/histograms/histograms_xml/instant/histograms.xml
 tools/metrics/histograms/histograms_xml/interstitial/histograms.xml
+tools/metrics/histograms/histograms_xml/invalidation/histograms.xml
 tools/metrics/histograms/histograms_xml/ios/histograms.xml
 tools/metrics/histograms/histograms_xml/local/histograms.xml
 tools/metrics/histograms/histograms_xml/login/histograms.xml
@@ -77,6 +79,7 @@ tools/metrics/histograms/histograms_xml/phonehub/histograms.xml
 tools/metrics/histograms/histograms_xml/platform/histograms.xml
 tools/metrics/histograms/histograms_xml/plugin/histograms.xml
 tools/metrics/histograms/histograms_xml/power/histograms.xml
+tools/metrics/histograms/histograms_xml/prefetch/histograms.xml
 tools/metrics/histograms/histograms_xml/print/histograms.xml
 tools/metrics/histograms/histograms_xml/printing/histograms.xml
 tools/metrics/histograms/histograms_xml/profile/histograms.xml
@@ -86,6 +89,7 @@ tools/metrics/histograms/histograms_xml/renderer/histograms.xml
 tools/metrics/histograms/histograms_xml/renderer4/histograms.xml
 tools/metrics/histograms/histograms_xml/safe_browsing/histograms.xml
 tools/metrics/histograms/histograms_xml/sb_client/histograms.xml
+tools/metrics/histograms/histograms_xml/scanning/histograms.xml
 tools/metrics/histograms/histograms_xml/scheduler/histograms.xml
 tools/metrics/histograms/histograms_xml/search/histograms.xml
 tools/metrics/histograms/histograms_xml/security/histograms.xml

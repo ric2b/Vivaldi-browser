@@ -109,14 +109,14 @@ FetchRequestData* FetchRequestData::Create(
         script_state,
         MakeGarbageCollected<BlobBytesConsumer>(
             ExecutionContext::From(script_state), fetch_api_request->blob),
-        nullptr /* AbortSignal */));
+        nullptr /* AbortSignal */, /*cached_metadata_handler=*/nullptr));
   } else if (fetch_api_request->body.FormBody()) {
-    request->SetBuffer(
-        BodyStreamBuffer::Create(script_state,
-                                 MakeGarbageCollected<FormDataBytesConsumer>(
-                                     ExecutionContext::From(script_state),
-                                     fetch_api_request->body.FormBody()),
-                                 nullptr /* AbortSignal */));
+    request->SetBuffer(BodyStreamBuffer::Create(
+        script_state,
+        MakeGarbageCollected<FormDataBytesConsumer>(
+            ExecutionContext::From(script_state),
+            fetch_api_request->body.FormBody()),
+        nullptr /* AbortSignal */, /*cached_metadata_handler=*/nullptr));
   } else if (fetch_api_request->body.StreamBody()) {
     mojo::ScopedDataPipeConsumerHandle readable;
     mojo::ScopedDataPipeProducerHandle writable;
@@ -128,14 +128,15 @@ FetchRequestData* FetchRequestData::Create(
       DataPipeBytesConsumer::CompletionNotifier* completion_notifier = nullptr;
       // Explicitly creating a ReadableStream here in order to remember
       // that the request is created from a ReadableStream.
-      auto* stream = BodyStreamBuffer::Create(
-                         script_state,
-                         MakeGarbageCollected<DataPipeBytesConsumer>(
-                             ExecutionContext::From(script_state)
-                                 ->GetTaskRunner(TaskType::kNetworking),
-                             std::move(readable), &completion_notifier),
-                         /*AbortSignal=*/nullptr)
-                         ->Stream();
+      auto* stream =
+          BodyStreamBuffer::Create(
+              script_state,
+              MakeGarbageCollected<DataPipeBytesConsumer>(
+                  ExecutionContext::From(script_state)
+                      ->GetTaskRunner(TaskType::kNetworking),
+                  std::move(readable), &completion_notifier),
+              /*AbortSignal=*/nullptr, /*cached_metadata_handler=*/nullptr)
+              ->Stream();
       request->SetBuffer(
           MakeGarbageCollected<BodyStreamBuffer>(script_state, stream,
                                                  /*AbortSignal=*/nullptr));
@@ -151,7 +152,7 @@ FetchRequestData* FetchRequestData::Create(
     } else {
       request->SetBuffer(BodyStreamBuffer::Create(
           script_state, BytesConsumer::CreateErrored(BytesConsumer::Error()),
-          nullptr /* AbortSignal */));
+          nullptr /* AbortSignal */, /*cached_metadata_handler=*/nullptr));
     }
   }
 
@@ -198,7 +199,6 @@ FetchRequestData* FetchRequestData::CloneExceptBody() {
   request->credentials_ = credentials_;
   request->cache_mode_ = cache_mode_;
   request->redirect_ = redirect_;
-  request->response_tainting_ = response_tainting_;
   request->mime_type_ = mime_type_;
   request->integrity_ = integrity_;
   request->priority_ = priority_;
@@ -238,7 +238,8 @@ FetchRequestData* FetchRequestData::Pass(ScriptState* script_state) {
   if (buffer_) {
     request->buffer_ = buffer_;
     buffer_ = BodyStreamBuffer::Create(
-        script_state, BytesConsumer::CreateClosed(), nullptr /* AbortSignal */);
+        script_state, BytesConsumer::CreateClosed(), nullptr /* AbortSignal */,
+        /*cached_metadata_handler=*/nullptr);
     buffer_->CloseAndLockAndDisturb();
   }
   request->url_loader_factory_ = std::move(url_loader_factory_);
@@ -258,7 +259,6 @@ FetchRequestData::FetchRequestData(ExecutionContext* execution_context)
       cache_mode_(mojom::FetchCacheMode::kDefault),
       redirect_(network::mojom::RedirectMode::kFollow),
       importance_(mojom::FetchImportanceMode::kImportanceAuto),
-      response_tainting_(kBasicTainting),
       priority_(ResourceLoadPriority::kUnresolved),
       keepalive_(false),
       url_loader_factory_(execution_context),

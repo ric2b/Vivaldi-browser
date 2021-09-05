@@ -11,6 +11,7 @@
     <output filename="values-io/permissions_android_strings.xml" lang="io" type="android" />
     <output filename="values-ja-rKS/permissions_android_strings.xml" lang="ja-KS" type="android" />
     <output filename="values-jbo/permissions_android_strings.xml" lang="jbo" type="android" />
+    <output filename="values-kab/permissions_android_strings.xml" lang="kab" type="android" />
     <output filename="values-ku/permissions_android_strings.xml" lang="ku" type="android" />
     <output filename="values-sc/permissions_android_strings.xml" lang="sc" type="android" />
     <output filename="values-nn/permissions_android_strings.xml" lang="nn" type="android" />
@@ -52,6 +53,7 @@
     <file path="strings/vivaldi_permissions_android_strings_it.xtb" lang="it" />
     <file path="strings/vivaldi_permissions_android_strings_ja.xtb" lang="ja" />
     <file path="strings/vivaldi_permissions_android_strings_ka.xtb" lang="ka" />
+    <file path="strings/vivaldi_permissions_android_strings_kab.xtb" lang="kab" />
     <file path="strings/vivaldi_permissions_android_strings_kk.xtb" lang="kk" />
     <file path="strings/vivaldi_permissions_android_strings_km.xtb" lang="km" />
     <file path="strings/vivaldi_permissions_android_strings_kn.xtb" lang="kn" />

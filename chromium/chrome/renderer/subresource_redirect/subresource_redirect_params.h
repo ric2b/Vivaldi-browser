@@ -16,14 +16,6 @@ namespace subresource_redirect {
 // default.
 url::Origin GetSubresourceRedirectOrigin();
 
-// Returns if the public image hints based subresource compression is enabled.
-bool IsPublicImageHintsBasedCompressionEnabled();
-
-// Should the subresource be redirected to its compressed version. This returns
-// false if only coverage metrics need to be recorded and actual redirection
-// should not happen.
-bool ShouldCompressionServerRedirectSubresource();
-
 // Returns the timeout for the compressed subresource redirect, after which the
 // subresource should be fetched directly from the origin.
 base::TimeDelta GetCompressionRedirectTimeout();
@@ -34,6 +26,10 @@ int64_t GetHintsReceiveTimeout();
 // Returns the timeout to wait for the robots rules to be received, after which
 // the subresource should be fetched directly from the origin.
 base::TimeDelta GetRobotsRulesReceiveTimeout();
+
+// The maximum number of robots rules parsers the renderer should cache locally
+// for reuse by the renderframes in the renderer process.
+int MaxRobotsRulesParsersCacheSize();
 
 }  // namespace subresource_redirect
 

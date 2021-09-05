@@ -41,7 +41,7 @@ class CompositingTest : public PaintTestConfigurations, public testing::Test {
 
   void SetUp() override {
     web_view_helper_ = std::make_unique<frame_test_helpers::WebViewHelper>();
-    web_view_helper_->Initialize(nullptr, nullptr, &web_widget_client_,
+    web_view_helper_->Initialize(nullptr, nullptr,
                                  &ConfigureCompositingWebView);
     web_view_helper_->Resize(gfx::Size(200, 200));
 
@@ -76,7 +76,9 @@ class CompositingTest : public PaintTestConfigurations, public testing::Test {
   }
 
   cc::LayerTreeHost* LayerTreeHost() {
-    return web_widget_client_.layer_tree_host();
+    return web_view_helper_->LocalMainFrame()
+        ->FrameWidgetImpl()
+        ->LayerTreeHostForTesting();
   }
 
   Element* GetElementById(const AtomicString& id) {
@@ -103,7 +105,6 @@ class CompositingTest : public PaintTestConfigurations, public testing::Test {
   }
 
  private:
-  frame_test_helpers::TestWebWidgetClient web_widget_client_;
   std::unique_ptr<frame_test_helpers::WebViewHelper> web_view_helper_;
 };
 
@@ -484,7 +485,7 @@ class CompositingSimTest : public PaintTestConfigurations, public SimTest {
   }
 
   cc::PropertyTrees* GetPropertyTrees() {
-    return Compositor().layer_tree_host()->property_trees();
+    return Compositor().LayerTreeHost()->property_trees();
   }
 
   cc::TransformNode* GetTransformNode(const cc::Layer* layer) {
@@ -533,7 +534,7 @@ TEST_P(CompositingSimTest, LayerUpdatesDoNotInvalidateEarlierLayers) {
   auto* b_layer = CcLayerByDOMElementId("b");
 
   // Initially, neither a nor b should have a layer that should push properties.
-  cc::LayerTreeHost& host = *Compositor().layer_tree_host();
+  cc::LayerTreeHost& host = *Compositor().LayerTreeHost();
   EXPECT_FALSE(host.LayersThatShouldPushProperties().count(a_layer));
   EXPECT_FALSE(host.LayersThatShouldPushProperties().count(b_layer));
 
@@ -575,7 +576,7 @@ TEST_P(CompositingSimTest, LayerUpdatesDoNotInvalidateLaterLayers) {
   auto* c_layer = CcLayerByDOMElementId("c");
 
   // Initially, no layer should need to push properties.
-  cc::LayerTreeHost& host = *Compositor().layer_tree_host();
+  cc::LayerTreeHost& host = *Compositor().LayerTreeHost();
   EXPECT_FALSE(host.LayersThatShouldPushProperties().count(a_layer));
   EXPECT_FALSE(host.LayersThatShouldPushProperties().count(b_layer));
   EXPECT_FALSE(host.LayersThatShouldPushProperties().count(c_layer));
@@ -613,7 +614,7 @@ TEST_P(CompositingSimTest,
   Compositor().BeginFrame();
 
   // Initially the host should not need to sync.
-  cc::LayerTreeHost& layer_tree_host = *Compositor().layer_tree_host();
+  cc::LayerTreeHost& layer_tree_host = *Compositor().LayerTreeHost();
   EXPECT_FALSE(layer_tree_host.needs_full_tree_sync());
   int sequence_number = GetPropertyTrees()->sequence_number;
   EXPECT_GT(sequence_number, 0);
@@ -1193,16 +1194,88 @@ TEST_P(CompositingSimTest, LayerClipPropertyChanged) {
   EXPECT_FALSE(inner_element_layer->subtree_property_changed());
 }
 
-TEST_P(CompositingSimTest, SafeOpaqueBackgroundColorGetsSet) {
-  // TODO(crbug.com/765003): CAP may make different layerization decisions and
-  // we cannot guarantee that both divs will be composited in this test. When
-  // CAP gets closer to launch, this test should be updated to pass.
-  if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
-    return;
-
+TEST_P(CompositingSimTest, SafeOpaqueBackgroundColor) {
   InitializeWithHTML(R"HTML(
-      <!DOCTYPE html>
-      <style>
+    <!DOCTYPE html>
+    <style>
+      body { background: yellow; }
+      div {
+        position: absolute;
+        z-index: 1;
+        width: 20px;
+        height: 20px;
+        will-change: transform; /* Composited */
+      }
+      #opaque-color {
+        background: blue;
+      }
+      #opaque-image, #opaque-image-translucent-color {
+        background: linear-gradient(blue, green);
+      }
+      #partly-opaque div {
+        width: 15px;
+        height: 15px;
+        background: blue;
+        will-change: initial;
+      }
+      #translucent, #opaque-image-translucent-color div {
+        background: rgba(0, 255, 255, 0.5);
+        will-change: initial;
+      }
+    </style>
+    <div id="opaque-color"></div>
+    <div id="opaque-image"></div>
+    <div id="opaque-image-translucent-color">
+      <div></div>
+    </div>
+    <div id="partly-opaque">
+      <div></div>
+    </div>
+    <div id="translucent"></div>
+  )HTML");
+
+  Compositor().BeginFrame();
+
+  auto* opaque_color = CcLayerByDOMElementId("opaque-color");
+  EXPECT_TRUE(opaque_color->contents_opaque());
+  EXPECT_EQ(SK_ColorBLUE, opaque_color->background_color());
+  EXPECT_EQ(SK_ColorBLUE, opaque_color->SafeOpaqueBackgroundColor());
+
+  auto* opaque_image = CcLayerByDOMElementId("opaque-image");
+  EXPECT_TRUE(opaque_image->contents_opaque());
+  EXPECT_EQ(SK_ColorTRANSPARENT, opaque_image->background_color());
+  // Fallback to use the viewport background.
+  EXPECT_EQ(SK_ColorYELLOW, opaque_image->SafeOpaqueBackgroundColor());
+
+  const SkColor kTranslucentCyan = SkColorSetARGB(128, 0, 255, 255);
+  auto* opaque_image_translucent_color =
+      CcLayerByDOMElementId("opaque-image-translucent-color");
+  EXPECT_TRUE(opaque_image_translucent_color->contents_opaque());
+  EXPECT_EQ(kTranslucentCyan,
+            opaque_image_translucent_color->background_color());
+  // Use background_color() with the alpha channel forced to be opaque.
+  EXPECT_EQ(SK_ColorCYAN,
+            opaque_image_translucent_color->SafeOpaqueBackgroundColor());
+
+  auto* partly_opaque = CcLayerByDOMElementId("partly-opaque");
+  EXPECT_FALSE(partly_opaque->contents_opaque());
+  EXPECT_EQ(SK_ColorBLUE, partly_opaque->background_color());
+  // SafeOpaqueBackgroundColor() returns SK_ColorTRANSPARENT when
+  // background_color() is opaque and contents_opaque() is false.
+  EXPECT_EQ(SK_ColorTRANSPARENT, partly_opaque->SafeOpaqueBackgroundColor());
+
+  auto* translucent = CcLayerByDOMElementId("translucent");
+  EXPECT_FALSE(translucent->contents_opaque());
+  EXPECT_EQ(kTranslucentCyan, translucent->background_color());
+  // SafeOpaqueBackgroundColor() returns background_color() if it's not opaque
+  // and contents_opaque() is false.
+  EXPECT_EQ(kTranslucentCyan, translucent->SafeOpaqueBackgroundColor());
+}
+
+TEST_P(CompositingSimTest, SquashingLayerSafeOpaqueBackgroundColor) {
+  InitializeWithHTML(R"HTML(
+    <!DOCTYPE html>
+    <style>
       div {
         position: absolute;
         z-index: 1;
@@ -1223,52 +1296,32 @@ TEST_P(CompositingSimTest, SafeOpaqueBackgroundColorGetsSet) {
       #bottomright {
         top: 24px;
         left: 24px;
+        width: 100px;
+        height: 100px;
         background: cyan;
       }
-      </style>
-      <div id="behind"></div>
-      <div id="topleft"></div>
-      <div id="bottomright"></div>
+    </style>
+    <div id="behind"></div>
+    <div id="topleft"></div>
+    <div id="bottomright"></div>
   )HTML");
 
   Compositor().BeginFrame();
 
-  auto* behind_element = GetElementById("behind");
-  auto* behind_layer = CcLayerByDOMElementId("behind");
-  EXPECT_EQ(behind_layer->element_id(),
-            CompositorElementIdFromUniqueObjectId(
-                behind_element->GetLayoutObject()->UniqueId(),
-                CompositorElementIdNamespace::kPrimary));
-  EXPECT_EQ(behind_layer->SafeOpaqueBackgroundColor(), SK_ColorBLUE);
-
-  auto* grouped_mapping =
-      GetElementById("topleft")->GetLayoutBox()->Layer()->GroupedMapping();
-  ASSERT_TRUE(grouped_mapping);
-  ASSERT_TRUE(grouped_mapping->NonScrollingSquashingLayer());
-  auto& squashing_layer =
-      grouped_mapping->NonScrollingSquashingLayer()->CcLayer();
+  auto* squashing_layer = CcLayerByDOMElementId("topleft");
+  ASSERT_TRUE(squashing_layer);
+  EXPECT_EQ(gfx::Size(124, 124), squashing_layer->bounds());
 
   // Top left and bottom right are squashed.
   // This squashed layer should not be opaque, as it is squashing two squares
   // with some gaps between them.
-  EXPECT_FALSE(squashing_layer.contents_opaque());
-  // This shouldn't DCHECK.
-  squashing_layer.SafeOpaqueBackgroundColor();
-  // Because contents_opaque is false, the SafeOpaqueBackgroundColor() getter
-  // will return SK_ColorTRANSPARENT. So we need to grab the actual color,
-  // to make sure it's right.
-  SkColor squashed_bg_color =
-      squashing_layer.ActualSafeOpaqueBackgroundColorForTesting();
-  // The squashed layer should have a non-transparent safe opaque background
-  // color, that isn't blue. Exactly which color it is depends on heuristics,
-  // but it should be one of the two colors of the elements that created it.
-  EXPECT_NE(squashed_bg_color, SK_ColorBLUE);
-  EXPECT_EQ(SkColorGetA(squashed_bg_color), SK_AlphaOPAQUE);
-  // #behind is blue, which is SK_ColorBLUE
-  // #topleft is lime, which is SK_ColorGREEN
-  // #bottomright is cyan, which is SK_ColorCYAN
-  EXPECT_TRUE((squashed_bg_color == SK_ColorGREEN) ||
-              (squashed_bg_color == SK_ColorCYAN));
+  EXPECT_FALSE(squashing_layer->contents_opaque());
+  // The background color of #bottomright is used as the background color
+  // because it covers the most significant area of the squashing layer.
+  EXPECT_EQ(squashing_layer->background_color(), SK_ColorCYAN);
+  // SafeOpaqueBackgroundColor() returns SK_ColorTRANSPARENT when
+  // background_color() is opaque and contents_opaque() is false.
+  EXPECT_EQ(squashing_layer->SafeOpaqueBackgroundColor(), SK_ColorTRANSPARENT);
 }
 
 // Test that a pleasant checkerboard color is used in the presence of blending.
@@ -1283,6 +1336,7 @@ TEST_P(CompositingSimTest, RootScrollingContentsSafeOpaqueBackgroundColor) {
   auto* scrolling_contents = ScrollingContentsCcLayerByScrollElementId(
       RootCcLayer(),
       MainFrame().GetFrameView()->LayoutViewport()->GetScrollElementId());
+  EXPECT_EQ(scrolling_contents->background_color(), SK_ColorWHITE);
   EXPECT_EQ(scrolling_contents->SafeOpaqueBackgroundColor(), SK_ColorWHITE);
 }
 
@@ -1589,13 +1643,13 @@ TEST_P(CompositingSimTest, ImplSideScrollSkipsCommit) {
   auto* scrollable_area = scroller->GetLayoutBox()->GetScrollableArea();
   auto element_id = scrollable_area->GetScrollElementId();
 
-  EXPECT_FALSE(Compositor().layer_tree_host()->CommitRequested());
+  EXPECT_FALSE(Compositor().LayerTreeHost()->CommitRequested());
 
   // Simulate the scroll update with scroll delta from impl-side.
   cc::CompositorCommitData commit_data;
   commit_data.scrolls.emplace_back(cc::CompositorCommitData::ScrollUpdateInfo(
       element_id, gfx::ScrollOffset(0, 10), base::nullopt));
-  Compositor().layer_tree_host()->ApplyCompositorChanges(&commit_data);
+  Compositor().LayerTreeHost()->ApplyCompositorChanges(&commit_data);
   EXPECT_EQ(FloatPoint(0, 10), scrollable_area->ScrollPosition());
   EXPECT_EQ(gfx::ScrollOffset(0, 10),
             GetPropertyTrees()->scroll_tree.current_scroll_offset(element_id));
@@ -1607,10 +1661,10 @@ TEST_P(CompositingSimTest, ImplSideScrollSkipsCommit) {
   // A main frame is needed to call UpdateLayers which updates property trees,
   // re-calculating cached to/from-screen transforms.
   EXPECT_TRUE(
-      Compositor().layer_tree_host()->RequestedMainFramePendingForTesting());
+      Compositor().LayerTreeHost()->RequestedMainFramePendingForTesting());
 
   // A full commit is not needed.
-  EXPECT_FALSE(Compositor().layer_tree_host()->CommitRequested());
+  EXPECT_FALSE(Compositor().LayerTreeHost()->CommitRequested());
 }
 
 TEST_P(CompositingSimTest, FrameAttribution) {
@@ -1717,6 +1771,32 @@ TEST_P(CompositingSimTest, VisibleFrameRootLayers) {
   ASSERT_TRUE(iframe_transform_node);
 
   EXPECT_FALSE(iframe_transform_node->visible_frame_element_id);
+}
+
+TEST_P(CompositingSimTest, DecompositedTransformWithChange) {
+  InitializeWithHTML(R"HTML(
+    <style>
+      svg { overflow: hidden; }
+      .initial { transform: rotate3d(0,0,1,10deg); }
+      .changed { transform: rotate3d(0,0,1,0deg); }
+    </style>
+    <div style='will-change: transform;'>
+      <svg id='svg' xmlns='http://www.w3.org/2000/svg' class='initial'>
+        <line x1='50%' x2='50%' y1='0' y2='100%' stroke='blue'/>
+        <line y1='50%' y2='50%' x1='0' x2='100%' stroke='blue'/>
+      </svg>
+    </div>
+  )HTML");
+
+  Compositor().BeginFrame();
+
+  auto* svg_element_layer = CcLayerByDOMElementId("svg");
+  EXPECT_FALSE(svg_element_layer->subtree_property_changed());
+
+  auto* svg_element = GetElementById("svg");
+  svg_element->setAttribute(html_names::kClassAttr, "changed");
+  UpdateAllLifecyclePhases();
+  EXPECT_TRUE(svg_element_layer->subtree_property_changed());
 }
 
 }  // namespace blink

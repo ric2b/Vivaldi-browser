@@ -17,6 +17,7 @@
 #include "chromecast/browser/webview/webview_navigation_throttle.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browsing_data_remover.h"
+#include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -69,10 +70,15 @@ WebviewController::WebviewController(content::BrowserContext* browser_context,
   contents_->SetUserData(CastWebPreferences::kCastWebPreferencesDataKey,
                          std::make_unique<CastWebPreferences>());
 
+  CastWebPreferences* cast_prefs = GetCastPreferencesFor(contents_.get());
+
   // Allow Webviews to show scrollbars. These are globally disabled since Cast
   // Apps are not expected to be scrollable.
-  GetCastPreferencesFor(contents_.get())->preferences()->hide_scrollbars =
-      false;
+  cast_prefs->preferences()->hide_scrollbars = false;
+
+  // Disallow Webviews to use multiple windows to show the new page in the
+  // existing view.
+  cast_prefs->preferences()->supports_multiple_windows = false;
 
   CastWebContents::InitParams cast_contents_init;
   cast_contents_init.is_root_window = true;
@@ -181,11 +187,20 @@ void WebviewController::HandleUpdateSettings(
   CastWebContents::FromWebContents(contents)->SetEnabledForRemoteDebugging(
       request.debugging_enabled() || enabled_for_dev_);
 
-  if (request.has_user_agent() &&
-      request.user_agent().type_case() == webview::UserAgent::kValue) {
+  const bool user_agent_overridden =
+      request.has_user_agent() &&
+      request.user_agent().type_case() == webview::UserAgent::kValue;
+
+  if (user_agent_overridden) {
     contents->SetUserAgentOverride(
         blink::UserAgentOverride::UserAgentOnly(request.user_agent().value()),
         true);
+  }
+
+  content::NavigationController& controller = contents->GetController();
+  for (int i = 0; i < controller.GetEntryCount(); ++i) {
+    controller.GetEntryAtIndex(i)->SetIsOverridingUserAgent(
+        user_agent_overridden);
   }
 }
 

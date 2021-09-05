@@ -12,11 +12,12 @@ import 'chrome://resources/cr_elements/cr_lottie/cr_lottie.m.js';
 import 'chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js';
 import 'chrome://resources/mojo/mojo/public/mojom/base/unguessable_token.mojom-lite.js';
 import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
-import './nearby_device.js';
-import './nearby_preview.js';
+import './shared/nearby_device.m.js';
 import './mojo/nearby_share_target_types.mojom-lite.js';
+import './mojo/nearby_share_share_type.mojom-lite.js';
 import './mojo/nearby_share.mojom-lite.js';
 import './shared/nearby_page_template.m.js';
+import './shared/nearby_preview.m.js';
 import './strings.m.js';
 
 import {assert, assertNotReached} from 'chrome://resources/js/assert.m.js';
@@ -53,9 +54,9 @@ Polymer({
   properties: {
     /**
      * Preview info for the file(s) to be shared.
-     * @type {?nearbyShare.mojom.SendPreview}
+     * @type {?nearbyShare.mojom.PayloadPreview}
      */
-    sendPreview: {
+    payloadPreview: {
       notify: true,
       type: Object,
       value: null,
@@ -98,6 +99,25 @@ Polymer({
     shareTargets_: {
       type: Array,
       value: [],
+    },
+
+    /**
+     * Header text for error. The error section is not displayed if this is
+     * falsey.
+     * @private {?string}
+     */
+    errorTitle_: {
+      type: String,
+      value: null,
+    },
+
+    /**
+     * Description text for error, displayed under the error title.
+     * @private {?string}
+     */
+    errorDescription_: {
+      type: String,
+      value: null,
     },
   },
 
@@ -178,17 +198,25 @@ Polymer({
           this.onShareTargetLost_.bind(this)),
     ];
 
-    getDiscoveryManager().getSendPreview().then(result => {
-      this.sendPreview = result.sendPreview;
-      // TODO (vecore): Setup icon and handle case of more than one attachment.
+    getDiscoveryManager().getPayloadPreview().then(result => {
+      this.payloadPreview = result.payloadPreview;
     });
 
     getDiscoveryManager()
         .startDiscovery(this.mojoEventTarget_.$.bindNewPipeAndPassRemote())
         .then(response => {
-          if (!response.success) {
-            // TODO(crbug.com/1123934): Show error.
-            return;
+          switch (response.result) {
+            case nearbyShare.mojom.StartDiscoveryResult.kErrorGeneric:
+              this.errorTitle_ = this.i18n('nearbyShareErrorCantShare');
+              this.errorDescription_ =
+                  this.i18n('nearbyShareErrorSomethingWrong');
+              return;
+            case nearbyShare.mojom.StartDiscoveryResult
+                .kErrorInProgressTransferring:
+              this.errorTitle_ = this.i18n('nearbyShareErrorCantShare');
+              this.errorDescription_ =
+                  this.i18n('nearbyShareErrorTransferInProgress');
+              return;
           }
         });
   },
@@ -212,7 +240,6 @@ Polymer({
       this.shareTargetMap_.clear();
     }
     this.lastSelectedShareTarget_ = null;
-    this.selectedShareTarget = null;
     this.shareTargets_ = [];
   },
 
@@ -259,7 +286,9 @@ Polymer({
           const {result, transferUpdateListener, confirmationManager} =
               response;
           if (result !== nearbyShare.mojom.SelectShareTargetResult.kOk) {
-            // TODO(crbug.com/crbug.com/1123934): Show error.
+            this.errorTitle_ = this.i18n('nearbyShareErrorCantShare');
+            this.errorDescription_ =
+                this.i18n('nearbyShareErrorSomethingWrong');
             return;
           }
 
@@ -326,16 +355,17 @@ Polymer({
 
   /**
    * Builds the html for the help text, applying the appropriate aria labels,
-   * and setting the href of the link to |linkUrl|. This function is largely
+   * and setting the href of the link. This function is largely
    * copied from getAriaLabelledContent_ in <settings-localized-link>, which
    * can't be used directly because this isn't part of settings.
-   * @param {string} linkUrl
+   * TODO(crbug.com/1154718): Extract this logic into a general method.
    * @return {string}
    * @private
    */
-  getAriaLabelledHelpText_(linkUrl) {
+  getAriaLabelledHelpText_() {
     const tempEl = document.createElement('div');
     const localizedString = this.i18nAdvanced('nearbyShareDiscoveryPageInfo');
+    const linkUrl = this.i18n('nearbyShareLearnMoreLink');
     tempEl.innerHTML = localizedString;
 
     const ariaLabelledByIds = [];
@@ -375,11 +405,8 @@ Polymer({
         'nearbyShareDiscoveryPageInfo should contain exactly one anchor tag');
     const anchorTag = anchorTags[0];
     anchorTag.setAttribute('aria-labelledby', ariaLabelledByIds.join(' '));
-
-    if (linkUrl != '') {
-      anchorTag.href = linkUrl;
-      anchorTag.target = '_blank';
-    }
+    anchorTag.href = linkUrl;
+    anchorTag.target = '_blank';
 
     return tempEl.innerHTML;
   },

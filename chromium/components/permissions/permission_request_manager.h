@@ -110,8 +110,8 @@ class PermissionRequestManager
   bool ShouldCurrentRequestUseQuietUI() const;
 
   // If |ShouldCurrentRequestUseQuietUI| return true, this will provide a reason
-  // as to why the quiet UI needs to be used.
-  QuietUiReason ReasonForUsingQuietUi() const;
+  // as to why the quiet UI needs to be used. Returns `base::nullopt` otherwise.
+  base::Optional<QuietUiReason> ReasonForUsingQuietUi() const;
 
   bool IsRequestInProgress() const;
 
@@ -171,6 +171,13 @@ class PermissionRequestManager
 
   void set_view_factory_for_testing(PermissionPrompt::Factory view_factory) {
     view_factory_ = std::move(view_factory);
+  }
+
+  PermissionPrompt* view_for_testing() { return view_.get(); }
+
+  base::Optional<PermissionUmaUtil::PredictionGrantLikelihood>
+  prediction_grant_likelihood_for_testing() {
+    return prediction_grant_likelihood_;
   }
 
  private:

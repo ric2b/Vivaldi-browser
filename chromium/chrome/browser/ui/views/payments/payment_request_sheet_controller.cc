@@ -45,8 +45,8 @@ class DummyEvent : public ui::Event {
 // this SheetView's RequestFocus() is called.
 class SheetView : public views::View, public views::FocusTraversable {
  public:
-  explicit SheetView(
-      const base::Callback<void(bool*)>& enter_key_accelerator_callback)
+  explicit SheetView(const base::RepeatingCallback<void(bool*)>&
+                         enter_key_accelerator_callback)
       : enter_key_accelerator_callback_(enter_key_accelerator_callback) {
     if (enter_key_accelerator_callback_)
       AddAccelerator(enter_key_accelerator_);
@@ -126,7 +126,7 @@ class SheetView : public views::View, public views::FocusTraversable {
                                            /*cycle=*/true,
                                            /*accessibility_mode=*/false);
   ui::Accelerator enter_key_accelerator_{ui::VKEY_RETURN, ui::EF_NONE};
-  base::Callback<void(bool*)> enter_key_accelerator_callback_;
+  base::RepeatingCallback<void(bool*)> enter_key_accelerator_callback_;
 };
 
 // A scroll view that displays a separator on the bounds where content is
@@ -210,10 +210,10 @@ std::unique_ptr<views::View> PaymentRequestSheetController::CreateView() {
   std::unique_ptr<views::View> footer = CreateFooterView();
   auto view = std::make_unique<SheetView>(
       primary_button_
-          ? base::Bind(
+          ? base::BindRepeating(
                 &PaymentRequestSheetController::PerformPrimaryButtonAction,
                 weak_ptr_factory_.GetWeakPtr())
-          : base::Callback<void(bool*)>());
+          : base::RepeatingCallback<void(bool*)>());
 
   DialogViewID sheet_id;
   if (GetSheetId(&sheet_id))
@@ -287,12 +287,20 @@ std::unique_ptr<views::View> PaymentRequestSheetController::CreateView() {
 }
 
 void PaymentRequestSheetController::UpdateContentView() {
+  // Do not update the view if the payment request is being aborted.
+  if (!is_active_)
+    return;
+
   content_view_->RemoveAllChildViews(true);
   FillContentView(content_view_);
   RelayoutPane();
 }
 
 void PaymentRequestSheetController::UpdateHeaderView() {
+  // Do not update the view if the payment request is being aborted.
+  if (!is_active_)
+    return;
+
   header_view_->RemoveAllChildViews(true);
   PopulateSheetHeaderView(
       ShouldShowHeaderBackArrow(), CreateHeaderContentView(header_view_),
@@ -318,6 +326,10 @@ void PaymentRequestSheetController::UpdateFocus(views::View* focused_view) {
 }
 
 void PaymentRequestSheetController::RelayoutPane() {
+  // Do not update the view if the payment request is being aborted.
+  if (!is_active_)
+    return;
+
   content_view_->Layout();
   pane_->SizeToPreferredSize();
   // Now that the content and its surrounding pane are updated, force a Layout

@@ -10,6 +10,7 @@
 <link rel="import" href="/components/common_styles.html">
 <link rel="import" href="/components/hd_iron_icon.html">
 <link rel="import" href="/components/oobe_i18n_behavior.html">
+<link rel="import" href="/components/oobe_dialog.html">
 
 <iron-iconset-svg name="oobe-welcome-32" size="32">
   <svg>
@@ -60,7 +61,7 @@
   <template>
     <style include="oobe-dialog-host"></style>
     <link rel="stylesheet" href="oobe_welcome.css">
-    <oobe-welcome-dialog id="welcomeScreen" role="dialog"
+    <oobe-welcome-dialog id="welcomeScreen" role="dialog" for-step="greeting"
         aria-label$="[[i18nDynamic(locale, 'welcomeScreenGreeting')]]"
         current-language="[[currentLanguage]]"
         on-language-button-clicked="onWelcomeSelectLanguageButtonClicked_"
@@ -69,12 +70,14 @@
         on-next-button-clicked="onWelcomeNextButtonClicked_"
         on-enable-debugging-clicked="onEnableDebuggingClicked_"
         on-launch-advanced-options="onWelcomeLaunchAdvancedOptions_"
+        on-chromevox-hint-accepted="onChromeVoxHintAccepted_"
+        on-chromevox-hint-dismissed="onChromeVoxHintDismissed_"
         timezone-button-visible=
             "[[isTimezoneButtonVisible_(highlightStrength)]]"
         debugging-link-visible="[[debuggingLinkVisible_]]">
     </oobe-welcome-dialog>
-    <oobe-dialog id="languageScreen" role="dialog" hidden has-buttons
-        title-key="languageSectionTitle"
+    <oobe-dialog id="languageScreen" role="dialog" for-step="language"
+        has-buttons title-key="languageSectionTitle"
         aria-label$="[[i18nDynamic(locale, 'languageSectionTitle')]]">
       <hd-iron-icon slot="oobe-icon"
           icon1x="oobe-welcome-32:language" icon2x="oobe-welcome-64:language">
@@ -112,8 +115,8 @@
             inverse on-click="closeLanguageSection_"></oobe-text-button>
       </div>
     </oobe-dialog>
-    <oobe-dialog id="accessibilityScreen" role="dialog" hidden has-buttons
-        title-key="accessibilitySectionTitle"
+    <oobe-dialog id="accessibilityScreen" role="dialog" for-step="accessibility"
+        has-buttons title-key="accessibilitySectionTitle"
         subtitle-key="accessibilitySectionHint"
         aria-label$="[[i18nDynamic(locale, 'accessibilitySectionTitle')]]">
       <hd-iron-icon slot="oobe-icon"
@@ -228,8 +231,8 @@
             on-click="closeAccessibilitySection_"></oobe-text-button>
       </div>
     </oobe-dialog>
-    <oobe-dialog id="timezoneScreen" role="dialog" hidden has-buttons
-        title-key="timezoneSectionTitle"
+    <oobe-dialog id="timezoneScreen" role="dialog" for-step="timezone"
+        has-buttons title-key="timezoneSectionTitle"
         aria-label$="[[i18nDynamic(locale, 'timezoneSectionTitle')]]">
       <hd-iron-icon slot="oobe-icon"
           icon1x="oobe-welcome-32:timezone" icon2x="oobe-welcome-64:timezone">
@@ -253,7 +256,8 @@
             inverse on-click="closeTimezoneSection_"></oobe-text-button>
       </div>
     </oobe-dialog>
-    <oobe-dialog id="oobeAdvancedOptionsScreen" role="dialog" hidden has-buttons
+    <oobe-dialog id="oobeAdvancedOptionsScreen" role="dialog"
+        for-step="advanced-options" has-buttons
         title-key="advancedOptionsSectionTitle"
         aria-label$="[[i18nDynamic(locale, 'advancedOptionsSectionTitle')]]">
       <hd-iron-icon slot="oobe-icon"
@@ -289,5 +293,22 @@
             on-click="closeAdvancedOptionsSection_"></oobe-text-button>
       </div>
     </oobe-dialog>
+    <!-- Demo Mode confirmation dialog -->
+    <oobe-modal-dialog id="demoModeConfirmationDialog">
+      <div slot="title">
+        [[i18nDynamic(locale, 'enableDemoModeDialogTitle')]]
+      </div>
+      <div slot="content">
+        [[i18nDynamic(locale, 'enableDemoModeDialogText')]]
+      </div>
+      <div slot="buttons">
+        <oobe-text-button id="cancelButton" border
+            on-click="onDemoModeDialogCancelTap_"
+            text-key="enableDemoModeDialogCancel"></oobe-text-button>
+        <oobe-text-button inverse on-click="onDemoModeDialogConfirmTap_"
+            id="okButton"
+            text-key="enableDemoModeDialogConfirm"></oobe-text-button>
+      </div>
+    </oobe-modal-dialog>
   </template>
 </dom-module>

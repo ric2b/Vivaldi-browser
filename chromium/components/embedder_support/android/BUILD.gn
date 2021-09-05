@@ -49,7 +49,7 @@ android_library("util_java") {
     "//base:base_java",
     "//base:jni_java",
     "//components/url_formatter/android:url_formatter_java",
-    "//content/public/android:content_java",
+    "//content/public/android:content_main_dex_java",
     "//net/android:net_java",
     "//third_party/android_deps:androidx_annotation_annotation_java",
     "//third_party/android_deps:androidx_core_core_java",
@@ -88,6 +88,7 @@ static_library("util") {
     "//services/network/public/cpp:cpp",
     "//services/network/public/mojom:mojom",
     "//url",
+    "//url:gurl_android",
   ]
 }
 
@@ -169,6 +170,7 @@ static_library("web_contents_delegate") {
     "//ui/base",
     "//ui/gfx",
     "//ui/gfx/geometry",
+    "//url:gurl_android",
   ]
 }
 
@@ -196,7 +198,9 @@ android_library("web_contents_delegate_java") {
     "//content/public/android:content_java",
     "//third_party/android_deps:androidx_annotation_annotation_java",
     "//third_party/android_deps:androidx_core_core_java",
+    "//third_party/blink/public/mojom:mojom_platform_java",
     "//ui/android:ui_no_recycler_view_java",
+    "//url:gurl_java",
   ]
   resources_package = "org.chromium.components.embedder_support.delegate"
   annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
@@ -230,6 +234,7 @@ static_library("context_menu") {
     "//base",
     "//content/public/browser",
     "//content/public/common",
+    "//url:gurl_android",
   ]
 }
 
@@ -245,6 +250,7 @@ android_library("context_menu_java") {
     "//third_party/android_deps:androidx_annotation_annotation_java",
     "//third_party/blink/public:blink_headers_java",
     "//ui/android:ui_no_recycler_view_java",
+    "//url:gurl_java",
   ]
   annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
   sources = [ "java/src/org/chromium/components/embedder_support/contextmenu/ContextMenuParams.java" ]

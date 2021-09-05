@@ -11,6 +11,7 @@
 #include <memory>
 #include <set>
 
+#include "base/containers/contains.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -18,7 +19,6 @@
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
-#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/clipboard_constants.h"
@@ -31,15 +31,15 @@
 #include "ui/base/x/selection_requestor.h"
 #include "ui/base/x/selection_utils.h"
 #include "ui/base/x/x11_util.h"
-#include "ui/events/platform/x11/x11_event_source.h"
-#include "ui/events/x/x11_window_event_manager.h"
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/x/connection.h"
 #include "ui/gfx/x/event.h"
 #include "ui/gfx/x/x11_atom_cache.h"
+#include "ui/gfx/x/x11_window_event_manager.h"
 #include "ui/gfx/x/xfixes.h"
 #include "ui/gfx/x/xproto.h"
+#include "ui/gfx/x/xproto_util.h"
 
 namespace ui {
 
@@ -51,7 +51,7 @@ const char kClipboardManager[] = "CLIPBOARD_MANAGER";
 ///////////////////////////////////////////////////////////////////////////////
 
 // Uses the XFixes API to provide sequence numbers for GetSequenceNumber().
-class SelectionChangeObserver : public XEventObserver {
+class SelectionChangeObserver : public x11::EventObserver {
  public:
   static SelectionChangeObserver* GetInstance();
 
@@ -66,9 +66,8 @@ class SelectionChangeObserver : public XEventObserver {
   SelectionChangeObserver();
   ~SelectionChangeObserver() override;
 
-  // XEventObserver:
-  void WillProcessXEvent(x11::Event* xev) override;
-  void DidProcessXEvent(x11::Event* xev) override {}
+  // x11::EventObserver:
+  void OnEvent(const x11::Event& xev) override;
 
   x11::Atom clipboard_atom_{};
   uint64_t clipboard_sequence_number_{};
@@ -78,14 +77,15 @@ class SelectionChangeObserver : public XEventObserver {
 };
 
 SelectionChangeObserver::SelectionChangeObserver() {
-  auto& xfixes = x11::Connection::Get()->xfixes();
+  auto* connection = x11::Connection::Get();
+  auto& xfixes = connection->xfixes();
   // Let the server know the client version.  No need to sync since we don't
   // care what version is running on the server.
   xfixes.QueryVersion({x11::XFixes::major_version, x11::XFixes::minor_version});
   if (!xfixes.present())
     return;
 
-  clipboard_atom_ = gfx::GetAtom(kClipboard);
+  clipboard_atom_ = x11::GetAtom(kClipboard);
   auto mask = x11::XFixes::SelectionEventMask::SetSelectionOwner |
               x11::XFixes::SelectionEventMask::SelectionWindowDestroy |
               x11::XFixes::SelectionEventMask::SelectionClientClose;
@@ -95,7 +95,7 @@ SelectionChangeObserver::SelectionChangeObserver() {
   // primary and the clipboard buffers. Register anyway just to be safe.
   xfixes.SelectSelectionInput({GetX11RootWindow(), x11::Atom::PRIMARY, mask});
 
-  X11EventSource::GetInstance()->AddXEventObserver(this);
+  connection->AddEventObserver(this);
 }
 
 // We are a singleton; we will outlive the event source.
@@ -105,8 +105,8 @@ SelectionChangeObserver* SelectionChangeObserver::GetInstance() {
   return base::Singleton<SelectionChangeObserver>::get();
 }
 
-void SelectionChangeObserver::WillProcessXEvent(x11::Event* xev) {
-  auto* ev = xev->As<x11::XFixes::SelectionNotifyEvent>();
+void SelectionChangeObserver::OnEvent(const x11::Event& xev) {
+  auto* ev = xev.As<x11::XFixes::SelectionNotifyEvent>();
   if (!ev)
     return;
 
@@ -154,7 +154,7 @@ bool TargetList::ContainsText() const {
 }
 
 bool TargetList::ContainsFormat(const ClipboardFormatType& format_type) const {
-  x11::Atom atom = gfx::GetAtom(format_type.GetName().c_str());
+  x11::Atom atom = x11::GetAtom(format_type.GetName().c_str());
   return ContainsAtom(atom);
 }
 
@@ -174,7 +174,7 @@ x11::Window GetSelectionOwner(x11::Atom selection) {
 
 // Private implementation of our X11 integration. Keeps X11 headers out of the
 // majority of chrome, which break badly.
-class ClipboardX11::X11Details : public XEventDispatcher {
+class ClipboardX11::X11Details : public x11::EventObserver {
  public:
   X11Details();
   ~X11Details() override;
@@ -235,8 +235,8 @@ class ClipboardX11::X11Details : public XEventDispatcher {
   void StoreCopyPasteDataAndWait();
 
  private:
-  // XEventDispatcher:
-  bool DispatchXEvent(x11::Event* xev) override;
+  // x11::EventObserver:
+  void OnEvent(const x11::Event& xev) override;
 
   // Our X11 state.
   x11::Connection* connection_;
@@ -246,7 +246,7 @@ class ClipboardX11::X11Details : public XEventDispatcher {
   x11::Window x_window_;
 
   // Events selected on |x_window_|.
-  std::unique_ptr<XScopedEventSelector> x_window_events_;
+  std::unique_ptr<x11::XScopedEventSelector> x_window_events_;
 
   // Object which requests and receives selection data.
   SelectionRequestor selection_requestor_;
@@ -264,23 +264,20 @@ class ClipboardX11::X11Details : public XEventDispatcher {
 ClipboardX11::X11Details::X11Details()
     : connection_(x11::Connection::Get()),
       x_root_window_(ui::GetX11RootWindow()),
-      x_window_(CreateDummyWindow("Chromium Clipboard Window")),
+      x_window_(x11::CreateDummyWindow("Chromium Clipboard Window")),
       selection_requestor_(x_window_, this),
-      clipboard_owner_(connection_, x_window_, gfx::GetAtom(kClipboard)),
+      clipboard_owner_(connection_, x_window_, x11::GetAtom(kClipboard)),
       primary_owner_(connection_, x_window_, x11::Atom::PRIMARY) {
-  SetStringProperty(x_window_, x11::Atom::WM_NAME, x11::Atom::STRING,
-                    "Chromium clipboard");
-  x_window_events_ = std::make_unique<XScopedEventSelector>(
+  x11::SetStringProperty(x_window_, x11::Atom::WM_NAME, x11::Atom::STRING,
+                         "Chromium clipboard");
+  x_window_events_ = std::make_unique<x11::XScopedEventSelector>(
       x_window_, x11::EventMask::PropertyChange);
 
-  if (X11EventSource::GetInstance())
-    X11EventSource::GetInstance()->AddXEventDispatcher(this);
+  connection_->AddEventObserver(this);
 }
 
 ClipboardX11::X11Details::~X11Details() {
-  if (X11EventSource::GetInstance())
-    X11EventSource::GetInstance()->RemoveXEventDispatcher(this);
-
+  connection_->RemoveEventObserver(this);
   connection_->DestroyWindow({x_window_});
 }
 
@@ -293,7 +290,7 @@ x11::Atom ClipboardX11::X11Details::LookupSelectionForClipboardBuffer(
 }
 
 x11::Atom ClipboardX11::X11Details::GetCopyPasteSelection() const {
-  return gfx::GetAtom(kClipboard);
+  return x11::GetAtom(kClipboard);
 }
 
 const SelectionFormatMap& ClipboardX11::X11Details::LookupStorageForAtom(
@@ -312,7 +309,7 @@ void ClipboardX11::X11Details::CreateNewClipboardData() {
 void ClipboardX11::X11Details::InsertMapping(
     const std::string& key,
     const scoped_refptr<base::RefCountedMemory>& memory) {
-  x11::Atom atom_key = gfx::GetAtom(key.c_str());
+  x11::Atom atom_key = x11::GetAtom(key.c_str());
   clipboard_data_.Insert(atom_key, memory);
 }
 
@@ -366,9 +363,9 @@ TargetList ClipboardX11::X11Details::WaitAndGetTargetsList(
     x11::Atom out_type = x11::Atom::None;
 
     if (selection_requestor_.PerformBlockingConvertSelection(
-            selection_name, gfx::GetAtom(kTargets), &data, &out_type)) {
+            selection_name, x11::GetAtom(kTargets), &data, &out_type)) {
       // Some apps return an |out_type| of "TARGETS". (crbug.com/377893)
-      if (out_type == x11::Atom::ATOM || out_type == gfx::GetAtom(kTargets)) {
+      if (out_type == x11::Atom::ATOM || out_type == x11::GetAtom(kTargets)) {
         const x11::Atom* atom_array =
             reinterpret_cast<const x11::Atom*>(data.data());
         for (size_t i = 0; i < data.size() / sizeof(x11::Atom); ++i)
@@ -402,7 +399,7 @@ std::vector<x11::Atom> ClipboardX11::X11Details::GetTextAtoms() const {
 
 std::vector<x11::Atom> ClipboardX11::X11Details::GetAtomsForFormat(
     const ClipboardFormatType& format) {
-  return {gfx::GetAtom(format.GetName().c_str())};
+  return {x11::GetAtom(format.GetName().c_str())};
 }
 
 void ClipboardX11::X11Details::Clear(ClipboardBuffer buffer) {
@@ -417,7 +414,7 @@ void ClipboardX11::X11Details::StoreCopyPasteDataAndWait() {
   if (GetSelectionOwner(selection) != x_window_)
     return;
 
-  x11::Atom clipboard_manager_atom = gfx::GetAtom(kClipboardManager);
+  x11::Atom clipboard_manager_atom = x11::GetAtom(kClipboardManager);
   if (GetSelectionOwner(clipboard_manager_atom) == x11::Window::None)
     return;
 
@@ -428,47 +425,45 @@ void ClipboardX11::X11Details::StoreCopyPasteDataAndWait() {
 
   base::TimeTicks start = base::TimeTicks::Now();
   selection_requestor_.PerformBlockingConvertSelectionWithParameter(
-      gfx::GetAtom(kClipboardManager), gfx::GetAtom(kSaveTargets), targets);
+      x11::GetAtom(kClipboardManager), x11::GetAtom(kSaveTargets), targets);
   UMA_HISTOGRAM_TIMES("Clipboard.X11StoreCopyPasteDuration",
                       base::TimeTicks::Now() - start);
 }
 
-bool ClipboardX11::X11Details::DispatchXEvent(x11::Event* xev) {
-  if (auto* request = xev->As<x11::SelectionRequestEvent>()) {
+void ClipboardX11::X11Details::OnEvent(const x11::Event& xev) {
+  if (auto* request = xev.As<x11::SelectionRequestEvent>()) {
     if (request->owner != x_window_)
-      return false;
+      return;
     if (request->selection == x11::Atom::PRIMARY) {
-      primary_owner_.OnSelectionRequest(*xev);
+      primary_owner_.OnSelectionRequest(*request);
     } else {
       // We should not get requests for the CLIPBOARD_MANAGER selection
       // because we never take ownership of it.
       DCHECK_EQ(GetCopyPasteSelection(), request->selection);
-      clipboard_owner_.OnSelectionRequest(*xev);
+      clipboard_owner_.OnSelectionRequest(*request);
     }
-  } else if (auto* notify = xev->As<x11::SelectionNotifyEvent>()) {
-    if (notify->requestor != x_window_)
-      return false;
-    selection_requestor_.OnSelectionNotify(*notify);
-  } else if (auto* clear = xev->As<x11::SelectionClearEvent>()) {
+  } else if (auto* notify = xev.As<x11::SelectionNotifyEvent>()) {
+    if (notify->requestor == x_window_)
+      selection_requestor_.OnSelectionNotify(*notify);
+  } else if (auto* clear = xev.As<x11::SelectionClearEvent>()) {
     if (clear->owner != x_window_)
-      return false;
+      return;
     if (clear->selection == x11::Atom::PRIMARY) {
-      primary_owner_.OnSelectionClear(*xev);
+      primary_owner_.OnSelectionClear(*clear);
     } else {
       // We should not get requests for the CLIPBOARD_MANAGER selection
       // because we never take ownership of it.
       DCHECK_EQ(GetCopyPasteSelection(), clear->selection);
-      clipboard_owner_.OnSelectionClear(*xev);
+      clipboard_owner_.OnSelectionClear(*clear);
     }
-  } else if (auto* prop = xev->As<x11::PropertyNotifyEvent>()) {
-    if (primary_owner_.CanDispatchPropertyEvent(*xev))
-      primary_owner_.OnPropertyEvent(*xev);
-    if (clipboard_owner_.CanDispatchPropertyEvent(*xev))
-      clipboard_owner_.OnPropertyEvent(*xev);
-    if (selection_requestor_.CanDispatchPropertyEvent(*xev))
-      selection_requestor_.OnPropertyEvent(*xev);
+  } else if (auto* prop = xev.As<x11::PropertyNotifyEvent>()) {
+    if (primary_owner_.CanDispatchPropertyEvent(*prop))
+      primary_owner_.OnPropertyEvent(*prop);
+    if (clipboard_owner_.CanDispatchPropertyEvent(*prop))
+      clipboard_owner_.OnPropertyEvent(*prop);
+    if (selection_requestor_.CanDispatchPropertyEvent(*prop))
+      selection_requestor_.OnPropertyEvent(*prop);
   }
-  return false;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

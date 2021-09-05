@@ -10,15 +10,8 @@
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
-#include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
-#include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/net/profile_network_context_service.h"
-#include "chrome/browser/net/profile_network_context_service_factory.h"
-#include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/browsing_data/chrome_browsing_data_remover_constants.h"
 #include "chrome/browser/profiles/profile_observer.h"
-#include "chrome/browser/signin/identity_manager_factory.h"
-#include "chrome/browser/sync/profile_sync_service_factory.h"
-#include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_prefs.h"
@@ -27,12 +20,7 @@
 #include "components/media_router/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
-#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
-#include "components/signin/public/identity_manager/identity_manager.h"
-#include "components/sync/base/sync_prefs.h"
 #include "components/sync/driver/sync_driver_switches.h"
-#include "components/sync/driver/sync_service.h"
-#include "components/variations/proto/study.pb.h"
 #include "components/variations/variations.mojom.h"
 #include "components/variations/variations_client.h"
 #include "components/variations/variations_ids_provider.h"
@@ -43,9 +31,8 @@
 #include "content/public/browser/web_ui.h"
 #include "extensions/buildflags/buildflags.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "base/command_line.h"
-#include "chrome/common/chrome_switches.h"
 #include "chromeos/constants/chromeos_switches.h"
 #endif
 
@@ -66,7 +53,7 @@
 #include "extensions/browser/pref_names.h"
 #endif
 
-#if BUILDFLAG(IS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chromeos/lacros/lacros_chrome_service_impl.h"
 #endif
 
@@ -89,34 +76,6 @@ base::LazyInstance<std::set<content::BrowserContext*>>::Leaky
 #endif  // DCHECK_IS_ON()
 
 namespace {
-
-class ChromeVariationsClient : public variations::VariationsClient {
- public:
-  explicit ChromeVariationsClient(content::BrowserContext* browser_context)
-      : browser_context_(browser_context) {}
-
-  ~ChromeVariationsClient() override = default;
-
-  bool IsOffTheRecord() const override {
-    return browser_context_->IsOffTheRecord();
-  }
-
-  variations::mojom::VariationsHeadersPtr GetVariationsHeaders()
-      const override {
-    return variations::VariationsIdsProvider::GetInstance()
-        ->GetClientDataHeaders(IsSignedIn());
-  }
-
- private:
-  bool IsSignedIn() const {
-    Profile* profile = Profile::FromBrowserContext(browser_context_);
-    signin::IdentityManager* identity_manager =
-        IdentityManagerFactory::GetForProfile(profile);
-    return identity_manager && identity_manager->HasPrimaryAccount();
-  }
-
-  content::BrowserContext* browser_context_;
-};
 
 const char kDevToolsOTRProfileIDPrefix[] = "Devtools::BrowserContext";
 const char kMediaRouterOTRProfileIDPrefix[] = "MediaRouter::Presentation";
@@ -198,6 +157,18 @@ JNI_OTRProfileID_CreateUniqueOTRProfileID(
       Profile::OTRProfileID::CreateUnique(base::UTF16ToASCII(
           base::android::ConvertJavaStringToUTF16(env, j_profile_id_prefix)));
   return profile_id.ConvertToJavaOTRProfileID(env);
+}
+
+// static
+base::android::ScopedJavaLocalRef<jobject> JNI_OTRProfileID_GetPrimaryID(
+    JNIEnv* env) {
+  return Profile::OTRProfileID::PrimaryID().ConvertToJavaOTRProfileID(env);
+}
+
+std::string Profile::OTRProfileID::Serialize() const {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  return ConvertJavaStringToUTF8(
+      env, Java_OTRProfileID_serialize(env, ConvertToJavaOTRProfileID(env)));
 }
 #endif
 
@@ -321,7 +292,7 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
                                 true);
   registry->RegisterIntegerPref(prefs::kProfileIconVersion, 0);
   registry->RegisterBooleanPref(prefs::kAllowDinosaurEasterEgg, true);
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // TODO(dilmah): For OS_CHROMEOS we maintain kApplicationLocale in both
   // local state and user's profile.  For other platforms we maintain
   // kApplicationLocale only in local state.
@@ -337,7 +308,7 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
 
   data_reduction_proxy::RegisterSyncableProfilePrefs(registry);
 
-#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+#if !defined(OS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
   // Preferences related to the avatar bubble and user manager tutorials.
   registry->RegisterIntegerPref(prefs::kProfileAvatarTutorialShown, 0);
 #endif
@@ -387,7 +358,9 @@ bool Profile::IsIncognitoProfile() const {
 
 // static
 bool Profile::IsEphemeralGuestProfileEnabled() {
-#if defined(OS_WIN) || (defined(OS_LINUX) && !defined(OS_CHROMEOS)) || \
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if defined(OS_WIN) || (defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)) || \
     defined(OS_MAC)
   return base::FeatureList::IsEnabled(
       features::kEnableEphemeralGuestProfilesOnDesktop);
@@ -397,13 +370,13 @@ bool Profile::IsEphemeralGuestProfileEnabled() {
 }
 
 bool Profile::IsGuestSession() const {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   static bool is_guest_session =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           chromeos::switches::kGuestSession);
   return is_guest_session;
 #else
-#if BUILDFLAG(IS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
   DCHECK(chromeos::LacrosChromeServiceImpl::Get());
   if (chromeos::LacrosChromeServiceImpl::Get()->init_params()->session_type !=
       crosapi::mojom::SessionType::kUnknown) {
@@ -411,9 +384,9 @@ bool Profile::IsGuestSession() const {
                ->init_params()
                ->session_type == crosapi::mojom::SessionType::kGuestSession;
   }
-#endif  // BUILDFLAG(IS_LACROS)
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
   return is_guest_profile_ && !IsEphemeralGuestProfileEnabled();
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 bool Profile::IsEphemeralGuestProfile() const {
@@ -429,7 +402,7 @@ bool Profile::IsPrimaryOTRProfile() const {
 }
 
 bool Profile::CanUseDiskWhenOffTheRecord() {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Guest mode on ChromeOS uses an in-memory file system to store the profile
   // in, so despite this being an off the record profile, it is still okay to
   // store data on disk.
@@ -445,17 +418,6 @@ bool Profile::ShouldRestoreOldSessionCookies() const {
 
 bool Profile::ShouldPersistSessionCookies() const {
   return false;
-}
-
-void Profile::ConfigureNetworkContextParams(
-    bool in_memory,
-    const base::FilePath& relative_partition_path,
-    network::mojom::NetworkContextParams* network_context_params,
-    network::mojom::CertVerifierCreationParams* cert_verifier_creation_params) {
-  ProfileNetworkContextServiceFactory::GetForContext(this)
-      ->ConfigureNetworkContextParams(in_memory, relative_partition_path,
-                                      network_context_params,
-                                      cert_verifier_creation_params);
 }
 
 bool Profile::IsNewProfile() const {
@@ -482,11 +444,6 @@ void Profile::MaybeSendDestroyedNotification() {
 
     for (auto& observer : observers_)
       observer.OnProfileWillBeDestroyed(this);
-
-    content::NotificationService::current()->Notify(
-        chrome::NOTIFICATION_PROFILE_DESTROYED,
-        content::Source<Profile>(this),
-        content::NotificationService::NoDetails());
   }
 }
 
@@ -520,8 +477,8 @@ double Profile::GetDefaultZoomLevelForProfile() {
 void Profile::Wipe() {
   content::BrowserContext::GetBrowsingDataRemover(this)->Remove(
       base::Time(), base::Time::Max(),
-      ChromeBrowsingDataRemoverDelegate::WIPE_PROFILE,
-      ChromeBrowsingDataRemoverDelegate::ALL_ORIGIN_TYPES);
+      chrome_browsing_data_remover::WIPE_PROFILE,
+      chrome_browsing_data_remover::ALL_ORIGIN_TYPES);
 }
 
 void Profile::NotifyOffTheRecordProfileCreated(Profile* off_the_record) {
@@ -538,6 +495,24 @@ Profile* Profile::GetPrimaryOTRProfile() {
 bool Profile::HasPrimaryOTRProfile() {
   return HasOffTheRecordProfile(OTRProfileID::PrimaryID());
 }
+
+class Profile::ChromeVariationsClient : public variations::VariationsClient {
+ public:
+  explicit ChromeVariationsClient(Profile* profile) : profile_(profile) {}
+
+  ~ChromeVariationsClient() override = default;
+
+  bool IsOffTheRecord() const override { return profile_->IsOffTheRecord(); }
+
+  variations::mojom::VariationsHeadersPtr GetVariationsHeaders()
+      const override {
+    return variations::VariationsIdsProvider::GetInstance()
+        ->GetClientDataHeaders(profile_->IsSignedIn());
+  }
+
+ private:
+  Profile* profile_;
+};
 
 variations::VariationsClient* Profile::GetVariationsClient() {
   if (!chrome_variations_client_)

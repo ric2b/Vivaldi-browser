@@ -15,18 +15,29 @@
 
 namespace content {
 
-namespace {
-// The maximum number of TYPE_WINDOW_CONTENT_CHANGED events to fire in one
-// atomic update before we give up and fire it on the root node instead.
-constexpr int kMaxContentChangedEventsToFire = 5;
-}  // namespace
-
 // static
 BrowserAccessibilityManager* BrowserAccessibilityManager::Create(
     const ui::AXTreeUpdate& initial_tree,
     BrowserAccessibilityDelegate* delegate) {
-  return new BrowserAccessibilityManagerAndroid(initial_tree, nullptr,
-                                                delegate);
+  if (!delegate)
+    return new BrowserAccessibilityManagerAndroid(initial_tree, nullptr,
+                                                  nullptr);
+
+  WebContentsAccessibilityAndroid* wcax =
+      static_cast<WebContentsAccessibilityAndroid*>(
+          delegate->AccessibilityGetWebContentsAccessibility());
+  return new BrowserAccessibilityManagerAndroid(
+      initial_tree,
+      wcax && delegate->AccessibilityIsMainFrame() ? wcax->GetWeakPtr()
+                                                   : nullptr,
+      delegate);
+}
+
+// static
+BrowserAccessibilityManager* BrowserAccessibilityManager::Create(
+    BrowserAccessibilityDelegate* delegate) {
+  return BrowserAccessibilityManager::Create(
+      BrowserAccessibilityManagerAndroid::GetEmptyDocument(), delegate);
 }
 
 BrowserAccessibilityManagerAndroid::BrowserAccessibilityManagerAndroid(
@@ -184,27 +195,9 @@ void BrowserAccessibilityManagerAndroid::FireGeneratedEvent(
 
   // Always send AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED to notify
   // the Android system that the accessibility hierarchy rooted at this
-  // node has changed. However, if there are a large number of changes
-  // it's too expensive to fire all of them, so we just fire one
-  // on the root instead.
-  if (event_type != ui::AXEventGenerator::Event::SUBTREE_CREATED) {
-    content_changed_events_++;
-    if (content_changed_events_ < kMaxContentChangedEventsToFire) {
-      // If it's less than the max event count, fire the event on the specific
-      // node that changed.
-      wcax->HandleContentChanged(android_node->unique_id());
-    } else if (content_changed_events_ == kMaxContentChangedEventsToFire) {
-      // If it's equal to the max event count, fire the event on the
-      // root instead.
-      BrowserAccessibilityManager* root_manager = GetRootManager();
-      if (root_manager) {
-        auto* root_node =
-            static_cast<BrowserAccessibilityAndroid*>(root_manager->GetRoot());
-        if (root_node)
-          wcax->HandleContentChanged(root_node->unique_id());
-      }
-    }
-  }
+  // node has changed.
+  if (event_type != ui::AXEventGenerator::Event::SUBTREE_CREATED)
+    wcax->HandleContentChanged(android_node->unique_id());
 
   switch (event_type) {
     case ui::AXEventGenerator::Event::ALERT: {
@@ -229,6 +222,13 @@ void BrowserAccessibilityManagerAndroid::FireGeneratedEvent(
         BrowserAccessibilityAndroid* android_focus_object =
             static_cast<BrowserAccessibilityAndroid*>(focus_object);
         wcax->HandleTextSelectionChanged(android_focus_object->unique_id());
+      }
+      break;
+    }
+    case ui::AXEventGenerator::Event::EXPANDED: {
+      if (android_node->IsCombobox() &&
+          GetFocus()->IsDescendantOf(android_node)) {
+        wcax->AnnounceLiveRegionText(android_node->GetComboboxExpandedText());
       }
       break;
     }
@@ -265,6 +265,7 @@ void BrowserAccessibilityManagerAndroid::FireGeneratedEvent(
     // Currently unused events on this platform.
     case ui::AXEventGenerator::Event::ACCESS_KEY_CHANGED:
     case ui::AXEventGenerator::Event::ACTIVE_DESCENDANT_CHANGED:
+    case ui::AXEventGenerator::Event::ARIA_CURRENT_CHANGED:
     case ui::AXEventGenerator::Event::ATK_TEXT_OBJECT_ATTRIBUTE_CHANGED:
     case ui::AXEventGenerator::Event::ATOMIC_CHANGED:
     case ui::AXEventGenerator::Event::AUTO_COMPLETE_CHANGED:
@@ -277,7 +278,6 @@ void BrowserAccessibilityManagerAndroid::FireGeneratedEvent(
     case ui::AXEventGenerator::Event::DESCRIPTION_CHANGED:
     case ui::AXEventGenerator::Event::DOCUMENT_TITLE_CHANGED:
     case ui::AXEventGenerator::Event::DROPEFFECT_CHANGED:
-    case ui::AXEventGenerator::Event::EXPANDED:
     case ui::AXEventGenerator::Event::EDITABLE_TEXT_CHANGED:
     case ui::AXEventGenerator::Event::ENABLED_CHANGED:
     case ui::AXEventGenerator::Event::FOCUS_CHANGED:
@@ -505,16 +505,17 @@ void BrowserAccessibilityManagerAndroid::OnAtomicUpdateFinished(
     ui::AXTree* tree,
     bool root_changed,
     const std::vector<ui::AXTreeObserver::Change>& changes) {
-  // Reset this every time we get an atomic update.
-  content_changed_events_ = 0;
-
   BrowserAccessibilityManager::OnAtomicUpdateFinished(tree, root_changed,
                                                       changes);
 
+  WebContentsAccessibilityAndroid* wcax = GetWebContentsAXFromRootManager();
+  if (!wcax)
+    return;
+
+  // Reset content changed events counter every time we finish an atomic update.
+  wcax->ResetContentChangedEventsCounter();
+
   if (root_changed) {
-    WebContentsAccessibilityAndroid* wcax = GetWebContentsAXFromRootManager();
-    if (!wcax)
-      return;
     wcax->HandleNavigate();
   }
 }

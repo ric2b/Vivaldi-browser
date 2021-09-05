@@ -24,23 +24,20 @@
 #include "third_party/blink/renderer/platform/graphics/paint/cull_rect.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_record_builder.h"
 #include "third_party/blink/renderer/platform/graphics/unaccelerated_static_bitmap_image.h"
-#include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkSurface.h"
 
 namespace {
 
-bool ToSkBitmap(
-    const scoped_refptr<blink::StaticBitmapImage>& static_bitmap_image,
-    SkBitmap* dest) {
-  const sk_sp<SkImage> image =
-      static_bitmap_image->PaintImageForCurrentFrame().GetSkImage();
-  if (!image) {
-    LOG(ERROR) << "Failed to create SkImage";
+bool ToSkBitmap(sk_sp<SkImage> image, SkBitmap* bitmap) {
+  SkImageInfo info =
+      SkImageInfo::MakeN32Premul(image->width(), image->height());
+  bitmap->reset();
+  if (!bitmap->tryAllocPixels(info, info.minRowBytes())) {
+    LOG(ERROR) << "Failed to allocate memory for capture bitmap";
     return false;
   }
-  if (!image->asLegacyBitmap(
-      dest, SkImage::LegacyBitmapMode::kRO_LegacyBitmapMode)) {
-    LOG(ERROR) << "Failed to create SkBitmap";
+  if (!image->readPixels(info, bitmap->getPixels(), info.minRowBytes(), 0, 0)) {
+    LOG(ERROR) << "Failed toread pixels into the capture bitmap";
     return false;
   }
   return true;
@@ -75,7 +72,7 @@ bool VivaldiSnapshotPage(blink::LocalFrame* local_frame,
   }
 
   blink::IntRect visible_content_rect =
-    local_frame->View()->LayoutViewport()->VisibleContentRect();
+      local_frame->View()->LayoutViewport()->VisibleContentRect();
   if (visible_content_rect.IsEmpty()) {
     LOG(ERROR) << "empty visible content rect";
     return false;
@@ -90,8 +87,8 @@ bool VivaldiSnapshotPage(blink::LocalFrame* local_frame,
     }
     blink::PhysicalRect document_rect = layout_view->DocumentRect();
     blink::FloatSize float_page_size = local_frame->ResizePageRectsKeepingRatio(
-      blink::FloatSize(document_rect.Width(), document_rect.Height()),
-      blink::FloatSize(document_rect.Width(), document_rect.Height()));
+        blink::FloatSize(document_rect.Width(), document_rect.Height()),
+        blink::FloatSize(document_rect.Width(), document_rect.Height()));
     float_page_size.SetHeight(
         std::min(float_page_size.Height(), static_cast<float>(rect.Height())));
     blink::IntSize page_size = ExpandedIntSize(float_page_size);
@@ -140,8 +137,7 @@ bool VivaldiSnapshotPage(blink::LocalFrame* local_frame,
   }
 
   SkSurfaceProps surface_props(0, kUnknown_SkPixelGeometry);
-  sk_sp<SkSurface> surface =
-    SkSurface::MakeRasterN32Premul(
+  sk_sp<SkSurface> surface = SkSurface::MakeRasterN32Premul(
       page_rect.Width(), page_rect.Height(), &surface_props);
   if (!surface) {
     LOG(ERROR) << "failed to allocate surface width=" << page_rect.Width()
@@ -162,11 +158,11 @@ bool VivaldiSnapshotPage(blink::LocalFrame* local_frame,
     DCHECK(!blink::PaintChunksToCcLayer::TopClipToIgnore());
     blink::LayoutView* layout_view = document->GetLayoutView();
     DCHECK(layout_view);
-    const blink::ObjectPaintProperties *root_properties =
-      layout_view->FirstFragment().PaintProperties();
+    const blink::ObjectPaintProperties* root_properties =
+        layout_view->FirstFragment().PaintProperties();
     if (root_properties) {
       blink::PaintChunksToCcLayer::TopClipToIgnore() =
-        root_properties->OverflowClip();
+          root_properties->OverflowClip();
     }
   }
 
@@ -179,20 +175,15 @@ bool VivaldiSnapshotPage(blink::LocalFrame* local_frame,
     DCHECK(!blink::PaintChunksToCcLayer::TopClipToIgnore());
   }
 
-  // Crop to rect if required.
-  scoped_refptr<blink::StaticBitmapImage> image;
+  sk_sp<SkImage> snapshot;
   if (rect.IsEmpty() || full_page) {
-    image = blink::UnacceleratedStaticBitmapImage::Create(
-        surface->makeImageSnapshot());
+    snapshot = surface->makeImageSnapshot();
   } else {
-    sk_sp<SkImage> snapshotImage = surface->makeImageSnapshot(SkIRect(rect));
-    image = snapshotImage
-                ? blink::UnacceleratedStaticBitmapImage::Create(snapshotImage)
-                : nullptr;
+    snapshot = surface->makeImageSnapshot(SkIRect(rect));
   }
-  if (!image) {
-    LOG(ERROR) << "failed to create bitmap image";
+  if (!snapshot) {
+    LOG(ERROR) << "failed to create image snapshot";
     return false;
   }
-  return ToSkBitmap(image, bitmap);
+  return ToSkBitmap(std::move(snapshot), bitmap);
 }

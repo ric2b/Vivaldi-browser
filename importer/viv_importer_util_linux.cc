@@ -21,3 +21,17 @@ base::FilePath GetProfileDir() {
 
   return base::FilePath();
 }
+
+base::FilePath GetMailDirectory() {
+  base::FilePath mail_directory;
+  // The default location of the opera mail folder containing is
+  // under user HOME directory in .opera/mail folder on Linux.
+  base::FilePath home = base::GetHomeDir();
+  if (!home.empty()) {
+    mail_directory = home.Append(".opera/mail");
+  }
+  if (base::PathExists(mail_directory))
+    return mail_directory;
+
+  return base::FilePath();
+}

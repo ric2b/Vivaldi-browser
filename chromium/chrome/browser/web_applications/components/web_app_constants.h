@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_WEB_APPLICATIONS_COMPONENTS_WEB_APP_CONSTANTS_H_
 #define CHROME_BROWSER_WEB_APPLICATIONS_COMPONENTS_WEB_APP_CONSTANTS_H_
 
+#include <iosfwd>
 #include <vector>
 
 #include "components/services/app_service/public/mojom/types.mojom-forward.h"
@@ -43,10 +44,12 @@ enum Type {
   kShortcuts = 0,
   kRunOnOsLogin,
   kShortcutsMenu,
+  kUninstallationViaOsSettings,
   kFileHandlers,
-  kMaxValue = kFileHandlers,
+  kProtocolHandlers,
+  kMaxValue = kProtocolHandlers,
 };
-}
+}  // namespace OsHookType
 
 // The result of an attempted web app installation, uninstallation or update.
 //
@@ -117,6 +120,8 @@ bool IsSuccess(InstallResultCode code);
 
 // Checks if InstallResultCode indicates a new app was installed.
 bool IsNewInstall(InstallResultCode code);
+
+std::ostream& operator<<(std::ostream& os, InstallResultCode code);
 
 // PendingAppManager: Where an app was installed from. This affects what flags
 // will be used when installing the app.
@@ -233,6 +238,9 @@ constexpr int kIphMuteAfterConsecutiveAppAgnosticIgnores = 4;
 constexpr int kIphAppSpecificMuteTimeSpanDays = 90;
 // Number of days to mute IPH after it's ignored for any app.
 constexpr int kIphAppAgnosticMuteTimeSpanDays = 14;
+// Default threshold for site engagement score if it's not set by field trial
+// param.
+constexpr int kIphFieldTrialParamDefaultSiteEngagementThreshold = 10;
 
 }  // namespace web_app
 

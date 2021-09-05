@@ -13,6 +13,7 @@
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/gmock_move_support.h"
 #include "chrome/browser/chromeos/crostini/crostini_manager.h"
 #include "chrome/browser/chromeos/crostini/crostini_pref_names.h"
 #include "chrome/browser/chromeos/crostini/crostini_test_helper.h"
@@ -28,10 +29,14 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "chromeos/dbus/cros_disks_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_cicerone_client.h"
 #include "chromeos/dbus/fake_concierge_client.h"
 #include "chromeos/dbus/fake_vm_plugin_dispatcher_client.h"
+#include "chromeos/disks/disk.h"
+#include "chromeos/disks/disk_mount_manager.h"
+#include "chromeos/disks/mock_disk_mount_manager.h"
 #include "components/arc/arc_util.h"
 #include "services/device/public/cpp/test/fake_usb_device_info.h"
 #include "services/device/public/cpp/test/fake_usb_device_manager.h"
@@ -40,6 +45,10 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/message_center/public/cpp/notification.h"
 #include "url/gurl.h"
+
+using testing::_;
+using testing::ReturnRef;
+using MountCallback = base::OnceCallback<void(chromeos::MountError)>;
 
 namespace {
 
@@ -128,9 +137,17 @@ class CrosUsbDetectorTest : public BrowserWithTestWindowTest {
     fake_vm_plugin_dispatcher_client_ =
         static_cast<chromeos::FakeVmPluginDispatcherClient*>(
             chromeos::DBusThreadManager::Get()->GetVmPluginDispatcherClient());
+
+    mock_disk_mount_manager_ =
+        new testing::NiceMock<chromeos::disks::MockDiskMountManager>;
+    chromeos::disks::DiskMountManager::InitializeForTesting(
+        mock_disk_mount_manager_);
   }
 
-  ~CrosUsbDetectorTest() override { chromeos::DBusThreadManager::Shutdown(); }
+  ~CrosUsbDetectorTest() override {
+    chromeos::disks::DiskMountManager::Shutdown();
+    chromeos::DBusThreadManager::Shutdown();
+  }
 
   TestingProfile* CreateProfile() override {
     return profile_manager()->CreateTestingProfile(kProfileName);
@@ -167,6 +184,8 @@ class CrosUsbDetectorTest : public BrowserWithTestWindowTest {
     chromeos::CrosUsbDetector::Get()->ConnectToDeviceManager();
   }
 
+  MOCK_METHOD1(OnAttach, void(bool success));
+
   void AttachDeviceToVm(const std::string& vm_name,
                         const std::string& guid,
                         bool success = true) {
@@ -176,11 +195,10 @@ class CrosUsbDetectorTest : public BrowserWithTestWindowTest {
     response->set_guest_port(0);
     fake_concierge_client_->set_attach_usb_device_response(response);
 
+    EXPECT_CALL(*this, OnAttach(success));
     cros_usb_detector_->AttachUsbDeviceToVm(
         vm_name, guid,
-        base::BindOnce(
-            [](bool expected, bool actual) { EXPECT_EQ(expected, actual); },
-            success));
+        base::BindOnce(&CrosUsbDetectorTest::OnAttach, base::Unretained(this)));
     base::RunLoop().RunUntilIdle();
   }
 
@@ -212,6 +230,32 @@ class CrosUsbDetectorTest : public BrowserWithTestWindowTest {
     return devices.front();
   }
 
+  void AddDisk(const std::string& name,
+               int bus_number,
+               int device_number,
+               bool mounted) {
+    mock_disk_mount_manager_->CreateDiskEntryForMountDevice(
+        chromeos::disks::Disk::Builder()
+            .SetBusNumber(bus_number)
+            .SetDeviceNumber(device_number)
+            .SetDevicePath("/dev/" + name)
+            .SetMountPath("/mount/" + name)
+            .SetIsMounted(mounted)
+            .Build());
+    if (mounted)
+      NotifyMountEvent(name, chromeos::disks::DiskMountManager::MOUNTING);
+  }
+
+  void NotifyMountEvent(
+      const std::string& name,
+      chromeos::disks::DiskMountManager::MountEvent event,
+      chromeos::MountError mount_error = chromeos::MOUNT_ERROR_NONE) {
+    chromeos::disks::DiskMountManager::MountPointInfo info(
+        "/dev/" + name, "/mount/" + name, chromeos::MOUNT_TYPE_DEVICE,
+        chromeos::disks::MOUNT_CONDITION_NONE);
+    mock_disk_mount_manager_->NotifyMountEvent(event, mount_error, info);
+  }
+
  protected:
   base::string16 connection_message(const char* product_name) {
     return base::ASCIIToUTF16(base::StringPrintf(
@@ -224,6 +268,8 @@ class CrosUsbDetectorTest : public BrowserWithTestWindowTest {
 
   device::FakeUsbDeviceManager device_manager_;
   std::unique_ptr<NotificationDisplayServiceTester> display_service_;
+  chromeos::disks::MockDiskMountManager* mock_disk_mount_manager_;
+  chromeos::disks::DiskMountManager::DiskMap disks_;
 
   // Owned by chromeos::DBusThreadManager
   chromeos::FakeCiceroneClient* fake_cicerone_client_;
@@ -941,4 +987,129 @@ TEST_F(CrosUsbDetectorTest, DetachFromDifferentVM) {
   DetachDeviceFromVm("VM2", device_info.guid, /*expected_success=*/false);
   EXPECT_FALSE(fake_concierge_client_->detach_usb_device_called());
   EXPECT_EQ("VM1", *device_info.shared_vm_name);
+}
+
+TEST_F(CrosUsbDetectorTest, AttachUnmountFilesystemSuccess) {
+  ConnectToDeviceManager();
+  base::RunLoop().RunUntilIdle();
+
+  device_manager_.CreateAndAddDevice(
+      0x0200, 0xff, 0xff, 0xff, 0x0100, 1, 2, /*bus_number=*/3,
+      /*port_number=*/4, kManufacturerName, kProductName_1, "5");
+  base::RunLoop().RunUntilIdle();
+
+  AddDisk("disk1", 3, 4, true);
+  AddDisk("disk2", 3, 4, /*mounted=*/false);
+  NotifyMountEvent("disk2", chromeos::disks::DiskMountManager::MOUNTING,
+                   chromeos::MOUNT_ERROR_INTERNAL);
+  AddDisk("disk3", 3, 5, true);
+  AddDisk("disk4", 3, 4, true);
+  AddDisk("disk5", 2, 4, true);
+  MountCallback callback1;
+  MountCallback callback4;
+  EXPECT_CALL(*mock_disk_mount_manager_, UnmountPath("/mount/disk1", _))
+      .WillOnce(MoveArg<1>(&callback1));
+  EXPECT_CALL(*mock_disk_mount_manager_, UnmountPath("/mount/disk4", _))
+      .WillOnce(MoveArg<1>(&callback4));
+
+  AttachDeviceToVm("VM1", GetSingleDeviceInfo().guid);
+  EXPECT_FALSE(fake_concierge_client_->attach_usb_device_called());
+
+  // Unmount events would normally be fired by the DiskMountManager.
+  NotifyMountEvent("disk1", chromeos::disks::DiskMountManager::UNMOUNTING);
+  std::move(callback1).Run(chromeos::MOUNT_ERROR_NONE);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(GetSingleDeviceInfo().shared_vm_name.has_value());
+  EXPECT_FALSE(fake_concierge_client_->attach_usb_device_called());
+
+  // All unmounts must complete before sharing succeeds.
+  NotifyMountEvent("disk4", chromeos::disks::DiskMountManager::UNMOUNTING);
+  std::move(callback4).Run(chromeos::MOUNT_ERROR_NONE);
+  base::RunLoop().RunUntilIdle();
+
+  EXPECT_TRUE(fake_concierge_client_->attach_usb_device_called());
+  EXPECT_EQ("VM1", GetSingleDeviceInfo().shared_vm_name);
+}
+
+TEST_F(CrosUsbDetectorTest, AttachUnmountFilesystemFailure) {
+  ConnectToDeviceManager();
+  base::RunLoop().RunUntilIdle();
+
+  device_manager_.CreateAndAddDevice(
+      0x0200, 0xff, 0xff, 0xff, 0x0100, 1, 2, /*bus_number=*/1,
+      /*port_number=*/5, kManufacturerName, kProductName_1, "5");
+  base::RunLoop().RunUntilIdle();
+
+  AddDisk("disk1", 1, 5, true);
+  AddDisk("disk2", 1, 5, true);
+  AddDisk("disk3", 1, 5, true);
+  MountCallback callback1;
+  MountCallback callback2;
+  MountCallback callback3;
+  EXPECT_CALL(*mock_disk_mount_manager_, UnmountPath("/mount/disk1", _))
+      .WillOnce(MoveArg<1>(&callback1));
+  EXPECT_CALL(*mock_disk_mount_manager_, UnmountPath("/mount/disk2", _))
+      .WillOnce(MoveArg<1>(&callback2));
+  EXPECT_CALL(*mock_disk_mount_manager_, UnmountPath("/mount/disk3", _))
+      .WillOnce(MoveArg<1>(&callback3));
+
+  // Unmount events would normally be fired by the DiskMountManager.
+  AttachDeviceToVm("VM1", GetSingleDeviceInfo().guid, /*success=*/false);
+  NotifyMountEvent("disk1", chromeos::disks::DiskMountManager::UNMOUNTING);
+  std::move(callback1).Run(chromeos::MOUNT_ERROR_NONE);
+  std::move(callback2).Run(chromeos::MOUNT_ERROR_UNKNOWN);
+  NotifyMountEvent("disk3", chromeos::disks::DiskMountManager::UNMOUNTING);
+  std::move(callback3).Run(chromeos::MOUNT_ERROR_NONE);
+  base::RunLoop().RunUntilIdle();
+
+  // AttachDeviceToVm() verifies CrosUsbDetector correctly calls the completion
+  // callback, so there's not much to check here.
+  EXPECT_FALSE(fake_concierge_client_->attach_usb_device_called());
+}
+
+TEST_F(CrosUsbDetectorTest, ReassignPromptForSharedDevice) {
+  ConnectToDeviceManager();
+  base::RunLoop().RunUntilIdle();
+
+  device_manager_.CreateAndAddDevice(0x1234, 0x5678);
+  base::RunLoop().RunUntilIdle();
+
+  auto device_info = GetSingleDeviceInfo();
+  EXPECT_FALSE(cros_usb_detector_->SharingRequiresReassignPrompt(device_info));
+
+  AttachDeviceToVm("VM1", device_info.guid);
+  device_info = GetSingleDeviceInfo();
+  EXPECT_TRUE(cros_usb_detector_->SharingRequiresReassignPrompt(device_info));
+
+  DetachDeviceFromVm("VM1", device_info.guid, /*expected_success=*/true);
+  device_info = GetSingleDeviceInfo();
+  EXPECT_FALSE(cros_usb_detector_->SharingRequiresReassignPrompt(device_info));
+}
+
+TEST_F(CrosUsbDetectorTest, ReassignPromptForStorageDevice) {
+  ConnectToDeviceManager();
+  base::RunLoop().RunUntilIdle();
+
+  device_manager_.CreateAndAddDevice(
+      0x0200, 0xff, 0xff, 0xff, 0x0100, 1, 2, /*bus_number=*/1,
+      /*port_number=*/5, kManufacturerName, kProductName_1, "5");
+  base::RunLoop().RunUntilIdle();
+
+  auto device_info = GetSingleDeviceInfo();
+  EXPECT_FALSE(cros_usb_detector_->SharingRequiresReassignPrompt(device_info));
+
+  AddDisk("disk_error", 1, 5, /*mounted=*/false);
+  NotifyMountEvent("disk_error", chromeos::disks::DiskMountManager::MOUNTING,
+                   chromeos::MOUNT_ERROR_INTERNAL);
+  device_info = GetSingleDeviceInfo();
+  EXPECT_FALSE(cros_usb_detector_->SharingRequiresReassignPrompt(device_info));
+
+  AddDisk("disk_success", 1, 5, true);
+  device_info = GetSingleDeviceInfo();
+  EXPECT_TRUE(cros_usb_detector_->SharingRequiresReassignPrompt(device_info));
+
+  NotifyMountEvent("disk_success",
+                   chromeos::disks::DiskMountManager::UNMOUNTING);
+  device_info = GetSingleDeviceInfo();
+  EXPECT_FALSE(cros_usb_detector_->SharingRequiresReassignPrompt(device_info));
 }

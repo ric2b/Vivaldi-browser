@@ -245,7 +245,7 @@ IN_PROC_BROWSER_TEST_F(VivaldiSubresourceFilterBrowserTest,
   proto::UrlRule whitelist_rule =
       subresource_filter::testing::CreateSuffixRule(kWhitelistedDomain);
   whitelist_rule.set_anchor_right(proto::ANCHOR_TYPE_NONE);
-  whitelist_rule.set_semantics(proto::RULE_SEMANTICS_WHITELIST);
+  whitelist_rule.set_semantics(proto::RULE_SEMANTICS_ALLOWLIST);
   ASSERT_NO_FATAL_FAILURE(SetRulesetWithRules({rule, whitelist_rule}));
 
   ui_test_utils::NavigateToURL(browser(), url);

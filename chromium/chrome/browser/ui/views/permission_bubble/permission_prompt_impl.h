@@ -36,7 +36,10 @@ class PermissionPromptImpl : public permissions::PermissionPrompt,
       const override;
 
   PermissionPromptBubbleView* prompt_bubble_for_testing() {
-    return prompt_bubble_;
+    if (prompt_bubble_)
+      return prompt_bubble_;
+    return permission_chip_ ? permission_chip_->prompt_bubble_for_testing()
+                            : nullptr;
   }
 
   // views::WidgetObserver:
@@ -46,6 +49,10 @@ class PermissionPromptImpl : public permissions::PermissionPrompt,
   LocationBarView* GetLocationBarView();
 
   void ShowBubble();
+
+  void ShowChipUI();
+
+  bool ShouldCurrentRequestUseChipUI();
 
   // The popup bubble. Not owned by this class; it will delete itself when a
   // decision is made.

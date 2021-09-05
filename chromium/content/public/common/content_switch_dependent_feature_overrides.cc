@@ -8,6 +8,7 @@
 #include "content/public/common/content_switches.h"
 #include "net/base/features.h"
 #include "services/network/public/cpp/features.h"
+#include "services/network/public/cpp/network_switches.h"
 #include "third_party/blink/public/common/features.h"
 
 namespace content {
@@ -70,6 +71,9 @@ GetSwitchDependentFeatureOverrides(const base::CommandLine& command_line) {
       {switches::kEnableExperimentalWebPlatformFeatures,
        std::cref(net::features::kSchemefulSameSite),
        base::FeatureList::OVERRIDE_ENABLE_FEATURE},
+      {switches::kEnableExperimentalWebPlatformFeatures,
+       std::cref(features::kBlockInsecurePrivateNetworkRequests),
+       base::FeatureList::OVERRIDE_ENABLE_FEATURE},
 
       // Overrides for --enable-experimental-cookie-features.
       {switches::kEnableExperimentalCookieFeatures,
@@ -86,6 +90,18 @@ GetSwitchDependentFeatureOverrides(const base::CommandLine& command_line) {
        base::FeatureList::OVERRIDE_ENABLE_FEATURE},
       {switches::kEnableExperimentalCookieFeatures,
        std::cref(net::features::kSchemefulSameSite),
+       base::FeatureList::OVERRIDE_ENABLE_FEATURE},
+
+      // Overrides for --isolation-by-default.
+      {switches::kIsolationByDefault,
+       std::cref(features::kEmbeddingRequiresOptIn),
+       base::FeatureList::OVERRIDE_ENABLE_FEATURE},
+      {switches::kIsolationByDefault,
+       std::cref(network::features::kCrossOriginOpenerPolicyByDefault),
+       base::FeatureList::OVERRIDE_ENABLE_FEATURE},
+
+      {network::switches::kUseFirstPartySet,
+       std::cref(net::features::kFirstPartySets),
        base::FeatureList::OVERRIDE_ENABLE_FEATURE},
   };
 

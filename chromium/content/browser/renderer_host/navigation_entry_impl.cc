@@ -81,7 +81,10 @@ void RecursivelyGenerateFrameEntries(
       state.initiator_origin, std::vector<GURL>(),
       blink::PageState::CreateFromEncodedData(data), "GET", -1,
       nullptr /* blob_url_loader_factory */,
-      nullptr /* web_bundle_navigation_info */);
+      nullptr /* web_bundle_navigation_info */,
+      // TODO(https://crbug.com/1140393): We should restore the policy
+      // container.
+      nullptr /* document_policies */);
 
   // Don't pass the file list to subframes, since that would result in multiple
   // copies of it ending up in the combined list in GetPageState (via
@@ -335,13 +338,14 @@ NavigationEntryImpl::NavigationEntryImpl(
               "GET",
               -1,
               std::move(blob_url_loader_factory),
-              nullptr /* web_bundle_navigation_info */))),
+              nullptr /* web_bundle_navigation_info */,
+              nullptr /* document_policies */))),
       unique_id_(CreateUniqueEntryID()),
       page_type_(PAGE_TYPE_NORMAL),
       update_virtual_url_with_url_(false),
       title_(title),
       transition_type_(transition_type),
-      restore_type_(RestoreType::NONE),
+      restore_type_(RestoreType::kNotRestored),
       is_overriding_user_agent_(false),
       http_status_code_(0),
       is_renderer_initiated_(is_renderer_initiated),
@@ -630,7 +634,7 @@ NavigationEntryImpl::GetReplacedEntryData() {
 }
 
 bool NavigationEntryImpl::IsRestored() {
-  return restore_type_ != RestoreType::NONE;
+  return restore_type_ == RestoreType::kRestored;
 }
 
 std::string NavigationEntryImpl::GetExtraHeaders() {
@@ -782,12 +786,11 @@ NavigationEntryImpl::ConstructCommitNavigationParams(
 #if defined(OS_ANDROID)
           std::string(),
 #endif
-          false, network::mojom::IPAddressSpace::kUnknown,
-          GURL() /* web_bundle_physical_url */,
+          false, GURL() /* web_bundle_physical_url */,
           GURL() /* base_url_override_for_web_bundle */,
           ukm::kInvalidSourceId /* document_ukm_source_id */, frame_policy,
           std::vector<std::string>() /* force_enabled_origin_trials */,
-          false /* origin_isolated */,
+          false /* origin_agent_cluster */,
           std::vector<
               network::mojom::WebClientHintsType>() /* enabled_client_hints */,
           false /* is_cross_browsing_instance */,
@@ -852,7 +855,8 @@ void NavigationEntryImpl::AddOrUpdateFrameEntry(
     const std::string& method,
     int64_t post_id,
     scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory,
-    std::unique_ptr<WebBundleNavigationInfo> web_bundle_navigation_info) {
+    std::unique_ptr<WebBundleNavigationInfo> web_bundle_navigation_info,
+    std::unique_ptr<PolicyContainerHost::DocumentPolicies> document_policies) {
   // If this is called for the main frame, the FrameNavigationEntry is
   // guaranteed to exist, so just update it directly and return.
   if (frame_tree_node->IsMainFrame()) {
@@ -868,7 +872,7 @@ void NavigationEntryImpl::AddOrUpdateFrameEntry(
         std::move(source_site_instance), url, origin, referrer,
         initiator_origin, redirect_chain, page_state, method, post_id,
         std::move(blob_url_loader_factory),
-        std::move(web_bundle_navigation_info));
+        std::move(web_bundle_navigation_info), std::move(document_policies));
     return;
   }
 
@@ -898,7 +902,7 @@ void NavigationEntryImpl::AddOrUpdateFrameEntry(
           site_instance, std::move(source_site_instance), url, origin, referrer,
           initiator_origin, redirect_chain, page_state, method, post_id,
           std::move(blob_url_loader_factory),
-          std::move(web_bundle_navigation_info));
+          std::move(web_bundle_navigation_info), std::move(document_policies));
       return;
     }
   }
@@ -911,8 +915,8 @@ void NavigationEntryImpl::AddOrUpdateFrameEntry(
       site_instance, std::move(source_site_instance), url,
       base::OptionalOrNullptr(origin), referrer, initiator_origin,
       redirect_chain, page_state, method, post_id,
-      std::move(blob_url_loader_factory),
-      std::move(web_bundle_navigation_info));
+      std::move(blob_url_loader_factory), std::move(web_bundle_navigation_info),
+      std::move(document_policies));
   parent_node->children.push_back(
       std::make_unique<NavigationEntryImpl::TreeNode>(parent_node,
                                                       std::move(frame_entry)));

@@ -34,6 +34,7 @@ class VivaldiLocationBar : public LocationBar {
   void UpdateContentSettingsIcons() override;
 
   base::TimeTicks GetMatchSelectionTimestamp() const override;
+  bool IsInputTypedUrlWithoutScheme() const override;
 
   // TODO?
   void SaveStateToContents(content::WebContents* contents) override {}

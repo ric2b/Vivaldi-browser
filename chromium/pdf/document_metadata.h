@@ -7,6 +7,8 @@
 
 #include <string>
 
+#include "base/time/time.h"
+
 namespace chrome_pdf {
 
 // These values are persisted to logs. Entries should not be renumbered and
@@ -29,9 +31,8 @@ enum class PdfVersion {
 // Document properties, including those specified in the document information
 // dictionary (see section 14.3.3 "Document Information Dictionary" of the ISO
 // 32000-1 standard), as well as other properties about the file.
-// TODO(crbug.com/93619): Finish adding information dictionary fields like
-// |keywords|, |creation_date|, and |mod_date|. Also add fields like
-// |size_bytes|, |is_encrypted|, and |is_linearized|.
+// TODO(crbug.com/93619): Finish adding fields like `size_bytes` and
+// `is_encrypted`.
 struct DocumentMetadata {
   DocumentMetadata();
   DocumentMetadata(const DocumentMetadata&) = delete;
@@ -40,6 +41,9 @@ struct DocumentMetadata {
 
   // Version of the document
   PdfVersion version = PdfVersion::kUnknown;
+
+  // Whether the document is optimized by linearization.
+  bool linearized = false;
 
   // The document's title.
   std::string title;
@@ -50,12 +54,21 @@ struct DocumentMetadata {
   // The document's subject.
   std::string subject;
 
+  // The document's keywords.
+  std::string keywords;
+
   // The name of the application that created the original document.
   std::string creator;
 
   // If the document's format was not originally PDF, the name of the
   // application that converted the document to PDF.
   std::string producer;
+
+  // The date and time the document was created.
+  base::Time creation_date;
+
+  // The date and time the document was most recently modified
+  base::Time mod_date;
 };
 
 }  // namespace chrome_pdf

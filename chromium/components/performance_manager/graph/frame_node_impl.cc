@@ -8,12 +8,11 @@
 
 #include "base/bind.h"
 #include "components/performance_manager/graph/graph_impl.h"
+#include "components/performance_manager/graph/graph_impl_util.h"
 #include "components/performance_manager/graph/page_node_impl.h"
 #include "components/performance_manager/graph/process_node_impl.h"
 #include "components/performance_manager/graph/worker_node_impl.h"
-#include "components/performance_manager/public/execution_context_priority/execution_context_priority.h"
 #include "components/performance_manager/public/v8_memory/web_memory.h"
-#include "third_party/blink/public/common/features.h"
 
 namespace performance_manager {
 
@@ -79,11 +78,6 @@ void FrameNodeImpl::SetLifecycleState(mojom::LifecycleState state) {
 void FrameNodeImpl::SetHasNonEmptyBeforeUnload(bool has_nonempty_beforeunload) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   document_.has_nonempty_beforeunload = has_nonempty_beforeunload;
-}
-
-void FrameNodeImpl::SetOriginTrialFreezePolicy(
-    mojom::InterventionPolicy policy) {
-  document_.origin_trial_freeze_policy.SetAndMaybeNotify(this, policy);
 }
 
 void FrameNodeImpl::SetIsAdFrame() {
@@ -168,11 +162,6 @@ const base::flat_set<PageNodeImpl*>& FrameNodeImpl::opened_page_nodes() const {
 mojom::LifecycleState FrameNodeImpl::lifecycle_state() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return lifecycle_state_.value();
-}
-
-mojom::InterventionPolicy FrameNodeImpl::origin_trial_freeze_policy() const {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return document_.origin_trial_freeze_policy.value();
 }
 
 bool FrameNodeImpl::has_nonempty_beforeunload() const {
@@ -355,7 +344,7 @@ void FrameNodeImpl::SetPriorityAndReason(
   priority_and_reason_.SetAndMaybeNotify(this, priority_and_reason);
 }
 
-void FrameNodeImpl::AddOpenedPage(util::PassKey<PageNodeImpl>,
+void FrameNodeImpl::AddOpenedPage(base::PassKey<PageNodeImpl>,
                                   PageNodeImpl* page_node) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(page_node);
@@ -366,7 +355,7 @@ void FrameNodeImpl::AddOpenedPage(util::PassKey<PageNodeImpl>,
   DCHECK(inserted);
 }
 
-void FrameNodeImpl::RemoveOpenedPage(util::PassKey<PageNodeImpl>,
+void FrameNodeImpl::RemoveOpenedPage(base::PassKey<PageNodeImpl>,
                                      PageNodeImpl* page_node) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(page_node);
@@ -426,11 +415,8 @@ bool FrameNodeImpl::VisitChildFrameNodes(
 const base::flat_set<const FrameNode*> FrameNodeImpl::GetChildFrameNodes()
     const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  base::flat_set<const FrameNode*> children;
-  for (auto* child : child_frame_nodes())
-    children.insert(static_cast<const FrameNode*>(child));
-  DCHECK_EQ(children.size(), child_frame_nodes().size());
-  return children;
+
+  return UpcastNodeSet<FrameNode>(child_frame_nodes());
 }
 
 bool FrameNodeImpl::VisitOpenedPageNodes(const PageNodeVisitor& visitor) const {
@@ -446,22 +432,12 @@ bool FrameNodeImpl::VisitOpenedPageNodes(const PageNodeVisitor& visitor) const {
 const base::flat_set<const PageNode*> FrameNodeImpl::GetOpenedPageNodes()
     const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  base::flat_set<const PageNode*> opened;
-  for (auto* page : opened_page_nodes())
-    opened.insert(static_cast<const PageNode*>(page));
-  DCHECK_EQ(opened.size(), opened_page_nodes().size());
-  return opened;
+  return UpcastNodeSet<PageNode>(opened_page_nodes());
 }
 
 FrameNodeImpl::LifecycleState FrameNodeImpl::GetLifecycleState() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return lifecycle_state();
-}
-
-FrameNodeImpl::InterventionPolicy FrameNodeImpl::GetOriginTrialFreezePolicy()
-    const {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  return origin_trial_freeze_policy();
 }
 
 bool FrameNodeImpl::HasNonemptyBeforeUnload() const {
@@ -502,11 +478,19 @@ bool FrameNodeImpl::IsHoldingIndexedDBLock() const {
 const base::flat_set<const WorkerNode*> FrameNodeImpl::GetChildWorkerNodes()
     const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  base::flat_set<const WorkerNode*> children;
-  for (auto* child : child_worker_nodes())
-    children.insert(static_cast<const WorkerNode*>(child));
-  DCHECK_EQ(children.size(), child_worker_nodes().size());
-  return children;
+  return UpcastNodeSet<WorkerNode>(child_worker_nodes());
+}
+
+bool FrameNodeImpl::VisitChildDedicatedWorkers(
+    const WorkerNodeVisitor& visitor) const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  for (auto* worker_node_impl : child_worker_nodes()) {
+    const WorkerNode* node = worker_node_impl;
+    if (node->GetWorkerType() == WorkerNode::WorkerType::kDedicated &&
+        !visitor.Run(node))
+      return false;
+  }
+  return true;
 }
 
 const PriorityAndReason& FrameNodeImpl::GetPriorityAndReason() const {
@@ -575,7 +559,7 @@ void FrameNodeImpl::OnJoiningGraph() {
   // Wire this up to the other nodes in the graph.
   if (parent_frame_node_)
     parent_frame_node_->AddChildFrame(this);
-  page_node_->AddFrame(this);
+  page_node_->AddFrame(base::PassKey<FrameNodeImpl>(), this);
   process_node_->AddFrame(this);
 }
 
@@ -589,7 +573,7 @@ void FrameNodeImpl::OnBeforeLeavingGraph() {
 
   // Leave the page.
   DCHECK(graph()->NodeInGraph(page_node_));
-  page_node_->RemoveFrame(this);
+  page_node_->RemoveFrame(base::PassKey<FrameNodeImpl>(), this);
 
   // Leave the frame hierarchy.
   if (parent_frame_node_) {
@@ -695,17 +679,15 @@ void FrameNodeImpl::DocumentProperties::Reset(FrameNodeImpl* frame_node,
   has_nonempty_beforeunload = false;
   // Network is busy on navigation.
   network_almost_idle.SetAndMaybeNotify(frame_node, false);
-  origin_trial_freeze_policy.SetAndMaybeNotify(
-      frame_node, mojom::InterventionPolicy::kDefault);
   had_form_interaction.SetAndMaybeNotify(frame_node, false);
 }
 
 void FrameNodeImpl::OnWebMemoryMeasurementRequested(
     mojom::WebMemoryMeasurement::Mode mode,
     OnWebMemoryMeasurementRequestedCallback callback) {
-  CHECK(base::FeatureList::IsEnabled(
-      blink::features::kWebMeasureMemoryViaPerformanceManager));
-  v8_memory::WebMeasureMemory(this, mode, std::move(callback));
+  v8_memory::WebMeasureMemory(
+      this, mode, v8_memory::WebMeasureMemorySecurityChecker::Create(),
+      std::move(callback), mojo::GetBadMessageCallback());
 }
 
 }  // namespace performance_manager

@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "ash/public/cpp/tablet_mode.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_list_client_impl.h"
 #include "chrome/browser/ui/app_list/app_list_syncable_service_factory.h"
@@ -16,7 +17,7 @@
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/image/image_skia_operations.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
 #endif
 
@@ -83,7 +84,7 @@ std::unique_ptr<ash::AppListItemMetadata> ChromeAppListItem::CloneMetadata()
 }
 
 void ChromeAppListItem::PerformActivate(int event_flags) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Handle recording app launch source from the AppList in Demo Mode.
   chromeos::DemoSession::RecordAppLaunchSourceIfInDemoMode(
       chromeos::DemoSession::AppLaunchSource::kAppList);
@@ -185,6 +186,13 @@ void ChromeAppListItem::SetNameAndShortName(const std::string& name,
   AppListModelUpdater* updater = model_updater();
   if (updater)
     updater->SetItemNameAndShortName(id(), name, short_name);
+}
+
+void ChromeAppListItem::SetAppStatus(ash::AppStatus app_status) {
+  metadata_->app_status = app_status;
+  AppListModelUpdater* updater = model_updater();
+  if (updater)
+    updater->SetAppStatus(id(), app_status);
 }
 
 void ChromeAppListItem::SetFolderId(const std::string& folder_id) {

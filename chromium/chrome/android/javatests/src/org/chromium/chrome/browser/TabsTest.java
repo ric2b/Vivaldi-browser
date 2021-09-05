@@ -9,6 +9,7 @@ import static androidx.test.espresso.action.ViewActions.click;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 
 import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE;
+import static org.chromium.chrome.test.util.ViewUtils.createMotionEvent;
 
 import android.content.pm.ActivityInfo;
 import android.graphics.Point;
@@ -53,8 +54,6 @@ import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
 import org.chromium.chrome.browser.compositor.layouts.SceneChangeObserver;
 import org.chromium.chrome.browser.compositor.layouts.StaticLayout;
 import org.chromium.chrome.browser.compositor.layouts.components.LayoutTab;
-import org.chromium.chrome.browser.compositor.layouts.eventfilter.EdgeSwipeHandler;
-import org.chromium.chrome.browser.compositor.layouts.eventfilter.ScrollDirection;
 import org.chromium.chrome.browser.compositor.layouts.phone.StackLayout;
 import org.chromium.chrome.browser.compositor.layouts.phone.stack.Stack;
 import org.chromium.chrome.browser.compositor.layouts.phone.stack.StackTab;
@@ -79,6 +78,8 @@ import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.MenuUtils;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.OverviewModeBehaviorWatcher;
+import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener.ScrollDirection;
+import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener.SwipeHandler;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.javascript_dialogs.JavascriptTabModalDialog;
 import org.chromium.content_public.browser.SelectionPopupController;
@@ -95,6 +96,7 @@ import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.modaldialog.ModalDialogProperties;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.test.util.UiRestriction;
+import org.chromium.url.GURL;
 
 import java.io.File;
 import java.util.Locale;
@@ -562,8 +564,11 @@ public class TabsTest {
     @Test
     @LargeTest
     @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE, RESTRICTION_TYPE_NON_LOW_END_DEVICE})
+    @DisableIf.Build(message = "Flaky on Android P, see https://crbug.com/1164443",
+            sdk_is_greater_than = VERSION_CODES.O_MR1, sdk_is_less_than = VERSION_CODES.Q)
     @Feature({"Android-TabSwitcher"})
-    public void testTabSwitcherLandscapeCloseButton() {
+    public void
+    testTabSwitcherLandscapeCloseButton() {
         mActivityTestRule.getActivity().setRequestedOrientation(
                 ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
         // Hard-coded coordinates of the close button on the bottom left of the screen.
@@ -1573,7 +1578,7 @@ public class TabsTest {
     public void testOSKIsNotShownDuringSwipe() throws InterruptedException {
         final View urlBar = mActivityTestRule.getActivity().findViewById(R.id.url_bar);
         final LayoutManagerChrome layoutManager = updateTabsViewSize();
-        final EdgeSwipeHandler edgeSwipeHandler = layoutManager.getToolbarSwipeHandler();
+        final SwipeHandler swipeHandler = layoutManager.getToolbarSwipeHandler();
 
         UiUtils.settleDownUI(InstrumentationRegistry.getInstrumentation());
         InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> urlBar.requestFocus());
@@ -1590,10 +1595,10 @@ public class TabsTest {
                         mActivityTestRule.getActivity(), urlBar));
 
         PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> {
-            edgeSwipeHandler.swipeStarted(ScrollDirection.RIGHT, 0, 0);
+            swipeHandler.onSwipeStarted(ScrollDirection.RIGHT, createMotionEvent(0, 0));
             float swipeXChange = mTabsViewWidthDp / 2.f;
-            edgeSwipeHandler.swipeUpdated(
-                    swipeXChange, 0.f, swipeXChange, 0.f, swipeXChange, 0.f);
+            swipeHandler.onSwipeUpdated(createMotionEvent(swipeXChange / mPxToDp, 0.f),
+                    swipeXChange / mPxToDp, 0.f, swipeXChange / mPxToDp, 0.f);
         });
 
         CriteriaHelper.pollUiThread(() -> {
@@ -1607,7 +1612,7 @@ public class TabsTest {
             Assert.assertFalse("Keyboard should be hidden while swiping",
                     mActivityTestRule.getKeyboardDelegate().isKeyboardShowing(
                             mActivityTestRule.getActivity(), urlBar));
-            edgeSwipeHandler.swipeFinished();
+            swipeHandler.onSwipeFinished();
         });
 
         CriteriaHelper.pollUiThread(() -> {
@@ -1844,7 +1849,7 @@ public class TabsTest {
                     pageLoadedCallbacks[index] = pageLoadCallback;
                     currentTab.addObserver(new EmptyTabObserver() {
                         @Override
-                        public void onPageLoadFinished(Tab tab, String url) {
+                        public void onPageLoadFinished(Tab tab, GURL url) {
                             pageLoadCallback.notifyCalled();
                             tab.removeObserver(this);
                         }

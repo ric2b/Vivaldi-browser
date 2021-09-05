@@ -1129,10 +1129,15 @@ CommandHandler.COMMANDS_['delete'] = new class extends Command {
       dialog.showModalElement();
     }
 
-    dialog.show(message, () => {
+    const deleteCallback = () => {
       dialog.doneCallback && dialog.doneCallback();
+      document.querySelector('files-tooltip').hideTooltip();
+    };
+
+    dialog.show(message, () => {
+      deleteCallback();
       fileManager.fileOperationManager.deleteEntries(entries);
-    }, dialog.doneCallback, null);
+    }, deleteCallback, null);
   }
 
   /**
@@ -1146,7 +1151,7 @@ CommandHandler.COMMANDS_['delete'] = new class extends Command {
   canDeleteEntries_(entries, fileManager) {
     return entries.length > 0 &&
         !this.containsReadOnlyEntry_(entries, fileManager) &&
-        !fileManager.directoryModel.isReadOnly() &&
+        fileManager.directoryModel.canDeleteEntries() &&
         CommandUtil.hasCapability(fileManager, entries, 'canDelete');
   }
 
@@ -1197,22 +1202,49 @@ CommandHandler.registerUndoDeleteToast = function(fileManager) {
    */
   const onDeleted = (e) => {
     if (e.reason === 'BEGIN' || e.reason === 'PROGRESS' ||
-        !e.trashedItems.length) {
+        !e.trashedEntries.length) {
       return;
     }
-    const message = e.trashedItems.length === 1 ?
-        strf('UNDO_DELETE_ONE', e.trashedItems[0].name) :
-        strf('UNDO_DELETE_SOME', e.trashedItems.length);
+    const message = e.trashedEntries.length === 1 ?
+        strf('UNDO_DELETE_ONE', e.trashedEntries[0].name) :
+        strf('UNDO_DELETE_SOME', e.trashedEntries.length);
     fileManager.ui.toast.show(message, {
       text: str('UNDO_DELETE_ACTION_LABEL'),
       callback: () => {
-        fileManager.fileOperationManager.restoreDeleted(e.trashedItems);
+        fileManager.fileOperationManager.restoreDeleted(
+            assert(e.trashedEntries));
       }
     });
   };
 
   util.addEventListenerToBackgroundComponent(
       assert(fileManager.fileOperationManager), 'delete', onDeleted);
+};
+
+/**
+ * Restores selected files from trash.
+ *
+ * @suppress {invalidCasts} See FilesAppEntry in files_app_entry_interfaces.js
+ * for explanation of why FilesAppEntry cannot extend Entry.
+ */
+CommandHandler.COMMANDS_['restore-from-trash'] = new class extends Command {
+  execute(event, fileManager) {
+    const entries = CommandUtil.getCommandEntries(fileManager, event.target);
+    fileManager.fileOperationManager.restoreDeleted(entries.map(e => {
+      return /** @type {!TrashEntry} */ (e);
+    }));
+  }
+
+  /** @override */
+  canExecute(event, fileManager) {
+    const entries = CommandUtil.getCommandEntries(fileManager, event.target);
+
+    const enabled = entries.length > 0 && entries.every(e => {
+      return e.rootType && e.rootType === VolumeManagerCommon.RootType.TRASH;
+    });
+    event.canExecute = enabled;
+    event.command.setHidden(!enabled);
+  }
 };
 
 /**
@@ -1545,6 +1577,11 @@ CommandHandler.COMMANDS_['send-feedback'] = new class extends Command {
       },
     };
 
+    if (window.isSWA) {
+      console.log('SWA send-feedback command not implemented: ', message);
+      return;
+    }
+
     const kFeedbackExtensionId = 'gfdkimpbcpahaombhbimeihdjnejgicl';
     // On ChromiumOS the feedback extension is not installed, so we just log
     // that filing feedback has failed.
@@ -1738,45 +1775,59 @@ CommandHandler.COMMANDS_['toggle-holding-space'] = new class extends Command {
     this.addsItems_;
   }
 
+  /** @override */
   execute(event, fileManager) {
     if (this.addsItems_ === undefined) {
       return;
     }
 
-    const entries = fileManager.selectionHandler.selection.entries;
+    // Filter out entries from unsupported volumes.
+    const allowedVolumeTypes = HoldingSpaceUtil.getAllowedVolumeTypes();
+    const entries =
+        fileManager.selectionHandler.selection.entries.filter(entry => {
+          const volumeInfo = fileManager.volumeManager.getVolumeInfo(entry);
+          return volumeInfo &&
+              allowedVolumeTypes.includes(volumeInfo.volumeType);
+        });
+
     chrome.fileManagerPrivate.toggleAddedToHoldingSpace(
         entries, this.addsItems_);
+
+    if (this.addsItems_) {
+      HoldingSpaceUtil.maybeStoreTimeOfFirstPin();
+    }
   }
 
   /** @override */
   canExecute(event, fileManager) {
     const command = event.command;
 
-    if (!util.isHoldingSpaceEnabled()) {
+    if (!HoldingSpaceUtil.isFeatureEnabled()) {
       event.canExecute = false;
       command.setHidden(true);
       return;
     }
 
-    const allowedVolumeTypes = [
-      VolumeManagerCommon.VolumeType.MY_FILES,
-      VolumeManagerCommon.VolumeType.DOWNLOADS,
-      VolumeManagerCommon.VolumeType.DRIVE,
-      VolumeManagerCommon.VolumeType.CROSTINI,
-      VolumeManagerCommon.VolumeType.ANDROID_FILES,
-    ];
-
-    const currentVolumeInfo = fileManager.directoryModel.getCurrentVolumeInfo();
-    if (!currentVolumeInfo ||
-        !allowedVolumeTypes.includes(currentVolumeInfo.volumeType)) {
-      event.canExecute = false;
-      command.setHidden(true);
-      return;
+    const allowedVolumeTypes = HoldingSpaceUtil.getAllowedVolumeTypes();
+    const currentRootType = fileManager.directoryModel.getCurrentRootType();
+    if (!util.isRecentRootType(currentRootType)) {
+      const volumeInfo = fileManager.directoryModel.getCurrentVolumeInfo();
+      if (!volumeInfo || !allowedVolumeTypes.includes(volumeInfo.volumeType)) {
+        event.canExecute = false;
+        command.setHidden(true);
+        return;
+      }
     }
 
-    const entries = fileManager.selectionHandler.selection.entries;
+    // Filter out entries from unsupported volumes.
+    const entries =
+        fileManager.selectionHandler.selection.entries.filter(entry => {
+          const volumeInfo = fileManager.volumeManager.getVolumeInfo(entry);
+          return volumeInfo &&
+              allowedVolumeTypes.includes(volumeInfo.volumeType);
+        });
 
-    if (!entries || entries.length === 0) {
+    if (entries.length === 0) {
       event.canExecute = false;
       command.setHidden(true);
       return;

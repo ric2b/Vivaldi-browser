@@ -161,10 +161,10 @@ class CONTENT_EXPORT FrameTree {
       RenderFrameHostImpl* parent,
       int process_id,
       int new_routing_id,
-      mojo::PendingReceiver<service_manager::mojom::InterfaceProvider>
-          interface_provider_receiver,
       mojo::PendingReceiver<blink::mojom::BrowserInterfaceBroker>
           browser_interface_broker_receiver,
+      mojo::PendingAssociatedReceiver<blink::mojom::PolicyContainerHost>
+          policy_container_host_receiver,
       blink::mojom::TreeScopeType scope,
       const std::string& frame_name,
       const std::string& frame_unique_name,
@@ -216,7 +216,8 @@ class CONTENT_EXPORT FrameTree {
   scoped_refptr<RenderViewHostImpl> CreateRenderViewHost(
       SiteInstance* site_instance,
       int32_t main_frame_routing_id,
-      bool swapped_out);
+      bool swapped_out,
+      bool renderer_initiated_creation);
 
   // Returns the existing RenderViewHost for a new RenderFrameHost.
   // There should always be such a RenderViewHost, because the main frame

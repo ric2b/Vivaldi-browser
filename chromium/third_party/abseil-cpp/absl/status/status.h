@@ -57,6 +57,7 @@
 #include "absl/container/inlined_vector.h"
 #include "absl/status/internal/status_internal.h"
 #include "absl/strings/cord.h"
+#include "absl/strings/string_view.h"
 #include "absl/types/optional.h"
 
 namespace absl {
@@ -704,9 +705,11 @@ inline Status::Status(Status&& x) noexcept : rep_(x.rep_) {
 
 inline Status& Status::operator=(Status&& x) {
   uintptr_t old_rep = rep_;
-  rep_ = x.rep_;
-  x.rep_ = MovedFromRep();
-  Unref(old_rep);
+  if (x.rep_ != old_rep) {
+    rep_ = x.rep_;
+    x.rep_ = MovedFromRep();
+    Unref(old_rep);
+  }
   return *this;
 }
 

@@ -118,6 +118,14 @@ hooks = [
                '--package=lld_mac'],
   },
   {
+    # Should run after the clang hook.
+    'name': 'objdump/mac',
+    'pattern': '.',
+    'condition': 'checkout_mac and host_os != "mac"',
+    'action': ['python', 'chromium/tools/clang/scripts/update.py',
+               '--package=objdump'],
+  },
+  {
     # Update LASTCHANGE.
     'name': 'lastchange_vivaldi',
     'pattern': '.',
@@ -248,20 +256,6 @@ hooks = [
                '--bucket', 'chromium-webrtc-resources',
                '-d', 'chromium/third_party/opus/tests/resources'],
   },
-  # Pull order files for the win/clang build.
-  {
-    'name': 'orderfiles_win',
-    'pattern': '.',
-    'condition': 'checkout_win',
-    'action': [ 'python', "-u",
-                'chromium/third_party/depot_tools/download_from_google_storage.py',
-                '--no_resume',
-                '--no_auth',
-                '--num_threads=4',
-                '--bucket', 'chromium-browser-clang/orderfiles',
-                '-d', 'chromium/chrome/build',
-    ],
-  },
   # Pull down NPM dependencies for WebUI toolchain.
   {
     'name': 'webui_node_modules',
@@ -273,17 +267,6 @@ hooks = [
                 '--no_auth',
                 '--bucket', 'chromium-nodejs',
                 '-s', 'chromium/third_party/node/node_modules.tar.gz.sha1',
-    ],
-  },
-
-  # Pull down Android RenderTest goldens
-  {
-    'name': 'Fetch Android RenderTest goldens',
-    'pattern': '.',
-    'condition': 'checkout_android',
-    'action': [ 'python', "-u",
-                'chromium/chrome/test/data/android/manage_render_test_goldens.py',
-                'download',
     ],
   },
   {

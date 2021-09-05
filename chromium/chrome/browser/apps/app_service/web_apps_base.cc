@@ -81,7 +81,7 @@ apps::mojom::IntentFilterPtr CreateShareFileFilter(
   std::vector<apps::mojom::ConditionValuePtr> mime_type_condition_values;
   for (auto& mime_type : content_types) {
     mime_type_condition_values.push_back(apps_util::MakeConditionValue(
-        mime_type, apps::mojom::PatternMatchType::kNone));
+        mime_type, apps::mojom::PatternMatchType::kMimeType));
   }
   if (!mime_type_condition_values.empty()) {
     auto mime_type_condition =
@@ -120,7 +120,7 @@ const web_app::WebApp* WebAppsBase::GetWebApp(
   return GetRegistrar() ? GetRegistrar()->GetAppById(app_id) : nullptr;
 }
 
-void WebAppsBase::OnWebAppUninstalled(const web_app::AppId& app_id) {
+void WebAppsBase::OnWebAppWillBeUninstalled(const web_app::AppId& app_id) {
   const web_app::WebApp* web_app = GetWebApp(app_id);
   if (!web_app || !Accepts(app_id)) {
     return;
@@ -153,6 +153,9 @@ apps::mojom::AppPtr WebAppsBase::ConvertImpl(const web_app::WebApp* web_app,
   app->additional_search_terms = web_app->additional_search_terms();
   app->last_launch_time = web_app->last_launch_time();
   app->install_time = web_app->install_time();
+
+  // Web App's publisher_id the start url.
+  app->publisher_id = web_app->start_url().spec();
 
   // app->version is left empty here.
   PopulatePermissions(web_app, &app->permissions);
@@ -192,6 +195,10 @@ content::WebContents* WebAppsBase::LaunchAppWithIntentImpl(
           GetRegistrar()->GetAppEffectiveDisplayMode(app_id)),
       std::move(intent));
   params.launch_source = launch_source;
+  return LaunchAppWithParams(std::move(params));
+}
+
+content::WebContents* WebAppsBase::LaunchAppWithParams(AppLaunchParams params) {
   return web_app_launch_manager_->OpenApplication(std::move(params));
 }
 
@@ -305,12 +312,14 @@ void WebAppsBase::Launch(const std::string& app_id,
       display_id,
       /*fallback_container=*/
       web_app::ConvertDisplayModeToAppLaunchContainer(display_mode));
+
   // This is used only in the case that a SystemWebApp is being opened. We
   // avoided recording the metrics above, in app_service_proxy.cc, and will
   // record the launch metrics as part of the call to LaunchSystemWebApp.
   params.launch_source = launch_source;
-  // The app will be created for the currently active profile.
-  web_app_launch_manager_->OpenApplication(std::move(params));
+
+  // The app will be launched for the currently active profile.
+  LaunchAppWithParams(std::move(params));
 }
 
 void WebAppsBase::LaunchAppWithFiles(const std::string& app_id,
@@ -326,8 +335,8 @@ void WebAppsBase::LaunchAppWithFiles(const std::string& app_id,
     params.launch_files.push_back(file_path);
   }
 
-  // The app will be created for the currently active profile.
-  web_app_launch_manager_->OpenApplication(std::move(params));
+  // The app will be launched for the currently active profile.
+  LaunchAppWithParams(std::move(params));
 }
 
 void WebAppsBase::LaunchAppWithIntent(const std::string& app_id,
@@ -577,13 +586,6 @@ void PopulateIntentFilters(const web_app::WebApp& web_app,
 
   const apps::ShareTarget& share_target = web_app.share_target().value();
 
-  // TODO(crbug.com/1127670): Support title/text/url sharing on ChromeOS
-  if (share_target.params.files.empty() ||
-      share_target.method != apps::ShareTarget::Method::kPost ||
-      share_target.enctype != apps::ShareTarget::Enctype::kMultipartFormData) {
-    return;
-  }
-
   std::vector<std::string> content_types;
   for (const auto& files_entry : share_target.params.files) {
     for (const auto& file_type : files_entry.accept) {
@@ -596,9 +598,6 @@ void PopulateIntentFilters(const web_app::WebApp& web_app,
       content_types.push_back(file_type);
     }
   }
-
-  if (content_types.empty())
-    return;
 
   const std::vector<std::string> intent_actions(
       {apps_util::kIntentActionSend, apps_util::kIntentActionSendMultiple});

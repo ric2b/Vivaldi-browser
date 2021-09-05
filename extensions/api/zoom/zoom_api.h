@@ -49,8 +49,7 @@ class ZoomAPI : public BrowserContextKeyedAPI,
   // Listener for default zoom level. We create it lazily upon OnListenerAdded.
   // We cannot initialize it in the constructor as the profile is not fully
   // ready at that point.
-  std::unique_ptr<ChromeZoomLevelPrefs::DefaultZoomLevelSubscription>
-      default_zoom_level_subscription_;
+  base::CallbackListSubscription default_zoom_level_subscription_;
 };
 
 class ZoomSetVivaldiUIZoomFunction : public ExtensionFunction {

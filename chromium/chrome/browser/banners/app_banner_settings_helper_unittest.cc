@@ -2,12 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/banners/app_banner_metrics.h"
 #include "chrome/browser/banners/app_banner_settings_helper.h"
-#include "chrome/browser/engagement/site_engagement_service.h"
-#include "chrome/browser/installable/installable_logging.h"
+#include "chrome/browser/banners/app_banner_metrics.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
+#include "components/site_engagement/content/site_engagement_service.h"
+
+namespace webapps {
 
 namespace {
 
@@ -88,7 +89,8 @@ TEST_F(AppBannerSettingsHelperTest, SingleEvents) {
 
 TEST_F(AppBannerSettingsHelperTest, ShouldShowFromEngagement) {
   GURL url(kTestURL);
-  SiteEngagementService* service = SiteEngagementService::Get(profile());
+  site_engagement::SiteEngagementService* service =
+      site_engagement::SiteEngagementService::Get(profile());
 
   // By default the banner should not be shown.
   EXPECT_FALSE(
@@ -190,7 +192,8 @@ TEST_F(AppBannerSettingsHelperTest, OperatesOnOrigins) {
   GURL url(kTestURL);
   GURL otherURL(kSameOriginTestURL);
 
-  SiteEngagementService* service = SiteEngagementService::Get(profile());
+  site_engagement::SiteEngagementService* service =
+      site_engagement::SiteEngagementService::Get(profile());
 
   // By default the banner should not be shown.
   EXPECT_FALSE(
@@ -230,7 +233,8 @@ TEST_F(AppBannerSettingsHelperTest, OperatesOnOrigins) {
 TEST_F(AppBannerSettingsHelperTest, ShouldShowWithHigherTotal) {
   AppBannerSettingsHelper::SetTotalEngagementToTrigger(10);
   GURL url(kTestURL);
-  SiteEngagementService* service = SiteEngagementService::Get(profile());
+  site_engagement::SiteEngagementService* service =
+      site_engagement::SiteEngagementService::Get(profile());
 
   // By default the banner should not be shown.
   EXPECT_FALSE(
@@ -365,3 +369,5 @@ TEST_F(AppBannerSettingsHelperTest, NulloptSingleBannerEvent) {
   EXPECT_TRUE(AppBannerSettingsHelper::WasBannerRecentlyBlocked(
       web_contents(), url, url_same_origin3, reference_time));
 }
+
+}  // namespace webapps

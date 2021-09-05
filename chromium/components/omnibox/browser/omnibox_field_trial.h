@@ -410,6 +410,7 @@ bool RichAutocompletionShowAdditionalText();
 bool RichAutocompletionSplitTitleCompletion();
 bool RichAutocompletionSplitUrlCompletion();
 size_t RichAutocompletionSplitCompletionMinChar();
+bool RichAutocompletionCounterfactual();
 
 // On Device Head Suggestions feature and its helper functions.
 bool IsOnDeviceHeadSuggestEnabledForIncognito();
@@ -417,8 +418,7 @@ bool IsOnDeviceHeadSuggestEnabledForNonIncognito();
 bool IsOnDeviceHeadSuggestEnabledForAnyMode();
 // Functions can be used in both non-incognito and incognito.
 std::string OnDeviceHeadModelLocaleConstraint(bool is_incognito);
-int OnDeviceHeadSuggestMaxScoreForNonUrlInput(bool is_incognito,
-                                              const int default_score);
+int OnDeviceHeadSuggestMaxScoreForNonUrlInput(bool is_incognito);
 int OnDeviceSearchProviderDefaultLoaderTimeoutMs(bool is_incognito);
 int OnDeviceHeadSuggestDelaySuggestRequestMs(bool is_incognito);
 // Function only works in non-incognito when server suggestions are available.
@@ -431,6 +431,10 @@ bool ShouldHidePathQueryRefOnInteraction();
 // domain, as well as the path, query, and ref.
 bool ShouldMaybeElideToRegistrableDomain();
 int UnelideURLOnHoverThresholdMs();
+
+// Returns true if CGI parameter names should not be considered when scoring
+// suggestions.
+bool ShouldDisableCGIParamMatching();
 
 // ---------------------------------------------------------
 // Clipboard URL suggestions:
@@ -545,6 +549,7 @@ extern const char kRichAutocompletionShowAdditionalTextParam[];
 extern const char kRichAutocompletionSplitTitleCompletionParam[];
 extern const char kRichAutocompletionSplitUrlCompletionParam[];
 extern const char kRichAutocompletionSplitCompletionMinCharParam[];
+extern const char kRichAutocompletionCounterfactualParam[];
 
 // Parameter names used by omnibox experiments that hide the path (and
 // optionally subdomains) in the steady state.

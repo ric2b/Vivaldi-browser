@@ -12,7 +12,9 @@
 <translation id="1682548588986054654">Nova finestra discreta</translation>
 <translation id="1708338024780164500">(Inactiva)</translation>
 <translation id="1729533290416704613">També controla la pàgina que es mostra quan feu una cerca des de l'omnibox.</translation>
+<translation id="1744108098763830590">&amp;Pàgina de fons</translation>
 <translation id="1828901632669367785">Imprimeix fent servir el Diàleg del Sistema...</translation>
+<translation id="1936931585862840749">Utilitza un número per indicar quantes còpies vols imprimir (entre 1 i <ph name="MAX_COPIES" />).</translation>
 <translation id="2087822576218954668">Impressió: <ph name="PRINT_NAME" /></translation>
 <translation id="2177950615300672361">Pestanya d'incògnit: <ph name="TAB_NAME" /></translation>
 <translation id="219008588003277019">Mòdul de client nadiu: <ph name="NEXE_NAME" /></translation>
@@ -22,6 +24,7 @@
 <translation id="2327492829706409234">Activa l'aplicació</translation>
 <translation id="2348176352564285430">Aplicació: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="2378982052244864789">Seleccioneu el directori de l'extensió.</translation>
+<translation id="2381756643783702095">Demana permís abans d'enviament (recomanat)</translation>
 <translation id="241082044617551207">Connector desconegut</translation>
 <translation id="2439110203301358333">Un altre programa de l'ordinador ha afegit una extensió que pot canviar el funcionament de Vivaldi.</translation>
 <translation id="2445081178310039857">El directori arrel de l'extensió és obligatori.</translation>
@@ -37,11 +40,13 @@
 <translation id="2972581237482394796">&amp;Refés</translation>
 <translation id="3012631534724231212">(iframe)</translation>
 <translation id="3021678814754966447">&amp;Visualitza l'origen del marc</translation>
+<translation id="3046910703532196514">Pàgina web completa</translation>
 <translation id="3080207940057008665">Un altre programa de l'ordinador ha afegit un tema que pot canviar el funcionament de Vivaldi.</translation>
 <translation id="3084548735795614657">Deixeu anar per a instal·lar</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3222066309010235055">Renderitzador previ: <ph name="PRERENDER_CONTENTS_NAME" /></translation>
 <translation id="3241680850019875542">Seleccioneu el directori arrel de l'extensió que voleu empaquetar. Per actualitzar una extensió, cal que seleccioneu també el fitxer de clau privada que s'utilitzarà.</translation>
+<translation id="3285322247471302225">Nova Pes&amp;tanya</translation>
 <translation id="3288047731229977326">Les extensions que funcionen amb el mode desenvolupador poden malmetre el vostre ordinador. Si no sou desenvolupador, hauríeu de desactivar aquestes extensions per continuar protegit.</translation>
 <translation id="3305661444342691068">Obre el PDF en Previsualització</translation>
 <translation id="3341703758641437857">Permet accedir als URLs dels fitxers</translation>
@@ -76,6 +81,7 @@
 <translation id="5039804452771397117">Permet</translation>
 <translation id="5143374789336132547">L'extensió <ph name="EXTENSION_NAME" /> ha canviat la pàgina que es mostra quan feu clic al botó d'inici.</translation>
 <translation id="5233231016133573565">ID de procés</translation>
+<translation id="5233736638227740678">&amp;Enganxar</translation>
 <translation id="52912272896845572">El fitxer de clau privada no és vàlid.</translation>
 <translation id="5301954838959518834">D'acord</translation>
 <translation id="5355926466126177564">L'extensió <ph name="EXTENSION_NAME" /> ha canviat la pàgina que es mostra quan feu una cerca des de l'omnibox.</translation>
@@ -88,6 +94,7 @@
 <translation id="5556459405103347317">Torna a carregar</translation>
 <translation id="5575473780076478375">Extensió d'incògnit: <ph name="EXTENSION_NAME" /></translation>
 <translation id="5627086634964711283">També controla la pàgina que es mostra quan feu clic al botó d'inici.</translation>
+<translation id="5677928146339483299">Bloquejades</translation>
 <translation id="5707185214361380026">No s'ha pogut carregat l'extensió des de:</translation>
 <translation id="5715711091495208045">Agent de connectors: <ph name="PLUGIN_NAME" /></translation>
 <translation id="583281660410589416">Desconegut</translation>
@@ -110,17 +117,20 @@
 <translation id="7175353351958621980">Carregada des de:</translation>
 <translation id="7287143125007575591">Accés denegat.</translation>
 <translation id="7421925624202799674">&amp;Visualitza l'origen de la pàgina</translation>
+<translation id="7423098979219808738">Pregunta-m'ho abans</translation>
 <translation id="7427348830195639090">Pàgina en segon pla: <ph name="BACKGROUND_PAGE_URL" /></translation>
 <translation id="7629827748548208700">Pestanya: <ph name="TAB_NAME" /></translation>
 <translation id="7663719505383602579">Receptor: <ph name="ARC_PROCESS_NAME" /></translation>
 <translation id="7704305437604973648">Tasca</translation>
 <translation id="7710568461918838723">&amp;Emet...</translation>
+<translation id="7750228210027921155">Pantalla en pantalla</translation>
 <translation id="7760004034676677601">Aquesta pàgina d'inici és la que esperàveu?</translation>
 <translation id="7791543448312431591">Afegeix</translation>
 <translation id="7814458197256864873">&amp;Copiar</translation>
 <translation id="7818135753970109980">S'ha afegit un tema nou (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="7857949311770343000">Aquesta és la pàgina de la pestanya nova que volíeu?</translation>
 <translation id="786073089922909430">Servei: <ph name="ARC_PROCESS_NAME" /></translation>
+<translation id="7898627924844766532">Conserva a la Barra d'Eines</translation>
 <translation id="7903925330883316394">Utilitat: <ph name="UTILITY_TYPE" /></translation>
 <translation id="7978412674231730200">Clau privada</translation>
 <translation id="7982789257301363584">Xarxa</translation>

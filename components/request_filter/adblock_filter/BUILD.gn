@@ -4,10 +4,10 @@ import("//testing/test.gni")
 
 source_set("adblock_parser") {
   sources = [
-    "adblock_cosmetic_rule.cc",
-    "adblock_cosmetic_rule.h",
-    "adblock_filter_rule.cc",
-    "adblock_filter_rule.h",
+    "adblock_content_injection_rule.cc",
+    "adblock_content_injection_rule.h",
+    "adblock_request_filter_rule.cc",
+    "adblock_request_filter_rule.h",
     "adblock_metadata.cc",
     "adblock_metadata.h",
     "adblock_rule_parser.cc",
@@ -30,8 +30,12 @@ source_set("adblock_parser") {
 
 source_set("adblock_filter") {
   sources = [
+    "adblock_content_injection_provider.cc",
+    "adblock_content_injection_provider.h",
     "adblock_cosmetic_filter.cc",
     "adblock_cosmetic_filter.h",
+    "adblock_known_sources_handler_impl.cc",
+    "adblock_known_sources_handler_impl.h",
     "adblock_known_sources_handler.cc",
     "adblock_known_sources_handler.h",
     "adblock_request_filter.cc",

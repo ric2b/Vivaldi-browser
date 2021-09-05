@@ -17,7 +17,6 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/scoped_observer.h"
 #include "chrome/browser/chromeos/login/screens/error_screen.h"
 #include "chrome/browser/chromeos/login/signin_specifics.h"
 #include "chrome/browser/chromeos/login/ui/login_display.h"
@@ -55,7 +54,6 @@ namespace chromeos {
 class CoreOobeView;
 class ErrorScreensHistogramHelper;
 class GaiaScreenHandler;
-class LoginFeedback;
 class User;
 class UserContext;
 
@@ -66,12 +64,10 @@ class LoginDisplayWebUIHandler {
   virtual void ClearUserPodPassword() = 0;
   virtual void OnUserImageChanged(const user_manager::User& user) = 0;
   virtual void OnPreferencesChanged() = 0;
-  virtual void ResetSigninScreenHandlerDelegate() = 0;
   virtual void ShowError(int login_attempts,
                          const std::string& error_text,
                          const std::string& help_link_text,
                          HelpAppLauncher::HelpTopic help_topic_id) = 0;
-  virtual void ShowSigninUI(const std::string& email) = 0;
   virtual void ShowAllowlistCheckFailedError() = 0;
   virtual void LoadUsers(const user_manager::UserList& users,
                          const base::ListValue& users_list) = 0;
@@ -98,9 +94,6 @@ class SigninScreenHandlerDelegate {
 
   // Shows Enterprise Enrollment screen.
   virtual void ShowEnterpriseEnrollmentScreen() = 0;
-
-  // Shows Kiosk Enable screen.
-  virtual void ShowKioskEnableScreen() = 0;
 
   // Shows Reset screen.
   virtual void ShowKioskAutolaunchScreen() = 0;
@@ -169,7 +162,6 @@ class SigninScreenHandler
   void SetDelegate(SigninScreenHandlerDelegate* delegate);
 
   // NetworkStateInformer::NetworkStateInformerObserver implementation:
-  void OnNetworkReady() override;
   void UpdateState(NetworkError::ErrorReason reason) override;
 
   // Required Local State preferences.
@@ -233,12 +225,10 @@ class SigninScreenHandler
   void ClearUserPodPassword() override;
   void OnUserImageChanged(const user_manager::User& user) override;
   void OnPreferencesChanged() override;
-  void ResetSigninScreenHandlerDelegate() override;
   void ShowError(int login_attempts,
                  const std::string& error_text,
                  const std::string& help_link_text,
                  HelpAppLauncher::HelpTopic help_topic_id) override;
-  void ShowSigninUI(const std::string& email) override;
   void ShowAllowlistCheckFailedError() override;
   void LoadUsers(const user_manager::UserList& users,
                  const base::ListValue& users_list) override;
@@ -249,7 +239,7 @@ class SigninScreenHandler
                const content::NotificationDetails& details) override;
 
   // PowerManagerClient::Observer implementation:
-  void SuspendDone(const base::TimeDelta& sleep_duration) override;
+  void SuspendDone(base::TimeDelta sleep_duration) override;
 
   // ash::TabletModeObserver:
   void OnTabletModeStarted() override;
@@ -271,13 +261,10 @@ class SigninScreenHandler
   void HandleAuthenticateUser(const AccountId& account_id,
                               const std::string& password,
                               bool authenticated_by_pin);
-  void HandleCompleteOfflineAuthentication(const std::string& email,
-                                           const std::string& password);
   void HandleLaunchIncognito();
   void HandleLaunchSAMLPublicSession(const std::string& email);
   void HandleOfflineLogin(const base::ListValue* args);
   void HandleToggleEnrollmentScreen();
-  void HandleToggleKioskEnableScreen();
   void HandleToggleResetScreen();
   void HandleToggleKioskAutolaunchScreen();
 
@@ -306,7 +293,6 @@ class SigninScreenHandler
   void HandleLogRemoveUserWarningShown();
   void HandleFirstIncorrectPasswordAttempt(const AccountId& account_id);
   void HandleMaxIncorrectPasswordAttempts(const AccountId& account_id);
-  void HandleSendFeedback();
 
   // Implements user sign-in.
   void AuthenticateExistingUser(const AccountId& account_id,
@@ -336,16 +322,11 @@ class SigninScreenHandler
   // screen.
   bool IsSigninScreenHiddenByError() const;
 
-  bool ShouldLoadGaia() const;
-
   net::Error FrameError() const;
 
   // input_method::ImeKeyboard::Observer implementation:
   void OnCapsLockChanged(bool enabled) override;
   void OnLayoutChanging(const std::string& layout_name) override {}
-
-  // Callback invoked after the feedback is finished.
-  void OnFeedbackFinished();
 
   // After proxy auth information has been supplied, this function re-enables
   // responding to network state notifications.
@@ -363,9 +344,6 @@ class SigninScreenHandler
   // Keeps whether screen should be shown for OOBE.
   bool oobe_ui_ = false;
 
-  // Is account picker being shown for the first time.
-  bool is_account_picker_showing_first_time_ = false;
-
   // Network state informer used to keep signin screen up.
   scoped_refptr<NetworkStateInformer> network_state_informer_;
 
@@ -379,8 +357,8 @@ class SigninScreenHandler
   NetworkStateInformer::State last_network_state_ =
       NetworkStateInformer::UNKNOWN;
 
-  base::CancelableClosure update_state_closure_;
-  base::CancelableClosure connecting_closure_;
+  base::CancelableOnceCallback<void()> update_state_callback_;
+  base::CancelableOnceCallback<void()> connecting_callback_;
 
   content::NotificationRegistrar registrar_;
 
@@ -417,8 +395,6 @@ class SigninScreenHandler
   base::TimeDelta offline_timeout_for_test_;
 
   std::unique_ptr<ErrorScreensHistogramHelper> histogram_helper_;
-
-  std::unique_ptr<LoginFeedback> login_feedback_;
 
   std::unique_ptr<AccountId> focused_pod_account_id_;
   base::Optional<system::SystemClock::ScopedHourClockType>

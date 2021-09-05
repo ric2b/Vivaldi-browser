@@ -143,7 +143,10 @@ class ControllerTest : public content::RenderViewHostTestHarness {
     controller_->AddObserver(&mock_observer_);
   }
 
-  void TearDown() override { controller_->RemoveObserver(&mock_observer_); }
+  void TearDown() override {
+    controller_->RemoveObserver(&mock_observer_);
+    RenderViewHostTestHarness::TearDown();
+  }
 
  protected:
   static SupportedScriptProto* AddRunnableScript(
@@ -584,6 +587,30 @@ TEST_F(ControllerTest, CloseCustomTab) {
   EXPECT_TRUE(controller_->PerformUserAction(0));
 }
 
+TEST_F(ControllerTest, StopWithFeedbackChip) {
+  SupportsScriptResponseProto script_response;
+  AddRunnableScript(&script_response, "stop");
+  SetNextScriptResponse(script_response);
+
+  ActionsResponseProto actions_response;
+  actions_response.add_actions()->mutable_tell()->set_message("I give up");
+  actions_response.add_actions()->mutable_stop()->set_show_feedback_chip(true);
+  std::string actions_response_str;
+  actions_response.SerializeToString(&actions_response_str);
+  EXPECT_CALL(*mock_service_, OnGetActions(StrEq("stop"), _, _, _, _, _))
+      .WillOnce(RunOnceCallback<5>(net::HTTP_OK, actions_response_str));
+
+  Start();
+  ASSERT_THAT(controller_->GetUserActions(), SizeIs(1));
+
+  testing::InSequence seq;
+  EXPECT_CALL(mock_client_,
+              RecordDropOut(Metrics::DropOutReason::SCRIPT_SHUTDOWN));
+  EXPECT_TRUE(controller_->PerformUserAction(0));
+  ASSERT_THAT(controller_->GetUserActions(), SizeIs(1));
+  EXPECT_EQ(FEEDBACK_ACTION, controller_->GetUserActions().at(0).chip().type);
+}
+
 TEST_F(ControllerTest, RefreshScriptWhenDomainChanges) {
   SupportsScriptResponseProto script_response;
   AddRunnableScript(&script_response, "script");
@@ -637,7 +664,26 @@ TEST_F(ControllerTest, Autostart) {
                                    AutofillAssistantState::STOPPED));
 }
 
-TEST_F(ControllerTest, AutostartIsNotPassedToTheUi) {
+TEST_F(ControllerTest,
+       AutostartFallbackWithNoRunnableScriptsShowsFeedbackChip) {
+  SupportsScriptResponseProto script_response;
+  auto* autostart = AddRunnableScript(&script_response, "runnable");
+  autostart->mutable_presentation()->set_autostart(true);
+  RunOnce(autostart);
+  SetRepeatedScriptResponse(script_response);
+
+  Start("http://a.example.com/path");
+  ASSERT_THAT(controller_->GetUserActions(), SizeIs(1));
+  EXPECT_EQ(FEEDBACK_ACTION, controller_->GetUserActions().at(0).chip().type);
+}
+
+TEST_F(ControllerTest,
+       AutostartErrorDoesNotShowFeedbackChipWithFeatureFlagDisabled) {
+  // Disable the feedback chip feature.
+  scoped_feature_list_.Reset();
+  scoped_feature_list_.InitAndDisableFeature(
+      features::kAutofillAssistantFeedbackChip);
+
   SupportsScriptResponseProto script_response;
   auto* autostart = AddRunnableScript(&script_response, "runnable");
   autostart->mutable_presentation()->set_autostart(true);
@@ -831,8 +877,9 @@ TEST_F(ControllerTest, StateChanges) {
                                    AutofillAssistantState::PROMPT,
                                    AutofillAssistantState::STOPPED));
 
-  // The cancel button is removed.
-  EXPECT_TRUE(controller_->GetUserActions().empty());
+  // The cancel button is removed and the feedback chip is displayed.
+  ASSERT_THAT(controller_->GetUserActions(), SizeIs(1));
+  EXPECT_EQ(FEEDBACK_ACTION, controller_->GetUserActions().at(0).chip().type);
 }
 
 TEST_F(ControllerTest, AttachUIWhenStarting) {
@@ -855,7 +902,8 @@ TEST_F(ControllerTest, AttachUIWhenContentsFocused) {
   SimulateWebContentsFocused();  // must call AttachUI
 
   EXPECT_CALL(mock_client_, AttachUI());
-  controller_->OnFatalError("test", Metrics::DropOutReason::TAB_CHANGED);
+  controller_->OnFatalError("test", /*show_feedback_chip= */ false,
+                            Metrics::DropOutReason::TAB_CHANGED);
   EXPECT_EQ(AutofillAssistantState::STOPPED, controller_->GetState());
   SimulateWebContentsFocused();  // must call AttachUI
 }
@@ -1165,6 +1213,26 @@ TEST_F(ControllerTest, WaitForNavigationActionStartWithinTimeout) {
   ASSERT_THAT(processed_actions_capture, SizeIs(2));
   EXPECT_EQ(ACTION_APPLIED, processed_actions_capture[0].status());
   EXPECT_EQ(ACTION_APPLIED, processed_actions_capture[1].status());
+}
+
+TEST_F(ControllerTest, SetScriptStoreConfig) {
+  // A single script, and its corresponding bundle info.
+  SupportsScriptResponseProto script_response;
+  AddRunnableScript(&script_response, "script");
+  script_response.mutable_script_store_config()->set_bundle_path("bundle/path");
+  script_response.mutable_script_store_config()->set_bundle_version(12);
+  SetupScripts(script_response);
+
+  ScriptStoreConfig script_store_config;
+  std::vector<ProcessedActionProto> processed_actions_capture;
+  EXPECT_CALL(*mock_service_, SetScriptStoreConfig(_))
+      .WillOnce(SaveArg<0>(&script_store_config));
+
+  Start("http://a.example.com/path");
+  controller_->GetUserActions();
+
+  EXPECT_THAT(script_store_config.bundle_path(), Eq("bundle/path"));
+  EXPECT_THAT(script_store_config.bundle_version(), Eq(12));
 }
 
 TEST_F(ControllerTest, InitialDataUrlDoesNotChange) {
@@ -1563,6 +1631,13 @@ TEST_F(ControllerTest, BrowseStateWithDomainAllowlist) {
   // AA.
   SimulateNavigateToUrl(GURL("http://other-example.com/"));
   EXPECT_EQ(AutofillAssistantState::BROWSE, controller_->GetState());
+
+  // Navigation to different domain should stop AA.
+  EXPECT_CALL(
+      mock_client_,
+      RecordDropOut(Metrics::DropOutReason::DOMAIN_CHANGE_DURING_BROWSE_MODE));
+  SimulateNavigateToUrl(GURL("http://unknown.com"));
+  EXPECT_EQ(AutofillAssistantState::STOPPED, controller_->GetState());
 }
 
 TEST_F(ControllerTest, BrowseStateWithDomainAllowlistCleanup) {
@@ -1893,7 +1968,7 @@ TEST_F(ControllerTest, NavigationAfterStopped) {
                                    AutofillAssistantState::STOPPED));
 }
 
-TEST_F(ControllerTest, NavigationToGooglePropertyDestroysUI) {
+TEST_F(ControllerTest, NavigationToGooglePropertyShutsDownDestroyingUI) {
   SupportsScriptResponseProto script_response;
   AddRunnableScript(&script_response, "autostart")
       ->mutable_presentation()
@@ -1911,23 +1986,20 @@ TEST_F(ControllerTest, NavigationToGooglePropertyDestroysUI) {
   Start();
   EXPECT_EQ(AutofillAssistantState::PROMPT, controller_->GetState());
 
-  EXPECT_CALL(mock_client_, RecordDropOut(Metrics::DropOutReason::NAVIGATION));
-  EXPECT_CALL(mock_client_, DestroyUI);
+  EXPECT_CALL(mock_client_, Shutdown(Metrics::DropOutReason::NAVIGATION));
   GURL google("https://google.com/search");
   SetLastCommittedUrl(google);
   content::NavigationSimulator::NavigateAndCommitFromBrowser(web_contents(),
                                                              google);
 
-  EXPECT_EQ(AutofillAssistantState::STOPPED, controller_->GetState());
-
   // Full history of state transitions.
   EXPECT_THAT(states_, ElementsAre(AutofillAssistantState::STARTING,
                                    AutofillAssistantState::RUNNING,
-                                   AutofillAssistantState::PROMPT,
-                                   AutofillAssistantState::STOPPED));
+                                   AutofillAssistantState::PROMPT));
 }
 
-TEST_F(ControllerTest, DomainChangeToGooglePropertyDuringBrowseDestroysUI) {
+TEST_F(ControllerTest,
+       DomainChangeToGooglePropertyDuringBrowseShutsDownDestroyingUI) {
   SupportsScriptResponseProto script_response;
   AddRunnableScript(&script_response, "runnable")
       ->mutable_presentation()
@@ -1948,20 +2020,16 @@ TEST_F(ControllerTest, DomainChangeToGooglePropertyDuringBrowseDestroysUI) {
 
   EXPECT_CALL(
       mock_client_,
-      RecordDropOut(Metrics::DropOutReason::DOMAIN_CHANGE_DURING_BROWSE_MODE));
-  EXPECT_CALL(mock_client_, DestroyUI);
+      Shutdown(Metrics::DropOutReason::DOMAIN_CHANGE_DURING_BROWSE_MODE));
   GURL google("https://google.com/search");
   SetLastCommittedUrl(google);
   content::NavigationSimulator::NavigateAndCommitFromBrowser(web_contents(),
                                                              google);
 
-  EXPECT_EQ(AutofillAssistantState::STOPPED, controller_->GetState());
-
   // Full history of state transitions.
   EXPECT_THAT(states_, ElementsAre(AutofillAssistantState::STARTING,
                                    AutofillAssistantState::RUNNING,
-                                   AutofillAssistantState::BROWSE,
-                                   AutofillAssistantState::STOPPED));
+                                   AutofillAssistantState::BROWSE));
 }
 
 TEST_F(ControllerTest, UserDataFormEmpty) {
@@ -2638,7 +2706,11 @@ TEST_F(ControllerTest, StartPasswordChangeFlow) {
 
   EXPECT_TRUE(
       controller_->Start(initialUrl, TriggerContext::Create(parameters, "")));
+  // Initial navigation.
+  SimulateNavigateToUrl(GURL("http://b.example.com"));
   EXPECT_EQ(GetUserData()->selected_login_->username, username);
+  EXPECT_EQ(GetUserData()->selected_login_->origin, initialUrl.GetOrigin());
+  EXPECT_EQ(controller_->GetCurrentURL().host(), "b.example.com");
 }
 
 TEST_F(ControllerTest, EndPromptWithOnEndNavigation) {
@@ -2932,4 +3004,80 @@ TEST_F(ControllerTest, OnGetScriptsFailedWillShutdown) {
   Start();
   EXPECT_EQ(AutofillAssistantState::STOPPED, controller_->GetState());
 }
+
+TEST_F(ControllerTest, Details) {
+  // The current controller details, as notified to the observers.
+  std::vector<Details> observed_details;
+
+  ON_CALL(mock_observer_, OnDetailsChanged(_))
+      .WillByDefault(
+          Invoke([&observed_details](const std::vector<Details>& details) {
+            observed_details = details;
+          }));
+
+  // Details are initially empty.
+  EXPECT_THAT(controller_->GetDetails(), IsEmpty());
+
+  // Set 2 details.
+  controller_->SetDetails(std::make_unique<Details>(), base::TimeDelta());
+  EXPECT_THAT(controller_->GetDetails(), SizeIs(1));
+  EXPECT_THAT(observed_details, SizeIs(1));
+
+  // Set 2 details in 1s (which directly clears the current details).
+  controller_->SetDetails(std::make_unique<Details>(),
+                          base::TimeDelta::FromMilliseconds(1000));
+  EXPECT_THAT(controller_->GetDetails(), IsEmpty());
+  EXPECT_THAT(observed_details, IsEmpty());
+
+  task_environment()->FastForwardBy(base::TimeDelta::FromMilliseconds(1000));
+  EXPECT_THAT(controller_->GetDetails(), SizeIs(1));
+  EXPECT_THAT(observed_details, SizeIs(1));
+
+  controller_->AppendDetails(std::make_unique<Details>(),
+                             /* delay= */ base::TimeDelta());
+  EXPECT_THAT(controller_->GetDetails(), SizeIs(2));
+  EXPECT_THAT(observed_details, SizeIs(2));
+
+  // Delay the appending of the details.
+  controller_->AppendDetails(
+      std::make_unique<Details>(),
+      /* delay= */ base::TimeDelta::FromMilliseconds(1000));
+  EXPECT_THAT(controller_->GetDetails(), SizeIs(2));
+  EXPECT_THAT(observed_details, SizeIs(2));
+
+  task_environment()->FastForwardBy(base::TimeDelta::FromMilliseconds(999));
+  EXPECT_THAT(controller_->GetDetails(), SizeIs(2));
+  EXPECT_THAT(observed_details, SizeIs(2));
+
+  task_environment()->FastForwardBy(base::TimeDelta::FromMilliseconds(1));
+  EXPECT_THAT(controller_->GetDetails(), SizeIs(3));
+  EXPECT_THAT(observed_details, SizeIs(3));
+
+  // Setting the details clears the timers.
+  controller_->AppendDetails(
+      std::make_unique<Details>(),
+      /* delay= */ base::TimeDelta::FromMilliseconds(1000));
+  controller_->SetDetails(nullptr, base::TimeDelta());
+  EXPECT_THAT(controller_->GetDetails(), IsEmpty());
+  EXPECT_THAT(observed_details, IsEmpty());
+
+  task_environment()->FastForwardBy(base::TimeDelta::FromMilliseconds(2000));
+  EXPECT_THAT(controller_->GetDetails(), IsEmpty());
+  EXPECT_THAT(observed_details, IsEmpty());
+}
+
+TEST_F(ControllerTest, OnScriptErrorWillAppendVanishingFeedbackChip) {
+  // A script error should show the feedback chip.
+  EXPECT_CALL(mock_observer_, OnUserActionsChanged(SizeIs(1)));
+  EXPECT_CALL(mock_client_, RecordDropOut(Metrics::DropOutReason::NAVIGATION));
+  controller_->OnScriptError("Error", Metrics::DropOutReason::NAVIGATION);
+  EXPECT_EQ(AutofillAssistantState::STOPPED, controller_->GetState());
+
+  // The chip should vanish once clicked.
+  EXPECT_CALL(mock_observer_, OnUserActionsChanged(SizeIs(0)));
+  EXPECT_CALL(mock_client_,
+              Shutdown(Metrics::DropOutReason::UI_CLOSED_UNEXPECTEDLY));
+  EXPECT_TRUE(controller_->PerformUserAction(0));
+}
+
 }  // namespace autofill_assistant

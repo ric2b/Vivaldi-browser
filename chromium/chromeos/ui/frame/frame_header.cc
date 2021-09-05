@@ -111,13 +111,17 @@ class FrameHeader::FrameAnimatorView : public views::View,
   }
 
   void StartAnimation(base::TimeDelta duration) {
-    if (layer_owner_ || !parent_->GetWidget()) {
-      // If animation is already running or the widget hasn't been initialized
-      // yet, just update the content of the new layer.
+    aura::Window* window = parent_->GetWidget()
+                               ? parent_->GetWidget()->GetNativeWindow()
+                               : nullptr;
+    if (layer_owner_ || !window ||
+        window->layer()->GetAnimator()->is_animating()) {
+      // If the frame animation is already running or the widget
+      // hasn't been initialized yet, just update the content of the
+      // new layer.
       parent_->SchedulePaint();
       return;
     }
-    aura::Window* window = parent_->GetWidget()->GetNativeWindow();
 
     // Make sure the this view is at the bottom of root view's children.
     parent_->ReorderChildView(this, 0);
@@ -129,14 +133,16 @@ class FrameHeader::FrameAnimatorView : public views::View,
     new_layer->SetName(old_layer->name());
     old_layer->SetName(old_layer->name() + ":Old");
     old_layer->SetTransform(gfx::Transform());
+    // Layer in maximized / fullscreen / snapped state is set to
+    // opaque, which can prevent resterizing the new layer immediately.
+    old_layer->SetFillsBoundsOpaquely(false);
 
     layer_owner_ = std::move(old_layer_owner);
 
     AddLayerBeneathView(old_layer);
 
-    // The old layer is on top and should fade out. Make it non opaque
-    // so that new layer gets resterized immediately.
-    old_layer->SetOpacity(0.99f);
+    // The old layer is on top and should fade out.
+    old_layer->SetOpacity(1.f);
     new_layer->SetOpacity(1.f);
     {
       ui::ScopedLayerAnimationSettings settings(old_layer->GetAnimator());

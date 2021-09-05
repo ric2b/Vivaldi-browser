@@ -181,11 +181,11 @@ guestMessagePipe.registerHandler(Message.RENAME_FILE, async (message) => {
     return {renameResult: RenameResult.FILE_EXISTS};
   }
 
-  const originalFile = await handle.getFile();
+  const originalFile = await maybeGetFileFromFileHandle(handle);
   let originalFileIndex =
       currentFiles.findIndex(fd => fd.token === renameMsg.token);
 
-  if (originalFileIndex < 0) {
+  if (!originalFile || originalFileIndex < 0) {
     return {renameResult: RenameResult.FILE_NO_LONGER_IN_LAST_OPENED_DIRECTORY};
   }
 
@@ -283,8 +283,7 @@ guestMessagePipe.registerHandler(Message.SAVE_AS, async (message) => {
     // Note `pickedFileHandle` could be the same as a `FileSystemFileHandle`
     // that exists in `tokenMap`. Possibly even the `File` currently open. But
     // that's OK. E.g. the next overwrite-file request will just invoke
-    // `saveBlobToFile` in the same way. Note there may be no currently writable
-    // file (e.g. save from clipboard).
+    // `saveBlobToFile` in the same way.
     await saveBlobToFile(pickedFileDescriptor.handle, blob);
   } catch (/** @type {!DOMException} */ e) {
     // If something went wrong revert the token back to its original
@@ -415,7 +414,9 @@ async function saveBlobToFile(handle, data) {
  * @param {string} fileName
  */
 function warnIfUncommon(e, fileName) {
-  if (e.name === 'NotFoundError' || e.name === 'NotAllowedError') {
+  // Errors we expect to be thrown in normal operation.
+  const commonErrors = ['NotFoundError', 'NotAllowedError', 'NotAFile'];
+  if (commonErrors.includes(e.name)) {
     return;
   }
   console.warn(`Unexpected ${e.name} on ${fileName}: ${e.message}`);
@@ -457,7 +458,7 @@ async function sendFilesToGuest() {
  * @return {!FileContext}
  */
 function fileDescriptorToFileContext(fd) {
-  // TODO(b/163285796): Properly detect files that can't be renamed/deleted.
+  // TODO(b/163285659): Properly detect files that can't be renamed/deleted.
   return {
     token: fd.token,
     file: fd.file,
@@ -469,7 +470,7 @@ function fileDescriptorToFileContext(fd) {
 }
 
 /**
- * Loads the provided file list into the guest without making any file writable.
+ * Loads the provided file list into the guest.
  * Note: code paths can defer loads i.e. `launchWithDirectory()` increment
  * `globalLaunchNumber` to ensure their deferred load is still relevant when it
  * finishes processing. Other code paths that call `sendSnapshotToGuest()` don't
@@ -496,13 +497,13 @@ async function sendSnapshotToGuest(
   if (localLaunchNumber !== globalLaunchNumber) {
     return;
   }
-
   /** @type {!LoadFilesMessage} */
   const loadFilesMessage = {
-    writableFileIndex: focusIndex,
+    currentFileIndex: focusIndex,
     // Handle can't be passed through a message pipe.
     files: snapshot.map(fileDescriptorToFileContext)
   };
+
   // Clear handles to the open files in the privileged context so they are
   // refreshed on a navigation request. The refcount to the File will be alive
   // in the postMessage object until the guest takes its own reference.
@@ -544,8 +545,21 @@ function assertFileAndDirectoryMutable(editFileToken, operation) {
  * @return {!Promise<boolean>}
  */
 async function isHandleInCurrentDirectory(handle) {
-  // Get the name from the file reference. Handles file renames.
-  const currentFilename = (await handle.getFile()).name;
+  /** @type {?File} */
+  const file = await maybeGetFileFromFileHandle(handle);
+  // If we were unable to get a file from the handle it must not be in the
+  // current directory anymore.
+  if (!file) {
+    return false;
+  }
+
+  // It's unclear if getFile will always give us a NotFoundError if the file has
+  // been moved as it's not explicitly stated in the native file system API
+  // spec. As such we perform an additional check here to make sure the file
+  // returned by the handle is in fact in the current directory.
+  // TODO(b/172628918): Remove this once we have more assurances getFile() does
+  // the right thing.
+  const currentFilename = file.name;
   const fileHandle = await getFileHandleFromCurrentDirectory(currentFilename);
   return fileHandle ? fileHandle.isSameEntry(handle) : false;
 }
@@ -598,6 +612,31 @@ async function getFileFromHandle(fileSystemHandle) {
   const handle = /** @type {!FileSystemFileHandle} */ (fileSystemHandle);
   const file = await handle.getFile();  // Note: throws DOMException.
   return {file, handle};
+}
+
+/**
+ * Calls getFile on `handle` and gracefully returns null if it encounters a
+ * NotFoundError, which can happen if the file is no longer in the current
+ * directory due to being moved or deleted.
+ * @param {!FileSystemFileHandle} handle
+ * @return {!Promise<?File>}
+ */
+async function maybeGetFileFromFileHandle(handle) {
+  /** @type {?File} */
+  let file;
+  try {
+    file = await handle.getFile();
+  } catch (/** @type {!DOMException} */ e) {
+    // NotFoundError can be thrown if `handle` is no longer in the directory we
+    // have access to.
+    if (e.name === 'NotFoundError') {
+      file = null;
+    } else {
+      // Any other error is unexpected.
+      throw e;
+    }
+  }
+  return file;
 }
 
 /**
@@ -875,7 +914,6 @@ async function advance(direction, currentFileToken) {
   } else {
     entryIndex = -1;
   }
-
   await sendFilesToGuest();
 }
 

@@ -17,7 +17,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "chrome/browser/engagement/site_engagement_service.h"
 #include "chrome/browser/lookalikes/lookalike_url_blocking_page.h"
 #include "chrome/browser/lookalikes/lookalike_url_controller_client.h"
 #include "chrome/browser/lookalikes/lookalike_url_service.h"
@@ -30,6 +29,7 @@
 #include "components/no_state_prefetch/browser/prerender_contents.h"
 #include "components/reputation/core/safety_tips_config.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
+#include "components/site_engagement/content/site_engagement_service.h"
 #include "components/ukm/content/source_url_recorder.h"
 #include "components/url_formatter/spoof_checks/top_domains/top500_domains.h"
 #include "components/url_formatter/spoof_checks/top_domains/top_domain_util.h"
@@ -328,9 +328,9 @@ bool LookalikeUrlNavigationThrottle::IsLookalikeUrl(
 
   // Ensure that this URL is not already engaged. We can't use the synchronous
   // SiteEngagementService::IsEngagementAtLeast as it has side effects. We check
-  // in PerformChecks to ensure we have up-to-date engaged_sites.
-  // This check ignores the scheme which is okay since it's more conservative:
-  // If the user is engaged with http://domain.test, not showing the warning on
+  // in PerformChecks to ensure we have up-to-date engaged_sites. This check
+  // ignores the scheme which is okay since it's more conservative: If the user
+  // is engaged with http://domain.test, not showing the warning on
   // https://domain.test is acceptable.
   const auto already_engaged =
       std::find_if(engaged_sites.begin(), engaged_sites.end(),

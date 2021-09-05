@@ -9,8 +9,10 @@
 #include <vector>
 
 #include "base/callback.h"
+#include "base/containers/circular_deque.h"
 #include "base/hash/hash.h"
 #include "base/lazy_instance.h"
+#include "base/no_destructor.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/child_process_security_policy_impl.h"
@@ -27,13 +29,15 @@
 #include "content/browser/scoped_active_url.h"
 #include "content/browser/site_instance_impl.h"
 #include "content/common/frame_messages.h"
-#include "content/common/unfreezable_frame_messages.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/referrer_type_converters.h"
 #include "ipc/ipc_message.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/web_sandbox_flags.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom.h"
@@ -52,6 +56,11 @@ RenderFrameProxyHost::CreatedCallback& GetProxyHostCreatedCallback() {
   return *s_callback;
 }
 
+RenderFrameProxyHost::CreatedCallback& GetProxyHostDeletedCallback() {
+  static base::NoDestructor<RenderFrameProxyHost::DeletedCallback> s_callback;
+  return *s_callback;
+}
+
 // The (process id, routing id) pair that identifies one RenderFrameProxy.
 typedef std::pair<int32_t, int32_t> RenderFrameProxyHostID;
 typedef std::unordered_map<RenderFrameProxyHostID,
@@ -67,12 +76,47 @@ using TokenFrameMap = std::unordered_map<base::UnguessableToken,
 base::LazyInstance<TokenFrameMap>::Leaky g_token_frame_proxy_map =
     LAZY_INSTANCE_INITIALIZER;
 
+// Maintains a list of the most recently recorded (source, target) pairs for the
+// PostMessage.Incoming.Page UKM event, in order to partially deduplicate
+// logged events. Its size is limited to 20. See RouteMessageEvent() where
+// this UKM is logged.
+// TODO(crbug.com/1112491): Remove when no longer needed.
+bool ShouldRecordPostMessageIncomingPageUkmEvent(
+    ukm::SourceId source_page_ukm_source_id,
+    ukm::SourceId target_page_ukm_source_id) {
+  constexpr size_t kMaxPostMessageUkmAlreadyRecordedPairsSize = 20;
+  static base::NoDestructor<
+      base::circular_deque<std::pair<ukm::SourceId, ukm::SourceId>>>
+      s_post_message_ukm_already_recorded_pairs;
+
+  DCHECK_LE(s_post_message_ukm_already_recorded_pairs->size(),
+            kMaxPostMessageUkmAlreadyRecordedPairsSize);
+  std::pair<ukm::SourceId, ukm::SourceId> new_pair =
+      std::make_pair(source_page_ukm_source_id, target_page_ukm_source_id);
+
+  if (base::Contains(*s_post_message_ukm_already_recorded_pairs, new_pair))
+    return false;
+
+  if (s_post_message_ukm_already_recorded_pairs->size() ==
+      kMaxPostMessageUkmAlreadyRecordedPairsSize) {
+    s_post_message_ukm_already_recorded_pairs->pop_back();
+  }
+  s_post_message_ukm_already_recorded_pairs->push_front(new_pair);
+  return true;
+}
+
 }  // namespace
 
 // static
 void RenderFrameProxyHost::SetCreatedCallbackForTesting(
     const CreatedCallback& created_callback) {
   GetProxyHostCreatedCallback() = created_callback;
+}
+
+// static
+void RenderFrameProxyHost::SetDeletedCallbackForTesting(
+    const DeletedCallback& deleted_callback) {
+  GetProxyHostDeletedCallback() = deleted_callback;
 }
 
 // static
@@ -146,13 +190,16 @@ RenderFrameProxyHost::RenderFrameProxyHost(
 }
 
 RenderFrameProxyHost::~RenderFrameProxyHost() {
+  if (!GetProxyHostDeletedCallback().is_null())
+    GetProxyHostDeletedCallback().Run(this);
+
   if (GetProcess()->IsInitializedAndNotDead()) {
     // TODO(nasko): For now, don't send this IPC for top-level frames, as
     // the top-level RenderFrame will delete the RenderFrameProxy.
     // This can be removed once we don't have a swapped out state on
     // RenderFrame. See https://crbug.com/357747
     if (!frame_tree_node_->IsMainFrame())
-      Send(new UnfreezableFrameMsg_DeleteProxy(routing_id_));
+      GetAssociatedRemoteFrame()->DetachAndDispose();
   }
 
   // TODO(arthursonzogni): There are no known reason for removing the
@@ -191,14 +238,6 @@ bool RenderFrameProxyHost::Send(IPC::Message* msg) {
 }
 
 bool RenderFrameProxyHost::OnMessageReceived(const IPC::Message& msg) {
-  // Crash reports trigerred by IPC messages for this proxy should be associated
-  // with the URL of the current RenderFrameHost that is being proxied.
-  ScopedActiveURL scoped_active_url(this);
-
-  if (cross_process_frame_connector_.get() &&
-      cross_process_frame_connector_->OnMessageReceived(msg))
-    return true;
-
   return false;
 }
 
@@ -367,11 +406,11 @@ void RenderFrameProxyHost::SetInheritedEffectiveTouchAction(
       touch_action);
 }
 
-void RenderFrameProxyHost::UpdateRenderThrottlingStatus(
-    bool is_throttled,
-    bool subtree_throttled) {
+void RenderFrameProxyHost::UpdateRenderThrottlingStatus(bool is_throttled,
+                                                        bool subtree_throttled,
+                                                        bool display_locked) {
   cross_process_frame_connector_->UpdateRenderThrottlingStatus(
-      is_throttled, subtree_throttled);
+      is_throttled, subtree_throttled, display_locked);
 }
 
 void RenderFrameProxyHost::VisibilityChanged(
@@ -577,6 +616,7 @@ void RenderFrameProxyHost::RouteMessageEvent(
   // If there is a |source_frame_token|, translate it to the frame token of the
   // equivalent RenderFrameProxyHost in the target process.
   base::Optional<base::UnguessableToken> translated_source_token;
+  ukm::SourceId source_page_ukm_source_id = ukm::kInvalidSourceId;
   if (source_frame_token) {
     RenderFrameHostImpl* source_rfh = RenderFrameHostImpl::FromFrameToken(
         GetProcess()->GetID(), source_frame_token.value());
@@ -616,7 +656,20 @@ void RenderFrameProxyHost::RouteMessageEvent(
         translated_source_token =
             source_proxy_in_target_site_instance->GetFrameToken();
       }
+
+      source_page_ukm_source_id = source_rfh->GetPageUkmSourceId();
     }
+  }
+
+  // Record UKM metrics for the postMessage event.
+  ukm::SourceId target_page_ukm_source_id = target_rfh->GetPageUkmSourceId();
+  if (ShouldRecordPostMessageIncomingPageUkmEvent(source_page_ukm_source_id,
+                                                  target_page_ukm_source_id)) {
+    ukm::builders::PostMessage_Incoming_Page ukm_builder(
+        target_page_ukm_source_id);
+    if (source_page_ukm_source_id != ukm::kInvalidSourceId)
+      ukm_builder.SetSourcePageSourceId(source_page_ukm_source_id);
+    ukm_builder.Record(ukm::UkmRecorder::Get());
   }
 
   target_rfh->PostMessageEvent(translated_source_token, source_origin,
@@ -627,6 +680,12 @@ void RenderFrameProxyHost::PrintCrossProcessSubframe(const gfx::Rect& rect,
                                                      int32_t document_cookie) {
   RenderFrameHostImpl* rfh = frame_tree_node_->current_frame_host();
   rfh->delegate()->PrintCrossProcessSubframe(rect, document_cookie, rfh);
+}
+
+void RenderFrameProxyHost::SynchronizeVisualProperties(
+    const blink::FrameVisualProperties& frame_visual_properties) {
+  cross_process_frame_connector_->OnSynchronizeVisualProperties(
+      frame_visual_properties);
 }
 
 void RenderFrameProxyHost::FocusPage() {
@@ -710,8 +769,10 @@ void RenderFrameProxyHost::OpenURL(mojom::OpenURLParamsPtr params) {
   // to PAGE_TRANSITION_FORM_SUBMIT. See https://crbug.com/829827.
   frame_tree_node_->navigator().NavigateFromFrameProxy(
       current_rfh, validated_url,
-      GlobalFrameRoutingId(GetProcess()->GetID(), params->initiator_routing_id),
-      params->initiator_origin, site_instance_.get(),
+      params->initiator_frame_token.has_value()
+          ? &params->initiator_frame_token.value()
+          : nullptr,
+      GetProcess()->GetID(), params->initiator_origin, site_instance_.get(),
       params->referrer.To<content::Referrer>(), ui::PAGE_TRANSITION_LINK,
       params->should_replace_current_entry, download_policy,
       params->post_body ? "POST" : "GET", params->post_body,

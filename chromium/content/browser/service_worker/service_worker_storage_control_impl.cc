@@ -104,8 +104,9 @@ void ServiceWorkerStorageControlImpl::LazyInitializeForTest() {
   storage_->LazyInitializeForTest();
 }
 
-void ServiceWorkerStorageControlImpl::Disable() {
+void ServiceWorkerStorageControlImpl::Disable(DisableCallback callback) {
   storage_->Disable();
+  std::move(callback).Run();
 }
 
 void ServiceWorkerStorageControlImpl::Delete(DeleteCallback callback) {
@@ -368,8 +369,9 @@ void ServiceWorkerStorageControlImpl::PerformStorageCleanup(
 
 void ServiceWorkerStorageControlImpl::ApplyPolicyUpdates(
     const std::vector<storage::mojom::LocalStoragePolicyUpdatePtr>
-        policy_updates) {
-  storage_->ApplyPolicyUpdates(std::move(policy_updates));
+        policy_updates,
+    ApplyPolicyUpdatesCallback callback) {
+  storage_->ApplyPolicyUpdates(std::move(policy_updates), std::move(callback));
 }
 
 void ServiceWorkerStorageControlImpl::GetPurgingResourceIdsForTest(

@@ -1,0 +1,6 @@
+/node_modules/
+/chromium-snapshots/
+/firefox-snapshots/
+/build/docs/tutorials/snippet-filter-tutorial.md
+/coverage/
+/docs/

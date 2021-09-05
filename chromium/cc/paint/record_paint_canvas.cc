@@ -112,8 +112,18 @@ void RecordPaintCanvas::concat(const SkMatrix& matrix) {
   GetCanvas()->concat(matrix);
 }
 
+void RecordPaintCanvas::concat(const SkM44& matrix) {
+  list_->push<Concat44Op>(matrix);
+  GetCanvas()->concat(matrix);
+}
+
 void RecordPaintCanvas::setMatrix(const SkMatrix& matrix) {
   list_->push<SetMatrixOp>(matrix);
+  GetCanvas()->setMatrix(matrix);
+}
+
+void RecordPaintCanvas::setMatrix(const SkM44& matrix) {
+  list_->push<SetMatrix44Op>(matrix);
   GetCanvas()->setMatrix(matrix);
 }
 

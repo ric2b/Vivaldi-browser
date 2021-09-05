@@ -32,7 +32,6 @@
 #include "components/autofill/core/browser/data_model/autofill_structured_address_utils.h"
 #include "components/autofill/core/browser/data_model/credit_card.h"
 #include "components/autofill/core/browser/form_structure.h"
-#include "components/autofill/core/browser/pattern_provider/test_pattern_provider.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/personal_data_manager_observer.h"
 #include "components/autofill/core/browser/test_autofill_client.h"
@@ -124,6 +123,7 @@ class FormDataImporterTestBase {
         scoped_refptr<AutofillWebDataService>(autofill_database_service_),
         /*account_database=*/nullptr,
         /*pref_service=*/prefs_.get(),
+        /*local_state=*/prefs_.get(),
         /*identity_manager=*/nullptr,
         /*client_profile_validator=*/nullptr,
         /*history_service=*/nullptr,
@@ -232,7 +232,6 @@ class FormDataImporterTestBase {
   std::unique_ptr<PersonalDataManager> personal_data_manager_;
   std::unique_ptr<FormDataImporter> form_data_importer_;
   base::test::ScopedFeatureList scoped_feature_list_;
-  TestPatternProvider test_pattern_provider_;
 };
 
 // TODO(crbug.com/1103421): Clean legacy implementation once structured names
@@ -241,7 +240,7 @@ class FormDataImporterTestBase {
 class FormDataImporterTest
     : public FormDataImporterTestBase,
       public testing::Test,
-      public testing::WithParamInterface<std::tuple<bool, bool>> {
+      public testing::WithParamInterface<std::tuple<bool, bool, bool>> {
  protected:
   bool StructuredNames() const { return structured_names_enabled_; }
   bool StructuredAddresses() const { return structured_addresses_enabled_; }
@@ -290,6 +289,7 @@ class FormDataImporterTest
   void InitializeFeatures() {
     structured_names_enabled_ = std::get<0>(GetParam());
     structured_addresses_enabled_ = std::get<1>(GetParam());
+    support_for_apartment_numbers_ = std::get<2>(GetParam());
 
     std::vector<base::Feature> enabled_features;
     std::vector<base::Feature> disabled_features;
@@ -309,15 +309,24 @@ class FormDataImporterTest
       disabled_features.push_back(
           features::kAutofillEnableSupportForMoreStructureInAddresses);
     }
+
+    if (support_for_apartment_numbers_) {
+      enabled_features.push_back(
+          features::kAutofillEnableSupportForApartmentNumbers);
+    } else {
+      disabled_features.push_back(
+          features::kAutofillEnableSupportForApartmentNumbers);
+    }
     scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
 
   bool structured_names_enabled_;
   bool structured_addresses_enabled_;
+  bool support_for_apartment_numbers_;
 };
 
 // ImportAddressProfiles tests.
-TEST_P(FormDataImporterTest, ImportStructuredAddressProfile) {
+TEST_P(FormDataImporterTest, ImportStructuredNameProfile) {
   base::test::ScopedFeatureList structured_addresses_feature;
   structured_addresses_feature.InitAndEnableFeature(
       features::kAutofillEnableSupportForMoreStructureInAddresses);
@@ -416,6 +425,65 @@ TEST_P(FormDataImporterTest,
             structured_address::VerificationStatus::kFormatted);
 }
 
+TEST_P(
+    FormDataImporterTest,
+    ImportStructuredAddressProfile_StreetNameAndHouseNumberAndApartmentNumber) {
+  // This test is only applicable for enabled structured addresses and support
+  // for apartment numbers.
+  if (!base::FeatureList::IsEnabled(
+          features::kAutofillEnableSupportForMoreStructureInAddresses) ||
+      !base::FeatureList::IsEnabled(
+          features::kAutofillEnableSupportForApartmentNumbers)) {
+    return;
+  }
+  FormData form;
+  form.url = GURL("https://wwww.foo.com");
+
+  FormFieldData field;
+  test::CreateTestFormField("Name:", "name", "Pablo Diego Ruiz y Picasso",
+                            "text", &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Email:", "email", "theprez@gmail.com", "text",
+                            &field);
+  form.fields.push_back(field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Street name:", "street_name", "Laussat St", "text",
+                            &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("House number:", "house_number", "21", "text",
+                            &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Apartment", "apartment", "101", "text", &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("City:", "city", "San Francisco", "text", &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("State:", "state", "California", "text", &field);
+  form.fields.push_back(field);
+  test::CreateTestFormField("Zip:", "zip", "94102", "text", &field);
+  form.fields.push_back(field);
+  FormStructure form_structure(form);
+  form_structure.DetermineHeuristicTypes();
+  ImportAddressProfiles(/*extraction_successful=*/true, form_structure);
+
+  const std::vector<AutofillProfile*>& results =
+      personal_data_manager_->GetProfiles();
+  ASSERT_EQ(1U, results.size());
+
+  EXPECT_EQ(results[0]->GetRawInfo(ADDRESS_HOME_HOUSE_NUMBER),
+            base::ASCIIToUTF16("21"));
+  EXPECT_EQ(results[0]->GetRawInfo(ADDRESS_HOME_STREET_NAME),
+            base::ASCIIToUTF16("Laussat St"));
+  EXPECT_EQ(results[0]->GetRawInfo(ADDRESS_HOME_STREET_ADDRESS),
+            base::ASCIIToUTF16("21 Laussat St APT 101"));
+  EXPECT_EQ(results[0]->GetRawInfo(ADDRESS_HOME_APT_NUM),
+            base::ASCIIToUTF16("101"));
+  EXPECT_EQ(results[0]->GetVerificationStatus(ADDRESS_HOME_HOUSE_NUMBER),
+            structured_address::VerificationStatus::kObserved);
+  EXPECT_EQ(results[0]->GetVerificationStatus(ADDRESS_HOME_STREET_NAME),
+            structured_address::VerificationStatus::kObserved);
+  EXPECT_EQ(results[0]->GetVerificationStatus(ADDRESS_HOME_STREET_ADDRESS),
+            structured_address::VerificationStatus::kFormatted);
+}
 TEST_P(FormDataImporterTest,
        ImportStructuredAddressProfile_GermanStreetNameAndHouseNumber) {
   // This test is only applicable if structured addresses are enabled.
@@ -517,6 +585,10 @@ TEST_P(FormDataImporterTest, ImportStructuredNameAddressProfile) {
 }
 
 TEST_P(FormDataImporterTest, ImportAddressProfiles) {
+  base::test::ScopedFeatureList dependent_locality_feature;
+  dependent_locality_feature.InitAndEnableFeature(
+      features::kAutofillEnableDependentLocalityParsing);
+
   FormData form;
   form.url = GURL("https://wwww.foo.com");
 
@@ -533,6 +605,9 @@ TEST_P(FormDataImporterTest, ImportAddressProfiles) {
   test::CreateTestFormField("Address:", "address1", "21 Laussat St", "text",
                             &field);
   form.fields.push_back(field);
+  test::CreateTestFormField("Neighborhood:", "neighborhood", "Nob Hill", "text",
+                            &field);
+  form.fields.push_back(field);
   test::CreateTestFormField("City:", "city", "San Francisco", "text", &field);
   form.fields.push_back(field);
   test::CreateTestFormField("State:", "state", "California", "text", &field);
@@ -546,8 +621,8 @@ TEST_P(FormDataImporterTest, ImportAddressProfiles) {
   AutofillProfile expected(base::GenerateGUID(), test::kEmptyOrigin);
   test::SetProfileInfo(&expected, "George", nullptr, "Washington",
                        "theprez@gmail.com", nullptr, "21 Laussat St", nullptr,
-                       "San Francisco", "California", "94102", nullptr,
-                       nullptr);
+                       "Nob Hill", "San Francisco", "California", "94102",
+                       nullptr, nullptr);
   const std::vector<AutofillProfile*>& results =
       personal_data_manager_->GetProfiles();
   ASSERT_EQ(1U, results.size());
@@ -833,9 +908,7 @@ TEST_P(FormDataImporterTest,
   EXPECT_EQ(0, expected.Compare(*results[0]));
 }
 
-// Test that a form is imported correctly even if some fields are not
-// focusable.
-TEST_P(FormDataImporterTest, ImportAddressProfiles_WithUnFocussableFields) {
+TEST_P(FormDataImporterTest, ImportAddressProfiles_UnFocussableFields) {
   FormData form;
   form.url = GURL("https://wwww.foo.com");
 
@@ -857,8 +930,7 @@ TEST_P(FormDataImporterTest, ImportAddressProfiles_WithUnFocussableFields) {
   form.fields.push_back(field);
 
   test::CreateTestFormField("City:", "city", "San Francisco", "text", &field);
-
-  // Set this field to be not focusable.
+  // Set this field to be unfocusable.
   field.is_focusable = false;
   form.fields.push_back(field);
 
@@ -871,6 +943,18 @@ TEST_P(FormDataImporterTest, ImportAddressProfiles_WithUnFocussableFields) {
   FormStructure form_structure(form);
   form_structure.DetermineHeuristicTypes();
 
+  // Verify the status quo that the form is not imported with the unfocusable
+  // fields.
+  // TODO(crbug.com/1101280): Remove once feature is launched.
+  scoped_feature_list_.Reset();
+  scoped_feature_list_.InitAndDisableFeature(
+      features::kAutofillProfileImportFromUnfocusableFields);
+  ImportAddressProfiles(/*extraction_successful=*/false, form_structure);
+
+  // Activate the feature and test again.
+  scoped_feature_list_.Reset();
+  scoped_feature_list_.InitAndEnableFeature(
+      features::kAutofillProfileImportFromUnfocusableFields);
   ImportAddressProfiles(/*extraction_successful=*/true, form_structure);
 
   AutofillProfile expected(base::GenerateGUID(), test::kEmptyOrigin);
@@ -3955,10 +4039,13 @@ TEST_P(FormDataImporterTest, ImportUpiIdIgnoreNonUpiId) {
   EXPECT_FALSE(imported_upi_id.has_value());
 }
 
-// Runs the suite with the feature |kAutofillSupportForMoreStructuredNames| and
-// |kAutofillSupportForMoreStructuredAddresses| enabled and disabled.
+// Runs the suite with the feature |kAutofillSupportForMoreStructuredNames|,
+// |kAutofillSupportForMoreStructuredAddresses| and
+// |kAutofillEnableSupportForApartmentNumbers| enabled and disabled.
 INSTANTIATE_TEST_SUITE_P(,
                          FormDataImporterTest,
-                         testing::Combine(testing::Bool(), testing::Bool()));
+                         testing::Combine(testing::Bool(),
+                                          testing::Bool(),
+                                          testing::Bool()));
 
 }  // namespace autofill

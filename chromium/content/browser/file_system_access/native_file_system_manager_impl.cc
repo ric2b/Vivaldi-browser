@@ -14,7 +14,7 @@
 #include "base/strings/strcat.h"
 #include "base/task/thread_pool.h"
 #include "content/browser/file_system_access/file_system_chooser.h"
-#include "content/browser/file_system_access/fixed_native_file_system_permission_grant.h"
+#include "content/browser/file_system_access/fixed_file_system_access_permission_grant.h"
 #include "content/browser/file_system_access/native_file_system.pb.h"
 #include "content/browser/file_system_access/native_file_system_directory_handle_impl.h"
 #include "content/browser/file_system_access/native_file_system_drag_drop_token_impl.h"
@@ -36,19 +36,21 @@
 #include "storage/browser/file_system/file_system_operation_runner.h"
 #include "storage/browser/file_system/file_system_url.h"
 #include "storage/browser/file_system/isolated_context.h"
+#include "storage/common/file_system/file_system_types.h"
 #include "storage/common/file_system/file_system_util.h"
-#include "third_party/blink/public/mojom/file_system_access/native_file_system_drag_drop_token.mojom.h"
-#include "third_party/blink/public/mojom/file_system_access/native_file_system_error.mojom.h"
+#include "third_party/blink/public/mojom/file_system_access/file_system_access_drag_drop_token.mojom.h"
+#include "third_party/blink/public/mojom/file_system_access/file_system_access_error.mojom.h"
 #include "url/origin.h"
 
 namespace content {
 
-using blink::mojom::NativeFileSystemStatus;
-using PermissionStatus = NativeFileSystemPermissionGrant::PermissionStatus;
+using blink::mojom::FileSystemAccessStatus;
+using PermissionStatus = FileSystemAccessPermissionGrant::PermissionStatus;
 using SensitiveDirectoryResult =
-    NativeFileSystemPermissionContext::SensitiveDirectoryResult;
+    FileSystemAccessPermissionContext::SensitiveDirectoryResult;
 using storage::FileSystemContext;
-using HandleType = NativeFileSystemPermissionContext::HandleType;
+using HandleType = FileSystemAccessPermissionContext::HandleType;
+using PathInfo = FileSystemAccessPermissionContext::PathInfo;
 
 namespace {
 
@@ -62,7 +64,7 @@ void ShowFilePickerOnUIThread(const url::Origin& requesting_origin,
 
   if (!web_contents) {
     std::move(callback).Run(native_file_system_error::FromStatus(
-                                NativeFileSystemStatus::kOperationAborted),
+                                FileSystemAccessStatus::kOperationAborted),
                             {});
     return;
   }
@@ -73,7 +75,7 @@ void ShowFilePickerOnUIThread(const url::Origin& requesting_origin,
     // Third party iframes are not allowed to show a file picker.
     std::move(callback).Run(
         native_file_system_error::FromStatus(
-            NativeFileSystemStatus::kPermissionDenied,
+            FileSystemAccessStatus::kPermissionDenied,
             "Third party iframes are not allowed to show a file picker."),
         {});
     return;
@@ -177,11 +179,28 @@ void GetHandleTypeFromUrl(
           std::move(reply_runner), std::move(callback)));
 }
 
+void GetDirectoryExistsFromUrl(
+    storage::FileSystemURL url,
+    base::OnceCallback<void(base::File::Error)> callback,
+    scoped_refptr<base::SequencedTaskRunner> reply_runner,
+    storage::FileSystemOperationRunner* operation_runner) {
+  operation_runner->DirectoryExists(
+      url, base::BindOnce(
+               [](scoped_refptr<base::SequencedTaskRunner> reply_runner,
+                  base::OnceCallback<void(base::File::Error)> callback,
+                  base::File::Error result) {
+                 // Post next task back on the UI thread.
+                 reply_runner->PostTask(
+                     FROM_HERE, base::BindOnce(std::move(callback), result));
+               },
+               std::move(reply_runner), std::move(callback)));
+}
+
 }  // namespace
 
 NativeFileSystemManagerImpl::SharedHandleState::SharedHandleState(
-    scoped_refptr<NativeFileSystemPermissionGrant> read_grant,
-    scoped_refptr<NativeFileSystemPermissionGrant> write_grant,
+    scoped_refptr<FileSystemAccessPermissionGrant> read_grant,
+    scoped_refptr<FileSystemAccessPermissionGrant> write_grant,
     storage::IsolatedContext::ScopedFSHandle file_system)
     : read_grant(std::move(read_grant)),
       write_grant(std::move(write_grant)),
@@ -197,7 +216,7 @@ NativeFileSystemManagerImpl::SharedHandleState::~SharedHandleState() = default;
 NativeFileSystemManagerImpl::NativeFileSystemManagerImpl(
     scoped_refptr<storage::FileSystemContext> context,
     scoped_refptr<ChromeBlobStorageContext> blob_context,
-    NativeFileSystemPermissionContext* permission_context,
+    FileSystemAccessPermissionContext* permission_context,
     bool off_the_record)
     : context_(std::move(context)),
       blob_context_(std::move(blob_context)),
@@ -214,7 +233,7 @@ NativeFileSystemManagerImpl::~NativeFileSystemManagerImpl() {
 
 void NativeFileSystemManagerImpl::BindReceiver(
     const BindingContext& binding_context,
-    mojo::PendingReceiver<blink::mojom::NativeFileSystemManager> receiver) {
+    mojo::PendingReceiver<blink::mojom::FileSystemAccessManager> receiver) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (!network::IsOriginPotentiallyTrustworthy(binding_context.origin)) {
@@ -226,7 +245,7 @@ void NativeFileSystemManagerImpl::BindReceiver(
 }
 
 void NativeFileSystemManagerImpl::BindInternalsReceiver(
-    mojo::PendingReceiver<storage::mojom::NativeFileSystemContext> receiver) {
+    mojo::PendingReceiver<storage::mojom::FileSystemAccessContext> receiver) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   internals_receivers_.Add(this, std::move(receiver));
@@ -263,6 +282,7 @@ void NativeFileSystemManagerImpl::GetSandboxedFileSystem(
 void NativeFileSystemManagerImpl::ChooseEntries(
     blink::mojom::ChooseFileSystemEntryType type,
     std::vector<blink::mojom::ChooseFileSystemEntryAcceptsOptionPtr> accepts,
+    blink::mojom::CommonDirectory starting_directory,
     bool include_accepts_all,
     ChooseEntriesCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -282,8 +302,8 @@ void NativeFileSystemManagerImpl::ChooseEntries(
          !permission_context_->CanObtainWritePermission(context.origin))) {
       std::move(callback).Run(
           native_file_system_error::FromStatus(
-              NativeFileSystemStatus::kPermissionDenied),
-          std::vector<blink::mojom::NativeFileSystemEntryPtr>());
+              FileSystemAccessStatus::kPermissionDenied),
+          std::vector<blink::mojom::FileSystemAccessEntryPtr>());
       return;
     }
   }
@@ -292,8 +312,8 @@ void NativeFileSystemManagerImpl::ChooseEntries(
   if (!rfh) {
     std::move(callback).Run(
         native_file_system_error::FromStatus(
-            NativeFileSystemStatus::kOperationAborted),
-        std::vector<blink::mojom::NativeFileSystemEntryPtr>());
+            FileSystemAccessStatus::kOperationAborted),
+        std::vector<blink::mojom::FileSystemAccessEntryPtr>());
     return;
   }
 
@@ -304,26 +324,61 @@ void NativeFileSystemManagerImpl::ChooseEntries(
   if (!rfh->HasTransientUserActivation()) {
     std::move(callback).Run(
         native_file_system_error::FromStatus(
-            NativeFileSystemStatus::kPermissionDenied,
+            FileSystemAccessStatus::kPermissionDenied,
             "User activation is required to show a file picker."),
-        std::vector<blink::mojom::NativeFileSystemEntryPtr>());
+        std::vector<blink::mojom::FileSystemAccessEntryPtr>());
     return;
   }
 
-  // TODO(https://crbug.com/1142824): Check if path exists.
-  base::FilePath default_directory;
+  PathInfo path_info;
   if (permission_context_) {
-    default_directory =
-        permission_context_->GetLastPickedDirectory(context.origin);
-    if (default_directory.empty()) {
-      default_directory = permission_context_->GetDefaultDirectory();
+    if (starting_directory != blink::mojom::CommonDirectory::kDefault) {
+      // Priotitize an explicitly stated starting directory over an implicitly
+      // remembered LastPicked directory.
+      path_info.path =
+          permission_context_->GetCommonDirectoryPath(starting_directory);
+    } else { /*starting_directory == blink::mojom::CommonDirectory::kDefault*/
+      path_info = permission_context_->GetLastPickedDirectory(context.origin);
     }
   }
 
-  // TODO(https://crbug.com/1019408): Append suggested filename to the default
-  // directory.
+  auto url = CreateFileSystemURLFromPath(context.origin, path_info.type,
+                                         path_info.path);
+  auto fs_url = url.url;
+  operation_runner().PostTaskWithThisObject(
+      FROM_HERE,
+      base::BindOnce(
+          &GetDirectoryExistsFromUrl, std::move(fs_url),
+          base::BindOnce(
+              &NativeFileSystemManagerImpl::SetDefaultPathAndShowPicker,
+              weak_factory_.GetWeakPtr(), context, type, std::move(accepts),
+              include_accepts_all, std::move(url).url.path(),
+              std::move(callback)),
+          base::SequencedTaskRunnerHandle::Get()));
+}
+
+void NativeFileSystemManagerImpl::SetDefaultPathAndShowPicker(
+    const BindingContext& context,
+    blink::mojom::ChooseFileSystemEntryType type,
+    std::vector<blink::mojom::ChooseFileSystemEntryAcceptsOptionPtr> accepts,
+    bool include_accepts_all,
+    base::FilePath default_directory,
+    ChooseEntriesCallback callback,
+    base::File::Error result) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  if (result != base::File::Error::FILE_OK) {
+    // |path| does not exist. Resort to the default.
+    if (permission_context_)
+      default_directory = permission_context_->GetCommonDirectoryPath(
+          blink::mojom::CommonDirectory::kDefault);
+  }
+
+  // TODO(https://crbug.com/1019408): Append suggested filename to
+  // default_directory.
   FileSystemChooser::Options options(type, std::move(accepts),
-                                     include_accepts_all, default_directory);
+                                     include_accepts_all,
+                                     std::move(default_directory));
 
   if (auto_file_picker_result_for_test_) {
     DidChooseEntries(context, options, std::move(callback),
@@ -343,7 +398,7 @@ void NativeFileSystemManagerImpl::CreateNativeFileSystemDragDropToken(
     PathType path_type,
     const base::FilePath& file_path,
     int renderer_id,
-    mojo::PendingReceiver<blink::mojom::NativeFileSystemDragDropToken>
+    mojo::PendingReceiver<blink::mojom::FileSystemAccessDragDropToken>
         receiver) {
   auto drag_drop_token_impl =
       std::make_unique<NativeFileSystemDragDropTokenImpl>(
@@ -353,9 +408,9 @@ void NativeFileSystemManagerImpl::CreateNativeFileSystemDragDropToken(
 }
 
 void NativeFileSystemManagerImpl::GetEntryFromDragDropToken(
-    mojo::PendingRemote<blink::mojom::NativeFileSystemDragDropToken> token,
+    mojo::PendingRemote<blink::mojom::FileSystemAccessDragDropToken> token,
     GetEntryFromDragDropTokenCallback token_resolved_callback) {
-  mojo::Remote<blink::mojom::NativeFileSystemDragDropToken> drop_token_remote(
+  mojo::Remote<blink::mojom::FileSystemAccessDragDropToken> drop_token_remote(
       std::move(token));
 
   // Get a failure callback in case this token ends up not being valid (i.e.
@@ -377,7 +432,7 @@ void NativeFileSystemManagerImpl::GetEntryFromDragDropToken(
 }
 
 void NativeFileSystemManagerImpl::ResolveDragDropToken(
-    mojo::Remote<blink::mojom::NativeFileSystemDragDropToken>,
+    mojo::Remote<blink::mojom::FileSystemAccessDragDropToken>,
     const BindingContext& binding_context,
     GetEntryFromDragDropTokenCallback token_resolved_callback,
     mojo::ReportBadMessageCallback failed_token_redemption_callback,
@@ -427,16 +482,16 @@ void NativeFileSystemManagerImpl::ResolveDragDropTokenWithFileType(
       file_path, binding_context.origin, std::move(url.file_system), file_type,
       UserAction::kDragAndDrop);
 
-  blink::mojom::NativeFileSystemEntryPtr entry;
+  blink::mojom::FileSystemAccessEntryPtr entry;
   if (file_type == HandleType::kDirectory) {
-    entry = blink::mojom::NativeFileSystemEntry::New(
-        blink::mojom::NativeFileSystemHandle::NewDirectory(
+    entry = blink::mojom::FileSystemAccessEntry::New(
+        blink::mojom::FileSystemAccessHandle::NewDirectory(
             CreateDirectoryHandle(binding_context, url.url,
                                   shared_handle_state)),
         url.base_name);
   } else {
-    entry = blink::mojom::NativeFileSystemEntry::New(
-        blink::mojom::NativeFileSystemHandle::NewFile(
+    entry = blink::mojom::FileSystemAccessEntry::New(
+        blink::mojom::FileSystemAccessHandle::NewFile(
             CreateFileHandle(binding_context, url.url, shared_handle_state)),
         url.base_name);
   }
@@ -445,8 +500,8 @@ void NativeFileSystemManagerImpl::ResolveDragDropTokenWithFileType(
 }
 
 void NativeFileSystemManagerImpl::GetFileHandleFromToken(
-    mojo::PendingRemote<blink::mojom::NativeFileSystemTransferToken> token,
-    mojo::PendingReceiver<blink::mojom::NativeFileSystemFileHandle>
+    mojo::PendingRemote<blink::mojom::FileSystemAccessTransferToken> token,
+    mojo::PendingReceiver<blink::mojom::FileSystemAccessFileHandle>
         file_handle_receiver) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -459,8 +514,8 @@ void NativeFileSystemManagerImpl::GetFileHandleFromToken(
 }
 
 void NativeFileSystemManagerImpl::GetDirectoryHandleFromToken(
-    mojo::PendingRemote<blink::mojom::NativeFileSystemTransferToken> token,
-    mojo::PendingReceiver<blink::mojom::NativeFileSystemDirectoryHandle>
+    mojo::PendingRemote<blink::mojom::FileSystemAccessTransferToken> token,
+    mojo::PendingReceiver<blink::mojom::FileSystemAccessDirectoryHandle>
         directory_handle_receiver) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -473,7 +528,7 @@ void NativeFileSystemManagerImpl::GetDirectoryHandleFromToken(
 }
 
 void NativeFileSystemManagerImpl::SerializeHandle(
-    mojo::PendingRemote<blink::mojom::NativeFileSystemTransferToken> token,
+    mojo::PendingRemote<blink::mojom::FileSystemAccessTransferToken> token,
     SerializeHandleCallback callback) {
   ResolveTransferToken(
       std::move(token),
@@ -559,7 +614,7 @@ void NativeFileSystemManagerImpl::DidResolveForSerializeHandle(
 void NativeFileSystemManagerImpl::DeserializeHandle(
     const url::Origin& origin,
     const std::vector<uint8_t>& bits,
-    mojo::PendingReceiver<blink::mojom::NativeFileSystemTransferToken> token) {
+    mojo::PendingReceiver<blink::mojom::FileSystemAccessTransferToken> token) {
   DCHECK(!bits.empty());
 
   std::string bits_as_string(bits.begin(), bits.end());
@@ -577,7 +632,7 @@ void NativeFileSystemManagerImpl::DeserializeHandle(
           origin, storage::kFileSystemTypeTemporary, virtual_path);
 
       auto permission_grant =
-          base::MakeRefCounted<FixedNativeFileSystemPermissionGrant>(
+          base::MakeRefCounted<FixedFileSystemAccessPermissionGrant>(
               PermissionStatus::GRANTED, base::FilePath());
       CreateTransferTokenImpl(
           url, origin,
@@ -619,7 +674,7 @@ void NativeFileSystemManagerImpl::DeserializeHandle(
           root_path, origin, std::move(root.file_system),
           (is_directory || !relative_path.empty()) ? HandleType::kDirectory
                                                    : HandleType::kFile,
-          NativeFileSystemPermissionContext::UserAction::kLoadFromStorage);
+          FileSystemAccessPermissionContext::UserAction::kLoadFromStorage);
 
       CreateTransferTokenImpl(
           child, origin, handle_state,
@@ -632,7 +687,7 @@ void NativeFileSystemManagerImpl::DeserializeHandle(
   }
 }
 
-blink::mojom::NativeFileSystemEntryPtr
+blink::mojom::FileSystemAccessEntryPtr
 NativeFileSystemManagerImpl::CreateFileEntryFromPath(
     const BindingContext& binding_context,
     PathType path_type,
@@ -646,13 +701,13 @@ NativeFileSystemManagerImpl::CreateFileEntryFromPath(
       file_path, binding_context.origin, std::move(url.file_system),
       HandleType::kFile, user_action);
 
-  return blink::mojom::NativeFileSystemEntry::New(
-      blink::mojom::NativeFileSystemHandle::NewFile(
+  return blink::mojom::FileSystemAccessEntry::New(
+      blink::mojom::FileSystemAccessHandle::NewFile(
           CreateFileHandle(binding_context, url.url, shared_handle_state)),
       url.base_name);
 }
 
-blink::mojom::NativeFileSystemEntryPtr
+blink::mojom::FileSystemAccessEntryPtr
 NativeFileSystemManagerImpl::CreateDirectoryEntryFromPath(
     const BindingContext& binding_context,
     PathType path_type,
@@ -666,13 +721,13 @@ NativeFileSystemManagerImpl::CreateDirectoryEntryFromPath(
       file_path, binding_context.origin, std::move(url.file_system),
       HandleType::kDirectory, user_action);
 
-  return blink::mojom::NativeFileSystemEntry::New(
-      blink::mojom::NativeFileSystemHandle::NewDirectory(
+  return blink::mojom::FileSystemAccessEntry::New(
+      blink::mojom::FileSystemAccessHandle::NewDirectory(
           CreateDirectoryHandle(binding_context, url.url, shared_handle_state)),
       url.base_name);
 }
 
-mojo::PendingRemote<blink::mojom::NativeFileSystemFileHandle>
+mojo::PendingRemote<blink::mojom::FileSystemAccessFileHandle>
 NativeFileSystemManagerImpl::CreateFileHandle(
     const BindingContext& binding_context,
     const storage::FileSystemURL& url,
@@ -683,14 +738,14 @@ NativeFileSystemManagerImpl::CreateFileHandle(
             handle_state.file_system.is_valid())
       << url.mount_type();
 
-  mojo::PendingRemote<blink::mojom::NativeFileSystemFileHandle> result;
+  mojo::PendingRemote<blink::mojom::FileSystemAccessFileHandle> result;
   file_receivers_.Add(std::make_unique<NativeFileSystemFileHandleImpl>(
                           this, binding_context, url, handle_state),
                       result.InitWithNewPipeAndPassReceiver());
   return result;
 }
 
-mojo::PendingRemote<blink::mojom::NativeFileSystemDirectoryHandle>
+mojo::PendingRemote<blink::mojom::FileSystemAccessDirectoryHandle>
 NativeFileSystemManagerImpl::CreateDirectoryHandle(
     const BindingContext& binding_context,
     const storage::FileSystemURL& url,
@@ -701,7 +756,7 @@ NativeFileSystemManagerImpl::CreateDirectoryHandle(
             handle_state.file_system.is_valid())
       << url.mount_type();
 
-  mojo::PendingRemote<blink::mojom::NativeFileSystemDirectoryHandle> result;
+  mojo::PendingRemote<blink::mojom::FileSystemAccessDirectoryHandle> result;
   directory_receivers_.Add(
       std::make_unique<NativeFileSystemDirectoryHandleImpl>(
           this, binding_context, url, handle_state),
@@ -709,30 +764,55 @@ NativeFileSystemManagerImpl::CreateDirectoryHandle(
   return result;
 }
 
-mojo::PendingRemote<blink::mojom::NativeFileSystemFileWriter>
+mojo::PendingRemote<blink::mojom::FileSystemAccessFileWriter>
 NativeFileSystemManagerImpl::CreateFileWriter(
     const BindingContext& binding_context,
     const storage::FileSystemURL& url,
     const storage::FileSystemURL& swap_url,
-    const SharedHandleState& handle_state) {
+    const SharedHandleState& handle_state,
+    bool auto_close) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  mojo::PendingRemote<blink::mojom::NativeFileSystemFileWriter> result;
+  mojo::PendingRemote<blink::mojom::FileSystemAccessFileWriter> result;
 
   RenderFrameHost* rfh = RenderFrameHost::FromID(binding_context.frame_id);
   bool has_transient_user_activation = rfh && rfh->HasTransientUserActivation();
-  writer_receivers_.Add(
-      std::make_unique<NativeFileSystemFileWriterImpl>(
-          this, binding_context, url, swap_url, handle_state,
-          has_transient_user_activation,
-          GetContentClient()->browser()->GetQuarantineConnectionCallback()),
-      result.InitWithNewPipeAndPassReceiver());
+
+  CreateFileWriter(
+      binding_context, url, swap_url, handle_state,
+      result.InitWithNewPipeAndPassReceiver(), has_transient_user_activation,
+      auto_close,
+      GetContentClient()->browser()->GetQuarantineConnectionCallback());
   return result;
+}
+
+base::WeakPtr<NativeFileSystemFileWriterImpl>
+NativeFileSystemManagerImpl::CreateFileWriter(
+    const BindingContext& binding_context,
+    const storage::FileSystemURL& url,
+    const storage::FileSystemURL& swap_url,
+    const SharedHandleState& handle_state,
+    mojo::PendingReceiver<blink::mojom::FileSystemAccessFileWriter> receiver,
+    bool has_transient_user_activation,
+    bool auto_close,
+    download::QuarantineConnectionCallback quarantine_connection_callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  auto writer = std::make_unique<NativeFileSystemFileWriterImpl>(
+      this, PassKey(), binding_context, url, swap_url, handle_state,
+      std::move(receiver), has_transient_user_activation, auto_close,
+      quarantine_connection_callback);
+
+  base::WeakPtr<NativeFileSystemFileWriterImpl> writer_weak =
+      writer->weak_ptr();
+  writer_receivers_.insert(std::move(writer));
+
+  return writer_weak;
 }
 
 void NativeFileSystemManagerImpl::CreateTransferToken(
     const NativeFileSystemFileHandleImpl& file,
-    mojo::PendingReceiver<blink::mojom::NativeFileSystemTransferToken>
+    mojo::PendingReceiver<blink::mojom::FileSystemAccessTransferToken>
         receiver) {
   return CreateTransferTokenImpl(file.url(), file.context().origin,
                                  file.handle_state(), HandleType::kFile,
@@ -741,7 +821,7 @@ void NativeFileSystemManagerImpl::CreateTransferToken(
 
 void NativeFileSystemManagerImpl::CreateTransferToken(
     const NativeFileSystemDirectoryHandleImpl& directory,
-    mojo::PendingReceiver<blink::mojom::NativeFileSystemTransferToken>
+    mojo::PendingReceiver<blink::mojom::FileSystemAccessTransferToken>
         receiver) {
   return CreateTransferTokenImpl(directory.url(), directory.context().origin,
                                  directory.handle_state(),
@@ -749,11 +829,11 @@ void NativeFileSystemManagerImpl::CreateTransferToken(
 }
 
 void NativeFileSystemManagerImpl::ResolveTransferToken(
-    mojo::PendingRemote<blink::mojom::NativeFileSystemTransferToken> token,
+    mojo::PendingRemote<blink::mojom::FileSystemAccessTransferToken> token,
     ResolvedTokenCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  mojo::Remote<blink::mojom::NativeFileSystemTransferToken> token_remote(
+  mojo::Remote<blink::mojom::FileSystemAccessTransferToken> token_remote(
       std::move(token));
   auto* raw_token = token_remote.get();
   raw_token->GetInternalID(mojo::WrapCallbackWithDefaultInvokeIfNotRun(
@@ -765,7 +845,7 @@ void NativeFileSystemManagerImpl::ResolveTransferToken(
 
 void NativeFileSystemManagerImpl::DidResolveTransferTokenForFileHandle(
     const BindingContext& binding_context,
-    mojo::PendingReceiver<blink::mojom::NativeFileSystemFileHandle>
+    mojo::PendingReceiver<blink::mojom::FileSystemAccessFileHandle>
         file_handle_receiver,
     NativeFileSystemTransferTokenImpl* resolved_token) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -790,7 +870,7 @@ void NativeFileSystemManagerImpl::DidResolveTransferTokenForFileHandle(
 
 void NativeFileSystemManagerImpl::DidResolveTransferTokenForDirectoryHandle(
     const BindingContext& binding_context,
-    mojo::PendingReceiver<blink::mojom::NativeFileSystemDirectoryHandle>
+    mojo::PendingReceiver<blink::mojom::FileSystemAccessDirectoryHandle>
         directory_handle_receiver,
     NativeFileSystemTransferTokenImpl* resolved_token) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -833,7 +913,7 @@ void NativeFileSystemManagerImpl::DidOpenSandboxedFileSystem(
   }
 
   auto permission_grant =
-      base::MakeRefCounted<FixedNativeFileSystemPermissionGrant>(
+      base::MakeRefCounted<FixedFileSystemAccessPermissionGrant>(
           PermissionStatus::GRANTED, base::FilePath());
 
   std::move(callback).Run(
@@ -848,14 +928,14 @@ void NativeFileSystemManagerImpl::DidChooseEntries(
     const BindingContext& binding_context,
     const FileSystemChooser::Options& options,
     ChooseEntriesCallback callback,
-    blink::mojom::NativeFileSystemErrorPtr result,
+    blink::mojom::FileSystemAccessErrorPtr result,
     std::vector<FileSystemChooser::ResultEntry> entries) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (result->status != NativeFileSystemStatus::kOk || entries.empty()) {
+  if (result->status != FileSystemAccessStatus::kOk || entries.empty()) {
     std::move(callback).Run(
         std::move(result),
-        std::vector<blink::mojom::NativeFileSystemEntryPtr>());
+        std::vector<blink::mojom::FileSystemAccessEntryPtr>());
     return;
   }
 
@@ -895,8 +975,8 @@ void NativeFileSystemManagerImpl::DidVerifySensitiveDirectoryAccess(
   if (result == SensitiveDirectoryResult::kAbort) {
     std::move(callback).Run(
         native_file_system_error::FromStatus(
-            NativeFileSystemStatus::kOperationAborted),
-        std::vector<blink::mojom::NativeFileSystemEntryPtr>());
+            FileSystemAccessStatus::kOperationAborted),
+        std::vector<blink::mojom::FileSystemAccessEntryPtr>());
     return;
   }
   if (result == SensitiveDirectoryResult::kTryAgain) {
@@ -914,8 +994,8 @@ void NativeFileSystemManagerImpl::DidVerifySensitiveDirectoryAccess(
                 blink::mojom::ChooseFileSystemEntryType::kOpenDirectory
             ? entries.front().path
             : entries.front().path.DirName();
-    permission_context_->SetLastPickedDirectory(binding_context.origin,
-                                                picked_directory);
+    permission_context_->SetLastPickedDirectory(
+        binding_context.origin, picked_directory, entries.front().type);
   }
 
   if (options.type() ==
@@ -924,10 +1004,10 @@ void NativeFileSystemManagerImpl::DidVerifySensitiveDirectoryAccess(
     SharedHandleState shared_handle_state = GetSharedHandleStateForPath(
         entries.front().path, binding_context.origin, {},
         HandleType::kDirectory,
-        NativeFileSystemPermissionContext::UserAction::kOpen);
+        FileSystemAccessPermissionContext::UserAction::kOpen);
     shared_handle_state.read_grant->RequestPermission(
         binding_context.frame_id,
-        NativeFileSystemPermissionGrant::UserActivationState::kNotRequired,
+        FileSystemAccessPermissionGrant::UserActivationState::kNotRequired,
         base::BindOnce(&NativeFileSystemManagerImpl::DidChooseDirectory, this,
                        binding_context, entries.front(), std::move(callback),
                        shared_handle_state));
@@ -953,7 +1033,7 @@ void NativeFileSystemManagerImpl::DidVerifySensitiveDirectoryAccess(
     return;
   }
 
-  std::vector<blink::mojom::NativeFileSystemEntryPtr> result_entries;
+  std::vector<blink::mojom::FileSystemAccessEntryPtr> result_entries;
   result_entries.reserve(entries.size());
   for (const auto& entry : entries) {
     result_entries.push_back(CreateFileEntryFromPath(
@@ -970,14 +1050,14 @@ void NativeFileSystemManagerImpl::DidCreateAndTruncateSaveFile(
     ChooseEntriesCallback callback,
     bool success) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  std::vector<blink::mojom::NativeFileSystemEntryPtr> result_entries;
+  std::vector<blink::mojom::FileSystemAccessEntryPtr> result_entries;
   if (!success) {
     // TODO(https://crbug.com/1124871): Failure to create or truncate the file
     // should probably not just result in a generic error, but instead inform
     // the user of the problem?
     std::move(callback).Run(
         native_file_system_error::FromStatus(
-            blink::mojom::NativeFileSystemStatus::kOperationFailed,
+            blink::mojom::FileSystemAccessStatus::kOperationFailed,
             "Failed to create or truncate file"),
         std::move(result_entries));
     return;
@@ -987,8 +1067,8 @@ void NativeFileSystemManagerImpl::DidCreateAndTruncateSaveFile(
       entry.path, binding_context.origin, std::move(url.file_system),
       HandleType::kFile, UserAction::kSave);
 
-  result_entries.push_back(blink::mojom::NativeFileSystemEntry::New(
-      blink::mojom::NativeFileSystemHandle::NewFile(
+  result_entries.push_back(blink::mojom::FileSystemAccessEntry::New(
+      blink::mojom::FileSystemAccessHandle::NewFile(
           CreateFileHandle(binding_context, url.url, shared_handle_state)),
       url.base_name));
 
@@ -1001,17 +1081,17 @@ void NativeFileSystemManagerImpl::DidChooseDirectory(
     const FileSystemChooser::ResultEntry& entry,
     ChooseEntriesCallback callback,
     const SharedHandleState& shared_handle_state,
-    NativeFileSystemPermissionGrant::PermissionRequestOutcome outcome) {
+    FileSystemAccessPermissionGrant::PermissionRequestOutcome outcome) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   base::UmaHistogramEnumeration(
       "NativeFileSystemAPI.ConfirmReadDirectoryResult",
       shared_handle_state.read_grant->GetStatus());
 
-  std::vector<blink::mojom::NativeFileSystemEntryPtr> result_entries;
+  std::vector<blink::mojom::FileSystemAccessEntryPtr> result_entries;
   if (shared_handle_state.read_grant->GetStatus() !=
       PermissionStatus::GRANTED) {
     std::move(callback).Run(native_file_system_error::FromStatus(
-                                NativeFileSystemStatus::kOperationAborted),
+                                FileSystemAccessStatus::kOperationAborted),
                             std::move(result_entries));
     return;
   }
@@ -1019,8 +1099,8 @@ void NativeFileSystemManagerImpl::DidChooseDirectory(
   FileSystemURLAndFSHandle url = CreateFileSystemURLFromPath(
       binding_context.origin, entry.type, entry.path);
 
-  result_entries.push_back(blink::mojom::NativeFileSystemEntry::New(
-      blink::mojom::NativeFileSystemHandle::NewDirectory(CreateDirectoryHandle(
+  result_entries.push_back(blink::mojom::FileSystemAccessEntry::New(
+      blink::mojom::FileSystemAccessHandle::NewDirectory(CreateDirectoryHandle(
           binding_context, url.url,
           SharedHandleState(shared_handle_state.read_grant,
                             shared_handle_state.write_grant,
@@ -1035,7 +1115,7 @@ void NativeFileSystemManagerImpl::CreateTransferTokenImpl(
     const url::Origin& origin,
     const SharedHandleState& handle_state,
     HandleType handle_type,
-    mojo::PendingReceiver<blink::mojom::NativeFileSystemTransferToken>
+    mojo::PendingReceiver<blink::mojom::FileSystemAccessTransferToken>
         receiver) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -1043,6 +1123,14 @@ void NativeFileSystemManagerImpl::CreateTransferTokenImpl(
       url, origin, handle_state, handle_type, this, std::move(receiver));
   auto token = token_impl->token();
   transfer_tokens_.emplace(token, std::move(token_impl));
+}
+
+void NativeFileSystemManagerImpl::RemoveFileWriter(
+    NativeFileSystemFileWriterImpl* writer) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  size_t count_removed = writer_receivers_.erase(writer);
+  DCHECK_EQ(1u, count_removed);
 }
 
 void NativeFileSystemManagerImpl::RemoveToken(
@@ -1062,7 +1150,7 @@ void NativeFileSystemManagerImpl::RemoveDragDropToken(
 }
 
 void NativeFileSystemManagerImpl::DoResolveTransferToken(
-    mojo::Remote<blink::mojom::NativeFileSystemTransferToken>,
+    mojo::Remote<blink::mojom::FileSystemAccessTransferToken>,
     ResolvedTokenCallback callback,
     const base::UnguessableToken& token) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -1120,8 +1208,8 @@ NativeFileSystemManagerImpl::GetSharedHandleStateForPath(
     const url::Origin& origin,
     storage::IsolatedContext::ScopedFSHandle file_system,
     HandleType handle_type,
-    NativeFileSystemPermissionContext::UserAction user_action) {
-  scoped_refptr<NativeFileSystemPermissionGrant> read_grant, write_grant;
+    FileSystemAccessPermissionContext::UserAction user_action) {
+  scoped_refptr<FileSystemAccessPermissionGrant> read_grant, write_grant;
   if (permission_context_) {
     read_grant = permission_context_->GetReadPermissionGrant(
         origin, path, handle_type, user_action);
@@ -1132,19 +1220,19 @@ NativeFileSystemManagerImpl::GetSharedHandleStateForPath(
     // Experimental Web Platform features are enabled.
     // TODO(mek): Remove experimental web platform check when permission UI is
     // implemented.
-    write_grant = base::MakeRefCounted<FixedNativeFileSystemPermissionGrant>(
+    write_grant = base::MakeRefCounted<FixedFileSystemAccessPermissionGrant>(
         base::CommandLine::ForCurrentProcess()->HasSwitch(
             switches::kEnableExperimentalWebPlatformFeatures)
             ? PermissionStatus::GRANTED
             : PermissionStatus::DENIED,
         path);
     if (user_action ==
-        NativeFileSystemPermissionContext::UserAction::kLoadFromStorage) {
+        FileSystemAccessPermissionContext::UserAction::kLoadFromStorage) {
       read_grant = write_grant;
     } else {
       // Grant read permission even without a permission_context_, as the picker
       // itself is enough UI to assume user intent.
-      read_grant = base::MakeRefCounted<FixedNativeFileSystemPermissionGrant>(
+      read_grant = base::MakeRefCounted<FixedFileSystemAccessPermissionGrant>(
           PermissionStatus::GRANTED, path);
     }
   }

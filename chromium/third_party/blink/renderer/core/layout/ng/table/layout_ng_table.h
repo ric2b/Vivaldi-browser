@@ -66,6 +66,10 @@ class CORE_EXPORT LayoutNGTable : public LayoutNGMixin<LayoutBlock>,
   // might have changed.
   void TableGridStructureChanged();
 
+  // Table paints column backgrounds.
+  // Returns true if table, or columns' style.HasBackground().
+  bool HasBackgroundForPaint() const;
+
   // LayoutBlock methods start.
 
   const char* GetName() const override {
@@ -96,7 +100,21 @@ class CORE_EXPORT LayoutNGTable : public LayoutNGMixin<LayoutBlock>,
 
   LayoutUnit BorderRight() const override;
 
+  // The collapsing border model disallows paddings on table.
+  // See http://www.w3.org/TR/CSS2/tables.html#collapsing-borders.
+  LayoutUnit PaddingTop() const override;
+
+  LayoutUnit PaddingBottom() const override;
+
+  LayoutUnit PaddingLeft() const override;
+
+  LayoutUnit PaddingRight() const override;
+
   LayoutRectOutsets BorderBoxOutsets() const override;
+
+  // TODO(1151101)
+  // ClientLeft/Top are incorrect for tables, but cannot be fixed
+  // by subclassing ClientLeft/Top.
 
   PhysicalRect OverflowClipRect(const PhysicalOffset&,
                                 OverlayScrollbarClipBehavior) const override;
@@ -133,11 +151,7 @@ class CORE_EXPORT LayoutNGTable : public LayoutNGMixin<LayoutBlock>,
     return StyleRef().BorderCollapse() == EBorderCollapse::kCollapse;
   }
 
-  // Used in table painting for invalidation. Should not be needed by NG.
-  bool HasCollapsedBorders() const final {
-    NOTREACHED();
-    return false;
-  }
+  bool HasCollapsedBorders() const final;
 
   bool HasColElements() const final {
     NOTREACHED();
@@ -167,8 +181,8 @@ class CORE_EXPORT LayoutNGTable : public LayoutNGMixin<LayoutBlock>,
     return absolute_column_index;
   }
 
-  // Legacy caches sections. Might not be needed by NG.
-  void RecalcSectionsIfNeeded() const final { NOTIMPLEMENTED(); }
+  // NG does not need this method. Sections are not cached.
+  void RecalcSectionsIfNeeded() const final {}
 
   // Legacy caches sections. Might not be needed by NG.
   void ForceSectionsRecalc() final { NOTIMPLEMENTED(); }

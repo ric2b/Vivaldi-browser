@@ -134,9 +134,6 @@ void HTMLLinkElement::ParseAttribute(
   } else if (name == html_names::kMediaAttr) {
     media_ = value.LowerASCII();
     Process();
-  } else if (name == html_names::kScopeAttr) {
-    scope_ = value;
-    Process();
   } else if (name == html_names::kIntegrityAttr) {
     integrity_ = value;
   } else if (name == html_names::kImportanceAttr &&
@@ -361,23 +358,6 @@ void HTMLLinkElement::LinkLoadingErrored() {
     UseCounter::Count(GetDocument(), WebFeature::kLinkPrefetchErrorEvent);
   }
   DispatchEvent(*Event::Create(event_type_names::kError));
-}
-
-void HTMLLinkElement::DidStartLinkPrerender() {
-  DispatchEvent(*Event::Create(event_type_names::kWebkitprerenderstart));
-}
-
-void HTMLLinkElement::DidStopLinkPrerender() {
-  DispatchEvent(*Event::Create(event_type_names::kWebkitprerenderstop));
-}
-
-void HTMLLinkElement::DidSendLoadForLinkPrerender() {
-  DispatchEvent(*Event::Create(event_type_names::kWebkitprerenderload));
-}
-
-void HTMLLinkElement::DidSendDOMContentLoadedForLinkPrerender() {
-  DispatchEvent(
-      *Event::Create(event_type_names::kWebkitprerenderdomcontentloaded));
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>

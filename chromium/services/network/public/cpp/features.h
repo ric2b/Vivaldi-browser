@@ -56,9 +56,6 @@ extern const base::FeatureParam<std::string>
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kDisableKeepaliveFetch;
 COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature
-    kDeriveOriginFromUrlForNeitherGetNorHeadRequestWhenHavingSpecialAccess;
-COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kRequestInitiatorSiteLockEnfocement;
 COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kCertVerifierService;
@@ -79,13 +76,7 @@ COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::FeatureParam<bool> kPlatformProvidedTrustTokenIssuance;
 
 COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature kOutOfBlinkCSPEE;
-
-COMPONENT_EXPORT(NETWORK_CPP)
 extern const base::Feature kWebSocketReassembleShortMessages;
-
-COMPONENT_EXPORT(NETWORK_CPP)
-extern const base::Feature kFirstPartySets;
 
 }  // namespace features
 }  // namespace network

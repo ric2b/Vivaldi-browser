@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/views/profiles/avatar_toolbar_button_delegate.h"
 
 #include "base/check_op.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
@@ -19,7 +20,7 @@
 #include "components/signin/public/identity_manager/consent_level.h"
 #include "ui/base/resource/resource_bundle.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chromeos/constants/chromeos_features.h"
 #endif
 
@@ -109,7 +110,7 @@ void AvatarToolbarButtonDelegate::Init(AvatarToolbarButton* button,
   profile_ = profile;
   error_controller_ =
       std::make_unique<AvatarButtonErrorController>(this, profile_);
-  profile_observer_.Add(&GetProfileAttributesStorage());
+  profile_observation_.Observe(&GetProfileAttributesStorage());
   AvatarToolbarButton::State state = GetState();
   if (state == AvatarToolbarButton::State::kIncognitoProfile ||
       state == AvatarToolbarButton::State::kGuestSession) {
@@ -117,13 +118,13 @@ void AvatarToolbarButtonDelegate::Init(AvatarToolbarButton* button,
   } else if (state != AvatarToolbarButton::State::kGuestSession) {
     signin::IdentityManager* identity_manager =
         IdentityManagerFactory::GetForProfile(profile_);
-    identity_manager_observer_.Add(identity_manager);
+    identity_manager_observation_.Observe(identity_manager);
 
     if (identity_manager->AreRefreshTokensLoaded())
       OnRefreshTokensLoaded();
   }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (!base::FeatureList::IsEnabled(chromeos::features::kAvatarToolbarButton)) {
     // On CrOS this button should only show as badging for Incognito and Guest
     // sessions. It's only enabled for Incognito where a menu is available for
@@ -131,7 +132,7 @@ void AvatarToolbarButtonDelegate::Init(AvatarToolbarButton* button,
     avatar_toolbar_button_->SetEnabled(
         state == AvatarToolbarButton::State::kIncognitoProfile);
   }
-#endif  // !defined(OS_CHROMEOS)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 base::string16 AvatarToolbarButtonDelegate::GetProfileName() const {
@@ -326,10 +327,12 @@ void AvatarToolbarButtonDelegate::OnProfileNameChanged(
   avatar_toolbar_button_->UpdateText();
 }
 
-void AvatarToolbarButtonDelegate::OnUnconsentedPrimaryAccountChanged(
-    const CoreAccountInfo& unconsented_primary_account_info) {
-  if (unconsented_primary_account_info.IsEmpty())
+void AvatarToolbarButtonDelegate::OnPrimaryAccountChanged(
+    const signin::PrimaryAccountChangeEvent& event) {
+  if (event.GetEventTypeFor(signin::ConsentLevel::kNotRequired) !=
+      signin::PrimaryAccountChangeEvent::Type::kSet) {
     return;
+  }
   OnUserIdentityChanged();
 }
 

@@ -5,22 +5,27 @@
 import contextlib
 import json
 import mock
+import re
 import requests
 import sys
 import unittest
 from urlparse import urlparse
 
 from blinkpy.common.host_mock import MockHost
+from blinkpy.common.path_finder import RELATIVE_WEB_TESTS
 from blinkpy.web_tests.controllers.test_result_sink import CreateTestResultSink
 from blinkpy.web_tests.controllers.test_result_sink import TestResultSink
 from blinkpy.web_tests.models import test_results
 from blinkpy.web_tests.models.typ_types import ResultType
+from blinkpy.web_tests.port.test import add_manifest_to_mock_filesystem
+from blinkpy.web_tests.port.test import TestPort
+from blinkpy.web_tests.port.test import WEB_TEST_DIR
 
 
 class TestResultSinkTestBase(unittest.TestCase):
     def setUp(self):
         super(TestResultSinkTestBase, self).setUpClass()
-        self.port = MockHost().port_factory.get()
+        self.port = TestPort(MockHost())
 
     def luci_context(self, **section_values):
         if not section_values:
@@ -94,15 +99,33 @@ class TestResultSinkMessage(TestResultSinkTestBase):
         self.assertEqual(sent_data['status'], 'CRASH')
         self.assertEqual(sent_data['duration'], '123.456s')
 
-    def test_test_location(self):
+    def test_test_metadata(self):
         tr = test_results.TestResult('')
-        prefix = '//third_party/blink/web_tests/'
-        sink = lambda tr: self.sink(True, tr)['testLocation']['fileName']
+        base_path = '//' + RELATIVE_WEB_TESTS
 
         tr.test_name = "test-name"
-        self.assertEqual(sink(tr), prefix + 'test-name')
+        self.assertDictEqual(
+            self.sink(True, tr)['testMetadata'],
+            {
+                'name': 'test-name',
+                'location': {
+                    'repo': 'https://chromium.googlesource.com/chromium/src',
+                    'fileName': base_path + 'test-name',
+                },
+            },
+        )
+
         tr.test_name = "///test-name"
-        self.assertEqual(sink(tr), prefix + '///test-name')
+        self.assertDictEqual(
+            self.sink(True, tr)['testMetadata'],
+            {
+                'name': '///test-name',
+                'location': {
+                    'repo': 'https://chromium.googlesource.com/chromium/src',
+                    'fileName': base_path + '///test-name',
+                },
+            },
+        )
 
     def test_device_failure(self):
         tr = test_results.TestResult(test_name='test-name')
@@ -153,3 +176,53 @@ class TestResultSinkMessage(TestResultSinkTestBase):
                     'filePath': '/tmp/bar'
                 }
             })
+
+    def test_summary_html(self):
+        tr = test_results.TestResult(test_name='test-name')
+        tr.artifacts.AddArtifact('stderr', '/tmp/stderr', False)
+        tr.artifacts.AddArtifact('crash_log', '/tmp/crash_log', False)
+        tr.artifacts.AddArtifact('command', '/tmp/cmd', False)
+
+        sent_data = self.sink(True, tr)
+        p = re.compile(
+            '<text-artifact artifact-id="(command|stderr|crash_log)" />')
+
+        self.assertListEqual(
+            p.findall(sent_data['summaryHtml']),
+            # The artifact tags should be sorted by the artifact names.
+            ['command', 'crash_log', 'stderr'],
+        )
+
+    def assertFilename(self, test_name, expected_filename):
+        sent_data = self.sink(True, test_results.TestResult(test_name))
+        self.assertEqual(sent_data['testMetadata']['location']['fileName'],
+                         '//' + RELATIVE_WEB_TESTS + expected_filename)
+
+    def test_location_filename(self):
+        self.assertFilename('real/test.html', 'real/test.html')
+
+        # TestPort.virtual_test_suites() has a set of hard-coded virtualized
+        # tests, and a test name must start with one of the virtual prefixes
+        # and base in order for it to be recognized as a virtual test.
+        self.assertFilename(
+            'virtual/virtual_passes/passes/does_not_exist.html',
+            'passes/does_not_exist.html')
+        self.port.host.filesystem.write_text_file(
+            self.port.host.filesystem.join(WEB_TEST_DIR, 'virtual',
+                                           'virtual_passes', 'passes',
+                                           'exists.html'),
+            'body',
+        )
+        self.assertFilename('virtual/virtual_passes/passes/exists.html',
+                            'virtual/virtual_passes/passes/exists.html')
+
+    def test_wpt_location_filename(self):
+        add_manifest_to_mock_filesystem(self.port)
+        self.assertFilename(
+            'external/wpt/html/parse.html?run_type=uri',
+            'external/wpt/html/parse.html',
+        )
+        self.assertFilename(
+            'virtual/virtual_wpt/external/wpt/dom/ranges/Range-attributes.html',
+            'external/wpt/dom/ranges/Range-attributes.html',
+        )

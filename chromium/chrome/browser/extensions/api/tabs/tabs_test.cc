@@ -19,6 +19,7 @@
 #include "base/test/simple_test_tick_clock.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/platform_apps/app_browsertest_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/devtools/devtools_window_testing.h"
@@ -69,7 +70,6 @@
 #include "ui/views/widget/widget_observer.h"
 
 #if defined(OS_MAC)
-#include "base/mac/mac_util.h"
 #include "ui/base/test/scoped_fake_nswindow_fullscreen.h"
 #endif
 
@@ -1042,8 +1042,6 @@ IN_PROC_BROWSER_TEST_F(ExtensionWindowLastFocusedTest,
 #endif
 IN_PROC_BROWSER_TEST_F(ExtensionWindowCreateTest, MAYBE_AcceptState) {
 #if defined(OS_MAC)
-  if (base::mac::IsOS10_10())
-    return;  // Fails when swarmed. http://crbug.com/660582
   ui::test::ScopedFakeNSWindowFullscreen fake_fullscreen;
 #endif
 
@@ -1060,7 +1058,9 @@ IN_PROC_BROWSER_TEST_F(ExtensionWindowCreateTest, MAYBE_AcceptState) {
   Browser* new_window = ExtensionTabUtil::GetBrowserFromWindowID(
       ChromeExtensionFunctionDetails(function.get()), window_id, &error);
   EXPECT_TRUE(error.empty());
-#if !defined(OS_LINUX) || defined(OS_CHROMEOS)
+// TODO(crbug.com/1052397): Revisit the macro expression once build flag switch
+// of lacros-chrome is complete.
+#if !(defined(OS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
   // DesktopWindowTreeHostX11::IsMinimized() relies on an asynchronous update
   // from the window server.
   EXPECT_TRUE(new_window->window()->IsMinimized());
@@ -2103,9 +2103,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionApiTest, TemporaryAddressSpoof) {
       browser(), url, WindowOpenDisposition::CURRENT_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
 
-  bool load_success =
-      pdf_extension_test_util::EnsurePDFHasLoaded(second_web_contents);
-  EXPECT_TRUE(load_success);
+  ASSERT_TRUE(pdf_extension_test_util::EnsurePDFHasLoaded(second_web_contents));
 
   auto* web_contents_for_click = second_web_contents;
   auto inner_web_contents = web_contents_for_click->GetInnerWebContents();

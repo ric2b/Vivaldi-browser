@@ -11,6 +11,7 @@
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/common/buildflags.h"
 #include "extensions/buildflags/buildflags.h"
 
@@ -18,6 +19,8 @@ namespace features {
 
 // All features in alphabetical order. The features should be documented
 // alongside the definition of their values in the .cc file.
+
+extern const base::Feature kChromeLabs;
 
 extern const base::Feature kEvDetailsInPageInfo;
 
@@ -41,7 +44,9 @@ extern const base::Feature kScrollableTabStripButtons;
 
 extern const base::Feature kSidePanel;
 
-extern const base::Feature kProfilesUIRevamp;
+extern const base::Feature kSyncConfirmationUpdatedText;
+
+extern const base::Feature kSignInProfileCreation;
 
 extern const base::Feature kTabGroupsAutoCreate;
 
@@ -50,6 +55,8 @@ extern const base::Feature kTabGroupsCollapse;
 extern const base::Feature kTabGroupsCollapseFreezing;
 
 extern const base::Feature kTabGroupsFeedback;
+
+extern const base::Feature kTabGroupsNewBadgePromo;
 
 extern const base::Feature kTabHoverCards;
 extern const char kTabHoverCardsFeatureParameterName[];
@@ -91,10 +98,10 @@ extern const base::Feature kWebFooterExperiment;
 
 extern const base::Feature kWebUITabStrip;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 extern const base::Feature kHiddenNetworkWarning;
 extern const base::Feature kSeparatePointingStickSettings;
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }  // namespace features
 
 #endif  // CHROME_BROWSER_UI_UI_FEATURES_H_

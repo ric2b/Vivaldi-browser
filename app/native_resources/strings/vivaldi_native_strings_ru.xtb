@@ -4,6 +4,7 @@
 <translation id="1033008476608128425">Пейзаж 3</translation>
 <translation id="1118377629180821201">Пейзаж 12</translation>
 <translation id="1158503667684816647">Больше не показывать</translation>
+<translation id="1222195720020481779">Запуск установщика...</translation>
 <translation id="1276145862619442150">Экспресс-панели</translation>
 <translation id="1281950884873973195">Зверушка 6</translation>
 <translation id="1411638389238344450">Отправить ссылку по почте</translation>
@@ -21,11 +22,17 @@
 <translation id="1921101374471252440">&amp;Обновить картинку</translation>
 <translation id="1924750141060565109">Пейзаж 15</translation>
 <translation id="19598411548897379">Общий</translation>
+<translation id="1985669426322966465">Обновление программы</translation>
 <translation id="2079036669923635404">Нажмите здесь, чтобы обновить Vivaldi до версии <ph name="VERSION" />.</translation>
 <translation id="2141974047387702305">Произошла ошибка при загрузке обновления. Проверьте сетевое подключение и повторите попытку.</translation>
+<translation id="2339641773402824483">Проверка обновлений...</translation>
 <translation id="2441056087170876076">Монстр 2</translation>
 <translation id="2444387452209867610">Вставить заметку</translation>
 <translation id="2486841023299517366">Зверушка 4</translation>
+<translation id="2612127540243995147">Обновление готово к установке. Vivaldi будет перезапущен.</translation>
+<translation id="2613387515621326337">Перейти к странице обновления</translation>
+<translation id="2647368062414805334">К сожалению, настройки Edge недоступны, пока браузер работает. Для импортирования настроек в Vivaldi сохраните свою работу и закройте все окна Edge. Затем продолжите импортирование.</translation>
+<translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Зверушка 3</translation>
 <translation id="2873951654529031587">Корзина</translation>
 <translation id="292258461174562431">Монстр 4</translation>
@@ -36,9 +43,12 @@
 <translation id="3084011186245865060">Пейзаж 6</translation>
 <translation id="3127383884976966729">Зверушка 7</translation>
 <translation id="3156398087075132709">Новая закладка</translation>
+<translation id="3255747772218936245">Установка обновления</translation>
 <translation id="3259769196742189631">Валидация на W3C</translation>
 <translation id="3302905971452834934">Монстр 1</translation>
 <translation id="3334610655141903168">(без названия)</translation>
+<translation id="3372505110412186107">Версия Vivaldi <ph name="VERSION" /> является самой новой.</translation>
+<translation id="3383198080133834965">Обновление завершено!</translation>
 <translation id="3402602684546832928">Выберите файл закладок Opera</translation>
 <translation id="3451317331714872347">Пейзаж 8</translation>
 <translation id="3457498675806041407">Подтвердить выход</translation>
@@ -48,14 +58,17 @@
 <translation id="3542768452570884558">Открыть ссылку в новом окне</translation>
 <translation id="3588820906588687999">Открыть картинку в новой вкладке</translation>
 <translation id="3601066750251199488">Монстр 3</translation>
+<translation id="3680031241659195730">Доступна новая версия Vivaldi!</translation>
 <translation id="3708982624815781692">Загрузка была отменена.</translation>
 <translation id="3732157130969736834">Поместить ссылку в закладки</translation>
 <translation id="3732388226447288666">Зверушка 2</translation>
 <translation id="3732439195215136813">Зверушка 5</translation>
+<translation id="3795800845758778870">К сожалению, настройки Brave недоступны, пока браузер работает. Для импортирования настроек в Vivaldi сохраните свою работу и закройте все окна Brave. Затем продолжите импортирование.</translation>
 <translation id="3832132597516774400">Пейзаж 5</translation>
 <translation id="3914946330804881301">Импортировано из Opera</translation>
 <translation id="3921292902397893431">Монстр 8</translation>
 <translation id="3943857333388298514">Вставить</translation>
+<translation id="4005270918754737597">Пропустить эту версию</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
 <translation id="4073157431025461511">&amp;Больше не показывать</translation>
 <translation id="4074744496918018786">Открыть картинку в приватном окне</translation>
@@ -72,6 +85,7 @@
 <translation id="4677434526832593569">Зверушка 8</translation>
 <translation id="474217410105706308">Заглушить вкладку</translation>
 <translation id="4881695831933465202">Открыть</translation>
+<translation id="498766871928286903"><ph name="DOWNLOADED" /> из <ph name="TOTAL_SIZE_TO_DOWNLOAD" /></translation>
 <translation id="5014281392052865061">Импортированная Экспресс-панель</translation>
 <translation id="5092656712000637858">Добавить страницу на веб-панель</translation>
 <translation id="5177818338935286353">Монстр 7</translation>
@@ -87,6 +101,7 @@
 <translation id="5648110075441906505">Открыть картинку в новом окне</translation>
 <translation id="5656371807944747581">Ошибка обновления!</translation>
 <translation id="5716238312826274098">Отключение уведомлений</translation>
+<translation id="5732584064771442623">Доступна версия Vivaldi <ph name="NEW_VERSION" /> (у вас установлена <ph name="OLD_VERSION" />). Хотите загрузить сейчас?</translation>
 <translation id="5770433027661640693">Пейзаж 10</translation>
 <translation id="5857090052475505287">Новая папка</translation>
 <translation id="588258955323874662">Полноэкранный режим</translation>
@@ -102,15 +117,21 @@
 <translation id="6538338088414940408">Открыть ссылку в фоновой вкладке</translation>
 <translation id="6551219277044048123">Добавить как новый поиск...</translation>
 <translation id="6630781781151951863">Пейзаж 18</translation>
+<translation id="6635049669875534328">Что нового:</translation>
+<translation id="6693585104974197539">Выберите папку профиля Edge для импортирования</translation>
+<translation id="6726279523566323394">Выберите папку профиля Brave для импортирования</translation>
 <translation id="6804831687363620480">К сожалению, настройки Opera 15+ недоступны при работающем браузере. Для импорта этих настроек в Vivaldi, сохраните свои данные и закройте все окна Opera 15+. Затем нажмите "Продолжить".</translation>
+<translation id="6892812721183419409">Открыть ссылку как <ph name="USER" /></translation>
 <translation id="6896758677409633944">Копировать</translation>
 <translation id="7086554968911045110">Пейзаж 7</translation>
 <translation id="7111492742514999492">Пейзаж 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi создан с использованием проекта <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> с открытым исходным кодом и другого <ph name="BEGIN_LINK_OSS" />открытого ПО<ph name="END_LINK_OSS" />.</translation>
 <translation id="7581266044164103589">Ошибка запуска установщика обновления. Проверьте наличие дискового пространства и памяти, повторите попытку.</translation>
+<translation id="7658239707568436148">Отмена</translation>
 <translation id="7715497554424665066">&amp;Не обновляться</translation>
 <translation id="7724603315864178912">Вырезать</translation>
+<translation id="7727481996062361502">Проверка обновления...</translation>
 <translation id="7793738202466490491">Добавить как событие календаря</translation>
 <translation id="7848222781052558334">Сбой проверки цифровой подписи загруженных файлов.</translation>
 <translation id="7865983598101744945">Подтвердите выход</translation>
@@ -121,9 +142,13 @@
 <translation id="8261506727792406068">Удалить</translation>
 <translation id="8331671104904436324">Открыть в фоновой вкладке</translation>
 <translation id="8373293945112511707">Пейзаж 1</translation>
+<translation id="8388552048012645975">Загрузка обновления...</translation>
 <translation id="8427094907586191051">Пейзаж 17</translation>
+<translation id="8439034818057146672">Новая версия Vivaldi готова к установке.</translation>
 <translation id="8446668873108041390">Выполнение JavaScript через AppleScript отключено. В настройках Settings &gt; Privacy &gt; Apple Events вы можете разрешить JavaScript из Apple Events.</translation>
 <translation id="8539196077526389150">Пейзаж 13</translation>
+<translation id="8562339533180097902">Закрыть Vivaldi и установить сейчас</translation>
+<translation id="8567452685425968223">Распаковка обновления...</translation>
 <translation id="8624587806981488221">&amp;Обновить картинку</translation>
 <translation id="864444594187862076">Opera версии 15+ (Тестовая)</translation>
 <translation id="8651348004684669199">Добавить активную</translation>
@@ -131,12 +156,15 @@
 <translation id="867544375504146191">Яндекс</translation>
 <translation id="8768970203213061953">Пейзаж 14</translation>
 <translation id="8773635261052182196">Вы больше не будете получать уведомления. Вы можете включить их в настройках Vivaldi.</translation>
+<translation id="8813277370772331957">Напомнить позже</translation>
 <translation id="8894900864683381599">Добавить ссылку на веб-панель</translation>
 <translation id="8912720443398351457">Вы хотите выйти из Vivaldi?</translation>
 <translation id="8947109330183116400">Выбрать HTML файл закладок</translation>
 <translation id="9017566390391482291">Выберите папку профиля Vivaldi для импорта</translation>
 <translation id="9065203028668620118">Изменить</translation>
+<translation id="912022491595344261">Открыть картинку как <ph name="USER" /></translation>
 <translation id="9157539936604258187">Открыть ссылку</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>
+<translation id="939305735877869636">Brave</translation>
 <translation id="970294721402795299">Пейзаж 16</translation>
 </translationbundle>

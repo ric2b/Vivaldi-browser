@@ -6,6 +6,8 @@ update_target("//components/bookmarks/browser:browser") {
     "//vivaldi/components/bookmarks/vivaldi_bookmark_kit.cc",
     "//vivaldi/components/bookmarks/vivaldi_partners.cc",
     "//vivaldi/components/bookmarks/vivaldi_partners.h",
+    "//vivaldi/components/locale/locale_kit.cc",
+    "//vivaldi/components/locale/locale_kit.h",
   ]
   public += [
     "//vivaldi/components/bookmarks/vivaldi_bookmark_kit.h",

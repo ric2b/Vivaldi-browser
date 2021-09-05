@@ -71,6 +71,7 @@ class ExtensionTabUtil {
     std::unique_ptr<bool> pinned;
     std::unique_ptr<int> index;
     std::unique_ptr<ui::PageTransition> transition;
+    std::unique_ptr<std::string> ext_data;
   };
 
   // Platform specific delegate.
@@ -234,7 +235,7 @@ class ExtensionTabUtil {
 
   // Executes the specified callback for all tabs in all browser windows.
   static void ForEachTab(
-      const base::Callback<void(content::WebContents*)>& callback);
+      base::RepeatingCallback<void(content::WebContents*)> callback);
 
   static WindowController* GetWindowControllerOfTab(
       const content::WebContents* web_contents);

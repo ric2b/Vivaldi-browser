@@ -50,7 +50,7 @@ IndexedDBControlWrapper::IndexedDBControlWrapper(
     base::Clock* clock,
     mojo::PendingRemote<storage::mojom::BlobStorageContext>
         blob_storage_context,
-    mojo::PendingRemote<storage::mojom::NativeFileSystemContext>
+    mojo::PendingRemote<storage::mojom::FileSystemAccessContext>
         native_file_system_context,
     scoped_refptr<base::SequencedTaskRunner> io_task_runner,
     scoped_refptr<base::SequencedTaskRunner> custom_task_runner)
@@ -70,6 +70,8 @@ IndexedDBControlWrapper::IndexedDBControlWrapper(
 
 IndexedDBControlWrapper::~IndexedDBControlWrapper() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  IndexedDBContextImpl::ReleaseOnIDBSequence(std::move(context_));
 }
 
 void IndexedDBControlWrapper::BindIndexedDB(
@@ -205,11 +207,9 @@ void IndexedDBControlWrapper::BindRemoteIfNeeded() {
 
   if (indexed_db_control_.is_bound())
     return;
-  IndexedDBContextImpl* idb_context = GetIndexedDBContextInternal();
-  idb_context->IDBTaskRunner()->PostTask(
+  context_->IDBTaskRunner()->PostTask(
       FROM_HERE,
-      base::BindOnce(&IndexedDBContextImpl::Bind,
-                     base::WrapRefCounted(idb_context),
+      base::BindOnce(&IndexedDBContextImpl::Bind, context_,
                      indexed_db_control_.BindNewPipeAndPassReceiver()));
 }
 

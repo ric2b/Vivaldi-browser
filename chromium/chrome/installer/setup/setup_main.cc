@@ -99,9 +99,16 @@
 #endif
 
 #include "app/vivaldi_version_info.h"
-#include "installer/util/vivaldi_install_dialog.h"
-#include "installer/util/vivaldi_install_util.h"
-#include "installer/util/vivaldi_progress_dialog.h"
+#include "base/vivaldi_switches.h"
+#include "installer/util/vivaldi_install_constants.h"
+#include "installer/util/vivaldi_setup_util.h"
+
+#if !defined(OFFICIAL_BUILD)
+namespace installer {
+// Path to use for all following setup.exe invocations.
+extern base::FilePath* vivaldi_debug_subprocesses_exe;
+}  // namespace installer
+#endif
 
 using installer::InitialPreferences;
 using installer::InstallationState;
@@ -259,16 +266,6 @@ base::string16 FindMsiProductId(const InstallerState& installer_state) {
   return base::string16();
 }
 
-void VivaldiUpdateDeltaPatchStatus(bool successful) {
-  std::wstring key_name(vivaldi::constants::kVivaldiKey);
-  key_name.append(L"\\");
-  key_name.append(vivaldi::constants::kVivaldiAutoUpdate);
-  base::win::RegKey key(HKEY_CURRENT_USER, key_name.c_str(), KEY_ALL_ACCESS);
-  if (key.Valid())
-    key.WriteValue(vivaldi::constants::kVivaldiDeltaPatchFailed,
-                   (successful) ? L"0" : L"1");
-}
-
 // Workhorse for producing an uncompressed archive (chrome.7z) given a
 // chrome.packed.7z containing either a patch file based on the version of
 // chrome being updated or the full uncompressed archive. Returns true on
@@ -315,7 +312,6 @@ bool UncompressAndPatchChromeArchive(
     *install_status = installer::UNCOMPRESSION_FAILED;
     installer_state.WriteInstallerResult(
         *install_status, IDS_INSTALL_UNCOMPRESSION_FAILED_BASE, nullptr);
-    VivaldiUpdateDeltaPatchStatus(false);
     return false;
   }
 
@@ -334,7 +330,6 @@ bool UncompressAndPatchChromeArchive(
     *install_status = installer::DIFF_PATCH_SOURCE_MISSING;
     installer_state.WriteInstallerResult(
         *install_status, IDS_INSTALL_UNCOMPRESSION_FAILED_BASE, nullptr);
-    VivaldiUpdateDeltaPatchStatus(false);
     return false;
   }
   archive_helper->set_patch_source(patch_source);
@@ -349,12 +344,10 @@ bool UncompressAndPatchChromeArchive(
     *install_status = installer::APPLY_DIFF_PATCH_FAILED;
     installer_state.WriteInstallerResult(
         *install_status, IDS_INSTALL_UNCOMPRESSION_FAILED_BASE, nullptr);
-    VivaldiUpdateDeltaPatchStatus(false);
     return false;
   }
 
   *archive_type = installer::INCREMENTAL_ARCHIVE_TYPE;
-  VivaldiUpdateDeltaPatchStatus(true);
   return true;
 }
 
@@ -534,7 +527,7 @@ installer::InstallStatus RenameChromeExecutables(
 bool CheckPreInstallConditions(const InstallationState& original_state,
                                const InstallerState& installer_state,
                                installer::InstallStatus* status) {
-  if (installer_state.is_vivaldi()) {
+  if (installer::kVivaldi) {
     return true;
   }
 
@@ -701,14 +694,14 @@ installer::InstallStatus InstallProducts(InstallationState& original_state,
     DCHECK_NE(install_status, installer::UNKNOWN_STATUS);
   }
 
-  // Delete the master preferences file if present. Note that we do not care
+  // Delete the initial preferences file if present. Note that we do not care
   // about rollback here and we schedule for deletion on reboot if the delete
   // fails. As such, we do not use DeleteTreeWorkItem.
   if (cmd_line.HasSwitch(installer::switches::kInstallerData)) {
     base::FilePath prefs_path(
         cmd_line.GetSwitchValuePath(installer::switches::kInstallerData));
     if (!base::DeleteFile(prefs_path)) {
-      LOG(ERROR) << "Failed deleting master preferences file "
+      LOG(ERROR) << "Failed deleting initial preferences file "
                  << prefs_path.value()
                  << ", scheduling for deletion after reboot.";
       ScheduleFileSystemEntityForDeletion(prefs_path);
@@ -843,11 +836,6 @@ bool HandleNonInstallCmdLineOptions(installer::ModifyParams& modify_params,
   // TODO(tommi): Split these checks up into functions and use a data driven
   // map of switch->function.
   if (cmd_line.HasSwitch(installer::switches::kUpdateSetupExe)) {
-    // this commandline switch is handled elsewhere if we are started
-    // with the --vivaldi switch. See InstallProductsHelper().
-    if (installer_state->is_vivaldi())
-      return false;
-
     installer_state->SetStage(installer::UPDATING_SETUP);
     installer::InstallStatus status = installer::SETUP_PATCH_FAILED;
     // If --update-setup-exe command line option is given, we apply the given
@@ -1077,7 +1065,6 @@ InstallStatus InstallProductsHelper(InstallationState& original_state,
                                     base::FilePath* installer_directory,
                                     ArchiveType* archive_type) {
   DCHECK(archive_type);
-  bool patch_install = false;
   const bool system_install = installer_state.system_install();
   InstallStatus install_status = UNKNOWN_STATUS;
 
@@ -1103,7 +1090,7 @@ InstallStatus InstallProductsHelper(InstallationState& original_state,
       previous_version = base::Version(
           cmd_line.GetSwitchValueASCII(installer::switches::kPreviousVersion));
     }
-    patch_install = previous_version.IsValid();
+
     std::unique_ptr<ArchivePatchHelper> archive_helper(
         CreateChromeArchiveHelper(
             setup_exe, cmd_line, installer_state, unpack_path,
@@ -1121,17 +1108,15 @@ InstallStatus InstallProductsHelper(InstallationState& original_state,
       }
       uncompressed_archive = archive_helper->target();
       DCHECK(!uncompressed_archive.empty());
-    } else {
-      if (patch_install) {
-        // The delta patch archive is invalid or missing, so bail out here.
-        LOG(ERROR) << "Cannot patch Vivaldi without a valid (delta) archive.";
-        installer_state.WriteInstallerResult(
-            INVALID_ARCHIVE, IDS_INSTALL_INVALID_ARCHIVE_BASE, NULL);
-        VivaldiUpdateDeltaPatchStatus(false);
-        return INVALID_ARCHIVE;
-      }
+    } else if (kVivaldi && previous_version.IsValid()) {
+      // The delta patch archive is invalid or missing, so bail out here.
+      LOG(ERROR) << "Cannot patch Vivaldi without a valid (delta) archive.";
+      installer_state.WriteInstallerResult(
+          INVALID_ARCHIVE, IDS_INSTALL_INVALID_ARCHIVE_BASE, NULL);
+      return INVALID_ARCHIVE;
     }
   }
+
   // Check for an uncompressed archive alongside the current executable if one
   // was not given or generated.
   if (uncompressed_archive.empty())
@@ -1198,12 +1183,14 @@ InstallStatus InstallProductsHelper(InstallationState& original_state,
           (product_state->version().CompareTo(*installer_version) > 0)) {
         LOG(ERROR) << "Higher version of Vivaldi is already installed.";
         // NOTE(jarle@vivaldi): If standalone we allow downgrading.
-        if (!installer_state.is_standalone()) {
+        if (!installer_state.is_vivaldi_standalone()) {
+          // clang-format off
         int message_id = IDS_INSTALL_HIGHER_VERSION_BASE;
         proceed_with_installation = false;
         install_status = HIGHER_VERSION_EXISTS;
         installer_state.WriteInstallerResult(install_status, message_id,
                                              nullptr);
+          // clang-format on
         }
       }
     }
@@ -1236,7 +1223,9 @@ InstallStatus InstallProductsHelper(InstallationState& original_state,
           install_status = OS_ERROR;
         } else {
           chrome_exe = installer_state.target_path().Append(kChromeExe);
-          quoted_chrome_exe = L"\"" + chrome_exe.value() + L"\"";
+          quoted_chrome_exe =
+              GetPostInstallLaunchCommand(installer_state.target_path())
+                  .GetCommandLineString();
           install_msg_base = 0;
         }
       }
@@ -1254,44 +1243,8 @@ InstallStatus InstallProductsHelper(InstallationState& original_state,
           install_status, install_msg_base,
           write_chrome_launch_string ? &quoted_chrome_exe : nullptr);
 
-      // TODO(jarle@vivaldi.com): REMOVE THIS:
-      // rename the "Profile" folder to "User Data" for standalone builds if
-      // the "Profile" folder exists
-      if (installer_state.is_standalone() &&
-          (install_status == FIRST_INSTALL_SUCCESS ||
-          install_status == INSTALL_REPAIRED ||
-          install_status == NEW_VERSION_UPDATED ||
-          install_status == IN_USE_UPDATED)) {
-        std::wstring::size_type pos =
-          std::wstring(
-            installer_state.target_path().value()).rfind(L"\\Application");
-        if (pos != std::wstring::npos) {
-          std::wstring base =
-            std::wstring(installer_state.target_path().value()).substr(0, pos);
-          base::FilePath old_profile_dir(base);
-          old_profile_dir = old_profile_dir.AppendASCII("Profile");
-          base::FilePath new_user_data_dir(base);
-          new_user_data_dir = new_user_data_dir.AppendASCII("User Data");
-          if (base::DirectoryExists(old_profile_dir)) {
-            if (!::MoveFileEx(old_profile_dir.value().c_str(),
-              new_user_data_dir.value().c_str(), MOVEFILE_WRITE_THROUGH)) {
-              DWORD error = ::GetLastError();
-              LOG(WARNING) <<
-                "Failed to rename old Profile folder to User Data. Error="
-                << error;
-              base::string16 message(base::StringPrintf(
-                  L"Failed to rename 'Profile' folder. Error=%u", error));
-              MessageBox(NULL, message.c_str(), L"Vivaldi Installer",
-                  MB_OK | MB_ICONWARNING);
-            } else {
-              // relax for a sec to be 100% sure that the rename has been
-              // flushed to disk ...
-              Sleep(1000);
-            }
-          }
-        }
-      }
-      if (!installer_state.is_vivaldi()) {
+      if (!kVivaldi) {
+        // clang-format off
       if (install_status == FIRST_INSTALL_SUCCESS) {
         VLOG(1) << "First install successful.";
         // We never want to launch Chrome in system level install mode.
@@ -1305,113 +1258,25 @@ InstallStatus InstallProductsHelper(InstallationState& original_state,
         DCHECK_NE(chrome_exe.value(), base::string16());
         RemoveChromeLegacyRegistryKeys(chrome_exe);
       }
-      }
-      // For Vivaldi, if this is a standalone install, write the stp.viv file
-      // to the same location as the executable.
-      if (installer_state.is_standalone() &&
-          (install_status == FIRST_INSTALL_SUCCESS ||
-          install_status == INSTALL_REPAIRED ||
-          install_status == NEW_VERSION_UPDATED ||
-          install_status == IN_USE_UPDATED)) {
-        std::string content_str("// Vivaldi Standalone");
-        base::FilePath stp_viv_path =
-            installer_state.target_path().
-                Append(installer::kStandaloneProfileHelper);
-        int size = static_cast<int>(content_str.size());
-        if (base::WriteFile(stp_viv_path,
-                            content_str.c_str(),
-                            size) == size) {
-          VLOG(1) << "Successfully wrote: " << stp_viv_path.value();
-        } else {
-          PLOG(ERROR) << "Error writing: " << stp_viv_path.value();
-          return installer::INSTALL_FAILED;
-        }
-      }
-      // For Vivaldi, if this is a patch install, we will try to patch
-      // setup.exe as well.
-      if (patch_install &&
-          cmd_line.HasSwitch(installer::switches::kUpdateSetupExe)) {
-        install_status = installer::SETUP_PATCH_FAILED;
-        // If --update-setup-exe command line option is given, we apply
-        // the given patch to current exe, and store the resulting binary in
-        // the path specified by --new-setup-exe. But we need to first unpack
-        // the file given in --update-setup-exe.
-        base::ScopedTempDir temp_path;
-        if (!temp_path.CreateUniqueTempDir()) {
-          PLOG(ERROR) << "Could not create temporary path.";
-        } else {
-          base::FilePath compressed_archive(cmd_line.GetSwitchValuePath(
-              installer::switches::kUpdateSetupExe));
-          VLOG(1) << "Opening archive " << compressed_archive.value();
-          if (installer::ArchivePatchHelper::UncompressAndPatch(
-                  temp_path.GetPath(), compressed_archive, setup_exe,
-                  cmd_line.GetSwitchValuePath(
-                      installer::switches::kNewSetupExe),
-                  installer::UnPackConsumer::SETUP_EXE_PATCH)) {
-            install_status = installer::NEW_VERSION_UPDATED;
-          }
-          if (!temp_path.Delete()) {
-            // PLOG would be nice, but Delete() doesn't leave a meaningful
-            // value in the Windows last-error code.
-            LOG(WARNING) << "Scheduling temporary path "
-                          << temp_path.GetPath().value()
-                          << " for deletion at reboot.";
-            ScheduleDirectoryForDeletion(temp_path.GetPath());
-          }
-        }
-
-        int exit_code = InstallUtil::GetInstallReturnCode(install_status);
-        if (exit_code) {
-          LOG(WARNING) << "setup.exe patching failed.";
-          installer_state.WriteInstallerResult(
-              install_status, IDS_SETUP_PATCH_FAILED_BASE, NULL);
-          return install_status;
-        }
-      }
-
-      bool force_launch_vivaldi_on_successful_install =
-        base::CommandLine::ForCurrentProcess()->HasSwitch(
-            vivaldi::constants::kVivaldiForceLaunch);
-      if (force_launch_vivaldi_on_successful_install &&
-          (install_status == FIRST_INSTALL_SUCCESS ||
-          install_status == INSTALL_REPAIRED ||
-          install_status == NEW_VERSION_UPDATED ||
-          install_status == IN_USE_UPDATED)) {
-        base::FilePath vivaldi_path =
-            installer_state.target_path().Append(installer::kChromeExe);
-
-        // We need to use the custom ShellExecuteFromExplorer to avoid
-        // launching vivaldi.exe with elevated privileges.
-        // The setup.exe process could be elevated.
-        VLOG(1) << "Launching: " << vivaldi_path.value()
-            << ", is_standalone() = " << installer_state.is_standalone()
-            << ", install_status = " << static_cast<int>(install_status);
-        vivaldi::ShellExecuteFromExplorer(vivaldi_path, base::string16(),
-                                          base::FilePath(), base::string16());
+        // clang-format on
       }
     }
   }
-  // For Vivaldi, launch the cleanup process here and not before we patch
-  // the setup.exe (see install.cc).
-  if (installer_state.is_vivaldi()) {
-    const base::FilePath new_version_setup_path =
-        installer_state.GetInstallerDirectory(*installer_version)
-            .Append(setup_exe.BaseName());
-    installer::LaunchDeleteOldVersionsProcess(new_version_setup_path,
-                                              installer_state);
-  }
 
   // If the installation completed successfully...
-  VivaldiUpdateDeltaPatchStatus(true);
   if (InstallUtil::GetInstallReturnCode(install_status) == 0) {
+    if (installer::kVivaldi) {
+      vivaldi::FinalizeSuccessfullInstall(installer_state, install_status);
+    }
+
     // Update the DisplayVersion created by an MSI-based install.
-    base::FilePath master_preferences_file(
+    base::FilePath initial_preferences_file(
         installer_state.target_path().AppendASCII(
-            installer::kDefaultMasterPrefs));
+            installer::kLegacyInitialPrefs));
     std::string install_id;
     if (prefs.GetString(installer::initial_preferences::kMsiProductId,
                         &install_id)) {
-      // A currently active MSI install will have specified the master-
+      // A currently active MSI install will have specified the initial-
       // preferences file on the command-line that includes the product-id.
       // We must delay the setting of the DisplayVersion until after the
       // grandparent "msiexec" process has exited.
@@ -1447,31 +1312,6 @@ InstallStatus InstallProductsHelper(InstallationState& original_state,
 }
 
 }  // namespace installer
-
-// Attempts to enable the SE_DEBUG privilege, which allows us to obtain
-// tokens for processes of other users. This shouls always succeed when
-// running elevated and always fail otherwise. This is ok, because we
-// only want to handle processes of other users when elevated.
-void EnableDebugPrivileges() {
-  HANDLE process_token_handle;
-  if (OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES,
-                       &process_token_handle) == FALSE)
-    return;
-  base::win::ScopedHandle process_token(process_token_handle);
-
-  LUID locally_unique_id;
-
-  if (LookupPrivilegeValue(NULL, SE_DEBUG_NAME, &locally_unique_id) == FALSE)
-    return;
-
-  TOKEN_PRIVILEGES token_privileges;
-  token_privileges.PrivilegeCount = 1;
-  token_privileges.Privileges[0].Luid = locally_unique_id;
-  token_privileges.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-
-  ::AdjustTokenPrivileges(process_token.Get(), FALSE, &token_privileges, NULL,
-                          NULL, NULL);
-}
 
 int WINAPI wWinMain(HINSTANCE instance,
                     HINSTANCE prev_instance,
@@ -1511,212 +1351,21 @@ int WINAPI wWinMain(HINSTANCE instance,
   // install_util uses chrome paths.
   chrome::RegisterPathProvider();
 
+  // Parse vivaldi-specific switches before Chromium preference initialization
+  // as we update switch values.
+  if (installer::kVivaldi && !vivaldi::PrepareSetupConfig(instance))
+    return installer::INSTALL_FAILED;
+
   const InitialPreferences& prefs = InitialPreferences::ForCurrentProcess();
   installer::InitInstallerLogging(prefs);
 
-  base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
+  const base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
   VLOG(1) << "Command Line: " << cmd_line.GetCommandLineString();
 
   InitializeInstallDetails(cmd_line, prefs);
 
-  base::FilePath vivaldi_target_path(cmd_line.GetSwitchValuePath(
-      vivaldi::constants::kVivaldiInstallDir));
-
-  // if true, the vivaldi target path was provided on the cmd line
-  const bool is_vivaldi_target_path_provided = !vivaldi_target_path.empty();
-
-  const bool is_vivaldi = cmd_line.HasSwitch(vivaldi::constants::kVivaldi);
-  const bool is_uninstall = cmd_line.HasSwitch(installer::switches::kUninstall);
-  const bool is_vivaldi_update = cmd_line.HasSwitch(
-      vivaldi::constants::kVivaldiUpdate);
-  const bool is_standalone = cmd_line.HasSwitch(
-      vivaldi::constants::kVivaldiStandalone);
-  const bool is_silent =
-      cmd_line.HasSwitch(vivaldi::constants::kVivaldiSilent);
-#if defined(VIVALDI_BUILD)
-  // NOTE(jarle@vivaldi.com): From Chr-50, XP/Vista is unsupported.
-  if (!InstallUtil::IsOSSupported()) {
-    // TODO(jarle@vivaldi.com): Localize
-    MessageBox(NULL, L"Vivaldi requires Windows 7 or higher.",
-      NULL, MB_ICONINFORMATION | MB_SETFOREGROUND);
-    return installer::OS_NOT_SUPPORTED;
-  }
-#endif
-  installer::VivaldiInstallDialog::InstallType install_type;
-  if (cmd_line.HasSwitch(installer::switches::kSystemLevel))
-    install_type = installer::VivaldiInstallDialog::INSTALL_FOR_ALL_USERS;
-  else if (is_standalone)
-    install_type = installer::VivaldiInstallDialog::INSTALL_STANDALONE;
-  else
-    install_type = installer::VivaldiInstallDialog::INSTALL_FOR_CURRENT_USER;
-
-  // for silent installs, make sure we have an install path
-  if (is_silent && !is_vivaldi_target_path_provided) {
-    int csidl = 0;
-
-    if (install_type == installer::VivaldiInstallDialog::INSTALL_FOR_ALL_USERS)
-      csidl = CSIDL_PROGRAM_FILES;
-    else if (install_type ==
-        installer::VivaldiInstallDialog::INSTALL_FOR_CURRENT_USER)
-      csidl = CSIDL_LOCAL_APPDATA;
-
-    wchar_t szPath[MAX_PATH];
-    if (csidl && SUCCEEDED(::SHGetFolderPath(NULL, csidl, NULL, 0, szPath))) {
-      vivaldi_target_path = base::FilePath(szPath).Append(L"Vivaldi");
-      cmd_line.AppendSwitchPath(vivaldi::constants::kVivaldiInstallDir,
-                                vivaldi_target_path);
-    } else {
-      LOG(ERROR) << "Vivaldi silent install failed: Install path empty.";
-      return installer::INSTALL_FAILED;
-    }
-  }
-
-  if (is_vivaldi && !(is_vivaldi_update || is_uninstall || is_silent)) {
-    INITCOMMONCONTROLSEX iccx;
-    iccx.dwSize = sizeof(iccx);
-    iccx.dwICC = ICC_COOL_CLASSES | ICC_BAR_CLASSES | ICC_TREEVIEW_CLASSES |
-        ICC_USEREX_CLASSES;
-    ::InitCommonControlsEx(&iccx);
-
-    installer::VivaldiInstallDialog dlg(instance,
-                                        false,
-                                        install_type,
-                                        vivaldi_target_path);
-
-    const installer::VivaldiInstallDialog::DlgResult dlg_result =
-      dlg.ShowModal();
-    if (dlg_result != installer::VivaldiInstallDialog::INSTALL_DLG_INSTALL) {
-      VLOG(1) << "Vivaldi: install cancelled/failed.";
-      return installer::INSTALL_FAILED;
-    }
-
-    const bool set_vivaldi_as_default = dlg.GetSetAsDefaultBrowser();
-    if (set_vivaldi_as_default) {
-      cmd_line.AppendSwitch(installer::switches::kMakeChromeDefault);
-      VLOG(1) << "Vivaldi: set as default browser.";
-    }
-
-    base::FilePath path(dlg.GetDestinationFolder());
-    cmd_line.AppendSwitchPath(vivaldi::constants::kVivaldiInstallDir, path);
-
-    vivaldi_target_path = path;
-
-    install_type = dlg.GetInstallType();
-    switch (install_type)
-    {
-    case installer::VivaldiInstallDialog::INSTALL_FOR_CURRENT_USER:
-      VLOG(1) << "Vivaldi: install for current user - install dir=" <<
-        path.value();
-      break;
-    case installer::VivaldiInstallDialog::INSTALL_FOR_ALL_USERS:
-      cmd_line.AppendSwitch(installer::switches::kSystemLevel);
-      VLOG(1) << "Vivaldi: install for all users (system install).";
-      break;
-    case installer::VivaldiInstallDialog::INSTALL_STANDALONE:
-      cmd_line.AppendSwitch(vivaldi::constants::kVivaldiStandalone);
-      VLOG(1) << "Vivaldi: standalone install - install dir=" << path.value();
-      break;
-    default:
-      NOTREACHED();
-    }
-
-    if (dlg.GetRegisterBrowser()) {
-      cmd_line.AppendSwitch(vivaldi::constants::kVivaldiRegisterStandalone);
-      VLOG(1) << "Vivaldi: register standalone browser.";
-    }
-  }
-
-  installer::VivaldiProgressDialog progress_dlg(instance);
-
-  EnableDebugPrivileges();
-
-  base::FilePath vivaldi_exe_path(
-      vivaldi_target_path.Append(installer::kInstallBinaryDir)
-          .Append(installer::kChromeExe));
-
-  if (is_vivaldi && !is_uninstall) {
-    std::vector<base::FilePath::StringType> components;
-    vivaldi_exe_path.GetComponents(&components);
-
-    wchar_t path_sz[MAX_PATH];
-    DWORD res = ::QueryDosDevice(components[0].c_str(),
-                                 (LPWSTR)path_sz, MAX_PATH - 1);
-
-    std::wstring target_path_str(path_sz);
-    if (res && (target_path_str.find(L"\\??\\", 0, 4) != std::wstring::npos)) {
-      // this is a virtual drive
-      VLOG(1) << "Virtual drive: " << target_path_str;
-      target_path_str.erase(0, 4);
-      base::FilePath target_path = base::FilePath(target_path_str);
-      for (size_t i = 2; i < components.size(); ++i) {
-        target_path = target_path.Append(components[i]);
-      }
-      vivaldi_exe_path = target_path;
-    }
-
-    std::vector<base::win::ScopedHandle> vivaldi_processes(
-        vivaldi::GetRunningProcessesForPath(vivaldi_exe_path));
-    if (!vivaldi_processes.empty()) {
-      vivaldi::KillProcesses(vivaldi_processes);
-
-      const int MAX_WAIT_SECS = 10;
-      for (int wait = MAX_WAIT_SECS * 10; wait > 0; --wait) {
-        Sleep(100);
-        vivaldi_processes =
-            vivaldi::GetRunningProcessesForPath(vivaldi_exe_path);
-        if (vivaldi_processes.empty())
-          break;
-      }
-
-      int choice = IDRETRY;
-      while (choice != IDCANCEL && !vivaldi_processes.empty()) {
-        choice = MessageBox(
-            NULL,
-            L"Vivaldi is still running.\n"
-            L"Please close all Vivaldi windows before continuing install.",
-            L"Vivaldi Installer", MB_RETRYCANCEL | MB_ICONEXCLAMATION);
-        vivaldi_processes =
-            vivaldi::GetRunningProcessesForPath(vivaldi_exe_path);
-      }
-      if (choice == IDCANCEL) {
-        VLOG(1) << "Vivaldi: install cancelled due to running instances.";
-        return installer::INSTALL_FAILED;
-      }
-    }
-
-    // enable auto-update
-    std::wstring update_key(vivaldi::constants::kVivaldiKey);
-    update_key.append(L"\\");
-    update_key.append(vivaldi::constants::kVivaldiAutoUpdate);
-    base::win::RegKey key(HKEY_CURRENT_USER,
-        update_key.c_str(), KEY_ALL_ACCESS);
-    if (key.Valid())
-      key.WriteValue(L"Enabled", L"1");
-  }
-
   bool system_install = false;
   prefs.GetBool(installer::initial_preferences::kSystemLevel, &system_install);
-
-  if (is_vivaldi) {
-    if (is_vivaldi_update) {
-      // Find the install type of the installed Vivaldi.
-      // If installed, update the main install type, unless we are launched
-      // with the --system-level flag. Then we keep the install type since we
-      // have no way to find out if this is a system install for non-standard
-      // install paths.
-      if (install_type !=
-          installer::VivaldiInstallDialog::INSTALL_FOR_ALL_USERS) {
-        installer::VivaldiInstallDialog::InstallType inst_type;
-        if (installer::VivaldiInstallDialog::IsVivaldiInstalled(
-          vivaldi_target_path, &inst_type)) {
-          install_type = inst_type;
-        }
-      }
-    }
-
-    system_install = (install_type ==
-        installer::VivaldiInstallDialog::INSTALL_FOR_ALL_USERS);
-  }
   VLOG(1) << "system install is " << system_install;
 
   InstallationState original_state;
@@ -1728,10 +1377,12 @@ int WINAPI wWinMain(HINSTANCE instance,
   persistent_histogram_storage.set_storage_base_dir(
       installer_state.target_path());
 
-  if (!is_vivaldi) {
+  if (!installer::kVivaldi) {
+    // clang-format off
   installer::ConfigureCrashReporting(installer_state);
   installer::SetInitialCrashKeys(installer_state);
   installer::SetCrashKeysFromCommandLine(cmd_line);
+    // clang-format on
   }
 
   // Make sure the process exits cleanly on unexpected errors.
@@ -1744,6 +1395,14 @@ int WINAPI wWinMain(HINSTANCE instance,
   // Disable the handle verifier for all but 32-bit debug builds.
   base::win::DisableHandleVerifier();
 #endif
+
+  const bool is_uninstall = cmd_line.HasSwitch(installer::switches::kUninstall);
+
+  // Histogram storage is enabled at the very top of this wWinMain. Disable it
+  // during uninstall since there's neither a directory in which to write them
+  // nor a browser to subsequently upload them.
+  if (is_uninstall)
+    persistent_histogram_storage.Disable();
 
   // Check to make sure current system is Win7 or later. If not, log
   // error message and get out.
@@ -1800,6 +1459,15 @@ int WINAPI wWinMain(HINSTANCE instance,
   // true path to the program at position 0.
   base::FilePath setup_exe;
   base::PathService::Get(base::FILE_EXE, &setup_exe);
+#if !defined(OFFICIAL_BUILD)
+  if (cmd_line.HasSwitch(vivaldi::constants::kVivaldiDebugCopyExe)) {
+    // Install setup.exe from the switch value, but use the current exe for
+    // all subprocesses.
+    installer::vivaldi_debug_subprocesses_exe = new base::FilePath(setup_exe);
+    setup_exe =
+        cmd_line.GetSwitchValuePath(vivaldi::constants::kVivaldiDebugCopyExe);
+  }
+#endif
 
   const base::Version current_version(
       installer_state.GetCurrentVersion(original_state));
@@ -1828,18 +1496,6 @@ int WINAPI wWinMain(HINSTANCE instance,
       if (!new_cmd.HasSwitch(installer::switches::kSystemLevel))
         new_cmd.AppendSwitch(installer::switches::kSystemLevel);
 
-      // Do not show the Vivaldi installer UI twice.
-      // Add the --vivaldi-update flag for the elevated process.
-      if (new_cmd.HasSwitch(vivaldi::constants::kVivaldi) &&
-         !new_cmd.HasSwitch(vivaldi::constants::kVivaldiUpdate)) {
-        new_cmd.AppendSwitch(vivaldi::constants::kVivaldiUpdate);
-      }
-
-      if (new_cmd.HasSwitch(vivaldi::constants::kVivaldi) && !is_silent) {
-        // Kill off the progress dialog here, since we are being relaunched.
-        progress_dlg.FinishProgress(0);
-      }
-
       DWORD exit_code = installer::UNKNOWN_STATUS;
       InstallUtil::ExecuteExeAsAdmin(new_cmd, &exit_code);
       return exit_code;
@@ -1862,8 +1518,10 @@ int WINAPI wWinMain(HINSTANCE instance,
     return installer::SETUP_SINGLETON_ACQUISITION_FAILED;
   }
 
-  if (is_vivaldi && !is_uninstall && !is_silent)
-    progress_dlg.ShowModeless();
+  if (installer::kVivaldi) {
+    if (!vivaldi::BeginInstallOrUninstall(instance, installer_state))
+      return installer::INSTALL_FAILED;
+  }
 
   base::FilePath installer_directory;
   installer::InstallStatus install_status = installer::UNKNOWN_STATUS;
@@ -1886,6 +1544,10 @@ int WINAPI wWinMain(HINSTANCE instance,
           installer_state, installer_directory.Append(setup_exe.BaseName()),
           !system_install);
     }
+  }
+
+  if (installer::kVivaldi) {
+    vivaldi::EndInstallOrUninstall(installer_state, install_status);
   }
 
   UMA_HISTOGRAM_ENUMERATION("Setup.Install.Result", install_status,
@@ -1920,10 +1582,6 @@ int WINAPI wWinMain(HINSTANCE instance,
   }
 
   VLOG(1) << "Installation complete, returning: " << return_code;
-
-  if (is_vivaldi && !is_uninstall && !is_silent) {
-    progress_dlg.FinishProgress(return_code == 0 ? 1000 : 0);
-  }
 
   return return_code;
 }

@@ -26,7 +26,6 @@
 #include "content/public/browser/navigation_ui_data.h"
 #include "content/public/browser/plugin_service.h"
 #include "content/public/browser/storage_partition.h"
-#include "content/public/browser/system_connector.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/browser_task_environment.h"
@@ -99,10 +98,12 @@ class TestNavigationLoaderInterceptor : public NavigationLoaderInterceptor {
         std::move(client), /*reponse_body_use_tracker=*/base::nullopt,
         TRAFFIC_ANNOTATION_FOR_TESTS, &params,
         /*coep_reporter=*/nullptr, 0, /* request_id */
-        0 /* keepalive_request_size */, resource_scheduler_client_,
+        0 /* keepalive_request_size */,
+        false /* require_network_isolation_key */, resource_scheduler_client_,
         nullptr /* keepalive_statistics_recorder */,
         nullptr /* network_usage_accumulator */, nullptr /* header_client */,
         nullptr /* origin_policy_manager */, nullptr /* trust_token_helper */,
+        nullptr /* origin_access_list */,
         mojo::NullRemote() /* cookie_observer */);
   }
 
@@ -141,14 +142,6 @@ class NavigationURLLoaderImplTest : public testing::Test {
             base::test::TaskEnvironment::MainThreadType::IO)),
         network_change_notifier_(
             net::test::MockNetworkChangeNotifier::Create()) {
-    // Because the network service is enabled we need a system Connector or
-    // BrowserContext::GetDefaultStoragePartition will segfault when
-    // ContentBrowserClient::CreateNetworkContext tries to call
-    // GetNetworkService.
-    mojo::PendingReceiver<service_manager::mojom::Connector> connector_receiver;
-    SetSystemConnectorForTesting(
-        service_manager::Connector::Create(&connector_receiver));
-
     browser_context_.reset(new TestBrowserContext);
     http_test_server_.AddDefaultHandlers(
         base::FilePath(FILE_PATH_LITERAL("content/test/data")));
@@ -160,7 +153,6 @@ class NavigationURLLoaderImplTest : public testing::Test {
 
   ~NavigationURLLoaderImplTest() override {
     browser_context_.reset();
-    SetSystemConnectorForTesting(nullptr);
     // Reset the BrowserTaskEnvironment to force destruction of the local
     // NetworkService, which is held in SequenceLocalStorage. This must happen
     // before destruction of |network_change_notifier_|, to allow observers to
@@ -178,7 +170,7 @@ class NavigationURLLoaderImplTest : public testing::Test {
       bool upgrade_if_insecure = false) {
     mojom::BeginNavigationParamsPtr begin_params =
         mojom::BeginNavigationParams::New(
-            MSG_ROUTING_NONE /* initiator_routing_id */, headers,
+            base::nullopt /* initiator_frame_token */, headers,
             net::LOAD_NORMAL, false /* skip_service_worker */,
             blink::mojom::RequestContextType::LOCATION,
             network::mojom::RequestDestination::kDocument,
@@ -189,7 +181,6 @@ class NavigationURLLoaderImplTest : public testing::Test {
             std::string() /* searchable_form_encoding */,
             GURL() /* client_side_redirect_url */,
             base::nullopt /* devtools_initiator_info */,
-            false /* attach_same_site_cookie */,
             nullptr /* trust_token_params */, base::nullopt /* impression */,
             base::TimeTicks() /* renderer_before_unload_start */,
             base::TimeTicks() /* renderer_before_unload_end */);
@@ -321,7 +312,7 @@ TEST_F(NavigationURLLoaderImplTest, IsolationInfoOfMainFrameNavigation) {
                          url.GetOrigin().spec().c_str()),
       "GET", &delegate, NavigationDownloadPolicy(), true /*is_main_frame*/,
       false /*upgrade_if_insecure*/);
-  delegate.WaitForRequestStarted();
+  delegate.WaitForResponseStarted();
 
   ASSERT_TRUE(most_recent_resource_request_);
   ASSERT_TRUE(most_recent_resource_request_->trusted_params);

@@ -61,19 +61,12 @@ static_library("vr_android") {
     "vrcore_install_helper.h",
   ]
 
-  if (enable_arcore) {
-    sources += [
-      "arcore_device/arcore_device_provider.cc",
-      "arcore_device/arcore_device_provider.h",
-      "arcore_device/arcore_device_utils.cc",
-    ]
-  }
-
   deps = [
     ":ui_factory",
     "//base",
     "//cc",
     "//chrome/android/features/vr:jni_headers",
+    "//chrome/browser:browser_process",
     "//chrome/browser/ui",
     "//chrome/browser/vr:vr_common",
     "//chrome/common",
@@ -172,10 +165,7 @@ group("module_factory") {
 
 if (enable_arcore) {
   generate_jni("ar_jni_headers") {
-    sources = [
-      "//chrome/android/java/src/org/chromium/chrome/browser/vr/ArCompositorDelegateProviderImpl.java",
-      "//chrome/android/java/src/org/chromium/chrome/browser/vr/ArCoreDeviceUtils.java",
-    ]
+    sources = [ "//chrome/android/java/src/org/chromium/chrome/browser/vr/ArCompositorDelegateProviderImpl.java" ]
   }
 }
 

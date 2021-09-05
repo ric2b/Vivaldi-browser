@@ -19,6 +19,12 @@
   <message name="IDS_IMPORT_OPERA_PROFILE_TITLE" desc="The title of the Opera profile folder select dialog.">
     Select Opera profile folder for import
   </message>
+  <message name="IDS_IMPORT_BRAVE_PROFILE_TITLE" desc="The title of the Opera profile folder select dialog.">
+    Select Brave profile folder for import
+  </message>
+  <message name="IDS_IMPORT_EDGE_CHROMIUM_PROFILE_TITLE" desc="The title of the Opera profile folder select dialog.">
+    Select Edge profile folder for import
+  </message>
   <message name="IDS_IMPORT_VIVALDI_PROFILE_TITLE" desc="The title of the Vivaldi profile folder select dialog.">
     Select Vivaldi profile folder for import
   </message>

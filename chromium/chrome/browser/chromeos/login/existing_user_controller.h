@@ -32,7 +32,6 @@
 #include "chromeos/login/auth/login_performer.h"
 #include "chromeos/login/auth/user_context.h"
 #include "components/account_id/account_id.h"
-#include "components/prefs/pref_registry_simple.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_type.h"
@@ -70,10 +69,6 @@ class ExistingUserController : public LoginDisplay::Delegate,
   // Returns the current existing user controller fetched from the current
   // LoginDisplayHost instance.
   static ExistingUserController* current_controller();
-
-  // Registers the pref for ManagedGuestSessionAutoLaunchNotificationReduced
-  // policy.
-  static void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
 
   // All UI initialization is deferred till Init() call.
   ExistingUserController();
@@ -143,6 +138,10 @@ class ExistingUserController : public LoginDisplay::Delegate,
   bool IsAutoLoginTimerRunningForTesting() const {
     return auto_login_timer_ && auto_login_timer_->IsRunning();
   }
+
+  // Extracts out users allowed on login screen.
+  static user_manager::UserList ExtractLoginUsers(
+      const user_manager::UserList& users);
 
  private:
   friend class ExistingUserControllerTest;
@@ -385,18 +384,13 @@ class ExistingUserController : public LoginDisplay::Delegate,
 
   std::unique_ptr<login::NetworkStateHelper> network_state_helper_;
 
-  std::unique_ptr<CrosSettings::ObserverSubscription>
-      show_user_names_subscription_;
-  std::unique_ptr<CrosSettings::ObserverSubscription>
-      allow_new_user_subscription_;
-  std::unique_ptr<CrosSettings::ObserverSubscription> allow_guest_subscription_;
-  std::unique_ptr<CrosSettings::ObserverSubscription> users_subscription_;
-  std::unique_ptr<CrosSettings::ObserverSubscription>
-      local_account_auto_login_id_subscription_;
-  std::unique_ptr<CrosSettings::ObserverSubscription>
-      local_account_auto_login_delay_subscription_;
-  std::unique_ptr<CrosSettings::ObserverSubscription>
-      family_link_allowed_subscription_;
+  base::CallbackListSubscription show_user_names_subscription_;
+  base::CallbackListSubscription allow_new_user_subscription_;
+  base::CallbackListSubscription allow_guest_subscription_;
+  base::CallbackListSubscription users_subscription_;
+  base::CallbackListSubscription local_account_auto_login_id_subscription_;
+  base::CallbackListSubscription local_account_auto_login_delay_subscription_;
+  base::CallbackListSubscription family_link_allowed_subscription_;
 
   std::unique_ptr<OAuth2TokenInitializer> oauth2_token_initializer_;
 

@@ -8,6 +8,7 @@
 
 #include "browser/menus/bookmark_sorter.h"
 #include "browser/menus/bookmark_support.h"
+#include "components/renderer_context_menu/render_view_context_menu_base.h"
 #include "extensions/schema/bookmark_context_menu.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/widget/widget.h"
@@ -131,8 +132,7 @@ VivaldiContextMenu* CreateVivaldiContextMenu(
     content::WebContents* web_contents,
     ui::SimpleMenuModel* menu_model,
     const gfx::Rect& rect,
-    bool force_views,
-    vivaldi::ContextMenuPostitionDelegate* delegate);
+    bool force_views);
 
 VivaldiBookmarkMenu* CreateVivaldiBookmarkMenu(
     content::WebContents* web_contents,
@@ -174,9 +174,11 @@ class VivaldiContextMenu : public VivaldiMenu {
  public:
   virtual ~VivaldiContextMenu() {}
 
-  virtual void Show() = 0;
+  virtual void Init(ui::SimpleMenuModel* menu_model, ContextMenuPostitionDelegate* delegate) = 0;
+  virtual bool Show() = 0;
   virtual void SetIcon(const gfx::Image& icon, int id) {}
   virtual void UpdateMenu(ui::SimpleMenuModel* menu_model, int id) {}
+  virtual RenderViewContextMenuBase::ToolkitDelegate* GetToolkitDelegate();
 };
 
 class VivaldiBookmarkMenu : public VivaldiMenu {

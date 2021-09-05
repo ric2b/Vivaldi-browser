@@ -26,24 +26,6 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/ipc/geometry/gfx_param_traits.h"
 
-#ifndef INTERNAL_COMPONENTS_PRINTING_COMMON_PRINT_MESSAGES_H_
-#define INTERNAL_COMPONENTS_PRINTING_COMMON_PRINT_MESSAGES_H_
-
-#if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-struct PrintHostMsg_RequestPrintPreview_Params {
-  PrintHostMsg_RequestPrintPreview_Params();
-  ~PrintHostMsg_RequestPrintPreview_Params();
-  bool is_from_arc;
-  bool is_modifiable;
-  bool is_pdf;
-  bool webnode_only;
-  bool has_selection;
-  bool selection_only;
-};
-#endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
-
-#endif  // INTERNAL_COMPONENTS_PRINTING_COMMON_PRINT_MESSAGES_H_
-
 #define IPC_MESSAGE_START PrintMsgStart
 
 IPC_ENUM_TRAITS_MAX_VALUE(printing::mojom::PageOrientation,
@@ -145,15 +127,6 @@ IPC_STRUCT_TRAITS_BEGIN(printing::PageRange)
 IPC_STRUCT_TRAITS_END()
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-IPC_STRUCT_TRAITS_BEGIN(PrintHostMsg_RequestPrintPreview_Params)
-  IPC_STRUCT_TRAITS_MEMBER(is_from_arc)
-  IPC_STRUCT_TRAITS_MEMBER(is_modifiable)
-  IPC_STRUCT_TRAITS_MEMBER(is_pdf)
-  IPC_STRUCT_TRAITS_MEMBER(webnode_only)
-  IPC_STRUCT_TRAITS_MEMBER(has_selection)
-  IPC_STRUCT_TRAITS_MEMBER(selection_only)
-IPC_STRUCT_TRAITS_END()
-
 IPC_STRUCT_TRAITS_BEGIN(printing::mojom::PreviewIds)
   IPC_STRUCT_TRAITS_MEMBER(request_id)
   IPC_STRUCT_TRAITS_MEMBER(ui_id)
@@ -253,43 +226,9 @@ IPC_STRUCT_TRAITS_BEGIN(printing::mojom::DidPrintDocumentParams)
   IPC_STRUCT_TRAITS_MEMBER(physical_offsets)
 IPC_STRUCT_TRAITS_END()
 
-// TODO(dgn): Rename *ScriptedPrint messages because they are not called only
-//           from scripts.
-// Parameters for the IPC message PrintHostMsg_ScriptedPrint
-IPC_STRUCT_TRAITS_BEGIN(printing::mojom::ScriptedPrintParams)
-  IPC_STRUCT_TRAITS_MEMBER(cookie)
-  IPC_STRUCT_TRAITS_MEMBER(expected_pages_count)
-  IPC_STRUCT_TRAITS_MEMBER(has_selection)
-  IPC_STRUCT_TRAITS_MEMBER(is_scripted)
-  IPC_STRUCT_TRAITS_MEMBER(is_modifiable)
-  IPC_STRUCT_TRAITS_MEMBER(margin_type)
-IPC_STRUCT_TRAITS_END()
-
 // Messages sent from the renderer to the browser.
 
-// Sends back to the browser the rendered document that was requested by a
-// PrintMsg_PrintPages message or from scripted printing. The memory handle in
-// this message is already valid in the browser process. Waits until the
-// document is complete ready before replying.
-IPC_SYNC_MESSAGE_ROUTED1_1(PrintHostMsg_DidPrintDocument,
-                           printing::mojom::DidPrintDocumentParams
-                           /* page content */,
-                           bool /* completed */)
-
-// It's the renderer that controls the printing process when it is generated
-// by javascript. This step is about showing UI to the user to select the
-// final print settings. The output parameter is the same as
-// PrintMsg_PrintPages which is executed implicitly.
-IPC_SYNC_MESSAGE_ROUTED1_1(PrintHostMsg_ScriptedPrint,
-                           printing::mojom::ScriptedPrintParams,
-                           printing::mojom::PrintPagesParams
-                           /* settings chosen by the user*/)
-
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-// Asks the browser to do print preview.
-IPC_MESSAGE_ROUTED1(PrintHostMsg_RequestPrintPreview,
-                    PrintHostMsg_RequestPrintPreview_Params /* params */)
-
 // Notify the browser the about the to-be-rendered print preview document.
 IPC_MESSAGE_ROUTED2(PrintHostMsg_DidStartPreview,
                     printing::mojom::DidStartPreviewParams /* params */,
@@ -319,11 +258,6 @@ IPC_MESSAGE_ROUTED2(PrintHostMsg_DidPreviewPage,
                     printing::mojom::DidPreviewPageParams /* params */,
                     printing::mojom::PreviewIds /* ids */)
 
-// Asks the browser whether the print preview has been cancelled.
-IPC_SYNC_MESSAGE_ROUTED1_1(PrintHostMsg_CheckForCancel,
-                           printing::mojom::PreviewIds /* ids */,
-                           bool /* print preview cancelled */)
-
 // Sends back to the browser the complete rendered document (non-draft mode,
 // used for printing) that was requested by a PrintMsg_PrintPreview message.
 // The memory handle in this message is already valid in the browser process.
@@ -334,11 +268,6 @@ IPC_MESSAGE_ROUTED2(PrintHostMsg_MetafileReadyForPrinting,
 // Run a nested run loop in the renderer until print preview for
 // window.print() finishes.
 IPC_SYNC_MESSAGE_ROUTED0_0(PrintHostMsg_SetupScriptedPrintPreview)
-
-// Tell the browser to show the print preview, when the document is sufficiently
-// loaded such that the renderer can determine whether it is modifiable or not.
-IPC_MESSAGE_ROUTED1(PrintHostMsg_ShowScriptedPrintPreview,
-                    bool /* is_modifiable */)
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
 #endif  // COMPONENTS_PRINTING_COMMON_PRINT_MESSAGES_H_

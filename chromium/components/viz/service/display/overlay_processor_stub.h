@@ -20,7 +20,6 @@ class VIZ_SERVICE_EXPORT OverlayProcessorStub
 
   // Overrides OverlayProcessorInterface's pure virtual functions.
   bool IsOverlaySupported() const final;
-  gfx::Rect GetPreviousFrameOverlaysBoundingRect() const final;
   gfx::Rect GetAndResetOverlayDamage() final;
   bool NeedsSurfaceDamageRectList() const final;
   void ProcessForOverlays(
@@ -29,7 +28,7 @@ class VIZ_SERVICE_EXPORT OverlayProcessorStub
       const SkMatrix44& output_color_matrix,
       const FilterOperationsMap& render_pass_filters,
       const FilterOperationsMap& render_pass_backdrop_filters,
-      SurfaceDamageRectList* surface_damage_rect_list,
+      SurfaceDamageRectList surface_damage_rect_list,
       OutputSurfaceOverlayPlane* output_surface_plane,
       CandidateList* overlay_candidates,
       gfx::Rect* damage_rect,
