@@ -53,7 +53,7 @@ class PLATFORM_EXPORT HeapAllocator {
   STATIC_ONLY(HeapAllocator);
 
  public:
-  using WeakCallbackInfo = blink::WeakCallbackInfo;
+  using LivenessBroker = blink::LivenessBroker;
   using Visitor = blink::Visitor;
   static constexpr bool kIsGarbageCollected = true;
 
@@ -147,11 +147,6 @@ class PLATFORM_EXPORT HeapAllocator {
            ThreadState::Current()->IsIncrementalMarking();
   }
 
-  template <typename T>
-  static bool IsHeapObjectAlive(T* object) {
-    return ThreadHeap::IsHeapObjectAlive(object);
-  }
-
   template <typename T, typename Traits>
   static void Trace(Visitor* visitor, const T& t) {
     TraceCollectionIfEnabled<WTF::WeakHandlingTrait<T>::value, T,
@@ -239,19 +234,17 @@ class PLATFORM_EXPORT HeapAllocator {
   static void TraceVectorBacking(Visitor* visitor,
                                  const T* backing,
                                  const T* const* backing_slot) {
-    visitor->TraceBackingStoreStrongly(
-        reinterpret_cast<const HeapVectorBacking<T>*>(backing),
-        reinterpret_cast<const HeapVectorBacking<T>* const*>(backing_slot));
+    visitor->TraceMovablePointer(backing_slot);
+    visitor->Trace(reinterpret_cast<const HeapVectorBacking<T>*>(backing));
   }
 
   template <typename T, typename HashTable>
   static void TraceHashTableBackingStrongly(Visitor* visitor,
                                             const T* backing,
                                             const T* const* backing_slot) {
-    visitor->TraceBackingStoreStrongly(
-        reinterpret_cast<const HeapHashTableBacking<HashTable>*>(backing),
-        reinterpret_cast<const HeapHashTableBacking<HashTable>* const*>(
-            backing_slot));
+    visitor->TraceMovablePointer(backing_slot);
+    visitor->Trace(
+        reinterpret_cast<const HeapHashTableBacking<HashTable>*>(backing));
   }
 
   template <typename T, typename HashTable>
@@ -260,21 +253,16 @@ class PLATFORM_EXPORT HeapAllocator {
                                           const T* const* backing_slot,
                                           WeakCallback callback,
                                           const void* parameter) {
-    visitor->TraceBackingStoreWeakly<HashTable>(
+    visitor->TraceMovablePointer(backing_slot);
+    visitor->TraceWeakContainer(
         reinterpret_cast<const HeapHashTableBacking<HashTable>*>(backing),
         reinterpret_cast<const HeapHashTableBacking<HashTable>* const*>(
             backing_slot),
+        TraceTrait<HeapHashTableBacking<HashTable>>::GetTraceDescriptor(
+            backing),
+        TraceTrait<HeapHashTableBacking<HashTable>>::GetWeakTraceDescriptor(
+            backing),
         callback, parameter);
-  }
-
-  template <typename T, typename HashTable>
-  static void TraceHashTableBackingOnly(Visitor* visitor,
-                                        const T* backing,
-                                        const T* const* backing_slot) {
-    visitor->TraceBackingStoreOnly(
-        reinterpret_cast<const HeapHashTableBacking<HashTable>*>(backing),
-        reinterpret_cast<const HeapHashTableBacking<HashTable>* const*>(
-            backing_slot));
   }
 
  private:
@@ -642,6 +630,8 @@ class HeapVector : public Vector<T, inlineCapacity, HeapAllocator> {
                   "instead of HeapVector<>.");
     static_assert(!WTF::IsWeak<T>::value,
                   "Weak types are not allowed in HeapVector.");
+    static_assert(WTF::IsTraceableInCollectionTrait<VectorTraits<T>>::value,
+                  "Type must be traceable in collection");
   }
 
  public:
@@ -742,16 +732,8 @@ struct VectorTraits<blink::Member<T>> : VectorTraitsBase<blink::Member<T>> {
   static const bool kCanClearUnusedSlotsWithMemset = true;
   static const bool kCanCopyWithMemcpy = true;
   static const bool kCanMoveWithMemcpy = true;
-};
 
-template <typename T>
-struct VectorTraits<blink::WeakMember<T>>
-    : VectorTraitsBase<blink::WeakMember<T>> {
-  STATIC_ONLY(VectorTraits);
-  static const bool kNeedsDestruction = false;
-  static const bool kCanInitializeWithMemset = true;
-  static const bool kCanClearUnusedSlotsWithMemset = true;
-  static const bool kCanMoveWithMemcpy = true;
+  static constexpr bool kCanTraceConcurrently = true;
 };
 
 template <typename T>
@@ -826,6 +808,8 @@ struct HashTraits<blink::Member<T>> : SimpleClassHashTraits<blink::Member<T>> {
   static void ConstructDeletedValue(blink::Member<T>& slot, bool) {
     slot = WTF::kHashTableDeletedValue;
   }
+
+  static constexpr bool kCanTraceConcurrently = true;
 };
 
 template <typename T>
@@ -860,6 +844,8 @@ struct HashTraits<blink::WeakMember<T>>
   static void ConstructDeletedValue(blink::WeakMember<T>& slot, bool) {
     slot = WTF::kHashTableDeletedValue;
   }
+
+  static constexpr bool kCanTraceConcurrently = true;
 };
 
 template <typename T>
@@ -890,6 +876,8 @@ struct HashTraits<blink::UntracedMember<T>>
   static PeekOutType Peek(const blink::UntracedMember<T>& value) {
     return value;
   }
+
+  static constexpr bool kCanTraceConcurrently = true;
 };
 
 template <typename T, wtf_size_t inlineCapacity>

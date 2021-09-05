@@ -89,8 +89,6 @@ std::unique_ptr<ResourceRequest> CreatePreflightRequest(
   preflight_request->url = request.url;
   preflight_request->method = net::HttpRequestHeaders::kOptionsMethod;
   preflight_request->priority = request.priority;
-  preflight_request->fetch_request_context_type =
-      request.fetch_request_context_type;
   preflight_request->destination = request.destination;
   preflight_request->referrer = request.referrer;
   preflight_request->referrer_policy = request.referrer_policy;
@@ -235,7 +233,7 @@ class PreflightController::PreflightLoader final {
 
     loader_->SetOnRedirectCallback(base::BindRepeating(
         &PreflightLoader::HandleRedirect, base::Unretained(this)));
-    loader_->SetOnResponseStartedCallback(base::BindRepeating(
+    loader_->SetOnResponseStartedCallback(base::BindOnce(
         &PreflightLoader::HandleResponseHeader, base::Unretained(this)));
 
     loader_->DownloadToString(

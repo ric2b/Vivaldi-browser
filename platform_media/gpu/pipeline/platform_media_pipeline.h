@@ -43,8 +43,7 @@ class MEDIA_EXPORT PlatformMediaPipeline {
 
   virtual ~PlatformMediaPipeline() {}
 
-  virtual void Initialize(ipc_data_source::Reader source_reader,
-                          ipc_data_source::Info source_info,
+  virtual void Initialize(ipc_data_source::Info source_info,
                           InitializeCB initialize_cb) = 0;
 
   // Read the media data of the given type into the supplied buffer.

@@ -11,6 +11,9 @@
 @class ShowSigninCommand;
 @class StartVoiceSearchCommand;
 @class UIViewController;
+namespace syncer {
+enum class KeyRetrievalTriggerForUMA;
+}  // namespace syncer
 
 // This protocol groups commands that are part of ApplicationCommands, but
 // may also be forwarded directly to a settings navigation controller.
@@ -78,6 +81,17 @@
 - (void)showAdvancedSigninSettingsFromViewController:
     (UIViewController*)baseViewController;
 
+// Presents the Trusted Vault reauth dialog.
+// |baseViewController| presents the sign-in.
+// |retrievalTrigger| UI elements where the trusted vault reauth has been
+// triggered.
+- (void)
+    showTrustedVaultReauthenticationFromViewController:
+        (UIViewController*)baseViewController
+                                      retrievalTrigger:
+                                          (syncer::KeyRetrievalTriggerForUMA)
+                                              retrievalTrigger;
+
 // Starts a voice search on the current BVC.
 - (void)startVoiceSearch;
 
@@ -122,10 +136,8 @@
 // Sets whether the UI is displaying incognito content.
 - (void)setIncognitoContentVisible:(BOOL)incognitoContentVisible;
 
-#if !defined(NDEBUG)
-// Open a new window.
-- (void)openNewWindow;
-#endif  // !defined(NDEBUG)
+// Open a new window with |userActivity|
+- (void)openNewWindowWithActivity:(NSUserActivity*)userActivity;
 
 @end
 

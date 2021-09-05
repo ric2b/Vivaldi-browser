@@ -66,6 +66,12 @@ but also avoids relying upon `'strict-dynamic'`, via
 [script-src]: https://w3c.github.io/webappsec-csp/#directive-script-src
 [csp-is-dead]: https://research.google/pubs/pub45542/
 
+#### Embedded Enforcement
+
+`kIFrameCSPAttribute` records the overall usage of the `csp` attribute on
+`<iframe>` elements, which enables pages to enforce a policy on documents
+they embed.
+
 ## Trusted Types
 
 [Trusted Types][tt] gives page authors a means to protect their sites against
@@ -78,9 +84,10 @@ usage we obtain the following usage counts:
   two allow us to determine which percentage of pages run in enforcing or
   report-only mode (or both).
 
-* Tracking specific features: `kTrustedTypesDefaultPolicyUsed` notes whether a
-  "default" policy has been used. `kTrustedTyoesAllowDuplicates` records
-  whether an 'allow-duplicates' keyword has been used.
+* Tracking specific features: `kTrustedTypesPolicyCreated` tracks
+  creation of all Trusted Types policies, `kTrustedTypesDefaultPolicyCreated`
+  notes whether a "default" policy has been created. `kTrustedTypesAllowDuplicates` 
+  records whether an 'allow-duplicates' keyword has been used.
 
 * Error tracking: `kTrustedTypesAssignmentError` tracks whether Trusted Types
   has blocked a string assignment.

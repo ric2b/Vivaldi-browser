@@ -18,6 +18,7 @@ import android.os.Bundle;
 import android.text.TextUtils;
 import android.util.Pair;
 
+import androidx.annotation.NonNull;
 import androidx.browser.trusted.sharing.ShareData;
 
 import org.xmlpull.v1.XmlPullParser;
@@ -32,7 +33,6 @@ import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.ShortcutSource;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.webapps.WebApkExtras.ShortcutItem;
-import org.chromium.chrome.browser.webapps.WebApkInfo.ShareTarget;
 import org.chromium.content_public.common.ScreenOrientationValues;
 import org.chromium.webapk.lib.common.WebApkCommonUtils;
 import org.chromium.webapk.lib.common.WebApkConstants;
@@ -64,6 +64,7 @@ public class WebApkIntentDataProviderFactory {
     private static final String SHORTCUT_SHORT_NAME_ATTRIBUTE = "shortcutShortLabel";
     private static final String SHORTCUT_ICON_HASH_ATTRIBUTE = "iconHash";
     private static final String SHORTCUT_ICON_URL_ATTRIBUTE = "iconUrl";
+    private static final String SHORTCUT_ICON_ATTRIBUTE = "icon";
     private static final String SHORTCUT_INTENT_LAUNCH_URL_ATTRIBUTE = "data";
 
     private static final String TAG = "WebApkInfo";
@@ -74,8 +75,7 @@ public class WebApkIntentDataProviderFactory {
      * @param intent Intent containing info about the app.
      */
     public static BrowserServicesIntentDataProvider create(Intent intent) {
-        String webApkPackageName =
-                IntentUtils.safeGetStringExtra(intent, WebApkConstants.EXTRA_WEBAPK_PACKAGE_NAME);
+        String webApkPackageName = WebappIntentUtils.getWebApkPackageName(intent);
 
         if (TextUtils.isEmpty(webApkPackageName)) {
             return null;
@@ -107,7 +107,7 @@ public class WebApkIntentDataProviderFactory {
             shareData = new ShareData(subject, text, files);
         }
 
-        String url = IntentUtils.safeGetStringExtra(intent, ShortcutHelper.EXTRA_URL);
+        String url = WebappIntentUtils.getUrl(intent);
         int source = computeSource(intent, shareData);
 
         boolean canUseSplashFromContentProvider = IntentUtils.safeGetBooleanExtra(
@@ -170,6 +170,8 @@ public class WebApkIntentDataProviderFactory {
                             SHORTCUT_ATTRIBUTE_NAMESPACE, SHORTCUT_SHORT_NAME_ATTRIBUTE, 0);
                     String iconUrl = parser.getAttributeValue(null, SHORTCUT_ICON_URL_ATTRIBUTE);
                     String iconHash = parser.getAttributeValue(null, SHORTCUT_ICON_HASH_ATTRIBUTE);
+                    int iconId = parser.getAttributeResourceValue(
+                            SHORTCUT_ATTRIBUTE_NAMESPACE, SHORTCUT_ICON_ATTRIBUTE, 0);
 
                     eventType = parser.next();
                     if (eventType != XmlPullParser.START_TAG
@@ -183,7 +185,7 @@ public class WebApkIntentDataProviderFactory {
 
                     shortcuts.add(new ShortcutItem(nameResId != 0 ? res.getString(nameResId) : "",
                             shortNameResId != 0 ? res.getString(shortNameResId) : "", launchUrl,
-                            iconUrl, iconHash));
+                            iconUrl, iconHash, new WebappIcon(webApkPackageName, iconId)));
                 }
                 eventType = parser.next();
             }
@@ -308,9 +310,9 @@ public class WebApkIntentDataProviderFactory {
             }
         }
 
-        Pair<String, ShareTarget> shareTargetActivityNameAndData =
+        Pair<String, WebApkShareTarget> shareTargetActivityNameAndData =
                 extractFirstShareTarget(webApkPackageName);
-        ShareTarget shareTarget = shareTargetActivityNameAndData.second;
+        WebApkShareTarget shareTarget = shareTargetActivityNameAndData.second;
         if (shareDataActivityClassName != null
                 && !shareDataActivityClassName.equals(shareTargetActivityNameAndData.first)) {
             shareData = null;
@@ -373,7 +375,7 @@ public class WebApkIntentDataProviderFactory {
             long backgroundColor, int defaultBackgroundColor, boolean isPrimaryIconMaskable,
             boolean isSplashIconMaskable, String webApkPackageName, int shellApkVersion,
             String manifestUrl, String manifestStartUrl, @WebApkDistributor int distributor,
-            Map<String, String> iconUrlToMurmur2HashMap, ShareTarget shareTarget,
+            Map<String, String> iconUrlToMurmur2HashMap, WebApkShareTarget shareTarget,
             boolean forceNavigation, boolean isSplashProvidedByWebApk, ShareData shareData,
             List<ShortcutItem> shortcutItems, int webApkVersionCode) {
         if (manifestStartUrl == null || webApkPackageName == null) {
@@ -398,10 +400,6 @@ public class WebApkIntentDataProviderFactory {
 
         if (splashIcon == null) {
             splashIcon = new WebappIcon();
-        }
-
-        if (shareTarget == null) {
-            shareTarget = new ShareTarget();
         }
 
         WebappExtras webappExtras = new WebappExtras(
@@ -542,7 +540,9 @@ public class WebApkIntentDataProviderFactory {
      * Returns the name of activity or activity alias in WebAPK which handles share intents, and
      * the data about the handler.
      */
-    private static Pair<String, ShareTarget> extractFirstShareTarget(String webApkPackageName) {
+    @NonNull
+    private static Pair<String, WebApkShareTarget> extractFirstShareTarget(
+            String webApkPackageName) {
         Intent shareIntent = new Intent();
         shareIntent.setAction(Intent.ACTION_SEND);
         shareIntent.setPackage(webApkPackageName);
@@ -561,7 +561,7 @@ public class WebApkIntentDataProviderFactory {
             String shareAction =
                     IntentUtils.safeGetString(shareTargetMetaData, WebApkMetaDataKeys.SHARE_ACTION);
             if (TextUtils.isEmpty(shareAction)) {
-                return new Pair<>(null, new ShareTarget());
+                return new Pair<>(null, null);
             }
 
             String encodedFileNames = IntentUtils.safeGetString(
@@ -582,8 +582,7 @@ public class WebApkIntentDataProviderFactory {
             boolean isShareEncTypeMultipart = shareEncType != null
                     && shareEncType.toLowerCase(Locale.ENGLISH).equals("multipart/form-data");
 
-            ShareTarget target = new ShareTarget(
-                    IntentUtils.safeGetString(shareTargetMetaData, WebApkMetaDataKeys.SHARE_ACTION),
+            WebApkShareTarget target = new WebApkShareTarget(shareAction,
                     IntentUtils.safeGetString(
                             shareTargetMetaData, WebApkMetaDataKeys.SHARE_PARAM_TITLE),
                     IntentUtils.safeGetString(
@@ -592,6 +591,6 @@ public class WebApkIntentDataProviderFactory {
 
             return new Pair<>(shareTargetActivityName, target);
         }
-        return new Pair<>(null, new ShareTarget());
+        return new Pair<>(null, null);
     }
 }

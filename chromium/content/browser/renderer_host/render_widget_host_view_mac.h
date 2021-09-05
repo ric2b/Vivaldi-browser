@@ -165,9 +165,10 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   bool IsKeyboardLocked() override;
   base::flat_map<std::string, std::string> GetKeyboardLayoutMap() override;
   void GestureEventAck(const blink::WebGestureEvent& event,
-                       InputEventAckState ack_result) override;
-  void ProcessAckedTouchEvent(const TouchEventWithLatencyInfo& touch,
-                              InputEventAckState ack_result) override;
+                       blink::mojom::InputEventResultState ack_result) override;
+  void ProcessAckedTouchEvent(
+      const TouchEventWithLatencyInfo& touch,
+      blink::mojom::InputEventResultState ack_result) override;
 
   void DidOverscroll(const ui::DidOverscrollParams& params) override;
 
@@ -304,7 +305,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   void ForwardKeyboardEventWithCommands(
       const NativeWebKeyboardEvent& key_event,
       const ui::LatencyInfo& latency_info,
-      const std::vector<EditCommand>& commands) override;
+      std::vector<blink::mojom::EditCommandPtr> commands) override;
   void RouteOrProcessMouseEvent(const blink::WebMouseEvent& web_event) override;
   void RouteOrProcessTouchEvent(const blink::WebTouchEvent& web_event) override;
   void RouteOrProcessWheelEvent(
@@ -335,7 +336,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
       std::unique_ptr<InputEvent> event,
       const std::vector<uint8_t>& native_event_data,
       bool skip_in_browser,
-      const std::vector<EditCommand>& commands) override;
+      std::vector<blink::mojom::EditCommandPtr> commands) override;
   void RouteOrProcessMouseEvent(std::unique_ptr<InputEvent> event) override;
   void RouteOrProcessTouchEvent(std::unique_ptr<InputEvent> event) override;
   void RouteOrProcessWheelEvent(std::unique_ptr<InputEvent> event) override;

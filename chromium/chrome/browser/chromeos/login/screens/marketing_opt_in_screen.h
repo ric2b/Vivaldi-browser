@@ -6,6 +6,8 @@
 #define CHROME_BROWSER_CHROMEOS_LOGIN_SCREENS_MARKETING_OPT_IN_SCREEN_H_
 
 #include <memory>
+#include <unordered_set>
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -21,6 +23,8 @@ class MarketingOptInScreenView;
 // sign-in flow.
 class MarketingOptInScreen : public BaseScreen {
  public:
+  enum class Result { NEXT, NOT_APPLICABLE };
+
   // These values are persisted to logs. Entries should not be renumbered and
   // numeric values should never be reused. Must coincide with the enum
   // MarketingOptInScreenEvent
@@ -32,15 +36,22 @@ class MarketingOptInScreen : public BaseScreen {
     kMaxValue = kUserOptedOutWhenDefaultIsOptOut,
   };
 
-  enum class Country {
-    OTHER,
-    US,
-    GB,
-    CA,
+  // Whether the geolocation resolve was successful.
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused. Must coincide with the enum
+  // MarketingOptInScreenEvent
+  enum class GeolocationEvent {
+    kCouldNotDetermineCountry = 0,
+    kCountrySuccessfullyDetermined = 1,
+    kMaxValue = kCountrySuccessfullyDetermined,
   };
 
+  static std::string GetResultString(Result result);
+
+  using ScreenExitCallback = base::RepeatingCallback<void(Result result)>;
+
   MarketingOptInScreen(MarketingOptInScreenView* view,
-                       const base::RepeatingClosure& exit_callback);
+                       const ScreenExitCallback& exit_callback);
   ~MarketingOptInScreen() override;
 
   static MarketingOptInScreen* Get(ScreenManager* manager);
@@ -50,42 +61,59 @@ class MarketingOptInScreen : public BaseScreen {
 
   void SetA11yButtonVisibilityForTest(bool shown);
 
-  void set_exit_callback_for_testing(
-      const base::RepeatingClosure& exit_callback) {
+  void set_exit_callback_for_testing(const ScreenExitCallback& exit_callback) {
     exit_callback_ = exit_callback;
+  }
+
+  const ScreenExitCallback& get_exit_callback_for_testing() {
+    return exit_callback_;
   }
 
  protected:
   // BaseScreen:
+  bool MaybeSkip() override;
   void ShowImpl() override;
   void HideImpl() override;
 
  private:
-  // Exits the screen.
-  void ExitScreen();
-
   void OnA11yShelfNavigationButtonPrefChanged();
 
   // Checks whether this user is managed.
   bool IsCurrentUserManaged();
 
+  // Sets the country to be used if the feature is available in this region.
+  void SetCountryFromTimezoneIfAvailable(const std::string& timezone_id);
+
+  bool IsDefaultOptInCountry() {
+    return default_opt_in_countries_.count(country_);
+  }
+
   MarketingOptInScreenView* const view_;
-
-  // Whether the screen is shown and exit callback has not been run.
-  bool active_ = false;
-
-  base::RepeatingClosure exit_callback_;
-
+  ScreenExitCallback exit_callback_;
   std::unique_ptr<PrefChangeRegistrar> active_user_pref_change_registrar_;
-
-  // The country that was determined based on the timezone.
-  Country country_ = Country::OTHER;
 
   // Whether the email opt-in toggle is visible.
   bool email_opt_in_visible_ = false;
 
-  base::WeakPtrFactory<MarketingOptInScreen> weak_factory_{this};
+  // Country code. Unknown IFF empty.
+  std::string country_;
 
+  // Default country list.
+  const std::unordered_set<std::string> default_countries_{"us", "ca", "gb"};
+
+  // Extended country list. Protected behind the flag:
+  // - kOobeMarketingAdditionalCountriesSupported (DEFAULT_ON)
+  const std::unordered_set<std::string> additional_countries_{
+      "fr", "nl", "fi", "se", "no", "dk", "es", "it", "jp", "au"};
+
+  // Countries with double opt-in.  Behind the flag:
+  // - kOobeMarketingDoubleOptInCountriesSupported (DEFAULT_OFF)
+  const std::unordered_set<std::string> double_opt_in_countries_{"de"};
+
+  // Countries in which the toggle will be enabled by default.
+  const std::unordered_set<std::string> default_opt_in_countries_{"us"};
+
+  base::WeakPtrFactory<MarketingOptInScreen> weak_factory_{this};
   DISALLOW_COPY_AND_ASSIGN(MarketingOptInScreen);
 };
 

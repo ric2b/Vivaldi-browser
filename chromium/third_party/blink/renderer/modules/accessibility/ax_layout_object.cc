@@ -28,6 +28,10 @@
 
 #include "third_party/blink/renderer/modules/accessibility/ax_layout_object.h"
 
+#include <algorithm>
+#include <memory>
+#include <string>
+
 #include "third_party/blink/renderer/bindings/core/v8/v8_image_bitmap_options.h"
 #include "third_party/blink/renderer/core/aom/accessible_node.h"
 #include "third_party/blink/renderer/core/css/css_property_names.h"
@@ -322,8 +326,9 @@ bool AXLayoutObject::IsDefault() const {
 
   // Checks for any kind of disabled, including aria-disabled.
   if (Restriction() == kRestrictionDisabled ||
-      RoleValue() != ax::mojom::Role::kButton)
+      RoleValue() != ax::mojom::Role::kButton) {
     return false;
+  }
 
   // Will only match :default pseudo class if it's the first default button in
   // a form.
@@ -968,16 +973,15 @@ String AXLayoutObject::ImageDataUrl(const IntSize& max_size) const {
 
   ImageBitmapOptions* options = ImageBitmapOptions::Create();
   ImageBitmap* image_bitmap = nullptr;
-  Document* document = &node->GetDocument();
   if (auto* image = DynamicTo<HTMLImageElement>(node)) {
     image_bitmap = MakeGarbageCollected<ImageBitmap>(
-        image, base::Optional<IntRect>(), document, options);
+        image, base::Optional<IntRect>(), options);
   } else if (auto* canvas = DynamicTo<HTMLCanvasElement>(node)) {
     image_bitmap = MakeGarbageCollected<ImageBitmap>(
         canvas, base::Optional<IntRect>(), options);
   } else if (auto* video = DynamicTo<HTMLVideoElement>(node)) {
     image_bitmap = MakeGarbageCollected<ImageBitmap>(
-        video, base::Optional<IntRect>(), document, options);
+        video, base::Optional<IntRect>(), options);
   }
   if (!image_bitmap)
     return String();
@@ -1533,6 +1537,12 @@ String AXLayoutObject::StringValue() const {
     }
   }
 
+  // ARIA combobox can get value from  inner contents.
+  if (AriaRoleAttribute() == ax::mojom::Role::kComboBoxMenuButton) {
+    AXObjectSet visited;
+    return TextFromDescendants(visited, false);
+  }
+
   // FIXME: We might need to implement a value here for more types
   // FIXME: It would be better not to advertise a value at all for the types for
   // which we don't implement one; this would require subclassing or making
@@ -1763,10 +1773,9 @@ AXObject* AXLayoutObject::AccessibilityHitTest(const IntPoint& point) const {
       !layout_object_->IsBox())
     return nullptr;
 
-  auto* frame_view = DocumentFrameView();
-  if (!frame_view || !frame_view->UpdateAllLifecyclePhasesExceptPaint(
-                         DocumentUpdateReason::kAccessibility))
-    return nullptr;
+  // Must be called with lifecycle >= compositing clean.
+  DCHECK_GE(GetDocument()->Lifecycle().GetState(),
+            DocumentLifecycle::kCompositingClean);
 
   PaintLayer* layer = ToLayoutBox(layout_object_)->Layer();
 

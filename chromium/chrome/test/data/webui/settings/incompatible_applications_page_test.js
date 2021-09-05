@@ -3,13 +3,13 @@
 // found in the LICENSE file.
 
 // clang-format off
-// #import {IncompatibleApplicationsBrowserProxyImpl, IncompatibleApplication} from 'chrome://settings/settings.js';
-// #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-// #import {TestBrowserProxy} from 'chrome://test/test_browser_proxy.m.js';
-// #import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
+import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
+import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {IncompatibleApplication, IncompatibleApplicationsBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
+import {TestBrowserProxy} from 'chrome://test/test_browser_proxy.m.js';
 // clang-format on
 
-/** @implements {settings.IncompatibleApplicationsBrowserProxy} */
+/** @implements {IncompatibleApplicationsBrowserProxy} */
 class TestIncompatibleApplicationsBrowserProxy extends TestBrowserProxy {
   constructor() {
     super([
@@ -21,7 +21,7 @@ class TestIncompatibleApplicationsBrowserProxy extends TestBrowserProxy {
       'getListTitlePluralString',
     ]);
 
-    /** @private {!Array<!settings.IncompatibleApplication>} */
+    /** @private {!Array<!IncompatibleApplication>} */
     this.incompatibleApplications_ = [];
   }
 
@@ -62,7 +62,7 @@ class TestIncompatibleApplicationsBrowserProxy extends TestBrowserProxy {
   /**
    * Sets the list of incompatible applications returned by
    * requestIncompatibleApplicationsList().
-   * @param {!Array<!settings.IncompatibleApplication>} incompatibleApplications
+   * @param {!Array<!IncompatibleApplication>} incompatibleApplications
    */
   setIncompatibleApplications(incompatibleApplications) {
     this.incompatibleApplications_ = incompatibleApplications;
@@ -102,17 +102,17 @@ suite('incompatibleApplicationsHandler', function() {
   };
 
   /**
-   * @param {!Array<settings.IncompatibleApplication>}
+   * @param {!Array<IncompatibleApplication>}
    */
   function validateList(incompatibleApplications) {
     if (incompatibleApplications.length === 0) {
       const list =
           incompatibleApplicationsPage.$$('#incompatible-applications-list');
       assertEquals('none', list.style.display);
-      // The contents of a dom-if that is false no longer receive updates in
-      // Polymer 2. When there are no applications the parent dom-if becomes
-      // false, so only check that the list is hidden, but don't assert on
-      // number of DOM children.
+      // The contents of a dom-if that is false no longer receive updates. When
+      // there are no applications the parent dom-if becomes false, so only
+      // check that the list is hidden, but don't assert on number of DOM
+      // children.
       return;
     }
 
@@ -125,7 +125,7 @@ suite('incompatibleApplicationsHandler', function() {
   setup(function() {
     incompatibleApplicationsBrowserProxy =
         new TestIncompatibleApplicationsBrowserProxy();
-    settings.IncompatibleApplicationsBrowserProxyImpl.instance_ =
+    IncompatibleApplicationsBrowserProxyImpl.instance_ =
         incompatibleApplicationsBrowserProxy;
   });
 
@@ -147,7 +147,7 @@ suite('incompatibleApplicationsHandler', function() {
     return incompatibleApplicationsBrowserProxy
         .whenCalled('requestIncompatibleApplicationsList')
         .then(function() {
-          Polymer.dom.flush();
+          flush();
         });
   }
 
@@ -261,9 +261,9 @@ suite('incompatibleApplicationsHandler', function() {
       assertTrue(isDoneSection.hidden);
 
       // Send the event.
-      cr.webUIListenerCallback(
+      webUIListenerCallback(
           'incompatible-application-removed', incompatibleApplication1.name);
-      Polymer.dom.flush();
+      flush();
 
       // Make sure the list is now empty.
       validateList([]);

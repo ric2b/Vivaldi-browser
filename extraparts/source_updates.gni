@@ -1,22 +1,13 @@
 import("//build/config/chrome_build.gni")
 
 _main_dll_targets = []
-if (is_win) {
+if (is_win || is_mac) {
   _main_dll_targets += [
-    "//chrome:main_dll",
+    "//chrome:chrome_dll",
   ]
-
-  if (is_multi_dll_chrome) {
-    _main_dll_targets += [
-      "//chrome:chrome_child",
-    ]
-  }
 }
-if (!is_mac && !is_win && !is_android) {
+else if (!is_android) {
   _main_dll_targets += [ "//chrome:chrome_initial" ]
-}
-if (is_mac) {
-  _main_dll_targets += [ "//chrome:chrome_dll" ]
 }
 foreach(_target, _main_dll_targets) {
   update_target(_target) {
@@ -32,15 +23,9 @@ foreach(_target, _main_dll_targets) {
     }
     deps += [
       "//vivaldi/components:adverse_adblocking",
+      "//vivaldi/components:content_adverse_adblocking",
+      "//vivaldi/extensions:extensions_client"
     ]
-    if (_target != "//chrome:chrome_child") {
-      deps += [
-        "//vivaldi/components:content_adverse_adblocking",
-      ]
-    }
-    if (!is_android) {
-      deps += [ "//vivaldi/extensions:extensions_client" ]
-    }
   }
 }
 

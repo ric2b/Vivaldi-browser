@@ -11,6 +11,7 @@
 #include "third_party/blink/public/platform/web_effective_connection_type.h"
 #include "third_party/blink/renderer/core/css/css_custom_font_data.h"
 #include "third_party/blink/renderer/core/css/css_font_face.h"
+#include "third_party/blink/renderer/core/css/font_face_set_document.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
@@ -29,13 +30,55 @@
 
 namespace blink {
 
+bool RemoteFontFaceSource::NeedsInterventionToAlignWithLCPGoal() const {
+  DCHECK_EQ(display_, kFontDisplayAuto);
+  if (!base::FeatureList::IsEnabled(
+          features::kAlignFontDisplayAutoTimeoutWithLCPGoal)) {
+    return false;
+  }
+  if (!GetDocument() ||
+      !FontFaceSetDocument::From(*GetDocument())->HasReachedLCPLimit()) {
+    return false;
+  }
+  // If a 'font-display: auto' font hasn't finished loading by the LCP limit, it
+  // should enter the swap or failure period immediately, so that it doesn't
+  // become a source of bad LCP. The only exception is when the font is
+  // immediately available from the memory cache, in which case it can be used
+  // right away without any latency.
+  return !IsLoaded() ||
+         (!FinishedFromMemoryCache() && !finished_before_lcp_limit_);
+}
+
+RemoteFontFaceSource::DisplayPeriod
+RemoteFontFaceSource::ComputeFontDisplayAutoPeriod() const {
+  DCHECK_EQ(display_, kFontDisplayAuto);
+  if (NeedsInterventionToAlignWithLCPGoal()) {
+    using Mode = features::AlignFontDisplayAutoTimeoutWithLCPGoalMode;
+    Mode mode =
+        features::kAlignFontDisplayAutoTimeoutWithLCPGoalModeParam.Get();
+    if (mode == Mode::kToFailurePeriod)
+      return kFailurePeriod;
+    DCHECK_EQ(Mode::kToSwapPeriod, mode);
+    return kSwapPeriod;
+  }
+
+  if (is_intervention_triggered_)
+    return kSwapPeriod;
+
+  switch (phase_) {
+    case kNoLimitExceeded:
+    case kShortLimitExceeded:
+      return kBlockPeriod;
+    case kLongLimitExceeded:
+      return kSwapPeriod;
+  }
+}
+
 RemoteFontFaceSource::DisplayPeriod RemoteFontFaceSource::ComputePeriod()
     const {
   switch (display_) {
     case kFontDisplayAuto:
-      if (is_intervention_triggered_)
-        return kSwapPeriod;
-      FALLTHROUGH;
+      return ComputeFontDisplayAutoPeriod();
     case kFontDisplayBlock:
       switch (phase_) {
         case kNoLimitExceeded:
@@ -106,7 +149,8 @@ RemoteFontFaceSource::RemoteFontFaceSource(CSSFontFace* css_font_face,
                                                ReportOptions::kDoNotReport)),
       phase_(kNoLimitExceeded),
       is_intervention_triggered_(ShouldTriggerWebFontsIntervention()),
-      finished_before_document_rendering_begin_(false) {
+      finished_before_document_rendering_begin_(false),
+      finished_before_lcp_limit_(false) {
   DCHECK(face_);
   period_ = ComputePeriod();
 }
@@ -171,9 +215,11 @@ void RemoteFontFaceSource::NotifyFinished(Resource* resource) {
 
   PruneTable();
 
-  if (GetDocument() &&
-      !GetDocument()->GetFontPreloadManager().RenderingHasBegun()) {
-    finished_before_document_rendering_begin_ = true;
+  if (GetDocument()) {
+    if (!GetDocument()->GetFontPreloadManager().RenderingHasBegun())
+      finished_before_document_rendering_begin_ = true;
+    if (!FontFaceSetDocument::From(*GetDocument())->HasReachedLCPLimit())
+      finished_before_lcp_limit_ = true;
   }
 
   if (FinishedFromMemoryCache())
@@ -182,7 +228,8 @@ void RemoteFontFaceSource::NotifyFinished(Resource* resource) {
     UpdatePeriod();
 
   if (face_->FontLoaded(this)) {
-    font_selector_->FontFaceInvalidated();
+    font_selector_->FontFaceInvalidated(
+        FontInvalidationReason::kFontFaceLoaded);
 
     const scoped_refptr<FontCustomPlatformData> customFontData =
         font->GetCustomFontData();
@@ -220,19 +267,23 @@ void RemoteFontFaceSource::SetDisplay(FontDisplay display) {
   UpdatePeriod();
 }
 
-void RemoteFontFaceSource::UpdatePeriod() {
+bool RemoteFontFaceSource::UpdatePeriod() {
   DisplayPeriod new_period = ComputePeriod();
+  bool changed = new_period != period_;
 
   // Fallback font is invisible iff the font is loading and in the block period.
   // Invalidate the font if its fallback visibility has changed.
   if (IsLoading() && period_ != new_period &&
       (period_ == kBlockPeriod || new_period == kBlockPeriod)) {
     PruneTable();
-    if (face_->FallbackVisibilityChanged(this))
-      font_selector_->FontFaceInvalidated();
+    if (face_->FallbackVisibilityChanged(this)) {
+      font_selector_->FontFaceInvalidated(
+          FontInvalidationReason::kGeneralInvalidation);
+    }
     histograms_.RecordFallbackTime();
   }
   period_ = new_period;
+  return changed;
 }
 
 FontDisplay RemoteFontFaceSource::GetFontDisplayWithFeaturePolicyCheck(

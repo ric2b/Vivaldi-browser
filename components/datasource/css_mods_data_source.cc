@@ -24,7 +24,7 @@ CSSModsDataClassHandler::~CSSModsDataClassHandler() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 }
 
-bool CSSModsDataClassHandler::GetData(
+void CSSModsDataClassHandler::GetData(
     const std::string& data_id,
     content::URLDataSource::GotDataCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -40,20 +40,16 @@ bool CSSModsDataClassHandler::GetData(
             (size_t)data.length());
 
     std::move(callback).Run(std::move(memory));
-
-    return true;
+    return;
   }
 
-  // If callback was OnceCallback, we could pass it directly as the result
-  // argument to PostTask. But it is RepeatingCallback. Thus we use a helper
-  // method to redirect to it.
-  return base::PostTaskAndReplyWithResult(
+  base::PostTaskAndReplyWithResult(
       FROM_HERE,
       {base::ThreadPool(), base::TaskPriority::USER_VISIBLE, base::MayBlock(),
        base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
       base::BindOnce(&CSSModsDataClassHandler::GetDataForIdOnBlockingThread,
                      custom_css_path, data_id),
-      base::BindOnce(&CSSModsDataClassHandler::PostResultsOnThread, std::move(callback)));
+      std::move(callback));
 }
 
 // static
@@ -94,11 +90,4 @@ CSSModsDataClassHandler::GetDataForIdOnBlockingThread(base::FilePath dir_path,
     return extensions::VivaldiDataSourcesAPI::ReadFileOnBlockingThread(
         file_path);
   }
-}
-
-// static
-void CSSModsDataClassHandler::PostResultsOnThread(
-    content::URLDataSource::GotDataCallback callback,
-    scoped_refptr<base::RefCountedMemory> data) {
-  std::move(callback).Run(std::move(data));
 }

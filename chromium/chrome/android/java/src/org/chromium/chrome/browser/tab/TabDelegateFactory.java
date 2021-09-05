@@ -4,7 +4,10 @@
 
 package org.chromium.chrome.browser.tab;
 
+import androidx.annotation.Nullable;
+
 import org.chromium.chrome.browser.contextmenu.ContextMenuPopulator;
+import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.components.browser_ui.util.BrowserControlsVisibilityDelegate;
 import org.chromium.components.embedder_support.delegate.WebContentsDelegateAndroid;
 import org.chromium.components.external_intents.ExternalNavigationHandler;
@@ -41,4 +44,17 @@ public interface TabDelegateFactory {
      * @param tab The associated {@link Tab}.
      */
     BrowserControlsVisibilityDelegate createBrowserControlsVisibilityDelegate(Tab tab);
+
+    /**
+     * Returns a NativePage for displaying the given URL if the URL is a valid chrome-native URL,
+     * or null otherwise. If candidatePage is non-null and corresponds to the URL, it will be
+     * returned. Otherwise, a new NativePage will be constructed.
+     *
+     * @param url The URL to be handled.
+     * @param candidatePage A NativePage to be reused if it matches the url, or null.
+     * @param tab The Tab that will show the page.
+     * @return A NativePage showing the specified url or null.
+     */
+    @Nullable
+    NativePage createNativePage(String url, NativePage candidatePage, Tab tab);
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2015 Vivaldi Technologies AS. All rights reserved
+// Copyright (c) 2015-2020 Vivaldi Technologies AS. All rights reserved
 
 #ifndef SYNC_VIVALDI_PROFILE_SYNC_SERVICE_FACTORY_H_
 #define SYNC_VIVALDI_PROFILE_SYNC_SERVICE_FACTORY_H_

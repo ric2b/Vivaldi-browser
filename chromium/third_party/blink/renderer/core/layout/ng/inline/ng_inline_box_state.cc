@@ -116,8 +116,10 @@ NGInlineBoxState* NGInlineLayoutStateStack::OnBeginPlaceItems(
     // For the following lines, clear states that are not shared across lines.
     for (NGInlineBoxState& box : stack_) {
       box.fragment_start = line_box->size();
-      if (&box != stack_.begin())
+      if (box.needs_box_fragment) {
+        DCHECK_NE(&box, stack_.begin());
         AddBoxFragmentPlaceholder(&box, line_box, baseline_type);
+      }
       if (!line_height_quirk)
         box.metrics = box.text_metrics;
       else
@@ -158,7 +160,8 @@ NGInlineBoxState* NGInlineLayoutStateStack::OnOpenTag(
   NGInlineBoxState* box =
       OnOpenTag(item, item_result, baseline_type, *line_box);
   box->needs_box_fragment = item.ShouldCreateBoxFragment();
-  AddBoxFragmentPlaceholder(box, line_box, baseline_type);
+  if (box->needs_box_fragment)
+    AddBoxFragmentPlaceholder(box, line_box, baseline_type);
   return box;
 }
 
@@ -223,13 +226,8 @@ void NGInlineLayoutStateStack::EndBoxState(
     NGInlineBoxState* box,
     NGLineBoxFragmentBuilder::ChildList* line_box,
     FontBaseline baseline_type) {
-  if (!RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled()) {
-    if (box->needs_box_fragment)
-      AddBoxData(box, line_box);
-  } else {
-    if (box->has_box_placeholder)
-      AddBoxData(box, line_box);
-  }
+  if (box->needs_box_fragment)
+    AddBoxData(box, line_box);
 
   PositionPending position_pending =
       ApplyBaselineShift(box, line_box, baseline_type);
@@ -512,10 +510,10 @@ void NGInlineLayoutStateStack::BoxData::UpdateFragmentEdges(
 }
 
 LayoutUnit NGInlineLayoutStateStack::ComputeInlinePositions(
-    NGLineBoxFragmentBuilder::ChildList* line_box) {
+    NGLineBoxFragmentBuilder::ChildList* line_box,
+    LayoutUnit position) {
   // At this point, children are in the visual order, and they have their
   // origins at (0, 0). Accumulate inline offset from left to right.
-  LayoutUnit position;
   for (NGLineBoxFragmentBuilder::Child& child : *line_box) {
     child.margin_line_left = child.rect.offset.inline_offset;
     child.rect.offset.inline_offset += position;
@@ -658,8 +656,6 @@ NGInlineLayoutStateStack::BoxData::CreateBoxFragment(
   // supported today.
   box.SetBorderEdges({true, has_line_right_edge, true, has_line_left_edge});
 
-  box.SetIsFirstForNode(has_line_left_edge);
-
   for (unsigned i = fragment_start; i < fragment_end; i++) {
     NGLineBoxFragmentBuilder::Child& child = (*line_box)[i];
     if (child.out_of_flow_positioned_box) {
@@ -700,11 +696,9 @@ NGInlineLayoutStateStack::BoxData::CreateBoxFragment(
     }
   }
 
-  if (!RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled()) {
-    // Inline boxes that produce DisplayItemClient should do full paint
-    // invalidations.
-    item->GetLayoutObject()->SetShouldDoFullPaintInvalidation();
-  }
+  // Inline boxes that produce DisplayItemClient should do full paint
+  // invalidations.
+  item->GetLayoutObject()->SetShouldDoFullPaintInvalidation();
 
   box.MoveOutOfFlowDescendantCandidatesToDescendants();
   return box.ToInlineBoxFragment();

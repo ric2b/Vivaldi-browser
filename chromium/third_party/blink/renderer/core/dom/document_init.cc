@@ -29,6 +29,8 @@
 
 #include "third_party/blink/renderer/core/dom/document_init.h"
 
+#include "services/network/public/cpp/web_sandbox_flags.h"
+#include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_implementation.h"
@@ -61,27 +63,20 @@ static Document* ParentDocument(DocumentLoader* loader) {
   return &owner_element->GetDocument();
 }
 
+// static
 DocumentInit DocumentInit::Create() {
-  return DocumentInit(nullptr);
+  return DocumentInit();
 }
-
-DocumentInit DocumentInit::CreateWithImportsController(
-    HTMLImportsController* controller) {
-  DCHECK(controller);
-  Document* master = controller->Master();
-  return DocumentInit(controller)
-      .WithContextDocument(master->ContextDocument())
-      .WithRegistrationContext(master->RegistrationContext());
-}
-
-DocumentInit::DocumentInit(HTMLImportsController* imports_controller)
-    : imports_controller_(imports_controller),
-      create_new_registration_context_(false),
-      content_security_policy_from_context_doc_(false) {}
 
 DocumentInit::DocumentInit(const DocumentInit&) = default;
 
 DocumentInit::~DocumentInit() = default;
+
+DocumentInit& DocumentInit::WithImportsController(
+    HTMLImportsController* controller) {
+  imports_controller_ = controller;
+  return *this;
+}
 
 bool DocumentInit::ShouldSetURL() const {
   DocumentLoader* loader = MasterDocumentLoader();
@@ -105,8 +100,8 @@ DocumentLoader* DocumentInit::MasterDocumentLoader() const {
   return nullptr;
 }
 
-mojom::blink::WebSandboxFlags DocumentInit::GetSandboxFlags() const {
-  mojom::blink::WebSandboxFlags flags = sandbox_flags_;
+network::mojom::blink::WebSandboxFlags DocumentInit::GetSandboxFlags() const {
+  network::mojom::blink::WebSandboxFlags flags = sandbox_flags_;
   if (DocumentLoader* loader = MasterDocumentLoader())
     flags |= loader->GetFrame()->Loader().EffectiveSandboxFlags();
   // If the load was blocked by CSP, force the Document's origin to be unique,
@@ -114,7 +109,7 @@ mojom::blink::WebSandboxFlags DocumentInit::GetSandboxFlags() const {
   // document's load per CSP spec:
   // https://www.w3.org/TR/CSP3/#directive-frame-ancestors.
   if (blocked_by_csp_)
-    flags |= mojom::blink::WebSandboxFlags::kOrigin;
+    flags |= network::mojom::blink::WebSandboxFlags::kOrigin;
   return flags;
 }
 
@@ -162,80 +157,90 @@ UseCounter* DocumentInit::GetUseCounter() const {
   return document_loader_;
 }
 
-DocumentInit& DocumentInit::WithTypeFrom(const String& type) {
-  mime_type_ = type;
-
-  if (GetFrame() && GetFrame()->InViewSourceMode()) {
-    type_ = Type::kViewSource;
-    return *this;
-  }
+// static
+DocumentInit::Type DocumentInit::ComputeDocumentType(
+    LocalFrame* frame,
+    const KURL& url,
+    const String& mime_type,
+    bool* is_for_external_handler) {
+  if (frame && frame->InViewSourceMode())
+    return Type::kViewSource;
 
   // Plugins cannot take HTML and XHTML from us, and we don't even need to
   // initialize the plugin database for those.
-  if (type == "text/html") {
-    type_ = Type::kHTML;
-    return *this;
-  }
-  if (type == "application/xhtml+xml") {
-    type_ = Type::kXHTML;
-    return *this;
-  }
+  if (mime_type == "text/html")
+    return Type::kHTML;
+
+  if (mime_type == "application/xhtml+xml")
+    return Type::kXHTML;
+
   // multipart/x-mixed-replace is only supported for images.
-  if (MIMETypeRegistry::IsSupportedImageResourceMIMEType(type) ||
-      type == "multipart/x-mixed-replace") {
-    type_ = Type::kImage;
-    return *this;
-  }
-  if (HTMLMediaElement::GetSupportsType(ContentType(type))) {
-    type_ = Type::kMedia;
-    return *this;
+  if (MIMETypeRegistry::IsSupportedImageResourceMIMEType(mime_type) ||
+      mime_type == "multipart/x-mixed-replace") {
+    return Type::kImage;
   }
 
-  PluginData* plugin_data = nullptr;
-  if (GetFrame() && GetFrame()->GetPage() &&
-      GetFrame()->Loader().AllowPlugins(kNotAboutToInstantiatePlugin)) {
-    // If the document is being created for the main frame,
-    // frame()->tree().top()->securityContext() returns nullptr.
-    // For that reason, the origin must be retrieved directly from url().
-    if (GetFrame()->IsMainFrame()) {
-      scoped_refptr<const SecurityOrigin> origin =
-          SecurityOrigin::Create(Url());
-      plugin_data = GetFrame()->GetPage()->GetPluginData(origin.get());
-    } else {
-      auto* top_security_origin =
-          GetFrame()->Tree().Top().GetSecurityContext()->GetSecurityOrigin();
-      plugin_data = GetFrame()->GetPage()->GetPluginData(top_security_origin);
+  if (HTMLMediaElement::GetSupportsType(ContentType(mime_type)))
+    return Type::kMedia;
+
+  if (frame && frame->GetPage() &&
+      frame->Loader().AllowPlugins(kNotAboutToInstantiatePlugin)) {
+    PluginData* plugin_data = GetPluginData(frame, url);
+
+    // Everything else except text/plain can be overridden by plugins.
+    // Disallowing plugins to use text/plain prevents plugins from hijacking a
+    // fundamental type that the browser is expected to handle, and also serves
+    // as an optimization to prevent loading the plugin database in the common
+    // case.
+    if (mime_type != "text/plain" && plugin_data &&
+        plugin_data->SupportsMimeType(mime_type)) {
+      // Plugins handled by MimeHandlerView do not create a PluginDocument. They
+      // are rendered inside cross-process frames and the notion of a PluginView
+      // (which is associated with PluginDocument) is irrelevant here.
+      if (plugin_data->IsExternalPluginMimeType(mime_type)) {
+        if (is_for_external_handler)
+          *is_for_external_handler = true;
+        return Type::kHTML;
+      }
+
+      return Type::kPlugin;
     }
   }
 
-  // Everything else except text/plain can be overridden by plugins.
-  // Disallowing plugins to use text/plain prevents plugins from hijacking a
-  // fundamental type that the browser is expected to handle, and also serves as
-  // an optimization to prevent loading the plugin database in the common case.
-  if (type != "text/plain" && plugin_data &&
-      plugin_data->SupportsMimeType(type)) {
-    // Plugins handled by MimeHandlerView do not create a PluginDocument. They
-    // are rendered inside cross-process frames and the notion of a PluginView
-    // (which is associated with PluginDocument) is irrelevant here.
-    if (plugin_data->IsExternalPluginMimeType(type)) {
-      type_ = Type::kHTML;
-      is_for_external_handler_ = true;
-    } else {
-      type_ = Type::kPlugin;
-      plugin_background_color_ =
-          plugin_data->PluginBackgroundColorForMimeType(type);
-    }
-    return *this;
-  }
+  if (DOMImplementation::IsTextMIMEType(mime_type))
+    return Type::kText;
 
-  if (DOMImplementation::IsTextMIMEType(type))
-    type_ = Type::kText;
-  else if (type == "image/svg+xml")
-    type_ = Type::kSVG;
-  else if (DOMImplementation::IsXMLMIMEType(type))
-    type_ = Type::kXML;
-  else
-    type_ = Type::kHTML;
+  if (mime_type == "image/svg+xml")
+    return Type::kSVG;
+
+  if (DOMImplementation::IsXMLMIMEType(mime_type))
+    return Type::kXML;
+
+  return Type::kHTML;
+}
+
+// static
+PluginData* DocumentInit::GetPluginData(LocalFrame* frame, const KURL& url) {
+  // If the document is being created for the main frame,
+  // frame()->tree().top()->securityContext() returns nullptr.
+  // For that reason, the origin must be retrieved directly from |url|.
+  if (frame->IsMainFrame())
+    return frame->GetPage()->GetPluginData(SecurityOrigin::Create(url).get());
+
+  const SecurityOrigin* main_frame_origin =
+      frame->Tree().Top().GetSecurityContext()->GetSecurityOrigin();
+  return frame->GetPage()->GetPluginData(main_frame_origin);
+}
+
+DocumentInit& DocumentInit::WithTypeFrom(const String& mime_type) {
+  mime_type_ = mime_type;
+  type_ = ComputeDocumentType(GetFrame(), Url(), mime_type_,
+                              &is_for_external_handler_);
+  if (type_ == Type::kPlugin) {
+    plugin_background_color_ =
+        GetPluginData(GetFrame(), Url())
+            ->PluginBackgroundColorForMimeType(mime_type_);
+  }
   return *this;
 }
 
@@ -365,7 +370,7 @@ DocumentInit& DocumentInit::WithOriginTrialsHeader(const String& header) {
 }
 
 DocumentInit& DocumentInit::WithSandboxFlags(
-    mojom::blink::WebSandboxFlags flags) {
+    network::mojom::blink::WebSandboxFlags flags) {
   // Only allow adding more sandbox flags.
   sandbox_flags_ |= flags;
   return *this;
@@ -437,17 +442,14 @@ WindowAgentFactory* DocumentInit::GetWindowAgentFactory() const {
   // If we are a page popup in LayoutTests ensure we use the popup
   // owner's frame for looking up the Agent so the tests can possibly
   // access the document via internals API.
-  if (IsPagePopupRunningInWebTest(GetFrame())) {
-    auto* frame = GetFrame()->PagePopupOwner()->GetDocument().GetFrame();
-    return &frame->window_agent_factory();
-  }
-  if (GetFrame())
-    return &GetFrame()->window_agent_factory();
-  if (Document* context_document = ContextDocument())
+  LocalFrame* frame = nullptr;
+  if (IsPagePopupRunningInWebTest(GetFrame()))
+    frame = GetFrame()->PagePopupOwner()->GetDocument().GetFrame();
+  else if (GetFrame())
+    frame = GetFrame();
+  else if (Document* context_document = ContextDocument())
     return context_document->GetWindowAgentFactory();
-  if (const Document* owner_document = OwnerDocument())
-    return owner_document->GetWindowAgentFactory();
-  return nullptr;
+  return frame ? &frame->window_agent_factory() : nullptr;
 }
 
 Settings* DocumentInit::GetSettingsForWindowAgentFactory() const {
@@ -458,8 +460,6 @@ Settings* DocumentInit::GetSettingsForWindowAgentFactory() const {
     frame = GetFrame();
   else if (Document* context_document = ContextDocument())
     frame = context_document->GetFrame();
-  else if (const Document* owner_document = OwnerDocument())
-    frame = owner_document->GetFrame();
   return frame ? frame->GetSettings() : nullptr;
 }
 

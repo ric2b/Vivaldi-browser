@@ -15,12 +15,13 @@ import static org.chromium.content_public.browser.test.util.TestThreadUtils.runO
 import android.net.Uri;
 import android.support.test.filters.SmallTest;
 
+import org.hamcrest.Matchers;
+import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CallbackHelper;
-import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.util.TestWebServer;
@@ -124,14 +125,7 @@ public class NavigationTest {
 
             public void waitUntilValueObserved(String expectation) {
                 CriteriaHelper.pollInstrumentationThread(
-                        new Criteria() {
-                            @Override
-                            public boolean isSatisfied() {
-                                return mObservedValues.contains(expectation);
-                            }
-                        },
-                        CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL,
-                        CriteriaHelper.DEFAULT_POLLING_INTERVAL);
+                        () -> Assert.assertThat(expectation, Matchers.isIn(mObservedValues)));
             }
         }
 
@@ -665,5 +659,33 @@ public class NavigationTest {
         registerNavigationCallback(setter);
         mActivityTestRule.navigateAndWait(URL1);
         assertTrue(setter.mGotIllegalArgumentException);
+    }
+
+    // NavigationCallback implementation that sets the user-agent string in onNavigationStarted().
+    private static final class UserAgentSetter extends NavigationCallback {
+        private final String mValue;
+
+        UserAgentSetter(String value) {
+            mValue = value;
+        }
+
+        @Override
+        public void onNavigationStarted(Navigation navigation) {
+            navigation.setUserAgentString(mValue);
+        }
+    }
+
+    @Test
+    @SmallTest
+    public void testSetUserAgentString() throws Exception {
+        TestWebServer testServer = TestWebServer.start();
+        InstrumentationActivity activity = mActivityTestRule.launchShellWithUrl(null);
+        String customUserAgent = "custom-ua";
+        UserAgentSetter setter = new UserAgentSetter(customUserAgent);
+        registerNavigationCallback(setter);
+        String url = testServer.setResponse("/ok.html", "<html>ok</html>", null);
+        mActivityTestRule.navigateAndWait(url);
+        String actualUserAgent = testServer.getLastRequest("/ok.html").headerValue("User-Agent");
+        assertEquals(customUserAgent, actualUserAgent);
     }
 }

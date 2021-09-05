@@ -75,6 +75,9 @@ class CONTENT_EXPORT RenderFrameProxyHost
   using CreatedCallback = base::RepeatingCallback<void(RenderFrameProxyHost*)>;
 
   static RenderFrameProxyHost* FromID(int process_id, int routing_id);
+  static RenderFrameProxyHost* FromFrameToken(
+      int process_id,
+      const base::UnguessableToken& frame_token);
 
   // Sets a callback to be called whenever any RenderFrameProxyHost is created.
   static void SetCreatedCallbackForTesting(
@@ -174,6 +177,8 @@ class CONTENT_EXPORT RenderFrameProxyHost
   blink::AssociatedInterfaceProvider* GetRemoteAssociatedInterfacesTesting();
   bool IsInertForTesting();
 
+  const base::UnguessableToken& GetFrameToken() const { return frame_token_; }
+
  private:
   // IPC Message handlers.
   void OnDetach();
@@ -238,6 +243,8 @@ class CONTENT_EXPORT RenderFrameProxyHost
 
   mojo::AssociatedReceiver<blink::mojom::RemoteFrameHost>
       remote_frame_host_receiver_{this};
+
+  base::UnguessableToken frame_token_ = base::UnguessableToken::Create();
 
   DISALLOW_COPY_AND_ASSIGN(RenderFrameProxyHost);
 };

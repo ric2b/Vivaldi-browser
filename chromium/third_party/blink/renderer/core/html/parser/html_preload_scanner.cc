@@ -302,53 +302,20 @@ class TokenPreloadScanner::StartTagScanner {
         document_parameters.lazyload_policy_enforced) {
       effective_loading_attr_value = LoadingAttrValue::kAuto;
     }
-    if (type == ResourceType::kImage) {
-      bool is_lazy_load_image_enabled = false;
-      switch (effective_loading_attr_value) {
-        case LoadingAttrValue::kEager:
-          is_lazy_load_image_enabled = false;
-          break;
-        case LoadingAttrValue::kLazy:
-          is_lazy_load_image_enabled =
-              document_parameters.lazy_load_image_setting !=
-              LocalFrame::LazyLoadImageSetting::kDisabled;
-          break;
-        case LoadingAttrValue::kAuto:
-          if ((width_attr_dimension_type_ ==
-                   HTMLImageElement::LazyLoadDimensionType::kAbsoluteSmall &&
-               height_attr_dimension_type_ ==
-                   HTMLImageElement::LazyLoadDimensionType::kAbsoluteSmall) ||
-              inline_style_dimensions_type_ ==
-                  HTMLImageElement::LazyLoadDimensionType::kAbsoluteSmall) {
-            is_lazy_load_image_enabled = false;
-          } else {
-            is_lazy_load_image_enabled =
-                document_parameters.lazy_load_image_setting ==
-                LocalFrame::LazyLoadImageSetting::kEnabledAutomatic;
-          }
-          break;
-      }
-      // Do not preload if lazyload is possible but metadata fetch is disabled.
-      if (is_lazy_load_image_enabled &&
-          !RuntimeEnabledFeatures::LazyImageLoadingMetadataFetchEnabled()) {
-        return nullptr;
-      }
-      // LazyLoad: Do not preload if absolute dimensions are mentioned in width
-      // and height attributes or in the inline style, and the dimensions are
-      // not small enough.
-      if (is_lazy_load_image_enabled &&
-          ((width_attr_dimension_type_ ==
-                HTMLImageElement::LazyLoadDimensionType::kAbsoluteNotSmall &&
-            height_attr_dimension_type_ ==
-                HTMLImageElement::LazyLoadDimensionType::kAbsoluteNotSmall) ||
-           inline_style_dimensions_type_ ==
-               HTMLImageElement::LazyLoadDimensionType::kAbsoluteNotSmall)) {
-        return nullptr;
-      }
-      request->SetIsLazyLoadImageEnabled(is_lazy_load_image_enabled);
+    if (type == ResourceType::kImage && Match(tag_impl_, html_names::kImgTag) &&
+        IsLazyLoadImageDeferable(document_parameters)) {
+      return nullptr;
     }
-
-    request->SetIntegrityMetadata(integrity_metadata_);
+    // Do not set integrity metadata for <link> elements for destinations not
+    // supporting SRI (crbug.com/1058045).
+    // A corresponding check for non-preload-scanner code path is in
+    // PreloadHelper::PreloadIfNeeded().
+    // TODO(crbug.com/981419): Honor the integrity attribute value for all
+    // supported preload destinations, not just the destinations that support
+    // SRI in the first place.
+    if (type == ResourceType::kScript || type == ResourceType::kCSSStyleSheet) {
+      request->SetIntegrityMetadata(integrity_metadata_);
+    }
 
     if (scanner_type_ == ScannerType::kInsertion)
       request->SetFromInsertionScanner(true);
@@ -577,6 +544,50 @@ class TokenPreloadScanner::StartTagScanner {
       ProcessSourceAttribute(attribute_name, attribute_value);
     else if (Match(tag_impl_, html_names::kVideoTag))
       ProcessVideoAttribute(attribute_name, attribute_value);
+  }
+
+  bool IsLazyLoadImageDeferable(
+      const CachedDocumentParameters& document_parameters) {
+    if (!document_parameters.lazy_load_image_observer)
+      return false;
+
+    bool is_fully_loadable =
+        document_parameters.lazy_load_image_observer
+            ->IsFullyLoadableFirstKImageAndDecrementCount();
+    if (document_parameters.lazy_load_image_setting ==
+        LocalFrame::LazyLoadImageSetting::kDisabled) {
+      return false;
+    }
+
+    // If the 'lazyload' feature policy is enforced, the attribute value
+    // loading='eager' is considered as 'auto'.
+    LoadingAttrValue effective_loading_attr_value = loading_attr_value_;
+    if (effective_loading_attr_value == LoadingAttrValue::kEager &&
+        document_parameters.lazyload_policy_enforced) {
+      effective_loading_attr_value = LoadingAttrValue::kAuto;
+    }
+    switch (effective_loading_attr_value) {
+      case LoadingAttrValue::kEager:
+        return false;
+      case LoadingAttrValue::kLazy:
+        return true;
+      case LoadingAttrValue::kAuto:
+        if ((width_attr_dimension_type_ ==
+                 HTMLImageElement::LazyLoadDimensionType::kAbsoluteSmall &&
+             height_attr_dimension_type_ ==
+                 HTMLImageElement::LazyLoadDimensionType::kAbsoluteSmall) ||
+            inline_style_dimensions_type_ ==
+                HTMLImageElement::LazyLoadDimensionType::kAbsoluteSmall) {
+          // Fetch small images eagerly.
+          return false;
+        } else if (is_fully_loadable ||
+                   document_parameters.lazy_load_image_setting !=
+                       LocalFrame::LazyLoadImageSetting::kEnabledAutomatic) {
+          return false;
+        }
+        break;
+    }
+    return true;
   }
 
   void SetUrlToLoad(const String& value, URLReplacement replacement) {
@@ -972,7 +983,8 @@ void TokenPreloadScanner::ScanCommon(
                 token.GetAttributeItem(html_names::kContentAttr);
             if (content_attribute) {
               client_hints_preferences_.UpdateFromAcceptClientHintsHeader(
-                  content_attribute->Value(), document_url_, nullptr);
+                  content_attribute->Value(), document_url_,
+                  ClientHintsPreferences::UpdateMode::kMerge, nullptr);
             }
           }
           return;
@@ -1106,6 +1118,7 @@ CachedDocumentParameters::CachedDocumentParameters(Document* document) {
   if (document->Loader() && document->Loader()->GetFrame()) {
     lazy_load_image_setting =
         document->Loader()->GetFrame()->GetLazyLoadImageSetting();
+    lazy_load_image_observer = document->EnsureLazyLoadImageObserver();
   } else {
     lazy_load_image_setting = LocalFrame::LazyLoadImageSetting::kDisabled;
   }

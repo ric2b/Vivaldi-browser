@@ -22,8 +22,6 @@ import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.NormalizedAddressRequestDelegate;
-import org.chromium.chrome.browser.autofill.prefeditor.Completable;
-import org.chromium.chrome.browser.autofill.prefeditor.EditableOption;
 import org.chromium.chrome.browser.compositor.layouts.EmptyOverviewModeObserver;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior.OverviewModeObserver;
@@ -41,10 +39,9 @@ import org.chromium.chrome.browser.payments.ui.SectionInformation;
 import org.chromium.chrome.browser.payments.ui.ShoppingCart;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.SettingsLauncher;
-import org.chromium.chrome.browser.ssl.ChromeSecurityStateModelDelegate;
+import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabSelectionType;
-import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelObserver;
@@ -54,6 +51,8 @@ import org.chromium.chrome.browser.ui.favicon.FaviconHelper;
 import org.chromium.chrome.browser.widget.ScrimView;
 import org.chromium.chrome.browser.widget.ScrimView.EmptyScrimObserver;
 import org.chromium.chrome.browser.widget.ScrimView.ScrimParams;
+import org.chromium.components.autofill.Completable;
+import org.chromium.components.autofill.EditableOption;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.page_info.CertificateChainHelper;
 import org.chromium.components.payments.CurrencyFormatter;
@@ -62,6 +61,7 @@ import org.chromium.components.payments.ErrorStrings;
 import org.chromium.components.payments.MethodStrings;
 import org.chromium.components.payments.OriginSecurityChecker;
 import org.chromium.components.payments.PayerData;
+import org.chromium.components.payments.PaymentApp;
 import org.chromium.components.payments.PaymentDetailsConverter;
 import org.chromium.components.payments.PaymentHandlerHost;
 import org.chromium.components.payments.PaymentHandlerHost.PaymentHandlerHostDelegate;
@@ -93,8 +93,8 @@ import org.chromium.payments.mojom.PaymentResponse;
 import org.chromium.payments.mojom.PaymentShippingOption;
 import org.chromium.payments.mojom.PaymentShippingType;
 import org.chromium.payments.mojom.PaymentValidationErrors;
+import org.chromium.url.GURL;
 import org.chromium.url.Origin;
-import org.chromium.url.URI;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -115,7 +115,7 @@ import java.util.Set;
  */
 public class PaymentRequestImpl
         implements PaymentRequest, PaymentRequestUI.Client, PaymentAppFactoryDelegate,
-                   PaymentAppFactoryParams, PaymentApp.PaymentRequestUpdateEventCallback,
+                   PaymentAppFactoryParams, PaymentApp.PaymentRequestUpdateEventListener,
                    PaymentApp.AbortCallback, PaymentApp.InstrumentDetailsCallback,
                    PaymentResponseHelper.PaymentResponseRequesterDelegate, FocusChangedObserver,
                    NormalizedAddressRequestDelegate, SettingsAutofillAndPaymentsObserver.Observer,
@@ -382,7 +382,7 @@ public class PaymentRequestImpl
     };
 
     /** Monitors changes in the current TabModel. */
-    private final TabModelObserver mTabModelObserver = new EmptyTabModelObserver() {
+    private final TabModelObserver mTabModelObserver = new TabModelObserver() {
         @Override
         public void didSelectTab(Tab tab, @TabSelectionType int type, int lastId) {
             if (tab == null || tab.getId() != lastId) {
@@ -896,8 +896,7 @@ public class PaymentRequestImpl
 
         mUI = new PaymentRequestUI(activity, this, mMerchantSupportsAutofillCards,
                 !PaymentPreferencesUtil.isPaymentCompleteOnce(), mMerchantName, mTopLevelOrigin,
-                SecurityStateModel.getSecurityLevelForWebContents(
-                        mWebContents, ChromeSecurityStateModelDelegate.getInstance()),
+                SecurityStateModel.getSecurityLevelForWebContents(mWebContents),
                 new ShippingStrings(mShippingType), mPaymentUisShowStateReconciler);
         activity.getLifecycleDispatcher().register(mUI);
 
@@ -1356,7 +1355,7 @@ public class PaymentRequestImpl
      * @return Whether the opening is successful.
      */
     public static boolean openPaymentHandlerWindow(
-            URI url, PaymentHandlerWebContentsObserver paymentHandlerWebContentsObserver) {
+            GURL url, PaymentHandlerWebContentsObserver paymentHandlerWebContentsObserver) {
         return sShowingPaymentRequest != null
                 && sShowingPaymentRequest.openPaymentHandlerWindowInternal(
                         url, paymentHandlerWebContentsObserver);
@@ -1370,12 +1369,12 @@ public class PaymentRequestImpl
      * @return Whether the opening is successful.
      */
     private boolean openPaymentHandlerWindowInternal(
-            URI url, PaymentHandlerWebContentsObserver paymentHandlerWebContentsObserver) {
+            GURL url, PaymentHandlerWebContentsObserver paymentHandlerWebContentsObserver) {
         assert mInvokedPaymentApp != null;
         assert mInvokedPaymentApp instanceof ServiceWorkerPaymentApp;
-        assert org.chromium.components.embedder_support.util.Origin.create(url.toString())
+        assert org.chromium.components.embedder_support.util.Origin.create(url.getSpec())
                 .equals(org.chromium.components.embedder_support.util.Origin.create(
-                        ((ServiceWorkerPaymentApp) mInvokedPaymentApp).getScope().toString()));
+                        ((ServiceWorkerPaymentApp) mInvokedPaymentApp).getScope().getSpec()));
 
         if (mPaymentHandlerUi != null) return false;
         mPaymentHandlerUi = new PaymentHandlerCoordinator();
@@ -2366,7 +2365,8 @@ public class PaymentRequestImpl
             return;
         }
 
-        SettingsLauncher.getInstance().launchSettingsPage(context);
+        SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
+        settingsLauncher.launchSettingsActivity(context);
     }
 
     @Override
@@ -2612,7 +2612,7 @@ public class PaymentRequestImpl
 
     // PaymentAppFactoryParams implementation.
     @Override
-    public PaymentApp.PaymentRequestUpdateEventCallback getPaymentRequestUpdateEventCallback() {
+    public PaymentApp.PaymentRequestUpdateEventListener getPaymentRequestUpdateEventListener() {
         return this;
     }
 
@@ -2620,6 +2620,12 @@ public class PaymentRequestImpl
     @Override
     public String getTotalAmountCurrency() {
         return mRawTotal.amount.currency;
+    }
+
+    // PaymentAppFactoryParams implementation.
+    @Override
+    public boolean requestShippingOrPayerContact() {
+        return mRequestShipping || mRequestPayerName || mRequestPayerPhone || mRequestPayerEmail;
     }
 
     // PaymentAppFactoryDelegate implementation.
@@ -2872,11 +2878,6 @@ public class PaymentRequestImpl
 
         mPaymentResponseHelper.onPaymentDetailsReceived(methodName, stringifiedDetails, payerData);
     }
-
-    /** Stub method to get removed after resolving clank dependencies. */
-    @Override
-    public void onInstrumentDetailsReady(String methodName, String stringifiedDetails,
-            org.chromium.chrome.browser.payments.PayerData payerData) {}
 
     @Override
     public void onPaymentResponseReady(PaymentResponse response) {

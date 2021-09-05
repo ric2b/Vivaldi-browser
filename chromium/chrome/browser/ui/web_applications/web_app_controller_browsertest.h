@@ -24,6 +24,8 @@ class WebContents;
 
 namespace web_app {
 
+class WebAppProviderBase;
+
 enum class ControllerType {
   kHostedAppController,
   kUnifiedControllerWithBookmarkApp,
@@ -43,6 +45,8 @@ class WebAppControllerBrowserTestBase
   WebAppControllerBrowserTestBase();
   ~WebAppControllerBrowserTestBase() = 0;
 
+  WebAppProviderBase& provider();
+
   AppId InstallPWA(const GURL& app_url);
 
   AppId InstallWebApp(std::unique_ptr<WebApplicationInfo> web_app_info);
@@ -52,6 +56,9 @@ class WebAppControllerBrowserTestBase
 
   // Launches the app, waits for the app url to load.
   Browser* LaunchWebAppBrowserAndWait(const AppId&);
+
+  // Launches the app, waits for it to load and finish the installability check.
+  Browser* LaunchWebAppBrowserAndAwaitInstallabilityCheck(const AppId&);
 
   // Launches the app as a tab and returns the browser.
   Browser* LaunchBrowserForWebAppInTab(const AppId&);

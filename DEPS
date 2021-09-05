@@ -107,18 +107,6 @@ hooks = [
                 '-s', 'chromium/build/ciopfs.sha1',
     ]
   },
-  # Pull binutils for linux, enabled debug fission for faster linking /
-  # debugging when used with clang on Ubuntu Precise.
-  # https://code.google.com/p/chromium/issues/detail?id=352046
-  {
-    'name': 'binutils',
-    'pattern': 'chromium/third_party/binutils',
-    'condition': 'host_os == "linux"',
-    'action': [
-      'python', "-u",
-      'chromium/third_party/binutils/download.py'
-    ],
-  },
   {
     # Update the prebuilt clang toolchain.
     # Note: On Win, this should run after win_toolchain, as it may use it.
@@ -330,7 +318,7 @@ hooks = [
     'pattern': '.',
     'condition': 'checkout_android or checkout_linux',
     'action': [ 'vpython',
-                'chromium/tools/download_cros_provided_profile.py',
+                'chromium/tools/download_optimization_profile.py',
                 '--newest_state=chromium/chrome/android/profiles/newest.txt',
                 '--local_state=chromium/chrome/android/profiles/local.txt',
                 '--output_name=chromium/chrome/android/profiles/afdo.prof',

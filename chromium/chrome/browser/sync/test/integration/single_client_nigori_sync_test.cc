@@ -11,6 +11,7 @@
 #include "base/strings/string16.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "chrome/browser/sync/sync_ui_util.h"
@@ -30,6 +31,9 @@
 #include "components/sync/engine/sync_engine_switches.h"
 #include "components/sync/nigori/cryptographer_impl.h"
 #include "components/sync/nigori/nigori.h"
+#include "components/sync/nigori/nigori_test_utils.h"
+#include "components/sync/test/fake_server/fake_server_nigori_helper.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/test_launcher.h"
 #include "crypto/ec_private_key.h"
 #include "google_apis/gaia/gaia_switches.h"
@@ -38,9 +42,12 @@
 
 namespace {
 
-using encryption_helper::GetServerNigori;
-using encryption_helper::KeyParams;
-using encryption_helper::SetNigoriInFakeServer;
+using fake_server::GetServerNigori;
+using fake_server::SetNigoriInFakeServer;
+using syncer::BuildKeystoreNigoriSpecifics;
+using syncer::BuildTrustedVaultNigoriSpecifics;
+using syncer::KeyParamsForTesting;
+using syncer::Pbkdf2KeyParamsForTesting;
 using testing::NotNull;
 using testing::SizeIs;
 
@@ -92,82 +99,12 @@ GURL GetTrustedVaultRetrievalURL(
                          base64_encoded_key.c_str()));
 }
 
-KeyParams Pbkdf2KeyParams(const std::vector<uint8_t>& key) {
-  return {syncer::KeyDerivationParams::CreateForPbkdf2(),
-          base::Base64Encode(key)};
-}
-
-std::string ComputeKeyName(const KeyParams& key_params) {
+std::string ComputeKeyName(const KeyParamsForTesting& key_params) {
   std::string key_name;
   syncer::Nigori::CreateByDerivation(key_params.derivation_params,
                                      key_params.password)
       ->Permute(syncer::Nigori::Password, syncer::kNigoriKeyName, &key_name);
   return key_name;
-}
-
-// Builds NigoriSpecifics with following fields:
-// 1. encryption_keybag contains all keys derived from |keybag_keys_params|
-// and encrypted with a key derived from |keybag_decryptor_params|.
-// keystore_decryptor_token is always saved in encryption_keybag, even if it
-// is not derived from any params in |keybag_keys_params|.
-// 2. keystore_decryptor_token contains the key derived from
-// |keybag_decryptor_params| and encrypted with a key derived from
-// |keystore_key_params|.
-// 3. passphrase_type is KEYSTORE_PASSHPRASE.
-// 4. Other fields are default.
-sync_pb::NigoriSpecifics BuildKeystoreNigoriSpecifics(
-    const std::vector<KeyParams>& keybag_keys_params,
-    const KeyParams& keystore_decryptor_params,
-    const KeyParams& keystore_key_params) {
-  sync_pb::NigoriSpecifics specifics;
-
-  std::unique_ptr<syncer::CryptographerImpl> cryptographer =
-      syncer::CryptographerImpl::FromSingleKeyForTesting(
-          keystore_decryptor_params.password,
-          keystore_decryptor_params.derivation_params);
-  for (const KeyParams& key_params : keybag_keys_params) {
-    cryptographer->EmplaceKey(key_params.password,
-                              key_params.derivation_params);
-  }
-
-  EXPECT_TRUE(cryptographer->Encrypt(cryptographer->ToProto().key_bag(),
-                                     specifics.mutable_encryption_keybag()));
-
-  std::string serialized_keystore_decryptor =
-      cryptographer->ExportDefaultKey().SerializeAsString();
-
-  std::unique_ptr<syncer::CryptographerImpl> keystore_cryptographer =
-      syncer::CryptographerImpl::FromSingleKeyForTesting(
-          keystore_key_params.password, keystore_key_params.derivation_params);
-  EXPECT_TRUE(keystore_cryptographer->EncryptString(
-      serialized_keystore_decryptor,
-      specifics.mutable_keystore_decryptor_token()));
-
-  specifics.set_passphrase_type(sync_pb::NigoriSpecifics::KEYSTORE_PASSPHRASE);
-  specifics.set_keystore_migration_time(
-      syncer::TimeToProtoTime(base::Time::Now()));
-  return specifics;
-}
-
-sync_pb::NigoriSpecifics BuildTrustedVaultNigoriSpecifics(
-    const std::vector<std::vector<uint8_t>>& trusted_vault_keys) {
-  sync_pb::NigoriSpecifics specifics;
-  specifics.set_passphrase_type(
-      sync_pb::NigoriSpecifics::TRUSTED_VAULT_PASSPHRASE);
-  specifics.set_keybag_is_frozen(true);
-
-  std::unique_ptr<syncer::CryptographerImpl> cryptographer =
-      syncer::CryptographerImpl::CreateEmpty();
-  for (const std::vector<uint8_t>& trusted_vault_key : trusted_vault_keys) {
-    const std::string key_name = cryptographer->EmplaceKey(
-        base::Base64Encode(trusted_vault_key),
-        syncer::KeyDerivationParams::CreateForPbkdf2());
-    cryptographer->SelectDefaultEncryptionKey(key_name);
-  }
-
-  EXPECT_TRUE(cryptographer->Encrypt(cryptographer->ToProto().key_bag(),
-                                     specifics.mutable_encryption_keybag()));
-  return specifics;
 }
 
 // Used to wait until a tab closes.
@@ -297,8 +234,9 @@ IN_PROC_BROWSER_TEST_P(SingleClientNigoriSyncTestWithUssTests,
   const std::vector<std::vector<uint8_t>>& keystore_keys =
       GetFakeServer()->GetKeystoreKeys();
   ASSERT_TRUE(keystore_keys.size() == 1);
-  EXPECT_THAT(specifics.encryption_keybag(),
-              IsDataEncryptedWith(Pbkdf2KeyParams(keystore_keys.back())));
+  EXPECT_THAT(
+      specifics.encryption_keybag(),
+      IsDataEncryptedWith(Pbkdf2KeyParamsForTesting(keystore_keys.back())));
   EXPECT_EQ(specifics.passphrase_type(),
             sync_pb::NigoriSpecifics::KEYSTORE_PASSPHRASE);
   EXPECT_TRUE(specifics.keybag_is_frozen());
@@ -311,15 +249,15 @@ IN_PROC_BROWSER_TEST_P(SingleClientNigoriSyncTestWithUssTests,
 // this password form.
 IN_PROC_BROWSER_TEST_P(SingleClientNigoriSyncTestWithUssTests,
                        ShouldDecryptWithImplicitPassphraseNigori) {
-  const KeyParams kKeyParams = {syncer::KeyDerivationParams::CreateForPbkdf2(),
-                                "passphrase"};
+  const KeyParamsForTesting kKeyParams = {
+      syncer::KeyDerivationParams::CreateForPbkdf2(), "passphrase"};
   sync_pb::NigoriSpecifics specifics;
   std::unique_ptr<syncer::CryptographerImpl> cryptographer =
       syncer::CryptographerImpl::FromSingleKeyForTesting(
           kKeyParams.password, kKeyParams.derivation_params);
   ASSERT_TRUE(cryptographer->Encrypt(cryptographer->ToProto().key_bag(),
                                      specifics.mutable_encryption_keybag()));
-  SetNigoriInFakeServer(GetFakeServer(), specifics);
+  SetNigoriInFakeServer(specifics, GetFakeServer());
 
   const autofill::PasswordForm password_form =
       passwords_helper::CreateTestPasswordForm(0);
@@ -341,12 +279,13 @@ IN_PROC_BROWSER_TEST_P(SingleClientNigoriSyncTestWithUssTests,
   const std::vector<std::vector<uint8_t>>& keystore_keys =
       GetFakeServer()->GetKeystoreKeys();
   ASSERT_THAT(keystore_keys, SizeIs(1));
-  const KeyParams kKeystoreKeyParams = Pbkdf2KeyParams(keystore_keys.back());
-  SetNigoriInFakeServer(GetFakeServer(),
-                        BuildKeystoreNigoriSpecifics(
+  const KeyParamsForTesting kKeystoreKeyParams =
+      Pbkdf2KeyParamsForTesting(keystore_keys.back());
+  SetNigoriInFakeServer(BuildKeystoreNigoriSpecifics(
                             /*keybag_keys_params=*/{kKeystoreKeyParams},
                             /*keystore_decryptor_params=*/kKeystoreKeyParams,
-                            /*keystore_key_params=*/kKeystoreKeyParams));
+                            /*keystore_key_params=*/kKeystoreKeyParams),
+                        GetFakeServer());
 
   const autofill::PasswordForm password_form =
       passwords_helper::CreateTestPasswordForm(0);
@@ -366,15 +305,16 @@ IN_PROC_BROWSER_TEST_P(SingleClientNigoriSyncTestWithUssTests,
   const std::vector<std::vector<uint8_t>>& keystore_keys =
       GetFakeServer()->GetKeystoreKeys();
   ASSERT_THAT(keystore_keys, SizeIs(1));
-  const KeyParams kKeystoreKeyParams = Pbkdf2KeyParams(keystore_keys.back());
-  const KeyParams kDefaultKeyParams = {
+  const KeyParamsForTesting kKeystoreKeyParams =
+      Pbkdf2KeyParamsForTesting(keystore_keys.back());
+  const KeyParamsForTesting kDefaultKeyParams = {
       syncer::KeyDerivationParams::CreateForPbkdf2(), "password"};
   SetNigoriInFakeServer(
-      GetFakeServer(),
       BuildKeystoreNigoriSpecifics(
           /*keybag_keys_params=*/{kDefaultKeyParams, kKeystoreKeyParams},
           /*keystore_decryptor_params*/ {kDefaultKeyParams},
-          /*keystore_key_params=*/kKeystoreKeyParams));
+          /*keystore_key_params=*/kKeystoreKeyParams),
+      GetFakeServer());
   const autofill::PasswordForm password_form =
       passwords_helper::CreateTestPasswordForm(0);
   passwords_helper::InjectEncryptedServerPassword(
@@ -392,44 +332,13 @@ IN_PROC_BROWSER_TEST_P(SingleClientNigoriSyncTestWithUssTests,
   const std::vector<std::vector<uint8_t>>& keystore_keys =
       GetFakeServer()->GetKeystoreKeys();
   ASSERT_THAT(keystore_keys, SizeIs(2));
-  const KeyParams new_keystore_key_params = Pbkdf2KeyParams(keystore_keys[1]);
+  const KeyParamsForTesting new_keystore_key_params =
+      Pbkdf2KeyParamsForTesting(keystore_keys[1]);
   const std::string expected_key_bag_key_name =
       ComputeKeyName(new_keystore_key_params);
   EXPECT_TRUE(ServerNigoriKeyNameChecker(expected_key_bag_key_name,
                                          GetSyncService(0), GetFakeServer())
                   .Wait());
-}
-
-IN_PROC_BROWSER_TEST_P(SingleClientNigoriSyncTestWithUssTests,
-                       ShouldExposeExperimentalAuthenticationKey) {
-  const std::vector<std::vector<uint8_t>>& keystore_keys =
-      GetFakeServer()->GetKeystoreKeys();
-  ASSERT_THAT(keystore_keys, SizeIs(1));
-  const KeyParams kKeystoreKeyParams = Pbkdf2KeyParams(keystore_keys.back());
-  SetNigoriInFakeServer(GetFakeServer(),
-                        BuildKeystoreNigoriSpecifics(
-                            /*keybag_keys_params=*/{kKeystoreKeyParams},
-                            /*keystore_decryptor_params=*/kKeystoreKeyParams,
-                            /*keystore_key_params=*/kKeystoreKeyParams));
-
-  ASSERT_TRUE(SetupSync());
-
-  // WARNING: Do *NOT* change these values since the authentication key should
-  // be stable across different browser versions.
-
-  // Default birthday determined by LoopbackServer.
-  const std::string kDefaultBirthday = GetFakeServer()->GetStoreBirthday();
-  const std::string kSeparator("|");
-  const std::string base64_encoded_keystore_key =
-      base::Base64Encode(keystore_keys.back());
-  const std::string authentication_id_before_hashing =
-      std::string("gaia_id_for_user_gmail.com") + kSeparator +
-      kDefaultBirthday + kSeparator + base64_encoded_keystore_key;
-
-  EXPECT_EQ(
-      GetSyncService(/*index=*/0)->GetExperimentalAuthenticationSecretForTest(),
-      authentication_id_before_hashing);
-  EXPECT_TRUE(GetSyncService(/*index=*/0)->GetExperimentalAuthenticationKey());
 }
 
 // Tests that client can decrypt |pending_keys| with implicit passphrase in
@@ -447,15 +356,16 @@ IN_PROC_BROWSER_TEST_P(
   // key used in NigoriSpecifics.
   std::vector<uint8_t> corrupted_keystore_key = keystore_keys[0];
   corrupted_keystore_key.push_back(42u);
-  const KeyParams kKeystoreKeyParams = Pbkdf2KeyParams(corrupted_keystore_key);
-  const KeyParams kDefaultKeyParams = {
+  const KeyParamsForTesting kKeystoreKeyParams =
+      Pbkdf2KeyParamsForTesting(corrupted_keystore_key);
+  const KeyParamsForTesting kDefaultKeyParams = {
       syncer::KeyDerivationParams::CreateForPbkdf2(), "password"};
   SetNigoriInFakeServer(
-      GetFakeServer(),
       BuildKeystoreNigoriSpecifics(
           /*keybag_keys_params=*/{kDefaultKeyParams, kKeystoreKeyParams},
           /*keystore_decryptor_params*/ {kDefaultKeyParams},
-          /*keystore_key_params=*/kKeystoreKeyParams));
+          /*keystore_key_params=*/kKeystoreKeyParams),
+      GetFakeServer());
 
   const autofill::PasswordForm password_form =
       passwords_helper::CreateTestPasswordForm(0);
@@ -526,7 +436,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientKeystoreKeysMigrationSyncTest,
   const std::vector<std::vector<uint8_t>>& keystore_keys =
       GetFakeServer()->GetKeystoreKeys();
   ASSERT_THAT(keystore_keys, SizeIs(1));
-  const KeyParams kKeystoreKeyParams = Pbkdf2KeyParams(keystore_keys.back());
+  const KeyParamsForTesting kKeystoreKeyParams =
+      Pbkdf2KeyParamsForTesting(keystore_keys.back());
 
   const autofill::PasswordForm password_form =
       passwords_helper::CreateTestPasswordForm(0);
@@ -575,8 +486,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientNigoriWithWebApiTest,
       GetTrustedVaultRetrievalURL(*embedded_test_server(), kTestEncryptionKey);
 
   // Mimic the account being already using a trusted vault passphrase.
-  encryption_helper::SetNigoriInFakeServer(
-      GetFakeServer(), BuildTrustedVaultNigoriSpecifics({kTestEncryptionKey}));
+  SetNigoriInFakeServer(BuildTrustedVaultNigoriSpecifics({kTestEncryptionKey}),
+                        GetFakeServer());
 
   ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(GetSyncService(0)
@@ -663,8 +574,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientNigoriWithWebApiTest,
   const std::vector<uint8_t> kTestEncryptionKey = {1, 2, 3, 4};
 
   // Mimic the account being already using a trusted vault passphrase.
-  encryption_helper::SetNigoriInFakeServer(
-      GetFakeServer(), BuildTrustedVaultNigoriSpecifics({kTestEncryptionKey}));
+  SetNigoriInFakeServer(BuildTrustedVaultNigoriSpecifics({kTestEncryptionKey}),
+                        GetFakeServer());
 
   // Sign in and start sync.
   EXPECT_TRUE(SetupSync());
@@ -722,8 +633,8 @@ IN_PROC_BROWSER_TEST_F(
   const std::vector<uint8_t> kTestEncryptionKey = {1, 2, 3, 4};
 
   // Mimic the account being already using a trusted vault passphrase.
-  encryption_helper::SetNigoriInFakeServer(
-      GetFakeServer(), BuildTrustedVaultNigoriSpecifics({kTestEncryptionKey}));
+  SetNigoriInFakeServer(BuildTrustedVaultNigoriSpecifics({kTestEncryptionKey}),
+                        GetFakeServer());
 
   // Sign in and start sync.
   ASSERT_TRUE(SetupSync());
@@ -744,8 +655,8 @@ IN_PROC_BROWSER_TEST_F(
       GetTrustedVaultRetrievalURL(*embedded_test_server(), kTestEncryptionKey);
 
   // Mimic the account being already using a trusted vault passphrase.
-  encryption_helper::SetNigoriInFakeServer(
-      GetFakeServer(), BuildTrustedVaultNigoriSpecifics({kTestEncryptionKey}));
+  SetNigoriInFakeServer(BuildTrustedVaultNigoriSpecifics({kTestEncryptionKey}),
+                        GetFakeServer());
 
   ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(GetSyncService(0)
@@ -775,17 +686,19 @@ IN_PROC_BROWSER_TEST_F(
   const std::vector<std::vector<uint8_t>>& keystore_keys =
       GetFakeServer()->GetKeystoreKeys();
   ASSERT_THAT(keystore_keys, SizeIs(1));
-  const KeyParams kKeystoreKeyParams = Pbkdf2KeyParams(keystore_keys.back());
-  const KeyParams kTrustedVaultKeyParams = Pbkdf2KeyParams(kTestEncryptionKey);
+  const KeyParamsForTesting kKeystoreKeyParams =
+      Pbkdf2KeyParamsForTesting(keystore_keys.back());
+  const KeyParamsForTesting kTrustedVaultKeyParams =
+      Pbkdf2KeyParamsForTesting(kTestEncryptionKey);
   SetNigoriInFakeServer(
-      GetFakeServer(),
       BuildKeystoreNigoriSpecifics(
           /*keybag_keys_params=*/{kTrustedVaultKeyParams, kKeystoreKeyParams},
           /*keystore_decryptor_params*/ {kKeystoreKeyParams},
-          /*keystore_key_params=*/kKeystoreKeyParams));
+          /*keystore_key_params=*/kKeystoreKeyParams),
+      GetFakeServer());
 
-  // Ensure that client can decrypt with both |kTrustedVaultKeyParams| and
-  // |kKeystoreKeyParams|.
+  // Ensure that client can decrypt with both |kTrustedVaultKeyParams|
+  // and |kKeystoreKeyParams|.
   const autofill::PasswordForm password_form1 =
       passwords_helper::CreateTestPasswordForm(1);
   const autofill::PasswordForm password_form2 =
@@ -810,8 +723,8 @@ IN_PROC_BROWSER_TEST_F(
       GetTrustedVaultRetrievalURL(*embedded_test_server(), kTestEncryptionKey);
 
   // Mimic the account being already using a trusted vault passphrase.
-  encryption_helper::SetNigoriInFakeServer(
-      GetFakeServer(), BuildTrustedVaultNigoriSpecifics({kTestEncryptionKey}));
+  SetNigoriInFakeServer(BuildTrustedVaultNigoriSpecifics({kTestEncryptionKey}),
+                        GetFakeServer());
 
   ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(GetSyncService(0)
@@ -838,12 +751,13 @@ IN_PROC_BROWSER_TEST_F(
           .Wait());
 
   // Mimic remote transition to custom passphrase.
-  const KeyParams kCustomPassphraseKeyParams = {
+  const KeyParamsForTesting kCustomPassphraseKeyParams = {
       syncer::KeyDerivationParams::CreateForPbkdf2(), "passphrase"};
-  const KeyParams kTrustedVaultKeyParams = Pbkdf2KeyParams(kTestEncryptionKey);
-  SetNigoriInFakeServer(GetFakeServer(),
-                        CreateCustomPassphraseNigori(kCustomPassphraseKeyParams,
-                                                     kTrustedVaultKeyParams));
+  const KeyParamsForTesting kTrustedVaultKeyParams =
+      Pbkdf2KeyParamsForTesting(kTestEncryptionKey);
+  SetNigoriInFakeServer(CreateCustomPassphraseNigori(kCustomPassphraseKeyParams,
+                                                     kTrustedVaultKeyParams),
+                        GetFakeServer());
 
   EXPECT_TRUE(
       PassphraseRequiredStateChecker(GetSyncService(1), /*desired_state=*/true)
@@ -854,8 +768,8 @@ IN_PROC_BROWSER_TEST_F(
       PassphraseRequiredStateChecker(GetSyncService(1), /*desired_state=*/false)
           .Wait());
 
-  // Ensure that client can decrypt with both |kTrustedVaultKeyParams| and
-  // |kCustomPassphraseKeyParams|.
+  // Ensure that client can decrypt with both |kTrustedVaultKeyParams|
+  // and |kCustomPassphraseKeyParams|.
   const autofill::PasswordForm password_form1 =
       passwords_helper::CreateTestPasswordForm(1);
   const autofill::PasswordForm password_form2 =
@@ -869,6 +783,80 @@ IN_PROC_BROWSER_TEST_F(
       kTrustedVaultKeyParams.derivation_params, GetFakeServer());
 
   EXPECT_TRUE(PasswordFormsChecker(0, {password_form1, password_form2}).Wait());
+}
+
+IN_PROC_BROWSER_TEST_F(
+    SingleClientNigoriWithWebApiTest,
+    ShoudRecordTrustedVaultErrorShownOnStartupWhenErrorShown) {
+  const std::vector<uint8_t> kTestEncryptionKey = {1, 2, 3, 4};
+
+  // Mimic the account being already using a trusted vault passphrase.
+  SetNigoriInFakeServer(BuildTrustedVaultNigoriSpecifics({kTestEncryptionKey}),
+                        GetFakeServer());
+
+  base::HistogramTester histogram_tester;
+  ASSERT_TRUE(SetupSync());
+  ASSERT_TRUE(GetSyncService(0)
+                  ->GetUserSettings()
+                  ->IsTrustedVaultKeyRequiredForPreferredDataTypes());
+  ASSERT_FALSE(GetSyncService(0)->GetActiveDataTypes().Has(syncer::PASSWORDS));
+  ASSERT_TRUE(sync_ui_util::ShouldShowSyncKeysMissingError(GetSyncService(0)));
+
+  histogram_tester.ExpectUniqueSample("Sync.TrustedVaultErrorShownOnStartup",
+                                      /*sample=*/1, /*expected_count=*/1);
+}
+
+IN_PROC_BROWSER_TEST_F(
+    SingleClientNigoriWithWebApiTest,
+    PRE_ShoudRecordTrustedVaultErrorShownOnStartupWhenErrorNotShown) {
+  const std::vector<uint8_t> kTestEncryptionKey = {1, 2, 3, 4};
+  const GURL retrieval_url =
+      GetTrustedVaultRetrievalURL(*embedded_test_server(), kTestEncryptionKey);
+
+  ASSERT_TRUE(SetupClients());
+
+  // There needs to be an existing tab for the second tab (the retrieval flow)
+  // to be closeable via javascript.
+  chrome::AddTabAt(GetBrowser(0), GURL(url::kAboutBlankURL), /*index=*/0,
+                   /*foreground=*/true);
+
+  TrustedVaultKeysChangedStateChecker keys_fetched_checker(GetSyncService(0));
+  // Mimic opening a web page where the user can interact with the retrieval
+  // flow, while the user is signed out.
+  sync_ui_util::OpenTabForSyncKeyRetrievalWithURLForTesting(GetBrowser(0),
+                                                            retrieval_url);
+  ASSERT_THAT(GetBrowser(0)->tab_strip_model()->GetActiveWebContents(),
+              NotNull());
+
+  // Wait until the page closes, which indicates successful completion.
+  ASSERT_TRUE(
+      TabClosedChecker(GetBrowser(0)->tab_strip_model()->GetActiveWebContents())
+          .Wait());
+  ASSERT_TRUE(keys_fetched_checker.Wait());
+}
+
+IN_PROC_BROWSER_TEST_F(
+    SingleClientNigoriWithWebApiTest,
+    ShoudRecordTrustedVaultErrorShownOnStartupWhenErrorNotShown) {
+  const std::vector<uint8_t> kTestEncryptionKey = {1, 2, 3, 4};
+
+  const GURL retrieval_url =
+      GetTrustedVaultRetrievalURL(*embedded_test_server(), kTestEncryptionKey);
+
+  // Mimic the account being already using a trusted vault passphrase.
+  SetNigoriInFakeServer(BuildTrustedVaultNigoriSpecifics({kTestEncryptionKey}),
+                        GetFakeServer());
+
+  base::HistogramTester histogram_tester;
+  ASSERT_TRUE(SetupSync());
+  ASSERT_FALSE(GetSyncService(0)
+                   ->GetUserSettings()
+                   ->IsTrustedVaultKeyRequiredForPreferredDataTypes());
+  ASSERT_TRUE(GetSyncService(0)->GetActiveDataTypes().Has(syncer::PASSWORDS));
+  ASSERT_FALSE(sync_ui_util::ShouldShowSyncKeysMissingError(GetSyncService(0)));
+
+  histogram_tester.ExpectUniqueSample("Sync.TrustedVaultErrorShownOnStartup",
+                                      /*sample=*/0, /*expected_count=*/1);
 }
 
 // Same as SingleClientNigoriWithWebApiTest but does NOT override
@@ -895,8 +883,8 @@ IN_PROC_BROWSER_TEST_F(SingleClientNigoriWithWebApiFromUntrustedOriginTest,
       GetTrustedVaultRetrievalURL(*embedded_test_server(), kTestEncryptionKey);
 
   // Mimic the account being already using a trusted vault passphrase.
-  encryption_helper::SetNigoriInFakeServer(
-      GetFakeServer(), BuildTrustedVaultNigoriSpecifics({kTestEncryptionKey}));
+  SetNigoriInFakeServer(BuildTrustedVaultNigoriSpecifics({kTestEncryptionKey}),
+                        GetFakeServer());
 
   SetupSyncNoWaitingForCompletion();
   ASSERT_TRUE(TrustedVaultKeyRequiredStateChecker(GetSyncService(0),

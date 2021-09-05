@@ -14,7 +14,7 @@
 #include "chrome/browser/cache_stats_recorder.h"
 #include "chrome/browser/chrome_browser_interface_binders.h"
 #include "chrome/browser/chrome_content_browser_client_parts.h"
-#include "chrome/browser/content_settings/content_settings_manager_impl.h"
+#include "chrome/browser/content_settings/content_settings_manager_delegate.h"
 #include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings.h"
 #include "chrome/browser/data_reduction_proxy/data_reduction_proxy_chrome_settings_factory.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
@@ -181,33 +181,36 @@ void ChromeContentBrowserClient::ExposeInterfacesToRenderer(
   }
 }
 
-void ChromeContentBrowserClient::ExposeInterfacesToMediaService(
-    service_manager::BinderRegistry* registry,
-    content::RenderFrameHost* render_frame_host) {
+void ChromeContentBrowserClient::BindMediaServiceReceiver(
+    content::RenderFrameHost* render_frame_host,
+    mojo::GenericPendingReceiver receiver) {
 #if BUILDFLAG(ENABLE_LIBRARY_CDMS)
-  registry->AddInterface(
-      base::Bind(&OutputProtectionImpl::Create, render_frame_host));
-  registry->AddInterface(
-      base::Bind(&PlatformVerificationImpl::Create, render_frame_host));
+  if (auto r = receiver.As<media::mojom::OutputProtection>()) {
+    OutputProtectionImpl::Create(render_frame_host, std::move(r));
+    return;
+  }
+
+  if (auto r = receiver.As<media::mojom::PlatformVerification>()) {
+    PlatformVerificationImpl::Create(render_frame_host, std::move(r));
+    return;
+  }
 #endif  // BUILDFLAG(ENABLE_LIBRARY_CDMS)
 
 #if BUILDFLAG(ENABLE_MOJO_CDM) && defined(OS_ANDROID)
-  registry->AddInterface(base::Bind(&CreateMediaDrmStorage, render_frame_host));
+  if (auto r = receiver.As<media::mojom::MediaDrmStorage>()) {
+    CreateMediaDrmStorage(render_frame_host, std::move(r));
+    return;
+  }
 #endif
 }
 
 void ChromeContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
     content::RenderFrameHost* render_frame_host,
-    service_manager::BinderMapWithContext<content::RenderFrameHost*>* map) {
+    mojo::BinderMapWithContext<content::RenderFrameHost*>* map) {
   chrome::internal::PopulateChromeFrameBinders(map);
   chrome::internal::PopulateChromeWebUIFrameBinders(map);
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  content::WebContents* web_contents =
-      content::WebContents::FromRenderFrameHost(render_frame_host);
-  if (!web_contents)
-    return;
-
   const GURL& site = render_frame_host->GetSiteInstance()->GetSiteURL();
   if (!site.SchemeIs(extensions::kExtensionScheme))
     return;
@@ -225,19 +228,6 @@ void ChromeContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
 #endif
 }
 
-void ChromeContentBrowserClient::BindInterfaceRequestFromFrame(
-    content::RenderFrameHost* render_frame_host,
-    const std::string& interface_name,
-    mojo::ScopedMessagePipeHandle interface_pipe) {
-  if (!frame_interfaces_ && !frame_interfaces_parameterized_) {
-    InitWebContextInterfaces();
-  }
-
-  if (!frame_interfaces_parameterized_->TryBindInterface(
-          interface_name, &interface_pipe, render_frame_host)) {
-    frame_interfaces_->TryBindInterface(interface_name, &interface_pipe);
-  }
-}
 bool ChromeContentBrowserClient::BindAssociatedReceiverFromFrame(
     content::RenderFrameHost* render_frame_host,
     const std::string& interface_name,
@@ -288,9 +278,10 @@ void ChromeContentBrowserClient::BindHostReceiverForRenderer(
     content::RenderProcessHost* render_process_host,
     mojo::GenericPendingReceiver receiver) {
   if (auto host_receiver =
-          receiver.As<chrome::mojom::ContentSettingsManager>()) {
-    chrome::ContentSettingsManagerImpl::Create(render_process_host,
-                                               std::move(host_receiver));
+          receiver.As<content_settings::mojom::ContentSettingsManager>()) {
+    content_settings::ContentSettingsManagerImpl::Create(
+        render_process_host, std::move(host_receiver),
+        std::make_unique<chrome::ContentSettingsManagerDelegate>());
     return;
   }
 

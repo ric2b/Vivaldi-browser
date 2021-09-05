@@ -4,24 +4,18 @@
 
 #include "cc/metrics/event_metrics.h"
 
-#include <tuple>
-
+#include "base/check.h"
+#include "base/memory/ptr_util.h"
+#include "base/notreached.h"
 #include "base/stl_util.h"
 
 namespace cc {
 
-EventMetrics::EventMetrics(ui::EventType type,
-                           base::TimeTicks time_stamp,
-                           base::Optional<ScrollInputType> scroll_input_type)
-    : type_(type),
-      time_stamp_(time_stamp),
-      scroll_input_type_(scroll_input_type) {}
-
-EventMetrics::EventMetrics(const EventMetrics&) = default;
-EventMetrics& EventMetrics::operator=(const EventMetrics&) = default;
-
-bool EventMetrics::IsWhitelisted() const {
-  switch (type_) {
+std::unique_ptr<EventMetrics> EventMetrics::Create(
+    ui::EventType type,
+    base::TimeTicks time_stamp,
+    base::Optional<ui::ScrollInputType> scroll_input_type) {
+  switch (type) {
     case ui::ET_MOUSE_PRESSED:
     case ui::ET_MOUSE_RELEASED:
     case ui::ET_MOUSEWHEEL:
@@ -33,16 +27,25 @@ bool EventMetrics::IsWhitelisted() const {
     case ui::ET_GESTURE_SCROLL_BEGIN:
     case ui::ET_GESTURE_SCROLL_UPDATE:
     case ui::ET_GESTURE_SCROLL_END:
-      return true;
+      return base::WrapUnique(
+          new EventMetrics(type, time_stamp, scroll_input_type));
     default:
-      return false;
+      return nullptr;
   }
 }
 
-const char* EventMetrics::GetTypeName() const {
-  DCHECK(IsWhitelisted()) << "Event type is not whitelisted for event metrics: "
-                          << type_;
+EventMetrics::EventMetrics(
+    ui::EventType type,
+    base::TimeTicks time_stamp,
+    base::Optional<ui::ScrollInputType> scroll_input_type)
+    : type_(type),
+      time_stamp_(time_stamp),
+      scroll_input_type_(scroll_input_type) {}
 
+EventMetrics::EventMetrics(const EventMetrics&) = default;
+EventMetrics& EventMetrics::operator=(const EventMetrics&) = default;
+
+const char* EventMetrics::GetTypeName() const {
   switch (type_) {
     case ui::ET_MOUSE_PRESSED:
       return "MousePressed";
@@ -51,6 +54,9 @@ const char* EventMetrics::GetTypeName() const {
     case ui::ET_MOUSEWHEEL:
       return "MouseWheel";
     case ui::ET_KEY_PRESSED:
+      // TODO(crbug/1071645): Currently, all ET_KEY_PRESSED events are reported
+      // under EventLatency.KeyPressed histogram. This includes both key-down
+      // and key-char events. Consider reporting them separately.
       return "KeyPressed";
     case ui::ET_KEY_RELEASED:
       return "KeyReleased";
@@ -73,18 +79,16 @@ const char* EventMetrics::GetTypeName() const {
 }
 
 const char* EventMetrics::GetScrollTypeName() const {
-  DCHECK(IsWhitelisted()) << "Event type is not whitelisted for event metrics: "
-                          << type_;
   DCHECK(scroll_input_type_) << "Event is not a scroll event";
 
   switch (*scroll_input_type_) {
-    case ScrollInputType::kTouchscreen:
+    case ui::ScrollInputType::kTouchscreen:
       return "Touchscreen";
-    case ScrollInputType::kWheel:
+    case ui::ScrollInputType::kWheel:
       return "Wheel";
-    case ScrollInputType::kAutoscroll:
+    case ui::ScrollInputType::kAutoscroll:
       return "Autoscroll";
-    case ScrollInputType::kScrollbar:
+    case ui::ScrollInputType::kScrollbar:
       return "Scrollbar";
   }
 }

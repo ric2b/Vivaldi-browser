@@ -5,6 +5,7 @@
 #ifndef CHROME_BROWSER_SAFE_BROWSING_DOWNLOAD_PROTECTION_DEEP_SCANNING_REQUEST_H_
 #define CHROME_BROWSER_SAFE_BROWSING_DOWNLOAD_PROTECTION_DEEP_SCANNING_REQUEST_H_
 
+#include "chrome/browser/enterprise/connectors/common.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
 #include "chrome/browser/safe_browsing/download_protection/download_protection_util.h"
@@ -115,6 +116,9 @@ class DeepScanningRequest : public download::DownloadItem::Observer {
 
   // The time when uploading starts.
   base::TimeTicks upload_start_time_;
+
+  // The settings to apply to this scan.
+  enterprise_connectors::AnalysisSettings analysis_settings_;
 
   base::WeakPtrFactory<DeepScanningRequest> weak_ptr_factory_;
 };

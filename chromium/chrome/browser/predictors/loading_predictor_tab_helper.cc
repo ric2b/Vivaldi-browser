@@ -168,6 +168,17 @@ void LoadingPredictorTabHelper::DidRedirectNavigation(
   if (!navigation_id.is_valid())
     return;
   current_navigation_id_ = navigation_id;
+
+  // If we are not trying to get an optimization guide prediction for this page
+  // load, just return.
+  if (!optimization_guide_decider_ || !last_optimization_guide_prediction_)
+    return;
+
+  // Get an updated prediction for the navigation.
+  optimization_guide_decider_->CanApplyOptimizationAsync(
+      navigation_handle, optimization_guide::proto::LOADING_PREDICTOR,
+      base::BindOnce(&LoadingPredictorTabHelper::OnOptimizationGuideDecision,
+                     weak_ptr_factory_.GetWeakPtr(), navigation_id));
 }
 
 void LoadingPredictorTabHelper::DidFinishNavigation(
@@ -313,8 +324,12 @@ void LoadingPredictorTabHelper::OnOptimizationGuideDecision(
   if (decision != optimization_guide::OptimizationGuideDecision::kTrue)
     return;
 
-  if (!metadata.loading_predictor_metadata())
+  if (!metadata.loading_predictor_metadata()) {
+    // Metadata is not applicable, so just log an unknown decision.
+    last_optimization_guide_prediction_->decision =
+        optimization_guide::OptimizationGuideDecision::kUnknown;
     return;
+  }
 
   PreconnectPrediction prediction;
   url::Origin main_frame_origin =

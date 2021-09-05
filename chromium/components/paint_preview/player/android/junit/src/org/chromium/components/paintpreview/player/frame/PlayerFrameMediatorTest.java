@@ -9,6 +9,7 @@ import android.graphics.Rect;
 import android.os.Parcel;
 import android.util.Pair;
 import android.view.View;
+import android.widget.Scroller;
 
 import androidx.annotation.NonNull;
 
@@ -17,8 +18,11 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
+import org.robolectric.annotation.Config;
+import org.robolectric.shadows.ShadowLooper;
 
 import org.chromium.base.Callback;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.UnguessableToken;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.components.paintpreview.player.PlayerCompositorDelegate;
@@ -32,6 +36,7 @@ import java.util.List;
  * Tests for the {@link PlayerFrameMediator} class.
  */
 @RunWith(BaseRobolectricTestRunner.class)
+@Config(shadows = {PaintPreviewCustomFlingingShadowScroller.class})
 public class PlayerFrameMediatorTest {
     private static final int CONTENT_WIDTH = 560;
     private static final int CONTENT_HEIGHT = 1150;
@@ -39,6 +44,7 @@ public class PlayerFrameMediatorTest {
     private UnguessableToken mFrameGuid;
     private PropertyModel mModel;
     private TestPlayerCompositorDelegate mCompositorDelegate;
+    private Scroller mScroller;
     private PlayerFrameMediator mMediator;
 
     /**
@@ -159,8 +165,15 @@ public class PlayerFrameMediatorTest {
         mFrameGuid = frameGuid();
         mModel = new PropertyModel.Builder(PlayerFrameProperties.ALL_KEYS).build();
         mCompositorDelegate = new TestPlayerCompositorDelegate();
+        mScroller = new Scroller(ContextUtils.getApplicationContext());
         mMediator = new PlayerFrameMediator(
-                mModel, mCompositorDelegate, mFrameGuid, CONTENT_WIDTH, CONTENT_HEIGHT);
+                mModel, mCompositorDelegate, mScroller, mFrameGuid, CONTENT_WIDTH, CONTENT_HEIGHT);
+    }
+
+    private static Rect getRectForTile(int tileWidth, int tileHeight, int row, int col) {
+        int left = col * tileWidth;
+        int top = row * tileHeight;
+        return new Rect(left, top, left + tileWidth, top + tileHeight);
     }
 
     /**
@@ -178,9 +191,10 @@ public class PlayerFrameMediatorTest {
         Assert.assertEquals(expectedViewPort, mModel.get(PlayerFrameProperties.VIEWPORT));
 
         // The bitmap matrix should be empty, but initialized with the correct number of rows and
-        // columns.
+        // columns. Because we set the initial scale factor to view port width over content width,
+        // we should have only one column.
         Bitmap[][] bitmapMatrix = mModel.get(PlayerFrameProperties.BITMAP_MATRIX);
-        Assert.assertTrue(Arrays.deepEquals(bitmapMatrix, new Bitmap[6][4]));
+        Assert.assertTrue(Arrays.deepEquals(bitmapMatrix, new Bitmap[2][1]));
         Assert.assertEquals(new ArrayList<Pair<View, Rect>>(),
                 mModel.get(PlayerFrameProperties.SUBFRAME_VIEWS));
     }
@@ -192,13 +206,33 @@ public class PlayerFrameMediatorTest {
     @Test
     public void testBitmapRequest() {
         // Initial view port setup.
-        mMediator.setLayoutDimensions(100, 200);
+        mMediator.updateViewportSize(100, 200, 1f);
 
-        // Requests for bitmaps in all tiles that are visible in the view port should've been made.
-        // Since the current view port fully matches the top left bitmap tile, that should be the
-        // only requested bitmap.
+        // Requests for bitmaps in all tiles that are visible in the view port as well as their
+        // adjacent tiles should've been made.
+        // The current view port fully matches the top left bitmap tile, so we expect requests for
+        // the top left bitmap, one bitmap to its right, and one to its bottom.
+        // Below is a schematic of the entire bitmap matrix. Those marked with number should have
+        // been requested, in the order of numbers.
+        // -------------------------
+        // | 1 | 3 |   |   |   |   |
+        // -------------------------
+        // | 2 |   |   |   |   |   |
+        // -------------------------
+        // |   |   |   |   |   |   |
+        // -------------------------
+        // |   |   |   |   |   |   |
+        // -------------------------
+        // |   |   |   |   |   |   |
+        // -------------------------
+        // |   |   |   |   |   |   |
         List<RequestedBitmap> expectedRequestedBitmaps = new ArrayList<>();
-        expectedRequestedBitmaps.add(new RequestedBitmap(mFrameGuid, new Rect(0, 0, 100, 200), 1f));
+        expectedRequestedBitmaps.add(
+                new RequestedBitmap(mFrameGuid, getRectForTile(100, 200, 0, 0), 1f));
+        expectedRequestedBitmaps.add(
+                new RequestedBitmap(mFrameGuid, getRectForTile(100, 200, 1, 0), 1f));
+        expectedRequestedBitmaps.add(
+                new RequestedBitmap(mFrameGuid, getRectForTile(100, 200, 0, 1), 1f));
         Assert.assertEquals(expectedRequestedBitmaps, mCompositorDelegate.mRequestedBitmap);
 
         mMediator.scrollBy(10, 20);
@@ -207,36 +241,203 @@ public class PlayerFrameMediatorTest {
         Rect expectedViewPort = new Rect(10, 20, 110, 220);
         Assert.assertEquals(expectedViewPort, mModel.get(PlayerFrameProperties.VIEWPORT));
 
-        // The current viewport covers portions of 4 adjacent bitmap tiles. Make sure requests for
-        // compositing those bitmap tiles are made.
+        // The current viewport covers portions of the 4 top left bitmap tiles. We have requested
+        // bitmaps for 3 of them before. Make sure requests for the 4th bitmap, as well adjacent
+        // bitmaps are made.
+        // Below is a schematic of the entire bitmap matrix. Those marked with number should have
+        // been requested, in the order of numbers.
+        // -------------------------
+        // | x | x | 3 |   |   |   |
+        // -------------------------
+        // | x | 1 | 5 |   |   |   |
+        // -------------------------
+        // | 2 | 4 |   |   |   |   |
+        // -------------------------
+        // |   |   |   |   |   |   |
+        // -------------------------
+        // |   |   |   |   |   |   |
+        // -------------------------
+        // |   |   |   |   |   |   |
         expectedRequestedBitmaps.add(
-                new RequestedBitmap(mFrameGuid, new Rect(0, 200, 100, 400), 1f));
+                new RequestedBitmap(mFrameGuid, getRectForTile(100, 200, 1, 1), 1f));
         expectedRequestedBitmaps.add(
-                new RequestedBitmap(mFrameGuid, new Rect(100, 0, 200, 200), 1f));
+                new RequestedBitmap(mFrameGuid, getRectForTile(100, 200, 2, 0), 1f));
         expectedRequestedBitmaps.add(
-                new RequestedBitmap(mFrameGuid, new Rect(100, 200, 200, 400), 1f));
+                new RequestedBitmap(mFrameGuid, getRectForTile(100, 200, 0, 2), 1f));
+        expectedRequestedBitmaps.add(
+                new RequestedBitmap(mFrameGuid, getRectForTile(100, 200, 2, 1), 1f));
+        expectedRequestedBitmaps.add(
+                new RequestedBitmap(mFrameGuid, getRectForTile(100, 200, 1, 2), 1f));
         Assert.assertEquals(expectedRequestedBitmaps, mCompositorDelegate.mRequestedBitmap);
 
         // Move the view port slightly. It is still covered by the same 4 tiles. Since there were
-        // already bitmap requests out for those tiles, we shouldn't have made new requests.
+        // already bitmap requests out for those tiles and their adjacent tiles, we shouldn't have
+        // made new requests.
         mMediator.scrollBy(10, 20);
         Assert.assertEquals(expectedRequestedBitmaps, mCompositorDelegate.mRequestedBitmap);
 
         // Move the view port to the bottom right so it covers portions of the 4 bottom right bitmap
         // tiles. 4 new bitmap requests should be made.
+        // Below is a schematic of the entire bitmap matrix. Those marked with number should have
+        // been requested, in the order of numbers.
+        // -------------------------
+        // | x | x | x |   |   |   |
+        // -------------------------
+        // | x | x | x |   |   |   |
+        // -------------------------
+        // | x | x |   |   |   |   |
+        // -------------------------
+        // |   |   |   |   | 5 | 8 |
+        // -------------------------
+        // |   |   |   | 6 | 1 | 3 |
+        // -------------------------
+        // |   |   |   | 7 | 2 | 4 |
         mMediator.scrollBy(430, 900);
         expectedViewPort.set(450, 940, 550, 1140);
         Assert.assertEquals(expectedViewPort, mModel.get(PlayerFrameProperties.VIEWPORT));
 
         expectedRequestedBitmaps.add(
-                new RequestedBitmap(mFrameGuid, new Rect(400, 800, 500, 1000), 1f));
+                new RequestedBitmap(mFrameGuid, getRectForTile(100, 200, 4, 4), 1f));
         expectedRequestedBitmaps.add(
-                new RequestedBitmap(mFrameGuid, new Rect(400, 1000, 500, 1200), 1f));
+                new RequestedBitmap(mFrameGuid, getRectForTile(100, 200, 5, 4), 1f));
         expectedRequestedBitmaps.add(
-                new RequestedBitmap(mFrameGuid, new Rect(500, 800, 600, 1000), 1f));
+                new RequestedBitmap(mFrameGuid, getRectForTile(100, 200, 4, 5), 1f));
         expectedRequestedBitmaps.add(
-                new RequestedBitmap(mFrameGuid, new Rect(500, 1000, 600, 1200), 1f));
+                new RequestedBitmap(mFrameGuid, getRectForTile(100, 200, 5, 5), 1f));
+        expectedRequestedBitmaps.add(
+                new RequestedBitmap(mFrameGuid, getRectForTile(100, 200, 3, 4), 1f));
+        expectedRequestedBitmaps.add(
+                new RequestedBitmap(mFrameGuid, getRectForTile(100, 200, 4, 3), 1f));
+        expectedRequestedBitmaps.add(
+                new RequestedBitmap(mFrameGuid, getRectForTile(100, 200, 5, 3), 1f));
+        expectedRequestedBitmaps.add(
+                new RequestedBitmap(mFrameGuid, getRectForTile(100, 200, 3, 5), 1f));
         Assert.assertEquals(expectedRequestedBitmaps, mCompositorDelegate.mRequestedBitmap);
+    }
+
+    /**
+     * Tests that the mediator keeps around the required bitmaps and removes the unrequired bitmaps
+     * when the view port changes. Required bitmaps are those in the viewport and its adjacent
+     * tiles.
+     */
+    @Test
+    public void testRequiredBitmapMatrix() {
+        // Initial view port setup.
+        mMediator.updateViewportSize(100, 200, 1f);
+
+        boolean[][] expectedRequiredBitmaps = new boolean[6][6];
+
+        // The current view port fully matches the top left bitmap tile.
+        // Below is a schematic of the entire bitmap matrix. Tiles marked with x are required for
+        // the current view port.
+        // -------------------------
+        // | x | x |   |   |   |   |
+        // -------------------------
+        // | x |   |   |   |   |   |
+        // -------------------------
+        // |   |   |   |   |   |   |
+        // -------------------------
+        // |   |   |   |   |   |   |
+        // -------------------------
+        // |   |   |   |   |   |   |
+        // -------------------------
+        // |   |   |   |   |   |   |
+        expectedRequiredBitmaps[0][0] = true;
+        expectedRequiredBitmaps[0][1] = true;
+        expectedRequiredBitmaps[1][0] = true;
+        Assert.assertTrue(
+                Arrays.deepEquals(expectedRequiredBitmaps, mMediator.mRequiredBitmaps.get(1f)));
+
+        mMediator.scrollBy(10, 15);
+        // The current viewport covers portions of the 4 top left bitmap tiles.
+        // -------------------------
+        // | x | x | x |   |   |   |
+        // -------------------------
+        // | x | x | x |   |   |   |
+        // -------------------------
+        // | x | x |   |   |   |   |
+        // -------------------------
+        // |   |   |   |   |   |   |
+        // -------------------------
+        // |   |   |   |   |   |   |
+        // -------------------------
+        // |   |   |   |   |   |   |
+        expectedRequiredBitmaps[0][2] = true;
+        expectedRequiredBitmaps[1][1] = true;
+        expectedRequiredBitmaps[1][2] = true;
+        expectedRequiredBitmaps[2][0] = true;
+        expectedRequiredBitmaps[2][1] = true;
+        Assert.assertTrue(
+                Arrays.deepEquals(expectedRequiredBitmaps, mMediator.mRequiredBitmaps.get(1f)));
+
+        mMediator.scrollBy(200, 400);
+        // The current view port contains portions of the middle 4 tiles.
+        // Tiles marked with x are required for the current view port.
+        // -------------------------
+        // |   |   |   |   |   |   |
+        // -------------------------
+        // |   |   | x | x |   |   |
+        // -------------------------
+        // |   | x | x | x | x |   |
+        // -------------------------
+        // |   | x | x | x | x |   |
+        // -------------------------
+        // |   |   | x | x |   |   |
+        // -------------------------
+        // |   |   |   |   |   |   |
+        expectedRequiredBitmaps[0][0] = false;
+        expectedRequiredBitmaps[0][1] = false;
+        expectedRequiredBitmaps[0][2] = false;
+        expectedRequiredBitmaps[1][0] = false;
+        expectedRequiredBitmaps[1][1] = false;
+        expectedRequiredBitmaps[2][0] = false;
+        expectedRequiredBitmaps[1][3] = true;
+        expectedRequiredBitmaps[2][2] = true;
+        expectedRequiredBitmaps[2][3] = true;
+        expectedRequiredBitmaps[2][4] = true;
+        expectedRequiredBitmaps[3][1] = true;
+        expectedRequiredBitmaps[3][2] = true;
+        expectedRequiredBitmaps[3][3] = true;
+        expectedRequiredBitmaps[3][4] = true;
+        expectedRequiredBitmaps[4][2] = true;
+        expectedRequiredBitmaps[4][3] = true;
+        Assert.assertTrue(
+                Arrays.deepEquals(expectedRequiredBitmaps, mMediator.mRequiredBitmaps.get(1f)));
+
+        mMediator.scrollBy(200, 400);
+        // The current view port contains portions of the 4 bottom right tiles.
+        // Tiles marked with x are required for the current view port.
+        // -------------------------
+        // |   |   |   |   |   |   |
+        // -------------------------
+        // |   |   |   |   |   |   |
+        // -------------------------
+        // |   |   |   |   |   |   |
+        // -------------------------
+        // |   |   |   |   | x | x |
+        // -------------------------
+        // |   |   |   | x | x | x |
+        // -------------------------
+        // |   |   |   | x | x | x |
+        expectedRequiredBitmaps[1][2] = false;
+        expectedRequiredBitmaps[1][3] = false;
+        expectedRequiredBitmaps[2][1] = false;
+        expectedRequiredBitmaps[2][2] = false;
+        expectedRequiredBitmaps[2][3] = false;
+        expectedRequiredBitmaps[2][4] = false;
+        expectedRequiredBitmaps[3][1] = false;
+        expectedRequiredBitmaps[3][2] = false;
+        expectedRequiredBitmaps[3][3] = false;
+        expectedRequiredBitmaps[4][2] = false;
+
+        expectedRequiredBitmaps[3][5] = true;
+        expectedRequiredBitmaps[4][4] = true;
+        expectedRequiredBitmaps[4][5] = true;
+        expectedRequiredBitmaps[5][3] = true;
+        expectedRequiredBitmaps[5][4] = true;
+        expectedRequiredBitmaps[5][5] = true;
+        Assert.assertTrue(
+                Arrays.deepEquals(expectedRequiredBitmaps, mMediator.mRequiredBitmaps.get(1f)));
     }
 
     /**
@@ -245,45 +446,63 @@ public class PlayerFrameMediatorTest {
      */
     @Test
     public void testBitmapRequestResponse() {
-        // Sets the bitmap tile size to 100x200 and triggers bitmap request for the upper left tile.
-        mMediator.setLayoutDimensions(150, 200);
+        // Sets the bitmap tile size to 150x200 and triggers bitmap request for the upper left tile
+        // and its adjacent tiles.
+        mMediator.updateViewportSize(150, 200, 1f);
 
-        // Create mock bitmap for response.
-        Bitmap bitmap1 = Mockito.mock(Bitmap.class);
+        // Create mock bitmaps for response.
+        Bitmap bitmap00 = Mockito.mock(Bitmap.class);
+        Bitmap bitmap10 = Mockito.mock(Bitmap.class);
+        Bitmap bitmap20 = Mockito.mock(Bitmap.class);
+        Bitmap bitmap01 = Mockito.mock(Bitmap.class);
+        Bitmap bitmap11 = Mockito.mock(Bitmap.class);
+        Bitmap bitmap21 = Mockito.mock(Bitmap.class);
+        Bitmap bitmap02 = Mockito.mock(Bitmap.class);
+        Bitmap bitmap12 = Mockito.mock(Bitmap.class);
+
         Bitmap[][] expectedBitmapMatrix = new Bitmap[6][4];
-        expectedBitmapMatrix[0][0] = bitmap1;
+        expectedBitmapMatrix[0][0] = bitmap00;
+        expectedBitmapMatrix[1][0] = bitmap10;
+        expectedBitmapMatrix[0][1] = bitmap01;
 
-        // Call the request callback with the mock bitmap and assert it's added to the model.
-        mCompositorDelegate.mRequestedBitmap.get(0).mBitmapCallback.onResult(bitmap1);
+        // Call the request callback with mock bitmaps and assert they're added to the model.
+        mCompositorDelegate.mRequestedBitmap.get(0).mBitmapCallback.onResult(bitmap00);
+        mCompositorDelegate.mRequestedBitmap.get(1).mBitmapCallback.onResult(bitmap10);
+        mCompositorDelegate.mRequestedBitmap.get(2).mBitmapCallback.onResult(bitmap01);
         Assert.assertTrue(Arrays.deepEquals(
                 expectedBitmapMatrix, mModel.get(PlayerFrameProperties.BITMAP_MATRIX)));
-        Assert.assertEquals(new ArrayList<Pair<View, Rect>>(),
-                mModel.get(PlayerFrameProperties.SUBFRAME_VIEWS));
 
-        // Move the viewport to an area that is covered by 3 additional tiles. Triggers bitmap
-        // requests for an additional 3 tiles.
+        // Move the viewport to an area that is covered by 4 top left tiles.
         mMediator.scrollBy(10, 10);
-        // Assert that there are the only 4 total bitmap requests, i.e. we didn't request for the
-        // tile at [0][0] again.
-        List<RequestedBitmap> expectedRequestedBitmaps = new ArrayList<>();
-        expectedRequestedBitmaps.add(new RequestedBitmap(mFrameGuid, new Rect(0, 0, 150, 200), 1f));
-        expectedRequestedBitmaps.add(
-                new RequestedBitmap(mFrameGuid, new Rect(0, 200, 150, 400), 1f));
-        expectedRequestedBitmaps.add(
-                new RequestedBitmap(mFrameGuid, new Rect(150, 0, 300, 200), 1f));
-        expectedRequestedBitmaps.add(
-                new RequestedBitmap(mFrameGuid, new Rect(150, 200, 300, 400), 1f));
-        Assert.assertEquals(expectedRequestedBitmaps, mCompositorDelegate.mRequestedBitmap);
 
-        // Mock a compositing failure for the second request.
-        mCompositorDelegate.mRequestedBitmap.get(1).mErrorCallback.run();
+        // Scroll should've triggered bitmap requests for an the 4th new tile as well as adjacent
+        // tiles. See comments on {@link #testBitmapRequest} for details on which tiles will be
+        // requested.
+        // Call the request callback with mock bitmaps and assert they're added to the model.
+        expectedBitmapMatrix[1][1] = bitmap11;
+        expectedBitmapMatrix[0][2] = bitmap02;
+        expectedBitmapMatrix[2][1] = bitmap21;
+        expectedBitmapMatrix[1][2] = bitmap12;
+        mCompositorDelegate.mRequestedBitmap.get(3).mBitmapCallback.onResult(bitmap11);
+        // Mock a compositing failure for this tile. No bitmaps should be added.
+        mCompositorDelegate.mRequestedBitmap.get(4).mErrorCallback.run();
+        mCompositorDelegate.mRequestedBitmap.get(5).mBitmapCallback.onResult(bitmap02);
+        mCompositorDelegate.mRequestedBitmap.get(6).mBitmapCallback.onResult(bitmap21);
+        mCompositorDelegate.mRequestedBitmap.get(7).mBitmapCallback.onResult(bitmap12);
+        Assert.assertTrue(Arrays.deepEquals(
+                expectedBitmapMatrix, mModel.get(PlayerFrameProperties.BITMAP_MATRIX)));
+
+        // Assert 8 bitmap requests have been made in total.
+        Assert.assertEquals(8, mCompositorDelegate.mRequestedBitmap.size());
+
         // Move the view port while staying within the 4 bitmap tiles in order to trigger the
-        // request logic again. Make sure only a new request is added, for the tile with a
+        // request logic again. Make sure only one new request is added, for the tile with a
         // compositing failure.
         mMediator.scrollBy(10, 10);
-        expectedRequestedBitmaps.add(
-                new RequestedBitmap(mFrameGuid, new Rect(0, 200, 150, 400), 1f));
-        Assert.assertEquals(expectedRequestedBitmaps, mCompositorDelegate.mRequestedBitmap);
+        Assert.assertEquals(9, mCompositorDelegate.mRequestedBitmap.size());
+        Assert.assertEquals(new RequestedBitmap(mFrameGuid, getRectForTile(150, 200, 2, 0), 1f),
+                mCompositorDelegate.mRequestedBitmap.get(
+                        mCompositorDelegate.mRequestedBitmap.size() - 1));
     }
 
     /**
@@ -292,7 +511,7 @@ public class PlayerFrameMediatorTest {
     @Test
     public void testViewPortOnScrollBy() {
         // Initial view port setup.
-        mMediator.setLayoutDimensions(100, 200);
+        mMediator.updateViewportSize(100, 200, 1f);
         Rect expectedViewPort = new Rect(0, 0, 100, 200);
 
         // Scroll right and down by a within bounds amount. Both scroll directions should be
@@ -375,27 +594,87 @@ public class PlayerFrameMediatorTest {
         mMediator.addSubFrame(subFrame3.first, subFrame3.second);
 
         // Initial view port setup.
-        mMediator.setLayoutDimensions(100, 200);
-        List<Pair<View, Rect>> expectedVisibleViews = new ArrayList<>();
-        expectedVisibleViews.add(subFrame1);
-        expectedVisibleViews.add(subFrame2);
+        mMediator.updateViewportSize(100, 200, 1f);
+        List<View> expectedVisibleViews = new ArrayList<>();
+        List<Rect> expectedVisibleRects = new ArrayList<>();
+        expectedVisibleViews.add(subFrame1.first);
+        expectedVisibleViews.add(subFrame2.first);
+        expectedVisibleRects.add(subFrame1.second);
+        expectedVisibleRects.add(subFrame2.second);
         Assert.assertEquals(expectedVisibleViews, mModel.get(PlayerFrameProperties.SUBFRAME_VIEWS));
+        Assert.assertEquals(expectedVisibleRects, mModel.get(PlayerFrameProperties.SUBFRAME_RECTS));
 
         mMediator.scrollBy(100, 0);
         expectedVisibleViews.clear();
-        expectedVisibleViews.add(subFrame3);
+        expectedVisibleRects.clear();
+        expectedVisibleViews.add(subFrame3.first);
+        expectedVisibleRects.add(new Rect(20, 35, 50, 65));
         Assert.assertEquals(expectedVisibleViews, mModel.get(PlayerFrameProperties.SUBFRAME_VIEWS));
+        Assert.assertEquals(expectedVisibleRects, mModel.get(PlayerFrameProperties.SUBFRAME_RECTS));
 
         mMediator.scrollBy(-50, 0);
         expectedVisibleViews.clear();
-        expectedVisibleViews.add(subFrame1);
-        expectedVisibleViews.add(subFrame2);
-        expectedVisibleViews.add(subFrame3);
+        expectedVisibleRects.clear();
+        expectedVisibleViews.add(subFrame1.first);
+        expectedVisibleViews.add(subFrame2.first);
+        expectedVisibleViews.add(subFrame3.first);
+        expectedVisibleRects.add(new Rect(-40, 20, 10, 120));
+        expectedVisibleRects.add(new Rect(-20, 130, 20, 160));
+        expectedVisibleRects.add(new Rect(70, 35, 100, 65));
         Assert.assertEquals(expectedVisibleViews, mModel.get(PlayerFrameProperties.SUBFRAME_VIEWS));
+        Assert.assertEquals(expectedVisibleRects, mModel.get(PlayerFrameProperties.SUBFRAME_RECTS));
 
         mMediator.scrollBy(0, 200);
         expectedVisibleViews.clear();
+        expectedVisibleRects.clear();
         Assert.assertEquals(expectedVisibleViews, mModel.get(PlayerFrameProperties.SUBFRAME_VIEWS));
+        Assert.assertEquals(expectedVisibleRects, mModel.get(PlayerFrameProperties.SUBFRAME_RECTS));
+    }
+
+    /**
+     * View port should be updated on fling events, but it shouldn't go out of content bounds.
+     */
+    @Test
+    public void testViewPortOnFling() {
+        // Initial view port setup.
+        mMediator.updateViewportSize(100, 200, 1f);
+        Rect expectedViewPort = new Rect(0, 0, 100, 200);
+
+        mMediator.onFling(100, 0);
+        expectedViewPort.offsetTo(mScroller.getFinalX(), mScroller.getFinalY());
+        ShadowLooper.runUiThreadTasks();
+        Assert.assertTrue(mScroller.isFinished());
+        Assert.assertEquals(expectedViewPort, mModel.get(PlayerFrameProperties.VIEWPORT));
+
+        mMediator.onFling(-100, 0);
+        expectedViewPort.offsetTo(mScroller.getFinalX(), mScroller.getFinalY());
+        ShadowLooper.runUiThreadTasks();
+        Assert.assertTrue(mScroller.isFinished());
+        Assert.assertEquals(expectedViewPort, mModel.get(PlayerFrameProperties.VIEWPORT));
+
+        mMediator.onFling(0, 200);
+        expectedViewPort.offsetTo(mScroller.getFinalX(), mScroller.getFinalY());
+        ShadowLooper.runUiThreadTasks();
+        Assert.assertTrue(mScroller.isFinished());
+        Assert.assertEquals(expectedViewPort, mModel.get(PlayerFrameProperties.VIEWPORT));
+
+        mMediator.onFling(0, -200);
+        expectedViewPort.offsetTo(mScroller.getFinalX(), mScroller.getFinalY());
+        ShadowLooper.runUiThreadTasks();
+        Assert.assertTrue(mScroller.isFinished());
+        Assert.assertEquals(expectedViewPort, mModel.get(PlayerFrameProperties.VIEWPORT));
+
+        mMediator.onFling(100, 200);
+        expectedViewPort.offsetTo(mScroller.getFinalX(), mScroller.getFinalY());
+        ShadowLooper.runUiThreadTasks();
+        Assert.assertTrue(mScroller.isFinished());
+        Assert.assertEquals(expectedViewPort, mModel.get(PlayerFrameProperties.VIEWPORT));
+
+        mMediator.onFling(-100, -200);
+        expectedViewPort.offsetTo(mScroller.getFinalX(), mScroller.getFinalY());
+        ShadowLooper.runUiThreadTasks();
+        Assert.assertTrue(mScroller.isFinished());
+        Assert.assertEquals(expectedViewPort, mModel.get(PlayerFrameProperties.VIEWPORT));
     }
 
     /**
@@ -405,7 +684,7 @@ public class PlayerFrameMediatorTest {
     @Test
     public void testOnClick() {
         // Initial view port setup.
-        mMediator.setLayoutDimensions(100, 200);
+        mMediator.updateViewportSize(100, 200, 1f);
         List<ClickedPoint> expectedClickedPoints = new ArrayList<>();
 
         // No scrolling has happened yet.

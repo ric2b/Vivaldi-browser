@@ -13,9 +13,11 @@
 #include "chrome/browser/ui/tabs/tab_group_model.h"
 #include "chrome/browser/ui/tabs/tab_group_theme.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/grit/generated_resources.h"
 #include "components/tab_groups/tab_group_color.h"
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tab_groups/tab_group_visual_data.h"
+#include "ui/base/models/image_model.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/image/canvas_image_source.h"
 #include "ui/gfx/image/image_skia.h"
@@ -25,11 +27,14 @@
 constexpr int kFirstCommandIndex =
     TabStripModel::ContextMenuCommand::CommandLast + 1;
 
-ExistingTabGroupSubMenuModel::ExistingTabGroupSubMenuModel(TabStripModel* model,
-                                                           int context_index)
-    : SimpleMenuModel(this) {
-  model_ = model;
-  context_index_ = context_index;
+ExistingTabGroupSubMenuModel::ExistingTabGroupSubMenuModel(
+    ui::SimpleMenuModel::Delegate* parent_delegate,
+    TabStripModel* model,
+    int context_index)
+    : SimpleMenuModel(this),
+      parent_delegate_(parent_delegate),
+      model_(model),
+      context_index_(context_index) {
   Build();
 }
 
@@ -37,6 +42,9 @@ void ExistingTabGroupSubMenuModel::Build() {
   // Start command ids after the parent menu's ids to avoid collisions.
   int group_index = kFirstCommandIndex;
   const auto& tp = ThemeService::GetThemeProviderForProfile(model_->profile());
+  AddItemWithStringId(TabStripModel::CommandAddToNewGroup,
+                      IDS_TAB_CXMENU_SUBMENU_NEW_GROUP);
+  AddSeparator(ui::NORMAL_SEPARATOR);
   for (tab_groups::TabGroupId group : GetOrderedTabGroups()) {
     if (ShouldShowGroup(model_, context_index_, group)) {
       const TabGroup* tab_group = model_->group_model()->GetTabGroup(group);
@@ -46,9 +54,11 @@ void ExistingTabGroupSubMenuModel::Build() {
       constexpr int kIconSize = 14;
       const int color_id =
           GetTabGroupContextMenuColorId(tab_group->visual_data()->color());
+      // TODO (kylixrd): Investigate passing in color_id in order to color the
+      // icon using the ColorProvider.
       AddItemWithIcon(group_index, displayed_title,
-                      gfx::CreateVectorIcon(kTabGroupIcon, kIconSize,
-                                            tp.GetColor(color_id)));
+                      ui::ImageModel::FromVectorIcon(
+                          kTabGroupIcon, tp.GetColor(color_id), kIconSize));
     }
     group_index++;
   }
@@ -78,6 +88,11 @@ bool ExistingTabGroupSubMenuModel::IsCommandIdEnabled(int command_id) const {
 
 void ExistingTabGroupSubMenuModel::ExecuteCommand(int command_id,
                                                   int event_flags) {
+  if (command_id == TabStripModel::CommandAddToNewGroup) {
+    parent_delegate_->ExecuteCommand(TabStripModel::CommandAddToNewGroup,
+                                     event_flags);
+    return;
+  }
   const int group_index = command_id - kFirstCommandIndex;
   DCHECK_LT(size_t{group_index}, model_->group_model()->ListTabGroups().size());
   base::RecordAction(base::UserMetricsAction("TabContextMenu_NewTabInGroup"));

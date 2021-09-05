@@ -24,8 +24,6 @@ import android.widget.ListView;
 import android.widget.Spinner;
 import android.widget.TextView;
 
-import androidx.fragment.app.Fragment;
-
 import org.chromium.android_webview.common.DeveloperModeUtils;
 import org.chromium.android_webview.common.Flag;
 import org.chromium.android_webview.common.ProductionSupportedFlagList;
@@ -40,7 +38,7 @@ import java.util.Map;
  * A fragment to toggle experimental WebView flags/features.
  */
 @SuppressLint("SetTextI18n")
-public class FlagsFragment extends Fragment {
+public class FlagsFragment extends DevUiBaseFragment {
     private static final String TAG = "WebViewDevTools";
 
     private static final String STATE_DEFAULT = "Default";
@@ -236,8 +234,6 @@ public class FlagsFragment extends Fragment {
 
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
-            Intent intent = new Intent();
-            intent.setClassName(mContext.getPackageName(), ServiceNames.DEVELOPER_UI_SERVICE);
             try {
                 IDeveloperUiService.Stub.asInterface(service).setFlagOverrides(mOverriddenFlags);
             } catch (RemoteException e) {

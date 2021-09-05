@@ -9,19 +9,23 @@
 
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/metrics/histogram_tester.h"
+#include "base/test/metrics/user_action_tester.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/supervised_user/logged_in_user_mixin.h"
+#include "chrome/browser/supervised_user/supervised_user_extensions_metrics_recorder.h"
 #include "chrome/browser/supervised_user/supervised_user_features.h"
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
+#include "chrome/browser/supervised_user/supervised_user_test_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/browser/ui/views/parent_permission_dialog_view.h"
-#include "chrome/common/pref_names.h"
 #include "chrome/test/base/mixin_based_in_process_browser_test.h"
 #include "components/signin/public/identity_manager/identity_test_environment.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/common/extension_builder.h"
 #include "google_apis/gaia/fake_gaia.h"
@@ -112,16 +116,7 @@ class ParentPermissionDialogBrowserTest
   void InitializeFamilyData() {
     // Set up the child user's custodians (AKA parents).
     ASSERT_TRUE(browser());
-    PrefService* prefs = browser()->profile()->GetPrefs();
-    prefs->SetString(prefs::kSupervisedUserCustodianEmail,
-                     "test_parent_0@google.com");
-    prefs->SetString(prefs::kSupervisedUserCustodianObfuscatedGaiaId,
-                     "239029320");
-
-    prefs->SetString(prefs::kSupervisedUserSecondCustodianEmail,
-                     "test_parent_1@google.com");
-    prefs->SetString(prefs::kSupervisedUserSecondCustodianObfuscatedGaiaId,
-                     "85948533");
+    supervised_user_test_util::AddCustodians(browser()->profile());
 
     // Set up the identity test environment, which provides fake
     // OAuth refresh tokens.
@@ -274,15 +269,46 @@ IN_PROC_BROWSER_TEST_F(ParentPermissionDialogBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(ParentPermissionDialogBrowserTest,
                        PermissionReceivedForExtension) {
+  base::HistogramTester histogram_tester;
+  base::UserActionTester user_action_tester;
+
   set_next_reauth_status(GaiaAuthConsumer::ReAuthProofTokenStatus::kSuccess);
   set_next_dialog_action(
       ParentPermissionDialogBrowserTest::NextDialogAction::kAccept);
-  ShowPrompt();
+  ShowPromptForExtension();
   CheckResult(ParentPermissionDialog::Result::kParentPermissionReceived);
+
+  histogram_tester.ExpectBucketCount(SupervisedUserExtensionsMetricsRecorder::
+                                         kParentPermissionDialogHistogramName,
+                                     SupervisedUserExtensionsMetricsRecorder::
+                                         ParentPermissionDialogState::kOpened,
+                                     1);
+  histogram_tester.ExpectBucketCount(
+      SupervisedUserExtensionsMetricsRecorder::
+          kParentPermissionDialogHistogramName,
+      SupervisedUserExtensionsMetricsRecorder::ParentPermissionDialogState::
+          kParentApproved,
+      1);
+  histogram_tester.ExpectTotalCount(SupervisedUserExtensionsMetricsRecorder::
+                                        kParentPermissionDialogHistogramName,
+                                    2);
+  histogram_tester.ExpectTotalCount(
+      SupervisedUserExtensionsMetricsRecorder::
+          kParentPermissionDialogParentApprovedTimeHistogramName,
+      1);
+  EXPECT_EQ(1, user_action_tester.GetActionCount(
+                   SupervisedUserExtensionsMetricsRecorder::
+                       kParentPermissionDialogOpenedActionName));
+  EXPECT_EQ(1, user_action_tester.GetActionCount(
+                   SupervisedUserExtensionsMetricsRecorder::
+                       kParentPermissionDialogParentApprovedActionName));
 }
 
 IN_PROC_BROWSER_TEST_F(ParentPermissionDialogBrowserTest,
                        PermissionFailedInvalidPasswordForExtension) {
+  base::HistogramTester histogram_tester;
+  base::UserActionTester user_action_tester;
+
   set_next_reauth_status(
       GaiaAuthConsumer::ReAuthProofTokenStatus::kInvalidGrant);
   set_next_dialog_action(
@@ -290,13 +316,62 @@ IN_PROC_BROWSER_TEST_F(ParentPermissionDialogBrowserTest,
   ShowPromptForExtension();
   CheckInvalidCredentialWasReceived();
   CheckResult(ParentPermissionDialog::Result::kParentPermissionFailed);
+
+  histogram_tester.ExpectBucketCount(SupervisedUserExtensionsMetricsRecorder::
+                                         kParentPermissionDialogHistogramName,
+                                     SupervisedUserExtensionsMetricsRecorder::
+                                         ParentPermissionDialogState::kOpened,
+                                     1);
+  histogram_tester.ExpectBucketCount(SupervisedUserExtensionsMetricsRecorder::
+                                         kParentPermissionDialogHistogramName,
+                                     SupervisedUserExtensionsMetricsRecorder::
+                                         ParentPermissionDialogState::kFailed,
+                                     1);
+  histogram_tester.ExpectTotalCount(SupervisedUserExtensionsMetricsRecorder::
+                                        kParentPermissionDialogHistogramName,
+                                    2);
+  histogram_tester.ExpectTotalCount(
+      SupervisedUserExtensionsMetricsRecorder::
+          kParentPermissionDialogFailedTimeHistogramName,
+      1);
+  EXPECT_EQ(1, user_action_tester.GetActionCount(
+                   SupervisedUserExtensionsMetricsRecorder::
+                       kParentPermissionDialogOpenedActionName));
 }
 
 IN_PROC_BROWSER_TEST_F(ParentPermissionDialogBrowserTest,
                        PermissionDialogCanceledForExtension) {
+  base::HistogramTester histogram_tester;
+  base::UserActionTester user_action_tester;
+
   set_next_dialog_action(
       ParentPermissionDialogBrowserTest::NextDialogAction::kCancel);
 
   ShowPromptForExtension();
   CheckResult(ParentPermissionDialog::Result::kParentPermissionCanceled);
+
+  histogram_tester.ExpectBucketCount(SupervisedUserExtensionsMetricsRecorder::
+                                         kParentPermissionDialogHistogramName,
+                                     SupervisedUserExtensionsMetricsRecorder::
+                                         ParentPermissionDialogState::kOpened,
+                                     1);
+  histogram_tester.ExpectBucketCount(
+      SupervisedUserExtensionsMetricsRecorder::
+          kParentPermissionDialogHistogramName,
+      SupervisedUserExtensionsMetricsRecorder::ParentPermissionDialogState::
+          kParentCanceled,
+      1);
+  histogram_tester.ExpectTotalCount(SupervisedUserExtensionsMetricsRecorder::
+                                        kParentPermissionDialogHistogramName,
+                                    2);
+  histogram_tester.ExpectTotalCount(
+      SupervisedUserExtensionsMetricsRecorder::
+          kParentPermissionDialogParentCanceledTimeHistogramName,
+      1);
+  EXPECT_EQ(1, user_action_tester.GetActionCount(
+                   SupervisedUserExtensionsMetricsRecorder::
+                       kParentPermissionDialogOpenedActionName));
+  EXPECT_EQ(1, user_action_tester.GetActionCount(
+                   SupervisedUserExtensionsMetricsRecorder::
+                       kParentPermissionDialogParentCanceledActionName));
 }

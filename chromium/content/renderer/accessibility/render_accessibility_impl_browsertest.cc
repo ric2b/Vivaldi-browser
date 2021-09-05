@@ -50,6 +50,8 @@
 #include "third_party/blink/public/web/web_node.h"
 #include "third_party/blink/public/web/web_view.h"
 #include "ui/accessibility/ax_action_target.h"
+#include "ui/accessibility/ax_enums.mojom.h"
+#include "ui/accessibility/ax_event.h"
 #include "ui/accessibility/ax_mode.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/accessibility/null_ax_action_target.h"
@@ -61,13 +63,24 @@ using blink::WebAXObject;
 using blink::WebDocument;
 using testing::ElementsAre;
 
+namespace {
+
+#if !defined(OS_ANDROID)
+bool IsSelected(const WebAXObject& obj) {
+  ui::AXNodeData node_data;
+  obj.Serialize(&node_data);
+  return node_data.GetBoolAttribute(ax::mojom::BoolAttribute::kSelected);
+}
+#endif  // !defined(OS_ANDROID)
+
+}  // namespace
+
 class TestAXImageAnnotator : public AXImageAnnotator {
  public:
   TestAXImageAnnotator(
       RenderAccessibilityImpl* const render_accessibility,
       mojo::PendingRemote<image_annotation::mojom::Annotator> annotator)
       : AXImageAnnotator(render_accessibility,
-                         std::string() /* preferred_language */,
                          std::move(annotator)) {}
   ~TestAXImageAnnotator() override = default;
 
@@ -262,7 +275,7 @@ class RenderAccessibilityImplTest : public RenderViewTest {
     WebAXObject root_obj = WebAXObject::FromWebDocument(document);
     EXPECT_FALSE(root_obj.IsNull());
     GetRenderAccessibilityImpl()->HandleAXEvent(
-        root_obj, ax::mojom::Event::kLayoutComplete);
+        ui::AXEvent(root_obj.AxID(), ax::mojom::Event::kLayoutComplete));
     SendPendingAccessibilityEvents();
   }
 
@@ -356,7 +369,7 @@ TEST_F(RenderAccessibilityImplTest, SendFullAccessibilityTreeOnReload) {
   WebDocument document = GetMainFrame()->GetDocument();
   WebAXObject root_obj = WebAXObject::FromWebDocument(document);
   GetRenderAccessibilityImpl()->HandleAXEvent(
-      root_obj, ax::mojom::Event::kLayoutComplete);
+      ui::AXEvent(root_obj.AxID(), ax::mojom::Event::kLayoutComplete));
   SendPendingAccessibilityEvents();
   EXPECT_EQ(1, CountAccessibilityNodesSentToBrowser());
   {
@@ -373,7 +386,7 @@ TEST_F(RenderAccessibilityImplTest, SendFullAccessibilityTreeOnReload) {
   root_obj = WebAXObject::FromWebDocument(document);
   ClearHandledUpdates();
   GetRenderAccessibilityImpl()->HandleAXEvent(
-      root_obj, ax::mojom::Event::kLayoutComplete);
+      ui::AXEvent(root_obj.AxID(), ax::mojom::Event::kLayoutComplete));
   SendPendingAccessibilityEvents();
   EXPECT_EQ(5, CountAccessibilityNodesSentToBrowser());
 
@@ -386,7 +399,7 @@ TEST_F(RenderAccessibilityImplTest, SendFullAccessibilityTreeOnReload) {
   ClearHandledUpdates();
   const WebAXObject& first_child = root_obj.ChildAt(0);
   GetRenderAccessibilityImpl()->HandleAXEvent(
-      first_child, ax::mojom::Event::kLiveRegionChanged);
+      ui::AXEvent(first_child.AxID(), ax::mojom::Event::kLiveRegionChanged));
   SendPendingAccessibilityEvents();
   EXPECT_EQ(5, CountAccessibilityNodesSentToBrowser());
 }
@@ -424,7 +437,7 @@ TEST_F(RenderAccessibilityImplTest, HideAccessibilityObject) {
   // Send a childrenChanged on "A".
   ClearHandledUpdates();
   GetRenderAccessibilityImpl()->HandleAXEvent(
-      node_a, ax::mojom::Event::kChildrenChanged);
+      ui::AXEvent(node_a.AxID(), ax::mojom::Event::kChildrenChanged));
   SendPendingAccessibilityEvents();
   AXContentTreeUpdate update = GetLastAccUpdate();
   ASSERT_EQ(2U, update.nodes.size());
@@ -472,7 +485,7 @@ TEST_F(RenderAccessibilityImplTest, ShowAccessibilityObject) {
   ClearHandledUpdates();
 
   GetRenderAccessibilityImpl()->HandleAXEvent(
-      node_a, ax::mojom::Event::kChildrenChanged);
+      ui::AXEvent(node_a.AxID(), ax::mojom::Event::kChildrenChanged));
   SendPendingAccessibilityEvents();
   AXContentTreeUpdate update = GetLastAccUpdate();
 
@@ -708,9 +721,9 @@ TEST_F(BlinkAXActionTargetTest, TestMethods) {
 
   // Android does not produce accessible items for option elements.
 #if !defined(OS_ANDROID)
-  EXPECT_EQ(blink::kWebAXSelectedStateFalse, option.IsSelected());
+  EXPECT_FALSE(IsSelected(option));
   EXPECT_TRUE(option_action_target->SetSelected(true));
-  EXPECT_EQ(blink::kWebAXSelectedStateTrue, option.IsSelected());
+  EXPECT_TRUE(IsSelected(option));
 #endif
 
   std::string value_to_set("test-value");

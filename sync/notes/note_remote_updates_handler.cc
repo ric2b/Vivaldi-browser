@@ -21,6 +21,7 @@
 #include "notes/note_node.h"
 #include "notes/notes_model.h"
 #include "sync/notes/note_specifics_conversions.h"
+#include "components/sync_bookmarks/switches.h"
 
 namespace sync_notes {
 
@@ -231,6 +232,7 @@ void NoteRemoteUpdatesHandler::Process(
             update_entity.originator_client_item_id);
     if (old_tracked_entity) {
       if (tracked_entity) {
+        DCHECK_NE(tracked_entity, old_tracked_entity);
         // We generally shouldn't have an entry for both the old ID and the new
         // ID, but it could happen due to some past bug (see crbug.com/1004205).
         // In that case, the two entries should be duplicates in the sense that
@@ -239,16 +241,35 @@ void NoteRemoteUpdatesHandler::Process(
         // resolved.
         const vivaldi::NoteNode* old_node = old_tracked_entity->note_node();
         const vivaldi::NoteNode* new_node = tracked_entity->note_node();
-        // |old_node| may be null when |old_entity| is a tombstone pending
-        // commit.
-        if (old_node != nullptr) {
-          CHECK(old_node->type() == vivaldi::NoteNode::NOTE);
-          CHECK(new_node->type() == vivaldi::NoteNode::NOTE);
-          CHECK(old_node->GetContent() == new_node->GetContent());
-          notes_model_->Remove(old_node);
+        if (new_node == nullptr) {
+          // This might happen in case a synced note (with a non-temporary
+          // server ID but no known client tag) was deleted locally and then
+          // recreated locally while the commit is in flight. This leads to two
+          // entities in the tracker (for the same note GUID), one of them
+          // being a tombstone (|tracked_entity|). The commit response (for the
+          // deletion) may never be received (e.g. network issues) and instead a
+          // remote update is received (possibly our own reflection). Resolving
+          // a situation with duplicate entries is simple as long as at least
+          // one of the two (it could also be both) is a tombstone: one of the
+          // entities can be simply untracked.
+          //
+          // In the current case the |old_tracked_entity| must be a new entity
+          // since it does not have server ID yet. The |new_node| must be always
+          // a tombstone (the note which was deleted). Just remove the
+          // tombstone and continue applying current update (even if |old_node|
+          // is a tombstone too).
+          note_tracker_->Remove(tracked_entity);
+          tracked_entity = nullptr;
+        } else {
+          // |old_node| may be null when |old_entity| is a tombstone pending
+          // commit.
+          if (old_node != nullptr) {
+            DCHECK_NE(old_node, new_node);
+            notes_model_->Remove(old_node);
+          }
+          note_tracker_->Remove(old_tracked_entity);
+          continue;
         }
-        note_tracker_->Remove(old_tracked_entity);
-        continue;
       }
 
       note_tracker_->UpdateSyncIdForLocalCreationIfNeeded(

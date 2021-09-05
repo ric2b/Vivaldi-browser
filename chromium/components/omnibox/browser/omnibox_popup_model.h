@@ -21,6 +21,7 @@
 class OmniboxPopupModelObserver;
 class OmniboxPopupView;
 class GURL;
+class PrefService;
 
 namespace gfx {
 class Image;
@@ -34,35 +35,48 @@ class OmniboxPopupModel {
 
   // When changing selections, these are the possible stepping behaviors.
   enum Step {
-    // Step by an entire line regardless of line state.
+    // Step by an entire line regardless of line state. Usually used for the
+    // Up and Down arrow keys.
     kWholeLine,
 
     // Step by a state if another one is available on the current line;
-    // otherwise step by line.
+    // otherwise step by line. Usually used for the Tab and Shift+Tab keys.
     kStateOrLine,
 
     // Step by a state if another one is available on the current line;
-    // otherwise do not step.
+    // otherwise do not step. Usually used for the Left and Right arrow keys.
     kStateOrNothing,
 
-    // Step across all lines to the first or last line.
+    // Step across all lines to the first or last line. Usually used for the
+    // PgUp and PgDn keys.
     kAllLines
   };
 
   // The sentinel value for Selection::line which means no line is selected.
   static const size_t kNoMatch;
 
-  // See |Selection::state| below for details.
+  // See |Selection::state| below for details. The numeric values are to aid
+  // comparison only. They are not persisted anywhere and can be freely changed.
   enum LineState {
-    NORMAL,
-    KEYWORD,
-    BUTTON_FOCUSED,
+    // This means the Header above this row is highlighted, and the
+    // header collapse/expand button is focused.
+    HEADER_BUTTON_FOCUSED = 0,
 
-    // NO_STATE logically indicates unavailability of a state, and is
-    // only used internally. NO_STATE values are not persisted in members,
-    // are not returned from public methods, and should not be used by
-    // other classes.
-    NO_STATE
+    // NORMAL means the row is focused, and Enter key navigates to the match.
+    NORMAL = 1,
+
+    // KEYWORD state means actually in keyword mode, as distinct from the
+    // FOCUSED_BUTTON_KEYWORD state, which is only for button focus.
+    KEYWORD = 2,
+
+    // The single (ambiguous) button focus state is not used when button row
+    // is enabled. Instead, the specific FOCUSED_* states below apply.
+    BUTTON_FOCUSED = 3,
+
+    // Button row focus states:
+    FOCUSED_BUTTON_KEYWORD = 4,
+    FOCUSED_BUTTON_TAB_SWITCH = 5,
+    FOCUSED_BUTTON_PEDAL = 6,
   };
 
   struct Selection {
@@ -81,16 +95,18 @@ class OmniboxPopupModel {
 
     bool operator==(const Selection&) const;
     bool operator!=(const Selection&) const;
+    bool operator<(const Selection&) const;
 
     // Returns true if going to this selection from given |from| selection
     // results in activation of keyword state when it wasn't active before.
     bool IsChangeToKeyword(Selection from) const;
-
-    // Derive another selection as copy of this one but with given state change.
-    Selection With(LineState new_state) const;
   };
 
-  OmniboxPopupModel(OmniboxPopupView* popup_view, OmniboxEditModel* edit_model);
+  // |pref_service| can be nullptr, in which case OmniboxPopupModel won't
+  // account for collapsed headers.
+  OmniboxPopupModel(OmniboxPopupView* popup_view,
+                    OmniboxEditModel* edit_model,
+                    PrefService* pref_service);
   ~OmniboxPopupModel();
 
   // Computes the maximum width, in pixels, that can be allocated for the two
@@ -114,9 +130,6 @@ class OmniboxPopupModel {
                                     bool allow_shrinking_contents,
                                     int* contents_max_width,
                                     int* description_max_width);
-
-  // Fully defines forward and backward ordering for all possible line states.
-  static LineState GetNextLineState(LineState state, Direction direction);
 
   // Returns true if the popup is currently open.
   bool IsOpen() const;
@@ -204,6 +217,11 @@ class OmniboxPopupModel {
 
   OmniboxEditModel* edit_model() { return edit_model_; }
 
+  // Gets all the available selections, filtered by |direction| and |step|, as
+  // well as feature flags and the matches' states.
+  std::vector<Selection> GetAllAvailableSelectionsSorted(Direction direction,
+                                                         Step step) const;
+
   // Advances selection with consideration for both line number and line state.
   // |direction| indicates direction of step, and |step| determines what kind
   // of step to take. Returns the next selection, which could be anything.
@@ -222,16 +240,11 @@ class OmniboxPopupModel {
   // Returns new selection.
   Selection ClearSelectionState();
 
- private:
   // Returns true if the |selection| is available according to result matches.
+  // It doesn't account for some Step methods skipping some selections.
   bool IsSelectionAvailable(Selection selection) const;
 
-  // Returns the next line state that can be applied for given |from| selection,
-  // with |direction| indicating the direction of step. May return NO_STATE.
-  LineState GetNextAvailableLineState(Selection from,
-                                      Direction direction,
-                                      bool skip_keyword) const;
-
+ private:
   void OnFaviconFetched(const GURL& page_url, const gfx::Image& icon);
 
   std::map<int, SkBitmap> rich_suggestion_bitmaps_;
@@ -239,6 +252,9 @@ class OmniboxPopupModel {
   OmniboxPopupView* view_;
 
   OmniboxEditModel* edit_model_;
+
+  // Non-owning reference to the pref service. Can be nullptr in tests or iOS.
+  PrefService* const pref_service_;
 
   Selection selection_;
 

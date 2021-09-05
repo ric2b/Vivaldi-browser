@@ -228,12 +228,17 @@ NGLayoutCacheStatus CalculateSizeBasedLayoutCacheStatusWithGeometry(
 
     block_size = ComputeBlockSizeForFragment(
         new_space, style, fragment_geometry.border + fragment_geometry.padding,
-        layout_result.IntrinsicBlockSize());
+        layout_result.IntrinsicBlockSize(),
+        fragment_geometry.border_box_size.inline_size);
   }
 
   bool is_block_size_equal = block_size == fragment.BlockSize();
 
   if (!is_block_size_equal) {
+    // Only block-flow supports changing the block-size for simplified layout.
+    if (!node.IsBlockFlow() || node.IsLayoutNGCustom())
+      return NGLayoutCacheStatus::kNeedsLayout;
+
     // If we are the document or body element in quirks mode, changing our size
     // means that a scrollbar was added/removed. Require full layout.
     if (node.IsQuirkyAndFillsViewport())

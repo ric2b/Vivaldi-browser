@@ -6,10 +6,10 @@
 
 #import <WebKit/WebKit.h>
 
+#include "base/check_op.h"
 #include "base/feature_list.h"
 #include "base/i18n/i18n_constants.h"
 #import "base/ios/block_types.h"
-#include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/sys_string_conversions.h"
 #include "ios/web/common/features.h"
@@ -440,31 +440,6 @@ enum class BackForwardNavigationType {
   }
 }
 
-// Reports Navigation.IOSWKWebViewSlowFastBackForward UMA. No-op if pending
-// navigation is not back forward navigation.
-- (void)reportBackForwardNavigationTypeForFastNavigation:(BOOL)isFast {
-  web::NavigationManager* navigationManager = self.navigationManagerImpl;
-  int pendingIndex = navigationManager->GetPendingItemIndex();
-  if (pendingIndex == -1) {
-    // Pending navigation is not a back forward navigation.
-    return;
-  }
-
-  BOOL isBack = pendingIndex < navigationManager->GetLastCommittedItemIndex();
-  BackForwardNavigationType type = BackForwardNavigationType::FAST_BACK;
-  if (isBack) {
-    type = isFast ? BackForwardNavigationType::FAST_BACK
-                  : BackForwardNavigationType::SLOW_BACK;
-  } else {
-    type = isFast ? BackForwardNavigationType::FAST_FORWARD
-                  : BackForwardNavigationType::SLOW_FORWARD;
-  }
-
-  UMA_HISTOGRAM_ENUMERATION(
-      "Navigation.IOSWKWebViewSlowFastBackForward", type,
-      BackForwardNavigationType::BACK_FORWARD_NAVIGATION_TYPE_COUNT);
-}
-
 #pragma mark Navigation and Session Information
 
 // Returns the associated NavigationManagerImpl.
@@ -556,18 +531,11 @@ enum class BackForwardNavigationType {
   // in the web view, update |customUserAgent| property, which will be used by
   // the next request sent by this web view.
   web::UserAgentType itemUserAgentType =
-      self.currentNavItem->GetUserAgentType();
+      self.currentNavItem->GetUserAgentType(self.webView);
 
-  if (itemUserAgentType == web::UserAgentType::AUTOMATIC) {
-    DCHECK(base::FeatureList::IsEnabled(
-        web::features::kUseDefaultUserAgentInWebClient));
-    itemUserAgentType = web::GetWebClient()->GetDefaultUserAgent(
-        self.webView, self.currentNavItem->GetURL());
-    self.currentNavItem->SetUserAgentType(
-        itemUserAgentType, /*update_inherited_user_agent =*/false);
-  } else if (itemUserAgentType == web::UserAgentType::NONE &&
-             web::GetWebClient()->IsAppSpecificURL(
-                 self.currentNavItem->GetVirtualURL())) {
+  if (itemUserAgentType == web::UserAgentType::NONE &&
+      web::GetWebClient()->IsAppSpecificURL(
+          self.currentNavItem->GetVirtualURL())) {
     // In case the URL to be loaded is a WebUI URL and the user agent is nil,
     // get the mobile user agent.
     itemUserAgentType = web::UserAgentType::MOBILE;
@@ -688,7 +656,6 @@ enum class BackForwardNavigationType {
     [self.navigationHandler.navigationStates
            setContext:std::move(navigationContext)
         forNavigation:navigation];
-    [self reportBackForwardNavigationTypeForFastNavigation:NO];
   };
 
   // When navigating via WKBackForwardListItem to pages created or updated by
@@ -740,7 +707,6 @@ enum class BackForwardNavigationType {
       holder->set_navigation_type(WKNavigationTypeBackForward);
       navigation = [self.webView
           goToBackForwardListItem:holder->back_forward_list_item()];
-      [self reportBackForwardNavigationTypeForFastNavigation:YES];
     }
     [self.navigationHandler.navigationStates
              setState:web::WKNavigationState::REQUESTED

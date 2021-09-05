@@ -11,14 +11,17 @@
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/android/feed/v2/feed_service_bridge.h"
+#include "chrome/browser/android/feed/v2/refresh_task_scheduler_impl.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_key.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
 #include "chrome/common/channel_info.h"
+#include "chrome/common/chrome_version.h"
+#include "components/background_task_scheduler/background_task_scheduler_factory.h"
 #include "components/feed/core/proto/v2/store.pb.h"
 #include "components/feed/core/v2/public/feed_service.h"
-#include "components/feed/core/v2/refresh_task_scheduler.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_context.h"
@@ -35,6 +38,9 @@ class FeedServiceDelegateImpl : public FeedService::Delegate {
   ~FeedServiceDelegateImpl() override = default;
   std::string GetLanguageTag() override {
     return FeedServiceBridge::GetLanguageTag();
+  }
+  DisplayMetrics GetDisplayMetrics() override {
+    return FeedServiceBridge::GetDisplayMetrics();
   }
 };
 
@@ -57,6 +63,8 @@ FeedServiceFactory::FeedServiceFactory()
           "FeedService",
           BrowserContextDependencyManager::GetInstance()) {
   DependsOn(IdentityManagerFactory::GetInstance());
+  DependsOn(HistoryServiceFactory::GetInstance());
+  DependsOn(background_task::BackgroundTaskSchedulerFactory::GetInstance());
 }
 
 FeedServiceFactory::~FeedServiceFactory() = default;
@@ -84,17 +92,25 @@ KeyedService* FeedServiceFactory::BuildServiceInstanceFor(
 
   base::FilePath feed_dir(profile->GetPath().Append(kFeedv2Folder));
 
+  feed::ChromeInfo chrome_info;
+  chrome_info.version = base::Version({CHROME_VERSION});
+  chrome_info.channel = chrome::GetChannel();
+
   return new FeedService(
       std::make_unique<FeedServiceDelegateImpl>(),
-      std::unique_ptr<RefreshTaskScheduler>(),  // TODO(harringtond): implement
-                                                // one of these.
+      std::make_unique<RefreshTaskSchedulerImpl>(
+          background_task::BackgroundTaskSchedulerFactory::GetForKey(
+              profile->GetProfileKey())),
       profile->GetPrefs(), g_browser_process->local_state(),
       storage_partition->GetProtoDatabaseProvider()->GetDB<feedstore::Record>(
           leveldb_proto::ProtoDbType::FEED_STREAM_DATABASE,
           feed_dir.AppendASCII("streamdb"), background_task_runner),
       identity_manager,
+      HistoryServiceFactory::GetForProfile(profile,
+                                           ServiceAccessType::IMPLICIT_ACCESS),
+
       storage_partition->GetURLLoaderFactoryForBrowserProcess(),
-      background_task_runner, api_key);
+      background_task_runner, api_key, chrome_info);
 }
 
 content::BrowserContext* FeedServiceFactory::GetBrowserContextToUse(

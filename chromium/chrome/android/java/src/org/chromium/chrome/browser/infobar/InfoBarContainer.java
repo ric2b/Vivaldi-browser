@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.infobar;
 
+import android.app.Activity;
 import android.view.View;
 import android.view.ViewGroup;
 
@@ -18,8 +19,9 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.TabImpl;
 import org.chromium.chrome.browser.tab.TabObserver;
+import org.chromium.chrome.browser.tab.TabUtils;
+import org.chromium.chrome.browser.ui.messages.infobar.InfoBar;
 import org.chromium.chrome.browser.ui.messages.infobar.InfoBarUiItem;
 import org.chromium.chrome.browser.util.AccessibilityUtil;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
@@ -28,6 +30,7 @@ import org.chromium.chrome.browser.widget.bottomsheet.EmptyBottomSheetObserver;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.KeyboardVisibilityDelegate.KeyboardVisibilityListener;
+import org.chromium.ui.base.WindowAndroid;
 
 import java.util.ArrayList;
 
@@ -118,9 +121,9 @@ public class InfoBarContainer implements UserData, KeyboardVisibilityListener, I
         }
 
         @Override
-        public void onActivityAttachmentChanged(Tab tab, boolean isAttached) {
-            if (isAttached) {
-                initializeContainerView();
+        public void onActivityAttachmentChanged(Tab tab, @Nullable WindowAndroid window) {
+            if (window != null) {
+                initializeContainerView(getActivity(tab));
                 updateWebContents();
             } else {
                 destroyContainerView();
@@ -233,11 +236,17 @@ public class InfoBarContainer implements UserData, KeyboardVisibilityListener, I
         mTabView = tab.getView();
         mTab = tab;
 
-        if (((TabImpl) tab).getActivity() != null) initializeContainerView();
+        ChromeActivity activity = getActivity(tab);
+        if (activity != null) initializeContainerView(activity);
 
         // Chromium's InfoBarContainer may add an InfoBar immediately during this initialization
         // call, so make sure everything in the InfoBarContainer is completely ready beforehand.
         mNativeInfoBarContainer = InfoBarContainerJni.get().init(InfoBarContainer.this);
+    }
+
+    private static ChromeActivity getActivity(Tab tab) {
+        Activity activity = TabUtils.getActivity(tab);
+        return activity instanceof ChromeActivity ? (ChromeActivity) activity : null;
     }
 
     /**
@@ -454,8 +463,7 @@ public class InfoBarContainer implements UserData, KeyboardVisibilityListener, I
         if (mTabView != null) mTabView.addOnAttachStateChangeListener(mAttachedStateListener);
     }
 
-    private void initializeContainerView() {
-        final ChromeActivity chromeActivity = ((TabImpl) mTab).getActivity();
+    private void initializeContainerView(ChromeActivity chromeActivity) {
         assert chromeActivity
                 != null
             : "ChromeActivity should not be null when initializing InfoBarContainerView";
@@ -477,10 +485,8 @@ public class InfoBarContainer implements UserData, KeyboardVisibilityListener, I
                                                     : View.VISIBLE);
                                 }
                             };
-                            ((TabImpl) mTab)
-                                    .getActivity()
-                                    .getBottomSheetController()
-                                    .addObserver(mBottomSheetObserver);
+                            getActivity(mTab).getBottomSheetController().addObserver(
+                                    mBottomSheetObserver);
                         }
 
                         for (InfoBarContainer.InfoBarContainerObserver observer : mObservers) {
@@ -519,7 +525,7 @@ public class InfoBarContainer implements UserData, KeyboardVisibilityListener, I
             mInfoBarContainerView = null;
         }
 
-        ChromeActivity activity = ((TabImpl) mTab).getActivity();
+        ChromeActivity activity = getActivity(mTab);
         if (activity != null && mBottomSheetObserver != null) {
             activity.getBottomSheetController().removeObserver(mBottomSheetObserver);
         }

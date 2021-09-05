@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "ash/public/cpp/keyboard/keyboard_controller.h"
+#include "ash/public/cpp/keyboard/keyboard_controller_observer.h"
 #include "ash/shell.h"
 #include "base/bind.h"
 #include "base/callback.h"
@@ -48,7 +49,7 @@ class ChromeKeyboardControllerClientTestHelper::FakeKeyboardController
   void ShowKeyboard() override { visible_ = true; }
   void HideKeyboard(ash::HideReason reason) override { visible_ = false; }
   void SetContainerType(keyboard::ContainerType container_type,
-                        const base::Optional<gfx::Rect>& target_bounds,
+                        const gfx::Rect& target_bounds,
                         SetContainerTypeCallback callback) override {
     std::move(callback).Run(true);
   }
@@ -59,11 +60,19 @@ class ChromeKeyboardControllerClientTestHelper::FakeKeyboardController
   bool SetAreaToRemainOnScreen(const gfx::Rect& bounds) override {
     return false;
   }
+  bool SetWindowBoundsInScreen(const gfx::Rect& bounds) override {
+    return false;
+  }
+  bool ShouldOverscroll() override { return true; }
   void AddObserver(ash::KeyboardControllerObserver* observer) override {
     observers_.AddObserver(observer);
   }
   void RemoveObserver(ash::KeyboardControllerObserver* observer) override {
     observers_.RemoveObserver(observer);
+  }
+  ash::KeyRepeatSettings GetKeyRepeatSettings() override {
+    return ash::KeyRepeatSettings{true, base::TimeDelta::FromMilliseconds(1000),
+                                  base::TimeDelta::FromMilliseconds(1000)};
   }
 
  private:

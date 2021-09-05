@@ -25,7 +25,7 @@
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos.h"
 #include "chrome/browser/chromeos/policy/device_policy_decoder_chromeos.h"
 #include "chrome/browser/chromeos/policy/off_hours/off_hours_proto_parser.h"
-#include "chrome/browser/chromeos/policy/system_proxy_settings_policy_handler.h"
+#include "chrome/browser/chromeos/policy/system_proxy_manager.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/settings/device_settings_cache.h"
 #include "chrome/browser/chromeos/settings/stats_reporting_controller.h"
@@ -128,6 +128,7 @@ const char* const kKnownSettings[] = {
     kReportDeviceBacklightInfo,
     kReportDeviceUsers,
     kReportDeviceVersionInfo,
+    kReportDeviceAppInfo,
     kReportOsUpdateStatus,
     kReportRunningKioskApp,
     kReportUploadFrequency,
@@ -602,6 +603,10 @@ void DecodeReportingPolicies(const em::ChromeDeviceSettingsProto& policy,
       new_values_cache->SetBoolean(kReportDeviceBacklightInfo,
                                    reporting_policy.report_backlight_info());
     }
+    if (reporting_policy.has_report_app_info()) {
+      new_values_cache->SetBoolean(kReportDeviceAppInfo,
+                                   reporting_policy.report_app_info());
+    }
   }
 }
 
@@ -755,16 +760,6 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
                                base::Value::FromUniquePtrValue(
                                    tpm_firmware_update::DecodeSettingsProto(
                                        policy.tpm_firmware_update_settings())));
-  }
-
-  if (policy.has_minimum_chrome_version_enforced()) {
-    const em::StringPolicyProto& container(
-        policy.minimum_chrome_version_enforced());
-    if (container.has_value()) {
-      SetJsonDeviceSetting(kMinimumChromeVersionEnforced,
-                           policy::key::kMinimumChromeVersionEnforced,
-                           container.value(), new_values_cache);
-    }
   }
 
   if (policy.has_cast_receiver_name()) {

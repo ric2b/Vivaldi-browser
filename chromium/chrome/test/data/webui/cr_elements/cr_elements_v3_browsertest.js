@@ -6,6 +6,9 @@
 
 // Polymer BrowserTest fixture.
 GEN_INCLUDE(['//chrome/test/data/webui/polymer_browser_test_base.js']);
+
+GEN('#include "chrome/browser/ui/ui_features.h"');
+GEN('#include "content/public/test/browser_test.h"');
 GEN('#include "services/network/public/cpp/features.h"');
 
 /** Test fixture for shared Polymer 3 elements. */
@@ -318,7 +321,10 @@ var CrElementsPolicyPrefIndicatorV3Test =
 
   /** @override */
   get featureList() {
-    return {enabled: ['network::features::kOutOfBlinkCors']};
+    return {
+      enabled: ['network::features::kOutOfBlinkCors'],
+      disabled: [],
+    };
   }
 };
 
@@ -336,5 +342,22 @@ var CrElementsPolicyIndicatorBehaviorV3Test =
 };
 
 TEST_F('CrElementsPolicyIndicatorBehaviorV3Test', 'All', function() {
+  mocha.run();
+});
+
+// eslint-disable-next-line no-var
+var CrElementsLottieV3Test = class extends CrElementsV3BrowserTest {
+  /** @override */
+  get browsePreload() {
+    return 'chrome://test?module=cr_elements/cr_lottie_tests.m.js';
+  }
+
+  /** @override */
+  get commandLineSwitches() {
+    return [{switchName: 'enable-pixel-output-in-tests'}];
+  }
+};
+
+TEST_F('CrElementsLottieV3Test', 'All', function() {
   mocha.run();
 });

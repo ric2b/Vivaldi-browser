@@ -893,7 +893,29 @@ void HTMLTreeBuilder::ProcessStartTagForInBody(AtomicHTMLToken* token) {
 
 void HTMLTreeBuilder::ProcessTemplateStartTag(AtomicHTMLToken* token) {
   tree_.ActiveFormattingElements()->AppendMarker();
-  tree_.InsertHTMLElement(token);
+
+  DeclarativeShadowRootType declarative_shadow_root_type(
+      DeclarativeShadowRootType::kNone);
+  if (RuntimeEnabledFeatures::DeclarativeShadowDOMEnabled()) {
+    if (Attribute* type_attribute =
+            token->GetAttributeItem(html_names::kShadowrootAttr)) {
+      String shadow_mode = type_attribute->Value();
+      if (EqualIgnoringASCIICase(shadow_mode, "open")) {
+        declarative_shadow_root_type = DeclarativeShadowRootType::kOpen;
+      } else if (EqualIgnoringASCIICase(shadow_mode, "closed")) {
+        declarative_shadow_root_type = DeclarativeShadowRootType::kClosed;
+      } else {
+        tree_.OwnerDocumentForCurrentNode().AddConsoleMessage(
+            MakeGarbageCollected<ConsoleMessage>(
+                mojom::blink::ConsoleMessageSource::kOther,
+                mojom::blink::ConsoleMessageLevel::kWarning,
+                "Invalid declarative shadowroot attribute value \"" +
+                    shadow_mode +
+                    "\". Valid values include \"open\" and \"closed\"."));
+      }
+    }
+  }
+  tree_.InsertHTMLTemplateElement(token, declarative_shadow_root_type);
   frameset_ok_ = false;
   template_insertion_modes_.push_back(kTemplateContentsMode);
   SetInsertionMode(kTemplateContentsMode);
@@ -920,39 +942,38 @@ bool HTMLTreeBuilder::ProcessTemplateEndTag(AtomicHTMLToken* token) {
   tree_.ActiveFormattingElements()->ClearToLastMarker();
   template_insertion_modes_.pop_back();
   ResetInsertionModeAppropriately();
-  // Check for a declarative shadow root.
   if (RuntimeEnabledFeatures::DeclarativeShadowDOMEnabled() &&
       template_stack_item) {
-    if (Attribute* type_attribute = template_stack_item->GetAttributeItem(
-            html_names::kShadowrootAttr)) {
-      String shadow_mode = type_attribute->Value();
-      bool is_open = EqualIgnoringASCIICase(shadow_mode, "open");
-      if (is_open || EqualIgnoringASCIICase(shadow_mode, "closed")) {
-        DCHECK(template_stack_item->IsElementNode());
-        DCHECK(shadow_host_stack_item);
-        DCHECK(shadow_host_stack_item->IsElementNode());
-        UseCounter::Count(shadow_host_stack_item->GetElement()->GetDocument(),
-                          WebFeature::kDeclarativeShadowRoot);
-        bool delegates_focus = template_stack_item->GetAttributeItem(
-            html_names::kShadowrootdelegatesfocusAttr);
-        // TODO(1063157): Add an attribute for imperative slot assignment.
-        bool manual_slotting = false;
-        shadow_host_stack_item->GetElement()->AttachDeclarativeShadowRoot(
-            DynamicTo<HTMLTemplateElement>(template_stack_item->GetElement()),
-            is_open ? ShadowRootType::kOpen : ShadowRootType::kClosed,
-            delegates_focus ? FocusDelegation::kDelegateFocus
-                            : FocusDelegation::kNone,
-            manual_slotting ? SlotAssignmentMode::kManual
-                            : SlotAssignmentMode::kAuto);
-      } else {
-        tree_.OwnerDocumentForCurrentNode().AddConsoleMessage(
-            MakeGarbageCollected<ConsoleMessage>(
-                mojom::blink::ConsoleMessageSource::kOther,
-                mojom::blink::ConsoleMessageLevel::kWarning,
-                "Invalid declarative shadowroot attribute value \"" +
-                    shadow_mode +
-                    "\". Valid values include \"open\" and \"closed\"."));
-      }
+    DCHECK(template_stack_item->IsElementNode());
+    HTMLTemplateElement* template_element =
+        DynamicTo<HTMLTemplateElement>(template_stack_item->GetElement());
+    // 9. If the start tag for the declarative template element did not have an
+    // attribute with the name "shadowroot" whose value was an ASCII
+    // case-insensitive match for the strings "open" or "closed", then stop this
+    // algorithm.
+    // 10. If the adjusted current node is the topmost element in the stack of
+    // open elements, then stop this algorithm.
+    if (template_element->IsDeclarativeShadowRoot() &&
+        shadow_host_stack_item->GetNode() != tree_.OpenElements()->RootNode()) {
+      DCHECK(shadow_host_stack_item);
+      DCHECK(shadow_host_stack_item->IsElementNode());
+      UseCounter::Count(shadow_host_stack_item->GetElement()->GetDocument(),
+                        WebFeature::kDeclarativeShadowRoot);
+      bool delegates_focus = template_stack_item->GetAttributeItem(
+          html_names::kShadowrootdelegatesfocusAttr);
+      // TODO(crbug.com/1063157): Add an attribute for imperative slot
+      // assignment.
+      bool manual_slotting = false;
+      shadow_host_stack_item->GetElement()->AttachDeclarativeShadowRoot(
+          template_element,
+          template_element->GetDeclarativeShadowRootType() ==
+                  DeclarativeShadowRootType::kOpen
+              ? ShadowRootType::kOpen
+              : ShadowRootType::kClosed,
+          delegates_focus ? FocusDelegation::kDelegateFocus
+                          : FocusDelegation::kNone,
+          manual_slotting ? SlotAssignmentMode::kManual
+                          : SlotAssignmentMode::kAuto);
     }
   }
   return true;

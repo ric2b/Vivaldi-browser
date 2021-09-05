@@ -72,12 +72,17 @@ constexpr OzonePlatform::PlatformProperties kWaylandPlatformProperties = {
     /*custom_frame_pref_default=*/true,
     /*use_system_title_bar=*/false,
 
-    // Ozone/Wayland relies on the mojo communication when running in
-    // !single_process.
-    // TODO(msisov, rjkroege): Remove after http://crbug.com/806092.
-    /*requires_mojo=*/true,
+    /*message_pump_type_for_gpu=*/base::MessagePumpType::DEFAULT,
 
-    /*message_pump_type_for_gpu=*/base::MessagePumpType::DEFAULT};
+    /*supports_vulkan_swap_chain=*/false,
+
+    // Wayland doesn't provide clients with global screen coordinates. Instead,
+    // it forces clients to position windows relative to their top level windows
+    // if the have child-parent relationship. In case of toplevel windows,
+    // clients simply don't know their position on screens and always assume
+    // they are located at some arbitrary position.
+    /*ignore_screen_bounds_for_menus=*/true,
+};
 
 class OzonePlatformWayland : public OzonePlatform {
  public:

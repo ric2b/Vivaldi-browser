@@ -22,6 +22,8 @@
 
 #include <map>
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/containers/circular_deque.h"
@@ -32,24 +34,22 @@
 #include "components/viz/common/surfaces/local_surface_id_allocation.h"
 #include "components/viz/common/surfaces/scoped_surface_id_allocator.h"
 #include "content/browser/renderer_host/input_event_shim.h"
-#include "content/common/edit_command.h"
 #include "content/public/browser/browser_plugin_guest_delegate.h"
 #include "content/public/browser/guest_host.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "content/public/common/input_event_ack_state.h"
 #include "content/public/common/screen_info.h"
+#include "mojo/public/cpp/bindings/pending_remote.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/mojom/choosers/popup_menu.mojom.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-forward.h"
+#include "third_party/blink/public/mojom/input/input_event_result.mojom-shared.h"
+#include "third_party/blink/public/mojom/input/input_handler.mojom-forward.h"
 #include "third_party/blink/public/platform/web_drag_operation.h"
 #include "third_party/blink/public/web/web_drag_status.h"
 #include "third_party/blink/public/web/web_ime_text_span.h"
 #include "ui/base/ime/text_input_mode.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/gfx/geometry/rect.h"
-
-#if defined(OS_MACOSX)
-struct FrameHostMsg_ShowPopup_Params;
-#endif
 
 namespace gfx {
 class Range;
@@ -133,9 +133,6 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
                 bool focused,
                 blink::mojom::FocusType focus_type);
 
-  // Return true if the mouse is locked.
-  bool mouse_locked() const { return mouse_locked_; }
-
   // Creates a new guest WebContentsImpl with the provided |params| with |this|
   // as the |opener|.
   WebContentsImpl* CreateNewGuestWindow(
@@ -183,13 +180,24 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   void DidFinishNavigation(NavigationHandle* navigation_handle) override;
 
   void RenderProcessGone(base::TerminationStatus status) override;
-  bool OnMessageReceived(const IPC::Message& message,
-                         RenderFrameHost* render_frame_host) override;
+#if defined(OS_MACOSX)
+  // On MacOS X popups are painted by the browser process. We handle them here
+  // so that they are positioned correctly.
+  bool ShowPopupMenu(
+      RenderFrameHost* render_frame_host,
+      mojo::PendingRemote<blink::mojom::PopupMenuClient>* popup_client,
+      const gfx::Rect& bounds,
+      int32_t item_height,
+      double font_size,
+      int32_t selected_item,
+      std::vector<blink::mojom::MenuItemPtr>* menu_items,
+      bool right_aligned,
+      bool allow_multiple_selection) override;
+#endif
 
   // GuestHost implementation.
   int LoadURLWithParams(
       const NavigationController::LoadURLParams& load_params) override;
-  void SizeContents(const gfx::Size& new_size) override;
   void WillDestroy() override;
 
   // Exposes the protected web_contents() from WebContentsObserver.
@@ -227,7 +235,6 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   }
 
  protected:
-
   // BrowserPluginGuest is a WebContentsObserver of |web_contents| and
   // |web_contents| has to stay valid for the lifetime of BrowserPluginGuest.
   // Constructor protected for testing.
@@ -270,10 +277,7 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   // Sets the name of the guest so that other guests in the same partition can
   // access it.
   void OnSetName(int instance_id, const std::string& name);
-  // Updates the size state of the guest.
-  void OnSetEditCommandsForNextKeyEvent(
-      int instance_id,
-      const std::vector<EditCommand>& edit_commands);
+
   // TODO(wjmaclean): Investigate how to update this comment.
   // The guest WebContents is visible if both its embedder is visible and
   // the browser plugin element is visible. If either one is not then the
@@ -291,7 +295,6 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   // Additionally, it will slow down Javascript execution and garbage
   // collection. See RenderThreadImpl::IdleHandler (executed when hidden) and
   // RenderThreadImpl::IdleHandlerInForegroundTab (executed when visible).
-  void OnUnlockMouseAck(int instance_id);
   void OnSynchronizeVisualProperties(
       int instance_id,
       const FrameVisualProperties& visual_properties);
@@ -305,15 +308,8 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   void OnExtendSelectionAndDelete(int instance_id, int before, int after);
 
   // Message handlers for messages from guest.
-  void OnHandleInputEventAck(
-      blink::WebInputEvent::Type event_type,
-      InputEventAckState ack_result);
-#if defined(OS_MACOSX)
-  // On MacOS X popups are painted by the browser process. We handle them here
-  // so that they are positioned correctly.
-  void OnShowPopup(RenderFrameHost* render_frame_host,
-                   const FrameHostMsg_ShowPopup_Params& params);
-#endif
+  void OnHandleInputEventAck(blink::WebInputEvent::Type event_type,
+                             blink::mojom::InputEventResultState ack_result);
   void OnUpdateFrameName(int frame_id,
                          bool is_top_level,
                          const std::string& name);
@@ -332,7 +328,6 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   int browser_plugin_instance_id_;
   gfx::Rect frame_rect_;
   bool focused_;
-  bool mouse_locked_;
   // Whether the browser plugin is inside a plugin document.
   bool is_full_page_plugin_;
 

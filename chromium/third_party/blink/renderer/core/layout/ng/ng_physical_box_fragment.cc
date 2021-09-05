@@ -56,8 +56,11 @@ scoped_refptr<const NGPhysicalBoxFragment> NGPhysicalBoxFragment::Create(
                      sizeof(NGLink) * builder->children_.size() +
                      (borders.IsZero() ? 0 : sizeof(borders)) +
                      (padding.IsZero() ? 0 : sizeof(padding));
-  if (builder->ItemsBuilder())
-    byte_size += sizeof(NGFragmentItems);
+  if (const NGFragmentItemsBuilder* items_builder = builder->ItemsBuilder()) {
+    // Omit |NGFragmentItems| if there were no items; e.g., display-lock.
+    if (items_builder->Size())
+      byte_size += NGFragmentItems::ByteSizeFor(items_builder->Size());
+  }
   // We store the children list inline in the fragment as a flexible
   // array. Therefore, we need to make sure to allocate enough space for
   // that array here, which requires a manual allocation + placement new.
@@ -83,15 +86,19 @@ NGPhysicalBoxFragment::NGPhysicalBoxFragment(
                                   builder->BoxType()) {
   DCHECK(layout_object_);
   DCHECK(layout_object_->IsBoxModelObject());
+
+  has_fragment_items_ = false;
   if (NGFragmentItemsBuilder* items_builder = builder->ItemsBuilder()) {
-    has_fragment_items_ = true;
-    NGFragmentItems* items =
-        const_cast<NGFragmentItems*>(ComputeItemsAddress());
-    items_builder->ToFragmentItems(block_or_line_writing_mode,
-                                   builder->Direction(), Size(), items);
-  } else {
-    has_fragment_items_ = false;
+    // Omit |NGFragmentItems| if there were no items; e.g., display-lock.
+    if (items_builder->Size()) {
+      has_fragment_items_ = true;
+      NGFragmentItems* items =
+          const_cast<NGFragmentItems*>(ComputeItemsAddress());
+      items_builder->ToFragmentItems(block_or_line_writing_mode,
+                                     builder->Direction(), Size(), items);
+    }
   }
+
   has_borders_ = !borders.IsZero();
   if (has_borders_)
     *const_cast<NGPhysicalBoxStrut*>(ComputeBordersAddress()) = borders;
@@ -105,7 +112,7 @@ NGPhysicalBoxFragment::NGPhysicalBoxFragment(
       builder->space_ && builder->space_->IsPaintedAtomically();
   border_edge_ = builder->border_edges_.ToPhysical(builder->GetWritingMode());
   is_inline_formatting_context_ = builder->is_inline_formatting_context_;
-  is_generated_text_or_math_fraction_ = builder->is_math_fraction_;
+  is_math_fraction_ = builder->is_math_fraction_;
 
   bool has_layout_containment = layout_object_->ShouldApplyLayoutContainment();
   if (builder->baseline_.has_value() && !has_layout_containment) {
@@ -302,7 +309,8 @@ PhysicalRect NGPhysicalBoxFragment::ScrollableOverflowFromChildren() const {
 
   // Traverse child items.
   if (items) {
-    for (NGInlineCursor cursor(*items); cursor; cursor.MoveToNextSibling()) {
+    for (NGInlineCursor cursor(*items); cursor;
+         cursor.MoveToNextSkippingChildren()) {
       const NGFragmentItem* item = cursor.CurrentItem();
       if (item->Type() == NGFragmentItem::kLine) {
         context.AddLineBoxChild(*item, cursor);
@@ -480,6 +488,7 @@ void NGPhysicalBoxFragment::CheckSameForSimplifiedLayout(
   DCHECK_EQ(type_, other.type_);
   DCHECK_EQ(sub_type_, other.sub_type_);
   DCHECK_EQ(style_variant_, other.style_variant_);
+  DCHECK_EQ(is_hidden_for_paint_, other.is_hidden_for_paint_);
 
   // |has_floating_descendants_for_paint_| can change during simplified layout.
   DCHECK_EQ(has_orthogonal_flow_roots_, other.has_orthogonal_flow_roots_);
@@ -489,10 +498,13 @@ void NGPhysicalBoxFragment::CheckSameForSimplifiedLayout(
             other.depends_on_percentage_block_size_);
 
   DCHECK_EQ(is_inline_formatting_context_, other.is_inline_formatting_context_);
+  DCHECK_EQ(has_fragment_items_, other.has_fragment_items_);
+  DCHECK_EQ(border_edge_, other.border_edge_);
+  DCHECK_EQ(is_math_fraction_, other.is_math_fraction_);
+
   DCHECK_EQ(is_fieldset_container_, other.is_fieldset_container_);
   DCHECK_EQ(is_legacy_layout_root_, other.is_legacy_layout_root_);
   DCHECK_EQ(is_painted_atomically_, other.is_painted_atomically_);
-  DCHECK_EQ(border_edge_, other.border_edge_);
 
   // The oof_positioned_descendants_ vector can change during "simplified"
   // layout. This occurs when an OOF-descendant changes from "fixed" to
@@ -501,7 +513,13 @@ void NGPhysicalBoxFragment::CheckSameForSimplifiedLayout(
   // Legacy layout can (incorrectly) shift baseline position(s) during
   // "simplified" layout.
   DCHECK(IsLegacyLayoutRoot() || Baseline() == other.Baseline());
-  DCHECK(IsLegacyLayoutRoot() || LastBaseline() == other.LastBaseline());
+  if (check_same_block_size) {
+    DCHECK(IsLegacyLayoutRoot() || LastBaseline() == other.LastBaseline());
+  } else {
+    DCHECK(IsLegacyLayoutRoot() || LastBaseline() == other.LastBaseline() ||
+           NGBlockNode(ToLayoutBox(GetMutableLayoutObject()))
+               .UseBlockEndMarginEdgeForInlineBlockBaseline());
+  }
   DCHECK(Borders() == other.Borders());
   DCHECK(Padding() == other.Padding());
 }

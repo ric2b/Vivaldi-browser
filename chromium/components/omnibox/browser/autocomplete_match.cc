@@ -7,10 +7,11 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/check_op.h"
 #include "base/feature_list.h"
 #include "base/i18n/case_conversion.h"
-#include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notreached.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -166,7 +167,8 @@ AutocompleteMatch::AutocompleteMatch(const AutocompleteMatch& match)
                        ? new TemplateURLRef::PostContent(*match.post_content)
                        : nullptr),
       additional_info(match.additional_info),
-      duplicate_matches(match.duplicate_matches) {}
+      duplicate_matches(match.duplicate_matches),
+      query_tiles(match.query_tiles) {}
 
 AutocompleteMatch::AutocompleteMatch(AutocompleteMatch&& match) noexcept =
     default;
@@ -225,6 +227,7 @@ AutocompleteMatch& AutocompleteMatch::operator=(
                          : nullptr);
   additional_info = match.additional_info;
   duplicate_matches = match.duplicate_matches;
+  query_tiles = match.query_tiles;
   return *this;
 }
 
@@ -257,6 +260,7 @@ const gfx::VectorIcon& AutocompleteMatch::GetVectorIcon(
     case Type::VOICE_SUGGEST:
     case Type::CLIPBOARD_TEXT:
     case Type::CLIPBOARD_IMAGE:
+    case Type::TILE_SUGGESTION:
       return vector_icons::kSearchIcon;
 
     case Type::SEARCH_HISTORY:
@@ -391,6 +395,7 @@ base::string16 AutocompleteMatch::GetWhyThisSuggestionText() const {
     case Type::PHYSICAL_WEB_OVERFLOW_DEPRECATED:
     case Type::TAB_SEARCH_DEPRECATED:
     case Type::NUM_TYPES:
+    case Type::TILE_SUGGESTION:
       NOTREACHED();
       return base::string16();
   }
@@ -616,6 +621,7 @@ bool AutocompleteMatch::IsSpecializedSearchType(Type type) {
   return type == AutocompleteMatchType::SEARCH_SUGGEST_ENTITY ||
          type == AutocompleteMatchType::SEARCH_SUGGEST_TAIL ||
          type == AutocompleteMatchType::SEARCH_SUGGEST_PERSONALIZED ||
+         type == AutocompleteMatchType::TILE_SUGGESTION ||
          type == AutocompleteMatchType::SEARCH_SUGGEST_PROFILE;
 }
 
@@ -744,8 +750,7 @@ void AutocompleteMatch::GetMatchComponents(
 
   size_t domain_length =
       net::registry_controlled_domains::GetDomainAndRegistry(
-          url.host_piece(),
-          net::registry_controlled_domains::EXCLUDE_PRIVATE_REGISTRIES)
+          url, net::registry_controlled_domains::EXCLUDE_PRIVATE_REGISTRIES)
           .size();
   const url::Parsed& parsed = url.parsed_for_possibly_invalid_spec();
 
@@ -916,7 +921,6 @@ AutocompleteMatch AutocompleteMatch::DerivePedalSuggestion(
 void AutocompleteMatch::RecordAdditionalInfo(const std::string& property,
                                              const std::string& value) {
   DCHECK(!property.empty());
-  DCHECK(!value.empty());
   additional_info[property] = value;
 }
 
@@ -998,6 +1002,7 @@ AutocompleteMatch::AsOmniboxEventResultType() const {
     case AutocompleteMatchType::PHYSICAL_WEB_DEPRECATED:
     case AutocompleteMatchType::PHYSICAL_WEB_OVERFLOW_DEPRECATED:
     case AutocompleteMatchType::TAB_SEARCH_DEPRECATED:
+    case AutocompleteMatchType::TILE_SUGGESTION:
     case AutocompleteMatchType::NUM_TYPES:
       break;
   }

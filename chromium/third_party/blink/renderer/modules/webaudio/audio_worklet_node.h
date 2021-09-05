@@ -49,6 +49,7 @@ class AudioWorkletHandler final
   void Process(uint32_t frames_to_process) override;
 
   void CheckNumberOfChannelsForInput(AudioNodeInput*) override;
+  void UpdatePullStatusIfNeeded() override;
 
   double TailTime() const override;
   double LatencyTime() const override { return 0; }
@@ -117,9 +118,9 @@ class AudioWorkletNode final : public AudioNode,
   // IDL
   AudioParamMap* parameters() const;
   MessagePort* port() const;
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(processorerror, kProcessorerror)
+  DEFINE_ATTRIBUTE_EVENT_LISTENER(processorerror, kError)
 
-  void FireProcessorError();
+  void FireProcessorError(AudioWorkletProcessorErrorState);
 
   void Trace(Visitor*) override;
 

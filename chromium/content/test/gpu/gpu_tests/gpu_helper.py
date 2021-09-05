@@ -16,7 +16,6 @@ EXPECTATIONS_DRIVER_TAGS = frozenset([
     'mesa_lt_19.1.2',
 ])
 
-
 # Driver tag format: VENDOR_OPERATION_VERSION
 DRIVER_TAG_MATCHER = re.compile(
     r'^([a-z\d]+)_(eq|ne|ge|gt|le|lt)_([a-z\d\.]+)$')
@@ -54,7 +53,7 @@ def GetGpuVendorString(gpu_info, index):
     if primary_gpu:
       vendor_string = primary_gpu.vendor_string
       angle_vendor_string = _ParseANGLEGpuVendorString(
-        primary_gpu.device_string)
+          primary_gpu.device_string)
       vendor_id = primary_gpu.vendor_id
       if vendor_id == 0x10DE:
         return 'nvidia'
@@ -73,11 +72,9 @@ def GetGpuDeviceId(gpu_info, index):
   if gpu_info:
     primary_gpu = gpu_info.devices[index]
     if primary_gpu:
-      return (
-          primary_gpu.device_id
-          or _GetANGLEGpuDeviceId(
-              primary_gpu.device_string)
-          or primary_gpu.device_string)
+      return (primary_gpu.device_id
+              or _GetANGLEGpuDeviceId(primary_gpu.device_string)
+              or primary_gpu.device_string)
   return 0
 
 
@@ -98,23 +95,35 @@ def GetGpuDriverVersion(gpu_info):
 
 
 def GetANGLERenderer(gpu_info):
+  retval = 'no_angle'
   if gpu_info and gpu_info.aux_attributes:
     gl_renderer = gpu_info.aux_attributes.get('gl_renderer')
     if gl_renderer and 'ANGLE' in gl_renderer:
       if 'Direct3D11' in gl_renderer:
-        return 'd3d11'
+        retval = 'd3d11'
       elif 'Direct3D9' in gl_renderer:
-        return 'd3d9'
+        retval = 'd3d9'
       elif 'OpenGL ES' in gl_renderer:
-        return 'opengles'
+        retval = 'opengles'
       elif 'OpenGL' in gl_renderer:
-        return 'opengl'
+        retval = 'opengl'
       # SwiftShader first because it also contains Vulkan
       elif 'SwiftShader' in gl_renderer:
-        return 'swiftshader'
+        retval = 'swiftshader'
       elif 'Vulkan' in gl_renderer:
-        return 'vulkan'
-  return 'no_angle'
+        retval = 'vulkan'
+  return retval
+
+
+def GetSwiftShaderGLRenderer(gpu_info):
+  if gpu_info and gpu_info.aux_attributes:
+    gl_renderer = gpu_info.aux_attributes.get('gl_renderer')
+    # Filter out ANGLE on top of SwiftShader Vulkan,
+    # as we are only interested in SwiftShader GL
+    if (gl_renderer and 'ANGLE' not in gl_renderer
+        and 'SwiftShader' in gl_renderer):
+      return 'swiftshader-gl'
+  return 'no-swiftshader-gl'
 
 
 def GetCommandDecoder(gpu_info):
@@ -130,10 +139,15 @@ def GetCommandDecoder(gpu_info):
 def GetSkiaRenderer(extra_browser_args):
   if extra_browser_args:
     for o in extra_browser_args:
-      if "UseSkiaRenderer" in o:
+      if o.startswith('--enable-features') and "UseSkiaRenderer" in o:
         return 'skia-renderer'
+      if o.startswith('--disable-features') and "UseSkiaRenderer" in o:
+        return 'no-skia-renderer'
       if "--disable-vulkan-fallback-to-gl-for-testing" in o:
         return 'skia-renderer'
+  # TODO(kylechar): The feature is enabled/disabled differently depending on
+  # platform and official build status. Find out if SkiaRenderer is enabled
+  # through GPU info instead.
   return 'no-skia-renderer'
 
 
@@ -155,6 +169,17 @@ def GetVulkan(extra_browser_args):
       if "--use-vulkan=" in o:
         return 'use-vulkan'
   return 'no-use-vulkan'
+
+
+# Used to parse additional options sent to the browser instance via
+# '--extra-browser-args', looking for '--enable-features=SkiaDawn' which
+# may be merged with additional feature flags.
+def GetSkiaDawn(extra_browser_args):
+  if extra_browser_args:
+    for o in extra_browser_args:
+      if o.startswith('--enable-features') and "SkiaDawn" in o:
+        return 'use-skia-dawn'
+  return 'no-use-skia-dawn'
 
 
 # used by unittests to create a mock arguments object
@@ -185,8 +210,14 @@ def MatchDriverTag(tag):
   return DRIVER_TAG_MATCHER.match(tag.lower())
 
 
-def EvaluateVersionComparison(version, operation, ref_version,
-                              os_name=None, driver_vendor=None):
+# No good way to reduce the number of local variables, particularly since each
+# argument is also considered a local.
+# pylint: disable=too-many-locals
+def EvaluateVersionComparison(version,
+                              operation,
+                              ref_version,
+                              os_name=None,
+                              driver_vendor=None):
   def parse_version(ver):
     if ver.isdigit():
       return int(ver), ''
@@ -200,18 +231,23 @@ def EvaluateVersionComparison(version, operation, ref_version,
     assert not suffix
     return num < 100
 
+  def versions_can_be_compared(ver_list1, ver_list2):
+    # If either of the two versions doesn't match the Intel driver version
+    # schema, or they belong to different generation of version schema, they
+    # should not be compared.
+    if len(ver_list1) != 4 or len(ver_list2) != 4:
+      return False
+    if is_old_intel_driver(ver_list1) != is_old_intel_driver(ver_list2):
+      return False
+    return True
+
   ver_list1 = version.split('.')
   ver_list2 = ref_version.split('.')
   # On Windows, if the driver vendor is Intel, the driver version should be
   # compared based on the Intel graphics driver version schema.
   # https://www.intel.com/content/www/us/en/support/articles/000005654/graphics-drivers.html
   if os_name == 'win' and driver_vendor == 'intel':
-    # If either of the two versions doesn't match the Intel driver version
-    # schema, or they belong to different generation of version schema, they
-    # should not be compared.
-    if len(ver_list1) != 4 or len(ver_list2) != 4:
-      return operation == 'ne'
-    if is_old_intel_driver(ver_list1) != is_old_intel_driver(ver_list2):
+    if not versions_can_be_compared(ver_list1, ver_list2):
       return operation == 'ne'
     if is_old_intel_driver(ver_list1):
       ver_list1 = ver_list1[3:]
@@ -246,6 +282,7 @@ def EvaluateVersionComparison(version, operation, ref_version,
     raise Exception('Invalid operation: ' + operation)
 
   return operation == 'eq' or operation == 'ge' or operation == 'le'
+# pylint: enable=too-many-locals
 
 
 def ExpectationsDriverTags():

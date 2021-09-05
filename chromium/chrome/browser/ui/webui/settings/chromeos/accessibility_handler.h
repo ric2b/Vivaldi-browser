@@ -5,10 +5,12 @@
 #ifndef CHROME_BROWSER_UI_WEBUI_SETTINGS_CHROMEOS_ACCESSIBILITY_HANDLER_H_
 #define CHROME_BROWSER_UI_WEBUI_SETTINGS_CHROMEOS_ACCESSIBILITY_HANDLER_H_
 
+#include "ash/public/cpp/tablet_mode.h"
+#include "ash/public/cpp/tablet_mode_observer.h"
 #include "base/macros.h"
+#include "base/scoped_observer.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
-#include "chromeos/dbus/power/power_manager_client.h"
 
 namespace base {
 class ListValue;
@@ -19,19 +21,24 @@ class Profile;
 namespace chromeos {
 namespace settings {
 
-class AccessibilityHandler : public ::settings::SettingsPageUIHandler {
+class AccessibilityHandler : public ::settings::SettingsPageUIHandler,
+                             public ash::TabletModeObserver {
  public:
   explicit AccessibilityHandler(Profile* profile);
   ~AccessibilityHandler() override;
 
   // SettingsPageUIHandler implementation.
   void RegisterMessages() override;
-  void OnJavascriptAllowed() override {}
-  void OnJavascriptDisallowed() override {}
+  void OnJavascriptAllowed() override;
+  void OnJavascriptDisallowed() override;
 
   // Callback which updates if startup sound is enabled and if tablet
   // mode is supported. Visible for testing.
   void HandleManageA11yPageReady(const base::ListValue* args);
+
+  // ash::TabletModeObserver:
+  void OnTabletModeStarted() override;
+  void OnTabletModeEnded() override;
 
  private:
   // Callback for the messages to show settings for ChromeVox or
@@ -42,12 +49,10 @@ class AccessibilityHandler : public ::settings::SettingsPageUIHandler {
   void HandleRecordSelectedShowShelfNavigationButtonsValue(
       const base::ListValue* args);
 
-  // Callback which updates visibility for the shelf navigation buttons
-  // accessibility setting, depending on whether tablet mode is supported.
-  void OnReceivedSwitchStates(
-      base::Optional<chromeos::PowerManagerClient::SwitchStates> switch_states);
-
   void OpenExtensionOptionsPage(const char extension_id[]);
+
+  ScopedObserver<ash::TabletMode, ash::TabletModeObserver>
+      tablet_mode_observer_{this};
 
   Profile* profile_;  // Weak pointer.
 

@@ -21,6 +21,10 @@ class CONTENT_EXPORT VivaldiTabCheck {
 
   static bool IsVivaldiTab(content::WebContents* web_contents);
 
+  // Get Vivaldi tab that holds the given web_cntents or null if none.
+  static content::WebContents* GetOuterVivaldiTab(
+      content::WebContents* web_contents);
+
   // Returned true if the contents is owned by TabStipModel or DevTool and
   // neither GuestViewBase nor its outer contents should delete it.
   static bool IsOwnedByTabStripOrDevTools(content::WebContents* web_contents);

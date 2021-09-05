@@ -12,6 +12,7 @@ import ast
 import collections
 import copy
 import difflib
+import glob
 import itertools
 import json
 import os
@@ -600,8 +601,8 @@ class BBJSONGenerator(object):
     elif self.is_chromeos(tester_config) and tester_config.get('use_swarming',
                                                                True):
       # The presence of the "device_type" dimension indicates that the tests
-      # are targetting CrOS hardware and so need the special trigger script.
-      dimension_sets = tester_config['swarming']['dimension_sets']
+      # are targeting CrOS hardware and so need the special trigger script.
+      dimension_sets = test['swarming']['dimension_sets']
       if all('device_type' in ds for ds in dimension_sets):
         test['trigger_script'] = {
           'script': '//testing/trigger_scripts/chromeos_device_trigger.py',
@@ -787,6 +788,13 @@ class BBJSONGenerator(object):
       return None
     result['isolate_name'] = test_config.get(
       'isolate_name', 'telemetry_gpu_integration_test')
+
+    # Populate test_id_prefix.
+    gn_entry = (
+        self.gn_isolate_map.get(result['isolate_name']) or
+        self.gn_isolate_map.get('telemetry_gpu_integration_test'))
+    result['test_id_prefix'] = 'ninja:%s/%s/' % (gn_entry['label'], step_name)
+
     args = result.get('args', [])
     test_to_run = result.pop('telemetry_test_name', test_name)
 
@@ -891,7 +899,7 @@ class BBJSONGenerator(object):
         new_test_suites[name] = value
     self.test_suites = new_test_suites
 
-  def resolve_full_test_targets(self):
+  def resolve_test_id_prefixes(self):
     for suite in self.test_suites['basic_suites'].itervalues():
       for key, test in suite.iteritems():
         if not isinstance(test, dict):
@@ -905,7 +913,20 @@ class BBJSONGenerator(object):
         isolate_name = test.get('test') or test.get('isolate_name') or key
         gn_entry = self.gn_isolate_map.get(isolate_name)
         if gn_entry:
-          test['test_target'] = gn_entry['label']
+          label = gn_entry['label']
+
+          if label.count(':') != 1:
+            raise BBGenErr(
+              'Malformed GN label "%s" in gn_isolate_map for key "%s",'
+              ' implicit names (like //f/b meaning //f/b:b) are disallowed.' %
+              (label, isolate_name))
+          if label.split(':')[1] != isolate_name:
+            raise BBGenErr(
+              'gn_isolate_map key name "%s" doesn\'t match GN target name in'
+              ' label "%s" see http://crbug.com/1071091 for details.' %
+              (isolate_name, label))
+
+          test['test_id_prefix'] = 'ninja:%s/' % label
         else:  # pragma: no cover
           # Some tests do not have an entry gn_isolate_map.pyl, such as
           # telemetry tests.
@@ -1035,7 +1056,7 @@ class BBJSONGenerator(object):
     self.variants = self.load_pyl_file('variants.pyl')
 
   def resolve_configuration_files(self):
-    self.resolve_full_test_targets()
+    self.resolve_test_id_prefixes()
     self.resolve_composition_test_suites()
     self.resolve_matrix_compound_test_suites()
     self.flatten_test_suites()
@@ -1262,20 +1283,23 @@ class BBJSONGenerator(object):
     # references to configs outside of this directory are added, please change
     # their presubmit to run `generate_buildbot_json.py -c`, so that the tree
     # never ends up in an invalid state.
+    project_star = glob.glob(
+        os.path.join(self.args.infra_config_dir, 'project.star'))
+    if project_star:
+      is_master_pattern = re.compile('is_master\s*=\s*(True|False)')
+      for l in self.read_file(project_star[0]).splitlines():
+        match = is_master_pattern.search(l)
+        if match:
+          if match.group(1) == 'False':
+            return None
+          break
     bot_names = set()
-    infra_config_dir = os.path.abspath(
-        os.path.join(os.path.dirname(__file__),
-                     '..', '..', 'infra', 'config'))
-    milo_configs = [
-        os.path.join(infra_config_dir, 'generated', 'luci-milo.cfg'),
-        os.path.join(infra_config_dir, 'generated', 'luci-milo-dev.cfg'),
-    ]
+    milo_configs = glob.glob(
+        os.path.join(self.args.infra_config_dir, 'generated', 'luci-milo*.cfg'))
     for c in milo_configs:
       for l in self.read_file(c).splitlines():
         if (not 'name: "buildbucket/luci.chromium.' in l and
-            not 'name: "buildbucket/luci.chrome.' in l and
-            not 'name: "buildbot/chromium.' in l and
-            not 'name: "buildbot/tryserver.chromium.' in l):
+            not 'name: "buildbucket/luci.chrome.' in l):
           continue
         # l looks like
         # `name: "buildbucket/luci.chromium.try/win_chromium_dbg_ng"`
@@ -1314,6 +1338,7 @@ class BBJSONGenerator(object):
       'mac10.13_retina-blink-rel-dummy',
       'mac10.13-blink-rel-dummy',
       'mac10.14-blink-rel-dummy',
+      'mac10.15-blink-rel-dummy',
       'win7-blink-rel-dummy',
       'win10-blink-rel-dummy',
       'Dummy WebKit Mac10.13',
@@ -1342,7 +1367,7 @@ class BBJSONGenerator(object):
   def get_internal_waterfalls(self):
     # Similar to get_builders_that_do_not_actually_exist above, but for
     # waterfalls defined in internal configs.
-    return ['chrome']
+    return ['chrome', 'chrome.pgo']
 
   def check_input_file_consistency(self, verbose=False):
     self.check_input_files_sorting(verbose)
@@ -1351,34 +1376,35 @@ class BBJSONGenerator(object):
     self.check_composition_type_test_suites('compound_suites')
     self.check_composition_type_test_suites('matrix_compound_suites',
                                             [check_matrix_identifier])
-    self.resolve_full_test_targets()
+    self.resolve_test_id_prefixes()
     self.flatten_test_suites()
 
     # All bots should exist.
     bot_names = self.get_valid_bot_names()
-    internal_waterfalls = self.get_internal_waterfalls()
     builders_that_dont_exist = self.get_builders_that_do_not_actually_exist()
-    for waterfall in self.waterfalls:
-      # TODO(crbug.com/991417): Remove the need for this exception.
-      if waterfall['name'] in internal_waterfalls:
-        continue  # pragma: no cover
-      for bot_name in waterfall['machines']:
-        if bot_name in builders_that_dont_exist:
+    if bot_names is not None:
+      internal_waterfalls = self.get_internal_waterfalls()
+      for waterfall in self.waterfalls:
+        # TODO(crbug.com/991417): Remove the need for this exception.
+        if waterfall['name'] in internal_waterfalls:
           continue  # pragma: no cover
-        if bot_name not in bot_names:
-          if waterfall['name'] in ['client.v8.chromium', 'client.v8.fyi']:
-            # TODO(thakis): Remove this once these bots move to luci.
+        for bot_name in waterfall['machines']:
+          if bot_name in builders_that_dont_exist:
             continue  # pragma: no cover
-          if waterfall['name'] in ['tryserver.webrtc',
-                                   'webrtc.chromium.fyi.experimental']:
-            # These waterfalls have their bot configs in a different repo.
-            # so we don't know about their bot names.
-            continue  # pragma: no cover
-          if waterfall['name'] in ['client.devtools-frontend.integration',
-                                   'tryserver.devtools-frontend',
-                                   'chromium.devtools-frontend']:
-            continue  # pragma: no cover
-          raise self.unknown_bot(bot_name, waterfall['name'])
+          if bot_name not in bot_names:
+            if waterfall['name'] in ['client.v8.chromium', 'client.v8.fyi']:
+              # TODO(thakis): Remove this once these bots move to luci.
+              continue  # pragma: no cover
+            if waterfall['name'] in ['tryserver.webrtc',
+                                     'webrtc.chromium.fyi.experimental']:
+              # These waterfalls have their bot configs in a different repo.
+              # so we don't know about their bot names.
+              continue  # pragma: no cover
+            if waterfall['name'] in ['client.devtools-frontend.integration',
+                                     'tryserver.devtools-frontend',
+                                     'chromium.devtools-frontend']:
+              continue  # pragma: no cover
+            raise self.unknown_bot(bot_name, waterfall['name'])
 
     # All test suites must be referenced.
     suites_seen = set()
@@ -1796,9 +1822,16 @@ class BBJSONGenerator(object):
       "Examples:\n" +
       "  Outputs file into specified json file: \n" +
       "    --json <file-name-here.json>"))
+    parser.add_argument(
+      '--infra-config-dir',
+      help='Path to the LUCI services configuration directory',
+      default=os.path.abspath(
+          os.path.join(os.path.dirname(__file__),
+                       '..', '..', 'infra', 'config')))
     self.args = parser.parse_args(argv)
     if self.args.json and not self.args.query:
       parser.error("The --json flag can only be used with --query.")
+    self.args.infra_config_dir = os.path.abspath(self.args.infra_config_dir)
 
   def does_test_match(self, test_info, params_dict):
     """Checks to see if the test matches the parameters given.

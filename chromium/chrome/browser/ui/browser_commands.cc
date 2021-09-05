@@ -16,10 +16,11 @@
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
-#include "chrome/browser/apps/launch_service/launch_service.h"
+#include "chrome/browser/apps/app_service/app_service_proxy.h"
+#include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/apps/app_service/browser_app_launcher.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 #include "chrome/browser/chrome_content_browser_client.h"
 #include "chrome/browser/devtools/devtools_window.h"
@@ -55,6 +56,7 @@
 #include "chrome/browser/ui/in_product_help/reopen_tab_in_product_help_factory.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
+#include "chrome/browser/ui/qrcode_generator/qrcode_generator_bubble_controller.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/browser/ui/send_tab_to_self/send_tab_to_self_bubble_controller.h"
 #include "chrome/browser/ui/status_bubble.h"
@@ -77,13 +79,14 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/browsing_data/content/browsing_data_helper.h"
 #include "components/dom_distiller/core/url_utils.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/feature_engagement/buildflags.h"
 #include "components/find_in_page/find_tab_helper.h"
 #include "components/find_in_page/find_types.h"
 #include "components/google/core/common/google_util.h"
-#include "components/omnibox/browser/omnibox_pref_names.h"
+#include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/prefs/pref_service.h"
 #include "components/services/app_service/public/mojom/types.mojom.h"
 #include "components/sessions/core/live_tab_context.h"
@@ -420,7 +423,7 @@ void NewEmptyWindow(Profile* profile) {
 
   if (incognito) {
     base::RecordAction(UserMetricsAction("NewIncognitoWindow"));
-    OpenEmptyWindow(profile->GetOffTheRecordProfile());
+    OpenEmptyWindow(profile->GetPrimaryOTRProfile());
   } else {
     base::RecordAction(UserMetricsAction("NewWindow"));
     SessionService* session_service =
@@ -451,7 +454,7 @@ void OpenWindowWithRestoredTabs(Profile* profile) {
 }
 
 void OpenURLOffTheRecord(Profile* profile, const GURL& url) {
-  ScopedTabbedBrowserDisplayer displayer(profile->GetOffTheRecordProfile());
+  ScopedTabbedBrowserDisplayer displayer(profile->GetPrimaryOTRProfile());
   AddSelectedTabWithURL(displayer.browser(), url, ui::PAGE_TRANSITION_LINK);
 }
 
@@ -619,7 +622,9 @@ void NewWindow(Browser* browser) {
     const apps::AppLaunchParams params = apps::AppLaunchParams(
         app_id, launch_container, WindowOpenDisposition::NEW_WINDOW,
         apps::mojom::AppLaunchSource::kSourceKeyboard);
-    apps::LaunchService::Get(profile)->OpenApplication(params);
+    apps::AppServiceProxyFactory::GetForProfile(profile)
+        ->BrowserAppLauncher()
+        .LaunchAppWithParams(params);
     return;
   }
 
@@ -645,7 +650,7 @@ void NewIncognitoWindow(Profile* profile) {
       ->GetForProfile(profile)
       ->OnIncognitoWindowOpened();
 #endif
-  NewEmptyWindow(profile->GetOffTheRecordProfile());
+  NewEmptyWindow(profile->GetPrimaryOTRProfile());
 }
 
 void CloseWindow(Browser* browser) {
@@ -791,17 +796,23 @@ void MoveTabsToNewWindow(Browser* browser,
   }
 
   int indices_size = tab_indices.size();
+  int active_index = browser->tab_strip_model()->active_index();
   for (int i = 0; i < indices_size; i++) {
     // Adjust tab index to account for tabs already moved.
     int adjusted_index = tab_indices[i] - i;
     bool pinned = browser->tab_strip_model()->IsTabPinned(adjusted_index);
     std::unique_ptr<WebContents> contents_move =
         browser->tab_strip_model()->DetachWebContentsAt(adjusted_index);
-    int add_types = TabStripModel::ADD_ACTIVE |
-                    TabStripModel::ADD_INHERIT_OPENER |
-                    (pinned ? TabStripModel::ADD_PINNED : 0);
+
+    int add_types = pinned ? TabStripModel::ADD_PINNED : 0;
+    // The last tab made active takes precedence, so activate the last active
+    // tab, with a fallback for the first tab (i == 0) if the active tab isn’t
+    // in the set of tabs being moved.
+    if (i == 0 || tab_indices[i] == active_index)
+      add_types = add_types | TabStripModel::ADD_ACTIVE;
+
     new_browser->tab_strip_model()->AddWebContents(std::move(contents_move), -1,
-                                                   ui::PAGE_TRANSITION_LINK,
+                                                   ui::PAGE_TRANSITION_TYPED,
                                                    add_types, new_group);
   }
   new_browser->window()->Show();
@@ -868,9 +879,9 @@ bool CanDuplicateTabAt(const Browser* browser, int index) {
          contents->GetController().GetLastCommittedEntry();
 }
 
-void MoveToExistingWindow(Browser* source,
-                          Browser* target,
-                          const std::vector<int>& tab_indices) {
+void MoveTabsToExistingWindow(Browser* source,
+                              Browser* target,
+                              const std::vector<int>& tab_indices) {
   if (tab_indices.empty())
     return;
 
@@ -882,10 +893,9 @@ void MoveToExistingWindow(Browser* source,
     std::unique_ptr<WebContents> contents_move =
         source->tab_strip_model()->DetachWebContentsAt(adjusted_index);
     int add_types = TabStripModel::ADD_ACTIVE |
-                    TabStripModel::ADD_INHERIT_OPENER |
                     (pinned ? TabStripModel::ADD_PINNED : 0);
     target->tab_strip_model()->AddWebContents(
-        std::move(contents_move), -1, ui::PAGE_TRANSITION_LINK, add_types);
+        std::move(contents_move), -1, ui::PAGE_TRANSITION_TYPED, add_types);
   }
   target->window()->Show();
 }
@@ -1118,6 +1128,16 @@ void SendTabToSelfFromPageAction(Browser* browser) {
       send_tab_to_self::SendTabToSelfBubbleController::
           CreateOrGetFromWebContents(web_contents);
   controller->ShowBubble();
+}
+
+void GenerateQRCodeFromPageAction(Browser* browser) {
+  WebContents* web_contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+  qrcode_generator::QRCodeGeneratorBubbleController* controller =
+      qrcode_generator::QRCodeGeneratorBubbleController::Get(web_contents);
+  content::NavigationEntry* entry =
+      web_contents->GetController().GetLastCommittedEntry();
+  controller->ShowBubble(entry->GetURL());
 }
 
 void SavePage(Browser* browser) {
@@ -1356,6 +1376,7 @@ void ToggleShowFullURLs(Browser* browser) {
       omnibox::kPreventUrlElisionsInOmnibox);
   browser->profile()->GetPrefs()->SetBoolean(
       omnibox::kPreventUrlElisionsInOmnibox, !pref_enabled);
+  UMA_HISTOGRAM_BOOLEAN("Omnibox.ShowFullUrlsEnabled", !pref_enabled);
 }
 
 void ShowAppMenu(Browser* browser) {

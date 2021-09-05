@@ -127,6 +127,15 @@ void MetricsRenderFrameObserver::DidObserveLayoutShift(
                                                        after_input_or_scroll);
 }
 
+void MetricsRenderFrameObserver::DidObserveLayoutNg(uint32_t all_block_count,
+                                                    uint32_t ng_block_count,
+                                                    uint32_t all_call_count,
+                                                    uint32_t ng_call_count) {
+  if (page_timing_metrics_sender_)
+    page_timing_metrics_sender_->DidObserveLayoutNg(
+        all_block_count, ng_block_count, all_call_count, ng_call_count);
+}
+
 void MetricsRenderFrameObserver::DidObserveLazyLoadBehavior(
     blink::WebLocalFrameClient::LazyLoadBehavior lazy_load_behavior) {
   if (page_timing_metrics_sender_)
@@ -146,12 +155,10 @@ void MetricsRenderFrameObserver::DidStartResponse(
     // case. There should be a guarantee that DidStartProvisionalLoad be called
     // before DidStartResponse for the frame request.
     provisional_frame_resource_data_use_->DidStartResponse(
-        response_url, request_id, response_head, request_destination,
-        previews_state);
+        response_url, request_id, response_head, request_destination);
   } else if (page_timing_metrics_sender_) {
     page_timing_metrics_sender_->DidStartResponse(
-        response_url, request_id, response_head, request_destination,
-        previews_state);
+        response_url, request_id, response_head, request_destination);
     UpdateResourceMetadata(request_id);
   }
 }

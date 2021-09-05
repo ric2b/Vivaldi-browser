@@ -57,7 +57,7 @@
     "min_manifest_version": 2
   },
   "background.service_worker": {
-    "channel": "canary",
+    "channel": "dev",
     "extension_types": ["extension"],
     "min_manifest_version": 2
   },
@@ -121,9 +121,10 @@
     "extension_types": "all"
   },
   "declarative_net_request": {
-    "channel": "beta",
+    "channel": "stable",
     "extension_types": ["extension"],
-    "min_manifest_version": 2
+    "min_manifest_version": 2,
+    "feature_flag": "DeclarativeNetRequest"
   },
   "default_locale": {
     "channel": "stable",
@@ -361,6 +362,17 @@
     }
   ],
   "web_app_file_handlers": {
+    "channel": "stable",
+    "extension_types": ["hosted_app"]
+  },
+  // TODO(https://crbug.com/1065748): Remove web_app_linked_shortcut_icons and
+  // web_app_shortcut_icons keys once we've transitioned PWAs from the current
+  // Extensions based representation to WebApp based representation.
+  "web_app_linked_shortcut_icons" : {
+    "channel": "stable",
+    "extension_types": ["hosted_app"]
+  },
+  "web_app_shortcut_icons" : {
     "channel": "stable",
     "extension_types": ["hosted_app"]
   },

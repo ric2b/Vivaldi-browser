@@ -51,6 +51,13 @@ copy("copy_signing") {
     sources += [ "internal/internal_config.py" ]
   }
 
+  if (is_vivaldi) {
+    sources += [
+      "//vivaldi/installer/mac/vivaldi_config.py",
+      "//vivaldi/installer/mac/signing_util.py",
+    ]
+  }
+
   outputs = [ "$_packaging_dir/signing/{{source_file_part}}" ]
 }
 

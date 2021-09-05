@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/optional.h"
 #include "chrome/browser/media/router/data_decoder_util.h"
@@ -17,6 +18,7 @@
 #include "chrome/browser/media/router/providers/cast/mirroring_activity_record.h"
 #include "chrome/common/media_router/media_source.h"
 #include "chrome/common/media_router/mojom/media_router.mojom.h"
+#include "components/cast_channel/enum_table.h"
 #include "url/origin.h"
 
 using blink::mojom::PresentationConnectionCloseReason;
@@ -87,6 +89,8 @@ void CastActivityManager::LaunchSession(
       MediaRoute::GetMediaRouteId(presentation_id, sink_id, source);
   MediaRoute route(route_id, source, sink_id, /* description */ std::string(),
                    /* is_local */ true, /* for_display */ true);
+  route.set_presentation_id(presentation_id);
+  route.set_local_presentation(true);
   route.set_incognito(incognito);
   if (cast_source.ContainsStreamingApp()) {
     route.set_controller_type(RouteControllerType::kMirroring);
@@ -109,12 +113,14 @@ void CastActivityManager::LaunchSession(
   } else {
     const MediaRoute::Id& existing_route_id =
         it->second->route().media_route_id();
-    TerminateSession(
-        existing_route_id,
-        base::BindOnce(
-            &CastActivityManager::LaunchSessionAfterTerminatingExisting,
-            weak_ptr_factory_.GetWeakPtr(), existing_route_id,
-            std::move(params)));
+    // We cannot launch the new session in the TerminateSession() callback
+    // because if we create a session there, then it may get deleted when
+    // OnSessionRemoved() is called to notify that the previous session was
+    // removed on the receiver.
+    TerminateSession(existing_route_id, base::DoNothing());
+    // The new session will be launched when OnSessionRemoved() is called for
+    // the old session.
+    pending_launch_ = std::move(params);
   }
 }
 
@@ -151,8 +157,13 @@ void CastActivityManager::DoLaunchSession(DoLaunchSessionParams params) {
 
   NotifyAllOnRoutesUpdated();
   base::TimeDelta launch_timeout = cast_source.launch_timeout();
+  std::vector<std::string> type_str;
+  for (ReceiverAppType type : cast_source.supported_app_types()) {
+    type_str.push_back(cast_util::EnumToString(type).value().data());
+  }
   message_handler_->LaunchSession(
-      sink.cast_data().cast_channel_id, app_id, launch_timeout,
+      sink.cast_data().cast_channel_id, app_id, launch_timeout, type_str,
+      cast_source.app_params(),
       base::BindOnce(&CastActivityManager::HandleLaunchSessionResponse,
                      weak_ptr_factory_.GetWeakPtr(), route_id, sink,
                      cast_source));
@@ -160,24 +171,6 @@ void CastActivityManager::DoLaunchSession(DoLaunchSessionParams params) {
   std::move(params.callback)
       .Run(route, std::move(presentation_connection),
            /* error_text */ base::nullopt, RouteRequestResult::ResultCode::OK);
-}
-
-void CastActivityManager::LaunchSessionAfterTerminatingExisting(
-    const MediaRoute::Id& existing_route_id,
-    DoLaunchSessionParams params,
-    const base::Optional<std::string>& error_string,
-    RouteRequestResult::ResultCode result) {
-  // NOTE(mfoltz): I don't recall if an explicit STOP request is required by
-  // Cast V2 before launching a new session.  I think in the Javascript MRP
-  // session termination is a fire and forget operation.  In which case we could
-  // rely on RECEIVER_STATUS to clean up the state from the just-removed
-  // session, versus having to stop then wait for a response.
-  DLOG_IF(ERROR, error_string)
-      << "Failed to terminate existing session before launching new "
-      << "session! New session may not operate correctly. Error: "
-      << *error_string;
-  activities_.erase(existing_route_id);
-  DoLaunchSession(std::move(params));
 }
 
 CastActivityRecord* CastActivityManager::FindActivityForSessionJoin(
@@ -425,13 +418,20 @@ ActivityRecord* CastActivityManager::AddMirroringActivityRecord(
     const std::string& app_id,
     const int tab_id,
     const CastSinkExtraData& cast_data) {
-  auto activity = std::make_unique<MirroringActivityRecord>(
-      route, app_id, message_handler_, session_tracker_, tab_id, cast_data,
-      media_router_,
-      // NOTE(jrw): We could theoretically use base::Unretained() below instead
-      // of GetWeakPtr(), the that seems like an unnecessary optimization here.
-      base::BindOnce(&CastActivityManager::RemoveActivityByRouteId,
-                     weak_ptr_factory_.GetWeakPtr(), route.media_route_id()));
+  auto activity =
+      activity_record_factory_
+          ? activity_record_factory_->MakeMirroringActivityRecord(route, app_id)
+          : std::make_unique<MirroringActivityRecord>(
+                route, app_id, message_handler_, session_tracker_, tab_id,
+                cast_data,
+                // NOTE(jrw): We could theoretically use base::Unretained()
+                // below instead of GetWeakPtr(), but that seems like an
+                // unnecessary optimization here.
+                base::BindOnce(&CastActivityManager::RemoveActivityByRouteId,
+                               weak_ptr_factory_.GetWeakPtr(),
+                               route.media_route_id()));
+  if (route.is_local())
+    activity->CreateMojoBindings(media_router_);
   auto* const activity_ptr = activity.get();
   activities_.emplace(route.media_route_id(), std::move(activity));
   return activity_ptr;
@@ -514,10 +514,14 @@ void CastActivityManager::OnSessionAddedOrUpdated(const MediaSinkInternal& sink,
 }
 
 void CastActivityManager::OnSessionRemoved(const MediaSinkInternal& sink) {
-  auto it = FindActivityBySink(sink);
-  if (it != activities_.end()) {
-    RemoveActivity(it, PresentationConnectionState::TERMINATED,
+  auto activity_it = FindActivityBySink(sink);
+  if (activity_it != activities_.end()) {
+    RemoveActivity(activity_it, PresentationConnectionState::TERMINATED,
                    PresentationConnectionCloseReason::CLOSED);
+  }
+  if (pending_launch_ && pending_launch_->sink.id() == sink.id()) {
+    DoLaunchSession(std::move(*pending_launch_));
+    pending_launch_.reset();
   }
 }
 
@@ -610,14 +614,16 @@ void CastActivityManager::AddNonLocalActivityRecord(
                    /* is_local */ false, /* for_display */ true);
   route.set_media_sink_name(sink.sink().name());
 
+  ActivityRecord* activity_ptr = nullptr;
   if (cast_source->ContainsStreamingApp()) {
     route.set_controller_type(RouteControllerType::kMirroring);
-    AddMirroringActivityRecord(route, app_id, -1, sink.cast_data());
+    activity_ptr =
+        AddMirroringActivityRecord(route, app_id, -1, sink.cast_data());
   } else {
     route.set_controller_type(RouteControllerType::kGeneric);
-    auto* activity_ptr = AddCastActivityRecord(route, app_id);
-    activity_ptr->SetOrUpdateSession(session, sink, hash_token_);
+    activity_ptr = AddCastActivityRecord(route, app_id);
   }
+  activity_ptr->SetOrUpdateSession(session, sink, hash_token_);
 }
 
 const MediaRoute* CastActivityManager::GetRoute(
@@ -762,7 +768,8 @@ CastActivityManager::DoLaunchSessionParams::DoLaunchSessionParams(
 
 CastActivityManager::DoLaunchSessionParams::~DoLaunchSessionParams() = default;
 
-CastActivityRecordFactoryForTest*
-    CastActivityManager::activity_record_factory_ = nullptr;
+// static
+ActivityRecordFactoryForTest* CastActivityManager::activity_record_factory_ =
+    nullptr;
 
 }  // namespace media_router

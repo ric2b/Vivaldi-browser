@@ -18,6 +18,7 @@ import android.widget.ScrollView;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.supplier.ObservableSupplierImpl;
+import org.chromium.base.task.PostTask;
 import org.chromium.chrome.autofill_assistant.R;
 import org.chromium.chrome.browser.autofill_assistant.carousel.AssistantActionsCarouselCoordinator;
 import org.chromium.chrome.browser.autofill_assistant.carousel.AssistantCarouselModel;
@@ -25,15 +26,18 @@ import org.chromium.chrome.browser.autofill_assistant.details.AssistantDetailsCo
 import org.chromium.chrome.browser.autofill_assistant.form.AssistantFormCoordinator;
 import org.chromium.chrome.browser.autofill_assistant.form.AssistantFormModel;
 import org.chromium.chrome.browser.autofill_assistant.generic_ui.AssistantGenericUiCoordinator;
+import org.chromium.chrome.browser.autofill_assistant.generic_ui.AssistantGenericUiModel;
 import org.chromium.chrome.browser.autofill_assistant.header.AssistantHeaderCoordinator;
 import org.chromium.chrome.browser.autofill_assistant.header.AssistantHeaderModel;
 import org.chromium.chrome.browser.autofill_assistant.infobox.AssistantInfoBoxCoordinator;
 import org.chromium.chrome.browser.autofill_assistant.user_data.AssistantCollectUserDataCoordinator;
 import org.chromium.chrome.browser.autofill_assistant.user_data.AssistantCollectUserDataModel;
 import org.chromium.chrome.browser.ui.TabObscuringHandler;
-import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetContent;
+import org.chromium.chrome.browser.util.AccessibilityUtil;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
 import org.chromium.chrome.browser.widget.bottomsheet.EmptyBottomSheetObserver;
+import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
+import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.ApplicationViewportInsetSupplier;
 
@@ -47,12 +51,14 @@ class AssistantBottomBarCoordinator implements AssistantPeekHeightCoordinator.De
 
     private final AssistantModel mModel;
     private final BottomSheetController mBottomSheetController;
+    private final TabObscuringHandler mTabObscuringHandler;
     private final AssistantBottomSheetContent mContent;
     private final ScrollView mScrollableContent;
     private final AssistantRootViewContainer mRootViewContainer;
     @Nullable
     private WebContents mWebContents;
     private ApplicationViewportInsetSupplier mWindowApplicationInsetSupplier;
+    private final AccessibilityUtil.Observer mAccessibilityObserver;
 
     // Child coordinators.
     private final AssistantHeaderCoordinator mHeaderCoordinator;
@@ -76,12 +82,20 @@ class AssistantBottomBarCoordinator implements AssistantPeekHeightCoordinator.De
     @AssistantViewportMode
     private int mViewportMode = AssistantViewportMode.NO_RESIZE;
 
+    // Stores the viewport mode for cases where talkback is enabled. During that time, the viewport
+    // is forced to RESIZE_VISUAL_VIEWPORT. If talkback gets disabled, the last mode stored in this
+    // field will be applied.
+    @AssistantViewportMode
+    private int mTargetViewportMode = AssistantViewportMode.NO_RESIZE;
+
     AssistantBottomBarCoordinator(Activity activity, AssistantModel model,
             BottomSheetController controller,
             ApplicationViewportInsetSupplier applicationViewportInsetSupplier,
-            TabObscuringHandler tabObscuringHandler) {
+            TabObscuringHandler tabObscuringHandler,
+            AssistantBottomSheetContent.Delegate bottomSheetDelegate) {
         mModel = model;
         mBottomSheetController = controller;
+        mTabObscuringHandler = tabObscuringHandler;
 
         mWindowApplicationInsetSupplier = applicationViewportInsetSupplier;
         mWindowApplicationInsetSupplier.addSupplier(mInsetSupplier);
@@ -90,7 +104,7 @@ class AssistantBottomBarCoordinator implements AssistantPeekHeightCoordinator.De
         if (currentSheetContent instanceof AssistantBottomSheetContent) {
             mContent = (AssistantBottomSheetContent) currentSheetContent;
         } else {
-            mContent = new AssistantBottomSheetContent(activity);
+            mContent = new AssistantBottomSheetContent(activity, bottomSheetDelegate);
         }
 
         // Replace or set the content to the actual Autofill Assistant views.
@@ -191,14 +205,14 @@ class AssistantBottomBarCoordinator implements AssistantPeekHeightCoordinator.De
                     hide();
                 }
             } else if (AssistantModel.ALLOW_TALKBACK_ON_WEBSITE == propertyKey) {
-                // Calling |setIsObscuringAllTabs| with the state it's already in triggers an
-                // assertion in |BottomSheetController|.
-                boolean shouldBeObscuring = !model.get(AssistantModel.ALLOW_TALKBACK_ON_WEBSITE);
-                if (shouldBeObscuring != tabObscuringHandler.areAllTabsObscured()) {
-                    controller.setIsObscuringAllTabs(tabObscuringHandler, shouldBeObscuring);
-                }
+                controller.setIsObscuringAllTabs(
+                        tabObscuringHandler, !model.get(AssistantModel.ALLOW_TALKBACK_ON_WEBSITE));
             } else if (AssistantModel.WEB_CONTENTS == propertyKey) {
                 mWebContents = model.get(AssistantModel.WEB_CONTENTS);
+            } else if (AssistantModel.TALKBACK_SHEET_SIZE_FRACTION == propertyKey) {
+                mRootViewContainer.setTalkbackViewSizeFraction(
+                        model.get(AssistantModel.TALKBACK_SHEET_SIZE_FRACTION));
+                updateVisualViewportHeight();
             }
         });
 
@@ -214,6 +228,13 @@ class AssistantBottomBarCoordinator implements AssistantPeekHeightCoordinator.De
                     mScrollableContent.setClipChildren(canScroll);
                     mRootViewContainer.setClipChildren(canScroll);
                 });
+
+        mAccessibilityObserver = (talkbackEnabled) -> {
+            setViewportMode(talkbackEnabled ? AssistantViewportMode.RESIZE_VISUAL_VIEWPORT
+                                            : mTargetViewportMode);
+            PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, mRootViewContainer::requestLayout);
+        };
+        AccessibilityUtil.addObserver(mAccessibilityObserver);
     }
 
     AssistantActionsCarouselCoordinator getActionsCarouselCoordinator() {
@@ -248,6 +269,12 @@ class AssistantBottomBarCoordinator implements AssistantPeekHeightCoordinator.De
                 animateChildren(rootView);
             }
         });
+
+        model.getGenericUiModel().addObserver((source, propertyKey) -> {
+            if (AssistantGenericUiModel.VIEW == propertyKey) {
+                animateChildren(rootView);
+            }
+        });
     }
 
     private void animateChildren(ViewGroup rootView) {
@@ -268,6 +295,11 @@ class AssistantBottomBarCoordinator implements AssistantPeekHeightCoordinator.De
     public void destroy() {
         resetVisualViewportHeight();
         mWindowApplicationInsetSupplier.removeSupplier(mInsetSupplier);
+        AccessibilityUtil.removeObserver(mAccessibilityObserver);
+
+        if (!mModel.get(AssistantModel.ALLOW_TALKBACK_ON_WEBSITE)) {
+            mBottomSheetController.setIsObscuringAllTabs(mTabObscuringHandler, false);
+        }
 
         mInfoBoxCoordinator.destroy();
         mInfoBoxCoordinator = null;
@@ -290,8 +322,14 @@ class AssistantBottomBarCoordinator implements AssistantPeekHeightCoordinator.De
 
     void setViewportMode(@AssistantViewportMode int mode) {
         if (mode == mViewportMode) return;
+        if (AccessibilityUtil.isAccessibilityEnabled()
+                && mode != AssistantViewportMode.RESIZE_VISUAL_VIEWPORT) {
+            mTargetViewportMode = mode;
+            return;
+        }
 
         mViewportMode = mode;
+        mTargetViewportMode = mode;
         updateVisualViewportHeight();
     }
 
@@ -383,14 +421,5 @@ class AssistantBottomBarCoordinator implements AssistantPeekHeightCoordinator.De
         }
 
         mInsetSupplier.set(resizing);
-    }
-
-    /** @return The peeking height of the bottom sheet if our content is showing, otherwise 0. */
-    private int getHeight() {
-        if (mBottomSheetController.getCurrentSheetContent() == mContent) {
-            return mPeekHeightCoordinator.getPeekHeight();
-        }
-
-        return 0;
     }
 }

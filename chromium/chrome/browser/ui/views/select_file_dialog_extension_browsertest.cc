@@ -37,7 +37,7 @@
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
-#include "content/public/common/service_manager_connection.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/extension_registry.h"
@@ -46,7 +46,6 @@
 #include "extensions/test/background_page_watcher.h"
 #include "extensions/test/extension_test_message_listener.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "ui/aura/window.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/shell_dialogs/select_file_dialog.h"
@@ -626,14 +625,20 @@ IN_PROC_BROWSER_TEST_P(SelectFileDialogExtensionFlagTest, DialogColoredTitle) {
       dialog_->GetRenderViewHost()->GetMainFrame();
   aura::Window* dialog_window =
       frame_host->GetNativeView()->GetToplevelWindow();
-  SkColor value = dialog_window->GetProperty(ash::kFrameActiveColorKey);
+  SkColor active_color = dialog_window->GetProperty(ash::kFrameActiveColorKey);
+  SkColor inactive_color =
+      dialog_window->GetProperty(ash::kFrameInactiveColorKey);
 
+  constexpr SkColor kFilesNgTitleColor = gfx::kGoogleGrey200;
   if (GetParam()) {
-    // FilesNG enabled the title should be grey.
-    EXPECT_EQ(value, gfx::kGoogleGrey300);
+    // FilesNG enabled the title should be Google Grey 200.
+    EXPECT_EQ(active_color, kFilesNgTitleColor);
+    // Active and Inactive should have the same color.
+    EXPECT_EQ(active_color, inactive_color);
   } else {
     // FilesNG disabled the title should be the original color.
-    EXPECT_NE(value, gfx::kGoogleGrey300);
+    EXPECT_NE(active_color, kFilesNgTitleColor);
+    EXPECT_NE(inactive_color, kFilesNgTitleColor);
   }
 
   CloseDialog(DIALOG_BTN_CANCEL, owning_window);

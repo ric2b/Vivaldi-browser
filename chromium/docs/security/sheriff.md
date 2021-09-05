@@ -185,13 +185,16 @@ assigning it to someone else.
 A few components have their own triage processes or points of contact who can
 help.
 
-* V8 bugs can be assigned to the [V8 ClusterFuzz
+* V8 ClusterFuzz bugs can be assigned to the [V8 ClusterFuzz
   Sheriff](https://rotation.googleplex.com/status?id=5714662985302016) for
   triage. Note that V8 CHECK failure crashes can have security implications, so
   don't triage it yourself and instead assign it to V8 ClusterFuzz Sheriff. They
   can make an informed decision on whether it is a security vulnerability or not
   and whether it is safe to strip the security tags (**Type=Bug-Security**,
   **Restrict-View-SecurityTeam**).
+* V8 non-ClusterFuzz bugs shouldn't be assigned to the V8 ClusterFuzz sheriff.
+  Instead, Googlers should refer to [the V8 security bug triage instructions](http://go/v8-security-issue-triage-how-to)
+  for lists of component owners.
 * Skia bugs can be assigned to hcm@chromium.org. Be careful while triaging
   these! The place where we're crashing isn't necessarily the place where the
   bug was introduced, so blame may be misleading. Skia fuzzing bugs can be
@@ -203,16 +206,10 @@ help.
 
 Tips for reproducing bugs:
 
-* [https://clusterfuzz.com/upload-testcase](https://clusterfuzz.com/upload-testcase)
-  allows you to upload files to reproduce crashes on various platforms and will
-  identify revision ranges when the regression was introduced. If a test case
-  requires multiple files, they can be uploaded together in a zip or tar
-  archive. Useful fuzzers include:-
-    * repro.html [linux_asan_chrome_mp](https://clusterfuzz.com/upload-testcase?upload=true&job=linux_asan_chrome_mp)
-    or [windows_asan_chrome](https://clusterfuzz.com/upload-testcase?upload=true&job=windows_asan_chrome)
-    * repro.js [linux_asan_d8](https://clusterfuzz.com/upload-testcase?upload=true&job=linux_asan_d8)
-    * repro.pdf [libfuzzer_pdfium_asan / pdfium_fuzzer](https://clusterfuzz.com/upload-testcase?upload=true&job=libfuzzer_pdfium_asan&target=pdfium_fuzzer)
-    or [libfuzzer_pdfium_asan / pdfium_xfa_fuzzer](https://clusterfuzz.com/upload-testcase?upload=true&job=libfuzzer_pdfium_asan&target=pdfium_xfa_fuzzer)
+* Plan A is always to [use ClusterFuzz](clusterfuzz-for-sheriffs.md). As well
+  as reproducing bugs, ClusterFuzz will help you with lots of subsequent
+  bisection and labelling tasks. If it's any kind of crash, DCHECK or
+  memory safety problem, try really hard to get ClusterFuzz to reproduce it.
 * When you can't just build from a specific branch locally, check out
   [https://dev.chromium.org/getting-involved/dev-channel](https://dev.chromium.org/getting-involved/dev-channel)
   or

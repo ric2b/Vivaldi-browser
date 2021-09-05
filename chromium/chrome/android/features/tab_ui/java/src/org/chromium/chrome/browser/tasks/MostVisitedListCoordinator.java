@@ -8,10 +8,7 @@ import android.view.ContextMenu;
 import android.view.View;
 import android.view.ViewGroup;
 
-import org.chromium.base.DiscardableReferencePool;
 import org.chromium.chrome.browser.ChromeActivity;
-import org.chromium.chrome.browser.GlobalDiscardableReferencePool;
-import org.chromium.chrome.browser.ntp.snippets.SuggestionsSource;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.suggestions.ImageFetcher;
@@ -61,14 +58,12 @@ class MostVisitedListCoordinator implements TileGroup.Observer, TileGroup.TileSe
         if (mRenderer != null) return;
         assert mTileGroup == null;
 
-        Profile profile = Profile.getLastUsedProfile();
-        SuggestionsSource suggestionsSource =
-                SuggestionsDependencyFactory.getInstance().createSuggestionSource(profile);
+        // This function is never called in incognito mode.
+        Profile profile = Profile.getLastUsedRegularProfile();
         SuggestionsEventReporter eventReporter =
                 SuggestionsDependencyFactory.getInstance().createEventReporter();
 
-        DiscardableReferencePool referencePool = GlobalDiscardableReferencePool.getReferencePool();
-        ImageFetcher imageFetcher = new ImageFetcher(suggestionsSource, profile, referencePool);
+        ImageFetcher imageFetcher = new ImageFetcher(profile);
         SnackbarManager snackbarManager = mActivity.getSnackbarManager();
 
         mRenderer = new TileRenderer(
@@ -79,8 +74,8 @@ class MostVisitedListCoordinator implements TileGroup.Observer, TileGroup.TileSe
 
         TileGroupDelegateImpl tileGroupDelegate =
                 new TileGroupDelegateImpl(mActivity, profile, null, snackbarManager);
-        SuggestionsUiDelegate suggestionsUiDelegate = new MostVisitedSuggestionsUiDelegate(
-                suggestionsSource, eventReporter, profile, referencePool, snackbarManager);
+        SuggestionsUiDelegate suggestionsUiDelegate =
+                new MostVisitedSuggestionsUiDelegate(eventReporter, profile, snackbarManager);
         mTileGroup = new TileGroup(
                 mRenderer, suggestionsUiDelegate, null, tileGroupDelegate, this, offlinePageBridge);
         mTileGroup.startObserving(MAX_RESULTS);
@@ -169,11 +164,9 @@ class MostVisitedListCoordinator implements TileGroup.Observer, TileGroup.TileSe
 
     /** Suggestions UI Delegate for constructing the TileGroup. */
     private static class MostVisitedSuggestionsUiDelegate extends SuggestionsUiDelegateImpl {
-        public MostVisitedSuggestionsUiDelegate(SuggestionsSource suggestionsSource,
-                SuggestionsEventReporter eventReporter, Profile profile,
-                DiscardableReferencePool referencePool, SnackbarManager snackbarManager) {
-            super(suggestionsSource, eventReporter, null, profile, null, referencePool,
-                    snackbarManager);
+        public MostVisitedSuggestionsUiDelegate(SuggestionsEventReporter eventReporter,
+                Profile profile, SnackbarManager snackbarManager) {
+            super(eventReporter, null, profile, null, snackbarManager);
         }
 
         @Override

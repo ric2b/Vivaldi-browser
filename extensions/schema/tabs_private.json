@@ -44,11 +44,6 @@
             "type": "boolean",
             "optional": true,
             "description": "If the tab should be quiet."
-          },
-          "hasBeforeUnloadHandler":  {
-            "type": "boolean",
-            "optional": true,
-            "description": "(read only) This tab has a before unload handler."
           }
         }
       },
@@ -329,6 +324,36 @@
             "type": "integer",
             "minimum": 0,
             "description": "Vertical co-ordinate from the top"
+          },
+          {
+            "name": "modifiers",
+            "type": "integer",
+            "minimum": 0,
+            "description": "Keyboard modifiers to simulate shift or ctrl-clicking"
+          }
+        ]
+      },
+      {
+        "name": "hasBeforeUnloadOrUnload",
+        "type": "function",
+        "description": "Check if a page contains a beforeunload or unload handler.",
+        "parameters": [
+          {
+            "name": "tabId",
+            "type": "integer",
+            "minimum": 0
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": false,
+            "parameters": [
+              {
+                "name": "hasHandler",
+                "type": "boolean",
+                "description": "true if the page has a beforeunload or unload handler, blocking a quick termination of the tab."
+              }
+            ]
           }
         ]
       }
@@ -351,7 +376,9 @@
           },
           {
             "name": "tabState",
-            "$ref": "TabAlertState"
+            "type": "array",
+            "items": { "$ref": "TabAlertState" },
+            "description": "All the active media states for this tab."
           }
         ]
       },

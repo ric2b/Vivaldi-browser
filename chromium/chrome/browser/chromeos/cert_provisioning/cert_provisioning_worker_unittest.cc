@@ -5,16 +5,24 @@
 #include "chrome/browser/chromeos/cert_provisioning/cert_provisioning_worker.h"
 
 #include "base/callback.h"
+#include "base/json/json_string_value_serializer.h"
+#include "base/json/json_writer.h"
 #include "base/test/gmock_callback_support.h"
+#include "base/test/metrics/histogram_tester.h"
+#include "base/test/values_test_util.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/attestation/mock_tpm_challenge_key_subtle.h"
 #include "chrome/browser/chromeos/attestation/tpm_challenge_key_subtle.h"
 #include "chrome/browser/chromeos/cert_provisioning/cert_provisioning_common.h"
+#include "chrome/browser/chromeos/cert_provisioning/cert_provisioning_metrics.h"
+#include "chrome/browser/chromeos/cert_provisioning/cert_provisioning_test_helpers.h"
+#include "chrome/browser/chromeos/cert_provisioning/mock_cert_provisioning_invalidator.h"
 #include "chrome/browser/chromeos/platform_keys/mock_platform_keys_service.h"
+#include "chrome/browser/chromeos/platform_keys/platform_keys_service.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys_service_factory.h"
-#include "chrome/test/base/testing_browser_process.h"
-#include "chrome/test/base/testing_profile_manager.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_client.h"
+#include "components/prefs/pref_change_registrar.h"
+#include "components/prefs/pref_service.h"
 #include "components/prefs/testing_pref_service.h"
 #include "content/public/test/browser_task_environment.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -22,9 +30,13 @@
 namespace em = enterprise_management;
 
 using base::TimeDelta;
+using base::test::IsJson;
+using base::test::ParseJson;
 using base::test::RunOnceCallback;
+using chromeos::attestation::MockTpmChallengeKeySubtle;
 using testing::_;
 using testing::Mock;
+using testing::StrictMock;
 
 namespace chromeos {
 namespace cert_provisioning {
@@ -52,8 +64,8 @@ mMhGDBfgEskdbM+0agsZrJupoQMBUbD5gflcJlW3kwlboi3dTtiGixfYWw==
 -----END CERTIFICATE-----)";
 
 const char kCertProfileId[] = "cert_profile_1";
+const char kCertProfileVersion[] = "cert_profile_version_1";
 // Prefix + certificate profile name.
-const char kKeyName[] = "cert-provis-cert_profile_1";
 const char kCertScopeStrUser[] = "google/chromeos/user";
 const char kCertScopeStrDevice[] = "google/chromeos/device";
 const char kPublicKey[] = "fake_public_key_1";
@@ -69,40 +81,41 @@ const char kSignature[] = "fake_signature_1";
 // Using macros to reduce boilerplate code, but keep real line numbers in
 // error messages in case of expectation failure. They use some of protected
 // fields of CertProvisioningWorkerTest class and may be considered as extra
-// methods of it.
-#define EXPECT_PREPARE_KEY_OK(PREPARE_KEY_FUNC)                        \
-  {                                                                    \
-    auto public_key_result =                                           \
-        attestation::TpmChallengeKeyResult::MakePublicKey(kPublicKey); \
-    EXPECT_CALL(*tpm_challenge_key_impl_, PREPARE_KEY_FUNC)            \
-        .Times(1)                                                      \
-        .WillOnce(RunOnceCallback<4>(public_key_result));              \
+// methods of it. *_OK macros immediately call callbacks with some successful
+// results. *_NO_OP doesn't call callbacks.
+#define EXPECT_PREPARE_KEY_OK(MOCK_TPM_CHALLENGE_KEY, PREPARE_KEY_FUNC) \
+  {                                                                     \
+    auto public_key_result =                                            \
+        attestation::TpmChallengeKeyResult::MakePublicKey(kPublicKey);  \
+    EXPECT_CALL((MOCK_TPM_CHALLENGE_KEY), PREPARE_KEY_FUNC)             \
+        .Times(1)                                                       \
+        .WillOnce(RunOnceCallback<4>(public_key_result));               \
   }
 
-#define EXPECT_SIGN_CHALLENGE_OK(SIGN_CHALLENGE_FUNC)              \
-  {                                                                \
-    auto sign_challenge_result =                                   \
-        attestation::TpmChallengeKeyResult::MakeChallengeResponse( \
-            kChallengeResponse);                                   \
-    EXPECT_CALL(*tpm_challenge_key_impl_, SIGN_CHALLENGE_FUNC)     \
-        .Times(1)                                                  \
-        .WillOnce(RunOnceCallback<2>(sign_challenge_result));      \
+#define EXPECT_SIGN_CHALLENGE_OK(MOCK_TPM_CHALLENGE_KEY, SIGN_CHALLENGE_FUNC) \
+  {                                                                           \
+    auto sign_challenge_result =                                              \
+        attestation::TpmChallengeKeyResult::MakeChallengeResponse(            \
+            kChallengeResponse);                                              \
+    EXPECT_CALL((MOCK_TPM_CHALLENGE_KEY), SIGN_CHALLENGE_FUNC)                \
+        .Times(1)                                                             \
+        .WillOnce(RunOnceCallback<2>(sign_challenge_result));                 \
   }
 
-#define EXPECT_REGISTER_KEY_OK(REGISTER_KEY_FUNC)            \
-  {                                                          \
-    auto register_key_result =                               \
-        attestation::TpmChallengeKeyResult::MakeSuccess();   \
-    EXPECT_CALL(*tpm_challenge_key_impl_, REGISTER_KEY_FUNC) \
-        .Times(1)                                            \
-        .WillOnce(RunOnceCallback<0>(register_key_result));  \
+#define EXPECT_REGISTER_KEY_OK(MOCK_TPM_CHALLENGE_KEY, REGISTER_KEY_FUNC) \
+  {                                                                       \
+    auto register_key_result =                                            \
+        attestation::TpmChallengeKeyResult::MakeSuccess();                \
+    EXPECT_CALL((MOCK_TPM_CHALLENGE_KEY), REGISTER_KEY_FUNC)              \
+        .Times(1)                                                         \
+        .WillOnce(RunOnceCallback<0>(register_key_result));               \
   }
 
 #define EXPECT_START_CSR_OK(START_CSR_FUNC)                           \
   {                                                                   \
     EXPECT_CALL(cloud_policy_client_, START_CSR_FUNC)                 \
         .Times(1)                                                     \
-        .WillOnce(RunOnceCallback<3>(                                 \
+        .WillOnce(RunOnceCallback<4>(                                 \
             policy::DeviceManagementStatus::DM_STATUS_SUCCESS,        \
             /*response_error=*/base::nullopt,                         \
             /*try_again_later_ms=*/base::nullopt, kInvalidationTopic, \
@@ -113,7 +126,7 @@ const char kSignature[] = "fake_signature_1";
   {                                                                   \
     EXPECT_CALL(cloud_policy_client_, START_CSR_FUNC)                 \
         .Times(1)                                                     \
-        .WillOnce(RunOnceCallback<3>(                                 \
+        .WillOnce(RunOnceCallback<4>(                                 \
             policy::DeviceManagementStatus::DM_STATUS_SUCCESS,        \
             /*response_error=*/base::nullopt,                         \
             /*try_again_later_ms=*/base::nullopt, kInvalidationTopic, \
@@ -124,7 +137,7 @@ const char kSignature[] = "fake_signature_1";
   {                                                                       \
     EXPECT_CALL(cloud_policy_client_, START_CSR_FUNC)                     \
         .Times(1)                                                         \
-        .WillOnce(RunOnceCallback<3>(                                     \
+        .WillOnce(RunOnceCallback<4>(                                     \
             policy::DeviceManagementStatus::DM_STATUS_SUCCESS,            \
             /*response_error=*/base::nullopt,                             \
             /*try_again_later_ms=*/(DELAY_MS), /*invalidation_topic=*/"", \
@@ -138,7 +151,7 @@ const char kSignature[] = "fake_signature_1";
   {                                                                          \
     EXPECT_CALL(cloud_policy_client_, START_CSR_FUNC)                        \
         .Times(1)                                                            \
-        .WillOnce(RunOnceCallback<3>(                                        \
+        .WillOnce(RunOnceCallback<4>(                                        \
             policy::DeviceManagementStatus::DM_STATUS_REQUEST_INVALID,       \
             /*response_error=*/base::nullopt,                                \
             /*try_again_later_ms=*/base::nullopt, /*invalidation_topic=*/"", \
@@ -152,7 +165,7 @@ const char kSignature[] = "fake_signature_1";
   {                                                                          \
     EXPECT_CALL(cloud_policy_client_, START_CSR_FUNC)                        \
         .Times(1)                                                            \
-        .WillOnce(RunOnceCallback<3>(                                        \
+        .WillOnce(RunOnceCallback<4>(                                        \
             policy::DeviceManagementStatus::DM_STATUS_SUCCESS,               \
             /*response_error=*/CertProvisioningResponseError::CA_ERROR,      \
             /*try_again_later_ms=*/base::nullopt, /*invalidation_topic=*/"", \
@@ -166,7 +179,7 @@ const char kSignature[] = "fake_signature_1";
   {                                                                          \
     EXPECT_CALL(cloud_policy_client_, START_CSR_FUNC)                        \
         .Times(1)                                                            \
-        .WillOnce(RunOnceCallback<3>(                                        \
+        .WillOnce(RunOnceCallback<4>(                                        \
             policy::DeviceManagementStatus::DM_STATUS_TEMPORARY_UNAVAILABLE, \
             /*response_error=*/base::nullopt,                                \
             /*try_again_later_ms=*/base::nullopt, /*invalidation_topic=*/"", \
@@ -176,11 +189,29 @@ const char kSignature[] = "fake_signature_1";
             /*data_to_sign=*/""));                                           \
   }
 
+#define EXPECT_START_CSR_INCONSISTENT_DATA(START_CSR_FUNC)                   \
+  {                                                                          \
+    EXPECT_CALL(cloud_policy_client_, START_CSR_FUNC)                        \
+        .Times(1)                                                            \
+        .WillOnce(RunOnceCallback<4>(                                        \
+            policy::DeviceManagementStatus::                                 \
+                DM_STATUS_SUCCESS, /*response_error=*/                       \
+            CertProvisioningResponseError::INCONSISTENT_DATA,                \
+            /*try_again_later_ms=*/base::nullopt, /*invalidation_topic=*/"", \
+            /*va_challenge=*/"",                                             \
+            enterprise_management::HashingAlgorithm::                        \
+                HASHING_ALGORITHM_UNSPECIFIED,                               \
+            /*data_to_sign=*/""));                                           \
+  }
+
+#define EXPECT_START_CSR_NO_OP(START_CSR_FUNC) \
+  { EXPECT_CALL(cloud_policy_client_, START_CSR_FUNC).Times(1); }
+
 #define EXPECT_FINISH_CSR_OK(FINISH_CSR_FUNC)                                 \
   {                                                                           \
     EXPECT_CALL(cloud_policy_client_, FINISH_CSR_FUNC)                        \
         .Times(1)                                                             \
-        .WillOnce(RunOnceCallback<5>(                                         \
+        .WillOnce(RunOnceCallback<6>(                                         \
             policy::DeviceManagementStatus::DM_STATUS_SUCCESS, base::nullopt, \
             base::nullopt));                                                  \
   }
@@ -189,7 +220,7 @@ const char kSignature[] = "fake_signature_1";
   {                                                                           \
     EXPECT_CALL(cloud_policy_client_, FINISH_CSR_FUNC)                        \
         .Times(1)                                                             \
-        .WillOnce(RunOnceCallback<5>(                                         \
+        .WillOnce(RunOnceCallback<6>(                                         \
             policy::DeviceManagementStatus::DM_STATUS_SUCCESS, base::nullopt, \
             /*try_again_later_ms=*/(DELAY_MS)));                              \
   }
@@ -198,18 +229,34 @@ const char kSignature[] = "fake_signature_1";
   {                                                                           \
     EXPECT_CALL(cloud_policy_client_, DOWNLOAD_CERT_FUNC)                     \
         .Times(1)                                                             \
-        .WillOnce(RunOnceCallback<3>(                                         \
+        .WillOnce(RunOnceCallback<4>(                                         \
             policy::DeviceManagementStatus::DM_STATUS_SUCCESS, base::nullopt, \
             base::nullopt, kFakeCertificate));                                \
   }
-
 #define EXPECT_DOWNLOAD_CERT_TRY_LATER(DOWNLOAD_CERT_FUNC, DELAY_MS)          \
   {                                                                           \
     EXPECT_CALL(cloud_policy_client_, DOWNLOAD_CERT_FUNC)                     \
         .Times(1)                                                             \
-        .WillOnce(RunOnceCallback<3>(                                         \
+        .WillOnce(RunOnceCallback<4>(                                         \
             policy::DeviceManagementStatus::DM_STATUS_SUCCESS, base::nullopt, \
             /*try_again_later_ms=*/(DELAY_MS), /*certificate=*/""));          \
+  }
+
+#define EXPECT_DOWNLOAD_CERT_NO_OP(DOWNLOAD_CERT_FUNC) \
+  { EXPECT_CALL(cloud_policy_client_, DOWNLOAD_CERT_FUNC).Times(1); }
+
+#define EXPECT_SET_ATTRIBUTE_FOR_KEY_OK(SET_FUNC)            \
+  {                                                          \
+    EXPECT_CALL(*platform_keys_service_, SET_FUNC)           \
+        .Times(1)                                            \
+        .WillOnce(RunOnceCallback<4>(/*error_message=*/"")); \
+  }
+
+#define EXPECT_SET_ATTRIBUTE_FOR_KEY_FAIL(SET_FUNC)                    \
+  {                                                                    \
+    EXPECT_CALL(*platform_keys_service_, SET_FUNC)                     \
+        .Times(1)                                                      \
+        .WillOnce(RunOnceCallback<4>(/*error_message=*/"Test error")); \
   }
 
 #define EXPECT_SIGN_RSAPKC1_DIGEST_OK(SIGN_FUNC)                         \
@@ -217,6 +264,14 @@ const char kSignature[] = "fake_signature_1";
     EXPECT_CALL(*platform_keys_service_, SIGN_FUNC)                      \
         .Times(1)                                                        \
         .WillOnce(RunOnceCallback<4>(kSignature, /*error_message=*/"")); \
+  }
+
+#define EXPECT_SIGN_RSAPKC1_DIGEST_FAIL(SIGN_FUNC)                     \
+  {                                                                    \
+    EXPECT_CALL(*platform_keys_service_, SIGN_FUNC)                    \
+        .Times(1)                                                      \
+        .WillOnce(RunOnceCallback<4>(/*signature=*/"",                 \
+                                     /*error_message=*/"Test error")); \
   }
 
 #define EXPECT_IMPORT_CERTIFICATE_OK(IMPORT_FUNC)            \
@@ -228,7 +283,9 @@ const char kSignature[] = "fake_signature_1";
 
 class CallbackObserver {
  public:
-  MOCK_METHOD(void, Callback, (bool is_success));
+  MOCK_METHOD(void,
+              Callback,
+              (const CertProfile& profile, CertProvisioningWorkerState state));
 };
 
 class CertProvisioningWorkerTest : public ::testing::Test {
@@ -240,17 +297,12 @@ class CertProvisioningWorkerTest : public ::testing::Test {
   ~CertProvisioningWorkerTest() override = default;
 
   void SetUp() override {
-    // Replace TpmChallengeKey.
-    auto mock_tpm_challenge_key_subtle_impl =
-        std::make_unique<attestation::MockTpmChallengeKeySubtle>();
-    tpm_challenge_key_impl_ = mock_tpm_challenge_key_subtle_impl.get();
-    attestation::TpmChallengeKeySubtleFactory::SetForTesting(
-        std::move(mock_tpm_challenge_key_subtle_impl));
-    ASSERT_TRUE(tpm_challenge_key_impl_);
-
     // There should not be any calls to callback before this expect is
     // overridden.
     EXPECT_CALL(callback_observer_, Callback).Times(0);
+
+    RegisterProfilePrefs(testing_pref_service_.registry());
+    RegisterLocalStatePrefs(testing_pref_service_.registry());
   }
 
   void TearDown() override {
@@ -260,25 +312,39 @@ class CertProvisioningWorkerTest : public ::testing::Test {
 
  protected:
   void Init() {
-    testing_profile_manager_ = std::make_unique<TestingProfileManager>(
-        TestingBrowserProcess::GetGlobal());
-    ASSERT_TRUE(testing_profile_manager_->SetUp());
-    testing_profile_ =
-        testing_profile_manager_->CreateTestingProfile("user@gmail.com");
-    ASSERT_TRUE(testing_profile_);
-
     platform_keys_service_ =
         static_cast<platform_keys::MockPlatformKeysService*>(
             platform_keys::PlatformKeysServiceFactory::GetInstance()
                 ->SetTestingFactoryAndUse(
-                    testing_profile_,
+                    GetProfile(),
                     base::BindRepeating(
                         &platform_keys::BuildMockPlatformKeysService)));
     ASSERT_TRUE(platform_keys_service_);
+    // Only explicitly expected removals are allowed.
+    EXPECT_CALL(*platform_keys_service_, RemoveCertificate).Times(0);
+    EXPECT_CALL(*platform_keys_service_, RemoveKey).Times(0);
   }
 
   void FastForwardBy(TimeDelta delta) {
     task_environment_.FastForwardBy(delta);
+  }
+
+  // Replaces next result of TpmChallengeKeySubtleFactory and return pointer to
+  // the mock. The mock will injected into next created worker and will live
+  // until worker's destruction. Should be called before creation of every
+  // worker.
+  MockTpmChallengeKeySubtle* PrepareTpmChallengeKey() {
+    auto mock_tpm_challenge_key_subtle_impl =
+        std::make_unique<MockTpmChallengeKeySubtle>();
+
+    MockTpmChallengeKeySubtle* tpm_challenge_key_impl =
+        mock_tpm_challenge_key_subtle_impl.get();
+
+    attestation::TpmChallengeKeySubtleFactory::SetForTesting(
+        std::move(mock_tpm_challenge_key_subtle_impl));
+
+    CHECK(tpm_challenge_key_impl);
+    return tpm_challenge_key_impl;
   }
 
   CertProvisioningWorkerCallback GetCallback() {
@@ -286,122 +352,189 @@ class CertProvisioningWorkerTest : public ::testing::Test {
                           base::Unretained(&callback_observer_));
   }
 
+  Profile* GetProfile() { return profile_helper_for_testing_.GetProfile(); }
+
+  std::unique_ptr<MockCertProvisioningInvalidator> MakeInvalidator() {
+    return std::make_unique<MockCertProvisioningInvalidator>();
+  }
+
+  std::unique_ptr<MockCertProvisioningInvalidator> MakeInvalidator(
+      MockCertProvisioningInvalidator** mock_invalidator) {
+    auto result = std::make_unique<MockCertProvisioningInvalidator>();
+    *mock_invalidator = result.get();
+    return result;
+  }
+
   content::BrowserTaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
 
-  CallbackObserver callback_observer_;
-
-  std::unique_ptr<TestingProfileManager> testing_profile_manager_;
-  TestingProfile* testing_profile_ = nullptr;
-
+  StrictMock<CallbackObserver> callback_observer_;
+  StrictMock<SpyingFakeCryptohomeClient> fake_cryptohome_client_;
+  ProfileHelperForTesting profile_helper_for_testing_;
   TestingPrefServiceSimple testing_pref_service_;
 
   policy::MockCloudPolicyClient cloud_policy_client_;
-  attestation::MockTpmChallengeKeySubtle* tpm_challenge_key_impl_ = nullptr;
   platform_keys::MockPlatformKeysService* platform_keys_service_ = nullptr;
 };
 
 // Checks that the worker makes all necessary requests to other modules during
 // success scenario.
 TEST_F(CertProvisioningWorkerTest, Success) {
-  CertProfile cert_profile{kCertProfileId};
-  CertProvisioningWorkerImpl worker(CertScope::kUser, testing_profile_,
-                                    &testing_pref_service_, cert_profile,
-                                    &cloud_policy_client_, GetCallback());
+  base::HistogramTester histogram_tester;
+
+  CertProfile cert_profile{kCertProfileId, kCertProfileVersion};
+
+  MockTpmChallengeKeySubtle* mock_tpm_challenge_key = PrepareTpmChallengeKey();
+  MockCertProvisioningInvalidator* mock_invalidator = nullptr;
+  CertProvisioningWorkerImpl worker(
+      CertScope::kUser, GetProfile(), &testing_pref_service_, cert_profile,
+      &cloud_policy_client_, MakeInvalidator(&mock_invalidator), GetCallback());
 
   {
     testing::InSequence seq;
 
-    EXPECT_PREPARE_KEY_OK(StartPrepareKeyStep(
-        attestation::AttestationKeyType::KEY_USER, kKeyName,
-        /*profile=*/_, /*key_name_for_spkac=*/"", /*callback=*/_));
+    EXPECT_PREPARE_KEY_OK(
+        *mock_tpm_challenge_key,
+        StartPrepareKeyStep(attestation::AttestationKeyType::KEY_USER,
+                            GetKeyName(kCertProfileId),
+                            /*profile=*/_, /*key_name_for_spkac=*/"",
+                            /*callback=*/_));
 
     EXPECT_START_CSR_OK(ClientCertProvisioningStartCsr(
-        kCertScopeStrUser, kCertProfileId, kPublicKey, /*callback=*/_));
+        kCertScopeStrUser, kCertProfileId, kCertProfileVersion, kPublicKey,
+        /*callback=*/_));
 
-    EXPECT_SIGN_CHALLENGE_OK(StartSignChallengeStep(
-        kChallenge, /*include_signed_public_key=*/true, /*callback=*/_));
+    EXPECT_CALL(*mock_invalidator, Register(kInvalidationTopic, _)).Times(1);
 
-    EXPECT_REGISTER_KEY_OK(StartRegisterKeyStep);
+    EXPECT_SIGN_CHALLENGE_OK(
+        *mock_tpm_challenge_key,
+        StartSignChallengeStep(kChallenge, /*include_signed_public_key=*/true,
+                               /*callback=*/_));
+
+    EXPECT_REGISTER_KEY_OK(*mock_tpm_challenge_key, StartRegisterKeyStep);
+
+    EXPECT_SET_ATTRIBUTE_FOR_KEY_OK(SetAttributeForKey(
+        platform_keys::kTokenIdUser, kPublicKey,
+        platform_keys::KeyAttributeType::CertificateProvisioningId,
+        kCertProfileId, _));
 
     EXPECT_SIGN_RSAPKC1_DIGEST_OK(
         SignRSAPKCS1Digest(platform_keys::kTokenIdUser, kDataToSign, kPublicKey,
                            kPkHashAlgo, /*callback=*/_));
 
     EXPECT_FINISH_CSR_OK(ClientCertProvisioningFinishCsr(
-        kCertScopeStrUser, kCertProfileId, kPublicKey, kChallengeResponse,
-        kSignature, /*callback=*/_));
+        kCertScopeStrUser, kCertProfileId, kCertProfileVersion, kPublicKey,
+        kChallengeResponse, kSignature, /*callback=*/_));
 
     EXPECT_DOWNLOAD_CERT_OK(ClientCertProvisioningDownloadCert(
-        kCertScopeStrUser, kCertProfileId, kPublicKey, /*callback=*/_));
+        kCertScopeStrUser, kCertProfileId, kCertProfileVersion, kPublicKey,
+        /*callback=*/_));
 
     EXPECT_IMPORT_CERTIFICATE_OK(ImportCertificate(
         platform_keys::kTokenIdUser, /*certificate=*/_, /*callback=*/_));
+
+    EXPECT_CALL(*mock_invalidator, Unregister()).Times(1);
+
+    EXPECT_CALL(callback_observer_,
+                Callback(cert_profile, CertProvisioningWorkerState::kSucceeded))
+        .Times(1);
   }
 
-  EXPECT_CALL(callback_observer_, Callback(true)).Times(1);
   worker.DoStep();
+
+  histogram_tester.ExpectUniqueSample("ChromeOS.CertProvisioning.Result.User",
+                                      CertProvisioningWorkerState::kSucceeded,
+                                      1);
+  histogram_tester.ExpectUniqueSample(
+      "ChromeOS.CertProvisioning.Event.User",
+      CertProvisioningEvent::kRegisteredToInvalidationTopic, 1);
+  histogram_tester.ExpectTotalCount(
+      "ChromeOS.CertProvisioning.KeypairGenerationTime.User", 1);
+  histogram_tester.ExpectTotalCount("ChromeOS.CertProvisioning.VaTime.User", 1);
+  histogram_tester.ExpectTotalCount(
+      "ChromeOS.CertProvisioning.CsrSignTime.User", 1);
 }
 
 // Checks that the worker makes all necessary requests to other modules during
 // success scenario when VA challenge is not received.
 TEST_F(CertProvisioningWorkerTest, NoVaSuccess) {
-  CertProfile cert_profile{kCertProfileId};
-  CertProvisioningWorkerImpl worker(CertScope::kUser, testing_profile_,
-                                    &testing_pref_service_, cert_profile,
-                                    &cloud_policy_client_, GetCallback());
-  EXPECT_CALL(*tpm_challenge_key_impl_, StartRegisterKeyStep).Times(0);
+  CertProfile cert_profile{kCertProfileId, kCertProfileVersion};
+
+  MockTpmChallengeKeySubtle* mock_tpm_challenge_key = PrepareTpmChallengeKey();
+  CertProvisioningWorkerImpl worker(
+      CertScope::kUser, GetProfile(), &testing_pref_service_, cert_profile,
+      &cloud_policy_client_, MakeInvalidator(), GetCallback());
+  EXPECT_CALL(*mock_tpm_challenge_key, StartRegisterKeyStep).Times(0);
 
   {
     testing::InSequence seq;
 
-    EXPECT_PREPARE_KEY_OK(StartPrepareKeyStep(
-        attestation::AttestationKeyType::KEY_USER, kKeyName,
-        /*profile=*/_, /*key_name_for_spkac=*/"", /*callback=*/_));
+    EXPECT_PREPARE_KEY_OK(
+        *mock_tpm_challenge_key,
+        StartPrepareKeyStep(attestation::AttestationKeyType::KEY_USER,
+                            GetKeyName(kCertProfileId),
+                            /*profile=*/_, /*key_name_for_spkac=*/"",
+                            /*callback=*/_));
 
     EXPECT_START_CSR_OK_WITHOUT_VA(ClientCertProvisioningStartCsr(
-        kCertScopeStrUser, kCertProfileId, kPublicKey, /*callback=*/_));
+        kCertScopeStrUser, kCertProfileId, kCertProfileVersion, kPublicKey,
+        /*callback=*/_));
 
-    EXPECT_REGISTER_KEY_OK(StartRegisterKeyStep);
+    EXPECT_REGISTER_KEY_OK(*mock_tpm_challenge_key, StartRegisterKeyStep);
+
+    EXPECT_SET_ATTRIBUTE_FOR_KEY_OK(SetAttributeForKey(
+        platform_keys::kTokenIdUser, kPublicKey,
+        platform_keys::KeyAttributeType::CertificateProvisioningId,
+        kCertProfileId, _));
 
     EXPECT_SIGN_RSAPKC1_DIGEST_OK(
         SignRSAPKCS1Digest(platform_keys::kTokenIdUser, kDataToSign, kPublicKey,
                            kPkHashAlgo, /*callback=*/_));
 
     EXPECT_FINISH_CSR_OK(ClientCertProvisioningFinishCsr(
-        kCertScopeStrUser, kCertProfileId, kPublicKey,
+        kCertScopeStrUser, kCertProfileId, kCertProfileVersion, kPublicKey,
         /*va_challenge_response=*/"", kSignature, /*callback=*/_));
 
     EXPECT_DOWNLOAD_CERT_OK(ClientCertProvisioningDownloadCert(
-        kCertScopeStrUser, kCertProfileId, kPublicKey, /*callback=*/_));
+        kCertScopeStrUser, kCertProfileId, kCertProfileVersion, kPublicKey,
+        /*callback=*/_));
 
     EXPECT_IMPORT_CERTIFICATE_OK(ImportCertificate(
         platform_keys::kTokenIdUser, /*certificate=*/_, /*callback=*/_));
+
+    EXPECT_CALL(callback_observer_,
+                Callback(cert_profile, CertProvisioningWorkerState::kSucceeded))
+        .Times(1);
   }
 
-  EXPECT_CALL(callback_observer_, Callback(true)).Times(1);
   worker.DoStep();
 }
 
 // Checks that when the server returns try_again_later field, the worker will
 // retry a request when it asked to continue the provisioning.
 TEST_F(CertProvisioningWorkerTest, TryLaterManualRetry) {
-  CertProfile cert_profile{kCertProfileId};
-  CertProvisioningWorkerImpl worker(CertScope::kDevice, testing_profile_,
-                                    &testing_pref_service_, cert_profile,
-                                    &cloud_policy_client_, GetCallback());
+  CertProfile cert_profile{kCertProfileId, kCertProfileVersion};
+
+  MockTpmChallengeKeySubtle* mock_tpm_challenge_key = PrepareTpmChallengeKey();
+  CertProvisioningWorkerImpl worker(
+      CertScope::kDevice, GetProfile(), &testing_pref_service_, cert_profile,
+      &cloud_policy_client_, MakeInvalidator(), GetCallback());
   const TimeDelta delay = TimeDelta::FromSeconds(30);
 
   {
     testing::InSequence seq;
 
-    EXPECT_PREPARE_KEY_OK(StartPrepareKeyStep(
-        attestation::AttestationKeyType::KEY_DEVICE, /*key_name=*/"",
-        /*profile=*/_, /*key_name_for_spkac=*/kKeyName, /*callback=*/_));
+    EXPECT_PREPARE_KEY_OK(
+        *mock_tpm_challenge_key,
+        StartPrepareKeyStep(
+            attestation::AttestationKeyType::KEY_DEVICE, /*key_name=*/"",
+            /*profile=*/_, /*key_name_for_spkac=*/GetKeyName(kCertProfileId),
+            /*callback=*/_));
 
     EXPECT_START_CSR_TRY_LATER(
         ClientCertProvisioningStartCsr(kCertScopeStrDevice, kCertProfileId,
-                                       kPublicKey, /*callback=*/_),
+                                       kCertProfileVersion, kPublicKey,
+                                       /*callback=*/_),
         delay.InMilliseconds());
 
     worker.DoStep();
@@ -413,19 +546,27 @@ TEST_F(CertProvisioningWorkerTest, TryLaterManualRetry) {
     testing::InSequence seq;
 
     EXPECT_START_CSR_OK(ClientCertProvisioningStartCsr(
-        kCertScopeStrDevice, kCertProfileId, kPublicKey, /*callback=*/_));
+        kCertScopeStrDevice, kCertProfileId, kCertProfileVersion, kPublicKey,
+        /*callback=*/_));
 
-    EXPECT_SIGN_CHALLENGE_OK(StartSignChallengeStep(
-        kChallenge, /*include_signed_public_key=*/true, /*callback=*/_));
+    EXPECT_SIGN_CHALLENGE_OK(
+        *mock_tpm_challenge_key,
+        StartSignChallengeStep(kChallenge, /*include_signed_public_key=*/true,
+                               /*callback=*/_));
 
-    EXPECT_REGISTER_KEY_OK(StartRegisterKeyStep);
+    EXPECT_REGISTER_KEY_OK(*mock_tpm_challenge_key, StartRegisterKeyStep);
+
+    EXPECT_SET_ATTRIBUTE_FOR_KEY_OK(SetAttributeForKey(
+        platform_keys::kTokenIdSystem, kPublicKey,
+        platform_keys::KeyAttributeType::CertificateProvisioningId,
+        kCertProfileId, _));
 
     EXPECT_SIGN_RSAPKC1_DIGEST_OK(SignRSAPKCS1Digest);
 
     EXPECT_FINISH_CSR_TRY_LATER(
-        ClientCertProvisioningFinishCsr(kCertScopeStrDevice, kCertProfileId,
-                                        kPublicKey, kChallengeResponse,
-                                        kSignature, /*callback=*/_),
+        ClientCertProvisioningFinishCsr(
+            kCertScopeStrDevice, kCertProfileId, kCertProfileVersion,
+            kPublicKey, kChallengeResponse, kSignature, /*callback=*/_),
         delay.InMilliseconds());
 
     worker.DoStep();
@@ -436,12 +577,13 @@ TEST_F(CertProvisioningWorkerTest, TryLaterManualRetry) {
     testing::InSequence seq;
 
     EXPECT_FINISH_CSR_OK(ClientCertProvisioningFinishCsr(
-        kCertScopeStrDevice, kCertProfileId, kPublicKey, kChallengeResponse,
-        kSignature, /*callback=*/_));
+        kCertScopeStrDevice, kCertProfileId, kCertProfileVersion, kPublicKey,
+        kChallengeResponse, kSignature, /*callback=*/_));
 
     EXPECT_DOWNLOAD_CERT_TRY_LATER(
         ClientCertProvisioningDownloadCert(kCertScopeStrDevice, kCertProfileId,
-                                           kPublicKey, /*callback=*/_),
+                                           kCertProfileVersion, kPublicKey,
+                                           /*callback=*/_),
         delay.InMilliseconds());
 
     worker.DoStep();
@@ -453,25 +595,30 @@ TEST_F(CertProvisioningWorkerTest, TryLaterManualRetry) {
     testing::InSequence seq;
 
     EXPECT_DOWNLOAD_CERT_OK(ClientCertProvisioningDownloadCert(
-        kCertScopeStrDevice, kCertProfileId, kPublicKey, /*callback=*/_));
+        kCertScopeStrDevice, kCertProfileId, kCertProfileVersion, kPublicKey,
+        /*callback=*/_));
 
     EXPECT_IMPORT_CERTIFICATE_OK(ImportCertificate(
         platform_keys::kTokenIdSystem, /*certificate=*/_, /*callback=*/_));
 
-    EXPECT_CALL(callback_observer_, Callback(true)).Times(1);
+    EXPECT_CALL(callback_observer_,
+                Callback(cert_profile, CertProvisioningWorkerState::kSucceeded))
+        .Times(1);
 
     worker.DoStep();
-    EXPECT_EQ(worker.GetState(), CertProvisioningWorkerState::kSucceed);
+    EXPECT_EQ(worker.GetState(), CertProvisioningWorkerState::kSucceeded);
   }
 }
 
 // Checks that when the server returns try_again_later field, the worker will
 // automatically retry a request after some time.
 TEST_F(CertProvisioningWorkerTest, TryLaterWait) {
-  CertProfile cert_profile{kCertProfileId};
-  CertProvisioningWorkerImpl worker(CertScope::kUser, testing_profile_,
-                                    &testing_pref_service_, cert_profile,
-                                    &cloud_policy_client_, GetCallback());
+  CertProfile cert_profile{kCertProfileId, kCertProfileVersion};
+
+  MockTpmChallengeKeySubtle* mock_tpm_challenge_key = PrepareTpmChallengeKey();
+  CertProvisioningWorkerImpl worker(
+      CertScope::kUser, GetProfile(), &testing_pref_service_, cert_profile,
+      &cloud_policy_client_, MakeInvalidator(), GetCallback());
 
   const TimeDelta start_csr_delay = TimeDelta::FromSeconds(30);
   const TimeDelta finish_csr_delay = TimeDelta::FromSeconds(30);
@@ -482,13 +629,17 @@ TEST_F(CertProvisioningWorkerTest, TryLaterWait) {
   {
     testing::InSequence seq;
 
-    EXPECT_PREPARE_KEY_OK(StartPrepareKeyStep(
-        attestation::AttestationKeyType::KEY_USER, kKeyName,
-        /*profile=*/_, /*key_name_for_spkac=*/"", /*callback=*/_));
+    EXPECT_PREPARE_KEY_OK(
+        *mock_tpm_challenge_key,
+        StartPrepareKeyStep(attestation::AttestationKeyType::KEY_USER,
+                            GetKeyName(kCertProfileId),
+                            /*profile=*/_, /*key_name_for_spkac=*/"",
+                            /*callback=*/_));
 
     EXPECT_START_CSR_TRY_LATER(
         ClientCertProvisioningStartCsr(kCertScopeStrUser, kCertProfileId,
-                                       kPublicKey, /*callback=*/_),
+                                       kCertProfileVersion, kPublicKey,
+                                       /*callback=*/_),
         start_csr_delay.InMilliseconds());
 
     worker.DoStep();
@@ -500,21 +651,29 @@ TEST_F(CertProvisioningWorkerTest, TryLaterWait) {
     testing::InSequence seq;
 
     EXPECT_START_CSR_OK(ClientCertProvisioningStartCsr(
-        kCertScopeStrUser, kCertProfileId, kPublicKey, /*callback=*/_));
+        kCertScopeStrUser, kCertProfileId, kCertProfileVersion, kPublicKey,
+        /*callback=*/_));
 
-    EXPECT_SIGN_CHALLENGE_OK(StartSignChallengeStep(
-        kChallenge, /*include_signed_public_key=*/true, /*callback=*/_));
+    EXPECT_SIGN_CHALLENGE_OK(
+        *mock_tpm_challenge_key,
+        StartSignChallengeStep(kChallenge, /*include_signed_public_key=*/true,
+                               /*callback=*/_));
 
-    EXPECT_REGISTER_KEY_OK(StartRegisterKeyStep);
+    EXPECT_REGISTER_KEY_OK(*mock_tpm_challenge_key, StartRegisterKeyStep);
+
+    EXPECT_SET_ATTRIBUTE_FOR_KEY_OK(SetAttributeForKey(
+        platform_keys::kTokenIdUser, kPublicKey,
+        platform_keys::KeyAttributeType::CertificateProvisioningId,
+        kCertProfileId, _));
 
     EXPECT_SIGN_RSAPKC1_DIGEST_OK(
         SignRSAPKCS1Digest(platform_keys::kTokenIdUser, kDataToSign, kPublicKey,
                            kPkHashAlgo, /*callback=*/_));
 
     EXPECT_FINISH_CSR_TRY_LATER(
-        ClientCertProvisioningFinishCsr(kCertScopeStrUser, kCertProfileId,
-                                        kPublicKey, kChallengeResponse,
-                                        kSignature, /*callback=*/_),
+        ClientCertProvisioningFinishCsr(
+            kCertScopeStrUser, kCertProfileId, kCertProfileVersion, kPublicKey,
+            kChallengeResponse, kSignature, /*callback=*/_),
         finish_csr_delay.InMilliseconds());
 
     FastForwardBy(start_csr_delay + small_delay);
@@ -525,12 +684,13 @@ TEST_F(CertProvisioningWorkerTest, TryLaterWait) {
     testing::InSequence seq;
 
     EXPECT_FINISH_CSR_OK(ClientCertProvisioningFinishCsr(
-        kCertScopeStrUser, kCertProfileId, kPublicKey, kChallengeResponse,
-        kSignature, /*callback=*/_));
+        kCertScopeStrUser, kCertProfileId, kCertProfileVersion, kPublicKey,
+        kChallengeResponse, kSignature, /*callback=*/_));
 
     EXPECT_DOWNLOAD_CERT_TRY_LATER(
         ClientCertProvisioningDownloadCert(kCertScopeStrUser, kCertProfileId,
-                                           kPublicKey, /*callback=*/_),
+                                           kCertProfileVersion, kPublicKey,
+                                           /*callback=*/_),
         download_cert_server_delay.InMilliseconds());
 
     FastForwardBy(finish_csr_delay + small_delay);
@@ -552,64 +712,144 @@ TEST_F(CertProvisioningWorkerTest, TryLaterWait) {
     EXPECT_EQ(worker.GetState(),
               CertProvisioningWorkerState::kFinishCsrResponseReceived);
 
-    EXPECT_CALL(callback_observer_, Callback(true)).Times(1);
+    EXPECT_CALL(callback_observer_,
+                Callback(cert_profile, CertProvisioningWorkerState::kSucceeded))
+        .Times(1);
     FastForwardBy(download_cert_real_delay + small_delay);
-    EXPECT_EQ(worker.GetState(), CertProvisioningWorkerState::kSucceed);
+    EXPECT_EQ(worker.GetState(), CertProvisioningWorkerState::kSucceeded);
   }
 }
 
 // Checks that when the server returns error status, the worker will enter an
 // error state and stop the provisioning.
 TEST_F(CertProvisioningWorkerTest, StatusErrorHandling) {
-  CertProfile cert_profile{kCertProfileId};
-  CertProvisioningWorkerImpl worker(CertScope::kUser, testing_profile_,
-                                    &testing_pref_service_, cert_profile,
-                                    &cloud_policy_client_, GetCallback());
+  CertProfile cert_profile{kCertProfileId, kCertProfileVersion};
+
+  MockTpmChallengeKeySubtle* mock_tpm_challenge_key = PrepareTpmChallengeKey();
+  CertProvisioningWorkerImpl worker(
+      CertScope::kUser, GetProfile(), &testing_pref_service_, cert_profile,
+      &cloud_policy_client_, MakeInvalidator(), GetCallback());
 
   {
     testing::InSequence seq;
 
-    EXPECT_PREPARE_KEY_OK(StartPrepareKeyStep(
-        attestation::AttestationKeyType::KEY_USER, kKeyName,
-        /*profile=*/_, /*key_name_for_spkac=*/"", /*callback=*/_));
+    EXPECT_PREPARE_KEY_OK(
+        *mock_tpm_challenge_key,
+        StartPrepareKeyStep(attestation::AttestationKeyType::KEY_USER,
+                            GetKeyName(kCertProfileId),
+                            /*profile=*/_, /*key_name_for_spkac=*/"",
+                            /*callback=*/_));
 
     EXPECT_START_CSR_INVALID_REQUEST(ClientCertProvisioningStartCsr(
-        kCertScopeStrUser, kCertProfileId, kPublicKey, /*callback=*/_));
+        kCertScopeStrUser, kCertProfileId, kCertProfileVersion, kPublicKey,
+        /*callback=*/_));
+
+    EXPECT_CALL(
+        fake_cryptohome_client_,
+        OnTpmAttestationDeleteKey(attestation::AttestationKeyType::KEY_USER,
+                                  GetKeyName(kCertProfileId)))
+        .Times(1);
+
+    EXPECT_CALL(callback_observer_,
+                Callback(cert_profile, CertProvisioningWorkerState::kFailed))
+        .Times(1);
   }
 
-  EXPECT_CALL(callback_observer_, Callback(false)).Times(1);
   worker.DoStep();
+  FastForwardBy(TimeDelta::FromSeconds(1));
 }
 
 // Checks that when the server returns response error, the worker will enter an
 // error state and stop the provisioning. Also check factory.
 TEST_F(CertProvisioningWorkerTest, ResponseErrorHandling) {
-  CertProfile cert_profile{kCertProfileId};
+  base::HistogramTester histogram_tester;
+
+  CertProfile cert_profile{kCertProfileId, kCertProfileVersion};
+
+  MockTpmChallengeKeySubtle* mock_tpm_challenge_key = PrepareTpmChallengeKey();
   auto worker = CertProvisioningWorkerFactory::Get()->Create(
-      CertScope::kUser, testing_profile_, &testing_pref_service_, cert_profile,
-      &cloud_policy_client_, GetCallback());
+      CertScope::kUser, GetProfile(), &testing_pref_service_, cert_profile,
+      &cloud_policy_client_, MakeInvalidator(), GetCallback());
 
   {
     testing::InSequence seq;
 
-    EXPECT_PREPARE_KEY_OK(StartPrepareKeyStep(
-        attestation::AttestationKeyType::KEY_USER, kKeyName,
-        /*profile=*/_, /*key_name_for_spkac=*/"", /*callback=*/_));
+    EXPECT_PREPARE_KEY_OK(
+        *mock_tpm_challenge_key,
+        StartPrepareKeyStep(attestation::AttestationKeyType::KEY_USER,
+                            GetKeyName(kCertProfileId),
+                            /*profile=*/_, /*key_name_for_spkac=*/"",
+                            /*callback=*/_));
 
     EXPECT_START_CSR_CA_ERROR(ClientCertProvisioningStartCsr);
+
+    EXPECT_CALL(
+        fake_cryptohome_client_,
+        OnTpmAttestationDeleteKey(attestation::AttestationKeyType::KEY_USER,
+                                  GetKeyName(kCertProfileId)))
+        .Times(1);
+
+    EXPECT_CALL(callback_observer_,
+                Callback(cert_profile, CertProvisioningWorkerState::kFailed))
+        .Times(1);
   }
 
-  EXPECT_CALL(callback_observer_, Callback(false)).Times(1);
   worker->DoStep();
+  FastForwardBy(TimeDelta::FromSeconds(1));
+
+  histogram_tester.ExpectBucketCount("ChromeOS.CertProvisioning.Result.User",
+                                     CertProvisioningWorkerState::kFailed, 1);
+  histogram_tester.ExpectBucketCount(
+      "ChromeOS.CertProvisioning.Result.User",
+      CertProvisioningWorkerState::kKeypairGenerated, 1);
+  histogram_tester.ExpectTotalCount("ChromeOS.CertProvisioning.Result.User", 2);
+}
+
+TEST_F(CertProvisioningWorkerTest, InconsistentDataErrorHandling) {
+  CertProfile cert_profile{kCertProfileId, kCertProfileVersion};
+
+  MockTpmChallengeKeySubtle* mock_tpm_challenge_key = PrepareTpmChallengeKey();
+  auto worker = CertProvisioningWorkerFactory::Get()->Create(
+      CertScope::kUser, GetProfile(), &testing_pref_service_, cert_profile,
+      &cloud_policy_client_, MakeInvalidator(), GetCallback());
+
+  {
+    testing::InSequence seq;
+
+    EXPECT_PREPARE_KEY_OK(
+        *mock_tpm_challenge_key,
+        StartPrepareKeyStep(attestation::AttestationKeyType::KEY_USER,
+                            GetKeyName(kCertProfileId),
+                            /*profile=*/_, /*key_name_for_spkac=*/"",
+                            /*callback=*/_));
+
+    EXPECT_START_CSR_INCONSISTENT_DATA(ClientCertProvisioningStartCsr);
+
+    EXPECT_CALL(
+        fake_cryptohome_client_,
+        OnTpmAttestationDeleteKey(attestation::AttestationKeyType::KEY_USER,
+                                  GetKeyName(kCertProfileId)))
+        .Times(1);
+
+    EXPECT_CALL(callback_observer_,
+                Callback(cert_profile,
+                         CertProvisioningWorkerState::kInconsistentDataError))
+        .Times(1);
+  }
+
+  worker->DoStep();
+  FastForwardBy(TimeDelta::FromSeconds(1));
 }
 
 // Checks that when the server returns TEMPORARY_UNAVAILABLE status code, the
 // worker will automatically retry a request using exponential backoff strategy.
 TEST_F(CertProvisioningWorkerTest, BackoffStrategy) {
-  CertProfile cert_profile{kCertProfileId};
-  CertProvisioningWorkerImpl worker(CertScope::kUser, testing_profile_,
-                                    &testing_pref_service_, cert_profile,
-                                    &cloud_policy_client_, GetCallback());
+  CertProfile cert_profile{kCertProfileId, kCertProfileVersion};
+
+  MockTpmChallengeKeySubtle* mock_tpm_challenge_key = PrepareTpmChallengeKey();
+  CertProvisioningWorkerImpl worker(
+      CertScope::kUser, GetProfile(), &testing_pref_service_, cert_profile,
+      &cloud_policy_client_, MakeInvalidator(), GetCallback());
 
   TimeDelta next_delay = TimeDelta::FromSeconds(30);
   const TimeDelta small_delay = TimeDelta::FromMilliseconds(500);
@@ -617,12 +857,16 @@ TEST_F(CertProvisioningWorkerTest, BackoffStrategy) {
   {
     testing::InSequence seq;
 
-    EXPECT_PREPARE_KEY_OK(StartPrepareKeyStep(
-        attestation::AttestationKeyType::KEY_USER, kKeyName,
-        /*profile=*/_, /*key_name_for_spkac=*/"", /*callback=*/_));
+    EXPECT_PREPARE_KEY_OK(
+        *mock_tpm_challenge_key,
+        StartPrepareKeyStep(attestation::AttestationKeyType::KEY_USER,
+                            GetKeyName(kCertProfileId),
+                            /*profile=*/_, /*key_name_for_spkac=*/"",
+                            /*callback=*/_));
 
     EXPECT_START_CSR_TEMPORARY_UNAVAILABLE(ClientCertProvisioningStartCsr(
-        kCertScopeStrUser, kCertProfileId, kPublicKey, /*callback=*/_));
+        kCertScopeStrUser, kCertProfileId, kCertProfileVersion, kPublicKey,
+        /*callback=*/_));
     worker.DoStep();
   }
 
@@ -630,7 +874,8 @@ TEST_F(CertProvisioningWorkerTest, BackoffStrategy) {
 
   {
     EXPECT_START_CSR_TEMPORARY_UNAVAILABLE(ClientCertProvisioningStartCsr(
-        kCertScopeStrUser, kCertProfileId, kPublicKey, /*callback=*/_));
+        kCertScopeStrUser, kCertProfileId, kCertProfileVersion, kPublicKey,
+        /*callback=*/_));
     FastForwardBy(next_delay + small_delay * 10);
     next_delay *= 2;
   }
@@ -639,7 +884,8 @@ TEST_F(CertProvisioningWorkerTest, BackoffStrategy) {
 
   {
     EXPECT_START_CSR_TEMPORARY_UNAVAILABLE(ClientCertProvisioningStartCsr(
-        kCertScopeStrUser, kCertProfileId, kPublicKey, /*callback=*/_));
+        kCertScopeStrUser, kCertProfileId, kCertProfileVersion, kPublicKey,
+        /*callback=*/_));
     FastForwardBy(next_delay + small_delay * 10);
     next_delay *= 2;
   }
@@ -648,10 +894,443 @@ TEST_F(CertProvisioningWorkerTest, BackoffStrategy) {
 
   {
     EXPECT_START_CSR_TEMPORARY_UNAVAILABLE(ClientCertProvisioningStartCsr(
-        kCertScopeStrUser, kCertProfileId, kPublicKey, /*callback=*/_));
+        kCertScopeStrUser, kCertProfileId, kCertProfileVersion, kPublicKey,
+        /*callback=*/_));
     FastForwardBy(next_delay + small_delay);
     next_delay *= 2;
   }
+}
+
+// Checks that the worker removes a key when an error occurs after the key was
+// registered.
+TEST_F(CertProvisioningWorkerTest, RemoveRegisteredKey) {
+  base::HistogramTester histogram_tester;
+
+  CertProfile cert_profile{kCertProfileId, kCertProfileVersion};
+  MockTpmChallengeKeySubtle* mock_tpm_challenge_key = PrepareTpmChallengeKey();
+  MockCertProvisioningInvalidator* mock_invalidator = nullptr;
+  CertProvisioningWorkerImpl worker(
+      CertScope::kUser, GetProfile(), &testing_pref_service_, cert_profile,
+      &cloud_policy_client_, MakeInvalidator(&mock_invalidator), GetCallback());
+
+  {
+    testing::InSequence seq;
+
+    EXPECT_PREPARE_KEY_OK(
+        *mock_tpm_challenge_key,
+        StartPrepareKeyStep(attestation::AttestationKeyType::KEY_USER,
+                            GetKeyName(kCertProfileId),
+                            /*profile=*/_, /*key_name_for_spkac=*/"",
+                            /*callback=*/_));
+
+    EXPECT_START_CSR_OK(ClientCertProvisioningStartCsr(
+        kCertScopeStrUser, kCertProfileId, kCertProfileVersion, kPublicKey,
+        /*callback=*/_));
+
+    EXPECT_CALL(*mock_invalidator, Register(kInvalidationTopic, _)).Times(1);
+
+    EXPECT_SIGN_CHALLENGE_OK(
+        *mock_tpm_challenge_key,
+        StartSignChallengeStep(kChallenge, /*include_signed_public_key=*/true,
+                               /*callback=*/_));
+
+    EXPECT_REGISTER_KEY_OK(*mock_tpm_challenge_key, StartRegisterKeyStep);
+
+    EXPECT_SET_ATTRIBUTE_FOR_KEY_FAIL(SetAttributeForKey(
+        platform_keys::kTokenIdUser, kPublicKey,
+        platform_keys::KeyAttributeType::CertificateProvisioningId,
+        kCertProfileId, _));
+
+    EXPECT_CALL(*mock_invalidator, Unregister()).Times(1);
+
+    EXPECT_CALL(*platform_keys_service_,
+                RemoveKey(platform_keys::kTokenIdUser,
+                          /*public_key_spki_der=*/kPublicKey, /*callback=*/_))
+        .Times(1)
+        .WillOnce(RunOnceCallback<2>(/*error_message=*/""));
+
+    EXPECT_CALL(callback_observer_,
+                Callback(cert_profile, CertProvisioningWorkerState::kFailed))
+        .Times(1);
+  }
+
+  worker.DoStep();
+  FastForwardBy(TimeDelta::FromSeconds(1));
+
+  histogram_tester.ExpectBucketCount("ChromeOS.CertProvisioning.Result.User",
+                                     CertProvisioningWorkerState::kFailed, 1);
+  histogram_tester.ExpectBucketCount(
+      "ChromeOS.CertProvisioning.Result.User",
+      CertProvisioningWorkerState::kKeyRegistered, 1);
+  histogram_tester.ExpectTotalCount("ChromeOS.CertProvisioning.Result.User", 2);
+}
+
+class PrefServiceObserver {
+ public:
+  PrefServiceObserver(PrefService* service, const char* pref_name)
+      : service_(service), pref_name_(pref_name) {
+    pref_change_registrar_.Init(service);
+    pref_change_registrar_.Add(
+        pref_name, base::BindRepeating(&PrefServiceObserver::OnPrefsChange,
+                                       weak_factory_.GetWeakPtr()));
+  }
+
+  void OnPrefsChange() {
+    const base::Value* pref_value = service_->Get(pref_name_);
+    DCHECK(pref_value);
+    OnPrefValueUpdated(*pref_value);
+  }
+
+  // Allows to add expectations about preference changes and verify new values.
+  MOCK_METHOD(void, OnPrefValueUpdated, (const base::Value& value));
+
+ private:
+  PrefService* service_ = nullptr;
+  const char* pref_name_ = nullptr;
+  PrefChangeRegistrar pref_change_registrar_;
+  base::WeakPtrFactory<PrefServiceObserver> weak_factory_{this};
+};
+
+TEST_F(CertProvisioningWorkerTest, SerializationSuccess) {
+  CertProfile cert_profile{kCertProfileId, kCertProfileVersion};
+  CertScope cert_scope = CertScope::kUser;
+
+  std::unique_ptr<MockCertProvisioningInvalidator> mock_invalidator_obj;
+  MockCertProvisioningInvalidator* mock_invalidator = nullptr;
+
+  MockTpmChallengeKeySubtle* mock_tpm_challenge_key = PrepareTpmChallengeKey();
+  std::unique_ptr<CertProvisioningWorker> worker =
+      CertProvisioningWorkerFactory::Get()->Create(
+          cert_scope, GetProfile(), &testing_pref_service_, cert_profile,
+          &cloud_policy_client_, MakeInvalidator(), GetCallback());
+
+  StrictMock<PrefServiceObserver> pref_observer(
+      &testing_pref_service_, GetPrefNameForSerialization(CertScope::kUser));
+  base::Value pref_val;
+
+  // Prepare key, send start csr request.
+  {
+    testing::InSequence seq;
+
+    EXPECT_PREPARE_KEY_OK(
+        *mock_tpm_challenge_key,
+        StartPrepareKeyStep(attestation::AttestationKeyType::KEY_USER,
+                            GetKeyName(kCertProfileId),
+                            /*profile=*/_, /*key_name_for_spkac=*/"",
+                            /*callback=*/_));
+
+    pref_val = ParseJson(R"({
+      "cert_profile_1": {
+          "cert_profile": {
+            "policy_version": "cert_profile_version_1",
+            "profile_id": "cert_profile_1"
+          },
+          "cert_scope": 0,
+          "invalidation_topic": "",
+          "public_key": "ZmFrZV9wdWJsaWNfa2V5XzE=",
+          "state": 1
+      }
+    })");
+    EXPECT_CALL(pref_observer, OnPrefValueUpdated(IsJson(pref_val))).Times(1);
+
+    EXPECT_START_CSR_NO_OP(ClientCertProvisioningStartCsr(
+        kCertScopeStrUser, kCertProfileId, kCertProfileVersion, kPublicKey,
+        /*callback=*/_));
+
+    worker->DoStep();
+  }
+
+  // Recreate worker.
+  {
+    testing::InSequence seq;
+
+    mock_tpm_challenge_key = PrepareTpmChallengeKey();
+
+    EXPECT_CALL(
+        *mock_tpm_challenge_key,
+        RestorePreparedKeyState(attestation::AttestationKeyType::KEY_USER,
+                                GetKeyName(kCertProfileId), _, ""))
+        .Times(1);
+
+    worker = CertProvisioningWorkerFactory::Get()->Deserialize(
+        cert_scope, GetProfile(), &testing_pref_service_,
+        *pref_val.FindKeyOfType(kCertProfileId, base::Value::Type::DICTIONARY),
+        &cloud_policy_client_, MakeInvalidator(&mock_invalidator),
+        GetCallback());
+  }
+
+  // Retry start csr request, receive response, try sign challenge.
+  {
+    testing::InSequence seq;
+
+    EXPECT_START_CSR_OK(ClientCertProvisioningStartCsr(
+        kCertScopeStrUser, kCertProfileId, kCertProfileVersion, kPublicKey,
+        /*callback=*/_));
+
+    pref_val = ParseJson("{}");
+    EXPECT_CALL(pref_observer, OnPrefValueUpdated(IsJson(pref_val))).Times(1);
+
+    EXPECT_CALL(*mock_invalidator, Register(kInvalidationTopic, _)).Times(1);
+
+    EXPECT_SIGN_CHALLENGE_OK(
+        *mock_tpm_challenge_key,
+        StartSignChallengeStep(kChallenge, /*include_signed_public_key=*/true,
+                               /*callback=*/_));
+
+    EXPECT_REGISTER_KEY_OK(*mock_tpm_challenge_key, StartRegisterKeyStep);
+
+    EXPECT_SET_ATTRIBUTE_FOR_KEY_OK(SetAttributeForKey(
+        platform_keys::kTokenIdUser, kPublicKey,
+        platform_keys::KeyAttributeType::CertificateProvisioningId,
+        kCertProfileId, _));
+
+    EXPECT_SIGN_RSAPKC1_DIGEST_OK(
+        SignRSAPKCS1Digest(platform_keys::kTokenIdUser, kDataToSign, kPublicKey,
+                           kPkHashAlgo, /*callback=*/_));
+
+    EXPECT_FINISH_CSR_OK(ClientCertProvisioningFinishCsr(
+        kCertScopeStrUser, kCertProfileId, kCertProfileVersion, kPublicKey,
+        kChallengeResponse, kSignature, /*callback=*/_));
+
+    pref_val = ParseJson(R"({
+      "cert_profile_1": {
+          "cert_profile": {
+            "policy_version": "cert_profile_version_1",
+            "profile_id": "cert_profile_1"
+          },
+          "cert_scope": 0,
+          "invalidation_topic": "fake_invalidation_topic_1",
+          "public_key": "ZmFrZV9wdWJsaWNfa2V5XzE=",
+          "state": 7
+      }
+    })");
+    EXPECT_CALL(pref_observer, OnPrefValueUpdated(IsJson(pref_val))).Times(1);
+
+    EXPECT_DOWNLOAD_CERT_NO_OP(ClientCertProvisioningDownloadCert(
+        kCertScopeStrUser, kCertProfileId, kCertProfileVersion, kPublicKey,
+        /*callback=*/_));
+
+    worker->DoStep();
+  }
+
+  // Recreate worker.
+  {
+    testing::InSequence seq;
+
+    mock_invalidator_obj = MakeInvalidator(&mock_invalidator);
+    EXPECT_CALL(*mock_invalidator, Register(kInvalidationTopic, _)).Times(1);
+
+    mock_tpm_challenge_key = PrepareTpmChallengeKey();
+    EXPECT_CALL(
+        *mock_tpm_challenge_key,
+        RestorePreparedKeyState(attestation::AttestationKeyType::KEY_USER,
+                                GetKeyName(kCertProfileId), _, ""))
+        .Times(1);
+
+    worker = CertProvisioningWorkerFactory::Get()->Deserialize(
+        cert_scope, GetProfile(), &testing_pref_service_,
+        *pref_val.FindKeyOfType(kCertProfileId, base::Value::Type::DICTIONARY),
+        &cloud_policy_client_, std::move(mock_invalidator_obj), GetCallback());
+  }
+
+  // Retry download cert request, receive response, try import certificate.
+  {
+    testing::InSequence seq;
+
+    EXPECT_DOWNLOAD_CERT_OK(ClientCertProvisioningDownloadCert(
+        kCertScopeStrUser, kCertProfileId, kCertProfileVersion, kPublicKey,
+        /*callback=*/_));
+
+    EXPECT_IMPORT_CERTIFICATE_OK(ImportCertificate(
+        platform_keys::kTokenIdUser, /*certificate=*/_, /*callback=*/_));
+
+    pref_val = ParseJson("{}");
+    EXPECT_CALL(pref_observer, OnPrefValueUpdated(IsJson(pref_val))).Times(1);
+
+    EXPECT_CALL(*mock_invalidator, Unregister()).Times(1);
+
+    EXPECT_CALL(callback_observer_,
+                Callback(cert_profile, CertProvisioningWorkerState::kSucceeded))
+        .Times(1);
+    worker->DoStep();
+  }
+}
+
+TEST_F(CertProvisioningWorkerTest, SerializationOnFailure) {
+  CertProfile cert_profile{kCertProfileId, kCertProfileVersion};
+
+  MockTpmChallengeKeySubtle* mock_tpm_challenge_key = PrepareTpmChallengeKey();
+  auto worker = CertProvisioningWorkerFactory::Get()->Create(
+      CertScope::kUser, GetProfile(), &testing_pref_service_, cert_profile,
+      &cloud_policy_client_, MakeInvalidator(), GetCallback());
+
+  PrefServiceObserver pref_observer(
+      &testing_pref_service_, GetPrefNameForSerialization(CertScope::kUser));
+  base::Value pref_val;
+
+  {
+    testing::InSequence seq;
+
+    EXPECT_PREPARE_KEY_OK(
+        *mock_tpm_challenge_key,
+        StartPrepareKeyStep(attestation::AttestationKeyType::KEY_USER,
+                            GetKeyName(kCertProfileId),
+                            /*profile=*/_, /*key_name_for_spkac=*/"",
+                            /*callback=*/_));
+
+    pref_val = ParseJson(R"({
+      "cert_profile_1": {
+          "cert_profile": {
+            "policy_version": "cert_profile_version_1",
+            "profile_id": "cert_profile_1"
+          },
+          "cert_scope": 0,
+          "invalidation_topic": "",
+          "public_key": "ZmFrZV9wdWJsaWNfa2V5XzE=",
+          "state": 1
+      }
+ })");
+    EXPECT_CALL(pref_observer, OnPrefValueUpdated(IsJson(pref_val))).Times(1);
+
+    EXPECT_START_CSR_CA_ERROR(ClientCertProvisioningStartCsr);
+
+    pref_val = ParseJson("{}");
+    EXPECT_CALL(pref_observer, OnPrefValueUpdated(IsJson(pref_val))).Times(1);
+
+    EXPECT_CALL(
+        fake_cryptohome_client_,
+        OnTpmAttestationDeleteKey(attestation::AttestationKeyType::KEY_USER,
+                                  GetKeyName(kCertProfileId)))
+        .Times(1);
+
+    EXPECT_CALL(callback_observer_,
+                Callback(cert_profile, CertProvisioningWorkerState::kFailed))
+        .Times(1);
+  }
+
+  worker->DoStep();
+  FastForwardBy(TimeDelta::FromSeconds(1));
+}
+
+TEST_F(CertProvisioningWorkerTest, InformationalGetters) {
+  CertProfile cert_profile{kCertProfileId, kCertProfileVersion};
+
+  MockTpmChallengeKeySubtle* mock_tpm_challenge_key = PrepareTpmChallengeKey();
+  CertProvisioningWorkerImpl worker(
+      CertScope::kUser, GetProfile(), &testing_pref_service_, cert_profile,
+      &cloud_policy_client_, MakeInvalidator(), GetCallback());
+
+  {
+    testing::InSequence seq;
+
+    EXPECT_PREPARE_KEY_OK(*mock_tpm_challenge_key, StartPrepareKeyStep);
+
+    EXPECT_START_CSR_TRY_LATER(ClientCertProvisioningStartCsr,
+                               TimeDelta::FromSeconds(30).InMilliseconds());
+
+    worker.DoStep();
+    EXPECT_EQ(worker.GetState(),
+              CertProvisioningWorkerState::kKeypairGenerated);
+    EXPECT_EQ(worker.GetPreviousState(),
+              CertProvisioningWorkerState::kInitState);
+    EXPECT_EQ(worker.GetCertProfile(), cert_profile);
+    EXPECT_EQ(worker.GetPublicKey(), kPublicKey);
+  }
+
+  {
+    testing::InSequence seq;
+
+    EXPECT_START_CSR_CA_ERROR(ClientCertProvisioningStartCsr);
+
+    EXPECT_CALL(
+        fake_cryptohome_client_,
+        OnTpmAttestationDeleteKey(attestation::AttestationKeyType::KEY_USER,
+                                  GetKeyName(kCertProfileId)))
+        .Times(1);
+
+    EXPECT_CALL(callback_observer_,
+                Callback(cert_profile, CertProvisioningWorkerState::kFailed))
+        .Times(1);
+
+    worker.DoStep();
+    FastForwardBy(TimeDelta::FromSeconds(1));
+
+    EXPECT_EQ(worker.GetState(), CertProvisioningWorkerState::kFailed);
+    EXPECT_EQ(worker.GetPreviousState(),
+              CertProvisioningWorkerState::kKeypairGenerated);
+    EXPECT_EQ(worker.GetCertProfile(), cert_profile);
+    EXPECT_EQ(worker.GetPublicKey(), kPublicKey);
+  }
+}
+
+TEST_F(CertProvisioningWorkerTest, CancelDeviceWorker) {
+  base::HistogramTester histogram_tester;
+
+  CertScope cert_scope = CertScope::kDevice;
+  CertProfile cert_profile{kCertProfileId, kCertProfileVersion};
+
+  MockTpmChallengeKeySubtle* mock_tpm_challenge_key = PrepareTpmChallengeKey();
+  auto worker = CertProvisioningWorkerFactory::Get()->Create(
+      cert_scope, GetProfile(), &testing_pref_service_, cert_profile,
+      &cloud_policy_client_, MakeInvalidator(), GetCallback());
+
+  EXPECT_CALL(callback_observer_, Callback).Times(0);
+
+  PrefServiceObserver pref_observer(
+      &testing_pref_service_, GetPrefNameForSerialization(CertScope::kDevice));
+  base::Value pref_val;
+
+  {
+    testing::InSequence seq;
+
+    EXPECT_PREPARE_KEY_OK(
+        *mock_tpm_challenge_key,
+        StartPrepareKeyStep(attestation::AttestationKeyType::KEY_DEVICE,
+                            /*key_name=*/"",
+                            /*profile=*/_,
+                            /*key_name_for_spkac=*/GetKeyName(kCertProfileId),
+                            /*callback=*/_));
+
+    pref_val = ParseJson(R"({
+      "cert_profile_1": {
+          "cert_profile": {
+            "policy_version": "cert_profile_version_1",
+            "profile_id": "cert_profile_1"
+          },
+          "cert_scope": 1,
+          "invalidation_topic": "",
+          "public_key": "ZmFrZV9wdWJsaWNfa2V5XzE=",
+          "state": 1
+      }
+    })");
+    EXPECT_CALL(pref_observer, OnPrefValueUpdated(IsJson(pref_val))).Times(1);
+
+    EXPECT_START_CSR_NO_OP(ClientCertProvisioningStartCsr);
+
+    worker->DoStep();
+  }
+
+  {
+    EXPECT_CALL(
+        fake_cryptohome_client_,
+        OnTpmAttestationDeleteKey(attestation::AttestationKeyType::KEY_DEVICE,
+                                  GetKeyName(kCertProfileId)))
+        .Times(1);
+
+    pref_val = ParseJson("{}");
+    EXPECT_CALL(pref_observer, OnPrefValueUpdated(IsJson(pref_val))).Times(1);
+
+    worker->Stop(CertProvisioningWorkerState::kCanceled);
+
+    EXPECT_CALL(callback_observer_,
+                Callback(cert_profile, CertProvisioningWorkerState::kCanceled))
+        .Times(1);
+    FastForwardBy(TimeDelta::FromSeconds(1));
+  }
+
+  histogram_tester.ExpectUniqueSample("ChromeOS.CertProvisioning.Result.Device",
+                                      CertProvisioningWorkerState::kCanceled,
+                                      1);
 }
 
 }  // namespace

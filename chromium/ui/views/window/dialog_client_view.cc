@@ -266,10 +266,8 @@ void DialogClientView::UpdateDialogButton(LabelButton** member,
     return;
   }
 
-  std::unique_ptr<LabelButton> button =
-      is_default ? MdTextButton::CreateSecondaryUiBlueButton(this, title)
-                 : MdTextButton::CreateSecondaryUiButton(this, title);
-
+  auto button = MdTextButton::Create(this, title);
+  button->SetProminent(is_default);
   button->SetIsDefault(is_default);
   button->SetEnabled(delegate->IsDialogButtonEnabled(type));
 
@@ -352,13 +350,13 @@ void DialogClientView::SetupLayout() {
   // into the layout. This simplifies min/max size calculations.
   column_set->AddPaddingColumn(kFixed, button_row_insets_.left());
   column_set->AddColumn(GridLayout::FILL, GridLayout::FILL, kFixed,
-                        GridLayout::USE_PREF, 0, 0);
+                        GridLayout::ColumnSize::kUsePreferred, 0, 0);
   column_set->AddPaddingColumn(kStretchy, GetExtraViewSpacing());
   column_set->AddColumn(GridLayout::FILL, GridLayout::FILL, kFixed,
-                        GridLayout::USE_PREF, 0, 0);
+                        GridLayout::ColumnSize::kUsePreferred, 0, 0);
   column_set->AddPaddingColumn(kFixed, button_spacing);
   column_set->AddColumn(GridLayout::FILL, GridLayout::FILL, kFixed,
-                        GridLayout::USE_PREF, 0, 0);
+                        GridLayout::ColumnSize::kUsePreferred, 0, 0);
   column_set->AddPaddingColumn(kFixed, button_row_insets_.right());
 
   // Track which columns to link sizes under MD.

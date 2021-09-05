@@ -19,7 +19,6 @@
 #include "base/threading/thread_checker.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_compression_stats.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_metrics.h"
-#include "components/data_reduction_proxy/core/common/data_reduction_proxy_server.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_member.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -35,7 +34,6 @@ class Clock;
 
 namespace data_reduction_proxy {
 
-class DataReductionProxyConfig;
 class DataReductionProxyService;
 class DataReductionProxyCompressionStats;
 
@@ -201,15 +199,7 @@ class DataReductionProxySettings {
     return data_reduction_proxy_service_.get();
   }
 
-  // Returns the |DataReductionProxyConfig| being used. May be null if
-  // InitDataReductionProxySettings has not been called.
-  DataReductionProxyConfig* Config() const { return config_; }
-
-  // Permits changing the underlying |DataReductionProxyConfig| without running
-  // the initialization loop.
-  void ResetConfigForTest(DataReductionProxyConfig* config) {
-    config_ = config;
-  }
+  bool is_initialized() const { return !!prefs_; }
 
  protected:
   void InitPrefMembers();
@@ -225,10 +215,6 @@ class DataReductionProxySettings {
   // enabled or disabled at startup.
   virtual void RecordStartupState(
       data_reduction_proxy::ProxyStartupState state) const;
-
-  // Checks whether |proxy_server| is a valid configured proxy.
-  bool IsConfiguredDataReductionProxy(
-      const net::ProxyServer& proxy_server) const;
 
  private:
   friend class DataReductionProxySettingsTestBase;
@@ -293,9 +279,6 @@ class DataReductionProxySettings {
   PrefService* prefs_;
 
   PrefChangeRegistrar registrar_;
-
-  // The caller must ensure that the |config_| outlives this instance.
-  DataReductionProxyConfig* config_;
 
   SyntheticFieldTrialRegistrationCallback register_synthetic_field_trial_;
 

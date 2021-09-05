@@ -11,7 +11,6 @@
 #include "chrome/browser/password_manager/account_storage/account_password_store_factory.h"
 #include "chrome/browser/password_manager/password_manager_test_base.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
-#include "chrome/browser/sync/test/integration/encryption_helper.h"
 #include "chrome/browser/sync/test/integration/passwords_helper.h"
 #include "chrome/browser/sync/test/integration/profile_sync_service_harness.h"
 #include "chrome/browser/sync/test/integration/secondary_account_helper.h"
@@ -21,11 +20,13 @@
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/password_manager/core/browser/password_manager_features_util.h"
 #include "components/password_manager/core/browser/password_manager_test_utils.h"
-#include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/sync/driver/profile_sync_service.h"
 #include "components/sync/driver/sync_driver_switches.h"
+#include "components/sync/test/fake_server/fake_server_nigori_helper.h"
+#include "content/public/test/browser_test.h"
 #include "net/dns/mock_host_resolver.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -87,7 +88,7 @@ class PasswordManagerSyncTest : public SyncTest {
     ASSERT_TRUE(embedded_test_server()->Start());
     host_resolver()->AddRule("*", "127.0.0.1");
 
-    encryption_helper::SetKeystoreNigoriInFakeServer(GetFakeServer());
+    fake_server::SetKeystoreNigoriInFakeServer(GetFakeServer());
   }
 
   void TearDownOnMainThread() override {
@@ -104,8 +105,8 @@ class PasswordManagerSyncTest : public SyncTest {
 
     // Let the user opt in to the passwords account storage, and wait for it to
     // become active.
-    password_manager_util::SetAccountStorageOptIn(GetProfile(0)->GetPrefs(),
-                                                  GetSyncService(0), true);
+    password_manager::features_util::OptInToAccountStorage(
+        GetProfile(0)->GetPrefs(), GetSyncService(0));
     PasswordSyncActiveChecker(GetSyncService(0)).Wait();
     ASSERT_TRUE(GetSyncService(0)->GetActiveDataTypes().Has(syncer::PASSWORDS));
   }
@@ -254,7 +255,7 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest, ChooseDestinationStore) {
 
   // Part 2: Mimic the user choosing to save locally; now a newly saved password
   // should end up in the profile store.
-  password_manager_util::SetDefaultPasswordStore(
+  password_manager::features_util::SetDefaultPasswordStore(
       GetProfile(0)->GetPrefs(), GetSyncService(0),
       autofill::PasswordForm::Store::kProfileStore);
   {
@@ -540,6 +541,36 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
   // should have changed.
   ASSERT_THAT(GetAllLoginsFromAccountPasswordStore(),
               ElementsAre(MatchesLogin("user", "pass")));
+}
+
+IN_PROC_BROWSER_TEST_F(PasswordManagerSyncTest,
+                       AutoUpdatePSLMatchInBothStoresOnSuccessfulUse) {
+  ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
+
+  // Add the same PSL-matched credential to both stores (i.e. it's stored for
+  // psl.example.com instead of www.example.com).
+  AddCredentialToFakeServer(CreateTestPSLPasswordForm("user", "pass"));
+  AddLocalCredential(CreateTestPSLPasswordForm("user", "pass"));
+
+  SetupSyncTransportWithPasswordAccountStorage();
+
+  content::WebContents* web_contents = nullptr;
+  GetNewTab(GetBrowser(0), &web_contents);
+
+  // Go to a form (on www.) and submit it with the saved credentials.
+  NavigateToFile(web_contents, "/password/simple_password.html");
+  FillAndSubmitPasswordForm(web_contents, "user", "pass");
+
+  // Now the PSL-matched credential should have been automatically saved for
+  // www. as well, in both stores.
+  EXPECT_THAT(GetAllLoginsFromAccountPasswordStore(),
+              UnorderedElementsAre(
+                  MatchesLoginAndRealm("user", "pass", GetWWWOrigin()),
+                  MatchesLoginAndRealm("user", "pass", GetPSLOrigin())));
+  EXPECT_THAT(GetAllLoginsFromProfilePasswordStore(),
+              UnorderedElementsAre(
+                  MatchesLoginAndRealm("user", "pass", GetWWWOrigin()),
+                  MatchesLoginAndRealm("user", "pass", GetPSLOrigin())));
 }
 #endif  // !defined(OS_CHROMEOS)
 

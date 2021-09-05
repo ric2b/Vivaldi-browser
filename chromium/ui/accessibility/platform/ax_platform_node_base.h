@@ -12,6 +12,7 @@
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_enums.mojom-forward.h"
+#include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
 #include "ui/accessibility/platform/ax_platform_node_delegate.h"
 #include "ui/accessibility/platform/ax_platform_text_boundary.h"
@@ -64,13 +65,14 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   gfx::NativeViewAccessible GetFocus();
   gfx::NativeViewAccessible GetParent() const;
   int GetChildCount() const;
-  gfx::NativeViewAccessible ChildAtIndex(int index);
+  gfx::NativeViewAccessible ChildAtIndex(int index) const;
 
   std::string GetName() const;
   base::string16 GetNameAsString16() const;
 
-  // This returns 0 if there's no parent.
-  virtual int GetIndexInParent();
+  // This returns nullopt if there's no parent, it's unable to find the child in
+  // the list of its parent's children, or its parent doesn't have children.
+  virtual base::Optional<int> GetIndexInParent();
 
   // AXPlatformNode.
   void Destroy() override;
@@ -85,11 +87,20 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   bool IsDescendantOf(AXPlatformNode* ancestor) const override;
 
   // Helpers.
-  AXPlatformNodeBase* GetPreviousSibling();
-  AXPlatformNodeBase* GetNextSibling();
-  AXPlatformNodeBase* GetFirstChild();
-  AXPlatformNodeBase* GetLastChild();
+  AXPlatformNodeBase* GetPreviousSibling() const;
+  AXPlatformNodeBase* GetNextSibling() const;
+  AXPlatformNodeBase* GetFirstChild() const;
+  AXPlatformNodeBase* GetLastChild() const;
   bool IsDescendant(AXPlatformNodeBase* descendant);
+
+  using AXPlatformNodeChildIterator =
+      ui::AXNode::ChildIteratorBase<AXPlatformNodeBase,
+                                    &AXPlatformNodeBase::GetNextSibling,
+                                    &AXPlatformNodeBase::GetPreviousSibling,
+                                    &AXPlatformNodeBase::GetFirstChild,
+                                    &AXPlatformNodeBase::GetLastChild>;
+  AXPlatformNodeChildIterator AXPlatformNodeChildrenBegin() const;
+  AXPlatformNodeChildIterator AXPlatformNodeChildrenEnd() const;
 
   bool HasBoolAttribute(ax::mojom::BoolAttribute attr) const;
   bool GetBoolAttribute(ax::mojom::BoolAttribute attr) const;
@@ -312,6 +323,24 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
 
   ui::TextAttributeList ComputeTextAttributes() const;
 
+  // Get the number of items selected. It checks kMultiselectable and
+  // kFocusable. and uses GetSelectedItems to get the selected number.
+  int GetSelectionCount() const;
+
+  // If this object is a container that supports selectable children, returns
+  // the selected item at the provided index.
+  AXPlatformNodeBase* GetSelectedItem(int selected_index) const;
+
+  // If this object is a container that supports selectable children,
+  // returns the number of selected items in this container.
+  // |out_selected_items| could be set to nullptr if the caller just
+  // needs to know the number of items selected.
+  // |max_items| represents the number that the caller expects as a
+  // maximum. For a single selection list box, it will be 1.
+  int GetSelectedItems(
+      int max_items,
+      std::vector<AXPlatformNodeBase*>* out_selected_items = nullptr) const;
+
   //
   // Delegate.  This is a weak reference which owns |this|.
   //
@@ -453,6 +482,11 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   base::Optional<int> GetSetSize() const;
 
   std::string GetInvalidValue() const;
+
+  // Based on the characteristics of this object, such as its role and the
+  // presence of a multiselectable attribute, returns the maximum number of
+  // selectable children that this object could potentially contain.
+  int GetMaxSelectableItems() const;
 
   mutable AXHypertext hypertext_;
 

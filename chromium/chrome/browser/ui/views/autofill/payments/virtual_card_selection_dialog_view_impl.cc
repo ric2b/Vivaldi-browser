@@ -27,16 +27,14 @@ namespace autofill {
 VirtualCardSelectionDialogViewImpl::VirtualCardSelectionDialogViewImpl(
     VirtualCardSelectionDialogController* controller)
     : controller_(controller) {
-  DialogDelegate::SetButtonLabel(ui::DIALOG_BUTTON_OK,
-                                   controller_->GetOkButtonLabel());
-  DialogDelegate::SetButtonLabel(ui::DIALOG_BUTTON_CANCEL,
-                                   controller_->GetCancelButtonLabel());
-  DialogDelegate::SetAcceptCallback(
-      base::Bind(&VirtualCardSelectionDialogController::OnOkButtonClicked,
-                 base::Unretained(controller_)));
-  DialogDelegate::SetCancelCallback(
-      base::Bind(&VirtualCardSelectionDialogController::OnCancelButtonClicked,
-                 base::Unretained(controller_)));
+  SetButtonLabel(ui::DIALOG_BUTTON_OK, controller_->GetOkButtonLabel());
+  SetButtonLabel(ui::DIALOG_BUTTON_CANCEL, controller_->GetCancelButtonLabel());
+  SetAcceptCallback(
+      base::BindOnce(&VirtualCardSelectionDialogController::OnOkButtonClicked,
+                     base::Unretained(controller_)));
+  SetCancelCallback(base::BindOnce(
+      &VirtualCardSelectionDialogController::OnCancelButtonClicked,
+      base::Unretained(controller_)));
 }
 
 VirtualCardSelectionDialogViewImpl::~VirtualCardSelectionDialogViewImpl() {

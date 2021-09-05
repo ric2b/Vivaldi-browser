@@ -1,0 +1,289 @@
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved
+
+#ifndef COMPONENTS_REQUEST_FILTER_REQUEST_FILTER_PROXYING_URL_LOADER_FACTORY_H_
+#define COMPONENTS_REQUEST_FILTER_REQUEST_FILTER_PROXYING_URL_LOADER_FACTORY_H_
+
+#include <map>
+#include <memory>
+#include <set>
+#include <string>
+#include <vector>
+
+#include "components/keyed_service/core/keyed_service_shutdown_notifier.h"
+#include "components/request_filter/request_filter_manager.h"
+#include "mojo/public/cpp/bindings/pending_receiver.h"
+#include "mojo/public/cpp/bindings/receiver_set.h"
+#include "services/network/public/mojom/network_context.mojom.h"
+
+namespace vivaldi {
+
+// Owns URLLoaderFactory bindings for RequestFilterManager proxies with the
+// Network Service enabled.
+class RequestFilterProxyingURLLoaderFactory
+    : public RequestFilterManager::Proxy,
+      public network::mojom::URLLoaderFactory,
+      public network::mojom::TrustedURLLoaderHeaderClient {
+ public:
+  class InProgressRequest : public network::mojom::URLLoader,
+                            public network::mojom::URLLoaderClient,
+                            public network::mojom::TrustedHeaderClient {
+   public:
+    // For usual requests
+    InProgressRequest(
+        RequestFilterProxyingURLLoaderFactory* factory,
+        uint64_t request_id,
+        int32_t routing_id,
+        int32_t network_service_request_id,
+        uint32_t options,
+        const network::ResourceRequest& request,
+        const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
+        mojo::PendingReceiver<network::mojom::URLLoader>,
+        mojo::PendingRemote<network::mojom::URLLoaderClient> client);
+    // For CORS preflights
+    InProgressRequest(RequestFilterProxyingURLLoaderFactory* factory,
+                      uint64_t request_id,
+                      const network::ResourceRequest& request);
+    ~InProgressRequest() override;
+
+    void Restart();
+
+    // network::mojom::URLLoader:
+    void FollowRedirect(
+        const std::vector<std::string>& removed_headers,
+        const net::HttpRequestHeaders& modified_headers,
+        const net::HttpRequestHeaders& modified_cors_exempt_headers,
+        const base::Optional<GURL>& new_url) override;
+    void SetPriority(net::RequestPriority priority,
+                     int32_t intra_priority_value) override;
+    void PauseReadingBodyFromNet() override;
+    void ResumeReadingBodyFromNet() override;
+
+    // network::mojom::URLLoaderClient:
+    void OnReceiveResponse(network::mojom::URLResponseHeadPtr head) override;
+    void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
+                           network::mojom::URLResponseHeadPtr head) override;
+    void OnUploadProgress(int64_t current_position,
+                          int64_t total_size,
+                          OnUploadProgressCallback callback) override;
+    void OnReceiveCachedMetadata(mojo_base::BigBuffer data) override;
+    void OnTransferSizeUpdated(int32_t transfer_size_diff) override;
+    void OnStartLoadingResponseBody(
+        mojo::ScopedDataPipeConsumerHandle body) override;
+    void OnComplete(const network::URLLoaderCompletionStatus& status) override;
+
+    void OnLoaderCreated(
+        mojo::PendingReceiver<network::mojom::TrustedHeaderClient> receiver,
+        mojo::PendingRemote<network::mojom::TrustedHeaderClient>
+            forwarding_header_client);
+
+    // network::mojom::TrustedHeaderClient:
+    void OnBeforeSendHeaders(const net::HttpRequestHeaders& headers,
+                             OnBeforeSendHeadersCallback callback) override;
+    void OnHeadersReceived(const std::string& headers,
+                           const net::IPEndPoint& endpoint,
+                           OnHeadersReceivedCallback callback) override;
+
+   private:
+    // These two methods combined form the implementation of Restart().
+    void UpdateRequestInfo();
+    void RestartInternal();
+
+    void ContinueToBeforeSendHeaders(int error_code);
+    void ContinueToSendHeaders(int error_code);
+    void ContinueToStartRequest(int error_code);
+    void ContinueToHandleOverrideHeaders(int error_code);
+    void ContinueToResponseStarted(int error_code);
+    void ContinueToBeforeRedirect(const net::RedirectInfo& redirect_info,
+                                  int error_code);
+    void HandleResponseOrRedirectHeaders(
+        net::CompletionOnceCallback continuation);
+    void OnLoaderDisconnected(uint32_t custom_reason,
+                              const std::string& description);
+    void OnRequestError(const network::URLLoaderCompletionStatus& status);
+    bool IsRedirectSafe(const GURL& from_url,
+                        const GURL& to_url,
+                        bool is_navigation_request);
+    void HandleBeforeRequestRedirect();
+
+    RequestFilterProxyingURLLoaderFactory* const factory_;
+    network::ResourceRequest request_;
+    const base::Optional<url::Origin> original_initiator_;
+    const uint64_t request_id_ = 0;
+    const int32_t network_service_request_id_ = 0;
+    const int32_t routing_id_ = 0;
+    const uint32_t options_ = 0;
+    const net::MutableNetworkTrafficAnnotationTag traffic_annotation_;
+    mojo::Receiver<network::mojom::URLLoader> proxied_loader_receiver_;
+    mojo::Remote<network::mojom::URLLoaderClient> target_client_;
+
+    base::Optional<FilteredRequestInfo> info_;
+
+    mojo::Receiver<network::mojom::URLLoaderClient> proxied_client_receiver_{
+        this};
+    mojo::Remote<network::mojom::URLLoader> target_loader_;
+
+    // NOTE: This is state which ExtensionWebRequestEventRouter needs to have
+    // persisted across some phases of this request -- namely between
+    // |OnHeadersReceived()| and request completion or restart. Pointers to
+    // these fields are stored in a |BlockedRequest| (created and owned by
+    // ExtensionWebRequestEventRouter) through much of the request's lifetime.
+    network::mojom::URLResponseHeadPtr current_response_;
+    scoped_refptr<net::HttpResponseHeaders> override_headers_;
+    std::set<std::string> set_request_headers_;
+    std::set<std::string> removed_request_headers_;
+    bool collapse_initiator_;
+    GURL redirect_url_;
+
+    const bool for_cors_preflight_ = false;
+
+    // If |has_any_extra_headers_listeners_| is set to true, the request will be
+    // sent with the network::mojom::kURLLoadOptionUseHeaderClient option, and
+    // we expect events to come through the
+    // network::mojom::TrustedURLLoaderHeaderClient binding on the factory. This
+    // is only set to true if there is a listener that needs to view or modify
+    // headers set in the network process.
+    bool has_any_extra_headers_listeners_ = false;
+    bool current_request_uses_header_client_ = false;
+    OnBeforeSendHeadersCallback on_before_send_headers_callback_;
+    OnHeadersReceivedCallback on_headers_received_callback_;
+    mojo::Receiver<network::mojom::TrustedHeaderClient> header_client_receiver_{
+        this};
+    mojo::Remote<network::mojom::TrustedHeaderClient> forwarding_header_client_;
+
+    // If |has_any_extra_headers_listeners_| is set to false and a redirect is
+    // in progress, this stores the parameters to FollowRedirect that came from
+    // the client. That way we can combine it with any other changes that
+    // filters made to headers in their callbacks.
+    struct FollowRedirectParams {
+      FollowRedirectParams();
+      ~FollowRedirectParams();
+      std::vector<std::string> removed_headers;
+      net::HttpRequestHeaders modified_headers;
+      net::HttpRequestHeaders modified_cors_exempt_headers;
+      base::Optional<GURL> new_url;
+
+      DISALLOW_COPY_AND_ASSIGN(FollowRedirectParams);
+    };
+    std::unique_ptr<FollowRedirectParams> pending_follow_redirect_params_;
+
+    base::WeakPtrFactory<InProgressRequest> weak_factory_{this};
+
+    DISALLOW_COPY_AND_ASSIGN(InProgressRequest);
+  };
+
+  RequestFilterProxyingURLLoaderFactory(
+      content::BrowserContext* browser_context,
+      int initiator_render_process_id,
+      int render_process_id,
+      int render_frame_id,
+      RequestFilterManager::RequestHandler* request_handler,
+      RequestFilterManager::RequestIDGenerator* request_id_generator,
+      base::Optional<int64_t> navigation_id,
+      mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader_receiver,
+      mojo::PendingRemote<network::mojom::URLLoaderFactory>
+          target_factory_remote,
+      mojo::PendingReceiver<network::mojom::TrustedURLLoaderHeaderClient>
+          header_client_receiver,
+      mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>
+          forwarding_header_client,
+      RequestFilterManager::ProxySet* proxies,
+      content::ContentBrowserClient::URLLoaderFactoryType loader_factory_type);
+
+  ~RequestFilterProxyingURLLoaderFactory() override;
+
+  static void StartProxying(
+      content::BrowserContext* browser_context,
+      int initiator_render_process_id,
+      int render_process_id,
+      int render_frame_id,
+      RequestFilterManager::RequestHandler* request_handler,
+      RequestFilterManager::RequestIDGenerator* request_id_generator,
+      base::Optional<int64_t> navigation_id,
+      mojo::PendingReceiver<network::mojom::URLLoaderFactory> loader_receiver,
+      mojo::PendingRemote<network::mojom::URLLoaderFactory>
+          target_factory_remote,
+      mojo::PendingReceiver<network::mojom::TrustedURLLoaderHeaderClient>
+          header_client_receiver,
+      mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>
+          forwarding_header_client,
+      RequestFilterManager::ProxySet* proxies,
+      content::ContentBrowserClient::URLLoaderFactoryType loader_factory_type);
+
+  // network::mojom::URLLoaderFactory:
+  void CreateLoaderAndStart(
+      mojo::PendingReceiver<network::mojom::URLLoader> loader_request,
+      int32_t routing_id,
+      int32_t request_id,
+      uint32_t options,
+      const network::ResourceRequest& request,
+      mojo::PendingRemote<network::mojom::URLLoaderClient> client,
+      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation)
+      override;
+  void Clone(mojo::PendingReceiver<network::mojom::URLLoaderFactory>
+                 loader_receiver) override;
+
+  // network::mojom::TrustedURLLoaderHeaderClient:
+  void OnLoaderCreated(
+      int32_t request_id,
+      mojo::PendingReceiver<network::mojom::TrustedHeaderClient> receiver)
+      override;
+  void OnLoaderForCorsPreflightCreated(
+      const network::ResourceRequest& request,
+      mojo::PendingReceiver<network::mojom::TrustedHeaderClient> receiver)
+      override;
+
+  content::ContentBrowserClient::URLLoaderFactoryType loader_factory_type()
+      const {
+    return loader_factory_type_;
+  }
+
+ private:
+  void OnTargetFactoryError();
+  void OnProxyBindingError();
+  void RemoveRequest(int32_t network_service_request_id, uint64_t request_id);
+  void MaybeRemoveProxy();
+
+  content::BrowserContext* const browser_context_;
+  const int initiator_render_process_id_;
+  const int render_process_id_;
+  const int render_frame_id_;
+  RequestFilterManager::RequestHandler* request_handler_;
+  RequestFilterManager::RequestIDGenerator* const request_id_generator_;
+  base::Optional<int64_t> navigation_id_;
+  mojo::ReceiverSet<network::mojom::URLLoaderFactory> proxy_receivers_;
+  mojo::Remote<network::mojom::URLLoaderFactory> target_factory_;
+  mojo::Receiver<network::mojom::TrustedURLLoaderHeaderClient>
+      url_loader_header_client_receiver_{this};
+  mojo::Remote<network::mojom::TrustedURLLoaderHeaderClient>
+      forwarding_url_loader_header_client_;
+  // Owns |this|.
+  RequestFilterManager::ProxySet* const proxies_;
+
+  const content::ContentBrowserClient::URLLoaderFactoryType
+      loader_factory_type_;
+
+  // Mapping from our own internally generated request ID to an
+  // InProgressRequest instance.
+  std::map<uint64_t, std::unique_ptr<InProgressRequest>> requests_;
+
+  // A mapping from the network stack's notion of request ID to our own
+  // internally generated request ID for the same request.
+  std::map<int32_t, uint64_t> network_request_id_to_filtered_request_id_;
+
+  // Notifies the proxy that the browser context has been shutdown.
+  std::unique_ptr<KeyedServiceShutdownNotifier::Subscription>
+      shutdown_notifier_;
+
+  base::WeakPtrFactory<RequestFilterProxyingURLLoaderFactory> weak_factory_{
+      this};
+
+  DISALLOW_COPY_AND_ASSIGN(RequestFilterProxyingURLLoaderFactory);
+};
+
+}  // namespace vivaldi
+
+#endif  // COMPONENTS_REQUEST_FILTER_REQUEST_FILTER_PROXYING_URL_LOADER_FACTORY_H_

@@ -38,6 +38,7 @@ extern const char kManagementCrostini[];
 extern const char kManagementCrostiniContainerConfiguration[];
 extern const char kManagementReportExtensions[];
 extern const char kManagementReportAndroidApplications[];
+extern const char kManagementReportProxyServer[];
 #endif  // defined(OS_CHROMEOS)
 
 extern const char kCloudReportingExtensionId[];
@@ -85,7 +86,10 @@ class Extension;
 }  // namespace extensions
 
 namespace policy {
+class DeviceCloudPolicyManagerChromeOS;
 class PolicyService;
+class StatusCollector;
+class SystemLogUploader;
 }  // namespace policy
 
 class Profile;
@@ -129,6 +133,12 @@ class ManagementUIHandler : public content::WebUIMessageHandler,
 #if defined(OS_CHROMEOS)
   // Protected for testing.
   virtual const std::string GetDeviceDomain() const;
+  virtual const policy::DeviceCloudPolicyManagerChromeOS*
+  GetDeviceCloudPolicyManager() const;
+  void AddDeviceReportingInfo(base::Value* report_sources,
+                              const policy::StatusCollector* collector,
+                              const policy::SystemLogUploader* uploader,
+                              Profile* profile) const;
 #endif  // defined(OS_CHROMEOS)
  private:
   void GetManagementStatus(Profile* profile, base::Value* status) const;

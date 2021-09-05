@@ -139,6 +139,13 @@ public class StreamActionApiImpl implements StreamActionApi {
     }
 
     @Override
+    public void handleBlockContent(
+            List<StreamDataOperation> dataOperations, ActionPayload payload) {
+        dismiss(dataOperations);
+        mActionManager.createAndUploadAction(mContentId, payload);
+    }
+
+    @Override
     public void dismiss(String contentId, List<StreamDataOperation> dataOperations,
             UndoAction undoAction, ActionPayload payload) {
         if (!undoAction.hasConfirmationLabel()) {
@@ -327,7 +334,21 @@ public class StreamActionApiImpl implements StreamActionApi {
     @Override
     public void reportClickAction(String contentId, ActionPayload payload) {
         if (ChromeFeatureList.isEnabled(ChromeFeatureList.REPORT_FEED_USER_ACTIONS)) {
-            mActionManager.createAndStoreAction(contentId, payload);
+            mActionManager.createAndUploadAction(contentId, payload);
+        }
+    }
+
+    @Override
+    public void reportViewVisible(View view, String contentId, ActionPayload payload) {
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.REPORT_FEED_USER_ACTIONS)) {
+            mActionManager.onViewVisible(view, contentId, payload);
+        }
+    }
+
+    @Override
+    public void reportViewHidden(View view, String contentId) {
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.REPORT_FEED_USER_ACTIONS)) {
+            mActionManager.onViewHidden(view, contentId);
         }
     }
 }

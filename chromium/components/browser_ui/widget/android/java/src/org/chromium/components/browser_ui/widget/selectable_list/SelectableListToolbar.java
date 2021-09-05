@@ -163,7 +163,7 @@ public class SelectableListToolbar<E>
     public void destroy() {
         mIsDestroyed = true;
         if (mSelectionDelegate != null) mSelectionDelegate.removeObserver(this);
-        hideKeyboard();
+        if (mSearchEditText != null) hideKeyboard();
         if (mVrModeProvider != null) mVrModeProvider.unregisterVrModeObserver(this);
     }
 
@@ -210,8 +210,8 @@ public class SelectableListToolbar<E>
                 ApiCompatibilityUtils.getColor(getResources(), R.color.default_bg_color);
         setBackgroundColor(mNormalBackgroundColor);
 
-        mSelectionBackgroundColor =
-                ApiCompatibilityUtils.getColor(getResources(), R.color.light_active_color);
+        mSelectionBackgroundColor = ApiCompatibilityUtils.getColor(
+                getResources(), R.color.default_control_color_active);
 
         mDarkIconColorList = AppCompatResources.getColorStateList(
                 getContext(), R.color.default_icon_color_tint_list);

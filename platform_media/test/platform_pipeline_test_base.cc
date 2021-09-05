@@ -90,6 +90,11 @@ class TestIPCDemuxer : public IPCDemuxer {
     IPCDemuxer::Initialize(host, std::move(status_cb));
   }
 
+  base::Optional<container_names::MediaContainerName> GetContainerForMetrics()
+      const override {
+    return base::nullopt;
+  }
+
  private:
   std::string mime_type_;
   base::WeakPtrFactory<TestIPCDemuxer> weak_ptr_factory_;

@@ -28,17 +28,6 @@ namespace syncer {
 
 namespace {
 
-// Indicates whether |configuration_params| corresponds to Nigori only
-// configuration (which happens if initial sync for Nigori isn't completed).
-// If |configuration_params| is null, returns false.
-bool IsNigoriOnlyConfiguration(
-    const ConfigurationParams* configuration_params) {
-  if (!configuration_params) {
-    return false;
-  }
-  return configuration_params->types_to_download == ModelTypeSet(NIGORI);
-}
-
 bool IsConfigRelatedUpdateOriginValue(
     sync_pb::SyncEnums::GetUpdatesOrigin origin) {
   switch (origin) {
@@ -70,6 +59,7 @@ bool ShouldRequestEarlyExit(const SyncProtocolError& error) {
     case CLIENT_DATA_OBSOLETE:
     case CLEAR_PENDING:
     case DISABLED_BY_ADMIN:
+    case ENCRYPTION_OBSOLETE:
       // If we send terminate sync early then |sync_cycle_ended| notification
       // would not be sent. If there were no actions then |ACTIONABLE_ERROR|
       // notification wouldnt be sent either. Then the UI layer would be left
@@ -79,6 +69,8 @@ bool ShouldRequestEarlyExit(const SyncProtocolError& error) {
     // Make UNKNOWN_ERROR a NOTREACHED. All the other error should be explicitly
     // handled.
     case UNKNOWN_ERROR:
+      // TODO(crbug.com/1081266): This NOTREACHED is questionable because the
+      // sync server can cause it.
       NOTREACHED();
       return false;
   }
@@ -155,16 +147,6 @@ void SyncSchedulerImpl::OnCredentialsUpdated() {
   if (server_status == HttpResponse::NONE ||
       server_status == HttpResponse::SYNC_AUTH_ERROR) {
     OnServerConnectionErrorFixed();
-  }
-}
-
-void SyncSchedulerImpl::OnCredentialsInvalidated() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (!nigori_configuration_with_invalidated_credentials_recorded &&
-      IsNigoriOnlyConfiguration(pending_configure_params_.get())) {
-    UMA_HISTOGRAM_BOOLEAN("Sync.NigoriConfigurationWithInvalidatedCredentials",
-                          true);
-    nigori_configuration_with_invalidated_credentials_recorded = true;
   }
 }
 

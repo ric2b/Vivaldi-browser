@@ -73,11 +73,18 @@ NGPhysicalContainerFragment::NGPhysicalContainerFragment(
   // storage be part of the subclass.
   wtf_size_t i = 0;
   for (auto& child : builder->children_) {
-    buffer[i].fragment = child.fragment.get();
-    buffer[i].fragment->AddRef();
     buffer[i].offset = child.offset.ConvertToPhysical(
         block_or_line_writing_mode, builder->Direction(), size,
         child.fragment->Size());
+    // Call the move constructor to move without |AddRef|. Fragments in
+    // |builder| are not used after |this| was constructed.
+    static_assert(
+        sizeof(buffer[0].fragment) ==
+            sizeof(scoped_refptr<const NGPhysicalFragment>),
+        "scoped_refptr must be the size of a pointer for this to work");
+    new (&buffer[i].fragment)
+        scoped_refptr<const NGPhysicalFragment>(std::move(child.fragment));
+    DCHECK(!child.fragment);  // Ensure it was moved.
     ++i;
   }
 }
@@ -275,8 +282,10 @@ void NGPhysicalContainerFragment::AddOutlineRectsForDescendant(
     // the LayoutInline needs to add rects for children and continuations
     // only.
     if (NGOutlineUtils::ShouldPaintOutline(*descendant_box)) {
+      // We don't pass additional_offset here because the function requires
+      // additional_offset to be the offset from the containing block.
       descendant_layout_inline->AddOutlineRectsForChildrenAndContinuations(
-          *outline_rects, additional_offset, outline_type);
+          *outline_rects, PhysicalOffset(), outline_type);
     }
     return;
   }
@@ -288,7 +297,7 @@ void NGPhysicalContainerFragment::AddOutlineRectsForDescendant(
         containing_block);
 
     if (!descendant_line_box->Size().IsEmpty()) {
-      outline_rects->emplace_back(additional_offset,
+      outline_rects->emplace_back(additional_offset + descendant.Offset(),
                                   descendant_line_box->Size().ToLayoutSize());
     } else if (descendant_line_box->Children().empty()) {
       // Special-case for when the first continuation does not generate
@@ -315,6 +324,13 @@ bool NGPhysicalContainerFragment::DependsOnPercentageBlockSize(
   if (!node || node.IsInline())
     return builder.has_descendant_that_depends_on_percentage_block_size_;
 
+  // For the below if-stmt we only want to consider legacy *containers* as
+  // potentially having %-dependent children - i.e. an image doesn't have any
+  // children.
+  bool is_legacy_container_with_percent_height_descendants =
+      builder.is_legacy_layout_root_ && !node.IsReplaced() &&
+      node.GetLayoutBox()->MaybeHasPercentHeightDescendant();
+
   // NOTE: If an element is OOF positioned, and has top/bottom constraints
   // which are percentage based, this function will return false.
   //
@@ -339,7 +355,7 @@ bool NGPhysicalContainerFragment::DependsOnPercentageBlockSize(
   // We only need to know about if this flex-item has a %-block-size child if
   // the "definiteness" changes, not if the percentage resolution size changes.
   if ((builder.has_descendant_that_depends_on_percentage_block_size_ ||
-       builder.is_legacy_layout_root_) &&
+       is_legacy_container_with_percent_height_descendants) &&
       (node.UseParentPercentageResolutionBlockSizeForChildren() ||
        node.IsFlexItem()))
     return true;

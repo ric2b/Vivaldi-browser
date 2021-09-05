@@ -12,8 +12,10 @@
 #include "base/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_piece_forward.h"
+#include "net/log/net_log_with_source.h"
 #include "services/network/public/mojom/trust_tokens.mojom-shared.h"
 #include "services/network/trust_tokens/proto/public.pb.h"
+#include "services/network/trust_tokens/suitable_trust_token_origin.h"
 #include "services/network/trust_tokens/trust_token_key_commitment_getter.h"
 #include "services/network/trust_tokens/trust_token_request_helper.h"
 #include "url/origin.h"
@@ -41,21 +43,42 @@ class TrustTokenRequestIssuanceHelper : public TrustTokenRequestHelper {
   // Class Cryptographer executes the underlying cryptographic
   // operations required for issuance. The API is intended to correspond closely
   // to the BoringSSL API.
+  //
+  // Usage:
+  //   1. 1x successful Initialize (without a success, don't call AddKey), then
+  //   2. >= 1x successful AddKey (without at least one success, don't call
+  //   BeginIssuance), then
+  //   3. 1x successful BeginIssuance (without a success, don't call
+  //   ConfirmIssuance), then
+  //   4. 1x ConfirmIssuance.
   class Cryptographer {
    public:
     virtual ~Cryptographer() = default;
+
+    // Initializes the delegate. |issuer_configured_batch_size| must be the
+    // "batchsize" value from an issuer-provided key commitment result.
+    //
+    // Returns true on success and false if the batch size is unacceptable or an
+    // internal error occurred in the underlying cryptographic library.
+    virtual bool Initialize(int issuer_configured_batch_size) = 0;
+
     // Stores a Trust Tokens issuance verification key for subsequent use
     // verifying signed tokens in |ConfirmIssuance|. May be called multiple
     // times to add multiple keys permissible for use during this issuance.
     // (Typically, an issuer will have around three simultaneously active public
     // keys.)
     //
-    // Returns true on success and false if the key is malformed or an internal
-    // error occurred in the underlying cryptographic library.
+    // Returns true on success and false if the key is malformed or if an
+    // internal error occurred in the underlying cryptographic library. Does not
+    // forbid adding duplicates; however, duplicates might contribute to an
+    // overall limit on the number of permitted keys, so the caller may wish to
+    // ensure this is called at most once per distinct key.
     virtual bool AddKey(base::StringPiece key) = 0;
 
-    // Returns a base64-encoded string representing |num_tokens| many
-    // blinded, unsigned trust tokens, or nullopt on error.
+    // On success, returns a base64-encoded string representing |num_tokens|
+    // many blinded, unsigned trust tokens; on error, returns nullopt. The
+    // format of this string will eventually be specified, but it is currently
+    // considered an implementation detail of the underlying cryptographic code.
     virtual base::Optional<std::string> BeginIssuance(size_t num_tokens) = 0;
 
     struct UnblindedTokens {
@@ -95,10 +118,11 @@ class TrustTokenRequestIssuanceHelper : public TrustTokenRequestHelper {
   // REQUIRES: |token_store|, |key_commitment_getter|, and |cryptographer| must
   // be non-null.
   TrustTokenRequestIssuanceHelper(
-      const url::Origin& top_level_origin,
+      SuitableTrustTokenOrigin top_level_origin,
       TrustTokenStore* token_store,
-      std::unique_ptr<TrustTokenKeyCommitmentGetter> key_commitment_getter,
-      std::unique_ptr<Cryptographer> cryptographer);
+      const TrustTokenKeyCommitmentGetter* key_commitment_getter,
+      std::unique_ptr<Cryptographer> cryptographer,
+      net::NetLogWithSource net_log = net::NetLogWithSource());
   ~TrustTokenRequestIssuanceHelper() override;
 
   // Executes the outbound part of a Trust Tokens issuance operation,
@@ -140,8 +164,14 @@ class TrustTokenRequestIssuanceHelper : public TrustTokenRequestHelper {
   //
   // If both of these steps are successful, stores the tokens in |token_store_|
   // and returns kOk. Otherwise, returns kBadResponse.
-  mojom::TrustTokenOperationStatus Finalize(
-      mojom::URLResponseHead* response) override;
+  void Finalize(
+      mojom::URLResponseHead* response,
+      base::OnceCallback<void(mojom::TrustTokenOperationStatus)> done) override;
+
+  // These internal structs are in the public namespace so that
+  // anonymous-namespace functions in the .cc file can construct them.
+  struct CryptographerAndBlindedTokens;
+  struct CryptographerAndUnblindedTokens;
 
  private:
   // Continuation of |Begin| after asynchronous key commitment fetching
@@ -155,11 +185,39 @@ class TrustTokenRequestIssuanceHelper : public TrustTokenRequestHelper {
       base::OnceCallback<void(mojom::TrustTokenOperationStatus)> done,
       mojom::TrustTokenKeyCommitmentResultPtr commitment_result);
 
-  url::Origin issuer_;
-  const url::Origin top_level_origin_;
+  // Continuation of |Begin| after a call to the cryptography delegate to
+  // execute the bulk of the outbound half of the issuance operation. Receives
+  // ownership of the cryptographer back from the asynchronous callback and
+  // should store the cryptographer back in |cryptographer_| to reuse during
+  // |Finalize|.
+  void OnDelegateBeginIssuanceCallComplete(
+      net::URLRequest* request,
+      base::OnceCallback<void(mojom::TrustTokenOperationStatus)> done,
+      CryptographerAndBlindedTokens cryptographer_and_blinded_tokens);
+
+  // Continuation of |Finalize| after a call to the cryptography delegate to
+  // execute the bulk of the inbound half of the issuance operation.
+  // Receives ownership of the cryptographer back from the asynchronous
+  // callback.
+  void OnDelegateConfirmIssuanceCallComplete(
+      base::OnceCallback<void(mojom::TrustTokenOperationStatus)> done,
+      CryptographerAndUnblindedTokens cryptographer_and_unblinded_tokens);
+
+  // |issuer_| needs to be a nullable type because it is initialized in |Begin|,
+  // but, once initialized, it will never be empty over the course of the
+  // operation's execution.
+  base::Optional<SuitableTrustTokenOrigin> issuer_;
+  const SuitableTrustTokenOrigin top_level_origin_;
   TrustTokenStore* const token_store_;
-  const std::unique_ptr<TrustTokenKeyCommitmentGetter> key_commitment_getter_;
-  const std::unique_ptr<Cryptographer> cryptographer_;
+  const TrustTokenKeyCommitmentGetter* const key_commitment_getter_;
+
+  // Relinquishes ownership during posted tasks for the potentially
+  // computationally intensive cryptographic operations
+  // (Cryptographer::BeginIssuance, Cryptographer::ConfirmIssuance); repopulated
+  // when regaining ownership upon receiving each operation's results.
+  std::unique_ptr<Cryptographer> cryptographer_;
+
+  net::NetLogWithSource net_log_;
   base::WeakPtrFactory<TrustTokenRequestIssuanceHelper> weak_ptr_factory_{this};
 };
 }  // namespace network

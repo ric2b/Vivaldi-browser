@@ -8,18 +8,12 @@ import org.chromium.chrome.browser.SwipeRefreshHandler;
 import org.chromium.chrome.browser.complex_tasks.TaskTabHelper;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchTabHelper;
 import org.chromium.chrome.browser.crypto.CipherFactory;
+import org.chromium.chrome.browser.dom_distiller.ReaderModeManager;
 import org.chromium.chrome.browser.dom_distiller.TabDistillabilityProvider;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
 import org.chromium.chrome.browser.media.ui.MediaSessionTabHelper;
 import org.chromium.chrome.browser.paint_preview.PaintPreviewTabHelper;
-import org.chromium.chrome.browser.tasks.TaskRecognizer;
-/*!!
-import org.chromium.chrome.browser.ChromeApplication;
-import org.chromium.content_public.browser.SelectionPopupController;
-import org.chromium.content_public.browser.WebContents;
-import org.vivaldi.browser.VivaldiActionModeCallback;
-*/
+
 /**
  * Helper class that initializes various tab UserData objects.
  */
@@ -35,16 +29,13 @@ public final class TabHelpers {
         TabUma.createForTab(tab);
         TabDistillabilityProvider.createForTab(tab);
         TabThemeColorHelper.createForTab(tab);
-        InterceptNavigationDelegateImpl.createForTab(tab);
+        InterceptNavigationDelegateTabHelper.createForTab(tab);
         ContextualSearchTabHelper.createForTab(tab);
-        if (ChromeFeatureList.isInitialized()
-                && ChromeFeatureList.isEnabled(ChromeFeatureList.SHOPPING_ASSIST)) {
-            TaskRecognizer.createForTab(tab);
-        }
         MediaSessionTabHelper.createForTab(tab);
         TaskTabHelper.createForTab(tab, parentTab);
         TabBrowserControlsConstraintsHelper.createForTab(tab);
         PaintPreviewTabHelper.createForTab(tab);
+        if (ReaderModeManager.isEnabled()) ReaderModeManager.createForTab(tab);
 
         // TODO(jinsukkim): Do this by having something observe new tab creation.
         if (tab.isIncognito()) CipherFactory.getInstance().triggerKeyGeneration();
@@ -66,14 +57,5 @@ public final class TabHelpers {
         TabFavicon.from(tab);
         TrustedCdn.from(tab);
         TabAssociatedApp.from(tab);
-/*!! TODO(jarle): disable for now
-        // NOTE(david@vivaldi.com: In Vivaldi we are using our own ActionModeCallback handler
-        if (ChromeApplication.isVivaldi()) {
-            WebContents webContents = tab.getWebContents();
-            VivaldiActionModeCallback callback = new VivaldiActionModeCallback(tab, webContents);
-            SelectionPopupController.fromWebContents(webContents).setActionModeCallback(callback);
-            SelectionPopupController.fromWebContents(webContents)
-                    .setNonSelectionActionModeCallback(callback);
-        }*/
     }
 }

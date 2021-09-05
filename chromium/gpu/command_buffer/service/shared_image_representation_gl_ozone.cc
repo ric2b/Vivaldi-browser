@@ -100,7 +100,10 @@ gles2::Texture* SharedImageRepresentationGLOzone::GetTexture() {
 bool SharedImageRepresentationGLOzone::BeginAccess(GLenum mode) {
   // TODO(hob): Synchronize access to the dma-buf by waiting on all semaphores
   // tracked by SharedImageBackingOzone.
-  return true;
+
+  // We must call VaapiWrapper::SyncSurface() to ensure all VA-API work is done
+  // prior to using the buffer in a graphics API.
+  return ozone_backing()->VaSync();
 }
 
 void SharedImageRepresentationGLOzone::EndAccess() {

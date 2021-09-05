@@ -39,7 +39,9 @@ def v8_bridge_class_name(idl_definition):
     """
     Returns the name of V8-from/to-Blink bridge class.
     """
-    assert isinstance(idl_definition, (web_idl.Namespace, web_idl.Interface))
+    assert isinstance(
+        idl_definition,
+        (web_idl.CallbackInterface, web_idl.Interface, web_idl.Namespace))
 
     assert idl_definition.identifier[0].isupper()
     # Do not apply |name_style.class_| due to the same reason as
@@ -168,7 +170,8 @@ def blink_type_info(idl_type):
             or real_type.is_variadic):
         element_type = real_type.element_type
         element_type_info = blink_type_info(real_type.element_type)
-        if element_type.type_definition_object is not None:
+        if (element_type.type_definition_object is not None
+                and not element_type.is_enumeration):
             # In order to support recursive IDL data structures, we have to
             # avoid recursive C++ header inclusions and utilize C++ forward
             # declarations.  Since |VectorOf| requires complete type
@@ -267,7 +270,10 @@ def native_value_tag(idl_type):
         return "IDLPromise"
 
     if real_type.is_union:
-        return blink_type_info(real_type).value_t
+        class_name = blink_class_name(real_type.union_definition_object)
+        if real_type.does_include_nullable_type:
+            return "IDLUnionINT<{}>".format(class_name)
+        return "IDLUnionNotINT<{}>".format(class_name)
 
     if real_type.is_nullable:
         return "IDLNullable<{}>".format(native_value_tag(real_type.inner_type))
@@ -338,8 +344,8 @@ def make_default_value_expr(idl_type, default_value):
             is_initializer_lightweight = True
             assignment_value = "nullptr"
         elif type_info.value_t == "ScriptValue":
-            initializer = None  # ScriptValue::IsEmpty() by default
-            assignment_value = "ScriptValue()"
+            initializer = "${isolate}, v8::Null(${isolate})"
+            assignment_value = "ScriptValue::CreateNull(${isolate})"
         elif idl_type.unwrap().is_union:
             initializer = None  # <union_type>::IsNull() by default
             assignment_value = "{}()".format(type_info.value_t)

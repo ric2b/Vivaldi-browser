@@ -4,7 +4,7 @@
 
 #import "ios/chrome/browser/ui/settings/autofill/autofill_credit_card_table_view_controller.h"
 
-#include "base/logging.h"
+#include "base/check.h"
 #include "base/mac/foundation_util.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/sys_string_conversions.h"
@@ -136,6 +136,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
     [self hideDeleteButton];
     [self setSwitchItemEnabled:YES itemType:ItemTypeAutofillCardSwitch];
   }
+  [self updateUIForEditState];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -212,6 +213,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   return header;
 }
 
+// TODO(crbug.com/1063426): Add egtest for server cards.
 - (TableViewItem*)itemForCreditCard:(const autofill::CreditCard&)creditCard {
   std::string guid(creditCard.guid());
   NSString* creditCardName = autofill::GetCreditCardName(
@@ -219,7 +221,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
   AutofillDataItem* item = [[AutofillDataItem alloc] initWithType:ItemTypeCard];
   item.text = creditCardName;
-  item.leadingDetailText = autofill::GetCreditCardObfuscatedNumber(creditCard);
+  item.leadingDetailText = autofill::GetCreditCardIdentifierString(creditCard);
   item.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
   item.accessibilityIdentifier = creditCardName;
   item.deletable = autofill::IsCreditCardLocal(creditCard);

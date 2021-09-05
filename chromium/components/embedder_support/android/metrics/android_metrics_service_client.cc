@@ -78,7 +78,6 @@ void AndroidMetricsServiceClient::Initialize(PrefService* pref_service) {
 
   pref_service_ = pref_service;
 
-  InitInternal();
   metrics_state_manager_ =
       MetricsStateManager::Create(pref_service_, this, base::string16(),
                                   base::BindRepeating(&StoreClientInfo),
@@ -94,7 +93,7 @@ void AndroidMetricsServiceClient::MaybeStartMetrics() {
   // but keep app_consent_ separate so we never persist data from an opted-out
   // app.
   bool user_consent_or_flag = user_consent_ || IsMetricsReportingForceEnabled();
-  if (init_finished_ && set_consent_finished_) {
+  if (IsConsentDetermined()) {
     if (app_consent_ && user_consent_or_flag) {
       metrics_service_ = CreateMetricsService(metrics_state_manager_.get(),
                                               this, pref_service_);
@@ -111,6 +110,7 @@ void AndroidMetricsServiceClient::MaybeStartMetrics() {
         metrics_service_->Start();
       }
     } else {
+      OnMetricsNotStarted();
       pref_service_->ClearPref(prefs::kMetricsClientID);
     }
   }
@@ -177,6 +177,10 @@ std::unique_ptr<const base::FieldTrial::EntropyProvider>
 AndroidMetricsServiceClient::CreateLowEntropyProvider() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return metrics_state_manager_->CreateLowEntropyProvider();
+}
+
+bool AndroidMetricsServiceClient::IsConsentDetermined() const {
+  return init_finished_ && set_consent_finished_;
 }
 
 bool AndroidMetricsServiceClient::IsConsentGiven() const {
@@ -273,8 +277,7 @@ void AndroidMetricsServiceClient::Observe(
     case content::NOTIFICATION_LOAD_START:
     case content::NOTIFICATION_RENDERER_PROCESS_CLOSED:
     case content::NOTIFICATION_RENDER_WIDGET_HOST_HANG:
-      if (ShouldWakeMetricsService())
-        metrics_service_->OnApplicationNotIdle();
+      metrics_service_->OnApplicationNotIdle();
       break;
     default:
       NOTREACHED();

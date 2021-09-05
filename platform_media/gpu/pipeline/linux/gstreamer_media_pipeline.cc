@@ -11,8 +11,7 @@ namespace media {
 GStreamerMediaPipeline::GStreamerMediaPipeline() = default;
 GStreamerMediaPipeline::~GStreamerMediaPipeline() = default;
 
-void GStreamerMediaPipeline::Initialize(ipc_data_source::Reader source_reader,
-                                        ipc_data_source::Info source_info,
+void GStreamerMediaPipeline::Initialize(ipc_data_source::Info source_info,
                                         InitializeCB initialize_cb) {
   LOG(INFO) << " PROPMEDIA(GPU) : " << __FUNCTION__ << " mime type "
             << source_info.mime_type;

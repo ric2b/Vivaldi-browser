@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {CloudPrintInterfaceEventType, Destination, DestinationConnectionStatus, DestinationOrigin, DestinationStore, DestinationType, makeRecentDestination, NativeLayer, PluginProxy, ScalingType, setCloudPrintInterfaceForTesting, State, whenReady} from 'chrome://print/print_preview.js';
+import {CloudPrintInterfaceEventType, CloudPrintInterfaceImpl, Destination, DestinationConnectionStatus, DestinationOrigin, DestinationStore, DestinationType, makeRecentDestination, NativeLayer, PluginProxy, ScalingType, State, whenReady} from 'chrome://print/print_preview.js';
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {isWindows} from 'chrome://resources/js/cr.m.js';
 import {CloudPrintInterfaceStub} from 'chrome://test/print_preview/cloud_print_interface_stub.js';
@@ -60,7 +60,7 @@ suite(invalid_settings_browsertest.suiteName, function() {
     nativeLayer = new NativeLayerStub();
     NativeLayer.setInstance(nativeLayer);
     cloudPrintInterface = new CloudPrintInterfaceStub();
-    setCloudPrintInterfaceForTesting(cloudPrintInterface);
+    CloudPrintInterfaceImpl.instance_ = cloudPrintInterface;
     PolymerTest.clearBody();
   });
 
@@ -211,7 +211,7 @@ suite(invalid_settings_browsertest.suiteName, function() {
               // Select a new destination
               const barDestination =
                   destinationSettings.destinationStore_.destinations().find(
-                      d => d.id == 'BarDevice');
+                      d => d.id === 'BarDevice');
               destinationSettings.destinationStore_.selectDestination(
                   barDestination);
 
@@ -240,7 +240,7 @@ suite(invalid_settings_browsertest.suiteName, function() {
                   const ticket = JSON.parse(printTicket);
                   assertEquals(barDevice.printer.deviceName, ticket.deviceName);
                   assertEquals(
-                      getDefaultOrientation(barDevice) == 'LANDSCAPE',
+                      getDefaultOrientation(barDevice) === 'LANDSCAPE',
                       ticket.landscape);
                   assertEquals(1, ticket.copies);
                   const mediaDefault = getDefaultMediaSize(barDevice);

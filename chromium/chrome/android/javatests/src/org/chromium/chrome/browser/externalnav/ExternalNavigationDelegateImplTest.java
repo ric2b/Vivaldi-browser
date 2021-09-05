@@ -5,11 +5,7 @@
 package org.chromium.chrome.browser.externalnav;
 
 import android.content.Intent;
-import android.content.IntentFilter;
-import android.content.pm.ActivityInfo;
-import android.content.pm.ResolveInfo;
 import android.net.Uri;
-import android.os.Build;
 import android.support.test.filters.SmallTest;
 
 import org.junit.Assert;
@@ -30,10 +26,6 @@ import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.external_intents.ExternalNavigationHandler;
 import org.chromium.components.external_intents.ExternalNavigationParams;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-
 /**
  * Instrumentation tests for {@link ExternalNavigationHandler}.
  */
@@ -51,19 +43,11 @@ import java.util.List;
     private static final String[] SUPERVISOR_START_ACTIONS = {
             "com.google.android.instantapps.START", "com.google.android.instantapps.nmr1.INSTALL",
             "com.google.android.instantapps.nmr1.VIEW"};
+    private static final boolean IS_GOOGLE_REFERRER = true;
 
     class ExternalNavigationDelegateImplForTesting extends ExternalNavigationDelegateImpl {
         public ExternalNavigationDelegateImplForTesting() {
             super(mActivityTestRule.getActivity().getActivityTab());
-        }
-
-        @Override
-        public boolean isGoogleReferrer() {
-            return mIsGoogleReferrer;
-        }
-
-        public void setIsGoogleReferrer(boolean value) {
-            mIsGoogleReferrer = value;
         }
 
         @Override
@@ -78,7 +62,8 @@ import java.util.List;
 
         // Convenience for testing that reduces boilerplate in constructing arguments to the
         // production method that are common across tests.
-        public boolean handleWithAutofillAssistant(ExternalNavigationParams params) {
+        public boolean handleWithAutofillAssistant(
+                ExternalNavigationParams params, boolean isGoogleReferrer) {
             Intent intent;
             try {
                 intent = Intent.parseUri(AUTOFILL_ASSISTANT_INTENT_URL, Intent.URI_INTENT_SCHEME);
@@ -89,169 +74,15 @@ import java.util.List;
 
             String fallbackUrl = "https://www.example.com";
 
-            return handleWithAutofillAssistant(params, intent, fallbackUrl);
+            return handleWithAutofillAssistant(params, intent, fallbackUrl, isGoogleReferrer);
         }
 
-        private boolean mIsGoogleReferrer;
         private boolean mWasAutofillAssistantStarted;
     }
 
     @Rule
     public ChromeActivityTestRule<ChromeActivity> mActivityTestRule =
             new ChromeActivityTestRule<>(ChromeActivity.class);
-
-    private static List<ResolveInfo> makeResolveInfos(ResolveInfo... infos) {
-        return Arrays.asList(infos);
-    }
-
-    @Test
-    @SmallTest
-    public void testIsPackageSpecializedHandler_NoResolveInfo() {
-        String packageName = "";
-        List<ResolveInfo> resolveInfos = new ArrayList<ResolveInfo>();
-        Assert.assertEquals(0,
-                ExternalNavigationDelegateImpl
-                        .getSpecializedHandlersWithFilter(resolveInfos, packageName)
-                        .size());
-    }
-
-    @Test
-    @SmallTest
-    public void testIsPackageSpecializedHandler_NoPathOrAuthority() {
-        String packageName = "";
-        ResolveInfo info = new ResolveInfo();
-        info.filter = new IntentFilter();
-        List<ResolveInfo> resolveInfos = makeResolveInfos(info);
-        Assert.assertEquals(0,
-                ExternalNavigationDelegateImpl
-                        .getSpecializedHandlersWithFilter(resolveInfos, packageName)
-                        .size());
-    }
-
-    @Test
-    @SmallTest
-    public void testIsPackageSpecializedHandler_WithPath() {
-        String packageName = "";
-        ResolveInfo info = new ResolveInfo();
-        info.filter = new IntentFilter();
-        info.filter.addDataPath("somepath", 2);
-        List<ResolveInfo> resolveInfos = makeResolveInfos(info);
-        Assert.assertEquals(1,
-                ExternalNavigationDelegateImpl
-                        .getSpecializedHandlersWithFilter(resolveInfos, packageName)
-                        .size());
-    }
-
-    @Test
-    @SmallTest
-    public void testIsPackageSpecializedHandler_WithAuthority() {
-        String packageName = "";
-        ResolveInfo info = new ResolveInfo();
-        info.filter = new IntentFilter();
-        info.filter.addDataAuthority("http://www.google.com", "80");
-        List<ResolveInfo> resolveInfos = makeResolveInfos(info);
-        Assert.assertEquals(1,
-                ExternalNavigationDelegateImpl
-                        .getSpecializedHandlersWithFilter(resolveInfos, packageName)
-                        .size());
-    }
-
-    @Test
-    @SmallTest
-    public void testIsPackageSpecializedHandler_WithAuthority_Wildcard_Host() {
-        String packageName = "";
-        ResolveInfo info = new ResolveInfo();
-        info.filter = new IntentFilter();
-        info.filter.addDataAuthority("*", null);
-        List<ResolveInfo> resolveInfos = makeResolveInfos(info);
-        Assert.assertEquals(0,
-                ExternalNavigationDelegateImpl
-                        .getSpecializedHandlersWithFilter(resolveInfos, packageName)
-                        .size());
-
-        ResolveInfo infoWildcardSubDomain = new ResolveInfo();
-        infoWildcardSubDomain.filter = new IntentFilter();
-        infoWildcardSubDomain.filter.addDataAuthority("http://*.google.com", "80");
-        List<ResolveInfo> resolveInfosWildcardSubDomain = makeResolveInfos(infoWildcardSubDomain);
-        Assert.assertEquals(1,
-                ExternalNavigationDelegateImpl
-                        .getSpecializedHandlersWithFilter(
-                                resolveInfosWildcardSubDomain, packageName)
-                        .size());
-    }
-
-    @Test
-    @SmallTest
-    public void testIsPackageSpecializedHandler_WithTargetPackage_Matching() {
-        String packageName = "com.android.chrome";
-        ResolveInfo info = new ResolveInfo();
-        info.filter = new IntentFilter();
-        info.filter.addDataAuthority("http://www.google.com", "80");
-        info.activityInfo = new ActivityInfo();
-        info.activityInfo.packageName = packageName;
-        List<ResolveInfo> resolveInfos = makeResolveInfos(info);
-        Assert.assertEquals(1,
-                ExternalNavigationDelegateImpl
-                        .getSpecializedHandlersWithFilter(resolveInfos, packageName)
-                        .size());
-    }
-
-    @Test
-    @SmallTest
-    public void testIsPackageSpecializedHandler_WithTargetPackage_NotMatching() {
-        String packageName = "com.android.chrome";
-        ResolveInfo info = new ResolveInfo();
-        info.filter = new IntentFilter();
-        info.filter.addDataAuthority("http://www.google.com", "80");
-        info.activityInfo = new ActivityInfo();
-        info.activityInfo.packageName = "com.foo.bar";
-        List<ResolveInfo> resolveInfos = makeResolveInfos(info);
-        Assert.assertEquals(0,
-                ExternalNavigationDelegateImpl
-                        .getSpecializedHandlersWithFilter(resolveInfos, packageName)
-                        .size());
-    }
-
-    @Test
-    @SmallTest
-    public void testIsPackageSpecializeHandler_withEphemeralResolver() {
-        String packageName = "";
-        ResolveInfo info = new ResolveInfo();
-        info.filter = new IntentFilter();
-        info.filter.addDataPath("somepath", 2);
-        info.activityInfo = new ActivityInfo();
-
-        // See InstantAppsHandler.isInstantAppResolveInfo
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            info.isInstantAppAvailable = true;
-        } else {
-            info.activityInfo.name = InstantAppsHandler.EPHEMERAL_INSTALLER_CLASS;
-        }
-        info.activityInfo.packageName = "com.google.android.gms";
-        List<ResolveInfo> resolveInfos = makeResolveInfos(info);
-        // Ephemeral resolver is not counted as a specialized handler.
-        Assert.assertEquals(0,
-                ExternalNavigationDelegateImpl
-                        .getSpecializedHandlersWithFilter(resolveInfos, packageName)
-                        .size());
-    }
-
-    @Test
-    @SmallTest
-    public void testIsDownload_noSystemDownloadManager() {
-        ExternalNavigationDelegateImpl delegate = new ExternalNavigationDelegateImpl(
-                mActivityTestRule.getActivity().getActivityTab());
-        Assert.assertTrue("pdf should be a download, no viewer in Android Chrome",
-                delegate.isPdfDownload("http://somesampeleurldne.com/file.pdf"));
-        Assert.assertFalse("URL is not a file, but web page",
-                delegate.isPdfDownload("http://somesampleurldne.com/index.html"));
-        Assert.assertFalse("URL is not a file url",
-                delegate.isPdfDownload("http://somesampeleurldne.com/not.a.real.extension"));
-        Assert.assertFalse("URL is an image, can be viewed in Chrome",
-                delegate.isPdfDownload("http://somesampleurldne.com/image.jpg"));
-        Assert.assertFalse("URL is a text file can be viewed in Chrome",
-                delegate.isPdfDownload("http://somesampleurldne.com/copy.txt"));
-    }
 
     @Test
     @SmallTest
@@ -381,14 +212,13 @@ import java.util.List;
     testHandleWithAutofillAssistant_TriggersFromSearch() {
         ExternalNavigationDelegateImplForTesting delegate =
                 new ExternalNavigationDelegateImplForTesting();
-        delegate.setIsGoogleReferrer(true);
 
         ExternalNavigationParams params =
                 new ExternalNavigationParams
                         .Builder(AUTOFILL_ASSISTANT_INTENT_URL, /*isIncognito=*/false)
                         .build();
 
-        Assert.assertTrue(delegate.handleWithAutofillAssistant(params));
+        Assert.assertTrue(delegate.handleWithAutofillAssistant(params, IS_GOOGLE_REFERRER));
         Assert.assertTrue(delegate.wasAutofillAssistantStarted());
     }
 
@@ -400,14 +230,13 @@ import java.util.List;
     testHandleWithAutofillAssistant_DoesNotTriggerFromSearchInIncognito() {
         ExternalNavigationDelegateImplForTesting delegate =
                 new ExternalNavigationDelegateImplForTesting();
-        delegate.setIsGoogleReferrer(true);
 
         ExternalNavigationParams params =
                 new ExternalNavigationParams
                         .Builder(AUTOFILL_ASSISTANT_INTENT_URL, /*isIncognito=*/true)
                         .build();
 
-        Assert.assertFalse(delegate.handleWithAutofillAssistant(params));
+        Assert.assertFalse(delegate.handleWithAutofillAssistant(params, IS_GOOGLE_REFERRER));
         Assert.assertFalse(delegate.wasAutofillAssistantStarted());
     }
 
@@ -419,14 +248,13 @@ import java.util.List;
     testHandleWithAutofillAssistant_DoesNotTriggerFromDifferentOrigin() {
         ExternalNavigationDelegateImplForTesting delegate =
                 new ExternalNavigationDelegateImplForTesting();
-        delegate.setIsGoogleReferrer(false);
 
         ExternalNavigationParams params =
                 new ExternalNavigationParams
                         .Builder(AUTOFILL_ASSISTANT_INTENT_URL, /*isIncognito=*/false)
                         .build();
 
-        Assert.assertFalse(delegate.handleWithAutofillAssistant(params));
+        Assert.assertFalse(delegate.handleWithAutofillAssistant(params, !IS_GOOGLE_REFERRER));
         Assert.assertFalse(delegate.wasAutofillAssistantStarted());
     }
 
@@ -438,14 +266,13 @@ import java.util.List;
     testHandleWithAutofillAssistant_DoesNotTriggerWhenFeatureDisabled() {
         ExternalNavigationDelegateImplForTesting delegate =
                 new ExternalNavigationDelegateImplForTesting();
-        delegate.setIsGoogleReferrer(true);
 
         ExternalNavigationParams params =
                 new ExternalNavigationParams
                         .Builder(AUTOFILL_ASSISTANT_INTENT_URL, /*isIncognito=*/false)
                         .build();
 
-        Assert.assertFalse(delegate.handleWithAutofillAssistant(params));
+        Assert.assertFalse(delegate.handleWithAutofillAssistant(params, IS_GOOGLE_REFERRER));
         Assert.assertFalse(delegate.wasAutofillAssistantStarted());
     }
 }

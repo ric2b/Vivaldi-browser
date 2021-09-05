@@ -22,6 +22,7 @@
 #include "third_party/blink/public/web/web_local_frame.h"
 #include "third_party/blink/public/web/web_view.h"
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/events/keyboard_event.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
@@ -148,7 +149,9 @@ void VivaldiRenderViewObserver::OnGetScrollPosition() {
   Send(new VivaldiViewHostMsg_GetScrollPosition_ACK(routing_id(), x, y));
 }
 
-void VivaldiRenderViewObserver::OnActivateElementFromPoint(int x, int y) {
+void VivaldiRenderViewObserver::OnActivateElementFromPoint(int x,
+                                                           int y,
+                                                           int modifiers) {
   WebLocalFrame* frame = render_view()->GetWebView()->FocusedFrame();
   if (!frame) {
     return;
@@ -156,8 +159,17 @@ void VivaldiRenderViewObserver::OnActivateElementFromPoint(int x, int y) {
   blink::Document* document =
     static_cast<blink::WebLocalFrameImpl*>(frame)->GetFrame()->GetDocument();
   blink::Element *elm = document->ElementFromPoint(x, y);
+
   if (elm) {
-    elm->AccessKeyAction(true);
+    // This key event is just to pass along modifier info
+    blink::WebKeyboardEvent web_keyboard_event(
+        blink::WebInputEvent::Type::kRawKeyDown, modifiers, base::TimeTicks());
+    blink::KeyboardEvent* key_evt =
+        blink::KeyboardEvent::Create(web_keyboard_event, nullptr);
+    elm->DispatchSimulatedClick(key_evt);
+
+    blink::FocusParams params;
+    elm->focus(params);
   }
 }
 

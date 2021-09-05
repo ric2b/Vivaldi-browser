@@ -39,6 +39,7 @@ import org.chromium.chrome.browser.preferences.PrefChangeRegistrar.PrefObserver;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.SettingsLauncher;
+import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.SigninManager.SignInStateObserver;
 import org.chromium.chrome.browser.tab.TabLaunchType;
@@ -48,8 +49,8 @@ import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager.SnackbarController;
 import org.chromium.chrome.browser.util.AccessibilityUtil;
-import org.chromium.chrome.browser.util.ConversionUtils;
 import org.chromium.chrome.browser.vr.VrModeProviderImpl;
+import org.chromium.components.browser_ui.util.ConversionUtils;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListLayout;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableListToolbar.SearchDelegate;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectionDelegate;
@@ -398,8 +399,8 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
      */
     public void openClearBrowsingDataPreference() {
         recordUserAction("ClearBrowsingData");
-        SettingsLauncher.getInstance().launchSettingsPage(
-                mActivity, ClearBrowsingDataTabsFragment.class);
+        SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
+        settingsLauncher.launchSettingsActivity(mActivity, ClearBrowsingDataTabsFragment.class);
     }
 
     @Override
@@ -508,6 +509,13 @@ public class HistoryManager implements OnMenuItemClickListener, SignInStateObser
         return !firstAdapterItemScrolledOff && mHistoryAdapter.hasPrivacyDisclaimers()
                 && mHistoryAdapter.getItemCount() > 0 && !mToolbar.isSearching()
                 && !mSelectionDelegate.isSelectionEnabled();
+    }
+
+    /**
+     * Called to notify when privacy disclaimers visibility has changed.
+     */
+    void onHasPrivacyDisclaimersChanged() {
+        mToolbar.updateInfoMenuItem(shouldShowInfoButton(), shouldShowInfoHeaderIfAvailable());
     }
 
     /**

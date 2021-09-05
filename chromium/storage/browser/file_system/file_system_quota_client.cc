@@ -8,9 +8,9 @@
 #include <memory>
 
 #include "base/bind.h"
+#include "base/check.h"
 #include "base/files/file_util.h"
 #include "base/location.h"
-#include "base/logging.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task_runner_util.h"
@@ -96,8 +96,8 @@ FileSystemQuotaClient::FileSystemQuotaClient(
 
 FileSystemQuotaClient::~FileSystemQuotaClient() = default;
 
-QuotaClient::ID FileSystemQuotaClient::id() const {
-  return QuotaClient::kFileSystem;
+QuotaClientType FileSystemQuotaClient::type() const {
+  return QuotaClientType::kFileSystem;
 }
 
 void FileSystemQuotaClient::GetOriginUsage(const url::Origin& origin,

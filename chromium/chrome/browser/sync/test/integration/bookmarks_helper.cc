@@ -665,7 +665,7 @@ void CheckFaviconExpired(int profile, const GURL& icon_url) {
   favicon_base::FaviconRawBitmapResult bitmap_result;
   favicon_service->GetRawFavicon(
       icon_url, favicon_base::IconType::kFavicon, 0,
-      base::Bind(&OnGotFaviconData, run_loop.QuitClosure(), &bitmap_result),
+      base::BindOnce(&OnGotFaviconData, run_loop.QuitClosure(), &bitmap_result),
       &task_tracker);
   run_loop.Run();
 
@@ -685,7 +685,7 @@ void CheckHasNoFavicon(int profile, const GURL& page_url) {
   favicon_service->GetRawFaviconForPageURL(
       page_url, {favicon_base::IconType::kFavicon}, 0,
       /*fallback_to_host=*/false,
-      base::Bind(&OnGotFaviconData, run_loop.QuitClosure(), &bitmap_result),
+      base::BindOnce(&OnGotFaviconData, run_loop.QuitClosure(), &bitmap_result),
       &task_tracker);
   run_loop.Run();
 
@@ -1130,8 +1130,8 @@ void BookmarkModelStatusChangeChecker::PostCheckExitCondition() {
   // that the checker doesn't immediately kick in while bookmarks are modified.
   base::SequencedTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::BindRepeating(&BookmarkModelStatusChangeChecker::CheckExitCondition,
-                          weak_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(&BookmarkModelStatusChangeChecker::CheckExitCondition,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 BookmarksMatchChecker::BookmarksMatchChecker() {
@@ -1231,6 +1231,18 @@ bool BookmarksTitleChecker::IsExitConditionSatisfied(std::ostream* os) {
   *os << "Waiting for bookmark count to match";
   int actual_count = CountBookmarksWithTitlesMatching(profile_index_, title_);
   return expected_count_ == actual_count;
+}
+
+BookmarkFaviconLoadedChecker::BookmarkFaviconLoadedChecker(int profile_index,
+                                                           const GURL& page_url)
+    : SingleBookmarkModelStatusChangeChecker(profile_index),
+      bookmark_node_(GetUniqueNodeByURL(profile_index, page_url)) {
+  DCHECK_NE(nullptr, bookmark_node_);
+}
+
+bool BookmarkFaviconLoadedChecker::IsExitConditionSatisfied(std::ostream* os) {
+  *os << "Waiting for the favicon to be loaded for " << bookmark_node_->url();
+  return bookmark_node_->is_favicon_loaded();
 }
 
 ServerBookmarksEqualityChecker::ServerBookmarksEqualityChecker(

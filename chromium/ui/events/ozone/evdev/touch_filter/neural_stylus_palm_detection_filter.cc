@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "base/logging.h"
 #include "ui/events/ozone/evdev/event_device_info.h"
 #include "ui/events/ozone/evdev/touch_filter/neural_stylus_palm_detection_filter_model.h"
 #include "ui/events/ozone/evdev/touch_filter/neural_stylus_palm_detection_filter_util.h"
@@ -396,6 +397,10 @@ bool NeuralStylusPalmDetectionFilter::
   // present.
   if (devinfo.HasAbsEvent(ABS_MT_TOUCH_MINOR) &&
       !code_check(ABS_MT_TOUCH_MINOR)) {
+    return false;
+  }
+  // Only work with internal touchscreens.
+  if (devinfo.device_type() != INPUT_DEVICE_INTERNAL) {
     return false;
   }
   return true;

@@ -6,6 +6,7 @@
 
 #include "third_party/blink/renderer/modules/xr/xr_hit_test_source.h"
 #include "third_party/blink/renderer/modules/xr/xr_pose.h"
+#include "third_party/blink/renderer/modules/xr/xr_reference_space.h"
 #include "third_party/blink/renderer/modules/xr/xr_rigid_transform.h"
 #include "third_party/blink/renderer/modules/xr/xr_session.h"
 #include "third_party/blink/renderer/modules/xr/xr_space.h"
@@ -40,22 +41,73 @@ XRPose* XRHitTestResult::getPose(XRSpace* other) {
 }
 
 ScriptPromise XRHitTestResult::createAnchor(ScriptState* script_state,
-                                            XRRigidTransform* initial_pose,
+                                            XRRigidTransform* this_from_anchor,
                                             ExceptionState& exception_state) {
   DVLOG(2) << __func__;
 
-  if (!initial_pose) {
+  if (!session_->IsFeatureEnabled(device::mojom::XRSessionFeature::ANCHORS)) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
+                                      XRSession::kAnchorsFeatureNotSupported);
+    return {};
+  }
+
+  if (!this_from_anchor) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       XRSession::kNoRigidTransformSpecified);
     return {};
   }
 
-  return session_->CreateAnchor(script_state, initial_pose->TransformMatrix(),
-                                *mojo_from_this_, plane_id_, exception_state);
+  if (plane_id_) {
+    DVLOG(2) << __func__
+             << ": hit test result's entity is a plane, creating "
+                "plane-attached anchor";
+    return session_->CreatePlaneAnchorHelper(
+        script_state, this_from_anchor->TransformMatrix(), *plane_id_,
+        exception_state);
+  } else {
+    DVLOG(2) << __func__
+             << ": hit test result's entity is unavailable, creating "
+                "free-floating anchor ";
+
+    // Let's create free-floating anchor since plane is unavailable. In our
+    // case, we should first attempt to use the local space as it is supposed to
+    // be more stable, but if that is unavailable, we can try using unbounded
+    // space. Otherwise, there's not much we can do so we fail the call.
+    auto reference_space_category =
+        device::mojom::XRReferenceSpaceCategory::LOCAL;
+    auto mojo_from_space =
+        session_->GetMojoFrom(XRReferenceSpace::Type::kTypeLocal);
+    if (!mojo_from_space) {
+      // Local space is not available, try unbounded.
+      reference_space_category =
+          device::mojom::XRReferenceSpaceCategory::UNBOUNDED;
+      mojo_from_space =
+          session_->GetMojoFrom(XRReferenceSpace::Type::kTypeUnbounded);
+    }
+
+    if (!mojo_from_space) {
+      exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                        XRSession::kUnableToRetrieveMatrix);
+      return {};
+    }
+
+    DCHECK(mojo_from_space->IsInvertible());
+
+    auto space_from_mojo = mojo_from_space->Inverse();
+    auto space_from_anchor = space_from_mojo * (*mojo_from_this_) *
+                             this_from_anchor->TransformMatrix();
+
+    auto maybe_native_origin =
+        XRNativeOriginInformation::Create(reference_space_category);
+
+    return session_->CreateAnchorHelper(script_state, space_from_anchor,
+                                        *maybe_native_origin, exception_state);
+  }
 }
 
 void XRHitTestResult::Trace(Visitor* visitor) {
   visitor->Trace(session_);
   ScriptWrappable::Trace(visitor);
 }
+
 }  // namespace blink

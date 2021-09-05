@@ -26,13 +26,15 @@ struct WhitelistEntry {
 
 const char* const kScopedBlockingCallAllowedArgs[] = {"file_name",
                                                       "function_name", nullptr};
+const char* const kPeekMessageAllowedArgs[] = {"sent_messages_in_queue",
+                                               nullptr};
 const char* const kFallbackFontAllowedArgs[] = {"font_name",
                                                 "primary_font_name", nullptr};
 const char* const kGetFallbackFontsAllowedArgs[] = {"script", nullptr};
 const char* const kGPUAllowedArgs[] = {nullptr};
 const char* const kInputLatencyAllowedArgs[] = {"data", nullptr};
-const char* const kMemoryDumpAllowedArgs[] = {"dumps", "top_queued_message_tag",
-                                              "count", nullptr};
+const char* const kMemoryDumpAllowedArgs[] = {
+    "count", "dumps", "function", "top_queued_message_tag", nullptr};
 const char* const kRendererHostAllowedArgs[] = {
     "class",           "line", "should_background", "has_pending_views",
     "bytes_allocated", nullptr};
@@ -52,6 +54,8 @@ const WhitelistEntry kEventArgsWhitelist[] = {
     {"__metadata", "chrome_library_module", nullptr},
     {"__metadata", "stackFrames", nullptr},
     {"__metadata", "typeNames", nullptr},
+    {"base", "MessagePumpForUI::ProcessNextWindowsMessage PeekMessage",
+     kPeekMessageAllowedArgs},
     {"base", "MultiSourceMemoryPressureMonitor::OnMemoryPressureLevelChanged",
      kMemoryPressureEventsAllowedArgs},
     {"base", "ScopedAllowBaseSyncPrimitivesOutsideBlockingScope",

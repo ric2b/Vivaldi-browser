@@ -5,7 +5,9 @@
 #import "ui/base/cocoa/command_dispatcher.h"
 
 #include "base/auto_reset.h"
-#include "base/logging.h"
+#include "base/check_op.h"
+#include "base/notreached.h"
+#include "base/trace_event/trace_event.h"
 #include "ui/base/cocoa/cocoa_base_utils.h"
 #import "ui/base/cocoa/user_interface_item_command_handler.h"
 
@@ -21,44 +23,6 @@
 - (NSWindow<CommandDispatchingWindow>*)bubbleParent;
 @end
 
-namespace {
-
-// Duplicate the given key event, but changing the associated window.
-NSEvent* KeyEventForWindow(NSWindow* window, NSEvent* event) {
-  NSEventType event_type = [event type];
-
-  // Convert the event's location from the original window's coordinates into
-  // our own.
-  NSPoint location = [event locationInWindow];
-  location = ui::ConvertPointFromWindowToScreen([event window], location);
-  location = ui::ConvertPointFromScreenToWindow(window, location);
-
-  // Various things *only* apply to key down/up.
-  bool is_a_repeat = false;
-  NSString* characters = nil;
-  NSString* charactors_ignoring_modifiers = nil;
-  if (event_type == NSKeyDown || event_type == NSKeyUp) {
-    is_a_repeat = [event isARepeat];
-    characters = [event characters];
-    charactors_ignoring_modifiers = [event charactersIgnoringModifiers];
-  }
-
-  // This synthesis may be slightly imperfect: we provide nil for the context,
-  // since I (viettrungluu) am sceptical that putting in the original context
-  // (if one is given) is valid.
-  return [NSEvent keyEventWithType:event_type
-                          location:location
-                     modifierFlags:[event modifierFlags]
-                         timestamp:[event timestamp]
-                      windowNumber:[window windowNumber]
-                           context:nil
-                        characters:characters
-       charactersIgnoringModifiers:charactors_ignoring_modifiers
-                         isARepeat:is_a_repeat
-                           keyCode:[event keyCode]];
-}
-
-}  // namespace
 
 @implementation CommandDispatcher {
  @private
@@ -94,6 +58,9 @@ NSEvent* KeyEventForWindow(NSWindow* window, NSEvent* event) {
 // call, we rely on the fact that method calls to nil return nil, and that nil
 // == ui::PerformKeyEquivalentResult::kUnhandled;
 - (BOOL)performKeyEquivalent:(NSEvent*)event {
+  // TODO(bokan): Tracing added temporarily to diagnose crbug.com/1039833.
+  TRACE_EVENT2("ui", "CommandDispatcher::performKeyEquivalent", "window num",
+               [_owner windowNumber], "is keyWin", [NSApp keyWindow] == _owner);
   DCHECK_EQ(NSKeyDown, [event type]);
 
   // If the event is being redispatched, then this is the second time
@@ -107,10 +74,14 @@ NSEvent* KeyEventForWindow(NSWindow* window, NSEvent* event) {
   // We skip all steps before postPerformKeyEquivalent, since those were already
   // triggered on the first pass of the event.
   if ([self isEventBeingRedispatched:event]) {
+    // TODO(bokan): Tracing added temporarily to diagnose crbug.com/1039833.
+    TRACE_EVENT_INSTANT0("ui", "IsRedispatch", TRACE_EVENT_SCOPE_THREAD);
     ui::PerformKeyEquivalentResult result =
         [_delegate postPerformKeyEquivalent:event
                                      window:_owner
                                isRedispatch:YES];
+    TRACE_EVENT_INSTANT1("ui", "postPerformKeyEquivalent",
+                         TRACE_EVENT_SCOPE_THREAD, "result", result);
     if (result == ui::PerformKeyEquivalentResult::kHandled)
       return YES;
     if (result == ui::PerformKeyEquivalentResult::kPassToMainMenu)
@@ -183,6 +154,10 @@ NSEvent* KeyEventForWindow(NSWindow* window, NSEvent* event) {
 }
 
 - (BOOL)redispatchKeyEvent:(NSEvent*)event {
+  // TODO(bokan): Tracing added temporarily to diagnose crbug.com/1039833.
+  TRACE_EVENT2("ui", "CommandDispatcher::redispatchKeyEvent", "window num",
+               [_owner windowNumber], "event window num",
+               [[event window] windowNumber]);
   DCHECK(!_isRedispatchingKeyEvent);
   base::AutoReset<BOOL> resetter(&_isRedispatchingKeyEvent, YES);
 
@@ -194,14 +169,10 @@ NSEvent* KeyEventForWindow(NSWindow* window, NSEvent* event) {
     return YES;  // Pretend it's been handled in an effort to limit damage.
   }
 
-  // Ordinarily, the event's window should be |owner_|. However, when switching
-  // between normal and fullscreen mode, we switch out the window, and the
-  // event's window might be the previous window (or even an earlier one if the
-  // renderer is running slowly and several mode switches occur). In this rare
-  // case, we synthesize a new key event so that its associate window (number)
-  // is our |owner_|'s.
-  if ([event window] != _owner)
-    event = KeyEventForWindow(_owner, event);
+  // TODO(lgrey): This is a temporary sanity check since the code that was
+  // here previously did *not* assume this. Remove shortly after this lands if
+  // nothing blew up.
+  DCHECK_EQ([event window], _owner);
 
   // Redispatch the event.
   _eventHandled = YES;
@@ -214,6 +185,11 @@ NSEvent* KeyEventForWindow(NSWindow* window, NSEvent* event) {
 }
 
 - (BOOL)preSendEvent:(NSEvent*)event {
+  // TODO(bokan): Tracing added temporarily to diagnose crbug.com/1039833.
+  TRACE_EVENT2("ui", "CommandDispatcher::preSendEvent", "window num",
+               [_owner windowNumber], "event window num",
+               [[event window] windowNumber]);
+
   // AppKit does not call performKeyEquivalent: if the event only has the
   // NSEventModifierFlagOption modifier. However, Chrome wants to treat these
   // events just like keyEquivalents, since they can be consumed by extensions.

@@ -16,6 +16,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
+#include "content/common/ax_serialization_utils.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/use_zoom_for_dsf_policy.h"
 #include "third_party/blink/public/strings/grit/blink_strings.h"
@@ -157,8 +158,6 @@ bool BrowserAccessibility::PlatformIsLeafIncludingIgnored() const {
 }
 
 bool BrowserAccessibility::CanFireEvents() const {
-  if (!instance_active())
-    return false;
   // Allow events unless this object would be trimmed away.
   return !PlatformIsChildOfLeafIncludingIgnored();
 }
@@ -180,9 +179,6 @@ uint32_t BrowserAccessibility::PlatformChildCount() const {
 }
 
 BrowserAccessibility* BrowserAccessibility::PlatformGetParent() const {
-  if (!instance_active())
-    return nullptr;
-
   ui::AXNode* parent = node_->GetUnignoredParent();
   if (parent)
     return manager_->GetFromAXNode(parent);
@@ -229,10 +225,6 @@ BrowserAccessibility* BrowserAccessibility::PlatformGetSelectionContainer()
   return container;
 }
 
-bool BrowserAccessibility::IsNative() const {
-  return false;
-}
-
 bool BrowserAccessibility::IsDescendantOf(
     const BrowserAccessibility* ancestor) const {
   if (!ancestor)
@@ -269,8 +261,9 @@ BrowserAccessibility* BrowserAccessibility::PlatformGetChild(
   BrowserAccessibility* result = nullptr;
 
   if (HasStringAttribute(ax::mojom::StringAttribute::kChildTreeId)) {
-    // A node should not have both children and a child tree.
-    DCHECK_EQ(node_->children().size(), 0u);
+    DCHECK_EQ(node_->children().size(), 0u)
+        << "A node should not have both children and a child tree.";
+
     // child_trees do not have siblings.
     if (child_index == 0)
       result = PlatformGetRootOfChildTree();
@@ -397,15 +390,11 @@ BrowserAccessibility* BrowserAccessibility::InternalDeepestLastChild() const {
 }
 
 uint32_t BrowserAccessibility::InternalChildCount() const {
-  if (!instance_active())
-    return 0;
   return node_->GetUnignoredChildCount();
 }
 
 BrowserAccessibility* BrowserAccessibility::InternalGetChild(
     uint32_t child_index) const {
-  if (!node_ || !manager_)
-    return nullptr;
   ui::AXNode* child_node = node_->GetUnignoredChildAtIndex(child_index);
   if (!child_node)
     return nullptr;
@@ -414,8 +403,6 @@ BrowserAccessibility* BrowserAccessibility::InternalGetChild(
 }
 
 BrowserAccessibility* BrowserAccessibility::InternalGetParent() const {
-  if (!node_ || !manager_)
-    return nullptr;
   ui::AXNode* child_node = node_->GetUnignoredParent();
   if (!child_node)
     return nullptr;
@@ -947,17 +934,6 @@ BrowserAccessibility* BrowserAccessibility::ApproximateHitTest(
   return this;
 }
 
-void BrowserAccessibility::Destroy() {
-  node_ = nullptr;
-  manager_ = nullptr;
-
-  NativeReleaseReference();
-}
-
-void BrowserAccessibility::NativeReleaseReference() {
-  delete this;
-}
-
 bool BrowserAccessibility::HasBoolAttribute(
     ax::mojom::BoolAttribute attribute) const {
   return GetData().HasBoolAttribute(attribute);
@@ -991,9 +967,6 @@ bool BrowserAccessibility::GetFloatAttribute(
 
 bool BrowserAccessibility::HasInheritedStringAttribute(
     ax::mojom::StringAttribute attribute) const {
-  if (!instance_active())
-    return false;
-
   if (GetData().HasStringAttribute(attribute))
     return true;
   return PlatformGetParent() &&
@@ -1169,8 +1142,6 @@ std::string BrowserAccessibility::GetLiveRegionText() const {
 }
 
 std::vector<int> BrowserAccessibility::GetLineStartOffsets() const {
-  if (!instance_active())
-    return std::vector<int>();
   return node()->GetOrComputeLineStartOffsets();
 }
 
@@ -1285,6 +1256,17 @@ gfx::Rect BrowserAccessibility::RelativeToAbsoluteBounds(
 
   if (coordinate_system == ui::AXCoordinateSystem::kScreenDIPs ||
       coordinate_system == ui::AXCoordinateSystem::kScreenPhysicalPixels) {
+    // Most platforms include page scale factor in the transform on the root
+    // node of the AXTree. That transform gets applied by the call to
+    // RelativeToTreeBounds() in the loop above. However, if the root transform
+    // did not include page scale factor, we need to apply it now.
+    // TODO(crbug.com/1074116): this should probably apply visual viewport
+    // offset as well.
+    if (!content::AXShouldIncludePageScaleFactorInRoot()) {
+      BrowserAccessibilityManager* root_manager = manager()->GetRootManager();
+      if (root_manager)
+        bounds.Scale(root_manager->GetPageScaleFactor());
+    }
     bounds.Offset(
         manager()->GetViewBoundsInScreenCoordinates().OffsetFromOrigin());
     if (coordinate_system == ui::AXCoordinateSystem::kScreenPhysicalPixels &&
@@ -1361,9 +1343,6 @@ std::set<ui::AXPlatformNode*> BrowserAccessibility::GetNodesForNodeIdSet(
 ui::AXPlatformNode* BrowserAccessibility::GetTargetNodeForRelation(
     ax::mojom::IntAttribute attr) {
   DCHECK(ui::IsNodeIdIntAttribute(attr));
-
-  if (!node_)
-    return nullptr;
 
   int target_id;
   if (!GetData().GetIntAttribute(attr, &target_id))
@@ -1529,9 +1508,6 @@ gfx::NativeViewAccessible BrowserAccessibility::GetNSWindow() {
 }
 
 gfx::NativeViewAccessible BrowserAccessibility::GetParent() {
-  if (!instance_active())
-    return nullptr;
-
   BrowserAccessibility* parent = PlatformGetParent();
   if (parent)
     return parent->GetNativeViewAccessible();
@@ -1613,7 +1589,7 @@ BrowserAccessibility::PlatformChildIterator::PlatformChildIterator(
     const BrowserAccessibility* parent,
     BrowserAccessibility* child)
     : parent_(parent), platform_iterator(parent, child) {
-  DCHECK(parent && parent->instance_active());
+  DCHECK(parent);
 }
 
 BrowserAccessibility::PlatformChildIterator::~PlatformChildIterator() = default;
@@ -1629,27 +1605,22 @@ bool BrowserAccessibility::PlatformChildIterator::operator!=(
 }
 
 void BrowserAccessibility::PlatformChildIterator::operator++() {
-  DCHECK(parent_->instance_active());
   ++platform_iterator;
 }
 
 void BrowserAccessibility::PlatformChildIterator::operator++(int) {
-  DCHECK(parent_->instance_active());
   ++platform_iterator;
 }
 
 void BrowserAccessibility::PlatformChildIterator::operator--() {
-  DCHECK(parent_->instance_active());
   --platform_iterator;
 }
 
 void BrowserAccessibility::PlatformChildIterator::operator--(int) {
-  DCHECK(parent_->instance_active());
   --platform_iterator;
 }
 
 BrowserAccessibility* BrowserAccessibility::PlatformChildIterator::get() const {
-  DCHECK(parent_->instance_active());
   return platform_iterator.get();
 }
 
@@ -1659,7 +1630,6 @@ BrowserAccessibility::PlatformChildIterator::GetNativeViewAccessible() const {
 }
 
 int BrowserAccessibility::PlatformChildIterator::GetIndexInParent() const {
-  DCHECK(parent_->instance_active());
   if (platform_iterator == parent_->PlatformChildrenEnd().platform_iterator)
     return parent_->PlatformChildCount();
 
@@ -1689,8 +1659,6 @@ BrowserAccessibility::ChildrenEnd() {
 gfx::NativeViewAccessible BrowserAccessibility::HitTestSync(
     int physical_pixel_x,
     int physical_pixel_y) const {
-  if (!instance_active())
-    return nullptr;
   BrowserAccessibility* accessible = manager_->CachingAsyncHitTest(
       gfx::Point(physical_pixel_x, physical_pixel_y));
   if (!accessible)
@@ -2126,6 +2094,19 @@ base::Optional<int> BrowserAccessibility::GetSetSize() const {
 
 bool BrowserAccessibility::IsInListMarker() const {
   return node()->IsInListMarker();
+}
+
+bool BrowserAccessibility::IsCollapsedMenuListPopUpButton() const {
+  return node()->IsCollapsedMenuListPopUpButton();
+}
+
+BrowserAccessibility*
+BrowserAccessibility::GetCollapsedMenuListPopUpButtonAncestor() const {
+  ui::AXNode* popup_button = node()->GetCollapsedMenuListPopUpButtonAncestor();
+  if (!popup_button)
+    return nullptr;
+
+  return manager()->GetFromAXNode(popup_button);
 }
 
 std::string BrowserAccessibility::ToString() const {

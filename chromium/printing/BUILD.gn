@@ -31,13 +31,19 @@ if ((enable_basic_printing && is_win) || enable_print_preview) {
              "set enable_pdf=true.")
 }
 
+# Enable the CUPS IPP printing backend.
+# TODO(crbug.com/226176): Remove this after CUPS PPD API calls are removed.
+declare_args() {
+  use_cups_ipp = use_cups && !is_desktop_linux
+}
+
 # Several targets want to include this header file. We separate it out
 # here so multiple targets can depend on it.
 source_set("printing_export") {
   sources = [ "printing_export.h" ]
 }
 
-if (use_cups && is_chromeos) {
+if (use_cups_ipp && is_chromeos) {
   ipp_handler_map_path = "$target_gen_dir/backend/ipp_handler_map.cc"
 
   ipp_code_generate("ipp_handlers_generate") {
@@ -54,6 +60,8 @@ component("printing") {
     "backend/print_backend_consts.cc",
     "backend/print_backend_consts.h",
     "backend/print_backend_dummy.cc",
+    "backend/printing_restrictions.cc",
+    "backend/printing_restrictions.h",
     "metafile.cc",
     "metafile.h",
     "metafile_skia.cc",
@@ -101,6 +109,7 @@ component("printing") {
     "//base/third_party/dynamic_annotations",
     "//cc/paint",
     "//printing/common",
+    "//printing/mojom",
     "//skia",
     "//third_party/icu",
     "//ui/accessibility",
@@ -127,8 +136,6 @@ component("printing") {
 
     sources += [
       "backend/print_backend_chromeos.cc",
-      "backend/printing_restrictions.cc",
-      "backend/printing_restrictions.h",
       "printed_document_chromeos.cc",
       "printing_context_no_system_dialog.cc",
       "printing_context_no_system_dialog.h",
@@ -217,7 +224,7 @@ component("printing") {
     # of the print backend and enables a custom implementation instead.
     defines += [ "PRINT_BACKEND_AVAILABLE" ]
 
-    if (is_chromeos || is_mac) {
+    if (use_cups_ipp) {
       sources += [
         "backend/cups_connection.cc",
         "backend/cups_connection.h",
@@ -259,8 +266,8 @@ component("printing") {
         "backend/print_backend_cups.h",
       ]
 
-      # We still build the utils for fuzzing.
-      if (use_fuzzing_engine) {
+      # We still build the utils for fuzzing if not already built.
+      if (use_fuzzing_engine && !use_cups_ipp) {
         sources += [
           "backend/cups_ipp_constants.cc",
           "backend/cups_ipp_constants.h",
@@ -271,7 +278,7 @@ component("printing") {
     }
   }
 
-  if (is_chromeos || is_mac) {
+  if (use_cups_ipp || is_chromeos) {
     sources += [
       "printer_query_result.h",
       "printer_status.cc",
@@ -325,6 +332,7 @@ test("printing_unittests") {
     "page_range_unittest.cc",
     "page_setup_unittest.cc",
     "print_settings_conversion_unittest.cc",
+    "print_settings_unittest.cc",
     "printing_test.h",
     "printing_utils_unittest.cc",
     "units_unittest.cc",
@@ -336,6 +344,7 @@ test("printing_unittests") {
     "//base/test:run_all_unittests",
     "//base/test:test_support",
     "//printing/common",
+    "//printing/mojom",
     "//testing/gmock",
     "//testing/gtest",
     "//ui/base",
@@ -356,6 +365,7 @@ test("printing_unittests") {
   if (is_win) {
     sources += [
       "emf_win_unittest.cc",
+      "printed_document_unittest.cc",
       "printed_page_win_unittest.cc",
       "printing_context_win_unittest.cc",
     ]
@@ -363,14 +373,10 @@ test("printing_unittests") {
     data = [ "test/data/emf/" ]
   }
 
-  if (is_win || is_mac) {
-    sources += [ "printed_document_unittest.cc" ]
-  }
-
   if (use_cups) {
     configs += [ ":cups" ]
 
-    if (is_chromeos || is_mac) {
+    if (use_cups_ipp) {
       sources += [ "backend/cups_ipp_helper_unittest.cc" ]
     }
 

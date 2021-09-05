@@ -40,6 +40,8 @@
 #include "content/public/common/content_switches.h"
 #include "ipc/ipc_message.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
+#include "net/base/isolation_info.h"
+#include "net/cookies/site_for_cookies.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/loader/url_loader_factory_bundle.mojom.h"
 #include "third_party/blink/public/mojom/renderer_preference_watcher.mojom.h"
@@ -112,13 +114,17 @@ using CreateFactoryBundlesOnUICallback = base::OnceCallback<void(
     std::unique_ptr<blink::PendingURLLoaderFactoryBundle> script_bundle,
     std::unique_ptr<blink::PendingURLLoaderFactoryBundle> subresouce_bundle,
     mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
-        coep_reporter)>;
+        coep_reporter,
+    mojo::PendingReceiver<blink::mojom::ReportingObserver>
+        reporting_observer_receiver)>;
 void CreateFactoryBundlesOnUI(int process_id,
                               int routing_id,
                               const GURL& script_url,
                               base::Optional<network::CrossOriginEmbedderPolicy>
                                   cross_origin_embedder_policy,
                               CreateFactoryBundlesOnUICallback callback) {
+  mojo::PendingReceiver<blink::mojom::ReportingObserver>
+      reporting_observer_receiver;
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   auto* rph = RenderProcessHost::FromID(process_id);
   if (!rph) {
@@ -126,7 +132,8 @@ void CreateFactoryBundlesOnUI(int process_id,
     // missing renderer.
     ServiceWorkerContextWrapper::RunOrPostTaskOnCoreThread(
         FROM_HERE, base::BindOnce(std::move(callback), nullptr, nullptr,
-                                  mojo::NullRemote()));
+                                  mojo::NullRemote(),
+                                  std::move(reporting_observer_receiver)));
     return;
   }
 
@@ -142,12 +149,17 @@ void CreateFactoryBundlesOnUI(int process_id,
   // |cross_origin_embedder_policy| is nullopt in some unittests.
   // TODO(shimazu): Set COEP in those tests.
   if (cross_origin_embedder_policy) {
-    mojo::MakeSelfOwnedReceiver(
-        std::make_unique<CrossOriginEmbedderPolicyReporter>(
-            rph->GetStoragePartition(), script_url,
-            cross_origin_embedder_policy->reporting_endpoint,
-            cross_origin_embedder_policy->report_only_reporting_endpoint),
-        coep_reporter.BindNewPipeAndPassReceiver());
+    mojo::PendingRemote<blink::mojom::ReportingObserver>
+        reporting_observer_remote;
+    reporting_observer_receiver =
+        reporting_observer_remote.InitWithNewPipeAndPassReceiver();
+    auto reporter = std::make_unique<CrossOriginEmbedderPolicyReporter>(
+        rph->GetStoragePartition(), script_url,
+        cross_origin_embedder_policy->reporting_endpoint,
+        cross_origin_embedder_policy->report_only_reporting_endpoint);
+    reporter->BindObserver(std::move(reporting_observer_remote));
+    mojo::MakeSelfOwnedReceiver(std::move(reporter),
+                                coep_reporter.BindNewPipeAndPassReceiver());
     coep_reporter->Clone(
         coep_reporter_for_devtools.InitWithNewPipeAndPassReceiver());
     coep_reporter->Clone(
@@ -173,7 +185,8 @@ void CreateFactoryBundlesOnUI(int process_id,
       FROM_HERE, base::BindOnce(std::move(callback), std::move(script_bundle),
                                 std::move(subresource_bundle),
                                 coep_reporter ? coep_reporter.Unbind()
-                                              : mojo::NullRemote()));
+                                              : mojo::NullRemote(),
+                                std::move(reporting_observer_receiver)));
 }
 
 using SetupProcessCallback = base::OnceCallback<void(
@@ -188,6 +201,7 @@ using SetupProcessCallback = base::OnceCallback<void(
     std::unique_ptr<
         blink::PendingURLLoaderFactoryBundle> /* factory_bundle_for_renderer */,
     mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>,
+    mojo::PendingReceiver<blink::mojom::ReportingObserver>,
     const base::Optional<base::TimeDelta>& thread_hop_time,
     const base::Optional<base::Time>& ui_post_time)>;
 
@@ -225,6 +239,8 @@ void SetupOnUIThread(
       factory_bundle_for_new_scripts;
   std::unique_ptr<blink::PendingURLLoaderFactoryBundle>
       factory_bundle_for_renderer;
+  mojo::PendingReceiver<blink::mojom::ReportingObserver>
+      reporting_observer_receiver;
 
   if (!process_manager) {
     base::Optional<base::Time> ui_post_time;
@@ -239,6 +255,7 @@ void SetupOnUIThread(
                                   std::move(factory_bundle_for_new_scripts),
                                   std::move(factory_bundle_for_renderer),
                                   /*coep_reporter=*/mojo::NullRemote(),
+                                  std::move(reporting_observer_receiver),
                                   thread_hop_time, ui_post_time));
     return;
   }
@@ -259,7 +276,8 @@ void SetupOnUIThread(
                        std::move(process_info), std::move(devtools_proxy),
                        std::move(factory_bundle_for_new_scripts),
                        std::move(factory_bundle_for_renderer),
-                       /*coep_reporter=*/mojo::NullRemote(), thread_hop_time,
+                       /*coep_reporter=*/mojo::NullRemote(),
+                       std::move(reporting_observer_receiver), thread_hop_time,
                        ui_post_time));
     return;
   }
@@ -286,12 +304,17 @@ void SetupOnUIThread(
   mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
       coep_reporter_for_subresources;
   if (cross_origin_embedder_policy) {
-    mojo::MakeSelfOwnedReceiver(
-        std::make_unique<CrossOriginEmbedderPolicyReporter>(
-            rph->GetStoragePartition(), params->script_url,
-            cross_origin_embedder_policy->reporting_endpoint,
-            cross_origin_embedder_policy->report_only_reporting_endpoint),
-        coep_reporter.BindNewPipeAndPassReceiver());
+    mojo::PendingRemote<blink::mojom::ReportingObserver>
+        reporting_observer_remote;
+    reporting_observer_receiver =
+        reporting_observer_remote.InitWithNewPipeAndPassReceiver();
+    auto reporter = std::make_unique<CrossOriginEmbedderPolicyReporter>(
+        rph->GetStoragePartition(), params->script_url,
+        cross_origin_embedder_policy->reporting_endpoint,
+        cross_origin_embedder_policy->report_only_reporting_endpoint);
+    reporter->BindObserver(std::move(reporting_observer_remote));
+    mojo::MakeSelfOwnedReceiver(std::move(reporter),
+                                coep_reporter.BindNewPipeAndPassReceiver());
     coep_reporter->Clone(
         coep_reporter_for_devtools.InitWithNewPipeAndPassReceiver());
     coep_reporter->Clone(
@@ -366,7 +389,8 @@ void SetupOnUIThread(
           std::move(factory_bundle_for_new_scripts),
           std::move(factory_bundle_for_renderer),
           coep_reporter ? coep_reporter.Unbind() : mojo::NullRemote(),
-          thread_hop_time, ui_post_time));
+          std::move(reporting_observer_receiver), thread_hop_time,
+          ui_post_time));
 }
 
 bool HasSentStartWorker(EmbeddedWorkerInstance::StartingPhase phase) {
@@ -708,9 +732,16 @@ class EmbeddedWorkerInstance::StartTask {
           factory_bundle_for_renderer,
       mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
           coep_reporter,
+      mojo::PendingReceiver<blink::mojom::ReportingObserver>
+          reporting_observer_receiver,
       const base::Optional<base::TimeDelta>& thread_hop_time,
       const base::Optional<base::Time>& ui_post_time) {
     DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
+
+    if (reporting_observer_receiver) {
+      instance_->owner_version_->set_reporting_observer_receiver(
+          std::move(reporting_observer_receiver));
+    }
 
     if (!ServiceWorkerContext::IsServiceWorkerOnUIEnabled())
       thread_hop_time_ =
@@ -1188,7 +1219,10 @@ EmbeddedWorkerInstance::CreateFactoryBundleOnUI(
                                      .InitWithNewPipeAndPassReceiver();
   network::mojom::URLLoaderFactoryParamsPtr factory_params =
       URLLoaderFactoryParamsHelper::CreateForWorker(
-          rph, origin, net::NetworkIsolationKey(origin, origin),
+          rph, origin,
+          net::IsolationInfo::Create(
+              net::IsolationInfo::RedirectMode::kUpdateNothing, origin, origin,
+              net::SiteForCookies::FromOrigin(origin)),
           std::move(coep_reporter));
   bool bypass_redirect_checks = false;
 
@@ -1483,11 +1517,17 @@ void EmbeddedWorkerInstance::OnCreatedFactoryBundles(
     std::unique_ptr<blink::PendingURLLoaderFactoryBundle> script_bundle,
     std::unique_ptr<blink::PendingURLLoaderFactoryBundle> subresource_bundle,
     mojo::PendingRemote<network::mojom::CrossOriginEmbedderPolicyReporter>
-        coep_reporter) {
+        coep_reporter,
+    mojo::PendingReceiver<blink::mojom::ReportingObserver>
+        reporting_observer_receiver) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
 
   if (coep_reporter) {
     coep_reporter_.Bind(std::move(coep_reporter));
+  }
+  if (reporting_observer_receiver) {
+    owner_version_->set_reporting_observer_receiver(
+        std::move(reporting_observer_receiver));
   }
   BindCacheStorageInternal();
   std::move(callback).Run(std::move(script_bundle),

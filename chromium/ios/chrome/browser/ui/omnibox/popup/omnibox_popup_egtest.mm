@@ -5,6 +5,7 @@
 #import <XCTest/XCTest.h>
 
 #include "base/bind.h"
+#include "base/ios/ios_util.h"
 #include "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/ui/content_suggestions/ntp_home_constant.h"
 #import "ios/chrome/browser/ui/omnibox/popup/omnibox_popup_accessibility_identifier_constants.h"
@@ -108,6 +109,12 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
 // Tests that tapping the switch to open tab button, switch to the open tab,
 // doesn't close the tab.
 - (void)testSwitchToOpenTab {
+// TODO(crbug.com/1067817): Test won't pass on iPad devices.
+#if !TARGET_IPHONE_SIMULATOR
+  if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"This test doesn't pass on iPad device.");
+  }
+#endif
   // Open the first page.
   GURL firstPageURL = self.testServer->GetURL(kPage1URL);
   [ChromeEarlGrey loadURL:firstPageURL];
@@ -140,6 +147,12 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
 
 // Tests that the switch to open tab button isn't displayed for the current tab.
 - (void)testNotSwitchButtonOnCurrentTab {
+// TODO(crbug.com/1067817): Test won't pass on iPad devices.
+#if !TARGET_IPHONE_SIMULATOR
+  if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"This test doesn't pass on iPad device.");
+  }
+#endif
   GURL URL2 = self.testServer->GetURL(kPage2URL);
 
   // Open the first page.
@@ -257,6 +270,12 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
 }
 
 - (void)testDontCloseNTPWhenSwitchingWithForwardHistory {
+// TODO(crbug.com/1067817): Test won't pass on iPad devices.
+#if !TARGET_IPHONE_SIMULATOR
+  if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"This test doesn't pass on iPad device.");
+  }
+#endif
   // Open the first page.
   GURL URL1 = self.testServer->GetURL(kPage1URL);
   [ChromeEarlGrey loadURL:URL1];
@@ -288,6 +307,12 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
       // TODO(crbug.com/992480):test fails on iPad.
       EARL_GREY_TEST_DISABLED(@"Test disabled on iPad.");
     }
+  }
+#endif
+// TODO(crbug.com/1067817): Test won't pass on iPad devices.
+#if !TARGET_IPHONE_SIMULATOR
+  if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"This test doesn't pass on iPad device.");
   }
 #endif
   GURL URL1 = self.testServer->GetURL(kPage1URL);
@@ -325,6 +350,13 @@ std::unique_ptr<net::test_server::HttpResponse> StandardResponse(
 // Tests that having multiple suggestions with corresponding opened tabs display
 // multiple buttons. TODO(crbug.com/1059464): Test is flaky.
 - (void)DISABLED_testMultiplePageOpened {
+// TODO(crbug.com/1067817): Test won't pass on iPad devices.
+#if !TARGET_IPHONE_SIMULATOR
+  if ([ChromeEarlGrey isIPadIdiom]) {
+    EARL_GREY_TEST_SKIPPED(@"This test doesn't pass on iPad device.");
+  }
+#endif
+
   // Open the first page.
   GURL URL1 = self.testServer->GetURL(kPage1URL);
   [ChromeEarlGrey loadURL:URL1];

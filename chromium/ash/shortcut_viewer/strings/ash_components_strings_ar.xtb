@@ -88,7 +88,7 @@
 <translation id="3976863468609830880">النقر على الرمز الأخير على الرف</translation>
 <translation id="3994783594793697310">إعادة ضبط مستوى تكبير/تصغير العرض</translation>
 <translation id="4026843240379844265">نقل نافذة نشطة بين شاشات العرض</translation>
-<translation id="4035482366624727273">تحديد كل محتوى الصفحة</translation>
+<translation id="4035482366624727273">اختيار كل محتوى الصفحة</translation>
 <translation id="4060703249685950734">إعادة فتح آخر علامة تبويب أو نافذة أغلقتها</translation>
 <translation id="4090342722461256974">اضغط مع الاستمرار على <ph name="ALT" /><ph name="SEPARATOR" /><ph name="SHIFT" />، وانقر على <ph name="TAB" /> حتى تحصل على النافذة المراد فتحها، ثم ارفع إصبعك.</translation>
 <translation id="4092538597492297615">نسخ المحتوى المحدد إلى الحافظة</translation>
@@ -147,7 +147,7 @@
 <translation id="6435207348963613811">تمييز العنصر السابق على الرف</translation>
 <translation id="6445033640292336367">إرجاع علامة التبويب إلى موضعها الأصلي</translation>
 <translation id="6474744297082284761">التصغير (عند تفعيل المكبّرات بملء الشاشة أو الإرساء)</translation>
-<translation id="649811797655257835">حدِّد الملف، ثم اضغط على <ph name="SPACE" /></translation>
+<translation id="649811797655257835">اختَر الملف، ثم اضغط على <ph name="SPACE" /></translation>
 <translation id="6556040137485212400">فَتحُ النافذة غير المُستخدمة للفترة الأطول</translation>
 <translation id="666343722268997814">النقر بالزر الأيمن لفتح قائمة العنصر المُحدَّد</translation>
 <translation id="6671538777808758331">الانتقال إلى المطابقة التالية للبحث</translation>
@@ -156,7 +156,7 @@
 <translation id="6692847073476874842">معاينة ملف في تطبيق "الملفات"</translation>
 <translation id="671928215901716392">قفل الشاشة</translation>
 <translation id="6727005317916125192">الجزء السابق</translation>
-<translation id="6740781404993465795">تحديد الكلمة التالية أو الحرف التالي</translation>
+<translation id="6740781404993465795">اختيار الكلمة التالية أو الحرف التالي</translation>
 <translation id="6755851152783057058">التبديل إلى آخر أسلوب إدخال تم استخدامه</translation>
 <translation id="6760706756348334449">خفض مستوى الصوت</translation>
 <translation id="6941333068993625698">إرسال التعليقات</translation>
@@ -195,7 +195,7 @@
 <translation id="85690795166292698">فتح الرابط في علامة تبويب جديدة</translation>
 <translation id="8609384513243082612">فتح علامة تبويب جديدة</translation>
 <translation id="8644639153978066712">عرض الملفات المخفية في تطبيق "الملفات"</translation>
-<translation id="8717459106217102612">تحديد الكلمة السابقة أو الحرف السابق</translation>
+<translation id="8717459106217102612">اختيار الكلمة السابقة أو الحرف السابق</translation>
 <translation id="8727232706774971183">الاطلاع على الإشعارات</translation>
 <translation id="8855885154700222542">مفتاح ملء الشاشة</translation>
 <translation id="8881584919399569791">نقل نافذة نشطة إلى سطح المكتب الأيمن</translation>

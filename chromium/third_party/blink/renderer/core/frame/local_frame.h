@@ -34,6 +34,7 @@
 #include "base/macros.h"
 #include "base/time/default_tick_clock.h"
 #include "base/unguessable_token.h"
+#include "build/build_config.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
@@ -42,6 +43,7 @@
 #include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/frame/reporting_observer.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/loader/pause_subresource_loading_handle.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/reporting/reporting.mojom-blink.h"
@@ -56,7 +58,6 @@
 #include "third_party/blink/renderer/core/frame/frame.h"
 #include "third_party/blink/renderer/core/frame/frame_types.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
-#include "third_party/blink/renderer/core/inspector/inspector_issue.h"
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
 #include "third_party/blink/renderer/platform/graphics/touch_action.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -64,6 +65,9 @@
 #include "third_party/blink/renderer/platform/loader/fetch/client_hints_preferences.h"
 #include "third_party/blink/renderer/platform/scheduler/public/frame_scheduler.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
+#if defined(OS_MACOSX)
+#include "third_party/blink/public/mojom/input/text_input_host.mojom-blink.h"
+#endif
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -72,6 +76,12 @@ class SingleThreadTaskRunner;
 namespace gfx {
 class Point;
 }
+
+#if defined(OS_MACOSX)
+namespace gfx {
+class Range;
+}
+#endif
 
 namespace blink {
 
@@ -131,6 +141,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
       LocalFrameClient*,
       Page&,
       FrameOwner*,
+      const base::UnguessableToken& frame_token,
       WindowAgentFactory* inheriting_agent_factory,
       InterfaceRegistry*,
       const base::TickClock* clock = base::DefaultTickClock::GetInstance());
@@ -260,6 +271,10 @@ class CORE_EXPORT LocalFrame final : public Frame,
 
   void DeviceScaleFactorChanged();
   double DevicePixelRatio() const;
+
+  // Informs the local root's document and its local descendant subtree that a
+  // media query value changed.
+  void MediaQueryAffectingValueChangedForLocalSubtree(MediaValueChange);
 
   String SelectedText() const;
   String SelectedTextForClipboard() const;
@@ -510,6 +525,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
                            const WTF::String& message,
                            bool discard_duplicates) final;
   void AddInspectorIssue(mojom::blink::InspectorIssueInfoPtr) final;
+  void StopLoading() final;
   void Collapse(bool collapsed) final;
   void EnableViewSourceMode() final;
   void Focus() final;
@@ -526,6 +542,9 @@ class CORE_EXPORT LocalFrame final : public Frame,
   void MediaPlayerActionAt(
       const gfx::Point& window_point,
       blink::mojom::blink::MediaPlayerActionPtr action) final;
+  void AdvanceFocusInFrame(
+      mojom::blink::FocusType focus_type,
+      const base::Optional<base::UnguessableToken>& source_frame_token) final;
   void AdvanceFocusInForm(mojom::blink::FocusType focus_type) final;
   void ReportContentSecurityPolicyViolation(
       network::mojom::blink::CSPViolationPtr csp_violation) final;
@@ -535,6 +554,14 @@ class CORE_EXPORT LocalFrame final : public Frame,
   // sandbox flags or container policy. The new policy won't take effect until
   // the next navigation.
   void DidUpdateFramePolicy(const FramePolicy& frame_policy) final;
+  void OnScreensChange() final;
+  void PostMessageEvent(
+      const base::Optional<base::UnguessableToken>& source_frame_token,
+      const String& source_origin,
+      const String& target_origin,
+      BlinkTransferableMessage message) final;
+  void BindReportingObserver(
+      mojo::PendingReceiver<mojom::blink::ReportingObserver> receiver) final;
 
   // blink::mojom::LocalMainFrame overrides:
   void AnimateDoubleTapZoom(const gfx::Point& point,
@@ -548,6 +575,10 @@ class CORE_EXPORT LocalFrame final : public Frame,
   void SetInitialFocus(bool reverse) override;
   void EnablePreferredSizeChangedMode() override;
   void ZoomToFindInPageRect(const gfx::Rect& rect_in_root_frame) override;
+#if defined(OS_MACOSX)
+  void GetCharacterIndexAtPoint(const gfx::Point& point) final;
+  void GetFirstRectForRange(const gfx::Range& range) final;
+#endif
 
   SystemClipboard* GetSystemClipboard();
   RawSystemClipboard* GetRawSystemClipboard();
@@ -561,6 +592,7 @@ class CORE_EXPORT LocalFrame final : public Frame,
 
  private:
   friend class FrameNavigationDisabler;
+  FRIEND_TEST_ALL_PREFIXES(LocalFrameTest, CharacterIndexAtPointWithPinchZoom);
 
   // Frame protected overrides:
   void DetachImpl(FrameDetachType) override;
@@ -614,6 +646,10 @@ class CORE_EXPORT LocalFrame final : public Frame,
 
   bool ShouldThrottleDownload();
 
+#if defined(OS_MACOSX)
+  mojom::blink::TextInputHost& GetTextInputHost();
+#endif
+
   static void BindToReceiver(
       blink::LocalFrame* frame,
       mojo::PendingAssociatedReceiver<mojom::blink::LocalFrame> receiver);
@@ -638,12 +674,9 @@ class CORE_EXPORT LocalFrame final : public Frame,
 
   const Member<ScriptController> script_controller_;
   const Member<Editor> editor_;
-  const Member<SpellChecker> spell_checker_;
   const Member<FrameSelection> selection_;
   const Member<EventHandler> event_handler_;
   const Member<FrameConsole> console_;
-  const Member<InputMethodController> input_method_controller_;
-  const Member<TextSuggestionController> text_suggestion_controller_;
 
   int navigation_disable_count_;
   // TODO(dcheng): In theory, this could be replaced by checking the
@@ -672,6 +705,10 @@ class CORE_EXPORT LocalFrame final : public Frame,
   // This is declared mutable so that the service endpoint can be cached by
   // const methods.
   mutable mojo::Remote<mojom::blink::ReportingServiceProxy> reporting_service_;
+
+#if defined(OS_MACOSX)
+  mojo::Remote<mojom::blink::TextInputHost> text_input_host_;
+#endif
 
   ViewportIntersectionState intersection_state_;
 
@@ -744,21 +781,8 @@ inline Editor& LocalFrame::GetEditor() const {
   return *editor_;
 }
 
-inline SpellChecker& LocalFrame::GetSpellChecker() const {
-  return *spell_checker_;
-}
-
 inline FrameConsole& LocalFrame::Console() const {
   return *console_;
-}
-
-inline InputMethodController& LocalFrame::GetInputMethodController() const {
-  return *input_method_controller_;
-}
-
-inline TextSuggestionController& LocalFrame::GetTextSuggestionController()
-    const {
-  return *text_suggestion_controller_;
 }
 
 inline bool LocalFrame::InViewSourceMode() const {

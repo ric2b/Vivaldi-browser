@@ -15,14 +15,15 @@
 <translation id="123620459398936149">Chrome OS нь таны өгөгдлийг sync хийж чадсангүй. Sync-ийн нэвтрэх хэллэгээ шинэчилнэ үү.</translation>
 <translation id="1302523850133262269">Chrome-оос хамгийн сүүлийн үеийн системийн шинэчлэлтүүдийг суулгаж байгаа тул түр хүлээнэ үү.</translation>
 <translation id="137466361146087520">Google Chrome Бэта</translation>
-<translation id="1399397803214730675">Google Chrome-ийн сүүлийн үеийн хувилбар аль хэдийн энэ компьютерт байна. Хэрэв програм хангамж ажиллахгүй байгаа бол Google Chrome-ийг устгаад, дахин оролдож үзнэ үү.</translation>
+<translation id="1399397803214730675">Google Chrome-ийн сүүлийн үеийн хувилбар аль хэдийн энэ компьютерт байна. Хэрэв программ хангамж ажиллахгүй байгаа бол Google Chrome-ийг устгаад, дахин оролдож үзнэ үү.</translation>
 <translation id="1434626383986940139">Chrome Canary програмууд</translation>
 <translation id="1553358976309200471">Chrome-г шинэчлэх</translation>
 <translation id="1587223624401073077">Google Chrome нь таны камерыг ашиглаж байна.</translation>
 <translation id="1587325591171447154"><ph name="FILE_NAME" /> аюултай тул үүнийг Chrome блок хийсэн.</translation>
 <translation id="1619887657840448962">Chrome-г илүү аюулгүй болгохын тулд <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> жагсаалтанд байхгүй, танд мэдэгдэлгүйгээр нэмэгдсэн байж болох дараах өргөтгөлийг идэвхгүй болголоо.</translation>
+<translation id="162629503687514352">Chrome үйлдлийн систем таны нууц үгийг синк хийж чадсангүй.</translation>
 <translation id="1628000112320670027">Chrome-с тусламж авах</translation>
-<translation id="1662639173275167396">Chrome OS нь нэмэлт <ph name="BEGIN_LINK_CROS_OSS" />нээлттэй эх кодын програм хангамж<ph name="END_LINK_CROS_OSS" /> болох <ph name="BEGIN_LINK_LINUX_OSS" />Linux (Бэта)<ph name="END_LINK_LINUX_OSS" />-р боломжтой байдаг.</translation>
+<translation id="1662639173275167396">Chrome OS нь нэмэлт <ph name="BEGIN_LINK_CROS_OSS" />нээлттэй эх кодын программ хангамж<ph name="END_LINK_CROS_OSS" /> болох <ph name="BEGIN_LINK_LINUX_OSS" />Linux (Бэта)<ph name="END_LINK_LINUX_OSS" />-р боломжтой байдаг.</translation>
 <translation id="1666409074978194368">Шинэчилж дуусаж байна! Шинэчлэлтийг дуусгахын тулд Google Chrome-г дахин ачаална уу. Нууцлалтай цонхыг дахин нээхгүй.</translation>
 <translation id="1674870198290878346">Холбоосыг Chrome-н нууцлалтай цонхонд нээх</translation>
 <translation id="1682634494516646069">Google Chrome нь өөрийн өгөгдлийн хадгалалтын сан руу уншуулж бас бичиж чадахгүй:
@@ -50,8 +51,8 @@
 <translation id="2290014774651636340">Google-ийн API түлхүүр байхгүй байна. Google Chrome-ийн зарим функц идэвхгүй болно.</translation>
 <translation id="2290095356545025170">Та Google Chrome-ыг устгах гэж байгаадаа итгэлтэй байна уу?</translation>
 <translation id="2309047409763057870">Энэ нь Google Chrome-н хоёр дахь суулгалт тул таны өгөгдмөл хөтчөөр сонгох боломжгүй.</translation>
-<translation id="2341767445688917208">Chrome үйлдлийн систем таны нууц үгийг синк хийж чадсангүй. Одоо засна уу.</translation>
 <translation id="2348335408836342058">Энэ сайтыг ашиглахын тулд Chrome-д таны камер, микрофонд хандах зөвшөөрөл шаардлагатай</translation>
+<translation id="234869673307233423">Chrome таны нууц үгсийг шалгах боломжгүй байна. Дараа дахин оролдоно уу.</translation>
 <translation id="2429317896000329049">Таны домэйнд sync хийх боломжгүй учраас Google Chrome нь таны өгөгдлийг sync хийж чадсангүй.</translation>
 <translation id="2467438592969358367">Google Chrome таны нууц үгийг экспортлох хүсэлтэй байна. Үүнийг зөвшөөрч байгаа бол Windows-н нууц үгээ оруулна уу.</translation>
 <translation id="2485422356828889247">Устгах</translation>
@@ -66,6 +67,7 @@
 <translation id="2689103672227170538">Энэ өргөтгөл нь таныг Chrome-г эхлүүлэх үед хуудсанд харагдах зүйлийг өөрчилсөн.</translation>
 <translation id="2765403129283291972">Энэ сайтыг ашиглахын тулд Chrome-д таны микрофонд хандах зөвшөөрөл шаардлагатай</translation>
 <translation id="2770231113462710648">Стандарт вэб хөтчийг дараах руу өөрчил:</translation>
+<translation id="2775140325783767197">Chrome таны нууц үгсийг шалгах боломжгүй байна. Интернэт холболтоо шалгаж үзнэ үү.</translation>
 <translation id="2799223571221894425">Дахин эхлүүлэх</translation>
 <translation id="2847461019998147611">Google Chrome-г энэ хэлээр харуулах</translation>
 <translation id="2857540653560290388">Chrome-г эхлүүлж байна...</translation>
@@ -78,25 +80,29 @@
 <translation id="3065168410429928842">Chrome-н чихтэй хуудас</translation>
 <translation id="3080151273017101988">Google Chrome хаагдсан үед үндсэн аппликйешнуудыг үргэлжлүүлэн ажиллуул</translation>
 <translation id="3089968997497233615">Google Chrome-ийн шинэ, илүү аюулгүй хувилбар бэлэн боллоо.</translation>
+<translation id="3127818369811890733">Chrome үйлдлийн систем таны өгөгдлийг синк хийж чадсангүй.</translation>
 <translation id="3149510190863420837">Chrome Аппликейшнууд</translation>
 <translation id="3360895254066713204">Chrome Helper</translation>
 <translation id="3379938682270551431">{0,plural, =0{Chrome-г одоо дахин ажиллуулж байна}=1{Chrome-г 1 секундийн дотор дахин ажиллуулна}other{Chrome-г # секундийн дотор дахин ажиллуулна}}</translation>
 <translation id="3395323229510056640">Chrome үйлдлийн системээс тусламж авах</translation>
 <translation id="3396977131400919238">Суулгах явцад үйлдлийн системд алдаа гарлаа. Google Chrome-ыг дахин татаж авна уу.</translation>
 <translation id="3398288718845740432">Chrome-ын цэсэнд нуух</translation>
+<translation id="3434246496373299699">Chrome нь таныг Google Бүртгэлээрээ нэвтрэх үед таны нууц үгсийг шалгах боломжтой</translation>
 <translation id="3451115285585441894">Chrome руу нэмж байна...</translation>
 <translation id="345171907106878721">Chrome-д өөрийгөө нэмэх</translation>
 <translation id="34857402635545079">Chrome-н (<ph name="URL" />) өгөгдлийг мөн адил устгах</translation>
 <translation id="3503306920980160878">Энэ сайтаар таны байршлыг хуваалцахын тулд Chrome-д таны байршилд хандах зөвшөөрөл шаардлагатай</translation>
+<translation id="3533694711092285624">Хадгалсан ямар ч нууц үг байхгүй байна. Таныг нууц үгсээ хадгалах үед Chrome тэднийг шалгах боломжтой.</translation>
+<translation id="3541482654983822893">Chrome таны нууц үгсийг шалгах боломжгүй байна. 24 цагийн дараа дахин оролдоно уу.</translation>
 <translation id="3576528680708590453">Таны системийн админ Google Chrome-г <ph name="TARGET_URL_HOSTNAME" />-д хандахын тулд өөр хөтөч нээхээр тохируулсан байна.</translation>
 <translation id="3582972582564653026">Төхөөрөмжүүддээ Chrome-г синк хийж, хувийн болгох</translation>
 <translation id="3596080736082218006">{COUNT,plural, =0{Шинэчлэлтийг хэрэгжүүлэхийн тулд Chrome-г дахин ачаалахыг таны администратор танаас шаардаж байна}=1{Шинэчлэлтийг хэрэгжүүлэхийн тулд Chrome-г дахин ачаалахыг таны администратор танаас шаардаж байна. Таны нууцлалтай цонхыг дахин нээхгүй.}other{Шинэчлэлтийг хэрэгжүүлэхийн тулд Chrome-г дахин ачаалахыг таны администратор танаас шаардаж байна. Таны # нууцлалтай цонхыг дахин нээхгүй.}}</translation>
 <translation id="3622797965165704966">Одоо та Google хаягаа ашиглан мөн өөр бусад компьютер дээр Chrome-г ашиглахад хялбар боллоо.</translation>
-<translation id="3637702109597584617">Google Chrome үйлдлийн системийн <ph name="TERMS_OF_SERVICE_LINK" />Үйлчилгээний нөхцөл<ph name="END_TERMS_OF_SERVICE_LINK" /></translation>
 <translation id="3718181793972440140">Энэ нь төхөөрөмжөөс 1 зүйл устгах болно. Өгөгдлөө дараа сэргээхийн тулд Chrome-д <ph name="USER_EMAIL" />-р нэвтэрнэ үү.</translation>
 <translation id="3735758079232443276">"<ph name="EXTENSION_NAME" />" өргөтгөл нь таныг Chrome-г эхлүүлэх үед хуудсанд харагдах зүйлийг өөрчилсөн.</translation>
 <translation id="3780814664026482060">Chrome - <ph name="PAGE_TITLE" /></translation>
 <translation id="386202838227397562">Бүх Google Chrome-ын цонхнуудыг хааж дахин оролдоно уу.</translation>
+<translation id="3865754807470779944">Chrome <ph name="PRODUCT_VERSION" /> хувилбарыг суулгасан</translation>
 <translation id="3873044882194371212">Холбоосыг Chrome-н нууцлалтай цонхонд нээх</translation>
 <translation id="3889417619312448367">Google Chrome-ыг устгах</translation>
 <translation id="4050175100176540509">Хамгийн сүүлийн хувилбар дээр аюулгүй байдлын чухал сайжруулалт болон шинэ функцийг санал болгож байна.</translation>
@@ -105,8 +111,10 @@
 <translation id="4147555960264124640">Та хяналтанд байдаг дансаар нэвтэрч байгаа бөгөөд администраторт таны Google Chrome-ийн профайлыг хянах боломжийг олгож байна. Таны апп, хавчуурга, түүх, нууц үг болон бусад тохиргоо гэх мэт Chrome дата нь байнга <ph name="USER_NAME" />-д хадгалагдана. Та Google Accounts Dashboard-ийн тусламжтай эдгээр датаг устгаж болох боловч энэ датаг өөр данстай хуваалцах боломжгүй. <ph name="LEARN_MORE" /></translation>
 <translation id="4149882025268051530">Суурьлуулагч Archive файлыг задалж чадсангүй. Google Chrome-ыг дахин татаж авна уу.</translation>
 <translation id="4191857738314598978">{0,plural, =1{Chrome-г 1 хоногийн дотор дахин ажиллуулна уу}other{Chrome-г # хоногийн дотор дахин ажиллуулна уу}}</translation>
+<translation id="4205939740494406371">Chrome таны нууц үгсийг шалгах боломжгүй байна. 24 цагийн дараа дахин оролдоно уу эсвэл <ph name="BEGIN_LINK" />өөрийн Google Бүртгэл дэх нууц үгсийг шалгана уу<ph name="END_LINK" />.</translation>
 <translation id="424864128008805179">Chrome-с гарах уу?</translation>
 <translation id="4251615635259297716">Chrome өгөгдлөө энэ бүртгэл рүү холбох уу?</translation>
+<translation id="4281844954008187215">Үйлчилгээний нөхцөл</translation>
 <translation id="4293420128516039005">Төхөөрөмжүүддээ Chrome-г синк хийж, хувийн болгохын тулд нэвтрэх</translation>
 <translation id="4328355335528187361">Google Chrome Dev (mDNS-In)</translation>
 <translation id="4331809312908958774">Chrome OS</translation>
@@ -117,6 +125,7 @@
 <translation id="4450664632294415862">Chrome - Сүлжээнд нэвтрэх - <ph name="PAGE_TITLE" /></translation>
 <translation id="4458462641685292929">Google Chrome-н өөр үйл ажиллагаа явагдаж байна. Дараа дахин оролдоно уу.</translation>
 <translation id="4480040274068703980">Таныг нэвтрэхэд алдаа гарсны улмаас Chrome-ийн үйлдлийн систем таны датаг синхрончлох боломжгүй байна.</translation>
+<translation id="4521185804071812304">Заавал биш: Оношилгоо болон ашиглалтын өгөгдлийг Google-д автоматаар илгээх замаар Chrome үйлдлийн системийн онцлогууд болон гүйцэтгэлийг сайжруулахад туслах.</translation>
 <translation id="4561051373932531560">Google Chrome нь танд вэб дээр утасны дугаараа хийж Skype-аар дуудлага хийх боломжийг олгоно.</translation>
 <translation id="4567424176335768812">Та <ph name="USER_EMAIL_ADDRESS" /> ингэж нэвтэрсэн байна. Одоо та өөрийн нэвтэрсэн бүх төхөөрөмжүүд дээрээ хайлтын жагсаалт, түүх болон бусад тохиргоонууд руугаа нэвтэрч болно.</translation>
 <translation id="4571503333518166079">Chrome-н мэдэгдлийн тохиргоо хэсэгт очих</translation>
@@ -140,7 +149,6 @@
 
 Зарим функц ажиллахгүй байж болох юм. Өөр профайл тодорхойл эсвэл Chrome-ийн шинэ хувилбарыг хэрэглэнэ үү.</translation>
 <translation id="5193136243808726294">Google Chrome үйлдлийн систем энэ хуудсыг нээх боломжгүй</translation>
-<translation id="5204098752394657250">Google Chrome <ph name="TERMS_OF_SERVICE_LINK" /> Үйлчилгээний нөхцөл <ph name="END_TERMS_OF_SERVICE_LINK" /></translation>
 <translation id="5251420635869119124">Зочид ч бусдаас хоцролгүй Chrome-ийг бүх талаар нь ашиглах боломжтой.</translation>
 <translation id="532046782124376502">Анхааруулга: Google Chrome таны өргөтгөлийг хөтчийн түүх бичихээс сэргийлэх боломжгүй. Энэ өргөтгөлийг үл танигдах горимд идэвхгүй болгохын тулд энэ сонголтыг сонгохгүй орхино уу.</translation>
 <translation id="5386244825306882791">Энэ нь мөн таныг Chrome эхлүүлэхэд ямар хуудаснуудыг харуулах эсвэл Omnibox-оос хайхыг хянадаг.</translation>
@@ -174,7 +182,7 @@ Google Chrome таны тохируулгыг дахин сэргээх боло
 <translation id="6291089322031436445">Chrome Dev Апп</translation>
 <translation id="6291549208091401781">Google Chrome-г таны компьютерийн бүх хэрэглэгчид суулгасан.</translation>
 <translation id="6338556085225130112">Google Chrome-г шинэчилж байна</translation>
-<translation id="6368958679917195344">Chrome OS-ийг нэмэлт <ph name="BEGIN_LINK_CROS_OSS" /> нээлттэй эхийн програм хангамжаар ажиллуулж байна <ph name="END_LINK_CROS_OSS" />.</translation>
+<translation id="6368958679917195344">Chrome OS-ийг нэмэлт <ph name="BEGIN_LINK_CROS_OSS" /> нээлттэй эхийн программ хангамжаар ажиллуулж байна <ph name="END_LINK_CROS_OSS" />.</translation>
 <translation id="6515495397637126556"><ph name="PAGE_TITLE" /> - Google Chrome Дев</translation>
 <translation id="6566149418543181476">Google Chrome-г шинэчилж байна (<ph name="PROGRESS_PERCENT" />)</translation>
 <translation id="6676384891291319759">Интернэтэд нэвтрэх</translation>
@@ -187,9 +195,11 @@ Google Chrome таны тохируулгыг дахин сэргээх боло
 <translation id="6967962315388095737">mDNS урсгалыг зөвшөөрөх Google Chrome Бэта-н дотоод дүрэм.</translation>
 <translation id="6982337800632491844"><ph name="DOMAIN" />-аас таныг энэ төхөөрөмжийг ашиглахаасаа өмнө дараах үйлчилгээний нөхцлийг уншиж, хүлээн зөвшөөрсөн байхыг шаардаж байна. Эдгээр нөхцлүүд нь Google Chrome OS нөхцлүүдийг өргөтгөж, өөрчилж бас хязгаарлахгүй.</translation>
 <translation id="6989339256997917931">Google Chrome шинэчлэгдсэн байна, гэхдээ та үүнийг ядаж 30 хоног ч ашиглаагүй байна.</translation>
+<translation id="7062128746136194023">Таны эцэг эх Chrome-н "Сайтууд, аппууд болон өргөтгөлүүдийн зөвшөөрөл"-ийг унтраасан байна. Энэ <ph name="EXTENSION_TYPE_PARAMETER" />-г нэмэхийг зөвшөөрдөггүй.</translation>
 <translation id="7098166902387133879">Google Chrome таны микрофоныг ашиглаж байна.</translation>
 <translation id="7106741999175697885">Асуудлын менежер - Google Chrome</translation>
 <translation id="7140653346177713799">{COUNT,plural, =0{Chrome-н шинэ шинэчлэлт боломжтой байгаа бөгөөд таныг дахин ачаалах үед түүнийг хэрэгжүүлэх болно.}=1{Chrome-н шинэ шинэчлэлт боломжтой байгаа бөгөөд таныг дахин ачаалах үед түүнийг хэрэгжүүлэх болно. Таны нууцлалтай цонхыг дахин нээхгүй.}other{Chrome-н шинэ шинэчлэлт боломжтой байгаа бөгөөд таныг дахин ачаалах үед түүнийг хэрэгжүүлэх болно. Таны # нууцлалтай цонхыг дахин нээхгүй.}}</translation>
+<translation id="7155997830309522122">Хэрэв тийм бол Chrome-д хадгалсан нууц үгээ засаж, шинэ нууц үгтэйгээ тааруулна уу.</translation>
 <translation id="7242029209006116544">Та удирдлагатай бүртгэлээр нэвтрэн орсноор үүний админд нь өөрийнхөө Google Chrome-ын мэдээллийг хянах эрхийг өгөх болно.  Жишээ нь, таны Chrome-ын мэдээлэл,  хадгалагдсан хуудсууд,  түүх, нууц үг болон бусад тохиргоонууд <ph name="USER_NAME" /> руу  тэр чигтээ нэгтгэгдэх болно.  Та Google-ийн Хяналтын Самбараар дамжуулан энэ мэдээллийг устгах боломжтой хэдий ч энэ мэдээллийг өөр бүртгэлтэй холбох боломжгүй болно. Харин та одоо байгаа Chrome-ын мэдээллийг тусад нь хадгалахын тулд шинэ хэрэглэгч үүсгэж болно. <ph name="LEARN_MORE" /></translation>
 <translation id="7295052994004373688">Энэ хэлийг Google Chrome UI-г харуулахад ашигладаг</translation>
 <translation id="7296210096911315575">Ашиглалт болон аюулгүй байдлын чухал мэдээлэл</translation>
@@ -207,7 +217,7 @@ Google Chrome таны тохируулгыг дахин сэргээх боло
 <translation id="7629695634924605473">Хэрэв таны нууц үг алдагдсан байвал Chrome танд мэдэгдэнэ</translation>
 <translation id="7641148173327520642">Таны системийн админ Google Chrome-г <ph name="TARGET_URL_HOSTNAME" />-д хандахын тулд <ph name="ALTERNATIVE_BROWSER_NAME" />-г нээхээр тохируулсан байна.</translation>
 <translation id="7651907282515937834">Chrome-н байгууллагын лого</translation>
-<translation id="7747138024166251722">Суулгагч нь түр зуурын хадгалалтын санг үүсгэж чадсангүй. Дискэнд сул зай байгаа эсэхийг мөн програм хангамж суулгах зөвшөөрлийг шалгана уу.</translation>
+<translation id="7747138024166251722">Суулгагч нь түр зуурын хадгалалтын санг үүсгэж чадсангүй. Дискэнд сул зай байгаа эсэхийг мөн программ хангамж суулгах зөвшөөрлийг шалгана уу.</translation>
 <translation id="7761834446675418963">Chrome-ыг нээж хайлтаа эхлүүлэх нэрэн дээрээ дарна уу.</translation>
 <translation id="7777080907402804672">Хэрэв зурагт хэрэгтэй тайлбар байхгүй бол Chrome танд тайлбар өгөхөөр оролдох болно. Тайлбар үүсгэхийн тулд зургийг Google-д илгээнэ. Та үүнийг хүссэн үедээ тохиргоонд унтрааж болно.</translation>
 <translation id="7781002470561365167">Google Chrome-ийн шинэ хувилбар боломжтой байна.</translation>
@@ -219,7 +229,6 @@ Google Chrome таны тохируулгыг дахин сэргээх боло
 <translation id="7890208801193284374">Нэг компьютерыг олон хэрэглэгч хуваан хэрэглэж байгаа тохиолдолд хэрэглэгч бүр өөрийн хүссэнээр Chrome-ыг тохируулж, хайлт хийх боломжтой.</translation>
 <translation id="7896673875602241923">Өмнө нь хэн нэгэн энэ компьютероос Chrome-д <ph name="ACCOUNT_EMAIL_LAST" /> бүртгэлээр нэвтэрсэн байна. Мэдээллээ тусaд нь байлгахын тулд Chrome-н шинэ хэрэглэгч үүсгэнэ үү.</translation>
 <translation id="7905891027772979035">Chrome таны өргөтгөлүүдийг шалгах боломжгүй байна. Дараа дахин оролдоно уу.</translation>
-<translation id="7916016681687251387">Chrome үйлдлийн систем таны өгөгдлийг синк хийж чадсангүй. Одоо засна уу.</translation>
 <translation id="7930071585467473040">Google Chrome нь нууц үгс хуулахыг оролдож байна.</translation>
 <translation id="7962410387636238736">Энэ компьютер Windows XP болон Windows Vista-г дэмжихээ больсон тул цаашид Google Chrome-н шинэчлэлтийг авахгүй.</translation>
 <translation id="8008534537613507642">Chrome-ийг дахин суулгах</translation>
@@ -227,17 +236,19 @@ Google Chrome таны тохируулгыг дахин сэргээх боло
 <translation id="8129812357326543296">Google Chrome-ийн тухай</translation>
 <translation id="8255190535488645436">Google Chrome нь таны камер болон микрофоныг ашиглаж байна.</translation>
 <translation id="8286862437124483331">Google Chrome нь нууц үгийг харуулахыг оролдож байна. Үүнийг зөвшөөрөхийн тулд Windows-ийн нууц үгээ бичиж оруулна уу.</translation>
+<translation id="828798499196665338">Таны эцэг эх Chrome-н "Сайтууд, аппууд болон өргөтгөлүүдийн зөвшөөрөл"-ийг унтраасан байна. Энэ <ph name="EXTENSION_TYPE_PARAMETER" />-г идэвхжүүлэхийг зөвшөөрдөггүй.</translation>
 <translation id="8290100596633877290">Өө! Google Chrome гэмтсэн байна. Дахин эхлүүлэх үү?</translation>
 <translation id="8342675569599923794">Энэ файл аюултай тул Chrome блоклосон байна.</translation>
 <translation id="8370517070665726704">Зохиогчийн эрх <ph name="YEAR" /> Google ХХК. Бүх эрх хуулиар хамгаалагдсан.</translation>
 <translation id="840084489713044809">Google Chrome таны нууц үгийг экспортлох хүсэлтэй байна.</translation>
-<translation id="8455999171311319804">Сонголтын: Оношилгоо болон хэрэглээний өгөгдлийг Google-д илгээж, Chrome үйлдлийн системийг сайжруулахад тусална уу.</translation>
 <translation id="8498858610309223613">Google Chrome-н аюулгүй байдлын тусгай шинэчлэлтийг хийж дууслаа. Одоо дахин эхлүүлнэ үү. Бид таны табыг сэргээх болно.</translation>
 <translation id="8521348052903287641">mDNS урсгалыг зөвшөөрөх Google Chrome-н дотоод дүрэм.</translation>
 <translation id="8540666473246803645">Google Chrome</translation>
 <translation id="8556340503434111824">Google Chrome-ийн шинэ хувилбар боломжтой байгаа бөгөөд энэ нь урьд урьдныхаас ч илүү хурдан.</translation>
 <translation id="8614913330719544658">Google Chrome ажиллахгүй байна. Дахин эхүүлэх үү?</translation>
+<translation id="861702415419836452">Орчин тойрны тань 3D газрын зургийг үүсгэхийн тулд таны камерт хандах зөвшөөрөл Chrome-д шаардлагатай</translation>
 <translation id="8625237574518804553">{0,plural, =1{Chrome-г 1 минутын дотор дахин ажиллуулна}other{Chrome-г # минутын дотор дахин ажиллуулна}}</translation>
+<translation id="8641606876632989680">Chrome нь таныг алдагдсан нууц үгээр нэвтрэх үед танд мэдэгдэнэ</translation>
 <translation id="8669527147644353129">Google Chrome Туслагч</translation>
 <translation id="8679801911857917785">Энэ нь мөн таныг Chrome-ыг эхлүүлэх үед гарч ирдэг хуудсыг хянадаг.</translation>
 <translation id="870251953148363156">Google Chrome-г шинэчлэх</translation>

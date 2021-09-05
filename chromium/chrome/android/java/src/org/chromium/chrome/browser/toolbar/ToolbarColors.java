@@ -22,12 +22,15 @@ import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabThemeColorHelper;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
+import org.chromium.chrome.features.start_surface.StartSurfaceConfiguration;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.ui.util.ColorUtils;
 
-import org.chromium.chrome.browser.tab.TabImpl;
+import android.app.Activity;
+import org.chromium.base.ContextUtils;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
+import org.chromium.chrome.browser.ChromeActivity;
 
 /**
  * Helpers to determine colors in toolbars.
@@ -106,11 +109,15 @@ public class ToolbarColors {
 
         // Note(david@vivaldi.com) When in tab strip mode use the default theme color. This affects
         // while scrolling a web-page.
-        if (SharedPreferencesManager.getInstance().readBoolean(
-                    VivaldiPreferences.SHOW_TAB_STRIP, true)
-                || ((TabImpl) tab).getActivity().isTablet()) {
-            return ChromeColors.getDefaultThemeColor(((TabImpl) tab).getActivity().getResources(),
-                    ((TabImpl) tab).getActivity().getCurrentTabModel().isIncognito());
+        Activity activity = ContextUtils.activityFromContext(tab.getContext());
+        if (activity instanceof ChromeActivity) {
+            ChromeActivity chromeActivity = (ChromeActivity) activity;
+            if (SharedPreferencesManager.getInstance().readBoolean(
+                        VivaldiPreferences.SHOW_TAB_STRIP, true)
+                    || chromeActivity.isTablet()) {
+                return ChromeColors.getDefaultThemeColor(
+                        chromeActivity.getResources(), tab.isIncognito());
+            }
         }
 
         return TabThemeColorHelper.getColor(tab);
@@ -173,6 +180,8 @@ public class ToolbarColors {
         final boolean isHorizontalTabSwitcherEnabled = ChromeFeatureList.isInitialized()
                 && ChromeFeatureList.isEnabled(ChromeFeatureList.HORIZONTAL_TAB_SWITCHER_ANDROID);
         final boolean isTabGridEnabled = TabUiFeatureUtilities.isGridTabSwitcherEnabled();
-        return (isAccessibilityEnabled || isHorizontalTabSwitcherEnabled || isTabGridEnabled);
+        final boolean isStartSurfaceEnabled = StartSurfaceConfiguration.isStartSurfaceEnabled();
+        return (isAccessibilityEnabled || isHorizontalTabSwitcherEnabled || isTabGridEnabled
+                || isStartSurfaceEnabled);
     }
 }

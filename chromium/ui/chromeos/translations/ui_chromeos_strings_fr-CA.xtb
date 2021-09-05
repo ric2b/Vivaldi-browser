@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">Clavier allemand</translation>
 <translation id="1972984168337863910">Développer les panneaux de commentaires sur les fichiers</translation>
 <translation id="1984603991036629094">Clavier phonétique arménien</translation>
+<translation id="1995337122023280937">Accéder au dossier du fichier</translation>
 <translation id="2001796770603320721">Gérer dans Google Disque</translation>
 <translation id="2009067268969781306">Le formatage d'un lecteur effacera toutes les données qu'il contient. Cette action est irréversible.</translation>
 <translation id="2028997212275086731">Archive RAR</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">Impossible d'accéder à Google Disque. Veuillez vous <ph name="BEGIN_LINK" />déconnecter<ph name="END_LINK" />, puis vous reconnecter.</translation>
 <translation id="2649120831653069427">Poisson-arc-en-ciel</translation>
 <translation id="2661146741306740526">16:9</translation>
+<translation id="2664412712123763093">Lieu du fichier</translation>
 <translation id="2672394958563893062">Une erreur s'est produite. Cliquez pour redémarrer depuis le début.</translation>
 <translation id="2676946222714718093">En cours de lecture sur</translation>
 <translation id="2735698359135166290">Clavier roumain standard</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" /> erreurs.</translation>
 <translation id="3519867315646775981">Translittération (shalom ← שלום)</translation>
 <translation id="3522708245912499433">Portugais</translation>
+<translation id="3524311639100184459">Attention : Ces fichiers sont temporaires et peuvent être automatiquement supprimés pour libérer de l'espace disque.  <ph name="BEGIN_LINK" />En savoir plus<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Dossier</translation>
 <translation id="3549797760399244642">Accéder à drive.google.com...</translation>
 <translation id="357479282490346887">Lituanien</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">Kiwi</translation>
 <translation id="3966388904776714213">Lecteur audio</translation>
 <translation id="4002066346123236978">Titre</translation>
+<translation id="4065397611279318371">Pour ouvrir des fichiers avec des applications de <ph name="APP_NAME" />, déplacez-les d'abord dans le dossier <ph name="SHARED_DIRECTORY_LABEL" />.</translation>
 <translation id="4070370845051020638">Méthode d'entrée cantonaise</translation>
 <translation id="4072248638558688893">Clavier tamoul (phonétique)</translation>
 <translation id="4124935795427217608">Licorne</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">Correction automatique</translation>
 <translation id="4881695831933465202">Ouvrir</translation>
 <translation id="4886021172213954916">Clavier tamoul (machine à écrire)</translation>
+<translation id="4892969127351273348">Impossible d'ouvrir avec <ph name="APP_NAME" /></translation>
 <translation id="4905417359854579806">Prêt à sauvegarder <ph name="FILE_COUNT" /></translation>
 <translation id="4924638091161556692">Ajustée</translation>
 <translation id="4935975195727477204">Gazania</translation>
@@ -501,6 +506,7 @@
 <translation id="6806699711453372963">Gérer le partage Linux</translation>
 <translation id="6808193438228982088">Renard</translation>
 <translation id="6820687829547641339">Archive tar compressée avec gzip</translation>
+<translation id="6823166707458800069">Tous les fichiers enregistrés dans ce dossier sont automatiquement sauvegardés en ligne.</translation>
 <translation id="6825883775269213504">Russe</translation>
 <translation id="6827236167376090743">Cette vidéo va être lue en boucle.</translation>
 <translation id="6847101934483209767"><ph name="ENTRY_NAME" /> retiré de la sélection.</translation>
@@ -557,6 +563,7 @@
 <translation id="7417705661718309329">Carte Google</translation>
 <translation id="7419631653042041064">Clavier catalan</translation>
 <translation id="7434823369735508263">Clavier Dvorak britannique</translation>
+<translation id="7447678886297481665">Les fichiers dans ce dossier sont en lecture seule. Certaines activités ne sont pas prises en charge.</translation>
 <translation id="7460898608667578234">Ukrainien</translation>
 <translation id="7474889694310679759">Clavier anglais canadien</translation>
 <translation id="7489215562877293245"><ph name="FILE_COUNT" /> trouvées

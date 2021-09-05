@@ -31,6 +31,8 @@
 #include "services/network/test/test_url_loader_factory.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/protobuf/src/google/protobuf/io/coded_stream.h"
+#include "third_party/protobuf/src/google/protobuf/io/zero_copy_stream_impl_lite.h"
 #include "third_party/zlib/google/compression_utils.h"
 #include "url/gurl.h"
 
@@ -108,6 +110,8 @@ class FeedNetworkTest : public testing::Test {
 
   TestingPrefServiceSimple& profile_prefs() { return profile_prefs_; }
 
+  base::HistogramTester& histogram() { return histogram_; }
+
   void Respond(const GURL& url,
                const std::string& response_string,
                net::HttpStatusCode code = net::HTTP_OK,
@@ -127,6 +131,16 @@ class FeedNetworkTest : public testing::Test {
     test_factory_.AddResponse(url, std::move(head), response_string, status);
   }
 
+  std::string PrependResponseLength(const std::string& response) {
+    std::string result;
+    ::google::protobuf::io::StringOutputStream string_output_stream(&result);
+    ::google::protobuf::io::CodedOutputStream stream(&string_output_stream);
+
+    stream.WriteVarint32(static_cast<uint32_t>(response.size()));
+    stream.WriteString(response);
+    return result;
+  }
+
   network::ResourceRequest RespondToQueryRequest(
       const std::string& response_string,
       net::HttpStatusCode code) {
@@ -135,7 +149,8 @@ class FeedNetworkTest : public testing::Test {
         test_factory()->GetPendingRequest(0);
     CHECK(pending_request);
     network::ResourceRequest resource_request = pending_request->request;
-    Respond(pending_request->request.url, response_string, code);
+    Respond(pending_request->request.url,
+            PrependResponseLength(response_string), code);
     task_environment_.FastForwardUntilNoTasksRemain();
     return resource_request;
   }
@@ -167,6 +182,7 @@ class FeedNetworkTest : public testing::Test {
   scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory_;
   base::SimpleTestTickClock test_tick_clock_;
   TestingPrefServiceSimple profile_prefs_;
+  base::HistogramTester histogram_;
 };
 
 TEST_F(FeedNetworkTest, SendQueryRequestEmpty) {
@@ -175,7 +191,7 @@ TEST_F(FeedNetworkTest, SendQueryRequestEmpty) {
 
   ASSERT_TRUE(receiver.GetResult());
   const QueryRequestResult& result = *receiver.GetResult();
-  EXPECT_EQ(0, result.status_code);
+  EXPECT_EQ(0, result.response_info.status_code);
   EXPECT_FALSE(result.response_body);
 }
 
@@ -186,8 +202,8 @@ TEST_F(FeedNetworkTest, SendQueryRequestSendsValidRequest) {
       RespondToQueryRequest("", net::HTTP_OK);
 
   EXPECT_EQ(
-      "https://www.google.com/httpservice/retry/InteractiveDiscoverAgaService/"
-      "FeedQuery?reqpld=%08%01%C2%3E%04%12%02%08%01&fmt=bin&hl=en",
+      "https://www.google.com/httpservice/retry/TrellisClankService/"
+      "FeedQuery?reqpld=CAHCPgQSAggB&fmt=bin&hl=en",
       resource_request.url);
   EXPECT_EQ("GET", resource_request.method);
   EXPECT_FALSE(resource_request.headers.HasHeader("content-encoding"));
@@ -195,6 +211,8 @@ TEST_F(FeedNetworkTest, SendQueryRequestSendsValidRequest) {
   EXPECT_TRUE(
       resource_request.headers.GetHeader("Authorization", &authorization));
   EXPECT_EQ(authorization, "Bearer access_token");
+  histogram().ExpectBucketCount(
+      "ContentSuggestions.Feed.Network.ResponseStatus.FeedQuery", 200, 1);
 }
 
 TEST_F(FeedNetworkTest, SendQueryRequestInvalidResponse) {
@@ -204,7 +222,7 @@ TEST_F(FeedNetworkTest, SendQueryRequestInvalidResponse) {
 
   ASSERT_TRUE(receiver.GetResult());
   const QueryRequestResult& result = *receiver.GetResult();
-  EXPECT_EQ(net::HTTP_OK, result.status_code);
+  EXPECT_EQ(net::HTTP_OK, result.response_info.status_code);
   EXPECT_FALSE(result.response_body);
 }
 
@@ -215,7 +233,11 @@ TEST_F(FeedNetworkTest, SendQueryRequestReceivesResponse) {
 
   ASSERT_TRUE(receiver.GetResult());
   const QueryRequestResult& result = *receiver.GetResult();
-  EXPECT_EQ(net::HTTP_OK, result.status_code);
+  EXPECT_EQ(net::HTTP_OK, result.response_info.status_code);
+  EXPECT_EQ(
+      "https://www.google.com/httpservice/retry/TrellisClankService/FeedQuery",
+      result.response_info.base_request_url);
+  EXPECT_NE(base::Time(), result.response_info.fetch_time);
   EXPECT_EQ(GetTestFeedResponse().response_version(),
             result.response_body->response_version());
 }
@@ -227,8 +249,11 @@ TEST_F(FeedNetworkTest, SendQueryRequestIgnoresBodyForNon200Response) {
 
   ASSERT_TRUE(receiver.GetResult());
   const QueryRequestResult& result = *receiver.GetResult();
-  EXPECT_EQ(net::HTTP_FORBIDDEN, result.status_code);
+  EXPECT_EQ(net::HTTP_FORBIDDEN, result.response_info.status_code);
   EXPECT_FALSE(result.response_body);
+  histogram().ExpectBucketCount(
+      "ContentSuggestions.Feed.Network.ResponseStatus.FeedQuery",
+      net::HTTP_FORBIDDEN, 1);
 }
 
 TEST_F(FeedNetworkTest, CancelRequest) {
@@ -248,7 +273,7 @@ TEST_F(FeedNetworkTest, RequestTimeout) {
 
   ASSERT_TRUE(receiver.GetResult());
   const QueryRequestResult& result = *receiver.GetResult();
-  EXPECT_EQ(net::ERR_TIMED_OUT, result.status_code);
+  EXPECT_EQ(net::ERR_TIMED_OUT, result.response_info.status_code);
   histogram_tester.ExpectTimeBucketCount(
       "ContentSuggestions.Feed.Network.Duration", TimeDelta::FromSeconds(30),
       1);
@@ -280,14 +305,15 @@ TEST_F(FeedNetworkTest, ParallelRequests) {
   EXPECT_TRUE(receiver2.GetResult());
 }
 
-TEST_F(FeedNetworkTest, ShouldReportRequestStatusCode) {
+TEST_F(FeedNetworkTest, ShouldReportResponseStatusCode) {
   CallbackReceiver<QueryRequestResult> receiver;
   base::HistogramTester histogram_tester;
   feed_network()->SendQueryRequest(GetTestFeedRequest(), receiver.Bind());
   RespondToQueryRequest(GetTestFeedResponse(), net::HTTP_FORBIDDEN);
+
   EXPECT_THAT(
       histogram_tester.GetAllSamples(
-          "ContentSuggestions.Feed.Network.RequestStatusCode"),
+          "ContentSuggestions.Feed.Network.ResponseStatus.FeedQuery"),
       ElementsAre(base::Bucket(/*min=*/net::HTTP_FORBIDDEN, /*count=*/1)));
 }
 
@@ -346,7 +372,7 @@ TEST_F(FeedNetworkTest, TestDurationHistogram) {
 }
 
 // Verify that the kHostOverrideHost pref overrides the feed host
-// and updates the Bless nonce if one sent in the response.
+// and returns the Bless nonce if one sent in the response.
 TEST_F(FeedNetworkTest, TestHostOverrideWithAuthHeader) {
   CallbackReceiver<QueryRequestResult> receiver;
   profile_prefs().SetString(feed::prefs::kHostOverrideHost,
@@ -359,9 +385,9 @@ TEST_F(FeedNetworkTest, TestHostOverrideWithAuthHeader) {
           "nonce=\"1234123412341234\"\n\n"));
   RespondToQueryRequest(GetTestFeedResponse(), net::HTTP_FORBIDDEN);
 
-  EXPECT_TRUE(receiver.GetResult());
+  ASSERT_TRUE(receiver.GetResult());
   EXPECT_EQ("1234123412341234",
-            profile_prefs().GetString(feed::prefs::kHostOverrideBlessNonce));
+            receiver.GetResult()->response_info.bless_nonce);
 }
 
 TEST_F(FeedNetworkTest, SendActionRequest) {
@@ -371,8 +397,10 @@ TEST_F(FeedNetworkTest, SendActionRequest) {
 
   ASSERT_TRUE(receiver.GetResult());
   const ActionRequestResult& result = *receiver.GetResult();
-  EXPECT_EQ(net::HTTP_OK, result.status_code);
+  EXPECT_EQ(net::HTTP_OK, result.response_info.status_code);
   EXPECT_TRUE(result.response_body);
+  histogram().ExpectBucketCount(
+      "ContentSuggestions.Feed.Network.ResponseStatus.UploadActions", 200, 1);
 }
 
 TEST_F(FeedNetworkTest, SendActionRequestSendsValidRequest) {

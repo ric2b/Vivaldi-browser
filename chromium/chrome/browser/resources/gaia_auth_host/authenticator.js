@@ -172,6 +172,16 @@ cr.define('cr.login', function() {
     'samlAclUrl',
   ];
 
+  /**
+   * Extract domain name from an URL.
+   * @param {string} url An URL string.
+   * @return {string} The host name of the URL.
+   */
+  function extractDomain(url) {
+    const a = document.createElement('a');
+    a.href = url;
+    return a.hostname;
+  }
 
   /**
    * Handlers for the HTML5 messages received from Gaia.
@@ -319,6 +329,7 @@ cr.define('cr.login', function() {
       this.onePasswordCallback = null;
       this.insecureContentBlockedCallback = null;
       this.samlApiUsedCallback = null;
+      this.recordSAMLProviderCallback = null;
       this.missingGaiaInfoCallback = null;
       /**
        * Callback allowing to request whether the specified user which
@@ -937,6 +948,12 @@ cr.define('cr.login', function() {
         return;
       }
 
+      if (this.recordSAMLProviderCallback && this.authFlow == AuthFlow.SAML) {
+        // Makes distinction between different SAML providers
+        this.recordSAMLProviderCallback(
+            this.samlHandler_.x509certificate || '');
+      }
+
       if (this.isSamlUserPasswordless_ && this.authFlow == AuthFlow.SAML &&
           this.email_ && this.gaiaId_) {
         // No password needed for this user, so complete immediately.
@@ -1126,7 +1143,6 @@ cr.define('cr.login', function() {
         return;
       }
 
-      this.authDomain = this.samlHandler_.authDomain;
       this.authFlow = AuthFlow.SAML;
 
       this.webview_.focus();
@@ -1236,6 +1252,14 @@ cr.define('cr.login', function() {
         return;
       }
 
+      // Ignore errors from subframe loads, as these should not cause an error
+      // screen to be displayed. When a subframe load is triggered, it means
+      // that the main frame load has succeeded, so the host is reachable in
+      // general.
+      if (!e.isTopLevel) {
+        return;
+      }
+
       this.dispatchEvent(new CustomEvent(
           'loadAbort', {detail: {error_code: e.code, src: e.url}}));
     }
@@ -1247,6 +1271,9 @@ cr.define('cr.login', function() {
     onLoadCommit_(e) {
       if (this.gaiaId_) {
         this.maybeCompleteAuth_();
+      }
+      if (e.isTopLevel) {
+        this.authDomain = extractDomain(e.url);
       }
     }
 

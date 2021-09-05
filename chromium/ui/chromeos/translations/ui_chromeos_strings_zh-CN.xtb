@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">德语键盘</translation>
 <translation id="1972984168337863910">展开文件反馈面板</translation>
 <translation id="1984603991036629094">亚美尼亚语拼音键盘</translation>
+<translation id="1995337122023280937">转到文件位置</translation>
 <translation id="2001796770603320721">在云端硬盘中管理</translation>
 <translation id="2009067268969781306">将驱动器格式化会删除其中存储的所有数据。此操作无法撤消。</translation>
 <translation id="2028997212275086731">RAR 归档</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">无法访问 Google 云端硬盘。请先<ph name="BEGIN_LINK" />退出<ph name="END_LINK" />，然后再重新登录。</translation>
 <translation id="2649120831653069427">彩虹鱼</translation>
 <translation id="2661146741306740526">16x9</translation>
+<translation id="2664412712123763093">文件位置</translation>
 <translation id="2672394958563893062">出现错误。点击可从头开始重新播放。</translation>
 <translation id="2676946222714718093">当前播放设备：</translation>
 <translation id="2735698359135166290">罗马尼亚语标准键盘</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" />个错误。</translation>
 <translation id="3519867315646775981">音译(shalom ← שלום)</translation>
 <translation id="3522708245912499433">葡萄牙语</translation>
+<translation id="3524311639100184459">警告：这些都是临时文件，可能会被系统自动删除以释放磁盘空间。<ph name="BEGIN_LINK" />了解详情<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">文件夹</translation>
 <translation id="3549797760399244642">转到 drive.google.com...</translation>
 <translation id="357479282490346887">立陶宛语</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">猕猴桃</translation>
 <translation id="3966388904776714213">音频播放器</translation>
 <translation id="4002066346123236978">标题</translation>
+<translation id="4065397611279318371">如需使用 <ph name="APP_NAME" /> 应用打开文件，请先将文件移到“<ph name="SHARED_DIRECTORY_LABEL" />”文件夹。</translation>
 <translation id="4070370845051020638">粤语输入法</translation>
 <translation id="4072248638558688893">泰米尔语键盘（注音）</translation>
 <translation id="4124935795427217608">独角兽</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">自动修正</translation>
 <translation id="4881695831933465202">打开</translation>
 <translation id="4886021172213954916">泰米尔语键盘（打字机）</translation>
+<translation id="4892969127351273348">无法使用“<ph name="APP_NAME" />”打开</translation>
 <translation id="4905417359854579806">可以开始备份 <ph name="FILE_COUNT" />了</translation>
 <translation id="4924638091161556692">已修正</translation>
 <translation id="4935975195727477204">杂色菊</translation>
@@ -495,6 +500,7 @@
 <translation id="6806699711453372963">管理 Linux 共享设置</translation>
 <translation id="6808193438228982088">狐狸</translation>
 <translation id="6820687829547641339">gzip 压缩的 tar 归档</translation>
+<translation id="6823166707458800069">系统会自动在线备份此文件夹中保存的所有文件。</translation>
 <translation id="6825883775269213504">俄语</translation>
 <translation id="6827236167376090743">此视频将不断循环播放。</translation>
 <translation id="6847101934483209767">已从所选项中移除<ph name="ENTRY_NAME" />。</translation>
@@ -551,6 +557,7 @@
 <translation id="7417705661718309329">Google 地图</translation>
 <translation id="7419631653042041064">加泰罗尼亚语键盘</translation>
 <translation id="7434823369735508263">英语（英国）德沃夏克键盘</translation>
+<translation id="7447678886297481665">此文件夹中的文件都是只读文件，所以不支持某些活动。</translation>
 <translation id="7460898608667578234">乌克兰语</translation>
 <translation id="7474889694310679759">英语（加拿大）键盘</translation>
 <translation id="7489215562877293245">找到了 <ph name="FILE_COUNT" />

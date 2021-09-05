@@ -29,7 +29,6 @@ def _ExtractImportantEnvironment(output_of_set):
   a textual dump output by the cmd.exe 'set' command."""
   envvars_to_save = (
       'clcache_.*',
-      'depot_tools_win_toolchain',
       'cipd_cache_dir', # needed by vpython
       'homedrive', # needed by vpython
       'homepath', # needed by vpython
@@ -86,7 +85,7 @@ def _LoadEnvFromBat(args):
   args = args[:]
   args.extend(('&&', 'set'))
   popen = subprocess.Popen(
-      args, shell=True, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+      args, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
   variables, _ = popen.communicate()
   if popen.returncode != 0:
     raise Exception('"%s" failed with error %d' % (args, popen.returncode))
@@ -159,6 +158,7 @@ def _LoadToolchainEnv(cpu, sdk_dir, target_store):
     # Store target must come before any SDK version declaration
     if (target_store):
       args.append(['store'])
+    args.append("10.0.18362.0") # Force Win 10 SDK version since 19041 causes build breakage
     variables = _LoadEnvFromBat(args)
   return _ExtractImportantEnvironment(variables)
 
@@ -185,6 +185,16 @@ def _LowercaseDict(d):
     A dict with both keys and values lowercased (e.g.: {'a': 'bcd'}).
   """
   return {k.lower(): d[k].lower() for k in d}
+
+
+def FindFileInEnvList(env, env_name, separator, file_name, optional=False):
+  parts = env[env_name].split(separator)
+  for path in parts:
+    if os.path.exists(os.path.join(path, file_name)):
+      return os.path.realpath(path)
+  assert optional, "%s is not found in %s:\n%s\nCheck if it is installed." % (
+      file_name, env_name, '\n'.join(parts))
+  return ''
 
 
 def main():
@@ -225,34 +235,11 @@ def main():
       env = _LoadToolchainEnv(cpu, win_sdk_path, target_store)
       env['PATH'] = runtime_dirs + os.pathsep + env['PATH']
 
-      for path in env['PATH'].split(os.pathsep):
-        if os.path.exists(os.path.join(path, 'cl.exe')):
-          vc_bin_dir = os.path.realpath(path)
-          break
-      assert vc_bin_dir, "cl.exe is not found, check if it is installed."
-
-      for path in env['LIB'].split(';'):
-        if os.path.exists(os.path.join(path, 'msvcrt.lib')):
-          vc_lib_path = os.path.realpath(path)
-          break
-      assert vc_lib_path, "msvcrt.lib is not found, check if it is installed."
-
-      for path in env['LIB'].split(';'):
-        if os.path.exists(os.path.join(path, 'atls.lib')):
-          vc_lib_atlmfc_path = os.path.realpath(path)
-          break
-      if (target_store != True):
-        # Path is assumed to exist for desktop applications.
-        assert vc_lib_atlmfc_path, (
-            "Microsoft.VisualStudio.Component.VC.ATLMFC " +
-            "is not found, check if it is installed.")
-
-      for path in env['LIB'].split(';'):
-        if os.path.exists(os.path.join(path, 'User32.Lib')):
-          vc_lib_um_path = os.path.realpath(path)
-          break
-      assert vc_lib_um_path, (
-          "User32.lib is not found, check if it is installed.")
+      vc_bin_dir = FindFileInEnvList(env, 'PATH', os.pathsep, 'cl.exe')
+      vc_lib_path = FindFileInEnvList(env, 'LIB', ';', 'msvcrt.lib')
+      vc_lib_atlmfc_path = FindFileInEnvList(
+          env, 'LIB', ';', 'atls.lib', optional=True)
+      vc_lib_um_path = FindFileInEnvList(env, 'LIB', ';', 'user32.lib')
 
       # The separator for INCLUDE here must match the one used in
       # _LoadToolchainEnv() above.

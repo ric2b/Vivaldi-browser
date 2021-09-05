@@ -15,6 +15,7 @@
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
+#include "components/url_formatter/url_formatter.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "third_party/skia/include/core/SkColor.h"
 
@@ -53,9 +54,17 @@ class AppBrowserController : public TabStripModelObserver,
   // Convenience wrapper for checking IsForExperimentalWebAppBrowser() on
   // |browser|'s HostedAppBrowserController if it exists.
   static bool IsForWebAppBrowser(const Browser* browser);
+  static bool IsForWebAppBrowser(const Browser* browser, const AppId& app_id);
 
   // Renders |url|'s origin as Unicode.
-  static base::string16 FormatUrlOrigin(const GURL& url);
+  static base::string16 FormatUrlOrigin(
+      const GURL& url,
+      url_formatter::FormatUrlTypes format_types =
+          url_formatter::kFormatUrlOmitUsernamePassword |
+          url_formatter::kFormatUrlOmitHTTPS |
+          url_formatter::kFormatUrlOmitHTTP |
+          url_formatter::kFormatUrlOmitTrailingSlashOnBareHostname |
+          url_formatter::kFormatUrlOmitTrivialSubdomains);
 
   // Returns a theme built from the current page or app's theme color.
   const ui::ThemeProvider* GetThemeProvider() const;
@@ -77,11 +86,6 @@ class AppBrowserController : public TabStripModelObserver,
 
   // Whether to show content settings in the titlebar toolbar.
   virtual bool HasTitlebarContentSettings() const;
-
-#if defined(OS_CHROMEOS)
-  // Whether to use the Terminal System App menu rather than the default menu.
-  virtual bool UseTitlebarTerminalSystemAppMenu() const;
-#endif
 
   // Whether to show the Back and Refresh buttons in the web app toolbar.
   virtual bool HasMinimalUiButtons() const = 0;

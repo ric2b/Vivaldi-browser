@@ -91,7 +91,7 @@ void GetSizeStatsAsync(const base::FilePath& mount_path,
 }
 
 // Retrieves the maximum file name length of the file system of |path|.
-// Returns 0 if it could not be queried.
+// Returns a default of 255 if it could not be queried.
 size_t GetFileNameMaxLengthAsync(const std::string& path) {
   struct statvfs stat = {};
   if (HANDLE_EINTR(statvfs(path.c_str(), &stat)) != 0) {
@@ -502,7 +502,7 @@ void FileManagerPrivateInternalAddFileWatchFunction::
 
   watcher_manager->AddWatcher(
       file_system_url, false /* recursive */,
-      base::Bind(
+      base::BindOnce(
           &StatusCallbackToResponseCallback,
           base::Bind(&PostResponseCallbackTaskToUIThread,
                      base::Bind(&FileWatchFunctionBase::RespondWith, this))),
@@ -535,7 +535,7 @@ void FileManagerPrivateInternalRemoveFileWatchFunction::
 
   watcher_manager->RemoveWatcher(
       file_system_url, false /* recursive */,
-      base::Bind(
+      base::BindOnce(
           &StatusCallbackToResponseCallback,
           base::Bind(&PostResponseCallbackTaskToUIThread,
                      base::Bind(&FileWatchFunctionBase::RespondWith, this))));

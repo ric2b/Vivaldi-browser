@@ -29,11 +29,14 @@ import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.share.ShareDelegateImpl;
 import org.chromium.chrome.browser.share.ShareHelper;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabImpl;
+import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.ui.RootUiCoordinator;
 import org.chromium.chrome.browser.util.ChromeFileProvider;
 import org.chromium.chrome.browser.widget.bottomsheet.BottomSheetController;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.chrome.test.util.browser.tabmodel.MockTabModelSelector;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.base.WindowAndroid;
 
@@ -143,6 +146,12 @@ public class ShareIntentTest {
         }
 
         @Override
+        public TabModelSelector getTabModelSelector() {
+            // TabModelSelector remains uninitialized for this test. Return a mock instead.
+            return new MockTabModelSelector(1, 0, null);
+        }
+
+        @Override
         public ObservableSupplier<ShareDelegate> getShareDelegateSupplier() {
             return mActivity.getShareDelegateSupplier();
         }
@@ -167,10 +176,10 @@ public class ShareIntentTest {
         });
         RootUiCoordinator rootUiCoordinator = TestThreadUtils.runOnUiThreadBlocking(() -> {
             return new RootUiCoordinator(mockActivity, null,
-                    mockActivity.getShareDelegateSupplier(), mockActivity.getActivityTabProvider());
+                    mockActivity.getShareDelegateSupplier(), mockActivity.getActivityTabProvider(),
+                    null, null);
         });
-        ShareHelper.setLastShareComponentName(
-                new ComponentName("test.package", "test.activity"), null);
+        ShareHelper.setLastShareComponentName(new ComponentName("test.package", "test.activity"));
         // Skips the capture of screenshot and notifies with an empty file.
         ShareDelegateImpl.setScreenshotCaptureSkippedForTesting(true);
 
@@ -183,7 +192,7 @@ public class ShareIntentTest {
             };
         });
         TestThreadUtils.runOnUiThreadBlocking(
-                () -> mockActivity.getActivityTab().updateAttachment(window, null));
+                () -> ((TabImpl) mockActivity.getActivityTab()).updateAttachment(window, null));
 
         TestThreadUtils.runOnUiThreadBlocking(
                 ()
@@ -192,7 +201,7 @@ public class ShareIntentTest {
 
         mockActivity.waitForFileCheck();
 
-        ShareHelper.setLastShareComponentName(new ComponentName("", ""), null);
+        ShareHelper.setLastShareComponentName(new ComponentName("", ""));
     }
 
     @Before

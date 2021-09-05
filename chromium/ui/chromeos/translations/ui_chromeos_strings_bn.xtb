@@ -29,7 +29,7 @@
 <translation id="1243314992276662751">আপলোড</translation>
 <translation id="1249250836236328755">প্রকার</translation>
 <translation id="1278813325885878377">হাঙ্গেরিয়ান কোয়ার্টি কীবোর্ড</translation>
-<translation id="1293556467332435079">ফাইল</translation>
+<translation id="1293556467332435079">Files</translation>
 <translation id="1297922636971898492">এই মুহূর্তে Google ড্রাইভ উপলব্ধ নেই৷ একবার Google ড্রাইভ উপলব্ধ হলেই আপলোড করার কাজটি স্বয়ংক্রিয়ভাবে পুনরায় চালু হবে৷</translation>
 <translation id="1307931752636661898">Linux ফাইল দেখা যায়নি</translation>
 <translation id="1310751437842832374">লিপ্যন্তরকরণ (mausam → ନମସ୍ତେ)</translation>
@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">জার্মান কীবোর্ড</translation>
 <translation id="1972984168337863910">ফাইল ফিডব্যাক প্যানেল বড় করুন</translation>
 <translation id="1984603991036629094">আর্মেনিয় ফোনেটিক কীবোর্ড</translation>
+<translation id="1995337122023280937">ফাইল লোকেশনে যান</translation>
 <translation id="2001796770603320721">ড্রাইভে পরিচালনা করুন</translation>
 <translation id="2009067268969781306">ড্রাইভ ফরম্যাট করা হলে, সেটিতে সেভ করা সব ডেটা মুছে যাবে। সেটিকে আর আগের অবস্থায় ফেরানো যাবে না।</translation>
 <translation id="2028997212275086731">RAR আর্কাইভ</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">Google ড্রাইভে পৌঁছানো যাবে না৷ অনুগ্রহ করে <ph name="BEGIN_LINK" />লগ-আউট<ph name="END_LINK" /> করুন এবং আবার লগ-ইন করুন৷</translation>
 <translation id="2649120831653069427">রেনবোফিশ</translation>
 <translation id="2661146741306740526">১৬x৯</translation>
+<translation id="2664412712123763093">ফাইলের লোকেশন</translation>
 <translation id="2672394958563893062">একটি ত্রুটি ঘটেছে৷ শুরু থেকে পুনরায় আরম্ভ করতে ক্লিক করুন৷</translation>
 <translation id="2676946222714718093">এতে প্লে হচ্ছে</translation>
 <translation id="2735698359135166290">রোমানিয়ান আদর্শ কীবোর্ড</translation>
@@ -160,7 +162,7 @@
 <translation id="2902734494705624966">মার্কিন যুক্তরাষ্ট্রীয় বর্ধিত</translation>
 <translation id="2923240520113693977">এস্তোনীয়</translation>
 <translation id="2924296707677495905">লিপ্যন্তরকরণ (namaskaram → ನಮಸ್ಕಾರ)</translation>
-<translation id="2925966894897775835">পত্রকগুলি</translation>
+<translation id="2925966894897775835">Sheets</translation>
 <translation id="2938685643439809023">মঙ্গোলীয়</translation>
 <translation id="2942290791863759244">জার্মান NEO 2 কীবোর্ড</translation>
 <translation id="2943400156390503548">স্লাইড</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" />টি ত্রুটি৷</translation>
 <translation id="3519867315646775981">লিপ্যন্তরকরণ (shalom ← שלום)</translation>
 <translation id="3522708245912499433">পর্তুগিজ</translation>
+<translation id="3524311639100184459">সতর্কতা: এই ফাইলগুলি অস্থায়ী এবং ডিস্কের জায়গা খালি করতে হয়ত অটোমেটিক মুছে ফেলা হবে।  <ph name="BEGIN_LINK" />আরও জানুন<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">ফোল্ডার</translation>
 <translation id="3549797760399244642">drive.google.com এ যান...</translation>
 <translation id="357479282490346887">লিথুয়ানিয়ান</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">কিউই</translation>
 <translation id="3966388904776714213">অডিও প্লেয়ার</translation>
 <translation id="4002066346123236978">শিরোনাম</translation>
+<translation id="4065397611279318371"><ph name="APP_NAME" /> অ্যাপের সাহায্যে কোনও ফাইল খুলতে, আগে সেটিকে <ph name="SHARED_DIRECTORY_LABEL" /> ফোল্ডারে সরান।</translation>
 <translation id="4070370845051020638">ক্যান্টনীজ ইনপুট পদ্ধতি</translation>
 <translation id="4072248638558688893">তামিল কীবোর্ড (ফোনেটিক)</translation>
 <translation id="4124935795427217608">ইউনিকর্ন</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">স্বতঃ-ফিক্স</translation>
 <translation id="4881695831933465202">খুলুন</translation>
 <translation id="4886021172213954916">তামিল কীবোর্ড (টাইপরাইটার)</translation>
+<translation id="4892969127351273348"><ph name="APP_NAME" /> দিয়ে খোলা যায়নি</translation>
 <translation id="4905417359854579806"><ph name="FILE_COUNT" />টির ব্যাকআপ নিতে প্রস্তুত</translation>
 <translation id="4924638091161556692">স্থির</translation>
 <translation id="4935975195727477204">গাজানিয়া ফুল</translation>
@@ -499,6 +504,7 @@
 <translation id="6806699711453372963">Linux শেয়ারিং পরিচালনা করুন</translation>
 <translation id="6808193438228982088">শিয়াল</translation>
 <translation id="6820687829547641339">Gzip কম্প্রেসযুক্ত টার আর্কাইভ</translation>
+<translation id="6823166707458800069">এই ফোল্ডারে সেভ করা সব ফাইল অনলাইনে অটোমেটিক ব্যাক-আপ নেওয়া হয়েছে।</translation>
 <translation id="6825883775269213504">রাশিয়ান</translation>
 <translation id="6827236167376090743">পাশাপাশি এই ভিডিওটি দীর্ঘ সময় ধরে চলতে থাকবে৷</translation>
 <translation id="6847101934483209767">বেছে নেওয়া ফাইল বা ফোল্ডারগুলি থেকে <ph name="ENTRY_NAME" /> সরিয়ে দেওয়া হয়েছে।</translation>
@@ -555,6 +561,7 @@
 <translation id="7417705661718309329">Google ম্যাপ</translation>
 <translation id="7419631653042041064">ক্যাটালান কীবোর্ড</translation>
 <translation id="7434823369735508263">ইউকে দভোরাক কীবোর্ড</translation>
+<translation id="7447678886297481665">এই ফোল্ডারের ফাইল শুধু পড়া যায়। কিছু অ্যাক্টিভিটি এখানে কাজ করবে না।</translation>
 <translation id="7460898608667578234">ইউক্রেনীয়</translation>
 <translation id="7474889694310679759">কানাডিয় ইংরাজি কীবোর্ড</translation>
 <translation id="7489215562877293245"><ph name="FILE_COUNT" />টি পাওয়া গেছে

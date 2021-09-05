@@ -24,11 +24,13 @@ XRPlane::XRPlane(uint64_t id,
               mojo::ConvertTo<HeapVector<Member<DOMPointReadOnly>>>(
                   plane_data.polygon),
               timestamp) {
-  // No need for else - if pose is not present, the default-constructed unique
-  // ptr is fine.
-  if (plane_data.pose) {
-    SetMojoFromPlane(
-        mojo::ConvertTo<blink::TransformationMatrix>(plane_data.pose));
+  // No need for else - if mojo_from_plane is not present, the
+  // default-constructed unique ptr is fine. It would signify that the plane
+  // exists and is tracked by the underlying system, but its current location is
+  // unknown.
+  if (plane_data.mojo_from_plane) {
+    SetMojoFromPlane(mojo::ConvertTo<blink::TransformationMatrix>(
+        plane_data.mojo_from_plane));
   }
 }
 
@@ -91,30 +93,23 @@ HeapVector<Member<DOMPointReadOnly>> XRPlane::polygon() const {
 
 ScriptPromise XRPlane::createAnchor(ScriptState* script_state,
                                     XRRigidTransform* initial_pose,
-                                    XRSpace* space,
                                     ExceptionState& exception_state) {
+  DVLOG(2) << __func__;
+
+  if (!session_->IsFeatureEnabled(device::mojom::XRSessionFeature::ANCHORS)) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
+                                      XRSession::kAnchorsFeatureNotSupported);
+    return {};
+  }
+
   if (!initial_pose) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
                                       XRSession::kNoRigidTransformSpecified);
     return {};
   }
 
-  if (!space) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
-                                      XRSession::kNoSpaceSpecified);
-    return {};
-  }
-
-  auto maybe_mojo_from_offset = space->MojoFromOffsetMatrix();
-
-  if (!maybe_mojo_from_offset) {
-    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
-                                      XRSession::kUnableToRetrieveMatrix);
-    return {};
-  }
-
-  return session_->CreateAnchor(script_state, initial_pose->TransformMatrix(),
-                                *maybe_mojo_from_offset, id_, exception_state);
+  return session_->CreatePlaneAnchorHelper(
+      script_state, initial_pose->TransformMatrix(), id_, exception_state);
 }
 
 void XRPlane::Update(const device::mojom::blink::XRPlaneData& plane_data,
@@ -125,9 +120,9 @@ void XRPlane::Update(const device::mojom::blink::XRPlaneData& plane_data,
 
   orientation_ = mojo::ConvertTo<base::Optional<blink::XRPlane::Orientation>>(
       plane_data.orientation);
-  if (plane_data.pose) {
-    SetMojoFromPlane(
-        mojo::ConvertTo<blink::TransformationMatrix>(plane_data.pose));
+  if (plane_data.mojo_from_plane) {
+    SetMojoFromPlane(mojo::ConvertTo<blink::TransformationMatrix>(
+        plane_data.mojo_from_plane));
   } else {
     mojo_from_plane_ = nullptr;
   }

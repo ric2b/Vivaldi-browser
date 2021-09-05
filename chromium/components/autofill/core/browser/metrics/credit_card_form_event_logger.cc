@@ -13,6 +13,7 @@
 #include "components/autofill/core/browser/form_data_importer.h"
 #include "components/autofill/core/browser/payments/credit_card_access_manager.h"
 #include "components/autofill/core/browser/validation.h"
+#include "components/autofill/core/common/autofill_tick_clock.h"
 
 namespace autofill {
 
@@ -35,6 +36,19 @@ void CreditCardFormEventLogger::OnDidSelectCardSuggestion(
     const FormStructure& form,
     AutofillSyncSigninState sync_state) {
   sync_state_ = sync_state;
+
+  // When server nicknames are available, if any card is selected, log the
+  // selection duration.
+  if (has_server_nickname_ && !has_logged_suggestion_selected_timestamp_) {
+    has_logged_suggestion_selected_timestamp_ = true;
+    base::TimeTicks now = AutofillTickClock::NowTicks();
+    // Suggestion selection should always chronologically follow suggestion
+    // shown.
+    DCHECK(now > first_suggestion_shown_timestamp_);
+    base::UmaHistogramMediumTimes(
+        "Autofill.FormEvents.CreditCard.WithServerNickname.SelectionDuration",
+        now - first_suggestion_shown_timestamp_);
+  }
 
   // No need to log selections for local/full-server cards -- a selection is
   // always followed by a form fill, which is logged separately.
@@ -151,6 +165,8 @@ void CreditCardFormEventLogger::LogUkmInteractedWithForm(
 }
 
 void CreditCardFormEventLogger::OnSuggestionsShownOnce() {
+  // Record the timestamp of the first suggestion shown.
+  first_suggestion_shown_timestamp_ = AutofillTickClock::NowTicks();
 }
 
 void CreditCardFormEventLogger::OnSuggestionsShownSubmittedOnce(
@@ -169,6 +185,14 @@ void CreditCardFormEventLogger::OnLog(const std::string& name,
   // that form interactions on nonsecure pages can be analyzed on their own.
   if (!is_context_secure_) {
     base::UmaHistogramEnumeration(name + ".OnNonsecurePage", event,
+                                  NUM_FORM_EVENTS);
+  }
+
+  // Log a different histogram for credit card forms with server nickname
+  // available so that selection rate with server nickname can be compared on
+  // their own.
+  if (has_server_nickname_) {
+    base::UmaHistogramEnumeration(name + ".WithServerNickname", event,
                                   NUM_FORM_EVENTS);
   }
 }

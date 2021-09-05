@@ -97,6 +97,7 @@ extern const char kHistogramInputToFirstPaint[];
 extern const char kBackgroundHistogramInputToFirstPaint[];
 extern const char kHistogramInputToFirstContentfulPaint[];
 extern const char kBackgroundHistogramInputToFirstContentfulPaint[];
+extern const char kHistogramBackForwardCacheEvent[];
 
 // Split histograms recorded only when the first rendering cycle has been
 // delayed for web font preloading.
@@ -105,6 +106,16 @@ extern const char kHistogramFontPreloadFirstPaint[];
 extern const char kHistogramFontPreloadFirstContentfulPaint[];
 extern const char kHistogramFontPreloadLargestContentfulPaint[];
 
+// Navigation metrics from the navigation start.
+extern const char
+    kHistogramNavigationTimingNavigationStartToFirstRequestStart[];
+extern const char
+    kHistogramNavigationTimingNavigationStartToFirstResponseStart[];
+
+// Navigation metrics between milestones.
+extern const char
+    kHistogramNavigationTimingFirstRequestStartToFirstResponseStart[];
+
 enum FirstMeaningfulPaintStatus {
   FIRST_MEANINGFUL_PAINT_RECORDED,
   FIRST_MEANINGFUL_PAINT_BACKGROUNDED,
@@ -112,6 +123,14 @@ enum FirstMeaningfulPaintStatus {
   FIRST_MEANINGFUL_PAINT_USER_INTERACTION_BEFORE_FMP,
   FIRST_MEANINGFUL_PAINT_DID_NOT_REACH_FIRST_CONTENTFUL_PAINT,
   FIRST_MEANINGFUL_PAINT_LAST_ENTRY
+};
+
+// Please keep in sync with PageLoadBackForwardCacheEvent in
+// tools/metrics/histograms/enums.xml. These values should not be renumbered.
+enum class PageLoadBackForwardCacheEvent {
+  kEnterBackForwardCache = 0,
+  kRestoreFromBackForwardCache = 1,
+  kMaxValue = kRestoreFromBackForwardCache,
 };
 
 }  // namespace internal
@@ -170,10 +189,16 @@ class CorePageLoadMetricsObserver
       const page_load_metrics::mojom::CpuTiming& timing) override;
   void OnDidFinishSubFrameNavigation(
       content::NavigationHandle* navigation_handle) override;
+  ObservePolicy OnEnterBackForwardCache(
+      const page_load_metrics::mojom::PageLoadTiming& timing) override;
+  void OnRestoreFromBackForwardCache(
+      const page_load_metrics::mojom::PageLoadTiming& timing) override;
   void OnLoadingBehaviorObserved(content::RenderFrameHost* rfh,
                                  int behavior_flags) override;
 
  private:
+  void RecordNavigationTimingHistograms(
+      content::NavigationHandle* navigation_handle);
   void RecordTimingHistograms(
       const page_load_metrics::mojom::PageLoadTiming& main_frame_timing);
   void RecordByteAndResourceHistograms(
@@ -215,7 +240,7 @@ class CorePageLoadMetricsObserver
 
   // True if the first rendering cycle has been delayed due to web font
   // preloading.
-  bool render_delayed_for_web_font_preloading_observed_ = false;
+  bool font_preload_started_before_rendering_observed_ = false;
 
   base::TimeTicks first_paint_;
 

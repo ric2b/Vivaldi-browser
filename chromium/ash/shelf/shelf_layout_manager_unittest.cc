@@ -41,6 +41,7 @@
 #include "ash/session/session_controller_impl.h"
 #include "ash/shelf/drag_handle.h"
 #include "ash/shelf/home_button.h"
+#include "ash/shelf/hotseat_widget.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_app_button.h"
 #include "ash/shelf/shelf_controller.h"
@@ -57,6 +58,7 @@
 #include "ash/shelf/test/shelf_layout_manager_test_base.h"
 #include "ash/shelf/test/widget_animation_waiter.h"
 #include "ash/shell.h"
+#include "ash/shell_state.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/status_area_widget_test_helper.h"
 #include "ash/system/unified/unified_system_tray.h"
@@ -125,6 +127,10 @@ ShelfWidget* GetShelfWidget() {
 
 ShelfLayoutManager* GetShelfLayoutManager() {
   return AshTestBase::GetPrimaryShelf()->shelf_layout_manager();
+}
+
+HotseatWidget* GetHotseatWidget() {
+  return AshTestBase::GetPrimaryShelf()->hotseat_widget();
 }
 
 gfx::Rect GetScreenAvailableBounds() {
@@ -2599,7 +2605,7 @@ TEST_F(ShelfLayoutManagerWindowDraggingTest, DraggedMRUWindow) {
   const int shelf_widget_bottom =
       GetShelfWidget()->GetWindowBoundsInScreen().bottom();
   const int shelf_size = ShelfConfig::Get()->shelf_size();
-  const int hotseat_size = ShelfConfig::Get()->hotseat_size();
+  const int hotseat_size = GetHotseatWidget()->GetHotseatSize();
   const int hotseat_padding_size = ShelfConfig::Get()->hotseat_bottom_padding();
 
   const struct TestCase {
@@ -2763,7 +2769,7 @@ TEST_F(ShelfLayoutManagerWindowDraggingTest, NoOpInOverview) {
   const gfx::Rect shelf_widget_bounds =
       GetShelfWidget()->GetWindowBoundsInScreen();
   const int shelf_size = ShelfConfig::Get()->shelf_size();
-  const int hotseat_size = ShelfConfig::Get()->hotseat_size();
+  const int hotseat_size = GetHotseatWidget()->GetHotseatSize();
   const int hotseat_padding_size = ShelfConfig::Get()->hotseat_bottom_padding();
   std::unique_ptr<aura::Window> window1 =
       AshTestBase::CreateTestWindow(gfx::Rect(0, 0, 400, 400));
@@ -2800,7 +2806,7 @@ TEST_F(ShelfLayoutManagerWindowDraggingTest, FlingInOverview) {
   const gfx::Rect shelf_widget_bounds =
       GetShelfWidget()->GetWindowBoundsInScreen();
   const int shelf_size = ShelfConfig::Get()->shelf_size();
-  const int hotseat_size = ShelfConfig::Get()->hotseat_size();
+  const int hotseat_size = GetHotseatWidget()->GetHotseatSize();
   const int hotseat_padding_size = ShelfConfig::Get()->hotseat_bottom_padding();
   std::unique_ptr<aura::Window> window1 =
       AshTestBase::CreateTestWindow(gfx::Rect(0, 0, 400, 400));
@@ -2838,7 +2844,7 @@ TEST_F(ShelfLayoutManagerWindowDraggingTest,
   const gfx::Rect shelf_widget_bounds =
       GetShelfWidget()->GetWindowBoundsInScreen();
   const int shelf_size = ShelfConfig::Get()->shelf_size();
-  const int hotseat_size = ShelfConfig::Get()->hotseat_size();
+  const int hotseat_size = GetHotseatWidget()->GetHotseatSize();
   const int hotseat_padding_size = ShelfConfig::Get()->hotseat_bottom_padding();
   std::unique_ptr<aura::Window> window1 =
       AshTestBase::CreateTestWindow(gfx::Rect(0, 0, 400, 400));
@@ -2900,7 +2906,7 @@ TEST_F(ShelfLayoutManagerWindowDraggingTest, FlingHomeInSplitModeWithOverview) {
   const gfx::Rect shelf_widget_bounds =
       GetShelfWidget()->GetWindowBoundsInScreen();
   const int shelf_size = ShelfConfig::Get()->shelf_size();
-  const int hotseat_size = ShelfConfig::Get()->hotseat_size();
+  const int hotseat_size = GetHotseatWidget()->GetHotseatSize();
   const int hotseat_padding_size = ShelfConfig::Get()->hotseat_bottom_padding();
   std::unique_ptr<aura::Window> window1 =
       AshTestBase::CreateTestWindow(gfx::Rect(0, 0, 400, 400));
@@ -2979,7 +2985,7 @@ TEST_F(ShelfLayoutManagerWindowDraggingTest,
   const gfx::Rect shelf_widget_bounds =
       GetShelfWidget()->GetWindowBoundsInScreen();
   const int shelf_size = ShelfConfig::Get()->shelf_size();
-  const int hotseat_size = ShelfConfig::Get()->hotseat_size();
+  const int hotseat_size = GetHotseatWidget()->GetHotseatSize();
   const int hotseat_padding_size = ShelfConfig::Get()->hotseat_bottom_padding();
 
   // Simulate virtual keyboard closing, and a swipe from shelf to home.
@@ -3013,7 +3019,7 @@ TEST_F(ShelfLayoutManagerWindowDraggingTest, DISABLED_NoOpForHiddenShelf) {
   wm::ActivateWindow(window.get());
   Shelf* shelf = GetPrimaryShelf();
   const int shelf_size = ShelfConfig::Get()->shelf_size();
-  const int hotseat_size = ShelfConfig::Get()->hotseat_size();
+  const int hotseat_size = GetHotseatWidget()->GetHotseatSize();
   const int hotseat_padding_size = ShelfConfig::Get()->hotseat_bottom_padding();
 
   // The window can be dragged on a visible shelf.
@@ -3075,7 +3081,7 @@ TEST_F(ShelfLayoutManagerWindowDraggingTest,
   gfx::Point start = shelf_widget_bounds.bottom_center();
   StartScroll(start);
   const int shelf_size = ShelfConfig::Get()->shelf_size();
-  const int hotseat_size = ShelfConfig::Get()->hotseat_size();
+  const int hotseat_size = GetHotseatWidget()->GetHotseatSize();
   const int hotseat_padding_size = ShelfConfig::Get()->hotseat_bottom_padding();
   UpdateScroll(-shelf_size - hotseat_size - hotseat_padding_size);
   const int hotseat_y =
@@ -3104,7 +3110,7 @@ TEST_F(ShelfLayoutManagerWindowDraggingTest,
   const gfx::Point start = shelf_widget_bounds.bottom_center();
   StartScroll(start);
   const int shelf_size = ShelfConfig::Get()->shelf_size();
-  const int hotseat_size = ShelfConfig::Get()->hotseat_size();
+  const int hotseat_size = GetHotseatWidget()->GetHotseatSize();
   const int hotseat_padding_size = ShelfConfig::Get()->hotseat_bottom_padding();
   UpdateScroll(-shelf_size - hotseat_size - hotseat_padding_size);
   const int hotseat_y =
@@ -3188,7 +3194,7 @@ TEST_F(ShelfLayoutManagerWindowDraggingTest, StartsDragAfterHotseatIsUp) {
   const gfx::Rect shelf_widget_bounds =
       GetShelfWidget()->GetWindowBoundsInScreen();
   const int shelf_size = ShelfConfig::Get()->shelf_size();
-  const int hotseat_size = ShelfConfig::Get()->hotseat_size();
+  const int hotseat_size = GetHotseatWidget()->GetHotseatSize();
   const int hotseat_padding_size = ShelfConfig::Get()->hotseat_bottom_padding();
 
   // Starts the drag from the center of the shelf's bottom.
@@ -3467,6 +3473,37 @@ TEST_F(ShelfLayoutManagerTest, ShelfRemainsCenteredOnSecondDisplay) {
   EXPECT_EQ(display_2.bounds().CenterPoint().x(), app_center_2.x());
 }
 
+// Verifies that showing the system tray view on the secondary display
+// should not affect the auto-hide shelf on the primary display
+// (https://crbug.com/1079464).
+TEST_F(ShelfLayoutManagerTest, VerifyAutoHideBehaviorOnMultipleDisplays) {
+  UpdateDisplay("800x600, 800x600");
+  Shelf* shelf = GetPrimaryShelf();
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlways);
+  CreateTestWidget();
+
+  // The primary shelf should be hidden.
+  ASSERT_EQ(SHELF_AUTO_HIDE, shelf->GetVisibilityState());
+  ASSERT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
+
+  // Set focus on the secondary display.
+  aura::Window* secondary_root_window =
+      Shell::GetRootWindowForDisplayId(GetSecondaryDisplay().id());
+  Shell::Get()->shell_state()->SetRootWindowForNewWindows(
+      secondary_root_window);
+
+  // Show the system tray on the secondary display.
+  Shell::Get()->accelerator_controller()->PerformActionIfEnabled(
+      TOGGLE_SYSTEM_TRAY_BUBBLE, {});
+  Shelf* secondary_shelf =
+      RootWindowController::ForWindow(secondary_root_window)->shelf();
+  ASSERT_TRUE(secondary_shelf->status_area_widget()->IsMessageBubbleShown());
+  ASSERT_FALSE(GetPrimaryUnifiedSystemTray()->IsBubbleShown());
+
+  // Verify that the primary shelf is still hidden.
+  EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
+}
+
 // Tests that pinned app icons are visible on non-primary displays.
 TEST_F(ShelfLayoutManagerTest, ShelfShowsPinnedAppsOnOtherDisplays) {
   // Create three displays.
@@ -3658,6 +3695,8 @@ class DimShelfLayoutManagerTestBase : public ShelfLayoutManagerTestBase {
 
   void ResetDimShelf() { GetPrimaryShelf()->UndimShelf(); }
 
+  bool HasDimShelfTimer() { return GetPrimaryShelf()->HasDimShelfTimer(); }
+
   float GetWidgetOpacity(views::Widget* widget) {
     return widget->GetNativeView()->layer()->opacity();
   }
@@ -3732,12 +3771,15 @@ TEST_P(DimShelfLayoutManagerTest, FloatingShelfDimAlpha) {
 
   EXPECT_EQ(GetWidgetOpacity(GetPrimaryShelf()->shelf_widget()),
             kExpectedDefaultShelfOpacity);
+  EXPECT_EQ(GetWidgetOpacity(GetPrimaryShelf()->hotseat_widget()),
+            kExpectedDefaultShelfOpacity);
   EXPECT_EQ(GetWidgetOpacity(GetPrimaryShelf()->navigation_widget()),
             dim_shelf_enabled ? kExpectedFloatingShelfDimOpacity
                               : kExpectedDefaultShelfOpacity);
-  EXPECT_EQ(GetWidgetOpacity(GetPrimaryShelf()->hotseat_widget()),
-            dim_shelf_enabled ? kExpectedFloatingShelfDimOpacity
-                              : kExpectedDefaultShelfOpacity);
+  EXPECT_EQ(
+      GetPrimaryShelf()->hotseat_widget()->GetShelfView()->layer()->opacity(),
+      dim_shelf_enabled ? kExpectedFloatingShelfDimOpacity
+                        : kExpectedDefaultShelfOpacity);
   EXPECT_EQ(
       GetWidgetOpacity(GetPrimaryShelf()->shelf_widget()->status_area_widget()),
       dim_shelf_enabled ? kExpectedFloatingShelfDimOpacity
@@ -3752,9 +3794,9 @@ TEST_P(DimShelfLayoutManagerTest, MaximizedShelfDimAlpha) {
   ASSERT_FALSE(ShelfDimmed());
 
   if (dim_shelf_enabled) {
-    TriggerDimShelf();
     views::Widget* widget = CreateTestWidget();
     widget->Maximize();
+    TriggerDimShelf();
   }
 
   EXPECT_EQ(GetWidgetOpacity(GetPrimaryShelf()->shelf_widget()),
@@ -3763,8 +3805,11 @@ TEST_P(DimShelfLayoutManagerTest, MaximizedShelfDimAlpha) {
             dim_shelf_enabled ? kExpectedMaximizedShelfDimOpacity
                               : kExpectedDefaultShelfOpacity);
   EXPECT_EQ(GetWidgetOpacity(GetPrimaryShelf()->hotseat_widget()),
-            dim_shelf_enabled ? kExpectedMaximizedShelfDimOpacity
-                              : kExpectedDefaultShelfOpacity);
+            kExpectedDefaultShelfOpacity);
+  EXPECT_EQ(
+      GetPrimaryShelf()->hotseat_widget()->GetShelfView()->layer()->opacity(),
+      dim_shelf_enabled ? kExpectedMaximizedShelfDimOpacity
+                        : kExpectedDefaultShelfOpacity);
   EXPECT_EQ(
       GetWidgetOpacity(GetPrimaryShelf()->shelf_widget()->status_area_widget()),
       dim_shelf_enabled ? kExpectedMaximizedShelfDimOpacity
@@ -3802,9 +3847,10 @@ INSTANTIATE_TEST_SUITE_P(All,
                          HotseatDimShelfLayoutManagerTest,
                          testing::Bool());
 
-// Tests that hotseat is not dimmed but other components are dimmed when
-// kShelfHotseat switch is on.
-TEST_P(HotseatDimShelfLayoutManagerTest, TabletModeShelfDimAlpha) {
+// Tests that navigation and status area widgets are dimmed. Verifies the shelf
+// view is not dimmed when the hotseat is in the kExtended state. Verifies that
+// the shelf background/hotseat widget are not dimmed.
+TEST_P(HotseatDimShelfLayoutManagerTest, InAppShelfDimAlpha) {
   ASSERT_TRUE(AutoDimEventHandlerInitialized());
   TabletModeControllerTestApi().EnterTabletMode();
   views::Widget* widget = CreateTestWidget();
@@ -3818,6 +3864,8 @@ TEST_P(HotseatDimShelfLayoutManagerTest, TabletModeShelfDimAlpha) {
   if (shelf_hotseat_enabled) {
     EXPECT_EQ(HotseatState::kHidden, GetShelfLayoutManager()->hotseat_state());
     SwipeUpOnShelf();
+    EXPECT_EQ(HotseatState::kExtended,
+              GetShelfLayoutManager()->hotseat_state());
   } else {
     EXPECT_EQ(HotseatState::kShownClamshell,
               GetShelfLayoutManager()->hotseat_state());
@@ -3827,14 +3875,151 @@ TEST_P(HotseatDimShelfLayoutManagerTest, TabletModeShelfDimAlpha) {
 
   EXPECT_EQ(GetWidgetOpacity(GetPrimaryShelf()->shelf_widget()),
             kExpectedDefaultShelfOpacity);
+  EXPECT_EQ(GetWidgetOpacity(GetPrimaryShelf()->hotseat_widget()),
+            kExpectedDefaultShelfOpacity);
+  EXPECT_EQ(
+      GetPrimaryShelf()->hotseat_widget()->GetShelfView()->layer()->opacity(),
+      shelf_hotseat_enabled ? kExpectedDefaultShelfOpacity
+                            : kExpectedFloatingShelfDimOpacity);
   EXPECT_EQ(GetWidgetOpacity(GetPrimaryShelf()->navigation_widget()),
             kExpectedFloatingShelfDimOpacity);
-  EXPECT_EQ(GetWidgetOpacity(GetPrimaryShelf()->hotseat_widget()),
-            shelf_hotseat_enabled ? kExpectedDefaultShelfOpacity
-                                  : kExpectedFloatingShelfDimOpacity);
   EXPECT_EQ(
       GetWidgetOpacity(GetPrimaryShelf()->shelf_widget()->status_area_widget()),
       kExpectedFloatingShelfDimOpacity);
+}
+
+// Tests that shelf view, navigation widget, and status area widget are
+// dimmed but the shelf background and hotseat are not.
+TEST_P(HotseatDimShelfLayoutManagerTest, TabletModeHomeShelfDimAlpha) {
+  ASSERT_TRUE(AutoDimEventHandlerInitialized());
+  TabletModeControllerTestApi().EnterTabletMode();
+  EXPECT_FALSE(ShelfDimmed());
+
+  const bool shelf_hotseat_enabled = GetParam();
+  EXPECT_EQ(shelf_hotseat_enabled,
+            chromeos::switches::ShouldShowShelfHotseat());
+
+  if (shelf_hotseat_enabled) {
+    EXPECT_EQ(HotseatState::kShownHomeLauncher,
+              GetShelfLayoutManager()->hotseat_state());
+  } else {
+    EXPECT_EQ(HotseatState::kShownClamshell,
+              GetShelfLayoutManager()->hotseat_state());
+  }
+
+  TriggerDimShelf();
+
+  EXPECT_EQ(GetWidgetOpacity(GetPrimaryShelf()->shelf_widget()),
+            kExpectedDefaultShelfOpacity);
+  EXPECT_EQ(GetWidgetOpacity(GetPrimaryShelf()->hotseat_widget()),
+            kExpectedDefaultShelfOpacity);
+  EXPECT_EQ(
+      GetPrimaryShelf()->hotseat_widget()->GetShelfView()->layer()->opacity(),
+      kExpectedFloatingShelfDimOpacity);
+  EXPECT_EQ(GetWidgetOpacity(GetPrimaryShelf()->navigation_widget()),
+            kExpectedFloatingShelfDimOpacity);
+  EXPECT_EQ(
+      GetWidgetOpacity(GetPrimaryShelf()->shelf_widget()->status_area_widget()),
+      kExpectedFloatingShelfDimOpacity);
+}
+
+// Shelf dimming should not trigger when shelf is hidden in tablet mode.
+TEST_P(HotseatDimShelfLayoutManagerTest, AutoHiddenShelfTabletModeDimAlpha) {
+  ASSERT_TRUE(AutoDimEventHandlerInitialized());
+  TabletModeControllerTestApi().EnterTabletMode();
+
+  Shelf* shelf = GetPrimaryShelf();
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlways);
+  EXPECT_FALSE(ShelfDimmed());
+  views::Widget* widget = CreateTestWidget();
+  widget->Maximize();
+
+  // Shelf should not be dimmed when auto hidden.
+  EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
+  TriggerDimShelf();
+  EXPECT_FALSE(ShelfDimmed());
+
+  // Minimizing the widget should show the shelf. The shelf can now be dimmed.
+  widget->Minimize();
+  EXPECT_EQ(SHELF_AUTO_HIDE_SHOWN, shelf->GetAutoHideState());
+  EXPECT_FALSE(ShelfDimmed());
+  TriggerDimShelf();
+  EXPECT_TRUE(ShelfDimmed());
+}
+
+// Shelf dimming should not trigger when shelf is hidden in clamshell mode.
+TEST_P(HotseatDimShelfLayoutManagerTest, AutoHiddenShelfClamshellModeDimAlpha) {
+  ASSERT_TRUE(AutoDimEventHandlerInitialized());
+
+  Shelf* shelf = GetPrimaryShelf();
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlways);
+  EXPECT_FALSE(ShelfDimmed());
+  views::Widget* widget = CreateTestWidget();
+  widget->Maximize();
+
+  // Shelf should not be dimmed when auto hidden. The dim shelf timer should
+  // persist after failing to dim the shelf.
+  EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
+  TriggerDimShelf();
+  EXPECT_FALSE(ShelfDimmed());
+  EXPECT_TRUE(HasDimShelfTimer());
+
+  // Minimizing the widget should show the shelf. The shelf can now be dimmed
+  // and the dim shelf timer should no longer be active.
+  widget->Minimize();
+  EXPECT_EQ(SHELF_AUTO_HIDE_SHOWN, shelf->GetAutoHideState());
+  ASSERT_FALSE(ShelfDimmed());
+  EXPECT_TRUE(HasDimShelfTimer());
+  TriggerDimShelf();
+  EXPECT_TRUE(ShelfDimmed());
+  EXPECT_FALSE(HasDimShelfTimer());
+}
+
+// Shelf should be undimmed when transitioning into the visible state and create
+// a dim shelf timer.
+TEST_P(HotseatDimShelfLayoutManagerTest, AutoHiddenShelfUndimOnShow) {
+  ASSERT_TRUE(AutoDimEventHandlerInitialized());
+
+  Shelf* shelf = GetPrimaryShelf();
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlways);
+  EXPECT_FALSE(ShelfDimmed());
+  TriggerDimShelf();
+  EXPECT_TRUE(ShelfDimmed());
+  views::Widget* widget = CreateTestWidget();
+
+  // Maximize and minimize the widget to cycle between shelf auto hidden states.
+  widget->Maximize();
+  EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
+  widget->Minimize();
+  EXPECT_EQ(SHELF_AUTO_HIDE_SHOWN, shelf->GetAutoHideState());
+
+  // Hiding and showing the auto hidden shelf should set the shelf to the
+  // undimmed state but also create a dim shelf timer.
+  ASSERT_FALSE(ShelfDimmed());
+  EXPECT_TRUE(HasDimShelfTimer());
+  TriggerDimShelf();
+  EXPECT_TRUE(ShelfDimmed());
+  EXPECT_FALSE(HasDimShelfTimer());
+}
+
+// Shelf should be undimmed when auto hidden shelf is disabled.
+TEST_P(HotseatDimShelfLayoutManagerTest, AutoHiddenShelfUndimOnDisable) {
+  ASSERT_TRUE(AutoDimEventHandlerInitialized());
+
+  Shelf* shelf = GetPrimaryShelf();
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kAlways);
+  EXPECT_FALSE(ShelfDimmed());
+  TriggerDimShelf();
+  EXPECT_TRUE(ShelfDimmed());
+
+  // Create and maximize a widget to cycle force auto hidden shelf.
+  views::Widget* widget = CreateTestWidget();
+  widget->Maximize();
+  EXPECT_EQ(SHELF_AUTO_HIDE_HIDDEN, shelf->GetAutoHideState());
+
+  // Disabling auto hidden shelf should undim the shelf.
+  shelf->SetAutoHideBehavior(ShelfAutoHideBehavior::kNever);
+  ASSERT_FALSE(ShelfDimmed());
 }
 
 }  // namespace ash

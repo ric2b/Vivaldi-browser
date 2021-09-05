@@ -12,11 +12,12 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/check_op.h"
 #include "base/containers/queue.h"
 #include "base/location.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -382,11 +383,15 @@ void VideoDecoderShim::YUVConverter::Convert(const media::VideoFrame* frame,
     //   U - 128  : Turns unsigned U into signed U [-128,127]
     //   V - 128  : Turns unsigned V into signed V [-128,127]
     static const float yuv_adjust_constrained[3] = {
-        -0.0625f, -0.5f, -0.5f,
+        -0.0625f,
+        -0.5f,
+        -0.5f,
     };
     // Same as above, but without the head and footroom.
     static const float yuv_adjust_full[3] = {
-        0.0f, -0.5f, -0.5f,
+        0.0f,
+        -0.5f,
+        -0.5f,
     };
 
     yuv_adjust = yuv_adjust_constrained;
@@ -1020,8 +1025,7 @@ void VideoDecoderShim::OnOutputComplete(std::unique_ptr<PendingFrame> frame) {
       // all textures to |textures_to_dismiss_| and dismiss any that aren't in
       // use by the plugin. We will dismiss the rest as they are recycled.
       for (TextureIdMap::const_iterator it = texture_id_map_.begin();
-           it != texture_id_map_.end();
-           ++it) {
+           it != texture_id_map_.end(); ++it) {
         textures_to_dismiss_.insert(it->first);
       }
       for (auto it = available_textures_.begin();

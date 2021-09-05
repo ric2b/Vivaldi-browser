@@ -68,6 +68,7 @@
     <output filename="values-sl/android_chrome_autofill_assistant_strings.xml" lang="sl" type="android" />
     <output filename="values-sq/android_chrome_autofill_assistant_strings.xml" lang="sq" type="android" />
     <output filename="values-sr/android_chrome_autofill_assistant_strings.xml" lang="sr" type="android" />
+    <output filename="values-b+sr+Latn/android_chrome_autofill_assistant_strings.xml" lang="sr-Latn" type="android" />
     <output filename="values-sv/android_chrome_autofill_assistant_strings.xml" lang="sv" type="android" />
     <output filename="values-sw/android_chrome_autofill_assistant_strings.xml" lang="sw" type="android" />
     <output filename="values-ta/android_chrome_autofill_assistant_strings.xml" lang="ta" type="android" />
@@ -178,6 +179,15 @@
       </message>
       <message name="IDS_AUTOFILL_ASSISTANT_INIT_MESSAGE_BUY_MOVIE_TICKETS" desc="Onboarding message describing autofill assistant's capability for movie tickets.">
         Buy movie tickets \n in just a few taps
+      </message>
+      <message name="IDS_AUTOFILL_ASSISTANT_INIT_MESSAGE_FOOD_ORDERING" desc="Onboarding message describing autofill assistant's capability for food ordering.">
+        Order food \n in just a few taps
+      </message>
+      <message name="IDS_AUTOFILL_ASSISTANT_INIT_MESSAGE_FLIGHTS_CHECKIN" desc="Onboarding message describing autofill assistant's capability for flights.">
+        Check in to your flight \n in just a few taps
+      </message>
+      <message name="IDS_AUTOFILL_ASSISTANT_INIT_MESSAGE_VOICE_SEARCH" desc="Onboarding message describing autofill assistant's capability for voice search.">
+        Try voice actions \n on websites
       </message>
       <message name="IDS_AUTOFILL_ASSISTANT_INIT_MESSAGE" desc="Onboarding message describing autofill assistant's capability.">
         Google Assistant saves you time by helping you complete actions on the web, like search and checkout.

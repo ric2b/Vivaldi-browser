@@ -30,14 +30,12 @@ namespace {
 // https://crbug.com/979703
 std::vector<PixelResourceTestCase> const kTestCases = {
     {LayerTreeTest::RENDERER_SOFTWARE, SOFTWARE},
-#if !defined(GL_NOT_ON_PLATFORM)
     {LayerTreeTest::RENDERER_GL, GPU},
     {LayerTreeTest::RENDERER_GL, ONE_COPY},
     {LayerTreeTest::RENDERER_GL, ZERO_COPY},
     {LayerTreeTest::RENDERER_SKIA_GL, GPU},
     {LayerTreeTest::RENDERER_SKIA_GL, ONE_COPY},
     {LayerTreeTest::RENDERER_SKIA_GL, ZERO_COPY},
-#endif  // !defined(GL_NOT_ON_PLATFORM)
 #if defined(ENABLE_CC_VULKAN_TESTS)
     {LayerTreeTest::RENDERER_SKIA_VK, GPU},
 #endif  // defined(ENABLE_CC_VULKAN_TESTS)
@@ -585,7 +583,7 @@ TEST_P(LayerTreeHostMasksForBackdropFiltersPixelTestWithLayerList, Test) {
           ? base::FilePath(FILE_PATH_LITERAL("mask_of_backdrop_filter_gpu.png"))
           : base::FilePath(FILE_PATH_LITERAL("mask_of_backdrop_filter.png"));
 
-  if (use_vulkan() && raster_type() == GPU) {
+  if (use_skia_vulkan() && raster_type() == GPU) {
     // Vulkan with GPU raster has 4 pixels errors (the circle mask shape is
     // slight different).
     float percentage_pixels_large_error = 0.04f;  // 4px / (100*100)
@@ -644,7 +642,7 @@ TEST_P(LayerTreeHostMasksForBackdropFiltersPixelTestWithLayerTree, Test) {
           ? base::FilePath(FILE_PATH_LITERAL("mask_of_backdrop_filter_gpu.png"))
           : base::FilePath(FILE_PATH_LITERAL("mask_of_backdrop_filter.png"));
 
-  if (use_vulkan() && raster_type() == GPU) {
+  if (use_skia_vulkan() && raster_type() == GPU) {
     // Vulkan with GPU raster has 4 pixels errors (the circle mask shape is
     // slight different).
     float percentage_pixels_large_error = 0.04f;  // 4px / (100*100)
@@ -874,7 +872,6 @@ class LayerTreeHostMaskAsBlendingPixelTest
 
 MaskTestConfig const kTestConfigs[] = {
     MaskTestConfig{{LayerTreeTest::RENDERER_SOFTWARE, SOFTWARE}, 0},
-#if !defined(GL_NOT_ON_PLATFORM)
     MaskTestConfig{{LayerTreeTest::RENDERER_GL, ZERO_COPY}, 0},
     MaskTestConfig{{LayerTreeTest::RENDERER_GL, ZERO_COPY}, kUseAntialiasing},
     MaskTestConfig{{LayerTreeTest::RENDERER_GL, ZERO_COPY}, kForceShaders},
@@ -883,7 +880,6 @@ MaskTestConfig const kTestConfigs[] = {
     MaskTestConfig{{LayerTreeTest::RENDERER_SKIA_GL, ZERO_COPY}, 0},
     MaskTestConfig{{LayerTreeTest::RENDERER_SKIA_GL, ZERO_COPY},
                    kUseAntialiasing},
-#endif  // !defined(GL_NOT_ON_PLATFORM)
 #if defined(ENABLE_CC_VULKAN_TESTS)
     MaskTestConfig{{LayerTreeTest::RENDERER_SKIA_VK, ZERO_COPY}, 0},
     MaskTestConfig{{LayerTreeTest::RENDERER_SKIA_VK, ZERO_COPY},

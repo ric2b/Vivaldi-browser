@@ -199,6 +199,12 @@ class CompositorImpl::AndroidHostDisplayClient : public viz::HostDisplayClient {
   void OnContextCreationResult(gpu::ContextResult context_result) override {
     compositor_->OnContextCreationResult(context_result);
   }
+  void SetWideColorEnabled(bool enabled) override {
+    // TODO(cblume): Add support for multiple compositors.
+    // If one goes wide, all should go wide.
+    if (compositor_->root_window_)
+      compositor_->root_window_->SetWideColorEnabled(enabled);
+  }
   void SetPreferredRefreshRate(float refresh_rate) override {
     if (compositor_->root_window_)
       compositor_->root_window_->SetPreferredRefreshRate(refresh_rate);
@@ -221,6 +227,26 @@ class CompositorImpl::ScopedCachedBackBuffer {
  private:
   uint32_t cache_id_;
 };
+
+class CompositorImpl::ReadbackRefImpl
+    : public ui::WindowAndroidCompositor::ReadbackRef {
+ public:
+  explicit ReadbackRefImpl(base::WeakPtr<CompositorImpl> weakptr);
+  ~ReadbackRefImpl() override;
+
+ private:
+  base::WeakPtr<CompositorImpl> compositor_weakptr_;
+};
+
+CompositorImpl::ReadbackRefImpl::ReadbackRefImpl(
+    base::WeakPtr<CompositorImpl> weakptr)
+    : compositor_weakptr_(weakptr) {}
+
+CompositorImpl::ReadbackRefImpl::~ReadbackRefImpl() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  if (compositor_weakptr_)
+    compositor_weakptr_->DecrementPendingReadbacks();
+}
 
 // static
 Compositor* Compositor::Create(CompositorClient* client,
@@ -314,11 +340,6 @@ void CompositorImpl::SetRootWindow(gfx::NativeWindow root_window) {
     root_window_->SetForce60HzRefreshRate();
   root_window_->SetLayer(root_layer ? root_layer : cc::Layer::Create());
   root_window_->GetLayer()->SetBounds(size_);
-  if (!readback_layer_tree_) {
-    readback_layer_tree_ = cc::Layer::Create();
-    readback_layer_tree_->SetHideLayerAndSubtree(true);
-  }
-  root_window->GetLayer()->AddChild(readback_layer_tree_);
   root_window->AttachCompositor(this);
   if (!host_) {
     CreateLayerTreeHost();
@@ -457,7 +478,7 @@ void CompositorImpl::TearDownDisplayAndUnregisterRootFrameSink() {
   // Make a best effort to try to complete pending readbacks.
   // TODO(crbug.com/637035): Consider doing this in a better way,
   // ideally with the guarantee of readbacks completing.
-  if (display_private_ && HavePendingReadbacks()) {
+  if (display_private_ && pending_readbacks_) {
     // Note that while this is not a Sync IPC, the call to
     // InvalidateFrameSinkId below will end up triggering a sync call to
     // FrameSinkManager::DestroyCompositorFrameSink, as this is the root
@@ -466,7 +487,6 @@ void CompositorImpl::TearDownDisplayAndUnregisterRootFrameSink() {
     // execution of this call.
     display_private_->ForceImmediateDrawAndSwapIfPossible();
   }
-
   GetHostFrameSinkManager()->InvalidateFrameSinkId(frame_sink_id_);
   display_private_.reset();
 }
@@ -681,8 +701,10 @@ CompositorImpl::GetBeginMainFrameMetrics() {
   return nullptr;
 }
 
-void CompositorImpl::AttachLayerForReadback(scoped_refptr<cc::Layer> layer) {
-  readback_layer_tree_->AddChild(layer);
+std::unique_ptr<ui::WindowAndroidCompositor::ReadbackRef>
+CompositorImpl::TakeReadbackRef() {
+  ++pending_readbacks_;
+  return std::make_unique<ReadbackRefImpl>(weak_factory_.GetWeakPtr());
 }
 
 void CompositorImpl::RequestCopyOfOutputOnRootLayer(
@@ -746,10 +768,6 @@ void CompositorImpl::OnDisplayMetricsChanged(const display::Display& display,
     host_->set_display_transform_hint(
         display::DisplayRotationToOverlayTransform(display.rotation()));
   }
-}
-
-bool CompositorImpl::HavePendingReadbacks() {
-  return !readback_layer_tree_->children().empty();
 }
 
 bool CompositorImpl::IsDrawingFirstVisibleFrame() const {
@@ -894,6 +912,11 @@ void CompositorImpl::EvictCachedBackBuffer() {
 void CompositorImpl::RequestPresentationTimeForNextFrame(
     PresentationTimeCallback callback) {
   host_->RequestPresentationTimeForNextFrame(std::move(callback));
+}
+
+void CompositorImpl::DecrementPendingReadbacks() {
+  DCHECK_GT(pending_readbacks_, 0u);
+  --pending_readbacks_;
 }
 
 }  // namespace content

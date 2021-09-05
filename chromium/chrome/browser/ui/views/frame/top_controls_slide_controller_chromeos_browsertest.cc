@@ -33,6 +33,7 @@
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/permissions/permission_request_impl.h"
 #include "components/permissions/permission_request_manager.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/dns/mock_host_resolver.h"
@@ -1351,7 +1352,7 @@ IN_PROC_BROWSER_TEST_F(TopControlsSlideControllerTest,
   auto decided = [](ContentSetting) {};
   permissions::PermissionRequestImpl permission_request(
       url, url, ContentSettingsType::GEOLOCATION, true /* user_gesture */,
-      base::BindRepeating(decided), base::DoNothing() /* delete_callback */);
+      base::BindOnce(decided), base::DoNothing() /* delete_callback */);
   auto* permission_manager =
       permissions::PermissionRequestManager::FromWebContents(active_contents);
   TopControlsShownRatioWaiter waiter(top_controls_slide_controller());

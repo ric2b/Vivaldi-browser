@@ -95,6 +95,17 @@ NSString* SerializedPref(const PrefService::Preference* pref) {
       @"Clearing browser history timed out");
 }
 
++ (NSInteger)getBrowsingHistoryEntryCount {
+  NSError* error = nil;
+  NSInteger count = chrome_test_util::GetBrowsingHistoryEntryCount(&error);
+
+  if (error != nil) {
+    return -1;
+  }
+
+  return count;
+}
+
 + (NSError*)removeBrowsingCache {
   if (chrome_test_util::RemoveBrowsingCache()) {
     return nil;
@@ -208,8 +219,12 @@ NSString* SerializedPref(const PrefService::Preference* pref) {
   chrome_test_util::OpenNewTab();
 }
 
-+ (void)simulateExternalAppURLOpening {
-  chrome_test_util::SimulateExternalAppURLOpening();
++ (NSURL*)simulateExternalAppURLOpening {
+  return chrome_test_util::SimulateExternalAppURLOpening();
+}
+
++ (void)simulateAddAccountFromWeb {
+  chrome_test_util::SimulateAddAccountFromWeb();
 }
 
 + (void)closeCurrentTab {
@@ -500,9 +515,12 @@ NSString* SerializedPref(const PrefService::Preference* pref) {
   chrome_test_util::TriggerSyncCycle(type);
 }
 
-+ (void)addUserDemographicsToSyncServerWithBirthYear:(int)birthYear
-                                              gender:(int)gender {
-  chrome_test_util::AddUserDemographicsToSyncServer(birthYear, gender);
++ (void)
+    addUserDemographicsToSyncServerWithBirthYear:(int)rawBirthYear
+                                          gender:
+                                              (metrics::UserDemographicsProto::
+                                                   Gender)gender {
+  chrome_test_util::AddUserDemographicsToSyncServer(rawBirthYear, gender);
 }
 
 + (void)clearAutofillProfileWithGUID:(NSString*)GUID {
@@ -602,6 +620,13 @@ NSString* SerializedPref(const PrefService::Preference* pref) {
   }
   return error;
 }
+
++ (void)addBookmarkWithSyncPassphrase:(NSString*)syncPassphrase {
+  chrome_test_util::AddBookmarkWithSyncPassphrase(
+      base::SysNSStringToUTF8(syncPassphrase));
+}
+
+#pragma mark - JavaScript Utilities (EG2)
 
 + (id)executeJavaScript:(NSString*)javaScript error:(NSError**)outError {
   __block bool handlerCalled = false;

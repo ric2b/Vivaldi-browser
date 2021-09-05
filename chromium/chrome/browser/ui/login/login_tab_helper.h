@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_LOGIN_LOGIN_TAB_HELPER_H_
 
 #include "base/memory/weak_ptr.h"
+#include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
@@ -14,6 +15,7 @@
 #include "url/gurl.h"
 
 namespace content {
+class LoginDelegate;
 class NavigationHandle;
 class WebContents;
 }  // namespace content
@@ -27,6 +29,14 @@ class LoginTabHelper : public content::WebContentsObserver,
                        public content::WebContentsUserData<LoginTabHelper> {
  public:
   ~LoginTabHelper() override;
+
+  std::unique_ptr<content::LoginDelegate> CreateAndStartMainFrameLoginDelegate(
+      const net::AuthChallengeInfo& auth_info,
+      content::WebContents* web_contents,
+      const content::GlobalRequestID& request_id,
+      const GURL& url,
+      scoped_refptr<net::HttpResponseHeaders> response_headers,
+      LoginAuthRequiredCallback auth_required_callback);
 
   // content::WebContentsObserver:
   void DidStartNavigation(
@@ -65,6 +75,9 @@ class LoginTabHelper : public content::WebContentsObserver,
   void HandleCredentials(
       const base::Optional<net::AuthCredentials>& credentials);
 
+  void RegisterExtensionCancelledNavigation(
+      const content::GlobalRequestID& request_id);
+
   // When the user enters credentials into the login prompt, they are populated
   // in the auth cache and then page is reloaded to re-send the request with the
   // cached credentials. This method is passed as the callback to the call that
@@ -97,6 +110,12 @@ class LoginTabHelper : public content::WebContentsObserver,
   // Both the *handle* ID and *entry* ID are needed because the entry ID does
   // not stay consistent across the refresh.
   int64_t navigation_handle_id_with_cancelled_prompt_ = 0;
+
+  // When an extension cancels an auth request for a navigation, these members
+  // remember the navigation so that the LoginTabHelper can avoid showing an
+  // auth prompt.
+  content::GlobalRequestID request_id_for_extension_cancelled_navigation_;
+  int64_t navigation_handle_id_for_extension_cancelled_navigation_ = 0;
 
   base::WeakPtrFactory<LoginTabHelper> weak_ptr_factory_{this};
 

@@ -32,7 +32,6 @@
 #include "components/sync/protocol/proto_value_conversions.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync/test/test_matchers.h"
-#include "components/sync_sessions/favicon_cache.h"
 #include "components/sync_sessions/mock_sync_sessions_client.h"
 #include "components/sync_sessions/session_sync_prefs.h"
 #include "components/sync_sessions/tab_node_pool.h"
@@ -164,10 +163,7 @@ class SessionSyncBridgeTest : public ::testing::Test {
   SessionSyncBridgeTest()
       : store_(syncer::ModelTypeStoreTestUtil::CreateInMemoryStoreForTest(
             syncer::SESSIONS)),
-        session_sync_prefs_(&pref_service_),
-        favicon_cache_(/*favicon_service=*/nullptr,
-                       /*history_service=*/nullptr,
-                       /*max_sync_favicon_limit=*/0) {
+        session_sync_prefs_(&pref_service_) {
     SessionSyncPrefs::RegisterProfilePrefs(pref_service_.registry());
 
     ON_CALL(mock_sync_sessions_client_, GetSessionSyncPrefs())
@@ -226,8 +222,10 @@ class SessionSyncBridgeTest : public ::testing::Test {
 
     sync_pb::ModelTypeState state;
     state.set_initial_sync_done(true);
+    state.set_cache_guid(request.cache_guid);
     state.mutable_progress_marker()->set_data_type_id(
         GetSpecificsFieldNumberFromModelType(syncer::SESSIONS));
+    state.set_authenticated_account_id("SomeAccountId");
     syncer::UpdateResponseDataList initial_updates;
     for (const SessionSpecifics& specifics : remote_data) {
       initial_updates.push_back(SpecificsToUpdateResponse(specifics));
@@ -334,7 +332,6 @@ class SessionSyncBridgeTest : public ::testing::Test {
   testing::NiceMock<MockSyncSessionsClient> mock_sync_sessions_client_;
   testing::NiceMock<MockModelTypeChangeProcessor> mock_processor_;
   TestSyncedWindowDelegatesGetter window_getter_;
-  FaviconCache favicon_cache_;
 
   std::unique_ptr<SessionSyncBridge> bridge_;
   std::unique_ptr<syncer::ClientTagBasedModelTypeProcessor> real_processor_;

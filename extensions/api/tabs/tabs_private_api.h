@@ -211,7 +211,7 @@ private:
 
 class TabsPrivateUpdateFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("tabsPrivate.update", TABSSPRIVATE_UPDATE)
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.update", TABSPRIVATE_UPDATE)
 
   TabsPrivateUpdateFunction() = default;
 
@@ -227,7 +227,7 @@ class TabsPrivateUpdateFunction : public ExtensionFunction {
 
 class TabsPrivateGetFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("tabsPrivate.get", TABSSPRIVATE_GET)
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.get", TABSPRIVATE_GET)
 
   TabsPrivateGetFunction() = default;
 
@@ -243,7 +243,7 @@ class TabsPrivateGetFunction : public ExtensionFunction {
 
 class TabsPrivateDiscardFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("tabsPrivate.discard", TABSSPRIVATE_DISCARD)
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.discard", TABSPRIVATE_DISCARD)
 
   TabsPrivateDiscardFunction() = default;
 
@@ -259,7 +259,7 @@ class TabsPrivateDiscardFunction : public ExtensionFunction {
 
 class TabsPrivateInsertTextFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("tabsPrivate.insertText", TABSSPRIVATE_INSERTTEXT)
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.insertText", TABSPRIVATE_INSERTTEXT)
 
   TabsPrivateInsertTextFunction() = default;
 
@@ -274,7 +274,7 @@ class TabsPrivateInsertTextFunction : public ExtensionFunction {
 
 class TabsPrivateStartDragFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("tabsPrivate.startDrag", TABSSPRIVATE_STARTDRAG)
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.startDrag", TABSPRIVATE_STARTDRAG)
 
   TabsPrivateStartDragFunction();
 
@@ -297,7 +297,7 @@ class TabsPrivateStartDragFunction : public ExtensionFunction {
 
 class TabsPrivateScrollPageFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("tabsPrivate.scrollPage", TABSSPRIVATE_SCROLLPAGE)
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.scrollPage", TABSPRIVATE_SCROLLPAGE)
 
   TabsPrivateScrollPageFunction() = default;
 
@@ -313,7 +313,7 @@ class TabsPrivateScrollPageFunction : public ExtensionFunction {
 class TabsPrivateGetSpatialNavigationRectsFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("tabsPrivate.getSpatialNavigationRects",
-                             TABSSPRIVATE_GETSPATIALNAVIGATIONRECTS)
+                             TABSPRIVATE_GETSPATIALNAVIGATIONRECTS)
 
   TabsPrivateGetSpatialNavigationRectsFunction() = default;
 
@@ -332,7 +332,7 @@ class TabsPrivateGetSpatialNavigationRectsFunction : public ExtensionFunction {
 class TabsPrivateGetScrollPositionFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("tabsPrivate.getScrollPosition",
-                             TABSSPRIVATE_GETSCROLLPOSITION)
+                             TABSPRIVATE_GETSCROLLPOSITION)
 
  TabsPrivateGetScrollPositionFunction() = default;
 
@@ -350,7 +350,7 @@ class TabsPrivateGetScrollPositionFunction : public ExtensionFunction {
 class TabsPrivateActivateElementFromPointFunction : public ExtensionFunction {
  public:
   DECLARE_EXTENSION_FUNCTION("tabsPrivate.activateElementFromPoint",
-                             TABSSPRIVATE_ACTIVATEELEMENTFROMPOINT)
+                             TABSPRIVATE_ACTIVATEELEMENTFROMPOINT)
 
   TabsPrivateActivateElementFromPointFunction() = default;
 
@@ -361,6 +361,22 @@ class TabsPrivateActivateElementFromPointFunction : public ExtensionFunction {
   ResponseAction Run() override;
 
   DISALLOW_COPY_AND_ASSIGN(TabsPrivateActivateElementFromPointFunction);
+};
+
+class TabsPrivateHasBeforeUnloadOrUnloadFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.hasBeforeUnloadOrUnload",
+                             TABSPRIVATE_HASBEFOREUNLOADORUNLOAD)
+
+  TabsPrivateHasBeforeUnloadOrUnloadFunction() = default;
+
+ protected:
+  ~TabsPrivateHasBeforeUnloadOrUnloadFunction() override = default;
+
+ private:
+  ResponseAction Run() override;
+
+  DISALLOW_COPY_AND_ASSIGN(TabsPrivateHasBeforeUnloadOrUnloadFunction);
 };
 
 }  // namespace extensions

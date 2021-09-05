@@ -30,11 +30,10 @@ BluetoothAdapter::ServiceOptions::~ServiceOptions() = default;
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS) && !defined(OS_MACOSX) && \
     !defined(OS_WIN) && !defined(OS_LINUX)
 // static
-base::WeakPtr<BluetoothAdapter> BluetoothAdapter::CreateAdapter(
-    InitCallback init_callback) {
-  return base::WeakPtr<BluetoothAdapter>();
+scoped_refptr<BluetoothAdapter> BluetoothAdapter::CreateAdapter() {
+  return nullptr;
 }
-#endif  // !defined(OS_CHROMEOS) && !defined(OS_WIN) && !defined(OS_MACOSX)
+#endif  // Not supported platforms.
 
 base::WeakPtr<BluetoothAdapter> BluetoothAdapter::GetWeakPtrForTesting() {
   return GetWeakPtr();
@@ -54,6 +53,11 @@ void BluetoothAdapter::AddObserver(BluetoothAdapter::Observer* observer) {
 void BluetoothAdapter::RemoveObserver(BluetoothAdapter::Observer* observer) {
   DCHECK(observer);
   observers_.RemoveObserver(observer);
+}
+
+std::string BluetoothAdapter::GetSystemName() const {
+  NOTIMPLEMENTED();
+  return std::string();
 }
 
 bool BluetoothAdapter::HasObserver(BluetoothAdapter::Observer* observer) {
@@ -89,6 +93,11 @@ void BluetoothAdapter::SetPowered(bool powered,
   set_powered_callbacks_->powered = powered;
   set_powered_callbacks_->callback = callback;
   set_powered_callbacks_->error_callback = error_callback;
+}
+
+bool BluetoothAdapter::IsPeripheralRoleSupported() const {
+  // TODO(crbug/1071595): Implement this for more platforms.
+  return true;
 }
 
 std::unordered_map<BluetoothDevice*, BluetoothDevice::UUIDSet>

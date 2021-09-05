@@ -11,7 +11,7 @@
 #include <string>
 #include <utility>
 
-#include "base/logging.h"
+#include "base/check.h"
 #include "base/macros.h"
 #include "base/numerics/ranges.h"
 #include "base/strings/string_number_conversions.h"
@@ -382,10 +382,10 @@ ColorChooserView::ColorChooserView(ColorChooserListener* listener,
       container2->SetLayoutManager(std::make_unique<views::GridLayout>());
   ColumnSet* columns = layout->AddColumnSet(0);
   columns->AddColumn(GridLayout::LEADING, GridLayout::FILL, 0,
-                     GridLayout::USE_PREF, 0, 0);
+                     GridLayout::ColumnSize::kUsePreferred, 0, 0);
   columns->AddPaddingColumn(0, kMarginWidth);
   columns->AddColumn(GridLayout::FILL, GridLayout::FILL, 1,
-                     GridLayout::USE_PREF, 0, 0);
+                     GridLayout::ColumnSize::kUsePreferred, 0, 0);
   layout->StartRow(0, 0);
   auto textfield = std::make_unique<Textfield>();
   textfield->set_controller(this);

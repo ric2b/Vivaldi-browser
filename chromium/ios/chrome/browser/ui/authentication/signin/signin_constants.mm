@@ -9,3 +9,25 @@
 #endif
 
 NSString* const kUserSigninAttemptedNotification = @"kUserSigninAttempted";
+NSString* const kSkipSigninAccessibilityIdentifier =
+    @"kSkipSigninAccessibilityIdentifier";
+NSString* const kAddAccountAccessibilityIdentifier =
+    @"kAddAccountAccessibilityIdentifier";
+NSString* const kConfirmationAccessibilityIdentifier =
+    @"kConfirmationAccessibilityIdentifier";
+NSString* const kMoreAccessibilityIdentifier = @"kMoreAccessibilityIdentifier";
+
+@implementation SigninCompletionInfo
+
+- (instancetype)initWithIdentity:(ChromeIdentity*)identity
+          signinCompletionAction:
+              (SigninCompletionAction)signinCompletionAction {
+  self = [super init];
+  if (self) {
+    _identity = identity;
+    _signinCompletionAction = signinCompletionAction;
+  }
+  return self;
+}
+
+@end

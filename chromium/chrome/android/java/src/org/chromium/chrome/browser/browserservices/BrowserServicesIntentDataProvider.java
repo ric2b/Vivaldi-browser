@@ -20,6 +20,7 @@ import androidx.browser.trusted.sharing.ShareData;
 import androidx.browser.trusted.sharing.ShareTarget;
 
 import org.chromium.chrome.browser.customtabs.CustomButtonParams;
+import org.chromium.chrome.browser.flags.ActivityType;
 import org.chromium.chrome.browser.webapps.WebApkExtras;
 import org.chromium.chrome.browser.webapps.WebappExtras;
 
@@ -29,9 +30,9 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Interface for model classes which parses incoming intent for customization data.
+ * Base class for model classes which parse incoming intent for customization data.
  */
-public class BrowserServicesIntentDataProvider {
+public abstract class BrowserServicesIntentDataProvider {
     // The type of UI for Custom Tab to use.
     @IntDef({CustomTabsUiType.DEFAULT, CustomTabsUiType.MEDIA_VIEWER,
             CustomTabsUiType.PAYMENT_REQUEST, CustomTabsUiType.INFO_PAGE,
@@ -47,6 +48,21 @@ public class BrowserServicesIntentDataProvider {
         int MINIMAL_UI_WEBAPP = 5;
         int OFFLINE_PAGE = 6;
     }
+
+    // The type of Disclosure for TWAs to use.
+    @IntDef({TwaDisclosureUi.DEFAULT, TwaDisclosureUi.V1_INFOBAR,
+            TwaDisclosureUi.V2_NOTIFICATION_OR_SNACKBAR})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface TwaDisclosureUi {
+        int DEFAULT = -1;
+        int V1_INFOBAR = 0;
+        int V2_NOTIFICATION_OR_SNACKBAR = 1;
+    }
+
+    /**
+     * @return The type of the Activity;
+     */
+    public abstract @ActivityType int getActivityType();
 
     /**
      * @return the Intent this instance was created with.
@@ -299,22 +315,23 @@ public class BrowserServicesIntentDataProvider {
     /**
      * @return Whether the Activity should attempt to display a Trusted Web Activity.
      */
-    public boolean isTrustedWebActivity() {
-        return false;
+    public final boolean isTrustedWebActivity() {
+        return getActivityType() == ActivityType.TRUSTED_WEB_ACTIVITY;
     }
 
     /**
      * @return Whether the Activity is either a Webapp or a WebAPK activity.
      */
-    public boolean isWebappOrWebApkActivity() {
-        return false;
+    public final boolean isWebappOrWebApkActivity() {
+        return getActivityType() == ActivityType.WEBAPP
+                || getActivityType() == ActivityType.WEB_APK;
     }
 
     /**
      * @return Whether the Activity is a WebAPK activity.
      */
-    public boolean isWebApkActivity() {
-        return false;
+    public final boolean isWebApkActivity() {
+        return getActivityType() == ActivityType.WEB_APK;
     }
 
     /**
@@ -461,5 +478,10 @@ public class BrowserServicesIntentDataProvider {
     @Nullable
     public PendingIntent getFocusIntent() {
         return null;
+    }
+
+    @TwaDisclosureUi
+    public int getTwaDisclosureUi() {
+        return TwaDisclosureUi.DEFAULT;
     }
 }

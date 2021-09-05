@@ -7,9 +7,9 @@
 #include <string>
 
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/extensions/chrome_extension_function.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_function.h"
 #include "vivaldi_account/vivaldi_account_manager.h"
 #include "vivaldi_account/vivaldi_account_manager_factory.h"
 #include "vivaldi_account/vivaldi_account_password_handler.h"

@@ -154,7 +154,7 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
 
     void toggleSelectAll() {
         HashSet<BookmarkId> idSet = new HashSet<>(mDelegate.getModel().getChildIDs(
-                mCurrentFolder.getId(), true, true));
+                mCurrentFolder.getId()));
         mDelegate.getSelectionDelegate().setSelectedItems(idSet);
     }
 

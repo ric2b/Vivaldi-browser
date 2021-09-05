@@ -5,8 +5,9 @@
 #include "chrome/browser/prerender/isolated/isolated_prerender_from_string_url_loader.h"
 
 #include "base/bind.h"
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/memory/ptr_util.h"
+#include "base/notreached.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
@@ -30,6 +31,7 @@ IsolatedPrerenderFromStringURLLoader::~IsolatedPrerenderFromStringURLLoader() =
 void IsolatedPrerenderFromStringURLLoader::FollowRedirect(
     const std::vector<std::string>& removed_headers,
     const net::HttpRequestHeaders& modified_headers,
+    const net::HttpRequestHeaders& modified_cors_exempt_headers,
     const base::Optional<GURL>& new_url) {
   NOTREACHED();
 }

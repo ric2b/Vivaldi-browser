@@ -9,11 +9,13 @@ import android.app.Instrumentation.ActivityMonitor;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.rule.ActivityTestRule;
-import android.support.v4.app.Fragment;
 import android.text.TextUtils;
+
+import androidx.fragment.app.Fragment;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -28,7 +30,7 @@ import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.net.test.EmbeddedTestServerRule;
-import org.chromium.weblayer.NavigationController;
+import org.chromium.weblayer.CookieManager;
 import org.chromium.weblayer.Tab;
 import org.chromium.weblayer.WebLayer;
 import org.chromium.weblayer.shell.InstrumentationActivity;
@@ -256,19 +258,12 @@ public class InstrumentationActivityTestRule extends ActivityTestRule<Instrument
         return mTestServerRule.getServer();
     }
 
-    public String getTestDataURL(String path) {
-        return getTestServer().getURL("/weblayer/test/data/" + path);
+    public EmbeddedTestServerRule getTestServerRule() {
+        return mTestServerRule;
     }
 
-    // Returns the display URL of the last committed navigation entry in |tab|. Note that this will
-    // return an empty URL if there have been no committed navigations in |tab|.
-    public String getLastCommittedUrlInTab(Tab tab) {
-        return TestThreadUtils.runOnUiThreadBlockingNoException(() -> {
-            NavigationController navController = tab.getNavigationController();
-            return navController
-                    .getNavigationEntryDisplayUri(navController.getNavigationListCurrentIndex())
-                    .toString();
-        });
+    public String getTestDataURL(String path) {
+        return getTestServer().getURL("/weblayer/test/data/" + path);
     }
 
     // Returns the URL that is currently being displayed to the user.
@@ -282,5 +277,31 @@ public class InstrumentationActivityTestRule extends ActivityTestRule<Instrument
 
     public Fragment getFragment() {
         return TestThreadUtils.runOnUiThreadBlockingNoException(() -> getActivity().getFragment());
+    }
+
+    public boolean setCookie(CookieManager cookieManager, Uri uri, String value) throws Exception {
+        Boolean[] resultHolder = new Boolean[1];
+        CallbackHelper callbackHelper = new CallbackHelper();
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            cookieManager.setCookie(uri, value, (Boolean result) -> {
+                resultHolder[0] = result;
+                callbackHelper.notifyCalled();
+            });
+        });
+        callbackHelper.waitForFirst();
+        return resultHolder[0];
+    }
+
+    public String getCookie(CookieManager cookieManager, Uri uri) throws Exception {
+        String[] resultHolder = new String[1];
+        CallbackHelper callbackHelper = new CallbackHelper();
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            cookieManager.getCookie(uri, (String result) -> {
+                resultHolder[0] = result;
+                callbackHelper.notifyCalled();
+            });
+        });
+        callbackHelper.waitForFirst();
+        return resultHolder[0];
     }
 }

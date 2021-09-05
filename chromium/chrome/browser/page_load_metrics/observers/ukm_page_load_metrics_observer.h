@@ -178,9 +178,6 @@ class UkmPageLoadMetricsObserver
   // True if the page main resource was served from disk cache.
   bool was_cached_ = false;
 
-  // True if the page main resource is inner response of a signed exchange.
-  bool is_signed_exchange_inner_response_ = false;
-
   // Whether the first URL in the redirect chain matches the default search
   // engine template.
   bool start_url_is_default_search_ = false;
@@ -211,7 +208,7 @@ class UkmPageLoadMetricsObserver
   // Unique across the lifetime of the browser process.
   int main_document_sequence_number_ = -1;
 
-  bool render_delayed_for_web_font_preloading_observed_ = false;
+  bool font_preload_started_before_rendering_observed_ = false;
 
   // The connection info for the committed URL.
   base::Optional<net::HttpResponseInfo::ConnectionInfo> connection_info_;

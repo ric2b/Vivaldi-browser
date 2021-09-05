@@ -89,7 +89,6 @@
 #include "chrome/browser/chromeos/net/network_portal_detector_impl.h"
 #include "chrome/browser/chromeos/net/network_pref_state_observer.h"
 #include "chrome/browser/chromeos/net/network_throttling_observer.h"
-#include "chrome/browser/chromeos/net/wake_on_wifi_manager.h"
 #include "chrome/browser/chromeos/network_change_manager_client.h"
 #include "chrome/browser/chromeos/note_taking_helper.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
@@ -107,11 +106,11 @@
 #include "chrome/browser/chromeos/power/smart_charging/smart_charging_manager.h"
 #include "chrome/browser/chromeos/printing/bulk_printers_calculator_factory.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/browser/chromeos/resource_reporter/resource_reporter.h"
 #include "chrome/browser/chromeos/scheduler_configuration_manager.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
 #include "chrome/browser/chromeos/settings/shutdown_policy_forwarder.h"
 #include "chrome/browser/chromeos/startup_settings_cache.h"
+#include "chrome/browser/chromeos/system/breakpad_consent_watcher.h"
 #include "chrome/browser/chromeos/system/input_device_settings.h"
 #include "chrome/browser/chromeos/system/user_removal_manager.h"
 #include "chrome/browser/chromeos/system_token_cert_db_initializer.h"
@@ -130,6 +129,7 @@
 #include "chrome/browser/task_manager/task_manager_interface.h"
 #include "chrome/browser/ui/ash/assistant/assistant_client_impl.h"
 #include "chrome/browser/ui/ash/assistant/assistant_state_client.h"
+#include "chrome/browser/ui/ash/image_downloader_impl.h"
 #include "chrome/browser/ui/ash/keyboard/chrome_keyboard_controller_client.h"
 #include "chrome/browser/ui/webui/chromeos/login/discover/discover_manager.h"
 #include "chrome/common/channel_info.h"
@@ -299,7 +299,9 @@ class DBusServices {
         dbus::ObjectPath(kComponentUpdaterServicePath),
         CrosDBusService::CreateServiceProviderList(
             std::make_unique<ComponentUpdaterServiceProvider>(
-                g_browser_process->platform_part()->cros_component_manager())));
+                g_browser_process->platform_part()
+                    ->cros_component_manager()
+                    .get())));
 
     chrome_features_service_ = CrosDBusService::Create(
         system_bus, kChromeFeaturesServiceName,
@@ -376,8 +378,8 @@ class DBusServices {
     // TODO(alanlxl): update Ml here to MachineLearning after powerd is
     // uprevved.
     machine_learning_decision_service_ = CrosDBusService::Create(
-        system_bus, machine_learning::kMlDecisionServiceName,
-        dbus::ObjectPath(machine_learning::kMlDecisionServicePath),
+        system_bus, kMlDecisionServiceName,
+        dbus::ObjectPath(kMlDecisionServicePath),
         CrosDBusService::CreateServiceProviderList(
             std::make_unique<MachineLearningDecisionServiceProvider>()));
   }
@@ -572,14 +574,10 @@ void ChromeBrowserMainPartsChromeos::PreMainMessageLoopRun() {
           ->GetSharedURLLoaderFactory(),
       g_browser_process->local_state());
 
-  wake_on_wifi_manager_.reset(new WakeOnWifiManager());
   fast_transition_observer_.reset(
       new FastTransitionObserver(g_browser_process->local_state()));
   network_throttling_observer_.reset(
       new NetworkThrottlingObserver(g_browser_process->local_state()));
-
-  ResourceReporter::GetInstance()->StartMonitoring(
-      task_manager::TaskManagerInterface::GetTaskManager());
 
   discover_manager_ = std::make_unique<DiscoverManager>();
 
@@ -594,6 +592,19 @@ void ChromeBrowserMainPartsChromeos::PreMainMessageLoopRun() {
   // policy connector is started.
   bulk_printers_calculator_factory_ =
       std::make_unique<BulkPrintersCalculatorFactory>();
+
+  // StatsReportingController is created in
+  // ChromeBrowserMainParts::PreCreateThreads, so this must come afterwards.
+  chromeos::StatsReportingController* stats_controller =
+      chromeos::StatsReportingController::Get();
+  // |stats_controller| can be nullptr if ChromeBrowserMainParts's
+  // browser_process_->GetApplicationLocale() returns empty. We're trying to
+  // show an error message in that case, so don't just crash. (See
+  // ChromeBrowserMainParts::PreCreateThreadsImpl()).
+  if (stats_controller != nullptr) {
+    breakpad_consent_watcher_ =
+        system::BreakpadConsentWatcher::Initialize(stats_controller);
+  }
 
   ChromeBrowserMainPartsLinux::PreMainMessageLoopRun();
 }
@@ -669,6 +680,9 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
   // Initialize magnification manager before ash tray is created. And this
   // must be placed after UserManager initialization.
   MagnificationManager::Initialize();
+
+  // Has to be initialized before |assistant_client_|;
+  image_downloader_ = std::make_unique<ImageDownloaderImpl>();
 
   // Requires UserManager.
   assistant_state_client_ = std::make_unique<AssistantStateClient>();
@@ -866,7 +880,7 @@ void ChromeBrowserMainPartsChromeos::PostProfileInit() {
   network_pref_state_observer_ = std::make_unique<NetworkPrefStateObserver>();
 
   // Initialize the NetworkHealth aggregator.
-  network_health_ = std::make_unique<NetworkHealth>();
+  network_health_ = std::make_unique<network_health::NetworkHealth>();
 
   // Initialize input methods.
   input_method::InputMethodManager* manager =
@@ -1005,8 +1019,6 @@ void ChromeBrowserMainPartsChromeos::PostBrowserStart() {
 void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
   crostini_unsupported_action_notifier_.reset();
 
-  ResourceReporter::GetInstance()->StopMonitoring();
-
   BootTimesRecorder::Get()->AddLogoutTimeMarker("UIMessageLoopEnded", true);
 
   if (lock_screen_apps_state_controller_)
@@ -1046,7 +1058,6 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
   network_health_.reset();
   power_metrics_reporter_.reset();
   renderer_freezer_.reset();
-  wake_on_wifi_manager_.reset();
   fast_transition_observer_.reset();
   network_throttling_observer_.reset();
   if (pre_profile_init_called_)

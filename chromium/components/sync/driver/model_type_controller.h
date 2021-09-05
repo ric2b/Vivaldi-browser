@@ -46,20 +46,18 @@ class ModelTypeController : public DataTypeController {
   std::unique_ptr<DataTypeActivationResponse> ActivateManuallyForNigori();
 
   // DataTypeController implementation.
-  bool ShouldLoadModelBeforeConfigure() const override;
-  void BeforeLoadModels(ModelTypeConfigurer* configurer) override;
   void LoadModels(const ConfigureContext& configure_context,
                   const ModelLoadCallback& model_load_callback) override;
   RegisterWithBackendResult RegisterWithBackend(
       ModelTypeConfigurer* configurer) override;
-  void StartAssociating(StartCallback start_callback) override;
-  void ActivateDataType(ModelTypeConfigurer* configurer) override;
   void DeactivateDataType(ModelTypeConfigurer* configurer) override;
   void Stop(ShutdownReason shutdown_reason, StopCallback callback) override;
   State state() const override;
   void GetAllNodes(AllNodesCallback callback) override;
   void GetStatusCounters(StatusCountersCallback callback) override;
   void RecordMemoryUsageAndCountsHistograms() override;
+
+  ModelTypeControllerDelegate* GetDelegateForTesting(SyncMode sync_mode);
 
  protected:
   // Subclasses that use this constructor must call InitModelTypeController().

@@ -111,15 +111,10 @@ std::vector<CapturedSiteParams> GetCapturedSites(
     JSONReader::ValueWithError value_with_error =
         JSONReader().ReadAndReturnValueWithError(
             json_text, JSONParserOptions::JSON_PARSE_RFC);
-    if (value_with_error.error_code !=
-        JSONReader::JsonParseError::JSON_NO_ERROR) {
+    if (!value_with_error.value) {
       LOG(WARNING) << "Could not load test config from json file: "
                    << "`testcases.json` because: "
                    << value_with_error.error_message;
-      return sites;
-    }
-    if (!value_with_error.value) {
-      LOG(WARNING) << "JSON Reader could not any object from `testcases.json`";
       return sites;
     }
     root_node = std::move(value_with_error.value.value());
@@ -648,12 +643,13 @@ bool TestRecipeReplayer::ReplayRecordedActions(
   }
 
   // Convert the file text into a json object.
-  std::unique_ptr<base::DictionaryValue> recipe = base::DictionaryValue::From(
-      base::JSONReader().ReadToValueDeprecated(json_text));
-  if (!recipe) {
+  base::Optional<base::Value> parsed_json = base::JSONReader::Read(json_text);
+  if (!parsed_json) {
     ADD_FAILURE() << "Failed to deserialize json text!";
     return false;
   }
+  std::unique_ptr<base::DictionaryValue> recipe = base::DictionaryValue::From(
+      base::Value::ToUniquePtrValue(std::move(*parsed_json)));
 
   if (!InitializeBrowserToExecuteRecipe(recipe))
     return false;
@@ -1716,7 +1712,8 @@ bool TestRecipeReplayer::SimulateLeftMouseClickAt(
     return false;
 
   blink::WebMouseEvent mouse_event(
-      blink::WebInputEvent::kMouseDown, blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::Type::kMouseDown,
+      blink::WebInputEvent::kNoModifiers,
       blink::WebInputEvent::GetStaticTimeStampForTests());
   mouse_event.button = blink::WebMouseEvent::Button::kLeft;
   mouse_event.SetPositionInWidget(point.x(), point.y());
@@ -1731,7 +1728,7 @@ bool TestRecipeReplayer::SimulateLeftMouseClickAt(
   content::RenderWidgetHost* widget = view->GetRenderWidgetHost();
 
   widget->ForwardMouseEvent(mouse_event);
-  mouse_event.SetType(blink::WebInputEvent::kMouseUp);
+  mouse_event.SetType(blink::WebInputEvent::Type::kMouseUp);
   widget->ForwardMouseEvent(mouse_event);
   return true;
 }

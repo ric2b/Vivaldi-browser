@@ -23,7 +23,7 @@
 #include "services/tracing/public/cpp/trace_startup.h"
 
 #if defined(OS_LINUX)
-#include "content/utility/soda/soda_sandbox_hook_linux.h"
+#include "content/utility/speech/speech_recognition_sandbox_hook_linux.h"
 #include "services/audio/audio_sandbox_hook_linux.h"
 #include "services/network/network_sandbox_hook_linux.h"
 #include "services/service_manager/sandbox/linux/sandbox_linux.h"
@@ -48,7 +48,7 @@ namespace content {
 
 // Mainline routine for running as the utility process.
 int UtilityMain(const MainFunctionParams& parameters) {
-  const base::MessagePumpType message_pump_type =
+  base::MessagePumpType message_pump_type =
       parameters.command_line.HasSwitch(switches::kMessageLoopTypeUi)
           ? base::MessagePumpType::UI
           : base::MessagePumpType::DEFAULT;
@@ -65,6 +65,12 @@ int UtilityMain(const MainFunctionParams& parameters) {
         return std::make_unique<base::MessagePumpNSRunLoop>();
       });
 #endif
+
+#if defined(OS_FUCHSIA)
+  // On Fuchsia always use IO threads to allow FIDL calls.
+  if (message_pump_type == base::MessagePumpType::DEFAULT)
+    message_pump_type = base::MessagePumpType::IO;
+#endif  // defined(OS_FUCHSIA)
 
   // The main task executor of the utility process.
   base::SingleThreadTaskExecutor main_thread_task_executor(message_pump_type);
@@ -85,14 +91,15 @@ int UtilityMain(const MainFunctionParams& parameters) {
       sandbox_type == service_manager::SandboxType::kIme ||
 #endif  // OS_CHROMEOS
       sandbox_type == service_manager::SandboxType::kAudio ||
-      sandbox_type == service_manager::SandboxType::kSoda) {
+      sandbox_type == service_manager::SandboxType::kSpeechRecognition) {
     service_manager::SandboxLinux::PreSandboxHook pre_sandbox_hook;
     if (sandbox_type == service_manager::SandboxType::kNetwork)
       pre_sandbox_hook = base::BindOnce(&network::NetworkPreSandboxHook);
     else if (sandbox_type == service_manager::SandboxType::kAudio)
       pre_sandbox_hook = base::BindOnce(&audio::AudioPreSandboxHook);
-    else if (sandbox_type == service_manager::SandboxType::kSoda)
-      pre_sandbox_hook = base::BindOnce(&soda::SodaPreSandboxHook);
+    else if (sandbox_type == service_manager::SandboxType::kSpeechRecognition)
+      pre_sandbox_hook =
+          base::BindOnce(&speech::SpeechRecognitionPreSandboxHook);
 #if defined(OS_CHROMEOS)
     else if (sandbox_type == service_manager::SandboxType::kIme)
       pre_sandbox_hook = base::BindOnce(&chromeos::ime::ImePreSandboxHook);

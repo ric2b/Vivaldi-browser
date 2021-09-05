@@ -13,6 +13,7 @@
 #include "content/browser/utility_process_host.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/test_service.mojom.h"
 #include "mojo/public/cpp/bindings/remote.h"
@@ -38,6 +39,10 @@ std::vector<SandboxType> GetSandboxTypesToTest() {
     // These sandbox types can't be spawned in a utility process.
     if (t == SandboxType::kRenderer || t == SandboxType::kGpu)
       continue;
+#if defined(OS_LINUX)
+    if (t == SandboxType::kZygoteIntermediateSandbox)
+      continue;
+#endif
 
     types.push_back(t);
   }
@@ -91,10 +96,13 @@ class UtilityProcessSandboxBrowserTest
   void OnGotSandboxStatusOnIOThread(int32_t sandbox_status) {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-    // Aside from kNoSandox, every utility process launched explicitly with a
+    // Aside from kNoSandbox, every utility process launched explicitly with a
     // sandbox type should always end up with a sandbox.
+    // kVideoCapture is equivalent to kNoSandbox on all platforms except
+    // Fuchsia.
     switch (GetParam()) {
       case SandboxType::kNoSandbox:
+      case SandboxType::kVideoCapture:
         EXPECT_EQ(sandbox_status, 0);
         break;
 
@@ -116,7 +124,7 @@ class UtilityProcessSandboxBrowserTest
       case SandboxType::kIme:
 #endif
       case SandboxType::kNetwork:
-      case SandboxType::kSoda: {
+      case SandboxType::kSpeechRecognition: {
         constexpr int kExpectedPartialSandboxFlags =
             SandboxLinux::kSeccompBPF | SandboxLinux::kYama |
             SandboxLinux::kSeccompTSYNC;
@@ -125,8 +133,8 @@ class UtilityProcessSandboxBrowserTest
       }
 
       case SandboxType::kGpu:
-      case SandboxType::kInvalid:
       case SandboxType::kRenderer:
+      case SandboxType::kZygoteIntermediateSandbox:
         NOTREACHED();
         break;
     }

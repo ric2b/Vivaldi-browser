@@ -17,8 +17,6 @@ extern const base::Feature kHideSteadyStateUrlScheme;
 extern const base::Feature kHideSteadyStateUrlTrivialSubdomains;
 extern const base::Feature kHideSteadyStateUrlPathQueryAndRef;
 extern const base::Feature kOmniboxLocalEntitySuggestions;
-extern const base::Feature kOmniboxMaxURLMatches;
-extern const base::Feature kOmniboxRichEntitySuggestions;
 extern const base::Feature kOmniboxReverseAnswers;
 extern const base::Feature kOmniboxShortBookmarkSuggestions;
 extern const base::Feature kOmniboxTailSuggestions;
@@ -30,7 +28,6 @@ extern const base::Feature kOmniboxSuggestionTransparencyOptions;
 extern const base::Feature kEnableClipboardProviderImageSuggestions;
 extern const base::Feature kSearchProviderWarmUpOnFocus;
 extern const base::Feature kDisplayTitleForCurrentUrl;
-extern const base::Feature kUIExperimentMaxAutocompleteMatches;
 extern const base::Feature kQueryInOmnibox;
 extern const base::Feature kUIExperimentSwapTitleAndUrl;
 extern const base::Feature kSpeculativeServiceWorkerStartOnQueryInput;
@@ -39,7 +36,6 @@ extern const base::Feature kAutocompleteTitles;
 extern const base::Feature kOmniboxDisableInstantExtendedLimit;
 extern const base::Feature kOmniboxSearchEngineLogo;
 extern const base::Feature kOmniboxRemoveSuggestionsFromClipboard;
-extern const base::Feature kOnDeviceHeadProvider;
 extern const base::Feature kDebounceDocumentProvider;
 
 // Flags that affect the "twiddle" step of AutocompleteResult, i.e. SortAndCull.
@@ -51,11 +47,29 @@ extern const base::Feature kOmniboxDemoteByType;
 // search features (e.g. zero suggest).
 extern const base::Feature kNewSearchFeatures;
 
+// Num suggestions - these affect how many suggestions are shown based on e.g.
+// focus, page context, provider, or URL v non-URL.
+// Note that all of these are overriden and default values used instead if
+// kNewSearchFeatures is disabled.
+extern const base::Feature kMaxZeroSuggestMatches;
+extern const base::Feature kUIExperimentMaxAutocompleteMatches;
+// The default value is established here as a bool so it can be referred to in
+// OmniboxFieldTrial.
+extern const bool kOmniboxMaxURLMatchesEnabledByDefault;
+extern const base::Feature kOmniboxMaxURLMatches;
+
 // On-Focus Suggestions a.k.a. ZeroSuggest.
 extern const base::Feature kOnFocusSuggestions;
+extern const base::Feature kOnFocusSuggestionsContextualWeb;
+extern const base::Feature kProactiveZeroSuggestionsOnNTPOmnibox;
+extern const base::Feature kProactiveZeroSuggestionsOnNTPRealbox;
 extern const base::Feature kZeroSuggestionsOnNTP;
 extern const base::Feature kZeroSuggestionsOnNTPRealbox;
 extern const base::Feature kZeroSuggestionsOnSERP;
+
+// On Device Head Suggest.
+extern const base::Feature kOnDeviceHeadProviderIncognito;
+extern const base::Feature kOnDeviceHeadProviderNonIncognito;
 
 // Scoring - these affect how relevance scores are calculated for suggestions.
 extern const base::Feature kOmniboxExperimentalSuggestScoring;
@@ -70,6 +84,7 @@ extern const base::Feature kDeferredKeyboardPopup;
 extern const base::Feature kRichAutocompletion;
 extern const base::Feature kOmniboxLooseMaxLimitOnDedicatedRows;
 extern const base::Feature kOmniboxSuggestionButtonRow;
+extern const base::Feature kOmniboxSuggestionsRecyclerView;
 extern const base::Feature kWebUIOmniboxPopup;
 
 // Omnibox UI - these affect the UI or function of the location bar (not the

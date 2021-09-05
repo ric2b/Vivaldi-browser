@@ -31,7 +31,7 @@
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/buildflags.h"
 #include "ui/base/class_property.h"
-#include "ui/base/dragdrop/os_exchange_data_provider_aurax11.h"
+#include "ui/base/dragdrop/os_exchange_data_provider_x11.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/layout.h"
@@ -57,7 +57,6 @@
 #include "ui/views/widget/desktop_aura/desktop_drag_drop_client_aurax11.h"
 #include "ui/views/widget/desktop_aura/desktop_native_cursor_manager.h"
 #include "ui/views/widget/desktop_aura/desktop_native_widget_aura.h"
-#include "ui/views/widget/desktop_aura/x11_desktop_window_move_client.h"
 #include "ui/views/window/native_frame_view.h"
 #include "ui/wm/core/compound_event_filter.h"
 #include "ui/wm/core/window_util.h"
@@ -72,12 +71,7 @@ DesktopWindowTreeHostX11::DesktopWindowTreeHostX11(
     : DesktopWindowTreeHostLinux(native_widget_delegate,
                                  desktop_native_widget_aura) {}
 
-DesktopWindowTreeHostX11::~DesktopWindowTreeHostX11() {
-  wm::SetWindowMoveClient(window(), nullptr);
-
-  // ~DWTHPlatform notifies the DestkopNativeWidgetAura about destruction and
-  // also destroyes the dispatcher.
-}
+DesktopWindowTreeHostX11::~DesktopWindowTreeHostX11() = default;
 
 ////////////////////////////////////////////////////////////////////////////////
 // DesktopWindowTreeHostX11, DesktopWindowTreeHost implementation:
@@ -94,14 +88,6 @@ void DesktopWindowTreeHostX11::Init(const Widget::InitParams& params) {
   static_cast<ui::X11Window*>(platform_window())->SetXEventDelegate(this);
 }
 
-void DesktopWindowTreeHostX11::OnNativeWidgetCreated(
-    const Widget::InitParams& params) {
-  x11_window_move_client_ = std::make_unique<X11DesktopWindowMoveClient>();
-  wm::SetWindowMoveClient(window(), x11_window_move_client_.get());
-
-  DesktopWindowTreeHostLinux::OnNativeWidgetCreated(params);
-}
-
 std::unique_ptr<aura::client::DragDropClient>
 DesktopWindowTreeHostX11::CreateDragDropClient(
     DesktopNativeCursorManager* cursor_manager) {
@@ -110,25 +96,6 @@ DesktopWindowTreeHostX11::CreateDragDropClient(
                                                        GetXWindow()->window());
   drag_drop_client_->Init();
   return base::WrapUnique(drag_drop_client_);
-}
-
-Widget::MoveLoopResult DesktopWindowTreeHostX11::RunMoveLoop(
-    const gfx::Vector2d& drag_offset,
-    Widget::MoveLoopSource source,
-    Widget::MoveLoopEscapeBehavior escape_behavior) {
-  wm::WindowMoveSource window_move_source =
-      source == Widget::MoveLoopSource::kMouse ? wm::WINDOW_MOVE_SOURCE_MOUSE
-                                               : wm::WINDOW_MOVE_SOURCE_TOUCH;
-  if (x11_window_move_client_->RunMoveLoop(GetContentWindow(), drag_offset,
-                                           window_move_source) ==
-      wm::MOVE_SUCCESSFUL)
-    return Widget::MOVE_LOOP_SUCCESSFUL;
-
-  return Widget::MOVE_LOOP_CANCELED;
-}
-
-void DesktopWindowTreeHostX11::EndMoveLoop() {
-  x11_window_move_client_->EndMoveLoop();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -143,21 +110,7 @@ void DesktopWindowTreeHostX11::OnXWindowSelectionEvent(XEvent* xev) {
 void DesktopWindowTreeHostX11::OnXWindowDragDropEvent(XEvent* xev) {
   DCHECK(xev);
   DCHECK(drag_drop_client_);
-
-  ::Atom message_type = xev->xclient.message_type;
-  if (message_type == gfx::GetAtom("XdndEnter")) {
-    drag_drop_client_->OnXdndEnter(xev->xclient);
-  } else if (message_type == gfx::GetAtom("XdndLeave")) {
-    drag_drop_client_->OnXdndLeave(xev->xclient);
-  } else if (message_type == gfx::GetAtom("XdndPosition")) {
-    drag_drop_client_->OnXdndPosition(xev->xclient);
-  } else if (message_type == gfx::GetAtom("XdndStatus")) {
-    drag_drop_client_->OnXdndStatus(xev->xclient);
-  } else if (message_type == gfx::GetAtom("XdndFinished")) {
-    drag_drop_client_->OnXdndFinished(xev->xclient);
-  } else if (message_type == gfx::GetAtom("XdndDrop")) {
-    drag_drop_client_->OnXdndDrop(xev->xclient);
-  }
+  drag_drop_client_->HandleXdndEvent(xev->xclient);
 }
 
 const ui::XWindow* DesktopWindowTreeHostX11::GetXWindow() const {

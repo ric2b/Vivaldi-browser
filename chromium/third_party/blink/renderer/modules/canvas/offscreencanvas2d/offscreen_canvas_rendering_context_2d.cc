@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/core/css/parser/css_parser.h"
 #include "third_party/blink/renderer/core/css/resolver/font_style_resolver.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/canvas/text_metrics.h"
 #include "third_party/blink/renderer/core/imagebitmap/image_bitmap.h"
@@ -92,9 +93,8 @@ OffscreenCanvasRenderingContext2D::OffscreenCanvasRenderingContext2D(
   }
 
   ExecutionContext* execution_context = canvas->GetTopExecutionContext();
-  if (auto* document = Document::DynamicFrom(execution_context)) {
-    Settings* settings = document->GetSettings();
-    if (settings && settings->GetDisableReadingFromCanvas())
+  if (auto* window = DynamicTo<LocalDOMWindow>(execution_context)) {
+    if (window->GetFrame()->GetSettings()->GetDisableReadingFromCanvas())
       canvas->SetDisableReadingFromCanvasTrue();
     return;
   }
@@ -510,8 +510,6 @@ void OffscreenCanvasRenderingContext2D::DrawTextInternal(
     return;
 
   const Font& font = AccessFont();
-  font.GetFontDescription().SetSubpixelAscentDescent(true);
-
   const SimpleFontData* font_data = font.PrimaryFont();
   DCHECK(font_data);
   if (!font_data)
@@ -601,7 +599,7 @@ TextMetrics* OffscreenCanvasRenderingContext2D::measureText(
 const Font& OffscreenCanvasRenderingContext2D::AccessFont() {
   if (!GetState().HasRealizedFont())
     setFont(GetState().UnparsedFont());
-  return ModifiableState().GetFont();
+  return GetState().GetFont();
 }
 
 bool OffscreenCanvasRenderingContext2D::IsCanvas2DBufferValid() const {

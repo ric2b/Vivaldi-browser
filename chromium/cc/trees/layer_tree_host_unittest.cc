@@ -20,6 +20,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "cc/animation/animation_host.h"
 #include "cc/animation/timing_function.h"
 #include "cc/input/scroll_elasticity_helper.h"
 #include "cc/layers/content_layer_client.h"
@@ -874,6 +875,99 @@ class LayerTreeHostTestPushPropertiesTo : public LayerTreeHostTest {
 
 SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestPushPropertiesTo);
 
+// Verify that invisible render passes are excluded in CompositorFrame.
+class LayerTreeHostTestInvisibleLayersSkipRenderPass
+    : public LayerTreeHostTest {
+ protected:
+  enum Step {
+    kAllInvisible,
+    kOneVisible,
+    kAllVisible,
+    kAllInvisibleAgain,
+    kDone,
+  };
+
+  void SetupTree() override {
+    SetInitialRootBounds(gfx::Size(10, 10));
+    LayerTreeHostTest::SetupTree();
+    auto* root = layer_tree_host()->root_layer();
+    child1_ = CreateChild(root);
+    child2_ = CreateChild(root);
+  }
+
+  scoped_refptr<Layer> CreateChild(scoped_refptr<Layer> root) {
+    auto child = Layer::Create();
+    // Initially hidden.
+    child->SetHideLayerAndSubtree(true);
+    AddBackgroundBlurFilter(child.get());
+    root->AddChild(child.get());
+    return child;
+  }
+
+  void AddBackgroundBlurFilter(Layer* layer) {
+    FilterOperations filters;
+    filters.Append(FilterOperation::CreateBlurFilter(
+        30, SkBlurImageFilter::kClamp_TileMode));
+    layer->SetBackdropFilters(filters);
+  }
+
+  void BeginTest() override {
+    index_ = kAllInvisible;
+    PostSetNeedsCommitToMainThread();
+  }
+
+  void DidCommitAndDrawFrame() override {
+    ++index_;
+    switch (index_) {
+      case kAllInvisible:
+        NOTREACHED();
+        break;
+      case kOneVisible:
+        child1_->SetHideLayerAndSubtree(false);
+        break;
+      case kAllVisible:
+        child2_->SetHideLayerAndSubtree(false);
+        break;
+      case kAllInvisibleAgain:
+        child1_->SetHideLayerAndSubtree(true);
+        child2_->SetHideLayerAndSubtree(true);
+        break;
+      case kDone:
+        EndTest();
+        break;
+    }
+  }
+
+  void DisplayReceivedCompositorFrameOnThread(
+      const viz::CompositorFrame& frame) override {
+    size_t num_render_passes = frame.render_pass_list.size();
+    switch (index_) {
+      case kAllInvisible:
+        // There is only a root render pass.
+        EXPECT_EQ(1u, num_render_passes);
+        break;
+      case kOneVisible:
+        EXPECT_EQ(2u, num_render_passes);
+        break;
+      case kAllVisible:
+        EXPECT_EQ(3u, num_render_passes);
+        break;
+      case kAllInvisibleAgain:
+        EXPECT_EQ(1u, num_render_passes);
+        break;
+      case kDone:
+        EndTest();
+        break;
+    }
+  }
+
+  int index_ = kAllInvisible;
+  scoped_refptr<Layer> child1_;
+  scoped_refptr<Layer> child2_;
+};
+
+SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostTestInvisibleLayersSkipRenderPass);
+
 class LayerTreeHostTestPushNodeOwnerToNodeIdMap : public LayerTreeHostTest {
  protected:
   void SetupTree() override {
@@ -1107,7 +1201,7 @@ class LayerTreeHostTestSurfaceDamage : public LayerTreeHostTest {
         root_->SetBounds(gfx::Size(20, 20));
         break;
       case 3:
-        child_->SetDoubleSided(false);
+        child_->SetOpacity(0.8f);
         break;
     }
   }
@@ -3883,12 +3977,12 @@ class LayerTreeHostTestLCDChange : public LayerTreeHostTest {
         PostSetNeedsCommitToMainThread();
         break;
       case 2:
-        // Change layer opacity that should trigger lcd change.
-        layer_tree_host()->root_layer()->SetOpacity(.5f);
+        // Change contents_opaque that should trigger lcd change.
+        layer_tree_host()->root_layer()->SetContentsOpaque(false);
         break;
       case 3:
-        // Change layer opacity that should not trigger lcd change.
-        layer_tree_host()->root_layer()->SetOpacity(1.f);
+        // Change contents_opaque that should trigger lcd change.
+        layer_tree_host()->root_layer()->SetContentsOpaque(true);
         break;
       case 4:
         EndTest();
@@ -3905,7 +3999,8 @@ class LayerTreeHostTestLCDChange : public LayerTreeHostTest {
     PictureLayerImpl* root_layer =
         static_cast<PictureLayerImpl*>(host_impl->active_tree()->root_layer());
     bool can_use_lcd_text =
-        host_impl->active_tree()->root_layer()->CanUseLCDText();
+        root_layer->ComputeLCDTextDisallowedReasonForTesting() ==
+        LCDTextDisallowedReason::kNone;
     switch (host_impl->active_tree()->source_frame_number()) {
       case 0:
         // The first draw.
@@ -8781,6 +8876,60 @@ class LayerTreeHostTopControlsDeltaTriggersViewportUpdate
 };
 
 MULTI_THREAD_TEST_F(LayerTreeHostTopControlsDeltaTriggersViewportUpdate);
+
+// Tests that custom sequence throughput tracking result is reported to
+// LayerTreeHostClient.
+constexpr MutatorHost::TrackedAnimationSequenceId kSequenceId = 1u;
+class LayerTreeHostCustomThrougputTrackerTest : public LayerTreeHostTest {
+ public:
+  void BeginTest() override { PostSetNeedsCommitToMainThread(); }
+
+  void DidCommit() override {
+    // FrameSequenceTracker typically sees the following sequence:
+    //   e(2,2)b(3)B(0,3)E(3)s(3)S(3)e(3,3)P(3)b(4)B(3,4)E(4)s(4)S(4)e(4,4)P(4)
+    switch (layer_tree_host()->SourceFrameNumber()) {
+      case 1:
+        animation_host()->StartThroughputTracking(kSequenceId);
+        break;
+      case 3:
+        animation_host()->StopThroughputTracking(kSequenceId);
+        break;
+      default:
+        break;
+    }
+
+    PostSetNeedsCommitWithForcedRedrawToMainThread();
+  }
+
+  void NotifyThroughputTrackerResults(CustomTrackerResults results) override {
+    ASSERT_TRUE(base::Contains(results, kSequenceId));
+    const auto& throughput = results[kSequenceId];
+    // Frame 3 and 4 are counted. See the sequence in DidCommit comment for
+    // normal case that expects 2 for both frames_expected and frames_produced.
+    //
+    // However, on slow bots, things could be different.
+    // - Begin frame could be skipped but still counted as expected frames,
+    //
+    //     e(5,5)b(8)B(0,8)E(8)s(3)S(8)e(8,8)b(11)
+    //         B(8,11)E(11)ts(4)S(11)e(11,11)P(3)e(14,14)P(4)
+    //
+    //   B(0, 8) and B(8, 11) make frame_expected to be 4, more than 2 expected
+    //   by test.
+    //
+    // - Finish before frame 4 is presented in multi-thread mode.
+    //
+    //     e(3,3)b(4)B(0,4)E(4)s(2)e(4,4)b(6)B(4,6)E(6)s(3)S(4)e(6,6)
+    //         P(2)e(7,7)P(3)
+    //
+    //   Only P(3) is counted thus frames_produced is 1.
+    EXPECT_GE(throughput.frames_expected, 2u);
+    EXPECT_GE(throughput.frames_produced, 1u);
+
+    EndTest();
+  }
+};
+
+SINGLE_AND_MULTI_THREAD_TEST_F(LayerTreeHostCustomThrougputTrackerTest);
 
 }  // namespace
 }  // namespace cc

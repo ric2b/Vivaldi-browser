@@ -5,7 +5,7 @@
 #include "components/download/public/common/download_item_impl_delegate.h"
 
 #include "base/bind_helpers.h"
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "build/build_config.h"
 #include "components/download/public/common/auto_resumption_handler.h"
 #include "components/download/public/common/download_danger_type.h"
@@ -56,7 +56,14 @@ bool DownloadItemImplDelegate::ShouldOpenDownload(
   return false;
 }
 
-bool DownloadItemImplDelegate::ShouldOpenFileBasedOnExtension(
+bool DownloadItemImplDelegate::ShouldAutomaticallyOpenFile(
+    const GURL& url,
+    const base::FilePath& path) {
+  return false;
+}
+
+bool DownloadItemImplDelegate::ShouldAutomaticallyOpenFileByPolicy(
+    const GURL& url,
     const base::FilePath& path) {
   return false;
 }

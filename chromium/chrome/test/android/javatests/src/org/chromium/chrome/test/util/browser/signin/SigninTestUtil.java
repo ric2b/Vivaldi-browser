@@ -18,11 +18,13 @@ import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.signin.SigninPreferencesManager;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
+import org.chromium.components.signin.AccountManagerFacadeImpl;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.AccountTrackerService;
 import org.chromium.components.signin.AccountUtils;
 import org.chromium.components.signin.ChromeSigninController;
 import org.chromium.components.signin.base.CoreAccountInfo;
+import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.components.signin.metrics.SignoutReason;
 import org.chromium.components.signin.test.util.AccountHolder;
@@ -50,17 +52,20 @@ public final class SigninTestUtil {
      * This must be called before native is loaded.
      */
     @WorkerThread
-    public static void setUpAuthForTest() {
+    public static void setUpAuthForTesting() {
         sAccountManager = new FakeAccountManagerDelegate(
                 FakeAccountManagerDelegate.DISABLE_PROFILE_DATA_SOURCE);
-        AccountManagerFacadeProvider.overrideAccountManagerFacadeForTests(sAccountManager);
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            AccountManagerFacadeProvider.setInstanceForTests(
+                    new AccountManagerFacadeImpl(sAccountManager));
+        });
     }
 
     /**
      * Tears down the test authentication environment.
      */
     @WorkerThread
-    public static void tearDownAuthForTest() {
+    public static void tearDownAuthForTesting() {
         if (getCurrentAccount() != null) {
             signOut();
         }
@@ -82,7 +87,8 @@ public final class SigninTestUtil {
     public static Account getCurrentAccount() {
         return TestThreadUtils.runOnUiThreadBlockingNoException(() -> {
             return CoreAccountInfo.getAndroidAccountFrom(
-                    IdentityServicesProvider.get().getIdentityManager().getPrimaryAccountInfo());
+                    IdentityServicesProvider.get().getIdentityManager().getPrimaryAccountInfo(
+                            ConsentLevel.SYNC));
         });
     }
 
@@ -124,7 +130,6 @@ public final class SigninTestUtil {
         signIn(account);
         return account;
     }
-
     /**
      * Sign into an account. Account should be added by {@link #addTestAccount} first.
      */
@@ -157,7 +162,7 @@ public final class SigninTestUtil {
             Assert.assertEquals(account.name,
                     IdentityServicesProvider.get()
                             .getIdentityManager()
-                            .getPrimaryAccountInfo()
+                            .getPrimaryAccountInfo(ConsentLevel.SYNC)
                             .getEmail());
         });
     }

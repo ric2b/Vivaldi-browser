@@ -11,8 +11,8 @@
 #include "base/memory/ptr_util.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/devtools/devtools_instrumentation.h"
+#include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/frame_host/navigator.h"
-#include "content/browser/frame_host/navigator_impl.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/frame_host/render_frame_host_manager.h"
 #include "content/browser/frame_host/render_frame_proxy_host.h"
@@ -21,6 +21,7 @@
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/page_type.h"
 #include "content/public/common/referrer_type_converters.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/service_manager/public/mojom/interface_provider.mojom.h"
@@ -126,16 +127,15 @@ RenderFrameProxyHost* Portal::CreateProxyAndAttachPortal() {
   // Create a FrameTreeNode in the outer WebContents to host the portal, in
   // response to the creation of a portal in the renderer process.
   FrameTreeNode* outer_node = outer_contents_impl->GetFrameTree()->AddFrame(
-      owner_render_frame_host_->frame_tree_node(),
-      owner_render_frame_host_->GetProcess()->GetID(),
+      owner_render_frame_host_, owner_render_frame_host_->GetProcess()->GetID(),
       owner_render_frame_host_->GetProcess()->GetNextRoutingID(),
       std::move(interface_provider_receiver),
       mojo::PendingRemote<blink::mojom::BrowserInterfaceBroker>()
           .InitWithNewPipeAndPassReceiver(),
-      blink::WebTreeScopeType::kDocument, "", "", true,
-      base::UnguessableToken::Create(), blink::FramePolicy(),
-      blink::mojom::FrameOwnerProperties(), false,
-      blink::FrameOwnerElementType::kPortal);
+      blink::mojom::TreeScopeType::kDocument, "", "", true,
+      base::UnguessableToken::Create(), base::UnguessableToken::Create(),
+      blink::FramePolicy(), blink::mojom::FrameOwnerProperties(), false,
+      blink::mojom::FrameOwnerElementType::kPortal);
   outer_node->AddObserver(this);
 
   bool web_contents_created = false;
@@ -156,6 +156,18 @@ RenderFrameProxyHost* Portal::CreateProxyAndAttachPortal() {
   outer_contents_impl->AttachInnerWebContents(
       portal_contents_.ReleaseOwnership(), outer_node->current_frame_host(),
       false /* is_full_page */);
+
+  // If a cross-process navigation started while the predecessor was orphaned,
+  // we need to create a view for the speculative RFH as well.
+  if (RenderFrameHostImpl* speculative_rfh =
+          portal_contents_->GetPendingMainFrame()) {
+    if (RenderWidgetHostViewBase* view = static_cast<RenderWidgetHostViewBase*>(
+            speculative_rfh->GetView())) {
+      view->Destroy();
+    }
+    portal_contents_->CreateRenderWidgetHostViewForRenderManager(
+        speculative_rfh->render_view_host());
+  }
 
   FrameTreeNode* frame_tree_node =
       portal_contents_->GetMainFrame()->frame_tree_node();
@@ -220,12 +232,18 @@ void Portal::Navigate(const GURL& url,
   // Fix this so that we can enforce this as an invariant.
   constexpr bool should_replace_entry = true;
 
+  // TODO(https://crbug.com/1074422): It is possible for a portal to be
+  // navigated by a frame other than the owning frame. Find a way to route the
+  // correct initiator of the portal navigation to this call.
   portal_root->navigator()->NavigateFromFrameProxy(
-      portal_frame, url, owner_render_frame_host_->GetLastCommittedOrigin(),
+      portal_frame, url,
+      GlobalFrameRoutingId(owner_render_frame_host_->GetProcess()->GetID(),
+                           owner_render_frame_host_->GetRoutingID()),
+      owner_render_frame_host_->GetLastCommittedOrigin(),
       owner_render_frame_host_->GetSiteInstance(),
       mojo::ConvertTo<Referrer>(referrer), ui::PAGE_TRANSITION_LINK,
-      should_replace_entry, download_policy, "GET", nullptr, "", nullptr,
-      false);
+      should_replace_entry, download_policy, "GET", nullptr, "", nullptr, false,
+      base::nullopt);
 
   std::move(callback).Run();
 }
@@ -272,15 +290,8 @@ void TakeHistoryForActivation(WebContentsImpl* activated_contents,
   NavigationControllerImpl& predecessor_controller =
       predecessor_contents->GetController();
 
-  DCHECK(predecessor_controller.GetLastCommittedEntry());
   // Activation would have discarded any pending entry in the host contents.
   DCHECK(!predecessor_controller.GetPendingEntry());
-
-  // TODO(mcnee): Determine how to deal with a transient entry.
-  if (predecessor_controller.GetTransientEntry() ||
-      activated_controller.GetTransientEntry()) {
-    return;
-  }
 
   // TODO(mcnee): Once we enforce that a portal contents does not build up its
   // own history, make this DCHECK that we only have a single committed entry,
@@ -318,14 +329,35 @@ void Portal::Activate(blink::TransferableMessage data,
       << "The binding should have been closed when the portal's outer "
          "FrameTreeNode was deleted due to swap out.";
 
+  DCHECK(portal_contents_);
+  NavigationControllerImpl& portal_controller =
+      portal_contents_->GetController();
+  NavigationControllerImpl& predecessor_controller =
+      outer_contents->GetController();
+
   // If no navigation has yet committed in the portal, it cannot be activated as
   // this would lead to an empty tab contents (without even an about:blank).
-  DCHECK(portal_contents_);
-  if (portal_contents_->GetController().GetLastCommittedEntryIndex() < 0) {
+  if (portal_controller.GetLastCommittedEntryIndex() < 0) {
     std::move(callback).Run(
         blink::mojom::PortalActivateResult::kRejectedDueToPortalNotReady);
     return;
   }
+  DCHECK(predecessor_controller.GetLastCommittedEntry());
+
+  // Error pages and interstitials may not host portals due to the HTTP(S)
+  // restriction.
+  DCHECK_EQ(PAGE_TYPE_NORMAL,
+            predecessor_controller.GetLastCommittedEntry()->GetPageType());
+  DCHECK(!predecessor_controller.GetTransientEntry());
+
+  // If the portal is showing an error page, reject activation.
+  if (portal_controller.GetLastCommittedEntry()->GetPageType() !=
+      PAGE_TYPE_NORMAL) {
+    std::move(callback).Run(
+        blink::mojom::PortalActivateResult::kRejectedDueToErrorInPortal);
+    return;
+  }
+  DCHECK(!portal_controller.GetTransientEntry());
 
   // If a navigation in the main frame is occurring, stop it if possible and
   // reject the activation if it's too late or if an ongoing navigation takes
@@ -346,13 +378,13 @@ void Portal::Activate(blink::TransferableMessage data,
   if (owner_render_frame_host_->HasPendingCommitNavigation() ||
       (outer_navigation &&
        outer_navigation->state() >= NavigationRequest::WILL_PROCESS_RESPONSE) ||
-      NavigatorImpl::ShouldIgnoreIncomingRendererRequest(outer_navigation,
-                                                         has_user_gesture)) {
+      Navigator::ShouldIgnoreIncomingRendererRequest(outer_navigation,
+                                                     has_user_gesture)) {
     std::move(callback).Run(blink::mojom::PortalActivateResult::
                                 kRejectedDueToPredecessorNavigation);
     return;
   }
-  outer_root_node->StopLoading();
+  outer_root_node->navigator()->CancelNavigation(outer_root_node);
 
   DCHECK(!is_closing_) << "Portal should not be shutting down when contents "
                           "ownership is yielded";
@@ -383,6 +415,7 @@ void Portal::Activate(blink::TransferableMessage data,
 
   auto* outer_contents_main_frame_view = static_cast<RenderWidgetHostViewBase*>(
       outer_contents->GetMainFrame()->GetView());
+  DCHECK(!outer_contents->GetPendingMainFrame());
   auto* portal_contents_main_frame_view =
       static_cast<RenderWidgetHostViewBase*>(
           successor_contents_raw->GetMainFrame()->GetView());
@@ -421,24 +454,18 @@ void Portal::Activate(blink::TransferableMessage data,
 
   // These pointers are cleared so that they don't dangle in the event this
   // object isn't immediately deleted. It isn't done sooner because
-  // SwapWebContents misbehaves if the WebContents doesn't appear to be a portal
-  // at that time.
+  // ActivatePortalWebContents misbehaves if the WebContents doesn't appear to
+  // be a portal at that time.
   portal_contents_.Clear();
 
   successor_contents_raw->GetMainFrame()->OnPortalActivated(
       std::move(predecessor_web_contents), std::move(data),
       std::move(callback));
-  successor_contents_raw->NotifyInsidePortal(false);
-
-  // This happens later than SwapWebContents so that the delegate can observe it
-  // happening after predecessor_web_contents has been moved into a portal.
-  successor_contents_raw->GetDelegate()->WebContentsBecamePortal(
-      outer_contents);
-
-  BrowserAccessibilityManager* manager =
-      successor_contents_raw->GetMainFrame()->browser_accessibility_manager();
-  if (manager)
-    manager->OnPortalActivated();
+  // Notifying of activation happens later than ActivatePortalWebContents so
+  // that it is observed after predecessor_web_contents has been moved into a
+  // portal.
+  DCHECK(outer_contents->IsPortal());
+  successor_contents_raw->DidActivatePortal(outer_contents);
 }
 
 void Portal::PostMessageToGuest(

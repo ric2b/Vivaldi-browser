@@ -53,20 +53,22 @@ void BuildColumnSet(views::GridLayout* layout,
       ChromeLayoutProvider::Get()->GetDistanceMetric(
           views::DISTANCE_RELATED_CONTROL_HORIZONTAL);
   column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL,
-                        kFirstColumnWeight, views::GridLayout::FIXED, 0, 0);
+                        kFirstColumnWeight,
+                        views::GridLayout::ColumnSize::kFixed, 0, 0);
 
   if (type_id == PASSWORD_COLUMN_SET) {
     column_set->AddPaddingColumn(views::GridLayout::kFixedSize,
                                  between_column_padding);
     column_set->AddColumn(views::GridLayout::FILL, views::GridLayout::FILL,
-                          kSecondColumnWeight, views::GridLayout::FIXED, 0, 0);
+                          kSecondColumnWeight,
+                          views::GridLayout::ColumnSize::kFixed, 0, 0);
   }
   // All rows end with a trailing column for the undo/trash button.
   column_set->AddPaddingColumn(views::GridLayout::kFixedSize,
                                between_column_padding);
   column_set->AddColumn(views::GridLayout::TRAILING, views::GridLayout::FILL,
                         views::GridLayout::kFixedSize,
-                        views::GridLayout::USE_PREF, 0, 0);
+                        views::GridLayout::ColumnSize::kUsePreferred, 0, 0);
 }
 
 void StartRow(views::GridLayout* layout,
@@ -91,9 +93,8 @@ std::unique_ptr<views::ImageButton> CreateDeleteButton(
 std::unique_ptr<views::LabelButton> CreateUndoButton(
     views::ButtonListener* listener,
     const base::string16& username) {
-  std::unique_ptr<views::LabelButton> undo_button(
-      views::MdTextButton::CreateSecondaryUiButton(
-          listener, l10n_util::GetStringUTF16(IDS_MANAGE_PASSWORDS_UNDO)));
+  auto undo_button = views::MdTextButton::Create(
+      listener, l10n_util::GetStringUTF16(IDS_MANAGE_PASSWORDS_UNDO));
   undo_button->set_tag(kUndoButtonTag);
   undo_button->SetFocusForPlatform();
   undo_button->SetTooltipText(
@@ -103,7 +104,7 @@ std::unique_ptr<views::LabelButton> CreateUndoButton(
 
 std::unique_ptr<views::View> CreateManageButton(
     views::ButtonListener* listener) {
-  return views::MdTextButton::CreateSecondaryUiButton(
+  return views::MdTextButton::Create(
       listener,
       l10n_util::GetStringUTF16(IDS_PASSWORD_MANAGER_MANAGE_PASSWORDS_BUTTON));
 }
@@ -220,8 +221,8 @@ PasswordItemsView::PasswordItemsView(content::WebContents* web_contents,
                              anchor_view,
                              /*easily_dismissable=*/true),
       controller_(PasswordsModelDelegateFromWebContents(web_contents)) {
-  DialogDelegate::SetButtons(ui::DIALOG_BUTTON_OK);
-  DialogDelegate::SetExtraView(CreateManageButton(this));
+  SetButtons(ui::DIALOG_BUTTON_OK);
+  SetExtraView(CreateManageButton(this));
 
   if (controller_.local_credentials().empty()) {
     // A LayoutManager is required for GetHeightForWidth() even without content.

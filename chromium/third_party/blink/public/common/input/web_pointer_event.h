@@ -35,6 +35,8 @@ class BLINK_COMMON_EXPORT WebPointerEvent : public WebInputEvent,
   WebPointerEvent(WebInputEvent::Type, const WebMouseEvent&);
 
   std::unique_ptr<WebInputEvent> Clone() const override;
+  bool CanCoalesce(const WebInputEvent& event) const override;
+  void Coalesce(const WebInputEvent& event) override;
 
   static WebPointerEvent CreatePointerCausesUaActionEvent(
       WebPointerProperties::PointerType,
@@ -52,7 +54,7 @@ class BLINK_COMMON_EXPORT WebPointerEvent : public WebInputEvent,
 
   // Whether the event is blocking, non-blocking, all event
   // listeners were passive or was forced to be non-blocking.
-  DispatchType dispatch_type = kBlocking;
+  DispatchType dispatch_type = DispatchType::kBlocking;
 
   // For a single touch, this is true after the touch-point has moved beyond
   // the platform slop region. For a multitouch, this is true after any
@@ -75,7 +77,7 @@ class BLINK_COMMON_EXPORT WebPointerEvent : public WebInputEvent,
   float width = 0.0f;
   float height = 0.0f;
 
-  bool IsCancelable() const { return dispatch_type == kBlocking; }
+  bool IsCancelable() const { return dispatch_type == DispatchType::kBlocking; }
   bool HasWidth() const { return !std::isnan(width); }
   bool HasHeight() const { return !std::isnan(height); }
 

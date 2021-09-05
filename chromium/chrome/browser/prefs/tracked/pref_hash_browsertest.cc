@@ -35,6 +35,7 @@
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/search_engines/default_search_manager.h"
 #include "components/search_engines/template_url_data.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/test_launcher.h"
 #include "extensions/browser/pref_names.h"
 #include "extensions/common/extension.h"
@@ -377,10 +378,8 @@ class PrefHashBrowserTestBase
 
       std::string num_tracked_prefs_str =
           base::NumberToString(num_tracked_prefs_);
-      EXPECT_EQ(static_cast<int>(num_tracked_prefs_str.size()),
-                base::WriteFile(num_tracked_prefs_file,
-                                num_tracked_prefs_str.c_str(),
-                                num_tracked_prefs_str.size()));
+      EXPECT_TRUE(
+          base::WriteFile(num_tracked_prefs_file, num_tracked_prefs_str));
     } else {
       std::string num_tracked_prefs_str;
       EXPECT_TRUE(base::ReadFileToString(num_tracked_prefs_file,
@@ -895,16 +894,10 @@ class PrefHashBrowserTestChangedSplitPref : public PrefHashBrowserTestBase {
   }
 
   void VerifyReactionToPrefAttack() override {
-    // Expect a single split pref changed report with a count of 2 for tracked
-    // pref #5 (extensions).
     EXPECT_EQ(protection_level_ > PROTECTION_DISABLED_ON_PLATFORM ? 1 : 0,
               GetTrackedPrefHistogramCount(
                   user_prefs::tracked::kTrackedPrefHistogramChanged,
                   BEGIN_ALLOW_SINGLE_BUCKET + 5));
-    EXPECT_EQ(protection_level_ > PROTECTION_DISABLED_ON_PLATFORM ? 1 : 0,
-              GetTrackedPrefHistogramCount(
-                  "Settings.TrackedSplitPreferenceChanged.extensions.settings",
-                  BEGIN_ALLOW_SINGLE_BUCKET + 2));
 
     // Everything else should have remained unchanged.
     EXPECT_EQ(

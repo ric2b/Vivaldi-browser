@@ -24,6 +24,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_WTF_LIST_HASH_SET_H_
 
 #include <memory>
+#include <type_traits>
 #include "third_party/blink/renderer/platform/wtf/allocator/partition_allocator.h"
 #include "third_party/blink/renderer/platform/wtf/conditional_destructor.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
@@ -79,6 +80,9 @@ struct ListHashSetTraits
     AsAtomicPtr(&slot)->store(reinterpret_cast<Node*>(-1),
                               std::memory_order_relaxed);
   }
+
+  static constexpr bool kCanTraceConcurrently =
+      HashTraits<Value>::kCanTraceConcurrently;
 };
 
 // Note that for a ListHashSet you cannot specify the HashTraits as a template
@@ -454,7 +458,19 @@ struct ListHashSetAllocator : public PartitionAllocator {
 };
 
 template <typename ValueArg, typename AllocatorArg>
-class ListHashSetNode : public ListHashSetNodeBase<ValueArg, AllocatorArg> {
+class ListHashSetNode
+    : public ListHashSetNodeBase<ValueArg, AllocatorArg>,
+      // Destruction handling:
+      // !AllocatorArg::kIsGarbageCollected (PartitionAlloc):
+      // - ListHashSet has destructor and manually destructs all nodes.
+      // - ListHashSetNode has no destructor.
+      // AllocatorArg::kIsGarbageCollected (Oilpan):
+      // - ListHashSet has no destructor.
+      // - ListHashSetNode has a destructor if it is not trivially destructible.
+      public ConditionalDestructor<
+          ListHashSetNode<ValueArg, AllocatorArg>,
+          !AllocatorArg::kIsGarbageCollected ||
+              std::is_trivially_destructible<ValueArg>::value> {
  public:
   typedef AllocatorArg NodeAllocator;
   typedef ValueArg Value;
@@ -481,12 +497,12 @@ class ListHashSetNode : public ListHashSetNodeBase<ValueArg, AllocatorArg> {
     return this->prev_ == UnlinkedNodePointer();
   }
 
-  static void Finalize(void* pointer) {
+  void Finalize() {
     // No need to waste time calling finalize if it's not needed.
     static_assert(
         !std::is_trivially_destructible<ValueArg>::value,
         "Finalization of trivially destructible classes should not happen.");
-    ListHashSetNode* self = reinterpret_cast_ptr<ListHashSetNode*>(pointer);
+    ListHashSetNode* self = reinterpret_cast_ptr<ListHashSetNode*>(this);
 
     // Check whether this node was already destructed before being unlinked
     // from the collection.
@@ -495,7 +511,6 @@ class ListHashSetNode : public ListHashSetNodeBase<ValueArg, AllocatorArg> {
 
     self->value_.~ValueArg();
   }
-  void FinalizeGarbageCollectedObject() { Finalize(this); }
 
   void Destroy(NodeAllocator* allocator) {
     this->~ListHashSetNode();
@@ -506,13 +521,15 @@ class ListHashSetNode : public ListHashSetNodeBase<ValueArg, AllocatorArg> {
   template <typename VisitorDispatcher, typename A = NodeAllocator>
   std::enable_if_t<A::kIsGarbageCollected> Trace(
       VisitorDispatcher visitor) const {
-    if (visitor->ConcurrentTracingBailOut(
-            {this, [](blink::Visitor* visitor, const void* object) {
-               reinterpret_cast<const ListHashSetNode<ValueArg, AllocatorArg>*>(
-                   object)
-                   ->Trace(visitor);
-             }}))
-      return;
+    if (!ListHashSetTraits<Value, NodeAllocator>::kCanTraceConcurrently) {
+      if (visitor->DeferredTraceIfConcurrent(
+              {this, [](blink::Visitor* visitor, const void* object) {
+                 reinterpret_cast<
+                     const ListHashSetNode<ValueArg, AllocatorArg>*>(object)
+                     ->Trace(visitor);
+               }}))
+        return;
+    }
 
     // The conservative stack scan can find nodes that have been removed
     // from the set and destructed. We don't need to trace these, and it
@@ -1191,13 +1208,15 @@ template <typename T, size_t inlineCapacity, typename U, typename V>
 template <typename VisitorDispatcher, typename A>
 std::enable_if_t<A::kIsGarbageCollected>
 ListHashSet<T, inlineCapacity, U, V>::Trace(VisitorDispatcher visitor) const {
-  if (visitor->ConcurrentTracingBailOut(
-          {this, [](blink::Visitor* visitor, const void* object) {
-             reinterpret_cast<const ListHashSet<T, inlineCapacity, U, V>*>(
-                 object)
-                 ->Trace(visitor);
-           }}))
-    return;
+  if (!NodeTraits::kCanTraceConcurrently) {
+    if (visitor->DeferredTraceIfConcurrent(
+            {this, [](blink::Visitor* visitor, const void* object) {
+               reinterpret_cast<const ListHashSet<T, inlineCapacity, U, V>*>(
+                   object)
+                   ->Trace(visitor);
+             }}))
+      return;
+  }
 
   static_assert(!IsWeak<T>::value,
                 "HeapListHashSet does not support weakness, consider using "

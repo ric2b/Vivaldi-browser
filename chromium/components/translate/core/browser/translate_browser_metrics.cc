@@ -11,6 +11,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/metrics_hashes.h"
+#include "base/notreached.h"
 #include "base/stl_util.h"
 #include "components/language_usage_metrics/language_usage_metrics.h"
 
@@ -23,6 +24,8 @@ namespace {
 const char kTranslateInitiationStatus[] = "Translate.InitiationStatus.v2";
 const char kTranslateReportLanguageDetectionError[] =
     "Translate.ReportLanguageDetectionError";
+const char kTranslateLanguageDetectionContentLength[] =
+    "Translate.LanguageDetection.ContentLength";
 const char kTranslateLocalesOnDisabledByPrefs[] =
     "Translate.LocalesOnDisabledByPrefs";
 const char kTranslateUndisplayableLanguage[] =
@@ -76,6 +79,11 @@ void ReportInitiationStatus(InitiationStatusType type) {
 
 void ReportLanguageDetectionError() {
   UMA_HISTOGRAM_BOOLEAN(kTranslateReportLanguageDetectionError, true);
+}
+
+void ReportLanguageDetectionContentLength(size_t length) {
+  base::UmaHistogramCounts100000(kTranslateLanguageDetectionContentLength,
+                                 length);
 }
 
 void ReportLocalesOnDisabledByPrefs(const std::string& locale) {

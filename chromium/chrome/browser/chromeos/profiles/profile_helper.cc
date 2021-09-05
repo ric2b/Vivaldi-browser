@@ -245,8 +245,13 @@ base::FilePath ProfileHelper::GetSigninProfileDir() {
 // static
 Profile* ProfileHelper::GetSigninProfile() {
   ProfileManager* profile_manager = g_browser_process->profile_manager();
+  // |profile_manager| could be null in tests.
+  if (!profile_manager) {
+    return nullptr;
+  }
+
   return profile_manager->GetProfile(GetSigninProfileDir())
-      ->GetOffTheRecordProfile();
+      ->GetPrimaryOTRProfile();
 }
 
 // static
@@ -407,9 +412,9 @@ ProfileHelperImpl::~ProfileHelperImpl() {
 void ProfileHelperImpl::ProfileStartup(Profile* profile) {
   // Initialize Chrome OS preferences like touch pad sensitivity. For the
   // preferences to work in the guest mode, the initialization has to be
-  // done after |profile| is switched to the incognito profile (which
+  // done after |profile| is switched to the off-the-record profile (which
   // is actually GuestSessionProfile in the guest mode). See the
-  // GetOffTheRecordProfile() call above.
+  // GetPrimaryOTRProfile() call above.
   profile->InitChromeOSPreferences();
 
   // Add observer so we can see when the first profile's session restore is
@@ -449,8 +454,8 @@ void ProfileHelperImpl::ClearSigninProfile(
     return;
   }
   on_clear_profile_stage_finished_ = base::BarrierClosure(
-      3, base::Bind(&ProfileHelperImpl::OnSigninProfileCleared,
-                    weak_factory_.GetWeakPtr()));
+      3, base::BindOnce(&ProfileHelperImpl::OnSigninProfileCleared,
+                        weak_factory_.GetWeakPtr()));
   LOG_ASSERT(!browsing_data_remover_);
   browsing_data_remover_ =
       content::BrowserContext::GetBrowsingDataRemover(GetSigninProfile());
@@ -521,9 +526,9 @@ Profile* ProfileHelperImpl::GetProfileByUser(const user_manager::User* user) {
   Profile* profile = GetProfileByUserIdHash(user->username_hash());
 
   // GetActiveUserProfile() or GetProfileByUserIdHash() returns a new instance
-  // of ProfileImpl(), but actually its OffTheRecordProfile() should be used.
+  // of ProfileImpl(), but actually its off-the-record profile should be used.
   if (user_manager::UserManager::Get()->IsLoggedInAsGuest())
-    profile = profile->GetOffTheRecordProfile();
+    profile = profile->GetPrimaryOTRProfile();
 
   return profile;
 }
@@ -550,9 +555,9 @@ Profile* ProfileHelperImpl::GetProfileByUserUnsafe(
   }
 
   // GetActiveUserProfile() or GetProfileByUserIdHash() returns a new instance
-  // of ProfileImpl(), but actually its OffTheRecordProfile() should be used.
+  // of ProfileImpl(), but actually its off-the-record profile should be used.
   if (profile && user_manager::UserManager::Get()->IsLoggedInAsGuest())
-    profile = profile->GetOffTheRecordProfile();
+    profile = profile->GetPrimaryOTRProfile();
   return profile;
 }
 

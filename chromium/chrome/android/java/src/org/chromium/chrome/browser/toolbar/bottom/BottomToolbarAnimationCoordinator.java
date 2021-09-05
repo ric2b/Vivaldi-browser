@@ -103,6 +103,7 @@ public class BottomToolbarAnimationCoordinator extends EmptyOverviewModeObserver
         });
         mBrowsingModeCoordinator.getSearchAccelerator().setImageResource(
                 showBrowsingMode ? R.drawable.ic_search : R.drawable.new_tab_icon);
+        if (!ChromeApplication.isVivaldi()) // Note(David@vivaldi.com): No animation required.
         animators.add(widthAnimator);
 
         animators.get(0).addListener(new AnimatorListenerAdapter() {

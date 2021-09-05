@@ -17,6 +17,15 @@ import * as util from './util.js';
 const THUMBNAIL_WIDTH = 240;
 
 /**
+ * The maximum size of video used to generate the thumbnail. The file would be
+ * truncated to that size before generating the thumbnail, which speeds up the
+ * generation process significantly when the file is large. 32MB should be more
+ * than enough for getting the first frame from a video.
+ * @type {number}
+ */
+const VIDEO_THUMBNAIL_SIZE_LIMIT = 32 << 20;
+
+/**
  * Cover photo of gallery button.
  */
 class CoverPhoto {
@@ -59,8 +68,9 @@ class CoverPhoto {
    * @return {!Promise<!CoverPhoto>}
    */
   static async create(file) {
-    const fileUrl = await filesystem.pictureURL(file);
     const isVideo = filesystem.hasVideoPrefix(file);
+    const limit = isVideo ? VIDEO_THUMBNAIL_SIZE_LIMIT : Infinity;
+    const fileUrl = await filesystem.pictureURL(file, limit);
     const thumbnail =
         await util.scalePicture(fileUrl, isVideo, THUMBNAIL_WIDTH);
     URL.revokeObjectURL(fileUrl);
@@ -196,16 +206,15 @@ export class GalleryButton {
    * @override
    */
   async startSaveVideo() {
-    const tempFile = await filesystem.createTempVideoFile();
-    return VideoSaver.createForFile(tempFile);
+    const file = await filesystem.createVideoFile();
+    return VideoSaver.createForFile(file);
   }
 
   /**
    * @override
    */
-  async finishSaveVideo(video, name) {
-    const tempFile = await video.endWrite();
-    const file = await filesystem.saveVideo(tempFile, name);
+  async finishSaveVideo(video) {
+    const file = await video.endWrite();
     assert(file !== null);
     await this.updateCover_(file);
   }

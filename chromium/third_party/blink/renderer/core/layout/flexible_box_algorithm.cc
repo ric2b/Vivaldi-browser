@@ -34,6 +34,7 @@
 #include "third_party/blink/renderer/core/layout/layout_flexible_box.h"
 #include "third_party/blink/renderer/core/layout/min_max_sizes.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_box_fragment.h"
+#include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace blink {
 namespace {
@@ -480,7 +481,9 @@ void FlexLine::ComputeLineItemsPosition(LayoutUnit main_axis_start_offset,
   LayoutUnit total_item_size;
   for (size_t i = 0; i < line_items.size(); ++i)
     total_item_size += line_items[i].FlexedMarginBoxSize();
-  remaining_free_space = container_main_inner_size - total_item_size;
+  remaining_free_space =
+      container_main_inner_size - total_item_size -
+      (line_items.size() - 1) * algorithm->gap_between_items_;
 
   const StyleContentAlignmentData justify_content =
       FlexLayoutAlgorithm::ResolvedJustifyContent(*algorithm->Style());
@@ -562,7 +565,9 @@ void FlexLine::ComputeLineItemsPosition(LayoutUnit main_axis_start_offset,
       LayoutUnit space_between =
           FlexLayoutAlgorithm::ContentDistributionSpaceBetweenChildren(
               available_free_space, justify_content, line_items.size());
-      main_axis_offset += space_between;
+      main_axis_offset += space_between + algorithm->gap_between_items_;
+      // The gap is included in the intrinsic content block size, so don't add
+      // it to sum_justify_adjustments.
       sum_justify_adjustments += space_between;
     }
   }
@@ -575,11 +580,71 @@ void FlexLine::ComputeLineItemsPosition(LayoutUnit main_axis_start_offset,
   cross_axis_offset += max_child_cross_axis_extent;
 }
 
+// static
+LayoutUnit FlexLayoutAlgorithm::GapBetweenItems(
+    const ComputedStyle& style,
+    LogicalSize percent_resolution_sizes) {
+  if (!RuntimeEnabledFeatures::FlexGapsEnabled())
+    return LayoutUnit();
+  DCHECK_GE(percent_resolution_sizes.inline_size, 0);
+  if (IsColumnFlow(style)) {
+    if (LIKELY(style.RowGap().IsNormal()))
+      return LayoutUnit();
+    return MinimumValueForLength(
+        style.RowGap().GetLength(),
+        percent_resolution_sizes.block_size.ClampNegativeToZero());
+  }
+  if (LIKELY(style.ColumnGap().IsNormal()))
+    return LayoutUnit();
+  return MinimumValueForLength(style.ColumnGap().GetLength(),
+                               percent_resolution_sizes.inline_size);
+}
+
+// static
+LayoutUnit FlexLayoutAlgorithm::GapBetweenLines(
+    const ComputedStyle& style,
+    LogicalSize percent_resolution_sizes) {
+  if (!RuntimeEnabledFeatures::FlexGapsEnabled())
+    return LayoutUnit();
+  DCHECK_GE(percent_resolution_sizes.inline_size, 0);
+  if (!IsColumnFlow(style)) {
+    if (LIKELY(style.RowGap().IsNormal()))
+      return LayoutUnit();
+    return MinimumValueForLength(
+        style.RowGap().GetLength(),
+        percent_resolution_sizes.block_size.ClampNegativeToZero());
+  }
+  if (LIKELY(style.ColumnGap().IsNormal()))
+    return LayoutUnit();
+  return MinimumValueForLength(style.ColumnGap().GetLength(),
+                               percent_resolution_sizes.inline_size);
+}
+
 FlexLayoutAlgorithm::FlexLayoutAlgorithm(const ComputedStyle* style,
-                                         LayoutUnit line_break_length)
-    : style_(style),
+                                         LayoutUnit line_break_length,
+                                         LogicalSize percent_resolution_sizes,
+                                         Document* document)
+    : gap_between_items_(GapBetweenItems(*style, percent_resolution_sizes)),
+      gap_between_lines_(GapBetweenLines(*style, percent_resolution_sizes)),
+      style_(style),
       line_break_length_(line_break_length),
-      next_item_index_(0) {}
+      next_item_index_(0) {
+  DCHECK_GE(gap_between_items_, 0);
+  DCHECK_GE(gap_between_lines_, 0);
+  const auto& row_gap = style->RowGap();
+  const auto& column_gap = style->ColumnGap();
+  if (!row_gap.IsNormal() || !column_gap.IsNormal()) {
+    UseCounter::Count(document, WebFeature::kFlexGapSpecified);
+    if (gap_between_items_ || gap_between_lines_)
+      UseCounter::Count(document, WebFeature::kFlexGapPositive);
+  }
+
+  if (!row_gap.IsNormal() && row_gap.GetLength().IsPercentOrCalc()) {
+    UseCounter::Count(document, WebFeature::kFlexRowGapPercent);
+    if (percent_resolution_sizes.block_size == LayoutUnit(-1))
+      UseCounter::Count(document, WebFeature::kFlexRowGapPercentIndefinite);
+  }
+}
 
 FlexLine* FlexLayoutAlgorithm::ComputeNextFlexLine(
     LayoutUnit container_logical_width) {
@@ -603,14 +668,23 @@ FlexLine* FlexLayoutAlgorithm::ComputeNextFlexLine(
       break;
     }
     line_has_in_flow_item = true;
-    sum_flex_base_size += flex_item.FlexBaseMarginBoxSize();
+    sum_flex_base_size +=
+        flex_item.FlexBaseMarginBoxSize() + gap_between_items_;
     total_flex_grow += flex_item.style.ResolvedFlexGrow(StyleRef());
     const float flex_shrink = flex_item.style.ResolvedFlexShrink(StyleRef());
     total_flex_shrink += flex_shrink;
     total_weighted_flex_shrink +=
         flex_shrink * flex_item.flex_base_content_size;
-    sum_hypothetical_main_size += flex_item.HypotheticalMainAxisMarginBoxSize();
+    sum_hypothetical_main_size +=
+        flex_item.HypotheticalMainAxisMarginBoxSize() + gap_between_items_;
     flex_item.line_number = flex_lines_.size();
+  }
+  if (line_has_in_flow_item) {
+    // We added a gap after every item but there shouldn't be one after the last
+    // item, so subtract it here.
+    // Note: the two sums here can be negative because of negative margins.
+    sum_hypothetical_main_size -= gap_between_items_;
+    sum_flex_base_size -= gap_between_items_;
   }
 
   DCHECK(next_item_index_ > start_index ||
@@ -630,7 +704,12 @@ bool FlexLayoutAlgorithm::IsHorizontalFlow() const {
 }
 
 bool FlexLayoutAlgorithm::IsColumnFlow() const {
-  return StyleRef().ResolvedIsColumnFlexDirection();
+  return IsColumnFlow(*style_);
+}
+
+// static
+bool FlexLayoutAlgorithm::IsColumnFlow(const ComputedStyle& style) {
+  return style.ResolvedIsColumnFlexDirection();
 }
 
 // static
@@ -666,9 +745,12 @@ bool FlexLayoutAlgorithm::ShouldApplyMinSizeAutoForChild(
   // css-flexbox section 4.5
   const Length& min = IsHorizontalFlow() ? child.StyleRef().MinWidth()
                                          : child.StyleRef().MinHeight();
-  // TODO(dgrogan): min.IsIntrinsic should also get past this check when in the
-  // item's block direction.
-  if (!min.IsAuto())
+  bool main_axis_is_childs_block_axis =
+      IsHorizontalFlow() != child.StyleRef().IsHorizontalWritingMode();
+  bool intrinsic_in_childs_block_axis =
+      main_axis_is_childs_block_axis &&
+      (min.IsMinContent() || min.IsMaxContent() || min.IsFitContent());
+  if (!min.IsAuto() && !intrinsic_in_childs_block_axis)
     return false;
 
   // webkit-box treats min-size: auto as 0.
@@ -699,16 +781,20 @@ LayoutUnit FlexLayoutAlgorithm::IntrinsicContentBlockSize() const {
   const FlexLine& last_line = flex_lines_.back();
   // Subtract the first line's offset to remove border/padding
   return last_line.cross_axis_offset + last_line.cross_axis_extent -
-         flex_lines_.front().cross_axis_offset;
+         flex_lines_.front().cross_axis_offset +
+         (flex_lines_.size() - 1) * gap_between_lines_;
 }
 
 void FlexLayoutAlgorithm::AlignFlexLines(LayoutUnit cross_axis_content_extent) {
   const StyleContentAlignmentData align_content = ResolvedAlignContent(*style_);
-  if (align_content.GetPosition() == ContentPosition::kFlexStart)
+  if (align_content.GetPosition() == ContentPosition::kFlexStart &&
+      gap_between_lines_ == 0) {
     return;
+  }
   if (flex_lines_.IsEmpty() || !IsMultiline())
     return;
-  LayoutUnit available_cross_axis_space = cross_axis_content_extent;
+  LayoutUnit available_cross_axis_space =
+      cross_axis_content_extent - (flex_lines_.size() - 1) * gap_between_lines_;
   for (const FlexLine& line : flex_lines_)
     available_cross_axis_space -= line.cross_axis_extent;
 
@@ -729,8 +815,10 @@ void FlexLayoutAlgorithm::AlignFlexLines(LayoutUnit cross_axis_content_extent) {
           static_cast<unsigned>(flex_lines_.size());
     }
 
-    line_offset += ContentDistributionSpaceBetweenChildren(
-        available_cross_axis_space, align_content, flex_lines_.size());
+    line_offset +=
+        ContentDistributionSpaceBetweenChildren(
+            available_cross_axis_space, align_content, flex_lines_.size()) +
+        gap_between_lines_;
   }
 }
 

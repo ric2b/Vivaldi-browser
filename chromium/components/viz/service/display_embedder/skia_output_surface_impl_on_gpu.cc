@@ -68,6 +68,7 @@
 
 #if BUILDFLAG(ENABLE_VULKAN)
 #include "components/viz/service/display_embedder/skia_output_device_vulkan.h"
+#include "gpu/vulkan/vulkan_util.h"
 #endif
 
 #if (BUILDFLAG(ENABLE_VULKAN) || BUILDFLAG(SKIA_USE_DAWN)) && defined(USE_X11)
@@ -1040,6 +1041,10 @@ void SkiaOutputSurfaceImplOnGpu::SwapBuffers(
   }
   context_state_->UpdateSkiaOwnedMemorySize();
   destroy_after_swap_.clear();
+#if BUILDFLAG(ENABLE_VULKAN)
+  if (is_using_vulkan())
+    gpu::ReportQueueSubmitPerSwapBuffers();
+#endif
 }
 
 void SkiaOutputSurfaceImplOnGpu::SwapBuffersSkipped(
@@ -1050,6 +1055,10 @@ void SkiaOutputSurfaceImplOnGpu::SwapBuffersSkipped(
   scoped_output_device_paint_.reset();
   context_state_->UpdateSkiaOwnedMemorySize();
   destroy_after_swap_.clear();
+#if BUILDFLAG(ENABLE_VULKAN)
+  if (is_using_vulkan())
+    gpu::ReportQueueSubmitPerSwapBuffers();
+#endif
 }
 
 void SkiaOutputSurfaceImplOnGpu::FinishPaintRenderPass(
@@ -1404,7 +1413,8 @@ SkiaOutputSurfaceImplOnGpu::GetGrContextThreadSafeProxy() {
 
 void SkiaOutputSurfaceImplOnGpu::ReleaseImageContexts(
     std::vector<std::unique_ptr<ExternalUseClient::ImageContext>>
-        image_contexts) {
+        image_contexts,
+    uint64_t sync_fence_release) {
   DCHECK(!image_contexts.empty());
   // The window could be destroyed already, and the MakeCurrent will fail with
   // an destroyed window, so MakeCurrent without requiring the fbo0.
@@ -1413,7 +1423,8 @@ void SkiaOutputSurfaceImplOnGpu::ReleaseImageContexts(
       context->OnContextLost();
   }
 
-  // |image_contexts| goes out of scope here.
+  image_contexts.clear();
+  ReleaseFenceSyncAndPushTextureUpdates(sync_fence_release);
 }
 
 void SkiaOutputSurfaceImplOnGpu::ScheduleOverlays(
@@ -1431,6 +1442,11 @@ void SkiaOutputSurfaceImplOnGpu::SetEnableDCLayers(bool enable) {
 
 void SkiaOutputSurfaceImplOnGpu::SetGpuVSyncEnabled(bool enabled) {
   output_device_->SetGpuVSyncEnabled(enabled);
+}
+
+void SkiaOutputSurfaceImplOnGpu::SetFrameRate(float frame_rate) {
+  if (gl_surface_)
+    gl_surface_->SetFrameRate(frame_rate);
 }
 
 void SkiaOutputSurfaceImplOnGpu::SetCapabilitiesForTesting(
@@ -1578,9 +1594,19 @@ bool SkiaOutputSurfaceImplOnGpu::InitializeForVulkan() {
       gl_surface_ = output_device->gl_surface();
       output_device_ = std::move(output_device);
     } else {
-      output_device_ = SkiaOutputDeviceVulkan::Create(
+      auto output_device = SkiaOutputDeviceVulkan::Create(
           vulkan_context_provider_, dependency_->GetSurfaceHandle(),
           memory_tracker_.get(), did_swap_buffer_complete_callback_);
+#if defined(OS_WIN)
+      gpu::SurfaceHandle child_surface =
+          output_device ? output_device->GetChildSurfaceHandle()
+                        : gpu::kNullSurfaceHandle;
+      if (child_surface != gpu::kNullSurfaceHandle) {
+        DidCreateAcceleratedSurfaceChildWindow(dependency_->GetSurfaceHandle(),
+                                               child_surface);
+      }
+#endif
+      output_device_ = std::move(output_device);
     }
 #endif
   }
@@ -1617,22 +1643,20 @@ bool SkiaOutputSurfaceImplOnGpu::InitializeForDawn() {
 }
 
 bool SkiaOutputSurfaceImplOnGpu::MakeCurrent(bool need_fbo0) {
-  if (context_state_->context_lost())
+  // need_fbo0 implies need_gl too.
+  bool need_gl = need_fbo0;
+  // Only make current with |gl_surface_|, if following operations will use
+  // fbo0.
+  auto* gl_surface = need_fbo0 ? gl_surface_.get() : nullptr;
+  if (!context_state_->MakeCurrent(gl_surface, need_gl)) {
+    LOG(ERROR) << "Failed to make current.";
+    dependency_->DidLoseContext(
+        gpu::error::kMakeCurrentFailed,
+        GURL("chrome://gpu/SkiaOutputSurfaceImplOnGpu::MakeCurrent"));
+    MarkContextLost(CONTEXT_LOST_MAKECURRENT_FAILED);
     return false;
-
-  if (gpu_preferences_.gr_context_type == gpu::GrContextType::kGL) {
-    // Only make current with |gl_surface_|, if following operations will use
-    // fbo0.
-    if (!context_state_->MakeCurrent(need_fbo0 ? gl_surface_.get() : nullptr)) {
-      LOG(ERROR) << "Failed to make current.";
-      dependency_->DidLoseContext(
-          gpu::error::kMakeCurrentFailed,
-          GURL("chrome://gpu/SkiaOutputSurfaceImplOnGpu::MakeCurrent"));
-      MarkContextLost(CONTEXT_LOST_MAKECURRENT_FAILED);
-      return false;
-    }
-    context_state_->set_need_context_state_reset(true);
   }
+  context_state_->set_need_context_state_reset(true);
   return true;
 }
 

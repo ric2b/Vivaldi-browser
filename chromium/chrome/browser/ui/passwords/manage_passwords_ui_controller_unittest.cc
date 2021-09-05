@@ -37,7 +37,6 @@
 #include "content/public/test/mock_navigation_handle.h"
 #include "content/public/test/test_utils.h"
 #include "content/public/test/web_contents_tester.h"
-#include "google_apis/gaia/core_account_id.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -94,8 +93,8 @@ class MockPasswordManagerClient
     : public password_manager::StubPasswordManagerClient {
  public:
   MOCK_METHOD(void,
-              TriggerReauthForAccount,
-              (const CoreAccountId&, base::OnceCallback<void(ReauthSucceeded)>),
+              TriggerReauthForPrimaryAccount,
+              (base::OnceCallback<void(ReauthSucceeded)>),
               (override));
 };
 
@@ -526,21 +525,17 @@ TEST_F(ManagePasswordsUIControllerTest,
 
   // The user hasn't opted in, so a reauth flow will be triggered.
   base::OnceCallback<void(ReauthSucceeded)> reauth_callback;
-  EXPECT_CALL(client(), TriggerReauthForAccount)
-      .WillOnce(MoveArg<1>(&reauth_callback));
+  EXPECT_CALL(client(), TriggerReauthForPrimaryAccount)
+      .WillOnce(MoveArg<0>(&reauth_callback));
 
   // The user clicks save which will invoke the reauth flow.
   controller()->AuthenticateUserForAccountStoreOptInAndSavePassword(
-      CoreAccountId(), submitted_form().username_value,
-      submitted_form().password_value);
+      submitted_form().username_value, submitted_form().password_value);
 
   // The bubble gets hidden after the user clicks on save.
   controller()->OnBubbleHidden();
 
-  // Simulate a successful reauth which will cause the opt-in status to be
-  // recorded and the password to be saved.
-  EXPECT_CALL(*client().GetPasswordFeatureManager(),
-              SetAccountStorageOptIn(true));
+  // Simulate a successful reauth which will cause the password to be saved.
   EXPECT_CALL(*test_form_manager_ptr, Save());
   std::move(reauth_callback).Run(ReauthSucceeded(true));
 
@@ -561,8 +556,8 @@ TEST_F(ManagePasswordsUIControllerTest,
 
   // The user hasn't opted in, so a reauth flow will be triggered.
   base::OnceCallback<void(ReauthSucceeded)> reauth_callback;
-  EXPECT_CALL(client(), TriggerReauthForAccount)
-      .WillOnce(MoveArg<1>(&reauth_callback));
+  EXPECT_CALL(client(), TriggerReauthForPrimaryAccount)
+      .WillOnce(MoveArg<0>(&reauth_callback));
 
   // Unsuccessful reauth should change the default store to profile store.
   EXPECT_CALL(
@@ -571,8 +566,7 @@ TEST_F(ManagePasswordsUIControllerTest,
 
   // The user clicks save which will invoke the reauth flow.
   controller()->AuthenticateUserForAccountStoreOptInAndSavePassword(
-      CoreAccountId(), submitted_form().username_value,
-      submitted_form().password_value);
+      submitted_form().username_value, submitted_form().password_value);
 
   // The bubble gets hidden after the user clicks on save.
   controller()->OnBubbleHidden();
@@ -1336,4 +1330,23 @@ TEST_F(ManagePasswordsUIControllerTest,
   EXPECT_TRUE(controller()->opened_bubble());
   ExpectIconAndControllerStateIs(
       password_manager::ui::WILL_DELETE_UNSYNCED_ACCOUNT_PASSWORDS_STATE);
+}
+
+TEST_F(ManagePasswordsUIControllerTest, OpenBubbleForMovableForm) {
+  std::vector<const PasswordForm*> matches = {&test_local_form()};
+  auto test_form_manager = CreateFormManagerWithBestMatches(&matches);
+  MockPasswordFormManagerForUI* form_manager = test_form_manager.get();
+
+  // A submitted form triggers the move dialog.
+  EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility()).Times(2);
+  controller()->OnShowMoveToAccountBubble(std::move(test_form_manager));
+  EXPECT_TRUE(controller()->opened_automatic_bubble());
+  ExpectIconAndControllerStateIs(
+      password_manager::ui::CAN_MOVE_PASSWORD_TO_ACCOUNT_STATE);
+
+  // A user confirms the move which closes the dialog.
+  EXPECT_CALL(*form_manager, MoveCredentialsToAccountStore);
+  controller()->MovePasswordToAccountStore();
+  EXPECT_FALSE(controller()->opened_automatic_bubble());
+  ExpectIconAndControllerStateIs(password_manager::ui::MANAGE_STATE);
 }

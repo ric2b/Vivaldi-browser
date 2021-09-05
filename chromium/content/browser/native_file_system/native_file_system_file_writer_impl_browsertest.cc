@@ -16,6 +16,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -61,8 +62,7 @@ class NativeFileSystemFileWriterBrowserTest : public ContentBrowserTest {
     base::FilePath test_file;
     EXPECT_TRUE(
         base::CreateTemporaryFileInDir(temp_dir_.GetPath(), &test_file));
-    EXPECT_EQ(int{contents.size()},
-              base::WriteFile(test_file, contents.data(), contents.size()));
+    EXPECT_TRUE(base::WriteFile(test_file, contents));
 
     ui::SelectFileDialog::SetFactory(
         new FakeSelectFileDialogFactory({test_file}));
@@ -88,9 +88,7 @@ class NativeFileSystemFileWriterBrowserTest : public ContentBrowserTest {
     base::FilePath test_file =
         temp_dir_.GetPath().AppendASCII("to_be_quarantined.exe");
     std::string file_data = "hello world!";
-    int file_size = static_cast<int>(file_data.size());
-    EXPECT_EQ(file_size,
-              base::WriteFile(test_file, file_data.c_str(), file_size));
+    EXPECT_TRUE(base::WriteFile(test_file, file_data));
 
     ui::SelectFileDialog::SetFactory(
         new FakeSelectFileDialogFactory({test_file}));

@@ -26,19 +26,17 @@ class CancelCastingDialog : public views::DialogDelegateView {
     AddChildView(new views::MessageBoxView(views::MessageBoxView::InitParams(
         l10n_util::GetStringUTF16(IDS_DESKTOP_CASTING_ACTIVE_MESSAGE))));
     SetLayoutManager(std::make_unique<views::FillLayout>());
-    DialogDelegate::SetButtonLabel(
+    SetTitle(l10n_util::GetStringUTF16(IDS_DESKTOP_CASTING_ACTIVE_TITLE));
+    SetShowCloseButton(false);
+    SetButtonLabel(
         ui::DIALOG_BUTTON_OK,
         l10n_util::GetStringUTF16(IDS_DESKTOP_CASTING_ACTIVE_CONTINUE));
-    DialogDelegate::SetAcceptCallback(base::BindOnce(
-        &CancelCastingDialog::OnDialogAccepted, base::Unretained(this)));
-    DialogDelegate::SetCancelCallback(base::BindOnce(
-        &CancelCastingDialog::OnDialogCancelled, base::Unretained(this)));
+    SetAcceptCallback(base::BindOnce(&CancelCastingDialog::OnDialogAccepted,
+                                     base::Unretained(this)));
+    SetCancelCallback(base::BindOnce(&CancelCastingDialog::OnDialogCancelled,
+                                     base::Unretained(this)));
   }
   ~CancelCastingDialog() override = default;
-
-  base::string16 GetWindowTitle() const override {
-    return l10n_util::GetStringUTF16(IDS_DESKTOP_CASTING_ACTIVE_TITLE);
-  }
 
   void OnDialogCancelled() { std::move(callback_).Run(false); }
 
@@ -51,8 +49,6 @@ class CancelCastingDialog : public views::DialogDelegateView {
 
     std::move(callback_).Run(true);
   }
-
-  bool ShouldShowCloseButton() const override { return false; }
 
  private:
   base::OnceCallback<void(bool)> callback_;

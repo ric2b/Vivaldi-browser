@@ -22,7 +22,6 @@
 #include "content/public/browser/storage_partition.h"
 #include "net/http/http_response_headers.h"
 #include "services/network/public/cpp/content_security_policy/csp_context.h"
-#include "services/network/public/cpp/features.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom.h"
 #include "url/origin.h"
 
@@ -107,13 +106,13 @@ class FrameAncestorCSPContext : public network::CSPContext {
  public:
   FrameAncestorCSPContext(
       RenderFrameHostImpl* navigated_frame,
-      std::vector<network::mojom::ContentSecurityPolicyPtr> policies)
+      const std::vector<network::mojom::ContentSecurityPolicyPtr>& policies)
       : navigated_frame_(navigated_frame) {
     // TODO(arthursonzogni): Refactor CSPContext to its original state, it
     // shouldn't own any ContentSecurityPolicies on its own. This should be
     // defined by the implementation instead. Copies could be avoided here.
     for (auto& policy : policies)
-      AddContentSecurityPolicy(std::move(policy));
+      AddContentSecurityPolicy(mojo::Clone(policy));
   }
 
  private:
@@ -226,11 +225,12 @@ NavigationThrottle::ThrottleCheckResult AncestorThrottle::ProcessResponseImpl(
 
     case HeaderDisposition::SAMEORIGIN: {
       // Block the request when any ancestor is not same-origin.
-      FrameTreeNode* parent = request->frame_tree_node()->parent();
+      RenderFrameHostImpl* parent = request->GetParentFrame();
       url::Origin current_origin =
           url::Origin::Create(navigation_handle()->GetURL());
       while (parent) {
-        if (!parent->current_origin().IsSameOriginWith(current_origin)) {
+        if (!parent->GetLastCommittedOrigin().IsSameOriginWith(
+                current_origin)) {
           RecordXFrameOptionsUsage(XFrameOptionsHistogram::SAMEORIGIN_BLOCKED);
           if (logging == LoggingDisposition::LOG_TO_CONSOLE)
             ConsoleError(disposition);
@@ -239,7 +239,7 @@ NavigationThrottle::ThrottleCheckResult AncestorThrottle::ProcessResponseImpl(
           // vendors to follow our lead with XFO: SAMEORIGIN processing.
           //
           // https://crbug.com/250309
-          if (parent->frame_tree()->root()->current_origin().IsSameOriginWith(
+          if (parent->GetMainFrame()->GetLastCommittedOrigin().IsSameOriginWith(
                   current_origin)) {
             RecordXFrameOptionsUsage(
                 XFrameOptionsHistogram::SAMEORIGIN_WITH_BAD_ANCESTOR_CHAIN);
@@ -247,7 +247,7 @@ NavigationThrottle::ThrottleCheckResult AncestorThrottle::ProcessResponseImpl(
 
           return NavigationThrottle::BLOCK_RESPONSE;
         }
-        parent = parent->parent();
+        parent = parent->GetParent();
       }
       RecordXFrameOptionsUsage(XFrameOptionsHistogram::SAMEORIGIN);
       break;
@@ -264,42 +264,13 @@ NavigationThrottle::ThrottleCheckResult AncestorThrottle::ProcessResponseImpl(
       break;
   }
 
-  // Evaluate whether the navigation should be allowed or blocked based on
-  // existing content-security-policy on the response.
-  if (is_response_check && request->GetResponseHeaders() &&
-      HeadersContainFrameAncestorsCSP(request->GetResponseHeaders(), true) &&
-      base::FeatureList::IsEnabled(
-          network::features::kOutOfBlinkFrameAncestors)) {
-    if (!request->response()->content_security_policy.empty()) {
-      return EvaluateContentSecurityPolicy(
-          mojo::Clone(request->response()->content_security_policy));
-    }
+  // X-Frame-Option is checked on both redirect and final responses. However,
+  // CSP:Frame-ancestor is checked only for the final response.
+  if (!is_response_check)
+    return NavigationThrottle::PROCEED;
 
-    BrowserContext* browser_context = request->frame_tree_node()
-                                          ->navigator()
-                                          ->GetController()
-                                          ->GetBrowserContext();
-    StoragePartition* partition = BrowserContext::GetStoragePartition(
-        browser_context, request->GetRenderFrameHost()->GetSiteInstance());
-    partition->GetNetworkContext()->ParseContentSecurityPolicy(
-        request->GetURL(), request->response()->headers,
-        base::BindOnce(
-            [](AncestorThrottle* ancestor_throttle, NavigationRequest* request,
-               std::vector<network::mojom::ContentSecurityPolicyPtr>
-                   content_security_policy) {
-              auto result = ancestor_throttle->EvaluateContentSecurityPolicy(
-                  mojo::Clone(content_security_policy));
-              if (result == NavigationThrottle::PROCEED) {
-                ancestor_throttle->Resume();
-              } else {
-                ancestor_throttle->CancelDeferredNavigation(result);
-              }
-            },
-            this, request));
-    return NavigationThrottle::DEFER;
-  }
-
-  return NavigationThrottle::PROCEED;
+  return EvaluateContentSecurityPolicy(
+      request->response()->parsed_headers->content_security_policy);
 }
 
 const char* AncestorThrottle::GetNameForLogging() {
@@ -360,7 +331,7 @@ void AncestorThrottle::ConsoleError(HeaderDisposition disposition) {
 
 NavigationThrottle::ThrottleAction
 AncestorThrottle::EvaluateContentSecurityPolicy(
-    std::vector<network::mojom::ContentSecurityPolicyPtr>
+    const std::vector<network::mojom::ContentSecurityPolicyPtr>&
         content_security_policy) {
   // TODO(lfg): If the initiating document is known and correspond to the
   // navigating frame's current document, consider using:
@@ -371,7 +342,7 @@ AncestorThrottle::EvaluateContentSecurityPolicy(
   // reported to the navigating frame.
   FrameAncestorCSPContext csp_context(
       NavigationRequest::From(navigation_handle())->GetRenderFrameHost(),
-      std::move(content_security_policy));
+      content_security_policy);
   csp_context.SetSelf(url::Origin::Create(navigation_handle()->GetURL()));
 
   // Check CSP frame-ancestors against every parent.

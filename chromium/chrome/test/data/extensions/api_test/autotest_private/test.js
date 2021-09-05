@@ -17,6 +17,28 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// Returns a promise that gets resolved after "window.requestAnimationFrame"
+// callbacks happened on a front window.
+var pendingRafPromise = null;
+function raf() {
+  chrome.test.assertTrue(pendingRafPromise === null);
+
+  var res;
+  pendingRafPromise = new Promise((resolve) => {
+    res = resolve;
+  });
+  pendingRafPromise.resolve = res;
+
+  chrome.windows.create({'url': 'raf.html'}, function() {});
+  return pendingRafPromise;
+}
+function onRaf(rafWin) {
+  chrome.test.assertTrue(pendingRafPromise !== null);
+  pendingRafPromise.resolve();
+  pendingRafPromise = null;
+  rafWin.close();
+}
+
 var defaultTests = [
   // logout/restart/shutdown don't do anything as we don't want to kill the
   // browser with these tests.
@@ -225,7 +247,7 @@ var defaultTests = [
     });
   },
   // The state dumped in Assistant API error message is AssistantAllowedState
-  // defined in ash/public/mojom/assistant_state_controller.mojom.
+  // defined in ash/public/cpp/assistant/assistant_state_base.h
   // 3 is DISALLOWED_BY_NONPRIMARY_USER from IsAssistantAllowedForProfile when
   // running under test without setting up a primary account.
   function setAssistantEnabled() {
@@ -245,12 +267,19 @@ var defaultTests = [
         chrome.test.callbackFail(
             'Assistant not allowed - state: 3'));
   },
+  // This test verifies the error message when trying to set Assistant-related
+  // preferences without enabling Assistant service first.
   function setWhitelistedPref() {
     chrome.autotestPrivate.setWhitelistedPref(
         'settings.voice_interaction.hotword.enabled' /* pref_name */,
         true /* value */,
         chrome.test.callbackFail(
-            'Assistant not allowed - state: 3'));
+            'Unable to set the pref because Assistant has not been enabled.'));
+    chrome.autotestPrivate.setWhitelistedPref(
+        'settings.voice_interaction.context.enabled' /* pref_name */,
+        true /* value */,
+        chrome.test.callbackFail(
+            'Unable to set the pref because Assistant has not been enabled.'));
   },
   // This test verifies that getArcState returns provisioned False in case ARC
   // is not provisioned by default.
@@ -752,6 +781,99 @@ var defaultTests = [
   },
   function setMetricsEnabled() {
     chrome.autotestPrivate.setMetricsEnabled(true, chrome.test.callbackPass());
+  },
+  // This test verifies that the API to set window bounds works as expected.
+  function setWindowBoundsTest() {
+    chrome.autotestPrivate.getAppWindowList(function(list) {
+      chrome.test.assertEq(1, list.length);
+      var window = list[0];
+      chrome.test.assertEq(window.stateType, 'Normal');
+      chrome.test.assertTrue(window.isVisible);
+      chrome.test.assertTrue(window.isActive);
+
+      // Test changing the bounds.
+      var newBounds = Object.assign({}, window.boundsInRoot);
+      newBounds.width /= 2;
+      newBounds.height /= 2;
+      chrome.autotestPrivate.setWindowBounds(window.id, newBounds,
+          window.displayId, function(result) {
+            chrome.test.assertNoLastError();
+            chrome.test.assertEq(result.bounds, newBounds);
+            chrome.test.assertEq(result.displayId, window.displayId);
+            // Reset bounds to original.
+            chrome.autotestPrivate.setWindowBounds(window.id,
+                window.boundsInRoot, window.displayId, function(result) {
+                  chrome.test.assertNoLastError();
+                  chrome.test.assertEq(result.bounds, window.boundsInRoot);
+                  chrome.test.assertEq(result.displayId, window.displayId);
+
+                  // Test calling setWindowBounds without changing the bounds
+                  // succeeds.
+                  chrome.autotestPrivate.setWindowBounds(window.id,
+                      window.boundsInRoot, window.displayId, function(result) {
+                        chrome.test.assertNoLastError();
+                        chrome.test.assertEq(result.bounds,
+                            window.boundsInRoot);
+                        chrome.test.assertEq(result.displayId,
+                            window.displayId);
+                        // Test calling setWindowBounds with an invalid display
+                        // fails.
+                        chrome.autotestPrivate.setWindowBounds(window.id,
+                            window.boundsInRoot, '-1', function(result) {
+                              chrome.test.assertLastError(
+                                  'Given display ID does not ' +
+                                  'correspond to a valid display');
+                              chrome.test.succeed();
+                            });
+                      });
+                });
+          });
+    });
+  },
+
+  function startSmoothnessTracking() {
+    chrome.autotestPrivate.startSmoothnessTracking(async function() {
+      chrome.test.assertNoLastError();
+
+      // Wait for a few frames.
+      await raf();
+
+      chrome.autotestPrivate.stopSmoothnessTracking(function(smoothness) {
+        chrome.test.assertNoLastError();
+        chrome.test.assertTrue(smoothness >= 0 && smoothness <= 100);
+        chrome.test.succeed();
+      });
+    });
+  },
+  function startSmoothnessTrackingExplicitDisplay() {
+    const badDisplay = '-1';
+    chrome.autotestPrivate.startSmoothnessTracking(badDisplay, function() {
+      chrome.test.assertEq(chrome.runtime.lastError.message,
+          'Invalid display_id; no root window found for the display id -1');
+      chrome.system.display.getInfo(function(info) {
+        var displayId = info[0].id;
+        chrome.autotestPrivate.startSmoothnessTracking(displayId,
+                                                       async function() {
+          chrome.test.assertNoLastError();
+
+          // Wait for a few frames.
+          await raf();
+
+          chrome.autotestPrivate.stopSmoothnessTracking(badDisplay,
+                                                        function(smoothness) {
+            chrome.test.assertEq(chrome.runtime.lastError.message,
+                'Smoothness is not tracked for display: -1');
+
+            chrome.autotestPrivate.stopSmoothnessTracking(displayId,
+                                                          function(smoothness) {
+              chrome.test.assertNoLastError();
+              chrome.test.assertTrue(smoothness >= 0 && smoothness <= 100);
+              chrome.test.succeed();
+            });
+          });
+        });
+      });
+    });
   },
 
   // KEEP |lockScreen()| TESTS AT THE BOTTOM OF THE defaultTests AS IT WILL

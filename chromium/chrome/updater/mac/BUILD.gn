@@ -62,6 +62,8 @@ mac_app_bundle("updater_bundle") {
 
 source_set("xpc_names") {
   sources = [
+    "setup/info_plist.h",
+    "setup/info_plist.mm",
     "xpc_service_names.h",
     "xpc_service_names.mm",
   ]
@@ -70,6 +72,8 @@ source_set("xpc_names") {
     "//base",
     "//chrome/updater:version_header",
   ]
+
+  libs = [ "Foundation.framework" ]
 }
 
 source_set("updater_setup_sources") {
@@ -102,6 +106,8 @@ source_set("install_app") {
   sources = [
     "setup/install_app.cc",
     "setup/install_app.h",
+    "setup/swap_app.cc",
+    "setup/swap_app.h",
   ]
 
   deps = [
@@ -156,6 +162,37 @@ source_set("updater_setup_tests") {
     "//base",
     "//base/test:test_support",
     "//chrome/common:constants",
+    "//testing/gtest",
+  ]
+}
+
+source_set("enterprise") {
+  sources = [
+    "managed_preference_policy_manager.h",
+    "managed_preference_policy_manager.mm",
+    "managed_preference_policy_manager_impl.h",
+    "managed_preference_policy_manager_impl.mm",
+  ]
+
+  deps = [
+    "//base",
+    "//chrome/updater:base",
+  ]
+}
+
+source_set("enterprise_tests") {
+  testonly = true
+
+  sources = [
+    "managed_preference_policy_manager_impl_unittest.mm",
+    "managed_preference_policy_manager_unittest.cc",
+  ]
+
+  deps = [
+    ":enterprise",
+    "//base",
+    "//base/test:test_support",
+    "//chrome/updater:base",
     "//testing/gtest",
   ]
 }

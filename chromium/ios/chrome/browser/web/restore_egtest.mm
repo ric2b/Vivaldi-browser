@@ -4,6 +4,7 @@
 
 #include "base/bind.h"
 #include "base/strings/sys_string_conversions.h"
+#import "base/test/ios/wait_util.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
@@ -81,6 +82,20 @@ std::unique_ptr<net::test_server::HttpResponse> CountResponse(
   (*counter)++;
   return std::move(http_response);
 }
+
+// Returns true when omnibox contains |text|, otherwise returns false after
+// after a timeout.
+bool WaitForOmniboxContaining(std::string text) WARN_UNUSED_RESULT;
+bool WaitForOmniboxContaining(std::string text) {
+  return base::test::ios::WaitUntilConditionOrTimeout(
+      base::test::ios::kWaitForUIElementTimeout, ^bool {
+        NSError* error = nil;
+        [[EarlGrey selectElementWithMatcher:OmniboxText(text)]
+            assertWithMatcher:grey_notNil()
+                        error:&error];
+        return error == nil;
+      });
+}
 }
 
 // Integration tests for restoring session history.
@@ -132,7 +147,12 @@ std::unique_ptr<net::test_server::HttpResponse> CountResponse(
 
 // Navigates to a set of cross-domains, chrome URLs and error pages, and then
 // tests that they are properly restored.
-- (void)testRestoreHistory {
+#if defined(CHROME_EARL_GREY_1)
+#define MAYBE_testRestoreHistory DISABLED_testRestoreHistory
+#else
+#define MAYBE_testRestoreHistory testRestoreHistory
+#endif
+- (void)MAYBE_testRestoreHistory {
   [self setUpRestoreServers];
   [self loadTestPages];
   [self verifyRestoredTestPages:YES];
@@ -140,7 +160,12 @@ std::unique_ptr<net::test_server::HttpResponse> CountResponse(
 
 // Navigates to a set of cross-domains, chrome URLs and error pages, and then
 // tests that they are properly restored in airplane mode.
-- (void)testRestoreNoNetwork {
+#if defined(CHROME_EARL_GREY_1)
+#define MAYBE_testRestoreNoNetwork DISABLED_testRestoreNoNetwork
+#else
+#define MAYBE_testRestoreNoNetwork testRestoreNoNetwork
+#endif
+- (void)MAYBE_testRestoreNoNetwork {
   [self setUpRestoreServers];
   [self loadTestPages];
   self.serverRespondsWithContent = false;
@@ -220,7 +245,9 @@ std::unique_ptr<net::test_server::HttpResponse> CountResponse(
 }
 
 - (void)triggerRestore {
-#if defined(CHROME_EARL_GREY_1)
+// TODO(crbug.com/1067821):|AppLaunchManager| relaunching with
+// |ForceRelaunchByCleanShutdown| policy won't work in EG1 or on real device.
+#if defined(CHROME_EARL_GREY_1) || !TARGET_IPHONE_SIMULATOR
   [ChromeEarlGrey triggerRestoreViaTabGridRemoveAllUndo];
 #elif defined(CHROME_EARL_GREY_2)
   [ChromeEarlGrey saveSessionImmediately];
@@ -274,24 +301,28 @@ std::unique_ptr<net::test_server::HttpResponse> CountResponse(
 
   // Go back to error page.
   [[EarlGrey selectElementWithMatcher:BackButton()] performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:OmniboxText("invalid.")]
-      assertWithMatcher:grey_notNil()];
+  GREYAssert(
+      WaitForOmniboxContaining("invalid."),
+      @"Timeout while waiting for  omnibox text to become \"invalid.\".");
   [ChromeEarlGrey waitForWebStateContainingText:"ERR_"];
   [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
   [self triggerRestore];
-  [[EarlGrey selectElementWithMatcher:OmniboxText("invalid.")]
-      assertWithMatcher:grey_notNil()];
+  GREYAssert(
+      WaitForOmniboxContaining("invalid."),
+      @"Timeout while waiting for  omnibox text to become \"invalid.\".");
   [ChromeEarlGrey waitForWebStateContainingText:"ERR_"];
   [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
 
   // Go back to chrome url.
   [[EarlGrey selectElementWithMatcher:BackButton()] performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:OmniboxText("chrome://chrome-urls")]
-      assertWithMatcher:grey_notNil()];
+  GREYAssert(WaitForOmniboxContaining("chrome://chrome-urls"),
+             @"Timeout while waiting for  omnibox text to become "
+             @"\"chrome://chrome-urls\".");
   [ChromeEarlGrey waitForWebStateContainingText:"List of Chrome"];
   [self triggerRestore];
-  [[EarlGrey selectElementWithMatcher:OmniboxText("chrome://chrome-urls")]
-      assertWithMatcher:grey_notNil()];
+  GREYAssert(WaitForOmniboxContaining("chrome://chrome-urls"),
+             @"Timeout while waiting for  omnibox text to become "
+             @"\"chrome://chrome-urls\".");
   [ChromeEarlGrey waitForWebStateContainingText:"List of Chrome"];
 
   // Go back to page1 and confirm page2 is still in the forward history.

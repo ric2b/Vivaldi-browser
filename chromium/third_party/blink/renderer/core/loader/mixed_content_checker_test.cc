@@ -7,7 +7,7 @@
 #include <base/macros.h>
 #include <memory>
 #include "base/memory/scoped_refptr.h"
-#include "testing/gmock/include/gmock/gmock-generated-function-mockers.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/mojom/loader/request_context_frame_type.mojom-blink.h"
 #include "third_party/blink/public/platform/web_mixed_content.h"
@@ -206,13 +206,13 @@ TEST(MixedContentCheckerTest, DetectMixedFavicon) {
   EXPECT_TRUE(MixedContentChecker::ShouldBlockFetch(
       &dummy_page_holder->GetFrame(), mojom::RequestContextType::FAVICON,
       ResourceRequest::RedirectStatus::kNoRedirect, http_favicon_url,
-      ReportingDisposition::kSuppressReporting));
+      base::Optional<String>(), ReportingDisposition::kSuppressReporting));
 
   // Test that a secure favicon is not blocked.
   EXPECT_FALSE(MixedContentChecker::ShouldBlockFetch(
       &dummy_page_holder->GetFrame(), mojom::RequestContextType::FAVICON,
       ResourceRequest::RedirectStatus::kNoRedirect, https_favicon_url,
-      ReportingDisposition::kSuppressReporting));
+      base::Optional<String>(), ReportingDisposition::kSuppressReporting));
 }
 
 class TestFetchClientSettingsObject : public FetchClientSettingsObject {

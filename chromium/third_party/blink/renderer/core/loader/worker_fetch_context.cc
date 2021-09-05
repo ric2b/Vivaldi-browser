@@ -144,7 +144,8 @@ bool WorkerFetchContext::ShouldBlockFetchByMixedContentCheck(
     mojom::RequestContextType request_context,
     ResourceRequest::RedirectStatus redirect_status,
     const KURL& url,
-    ReportingDisposition reporting_disposition) const {
+    ReportingDisposition reporting_disposition,
+    const base::Optional<String>& devtools_id) const {
   return MixedContentChecker::ShouldBlockFetchOnWorker(
       *this, request_context, redirect_status, url, reporting_disposition,
       global_scope_->IsWorkletGlobalScope());
@@ -242,6 +243,8 @@ void WorkerFetchContext::PopulateResourceRequest(
     const ClientHintsPreferences& hints_preferences,
     const FetchParameters::ResourceWidth& resource_width,
     ResourceRequest& out_request) {
+  if (!GetResourceFetcherProperties().IsDetached())
+    probe::SetDevToolsIds(Probe(), out_request);
   MixedContentChecker::UpgradeInsecureRequest(
       out_request,
       &GetResourceFetcherProperties().GetFetchClientSettingsObject(),

@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">Немецкая раскладка</translation>
 <translation id="1972984168337863910">Развернуть панель с информацией о файлах</translation>
 <translation id="1984603991036629094">Армянская фонетическая раскладка клавиатуры</translation>
+<translation id="1995337122023280937">Перейти к местоположению файла</translation>
 <translation id="2001796770603320721">Открыть на Google Диске</translation>
 <translation id="2009067268969781306">При форматировании диска все хранящиеся на нем данные будут удалены. Это действие нельзя отменить.</translation>
 <translation id="2028997212275086731">Архив RAR</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">Не удается подключиться к Google Диску. Попробуйте <ph name="BEGIN_LINK" />выйти<ph name="END_LINK" /> и снова зайти в систему.</translation>
 <translation id="2649120831653069427">Рыбка</translation>
 <translation id="2661146741306740526">16x9</translation>
+<translation id="2664412712123763093">Местоположение файла</translation>
 <translation id="2672394958563893062">Произошла ошибка. Нажмите, чтобы воспроизвести сначала.</translation>
 <translation id="2676946222714718093">Устройство:</translation>
 <translation id="2735698359135166290">Cтандартная румынская клавиатура</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826">Ошибок: <ph name="COUNT" />.</translation>
 <translation id="3519867315646775981">Транслитерация (shalom ← שלום)</translation>
 <translation id="3522708245912499433">Португальский</translation>
+<translation id="3524311639100184459">Внимание! Эти файлы – временные. Они могут быть автоматически удалены, чтобы освободить место на диске.  <ph name="BEGIN_LINK" />Подробнее…<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Папка</translation>
 <translation id="3549797760399244642">Перейти на drive.google.com…</translation>
 <translation id="357479282490346887">Литовский</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">Киви</translation>
 <translation id="3966388904776714213">Аудиоплеер</translation>
 <translation id="4002066346123236978">Название</translation>
+<translation id="4065397611279318371">Перенесите файлы в папку "<ph name="SHARED_DIRECTORY_LABEL" />", чтобы открывать их в приложениях <ph name="APP_NAME" />.</translation>
 <translation id="4070370845051020638">Кантонская раскладка</translation>
 <translation id="4072248638558688893">Тамильская раскладка (фонетическая)</translation>
 <translation id="4124935795427217608">Единорог</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">Автокоррекция</translation>
 <translation id="4881695831933465202">Открыть</translation>
 <translation id="4886021172213954916">Тамильская раскладка ("Печатная машинка")</translation>
+<translation id="4892969127351273348">Не удалось открыть файл с помощью приложения "<ph name="APP_NAME" />"</translation>
 <translation id="4905417359854579806">Файлы (<ph name="FILE_COUNT" />) готовы к сохранению</translation>
 <translation id="4924638091161556692">Исправлено</translation>
 <translation id="4935975195727477204">Гацания</translation>
@@ -500,6 +505,7 @@
 <translation id="6806699711453372963">Настроить доступ Linux</translation>
 <translation id="6808193438228982088">Лиса</translation>
 <translation id="6820687829547641339">Сжатый TAR-архив Gzip</translation>
+<translation id="6823166707458800069">Для всех файлов, сохраненных в этой папке, автоматически создается резервная копия в онлайн-хранилище.</translation>
 <translation id="6825883775269213504">Русский</translation>
 <translation id="6827236167376090743">Видео будет воспроизводиться в режиме повтора.</translation>
 <translation id="6847101934483209767">Выбор объекта "<ph name="ENTRY_NAME" />" отменен.</translation>
@@ -556,6 +562,7 @@
 <translation id="7417705661718309329">Карта Google</translation>
 <translation id="7419631653042041064">Каталанская раскладка</translation>
 <translation id="7434823369735508263">Английская раскладка (Дворак)</translation>
+<translation id="7447678886297481665">Файлы в этой папке доступны только для чтения. Некоторые действия не поддерживаются.</translation>
 <translation id="7460898608667578234">Украинский</translation>
 <translation id="7474889694310679759">Канадская раскладка (английский)</translation>
 <translation id="7489215562877293245">Обнаружены файлы (<ph name="FILE_COUNT" />).

@@ -26,6 +26,8 @@ import org.chromium.ui.interpolators.BakedBezierInterpolator;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.chromium.chrome.browser.ChromeApplication;
+
 /**
  * Location bar for tablet form factors.
  */
@@ -234,7 +236,7 @@ public class LocationBarTablet extends LocationBarLayout {
         super.onSuggestionsChanged(autocompleteText);
         mStatusViewCoordinator.setFirstSuggestionIsSearchType(
                 mAutocompleteCoordinator.getSuggestionCount() > 0
-                && !mAutocompleteCoordinator.getSuggestionAt(0).isUrlSuggestion());
+                && mAutocompleteCoordinator.getSuggestionAt(0).isSearchSuggestion());
     }
 
     @Override
@@ -506,6 +508,11 @@ public class LocationBarTablet extends LocationBarLayout {
 
     private boolean shouldShowPageActionButtons() {
         if (!mNativeInitialized) return true;
+
+        // Vivaldi:
+        // Should not show page action buttons when current URL is NTP.
+        if (ChromeApplication.isVivaldi() &&
+                NewTabPage.isNTPUrl(getToolbarDataProvider().getCurrentUrl())) return false;
 
         // There are two actions, bookmark and save offline, and they should be shown if the
         // omnibox isn't focused.

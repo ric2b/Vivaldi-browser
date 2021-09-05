@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/files/file_util.h"
 #include "base/task/post_task.h"
 #include "base/threading/thread_restrictions.h"
@@ -17,17 +18,19 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/content_index_context.h"
+#include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/shell/browser/shell_content_browser_client.h"
-#include "content/shell/browser/web_test/blink_test_controller.h"
 #include "content/shell/browser/web_test/web_test_browser_context.h"
 #include "content/shell/browser/web_test/web_test_content_browser_client.h"
 #include "content/shell/browser/web_test/web_test_content_index_provider.h"
+#include "content/shell/browser/web_test/web_test_control_host.h"
 #include "content/shell/browser/web_test/web_test_permission_manager.h"
 #include "content/shell/common/web_test/web_test_constants.h"
 #include "content/test/mock_platform_notification_service.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/self_owned_associated_receiver.h"
+#include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "storage/browser/database/database_tracker.h"
 #include "storage/browser/file_system/isolated_context.h"
@@ -97,25 +100,14 @@ WebTestClientImpl::WebTestClientImpl(
     network::mojom::NetworkContext* network_context)
     : render_process_id_(render_process_id),
       quota_manager_(quota_manager),
-      database_tracker_(database_tracker) {
+      database_tracker_(database_tracker),
+      network_context_(network_context) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   network_context->GetCookieManager(
       cookie_manager_.BindNewPipeAndPassReceiver());
 }
 
 WebTestClientImpl::~WebTestClientImpl() = default;
-
-void WebTestClientImpl::InspectSecondaryWindow() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (BlinkTestController::Get())
-    BlinkTestController::Get()->OnInspectSecondaryWindow();
-}
-
-void WebTestClientImpl::TestFinishedInSecondaryRenderer() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (BlinkTestController::Get())
-    BlinkTestController::Get()->OnTestFinishedInSecondaryRenderer();
-}
 
 void WebTestClientImpl::SimulateWebNotificationClick(
     const std::string& title,
@@ -147,10 +139,6 @@ void WebTestClientImpl::SimulateWebContentIndexDelete(const std::string& id) {
   auto* context = GetContentIndexContext(registration_data.second);
   context->OnUserDeletedItem(registration_data.first, registration_data.second,
                              id);
-}
-
-void WebTestClientImpl::BlockThirdPartyCookies(bool block) {
-  BlinkTestController::Get()->BlockThirdPartyCookies(block);
 }
 
 void WebTestClientImpl::ResetPermissions() {
@@ -218,7 +206,7 @@ void WebTestClientImpl::SetPermission(const std::string& name,
 void WebTestClientImpl::WebTestRuntimeFlagsChanged(
     base::Value changed_web_test_runtime_flags) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (!BlinkTestController::Get())
+  if (!WebTestControlHost::Get())
     return;
 
   base::DictionaryValue* changed_web_test_runtime_flags_dictionary = nullptr;
@@ -226,7 +214,7 @@ void WebTestClientImpl::WebTestRuntimeFlagsChanged(
       &changed_web_test_runtime_flags_dictionary);
   DCHECK(ok);
 
-  BlinkTestController::Get()->OnWebTestRuntimeFlagsChanged(
+  WebTestControlHost::Get()->OnWebTestRuntimeFlagsChanged(
       render_process_id_, *changed_web_test_runtime_flags_dictionary);
 }
 
@@ -234,15 +222,6 @@ void WebTestClientImpl::DeleteAllCookies() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   cookie_manager_->DeleteCookies(network::mojom::CookieDeletionFilter::New(),
                                  base::BindOnce([](uint32_t) {}));
-}
-
-void WebTestClientImpl::GetWritableDirectory(
-    GetWritableDirectoryCallback callback) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  base::FilePath path;
-  if (BlinkTestController::Get())
-    path = BlinkTestController::Get()->GetWritableDirectoryForTests();
-  std::move(callback).Run(path);
 }
 
 void WebTestClientImpl::RegisterIsolatedFileSystem(
@@ -263,13 +242,6 @@ void WebTestClientImpl::RegisterIsolatedFileSystem(
   std::move(callback).Run(filesystem_id);
 }
 
-void WebTestClientImpl::SetFilePathForMockFileDialog(
-    const base::FilePath& path) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (BlinkTestController::Get())
-    BlinkTestController::Get()->SetFilePathForMockFileDialog(path);
-}
-
 void WebTestClientImpl::ClearAllDatabases() {
   database_tracker_->task_runner()->PostTask(
       FROM_HERE,
@@ -288,13 +260,16 @@ void WebTestClientImpl::SetDatabaseQuota(int32_t quota) {
       base::BindOnce(&SetDatabaseQuotaOnIOThread, quota_manager_, quota));
 }
 
-void WebTestClientImpl::InitiateCaptureDump(bool capture_navigation_history,
-                                            bool capture_pixels) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (BlinkTestController::Get()) {
-    BlinkTestController::Get()->OnInitiateCaptureDump(
-        capture_navigation_history, capture_pixels);
-  }
+void WebTestClientImpl::SetTrustTokenKeyCommitments(
+    const std::string& raw_commitments,
+    base::OnceClosure callback) {
+  GetNetworkService()->SetTrustTokenKeyCommitments(raw_commitments,
+                                                   std::move(callback));
+}
+
+void WebTestClientImpl::ClearTrustTokenState(base::OnceClosure callback) {
+  // nullptr denotes a wildcard filter.
+  network_context_->ClearTrustTokenData(nullptr, std::move(callback));
 }
 
 }  // namespace content

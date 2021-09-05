@@ -15,9 +15,6 @@ namespace service_manager {
 
 // Defines the sandbox types known within the servicemanager.
 enum class SandboxType {
-  // Not a valid sandbox type.
-  kInvalid = -1,
-
   // Do not apply any sandboxing to the process.
   kNoSandbox,
 
@@ -74,15 +71,24 @@ enum class SandboxType {
   kIme,
 #endif  // defined(OS_CHROMEOS)
 
+#if defined(OS_LINUX)
+  // Indicates that a process is a zygote and will get a real sandbox later.
+  kZygoteIntermediateSandbox,
+#endif
+
 #if !defined(OS_MACOSX)
   // Hosts WebRTC for Sharing Service, uses kUtility on OS_MACOSX.
   kSharingService,
 #endif
 
-  // The Speech On-Device API service process.
-  kSoda,
+  // The speech recognition service process.
+  kSpeechRecognition,
 
-  kMaxValue = kSoda
+  // Equivalent to no sandbox on all non-Fuchsia platforms.
+  // Minimally privileged sandbox on Fuchsia.
+  kVideoCapture,
+
+  kMaxValue = kVideoCapture
 };
 
 SERVICE_MANAGER_SANDBOX_EXPORT bool IsUnsandboxedSandboxType(

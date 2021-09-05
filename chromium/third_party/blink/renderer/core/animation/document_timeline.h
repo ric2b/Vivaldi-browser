@@ -79,10 +79,16 @@ class CORE_EXPORT DocumentTimeline : public AnimationTimeline {
     return !animations_needing_update_.IsEmpty();
   }
 
+  // The zero time of DocumentTimeline is computed by adding a separate
+  // |origin_time_| from DocumentTimelineOptions.
+  // https://drafts.csswg.org/web-animations/#origin-time
   base::TimeTicks ZeroTime();
+  double ZeroTimeInSeconds() override {
+    return ZeroTime().since_origin().InSecondsF();
+  }
+
   void PauseAnimationsForTesting(double);
 
-  void SetAllCompositorPending(bool source_changed = false);
   void InvalidateKeyframeEffects(const TreeScope&);
 
   void SetPlaybackRate(double);

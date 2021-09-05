@@ -17,10 +17,8 @@ namespace content {
 // static
 BrowserAccessibilityManager* BrowserAccessibilityManager::Create(
     const ui::AXTreeUpdate& initial_tree,
-    BrowserAccessibilityDelegate* delegate,
-    BrowserAccessibilityFactory* factory) {
-  return new BrowserAccessibilityManagerAuraLinux(initial_tree, delegate,
-                                                  factory);
+    BrowserAccessibilityDelegate* delegate) {
+  return new BrowserAccessibilityManagerAuraLinux(initial_tree, delegate);
 }
 
 BrowserAccessibilityManagerAuraLinux*
@@ -30,9 +28,8 @@ BrowserAccessibilityManager::ToBrowserAccessibilityManagerAuraLinux() {
 
 BrowserAccessibilityManagerAuraLinux::BrowserAccessibilityManagerAuraLinux(
     const ui::AXTreeUpdate& initial_tree,
-    BrowserAccessibilityDelegate* delegate,
-    BrowserAccessibilityFactory* factory)
-    : BrowserAccessibilityManager(delegate, factory) {
+    BrowserAccessibilityDelegate* delegate)
+    : BrowserAccessibilityManager(delegate) {
   Initialize(initial_tree);
 }
 
@@ -72,9 +69,6 @@ void BrowserAccessibilityManagerAuraLinux::FireSelectedEvent(
 void BrowserAccessibilityManagerAuraLinux::FireLoadingEvent(
     BrowserAccessibility* node,
     bool is_loading) {
-  if (!node->IsNative())
-    return;
-
   gfx::NativeViewAccessible obj = node->GetNativeViewAccessible();
   if (!ATK_IS_OBJECT(obj))
     return;
@@ -87,18 +81,12 @@ void BrowserAccessibilityManagerAuraLinux::FireLoadingEvent(
 void BrowserAccessibilityManagerAuraLinux::FireExpandedEvent(
     BrowserAccessibility* node,
     bool is_expanded) {
-  if (!node->IsNative())
-    return;
-
   ToBrowserAccessibilityAuraLinux(node)->GetNode()->OnExpandedStateChanged(
       is_expanded);
 }
 
 void BrowserAccessibilityManagerAuraLinux::FireEvent(BrowserAccessibility* node,
                                                      ax::mojom::Event event) {
-  if (!node->IsNative())
-    return;
-
   ToBrowserAccessibilityAuraLinux(node)->GetNode()->NotifyAccessibilityEvent(
       event);
 }
@@ -127,11 +115,19 @@ void BrowserAccessibilityManagerAuraLinux::FireDescriptionChangedEvent(
   ToBrowserAccessibilityAuraLinux(node)->GetNode()->OnDescriptionChanged();
 }
 
+void BrowserAccessibilityManagerAuraLinux::FireSortDirectionChangedEvent(
+    BrowserAccessibility* node) {
+  ToBrowserAccessibilityAuraLinux(node)->GetNode()->OnSortDirectionChanged();
+}
+
 void BrowserAccessibilityManagerAuraLinux::FireSubtreeCreatedEvent(
     BrowserAccessibility* node) {
   // Sending events during a load would create a lot of spam, don't do that.
-  if (GetTreeData().loaded)
-    ToBrowserAccessibilityAuraLinux(node)->GetNode()->OnSubtreeCreated();
+  if (!GetTreeData().loaded)
+    return;
+  if (!CanEmitChildrenChanged(node))
+    return;
+  ToBrowserAccessibilityAuraLinux(node)->GetNode()->OnSubtreeCreated();
 }
 
 void BrowserAccessibilityManagerAuraLinux::FireGeneratedEvent(
@@ -176,6 +172,9 @@ void BrowserAccessibilityManagerAuraLinux::FireGeneratedEvent(
     case ui::AXEventGenerator::Event::SELECTED_CHANGED:
       FireSelectedEvent(node);
       break;
+    case ui::AXEventGenerator::Event::SORT_CHANGED:
+      FireSortDirectionChangedEvent(node);
+      break;
     case ui::AXEventGenerator::Event::SUBTREE_CREATED:
       FireSubtreeCreatedEvent(node);
       break;
@@ -208,8 +207,10 @@ void BrowserAccessibilityManagerAuraLinux::OnNodeDataWillChange(
   // children-changed:add is handled with the generated Event::IGNORED_CHANGED.
   if (!old_node_data.IsIgnored() && new_node_data.IsIgnored()) {
     BrowserAccessibility* obj = GetFromID(old_node_data.id);
-    if (obj && obj->IsNative() && obj->GetParent()) {
+    if (obj && obj->GetParent()) {
       DCHECK(!obj->IsIgnored());
+      if (!CanEmitChildrenChanged(obj))
+        return;
       g_signal_emit_by_name(obj->GetParent(), "children-changed::remove",
                             obj->GetIndexInParent(),
                             obj->GetNativeViewAccessible());
@@ -225,8 +226,9 @@ void BrowserAccessibilityManagerAuraLinux::OnSubtreeWillBeDeleted(
     return;
 
   BrowserAccessibility* obj = GetFromAXNode(node);
-  if (obj && obj->IsNative())
-    ToBrowserAccessibilityAuraLinux(obj)->GetNode()->OnSubtreeWillBeDeleted();
+  if (!CanEmitChildrenChanged(obj))
+    return;
+  ToBrowserAccessibilityAuraLinux(obj)->GetNode()->OnSubtreeWillBeDeleted();
 }
 
 void BrowserAccessibilityManagerAuraLinux::OnAtomicUpdateFinished(
@@ -268,6 +270,16 @@ void BrowserAccessibilityManagerAuraLinux::OnFindInPageTermination() {
   static_cast<BrowserAccessibilityAuraLinux*>(GetRoot())
       ->GetNode()
       ->TerminateFindInPage();
+}
+
+bool BrowserAccessibilityManagerAuraLinux::CanEmitChildrenChanged(
+    BrowserAccessibility* node) const {
+  if (!node || !ShouldFireEventForNode(node))
+    return false;
+  BrowserAccessibility* parent = node->PlatformGetParent();
+  if (!parent || parent->PlatformIsLeaf())
+    return false;
+  return true;
 }
 
 }  // namespace content

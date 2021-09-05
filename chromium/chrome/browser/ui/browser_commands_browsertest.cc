@@ -10,6 +10,7 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "content/public/test/browser_test.h"
 
 namespace chrome {
 
@@ -116,13 +117,13 @@ IN_PROC_BROWSER_TEST_F(BrowserCommandsTest, MoveToExistingWindow) {
 
   // Single tab move to an existing window.
   std::vector<int> indices = {0};
-  chrome::MoveToExistingWindow(browser(), second_window, indices);
+  chrome::MoveTabsToExistingWindow(browser(), second_window, indices);
   ASSERT_TRUE(browser()->tab_strip_model()->count() == 2);
   ASSERT_TRUE(second_window->tab_strip_model()->count() == 3);
 
   // Multiple tab move to an existing window.
   indices = {0, 2};
-  chrome::MoveToExistingWindow(second_window, browser(), indices);
+  chrome::MoveTabsToExistingWindow(second_window, browser(), indices);
   ASSERT_TRUE(browser()->tab_strip_model()->count() == 4);
   ASSERT_TRUE(second_window->tab_strip_model()->count() == 1);
 }

@@ -30,7 +30,6 @@
 
 #include "third_party/blink/public/common/metrics/document_update_reason.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink-forward.h"
-#include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
 #include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/shape_properties.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -177,6 +176,7 @@ class CORE_EXPORT LocalFrameView final
   bool HasOrthogonalWritingModeRoots() const;
   void LayoutOrthogonalWritingModeRoots();
   void ScheduleOrthogonalWritingModeRootsForLayout();
+  void MarkOrthogonalWritingModeRootsForLayout();
 
   unsigned LayoutCountForTesting() const { return layout_count_for_testing_; }
   unsigned LifecycleUpdateCountForTesting() const {
@@ -275,22 +275,28 @@ class CORE_EXPORT LocalFrameView final
   void SetMediaType(const AtomicString&);
   void AdjustMediaTypeForPrinting(bool printing);
 
-  blink::mojom::DisplayMode DisplayMode() { return display_mode_; }
-  void SetDisplayMode(blink::mojom::DisplayMode);
-
   DisplayShape GetDisplayShape() { return display_shape_; }
   void SetDisplayShape(DisplayShape);
 
-  // Fixed-position objects.
+  // For any viewport-constrained object, we need to know if it's due to fixed
+  // or sticky so that we can support HasStickyViewportConstrainedObject().
+  enum ViewportConstrainedType { kFixed = 0, kSticky = 1 };
+  // Fixed-position and viewport-constrained sticky-position objects.
   typedef HashSet<LayoutObject*> ObjectSet;
-  void AddViewportConstrainedObject(LayoutObject&);
-  void RemoveViewportConstrainedObject(LayoutObject&);
+  void AddViewportConstrainedObject(LayoutObject&, ViewportConstrainedType);
+  void RemoveViewportConstrainedObject(LayoutObject&, ViewportConstrainedType);
   const ObjectSet* ViewportConstrainedObjects() const {
     return viewport_constrained_objects_.get();
   }
   bool HasViewportConstrainedObjects() const {
     return viewport_constrained_objects_ &&
            viewport_constrained_objects_->size() > 0;
+  }
+  // Returns true if any of the objects in viewport_constrained_objects_ are
+  // sticky position.
+  bool HasStickyViewportConstrainedObject() const {
+    DCHECK(!sticky_position_object_count_ || HasViewportConstrainedObjects());
+    return sticky_position_object_count_ > 0;
   }
 
   // Objects with background-attachment:fixed.
@@ -726,7 +732,7 @@ class CORE_EXPORT LocalFrameView final
     ~DisallowLayoutInvalidationScope();
 
    private:
-    UntracedMember<LocalFrameView> local_frame_view_;
+    LocalFrameView* local_frame_view_;
   };
 #endif
 
@@ -845,7 +851,9 @@ class CORE_EXPORT LocalFrameView final
 
   PaintController* GetPaintController() { return paint_controller_.get(); }
 
-  void LayoutFromRootObject(LayoutObject& root);
+  // Returns true if the root object was laid out. Returns false if the layout
+  // was prevented (e.g. by ancestor display-lock) or not needed.
+  bool LayoutFromRootObject(LayoutObject& root);
 
   void UpdateLayerDebugInfoEnabled();
 
@@ -853,14 +861,14 @@ class CORE_EXPORT LocalFrameView final
   // necessary.
   OverlayInterstitialAdDetector& EnsureOverlayInterstitialAdDetector();
 
+  WTF::Vector<const TransformPaintPropertyNode*> GetScrollTranslationNodes();
+
   LayoutSize size_;
 
   typedef HashSet<scoped_refptr<LayoutEmbeddedObject>> EmbeddedObjectSet;
   EmbeddedObjectSet part_update_set_;
 
   Member<LocalFrame> frame_;
-
-  blink::mojom::DisplayMode display_mode_;
 
   DisplayShape display_shape_;
 
@@ -897,6 +905,7 @@ class CORE_EXPORT LocalFrameView final
   Member<ScrollableAreaSet> scrollable_areas_;
   Member<ScrollableAreaSet> animating_scrollable_areas_;
   std::unique_ptr<ObjectSet> viewport_constrained_objects_;
+  // Number of entries in viewport_constrained_objects_ that are sticky.
   unsigned sticky_position_object_count_;
   ObjectSet background_attachment_fixed_objects_;
   Member<FrameViewAutoSizeInfo> auto_size_info_;
@@ -994,7 +1003,7 @@ class CORE_EXPORT LocalFrameView final
   size_t paint_frame_count_;
 
   UniqueObjectId unique_id_;
-  std::unique_ptr<LayoutShiftTracker> layout_shift_tracker_;
+  Member<LayoutShiftTracker> layout_shift_tracker_;
   Member<PaintTimingDetector> paint_timing_detector_;
 
   HeapHashSet<WeakMember<LifecycleNotificationObserver>> lifecycle_observers_;

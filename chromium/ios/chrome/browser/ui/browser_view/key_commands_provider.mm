@@ -4,7 +4,6 @@
 
 #import "ios/chrome/browser/ui/browser_view/key_commands_provider.h"
 
-#include "base/logging.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/keyboard/UIKeyCommand+Chrome.h"
@@ -228,14 +227,19 @@
     ]];
   }
 
+  if (self.canDismissModals) {
+    [keyCommands
+        addObject:[UIKeyCommand
+                      cr_keyCommandWithInput:UIKeyInputEscape
+                               modifierFlags:Cr_UIKeyModifierNone
+                                       title:nil
+                                      action:^{
+                                        [weakDispatcher dismissModalDialogs];
+                                      }]];
+  }
+
   // List the commands that don't appear in the HUD but are always present.
   [keyCommands addObjectsFromArray:@[
-    [UIKeyCommand cr_keyCommandWithInput:UIKeyInputEscape
-                           modifierFlags:Cr_UIKeyModifierNone
-                                   title:nil
-                                  action:^{
-                                    [weakDispatcher dismissModalDialogs];
-                                  }],
     [UIKeyCommand cr_keyCommandWithInput:@"n"
                            modifierFlags:UIKeyModifierCommand
                                    title:nil

@@ -63,6 +63,17 @@
         cursor: pointer;
       }
 
+      .cr-centered-card-container {
+        box-sizing: border-box;
+        display: block;
+        height: inherit;
+        margin: 0 auto;
+        max-width: var(--cr-centered-card-max-width);
+        min-width: 550px;
+        position: relative;
+        width: calc(100% * var(--cr-centered-card-width-percentage));
+      }
+
       .cr-container-shadow {
         box-shadow: inset 0 5px 6px -3px rgba(0, 0, 0, .4);
         height: var(--cr-container-shadow-height);
@@ -89,7 +100,7 @@
         opacity: var(--cr-container-shadow-max-opacity);
       }
 
-      .cr-section {
+      .cr-row {
         align-items: center;
         border-top: var(--cr-separator-line);
         display: flex;
@@ -97,12 +108,45 @@
         padding: 0 var(--cr-section-padding);
       }
 
+      .cr-row.first,
+      .cr-row.continuation {
+        border-top: none;
+      }
+
+      .cr-row-gap {
+        padding-inline-start: 16px;
+      }
+
+      .cr-button-gap {
+        margin-inline-start: 8px;
+      }
+
+      paper-tooltip {
+        --paper-tooltip: {
+          font-size: 92.31%;  /* Effectively 12px if the host default is 13px. */
+          font-weight: 500;
+          max-width: 330px;
+          min-width: var(--paper-tooltip-min-width, 200px);
+          padding: var(--paper-tooltip-padding, 10px 8px);
+        }
+      }
+
       /* Typography */
+
+      .cr-padded-text {
+        padding-block-end: var(--cr-section-vertical-padding);
+        padding-block-start: var(--cr-section-vertical-padding);
+      }
 
       .cr-title-text {
         color: var(--cr-title-text-color);
         font-size: 107.6923%; /* Go to 14px from 13px. */
         font-weight: 500;
+      }
+
+      .cr-secondary-text {
+        color: var(--cr-secondary-text-color);
+        font-weight: 400;
       }
 
       .cr-form-field-label {

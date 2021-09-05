@@ -4,13 +4,14 @@
 
 #include "components/crash/core/app/crash_reporter_client.h"
 
+#include "build/branding_buildflags.h"
 #include "build/build_config.h"
 
 // On Windows don't use FilePath and logging.h.
 // http://crbug.com/604923
 #if !defined(OS_WIN)
+#include "base/check.h"
 #include "base/files/file_path.h"
-#include "base/logging.h"
 #else
 #include <assert.h>
 #define DCHECK assert
@@ -21,6 +22,10 @@ namespace crash_reporter {
 namespace {
 
 CrashReporterClient* g_client = nullptr;
+
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING) && defined(OFFICIAL_BUILD)
+const char kDefaultUploadURL[] = "https://clients2.google.com/cr/report";
+#endif
 
 }  // namespace
 
@@ -67,11 +72,6 @@ bool CrashReporterClient::ShouldShowRestartDialog(base::string16* title,
 }
 
 bool CrashReporterClient::AboutToRestart() {
-  return false;
-}
-
-bool CrashReporterClient::GetDeferredUploadsSupported(
-    bool is_per_usr_install) {
   return false;
 }
 
@@ -195,6 +195,16 @@ void CrashReporterClient::GetSanitizationInformation(
   *sanitize_stacks = false;
 }
 #endif
+
+std::string CrashReporterClient::GetUploadUrl() {
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING) && defined(OFFICIAL_BUILD)
+  // Only allow the possibility of report upload in official builds. This
+  // crash server won't have symbols for any other build types.
+  return kDefaultUploadURL;
+#else
+  return std::string();
+#endif
+}
 
 bool CrashReporterClient::ShouldMonitorCrashHandlerExpensively() {
   return false;

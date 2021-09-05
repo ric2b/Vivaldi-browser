@@ -8,8 +8,8 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
-#include "chrome/common/extensions/api/extension_action/action_info.h"
 #include "chrome/common/extensions/extension_constants.h"
+#include "extensions/common/api/extension_action/action_info.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/file_util.h"
 #include "extensions/common/image_util.h"
@@ -68,17 +68,7 @@ bool ExtensionActionHandler::Parse(Extension* extension,
     if (!action_info)
       return false;  // Failed to parse extension action definition.
 
-    switch (type) {
-      case ActionInfo::TYPE_ACTION:
-        ActionInfo::SetExtensionActionInfo(extension, std::move(action_info));
-        break;
-      case ActionInfo::TYPE_PAGE:
-        ActionInfo::SetPageActionInfo(extension, std::move(action_info));
-        break;
-      case ActionInfo::TYPE_BROWSER:
-        ActionInfo::SetBrowserActionInfo(extension, std::move(action_info));
-        break;
-    }
+    ActionInfo::SetExtensionActionInfo(extension, std::move(action_info));
   } else {  // No key, used for synthesizing an action for extensions with none.
     if (Manifest::IsComponentLocation(extension->location()))
       return true;  // Don't synthesize actions for component extensions.
@@ -89,7 +79,7 @@ bool ExtensionActionHandler::Parse(Extension* extension,
     // action) because the action should not be seen as enabled on every page.
     auto action_info = std::make_unique<ActionInfo>(ActionInfo::TYPE_PAGE);
     action_info->synthesized = true;
-    ActionInfo::SetPageActionInfo(extension, std::move(action_info));
+    ActionInfo::SetExtensionActionInfo(extension, std::move(action_info));
   }
 
   return true;
@@ -99,7 +89,7 @@ bool ExtensionActionHandler::Validate(
     const Extension* extension,
     std::string* error,
     std::vector<InstallWarning>* warnings) const {
-  const ActionInfo* action = ActionInfo::GetAnyActionInfo(extension);
+  const ActionInfo* action = ActionInfo::GetExtensionActionInfo(extension);
   if (!action || action->default_icon.empty())
     return true;
 

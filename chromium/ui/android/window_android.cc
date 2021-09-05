@@ -198,22 +198,6 @@ void WindowAndroid::SetVSyncPaused(JNIEnv* env,
     compositor_->SetVSyncPaused(paused);
 }
 
-void WindowAndroid::OnCursorVisibilityChanged(
-    JNIEnv* env,
-    const base::android::JavaParamRef<jobject>& obj,
-    bool visible) {
-  for (WindowAndroidObserver& observer : observer_list_)
-    observer.OnCursorVisibilityChanged(visible);
-}
-
-void WindowAndroid::OnFallbackCursorModeToggled(
-    JNIEnv* env,
-    const base::android::JavaParamRef<jobject>& obj,
-    bool is_on) {
-  for (WindowAndroidObserver& observer : observer_list_)
-    observer.OnFallbackCursorModeToggled(is_on);
-}
-
 void WindowAndroid::OnUpdateRefreshRate(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj,
@@ -236,6 +220,11 @@ void WindowAndroid::OnSupportedRefreshRatesUpdated(
     compositor_->OnUpdateSupportedRefreshRates(supported_refresh_rates);
 
   Force60HzRefreshRateIfNeeded();
+}
+
+void WindowAndroid::SetWideColorEnabled(bool enabled) {
+  JNIEnv* env = AttachCurrentThread();
+  Java_WindowAndroid_setWideColorEnabled(env, GetJavaObject(), enabled);
 }
 
 void WindowAndroid::SetForce60HzRefreshRate() {

@@ -35,17 +35,22 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeApplication;
 import org.chromium.chrome.browser.browserservices.TrustedWebActivityClient;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
-import org.chromium.chrome.browser.notifications.channels.ChannelDefinitions;
 import org.chromium.chrome.browser.notifications.channels.SiteChannelsManager;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.settings.SettingsLauncher;
-import org.chromium.chrome.browser.site_settings.SingleCategorySettings;
-import org.chromium.chrome.browser.site_settings.SingleWebsiteSettings;
-import org.chromium.chrome.browser.site_settings.SiteSettingsCategory;
+import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.usage_stats.NotificationSuspender;
 import org.chromium.chrome.browser.webapps.ChromeWebApkHost;
 import org.chromium.chrome.browser.webapps.WebApkServiceClient;
+import org.chromium.components.browser_ui.notifications.ChromeNotification;
+import org.chromium.components.browser_ui.notifications.NotificationManagerProxy;
+import org.chromium.components.browser_ui.notifications.NotificationManagerProxyImpl;
+import org.chromium.components.browser_ui.notifications.NotificationMetadata;
+import org.chromium.components.browser_ui.notifications.PendingIntentProvider;
+import org.chromium.components.browser_ui.site_settings.SingleCategorySettings;
+import org.chromium.components.browser_ui.site_settings.SingleWebsiteSettings;
+import org.chromium.components.browser_ui.site_settings.SiteSettingsCategory;
 import org.chromium.components.url_formatter.SchemeDisplay;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.url.URI;
@@ -281,8 +286,8 @@ public class NotificationPlatformBridge {
         Class<? extends PreferenceFragmentCompat> fragment = launchSingleWebsitePreferences
                 ? SingleWebsiteSettings.class
                 : SingleCategorySettings.class;
-        SettingsLauncher.getInstance().launchSettingsPage(
-                applicationContext, fragment, fragmentArguments);
+        SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
+        settingsLauncher.launchSettingsActivity(applicationContext, fragment, fragmentArguments);
     }
 
     /**
@@ -408,8 +413,7 @@ public class NotificationPlatformBridge {
     @Nullable
     @VisibleForTesting
     static String getOriginFromChannelId(@Nullable String channelId) {
-        if (channelId == null
-                || !channelId.startsWith(ChannelDefinitions.CHANNEL_ID_PREFIX_SITES)) {
+        if (channelId == null || !SiteChannelsManager.isValidSiteChannelId(channelId)) {
             return null;
         }
         return SiteChannelsManager.toSiteOrigin(channelId);
@@ -550,10 +554,18 @@ public class NotificationPlatformBridge {
         NotificationSuspender.maybeSuspendNotification(notification).then((suspended) -> {
             if (suspended) return;
             // Display notification as Chrome.
-            mNotificationManager.notify(notification);
-            NotificationUmaTracker.getInstance().onNotificationShown(
-                    NotificationUmaTracker.SystemNotificationType.SITES,
-                    notification.getNotification());
+            // Android may throw an exception on INotificationManager.enqueueNotificationWithTag,
+            // see crbug.com/1077027.
+            try {
+                mNotificationManager.notify(notification);
+                NotificationUmaTracker.getInstance().onNotificationShown(
+                        NotificationUmaTracker.SystemNotificationType.SITES,
+                        notification.getNotification());
+            } catch (RuntimeException e) {
+                Log.e(TAG, "Failed to send notification, the IPC message might be corrupted.");
+                NotificationUmaTracker.getInstance().onFailedToNotify(
+                        NotificationUmaTracker.SystemNotificationType.SITES);
+            }
         });
     }
 
@@ -639,7 +651,8 @@ public class NotificationPlatformBridge {
         // TODO(knollr): Generalize the NotificationPlatformBridge sufficiently to not need
         // to care about the individual notification types.
         // Set up a pending intent for going to the settings screen for |origin|.
-        Intent settingsIntent = SettingsLauncher.getInstance().createIntentForSettingsPage(context,
+        SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
+        Intent settingsIntent = settingsLauncher.createSettingsActivityIntent(context,
                 SingleWebsiteSettings.class.getName(),
                 SingleWebsiteSettings.createFragmentArgsForSite(origin));
         settingsIntent.setData(makeIntentData(notificationId, origin, -1 /* actionIndex */));

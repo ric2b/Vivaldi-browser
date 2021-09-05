@@ -21,21 +21,19 @@ class ExtensionUrlPatternIndexMatcher final : public RulesetMatcherBase {
  public:
   using UrlPatternIndexList = flatbuffers::Vector<
       flatbuffers::Offset<url_pattern_index::flat::UrlPatternIndex>>;
-  ExtensionUrlPatternIndexMatcher(
-      const ExtensionId& extension_id,
-      api::declarative_net_request::SourceType source_type,
-      const UrlPatternIndexList* index_list,
-      const ExtensionMetadataList* metadata_list);
+  ExtensionUrlPatternIndexMatcher(const ExtensionId& extension_id,
+                                  RulesetID ruleset_id,
+                                  const UrlPatternIndexList* index_list,
+                                  const ExtensionMetadataList* metadata_list);
 
   // RulesetMatcherBase override:
   ~ExtensionUrlPatternIndexMatcher() override;
-  uint8_t GetRemoveHeadersMask(
-      const RequestParams& params,
-      uint8_t excluded_remove_headers_mask,
-      std::vector<RequestAction>* remove_headers_actions) const override;
+  std::vector<RequestAction> GetModifyHeadersActions(
+      const RequestParams& params) const override;
   bool IsExtraHeadersMatcher() const override {
     return is_extra_headers_matcher_;
   }
+  size_t GetRulesCount() const override { return rules_count_; }
 
  private:
   using UrlPatternIndexMatcher = url_pattern_index::UrlPatternIndexMatcher;
@@ -57,12 +55,18 @@ class ExtensionUrlPatternIndexMatcher final : public RulesetMatcherBase {
       UrlPatternIndexMatcher::FindRuleStrategy strategy =
           UrlPatternIndexMatcher::FindRuleStrategy::kAny) const;
 
+  std::vector<const url_pattern_index::flat::UrlRule*> GetAllMatchingRules(
+      const RequestParams& params,
+      flat::IndexType index) const;
+
   const ExtensionMetadataList* const metadata_list_;
 
   // UrlPatternIndexMatchers corresponding to entries in flat::IndexType.
   const std::vector<UrlPatternIndexMatcher> matchers_;
 
   const bool is_extra_headers_matcher_;
+
+  const size_t rules_count_;
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionUrlPatternIndexMatcher);
 };

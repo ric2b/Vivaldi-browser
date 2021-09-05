@@ -56,7 +56,7 @@
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/web/web_ime_text_span.h"
 #include "ui/accessibility/accessibility_switches.h"
-#include "ui/accessibility/platform/aura_window_properties.h"
+#include "ui/accessibility/aura/aura_window_properties.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/cursor_client.h"
@@ -71,9 +71,9 @@
 #include "ui/aura/window_observer.h"
 #include "ui/aura/window_tree_host.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
+#include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/ime/input_method.h"
-#include "ui/base/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/compositor/dip_util.h"
@@ -111,7 +111,7 @@
 #include "ui/gfx/gdi_util.h"
 #endif
 
-#if defined(USE_X11)
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 #include "content/browser/accessibility/browser_accessibility_auralinux.h"
 #endif
 
@@ -564,7 +564,7 @@ gfx::NativeViewAccessible RenderWidgetHostViewAura::GetNativeViewAccessible() {
   if (manager)
     return ToBrowserAccessibilityWin(manager->GetRoot())->GetCOM();
 
-#elif defined(USE_X11)
+#elif defined(OS_LINUX) && !defined(OS_CHROMEOS)
   BrowserAccessibilityManager* manager =
       host()->GetOrCreateRootBrowserAccessibilityManager();
   if (manager && manager->GetRoot())
@@ -966,10 +966,10 @@ gfx::Rect RenderWidgetHostViewAura::GetBoundsInRootWindow() {
 
 void RenderWidgetHostViewAura::WheelEventAck(
     const blink::WebMouseWheelEvent& event,
-    InputEventAckState ack_result) {
+    blink::mojom::InputEventResultState ack_result) {
   if (overscroll_controller_) {
     overscroll_controller_->ReceivedEventACK(
-        event, (INPUT_EVENT_ACK_STATE_CONSUMED == ack_result));
+        event, (blink::mojom::InputEventResultState::kConsumed == ack_result));
   }
 }
 
@@ -981,19 +981,19 @@ void RenderWidgetHostViewAura::DidOverscroll(
 
 void RenderWidgetHostViewAura::GestureEventAck(
     const blink::WebGestureEvent& event,
-    InputEventAckState ack_result) {
+    blink::mojom::InputEventResultState ack_result) {
   const blink::WebInputEvent::Type event_type = event.GetType();
-  if (event_type == blink::WebGestureEvent::kGestureScrollBegin ||
-      event_type == blink::WebGestureEvent::kGestureScrollEnd) {
+  if (event_type == blink::WebGestureEvent::Type::kGestureScrollBegin ||
+      event_type == blink::WebGestureEvent::Type::kGestureScrollEnd) {
     if (host()->delegate()) {
       host()->delegate()->SetTopControlsGestureScrollInProgress(
-          event_type == blink::WebGestureEvent::kGestureScrollBegin);
+          event_type == blink::WebGestureEvent::Type::kGestureScrollBegin);
     }
   }
 
   if (overscroll_controller_) {
     overscroll_controller_->ReceivedEventACK(
-        event, (INPUT_EVENT_ACK_STATE_CONSUMED == ack_result));
+        event, (blink::mojom::InputEventResultState::kConsumed == ack_result));
     // Terminate an active fling when the ACK for a GSU generated from the fling
     // progress (GSU with inertial state) is consumed and the overscrolling mode
     // is not |OVERSCROLL_NONE|. The early fling termination generates a GSE
@@ -1001,7 +1001,7 @@ void RenderWidgetHostViewAura::GestureEventAck(
     // action would complete at the end of the active fling progress which
     // causes noticeable delay in cases that the fling velocity is large.
     // https://crbug.com/797855
-    if (event_type == blink::WebInputEvent::kGestureScrollUpdate &&
+    if (event_type == blink::WebInputEvent::Type::kGestureScrollUpdate &&
         event.data.scroll_update.inertial_phase ==
             blink::WebGestureEvent::InertialPhaseState::kMomentum &&
         overscroll_controller_->overscroll_mode() != OVERSCROLL_NONE) {
@@ -1020,7 +1020,7 @@ void RenderWidgetHostViewAura::GestureEventAck(
 
 void RenderWidgetHostViewAura::ProcessAckedTouchEvent(
     const TouchEventWithLatencyInfo& touch,
-    InputEventAckState ack_result) {
+    blink::mojom::InputEventResultState ack_result) {
   aura::WindowTreeHost* window_host = window_->GetHost();
   // |host| is NULL during tests.
   if (!window_host)
@@ -1028,28 +1028,30 @@ void RenderWidgetHostViewAura::ProcessAckedTouchEvent(
 
   // The TouchScrollStarted event is generated & consumed downstream from the
   // TouchEventQueue. So we don't expect an ACK up here.
-  DCHECK(touch.event.GetType() != blink::WebInputEvent::kTouchScrollStarted);
+  DCHECK(touch.event.GetType() !=
+         blink::WebInputEvent::Type::kTouchScrollStarted);
 
-  ui::EventResult result = (ack_result == INPUT_EVENT_ACK_STATE_CONSUMED)
-                               ? ui::ER_HANDLED
-                               : ui::ER_UNHANDLED;
+  ui::EventResult result =
+      (ack_result == blink::mojom::InputEventResultState::kConsumed)
+          ? ui::ER_HANDLED
+          : ui::ER_UNHANDLED;
 
   blink::WebTouchPoint::State required_state;
   switch (touch.event.GetType()) {
-    case blink::WebInputEvent::kTouchStart:
-      required_state = blink::WebTouchPoint::kStatePressed;
+    case blink::WebInputEvent::Type::kTouchStart:
+      required_state = blink::WebTouchPoint::State::kStatePressed;
       break;
-    case blink::WebInputEvent::kTouchEnd:
-      required_state = blink::WebTouchPoint::kStateReleased;
+    case blink::WebInputEvent::Type::kTouchEnd:
+      required_state = blink::WebTouchPoint::State::kStateReleased;
       break;
-    case blink::WebInputEvent::kTouchMove:
-      required_state = blink::WebTouchPoint::kStateMoved;
+    case blink::WebInputEvent::Type::kTouchMove:
+      required_state = blink::WebTouchPoint::State::kStateMoved;
       break;
-    case blink::WebInputEvent::kTouchCancel:
-      required_state = blink::WebTouchPoint::kStateCancelled;
+    case blink::WebInputEvent::Type::kTouchCancel:
+      required_state = blink::WebTouchPoint::State::kStateCancelled;
       break;
     default:
-      required_state = blink::WebTouchPoint::kStateUndefined;
+      required_state = blink::WebTouchPoint::State::kStateUndefined;
       NOTREACHED();
       break;
   }
@@ -1061,7 +1063,7 @@ void RenderWidgetHostViewAura::ProcessAckedTouchEvent(
       DCHECK(!sent_ack);
       window_host->dispatcher()->ProcessedTouchEvent(
           touch.event.unique_touch_event_id, window_, result,
-          InputEventAckStateIsSetNonBlocking(ack_result));
+          InputEventResultStateIsSetNonBlocking(ack_result));
       if (touch.event.touch_start_or_first_touch_move &&
           result == ui::ER_HANDLED && host()->delegate() &&
           host()->delegate()->GetInputEventRouter()) {
@@ -1082,7 +1084,7 @@ RenderWidgetHostViewAura::CreateSyntheticGestureTarget() {
       new SyntheticGestureTargetAura(host()));
 }
 
-InputEventAckState RenderWidgetHostViewAura::FilterInputEvent(
+blink::mojom::InputEventResultState RenderWidgetHostViewAura::FilterInputEvent(
     const blink::WebInputEvent& input_event) {
 #if defined(USE_X11)
   if (vivaldi::IsVivaldiRunning()) {
@@ -1100,7 +1102,7 @@ InputEventAckState RenderWidgetHostViewAura::FilterInputEvent(
 #endif  // USE_X11
 
   bool consumed = false;
-  if (input_event.GetType() == WebInputEvent::kGestureFlingStart) {
+  if (input_event.GetType() == WebInputEvent::Type::kGestureFlingStart) {
     const WebGestureEvent& gesture_event =
         static_cast<const WebGestureEvent&>(input_event);
     // Zero-velocity touchpad flings are an Aura-specific signal that the
@@ -1117,10 +1119,10 @@ InputEventAckState RenderWidgetHostViewAura::FilterInputEvent(
 
   // Touch events should always propagate to the renderer.
   if (WebTouchEvent::IsTouchEventType(input_event.GetType()))
-    return INPUT_EVENT_ACK_STATE_NOT_CONSUMED;
+    return blink::mojom::InputEventResultState::kNotConsumed;
 
   if (consumed &&
-      input_event.GetType() == blink::WebInputEvent::kGestureFlingStart) {
+      input_event.GetType() == blink::WebInputEvent::Type::kGestureFlingStart) {
     // Here we indicate that there was no consumer for this event, as
     // otherwise the fling animation system will try to run an animation
     // and will also expect a notification when the fling ends. Since
@@ -1128,11 +1130,11 @@ InputEventAckState RenderWidgetHostViewAura::FilterInputEvent(
     // of indicating that touchpad scroll has ended, we don't actually want
     // a fling animation. Note: Similar code exists in
     // RenderWidgetHostViewChildFrame::FilterInputEvent()
-    return INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS;
+    return blink::mojom::InputEventResultState::kNoConsumerExists;
   }
 
-  return consumed ? INPUT_EVENT_ACK_STATE_CONSUMED
-                  : INPUT_EVENT_ACK_STATE_NOT_CONSUMED;
+  return consumed ? blink::mojom::InputEventResultState::kConsumed
+                  : blink::mojom::InputEventResultState::kNotConsumed;
 }
 
 BrowserAccessibilityManager*
@@ -1374,11 +1376,11 @@ ui::TextInputClient::FocusReason RenderWidgetHostViewAura::GetFocusReason()
     return ui::TextInputClient::FOCUS_REASON_NONE;
 
   switch (last_pointer_type_before_focus_) {
-    case ui::EventPointerType::POINTER_TYPE_MOUSE:
+    case ui::EventPointerType::kMouse:
       return ui::TextInputClient::FOCUS_REASON_MOUSE;
-    case ui::EventPointerType::POINTER_TYPE_PEN:
+    case ui::EventPointerType::kPen:
       return ui::TextInputClient::FOCUS_REASON_PEN;
-    case ui::EventPointerType::POINTER_TYPE_TOUCH:
+    case ui::EventPointerType::kTouch:
       return ui::TextInputClient::FOCUS_REASON_TOUCH;
     default:
       return ui::TextInputClient::FOCUS_REASON_OTHER;
@@ -1526,9 +1528,7 @@ void RenderWidgetHostViewAura::SetTextEditCommandForNextKeyEvent(
 ukm::SourceId RenderWidgetHostViewAura::GetClientSourceForMetrics() const {
   RenderFrameHostImpl* frame = GetFocusedFrame();
   if (frame) {
-    return frame->GetRenderWidgetHost()
-        ->delegate()
-        ->GetUkmSourceIdForLastCommittedSource();
+    return frame->GetPageUkmSourceId();
   }
   return ukm::SourceId();
 }
@@ -1740,7 +1740,7 @@ bool RenderWidgetHostViewAura::RequiresDoubleTapGestureEvents() const {
 // RenderWidgetHostViewAura, ui::EventHandler implementation:
 
 void RenderWidgetHostViewAura::OnKeyEvent(ui::KeyEvent* event) {
-  last_pointer_type_ = ui::EventPointerType::POINTER_TYPE_UNKNOWN;
+  last_pointer_type_ = ui::EventPointerType::kUnknown;
   event_handler_->OnKeyEvent(event);
 }
 
@@ -1755,7 +1755,7 @@ void RenderWidgetHostViewAura::OnMouseEvent(ui::MouseEvent* event) {
     last_mouse_move_location_ = event->location();
   }
 #endif
-  last_pointer_type_ = ui::EventPointerType::POINTER_TYPE_MOUSE;
+  last_pointer_type_ = ui::EventPointerType::kMouse;
   event_handler_->OnMouseEvent(event);
 }
 
@@ -1807,7 +1807,7 @@ void RenderWidgetHostViewAura::FocusedNodeChanged(
 
 #if defined(OS_WIN)
   bool dismiss_virtual_keyboard =
-      last_pointer_type_ == ui::EventPointerType::POINTER_TYPE_TOUCH;
+      last_pointer_type_ == ui::EventPointerType::kTouch;
   if (dismiss_virtual_keyboard && !editable && virtual_keyboard_requested_ &&
       window_) {
     virtual_keyboard_requested_ = false;
@@ -2388,21 +2388,22 @@ void RenderWidgetHostViewAura::ForwardKeyboardEventWithLatencyInfo(
       event.os_event &&
       keybinding_delegate->MatchEvent(*event.os_event, &commands)) {
     // Transform from ui/ types to content/ types.
-    EditCommands edit_commands;
+    std::vector<blink::mojom::EditCommandPtr> edit_commands;
     for (std::vector<ui::TextEditCommandAuraLinux>::const_iterator it =
              commands.begin(); it != commands.end(); ++it) {
-      edit_commands.push_back(EditCommand(it->GetCommandString(),
-                                          it->argument()));
+      edit_commands.push_back(blink::mojom::EditCommand::New(
+          it->GetCommandString(), it->argument()));
     }
 
-    target_host->ForwardKeyboardEventWithCommands(event, latency,
-                                                  &edit_commands, update_event);
+    target_host->ForwardKeyboardEventWithCommands(
+        event, latency, std::move(edit_commands), update_event);
     return;
   }
 #endif
 
-  target_host->ForwardKeyboardEventWithCommands(event, latency, nullptr,
-                                                update_event);
+  target_host->ForwardKeyboardEventWithCommands(
+      event, latency, std::vector<blink::mojom::EditCommandPtr>(),
+      update_event);
 }
 
 void RenderWidgetHostViewAura::CreateSelectionController() {
@@ -2446,12 +2447,11 @@ void RenderWidgetHostViewAura::OnUpdateTextInputStateCalled(
       state->mode != ui::TEXT_INPUT_MODE_NONE) {
     bool show_virtual_keyboard = true;
 #if defined(OS_FUCHSIA)
-    show_virtual_keyboard =
-        last_pointer_type_ == ui::EventPointerType::POINTER_TYPE_TOUCH;
+    show_virtual_keyboard = last_pointer_type_ == ui::EventPointerType::kTouch;
 #elif defined(OS_WIN)
     show_virtual_keyboard =
-        last_pointer_type_ == ui::EventPointerType::POINTER_TYPE_TOUCH ||
-        last_pointer_type_ == ui::EventPointerType::POINTER_TYPE_PEN;
+        last_pointer_type_ == ui::EventPointerType::kTouch ||
+        last_pointer_type_ == ui::EventPointerType::kPen;
 #endif
 
 #if !defined(OS_WIN)

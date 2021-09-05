@@ -7,9 +7,9 @@
 #include <sstream>
 #include <type_traits>
 #include "base/json/string_escape.h"
-#include "base/logging.h"
-
+#include "components/feed/core/proto/v2/wire/client_info.pb.h"
 #include "components/feed/core/proto/v2/wire/content_id.pb.h"
+#include "components/feed/core/v2/protocol_translator.h"
 
 namespace feed {
 namespace {}  // namespace
@@ -112,6 +112,40 @@ class TextProtoPrinter {
     EndMessage();
     return *this;
   }
+  TextProtoPrinter& operator<<(const feedwire::ClientInfo& v) {
+    BeginMessage();
+    PRINT_FIELD(platform_type);
+    PRINT_FIELD(platform_version);
+    PRINT_FIELD(app_type);
+    PRINT_FIELD(app_version);
+    PRINT_FIELD(locale);
+    PRINT_FIELD(display_info);
+    PRINT_FIELD(client_instance_id);
+    PRINT_FIELD(advertising_id);
+    PRINT_FIELD(device_country);
+    EndMessage();
+    return *this;
+  }
+  TextProtoPrinter& operator<<(const feedwire::Version& v) {
+    BeginMessage();
+    PRINT_FIELD(major);
+    PRINT_FIELD(minor);
+    PRINT_FIELD(build);
+    PRINT_FIELD(revision);
+    PRINT_FIELD(architecture);
+    PRINT_FIELD(build_type);
+    PRINT_FIELD(api_version);
+    EndMessage();
+    return *this;
+  }
+  TextProtoPrinter& operator<<(const feedwire::DisplayInfo& v) {
+    BeginMessage();
+    PRINT_FIELD(screen_density);
+    PRINT_FIELD(screen_width_in_pixels);
+    PRINT_FIELD(screen_height_in_pixels);
+    EndMessage();
+    return *this;
+  }
   TextProtoPrinter& operator<<(const feedstore::Record& v) {
     BeginMessage();
     PRINT_ONEOF(stream_data);
@@ -119,7 +153,6 @@ class TextProtoPrinter {
     PRINT_ONEOF(content);
     PRINT_ONEOF(local_action);
     PRINT_ONEOF(shared_state);
-    PRINT_ONEOF(next_stream_state);
     EndMessage();
     return *this;
   }
@@ -127,10 +160,15 @@ class TextProtoPrinter {
     BeginMessage();
     PRINT_FIELD(content_id);
     PRINT_FIELD(next_page_token);
-    PRINT_FIELD(consistency_token);
     PRINT_FIELD(last_added_time_millis);
-    PRINT_FIELD(next_action_id);
     PRINT_FIELD(shared_state_id);
+    EndMessage();
+    return *this;
+  }
+  TextProtoPrinter& operator<<(const feedstore::Metadata& v) {
+    BeginMessage();
+    PRINT_FIELD(consistency_token);
+    PRINT_FIELD(next_action_id);
     EndMessage();
     return *this;
   }
@@ -185,11 +223,50 @@ class TextProtoPrinter {
     EndMessage();
     return *this;
   }
-  TextProtoPrinter& operator<<(const feedstore::StreamAndContentState& v) {
+  TextProtoPrinter& operator<<(const feedui::StreamUpdate& v) {
     BeginMessage();
-    PRINT_FIELD(stream_data);
-    PRINT_FIELD(content);
-    PRINT_FIELD(shared_state);
+    PRINT_FIELD(updated_slices);
+    PRINT_FIELD(new_shared_states);
+    EndMessage();
+    return *this;
+  }
+  TextProtoPrinter& operator<<(const feedui::StreamUpdate_SliceUpdate& v) {
+    BeginMessage();
+    PRINT_ONEOF(slice);
+    PRINT_FIELD(slice_id);
+    EndMessage();
+    return *this;
+  }
+  TextProtoPrinter& operator<<(const feedui::Slice& v) {
+    BeginMessage();
+    PRINT_ONEOF(xsurface_slice);
+    PRINT_ONEOF(zero_state_slice);
+    PRINT_ONEOF(loading_spinner_slice);
+    EndMessage();
+    return *this;
+  }
+  TextProtoPrinter& operator<<(const feedui::ZeroStateSlice& v) {
+    BeginMessage();
+    PRINT_FIELD(type);
+    EndMessage();
+    return *this;
+  }
+  TextProtoPrinter& operator<<(const feedui::LoadingSpinnerSlice& v) {
+    BeginMessage();
+    PRINT_FIELD(is_at_top);
+    EndMessage();
+    return *this;
+  }
+  TextProtoPrinter& operator<<(const feedui::XSurfaceSlice& v) {
+    BeginMessage();
+    PRINT_FIELD(xsurface_frame);
+    EndMessage();
+    return *this;
+  }
+  TextProtoPrinter& operator<<(const feedui::SharedState& v) {
+    BeginMessage();
+    PRINT_FIELD(id);
+    PRINT_FIELD(xsurface_shared_state);
     EndMessage();
     return *this;
   }
@@ -221,7 +298,19 @@ class TextProtoPrinter {
 std::string ToTextProto(const feedwire::ContentId& v) {
   return TextProtoPrinter::ToString(v);
 }
+std::string ToTextProto(const feedwire::DisplayInfo& v) {
+  return TextProtoPrinter::ToString(v);
+}
+std::string ToTextProto(const feedwire::Version& v) {
+  return TextProtoPrinter::ToString(v);
+}
+std::string ToTextProto(const feedwire::ClientInfo& v) {
+  return TextProtoPrinter::ToString(v);
+}
 std::string ToTextProto(const feedstore::StreamData& v) {
+  return TextProtoPrinter::ToString(v);
+}
+std::string ToTextProto(const feedstore::Metadata& v) {
   return TextProtoPrinter::ToString(v);
 }
 std::string ToTextProto(const feedstore::StreamStructureSet& v) {
@@ -236,14 +325,31 @@ std::string ToTextProto(const feedstore::Content& v) {
 std::string ToTextProto(const feedstore::StreamSharedState& v) {
   return TextProtoPrinter::ToString(v);
 }
-std::string ToTextProto(const feedstore::StreamAndContentState& v) {
-  return TextProtoPrinter::ToString(v);
-}
 std::string ToTextProto(const feedstore::StoredAction& v) {
   return TextProtoPrinter::ToString(v);
 }
 std::string ToTextProto(const feedstore::Record& v) {
   return TextProtoPrinter::ToString(v);
+}
+std::string ToTextProto(const feedui::StreamUpdate& v) {
+  return TextProtoPrinter::ToString(v);
+}
+
+std::ostream& operator<<(std::ostream& os, const StreamModelUpdateRequest& v) {
+  os << "source: " << static_cast<int>(v.source) << '\n';
+  os << "stream_data: " << v.stream_data;
+  for (auto& content : v.content) {
+    os << "content: " << content;
+  }
+  for (auto& shared_state : v.shared_states) {
+    os << "shared_state: " << shared_state;
+  }
+  for (auto& stream_structure : v.stream_structures) {
+    os << "stream_structure: " << stream_structure;
+  }
+  os << "max_structure_sequence_number: " << v.max_structure_sequence_number
+     << '\n';
+  return os;
 }
 
 }  // namespace feed

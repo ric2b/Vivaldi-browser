@@ -171,9 +171,20 @@ void CalendarBackend::InitImpl(
 
 void CalendarBackend::GetAllEvents(std::shared_ptr<EventQueryResults> results) {
   EventRows rows;
-  RecurrenceExceptionRows recurrence_exception_rows;
-
   db_->GetAllCalendarEvents(&rows);
+  GetEvents(rows, results);
+}
+
+void CalendarBackend::GetAllEventTemplates(
+    std::shared_ptr<EventQueryResults> results) {
+  EventRows rows;
+  db_->GetAllCalendarEventTemplates(&rows);
+  GetEvents(rows, results);
+}
+
+void CalendarBackend::GetEvents(EventRows rows,
+                                std::shared_ptr<EventQueryResults> results) {
+  RecurrenceExceptionRows recurrence_exception_rows;
   db_->GetAllRecurrenceExceptions(&recurrence_exception_rows);
 
   // Now add them and the URL rows to the results.
@@ -721,10 +732,6 @@ void CalendarBackend::UpdateCalendar(
       calendar_row.set_description(calendar.description);
     }
 
-    if (calendar.updateFields & calendar::CALENDAR_URL) {
-      calendar_row.set_url(calendar.url);
-    }
-
     if (calendar.updateFields & calendar::CALENDAR_ORDERINDEX) {
       calendar_row.set_orderindex(calendar.orderindex);
     }
@@ -747,18 +754,6 @@ void CalendarBackend::UpdateCalendar(
 
     if (calendar.updateFields & calendar::CALENDAR_CTAG) {
       calendar_row.set_ctag(calendar.ctag);
-    }
-
-    if (calendar.updateFields & calendar::CALENDAR_USERNAME) {
-      calendar_row.set_username(calendar.username);
-    }
-
-    if (calendar.updateFields & calendar::CALENDAR_TYPE) {
-      calendar_row.set_type(calendar.type);
-    }
-
-    if (calendar.updateFields & calendar::CALENDAR_INTERVAL) {
-      calendar_row.set_interval(calendar.interval);
     }
 
     if (calendar.updateFields & calendar::CALENDAR_LAST_CHECKED) {
@@ -859,6 +854,18 @@ void CalendarBackend::UpdateAccount(
 
     if (update_account_row.updateFields & calendar::ACCOUNT_URL) {
       account.url = update_account_row.url;
+    }
+
+    if (update_account_row.updateFields & calendar::ACCOUNT_TYPE) {
+      account.account_type = update_account_row.account_type;
+    }
+
+    if (update_account_row.updateFields & calendar::ACCOUNT_USERNAME) {
+      account.username = update_account_row.username;
+    }
+
+    if (update_account_row.updateFields & calendar::ACCOUNT_INTERVAL) {
+      account.interval = update_account_row.interval;
     }
 
     if (db_->UpdateAccountRow(account)) {

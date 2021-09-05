@@ -28,18 +28,27 @@
 #error "This file requires ARC support."
 #endif
 
+using autofill::FormRendererId;
+using autofill::FieldRendererId;
+
 namespace {
 
 // Struct that describes suggestion state.
 struct AutofillSuggestionState {
   AutofillSuggestionState(const std::string& form_name,
+                          FormRendererId unique_form_id,
                           const std::string& field_identifier,
+                          FieldRendererId unique_field_id,
                           const std::string& frame_identifier,
                           const std::string& typed_value);
   // The name of the form for autofill.
   std::string form_name;
+  // The unique numeric identifier of the form for autofill.
+  FormRendererId unique_form_id;
   // The identifier of the field for autofill.
   std::string field_identifier;
+  // The unique numeric identifier of the field for autofill.
+  FieldRendererId unique_field_id;
   // The identifier of the frame for autofill.
   std::string frame_identifier;
   // The user-typed value in the field.
@@ -50,11 +59,15 @@ struct AutofillSuggestionState {
 
 AutofillSuggestionState::AutofillSuggestionState(
     const std::string& form_name,
+    FormRendererId unique_form_id,
     const std::string& field_identifier,
+    FieldRendererId unique_field_id,
     const std::string& frame_identifier,
     const std::string& typed_value)
     : form_name(form_name),
+      unique_form_id(unique_form_id),
       field_identifier(field_identifier),
+      unique_field_id(unique_field_id),
       frame_identifier(frame_identifier),
       typed_value(typed_value) {}
 
@@ -178,16 +191,20 @@ AutofillSuggestionState::AutofillSuggestionState(
   NSUInteger requestIdentifier = self.requestIdentifier;
 
   __weak FormSuggestionController* weakSelf = self;
-  NSString* strongFormName = base::SysUTF8ToNSString(params.form_name);
-  NSString* strongFieldIdentifier =
-      base::SysUTF8ToNSString(params.field_identifier);
-  NSString* strongFrameId = base::SysUTF8ToNSString(params.frame_id);
-  NSString* strongFieldType = base::SysUTF8ToNSString(params.field_type);
-  NSString* strongType = base::SysUTF8ToNSString(params.type);
-  NSString* strongValue =
-      base::SysUTF8ToNSString(_suggestionState.get()->typed_value);
-  BOOL is_main_frame = params.is_main_frame;
-  BOOL has_user_gesture = params.has_user_gesture;
+
+  FormSuggestionProviderQuery* formQuery = [[FormSuggestionProviderQuery alloc]
+      initWithFormName:base::SysUTF8ToNSString(params.form_name)
+          uniqueFormID:FormRendererId(params.unique_form_id)
+       fieldIdentifier:base::SysUTF8ToNSString(params.field_identifier)
+         uniqueFieldID:FieldRendererId(params.unique_field_id)
+             fieldType:base::SysUTF8ToNSString(params.field_type)
+                  type:base::SysUTF8ToNSString(params.type)
+            typedValue:base::SysUTF8ToNSString(
+                           _suggestionState.get()->typed_value)
+               frameID:base::SysUTF8ToNSString(params.frame_id)];
+
+  BOOL isMainFrame = params.is_main_frame;
+  BOOL hasUserGesture = params.has_user_gesture;
 
   // Build a block for each provider that will invoke its completion with YES
   // if the provider can provide suggestions for the specified form/field/type
@@ -205,14 +222,9 @@ AutofillSuggestionState::AutofillSuggestionState(
             return;
           id<FormSuggestionProvider> provider =
               strongSelf->_suggestionProviders[i];
-          [provider checkIfSuggestionsAvailableForForm:strongFormName
-                                       fieldIdentifier:strongFieldIdentifier
-                                             fieldType:strongFieldType
-                                                  type:strongType
-                                            typedValue:strongValue
-                                               frameID:strongFrameId
-                                           isMainFrame:is_main_frame
-                                        hasUserGesture:has_user_gesture
+          [provider checkIfSuggestionsAvailableForForm:formQuery
+                                           isMainFrame:isMainFrame
+                                        hasUserGesture:hasUserGesture
                                               webState:webState
                                      completionHandler:completion];
         };
@@ -241,12 +253,7 @@ AutofillSuggestionState::AutofillSuggestionState(
       return;
     id<FormSuggestionProvider> provider =
         strongSelf->_suggestionProviders[providerIndex];
-    [provider retrieveSuggestionsForForm:strongFormName
-                         fieldIdentifier:strongFieldIdentifier
-                               fieldType:strongFieldType
-                                    type:strongType
-                              typedValue:strongValue
-                                 frameID:strongFrameId
+    [provider retrieveSuggestionsForForm:formQuery
                                 webState:webState
                        completionHandler:readyCompletion];
   };
@@ -320,8 +327,10 @@ AutofillSuggestionState::AutofillSuggestionState(
   [_provider
       didSelectSuggestion:suggestion
                      form:base::SysUTF8ToNSString(_suggestionState->form_name)
+             uniqueFormID:_suggestionState->unique_form_id
           fieldIdentifier:base::SysUTF8ToNSString(
                               _suggestionState->field_identifier)
+            uniqueFieldID:_suggestionState->unique_field_id
                   frameID:base::SysUTF8ToNSString(
                               _suggestionState->frame_identifier)
         completionHandler:^{
@@ -336,9 +345,10 @@ AutofillSuggestionState::AutofillSuggestionState(
           accessoryViewUpdateBlock:
               (FormSuggestionsReadyCompletion)accessoryViewUpdateBlock {
   [self processPage:webState];
-  _suggestionState.reset(
-      new AutofillSuggestionState(params.form_name, params.field_identifier,
-                                  params.frame_id, params.value));
+  _suggestionState.reset(new AutofillSuggestionState(
+      params.form_name, FormRendererId(params.unique_form_id),
+      params.field_identifier, FieldRendererId(params.unique_field_id),
+      params.frame_id, params.value));
   _accessoryViewUpdateBlock = [accessoryViewUpdateBlock copy];
   [self retrieveSuggestionsForForm:params webState:webState];
 }

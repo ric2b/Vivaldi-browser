@@ -42,8 +42,10 @@
 #include "components/optimization_guide/optimization_guide_service.h"
 #include "components/optimization_guide/optimization_guide_store.h"
 #include "components/optimization_guide/optimization_guide_switches.h"
+#include "components/optimization_guide/optimization_metadata.h"
 #include "components/optimization_guide/top_host_provider.h"
 #include "components/prefs/pref_service.h"
+#include "components/prefs/scoped_user_pref_update.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -199,9 +201,13 @@ bool IsOptimizationTypeSupportedByPageHint(
 // and its destructor is called.
 class ScopedHintsManagerRaceNavigationHintsFetchAttemptRecorder {
  public:
-  ScopedHintsManagerRaceNavigationHintsFetchAttemptRecorder()
+  explicit ScopedHintsManagerRaceNavigationHintsFetchAttemptRecorder(
+      content::NavigationHandle* navigation_handle)
       : race_attempt_status_(
-            optimization_guide::RaceNavigationFetchAttemptStatus::kUnknown) {}
+            optimization_guide::RaceNavigationFetchAttemptStatus::kUnknown),
+        navigation_data_(
+            OptimizationGuideNavigationData::GetFromNavigationHandle(
+                navigation_handle)) {}
 
   ~ScopedHintsManagerRaceNavigationHintsFetchAttemptRecorder() {
     DCHECK_NE(race_attempt_status_,
@@ -213,6 +219,8 @@ class ScopedHintsManagerRaceNavigationHintsFetchAttemptRecorder {
     base::UmaHistogramEnumeration(
         "OptimizationGuide.HintsManager.RaceNavigationFetchAttemptStatus",
         race_attempt_status_);
+    if (navigation_data_)
+      navigation_data_->set_hints_fetch_attempt_status(race_attempt_status_);
   }
 
   void set_race_attempt_status(
@@ -223,7 +231,24 @@ class ScopedHintsManagerRaceNavigationHintsFetchAttemptRecorder {
 
  private:
   optimization_guide::RaceNavigationFetchAttemptStatus race_attempt_status_;
+  OptimizationGuideNavigationData* navigation_data_;
 };
+
+// Returns true if the optimization type should be ignored when is newly
+// registered as the optimization type is likely launched.
+bool ShouldIgnoreNewlyRegisteredOptimizationType(
+    optimization_guide::proto::OptimizationType optimization_type) {
+  switch (optimization_type) {
+    case optimization_guide::proto::NOSCRIPT:
+    case optimization_guide::proto::RESOURCE_LOADING:
+    case optimization_guide::proto::LITE_PAGE_REDIRECT:
+    case optimization_guide::proto::DEFER_ALL_SCRIPT:
+      return true;
+    default:
+      return false;
+  }
+  return false;
+}
 
 }  // namespace
 
@@ -256,6 +281,9 @@ OptimizationGuideHintsManager::OptimizationGuideHintsManager(
               optimization_guide::features::
                   GetOptimizationGuideServiceGetHintsURL(),
               pref_service)),
+      external_app_packages_approved_for_fetch_(
+          optimization_guide::features::
+              ExternalAppPackageNamesApprovedForFetch()),
       top_host_provider_(top_host_provider),
       clock_(base::DefaultClock::GetInstance()) {
   DCHECK(optimization_guide_service_);
@@ -513,6 +541,9 @@ void OptimizationGuideHintsManager::MaybeScheduleTopHostsHintsFetch() {
       !IsUserPermittedToFetchFromRemoteOptimizationGuide(profile_))
     return;
 
+  if (!optimization_guide::features::ShouldBatchUpdateHintsForTopHosts())
+    return;
+
   if (optimization_guide::switches::ShouldOverrideFetchHintsTimer()) {
     SetLastHintsFetchAttemptTime(clock_->Now());
     FetchTopHostsHints();
@@ -692,18 +723,6 @@ void OptimizationGuideHintsManager::LoadHintForNavigation(
     return;
   }
 
-  OptimizationGuideNavigationData* navigation_data =
-      OptimizationGuideNavigationData::GetFromNavigationHandle(
-          navigation_handle);
-  if (navigation_data) {
-    bool has_hint = hint_cache_->HasHint(url.host());
-    if (navigation_handle->HasCommitted()) {
-      navigation_data->set_has_hint_after_commit(has_hint);
-    } else {
-      navigation_data->set_has_hint_before_commit(has_hint);
-    }
-  }
-
   LoadHintForHost(url.host(), std::move(callback));
 }
 
@@ -723,30 +742,52 @@ bool OptimizationGuideHintsManager::IsGoogleURL(const GURL& url) const {
                                        google_util::DISALLOW_SUBDOMAIN);
 }
 
+bool OptimizationGuideHintsManager::IsAllowedToFetchForNavigationPrediction(
+    const base::Optional<NavigationPredictorKeyedService::Prediction>
+        prediction) const {
+  if (!prediction)
+    return false;
+
+  if (prediction->prediction_source() ==
+      NavigationPredictorKeyedService::PredictionSource::
+          kAnchorElementsParsedFromWebPage) {
+    const base::Optional<GURL> source_document_url =
+        prediction->source_document_url();
+    if (!source_document_url || source_document_url->is_empty())
+      return false;
+
+    // We only extract next predicted navigations from Google URLs.
+    return IsGoogleURL(*source_document_url);
+  }
+
+  if (prediction->prediction_source() ==
+      NavigationPredictorKeyedService::PredictionSource::kExternalAndroidApp) {
+    if (external_app_packages_approved_for_fetch_.empty())
+      return false;
+
+    const base::Optional<std::vector<std::string>> external_app_packages_name =
+        prediction->external_app_packages_name();
+    if (!external_app_packages_name || external_app_packages_name->empty())
+      return false;
+
+    for (const auto& package_name : *external_app_packages_name) {
+      if (external_app_packages_approved_for_fetch_.find(package_name) ==
+          external_app_packages_approved_for_fetch_.end())
+        return false;
+    }
+    // If we get here, all apps have been approved for fetching.
+    return true;
+  }
+
+  return false;
+}
+
 void OptimizationGuideHintsManager::OnPredictionUpdated(
     const base::Optional<NavigationPredictorKeyedService::Prediction>
         prediction) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  if (registered_optimization_types_.empty())
-    return;
-
-  if (!prediction.has_value())
-    return;
-
-  if (prediction->prediction_source() !=
-      NavigationPredictorKeyedService::PredictionSource::
-          kAnchorElementsParsedFromWebPage) {
-    return;
-  }
-
-  const base::Optional<GURL>& source_document_url =
-      prediction->source_document_url();
-  if (!source_document_url || source_document_url->is_empty())
-    return;
-
-  // We only extract next predicted navigations from Google URLs.
-  if (!IsGoogleURL(source_document_url.value()))
+  if (!IsAllowedToFetchForNavigationPrediction(prediction))
     return;
 
   // Extract the target hosts and URLs. Use a flat set to remove duplicates.
@@ -816,6 +857,11 @@ void OptimizationGuideHintsManager::RegisterOptimizationTypes(
     const std::vector<optimization_guide::proto::OptimizationType>&
         optimization_types) {
   bool should_load_new_optimization_filter = false;
+  bool should_clear_hints_for_new_type = false;
+
+  DictionaryPrefUpdate previously_registered_opt_types(
+      pref_service_,
+      optimization_guide::prefs::kPreviouslyRegisteredOptimizationTypes);
   for (const auto optimization_type : optimization_types) {
     if (optimization_type == optimization_guide::proto::TYPE_UNSPECIFIED)
       continue;
@@ -826,6 +872,16 @@ void OptimizationGuideHintsManager::RegisterOptimizationTypes(
     }
     registered_optimization_types_.insert(optimization_type);
 
+    base::Optional<double> value = previously_registered_opt_types->FindBoolKey(
+        optimization_guide::proto::OptimizationType_Name(optimization_type));
+    if (!value) {
+      if (!ShouldIgnoreNewlyRegisteredOptimizationType(optimization_type))
+        should_clear_hints_for_new_type = true;
+      previously_registered_opt_types->SetBoolKey(
+          optimization_guide::proto::OptimizationType_Name(optimization_type),
+          true);
+    }
+
     if (!should_load_new_optimization_filter) {
       base::AutoLock lock(optimization_filters_lock_);
       if (optimization_types_with_filter_.find(optimization_type) !=
@@ -835,9 +891,13 @@ void OptimizationGuideHintsManager::RegisterOptimizationTypes(
     }
   }
 
+  // Clear all hint state so newly registered types can have their hints
+  // immediately included in hint fetches.
+  if (should_clear_hints_for_new_type)
+    ClearFetchedHints();
+
   if (should_load_new_optimization_filter) {
     DCHECK(hints_component_info_);
-
     OnHintsComponentAvailable(*hints_component_info_);
   } else {
     MaybeRunUpdateClosure(std::move(next_update_closure_));
@@ -1086,6 +1146,9 @@ bool OptimizationGuideHintsManager::IsAllowedToFetchNavigationHints(
     const GURL& url) const {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
+  if (registered_optimization_types_.empty())
+    return false;
+
   if (!IsUserPermittedToFetchFromRemoteOptimizationGuide(profile_))
     return false;
 
@@ -1136,7 +1199,7 @@ void OptimizationGuideHintsManager::MaybeFetchHintsForNavigation(
     return;
 
   ScopedHintsManagerRaceNavigationHintsFetchAttemptRecorder
-      race_navigation_recorder;
+      race_navigation_recorder(navigation_handle);
 
   // We expect that if the URL is being fetched for, we have already run through
   // the logic to decide if we also require fetching hints for the host.
@@ -1147,15 +1210,10 @@ void OptimizationGuideHintsManager::MaybeFetchHintsForNavigation(
     return;
   }
 
-  OptimizationGuideNavigationData* navigation_data =
-      OptimizationGuideNavigationData::GetFromNavigationHandle(
-          navigation_handle);
-
   std::vector<std::string> hosts;
   std::vector<GURL> urls;
   if (!hint_cache_->HasHint(url.host())) {
     hosts.push_back(url.host());
-    navigation_data->set_was_hint_for_host_attempted_to_be_fetched(true);
     race_navigation_recorder.set_race_attempt_status(
         optimization_guide::RaceNavigationFetchAttemptStatus::
             kRaceNavigationFetchHost);
@@ -1183,6 +1241,9 @@ void OptimizationGuideHintsManager::MaybeFetchHintsForNavigation(
       "OptimizationGuide.HintsManager.ConcurrentPageNavigationFetches",
       page_navigation_hints_fetchers_.size());
 
+  OptimizationGuideNavigationData* navigation_data =
+      OptimizationGuideNavigationData::GetFromNavigationHandle(
+          navigation_handle);
   navigation_data->set_hints_fetch_start(base::TimeTicks::Now());
   it->second->FetchOptimizationGuideServiceHints(
       hosts, urls, registered_optimization_types_,
@@ -1201,23 +1262,8 @@ void OptimizationGuideHintsManager::MaybeFetchHintsForNavigation(
 }
 
 void OptimizationGuideHintsManager::OnNavigationFinish(
-    const std::vector<GURL>& navigation_redirect_chain,
-    OptimizationGuideNavigationData* navigation_data) {
+    const std::vector<GURL>& navigation_redirect_chain) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  // Populate navigation data with hint information.
-  const GURL navigation_url = navigation_redirect_chain.back();
-  if (navigation_data && navigation_url.has_host()) {
-    const std::string host = navigation_url.host();
-    navigation_data->set_has_hint_after_commit(hint_cache_->HasHint(host));
-
-    const optimization_guide::proto::Hint* loaded_hint =
-        hint_cache_->GetHostKeyedHintIfLoaded(host);
-    if (loaded_hint) {
-      navigation_data->set_serialized_hint_version_string(
-          loaded_hint->version());
-    }
-  }
 
   // The callbacks will be invoked when the fetch request comes back, so it
   // will be cleaned up later.
@@ -1272,4 +1318,39 @@ void OptimizationGuideHintsManager::ClearFetchedHints() {
   hint_cache_->ClearFetchedHints();
   optimization_guide::HintsFetcher::ClearHostsSuccessfullyFetched(
       pref_service_);
+}
+
+void OptimizationGuideHintsManager::AddHintForTesting(
+    const GURL& url,
+    optimization_guide::proto::OptimizationType optimization_type,
+    const base::Optional<optimization_guide::OptimizationMetadata>& metadata) {
+  std::unique_ptr<optimization_guide::proto::Hint> hint =
+      std::make_unique<optimization_guide::proto::Hint>();
+  hint->set_key(url.spec());
+  optimization_guide::proto::PageHint* page_hint = hint->add_page_hints();
+  page_hint->set_page_pattern("*");
+  optimization_guide::proto::Optimization* optimization =
+      page_hint->add_whitelisted_optimizations();
+  optimization->set_optimization_type(optimization_type);
+  if (!metadata) {
+    hint_cache_->AddHintForTesting(url, std::move(hint));
+    PrepareToInvokeRegisteredCallbacks(url);
+    return;
+  }
+  if (metadata->previews_metadata()) {
+    *optimization->mutable_previews_metadata() = *metadata->previews_metadata();
+  } else if (metadata->loading_predictor_metadata()) {
+    *optimization->mutable_loading_predictor_metadata() =
+        *metadata->loading_predictor_metadata();
+  } else if (metadata->performance_hints_metadata()) {
+    *optimization->mutable_performance_hints_metadata() =
+        *metadata->performance_hints_metadata();
+  } else if (metadata->public_image_metadata()) {
+    *optimization->mutable_public_image_metadata() =
+        *metadata->public_image_metadata();
+  } else {
+    NOTREACHED();
+  }
+  hint_cache_->AddHintForTesting(url, std::move(hint));
+  PrepareToInvokeRegisteredCallbacks(url);
 }

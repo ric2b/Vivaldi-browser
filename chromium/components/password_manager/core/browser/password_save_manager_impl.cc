@@ -13,6 +13,7 @@
 #include "components/password_manager/core/browser/form_saver.h"
 #include "components/password_manager/core/browser/form_saver_impl.h"
 #include "components/password_manager/core/browser/multi_store_password_save_manager.h"
+#include "components/password_manager/core/browser/password_feature_manager.h"
 #include "components/password_manager/core/browser/password_form_metrics_recorder.h"
 #include "components/password_manager/core/browser/password_generation_manager.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
@@ -79,7 +80,7 @@ void CopyFieldPropertiesMasks(const FormData& from, FormData* to) {
         GetPlatformSpecificIdentifier(to->fields[i]) ==
                 GetPlatformSpecificIdentifier(from.fields[i])
             ? from.fields[i].properties_mask
-            : autofill::FieldPropertiesFlags::ERROR_OCCURRED;
+            : autofill::FieldPropertiesFlags::kErrorOccurred;
   }
 }
 
@@ -157,9 +158,7 @@ void PasswordSaveManagerImpl::CreatePendingCredentials(
     const FormData& submitted_form,
     bool is_http_auth,
     bool is_credential_api_save) {
-  DCHECK(votes_uploader_);
-
-  const PasswordForm* similar_saved_form;
+  const PasswordForm* similar_saved_form = nullptr;
   std::tie(similar_saved_form, pending_credentials_state_) =
       FindSimilarSavedFormAndComputeState(parsed_submitted_form);
 
@@ -172,6 +171,12 @@ void PasswordSaveManagerImpl::CreatePendingCredentials(
       submitted_form, generated_password, is_http_auth, is_credential_api_save,
       similar_saved_form);
 
+  SetVotesAndRecordMetricsForPendingCredentials(parsed_submitted_form);
+}
+
+void PasswordSaveManagerImpl::SetVotesAndRecordMetricsForPendingCredentials(
+    const PasswordForm& parsed_submitted_form) {
+  DCHECK(votes_uploader_);
   votes_uploader_->set_password_overridden(false);
   switch (pending_credentials_state_) {
     case PendingCredentialsState::NEW_LOGIN: {
@@ -217,21 +222,11 @@ void PasswordSaveManagerImpl::Save(const FormData& observed_form,
   }
 
   if (IsNewLogin()) {
-    metrics_util::LogNewlySavedPasswordIsGenerated(
-        pending_credentials_.type == PasswordForm::Type::kGenerated);
     SanitizePossibleUsernames(&pending_credentials_);
     pending_credentials_.date_created = base::Time::Now();
-    votes_uploader_->SendVotesOnSave(observed_form, parsed_submitted_form,
-                                     form_fetcher_->GetBestMatches(),
-                                     &pending_credentials_);
-    SavePendingToStore(parsed_submitted_form, false /*update*/);
-  } else {
-    // It sounds wrong that we still update even if the state is NONE. We
-    // should double check if this actually necessary. Currently some tests
-    // depend on this behavior.
-    ProcessUpdate(observed_form, parsed_submitted_form);
-    SavePendingToStore(parsed_submitted_form, true /*update*/);
   }
+
+  SavePendingToStore(observed_form, parsed_submitted_form);
 
   if (pending_credentials_.times_used == 1 &&
       pending_credentials_.type == PasswordForm::Type::kGenerated) {
@@ -254,8 +249,7 @@ void PasswordSaveManagerImpl::Update(
 
   pending_credentials_state_ = PendingCredentialsState::UPDATE;
 
-  ProcessUpdate(observed_form, parsed_submitted_form);
-  SavePendingToStore(parsed_submitted_form, true /*update*/);
+  SavePendingToStore(observed_form, parsed_submitted_form);
 }
 
 void PasswordSaveManagerImpl::PermanentlyBlacklist(
@@ -293,7 +287,8 @@ void PasswordSaveManagerImpl::PresaveGeneratedPassword(
   votes_uploader_->set_has_generated_password(true);
 
   generation_manager_->PresaveGeneratedPassword(
-      std::move(parsed_form), form_fetcher_->GetAllRelevantMatches(),
+      std::move(parsed_form),
+      GetRelevantMatchesForGeneration(form_fetcher_->GetAllRelevantMatches()),
       GetFormSaverForGeneration());
 }
 
@@ -302,8 +297,10 @@ void PasswordSaveManagerImpl::GeneratedPasswordAccepted(
     base::WeakPtr<PasswordManagerDriver> driver) {
   generation_manager_ = std::make_unique<PasswordGenerationManager>(client_);
   generation_manager_->GeneratedPasswordAccepted(
-      std::move(parsed_form), form_fetcher_->GetNonFederatedMatches(),
-      form_fetcher_->GetFederatedMatches(), driver);
+      std::move(parsed_form),
+      GetRelevantMatchesForGeneration(form_fetcher_->GetNonFederatedMatches()),
+      GetRelevantMatchesForGeneration(form_fetcher_->GetFederatedMatches()),
+      driver);
 }
 
 void PasswordSaveManagerImpl::PasswordNoLongerGenerated() {
@@ -318,6 +315,12 @@ void PasswordSaveManagerImpl::PasswordNoLongerGenerated() {
 }
 
 void PasswordSaveManagerImpl::MoveCredentialsToAccountStore() {
+  // Moving credentials is only supported in MultiStorePasswordSaveManager.
+  NOTREACHED();
+}
+
+void PasswordSaveManagerImpl::BlockMovingToAccountStoreFor(
+    const autofill::GaiaIdHash& gaia_id_hash) {
   // Moving credentials is only supported in MultiStorePasswordSaveManager.
   NOTREACHED();
 }
@@ -451,31 +454,55 @@ PasswordSaveManagerImpl::FindSimilarSavedFormAndComputeState(
 }
 
 void PasswordSaveManagerImpl::SavePendingToStore(
-    const PasswordForm& parsed_submitted_form,
-    bool update) {
-  const PasswordForm* similar_saved_form =
-      FindSimilarSavedFormAndComputeState(parsed_submitted_form).first;
-  if ((update || IsPasswordUpdate()) &&
-      !pending_credentials_.IsFederatedCredential()) {
-    DCHECK(similar_saved_form);
-  }
-  base::string16 old_password = similar_saved_form
-                                    ? similar_saved_form->password_value
-                                    : base::string16();
+    const FormData& observed_form,
+    const PasswordForm& parsed_submitted_form) {
+  UploadVotesAndMetrics(observed_form, parsed_submitted_form);
+
   if (HasGeneratedPassword()) {
     generation_manager_->CommitGeneratedPassword(
         pending_credentials_, form_fetcher_->GetAllRelevantMatches(),
-        old_password, GetFormSaverForGeneration());
-  } else if (update) {
-    UpdateInternal(form_fetcher_->GetAllRelevantMatches(), old_password);
+        GetOldPassword(parsed_submitted_form), GetFormSaverForGeneration());
   } else {
-    SaveInternal(form_fetcher_->GetAllRelevantMatches(), old_password);
+    SavePendingToStoreImpl(parsed_submitted_form);
   }
 }
 
-void PasswordSaveManagerImpl::ProcessUpdate(
+void PasswordSaveManagerImpl::SavePendingToStoreImpl(
+    const PasswordForm& parsed_submitted_form) {
+  auto matches = form_fetcher_->GetAllRelevantMatches();
+  base::string16 old_password = GetOldPassword(parsed_submitted_form);
+  if (IsNewLogin()) {
+    form_saver_->Save(pending_credentials_, matches, old_password);
+  } else {
+    // It sounds wrong that we still update even if the state is NONE. We
+    // should double check if this actually necessary. Currently some tests
+    // depend on this behavior.
+    form_saver_->Update(pending_credentials_, matches, old_password);
+  }
+}
+
+base::string16 PasswordSaveManagerImpl::GetOldPassword(
+    const PasswordForm& parsed_submitted_form) const {
+  const PasswordForm* similar_saved_form =
+      FindSimilarSavedFormAndComputeState(parsed_submitted_form).first;
+  return similar_saved_form ? similar_saved_form->password_value
+                            : base::string16();
+}
+
+void PasswordSaveManagerImpl::UploadVotesAndMetrics(
     const FormData& observed_form,
     const PasswordForm& parsed_submitted_form) {
+  if (IsNewLogin()) {
+    metrics_util::LogNewlySavedPasswordIsGenerated(
+        pending_credentials_.type == PasswordForm::Type::kGenerated,
+        client_->GetPasswordFeatureManager()
+            ->ComputePasswordAccountStorageUsageLevel());
+    votes_uploader_->SendVotesOnSave(observed_form, parsed_submitted_form,
+                                     form_fetcher_->GetBestMatches(),
+                                     &pending_credentials_);
+    return;
+  }
+
   DCHECK_EQ(FormFetcher::State::NOT_WAITING, form_fetcher_->GetState());
   DCHECK(form_fetcher_->GetPreferredMatch() ||
          pending_credentials_.IsFederatedCredential());
@@ -514,16 +541,10 @@ FormSaver* PasswordSaveManagerImpl::GetFormSaverForGeneration() {
   return form_saver_.get();
 }
 
-void PasswordSaveManagerImpl::SaveInternal(
-    const std::vector<const PasswordForm*>& matches,
-    const base::string16& old_password) {
-  form_saver_->Save(pending_credentials_, matches, old_password);
-}
-
-void PasswordSaveManagerImpl::UpdateInternal(
-    const std::vector<const PasswordForm*>& matches,
-    const base::string16& old_password) {
-  form_saver_->Update(pending_credentials_, matches, old_password);
+std::vector<const autofill::PasswordForm*>
+PasswordSaveManagerImpl::GetRelevantMatchesForGeneration(
+    const std::vector<const autofill::PasswordForm*>& matches) {
+  return matches;
 }
 
 void PasswordSaveManagerImpl::CloneInto(PasswordSaveManagerImpl* clone) {

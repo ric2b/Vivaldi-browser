@@ -29,9 +29,9 @@ const char kFailAudioStreamCreation[] = "fail-audio-stream-creation";
 // Set number of threads to use for video decoding.
 const char kVideoThreads[] = "video-threads";
 
-// Suspend media pipeline on background tabs.
-const char kEnableMediaSuspend[] = "enable-media-suspend";
-const char kDisableMediaSuspend[] = "disable-media-suspend";
+// Do not immediately suspend media in background tabs.
+const char kDisableBackgroundMediaSuspend[] =
+    "disable-background-media-suspend";
 
 // Force to report VP9 as an unsupported MIME type.
 const char kReportVp9AsAnUnsupportedMimeType[] =
@@ -75,9 +75,6 @@ const char kEnableProtectedVideoBuffers[] = "enable-protected-video-buffers";
 // --enable-protected-video-buffers is also specified.
 const char kForceProtectedVideoOutputBuffers[] =
     "force-protected-video-output-buffers";
-
-// Enables fuchsia.media.AudioConsumer to be used to render audio streams.
-const char kEnableFuchsiaAudioConsumer[] = "enable-fuchsia-audio-consumer";
 
 #endif  // defined(OS_FUCHSIA)
 
@@ -369,7 +366,14 @@ const base::Feature kGlobalMediaControlsOverlayControls{
 
 // Show picture-in-picture button in Global Media Controls.
 const base::Feature kGlobalMediaControlsPictureInPicture{
-    "GlobalMediaControlsPictureInPicture", base::FEATURE_DISABLED_BY_DEFAULT};
+  "GlobalMediaControlsPictureInPicture",
+#if defined(OS_WIN) || defined(OS_MACOSX) || \
+    (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
 
 // Enable new cpu load estimator. Intended for evaluation in local
 // testing and origin-trial.
@@ -382,6 +386,11 @@ const base::Feature kNewEncodeCpuLoadEstimator{
 const base::Feature kSpecCompliantCanPlayThrough{
     "SpecCompliantCanPlayThrough", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Disables the real audio output stream after silent audio has been delivered
+// for too long. Should save quite a bit of power in the muted video case.
+const base::Feature kSuspendMutedAudio{"SuspendMutedAudio",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Use shared block-based buffering for media.
 const base::Feature kUseNewMediaCache{"use-new-media-cache",
                                       base::FEATURE_ENABLED_BY_DEFAULT};
@@ -389,12 +398,6 @@ const base::Feature kUseNewMediaCache{"use-new-media-cache",
 // Enables using the media history store to store media engagement metrics.
 const base::Feature kUseMediaHistoryStore{"UseMediaHistoryStore",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Causes video.requestAniationFrame to use a microtask instead of running with
-// the rendering steps. TODO(crbug.com/1012063): Remove this once we figure out
-// which implementation to use.
-const base::Feature kUseMicrotaskForVideoRAF{"UseMicrotaskForVideoRAF",
-                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Use R16 texture for 9-16 bit channel instead of half-float conversion by CPU.
 const base::Feature kUseR16Texture{"use-r16-texture",
@@ -454,6 +457,9 @@ const base::Feature kFailUrlProvisionFetcherForTesting{
 // is already available.
 const base::Feature kHardwareSecureDecryption{
     "HardwareSecureDecryption", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kWakeLockOptimisationHiddenMuted{
+    "kWakeLockOptimisationHiddenMuted", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables encrypted AV1 support in EME requestMediaKeySystemAccess() query by
 // Widevine key system if it is also supported by the underlying Widevine CDM.
@@ -565,9 +571,20 @@ const base::Feature kUsePooledSharedImageVideoProvider{
 const base::Feature kDelayCopyNV12Textures{"DelayCopyNV12Textures",
                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enables H264 HW encode acceleration using Media Foundation for Windows.
-const base::Feature kMediaFoundationH264Encoding{
-    "MediaFoundationH264Encoding", base::FEATURE_ENABLED_BY_DEFAULT};
+// Enables DirectShow GetPhotoState implementation
+// Created to act as a kill switch by disabling it, in the case of the
+// resurgence of https://crbug.com/722038
+const base::Feature kDirectShowGetPhotoState{"DirectShowGetPhotoState",
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables asynchronous H264 HW encode acceleration using Media Foundation for
+// Windows.
+const base::Feature kMediaFoundationAsyncH264Encoding{
+    "MediaFoundationAsyncH264Encoding", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables AV1 decode acceleration for Windows.
+const base::Feature MEDIA_EXPORT kMediaFoundationAV1Decoding{
+    "MediaFoundationAV1Decoding", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables MediaFoundation based video capture
 const base::Feature kMediaFoundationVideoCapture{
@@ -576,12 +593,6 @@ const base::Feature kMediaFoundationVideoCapture{
 // Enables VP8 decode acceleration for Windows.
 const base::Feature MEDIA_EXPORT kMediaFoundationVP8Decoding{
     "MediaFoundationVP8Decoding", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Enables DirectShow GetPhotoState implementation
-// Created to act as a kill switch by disabling it, in the case of the
-// resurgence of https://crbug.com/722038
-const base::Feature kDirectShowGetPhotoState{"DirectShowGetPhotoState",
-                                             base::FEATURE_ENABLED_BY_DEFAULT};
 
 #endif  // defined(OS_WIN)
 
@@ -644,11 +655,11 @@ const base::Feature kMediaFeeds{"MediaFeeds",
 
 // Enables checking Media Feeds against safe search to prevent adult content.
 const base::Feature kMediaFeedsSafeSearch{"MediaFeedsSafeSearch",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Send events to devtools rather than to chrome://media-internals
 const base::Feature kMediaInspectorLogging{"MediaInspectorLogging",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables experimental local learning for media. Used in the context of media
 // capabilities only. Adds reporting only; does not change media behavior.

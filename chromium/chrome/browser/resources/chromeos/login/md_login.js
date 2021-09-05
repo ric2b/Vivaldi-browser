@@ -87,7 +87,6 @@ cr.define('cr.ui.Oobe', function() {
       login.DiscoverScreen.register();
       login.AssistantOptInFlowScreen.register();
       login.MultiDeviceSetupScreen.register();
-      login.UpdateRequiredScreen.register();
 
       cr.ui.Bubble.decorate($('bubble-persistent'));
       $('bubble-persistent').persistent = true;
@@ -95,6 +94,8 @@ cr.define('cr.ui.Oobe', function() {
 
       cr.ui.Bubble.decorate($('bubble'));
 
+      // TODO(crbug.com/1082670): Remove excessive logging after investigation.
+      console.warn('Login : Initialize');
       chrome.send('screenStateInitialize');
     },
 

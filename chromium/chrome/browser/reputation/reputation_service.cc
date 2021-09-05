@@ -21,7 +21,7 @@
 #include "chrome/browser/reputation/safety_tips_config.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
-#include "components/lookalikes/lookalike_url_util.h"
+#include "components/lookalikes/core/lookalike_url_util.h"
 #include "components/security_state/core/security_state.h"
 #include "components/url_formatter/spoof_checks/top_domains/top500_domains.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
@@ -88,9 +88,16 @@ bool ShouldSuppressWarning(const GURL& url) {
 }  // namespace
 
 ReputationService::ReputationService(Profile* profile)
-    : profile_(profile),
-      sensitive_keywords_(top500_domains::kTop500Keywords),
-      num_sensitive_keywords_(base::size(top500_domains::kTop500Keywords)) {}
+    : profile_(profile), sensitive_keywords_(top500_domains::kTop500Keywords) {
+  // kTop500Keywords can be padded at the end with blank entries.
+  for (num_sensitive_keywords_ = 0;
+       num_sensitive_keywords_ < base::size(top500_domains::kTop500Keywords);
+       ++num_sensitive_keywords_) {
+    if (strlen(top500_domains::kTop500Keywords[num_sensitive_keywords_]) == 0) {
+      break;
+    }
+  }
+}
 
 ReputationService::~ReputationService() = default;
 

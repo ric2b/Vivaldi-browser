@@ -47,14 +47,17 @@ class CONTENT_EXPORT NavigationURLLoaderImpl : public NavigationURLLoader {
       scoped_refptr<PrefetchedSignedExchangeCache>
           prefetched_signed_exchange_cache,
       NavigationURLLoaderDelegate* delegate,
+      mojo::PendingRemote<network::mojom::CookieAccessObserver> cookie_observer,
       std::vector<std::unique_ptr<NavigationLoaderInterceptor>>
           initial_interceptors);
   ~NavigationURLLoaderImpl() override;
 
   // NavigationURLLoader implementation:
-  void FollowRedirect(const std::vector<std::string>& removed_headers,
-                      const net::HttpRequestHeaders& modified_headers,
-                      PreviewsState new_previews_state) override;
+  void FollowRedirect(
+      const std::vector<std::string>& removed_headers,
+      const net::HttpRequestHeaders& modified_headers,
+      const net::HttpRequestHeaders& modified_cors_exempt_headers,
+      PreviewsState new_previews_state) override;
 
   void OnReceiveResponse(
       network::mojom::URLResponseHeadPtr response_head,
@@ -64,7 +67,7 @@ class CONTENT_EXPORT NavigationURLLoaderImpl : public NavigationURLLoader {
       bool is_download,
       base::TimeDelta total_ui_to_io_time,
       base::Time io_post_time);
-  void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
+  void OnReceiveRedirect(net::RedirectInfo redirect_info,
                          network::mojom::URLResponseHeadPtr response,
                          base::Time io_post_time);
   void OnComplete(const network::URLLoaderCompletionStatus& status);

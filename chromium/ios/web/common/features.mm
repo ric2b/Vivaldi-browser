@@ -11,9 +11,6 @@
 namespace web {
 namespace features {
 
-const base::Feature kIgnoresViewportScaleLimits{
-    "IgnoresViewportScaleLimits", base::FEATURE_ENABLED_BY_DEFAULT};
-
 const base::Feature kCrashOnUnexpectedURLChange{
     "CrashOnUnexpectedURLChange", base::FEATURE_ENABLED_BY_DEFAULT};
 
@@ -47,6 +44,13 @@ const base::Feature kPreserveScrollViewProperties{
 const base::Feature kIOSLookalikeUrlNavigationSuggestionsUI{
     "IOSLookalikeUrlNavigationSuggestionsUI",
     base::FEATURE_DISABLED_BY_DEFAULT};
+
+bool UseWebClientDefaultUserAgent() {
+  if (@available(iOS 13, *)) {
+    return base::FeatureList::IsEnabled(kUseDefaultUserAgentInWebClient);
+  }
+  return false;
+}
 
 }  // namespace features
 }  // namespace web

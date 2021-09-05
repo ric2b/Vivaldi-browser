@@ -6,8 +6,9 @@
 
 #include "base/base64.h"
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/compiler_specific.h"
-#include "base/logging.h"
+#include "base/notreached.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
@@ -473,10 +474,12 @@ void TpmChallengeKeySubtleImpl::GetCertificateCallback(
 void TpmChallengeKeySubtleImpl::GetPublicKey() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
+  const std::string& key =
+      (!key_name_for_spkac_.empty()) ? key_name_for_spkac_ : key_name_;
+
   CryptohomeClient::Get()->TpmAttestationGetPublicKey(
       key_type_,
-      cryptohome::CreateAccountIdentifierFromAccountId(GetAccountId()),
-      key_name_,
+      cryptohome::CreateAccountIdentifierFromAccountId(GetAccountId()), key,
       base::BindOnce(&TpmChallengeKeySubtleImpl::PrepareKeyFinished,
                      weak_factory_.GetWeakPtr()));
 }

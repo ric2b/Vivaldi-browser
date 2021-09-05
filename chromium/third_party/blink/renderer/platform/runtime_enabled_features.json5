@@ -88,6 +88,12 @@
       valid_type: "bool",
     },
 
+    // origin_trial_allows_third_party specifies whether the trial can be enabled
+    // from third party origins, with default being false.
+    origin_trial_allows_third_party: {
+      valid_type: "bool",
+    },
+
     // settable_from_internals specifies whether a feature can be set from
     // internals.runtimeFlags, with the default being false.
     settable_from_internals: {
@@ -159,9 +165,14 @@
       status: "experimental",
     },
     {
-      // Enabled when blink::features::kAppCache is enabled.
+      // Force disabled if blink::features::kAppCache is disabled, and this
+      // will override any origin trial setting.
+      // Disabled if blink::features::kAppCacheRequireOriginTrial is enabled,
+      // but can be turned back on by the origin trial.
+      // Otherwise, on by default.
       name: "AppCache",
       status: "stable",
+      origin_trial_feature_name: "AppCache",
     },
     {
       // Use an aspect ratio from the HTML attributes even when we use sizing
@@ -230,6 +241,11 @@
     {
       name: "BarcodeDetector",
       status: "stable",
+    },
+    {
+      // https://github.com/WICG/display-locking/blob/master/explainer-beforematch.md
+      name: "BeforeMatchEvent",
+      status: "experimental",
     },
     {
       name: "BidiCaretAffinity",
@@ -321,10 +337,6 @@
       status: {"Android": "stable"},
     },
     {
-      name: "CompositorTouchAction",
-      status: "test",
-    },
-    {
       name: "ComputedAccessibilityInfo",
       status: "experimental",
     },
@@ -337,15 +349,11 @@
     },
     {
       name: "ContactsManagerExtraProperties",
-      origin_trial_feature_name: "ContactsManagerExtraProperties",
-      origin_trial_os: ["android"],
-      status: {"Android": "experimental", "default": "test"},
+      status:  {"Android": "stable", "default": "test"},
     },
     {
       name: "ContentIndex",
-      origin_trial_feature_name: "ContentIndex",
-      origin_trial_os: ["android"],
-      status: "experimental",
+      status:  {"Android": "stable", "default": "experimental"},
     },
     {
       name: "ContextMenu",
@@ -361,10 +369,12 @@
     },
     {
       name: "CookieStoreDocument",
+      origin_trial_feature_name: "CookieStore",
       status: "experimental",
     },
     {
       name: "CookieStoreWorker",
+      origin_trial_feature_name: "CookieStore",
       status: "experimental",
     },
     {
@@ -387,7 +397,7 @@
     },
     {
       name: "CSSAspectRatioProperty",
-      status: "test",
+      status: "experimental",
     },
     {
       name: "CSSCalcAsInt",
@@ -412,8 +422,33 @@
       name: "CSSColorSchemeUARendering",
     },
     {
+      // The main content-visibility feature.
+      // https://wicg.github.io/display-locking/
+      name: "CSSContentVisibility",
+      status: "experimental",
+      implied_by: ["CSSContentVisibilityHiddenMatchable"]
+    },
+    {
+      // The content-visibility activation event which will be replaced by
+      // the beforematch event. When beforematch is available, this feaure
+      // will be removed.
+      name: "CSSContentVisibilityActivationEvent",
+      implied_by: ["CSSContentVisibility"]
+    },
+    {
+      // The content-visibility: hidden-matchable feature. This is a planned
+      // follow-up to the main CSSContentVisibility feature, thus it is gated
+      // by a different flag.
+      // https://wicg.github.io/display-locking/
+      name: "CSSContentVisibilityHiddenMatchable",
+      status: "experimental"
+    },
+    {
       name: "CSSFocusVisible",
       status: "experimental",
+    },
+    {
+      name: "CSSFoldables",
     },
     {
       name: "CSSFontSizeAdjust",
@@ -434,7 +469,7 @@
       // Support for CSS contain-intrinsic-size property.
       // https://wicg.github.io/display-locking/contain-intrinsic-size.html
       name: "CSSIntrinsicSize",
-      implied_by: ["CSSSubtreeVisibility"],
+      implied_by: ["CSSContentVisibility"],
       status: "stable",
     },
     {
@@ -464,6 +499,16 @@
       implied_by: ["MathMLCore"],
     },
     {
+      name: "CSSMathSuperscriptShiftStyle",
+      status: "experimental",
+      implied_by: ["MathMLCore"],
+    },
+    {
+      name: "CSSMathVariant",
+      status: "experimental",
+      implied_by: ["MathMLCore"],
+    },
+    {
       name: "CSSModules",
       status: "experimental",
     },
@@ -486,7 +531,6 @@
     {
       name: "CSSPaintAPIArguments",
       status: "experimental",
-      depends_on: ["CSSVariables2"],
     },
     {
       name: "CSSPictureInPicture",
@@ -502,66 +546,46 @@
       status: "experimental",
     },
     {
-      // Perform partial style and layout invalidation on web font loading.
+      // Perform partial style invalidation on web font loading.
       // See https://crbug.com/441925 and https://bit.ly/35JjPmq for details.
       name: "CSSReducedFontLoadingInvalidations",
       status: "test",
+      implied_by: ["CSSReducedFontLoadingLayoutInvalidations"],
+    },
+    {
+      // Perform partial layout invalidation on web font loading.
+      // See https://crbug.com/441925 and https://bit.ly/35JjPmq for details.
+      name: "CSSReducedFontLoadingLayoutInvalidations",
+      status: "test",
+    },
+    {
+      name: "CSSRevert",
+      status: "stable",
+      depends_on: ["CSSCascade"],
     },
     {
       name: "CSSSnapSize",
       status: "experimental",
     },
     {
-      // The main subtree-visibility feature.
-      // https://wicg.github.io/display-locking/
-      name: "CSSSubtreeVisibility",
-      status: "experimental",
-      implied_by: ["CSSSubtreeVisibilityHiddenMatchable"]
-    },
-    {
-      // The subtree-visibility activation event which will be replaced by
-      // the beforematch event. When beforematch is available, this feaure
-      // will be removed.
-      name: "CSSSubtreeVisibilityActivationEvent",
-      implied_by: ["CSSSubtreeVisibility"]
-    },
-    {
-      // The subtree-visibility: hidden-matchable feature. This is a planned
-      // follow-up to the main CSSSubtreeVisibility feature, thus it is gated
-      // by a different flag.
-      // https://wicg.github.io/display-locking/
-      name: "CSSSubtreeVisibilityHiddenMatchable",
-      status: "experimental"
-    },
-    {
       name: "CSSSupportsSelector",
-      status: "stable",
-    },
-    {
-      name: "CSSVariables2",
       status: "stable",
     },
     // Support for @property rules.
     {
       name: "CSSVariables2AtProperty",
-      depends_on: ["CSSVariables2"],
+      status: "test",
     },
     // Support for registered custom properties with <image> syntax.
     {
       name: "CSSVariables2ImageValues",
       status: "test",
-      depends_on: ["CSSVariables2"],
     },
     // Support for registered custom properties with <transform-list> and
     // <transform-function> syntax.
     {
       name: "CSSVariables2TransformValues",
       status: "test",
-      depends_on: ["CSSVariables2"],
-    },
-    {
-      name: "CSSViewport",
-      status: "experimental",
     },
     {
       name: "CustomElementDefaultStyle",
@@ -597,6 +621,10 @@
       status: "test",
     },
     {
+      name: "DelegatedInkTrails",
+      status: "test",
+    },
+    {
       name: "DesktopCaptureDisableLocalEchoControl",
       status: "experimental",
     },
@@ -604,6 +632,11 @@
       name: "DisableHardwareNoiseSuppression",
       origin_trial_feature_name: "DisableHardwareNoiseSuppression",
       status: "experimental",
+    },
+    {
+      // Disable composited layer squashing in pre-CompositeAfterPaint for
+      // testing.
+      name: "DisableLayerSquashing",
     },
     {
       name: "DisallowDocumentAccess",
@@ -654,7 +687,6 @@
     },
     {
       name: "EventTiming",
-      origin_trial_feature_name: "EventTiming",
       status: "experimental",
     },
     {
@@ -711,11 +743,8 @@
       status: "experimental",
     },
     {
-      name: "FallbackCursorMode",
-    },
-    {
       name: "FeaturePolicyForClientHints",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "FeaturePolicyForSandbox",
@@ -747,10 +776,8 @@
       name: "FileSystem",
       status: "stable",
     },
-    // Perform style recalc traversal in the flat tree order, including marking
-    // flat-tree instead of shadow-including ancestors for child dirtiness.
     {
-      name: "FlatTreeStyleRecalc",
+      name: "FlexGaps",
       status: "stable",
     },
     {
@@ -838,6 +865,7 @@
     },
     {
       name: "IdleDetection",
+      origin_trial_feature_name: "IdleDetection",
       status: "experimental",
     },
     {
@@ -883,10 +911,6 @@
       status: "stable",
     },
     {
-      name: "InvisibleDOM",
-      status: "experimental",
-    },
-    {
       // Launched by default. TODO(mythria): cleanup virtual tests and
       // other hooks in blink.
       name: "IsolatedCodeCache",
@@ -916,7 +940,7 @@
       // unit tests.
       name: "LayoutNG",
       // Keep this list in sync with the one in LayoutNGFlexBox below.
-      implied_by: ["LayoutNGBlockFragmentation", "LayoutNGFieldset", "LayoutNGFragmentItem", "LayoutNGLineCache", "EditingNG", "BidiCaretAffinity", "LayoutNGTable", "LayoutNGFragmentTraversal"],
+      implied_by: ["LayoutNGBlockFragmentation", "LayoutNGFieldset", "LayoutNGFragmentItem", "LayoutNGGrid", "EditingNG", "BidiCaretAffinity", "LayoutNGTable", "LayoutNGFragmentTraversal"],
       status: "stable",
     },
     {
@@ -927,7 +951,7 @@
     },
     {
       name: "LayoutNGFlexBox",
-      implied_by: ["LayoutNGBlockFragmentation", "LayoutNGFieldset", "LayoutNGFragmentItem", "LayoutNGLineCache", "EditingNG", "BidiCaretAffinity", "LayoutNGTable", "LayoutNGFragmentTraversal"],
+      implied_by: ["LayoutNGBlockFragmentation", "LayoutNGFieldset", "LayoutNGFragmentItem", "LayoutNGGrid", "EditingNG", "BidiCaretAffinity", "LayoutNGTable", "LayoutNGFragmentTraversal"],
       status: "experimental",
     },
     {
@@ -943,12 +967,23 @@
       // Traverse the fragment tree when painting and hit-testing, instead of
       // the layout object tree.
       name: "LayoutNGFragmentTraversal",
+      implied_by: ["LayoutNGBlockFragmentation"],
     },
     {
-      name: "LayoutNGLineCache",
+      name: "LayoutNGGrid",
+    },
+    {
+      name: "LayoutNGRuby",
+      depends_on: ["LayoutNG"],
     },
     {
       name: "LayoutNGTable",
+    },
+    {
+      // Adds the "sources" attribute to the LayoutShift interface for the
+      // Layout Instability API (bit.ly/cls-sources).
+      name: "LayoutShiftAttribution",
+      status: "stable",
     },
     {
       name: "LazyFrameLoading",
@@ -960,10 +995,6 @@
     {
       name: "LazyImageLoading",
       status: "stable",
-    },
-    {
-      name: "LazyImageLoadingMetadataFetch",
-      depends_on: ["LazyImageLoading"],
     },
     {
       name: "LazyImageVisibleLoadTimeMetrics",
@@ -989,6 +1020,10 @@
       name:"MeasureMemory",
       origin_trial_feature_name: "MeasureMemory",
       status:"experimental",
+    },
+    {
+      name: "MediaCapabilitiesDynamicRange",
+      status: "test",
     },
     {
       name: "MediaCapabilitiesEncodingInfo",
@@ -1025,6 +1060,9 @@
       name: "MediaControlsOverlayPlayButton",
       settable_from_internals: true,
       status: {"Android": "stable"},
+    },
+    {
+      name: "MediaControlsUseCutOutByDefault"
     },
     {
       name: "MediaDocumentDownloadButton",
@@ -1156,6 +1194,10 @@
     {
       name: "NeverSlowMode",
     },
+    {
+      name: "NewCanvas2DAPI",
+      status: "experimental",
+    },
     // Not a web exposed feature, enabled from the command line.
     {
       name: "NewRemotePlaybackPipeline",
@@ -1201,6 +1243,11 @@
     {
       name: "OrientationEvent",
       status: {"Android": "stable"},
+    },
+    {
+      name: "OriginIsolationHeader",
+      origin_trial_feature_name: "OriginIsolationHeader",
+      status: "experimental",
     },
     {
       name: "OriginPolicy",
@@ -1250,6 +1297,13 @@
       name: "OriginTrialsSampleAPINavigation",
       origin_trial_feature_name: "FrobulateNavigation",
     },
+    // As above. Do not change this flag to stable, as it exists solely to
+    // generate code used by the origin trials sample API implementation.
+    {
+      name: "OriginTrialsSampleAPIThirdParty",
+      origin_trial_feature_name: "FrobulateThirdParty",
+      origin_trial_allows_third_party: true,
+    },
     {
       name: "OutOfBlinkCors",
     },
@@ -1280,14 +1334,6 @@
     {
       name: "PaintUnderInvalidationChecking",
       settable_from_internals: true,
-    },
-    {
-      name: "PassiveDocumentEventListeners",
-      status: "stable",
-    },
-    {
-      name: "PassiveDocumentWheelEventListeners",
-      status: "stable",
     },
     {
       name: "PassPaintVisualRectToCompositor",
@@ -1397,10 +1443,6 @@
     {
       name: "PreciseMemoryInfo",
     },
-    {
-      name: "PredictedEvents",
-      status: "stable",
-    },
     // This feature is deprecated and we are evangelizing affected sites.
     // See https://crbug.com/346236 for current status.
     {
@@ -1426,6 +1468,7 @@
     },
     {
       name: "QuicTransport",
+      origin_trial_feature_name: "QuicTransport",
       status: "experimental",
     },
     {
@@ -1453,7 +1496,7 @@
     },
     {
       name: "ResizeObserverUpdates",
-      status: "test",
+      status: "stable",
     },
     {
       name: "RestrictAppCacheToSecureContexts",
@@ -1523,16 +1566,9 @@
       name: "SameSiteByDefaultCookies",
       status: "test",
     },
-    // Exposes the displays connected to the device and provides the display
-    // properties needed for window placement features.
-    {
-      name: "ScreenEnumeration",
-      status: "experimental",
-    },
     {
       name: "ScreenWakeLock",
-      origin_trial_feature_name: "WakeLock",
-      status: "experimental",
+      status: "stable",
     },
     // WebSpeech API with both speech recognition and synthesis functionality
     // is not fully enabled on all platforms.
@@ -1543,9 +1579,6 @@
     {
       name: "ScriptedSpeechSynthesis",
       status: "stable",
-    },
-    {
-      name: "ScriptStreamingOnPreload",
     },
     {
       name: "ScrollCustomization",
@@ -1564,6 +1597,9 @@
     {
       name: "ScrollTopLeftInterop",
       status: "stable",
+    },
+    {
+      name: "ScrollUnification",
     },
     {
       name: "SendBeaconThrowForBlobWithNonSimpleType",
@@ -1642,7 +1678,7 @@
     },
     {
       name: "SmsReceiver",
-      status: {"default": "experimental", "Android": "experimental"},
+      status: {"default": "experimental", "Android": "stable"},
     },
     {
       name: "SquashAfterPaint",
@@ -1737,6 +1773,15 @@
     },
     {
       name: "TrustTokens",
+      origin_trial_feature_name: "TrustTokens",
+      status: "test",
+    },
+    {
+      // Always allow trust token issuance (so long as the base::Feature
+      // is enabled). Used for testing; circumvents a runtime check that,
+      // if this RuntimeEnabledFeature is not present, guarantees the origin
+      // trial is enabled.
+      name: "TrustTokensAlwaysAllowIssuance",
       status: "test",
     },
     {
@@ -1779,7 +1824,7 @@
     },
     {
       name: "UserAgentClientHint",
-      status: "experimental"
+      status: "stable"
     },
     {
       name: "UseWindowsSystemColors",
@@ -1805,6 +1850,14 @@
       name: "VideoRotateToFullscreen",
     },
     {
+      name: "VideoWakeLockOptimisationHiddenMuted",
+      status: "stable",
+    },
+    {
+      name: "VirtualKeyboard",
+      status: "test",
+    },
+    {
       name: "VisibilityCollapseColumn",
     },
     {
@@ -1814,11 +1867,16 @@
     },
     {
       name: "WebAnimationsAPI",
-      status: "experimental",
+      status: "stable",
       implied_by: ['AnimationWorklet']
     },
     {
       name: "WebAnimationsSVG",
+      status: "experimental",
+    },
+    {
+      name: "WebAssemblySimd",
+      origin_trial_feature_name: "WebAssemblySimd",
       status: "experimental",
     },
     {
@@ -1833,7 +1891,7 @@
       status: "stable",
     },
     {
-      name: "WebAuthenticationFeaturePolicy",
+      name: "WebAuthenticationGetAssertionFeaturePolicy",
       status: "experimental",
     },
     // WebBluetooth is enabled by default on Android, ChromeOS and Mac.
@@ -1930,6 +1988,11 @@
       status: "stable",
     },
     {
+      name: "WebXRAnchors",
+      depends_on: ["WebXRARModule", "WebXRHitTest"],
+      status: "experimental"
+    },
+    {
       name: "WebXRARModule",
       depends_on: ["WebXR"],
       status: "stable",
@@ -1949,7 +2012,13 @@
       depends_on: ["WebXRARModule"],
       status: "experimental",
     },
-    // Extends window placement functionality for multi-screen devices.
+    {
+      name: "WebXRLightEstimation",
+      depends_on: ["WebXRARModule"],
+      status: "experimental",
+    },
+    // Extends window placement functionality for multi-screen devices. Also
+    // exposes requisite information about displays connected to the device.
     {
       name: "WindowPlacement",
       status: "experimental",

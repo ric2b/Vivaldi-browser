@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">Teclat alemany</translation>
 <translation id="1972984168337863910">Desplega els taulers amb informació dels fitxers</translation>
 <translation id="1984603991036629094">Teclat fonètic armeni</translation>
+<translation id="1995337122023280937">Ves a la ubicació del fitxer</translation>
 <translation id="2001796770603320721">Gestiona a Drive</translation>
 <translation id="2009067268969781306">En formatar una unitat, se'n suprimeixen totes les dades que s'hi hagin emmagatzemat. Aquesta acció no es pot desfer.</translation>
 <translation id="2028997212275086731">Arxiu RAR</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">No s'ha pogut accedir a Google Drive. <ph name="BEGIN_LINK" />Tanqueu la sessió<ph name="END_LINK" /> i torneu-la a iniciar.</translation>
 <translation id="2649120831653069427">Peix arc iris</translation>
 <translation id="2661146741306740526">16 x 9</translation>
+<translation id="2664412712123763093">Ubicació del fitxer</translation>
 <translation id="2672394958563893062">S'ha produït un error. Feu clic per reiniciar des del principi.</translation>
 <translation id="2676946222714718093">En reproducció</translation>
 <translation id="2735698359135166290">Teclat estàndard romanès</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" /> errors.</translation>
 <translation id="3519867315646775981">Transliteració (shalom ← שלום)</translation>
 <translation id="3522708245912499433">Portuguès</translation>
+<translation id="3524311639100184459">Compte: aquests fitxers són temporals i és possible que se suprimeixin automàticament per alliberar espai de disc.  <ph name="BEGIN_LINK" />Més informació<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Carpeta</translation>
 <translation id="3549797760399244642">Ves a drive.google.com...</translation>
 <translation id="357479282490346887">Lituà</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">Kiwi</translation>
 <translation id="3966388904776714213">Reproductor d'àudio</translation>
 <translation id="4002066346123236978">Títol</translation>
+<translation id="4065397611279318371">Per obrir fitxers amb aplicacions de <ph name="APP_NAME" />, primer mou-los a la carpeta <ph name="SHARED_DIRECTORY_LABEL" />.</translation>
 <translation id="4070370845051020638">Mètode d'introducció de cantonès</translation>
 <translation id="4072248638558688893">Teclat tàmil (fonètic)</translation>
 <translation id="4124935795427217608">Unicorn</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">Correcció automàtica</translation>
 <translation id="4881695831933465202">Obre</translation>
 <translation id="4886021172213954916">Teclat tàmil (màquina d'escriure)</translation>
+<translation id="4892969127351273348">No es pot obrir amb <ph name="APP_NAME" /></translation>
 <translation id="4905417359854579806">A punt per afegir <ph name="FILE_COUNT" /> a la còpia de seguretat</translation>
 <translation id="4924638091161556692">Corregida</translation>
 <translation id="4935975195727477204">Flor de gazània</translation>
@@ -500,6 +505,7 @@
 <translation id="6806699711453372963">Gestiona les opcions per compartir amb Linux</translation>
 <translation id="6808193438228982088">Guineu</translation>
 <translation id="6820687829547641339">Arxiu tar comprimit Gzip</translation>
+<translation id="6823166707458800069">Es crea automàticament una còpia de seguretat en línia de tots els fitxers desats en aquesta carpeta.</translation>
 <translation id="6825883775269213504">Rus</translation>
 <translation id="6827236167376090743">La reproducció d'aquest vídeo continuarà indefinidament.</translation>
 <translation id="6847101934483209767">S'ha suprimit <ph name="ENTRY_NAME" /> de la selecció.</translation>
@@ -556,6 +562,7 @@
 <translation id="7417705661718309329">Mapa de Google</translation>
 <translation id="7419631653042041064">Teclat català</translation>
 <translation id="7434823369735508263">Teclat Dvorak anglès</translation>
+<translation id="7447678886297481665">Els fitxers d'aquesta carpeta són només de lectura. Algunes activitats no s'admeten.</translation>
 <translation id="7460898608667578234">Ucraïnès</translation>
 <translation id="7474889694310679759">Teclat anglès del Canadà</translation>
 <translation id="7489215562877293245">S'han trobat <ph name="FILE_COUNT" />

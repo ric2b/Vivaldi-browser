@@ -1685,7 +1685,7 @@ void RenderTextHarfBuzz::EnsureLayout() {
 }
 
 void RenderTextHarfBuzz::DrawVisualText(internal::SkiaTextRenderer* renderer,
-                                        const Range& selection) {
+                                        const std::vector<Range> selections) {
   DCHECK(!update_layout_run_list_);
   DCHECK(!update_display_run_list_);
   DCHECK(!update_display_text_);
@@ -1699,11 +1699,14 @@ void RenderTextHarfBuzz::DrawVisualText(internal::SkiaTextRenderer* renderer,
 
   // Apply the selected text color to the [un-reversed] selection range.
   BreakList<SkColor> colors = layout_colors();
-  if (!selection.is_empty()) {
-    const Range grapheme_range = ExpandRangeToGraphemeBoundary(selection);
-    colors.ApplyValue(selection_color(),
-                      Range(TextIndexToDisplayIndex(grapheme_range.GetMin()),
-                            TextIndexToDisplayIndex(grapheme_range.GetMax())));
+  for (auto selection : selections) {
+    if (!selection.is_empty()) {
+      const Range grapheme_range = ExpandRangeToGraphemeBoundary(selection);
+      colors.ApplyValue(
+          selection_color(),
+          Range(TextIndexToDisplayIndex(grapheme_range.GetMin()),
+                TextIndexToDisplayIndex(grapheme_range.GetMax())));
+    }
   }
 
   internal::TextRunList* run_list = GetRunList();
@@ -2170,7 +2173,13 @@ void RenderTextHarfBuzz::ShapeRunsWithFont(
 }
 
 void RenderTextHarfBuzz::EnsureLayoutRunList() {
-  if (update_layout_run_list_) {
+  // Update layout run list if the device scale factor has changed since the
+  // layout run list was last updated, as changes in device scale factor change
+  // subpixel positioning, at least on Linux and Chrome OS.
+  const float device_scale_factor = GetFontRenderParamsDeviceScaleFactor();
+
+  if (update_layout_run_list_ || device_scale_factor_ != device_scale_factor) {
+    device_scale_factor_ = device_scale_factor;
     layout_run_list_.Reset();
 
     const base::string16& text = GetLayoutText();

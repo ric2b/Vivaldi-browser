@@ -6,6 +6,7 @@
 
 #import "ios/chrome/browser/ui/authentication/signin/add_account_signin/add_account_signin_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/signin/advanced_settings_signin/advanced_settings_signin_coordinator.h"
+#import "ios/chrome/browser/ui/authentication/signin/trusted_vault_reauthentication/trusted_vault_reauthentication_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/signin/user_signin/logging/first_run_signin_logger.h"
 #import "ios/chrome/browser/ui/authentication/signin/user_signin/logging/upgrade_signin_logger.h"
 #import "ios/chrome/browser/ui/authentication/signin/user_signin/user_signin_constants.h"
@@ -103,9 +104,25 @@ using signin_metrics::PromoAction;
                     signinIntent:AddAccountSigninIntentReauthPrimaryAccount];
 }
 
++ (instancetype)
+    trustedVaultReAuthenticationCoordiantorWithBaseViewController:
+        (UIViewController*)viewController
+                                                          browser:
+                                                              (Browser*)browser
+                                                 retrievalTrigger:
+                                                     (syncer::
+                                                          KeyRetrievalTriggerForUMA)
+                                                         retrievalTrigger {
+  return [[TrustedVaultReauthenticationCoordinator alloc]
+      initWithBaseViewController:viewController
+                         browser:browser
+                retrievalTrigger:retrievalTrigger];
+}
+
 - (void)dealloc {
-  // -[SigninCoordinator runCompletionCallbackWithSigninResult:identity:] has
-  // to be called by the subclass before the coordinator is deallocated.
+  // -[SigninCoordinator runCompletionCallbackWithSigninResult:identity:
+  // showAdvancedSettingsSignin:] has to be called by the subclass before
+  // the coordinator is deallocated.
   DCHECK(!self.signinCompletion);
 }
 
@@ -124,8 +141,9 @@ using signin_metrics::PromoAction;
 }
 
 - (void)stop {
-  // -[SigninCoordinator runCompletionCallbackWithSigninResult:identity:] has
-  // to be called by the subclass before -[SigninCoordinator stop] is called.
+  // -[SigninCoordinator runCompletionCallbackWithSigninResult:identity:
+  // showAdvancedSettingsSignin:] has to be called by the subclass before
+  // -[SigninCoordinator stop] is called.
   DCHECK(!self.signinCompletion);
 }
 
@@ -140,15 +158,23 @@ using signin_metrics::PromoAction;
 
 - (void)runCompletionCallbackWithSigninResult:
             (SigninCoordinatorResult)signinResult
-                                     identity:(ChromeIdentity*)identity {
+                                     identity:(ChromeIdentity*)identity
+                   showAdvancedSettingsSignin:(BOOL)showAdvancedSettingsSignin {
+  SigninCompletionAction signinCompletionAction =
+      showAdvancedSettingsSignin
+          ? SigninCompletionActionShowAdvancedSettingsSignin
+          : SigninCompletionActionNone;
+  SigninCompletionInfo* signinCompletionInfo =
+      [[SigninCompletionInfo alloc] initWithIdentity:identity
+                              signinCompletionAction:signinCompletionAction];
   // If |self.signinCompletion| is nil, this method has been probably called
   // twice.
   DCHECK(self.signinCompletion);
   SigninCoordinatorCompletionCallback signinCompletion = self.signinCompletion;
-  self.signinCompletion = nil;
   // The owner should call the stop method, during the callback.
   // |self.signinCompletion| needs to be set to nil before calling it.
-  signinCompletion(signinResult, identity);
+  self.signinCompletion = nil;
+  signinCompletion(signinResult, signinCompletionInfo);
 }
 
 @end

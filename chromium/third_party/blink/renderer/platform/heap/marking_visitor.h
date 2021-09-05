@@ -33,24 +33,13 @@ class PLATFORM_EXPORT MarkingVisitorCommon : public Visitor {
   };
 
   void VisitWeak(const void*, const void*, TraceDescriptor, WeakCallback) final;
-  void VisitBackingStoreStrongly(const void*,
-                                 const void* const*,
-                                 TraceDescriptor) final;
-  void VisitBackingStoreWeakly(const void*,
-                               const void* const*,
-                               TraceDescriptor,
-                               TraceDescriptor,
-                               WeakCallback,
-                               const void*) final;
-  bool VisitEphemeronKeyValuePair(const void*,
-                                  const void*,
-                                  EphemeronTracingCallback,
-                                  EphemeronTracingCallback) final;
-
-  // Used to only mark the backing store when it has been registered for weak
-  // processing. In this case, the contents are processed separately using
-  // the corresponding traits but the backing store requires marking.
-  void VisitBackingStoreOnly(const void*, const void* const*) final;
+  void VisitWeakContainer(const void*,
+                          const void* const*,
+                          TraceDescriptor,
+                          TraceDescriptor,
+                          WeakCallback,
+                          const void*) final;
+  void VisitEphemeron(const void*, const void*, TraceCallback) final;
 
   // This callback mechanism is needed to account for backing store objects
   // containing intra-object pointers, all of which must be relocated/rebased
@@ -59,6 +48,9 @@ class PLATFORM_EXPORT MarkingVisitorCommon : public Visitor {
   // For Blink, |HeapLinkedHashSet<>| is currently the only abstraction which
   // relies on this feature.
   void RegisterBackingStoreCallback(const void*, MovingObjectCallback) final;
+
+  void RegisterMovableSlot(const void* const*) final;
+
   void RegisterWeakCallback(WeakCallback, const void*) final;
 
   // Flush private segments remaining in visitor's worklists to global pools.
@@ -80,8 +72,6 @@ class PLATFORM_EXPORT MarkingVisitorCommon : public Visitor {
   // Try to mark an object without tracing. Returns true when the object was not
   // marked upon calling.
   bool MarkHeaderNoTracing(HeapObjectHeader*);
-
-  void RegisterBackingStoreReference(const void* const* slot);
 
   MarkingWorklist::View marking_worklist_;
   WriteBarrierWorklist::View write_barrier_worklist_;
@@ -121,16 +111,12 @@ ALWAYS_INLINE bool MarkingVisitorCommon::MarkHeaderNoTracing(
 // Base visitor used to mark Oilpan objects on any thread.
 template <class Specialized>
 class PLATFORM_EXPORT MarkingVisitorBase : public MarkingVisitorCommon {
- public:
-  void Visit(const void* object, TraceDescriptor desc) final;
-
-  // Unused cross-component visit methods.
-  void Visit(const TraceWrapperV8Reference<v8::Value>&) override {}
-
  protected:
   MarkingVisitorBase(ThreadState* state, MarkingMode marking_mode, int task_id)
       : MarkingVisitorCommon(state, marking_mode, task_id) {}
   ~MarkingVisitorBase() override = default;
+
+  void Visit(const void* object, TraceDescriptor desc) final;
 
   // Marks an object and adds a tracing callback for processing of the object.
   void MarkHeader(HeapObjectHeader*, const TraceDescriptor&);
@@ -283,7 +269,7 @@ class PLATFORM_EXPORT ConcurrentMarkingVisitor
 
   bool IsConcurrent() const override { return true; }
 
-  bool ConcurrentTracingBailOut(TraceDescriptor desc) override {
+  bool DeferredTraceIfConcurrent(TraceDescriptor desc) override {
     not_safe_to_concurrently_trace_worklist_.Push(desc);
     return true;
   }

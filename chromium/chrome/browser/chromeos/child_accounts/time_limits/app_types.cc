@@ -6,7 +6,8 @@
 
 #include <algorithm>
 
-#include "base/logging.h"
+#include "base/check_op.h"
+#include "base/notreached.h"
 
 namespace chromeos {
 
@@ -30,6 +31,10 @@ std::string AppTypeToString(apps::mojom::AppType app_type) {
       return "Crostini";
     case apps::mojom::AppType::kMacNative:
       return "Mac native";
+    case apps::mojom::AppType::kPluginVm:
+      return "Plugin VM";
+    case apps::mojom::AppType::kLacros:
+      return "LaCrOS";
   }
   NOTREACHED();
 }

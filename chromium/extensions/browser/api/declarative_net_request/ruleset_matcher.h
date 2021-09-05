@@ -12,6 +12,7 @@
 #include "extensions/browser/api/declarative_net_request/extension_url_pattern_index_matcher.h"
 #include "extensions/browser/api/declarative_net_request/flat/extension_ruleset_generated.h"
 #include "extensions/browser/api/declarative_net_request/regex_rules_matcher.h"
+#include "extensions/common/api/declarative_net_request/constants.h"
 
 namespace content {
 class RenderFrameHost;
@@ -73,11 +74,12 @@ class RulesetMatcher {
 
   base::Optional<RequestAction> GetBeforeRequestAction(
       const RequestParams& params) const;
-  uint8_t GetRemoveHeadersMask(
-      const RequestParams& params,
-      uint8_t excluded_remove_headers_mask,
-      std::vector<RequestAction>* remove_headers_actions) const;
+  std::vector<RequestAction> GetModifyHeadersActions(
+      const RequestParams& params) const;
+
   bool IsExtraHeadersMatcher() const;
+  size_t GetRulesCount() const;
+  size_t GetRegexRulesCount() const;
 
   void OnRenderFrameCreated(content::RenderFrameHost* host);
   void OnRenderFrameDeleted(content::RenderFrameHost* host);
@@ -85,7 +87,7 @@ class RulesetMatcher {
 
   // ID of the ruleset. Each extension can have multiple rulesets with
   // their own unique ids.
-  size_t id() const { return id_; }
+  RulesetID id() const { return id_; }
 
   // Returns the tracked highest priority matching allowsAllRequests action, if
   // any, for |host|.
@@ -94,15 +96,14 @@ class RulesetMatcher {
 
  private:
   explicit RulesetMatcher(std::string ruleset_data,
-                          int id,
-                          api::declarative_net_request::SourceType source_type,
+                          RulesetID id,
                           const ExtensionId& extension_id);
 
   const std::string ruleset_data_;
 
   const flat::ExtensionIndexedRuleset* const root_;
 
-  const int id_;
+  const RulesetID id_;
 
   // Underlying matcher for filter-list style rules supported using the
   // |url_pattern_index| component.

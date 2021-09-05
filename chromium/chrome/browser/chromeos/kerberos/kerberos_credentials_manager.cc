@@ -19,6 +19,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
+#include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chromeos/dbus/kerberos/kerberos_client.h"
@@ -734,6 +735,11 @@ void KerberosCredentialsManager::NotifyAccountsChanged() {
     observer.OnAccountsChanged();
 }
 
+void KerberosCredentialsManager::NotifyEnabledStateChanged() {
+  for (auto& observer : observers_)
+    observer.OnKerberosEnabledStateChanged();
+}
+
 const std::string& KerberosCredentialsManager::GetActivePrincipalName() const {
   // Using Get()->GetString() instead of GetString() directly to prevent a
   // string copy.
@@ -778,12 +784,13 @@ void KerberosCredentialsManager::UpdateEnabledFromPref() {
     // Kerberos got enabled, re-populate managed accounts.
     VLOG(1) << "Kerberos got enabled, populating managed accounts";
     UpdateAccountsFromPref(false /* is_retry */);
-    return;
+  } else {
+    // Note that ClearAccounts logs an error if the operation fails.
+    VLOG(1) << "Kerberos got disabled, clearing accounts";
+    ClearAccounts(EmptyResultCallback());
   }
 
-  // Note that ClearAccounts logs an error if the operation fails.
-  VLOG(1) << "Kerberos got disabled, clearing accounts";
-  ClearAccounts(EmptyResultCallback());
+  NotifyEnabledStateChanged();
 }
 
 void KerberosCredentialsManager::UpdateRememberPasswordEnabledFromPref() {
@@ -928,7 +935,8 @@ void KerberosCredentialsManager::OnTicketExpiryNotificationClick(
   // settings. Consider creating a standalone reauth dialog.
   chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
       primary_profile_,
-      chrome::kKerberosAccountsSubPage + std::string("?kerberos_reauth=") +
+      chromeos::settings::mojom::kKerberosSubpagePath +
+          std::string("?kerberos_reauth=") +
           net::EscapeQueryParamValue(principal_name, false /* use_plus */));
 
   // Close last! |principal_name| is owned by the notification.

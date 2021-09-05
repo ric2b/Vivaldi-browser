@@ -8,12 +8,13 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/feature_list.h"
-#include "base/logging.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notreached.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -170,18 +171,20 @@ TaskQueue::QueuePriority StringToTaskQueuePriority(
 
 bool IsBlockingEvent(const blink::WebInputEvent& web_input_event) {
   blink::WebInputEvent::Type type = web_input_event.GetType();
-  DCHECK(type == blink::WebInputEvent::kTouchStart ||
-         type == blink::WebInputEvent::kMouseWheel);
+  DCHECK(type == blink::WebInputEvent::Type::kTouchStart ||
+         type == blink::WebInputEvent::Type::kMouseWheel);
 
-  if (type == blink::WebInputEvent::kTouchStart) {
+  if (type == blink::WebInputEvent::Type::kTouchStart) {
     const WebTouchEvent& touch_event =
         static_cast<const WebTouchEvent&>(web_input_event);
-    return touch_event.dispatch_type == blink::WebInputEvent::kBlocking;
+    return touch_event.dispatch_type ==
+           blink::WebInputEvent::DispatchType::kBlocking;
   }
 
   const WebMouseWheelEvent& mouse_event =
       static_cast<const WebMouseWheelEvent&>(web_input_event);
-  return mouse_event.dispatch_type == blink::WebInputEvent::kBlocking;
+  return mouse_event.dispatch_type ==
+         blink::WebInputEvent::DispatchType::kBlocking;
 }
 
 MainThreadSchedulerImpl* g_main_thread_scheduler = nullptr;
@@ -395,12 +398,6 @@ MainThreadSchedulerImpl::MainThreadOnly::MainThreadOnly(
           main_thread_scheduler_impl,
           &main_thread_scheduler_impl->tracing_controller_,
           YesNoStateToString),
-      have_seen_a_begin_main_frame(
-          false,
-          "Scheduler.HasSeenBeginMainFrame",
-          main_thread_scheduler_impl,
-          &main_thread_scheduler_impl->tracing_controller_,
-          YesNoStateToString),
       have_reported_blocking_intervention_in_current_policy(
           false,
           "Scheduler.HasReportedBlockingInterventionInCurrentPolicy",
@@ -416,12 +413,6 @@ MainThreadSchedulerImpl::MainThreadOnly::MainThreadOnly(
       has_visible_render_widget_with_touch_handler(
           false,
           "Scheduler.HasVisibleRenderWidgetWithTouchHandler",
-          main_thread_scheduler_impl,
-          &main_thread_scheduler_impl->tracing_controller_,
-          YesNoStateToString),
-      begin_frame_not_expected_soon(
-          false,
-          "Scheduler.BeginFrameNotExpectedSoon",
           main_thread_scheduler_impl,
           &main_thread_scheduler_impl->tracing_controller_,
           YesNoStateToString),
@@ -486,8 +477,12 @@ MainThreadSchedulerImpl::MainThreadOnly::MainThreadOnly(
       max_virtual_time_task_starvation_count(0),
       virtual_time_stopped(false),
       nested_runloop(false),
-      compositing_experiment(main_thread_scheduler_impl),
-      should_prioritize_compositing(false),
+      prioritize_compositing_after_input(
+          false,
+          "Scheduler.PrioritizeCompositingAfterInput",
+          main_thread_scheduler_impl,
+          &main_thread_scheduler_impl->tracing_controller_,
+          YesNoStateToString),
       compositor_priority_experiments(main_thread_scheduler_impl),
       main_thread_compositing_is_fast(false) {}
 
@@ -530,14 +525,14 @@ MainThreadSchedulerImpl::AnyThread::AnyThread(
           main_thread_scheduler_impl,
           &main_thread_scheduler_impl->tracing_controller_,
           YesNoStateToString),
-      waiting_for_contentful_paint(
-          true,
-          "Scheduler.WaitingForContentfulPaint",
+      waiting_for_any_main_frame_contentful_paint(
+          false,
+          "Scheduler.WaitingForMainFrameContentfulPaint",
           main_thread_scheduler_impl,
           &main_thread_scheduler_impl->tracing_controller_,
           YesNoStateToString),
-      waiting_for_meaningful_paint(
-          true,
+      waiting_for_any_main_frame_meaningful_paint(
+          false,
           "Scheduler.WaitingForMeaningfulPaint",
           main_thread_scheduler_impl,
           &main_thread_scheduler_impl->tracing_controller_,
@@ -612,7 +607,7 @@ MainThreadSchedulerImpl::SchedulingSettings::SchedulingSettings() {
 MainThreadSchedulerImpl::AnyThread::~AnyThread() = default;
 
 MainThreadSchedulerImpl::CompositorThreadOnly::CompositorThreadOnly()
-    : last_input_type(blink::WebInputEvent::kUndefined) {}
+    : last_input_type(blink::WebInputEvent::Type::kUndefined) {}
 
 MainThreadSchedulerImpl::CompositorThreadOnly::~CompositorThreadOnly() =
     default;
@@ -637,6 +632,22 @@ void MainThreadSchedulerImpl::ShutdownAllQueues() {
     virtual_time_control_task_queue_->ShutdownTaskQueue();
 }
 
+bool MainThreadSchedulerImpl::IsAnyMainFrameWaitingForFirstMeaningfulPaint()
+    const {
+  return std::any_of(
+      main_thread_only().page_schedulers.begin(),
+      main_thread_only().page_schedulers.end(),
+      std::mem_fn(&PageSchedulerImpl::IsWaitingForMainFrameMeaningfulPaint));
+}
+
+bool MainThreadSchedulerImpl::IsAnyMainFrameWaitingForFirstContentfulPaint()
+    const {
+  return std::any_of(
+      main_thread_only().page_schedulers.begin(),
+      main_thread_only().page_schedulers.end(),
+      std::mem_fn(&PageSchedulerImpl::IsWaitingForMainFrameContentfulPaint));
+}
+
 void MainThreadSchedulerImpl::Shutdown() {
   if (was_shutdown_)
     return;
@@ -648,8 +659,11 @@ void MainThreadSchedulerImpl::Shutdown() {
 
   ShutdownAllQueues();
   task_queue_throttler_.reset();
-  idle_helper_.Shutdown();
+
+  // Shut down |helper_| first, so that the ForceUpdatePolicy() call
+  // from |idle_helper_| early-outs and doesn't do anything.
   helper_.Shutdown();
+  idle_helper_.Shutdown();
   sequence_manager_.reset();
   main_thread_only().rail_mode_observers.Clear();
   was_shutdown_ = true;
@@ -817,6 +831,9 @@ void MainThreadSchedulerImpl::RemoveTaskObserver(
 }
 
 void MainThreadSchedulerImpl::WillBeginFrame(const viz::BeginFrameArgs& args) {
+  // TODO(crbug/1068426): Figure out when and if |UpdatePolicy| should be called
+  //  and, if needed, remove the call to it from
+  //  |SetPrioritizeCompositingAfterInput|.
   TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
                "MainThreadSchedulerImpl::WillBeginFrame", "args",
                args.AsValue());
@@ -827,14 +844,12 @@ void MainThreadSchedulerImpl::WillBeginFrame(const viz::BeginFrameArgs& args) {
   EndIdlePeriod();
   main_thread_only().estimated_next_frame_begin =
       args.frame_time + args.interval;
-  main_thread_only().have_seen_a_begin_main_frame = true;
-  main_thread_only().begin_frame_not_expected_soon = false;
   main_thread_only().compositor_frame_interval = args.interval;
   {
     base::AutoLock lock(any_thread_lock_);
     any_thread().begin_main_frame_on_critical_path = args.on_critical_path;
   }
-  main_thread_only().compositing_experiment.OnWillBeginMainFrame();
+  SetPrioritizeCompositingAfterInput(false);
   main_thread_only().compositor_priority_experiments.OnWillBeginMainFrame();
 }
 
@@ -858,13 +873,13 @@ void MainThreadSchedulerImpl::DidCommitFrameToCompositor() {
 }
 
 void MainThreadSchedulerImpl::BeginFrameNotExpectedSoon() {
+  // TODO(crbug/1068426): Should this call |UpdatePolicy|?
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
                "MainThreadSchedulerImpl::BeginFrameNotExpectedSoon");
   helper_.CheckOnValidThread();
   if (helper_.IsShutdown())
     return;
 
-  main_thread_only().begin_frame_not_expected_soon = true;
   idle_helper_.EnableLongIdlePeriod();
   {
     base::AutoLock lock(any_thread_lock_);
@@ -944,9 +959,12 @@ void MainThreadSchedulerImpl::SetRendererHidden(bool hidden) {
   if (hidden) {
     TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
                  "MainThreadSchedulerImpl::OnRendererHidden");
+    main_thread_only().renderer_hidden_metadata.emplace(
+        "MainThreadSchedulerImpl.RendererHidden", /* is_hidden */ 1);
   } else {
     TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
                  "MainThreadSchedulerImpl::OnRendererVisible");
+    main_thread_only().renderer_hidden_metadata.reset();
   }
   helper_.CheckOnValidThread();
   main_thread_only().renderer_hidden = hidden;
@@ -1000,7 +1018,7 @@ void MainThreadSchedulerImpl::SetSchedulerKeepActive(bool keep_active) {
 }
 
 void MainThreadSchedulerImpl::OnMainFrameRequestedForInput() {
-  main_thread_only().compositing_experiment.OnMainFrameRequestedForInput();
+  SetPrioritizeCompositingAfterInput(true);
 }
 
 bool MainThreadSchedulerImpl::SchedulerKeepActive() {
@@ -1091,8 +1109,8 @@ bool MainThreadSchedulerImpl::ShouldPrioritizeInputEvent(
     const blink::WebInputEvent& web_input_event) {
   // We regard MouseMove events with the left mouse button down as a signal
   // that the user is doing something requiring a smooth frame rate.
-  if ((web_input_event.GetType() == blink::WebInputEvent::kMouseDown ||
-       web_input_event.GetType() == blink::WebInputEvent::kMouseMove) &&
+  if ((web_input_event.GetType() == blink::WebInputEvent::Type::kMouseDown ||
+       web_input_event.GetType() == blink::WebInputEvent::Type::kMouseMove) &&
       (web_input_event.GetModifiers() &
        blink::WebInputEvent::kLeftButtonDown)) {
     return true;
@@ -1168,7 +1186,7 @@ void MainThreadSchedulerImpl::UpdateForInputEventOnCompositorThread(
     any_thread().user_model.DidFinishProcessingInputEvent(now);
 
   switch (type) {
-    case blink::WebInputEvent::kTouchStart:
+    case blink::WebInputEvent::Type::kTouchStart:
       any_thread().awaiting_touch_start_response = true;
       // This is just a fail-safe to reset the state of
       // |last_gesture_was_compositor_driven| to the default. We don't know
@@ -1181,7 +1199,7 @@ void MainThreadSchedulerImpl::UpdateForInputEventOnCompositorThread(
       if (IsBlockingEvent(web_input_event))
         any_thread().have_seen_a_blocking_gesture = true;
       break;
-    case blink::WebInputEvent::kTouchMove:
+    case blink::WebInputEvent::Type::kTouchMove:
       // Observation of consecutive touchmoves is a strong signal that the
       // page is consuming the touch sequence, in which case touchstart
       // response prioritization is no longer necessary. Otherwise, the
@@ -1189,13 +1207,13 @@ void MainThreadSchedulerImpl::UpdateForInputEventOnCompositorThread(
       // state.
       if (any_thread().awaiting_touch_start_response &&
           GetCompositorThreadOnly().last_input_type ==
-              blink::WebInputEvent::kTouchMove) {
+              blink::WebInputEvent::Type::kTouchMove) {
         any_thread().awaiting_touch_start_response = false;
       }
       break;
 
-    case blink::WebInputEvent::kGesturePinchUpdate:
-    case blink::WebInputEvent::kGestureScrollUpdate:
+    case blink::WebInputEvent::Type::kGesturePinchUpdate:
+    case blink::WebInputEvent::Type::kGestureScrollUpdate:
       // If we see events for an established gesture, we can lock it to the
       // appropriate thread as the gesture can no longer be cancelled.
       any_thread().last_gesture_was_compositor_driven =
@@ -1204,24 +1222,24 @@ void MainThreadSchedulerImpl::UpdateForInputEventOnCompositorThread(
       any_thread().default_gesture_prevented = false;
       break;
 
-    case blink::WebInputEvent::kGestureFlingCancel:
+    case blink::WebInputEvent::Type::kGestureFlingCancel:
       any_thread().fling_compositor_escalation_deadline = base::TimeTicks();
       break;
 
-    case blink::WebInputEvent::kGestureTapDown:
-    case blink::WebInputEvent::kGestureShowPress:
-    case blink::WebInputEvent::kGestureScrollEnd:
+    case blink::WebInputEvent::Type::kGestureTapDown:
+    case blink::WebInputEvent::Type::kGestureShowPress:
+    case blink::WebInputEvent::Type::kGestureScrollEnd:
       // With no observable effect, these meta events do not indicate a
       // meaningful touchstart response and should not impact task priority.
       break;
 
-    case blink::WebInputEvent::kMouseDown:
+    case blink::WebInputEvent::Type::kMouseDown:
       // Reset tracking state at the start of a new mouse drag gesture.
       any_thread().last_gesture_was_compositor_driven = false;
       any_thread().default_gesture_prevented = true;
       break;
 
-    case blink::WebInputEvent::kMouseMove:
+    case blink::WebInputEvent::Type::kMouseMove:
       // Consider mouse movement with the left button held down (see
       // ShouldPrioritizeInputEvent) similarly to a touch gesture.
       any_thread().last_gesture_was_compositor_driven =
@@ -1229,7 +1247,7 @@ void MainThreadSchedulerImpl::UpdateForInputEventOnCompositorThread(
       any_thread().awaiting_touch_start_response = false;
       break;
 
-    case blink::WebInputEvent::kMouseWheel:
+    case blink::WebInputEvent::Type::kMouseWheel:
       any_thread().last_gesture_was_compositor_driven =
           input_event_state == InputEventState::EVENT_CONSUMED_BY_COMPOSITOR;
       any_thread().awaiting_touch_start_response = false;
@@ -1240,7 +1258,7 @@ void MainThreadSchedulerImpl::UpdateForInputEventOnCompositorThread(
       if (IsBlockingEvent(web_input_event))
         any_thread().have_seen_a_blocking_gesture = true;
       break;
-    case blink::WebInputEvent::kUndefined:
+    case blink::WebInputEvent::Type::kUndefined:
       break;
 
     default:
@@ -1263,7 +1281,8 @@ void MainThreadSchedulerImpl::WillPostInputEventToMainThread(
     WebInputEvent::Type web_input_event_type,
     const WebInputEventAttribution& web_input_event_attribution) {
   base::AutoLock lock(any_thread_lock_);
-  any_thread().pending_input_monitor.OnEnqueue(web_input_event_type);
+  any_thread().pending_input_monitor.OnEnqueue(web_input_event_type,
+                                               web_input_event_attribution);
 }
 
 void MainThreadSchedulerImpl::WillHandleInputEventOnMainThread(
@@ -1272,7 +1291,8 @@ void MainThreadSchedulerImpl::WillHandleInputEventOnMainThread(
   helper_.CheckOnValidThread();
 
   base::AutoLock lock(any_thread_lock_);
-  any_thread().pending_input_monitor.OnDequeue(web_input_event_type);
+  any_thread().pending_input_monitor.OnDequeue(web_input_event_type,
+                                               web_input_event_attribution);
 }
 
 void MainThreadSchedulerImpl::DidHandleInputEventOnMainThread(
@@ -1498,10 +1518,9 @@ void MainThreadSchedulerImpl::UpdatePolicyLocked(UpdateType update_type) {
       NOTREACHED();
   }
 
-  if (main_thread_only().should_prioritize_compositing) {
+  if (main_thread_only().prioritize_compositing_after_input) {
     new_policy.compositor_priority() =
-        main_thread_only()
-            .compositing_experiment.GetIncreasedCompositingPriority();
+        base::sequence_manager::TaskQueue::QueuePriority::kVeryHighPriority;
   } else if (scheduling_settings_
                  .prioritize_compositing_and_loading_during_early_loading &&
              current_use_case() == UseCase::kEarlyLoading) {
@@ -1677,10 +1696,10 @@ UseCase MainThreadSchedulerImpl::ComputeCurrentUseCase(
   // treat the presence of input as an indirect signal that there is meaningful
   // content on the page.
   if (!any_thread().have_seen_input_since_navigation) {
-    if (any_thread().waiting_for_contentful_paint)
+    if (any_thread().waiting_for_any_main_frame_contentful_paint)
       return UseCase::kEarlyLoading;
 
-    if (any_thread().waiting_for_meaningful_paint)
+    if (any_thread().waiting_for_any_main_frame_meaningful_paint)
       return UseCase::kLoading;
   }
   return UseCase::kNone;
@@ -1978,8 +1997,6 @@ void MainThreadSchedulerImpl::AsValueIntoLocked(
       main_thread_only().has_visible_render_widget_with_touch_handler);
   state->SetString("current_use_case",
                    UseCaseToString(main_thread_only().current_use_case));
-  state->SetBoolean("begin_frame_not_expected_soon",
-                    main_thread_only().begin_frame_not_expected_soon);
   state->SetBoolean(
       "compositor_will_send_main_frame_not_expected",
       main_thread_only().compositor_will_send_main_frame_not_expected);
@@ -1989,12 +2006,10 @@ void MainThreadSchedulerImpl::AsValueIntoLocked(
                    IdleHelper::IdlePeriodStateToString(
                        idle_helper_.SchedulerIdlePeriodState()));
   state->SetBoolean("renderer_hidden", main_thread_only().renderer_hidden);
-  state->SetBoolean("have_seen_a_begin_main_frame",
-                    main_thread_only().have_seen_a_begin_main_frame);
-  state->SetBoolean("waiting_for_contentful_paint",
-                    any_thread().waiting_for_contentful_paint);
-  state->SetBoolean("waiting_for_meaningful_paint",
-                    any_thread().waiting_for_meaningful_paint);
+  state->SetBoolean("waiting_for_any_main_frame_contentful_paint",
+                    any_thread().waiting_for_any_main_frame_contentful_paint);
+  state->SetBoolean("waiting_for_any_main_frame_meaningful_paint",
+                    any_thread().waiting_for_any_main_frame_meaningful_paint);
   state->SetBoolean("have_seen_input_since_navigation",
                     any_thread().have_seen_input_since_navigation);
   state->SetBoolean(
@@ -2217,19 +2232,14 @@ void MainThreadSchedulerImpl::DidCommitProvisionalLoad(
   }
 }
 
-void MainThreadSchedulerImpl::OnFirstContentfulPaint() {
+void MainThreadSchedulerImpl::OnMainFramePaint() {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
-               "MainThreadSchedulerImpl::OnFirstContentfulPaint");
+               "MainThreadSchedulerImpl::OnMainFramePaint");
   base::AutoLock lock(any_thread_lock_);
-  any_thread().waiting_for_contentful_paint = false;
-  UpdatePolicyLocked(UpdateType::kMayEarlyOutIfPolicyUnchanged);
-}
-
-void MainThreadSchedulerImpl::OnFirstMeaningfulPaint() {
-  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("renderer.scheduler"),
-               "MainThreadSchedulerImpl::OnFirstMeaningfulPaint");
-  base::AutoLock lock(any_thread_lock_);
-  any_thread().waiting_for_meaningful_paint = false;
+  any_thread().waiting_for_any_main_frame_contentful_paint =
+      IsAnyMainFrameWaitingForFirstContentfulPaint();
+  any_thread().waiting_for_any_main_frame_meaningful_paint =
+      IsAnyMainFrameWaitingForFirstMeaningfulPaint();
   UpdatePolicyLocked(UpdateType::kMayEarlyOutIfPolicyUnchanged);
 }
 
@@ -2240,11 +2250,12 @@ void MainThreadSchedulerImpl::ResetForNavigationLocked() {
   any_thread_lock_.AssertAcquired();
   any_thread().user_model.Reset(helper_.NowTicks());
   any_thread().have_seen_a_blocking_gesture = false;
-  any_thread().waiting_for_contentful_paint = true;
-  any_thread().waiting_for_meaningful_paint = true;
+  any_thread().waiting_for_any_main_frame_contentful_paint =
+      IsAnyMainFrameWaitingForFirstContentfulPaint();
+  any_thread().waiting_for_any_main_frame_meaningful_paint =
+      IsAnyMainFrameWaitingForFirstMeaningfulPaint();
   any_thread().have_seen_input_since_navigation = false;
   main_thread_only().idle_time_estimator.Clear();
-  main_thread_only().have_seen_a_begin_main_frame = false;
   main_thread_only().have_reported_blocking_intervention_since_navigation =
       false;
   for (PageSchedulerImpl* page_scheduler : main_thread_only().page_schedulers) {
@@ -2299,9 +2310,11 @@ void MainThreadSchedulerImpl::SetRendererProcessType(
   main_thread_only().process_type = type;
 }
 
-PendingUserInputInfo MainThreadSchedulerImpl::GetPendingUserInputInfo() const {
+Vector<WebInputEventAttribution>
+MainThreadSchedulerImpl::GetPendingUserInputInfo(
+    bool include_continuous) const {
   base::AutoLock lock(any_thread_lock_);
-  return any_thread().pending_input_monitor.Info();
+  return any_thread().pending_input_monitor.Info(include_continuous);
 }
 
 bool MainThreadSchedulerImpl::IsBeginMainFrameScheduled() const {
@@ -2395,6 +2408,11 @@ void MainThreadSchedulerImpl::AddPageScheduler(
     memory_purge_manager_.OnPageCreated(
         page_scheduler->GetPageLifecycleState());
   }
+  base::AutoLock lock(any_thread_lock_);
+  any_thread().waiting_for_any_main_frame_contentful_paint =
+      IsAnyMainFrameWaitingForFirstContentfulPaint();
+  any_thread().waiting_for_any_main_frame_meaningful_paint =
+      IsAnyMainFrameWaitingForFirstMeaningfulPaint();
 }
 
 void MainThreadSchedulerImpl::RemovePageScheduler(
@@ -2406,6 +2424,11 @@ void MainThreadSchedulerImpl::RemovePageScheduler(
     memory_purge_manager_.OnPageDestroyed(
         page_scheduler->GetPageLifecycleState());
   }
+  base::AutoLock lock(any_thread_lock_);
+  any_thread().waiting_for_any_main_frame_contentful_paint =
+      IsAnyMainFrameWaitingForFirstContentfulPaint();
+  any_thread().waiting_for_any_main_frame_meaningful_paint =
+      IsAnyMainFrameWaitingForFirstMeaningfulPaint();
 }
 
 void MainThreadSchedulerImpl::OnPageFrozen() {
@@ -2483,8 +2506,6 @@ void MainThreadSchedulerImpl::OnTaskCompleted(
     task_queue_throttler()->OnTaskRunTimeReported(
         queue.get(), task_timing->start_time(), task_timing->end_time());
   }
-
-  main_thread_only().compositing_experiment.OnTaskCompleted(queue.get());
 
   // TODO(altimin): Per-page metrics should also be considered.
   main_thread_only().metrics_helper.RecordTaskMetrics(queue.get(), task,
@@ -2769,14 +2790,14 @@ MainThreadSchedulerImpl::scheduling_settings() const {
   return scheduling_settings_;
 }
 
-void MainThreadSchedulerImpl::SetShouldPrioritizeCompositing(
-    bool should_prioritize_compositing) {
-  if (main_thread_only().should_prioritize_compositing ==
-      should_prioritize_compositing) {
+void MainThreadSchedulerImpl::SetPrioritizeCompositingAfterInput(
+    bool prioritize_compositing_after_input) {
+  if (main_thread_only().prioritize_compositing_after_input ==
+      prioritize_compositing_after_input) {
     return;
   }
-  main_thread_only().should_prioritize_compositing =
-      should_prioritize_compositing;
+  main_thread_only().prioritize_compositing_after_input =
+      prioritize_compositing_after_input;
   UpdatePolicy();
 }
 

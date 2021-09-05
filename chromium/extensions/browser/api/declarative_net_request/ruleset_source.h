@@ -14,6 +14,7 @@
 #include "base/time/time.h"
 #include "extensions/common/api/declarative_net_request.h"
 #include "extensions/common/api/declarative_net_request/constants.h"
+#include "extensions/common/api/declarative_net_request/dnr_manifest_data.h"
 #include "extensions/common/extension_id.h"
 
 namespace content {
@@ -40,13 +41,12 @@ class ParseInfo;
 struct IndexAndPersistJSONRulesetResult {
  public:
   static IndexAndPersistJSONRulesetResult CreateSuccessResult(
-      int ruleset_id,
       int ruleset_checksum,
       std::vector<InstallWarning> warnings,
       size_t rules_count,
+      size_t regex_rules_count,
       base::TimeDelta index_and_persist_time);
-  static IndexAndPersistJSONRulesetResult CreateErrorResult(int ruleset_id,
-                                                            std::string error);
+  static IndexAndPersistJSONRulesetResult CreateErrorResult(std::string error);
   ~IndexAndPersistJSONRulesetResult();
   IndexAndPersistJSONRulesetResult(IndexAndPersistJSONRulesetResult&&);
   IndexAndPersistJSONRulesetResult& operator=(
@@ -54,9 +54,6 @@ struct IndexAndPersistJSONRulesetResult {
 
   // Whether IndexAndPersistRules succeeded.
   bool success = false;
-
-  // ID for the ruleset.
-  int ruleset_id = kInvalidRulesetID;
 
   // Checksum of the persisted indexed ruleset file. Valid if |success| if true.
   // Note: there's no sane default value for this, any integer value is a valid
@@ -68,6 +65,9 @@ struct IndexAndPersistJSONRulesetResult {
 
   // The number of indexed rules. Valid if |success| is true.
   size_t rules_count = 0;
+
+  // The number of indexed regex rules. Valid if |success| is true.
+  size_t regex_rules_count = 0;
 
   // Time taken to deserialize the JSON rules and persist them in flatbuffer
   // format. Valid if success is true.
@@ -123,21 +123,24 @@ struct ReadJSONRulesResult {
 class RulesetSource {
  public:
   // Creates RulesetSources corresponding to the static rulesets in the
-  // extension package. This must only be called for extensions which specified
-  // a declarative ruleset.
+  // extension package.
   static std::vector<RulesetSource> CreateStatic(const Extension& extension);
+
+  // Creates a static RulesetSource corresponding to |info| for the given
+  // |extension|.
+  static RulesetSource CreateStatic(const Extension& extension,
+                                    const DNRManifestData::RulesetInfo& info);
 
   // Creates RulesetSource corresponding to the dynamic rules added by the
   // extension. This must only be called for extensions which specified a
   // declarative ruleset.
   static RulesetSource CreateDynamic(content::BrowserContext* context,
-                                     const Extension& extension);
+                                     const ExtensionId& extension_id);
 
   // Creates a temporary source i.e. a source corresponding to temporary files.
   // Returns null on failure.
   static std::unique_ptr<RulesetSource> CreateTemporarySource(
-      int id,
-      api::declarative_net_request::SourceType type,
+      RulesetID id,
       size_t rule_count_limit,
       ExtensionId extension_id);
 
@@ -154,16 +157,19 @@ class RulesetSource {
   const base::FilePath& indexed_path() const { return indexed_path_; }
 
   // Each ruleset source within an extension has a distinct ID.
-  int id() const { return id_; }
+  RulesetID id() const { return id_; }
 
-  // The origin type for this ruleset. Can be from the manifest or dynamic.
-  api::declarative_net_request::SourceType type() const { return type_; }
+  bool is_dynamic_ruleset() const { return id_ == kDynamicRulesetID; }
 
   // The maximum number of rules that will be indexed from this source.
   size_t rule_count_limit() const { return rule_count_limit_; }
 
   // The ID of the extension from which the ruleset originates from.
   const ExtensionId& extension_id() const { return extension_id_; }
+
+  // Whether the ruleset is enabled by default (as specified in the extension
+  // manifest for a static ruleset). Always true for a dynamic ruleset.
+  bool enabled_by_default() const { return enabled_by_default_; }
 
   // Indexes and persists the JSON ruleset. This is potentially unsafe since the
   // JSON rules file is parsed in-process. Note: This must be called on a
@@ -181,12 +187,10 @@ class RulesetSource {
       data_decoder::DataDecoder* decoder,
       IndexAndPersistJSONRulesetCallback callback) const;
 
-  // Indexes the given |rules| in indexed/flatbuffer format. Populates
-  // |ruleset_checksum| on success. The number of |rules| must be less than the
-  // rule count limit.
+  // Indexes the given |rules| in indexed/flatbuffer format. The number of
+  // |rules| must be less than the rule count limit.
   ParseInfo IndexAndPersistRules(
-      std::vector<api::declarative_net_request::Rule> rules,
-      int* ruleset_checksum) const;
+      std::vector<api::declarative_net_request::Rule> rules) const;
 
   // Reads JSON rules synchronously. Callers should only use this if the JSON is
   // trusted. Must be called on a sequence which supports file IO.
@@ -199,17 +203,17 @@ class RulesetSource {
  private:
   RulesetSource(base::FilePath json_path,
                 base::FilePath indexed_path,
-                int id,
-                api::declarative_net_request::SourceType type,
+                RulesetID id,
                 size_t rule_count_limit,
-                ExtensionId extension_id);
+                ExtensionId extension_id,
+                bool enabled);
 
   base::FilePath json_path_;
   base::FilePath indexed_path_;
-  int id_;
-  api::declarative_net_request::SourceType type_;
+  RulesetID id_;
   size_t rule_count_limit_;
   ExtensionId extension_id_;
+  bool enabled_by_default_;
 
   DISALLOW_COPY_AND_ASSIGN(RulesetSource);
 };

@@ -28,7 +28,8 @@ SERVICE_MANAGER_SANDBOX_EXPORT extern const char kCdmSandbox[];
 SERVICE_MANAGER_SANDBOX_EXPORT extern const char kPrintCompositorSandbox[];
 SERVICE_MANAGER_SANDBOX_EXPORT extern const char kAudioSandbox[];
 SERVICE_MANAGER_SANDBOX_EXPORT extern const char kSharingServiceSandbox[];
-SERVICE_MANAGER_SANDBOX_EXPORT extern const char kSodaSandbox[];
+SERVICE_MANAGER_SANDBOX_EXPORT extern const char kSpeechRecognitionSandbox[];
+SERVICE_MANAGER_SANDBOX_EXPORT extern const char kVideoCaptureSandbox[];
 
 #if defined(OS_WIN)
 SERVICE_MANAGER_SANDBOX_EXPORT extern const char kPdfConversionSandbox[];
@@ -68,11 +69,14 @@ SERVICE_MANAGER_SANDBOX_EXPORT extern const char kEnableSandboxLogging[];
 
 // Flags spied upon from other layers.
 SERVICE_MANAGER_SANDBOX_EXPORT extern const char kGpuProcess[];
+SERVICE_MANAGER_SANDBOX_EXPORT extern const char kNaClBrokerProcess[];
 SERVICE_MANAGER_SANDBOX_EXPORT extern const char kNaClLoaderProcess[];
 SERVICE_MANAGER_SANDBOX_EXPORT extern const char kPpapiBrokerProcess[];
 SERVICE_MANAGER_SANDBOX_EXPORT extern const char kPpapiPluginProcess[];
 SERVICE_MANAGER_SANDBOX_EXPORT extern const char kRendererProcess[];
 SERVICE_MANAGER_SANDBOX_EXPORT extern const char kUtilityProcess[];
+SERVICE_MANAGER_SANDBOX_EXPORT extern const char kCloudPrintServiceProcess[];
+SERVICE_MANAGER_SANDBOX_EXPORT extern const char kZygoteProcessType[];
 
 }  // namespace switches
 

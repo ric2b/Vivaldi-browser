@@ -145,7 +145,7 @@ could use `Goma`.
 If you are not a Googler and would like to use `Goma`
 [sign up](https://docs.google.com/forms/d/1NKHcyqYqw3c4jftrLPwvyiPlolRm4Hf6ObrB83wHXy8/viewform).
 
-Once you've allowed to use `Goma` service and installed the client,
+Once you're allowed to use `Goma` and have installed the client,
 [set the following GN args](https://www.chromium.org/developers/gn-build-configuration#TOC-Goma):
 
 ```
@@ -183,7 +183,6 @@ it. e.g. Intel, Opera, Samsung (this is not useful if you're using Goma).
 In order to use `icecc`, set the following GN args:
 
 ```
-linux_use_bundled_binutils=false
 use_debug_fission=false
 is_clang=false
 ```

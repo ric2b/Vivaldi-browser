@@ -5,8 +5,8 @@
 #import "ios/chrome/browser/ui/overlays/infobar_modal/infobar_modal_overlay_coordinator.h"
 #import "ios/chrome/browser/ui/overlays/infobar_modal/infobar_modal_overlay_coordinator+modal_configuration.h"
 
-#include "base/logging.h"
 #include "base/mac/foundation_util.h"
+#include "base/notreached.h"
 #import "ios/chrome/browser/ui/infobars/presentation/infobar_modal_positioner.h"
 #import "ios/chrome/browser/ui/infobars/presentation/infobar_modal_transition_driver.h"
 #import "ios/chrome/browser/ui/overlays/infobar_modal/infobar_modal_overlay_mediator.h"
@@ -66,8 +66,19 @@
 #pragma mark - InfobarModalPositioner
 
 - (CGFloat)modalHeightForWidth:(CGFloat)width {
-  CGSize layoutBoundsSize = CGSizeMake(width, CGFLOAT_MAX);
-  return [self.modalViewController.view sizeThatFits:layoutBoundsSize].height +
+  UIView* modalView = self.modalViewController.view;
+  CGSize modalContentSize = CGSizeZero;
+  if (UIScrollView* scrollView = base::mac::ObjCCast<UIScrollView>(modalView)) {
+    CGRect layoutFrame = self.baseViewController.view.bounds;
+    layoutFrame.size.width = width;
+    scrollView.frame = layoutFrame;
+    [scrollView setNeedsLayout];
+    [scrollView layoutIfNeeded];
+    modalContentSize = scrollView.contentSize;
+  } else {
+    modalContentSize = [modalView sizeThatFits:CGSizeMake(width, CGFLOAT_MAX)];
+  }
+  return modalContentSize.height +
          CGRectGetHeight(self.modalNavController.navigationBar.bounds);
 }
 

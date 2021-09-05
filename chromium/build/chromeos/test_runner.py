@@ -109,8 +109,6 @@ class RemoteTest(object):
           '--start',
           # Don't persist any filesystem changes after the VM shutsdown.
           '--copy-on-write',
-          '--device',
-          'localhost'
       ]
     else:
       self._test_cmd += [
@@ -239,6 +237,7 @@ class TastTest(RemoteTest):
     self._suite_name = args.suite_name
     self._tests = args.tests
     self._conditional = args.conditional
+    self._should_strip = args.strip_chrome
 
     if not self._llvm_profile_var and not self._logs_dir:
       # The host-side Tast bin returns 0 when tests fail, so we need to capture
@@ -311,7 +310,8 @@ class TastTest(RemoteTest):
     else:
       # Mounting the browser gives it enough disk space to not need stripping,
       # but only for browsers not instrumented with code coverage.
-      self._test_cmd.append('--nostrip')
+      if not self._should_strip:
+        self._test_cmd.append('--nostrip')
       # Capture tast's results in the logs dir as well.
       if self._logs_dir:
         self._test_cmd += [
@@ -446,6 +446,7 @@ class GTestTest(RemoteTest):
     self._test_launcher_total_shards = args.test_launcher_total_shards
 
     self._on_device_script = None
+    self._env_vars = args.env_var
     self._stop_ui = args.stop_ui
     self._trace_dir = args.trace_dir
 
@@ -496,11 +497,15 @@ class GTestTest(RemoteTest):
       ]
 
     # Build the shell script that will be used on the device to invoke the test.
+    # Stored here as a list of lines.
     device_test_script_contents = self.BASIC_SHELL_SCRIPT[:]
     if self._llvm_profile_var:
       device_test_script_contents += [
           'export LLVM_PROFILE_FILE=%s' % self._llvm_profile_var,
       ]
+
+    for var_name, var_val in self._env_vars:
+      device_test_script_contents += ['export %s=%s' % (var_name, var_val)]
 
     if self._vpython_dir:
       vpython_spec_path = os.path.relpath(
@@ -706,8 +711,6 @@ def host_cmd(args, unknown_args):
         '--start',
         # Don't persist any filesystem changes after the VM shutsdown.
         '--copy-on-write',
-        '--device',
-        'localhost',
     ]
   else:
     cros_run_test_cmd += [
@@ -870,6 +873,14 @@ def main():
       type=str,
       help='When set, will pass down to the test to generate the trace and '
       'retrieve the trace files to the specified location.')
+  gtest_parser.add_argument(
+      '--env-var',
+      nargs=2,
+      action='append',
+      default=[],
+      help='Env var to set on the device for the duration of the test. '
+      'Expected format is "--env-var SOME_VAR_NAME some_var_value". Specify '
+      'multiple times for more than one var.')
 
   # Tast test args.
   # pylint: disable=line-too-long
@@ -898,6 +909,10 @@ def main():
       dest='conditional',
       help='A boolean expression whose matching tests will run '
       '(eg: ("dep:chrome")).')
+  tast_test_parser.add_argument(
+      '--strip-chrome',
+      action='store_true',
+      help='Strips symbols from the browser before deploying to the device.')
   tast_test_parser.add_argument(
       '--test',
       '-t',

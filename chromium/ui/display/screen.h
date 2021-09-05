@@ -5,6 +5,7 @@
 #ifndef UI_DISPLAY_SCREEN_H_
 #define UI_DISPLAY_SCREEN_H_
 
+#include <set>
 #include <vector>
 
 #include "base/macros.h"
@@ -37,9 +38,10 @@ class DISPLAY_EXPORT Screen {
   // Retrieves the single Screen object.
   static Screen* GetScreen();
 
-  // Sets the global screen. NOTE: this does not take ownership of |screen|.
-  // Tests must be sure to reset any state they install.
-  static void SetScreenInstance(Screen* instance);
+  // Sets the global screen. Returns the previously installed screen, if any.
+  // NOTE: this does not take ownership of |screen|. Tests must be sure to reset
+  // any state they install.
+  static Screen* SetScreenInstance(Screen* instance);
 
   // Returns the current absolute position of the mouse pointer.
   virtual gfx::Point GetCursorScreenPoint() = 0;
@@ -49,6 +51,14 @@ class DISPLAY_EXPORT Screen {
 
   // Returns the window at the given screen coordinate |point|.
   virtual gfx::NativeWindow GetWindowAtScreenPoint(const gfx::Point& point) = 0;
+
+  // Finds the topmost visible chrome window at |screen_point|. This should
+  // return nullptr if |screen_point| is in another program's window which
+  // occludes the topmost chrome window. Ignores the windows in |ignore|, which
+  // contain windows such as the tab being dragged right now.
+  virtual gfx::NativeWindow GetLocalProcessWindowAtPoint(
+      const gfx::Point& point,
+      const std::set<gfx::NativeWindow>& ignore) = 0;
 
   // Returns the number of displays.
   // Mirrored displays are excluded; this method is intended to return the
@@ -90,16 +100,18 @@ class DISPLAY_EXPORT Screen {
   virtual void AddObserver(DisplayObserver* observer) = 0;
   virtual void RemoveObserver(DisplayObserver* observer) = 0;
 
-  // Converts |screen_rect| to DIP coordinates in the context of |view| clamping
-  // to the enclosing rect if the coordinates do not fall on pixel boundaries.
-  // If |view| is null, the primary display is used as the context.
-  virtual gfx::Rect ScreenToDIPRectInWindow(gfx::NativeView view,
+  // Converts |screen_rect| to DIP coordinates in the context of |window|
+  // clamping to the enclosing rect if the coordinates do not fall on pixel
+  // boundaries. If |window| is null, the primary display is used as the
+  // context.
+  virtual gfx::Rect ScreenToDIPRectInWindow(gfx::NativeWindow window,
                                             const gfx::Rect& screen_rect) const;
 
-  // Converts |dip_rect| to screen coordinates in the context of |view| clamping
-  // to the enclosing rect if the coordinates do not fall on pixel boundaries.
-  // If |view| is null, the primary display is used as the context.
-  virtual gfx::Rect DIPToScreenRectInWindow(gfx::NativeView view,
+  // Converts |dip_rect| to screen coordinates in the context of |window|
+  // clamping to the enclosing rect if the coordinates do not fall on pixel
+  // boundaries. If |window| is null, the primary display is used as the
+  // context.
+  virtual gfx::Rect DIPToScreenRectInWindow(gfx::NativeWindow window,
                                             const gfx::Rect& dip_rect) const;
 
   // Returns true if the display with |display_id| is found and returns that

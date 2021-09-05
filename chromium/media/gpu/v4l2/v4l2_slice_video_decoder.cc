@@ -425,13 +425,12 @@ void V4L2SliceVideoDecoder::ChangeResolution(gfx::Size pic_size,
   client_->PrepareChangeResolution();
 }
 
-void V4L2SliceVideoDecoder::OnPipelineFlushed() {
+void V4L2SliceVideoDecoder::ApplyResolutionChange() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(decoder_sequence_checker_);
   DVLOGF(3);
   DCHECK(continue_change_resolution_cb_);
 
-  decoder_task_runner_->PostTask(FROM_HERE,
-                                 std::move(continue_change_resolution_cb_));
+  std::move(continue_change_resolution_cb_).Run();
 }
 
 void V4L2SliceVideoDecoder::ContinueChangeResolution(

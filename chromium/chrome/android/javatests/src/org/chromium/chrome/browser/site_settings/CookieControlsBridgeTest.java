@@ -22,15 +22,18 @@ import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
+import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
+import org.chromium.components.browser_ui.site_settings.WebsitePreferenceBridge;
 import org.chromium.components.content_settings.ContentSettingsFeatureList;
 import org.chromium.components.content_settings.ContentSettingsType;
 import org.chromium.components.content_settings.CookieControlsEnforcement;
 import org.chromium.components.content_settings.CookieControlsMode;
-import org.chromium.components.page_info.CookieControlsStatus;
+import org.chromium.components.content_settings.CookieControlsObserver;
+import org.chromium.components.content_settings.CookieControlsStatus;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.EmbeddedTestServer;
@@ -42,7 +45,7 @@ import org.chromium.net.test.EmbeddedTestServer;
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 @EnableFeatures(ContentSettingsFeatureList.IMPROVED_COOKIE_CONTROLS)
 public class CookieControlsBridgeTest {
-    private class TestCallbackHandler implements CookieControlsBridge.CookieControlsObserver {
+    private class TestCallbackHandler implements CookieControlsObserver {
         private CallbackHelper mHelper;
 
         public TestCallbackHandler(CallbackHelper helper) {
@@ -130,9 +133,8 @@ public class CookieControlsBridgeTest {
     @RetryOnFailure
     public void testCookieBridgeWith3PCookiesEnabled() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            // Set CookieControlsMode Pref to On
             PrefServiceBridge.getInstance().setInteger(
-                    Pref.COOKIE_CONTROLS_MODE, CookieControlsMode.ON);
+                    Pref.COOKIE_CONTROLS_MODE, CookieControlsMode.BLOCK_THIRD_PARTY);
         });
         int currentCallCount = mCallbackHelper.getCallCount();
 
@@ -161,11 +163,11 @@ public class CookieControlsBridgeTest {
     @RetryOnFailure
     public void testCookieBridgeWithChangingBlockedCookiesCount() throws Exception {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            // Set CookieControlsMode Pref to On
             PrefServiceBridge.getInstance().setInteger(
-                    Pref.COOKIE_CONTROLS_MODE, CookieControlsMode.ON);
+                    Pref.COOKIE_CONTROLS_MODE, CookieControlsMode.BLOCK_THIRD_PARTY);
             // Block all cookies
-            WebsitePreferenceBridge.setCategoryEnabled(ContentSettingsType.COOKIES, false);
+            WebsitePreferenceBridge.setCategoryEnabled(
+                    Profile.getLastUsedRegularProfile(), ContentSettingsType.COOKIES, false);
         });
         int currentCallCount = mCallbackHelper.getCallCount();
 

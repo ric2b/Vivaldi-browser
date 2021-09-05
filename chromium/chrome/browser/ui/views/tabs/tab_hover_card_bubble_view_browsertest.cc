@@ -19,63 +19,14 @@
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "content/public/test/browser_test.h"
 #include "ui/gfx/animation/animation_test_api.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/test/widget_test.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
 
 using views::Widget;
-
-// Helper to wait until a window is deactivated.
-class WindowDeactivedWaiter : public views::WidgetObserver {
- public:
-  explicit WindowDeactivedWaiter(BrowserView* window) : window_(window) {
-    window_->frame()->AddObserver(this);
-  }
-  ~WindowDeactivedWaiter() override { window_->frame()->RemoveObserver(this); }
-
-  void Wait() {
-    if (!window_->IsActive())
-      return;
-    run_loop_.Run();
-  }
-
-  // WidgetObserver overrides:
-  void OnWidgetActivationChanged(Widget* widget, bool active) override {
-    if (!active)
-      run_loop_.Quit();
-  }
-
- private:
-  BrowserView* const window_;
-  base::RunLoop run_loop_;
-};
-
-// Helper to wait until the hover card widget is visible.
-class HoverCardVisibleWaiter : public views::WidgetObserver {
- public:
-  explicit HoverCardVisibleWaiter(Widget* hover_card)
-      : hover_card_(hover_card) {
-    hover_card_->AddObserver(this);
-  }
-  ~HoverCardVisibleWaiter() override { hover_card_->RemoveObserver(this); }
-
-  void Wait() {
-    if (hover_card_->IsVisible())
-      return;
-    run_loop_.Run();
-  }
-
-  // WidgetObserver overrides:
-  void OnWidgetVisibilityChanged(Widget* widget, bool visible) override {
-    if (visible)
-      run_loop_.Quit();
-  }
-
- private:
-  Widget* const hover_card_;
-  base::RunLoop run_loop_;
-};
 
 class TabHoverCardBubbleViewBrowserTest : public DialogBrowserTest {
  public:
@@ -130,8 +81,7 @@ class TabHoverCardBubbleViewBrowserTest : public DialogBrowserTest {
   // DialogBrowserTest:
   void ShowUi(const std::string& name) override {
     HoverMouseOverTabAt(0);
-    HoverCardVisibleWaiter waiter(hover_card()->GetWidget());
-    waiter.Wait();
+    views::test::WidgetVisibleWaiter(hover_card()->GetWidget()).Wait();
   }
 
  private:
@@ -181,9 +131,8 @@ IN_PROC_BROWSER_TEST_F(TabHoverCardBubbleViewBrowserTest,
   Tab* const tab = tab_strip()->tab_at(0);
   tab_strip()->GetFocusManager()->SetFocusedView(tab);
   Widget* const widget = hover_card()->GetWidget();
-  HoverCardVisibleWaiter waiter(widget);
-  waiter.Wait();
   ASSERT_NE(nullptr, widget);
+  views::test::WidgetVisibleWaiter(widget).Wait();
   EXPECT_TRUE(widget->IsVisible());
 }
 
@@ -202,13 +151,11 @@ IN_PROC_BROWSER_TEST_F(TabHoverCardBubbleViewBrowserTest,
   Tab* const tab = tab_strip()->tab_at(0);
   tab_strip()->GetFocusManager()->SetFocusedView(tab);
   Widget* const widget = hover_card()->GetWidget();
-  HoverCardVisibleWaiter waiter(widget);
-  waiter.Wait();
   ASSERT_NE(nullptr, widget);
+  views::test::WidgetVisibleWaiter(widget).Wait();
   EXPECT_TRUE(widget->IsVisible());
   tab_strip()->GetFocusManager()->SetFocusedView(tab->close_button_);
-  waiter.Wait();
-  ASSERT_NE(nullptr, widget);
+  views::test::WidgetVisibleWaiter(widget).Wait();
   EXPECT_TRUE(widget->IsVisible());
 }
 
@@ -218,9 +165,8 @@ IN_PROC_BROWSER_TEST_F(TabHoverCardBubbleViewBrowserTest,
   Tab* const tab = tab_strip()->tab_at(0);
   tab_strip()->GetFocusManager()->SetFocusedView(tab);
   Widget* const widget = hover_card()->GetWidget();
-  HoverCardVisibleWaiter waiter(widget);
-  waiter.Wait();
   ASSERT_NE(nullptr, widget);
+  views::test::WidgetVisibleWaiter(widget).Wait();
   EXPECT_TRUE(widget->IsVisible());
 
   ui::KeyEvent key_event(ui::ET_KEY_PRESSED, ui::VKEY_SPACE, 0);
@@ -235,9 +181,8 @@ IN_PROC_BROWSER_TEST_F(TabHoverCardBubbleViewBrowserTest,
   Tab* const tab = tab_strip()->tab_at(0);
   tab_strip()->GetFocusManager()->SetFocusedView(tab);
   Widget* const widget = hover_card()->GetWidget();
-  HoverCardVisibleWaiter waiter(widget);
-  waiter.Wait();
   ASSERT_NE(nullptr, widget);
+  views::test::WidgetVisibleWaiter(widget).Wait();
   EXPECT_TRUE(widget->IsVisible());
 
   ClickMouseOnTab(0);
@@ -267,15 +212,13 @@ IN_PROC_BROWSER_TEST_F(TabHoverCardBubbleViewBrowserTest,
     browser()->command_controller()->ExecuteCommand(IDC_FOCUS_NEXT_PANE);
 
   Widget* const widget = hover_card()->GetWidget();
-  HoverCardVisibleWaiter waiter(widget);
-  waiter.Wait();
   ASSERT_NE(nullptr, widget);
+  views::test::WidgetVisibleWaiter(widget).Wait();
   EXPECT_TRUE(widget->IsVisible());
 
   // Move focus forward to the close button or next tab dependent on window
   // size.
   tab_strip()->AcceleratorPressed(ui::Accelerator(ui::VKEY_RIGHT, ui::EF_NONE));
-  ASSERT_NE(nullptr, widget);
   EXPECT_TRUE(widget->IsVisible());
 }
 
@@ -351,8 +294,8 @@ IN_PROC_BROWSER_TEST_F(TabHoverCardBubbleViewBrowserTest,
   ASSERT_EQ(2u, active_browser_list_->size());
   Browser* active_window = active_browser_list_->get(0);
   Browser* inactive_window = active_browser_list_->get(1);
-  WindowDeactivedWaiter waiter(
-      BrowserView::GetBrowserViewForBrowser(inactive_window));
+  views::test::WidgetActivationWaiter waiter(
+      BrowserView::GetBrowserViewForBrowser(inactive_window)->frame(), false);
   BrowserView::GetBrowserViewForBrowser(active_window)->Activate();
   waiter.Wait();
   ASSERT_FALSE(
@@ -378,16 +321,14 @@ IN_PROC_BROWSER_TEST_F(TabHoverCardBubbleViewBrowserTest,
   HoverMouseOverTabAt(0);
 
   Widget* const widget = hover_card()->GetWidget();
-  HoverCardVisibleWaiter waiter(widget);
-  waiter.Wait();
+  ASSERT_NE(nullptr, widget);
+  views::test::WidgetVisibleWaiter(widget).Wait();
 
   EXPECT_EQ(GetHoverCardsSeenCount(), 1);
-  ASSERT_NE(nullptr, widget);
   EXPECT_TRUE(widget->IsVisible());
 
   HoverMouseOverTabAt(1);
   EXPECT_EQ(GetHoverCardsSeenCount(), 2);
-  ASSERT_NE(nullptr, widget);
   EXPECT_TRUE(widget->IsVisible());
 
   ui::ListSelectionModel selection;

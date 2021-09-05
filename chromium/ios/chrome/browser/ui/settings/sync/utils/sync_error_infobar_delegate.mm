@@ -8,13 +8,14 @@
 
 #include <utility>
 
-#include "base/logging.h"
+#include "base/check.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/infobars/core/infobar.h"
 #include "components/infobars/core/infobar_delegate.h"
 #include "components/infobars/core/infobar_manager.h"
 #include "components/sync/driver/sync_service.h"
+#include "components/sync/driver/sync_service_utils.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/sync/profile_sync_service_factory.h"
 #include "ios/chrome/browser/sync/sync_setup_service.h"
@@ -96,6 +97,9 @@ bool SyncErrorInfoBarDelegate::Accept() {
     [presenter_ showGoogleServicesSettings];
   } else if (ShouldShowSyncPassphraseSettings(error_state_)) {
     [presenter_ showSyncPassphraseSettings];
+  } else if (ShouldShowTrustedVaultReauthentication(error_state_)) {
+    [presenter_ showTrustedVaultReauthenticationWithRetrievalTrigger:
+                    syncer::KeyRetrievalTriggerForUMA::kNewTabPageInfobar];
   }
   return false;
 }

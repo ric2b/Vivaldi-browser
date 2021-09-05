@@ -14,9 +14,11 @@
 namespace {
 
 size_t GetFaviconCacheSize() {
-  // Set cache size to twice the number of maximum results to avoid favicon
-  // refetches as the user types. Favicon fetches are uncached and can hit disk.
-  return 2 * AutocompleteResult::GetMaxMatches();
+  // Set cache size to twice the number of maximum results in either the
+  // on-focus or prefix-suggest mode to avoid favicon refetches as the user
+  // types. Favicon fetches are uncached and can hit disk.
+  return 2 * std::max(AutocompleteResult::GetMaxMatches(),
+                      AutocompleteResult::GetMaxMatches(true));
 }
 
 }  // namespace

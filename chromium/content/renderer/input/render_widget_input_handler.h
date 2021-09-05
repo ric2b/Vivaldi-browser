@@ -9,13 +9,14 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "base/time/time.h"
-#include "content/common/cursors/webcursor.h"
-#include "content/common/input/input_event_ack.h"
 #include "content/common/input/input_event_dispatch_type.h"
 #include "content/renderer/input/main_thread_event_queue.h"
-#include "third_party/blink/public/platform/web_coalesced_input_event.h"
+#include "third_party/blink/public/common/input/web_coalesced_input_event.h"
+#include "third_party/blink/public/common/input/web_gesture_event.h"
 #include "third_party/blink/public/web/web_hit_test_result.h"
+#include "ui/base/cursor/cursor.h"
 #include "ui/base/ui_base_types.h"
 #include "ui/events/blink/did_overscroll_params.h"
 #include "ui/events/types/scroll_types.h"
@@ -55,7 +56,6 @@ class CONTENT_EXPORT RenderWidgetInputHandler {
   // Handle input events from the input event provider.
   virtual void HandleInputEvent(
       const blink::WebCoalescedInputEvent& coalesced_event,
-      const ui::LatencyInfo& latency_info,
       HandledEventCallback callback);
 
   // Handle overscroll from Blink.
@@ -82,7 +82,7 @@ class CONTENT_EXPORT RenderWidgetInputHandler {
 
   // Process the new cursor and returns true if it has changed from the last
   // cursor.
-  bool DidChangeCursor(const WebCursor& cursor);
+  bool DidChangeCursor(const ui::Cursor& cursor);
 
   // Do a hit test for a given point in viewport coordinate.
   blink::WebHitTestResult GetHitTestResultAtPoint(const gfx::PointF& point);
@@ -118,7 +118,7 @@ class CONTENT_EXPORT RenderWidgetInputHandler {
 
   // We store the current cursor object so we can avoid spamming SetCursor
   // messages.
-  base::Optional<WebCursor> current_cursor_;
+  base::Optional<ui::Cursor> current_cursor_;
 
   // Indicates if the next sequence of Char events should be suppressed or not.
   bool suppress_next_char_events_ = false;

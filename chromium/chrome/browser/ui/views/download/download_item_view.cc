@@ -31,6 +31,7 @@
 #include "chrome/browser/download/download_item_model.h"
 #include "chrome/browser/download/download_stats.h"
 #include "chrome/browser/download/drag_download_item.h"
+#include "chrome/browser/enterprise/connectors/connectors_manager.h"
 #include "chrome/browser/icon_loader.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager.h"
@@ -736,7 +737,7 @@ void DownloadItemView::ButtonPressed(views::Button* sender,
       content::WebContents* current_web_contents =
           shelf_->browser()->tab_strip_model()->GetActiveWebContents();
       safe_browsing::PromptForScanningModalDialog::ShowForWebContents(
-          current_web_contents,
+          current_web_contents, ElidedFilename(),
           base::BindOnce(&DownloadItemView::ConfirmDeepScanning,
                          weak_ptr_factory_.GetWeakPtr()),
           base::BindOnce(&DownloadItemView::BypassDeepScanning,
@@ -913,13 +914,14 @@ bool DownloadItemView::SubmitDownloadToFeedbackService(
 void DownloadItemView::LoadIcon() {
   IconManager* im = g_browser_process->icon_manager();
   last_download_item_path_ = model_->GetTargetFilePath();
-  im->LoadIcon(last_download_item_path_, IconLoader::SMALL,
-               base::Bind(&DownloadItemView::OnExtractIconComplete,
-                          base::Unretained(this), IconLoader::IconSize::SMALL),
-               &cancelable_task_tracker_);
+  im->LoadIcon(
+      last_download_item_path_, IconLoader::SMALL,
+      base::BindOnce(&DownloadItemView::OnExtractIconComplete,
+                     base::Unretained(this), IconLoader::IconSize::SMALL),
+      &cancelable_task_tracker_);
   im->LoadIcon(last_download_item_path_, IconLoader::NORMAL,
-               base::Bind(&DownloadItemView::OnExtractIconComplete,
-                          base::Unretained(this), IconLoader::NORMAL),
+               base::BindOnce(&DownloadItemView::OnExtractIconComplete,
+                              base::Unretained(this), IconLoader::NORMAL),
                &cancelable_task_tracker_);
 }
 
@@ -1306,16 +1308,15 @@ void DownloadItemView::ShowDeepScanningDialog() {
           },
           base::Unretained(this))));
 
-  int delay_delivery = g_browser_process->local_state()->GetInteger(
-      prefs::kDelayDeliveryUntilVerdict);
-  if (delay_delivery != safe_browsing::DELAY_DOWNLOADS &&
-      delay_delivery != safe_browsing::DELAY_UPLOADS_AND_DOWNLOADS) {
+  if (enterprise_connectors::ConnectorsManager::GetInstance()
+          ->DelayUntilVerdict(
+              enterprise_connectors::AnalysisConnector::FILE_DOWNLOADED)) {
+    open_button_->SetEnabled(false);
+  } else {
     auto open_now_button = views::MdTextButton::Create(
         this, l10n_util::GetStringUTF16(IDS_OPEN_DOWNLOAD_NOW));
     open_now_button_ = AddChildView(std::move(open_now_button));
     open_button_->SetEnabled(true);
-  } else {
-    open_button_->SetEnabled(false);
   }
 
   file_name_label_->SetVisible(false);

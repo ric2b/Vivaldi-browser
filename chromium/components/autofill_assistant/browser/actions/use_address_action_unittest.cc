@@ -129,6 +129,14 @@ TEST_F(UseAddressActionTest, NoSelectedAddress) {
             ProcessAction(action_proto));
 }
 
+TEST_F(UseAddressActionTest, InvalidActionSkipAutofillWithoutRequiredFields) {
+  ActionProto action;
+  UseAddressProto* use_address = action.mutable_use_address();
+  use_address->set_name(kAddressName);
+  use_address->set_skip_autofill(true);
+  EXPECT_EQ(ProcessedActionStatusProto::INVALID_ACTION, ProcessAction(action));
+}
+
 TEST_F(UseAddressActionTest, PreconditionFailedPopulatesUnexpectedErrorInfo) {
   InSequence seq;
 
@@ -243,7 +251,7 @@ TEST_F(UseAddressActionTest, FallbackFails) {
               OnSetFieldValue(Eq(Selector({"#first_name"})), kFirstName, _))
       .WillOnce(RunOnceCallback<2>(ClientStatus(OTHER_ACTION_STATUS)));
 
-  EXPECT_EQ(ProcessedActionStatusProto::MANUAL_FALLBACK,
+  EXPECT_EQ(ProcessedActionStatusProto::AUTOFILL_INCOMPLETE,
             ProcessAction(action_proto));
 }
 
@@ -427,6 +435,45 @@ TEST_F(UseAddressActionTest, ForcedFallbackWithKeystrokes) {
 
   EXPECT_EQ(ProcessedActionStatusProto::ACTION_APPLIED,
             ProcessAction(action_proto));
+}
+
+TEST_F(UseAddressActionTest, SkippingAutofill) {
+  ON_CALL(mock_action_delegate_, GetElementTag(_, _))
+      .WillByDefault(RunOnceCallback<1>(OkClientStatus(), "INPUT"));
+
+  ActionProto action_proto;
+  action_proto.mutable_use_address()->set_name(kAddressName);
+  AddRequiredField(&action_proto,
+                   base::NumberToString(
+                       static_cast<int>(autofill::ServerFieldType::NAME_FIRST)),
+                   "#first_name");
+  action_proto.mutable_use_address()->set_skip_autofill(true);
+
+  EXPECT_CALL(mock_action_delegate_, OnFillAddressForm(_, _, _)).Times(0);
+
+  // First validation fails.
+  EXPECT_CALL(mock_web_controller_,
+              OnGetFieldValue(Selector({"#first_name"}), _))
+      .WillOnce(RunOnceCallback<1>(OkClientStatus(), ""));
+  // Fill first name.
+  Expectation set_first_name =
+      EXPECT_CALL(mock_action_delegate_,
+                  OnSetFieldValue(Selector({"#first_name"}), kFirstName, _))
+          .WillOnce(RunOnceCallback<2>(OkClientStatus()));
+  // Second validation succeeds.
+  EXPECT_CALL(mock_web_controller_,
+              OnGetFieldValue(Selector({"#first_name"}), _))
+      .After(set_first_name)
+      .WillOnce(RunOnceCallback<1>(OkClientStatus(), "not empty"));
+
+  ProcessedActionProto processed_action;
+  EXPECT_CALL(callback_, Run(_)).WillOnce(SaveArgPointee<0>(&processed_action));
+
+  UseAddressAction action(&mock_action_delegate_, action_proto);
+  action.ProcessAction(callback_.Get());
+
+  EXPECT_EQ(processed_action.status(),
+            ProcessedActionStatusProto::ACTION_APPLIED);
 }
 
 }  // namespace

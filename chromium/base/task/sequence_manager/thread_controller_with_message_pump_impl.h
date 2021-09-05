@@ -100,7 +100,7 @@ class BASE_EXPORT ThreadControllerWithMessagePumpImpl
 
   // Returns the delay till the next task. If there's no delay TimeDelta::Max()
   // will be returned.
-  TimeDelta DoWorkImpl(LazyNow* continuation_lazy_now, bool* ran_task);
+  TimeDelta DoWorkImpl(LazyNow* continuation_lazy_now);
 
   void InitializeThreadTaskRunnerHandle()
       EXCLUSIVE_LOCKS_REQUIRED(task_runner_lock_);
@@ -187,6 +187,11 @@ class BASE_EXPORT ThreadControllerWithMessagePumpImpl
 };
 
 }  // namespace internal
+
+// Initialize ThreadController features. Called after FeatureList is available
+// when the process is still single-threaded.
+BASE_EXPORT void PostFieldTrialInitialization();
+
 }  // namespace sequence_manager
 }  // namespace base
 

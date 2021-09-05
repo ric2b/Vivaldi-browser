@@ -289,6 +289,7 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItemImpl
   bool CanShowInFolder() override;
   bool CanOpenDownload() override;
   bool ShouldOpenFileBasedOnExtension() override;
+  bool ShouldOpenFileByPolicyBasedOnExtension() override;
   bool GetOpenWhenComplete() const override;
   bool GetAutoOpened() override;
   bool GetOpened() const override;
@@ -836,9 +837,6 @@ class COMPONENTS_DOWNLOAD_EXPORT DownloadItemImpl
 
   // UKM ID for reporting, default to 0 if uninitialized.
   uint64_t ukm_download_id_ = 0;
-
-  // Whether download has been resumed.
-  bool has_resumed_ = false;
 
   // The MixedContentStatus if determined.
   MixedContentStatus mixed_content_status_ = MixedContentStatus::UNKNOWN;

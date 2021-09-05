@@ -9,7 +9,6 @@
 #include "base/strings/pattern.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
-#include "components/version_info/version_info.h"
 #include "extensions/common/api/declarative_net_request.h"
 #include "extensions/common/api/declarative_net_request/constants.h"
 #include "extensions/common/api/declarative_net_request/dnr_manifest_data.h"
@@ -17,7 +16,6 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/error_utils.h"
 #include "extensions/common/extension.h"
-#include "extensions/common/features/feature_channel.h"
 #include "extensions/common/file_util.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/value_builder.h"
@@ -32,10 +30,6 @@ namespace dnr_api = api::declarative_net_request;
 namespace declarative_net_request {
 namespace {
 
-constexpr char kJSONRulesFilename[] = "rules_file.json";
-const base::FilePath::CharType kJSONRulesetFilepath[] =
-    FILE_PATH_LITERAL("rules_file.json");
-
 std::string GetRuleResourcesKey() {
   return base::JoinString(
       {keys::kDeclarativeNetRequestKey, keys::kDeclarativeRuleResourcesKey},
@@ -45,7 +39,7 @@ std::string GetRuleResourcesKey() {
 // Fixture testing the kDeclarativeNetRequestKey manifest key.
 class DNRManifestTest : public testing::Test {
  public:
-  DNRManifestTest() : channel_(::version_info::Channel::UNKNOWN) {}
+  DNRManifestTest() = default;
 
  protected:
   // Loads the extension and verifies the |expected_error|.
@@ -58,32 +52,44 @@ class DNRManifestTest : public testing::Test {
   }
 
   // Loads the extension and verifies that the manifest info is correctly set
-  // up.. Returns the loaded extension.
-  void LoadAndExpectSuccess(const std::vector<base::FilePath>& expected_paths) {
+  // up.
+  void LoadAndExpectSuccess(const std::vector<TestRulesetInfo>& info) {
     std::string error;
     scoped_refptr<Extension> extension = file_util::LoadExtension(
         temp_dir_.GetPath(), Manifest::UNPACKED, Extension::NO_FLAGS, &error);
     ASSERT_TRUE(extension) << error;
     EXPECT_TRUE(error.empty());
 
-    ASSERT_TRUE(DNRManifestData::HasRuleset(*extension));
-
     const std::vector<DNRManifestData::RulesetInfo>& rulesets =
         DNRManifestData::GetRulesets(*extension);
-    ASSERT_EQ(expected_paths.size(), rulesets.size());
+    ASSERT_EQ(info.size(), rulesets.size());
     for (size_t i = 0; i < rulesets.size(); ++i) {
-      EXPECT_GE(rulesets[i].id, kMinValidStaticRulesetID);
-      EXPECT_EQ(rulesets[i].relative_path, expected_paths[i]);
+      EXPECT_EQ(RulesetID(i + kMinValidStaticRulesetID.value()),
+                rulesets[i].id);
+
+      EXPECT_EQ(info[i].manifest_id, rulesets[i].manifest_id);
+
+      // Compare normalized FilePaths instead of their string representations
+      // since different platforms represent path separators differently.
+      EXPECT_EQ(base::FilePath()
+                    .AppendASCII(info[i].relative_file_path)
+                    .NormalizePathSeparators(),
+                rulesets[i].relative_path);
+
+      EXPECT_EQ(info[i].enabled, rulesets[i].enabled);
+
+      EXPECT_EQ(&rulesets[i],
+                &DNRManifestData::GetRuleset(*extension, rulesets[i].id));
     }
   }
 
-  void WriteManifestAndRuleset(
-      const base::Value& manifest,
-      const std::vector<base::FilePath>& ruleset_paths) {
+  void WriteManifestAndRuleset(const base::Value& manifest,
+                               const std::vector<TestRulesetInfo>& info) {
     EXPECT_TRUE(temp_dir_.CreateUniqueTempDir());
 
-    for (const auto& path : ruleset_paths) {
-      base::FilePath rules_path = temp_dir_.GetPath().Append(path);
+    for (const auto& ruleset : info) {
+      base::FilePath rules_path =
+          temp_dir_.GetPath().AppendASCII(ruleset.relative_file_path);
 
       // Create parent directory of |rules_path| if it doesn't exist.
       EXPECT_TRUE(base::CreateDirectory(rules_path.DirName()));
@@ -97,112 +103,81 @@ class DNRManifestTest : public testing::Test {
         .Serialize(manifest);
   }
 
+  TestRulesetInfo CreateDefaultRuleset() {
+    return TestRulesetInfo("id", "rules_file.json", base::ListValue());
+  }
+
  private:
   base::ScopedTempDir temp_dir_;
-  ScopedCurrentChannel channel_;
 
   DISALLOW_COPY_AND_ASSIGN(DNRManifestTest);
 };
 
 TEST_F(DNRManifestTest, EmptyRuleset) {
-  base::FilePath ruleset_path = base::FilePath(kJSONRulesetFilepath);
-  WriteManifestAndRuleset(*CreateManifest(kJSONRulesFilename), {ruleset_path});
-
-  LoadAndExpectSuccess({ruleset_path});
+  std::vector<TestRulesetInfo> rulesets({CreateDefaultRuleset()});
+  WriteManifestAndRuleset(*CreateManifest(rulesets), rulesets);
+  LoadAndExpectSuccess(rulesets);
 }
 
 TEST_F(DNRManifestTest, InvalidManifestKey) {
-  std::unique_ptr<base::DictionaryValue> manifest =
-      CreateManifest(kJSONRulesFilename);
+  std::vector<TestRulesetInfo> rulesets({CreateDefaultRuleset()});
+  std::unique_ptr<base::DictionaryValue> manifest = CreateManifest(rulesets);
   manifest->SetInteger(keys::kDeclarativeNetRequestKey, 3);
-  WriteManifestAndRuleset(*manifest, {base::FilePath(kJSONRulesetFilepath)});
+
+  WriteManifestAndRuleset(*manifest, rulesets);
   LoadAndExpectError(
       ErrorUtils::FormatErrorMessage(errors::kInvalidDeclarativeNetRequestKey,
                                      keys::kDeclarativeNetRequestKey));
 }
 
 TEST_F(DNRManifestTest, InvalidRulesFileKey) {
-  std::unique_ptr<base::DictionaryValue> manifest =
-      CreateManifest(kJSONRulesFilename);
+  std::vector<TestRulesetInfo> rulesets({CreateDefaultRuleset()});
+  std::unique_ptr<base::DictionaryValue> manifest = CreateManifest(rulesets);
   manifest->SetInteger(GetRuleResourcesKey(), 3);
-  WriteManifestAndRuleset(*manifest, {base::FilePath(kJSONRulesetFilepath)});
+
+  WriteManifestAndRuleset(*manifest, rulesets);
   LoadAndExpectError(ErrorUtils::FormatErrorMessage(
       errors::kInvalidDeclarativeRulesFileKey, keys::kDeclarativeNetRequestKey,
       keys::kDeclarativeRuleResourcesKey));
 }
 
+TEST_F(DNRManifestTest, ZeroRulesets) {
+  std::vector<TestRulesetInfo> no_rulesets;
+  WriteManifestAndRuleset(*CreateManifest(no_rulesets), no_rulesets);
+  LoadAndExpectSuccess(no_rulesets);
+}
+
 TEST_F(DNRManifestTest, MultipleRulesFileSuccess) {
-  std::unique_ptr<base::DictionaryValue> manifest =
-      CreateManifest(kJSONRulesFilename);
+  TestRulesetInfo ruleset_1("1", "file1.json", base::ListValue(),
+                            true /* enabled */);
+  TestRulesetInfo ruleset_2("2", "file2.json", base::ListValue(),
+                            false /* enabled */);
+  TestRulesetInfo ruleset_3("3", "file3.json", base::ListValue(),
+                            true /* enabled */);
 
-  ListBuilder rule_resources;
-
-  base::FilePath path1(FILE_PATH_LITERAL("file1.json"));
-  dnr_api::Ruleset ruleset;
-  ruleset.path = path1.AsUTF8Unsafe();
-  rule_resources.Append(ruleset.ToValue());
-
-  base::FilePath path2(FILE_PATH_LITERAL("file2.json"));
-  ruleset.path = path2.AsUTF8Unsafe();
-  rule_resources.Append(ruleset.ToValue());
-
-  base::FilePath path3(FILE_PATH_LITERAL("file3.json"));
-  ruleset.path = path3.AsUTF8Unsafe();
-  rule_resources.Append(ruleset.ToValue());
-
-  manifest->SetList(GetRuleResourcesKey(), rule_resources.Build());
-
-  std::vector<base::FilePath> paths = {path1, path2, path3};
-  WriteManifestAndRuleset(*manifest, paths);
-
-  LoadAndExpectSuccess(paths);
+  std::vector<TestRulesetInfo> rulesets = {ruleset_1, ruleset_2, ruleset_3};
+  WriteManifestAndRuleset(*CreateManifest(rulesets), rulesets);
+  LoadAndExpectSuccess(rulesets);
 }
 
 TEST_F(DNRManifestTest, MultipleRulesFileInvalidPath) {
-  std::unique_ptr<base::DictionaryValue> manifest =
-      CreateManifest(kJSONRulesFilename);
+  TestRulesetInfo ruleset_1("1", "file1.json", base::ListValue());
+  TestRulesetInfo ruleset_2("2", "file2.json", base::ListValue());
 
-  ListBuilder rule_resources;
-
-  base::FilePath path1(FILE_PATH_LITERAL("file1.json"));
-  dnr_api::Ruleset ruleset;
-  ruleset.path = path1.AsUTF8Unsafe();
-  rule_resources.Append(ruleset.ToValue());
-
-  base::FilePath path2(FILE_PATH_LITERAL("file2.json"));
-  ruleset.path = path2.AsUTF8Unsafe();
-  rule_resources.Append(ruleset.ToValue());
-
-  manifest->SetList(GetRuleResourcesKey(), rule_resources.Build());
-
-  // Only persist |path1|.
-  WriteManifestAndRuleset(*manifest, {path1});
+  // Only persist |ruleset_1| on disk but include both in the manifest.
+  WriteManifestAndRuleset(*CreateManifest({ruleset_1, ruleset_2}), {ruleset_1});
 
   LoadAndExpectError(ErrorUtils::FormatErrorMessage(
       errors::kRulesFileIsInvalid, keys::kDeclarativeNetRequestKey,
-      keys::kDeclarativeRuleResourcesKey, path2.AsUTF8Unsafe()));
+      keys::kDeclarativeRuleResourcesKey, ruleset_2.relative_file_path));
 }
 
 TEST_F(DNRManifestTest, RulesetCountExceeded) {
-  std::unique_ptr<base::DictionaryValue> manifest =
-      CreateManifest(kJSONRulesFilename);
+  std::vector<TestRulesetInfo> rulesets;
+  for (int i = 0; i <= dnr_api::MAX_NUMBER_OF_STATIC_RULESETS; ++i)
+    rulesets.emplace_back(base::NumberToString(i), base::ListValue());
 
-  ListBuilder rule_resources;
-
-  std::vector<base::FilePath> paths;
-  for (int i = 0; i <= dnr_api::MAX_NUMBER_OF_STATIC_RULESETS; ++i) {
-    base::FilePath path = base::FilePath().AppendASCII(base::NumberToString(i));
-    paths.push_back(path);
-
-    dnr_api::Ruleset ruleset;
-    ruleset.path = path.AsUTF8Unsafe();
-
-    rule_resources.Append(ruleset.ToValue());
-  }
-
-  manifest->SetList(GetRuleResourcesKey(), rule_resources.Build());
-
-  WriteManifestAndRuleset(*manifest, paths);
+  WriteManifestAndRuleset(*CreateManifest(rulesets), rulesets);
 
   LoadAndExpectError(ErrorUtils::FormatErrorMessage(
       errors::kRulesetCountExceeded, keys::kDeclarativeNetRequestKey,
@@ -211,28 +186,24 @@ TEST_F(DNRManifestTest, RulesetCountExceeded) {
 }
 
 TEST_F(DNRManifestTest, NonExistentRulesFile) {
-  dnr_api::Ruleset ruleset;
-  ruleset.path = "invalid_file.json";
+  TestRulesetInfo ruleset("id", "invalid_file.json", base::ListValue());
 
-  std::unique_ptr<base::DictionaryValue> manifest =
-      CreateManifest(kJSONRulesFilename);
-  manifest->SetList(GetRuleResourcesKey(),
-                    ListBuilder().Append(ruleset.ToValue()).Build());
+  std::unique_ptr<base::DictionaryValue> manifest = CreateManifest({ruleset});
 
-  WriteManifestAndRuleset(*manifest, {base::FilePath(kJSONRulesetFilepath)});
+  WriteManifestAndRuleset(*manifest, {});
 
   LoadAndExpectError(ErrorUtils::FormatErrorMessage(
       errors::kRulesFileIsInvalid, keys::kDeclarativeNetRequestKey,
-      keys::kDeclarativeRuleResourcesKey, ruleset.path));
+      keys::kDeclarativeRuleResourcesKey, ruleset.relative_file_path));
 }
 
 TEST_F(DNRManifestTest, NeedsDeclarativeNetRequestPermission) {
-  std::unique_ptr<base::DictionaryValue> manifest =
-      CreateManifest(kJSONRulesFilename);
+  std::vector<TestRulesetInfo> rulesets({CreateDefaultRuleset()});
+  std::unique_ptr<base::DictionaryValue> manifest = CreateManifest(rulesets);
   // Remove "declarativeNetRequest" permission.
   manifest->Remove(keys::kPermissions, nullptr);
 
-  WriteManifestAndRuleset(*manifest, {base::FilePath(kJSONRulesetFilepath)});
+  WriteManifestAndRuleset(*manifest, rulesets);
 
   LoadAndExpectError(ErrorUtils::FormatErrorMessage(
       errors::kDeclarativeNetRequestPermissionNeeded, kAPIPermission,
@@ -240,20 +211,82 @@ TEST_F(DNRManifestTest, NeedsDeclarativeNetRequestPermission) {
 }
 
 TEST_F(DNRManifestTest, RulesFileInNestedDirectory) {
-  base::FilePath nested_path =
-      base::FilePath(FILE_PATH_LITERAL("dir")).Append(kJSONRulesetFilepath);
-  std::unique_ptr<base::DictionaryValue> manifest =
-      CreateManifest(kJSONRulesFilename);
+  TestRulesetInfo ruleset("id", "dir/rules_file.json", base::ListValue());
 
-  dnr_api::Ruleset ruleset;
-  ruleset.path = "dir/rules_file.json";
+  std::vector<TestRulesetInfo> rulesets({ruleset});
+  std::unique_ptr<base::DictionaryValue> manifest = CreateManifest(rulesets);
 
-  manifest->SetList(GetRuleResourcesKey(),
-                    ListBuilder().Append(ruleset.ToValue()).Build());
+  WriteManifestAndRuleset(*manifest, rulesets);
+  LoadAndExpectSuccess(rulesets);
+}
 
-  WriteManifestAndRuleset(*manifest, {nested_path});
+TEST_F(DNRManifestTest, EmptyRulesetID) {
+  TestRulesetInfo ruleset_1("1", "1.json", base::ListValue());
+  TestRulesetInfo ruleset_2("", "2.json", base::ListValue());
+  TestRulesetInfo ruleset_3("3", "3.json", base::ListValue());
+  std::vector<TestRulesetInfo> rulesets({ruleset_1, ruleset_2, ruleset_3});
+  WriteManifestAndRuleset(*CreateManifest(rulesets), rulesets);
 
-  LoadAndExpectSuccess({nested_path});
+  LoadAndExpectError(ErrorUtils::FormatErrorMessage(
+      errors::kInvalidRulesetID, keys::kDeclarativeNetRequestKey,
+      keys::kDeclarativeRuleResourcesKey, "1"));
+}
+
+TEST_F(DNRManifestTest, DuplicateRulesetID) {
+  TestRulesetInfo ruleset_1("1", "1.json", base::ListValue());
+  TestRulesetInfo ruleset_2("2", "2.json", base::ListValue());
+  TestRulesetInfo ruleset_3("3", "3.json", base::ListValue());
+  TestRulesetInfo ruleset_4("1", "3.json", base::ListValue());
+  std::vector<TestRulesetInfo> rulesets(
+      {ruleset_1, ruleset_2, ruleset_3, ruleset_4});
+  WriteManifestAndRuleset(*CreateManifest(rulesets), rulesets);
+
+  LoadAndExpectError(ErrorUtils::FormatErrorMessage(
+      errors::kInvalidRulesetID, keys::kDeclarativeNetRequestKey,
+      keys::kDeclarativeRuleResourcesKey, "3"));
+}
+
+TEST_F(DNRManifestTest, ReservedRulesetID) {
+  TestRulesetInfo ruleset_1("foo", "1.json", base::ListValue());
+  TestRulesetInfo ruleset_2("_bar", "2.json", base::ListValue());
+  TestRulesetInfo ruleset_3("baz", "3.json", base::ListValue());
+  std::vector<TestRulesetInfo> rulesets({ruleset_1, ruleset_2, ruleset_3});
+  WriteManifestAndRuleset(*CreateManifest(rulesets), rulesets);
+
+  LoadAndExpectError(ErrorUtils::FormatErrorMessage(
+      errors::kInvalidRulesetID, keys::kDeclarativeNetRequestKey,
+      keys::kDeclarativeRuleResourcesKey, "1"));
+}
+
+// The webstore installation flow involves creation of a dummy extension with an
+// empty extension root path. Ensure the manifest handler for declarative net
+// request handles it correctly. Regression test for crbug.com/1087348.
+TEST_F(DNRManifestTest, EmptyExtensionRootPath) {
+  TestRulesetInfo ruleset("foo", "1.json", base::ListValue());
+
+  std::string error;
+  scoped_refptr<Extension> extension = Extension::Create(
+      base::FilePath(), Manifest::INTERNAL, *CreateManifest({ruleset}),
+      Extension::FROM_WEBSTORE, &error);
+
+  EXPECT_TRUE(extension);
+  EXPECT_TRUE(error.empty()) << error;
+}
+
+TEST_F(DNRManifestTest, EmptyRulesetPath1) {
+  TestRulesetInfo ruleset("foo", "", base::ListValue());
+  WriteManifestAndRuleset(*CreateManifest({ruleset}), {});
+  LoadAndExpectError(ErrorUtils::FormatErrorMessage(
+      errors::kRulesFileIsInvalid, keys::kDeclarativeNetRequestKey,
+      keys::kDeclarativeRuleResourcesKey, ruleset.relative_file_path));
+}
+
+TEST_F(DNRManifestTest, EmptyRulesetPath2) {
+  TestRulesetInfo ruleset("foo", ".", base::ListValue());
+  WriteManifestAndRuleset(*CreateManifest({ruleset}), {});
+  LoadAndExpectError(ErrorUtils::FormatErrorMessage(
+      errors::kRulesFileIsInvalid, keys::kDeclarativeNetRequestKey,
+      keys::kDeclarativeRuleResourcesKey, ruleset.relative_file_path));
 }
 
 }  // namespace

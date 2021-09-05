@@ -14,6 +14,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/location.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
+#include "third_party/blink/renderer/core/geometry/dom_rect_read_only.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
@@ -363,6 +364,38 @@ void LayoutShiftTracker::NotifyPrePaintFinished() {
   attributions_.fill(Attribution());
 }
 
+LayoutShift::AttributionList LayoutShiftTracker::CreateAttributionList() const {
+  LayoutShift::AttributionList list;
+  for (const Attribution& att : attributions_) {
+    if (att.node_id == kInvalidDOMNodeId)
+      break;
+    list.push_back(LayoutShiftAttribution::Create(
+        DOMNodeIds::NodeForId(att.node_id),
+        DOMRectReadOnly::FromIntRect(att.old_visual_rect),
+        DOMRectReadOnly::FromIntRect(att.new_visual_rect)));
+  }
+  return list;
+}
+
+void LayoutShiftTracker::SubmitPerformanceEntry(double score_delta,
+                                                bool had_recent_input) const {
+  LocalDOMWindow* window = frame_view_->GetFrame().DomWindow();
+  if (!window)
+    return;
+  WindowPerformance* performance = DOMWindowPerformance::performance(*window);
+  DCHECK(performance);
+
+  double input_timestamp =
+      had_recent_input ? performance->MonotonicTimeToDOMHighResTimeStamp(
+                             most_recent_input_timestamp_)
+                       : 0.0;
+  LayoutShift* entry =
+      LayoutShift::Create(performance->now(), score_delta, had_recent_input,
+                          input_timestamp, CreateAttributionList());
+
+  performance->AddLayoutShiftEntry(entry);
+}
+
 void LayoutShiftTracker::ReportShift(double score_delta,
                                      double weighted_score_delta) {
   LocalFrame& frame = frame_view_->GetFrame();
@@ -377,14 +410,7 @@ void LayoutShiftTracker::ReportShift(double score_delta,
     }
   }
 
-  if (frame.DomWindow()) {
-    WindowPerformance* performance =
-        DOMWindowPerformance::performance(*frame.DomWindow());
-    if (performance) {
-      performance->AddLayoutShiftValue(score_delta, had_recent_input,
-                                       most_recent_input_timestamp_);
-    }
-  }
+  SubmitPerformanceEntry(score_delta, had_recent_input);
 
   TRACE_EVENT_INSTANT2("loading", "LayoutShift", TRACE_EVENT_SCOPE_THREAD,
                        "data", PerFrameTraceData(score_delta, had_recent_input),
@@ -405,23 +431,24 @@ void LayoutShiftTracker::NotifyInput(const WebInputEvent& event) {
   const WebInputEvent::Type type = event.GetType();
   const bool saw_pointerdown = pointerdown_pending_data_.saw_pointerdown;
   const bool pointerdown_became_tap =
-      saw_pointerdown && type == WebInputEvent::kPointerUp;
+      saw_pointerdown && type == WebInputEvent::Type::kPointerUp;
   const bool event_type_stops_pointerdown_buffering =
-      type == WebInputEvent::kPointerUp ||
-      type == WebInputEvent::kPointerCausedUaAction ||
-      type == WebInputEvent::kPointerCancel;
+      type == WebInputEvent::Type::kPointerUp ||
+      type == WebInputEvent::Type::kPointerCausedUaAction ||
+      type == WebInputEvent::Type::kPointerCancel;
 
   // Only non-hovering pointerdown requires buffering.
   const bool is_hovering_pointerdown =
-      type == WebInputEvent::kPointerDown &&
+      type == WebInputEvent::Type::kPointerDown &&
       static_cast<const WebPointerEvent&>(event).hovering;
 
   const bool should_trigger_shift_exclusion =
-      type == WebInputEvent::kMouseDown || type == WebInputEvent::kKeyDown ||
-      type == WebInputEvent::kRawKeyDown ||
+      type == WebInputEvent::Type::kMouseDown ||
+      type == WebInputEvent::Type::kKeyDown ||
+      type == WebInputEvent::Type::kRawKeyDown ||
       // We need to explicitly include tap, as if there are no listeners, we
       // won't receive the pointer events.
-      type == WebInputEvent::kGestureTap || is_hovering_pointerdown ||
+      type == WebInputEvent::Type::kGestureTap || is_hovering_pointerdown ||
       pointerdown_became_tap;
 
   if (should_trigger_shift_exclusion) {
@@ -438,7 +465,7 @@ void LayoutShiftTracker::NotifyInput(const WebInputEvent& event) {
       ReportShift(score_delta, pointerdown_pending_data_.weighted_score_delta);
     pointerdown_pending_data_ = PointerdownPendingData();
   }
-  if (type == WebInputEvent::kPointerDown && !is_hovering_pointerdown)
+  if (type == WebInputEvent::Type::kPointerDown && !is_hovering_pointerdown)
     pointerdown_pending_data_.saw_pointerdown = true;
 }
 
@@ -534,6 +561,10 @@ void LayoutShiftTracker::SetLayoutShiftRects(const Vector<IntRect>& int_rects) {
       cc_layer->layer_tree_host()->hud_layer()->SetNeedsPushProperties();
     }
   }
+}
+
+void LayoutShiftTracker::Trace(Visitor* visitor) {
+  visitor->Trace(frame_view_);
 }
 
 ReattachHook::Scope::Scope(const Node& node) : active_(node.GetLayoutObject()) {

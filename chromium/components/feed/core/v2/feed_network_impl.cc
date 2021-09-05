@@ -3,6 +3,11 @@
 // found in the LICENSE file.
 
 #include "components/feed/core/v2/feed_network_impl.h"
+
+#include <memory>
+#include <utility>
+
+#include "base/base64url.h"
 #include "base/bind.h"
 #include "base/containers/flat_set.h"
 #include "base/metrics/histogram_functions.h"
@@ -15,6 +20,7 @@
 #include "components/feed/core/proto/v2/wire/feed_query.pb.h"
 #include "components/feed/core/proto/v2/wire/request.pb.h"
 #include "components/feed/core/proto/v2/wire/response.pb.h"
+#include "components/feed/core/v2/metrics_reporter.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/identity_manager/access_token_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -30,6 +36,7 @@
 #include "services/network/public/cpp/resource_request_body.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
+#include "third_party/protobuf/src/google/protobuf/io/coded_stream.h"
 #include "third_party/zlib/google/compression_utils.h"
 
 namespace feed {
@@ -39,37 +46,53 @@ constexpr char kAuthenticationScope[] =
 constexpr char kApplicationOctetStream[] = "application/octet-stream";
 constexpr base::TimeDelta kNetworkTimeout = base::TimeDelta::FromSeconds(30);
 
+// Add URLs for Bling when it is supported.
 constexpr char kFeedQueryUrl[] =
-    "https://www.google.com/httpservice/retry/InteractiveDiscoverAgaService/"
-    "FeedQuery";
+    "https://www.google.com/httpservice/retry/TrellisClankService/FeedQuery";
 constexpr char kNextPageQueryUrl[] =
-    "https://www.google.com/httpservice/retry/InteractiveDiscoverAgaService/"
+    "https://www.google.com/httpservice/retry/TrellisClankService/"
     "NextPageQuery";
 constexpr char kBackgroundQueryUrl[] =
-    "https://www.google.com/httpservice/noretry/BackgroundDiscoverAgaService/"
+    "https://www.google.com/httpservice/noretry/TrellisClankService/"
     "FeedQuery";
+
+GURL GetUrlWithoutQuery(const GURL& url) {
+  GURL::Replacements replacements;
+  replacements.ClearQuery();
+  return url.ReplaceComponents(replacements);
+}
 
 using RawResponse = FeedNetworkImpl::RawResponse;
 }  // namespace
 
 struct FeedNetworkImpl::RawResponse {
-  // A union of net::Error (if the request failed) and the http
-  // status code(if the request succeeded in reaching the server).
-  int32_t status_code;
   // HTTP response body.
   std::string response_bytes;
+  NetworkResponseInfo response_info;
 };
 
 namespace {
-template <typename RESULT>
+template <typename RESULT, NetworkRequestType REQUEST_TYPE>
 void ParseAndForwardResponse(base::OnceCallback<void(RESULT)> result_callback,
                              RawResponse raw_response) {
+  MetricsReporter::NetworkRequestComplete(
+      REQUEST_TYPE, raw_response.response_info.status_code);
   RESULT result;
-  result.status_code = raw_response.status_code;
-  if (result.status_code == 200) {
+  result.response_info = raw_response.response_info;
+  if (result.response_info.status_code == 200) {
     auto response_message = std::make_unique<typename decltype(
         result.response_body)::element_type>();
-    if (response_message->ParseFromString(raw_response.response_bytes)) {
+
+    ::google::protobuf::io::CodedInputStream input_stream(
+        reinterpret_cast<const uint8_t*>(raw_response.response_bytes.data()),
+        raw_response.response_bytes.size());
+
+    // The first few bytes of the body are a varint containing the size of the
+    // message. We need to skip over them.
+    int message_size;
+    input_stream.ReadVarintSizeAsInt(&message_size);
+
+    if (response_message->ParseFromCodedStream(&input_stream)) {
       result.response_body = std::move(response_message);
     }
   }
@@ -277,7 +300,13 @@ class FeedNetworkImpl::NetworkFetch {
   }
 
   void OnSimpleLoaderComplete(std::unique_ptr<std::string> response) {
-    int32_t status_code = simple_loader_->NetError();
+    NetworkResponseInfo response_info;
+    response_info.status_code = simple_loader_->NetError();
+    response_info.fetch_duration =
+        tick_clock_->NowTicks() - entire_send_start_ticks_;
+    response_info.fetch_time = base::Time::Now();
+    response_info.base_request_url = GetUrlWithoutQuery(url_);
+
     // If overriding the feed host, try to grab the Bless nonce. This is
     // strictly informational, and only displayed in snippets-internals.
     if (host_overridden_ && simple_loader_->ResponseInfo()) {
@@ -289,8 +318,7 @@ class FeedNetworkImpl::NetworkFetch {
         if (pos != std::string::npos) {
           std::string nonce = value.substr(pos + 7, 16);
           if (nonce.size() == 16) {
-            pref_service_->SetString(feed::prefs::kHostOverrideBlessNonce,
-                                     nonce);
+            response_info.bless_nonce = nonce;
             break;
           }
         }
@@ -299,10 +327,11 @@ class FeedNetworkImpl::NetworkFetch {
 
     std::string response_body;
     if (response) {
-      status_code = simple_loader_->ResponseInfo()->headers->response_code();
+      response_info.status_code =
+          simple_loader_->ResponseInfo()->headers->response_code();
       response_body = std::move(*response);
 
-      if (status_code == net::HTTP_UNAUTHORIZED) {
+      if (response_info.status_code == net::HTTP_UNAUTHORIZED) {
         signin::ScopeSet scopes{kAuthenticationScope};
         CoreAccountId account_id = identity_manager_->GetPrimaryAccountId();
         if (!account_id.empty()) {
@@ -312,10 +341,8 @@ class FeedNetworkImpl::NetworkFetch {
       }
     }
 
-    base::TimeDelta entire_send_duration =
-        tick_clock_->NowTicks() - entire_send_start_ticks_;
     UMA_HISTOGRAM_MEDIUM_TIMES("ContentSuggestions.Feed.Network.Duration",
-                               entire_send_duration);
+                               response_info.fetch_duration);
 
     base::TimeDelta loader_only_duration =
         tick_clock_->NowTicks() - loader_only_start_ticks_;
@@ -323,17 +350,17 @@ class FeedNetworkImpl::NetworkFetch {
     // RemoteSuggestionsFetcherImpl.
     UMA_HISTOGRAM_TIMES("NewTabPage.Snippets.FetchTime", loader_only_duration);
 
-    base::UmaHistogramSparse(
-        "ContentSuggestions.Feed.Network.RequestStatusCode", status_code);
-
     // The below is true even if there is a protocol error, so this will
     // record response size as long as the request completed.
-    if (status_code >= 200) {
+    if (response_info.status_code >= 200) {
       UMA_HISTOGRAM_COUNTS_1M("ContentSuggestions.Feed.Network.ResponseSizeKB",
                               static_cast<int>(response_body.size() / 1024));
     }
 
-    std::move(done_callback_).Run({status_code, std::move(response_body)});
+    RawResponse raw_response;
+    raw_response.response_info = std::move(response_info);
+    raw_response.response_bytes = std::move(response_body);
+    std::move(done_callback_).Run(std::move(raw_response));
   }
 
  private:
@@ -380,6 +407,9 @@ void FeedNetworkImpl::SendQueryRequest(
     base::OnceCallback<void(QueryRequestResult)> callback) {
   std::string binary_proto;
   request.SerializeToString(&binary_proto);
+  std::string base64proto;
+  base::Base64UrlEncode(
+      binary_proto, base::Base64UrlEncodePolicy::INCLUDE_PADDING, &base64proto);
 
   // TODO(harringtond): Decide how we want to override these URLs for testing.
   // Should probably add a command-line flag.
@@ -400,10 +430,11 @@ void FeedNetworkImpl::SendQueryRequest(
       return;
   }
 
-  AddMothershipPayloadQueryParams(/*is_post=*/false, binary_proto,
+  AddMothershipPayloadQueryParams(/*is_post=*/false, base64proto,
                                   delegate_->GetLanguageTag(), &url);
   Send(url, "GET", /*request_body=*/std::string(),
-       base::BindOnce(&ParseAndForwardResponse<QueryRequestResult>,
+       base::BindOnce(&ParseAndForwardResponse<QueryRequestResult,
+                                               NetworkRequestType::kFeedQuery>,
                       std::move(callback)));
 }
 
@@ -418,10 +449,11 @@ void FeedNetworkImpl::SendActionRequest(
       "ClankActionUpload");
   AddMothershipPayloadQueryParams(/*is_post=*/true, /*payload=*/std::string(),
                                   delegate_->GetLanguageTag(), &url);
-
   Send(url, "POST", std::move(binary_proto),
-       base::BindOnce(&ParseAndForwardResponse<ActionRequestResult>,
-                      std::move(callback)));
+       base::BindOnce(
+           &ParseAndForwardResponse<ActionRequestResult,
+                                    NetworkRequestType::kUploadActions>,
+           std::move(callback)));
 }
 
 void FeedNetworkImpl::CancelRequests() {

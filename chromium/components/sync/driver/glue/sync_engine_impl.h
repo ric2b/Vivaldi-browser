@@ -37,7 +37,6 @@ class InvalidationService;
 
 namespace syncer {
 
-class ChangeProcessor;
 class SyncEngineBackend;
 class SyncBackendRegistrar;
 class SyncPrefs;
@@ -70,16 +69,12 @@ class SyncEngineImpl : public SyncEngine, public InvalidationHandler {
   void StopSyncingForShutdown() override;
   void Shutdown(ShutdownReason reason) override;
   void ConfigureDataTypes(ConfigureParams params) override;
-  void RegisterDirectoryDataType(ModelType type, ModelSafeGroup group) override;
-  void UnregisterDirectoryDataType(ModelType type) override;
-  void ActivateDirectoryDataType(ModelType type,
-                                 ModelSafeGroup group,
-                                 ChangeProcessor* change_processor) override;
-  void DeactivateDirectoryDataType(ModelType type) override;
   void ActivateNonBlockingDataType(
       ModelType type,
       std::unique_ptr<DataTypeActivationResponse>) override;
   void DeactivateNonBlockingDataType(ModelType type) override;
+  void ActivateProxyDataType(ModelType type) override;
+  void DeactivateProxyDataType(ModelType type) override;
   void EnableEncryptEverything() override;
   UserShare* GetUserShare() const override;
   const Status& GetDetailedStatus() const override;
@@ -126,8 +121,7 @@ class SyncEngineImpl : public SyncEngine, public InvalidationHandler {
       const WeakHandle<DataTypeDebugInfoListener> debug_info_listener,
       std::unique_ptr<ModelTypeConnector> model_type_connector,
       const std::string& birthday,
-      const std::string& bag_of_chips,
-      const std::string& last_keystore_key);
+      const std::string& bag_of_chips);
 
   // Forwards a ProtocolEvent to the host. Will not be called unless a call to
   // SetForwardProtocolEvents() explicitly requested that we start forwarding
@@ -171,8 +165,7 @@ class SyncEngineImpl : public SyncEngine, public InvalidationHandler {
   // Called from SyncEngineBackend::OnSyncCycleCompleted to handle updating
   // frontend thread components.
   void HandleSyncCycleCompletedOnFrontendLoop(
-      const SyncCycleSnapshot& snapshot,
-      const std::string& last_keystore_key);
+      const SyncCycleSnapshot& snapshot);
 
   // Let the front end handle the actionable error event.
   void HandleActionableErrorEventOnFrontendLoop(

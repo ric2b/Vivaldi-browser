@@ -41,6 +41,7 @@
 #include "third_party/blink/renderer/core/frame/ad_tracker.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/frame_client.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
@@ -242,13 +243,12 @@ Frame* CreateNewWindow(LocalFrame& opener_frame,
 
   const KURL& url = request.GetResourceRequest().Url();
   if (url.ProtocolIsJavaScript() &&
-      opener_frame.GetDocument()->GetContentSecurityPolicy() &&
-      !ContentSecurityPolicy::ShouldBypassMainWorld(
-          opener_frame.GetDocument()->ToExecutionContext())) {
+      opener_frame.DomWindow()->GetContentSecurityPolicy() &&
+      !ContentSecurityPolicy::ShouldBypassMainWorld(opener_frame.DomWindow())) {
     String script_source = DecodeURLEscapeSequences(
         url.GetString(), DecodeURLMode::kUTF8OrIsomorphic);
 
-    if (!opener_frame.GetDocument()->GetContentSecurityPolicy()->AllowInline(
+    if (!opener_frame.DomWindow()->GetContentSecurityPolicy()->AllowInline(
             ContentSecurityPolicy::InlineType::kNavigation,
             nullptr /* element */, script_source, String() /* nonce */,
             opener_frame.GetDocument()->Url(), OrdinalNumber())) {
@@ -272,7 +272,7 @@ Frame* CreateNewWindow(LocalFrame& opener_frame,
 
   // Sandboxed frames cannot open new auxiliary browsing contexts.
   if (opener_frame.GetDocument()->IsSandboxed(
-          mojom::blink::WebSandboxFlags::kPopups)) {
+          network::mojom::blink::WebSandboxFlags::kPopups)) {
     // FIXME: This message should be moved off the console once a solution to
     // https://bugs.webkit.org/show_bug.cgi?id=103274 exists.
     opener_frame.GetDocument()->AddConsoleMessage(
@@ -286,12 +286,13 @@ Frame* CreateNewWindow(LocalFrame& opener_frame,
   }
 
   bool propagate_sandbox = opener_frame.GetDocument()->IsSandboxed(
-      mojom::blink::WebSandboxFlags::kPropagatesToAuxiliaryBrowsingContexts);
-  const SandboxFlags sandbox_flags =
+      network::mojom::blink::WebSandboxFlags::
+          kPropagatesToAuxiliaryBrowsingContexts);
+  network::mojom::blink::WebSandboxFlags sandbox_flags =
       propagate_sandbox ? opener_frame.GetDocument()->GetSandboxFlags()
-                        : mojom::blink::WebSandboxFlags::kNone;
+                        : network::mojom::blink::WebSandboxFlags::kNone;
   bool not_sandboxed = opener_frame.GetDocument()->GetSandboxFlags() ==
-                       mojom::blink::WebSandboxFlags::kNone;
+                       network::mojom::blink::WebSandboxFlags::kNone;
   FeaturePolicy::FeatureState opener_feature_state =
       (not_sandboxed || propagate_sandbox) ? opener_frame.GetSecurityContext()
                                                  ->GetFeaturePolicy()

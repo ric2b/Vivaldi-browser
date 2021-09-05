@@ -33,6 +33,7 @@ namespace media {
 
 namespace {
 
+
 const char* const kDecodedDataReadTraceEventNames[] = {"ReadAudioData",
                                                        "ReadVideoData"};
 static_assert(base::size(kDecodedDataReadTraceEventNames) ==
@@ -91,6 +92,15 @@ void IPCMediaPipelineHostImpl::Initialize(const std::string& mimetype,
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
           << " With Mimetype : " << mimetype;
 
+  base::MappedReadOnlyRegion region =
+      base::ReadOnlySharedMemoryRegion::Create(kIPCSourceSharedMemorySize);
+  if (!region.IsValid()) {
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << " allocation failed for size " << kIPCSourceSharedMemorySize;
+    std::move(callback).Run(false);
+    return;
+  }
+
   routing_id_ = channel_->GenerateRouteID();
 
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -111,8 +121,10 @@ void IPCMediaPipelineHostImpl::Initialize(const std::string& mimetype,
   VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
           << " Initialize pipeline - size of source : " << size;
 
+  raw_mapping_ = std::move(region.mapping);
   channel_->Send(new MediaPipelineMsg_Initialize(
-      routing_id_, size, data_source_->IsStreaming(), mimetype));
+      routing_id_, size, data_source_->IsStreaming(), mimetype,
+      std::move(region.region)));
 }
 
 void IPCMediaPipelineHostImpl::OnInitialized(
@@ -228,36 +240,15 @@ void IPCMediaPipelineHostImpl::OnReadRawData(
     return;
   }
   do {
-    // TODO(igor@vivaldi.com): Figure out if size can be zero here.
-    if (!(0 <= size && size <= kMaxSharedMemorySize)) {
-      LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " invalid size - " << size;
-      break;
-    }
-    if (!data_source_) {
+    if (!data_source_ || !raw_mapping_.IsValid()) {
       LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                  << " unexpected call";
       break;
     }
-    // A default invalid region tells to reuse the old one.
-    base::ReadOnlySharedMemoryRegion raw_region_to_send;
-    if (size > 0 && (!raw_mapping_.IsValid() ||
-                     static_cast<size_t>(size) > raw_mapping_.size())) {
-      size_t region_size =
-          RoundUpTo4kPage(std::max(kMinimalSharedMemorySize, size));
-      VLOG(5) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-              << " size of allocation " << region_size;
-      // Release the old memory before we try to get new one.
-      raw_mapping_ = base::WritableSharedMemoryMapping();
-      base::MappedReadOnlyRegion region =
-          base::ReadOnlySharedMemoryRegion::Create(region_size);
-      if (!region.IsValid()) {
-        LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                   << " allocation failed for size " << region_size;
-        break;
-      }
-      raw_region_to_send = std::move(region.region);
-      raw_mapping_ = std::move(region.mapping);
+    if (size < 1 || static_cast<size_t>(size) > raw_mapping_.size()) {
+      LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << " invalid size - " << size;
+      break;
     }
 
     // The Read call assumes that the memory pointer passed to it is valid
@@ -273,22 +264,19 @@ void IPCMediaPipelineHostImpl::OnReadRawData(
     reading_raw_data_ = true;
     data_source_->Read(
         position, size, raw_memory,
-        AdaptCallbackForRepeating(BindToCurrentLoop(
-            base::BindOnce(&IPCMediaPipelineHostImpl::OnReadRawDataFinished,
-                       weak_ptr_factory_.GetWeakPtr(), tag,
-                       std::move(raw_region_to_send), std::move(mapping)))));
+        AdaptCallbackForRepeating(BindToCurrentLoop(base::BindOnce(
+            &IPCMediaPipelineHostImpl::OnReadRawDataFinished,
+            weak_ptr_factory_.GetWeakPtr(), tag, std::move(mapping)))));
     return;
   } while (false);
 
-  channel_->Send(new MediaPipelineMsg_RawDataReady(
-      routing_id_, tag, DataSource::kReadError,
-      base::ReadOnlySharedMemoryRegion()));
+  channel_->Send(new MediaPipelineMsg_RawDataReady(routing_id_, tag,
+                                                   DataSource::kReadError));
   TRACE_EVENT_ASYNC_END0("IPC_MEDIA", "ReadRawData", this);
 }
 
 void IPCMediaPipelineHostImpl::OnReadRawDataFinished(
     int64_t tag,
-    base::ReadOnlySharedMemoryRegion raw_region_to_send,
     base::WritableSharedMemoryMapping mapping,
     int size) {
   // Negative size indicates a read error.
@@ -304,9 +292,7 @@ void IPCMediaPipelineHostImpl::OnReadRawDataFinished(
   // See comments in OnReadRawData
   raw_mapping_ = std::move(mapping);
 
-  // If raw_region_to_send_ is not valid, it means to reuse the old region.
-  channel_->Send(new MediaPipelineMsg_RawDataReady(
-      routing_id_, tag, size, std::move(raw_region_to_send)));
+  channel_->Send(new MediaPipelineMsg_RawDataReady(routing_id_, tag, size));
   TRACE_EVENT_ASYNC_END0("IPC_MEDIA", "ReadRawData", this);
 }
 

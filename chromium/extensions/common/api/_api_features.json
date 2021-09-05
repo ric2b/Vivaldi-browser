@@ -136,18 +136,24 @@
   "clipboard.setImageData": {
     "dependencies": ["permission:clipboardWrite"]
   },
-  "crashReportPrivate": {
+  "crashReportPrivate": [{
     "dependencies": ["permission:crashReportPrivate"],
-    "contexts": ["blessed_extension"]
-  },
+    "contexts": ["blessed_extension"],
+    "default_parent": true
+  },{
+    "channel": "stable",
+    "contexts": ["webui_untrusted"],
+    "matches": [
+      "chrome-untrusted://help-app/*",
+      "chrome-untrusted://media-app/*"
+    ]
+  }],
   "declarativeNetRequest": {
     "dependencies": ["permission:declarativeNetRequest"],
     "contexts": ["blessed_extension"]
   },
   "declarativeNetRequest.onRuleMatchedDebug": {
     "dependencies": ["permission:declarativeNetRequest", "permission:declarativeNetRequestFeedback"],
-    "contexts": ["blessed_extension"],
-    "channel": "beta",
     "location": "unpacked"
   },
   "declarativeWebRequest": {

@@ -259,11 +259,6 @@ SigninScreenHandler::SigninScreenHandler(
       chromeos::input_method::InputMethodManager::Get()->GetImeKeyboard();
   if (keyboard)
     keyboard->AddObserver(this);
-  allowed_input_methods_subscription_ =
-      chromeos::CrosSettings::Get()->AddSettingsObserver(
-          chromeos::kDeviceLoginScreenInputMethods,
-          base::Bind(&SigninScreenHandler::OnAllowedInputMethodsChanged,
-                     base::Unretained(this)));
 
   ash::TabletMode* tablet_mode = ash::TabletMode::Get();
   tablet_mode->AddObserver(this);
@@ -1133,7 +1128,7 @@ void SigninScreenHandler::HandleOfflineLogin(const base::ListValue* args) {
   std::string email;
   args->GetString(0, &email);
 
-  gaia_screen_handler_->set_populated_email(email);
+  gaia_screen_handler_->set_populated_account(AccountId::FromUserEmail(email));
   gaia_screen_handler_->LoadAuthExtension(true /* force */, true /* offline */);
   UpdateUIState(UI_STATE_GAIA_SIGNIN);
 }
@@ -1253,7 +1248,6 @@ void SigninScreenHandler::HandleLoginVisible(const std::string& source) {
   webui_visible_ = true;
   if (preferences_changed_delayed_)
     OnPreferencesChanged();
-  OnAllowedInputMethodsChanged();
 }
 
 void SigninScreenHandler::HandleCancelPasswordChangedFlow(
@@ -1337,8 +1331,11 @@ void SigninScreenHandler::HandleFocusPod(const AccountId& account_id,
   if (is_same_pod_focused)
     return;
 
-  lock_screen_utils::SetUserInputMethod(account_id.GetUserEmail(),
-                                        ime_state_.get());
+  // TODO(https://crbug.com/1071779): Migrate KioskTest to Views Account picker.
+  // DCHECK_EQ(session_manager::SessionManager::Get()->session_state(),
+  //           session_manager::SessionState::LOGIN_SECONDARY);
+  lock_screen_utils::SetUserInputMethod(account_id, ime_state_.get(),
+                                        false /*honor_device_policy*/);
   lock_screen_utils::SetKeyboardSettings(account_id);
 
   bool use_24hour_clock = false;
@@ -1353,7 +1350,6 @@ void SigninScreenHandler::HandleFocusPod(const AccountId& account_id,
 
 void SigninScreenHandler::HandleNoPodFocused() {
   focused_pod_account_id_.reset();
-  lock_screen_utils::EnforcePolicyInputMethods(std::string());
 }
 
 void SigninScreenHandler::HandleGetPublicSessionKeyboardLayouts(
@@ -1471,19 +1467,6 @@ void SigninScreenHandler::OnCapsLockChanged(bool enabled) {
 
 void SigninScreenHandler::OnFeedbackFinished() {
   login_feedback_.reset();
-}
-
-void SigninScreenHandler::OnAllowedInputMethodsChanged() {
-  if (!webui_visible_)
-    return;
-
-  if (focused_pod_account_id_) {
-    std::string user_input_method = lock_screen_utils::GetUserLastInputMethod(
-        focused_pod_account_id_->GetUserEmail());
-    lock_screen_utils::EnforcePolicyInputMethods(user_input_method);
-  } else {
-    lock_screen_utils::EnforcePolicyInputMethods(std::string());
-  }
 }
 
 }  // namespace chromeos

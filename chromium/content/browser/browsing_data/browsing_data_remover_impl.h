@@ -107,7 +107,9 @@ class CONTENT_EXPORT BrowsingDataRemoverImpl
     kAuthCache = 9,
     kCodeCaches = 10,
     kNetworkErrorLogging = 11,
-    kMaxValue = kNetworkErrorLogging,
+    kTrustTokens = 12,
+    kConversions = 13,
+    kMaxValue = kConversions,
   };
 
   // Represents a single removal task. Contains all parameters needed to execute

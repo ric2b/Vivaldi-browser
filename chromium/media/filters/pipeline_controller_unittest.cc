@@ -8,9 +8,9 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/notreached.h"
 #include "base/run_loop.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/gmock_move_support.h"
@@ -533,6 +533,19 @@ TEST_F(PipelineControllerTest, SuspendDuringAudioTrackChange) {
 
   loop.Run();
   EXPECT_FALSE(was_resumed_);
+}
+
+TEST_F(PipelineControllerTest, ResumePlaybackDuringSwitchingTracksState) {
+  Complete(StartPipeline());
+  Complete(SuspendPipeline());
+  EXPECT_CALL(*pipeline_, OnSelectedVideoTrackChanged(_, _)).Times(1);
+  EXPECT_CALL(*pipeline_, GetMediaTime()).Times(1);
+  EXPECT_CALL(*pipeline_, OnResume(_, _)).Times(1);
+
+  pipeline_controller_.OnSelectedVideoTrackChanged({});
+  pipeline_controller_.Resume();
+  pipeline_controller_.FireOnTrackChangeCompleteForTesting(
+      PipelineController::State::SUSPENDED);
 }
 
 }  // namespace media

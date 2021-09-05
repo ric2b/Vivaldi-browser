@@ -586,8 +586,8 @@ void VolumeManager::Initialize() {
   // Subscribe to storage monitor for MTP notifications.
   if (storage_monitor::StorageMonitor::GetInstance()) {
     storage_monitor::StorageMonitor::GetInstance()->EnsureInitialized(
-        base::Bind(&VolumeManager::OnStorageMonitorInitialized,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::BindOnce(&VolumeManager::OnStorageMonitorInitialized,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 
   // Subscribe to ARC file system events.
@@ -993,7 +993,7 @@ void VolumeManager::OnRenameEvent(
       return;
     case chromeos::disks::DiskMountManager::RENAME_COMPLETED:
       // Find previous mount point label if it exists
-      std::string mount_label = "";
+      std::string mount_label;
       auto disk_map_iter = disk_mount_manager_->disks().find(device_path);
       if (disk_map_iter != disk_mount_manager_->disks().end() &&
           !disk_map_iter->second->base_mount_path().empty()) {

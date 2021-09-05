@@ -12,7 +12,6 @@
 #include "cc/input/event_listener_properties.h"
 #include "cc/input/main_thread_scrolling_reason.h"
 #include "cc/input/overscroll_behavior.h"
-#include "cc/input/scroll_input_type.h"
 #include "cc/input/scroll_state.h"
 #include "cc/input/scrollbar.h"
 #include "cc/input/touch_action.h"
@@ -20,6 +19,7 @@
 #include "cc/paint/element_id.h"
 #include "cc/trees/swap_promise_monitor.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
+#include "ui/events/types/scroll_input_type.h"
 #include "ui/events/types/scroll_types.h"
 
 namespace gfx {
@@ -171,12 +171,12 @@ class CC_EXPORT InputHandler {
   // SCROLL_IGNORED if there is nothing to be scrolled at the given
   // coordinates.
   virtual ScrollStatus ScrollBegin(ScrollState* scroll_state,
-                                   ScrollInputType type) = 0;
+                                   ui::ScrollInputType type) = 0;
 
   // Similar to ScrollBegin, except the hit test is skipped and scroll always
   // targets at the root layer.
   virtual ScrollStatus RootScrollBegin(ScrollState* scroll_state,
-                                       ScrollInputType type) = 0;
+                                       ui::ScrollInputType type) = 0;
 
   // Scroll the layer selected by |ScrollBegin| by given |scroll_state| delta.
   // Internally, the delta is transformed to local layer's coordinate space for
@@ -203,9 +203,9 @@ class CC_EXPORT InputHandler {
 
   // Called to notify every time scroll-begin/end is attempted by an input
   // event.
-  virtual void RecordScrollBegin(ScrollInputType input_type,
+  virtual void RecordScrollBegin(ui::ScrollInputType input_type,
                                  ScrollBeginThreadState scroll_start_state) = 0;
-  virtual void RecordScrollEnd(ScrollInputType input_type) = 0;
+  virtual void RecordScrollEnd(ui::ScrollInputType input_type) = 0;
 
   virtual InputHandlerPointerResult MouseMoveAt(
       const gfx::Point& mouse_position) = 0;
@@ -243,10 +243,6 @@ class CC_EXPORT InputHandler {
   // Returns true if there is an active scroll on the viewport.
   virtual bool IsCurrentlyScrollingViewport() const = 0;
 
-  // Whether the layer under |viewport_point| is the currently scrolling layer.
-  virtual bool IsCurrentlyScrollingLayerAt(
-      const gfx::Point& viewport_point) const = 0;
-
   virtual EventListenerProperties GetEventListenerProperties(
       EventListenerClass event_class) const = 0;
 
@@ -279,9 +275,10 @@ class CC_EXPORT InputHandler {
   // During the lifetime of the returned EventsMetricsManager::ScopedMonitor, if
   // SetNeedsOneBeginImplFrame() or SetNeedsRedraw() are called on
   // LayerTreeHostImpl or a scroll animation is updated, |event_metrics| will be
-  // saved for reporting event latency metrics.
+  // saved for reporting event latency metrics. It is allowed to pass nullptr as
+  // |event_metrics| in which case the return value would also be nullptr.
   virtual std::unique_ptr<EventsMetricsManager::ScopedMonitor>
-  GetScopedEventMetricsMonitor(const EventMetrics& event_metrics) = 0;
+  GetScopedEventMetricsMonitor(std::unique_ptr<EventMetrics> event_metrics) = 0;
 
   virtual ScrollElasticityHelper* CreateScrollElasticityHelper() = 0;
 
@@ -308,6 +305,10 @@ class CC_EXPORT InputHandler {
   // |did_finish| is true if the animation reached its target position (i.e.
   // it wasn't aborted).
   virtual void ScrollEndForSnapFling(bool did_finish) = 0;
+
+  // Notifies when any input event is received, irrespective of whether it is
+  // being handled by the InputHandler or not.
+  virtual void NotifyInputEvent() = 0;
 
  protected:
   InputHandler() = default;

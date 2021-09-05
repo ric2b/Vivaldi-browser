@@ -124,6 +124,7 @@ class RenderProcessHostCreationObserver;
 class RenderProcessHostFactory;
 class RenderProcessHostTest;
 class RenderWidgetHelper;
+class ResolveProxyHelper;
 class SiteInstance;
 class SiteInstanceImpl;
 class StoragePartition;
@@ -265,6 +266,9 @@ class CONTENT_EXPORT RenderProcessHostImpl
       mojo::PendingReceiver<blink::mojom::IDBFactory> receiver) override;
   void ForceCrash() override;
   void CleanupNetworkServicePluginExceptionsUponDestruction() override;
+#if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
+  void DumpProfilingData(base::OnceClosure callback) override;
+#endif
 
   mojom::RouteProvider* GetRemoteRouteProvider();
 
@@ -301,6 +305,11 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // TODO(https://crbug.com/1006814): Delete this.
   bool GetWithinProcessDiedObserverForCrbug1006814() {
     return within_process_died_observer_;
+  }
+
+  // TODO(https://crbug.com/1006814): Delete this.
+  bool GetWithinCleanupProcessDiedObserverForCrbug1006814() {
+    return within_cleanup_process_died_observer_;
   }
 
   // Used to extend the lifetime of the sessions until the render view
@@ -741,6 +750,9 @@ class CONTENT_EXPORT RenderProcessHostImpl
                            BrowserHistogramCallback callback) override;
   void SuddenTerminationChanged(bool enabled) override;
   void RecordUserMetricsAction(const std::string& action) override;
+  void ResolveProxy(
+      const GURL& url,
+      mojom::RendererHost::ResolveProxyCallback callback) override;
 
   void BindRouteProvider(
       mojo::PendingAssociatedReceiver<mojom::RouteProvider> receiver);
@@ -948,6 +960,10 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void ProvideStatusFileForRenderer();
 #endif
 
+  // Gives a DELETE_ON_CLOSE file descriptor to the renderer, to use for
+  // swapping. See blink::DiskDataAllocator for uses.
+  void ProvideSwapFileForRenderer();
+
   mojo::OutgoingInvitation mojo_invitation_;
 
   size_t keep_alive_ref_count_;
@@ -1031,6 +1047,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // IO thread.
   scoped_refptr<RenderWidgetHelper> widget_helper_;
 
+  scoped_refptr<ResolveProxyHelper> resolve_proxy_helper_;
+
   scoped_refptr<RenderFrameMessageFilter> render_frame_message_filter_;
 
   // Used in single-process mode.
@@ -1099,9 +1117,14 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // longer within the RenderProcessHostObserver::RenderProcessExited callbacks.
   bool delayed_cleanup_needed_;
 
-  // Indicates whether RenderProcessHostImpl is currently iterating and calling
-  // through RenderProcessHostObserver::RenderProcessExited.
+  // Indicates whether RenderProcessHostImpl::ProcessDied is currently iterating
+  // and calling through RenderProcessHostObserver::RenderProcessExited.
   bool within_process_died_observer_;
+
+  // Indicates whether RenderProcessHostImpl::Cleanup is currently iterating and
+  // calling through RenderProcessHostObserver::RenderProcessExited.
+  // TODO(https://crbug.com/1006814): Delete this.
+  bool within_cleanup_process_died_observer_ = false;
 
   std::unique_ptr<P2PSocketDispatcherHost> p2p_socket_dispatcher_host_;
 

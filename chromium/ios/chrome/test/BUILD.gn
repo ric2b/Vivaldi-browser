@@ -7,6 +7,7 @@ import("//ios/chrome/features.gni")
 import("//ios/public/provider/chrome/browser/build_config.gni")
 import("//ios/third_party/features.gni")
 import("//testing/test.gni")
+import("//third_party/protobuf/proto_library.gni")
 
 # All tests needs to be listed in that target to be built as part of
 # "gn_all" target (i.e. by the bots).
@@ -47,11 +48,13 @@ source_set("test_support") {
     "//components/network_time",
     "//components/prefs",
     "//components/prefs:test_support",
+    "//components/safe_browsing/core:features",
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/browser_state:browser_state_impl",
     "//ios/chrome/browser/content_settings",
     "//ios/chrome/browser/prefs:browser_prefs",
+    "//ios/chrome/browser/safe_browsing:test_support",
     "//ios/components/webui:url_constants",
     "//ios/public/provider/chrome/browser",
     "//ios/public/provider/chrome/browser:test_support",
@@ -98,6 +101,7 @@ source_set("eg_test_support+eg2") {
     "//ios/third_party/earl_grey2:test_lib",
   ]
   libs = [ "XCTest.framework" ]
+  all_dependent_configs = [ "//third_party/protobuf:protobuf_config" ]
 }
 
 source_set("block_cleanup_test") {
@@ -192,7 +196,6 @@ test("ios_chrome_unittests") {
     "//ios/chrome/browser/infobars/overlays/browser_agent:unit_tests",
     "//ios/chrome/browser/infobars/overlays/browser_agent/interaction_handlers/common:unit_tests",
     "//ios/chrome/browser/infobars/overlays/browser_agent/interaction_handlers/passwords:unit_tests",
-    "//ios/chrome/browser/interstitials:unit_tests",
     "//ios/chrome/browser/itunes_urls:unit_tests",
     "//ios/chrome/browser/json_parser:unit_tests",
     "//ios/chrome/browser/language:unit_tests",
@@ -205,6 +208,8 @@ test("ios_chrome_unittests") {
     "//ios/chrome/browser/omaha:unit_tests",
     "//ios/chrome/browser/open_in:unit_tests",
     "//ios/chrome/browser/overlays:unit_tests",
+    "//ios/chrome/browser/overlays/public/common/confirmation:unit_tests",
+    "//ios/chrome/browser/overlays/public/web_content_area:unit_tests",
     "//ios/chrome/browser/overscroll_actions:unit_tests",
     "//ios/chrome/browser/passwords:unit_tests",
     "//ios/chrome/browser/policy:unit_tests",
@@ -224,9 +229,10 @@ test("ios_chrome_unittests") {
     "//ios/chrome/browser/translate:unit_tests",
     "//ios/chrome/browser/u2f:unit_tests",
     "//ios/chrome/browser/ui/activity_services:unit_tests",
+    "//ios/chrome/browser/ui/activity_services/activities:unit_tests",
+    "//ios/chrome/browser/ui/activity_services/data:unit_tests",
     "//ios/chrome/browser/ui/alert_coordinator:unit_tests",
     "//ios/chrome/browser/ui/alert_view:unit_tests",
-    "//ios/chrome/browser/ui/app_launcher:unit_tests",
     "//ios/chrome/browser/ui/authentication:unit_tests",
     "//ios/chrome/browser/ui/authentication/cells:unit_tests",
     "//ios/chrome/browser/ui/authentication/signin:unit_tests",
@@ -268,20 +274,20 @@ test("ios_chrome_unittests") {
     "//ios/chrome/browser/ui/ntp:unit_tests",
     "//ios/chrome/browser/ui/ntp_tile_views:unit_tests",
     "//ios/chrome/browser/ui/omnibox:unit_tests",
+    "//ios/chrome/browser/ui/omnibox/keyboard_assist:unit_tests",
     "//ios/chrome/browser/ui/omnibox/popup:unit_tests",
     "//ios/chrome/browser/ui/open_in:unit_tests",
     "//ios/chrome/browser/ui/overlays:unit_tests",
-    "//ios/chrome/browser/ui/overlays/common/alerts:unit_tests",
     "//ios/chrome/browser/ui/overlays/infobar_banner:unit_tests",
+    "//ios/chrome/browser/ui/overlays/infobar_banner/confirm:unit_tests",
     "//ios/chrome/browser/ui/overlays/infobar_banner/passwords:unit_tests",
     "//ios/chrome/browser/ui/overlays/infobar_modal:unit_tests",
     "//ios/chrome/browser/ui/overlays/infobar_modal/passwords:unit_tests",
     "//ios/chrome/browser/ui/overlays/test_modality:unit_tests",
-    "//ios/chrome/browser/ui/overlays/web_content_area/app_launcher:unit_tests",
-    "//ios/chrome/browser/ui/overlays/web_content_area/http_auth_dialogs:unit_tests",
-    "//ios/chrome/browser/ui/overlays/web_content_area/java_script_dialogs:unit_tests",
+    "//ios/chrome/browser/ui/overlays/web_content_area/alerts:unit_tests",
     "//ios/chrome/browser/ui/popup_menu:unit_tests",
     "//ios/chrome/browser/ui/presenters:unit_tests",
+    "//ios/chrome/browser/ui/qr_generator:unit_tests",
     "//ios/chrome/browser/ui/reading_list:unit_tests",
     "//ios/chrome/browser/ui/recent_tabs:unit_tests",
     "//ios/chrome/browser/ui/sad_tab:unit_tests",
@@ -303,7 +309,6 @@ test("ios_chrome_unittests") {
     "//ios/chrome/browser/ui/tabs:unit_tests",
     "//ios/chrome/browser/ui/toolbar:unit_tests",
     "//ios/chrome/browser/ui/toolbar/fullscreen:unit_tests",
-    "//ios/chrome/browser/ui/toolbar/keyboard_assist:unit_tests",
     "//ios/chrome/browser/ui/toolbar_container:unit_tests",
     "//ios/chrome/browser/ui/translate:unit_tests",
     "//ios/chrome/browser/ui/util:unit_tests",

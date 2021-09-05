@@ -9,7 +9,9 @@ import android.graphics.drawable.Drawable;
 
 import androidx.annotation.DimenRes;
 import androidx.annotation.IntDef;
+import androidx.annotation.Nullable;
 
+import org.chromium.base.Callback;
 import org.chromium.base.ObserverList;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.ObservableSupplier;
@@ -21,9 +23,9 @@ import org.chromium.chrome.browser.lifecycle.NativeInitObserver;
 import org.chromium.chrome.browser.ntp.NewTabPage;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.SettingsLauncher;
+import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.signin.ProfileDataCache;
-import org.chromium.chrome.browser.signin.SigninManager;
 import org.chromium.chrome.browser.sync.settings.SyncAndServicesSettings;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.toolbar.ButtonData;
@@ -33,7 +35,9 @@ import org.chromium.chrome.browser.user_education.IPHCommandBuilder;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.feature_engagement.Tracker;
-import org.chromium.components.signin.ChromeSigninController;
+import org.chromium.components.signin.base.CoreAccountInfo;
+import org.chromium.components.signin.identitymanager.ConsentLevel;
+import org.chromium.components.signin.identitymanager.IdentityManager;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -44,8 +48,7 @@ import java.util.Collections;
  * (user sign-in state, whether NTP is shown)
  */
 public class IdentityDiscController implements NativeInitObserver, ProfileDataCache.Observer,
-                                               SigninManager.SignInStateObserver,
-                                               ButtonDataProvider {
+                                               IdentityManager.Observer, ButtonDataProvider {
     // Visual state of Identity Disc.
     @Retention(RetentionPolicy.SOURCE)
     @IntDef({IdentityDiscState.NONE, IdentityDiscState.SMALL, IdentityDiscState.LARGE})
@@ -64,10 +67,12 @@ public class IdentityDiscController implements NativeInitObserver, ProfileDataCa
     // Context is used for fetching resources and launching preferences page.
     private final Context mContext;
     private ActivityLifecycleDispatcher mActivityLifecycleDispatcher;
-    private ObservableSupplier<Boolean> mBottomToolbarVisibilitySupplier;
+    private final ObservableSupplier<Boolean> mBottomToolbarVisibilitySupplier;
 
-    // We observe SigninManager to receive sign-in state change notifications.
-    private SigninManager mSigninManager;
+    private @Nullable Callback<Boolean> mBottomToolbarVisibilityObserver;
+
+    // We observe IdentityManager to receive primary account state change notifications.
+    private IdentityManager mIdentityManager;
 
     // ProfileDataCache facilitates retrieving profile picture. Separate objects are maintained
     // for different visual states to cache profile pictures of different size.
@@ -98,16 +103,13 @@ public class IdentityDiscController implements NativeInitObserver, ProfileDataCa
         mActivityLifecycleDispatcher = activityLifecycleDispatcher;
         mBottomToolbarVisibilitySupplier = bottomToolbarVisibilitySupplier;
         mActivityLifecycleDispatcher.register(this);
-        mBottomToolbarVisibilitySupplier.addObserver(
-                (bottomToolbarIsVisible)
-                        -> notifyObservers(
-                                ChromeSigninController.get().getSignedInAccountName() != null));
 
         mButtonData = new ButtonData(false, null,
                 view
                 -> {
                     recordIdentityDiscUsed();
-                    SettingsLauncher.getInstance().launchSettingsPage(
+                    SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
+                    settingsLauncher.launchSettingsActivity(
                             mContext, SyncAndServicesSettings.class);
                 },
                 R.string.accessibility_toolbar_btn_identity_disc, false,
@@ -125,8 +127,12 @@ public class IdentityDiscController implements NativeInitObserver, ProfileDataCa
         mActivityLifecycleDispatcher = null;
         mNativeIsInitialized = true;
 
-        mSigninManager = IdentityServicesProvider.get().getSigninManager();
-        mSigninManager.addSignInStateObserver(this);
+        mIdentityManager = IdentityServicesProvider.get().getIdentityManager();
+        mIdentityManager.addObserver(this);
+
+        mBottomToolbarVisibilityObserver = (bottomToolbarIsVisible)
+                -> notifyObservers(mIdentityManager.getPrimaryAccountInfo() != null);
+        mBottomToolbarVisibilitySupplier.addObserver(mBottomToolbarVisibilityObserver);
     }
 
     @Override
@@ -167,18 +173,19 @@ public class IdentityDiscController implements NativeInitObserver, ProfileDataCa
             return;
         }
 
-        String accountName = ChromeSigninController.get().getSignedInAccountName();
-        boolean canShowIdentityDisc = accountName != null;
+        String email = CoreAccountInfo.getEmailFrom(
+                mIdentityManager.getPrimaryAccountInfo(ConsentLevel.SYNC));
+        boolean canShowIdentityDisc = email != null;
         boolean menuBottomOnBottom =
                 bottomToolbarVisible && BottomToolbarVariationManager.isMenuButtonOnBottom();
 
         mState = !canShowIdentityDisc
                 ? IdentityDiscState.NONE
                 : menuBottomOnBottom ? IdentityDiscState.LARGE : IdentityDiscState.SMALL;
-        ensureProfileDataCache(accountName, mState);
+        ensureProfileDataCache(email, mState);
 
         if (mState != IdentityDiscState.NONE) {
-            mButtonData.drawable = getProfileImage(accountName);
+            mButtonData.drawable = getProfileImage(email);
             mButtonData.canShow = true;
         } else {
             mButtonData.canShow = false;
@@ -235,25 +242,25 @@ public class IdentityDiscController implements NativeInitObserver, ProfileDataCa
      * Called after profile image becomes available. Updates the image on toolbar button.
      */
     @Override
-    public void onProfileDataUpdated(String accountId) {
+    public void onProfileDataUpdated(String accountEmail) {
         if (mState == IdentityDiscState.NONE) return;
         assert mProfileDataCache[mState] != null;
 
-        String accountName = ChromeSigninController.get().getSignedInAccountName();
-        if (accountId.equals(accountName)) {
+        CoreAccountInfo accountInfo = mIdentityManager.getPrimaryAccountInfo();
+        if (accountEmail.equals(CoreAccountInfo.getEmailFrom(accountInfo))) {
             notifyObservers(true);
         }
     }
 
-    // SigninManager.SignInStateObserver implementation.
+    // IdentityManager.Observer implementation.
     @Override
-    public void onSignedIn() {
+    public void onPrimaryAccountSet(CoreAccountInfo account) {
         resetIdentityDiscCache();
         notifyObservers(true);
     }
 
     @Override
-    public void onSignedOut() {
+    public void onPrimaryAccountCleared(CoreAccountInfo account) {
         notifyObservers(false);
     }
 
@@ -273,9 +280,15 @@ public class IdentityDiscController implements NativeInitObserver, ProfileDataCa
                 mProfileDataCache[i] = null;
             }
         }
-        if (mSigninManager != null) {
-            mSigninManager.removeSignInStateObserver(this);
-            mSigninManager = null;
+
+        if (mIdentityManager != null) {
+            mIdentityManager.removeObserver(this);
+            mIdentityManager = null;
+        }
+
+        if (mBottomToolbarVisibilityObserver != null) {
+            mBottomToolbarVisibilitySupplier.removeObserver(mBottomToolbarVisibilityObserver);
+            mBottomToolbarVisibilityObserver = null;
         }
     }
 
@@ -284,7 +297,10 @@ public class IdentityDiscController implements NativeInitObserver, ProfileDataCa
      * whether to show in-product help.
      */
     private void recordIdentityDiscUsed() {
-        Profile profile = Profile.getLastUsedProfile();
+        // TODO (https://crbug.com/1048632): Use the current profile (i.e., regular profile or
+        // incognito profile) instead of always using regular profile. It works correctly now, but
+        // it is not safe.
+        Profile profile = Profile.getLastUsedRegularProfile();
         Tracker tracker = TrackerFactory.getTrackerForProfile(profile);
         tracker.notifyEvent(EventConstants.IDENTITY_DISC_USED);
         RecordUserAction.record("MobileToolbarIdentityDiscTap");

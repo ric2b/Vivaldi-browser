@@ -26,7 +26,6 @@ using quic::ENCRYPTION_ZERO_RTT;
 using quic::kAESG;
 using quic::kC255;
 using quic::kDefaultMaxStreamsPerConnection;
-using quic::kMaximumIdleTimeoutSecs;
 using quic::kQBIC;
 using quic::NullDecrypter;
 using quic::NullEncrypter;
@@ -65,7 +64,8 @@ MockCryptoClientStream::MockCryptoClientStream(
                              session,
                              std::move(verify_context),
                              crypto_config,
-                             session),
+                             session,
+                             /*has_application_state = */ true),
       QuicCryptoHandshaker(this, session),
       handshake_mode_(handshake_mode),
       encryption_established_(false),
@@ -182,7 +182,7 @@ bool MockCryptoClientStream::CryptoConnect() {
               std::make_unique<NullDecrypter>(Perspective::IS_CLIENT));
         }
         session()->connection()->SetEncrypter(ENCRYPTION_INITIAL, nullptr);
-        session()->connection()->SetEncrypter(
+        session()->OnNewEncryptionKeyAvailable(
             ENCRYPTION_FORWARD_SECURE,
             std::make_unique<NullEncrypter>(Perspective::IS_CLIENT));
       }
@@ -264,7 +264,7 @@ void MockCryptoClientStream::NotifySessionOneRttKeyAvailable() {
             std::make_unique<NullDecrypter>(Perspective::IS_CLIENT));
       }
       session()->connection()->SetEncrypter(ENCRYPTION_INITIAL, nullptr);
-      session()->connection()->SetEncrypter(
+      session()->OnNewEncryptionKeyAvailable(
           ENCRYPTION_FORWARD_SECURE,
           std::make_unique<NullEncrypter>(Perspective::IS_CLIENT));
     }
@@ -294,9 +294,6 @@ void MockCryptoClientStream::SetConfigNegotiated() {
 #endif
   cgst.push_back(kQBIC);
   QuicConfig config(config_);
-  config.SetIdleNetworkTimeout(
-      QuicTime::Delta::FromSeconds(2 * kMaximumIdleTimeoutSecs),
-      QuicTime::Delta::FromSeconds(kMaximumIdleTimeoutSecs));
   config.SetBytesForConnectionIdToSend(PACKET_8BYTE_CONNECTION_ID);
   config.SetMaxBidirectionalStreamsToSend(kDefaultMaxStreamsPerConnection / 2);
   config.SetMaxUnidirectionalStreamsToSend(kDefaultMaxStreamsPerConnection / 2);
@@ -313,8 +310,8 @@ void MockCryptoClientStream::SetConfigNegotiated() {
       PROTOCOL_TLS1_3) {
     TransportParameters params;
     ASSERT_TRUE(config.FillTransportParameters(&params));
-    error = session()->config()->ProcessTransportParameters(params, CLIENT,
-                                                            &error_details);
+    error = session()->config()->ProcessTransportParameters(
+        params, CLIENT, /*is_resumption=*/false, &error_details);
   } else {
     CryptoHandshakeMessage msg;
     config.ToHandshakeMessage(

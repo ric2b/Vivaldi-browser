@@ -103,6 +103,7 @@
 #include "chrome/browser/chromeos/android_sms/android_sms_service_factory.h"
 #include "chrome/browser/chromeos/multidevice_setup/multidevice_setup_client_factory.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/ui/webui/certificate_provisioning_ui_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/account_manager_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/android_apps_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/multidevice_handler.h"
@@ -162,18 +163,6 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
   content::WebUIDataSource* html_source =
       content::WebUIDataSource::Create(chrome::kChromeUISettingsHost);
 
-  // TODO(dpapad): Replace the following calls with
-  // SetupBundledWebUIDataSource() when Settings is migrated to Polymer3.
-  // Currently only used for testing the Polymer 3 version of
-  // certificate-manager.
-#if BUILDFLAG(OPTIMIZE_WEBUI)
-  html_source->EnableReplaceI18nInJS();
-  html_source->OverrideContentSecurityPolicyScriptSrc(
-      "script-src chrome://resources chrome://test 'self';");
-  html_source->AddResourcePath("test_loader.js", IDR_WEBUI_JS_TEST_LOADER);
-  html_source->AddResourcePath("test_loader.html", IDR_WEBUI_HTML_TEST_LOADER);
-#endif
-
   AddSettingsPageUIHandler(std::make_unique<AppearanceHandler>(web_ui));
 
 #if defined(USE_NSS_CERTS)
@@ -182,6 +171,11 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
 #elif defined(OS_WIN) || defined(OS_MACOSX)
   AddSettingsPageUIHandler(std::make_unique<NativeCertificatesHandler>());
 #endif  // defined(USE_NSS_CERTS)
+#if defined(OS_CHROMEOS)
+  AddSettingsPageUIHandler(
+      std::make_unique<
+          chromeos::cert_provisioning::CertificateProvisioningUiHandler>());
+#endif
 
   AddSettingsPageUIHandler(std::make_unique<AccessibilityMainHandler>());
   AddSettingsPageUIHandler(std::make_unique<BrowserLifetimeHandler>());
@@ -191,13 +185,16 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
   AddSettingsPageUIHandler(std::make_unique<CookiesViewHandler>());
   AddSettingsPageUIHandler(std::make_unique<DownloadsHandler>(profile));
   AddSettingsPageUIHandler(std::make_unique<ExtensionControlHandler>());
-  AddSettingsPageUIHandler(std::make_unique<FontHandler>(web_ui));
+  AddSettingsPageUIHandler(std::make_unique<FontHandler>(profile));
   AddSettingsPageUIHandler(std::make_unique<ImportDataHandler>());
   AddSettingsPageUIHandler(std::make_unique<HatsHandler>());
 
-#if defined(OS_WIN) || defined(OS_CHROMEOS)
-  AddSettingsPageUIHandler(std::make_unique<LanguagesHandler>(web_ui));
-#endif  // defined(OS_WIN) || defined(OS_CHROMEOS)
+#if defined(OS_WIN)
+  AddSettingsPageUIHandler(std::make_unique<LanguagesHandler>());
+#endif  // defined(OS_WIN)
+#if defined(OS_CHROMEOS)
+  AddSettingsPageUIHandler(std::make_unique<LanguagesHandler>(profile));
+#endif  // defined(OS_CHROMEOS)
 
   AddSettingsPageUIHandler(
       std::make_unique<MediaDevicesSelectionHandler>(profile));
@@ -306,13 +303,8 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
   // This is the browser settings page.
   html_source->AddBoolean("isOSSettings", false);
 #endif
-  // TODO(crbug.com/1026455): Delete this as part of the SplitSettings cleanup.
-  html_source->AddBoolean("showOSSettings", false);
-
-  AddSettingsPageUIHandler(
-      base::WrapUnique(AboutHandler::Create(html_source, profile)));
-  AddSettingsPageUIHandler(
-      base::WrapUnique(ResetSettingsHandler::Create(html_source, profile)));
+  AddSettingsPageUIHandler(std::make_unique<AboutHandler>());
+  AddSettingsPageUIHandler(std::make_unique<ResetSettingsHandler>(profile));
 
   // Add a handler to provide pluralized strings.
   auto plural_string_handler = std::make_unique<PluralStringHandler>();
@@ -324,58 +316,48 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
   web_ui->AddMessageHandler(std::make_unique<MetricsHandler>());
 
 #if BUILDFLAG(OPTIMIZE_WEBUI)
-  html_source->AddResourcePath("crisper.js", IDR_SETTINGS_CRISPER_JS);
-  html_source->AddResourcePath("lazy_load.crisper.js",
-                               IDR_SETTINGS_LAZY_LOAD_CRISPER_JS);
-  html_source->AddResourcePath("lazy_load.html",
-                               IDR_SETTINGS_LAZY_LOAD_VULCANIZED_HTML);
-  html_source->SetDefaultResource(IDR_SETTINGS_VULCANIZED_HTML);
-
-  // Register SVG images that are purposefully not inlined in the HTML bundle
-  // above.
-  html_source->AddResourcePath("images/cookies_banner.svg",
-                               IDR_SETTINGS_IMAGES_COOKIES_BANNER_SVG);
-  html_source->AddResourcePath("images/cookies_banner_dark.svg",
-                               IDR_SETTINGS_IMAGES_COOKIES_BANNER_DARK_SVG);
-  html_source->AddResourcePath("images/permissions_banner.svg",
-                               IDR_SETTINGS_IMAGES_PERMISSIONS_BANNER_SVG);
-  html_source->AddResourcePath("images/permissions_banner_dark.svg",
-                               IDR_SETTINGS_IMAGES_PERMISSIONS_BANNER_DARK_SVG);
-  html_source->AddResourcePath("images/safe_browsing_banner.svg",
-                               IDR_SETTINGS_IMAGES_SAFE_BROWSING_BANNER_SVG);
-  html_source->AddResourcePath(
-      "images/safe_browsing_banner_dark.svg",
-      IDR_SETTINGS_IMAGES_SAFE_BROWSING_BANNER_DARK_SVG);
-  html_source->AddResourcePath("images/sync_banner.svg",
-                               IDR_SETTINGS_IMAGES_SYNC_BANNER_SVG);
-  html_source->AddResourcePath("images/sync_banner_dark.svg",
-                               IDR_SETTINGS_IMAGES_SYNC_BANNER_DARK_SVG);
-  html_source->AddResourcePath("images/password_check_neutral.svg",
-                               IDR_SETTINGS_IMAGES_PASSWORD_CHECK_NEUTRAL_SVG);
-  html_source->AddResourcePath(
-      "images/password_check_neutral_dark.svg",
-      IDR_SETTINGS_IMAGES_PASSWORD_CHECK_NEUTRAL_DARK_SVG);
-  html_source->AddResourcePath("images/password_check_positive.svg",
-                               IDR_SETTINGS_IMAGES_PASSWORD_CHECK_POSITIVE_SVG);
-  html_source->AddResourcePath(
-      "images/password_check_positive_dark.svg",
-      IDR_SETTINGS_IMAGES_PASSWORD_CHECK_POSITIVE_DARK_SVG);
-
-  // Only used in Polymer 3, see https://crbug.com/1026426.
-  html_source->AddResourcePath("settings.js", IDR_SETTINGS_SETTINGS_ROLLUP_JS);
+  webui::SetupBundledWebUIDataSource(html_source, "settings.js",
+                                     IDR_SETTINGS_SETTINGS_ROLLUP_JS,
+                                     IDR_SETTINGS_SETTINGS_V3_HTML);
   html_source->AddResourcePath("shared.rollup.js",
                                IDR_SETTINGS_SHARED_ROLLUP_JS);
   html_source->AddResourcePath("lazy_load.js",
                                IDR_SETTINGS_LAZY_LOAD_ROLLUP_JS);
-  html_source->AddResourcePath("settings_v3.html",
-                               IDR_SETTINGS_SETTINGS_V3_HTML);
+
+  // Register SVG images that are purposefully not inlined in the HTML bundle
+  // above.
+  static constexpr webui::ResourcePath kSvgResources[] = {
+      {"images/cookies_banner.svg", IDR_SETTINGS_IMAGES_COOKIES_BANNER_SVG},
+      {"images/cookies_banner_dark.svg",
+       IDR_SETTINGS_IMAGES_COOKIES_BANNER_DARK_SVG},
+      {"images/permissions_banner.svg",
+       IDR_SETTINGS_IMAGES_PERMISSIONS_BANNER_SVG},
+      {"images/permissions_banner_dark.svg",
+       IDR_SETTINGS_IMAGES_PERMISSIONS_BANNER_DARK_SVG},
+      {"images/safe_browsing_banner.svg",
+       IDR_SETTINGS_IMAGES_SAFE_BROWSING_BANNER_SVG},
+      {"images/safe_browsing_banner_dark.svg",
+       IDR_SETTINGS_IMAGES_SAFE_BROWSING_BANNER_DARK_SVG},
+      {"images/sync_banner.svg", IDR_SETTINGS_IMAGES_SYNC_BANNER_SVG},
+      {"images/sync_banner_dark.svg", IDR_SETTINGS_IMAGES_SYNC_BANNER_DARK_SVG},
+      {"images/password_check_neutral.svg",
+       IDR_SETTINGS_IMAGES_PASSWORD_CHECK_NEUTRAL_SVG},
+      {"images/password_check_neutral_dark.svg",
+       IDR_SETTINGS_IMAGES_PASSWORD_CHECK_NEUTRAL_DARK_SVG},
+      {"images/password_check_positive.svg",
+       IDR_SETTINGS_IMAGES_PASSWORD_CHECK_POSITIVE_SVG},
+      {"images/password_check_positive_dark.svg",
+       IDR_SETTINGS_IMAGES_PASSWORD_CHECK_POSITIVE_DARK_SVG},
+  };
+  webui::AddResourcePathsBulk(html_source, kSvgResources);
+
 #else
   webui::SetupWebUIDataSource(
       html_source, base::make_span(kSettingsResources, kSettingsResourcesSize),
-      kGeneratedPath, IDR_SETTINGS_SETTINGS_HTML);
+      kGeneratedPath, IDR_SETTINGS_SETTINGS_V3_HTML);
 #endif
 
-  AddBrowserLocalizedStrings(html_source, profile, web_ui->GetWebContents());
+  AddLocalizedStrings(html_source, profile, web_ui->GetWebContents());
 
   ManagedUIHandler::Initialize(web_ui, html_source);
 

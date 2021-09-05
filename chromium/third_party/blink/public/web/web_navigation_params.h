@@ -24,6 +24,7 @@
 #include "third_party/blink/public/platform/web_content_security_policy_struct.h"
 #include "third_party/blink/public/platform/web_data.h"
 #include "third_party/blink/public/platform/web_http_body.h"
+#include "third_party/blink/public/platform/web_impression.h"
 #include "third_party/blink/public/platform/web_navigation_body_loader.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_source_location.h"
@@ -51,6 +52,7 @@ namespace blink {
 
 class KURL;
 class WebDocumentLoader;
+class WebLocalFrame;
 
 // This structure holds all information collected by Blink when
 // navigation is being initiated.
@@ -86,9 +88,15 @@ struct BLINK_EXPORT WebNavigationInfo {
   // Whether the navigation is a result of client redirect.
   bool is_client_redirect = false;
 
+  // WebLocalFrame that initiated this navigation request. May be null for
+  // navigations that are not associated with a frame. Storing this pointer is
+  // dangerous, it should be verified by comparing against a set of known active
+  // frames before direct use.
+  WebLocalFrame* initiator_frame;
+
   // Whether the navigation initiator frame has the
-  // |mojom::blink::WebSandboxFlags::kDownloads| bit set in its sandbox flags
-  // set.
+  // |network::mojom::blink::WebSandboxFlags::kDownloads| bit set in its sandbox
+  // flags set.
   bool initiator_frame_has_download_sandbox_flag = false;
 
   // Whether the navigation initiator frame is an ad frame.
@@ -150,6 +158,11 @@ struct BLINK_EXPORT WebNavigationInfo {
   // The value of hrefTranslate attribute of a link, if this navigation was
   // inititated by clicking a link.
   WebString href_translate;
+
+  // Optional impression associated with this navigation. This is attached when
+  // a navigation results from a click on an anchor tag that has conversion
+  // measurement attributes.
+  base::Optional<WebImpression> impression;
 
   // The navigation initiator's address space.
   network::mojom::IPAddressSpace initiator_address_space =

@@ -9,8 +9,10 @@
 #include <string>
 #include <utility>
 
+#include "base/base64url.h"
 #include "base/bind.h"
 #include "base/containers/span.h"
+#include "base/json/string_escape.h"
 #include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/strcat.h"
@@ -25,12 +27,13 @@
 #include "device/fido/credential_management.h"
 #include "device/fido/ctap_get_assertion_request.h"
 #include "device/fido/ctap_make_credential_request.h"
-#include "device/fido/ec_public_key.h"
 #include "device/fido/fido_constants.h"
 #include "device/fido/fido_parsing_utils.h"
 #include "device/fido/opaque_attestation_statement.h"
+#include "device/fido/p256_public_key.h"
 #include "device/fido/pin.h"
 #include "device/fido/pin_internal.h"
+#include "device/fido/public_key.h"
 #include "device/fido/virtual_u2f_device.h"
 #include "third_party/boringssl/src/include/openssl/aes.h"
 #include "third_party/boringssl/src/include/openssl/digest.h"
@@ -84,32 +87,6 @@ bool CheckPINToken(base::span<const uint8_t> pin_token,
          CRYPTO_memcmp(pin_auth.data(), calculated_pin_auth, 16) == 0;
 }
 
-// Checks that whether the received MakeCredential request includes EA256
-// algorithm in publicKeyCredParam.
-bool AreMakeCredentialParamsValid(const CtapMakeCredentialRequest& request) {
-  const auto& params =
-      request.public_key_credential_params.public_key_credential_params();
-  return std::any_of(
-      params.begin(), params.end(), [](const auto& credential_info) {
-        return credential_info.algorithm ==
-               base::strict_cast<int>(CoseAlgorithmIdentifier::kCoseEs256);
-      });
-}
-
-std::unique_ptr<ECPublicKey> ConstructECPublicKey(
-    std::string public_key_string) {
-  DCHECK_EQ(64u, public_key_string.size());
-
-  const auto public_key_x_coordinate =
-      base::as_bytes(base::make_span(public_key_string)).first(32);
-  const auto public_key_y_coordinate =
-      base::as_bytes(base::make_span(public_key_string)).last(32);
-  return std::make_unique<ECPublicKey>(
-      fido_parsing_utils::kEs256,
-      fido_parsing_utils::Materialize(public_key_x_coordinate),
-      fido_parsing_utils::Materialize(public_key_y_coordinate));
-}
-
 std::vector<uint8_t> ConstructSignatureBuffer(
     const AuthenticatorData& authenticator_data,
     base::span<const uint8_t, kClientDataHashLength> client_data_hash) {
@@ -120,10 +97,25 @@ std::vector<uint8_t> ConstructSignatureBuffer(
   return signature_buffer;
 }
 
+std::string ConstructAndroidClientDataJSON(
+    const AndroidClientDataExtensionInput& input,
+    base::StringPiece type) {
+  std::string challenge_b64url;
+  base::Base64UrlEncode(
+      base::StringPiece(reinterpret_cast<const char*>(input.challenge.data()),
+                        input.challenge.size()),
+      base::Base64UrlEncodePolicy::OMIT_PADDING, &challenge_b64url);
+  return "{\"challenge\":" + base::GetQuotedJSONString(challenge_b64url) +
+         ",\"origin\":" + base::GetQuotedJSONString(input.origin.Serialize()) +
+         ",\"type\":" + base::GetQuotedJSONString(type) +
+         ",\"androidPackageName\":\"org.chromium.device.fido.test\"}";
+}
+
 std::vector<uint8_t> ConstructMakeCredentialResponse(
     const base::Optional<std::vector<uint8_t>> attestation_certificate,
     base::span<const uint8_t> signature,
-    AuthenticatorData authenticator_data) {
+    AuthenticatorData authenticator_data,
+    base::Optional<std::vector<uint8_t>> android_client_data_ext) {
   cbor::Value::MapValue attestation_map;
   attestation_map.emplace("alg", -7);
   attestation_map.emplace("sig", fido_parsing_utils::Materialize(signature));
@@ -140,6 +132,10 @@ std::vector<uint8_t> ConstructMakeCredentialResponse(
           std::move(authenticator_data),
           std::make_unique<OpaqueAttestationStatement>(
               "packed", cbor::Value(std::move(attestation_map)))));
+  if (android_client_data_ext) {
+    make_credential_response.set_android_client_data_ext(
+        *android_client_data_ext);
+  }
   return AsCTAPStyleCBORBytes(make_credential_response);
 }
 
@@ -363,6 +359,10 @@ std::vector<uint8_t> EncodeGetAssertionResponse(
   if (response.num_credentials()) {
     response_map.emplace(5, response.num_credentials().value());
   }
+  if (response.android_client_data_ext()) {
+    response_map.emplace(0xf0,
+                         cbor::Value(*response.android_client_data_ext()));
+  }
 
   return WriteCBOR(cbor::Value(std::move(response_map)), allow_invalid_utf8);
 }
@@ -387,6 +387,10 @@ VirtualCtap2Device::Config::~Config() = default;
 VirtualCtap2Device::VirtualCtap2Device() : VirtualFidoDevice() {
   device_info_ =
       AuthenticatorGetInfoResponse({ProtocolVersion::kCtap2}, kDeviceAaguid);
+  device_info_->algorithms = {
+      static_cast<int32_t>(CoseAlgorithmIdentifier::kCoseEs256),
+      static_cast<int32_t>(CoseAlgorithmIdentifier::kCoseRs256),
+  };
 }
 
 VirtualCtap2Device::VirtualCtap2Device(scoped_refptr<State> state,
@@ -465,6 +469,16 @@ VirtualCtap2Device::VirtualCtap2Device(scoped_refptr<State> state,
     options.is_platform_device = true;
   }
 
+  if (config.cred_protect_support) {
+    options_updated = true;
+    options.default_cred_protect = config.default_cred_protect;
+  }
+
+  if (config.support_android_client_data_extension) {
+    options_updated = true;
+    options.supports_android_client_data_ext = true;
+  }
+
   if (options_updated) {
     device_info_->options = std::move(options);
   }
@@ -472,6 +486,11 @@ VirtualCtap2Device::VirtualCtap2Device(scoped_refptr<State> state,
   if (config.cred_protect_support) {
     device_info_->extensions.emplace(
         {std::string(device::kExtensionCredProtect)});
+  }
+
+  if (config.support_android_client_data_extension) {
+    device_info_->extensions.emplace(
+        {std::string(device::kExtensionAndroidClientData)});
   }
 
   if (config.max_credential_count_in_list > 0) {
@@ -680,7 +699,10 @@ base::Optional<CtapDeviceResponseCode> VirtualCtap2Device::OnMakeCredential(
     return CtapDeviceResponseCode::kCtap2ErrOther;
   }
 
-  auto opt_request = CtapMakeCredentialRequest::Parse(cbor_request->GetMap());
+  CtapMakeCredentialRequest::ParseOpts parse_opts;
+  parse_opts.reject_all_extensions = config_.reject_all_extensions;
+  auto opt_request =
+      CtapMakeCredentialRequest::Parse(cbor_request->GetMap(), parse_opts);
   if (!opt_request) {
     DLOG(ERROR) << "Incorrectly formatted MakeCredential request.";
     return CtapDeviceResponseCode::kCtap2ErrOther;
@@ -728,11 +750,28 @@ base::Optional<CtapDeviceResponseCode> VirtualCtap2Device::OnMakeCredential(
   }
 
   // Step 7.
-  if (!AreMakeCredentialParamsValid(request)) {
-    DLOG(ERROR) << "Virtual CTAP2 device does not support options required by "
-                   "the request.";
+  std::unique_ptr<PrivateKey> private_key;
+  for (const auto& param :
+       request.public_key_credential_params.public_key_credential_params()) {
+    switch (param.algorithm) {
+      default:
+        continue;
+      case static_cast<int32_t>(CoseAlgorithmIdentifier::kCoseEs256):
+        private_key = FreshP256Key();
+        break;
+      case static_cast<int32_t>(CoseAlgorithmIdentifier::kCoseRs256):
+        private_key = FreshRSAKey();
+        break;
+    }
+    break;
+  }
+
+  if (!private_key) {
+    DLOG(ERROR) << "Virtual CTAP2 device does not support any public-key "
+                   "algorithm listed in the request";
     return CtapDeviceResponseCode::kCtap2ErrUnsupportedAlgorithm;
   }
+  std::unique_ptr<PublicKey> public_key(private_key->GetPublicKey());
 
   // Step 8.
   if ((request.resident_key_required && !options.supports_resident_key) ||
@@ -744,17 +783,9 @@ base::Optional<CtapDeviceResponseCode> VirtualCtap2Device::OnMakeCredential(
   if (!user_verified && !SimulatePress()) {
     return base::nullopt;
   }
-  // Create key to register.
-  // Note: Non-deterministic, you need to mock this out if you rely on
-  // deterministic behavior.
-  auto private_key = crypto::ECPrivateKey::Create();
-  std::string public_key;
-  bool status = private_key->ExportRawPublicKey(&public_key);
-  DCHECK(status);
 
   // Our key handles are simple hashes of the public key.
-  auto hash = fido_parsing_utils::CreateSHA256Hash(public_key);
-  std::vector<uint8_t> key_handle(hash.begin(), hash.end());
+  const auto key_handle = crypto::SHA256Hash(public_key->cose_key_bytes());
 
   base::Optional<cbor::Value> extensions;
   cbor::Value::MapValue extensions_map;
@@ -763,18 +794,18 @@ base::Optional<CtapDeviceResponseCode> VirtualCtap2Device::OnMakeCredential(
                            cbor::Value(true));
   }
 
-  base::Optional<CredProtect> cred_protect;
+  CredProtect cred_protect = config_.default_cred_protect;
   if (request.cred_protect) {
-    cred_protect = request.cred_protect->first;
+    cred_protect = *request.cred_protect;
   }
   if (config_.force_cred_protect) {
-    cred_protect = config_.force_cred_protect;
+    cred_protect = *config_.force_cred_protect;
   }
 
-  if (cred_protect) {
-    extensions_map.emplace(
-        cbor::Value(kExtensionCredProtect),
-        cbor::Value(cred_protect == CredProtect::kUVRequired ? 3 : 2));
+  if (request.cred_protect ||
+      cred_protect != device::CredProtect::kUVOptional) {
+    extensions_map.emplace(cbor::Value(kExtensionCredProtect),
+                           cbor::Value(static_cast<int64_t>(cred_protect)));
   }
 
   if (config_.add_extra_extension) {
@@ -787,11 +818,21 @@ base::Optional<CtapDeviceResponseCode> VirtualCtap2Device::OnMakeCredential(
 
   auto authenticator_data = ConstructAuthenticatorData(
       rp_id_hash, user_verified, 01ul,
-      ConstructAttestedCredentialData(key_handle,
-                                      ConstructECPublicKey(public_key)),
+      ConstructAttestedCredentialData(key_handle, std::move(public_key)),
       std::move(extensions));
-  auto sign_buffer =
-      ConstructSignatureBuffer(authenticator_data, request.client_data_hash);
+
+  base::Optional<std::string> opt_android_client_data_json;
+  if (request.android_client_data_ext &&
+      config_.support_android_client_data_extension) {
+    opt_android_client_data_json.emplace(ConstructAndroidClientDataJSON(
+        *request.android_client_data_ext, "webauthn.create"));
+  }
+
+  auto sign_buffer = ConstructSignatureBuffer(
+      authenticator_data,
+      opt_android_client_data_json
+          ? fido_parsing_utils::CreateSHA256Hash(*opt_android_client_data_json)
+          : request.client_data_hash);
 
   // Sign with attestation key.
   // Note: Non-deterministic, you need to mock this out if you rely on
@@ -799,7 +840,8 @@ base::Optional<CtapDeviceResponseCode> VirtualCtap2Device::OnMakeCredential(
   std::vector<uint8_t> sig;
   std::unique_ptr<crypto::ECPrivateKey> attestation_private_key =
       crypto::ECPrivateKey::CreateFromPrivateKeyInfo(GetAttestationKey());
-  status = Sign(attestation_private_key.get(), std::move(sign_buffer), &sig);
+  bool status =
+      Sign(attestation_private_key.get(), std::move(sign_buffer), &sig);
   DCHECK(status);
 
   base::Optional<std::vector<uint8_t>> attestation_cert;
@@ -812,8 +854,34 @@ base::Optional<CtapDeviceResponseCode> VirtualCtap2Device::OnMakeCredential(
     }
   }
 
-  *response = ConstructMakeCredentialResponse(std::move(attestation_cert), sig,
-                                              std::move(authenticator_data));
+  base::Optional<std::vector<uint8_t>> opt_android_client_data_ext;
+  if (opt_android_client_data_json) {
+    opt_android_client_data_ext.emplace();
+    fido_parsing_utils::Append(
+        &*opt_android_client_data_ext,
+        base::make_span(reinterpret_cast<const uint8_t*>(
+                            opt_android_client_data_json->data()),
+                        opt_android_client_data_json->size()));
+  } else if (config_.send_unsolicited_android_client_data_extension) {
+    const std::string client_data_json =
+        "{\"challenge\":"
+        "\"ZXlKaGJHY2lPaUpJVXpJMU5pSXNJblI1Y0NJNklrcFhWQ0o5LmV5SnBZWFFpT2pFMU"
+        "9EYzNOamMxTnpJc0ltVjRjQ0k2TVRVNE56ZzROelUzTWl3aWMzVmlJam9pWkdaa1ptY2"
+        "lmUS5FdFFyUXNSWE9qNlpkMGFseXVkUzF3X3FORjJSbElZdTNfb0NvTDRzbWI4\","
+        "\"origin\":" +
+        base::GetQuotedJSONString("https://" + request.rp.id) +
+        ",\"type\":\"webauthn.create\",\"androidPackageName\":\"org.chromium."
+        "device.fido.test\"}";
+    opt_android_client_data_ext.emplace();
+    fido_parsing_utils::Append(&*opt_android_client_data_ext,
+                               base::make_span(reinterpret_cast<const uint8_t*>(
+                                                   client_data_json.data()),
+                                               client_data_json.size()));
+  }
+
+  *response = ConstructMakeCredentialResponse(
+      std::move(attestation_cert), sig, std::move(authenticator_data),
+      std::move(opt_android_client_data_ext));
   RegistrationData registration(std::move(private_key), rp_id_hash,
                                 1 /* signature counter */);
 
@@ -861,7 +929,9 @@ base::Optional<CtapDeviceResponseCode> VirtualCtap2Device::OnGetAssertion(
   }
 
   const auto& request_map = cbor_request->GetMap();
-  auto opt_request = CtapGetAssertionRequest::Parse(request_map);
+  CtapGetAssertionRequest::ParseOpts parse_opts;
+  parse_opts.reject_all_extensions = config_.reject_all_extensions;
+  auto opt_request = CtapGetAssertionRequest::Parse(request_map, parse_opts);
   if (!opt_request) {
     DLOG(ERROR) << "Incorrectly formatted GetAssertion request.";
     return CtapDeviceResponseCode::kCtap2ErrOther;
@@ -934,10 +1004,9 @@ base::Optional<CtapDeviceResponseCode> VirtualCtap2Device::OnGetAssertion(
           [user_verified, &request](
               const std::pair<base::span<const uint8_t>, RegistrationData*>&
                   candidate) -> bool {
-            if (!candidate.second->protection) {
-              return false;
-            }
-            switch (*candidate.second->protection) {
+            switch (candidate.second->protection) {
+              case CredProtect::kUVOptional:
+                return false;
               case CredProtect::kUVOrCredIDRequired:
                 return request.allow_list.empty() && !user_verified;
               case CredProtect::kUVRequired:
@@ -982,28 +1051,33 @@ base::Optional<CtapDeviceResponseCode> VirtualCtap2Device::OnGetAssertion(
   for (const auto& registration : found_registrations) {
     registration.second->counter++;
 
-    auto* private_key = registration.second->private_key.get();
-    std::string public_key;
-    bool status = private_key->ExportRawPublicKey(&public_key);
-    DCHECK(status);
-
-    base::Optional<AttestedCredentialData> opt_attested_cred_data =
-        config_.return_attested_cred_data_in_get_assertion_response
-            ? base::make_optional(ConstructAttestedCredentialData(
-                  fido_parsing_utils::Materialize(registration.first),
-                  ConstructECPublicKey(public_key)))
-            : base::nullopt;
+    base::Optional<AttestedCredentialData> opt_attested_cred_data;
+    if (config_.return_attested_cred_data_in_get_assertion_response) {
+      opt_attested_cred_data.emplace(ConstructAttestedCredentialData(
+          registration.first,
+          registration.second->private_key->GetPublicKey()));
+    }
 
     auto authenticator_data = ConstructAuthenticatorData(
         rp_id_hash, user_verified, registration.second->counter,
         std::move(opt_attested_cred_data),
         extensions ? base::make_optional(extensions->Clone()) : base::nullopt);
-    auto signature_buffer =
-        ConstructSignatureBuffer(authenticator_data, request.client_data_hash);
 
-    std::vector<uint8_t> signature;
-    status = Sign(private_key, std::move(signature_buffer), &signature);
-    DCHECK(status);
+    base::Optional<std::string> opt_android_client_data_json;
+    if (request.android_client_data_ext &&
+        config_.support_android_client_data_extension) {
+      opt_android_client_data_json.emplace(ConstructAndroidClientDataJSON(
+          *request.android_client_data_ext, "webauthn.get"));
+    }
+
+    auto signature_buffer = ConstructSignatureBuffer(
+        authenticator_data, opt_android_client_data_json
+                                ? fido_parsing_utils::CreateSHA256Hash(
+                                      *opt_android_client_data_json)
+                                : request.client_data_hash);
+
+    std::vector<uint8_t> signature =
+        registration.second->private_key->Sign(signature_buffer);
 
     AuthenticatorGetAssertionResponse assertion(
         std::move(authenticator_data),
@@ -1014,6 +1088,31 @@ base::Optional<CtapDeviceResponseCode> VirtualCtap2Device::OnGetAssertion(
          fido_parsing_utils::Materialize(registration.first)});
     if (registration.second->is_resident) {
       assertion.SetUserEntity(registration.second->user.value());
+    }
+
+    if (opt_android_client_data_json) {
+      std::vector<uint8_t> android_client_data_ext;
+      fido_parsing_utils::Append(
+          &android_client_data_ext,
+          base::make_span(reinterpret_cast<const uint8_t*>(
+                              opt_android_client_data_json->data()),
+                          opt_android_client_data_json->size()));
+      assertion.set_android_client_data_ext(std::move(android_client_data_ext));
+    } else if (config_.send_unsolicited_android_client_data_extension) {
+      const std::string client_data_json =
+          "{challenge:"
+          "\"ZXlKaGJHY2lPaUpJVXpJMU5pSXNJblI1Y0NJNklrcFhWQ0o5LmV5SnBZWFFpT2pFMU"
+          "9EYzNOamMxTnpJc0ltVjRjQ0k2TVRVNE56ZzROelUzTWl3aWMzVmlJam9pWkdaa1ptY2"
+          "lmUS5FdFFyUXNSWE9qNlpkMGFseXVkUzF3X3FORjJSbElZdTNfb0NvTDRzbWI4\","
+          "origin:\"https://" +
+          request.rp_id + "\",type:\"webauthn.get\"}";
+      std::vector<uint8_t> android_client_data_ext;
+      fido_parsing_utils::Append(
+          &android_client_data_ext,
+          base::make_span(
+              reinterpret_cast<const uint8_t*>(client_data_json.data()),
+              client_data_json.size()));
+      assertion.set_android_client_data_ext(std::move(android_client_data_ext));
     }
 
     if (!done_first) {
@@ -1629,6 +1728,7 @@ CtapDeviceResponseCode VirtualCtap2Device::OnBioEnrollment(
                 {"Template", base::NumberToString(
                                  *mutable_state()->bio_current_template_id)});
         mutable_state()->bio_current_template_id = base::nullopt;
+        mutable_state()->fingerprints_enrolled = true;
       }
       break;
     case SubCmd::kEnumerateEnrollments: {
@@ -1729,13 +1829,12 @@ void VirtualCtap2Device::InitPendingRegistrations(
         static_cast<int>(CredentialManagementResponseKey::kCredentialID),
         AsCBOR(PublicKeyCredentialDescriptor(CredentialType::kPublicKey,
                                              registration.first)));
-    std::string public_key;
-    EC_KEY* ec_key =
-        EVP_PKEY_get0_EC_KEY(registration.second.private_key->key());
-    CHECK(ec_key != nullptr);
+
+    base::Optional<cbor::Value> cose_key = cbor::Reader::Read(
+        registration.second.private_key->GetPublicKey()->cose_key_bytes());
     response_map.emplace(
         static_cast<int>(CredentialManagementResponseKey::kPublicKey),
-        pin::EncodeCOSEPublicKey(ec_key));
+        cose_key->GetMap());
     mutable_state()->pending_registrations.emplace_back(
         std::move(response_map));
   }
@@ -1761,7 +1860,7 @@ CtapDeviceResponseCode VirtualCtap2Device::OnAuthenticatorGetInfo(
 }
 
 AttestedCredentialData VirtualCtap2Device::ConstructAttestedCredentialData(
-    std::vector<uint8_t> key_handle,
+    base::span<const uint8_t> key_handle,
     std::unique_ptr<PublicKey> public_key) {
   constexpr std::array<uint8_t, 2> sha256_length = {0, crypto::kSHA256Length};
   constexpr std::array<uint8_t, 16> kZeroAaguid = {0, 0, 0, 0, 0, 0, 0, 0,
@@ -1771,7 +1870,8 @@ AttestedCredentialData VirtualCtap2Device::ConstructAttestedCredentialData(
       !mutable_state()->non_zero_aaguid_with_self_attestation) {
     aaguid = kZeroAaguid;
   }
-  return AttestedCredentialData(aaguid, sha256_length, std::move(key_handle),
+  return AttestedCredentialData(aaguid, sha256_length,
+                                fido_parsing_utils::Materialize(key_handle),
                                 std::move(public_key));
 }
 

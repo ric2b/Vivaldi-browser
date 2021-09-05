@@ -11,6 +11,7 @@
 #include "base/process/process.h"
 #include "base/task/task_traits.h"
 #include "components/performance_manager/public/graph/node.h"
+#include "content/public/common/process_type.h"
 
 namespace base {
 class Process;
@@ -44,6 +45,9 @@ class ProcessNode : public Node {
   ProcessNode();
   ~ProcessNode() override;
 
+  // Returns the type of this process.
+  virtual content::ProcessType GetProcessType() const = 0;
+
   // Returns the process ID associated with this process. Use this in preference
   // to querying GetProcess.Pid(). It's always valid to access, but will return
   // kNullProcessId if the process has yet started. It will also retain the
@@ -66,8 +70,9 @@ class ProcessNode : public Node {
   virtual base::Optional<int32_t> GetExitStatus() const = 0;
 
   // Visits the frame nodes that are hosted in this process. The iteration is
-  // halted if the visitor returns false.
-  virtual void VisitFrameNodes(const FrameNodeVisitor& visitor) const = 0;
+  // halted if the visitor returns false. Returns true if every call to the
+  // visitor returned true, false otherwise.
+  virtual bool VisitFrameNodes(const FrameNodeVisitor& visitor) const = 0;
 
   // Returns the set of frame nodes that are hosted in this process. Note that
   // calling this causes the set of nodes to be generated.

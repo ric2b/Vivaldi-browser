@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">Tyskt tangentbord</translation>
 <translation id="1972984168337863910">Utöka panel med information om filåtgärder</translation>
 <translation id="1984603991036629094">Armeniskt fonetiskt tangentbord</translation>
+<translation id="1995337122023280937">Gå till filens plats</translation>
 <translation id="2001796770603320721">Hantera i Drive</translation>
 <translation id="2009067268969781306">Om du formaterar en enhet raderas all data som lagras på den. Det går inte att ångra åtgärden.</translation>
 <translation id="2028997212275086731">RAR-arkiv</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">Det gick inte att nå Google Drive. <ph name="BEGIN_LINK" />Logga ut<ph name="END_LINK" /> och sedan in igen.</translation>
 <translation id="2649120831653069427">Regnbågsfisk</translation>
 <translation id="2661146741306740526">16:9</translation>
+<translation id="2664412712123763093">Filens plats</translation>
 <translation id="2672394958563893062">Ett fel inträffade. Klicka här och börja om från början.</translation>
 <translation id="2676946222714718093">Spelas på</translation>
 <translation id="2735698359135166290">Rumänskt standardtangentbord</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" /> fel.</translation>
 <translation id="3519867315646775981">Translitterera (shalom ← שלום)</translation>
 <translation id="3522708245912499433">portugisiska</translation>
+<translation id="3524311639100184459">Obs! De här filerna är tillfälliga och kan tas bort automatiskt för att frigöra utrymme på hårddisken.  <ph name="BEGIN_LINK" />Läs mer<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Mapp</translation>
 <translation id="3549797760399244642">Besök drive.google.com ...</translation>
 <translation id="357479282490346887">litauiska</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">Kiwi</translation>
 <translation id="3966388904776714213">Ljudspelare</translation>
 <translation id="4002066346123236978">Titel</translation>
+<translation id="4065397611279318371">Om du vill öppna filer med <ph name="APP_NAME" />-appar måste du först flytta dem till mappen <ph name="SHARED_DIRECTORY_LABEL" />.</translation>
 <translation id="4070370845051020638">Inmatningsmetod för kantonesiska</translation>
 <translation id="4072248638558688893">Tangentbord för tamil (fonetiskt)</translation>
 <translation id="4124935795427217608">Enhörning</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">Åtgärda automatiskt</translation>
 <translation id="4881695831933465202">Öppna</translation>
 <translation id="4886021172213954916">Tangentbord för tamil (skrivmaskin)</translation>
+<translation id="4892969127351273348">Det går inte att öppna med <ph name="APP_NAME" /></translation>
 <translation id="4905417359854579806">Klar att säkerhetskopiera <ph name="FILE_COUNT" /></translation>
 <translation id="4924638091161556692">Åtgärdat</translation>
 <translation id="4935975195727477204">Gazaniablomma</translation>
@@ -500,6 +505,7 @@
 <translation id="6806699711453372963">Hantera Linux-delning</translation>
 <translation id="6808193438228982088">Räv</translation>
 <translation id="6820687829547641339">Gzip-komprimerat tar-arkiv</translation>
+<translation id="6823166707458800069">Alla filer som sparas i den här mappen säkerhetskopieras online automatiskt.</translation>
 <translation id="6825883775269213504">ryska</translation>
 <translation id="6827236167376090743">Denna video spelas upp för evigt.</translation>
 <translation id="6847101934483209767"><ph name="ENTRY_NAME" /> har avmarkerats.</translation>
@@ -556,6 +562,7 @@
 <translation id="7417705661718309329">Google-karta</translation>
 <translation id="7419631653042041064">Katalanskt tangentbord</translation>
 <translation id="7434823369735508263">Dvorak-tangentbord för USA</translation>
+<translation id="7447678886297481665">Filer i den här mappen är skrivskyddade. Vissa aktiviteter stöds inte.</translation>
 <translation id="7460898608667578234">ukrainska</translation>
 <translation id="7474889694310679759">Kanadensiskt-engelskt tangentbord</translation>
 <translation id="7489215562877293245"><ph name="FILE_COUNT" /> hittades

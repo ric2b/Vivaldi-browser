@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include "base/auto_reset.h"
+#include "base/notreached.h"
 #include "base/test/simple_test_tick_clock.h"
 
 namespace base {

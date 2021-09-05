@@ -49,11 +49,8 @@ config("skia_config") {
     }
   }
   if (enable_vulkan) {
-    include_dirs += [
-      "//third_party/vulkan/include",
-      "//third_party/skia/third_party/vulkanmemoryallocator",
-    ]
-    configs = [ "//third_party/vulkan:vulkan_config" ]
+    include_dirs += [ "//third_party/vulkan/include" ]
+    configs = [ "//third_party/vulkan_headers:vulkan_headers_config" ]
   }
 
   defines = [
@@ -379,8 +376,6 @@ component("skia") {
 
   # Remove unused util sources.
   sources -= [
-    "//third_party/skia/src/utils/SkCamera.cpp",
-    "//third_party/skia/src/utils/SkFrontBufferedStream.cpp",
     "//third_party/skia/src/utils/SkInterpolator.cpp",
     "//third_party/skia/src/utils/SkParsePath.cpp",
   ]
@@ -518,8 +513,9 @@ component("skia") {
   if (skia_use_dawn) {
     public_deps += [ "//third_party/dawn/src/dawn:dawncpp_headers" ]
     deps += [
-      "//third_party/dawn:libdawn_native",
-      "//third_party/dawn/src/dawn:libdawn",
+      "//third_party/dawn/src/dawn:dawn_proc",
+      "//third_party/dawn/src/dawn:dawncpp",
+      "//third_party/dawn/src/dawn_native",
     ]
   }
 
@@ -585,10 +581,6 @@ component("skia") {
     }
     if (enable_vulkan) {
       sources += skia_vk_sources
-      sources += [
-        "//third_party/skia/third_party/vulkanmemoryallocator/GrVulkanMemoryAllocator.cpp",
-        "//third_party/skia/third_party/vulkanmemoryallocator/GrVulkanMemoryAllocator.h",
-      ]
     }
     deps += [ "//gpu/config:workaround_list" ]
   }

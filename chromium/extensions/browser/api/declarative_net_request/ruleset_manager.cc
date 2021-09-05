@@ -5,16 +5,18 @@
 #include "extensions/browser/api/declarative_net_request/ruleset_manager.h"
 
 #include <algorithm>
+#include <iterator>
 #include <tuple>
-#include <utility>
 
 #include "base/bind.h"
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notreached.h"
 #include "base/optional.h"
 #include "base/stl_util.h"
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
+#include "components/version_info/channel.h"
 #include "components/web_cache/browser/web_cache_manager.h"
 #include "extensions/browser/api/declarative_net_request/composite_matcher.h"
 #include "extensions/browser/api/declarative_net_request/constants.h"
@@ -30,6 +32,7 @@
 #include "extensions/common/api/declarative_net_request.h"
 #include "extensions/common/api/declarative_net_request/utils.h"
 #include "extensions/common/constants.h"
+#include "extensions/common/features/feature_channel.h"
 #include "url/origin.h"
 
 namespace extensions {
@@ -83,9 +86,11 @@ void RulesetManager::AddRuleset(const ExtensionId& extension_id,
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(IsAPIAvailable());
 
-  bool inserted;
-  std::tie(std::ignore, inserted) = rulesets_.emplace(
-      extension_id, prefs_->GetInstallTime(extension_id), std::move(matcher));
+  bool inserted =
+      rulesets_
+          .emplace(extension_id, prefs_->GetInstallTime(extension_id),
+                   std::move(matcher))
+          .second;
   DCHECK(inserted) << "AddRuleset called twice in succession for "
                    << extension_id;
 
@@ -105,12 +110,10 @@ void RulesetManager::RemoveRuleset(const ExtensionId& extension_id) {
         return ruleset_data.extension_id == extension_id;
       };
 
-  DCHECK(std::find_if(rulesets_.begin(), rulesets_.end(), compare_by_id) !=
-         rulesets_.end())
+  size_t erased_count = base::EraseIf(rulesets_, compare_by_id);
+  DCHECK_EQ(1u, erased_count)
       << "RemoveRuleset called without a corresponding AddRuleset for "
       << extension_id;
-
-  base::EraseIf(rulesets_, compare_by_id);
 
   if (test_observer_)
     test_observer_->OnRulesetCountChanged(rulesets_.size());
@@ -118,6 +121,13 @@ void RulesetManager::RemoveRuleset(const ExtensionId& extension_id) {
   // Clear the renderers' cache so that they take the removed rules into
   // account.
   ClearRendererCacheOnNavigation();
+}
+
+std::set<ExtensionId> RulesetManager::GetExtensionsWithRulesets() const {
+  std::set<ExtensionId> extension_ids;
+  for (const ExtensionRulesetData& data : rulesets_)
+    extension_ids.insert(data.extension_id);
+  return extension_ids;
 }
 
 CompositeMatcher* RulesetManager::GetMatcherForExtension(
@@ -178,20 +188,14 @@ bool RulesetManager::HasExtraHeadersMatcherForRequest(
   const std::vector<RequestAction>& actions =
       EvaluateRequest(request, is_incognito_context);
 
-  // We only support removing a subset of extra headers currently. If that
-  // changes, the implementation here should change as well.
-  // TODO(crbug.com/947591): Modify this method for
-  // flat::ActionType_modify_headers.
-  static_assert(flat::ActionType_count == 7,
+  static_assert(flat::ActionType_count == 6,
                 "Modify this method to ensure HasExtraHeadersMatcherForRequest "
                 "is updated as new actions are added.");
 
-  for (const auto& action : actions) {
-    if (action.type == RequestAction::Type::REMOVE_HEADERS)
-      return true;
-  }
-
-  return false;
+  return std::any_of(
+      actions.begin(), actions.end(), [](const RequestAction& action) {
+        return action.type == RequestAction::Type::MODIFY_HEADERS;
+      });
 }
 
 void RulesetManager::OnRenderFrameCreated(content::RenderFrameHost* host) {
@@ -211,6 +215,8 @@ void RulesetManager::OnDidFinishNavigation(content::RenderFrameHost* host) {
 
 void RulesetManager::SetObserverForTest(TestObserver* observer) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(!(test_observer_ && observer))
+      << "Multiple test observers are not supported";
   test_observer_ = observer;
 }
 
@@ -236,14 +242,13 @@ bool RulesetManager::ExtensionRulesetData::operator<(
 }
 
 base::Optional<RequestAction> RulesetManager::GetBeforeRequestAction(
-    const std::vector<const ExtensionRulesetData*>& rulesets,
+    const std::vector<RulesetAndPageAccess>& rulesets,
     const WebRequestInfo& request,
-    const int tab_id,
-    const bool crosses_incognito,
     const RequestParams& params) const {
   DCHECK(std::is_sorted(rulesets.begin(), rulesets.end(),
-                        [](const ExtensionRulesetData* a,
-                           const ExtensionRulesetData* b) { return *a < *b; }));
+                        [](RulesetAndPageAccess a, RulesetAndPageAccess b) {
+                          return *a.first < *b.first;
+                        }));
 
   // The priorities of actions between different extensions is different from
   // the priorities of actions within an extension.
@@ -260,7 +265,7 @@ base::Optional<RequestAction> RulesetManager::GetBeforeRequestAction(
       case RequestAction::Type::ALLOW:
       case RequestAction::Type::ALLOW_ALL_REQUESTS:
         return 1;
-      case RequestAction::Type::REMOVE_HEADERS:
+      case RequestAction::Type::MODIFY_HEADERS:
         NOTREACHED();
         return 0;
     }
@@ -271,15 +276,12 @@ base::Optional<RequestAction> RulesetManager::GetBeforeRequestAction(
   // This iterates in decreasing order of extension installation time. Hence
   // more recently installed extensions get higher priority in choosing the
   // action for the request.
-  for (const ExtensionRulesetData* ruleset : rulesets) {
-    PageAccess page_access = WebRequestPermissions::CanExtensionAccessURL(
-        permission_helper_, ruleset->extension_id, request.url, tab_id,
-        crosses_incognito,
-        WebRequestPermissions::REQUIRE_HOST_PERMISSION_FOR_URL_AND_INITIATOR,
-        request.initiator, request.type);
+  for (const RulesetAndPageAccess& ruleset_and_access : rulesets) {
+    const ExtensionRulesetData* ruleset = ruleset_and_access.first;
 
     CompositeMatcher::ActionInfo action_info =
-        ruleset->matcher->GetBeforeRequestAction(params, page_access);
+        ruleset->matcher->GetBeforeRequestAction(params,
+                                                 ruleset_and_access.second);
 
     DCHECK(!(action_info.action && action_info.notify_request_withheld));
     if (action_info.notify_request_withheld) {
@@ -294,29 +296,51 @@ base::Optional<RequestAction> RulesetManager::GetBeforeRequestAction(
   return action;
 }
 
-std::vector<RequestAction> RulesetManager::GetRemoveHeadersActions(
-    const std::vector<const ExtensionRulesetData*>& rulesets,
+std::vector<RequestAction> RulesetManager::GetModifyHeadersActions(
+    const std::vector<RulesetAndPageAccess>& rulesets,
+    const WebRequestInfo& request,
     const RequestParams& params) const {
-  std::vector<RequestAction> remove_headers_actions;
+  DCHECK(std::is_sorted(rulesets.begin(), rulesets.end(),
+                        [](RulesetAndPageAccess a, RulesetAndPageAccess b) {
+                          return *a.first < *b.first;
+                        }));
 
-  // Keep a combined mask of all headers to be removed to be passed into
-  // GetRemoveHeadersMask. This is done to ensure the ruleset matchers will skip
-  // matching rules for headers already slated to be removed.
-  uint8_t combined_mask = 0;
-  for (const ExtensionRulesetData* ruleset : rulesets) {
-    uint8_t extension_ruleset_mask = ruleset->matcher->GetRemoveHeadersMask(
-        params, combined_mask /* excluded_remove_headers_mask */,
-        &remove_headers_actions);
-    if (!extension_ruleset_mask)
+  std::vector<RequestAction> modify_headers_actions;
+
+  for (const RulesetAndPageAccess& ruleset_and_access : rulesets) {
+    PageAccess page_access = ruleset_and_access.second;
+    // Skip the evaluation of modifyHeaders rules for this extension if its
+    // access to the request is denied.
+    if (page_access == PageAccess::kDenied)
       continue;
 
-    // Sanity check that extension matchers do not try to remove a header that
-    // has already been marked as removed.
-    DCHECK(!(extension_ruleset_mask & combined_mask));
-    combined_mask |= extension_ruleset_mask;
+    const ExtensionRulesetData* ruleset = ruleset_and_access.first;
+    std::vector<RequestAction> actions_for_matcher =
+        ruleset->matcher->GetModifyHeadersActions(params);
+
+    // Evaluate modifyHeaders rules for this extension if and only if it has
+    // host permissions for the request url and initiator.
+    if (page_access == PageAccess::kAllowed) {
+      modify_headers_actions.insert(
+          modify_headers_actions.end(),
+          std::make_move_iterator(actions_for_matcher.begin()),
+          std::make_move_iterator(actions_for_matcher.end()));
+    } else if (page_access == PageAccess::kWithheld &&
+               !actions_for_matcher.empty()) {
+      // Notify the extension that it could not modify the request's headers if
+      // it had at least one matching modifyHeaders rule and its access to the
+      // request was withheld.
+      NotifyRequestWithheld(ruleset->extension_id, request);
+    }
   }
 
-  return remove_headers_actions;
+  // |modify_headers_actions| is implicitly sorted in descreasing order by
+  // priority.
+  //  - Within an extension: each CompositeMatcher returns a vector sorted by
+  //  priority.
+  //  - Between extensions: |rulesets| is sorder in descending order of
+  //  extension priority.
+  return modify_headers_actions;
 }
 
 std::vector<RequestAction> RulesetManager::EvaluateRequestInternal(
@@ -347,8 +371,9 @@ std::vector<RequestAction> RulesetManager::EvaluateRequestInternal(
   // irrelevant here.
   const bool crosses_incognito = false;
 
-  // Filter the rulesets to evaluate.
-  std::vector<const ExtensionRulesetData*> rulesets_to_evaluate;
+  // Filter the rulesets to evaluate along with their host permissions based
+  // page access for the current request being evaluated.
+  std::vector<RulesetAndPageAccess> rulesets_to_evaluate;
   for (const ExtensionRulesetData& ruleset : rulesets_) {
     if (!ShouldEvaluateRulesetForRequest(ruleset, request,
                                          is_incognito_context)) {
@@ -367,26 +392,38 @@ std::vector<RequestAction> RulesetManager::EvaluateRequestInternal(
     if (page_access != PageAccess::kAllowed)
       continue;
 
-    rulesets_to_evaluate.push_back(&ruleset);
+    // Precompute the host permissions access the extension has for this
+    // request.
+    PageAccess host_permissions_access =
+        WebRequestPermissions::CanExtensionAccessURL(
+            permission_helper_, ruleset.extension_id, request.url, tab_id,
+            crosses_incognito,
+            WebRequestPermissions::
+                REQUIRE_HOST_PERMISSION_FOR_URL_AND_INITIATOR,
+            request.initiator, request.type);
+
+    rulesets_to_evaluate.push_back(
+        std::make_pair(&ruleset, host_permissions_access));
   }
 
   // If the request is blocked/allowed/redirected, no further modifications can
   // happen. A new request will be created and subsequently evaluated.
-  base::Optional<RequestAction> action = GetBeforeRequestAction(
-      rulesets_to_evaluate, request, tab_id, crosses_incognito, params);
+  base::Optional<RequestAction> action =
+      GetBeforeRequestAction(rulesets_to_evaluate, request, params);
   if (action) {
     actions.push_back(std::move(std::move(*action)));
     return actions;
   }
 
-  // Removing headers doesn't require host permissions.
-  // Note: If we add other "non-destructive" actions (i.e., actions that don't
-  // end the request), we should combine them with the remove-headers action.
-  std::vector<RequestAction> remove_headers_actions =
-      GetRemoveHeadersActions(rulesets_to_evaluate, params);
+  // TODO(crbug.com/947591): Remove the channel check once implementation of
+  // modifyHeaders action is complete.
+  if (GetCurrentChannel() != version_info::Channel::STABLE) {
+    std::vector<RequestAction> modify_headers_actions =
+        GetModifyHeadersActions(rulesets_to_evaluate, request, params);
 
-  if (!remove_headers_actions.empty())
-    return remove_headers_actions;
+    if (!modify_headers_actions.empty())
+      return modify_headers_actions;
+  }
 
   return actions;
 }

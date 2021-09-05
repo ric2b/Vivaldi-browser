@@ -250,6 +250,19 @@ void ToolbarActionsModel::RemovePref(const ActionId& action_id) {
     last_known_positions_.erase(pos);
     UpdatePrefs();
   }
+
+  if (base::FeatureList::IsEnabled(features::kExtensionsToolbarMenu)) {
+    // The extension is already unloaded at this point, and so shouldn't be in
+    // the active pinned set.
+    DCHECK(!IsActionPinned(action_id));
+    auto stored_pinned_actions = extension_prefs_->GetPinnedExtensions();
+    auto iter = std::find(stored_pinned_actions.begin(),
+                          stored_pinned_actions.end(), action_id);
+    if (iter != stored_pinned_actions.end()) {
+      stored_pinned_actions.erase(iter);
+      extension_prefs_->SetPinnedExtensions(stored_pinned_actions);
+    }
+  }
 }
 
 void ToolbarActionsModel::OnReady() {
@@ -400,9 +413,6 @@ void ToolbarActionsModel::RemoveAction(const ActionId& action_id) {
 
   action_ids_.erase(pos);
 
-  // TODO(pbos): Remove previously-pinned actions from ExtensionPrefs if this is
-  // an uninstall and not a disable. This might need to be handled in another
-  // place (ExtensionPrefs?) as we don't know the reason for RemoveAction here.
   UpdatePinnedActionIds();
 
   // If we're in highlight mode, we also have to remove the action from
@@ -506,17 +516,14 @@ void ToolbarActionsModel::InitializeActionList() {
     // have changed even though they haven't.
     pinned_action_ids_ = GetFilteredPinnedActionIds();
 
-    if (!profile_->IsOffTheRecord()) {
-      base::UmaHistogramCounts100("Extensions.Toolbar.PinnedExtensionCount",
+    if (!profile_->IsOffTheRecord() && !action_ids_.empty()) {
+      base::UmaHistogramCounts100("Extensions.Toolbar.PinnedExtensionCount2",
                                   pinned_action_ids_.size());
-      int percentage = 0;
-      if (!action_ids_.empty()) {
-        double percentage_double =
-            pinned_action_ids_.size() / action_ids_.size() * 100.0;
-        percentage = int{percentage_double};
-      }
+      double percentage_double =
+          pinned_action_ids_.size() / action_ids_.size() * 100.0;
+      int percentage = int{percentage_double};
       base::UmaHistogramPercentage(
-          "Extensions.Toolbar.PinnedExtensionPercentage", percentage);
+          "Extensions.Toolbar.PinnedExtensionPercentage2", percentage);
     }
   }
 }

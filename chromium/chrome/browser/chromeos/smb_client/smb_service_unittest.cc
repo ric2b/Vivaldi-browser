@@ -19,6 +19,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/test/bind_test_util.h"
+#include "base/test/gmock_callback_support.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -69,9 +70,11 @@ constexpr char kTestUser[] = "foobar";
 constexpr char kTestPassword[] = "my_secret_password";
 constexpr char kTestDomain[] = "EXAMPLE.COM";
 constexpr char kSharePath[] = "\\\\server\\foobar";
+constexpr char kSharePath2[] = "\\\\server2\\second_share";
 constexpr char kShareUrl[] = "smb://server/foobar";
 constexpr char kDisplayName[] = "My Share";
 constexpr char kMountPath[] = "/share/mount/path";
+constexpr char kMountPath2[] = "/share/mount/second_path";
 
 constexpr char kTestADUser[] = "ad-test-user";
 constexpr char kTestADDomain[] = "foorbar.corp";
@@ -111,7 +114,24 @@ class MockSmbFsMounter : public smbfs::SmbFsMounter {
 class MockSmbFsImpl : public smbfs::mojom::SmbFs {
  public:
   explicit MockSmbFsImpl(mojo::PendingReceiver<smbfs::mojom::SmbFs> pending)
-      : receiver_(this, std::move(pending)) {}
+      : receiver_(this, std::move(pending)) {
+    receiver_.set_disconnect_handler(
+        base::BindOnce(&MockSmbFsImpl::OnDisconnect, base::Unretained(this)));
+  }
+
+  // Mojo disconnection handler.
+  MOCK_METHOD(void, OnDisconnect, (), ());
+
+  // smbfs::mojom::SmbFs overrides.
+  MOCK_METHOD(void,
+              RemoveSavedCredentials,
+              (RemoveSavedCredentialsCallback),
+              (override));
+
+  MOCK_METHOD(void,
+              DeleteRecursively,
+              (const base::FilePath&, DeleteRecursivelyCallback),
+              (override));
 
  private:
   mojo::Receiver<smbfs::mojom::SmbFs> receiver_;
@@ -153,6 +173,8 @@ class SmbServiceTest : public testing::Test {
  protected:
   SmbServiceTest()
       : task_environment_(content::BrowserTaskEnvironment::REAL_IO_THREAD) {
+    scoped_feature_list_.InitWithFeatures({}, {features::kSmbFs});
+
     profile_manager_ = std::make_unique<TestingProfileManager>(
         TestingBrowserProcess::GetGlobal());
     EXPECT_TRUE(profile_manager_->SetUp());
@@ -252,6 +274,7 @@ class SmbServiceTest : public testing::Test {
 
   content::BrowserTaskEnvironment
       task_environment_;  // Included so tests magically don't crash.
+  base::test::ScopedFeatureList scoped_feature_list_;
   TestingProfile* profile_ = nullptr;     // Not owned.
   std::string ad_user_email_;
   TestingProfile* ad_profile_ = nullptr;  // Not owned.
@@ -818,6 +841,79 @@ TEST_F(SmbServiceWithSmbfsTest, Mount) {
   EXPECT_EQ(info->username(), kTestUser);
   EXPECT_TRUE(info->workgroup().empty());
   EXPECT_FALSE(info->use_kerberos());
+
+  // Unmounting should remove the saved share. Since |save_credentials| was
+  // false, there should be no request to smbfs.
+  EXPECT_CALL(smbfs_impl, RemoveSavedCredentials(_)).Times(0);
+  smb_service_->UnmountSmbFs(base::FilePath(kMountPath));
+  info = registry.Get(SmbUrl(kShareUrl));
+  EXPECT_FALSE(info);
+  EXPECT_TRUE(registry.GetAll().empty());
+}
+
+TEST_F(SmbServiceWithSmbfsTest, Mount_SaveCredentials) {
+  CreateService(profile_);
+  WaitForSetupComplete();
+
+  mojo::Remote<smbfs::mojom::SmbFs> smbfs_remote;
+  MockSmbFsImpl smbfs_impl(smbfs_remote.BindNewPipeAndPassReceiver());
+  mojo::Remote<smbfs::mojom::SmbFsDelegate> smbfs_delegate_remote;
+
+  smbfs::SmbFsHost::Delegate* smbfs_host_delegate = nullptr;
+  std::unique_ptr<MockSmbFsMounter> mock_mounter =
+      std::make_unique<MockSmbFsMounter>();
+  smb_service_->SetSmbFsMounterCreationCallbackForTesting(
+      base::BindLambdaForTesting([&mock_mounter, &smbfs_host_delegate](
+                                     const std::string& share_path,
+                                     const std::string& mount_dir_name,
+                                     const SmbFsShare::MountOptions& options,
+                                     smbfs::SmbFsHost::Delegate* delegate)
+                                     -> std::unique_ptr<smbfs::SmbFsMounter> {
+        EXPECT_EQ(share_path, kShareUrl);
+        EXPECT_EQ(options.username, kTestUser);
+        EXPECT_TRUE(options.workgroup.empty());
+        EXPECT_EQ(options.password, kTestPassword);
+        EXPECT_FALSE(options.kerberos_options);
+        EXPECT_TRUE(options.save_restore_password);
+        EXPECT_FALSE(options.account_hash.empty());
+        EXPECT_FALSE(options.password_salt.empty());
+        smbfs_host_delegate = delegate;
+        return std::move(mock_mounter);
+      }));
+  EXPECT_CALL(*mock_mounter, Mount(_))
+      .WillOnce(
+          [this, &smbfs_host_delegate, &smbfs_remote,
+           &smbfs_delegate_remote](smbfs::SmbFsMounter::DoneCallback callback) {
+            std::move(callback).Run(
+                smbfs::mojom::MountError::kOk,
+                std::make_unique<smbfs::SmbFsHost>(
+                    MakeMountPoint(base::FilePath(kMountPath)),
+                    smbfs_host_delegate, std::move(smbfs_remote),
+                    smbfs_delegate_remote.BindNewPipeAndPassReceiver()));
+          });
+
+  base::RunLoop run_loop;
+  smb_service_->Mount(
+      mount_options_, base::FilePath(kSharePath), kTestUser, kTestPassword,
+      false /* use_chromad_kerberos */,
+      false /* should_open_file_manager_after_mount */,
+      true /* save_credentials */,
+      base::BindLambdaForTesting([&run_loop](SmbMountResult result) {
+        EXPECT_EQ(SmbMountResult::kSuccess, result);
+        run_loop.Quit();
+      }));
+  run_loop.Run();
+
+  // Check that the share was saved.
+  SmbPersistedShareRegistry registry(profile_);
+  base::Optional<SmbShareInfo> info = registry.Get(SmbUrl(kShareUrl));
+  ASSERT_TRUE(info);
+  EXPECT_EQ(info->share_url().ToString(), kShareUrl);
+  EXPECT_EQ(info->display_name(), kDisplayName);
+  EXPECT_EQ(info->username(), kTestUser);
+  EXPECT_TRUE(info->workgroup().empty());
+  EXPECT_FALSE(info->use_kerberos());
+  EXPECT_FALSE(info->password_salt().empty());
 }
 
 TEST_F(SmbServiceWithSmbfsTest, Mount_ActiveDirectory) {
@@ -943,11 +1039,12 @@ TEST_F(SmbServiceWithSmbfsTest, PreconfiguredMount) {
 }
 
 TEST_F(SmbServiceWithSmbfsTest, MountSaved) {
+  const std::vector<uint8_t> kSalt = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
   // Save share in profile.
   {
     SmbPersistedShareRegistry registry(profile_);
     SmbShareInfo info(SmbUrl(kShareUrl), kDisplayName, kTestUser, kTestDomain,
-                      false /* use_kerberos */);
+                      false /* use_kerberos */, kSalt);
     registry.Save(info);
   }
 
@@ -961,7 +1058,7 @@ TEST_F(SmbServiceWithSmbfsTest, MountSaved) {
   std::unique_ptr<MockSmbFsMounter> mock_mounter =
       std::make_unique<MockSmbFsMounter>();
   smb_service_->SetSmbFsMounterCreationCallbackForTesting(
-      base::BindLambdaForTesting([&mock_mounter, &smbfs_host_delegate](
+      base::BindLambdaForTesting([&mock_mounter, &smbfs_host_delegate, kSalt](
                                      const std::string& share_path,
                                      const std::string& mount_dir_name,
                                      const SmbFsShare::MountOptions& options,
@@ -973,6 +1070,9 @@ TEST_F(SmbServiceWithSmbfsTest, MountSaved) {
         EXPECT_TRUE(options.password.empty());
         EXPECT_EQ(options.allow_ntlm, true);
         EXPECT_FALSE(options.kerberos_options);
+        EXPECT_TRUE(options.save_restore_password);
+        EXPECT_FALSE(options.account_hash.empty());
+        EXPECT_EQ(options.password_salt, kSalt);
         smbfs_host_delegate = delegate;
         return std::move(mock_mounter);
       }));
@@ -993,8 +1093,19 @@ TEST_F(SmbServiceWithSmbfsTest, MountSaved) {
 
   run_loop.Run();
 
-  // Unmounting should remove the saved share.
+  // Unmounting should remove the saved share, and ask smbfs to remove any saved
+  // credentials.
+  base::RunLoop run_loop2;
+  EXPECT_CALL(smbfs_impl, RemoveSavedCredentials(_))
+      .WillOnce(
+          [](smbfs::mojom::SmbFs::RemoveSavedCredentialsCallback callback) {
+            std::move(callback).Run(true /* success */);
+          });
+  EXPECT_CALL(smbfs_impl, OnDisconnect())
+      .WillOnce(base::test::RunClosure(run_loop2.QuitClosure()));
   smb_service_->UnmountSmbFs(base::FilePath(kMountPath));
+  run_loop2.Run();
+
   SmbPersistedShareRegistry registry(profile_);
   base::Optional<SmbShareInfo> info = registry.Get(SmbUrl(kShareUrl));
   EXPECT_FALSE(info);
@@ -1040,8 +1151,7 @@ TEST_F(SmbServiceWithSmbfsTest, GetSmbFsShareForPath) {
                                 base::BindOnce([](SmbMountResult result) {
                                   EXPECT_EQ(SmbMountResult::kSuccess, result);
                                 })));
-  const char kMountPath2[] = "/share/mount/second_path";
-  ignore_result(MountBasicShare(kSharePath, kMountPath2,
+  ignore_result(MountBasicShare(kSharePath2, kMountPath2,
                                 base::BindOnce([](SmbMountResult result) {
                                   EXPECT_EQ(SmbMountResult::kSuccess, result);
                                 })));
@@ -1063,6 +1173,29 @@ TEST_F(SmbServiceWithSmbfsTest, GetSmbFsShareForPath) {
       smb_service_->GetSmbFsShareForPath(base::FilePath("/share/mount")));
   EXPECT_FALSE(smb_service_->GetSmbFsShareForPath(
       base::FilePath("/share/mount/third_path")));
+}
+
+TEST_F(SmbServiceWithSmbfsTest, MountDuplicate) {
+  CreateService(profile_);
+  WaitForSetupComplete();
+
+  ignore_result(MountBasicShare(kSharePath, kMountPath,
+                                base::BindOnce([](SmbMountResult result) {
+                                  EXPECT_EQ(SmbMountResult::kSuccess, result);
+                                })));
+
+  // A second mount with the same share path should fail.
+  ignore_result(MountBasicShare(
+      kSharePath, kMountPath2, base::BindOnce([](SmbMountResult result) {
+        EXPECT_EQ(SmbMountResult::kMountExists, result);
+      })));
+
+  // Unmounting and mounting again should succeed.
+  smb_service_->UnmountSmbFs(base::FilePath(kMountPath));
+  ignore_result(MountBasicShare(kSharePath, kMountPath2,
+                                base::BindOnce([](SmbMountResult result) {
+                                  EXPECT_EQ(SmbMountResult::kSuccess, result);
+                                })));
 }
 
 }  // namespace smb_client

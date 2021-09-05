@@ -6,6 +6,7 @@
 
 #include "build/build_config.h"
 #include "components/variations/net/variations_http_headers.h"
+#include "content/public/browser/cors_exempt_headers.h"
 #include "content/public/browser/network_service_instance.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
@@ -51,12 +52,22 @@ SystemNetworkContextManager::CreateDefaultNetworkContextParams(
     const std::string& user_agent) {
   network::mojom::NetworkContextParamsPtr network_context_params =
       network::mojom::NetworkContextParams::New();
+  ConfigureDefaultNetworkContextParams(network_context_params.get(),
+                                       user_agent);
+  content::UpdateCorsExemptHeader(network_context_params.get());
+  variations::UpdateCorsExemptHeaderForVariations(network_context_params.get());
+  return network_context_params;
+}
+
+// static
+void SystemNetworkContextManager::ConfigureDefaultNetworkContextParams(
+    network::mojom::NetworkContextParams* network_context_params,
+    const std::string& user_agent) {
   network_context_params->user_agent = user_agent;
 #if defined(OS_LINUX) || defined(OS_WIN)
   // We're not configuring the cookie encryption on these platforms yet.
   network_context_params->enable_encrypted_cookies = false;
 #endif
-  return network_context_params;
 }
 
 SystemNetworkContextManager::SystemNetworkContextManager(
@@ -95,7 +106,6 @@ network::mojom::NetworkContextParamsPtr
 SystemNetworkContextManager::CreateSystemNetworkContextManagerParams() {
   network::mojom::NetworkContextParamsPtr network_context_params =
       CreateDefaultNetworkContextParams(user_agent_);
-  content::UpdateCorsExemptHeader(network_context_params.get());
 
   network_context_params->context_name = std::string("system");
   network_context_params->primary_network_context = true;

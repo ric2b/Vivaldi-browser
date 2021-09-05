@@ -18,7 +18,6 @@ struct PrintHostMsg_DidPreviewPage_Params;
 struct PrintHostMsg_DidStartPreview_Params;
 struct PrintHostMsg_PreviewIds;
 struct PrintHostMsg_RequestPrintPreview_Params;
-struct PrintHostMsg_SetOptionsFromDocument_Params;
 
 namespace base {
 class RefCountedMemory;
@@ -81,15 +80,10 @@ class PrintPreviewMessageHandler
       content::RenderFrameHost* render_frame_host,
       const PrintHostMsg_DidPreviewDocument_Params& params,
       const PrintHostMsg_PreviewIds& ids);
-  void OnPrintPreviewFailed(int document_cookie,
-                            const PrintHostMsg_PreviewIds& ids);
   void OnPrintPreviewCancelled(int document_cookie,
                                const PrintHostMsg_PreviewIds& ids);
   void OnInvalidPrinterSettings(int document_cookie,
                                 const PrintHostMsg_PreviewIds& ids);
-  void OnSetOptionsFromDocument(
-      const PrintHostMsg_SetOptionsFromDocument_Params& params,
-      const PrintHostMsg_PreviewIds& ids);
 
   void NotifyUIPreviewPageReady(
       PrintPreviewUI* print_preview_ui,

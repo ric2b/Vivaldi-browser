@@ -168,13 +168,15 @@ class MockFrameHost : public mojom::FrameHost {
                     mojo::PendingAssociatedRemote<blink::mojom::PortalClient>,
                     CreatePortalCallback callback) override {
     std::move(callback).Run(MSG_ROUTING_NONE, FrameReplicationState(),
-                            base::UnguessableToken(), base::UnguessableToken());
+                            base::UnguessableToken(), base::UnguessableToken(),
+                            base::UnguessableToken());
   }
 
   void AdoptPortal(const base::UnguessableToken&,
                    AdoptPortalCallback callback) override {
     std::move(callback).Run(MSG_ROUTING_NONE, viz::FrameSinkId(),
-                            FrameReplicationState(), base::UnguessableToken());
+                            FrameReplicationState(), base::UnguessableToken(),
+                            base::UnguessableToken());
   }
 
   void IssueKeepAliveHandle(
@@ -203,7 +205,7 @@ class MockFrameHost : public mojom::FrameHost {
                      const std::string& unique_name) override {}
 
   void DidSetFramePolicyHeaders(
-      blink::mojom::WebSandboxFlags sandbox_flags,
+      network::mojom::WebSandboxFlags sandbox_flags,
       const blink::ParsedFeaturePolicy& feature_policy_header,
       const blink::DocumentPolicy::FeatureState& document_policy_header)
       override {}
@@ -317,8 +319,9 @@ void TestRenderFrame::NavigateWithError(
 void TestRenderFrame::Unload(
     int proxy_routing_id,
     bool is_loading,
-    const FrameReplicationState& replicated_frame_state) {
-  OnUnload(proxy_routing_id, is_loading, replicated_frame_state);
+    const FrameReplicationState& replicated_frame_state,
+    const base::UnguessableToken& frame_token) {
+  OnUnload(proxy_routing_id, is_loading, replicated_frame_state, frame_token);
 }
 
 void TestRenderFrame::SetEditableSelectionOffsets(int start, int end) {

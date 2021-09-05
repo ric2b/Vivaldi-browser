@@ -26,11 +26,10 @@
 
 namespace settings {
 
-FontHandler::FontHandler(content::WebUI* webui)
-    : profile_(Profile::FromWebUI(webui)) {
+FontHandler::FontHandler(Profile* profile) {
 #if defined(OS_MACOSX)
   // Perform validation for saved fonts.
-  settings_utils::ValidateSavedFonts(profile_->GetPrefs());
+  settings_utils::ValidateSavedFonts(profile->GetPrefs());
 #endif
 }
 
@@ -52,9 +51,9 @@ void FontHandler::HandleFetchFontsData(const base::ListValue* args) {
   CHECK(args->GetString(0, &callback_id));
 
   AllowJavascript();
-  content::GetFontListAsync(base::Bind(&FontHandler::FontListHasLoaded,
-                                       weak_ptr_factory_.GetWeakPtr(),
-                                       callback_id));
+  content::GetFontListAsync(base::BindOnce(&FontHandler::FontListHasLoaded,
+                                           weak_ptr_factory_.GetWeakPtr(),
+                                           callback_id));
 }
 
 void FontHandler::FontListHasLoaded(std::string callback_id,

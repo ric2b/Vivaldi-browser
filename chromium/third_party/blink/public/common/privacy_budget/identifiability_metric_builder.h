@@ -9,8 +9,10 @@
 
 #include "base/metrics/ukm_source_id.h"
 #include "services/metrics/public/cpp/ukm_entry_builder_base.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "third_party/blink/public/common/common_export.h"
 #include "third_party/blink/public/common/privacy_budget/identifiable_surface.h"
+#include "third_party/blink/public/mojom/web_feature/web_feature.mojom-forward.h"
 
 namespace blink {
 
@@ -46,8 +48,8 @@ namespace blink {
 //
 // Metrics for *regular* UKM consist of a mapping from a metric ID to a metric
 // value. The metric ID is a digest of the metric name as determined by
-// base::DigestForMetrics(), similar to how an |event_hash| is derived from the
-// event name.
+// base::IdentifiabilityDigestOfBytes(), similar to how an |event_hash| is
+// derived from the event name.
 //
 // However, for identifiability metrics, the method for generating metric IDs
 // is:
@@ -66,7 +68,7 @@ namespace blink {
 // |metric_hash| to the output of the identifiable surface encoded into 64-bits.
 //
 // To generate a 64-bit hash of a random binary blob, use
-// |blink::DigestForMetrics()|. For numbers with fewer than 56
+// |blink::IdentifiabilityDigestOfBytes()|. For numbers with fewer than 56
 // significant bits, you can use the number itself as the input hash.
 //
 // As mentioned in |identifiability_metrics.h|, this function is **not** a
@@ -83,30 +85,49 @@ namespace blink {
 //        identifiable_surface = IdentifiableSurface::FromTypeAndInput(
 //            IdentifiableSurface::Type::kWebFeature,
 //            blink::mojom::WebFeature::kDeviceOrientationSecureOrigin);
-//        output = DigestForMetrics(result_as_binary_blob);
+//        output = IdentifiabilityDigestOfBytes(result_as_binary_blob);
 //
 // 2. A surface that takes a non-trivial input represented as a binary blob:
 //
 //        identifiable_surface = IdentifiableSurface::FromTypeAndInput(
 //            IdentifiableSurface::Type::kFancySurface,
-//            DigestForMetrics(input_as_binary_blob));
-//        output = DigestForMetrics(result_as_binary_blob);
+//            IdentifiabilityDigestOfBytes(input_as_binary_blob));
+//        output = IdentifiabilityDigestOfBytes(result_as_binary_blob);
 class BLINK_COMMON_EXPORT IdentifiabilityMetricBuilder
     : public ukm::internal::UkmEntryBuilderBase {
  public:
   // Construct a metrics builder for the given |source_id|. The source must be
   // known to UKM.
   explicit IdentifiabilityMetricBuilder(base::UkmSourceId source_id);
+
+  // This has the same effect as the previous constructor but takes the
+  // deprecated ukm::SourceId for convenience. Doing so allows callsites to use
+  // methods like Document::GetUkmSourceId() without an extra conversion. In
+  // addition, when Document::GetUkmSourceId() migrates to returning a
+  // base::UkmSourceId, callsites won't need to change.
+  explicit IdentifiabilityMetricBuilder(ukm::SourceId source_id)
+      : IdentifiabilityMetricBuilder(base::UkmSourceId::FromInt64(source_id)) {}
+
   ~IdentifiabilityMetricBuilder() override;
 
   // Set the metric using a previously constructed |IdentifiableSurface|.
   IdentifiabilityMetricBuilder& Set(IdentifiableSurface surface,
                                     int64_t result);
 
-  // Set the metric using a surface type, input and result.
-  IdentifiabilityMetricBuilder& Set(IdentifiableSurface::Type surface_type,
-                                    int64_t input,
-                                    int64_t result);
+  // Convenience method for recording the result of invoking a simple API
+  // surface with a UseCounter.
+  IdentifiabilityMetricBuilder& SetWebfeature(mojom::WebFeature feature,
+                                              int64_t result) {
+    return Set(IdentifiableSurface::FromTypeAndInput(
+                   IdentifiableSurface::Type::kWebFeature,
+                   static_cast<uint64_t>(feature)),
+               result);
+  }
+
+  // Shadow the underlying Record() implementation until the upstream pipeline
+  // is ready for identifiability metrics.
+  // TODO(crbug.com/973801): Remove once the pipeline is ready.
+  void Record(ukm::UkmRecorder* recorder);
 };
 
 }  // namespace blink

@@ -12,11 +12,12 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/files/file_util.h"
 #include "base/hash/md5.h"
 #include "base/json/json_string_value_serializer.h"
-#include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_tokenizer.h"
@@ -636,15 +637,15 @@ CancelCallback FakeDriveService::GetAboutResource(
 
 CancelCallback FakeDriveService::GetStartPageToken(
     const std::string& team_drive_id,
-    const google_apis::StartPageTokenCallback& callback) {
+    google_apis::StartPageTokenCallback callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(callback);
 
   if (offline_) {
     std::unique_ptr<StartPageToken> null;
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::BindOnce(callback, DRIVE_NO_CONNECTION, std::move(null)));
+        FROM_HERE, base::BindOnce(std::move(callback), DRIVE_NO_CONNECTION,
+                                  std::move(null)));
     return CancelCallback();
   }
 
@@ -658,8 +659,8 @@ CancelCallback FakeDriveService::GetStartPageToken(
   }
   ++start_page_token_load_count_;
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::BindOnce(callback, HTTP_SUCCESS, std::move(start_page_token)));
+      FROM_HERE, base::BindOnce(std::move(callback), HTTP_SUCCESS,
+                                std::move(start_page_token)));
   return CancelCallback();
 }
 
@@ -762,7 +763,7 @@ CancelCallback FakeDriveService::DownloadFile(
     const std::string& resource_id,
     const DownloadActionCallback& download_action_callback,
     const GetContentCallback& get_content_callback,
-    const ProgressCallback& progress_callback) {
+    ProgressCallback progress_callback) {
   base::ThreadRestrictions::ScopedAllowIO allow_io;
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!download_action_callback.is_null());
@@ -1164,7 +1165,7 @@ CancelCallback FakeDriveService::ResumeUpload(
     const std::string& content_type,
     const base::FilePath& local_file_path,
     UploadRangeCallback callback,
-    const ProgressCallback& progress_callback) {
+    ProgressCallback progress_callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(callback);
 
@@ -1291,7 +1292,7 @@ CancelCallback FakeDriveService::MultipartUploadNewFile(
     const base::FilePath& local_file_path,
     const UploadNewFileOptions& options,
     FileResourceCallback callback,
-    const ProgressCallback& progress_callback) {
+    ProgressCallback progress_callback) {
   CallResumeUpload* const call_resume_upload = new CallResumeUpload();
   call_resume_upload->service = weak_ptr_factory_.GetWeakPtr();
   call_resume_upload->content_type = content_type;
@@ -1316,7 +1317,7 @@ CancelCallback FakeDriveService::MultipartUploadExistingFile(
     const base::FilePath& local_file_path,
     const UploadExistingFileOptions& options,
     FileResourceCallback callback,
-    const ProgressCallback& progress_callback) {
+    ProgressCallback progress_callback) {
   CallResumeUpload* const call_resume_upload = new CallResumeUpload();
   call_resume_upload->service = weak_ptr_factory_.GetWeakPtr();
   call_resume_upload->content_type = content_type;

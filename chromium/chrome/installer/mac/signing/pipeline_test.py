@@ -435,6 +435,10 @@ framework dir is 'App Product.app/Contents/Frameworks/Product Framework.framewor
         self.assertEqual('$W/scripts',
                          _get_adjacent_item(pkgbuild_args, '--scripts'))
 
+        self.assertEqual('test.signing.bundle_id',
+                         _get_adjacent_item(productbuild_args, '--identifier'))
+        self.assertEqual('99.0.9999.99',
+                         _get_adjacent_item(productbuild_args, '--version'))
         self.assertEqual(
             '$W/App Product.dist',
             _get_adjacent_item(productbuild_args, '--distribution'))
@@ -524,6 +528,10 @@ framework dir is 'App Product.app/Contents/Frameworks/Product Framework.framewor
         self.assertEqual('$W/scripts',
                          _get_adjacent_item(pkgbuild_args, '--scripts'))
 
+        self.assertEqual('test.signing.bundle_id',
+                         _get_adjacent_item(productbuild_args, '--identifier'))
+        self.assertEqual('99.0.9999.99',
+                         _get_adjacent_item(productbuild_args, '--version'))
         self.assertEqual(
             '$W/App Product.dist',
             _get_adjacent_item(productbuild_args, '--distribution'))

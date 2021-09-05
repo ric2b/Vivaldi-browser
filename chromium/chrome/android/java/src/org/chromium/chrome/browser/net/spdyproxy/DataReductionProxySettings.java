@@ -18,7 +18,7 @@ import org.chromium.chrome.browser.datareduction.settings.DataReductionStatsPref
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.settings.datareduction.DataReductionProxySavingsClearedReason;
-import org.chromium.chrome.browser.util.ConversionUtils;
+import org.chromium.components.browser_ui.util.ConversionUtils;
 import org.chromium.components.embedder_support.util.UrlConstants;
 
 import java.util.ArrayList;
@@ -274,17 +274,6 @@ public class DataReductionProxySettings {
     }
 
     /**
-     * Returns the header used to request a data reduction proxy pass through. When a request is
-     * sent to the data reduction proxy with this header, it will respond with the original
-     * uncompressed response.
-     * @return The data reduction proxy pass through header.
-     */
-    public String getDataReductionProxyPassThroughHeader() {
-        return DataReductionProxySettingsJni.get().getDataReductionProxyPassThroughHeader(
-                mNativeDataReductionProxySettings, DataReductionProxySettings.this);
-    }
-
-    /**
      * Determines if the data reduction proxy is currently unreachable.
      * @return true if the data reduction proxy is unreachable.
      */
@@ -353,8 +342,6 @@ public class DataReductionProxySettings {
         long[] getDailyOriginalContentLengths(
                 long nativeDataReductionProxySettingsAndroid, DataReductionProxySettings caller);
         long[] getDailyReceivedContentLengths(
-                long nativeDataReductionProxySettingsAndroid, DataReductionProxySettings caller);
-        String getDataReductionProxyPassThroughHeader(
                 long nativeDataReductionProxySettingsAndroid, DataReductionProxySettings caller);
         boolean isDataReductionProxyUnreachable(
                 long nativeDataReductionProxySettingsAndroid, DataReductionProxySettings caller);

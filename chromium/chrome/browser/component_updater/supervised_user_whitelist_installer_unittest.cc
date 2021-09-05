@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -360,8 +361,8 @@ TEST_F(SupervisedUserWhitelistInstallerTest, InstallNewWhitelist) {
   // installer only calls |ComponentReady| if the install of the component
   // has succeeded.
   component->installer->Install(
-      unpacked_path, std::string(), nullptr,
-      base::Bind(
+      unpacked_path, std::string(), nullptr, base::DoNothing(),
+      base::BindOnce(
           [](WhitelistLoadObserver* observer,
              const update_client::CrxInstaller::Result& result) {
             EXPECT_EQ(0, result.error);

@@ -72,7 +72,6 @@ jumbo_component("gtk") {
     # our own HarfBuzz avoid mixing symbols from system HarfBuzz and
     # our own through the indirect dependency to harfbuzz-ng here.
     "//build/config/linux/gtk",
-    "//chrome/browser:theme_properties",
     "//third_party:freetype_harfbuzz",
     "//ui/aura",
     "//ui/base",
@@ -86,40 +85,26 @@ jumbo_component("gtk") {
     "//ui/gfx",
     "//ui/gfx:native_widget_types",
     "//ui/gfx/geometry",
+    "//ui/gfx/x",
     "//ui/native_theme",
     "//ui/shell_dialogs",
     "//ui/strings",
     "//ui/views",
   ]
+
+  if (use_cups) {
+    deps += [ "//printing/mojom" ]
+  }
+
   public_deps = [ ":gtk_ui_delegate" ]
 
   if (use_x11 || ozone_platform_x11) {
     # select_file_dialog_impl_kde.cc still refers to XID
-    configs += [ "//build/config/linux:x11" ]
+    deps += [ "//ui/gfx/x" ]
   }
 
   # TODO: This should be removed.
   if (use_ozone) {
     deps += [ "//ui/ozone" ]
   }
-}
-
-component("x") {
-  output_name = "ui_gtk_x"
-  sources = [
-    "gtk_event_loop_x11.cc",
-    "gtk_event_loop_x11.h",
-    "gtk_ui_delegate_x11.cc",
-    "gtk_ui_delegate_x11.h",
-  ]
-  deps = [
-    "//base",
-    "//build/config/linux/gtk",
-    "//ui/base",
-    "//ui/events/platform/x11",
-    "//ui/gfx/x",
-  ]
-  public_deps = [ ":gtk_ui_delegate" ]
-  defines = [ "IS_UI_GTK_X_IMPL" ]
-  configs += [ "//build/config/linux:x11" ]
 }

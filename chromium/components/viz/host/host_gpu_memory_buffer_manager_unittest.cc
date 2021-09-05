@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/clang_profiling_buildflags.h"
 #include "base/memory/unsafe_shared_memory_region.h"
 #include "base/run_loop.h"
 #include "base/threading/thread.h"
@@ -144,15 +145,6 @@ class TestGpuService : public mojom::GpuService {
   void GetPeakMemoryUsage(uint32_t sequence_num,
                           GetPeakMemoryUsageCallback callback) override {}
 
-#if defined(OS_WIN)
-  void RequestCompleteGpuInfo(
-      RequestCompleteGpuInfoCallback callback) override {}
-
-  void GetGpuSupportedRuntimeVersionAndDevicePerfInfo(
-      GetGpuSupportedRuntimeVersionAndDevicePerfInfoCallback callback)
-      override {}
-#endif
-
   void RequestHDRStatus(RequestHDRStatusCallback callback) override {}
 
   void LoadedShader(int32_t client_id,
@@ -184,6 +176,11 @@ class TestGpuService : public mojom::GpuService {
   void BeginCATransaction() override {}
 
   void CommitCATransaction(CommitCATransactionCallback callback) override {}
+#endif
+
+#if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
+  void WriteClangProfilingProfile(
+      WriteClangProfilingProfileCallback callback) override {}
 #endif
 
   void Crash() override {}

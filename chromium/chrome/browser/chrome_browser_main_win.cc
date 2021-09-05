@@ -22,6 +22,7 @@
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/files/important_file_writer_cleaner.h"
 #include "base/i18n/rtl.h"
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
@@ -53,6 +54,7 @@
 #include "chrome/browser/ui/simple_message_box.h"
 #include "chrome/browser/ui/uninstall_browser_prompt.h"
 #include "chrome/browser/web_applications/chrome_pwa_launcher/last_browser_file_util.h"
+#include "chrome/browser/web_applications/chrome_pwa_launcher/launcher_log_reporter.h"
 #include "chrome/browser/web_applications/chrome_pwa_launcher/launcher_update.h"
 #include "chrome/browser/web_applications/components/web_app_file_handler_registration_win.h"
 #include "chrome/browser/web_applications/components/web_app_shortcut.h"
@@ -600,6 +602,12 @@ int ChromeBrowserMainPartsWin::PreCreateThreads() {
   return ChromeBrowserMainParts::PreCreateThreads();
 }
 
+void ChromeBrowserMainPartsWin::PostMainMessageLoopRun() {
+  base::ImportantFileWriterCleaner::GetInstance().Stop();
+
+  ChromeBrowserMainParts::PostMainMessageLoopRun();
+}
+
 void ChromeBrowserMainPartsWin::ShowMissingLocaleMessageBox() {
   ui::MessageBox(NULL, base::ASCIIToUTF16(kMissingLocaleDataMessage),
                  base::ASCIIToUTF16(kMissingLocaleDataTitle),
@@ -668,7 +676,6 @@ void ChromeBrowserMainPartsWin::PostBrowserStart() {
   // Record Processor Metrics. This is a very low priority, hence posting to
   // start after Chrome startup has completed. This metric is only available
   // starting Windows 10.
-  // this should be fine.
   if (base::win::OSInfo::GetInstance()->version() >=
       base::win::Version::WIN10) {
     AfterStartupTaskUtils::PostTask(
@@ -694,6 +701,14 @@ void ChromeBrowserMainPartsWin::PostBrowserStart() {
         FROM_HERE, base::SequencedTaskRunnerHandle::Get(),
         base::BindOnce(&UpdatePwaLaunchersForProfile, profile()->GetPath()));
   }
+
+  // Record the result of the latest Progressive Web App launcher launch.
+  base::PostTask(
+      FROM_HERE,
+      {base::ThreadPool(), base::TaskPriority::BEST_EFFORT, base::MayBlock()},
+      base::BindOnce(&web_app::RecordPwaLauncherResult));
+
+  base::ImportantFileWriterCleaner::GetInstance().Start();
 }
 
 // static

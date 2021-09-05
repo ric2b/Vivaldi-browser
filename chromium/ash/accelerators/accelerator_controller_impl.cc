@@ -15,8 +15,6 @@
 #include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/ambient/ambient_controller.h"
 #include "ash/app_list/app_list_controller_impl.h"
-#include "ash/assistant/assistant_controller.h"
-#include "ash/assistant/assistant_ui_controller.h"
 #include "ash/assistant/model/assistant_ui_model.h"
 #include "ash/debug.h"
 #include "ash/display/display_configuration_controller.h"
@@ -36,6 +34,7 @@
 #include "ash/public/cpp/ash_features.h"
 #include "ash/public/cpp/ash_pref_names.h"
 #include "ash/public/cpp/ash_switches.h"
+#include "ash/public/cpp/assistant/controller/assistant_ui_controller.h"
 #include "ash/public/cpp/new_window_delegate.h"
 #include "ash/public/cpp/notification_utils.h"
 #include "ash/public/cpp/toast_data.h"
@@ -51,6 +50,7 @@
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/system/accessibility/floating_accessibility_controller.h"
 #include "ash/system/brightness_control_delegate.h"
 #include "ash/system/ime_menu/ime_menu_tray.h"
 #include "ash/system/keyboard_brightness_control_delegate.h"
@@ -90,6 +90,7 @@
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
+#include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "components/user_manager/user_type.h"
@@ -425,6 +426,18 @@ void HandleRotatePaneFocus(FocusCycler::Direction direction) {
 
 void HandleFocusShelf() {
   base::RecordAction(UserMetricsAction("Accel_Focus_Shelf"));
+
+  if (Shell::Get()->session_controller()->IsRunningInAppMode()) {
+    // If floating accessibility menu is shown, focus on it instead of the
+    // shelf.
+    FloatingAccessibilityController* floating_menu =
+        Shell::Get()->accessibility_controller()->GetFloatingMenuController();
+    if (floating_menu) {
+      floating_menu->FocusOnMenu();
+    }
+    return;
+  }
+
   // TODO(jamescook): Should this be GetRootWindowForNewWindows()?
   // Focus the home button.
   Shelf* shelf = Shelf::ForWindow(Shell::GetPrimaryRootWindow());
@@ -1003,64 +1016,65 @@ void HandleToggleAssistant(const ui::Accelerator& accelerator) {
         base::UserMetricsAction("VoiceInteraction.Started.Assistant"));
   }
 
+  using chromeos::assistant::AssistantAllowedState;
   switch (AssistantState::Get()->allowed_state().value_or(
-      mojom::AssistantAllowedState::ALLOWED)) {
-    case mojom::AssistantAllowedState::DISALLOWED_BY_NONPRIMARY_USER:
+      AssistantAllowedState::ALLOWED)) {
+    case AssistantAllowedState::DISALLOWED_BY_NONPRIMARY_USER:
       // Show a toast if the active user is not primary.
       ShowToast(kAssistantErrorToastId,
                 l10n_util::GetStringUTF16(
                     IDS_ASH_ASSISTANT_SECONDARY_USER_TOAST_MESSAGE));
       return;
-    case mojom::AssistantAllowedState::DISALLOWED_BY_LOCALE:
+    case AssistantAllowedState::DISALLOWED_BY_LOCALE:
       // Show a toast if the Assistant is disabled due to unsupported
       // locales.
       ShowToast(kAssistantErrorToastId,
                 l10n_util::GetStringUTF16(
                     IDS_ASH_ASSISTANT_LOCALE_UNSUPPORTED_TOAST_MESSAGE));
       return;
-    case mojom::AssistantAllowedState::DISALLOWED_BY_POLICY:
+    case AssistantAllowedState::DISALLOWED_BY_POLICY:
       // Show a toast if the Assistant is disabled due to enterprise policy.
       ShowToast(kAssistantErrorToastId,
                 l10n_util::GetStringUTF16(
                     IDS_ASH_ASSISTANT_DISABLED_BY_POLICY_MESSAGE));
       return;
-    case mojom::AssistantAllowedState::DISALLOWED_BY_DEMO_MODE:
+    case AssistantAllowedState::DISALLOWED_BY_DEMO_MODE:
       // Show a toast if the Assistant is disabled due to being in Demo
       // Mode.
       ShowToast(kAssistantErrorToastId,
                 l10n_util::GetStringUTF16(
                     IDS_ASH_ASSISTANT_DISABLED_IN_DEMO_MODE_MESSAGE));
       return;
-    case mojom::AssistantAllowedState::DISALLOWED_BY_PUBLIC_SESSION:
+    case AssistantAllowedState::DISALLOWED_BY_PUBLIC_SESSION:
       // Show a toast if the Assistant is disabled due to being in public
       // session.
       ShowToast(kAssistantErrorToastId,
                 l10n_util::GetStringUTF16(
                     IDS_ASH_ASSISTANT_DISABLED_IN_PUBLIC_SESSION_MESSAGE));
       return;
-    case mojom::AssistantAllowedState::DISALLOWED_BY_SUPERVISED_USER:
+    case AssistantAllowedState::DISALLOWED_BY_SUPERVISED_USER:
       // supervised user is deprecated, wait for the code clean up.
       NOTREACHED();
       return;
-    case mojom::AssistantAllowedState::DISALLOWED_BY_INCOGNITO:
+    case AssistantAllowedState::DISALLOWED_BY_INCOGNITO:
       ShowToast(kAssistantErrorToastId,
                 l10n_util::GetStringUTF16(
                     IDS_ASH_ASSISTANT_DISABLED_IN_GUEST_MESSAGE));
       return;
-    case mojom::AssistantAllowedState::DISALLOWED_BY_ACCOUNT_TYPE:
+    case AssistantAllowedState::DISALLOWED_BY_ACCOUNT_TYPE:
       ShowToast(kAssistantErrorToastId,
                 l10n_util::GetStringUTF16(
                     IDS_ASH_ASSISTANT_DISABLED_BY_ACCOUNT_MESSAGE));
       return;
-    case mojom::AssistantAllowedState::DISALLOWED_BY_KIOSK_MODE:
+    case AssistantAllowedState::DISALLOWED_BY_KIOSK_MODE:
       // No need to show toast in KIOSK mode.
       return;
-    case mojom::AssistantAllowedState::ALLOWED:
+    case AssistantAllowedState::ALLOWED:
       // Nothing need to do if allowed.
       break;
   }
 
-  Shell::Get()->assistant_controller()->ui_controller()->ToggleUi(
+  AssistantUiController::Get()->ToggleUi(
       /*entry_point=*/chromeos::assistant::mojom::AssistantEntryPoint::kHotkey,
       /*exit_point=*/chromeos::assistant::mojom::AssistantExitPoint::kHotkey);
 }
@@ -1741,6 +1755,8 @@ void AcceleratorControllerImpl::Init() {
   }
   for (size_t i = 0; i < kActionsAllowedInPinnedModeLength; ++i)
     actions_allowed_in_pinned_mode_.insert(kActionsAllowedInPinnedMode[i]);
+  for (size_t i = 0; i < kActionsAllowedInAppModeLength; ++i)
+    actions_allowed_in_app_mode_.insert(kActionsAllowedInAppMode[i]);
   for (size_t i = 0; i < kActionsNeedingWindowLength; ++i)
     actions_needing_window_.insert(kActionsNeedingWindow[i]);
   for (size_t i = 0; i < kActionsKeepingMenuOpenLength; ++i)

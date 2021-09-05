@@ -36,7 +36,6 @@ enum class ParseResult {
   ERROR_NON_ASCII_EXCLUDED_DOMAIN,
 
   ERROR_INVALID_URL_FILTER,
-  ERROR_EMPTY_REMOVE_HEADERS_LIST,
   ERROR_INVALID_REDIRECT,
   ERROR_INVALID_EXTENSION_PATH,
   ERROR_INVALID_TRANSFORM_SCHEME,
@@ -100,7 +99,6 @@ extern const char kErrorInvalidRedirectUrl[];
 extern const char kErrorDuplicateIDs[];
 extern const char kErrorPersisting[];
 extern const char kErrorNonAscii[];
-extern const char kErrorEmptyRemoveHeadersList[];
 extern const char kErrorInvalidKey[];
 extern const char kErrorInvalidTransformScheme[];
 extern const char kErrorQueryAndTransformBothSpecified[];
@@ -118,6 +116,8 @@ extern const char kErrorListNotPassed[];
 // Rule indexing install warnings.
 extern const char kRuleCountExceeded[];
 extern const char kRegexRuleCountExceeded[];
+extern const char kEnabledRuleCountExceeded[];
+extern const char kEnabledRegexRuleCountExceeded[];
 extern const char kRuleNotParsedWarning[];
 extern const char kTooManyParseFailuresWarning[];
 
@@ -127,9 +127,16 @@ extern const char kInternalErrorGettingDynamicRules[];
 extern const char kDynamicRuleCountExceeded[];
 extern const char kDynamicRegexRuleCountExceeded[];
 
+// Static ruleset toggling API errors.
+extern const char kInvalidRulesetIDError[];
+extern const char kEnabledRulesetsRuleCountExceeded[];
+extern const char kEnabledRulesetsRegexRuleCountExceeded[];
+extern const char kInternalErrorUpdatingEnabledRulesets[];
+
 // Histogram names.
 extern const char kIndexAndPersistRulesTimeHistogram[];
 extern const char kManifestRulesCountHistogram[];
+extern const char kManifestEnabledRulesCountHistogram[];
 extern const char kUpdateDynamicRulesStatusHistogram[];
 extern const char kReadDynamicRulesJSONStatusHistogram[];
 extern const char kIsLargeRegexHistogram[];

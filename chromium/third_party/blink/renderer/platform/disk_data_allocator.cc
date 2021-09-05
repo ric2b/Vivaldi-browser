@@ -135,7 +135,7 @@ std::unique_ptr<DiskDataAllocator::Metadata> DiskDataAllocator::Write(
       new Metadata(chosen_chunk.start_offset(), chosen_chunk.size()));
 }
 
-bool DiskDataAllocator::Read(const Metadata& metadata, void* data) {
+void DiskDataAllocator::Read(const Metadata& metadata, void* data) {
   DCHECK(IsMainThread());
 
   // Doesn't need locking as files support concurrent access, and we don't
@@ -151,8 +151,6 @@ bool DiskDataAllocator::Read(const Metadata& metadata, void* data) {
     DCHECK_EQ(metadata.size(), it->second);
   }
 #endif
-
-  return true;
 }
 
 void DiskDataAllocator::Discard(std::unique_ptr<Metadata> metadata) {
@@ -193,14 +191,20 @@ void DiskDataAllocator::ProvideTemporaryFile(base::File file) {
   DCHECK(!may_write_);
 
   file_ = std::move(file);
-  if (file_.IsValid())
-    may_write_ = true;
+  may_write_ = file_.IsValid();
 }
 
 // static
 DiskDataAllocator& DiskDataAllocator::Instance() {
   DEFINE_STATIC_LOCAL(DiskDataAllocator, instance, ());
   return instance;
+}
+
+// static
+void DiskDataAllocator::Bind(
+    mojo::PendingReceiver<mojom::blink::DiskAllocator> receiver) {
+  DCHECK(!Instance().receiver_.is_bound());
+  Instance().receiver_.Bind(std::move(receiver));
 }
 
 }  // namespace blink

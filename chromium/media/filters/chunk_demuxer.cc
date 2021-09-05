@@ -576,6 +576,11 @@ int64_t ChunkDemuxer::GetMemoryUsage() const {
   return mem;
 }
 
+base::Optional<container_names::MediaContainerName>
+ChunkDemuxer::GetContainerForMetrics() const {
+  return base::nullopt;
+}
+
 void ChunkDemuxer::AbortPendingReads() {
   base::AutoLock auto_lock(lock_);
   DCHECK(state_ == INITIALIZED || state_ == ENDED || state_ == SHUTDOWN ||

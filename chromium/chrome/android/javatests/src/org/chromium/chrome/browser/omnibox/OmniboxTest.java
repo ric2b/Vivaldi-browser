@@ -31,7 +31,7 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.omnibox.status.StatusViewCoordinator;
 import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteController.OnSuggestionsReceivedListener;
-import org.chromium.chrome.browser.omnibox.suggestions.OmniboxSuggestion;
+import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteResult;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabObserver;
@@ -46,8 +46,6 @@ import org.chromium.content_public.browser.test.util.KeyUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.net.test.ServerCertificate;
-
-import java.util.List;
 
 /**
  * Tests of the Omnibox.
@@ -80,7 +78,7 @@ public class OmniboxTest {
             new OnSuggestionsReceivedListener() {
                 @Override
                 public void onSuggestionsReceived(
-                        List<OmniboxSuggestion> suggestions, String inlineAutocompleteText) {}
+                        AutocompleteResult autocompleteResult, String inlineAutocompleteText) {}
             };
 
     /**
@@ -99,7 +97,7 @@ public class OmniboxTest {
         OmniboxTestUtils.waitForOmniboxSuggestions(locationBar);
 
         ChromeTabUtils.waitForTabPageLoadStart(
-                mActivityTestRule.getActivity().getActivityTab(), new Runnable() {
+                mActivityTestRule.getActivity().getActivityTab(), null, new Runnable() {
                     @Override
                     public void run() {
                         final UrlBar urlBar =

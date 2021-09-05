@@ -29,8 +29,7 @@ class CORE_EXPORT NGTextFragmentBuilder final : public NGFragmentBuilder {
   TextDirection ResolvedDirection() const { return resolved_direction_; }
 
   // NOTE: Takes ownership of the shape result within the item result.
-  void SetItem(NGPhysicalTextFragment::NGTextType,
-               const NGInlineItemsData&,
+  void SetItem(const String& text_content,
                NGInlineItemResult*,
                LayoutUnit line_height);
 
@@ -45,17 +44,12 @@ class CORE_EXPORT NGTextFragmentBuilder final : public NGFragmentBuilder {
   scoped_refptr<const NGPhysicalTextFragment> ToTextFragment();
 
  private:
-  // Returns true if the text is generated (from, e.g., list marker,
-  // pseudo-element, ...) instead of from a DOM text node.
-  bool IsGeneratedText() const;
-
   String text_;
   unsigned start_offset_;
   unsigned end_offset_;
   scoped_refptr<const ShapeResultView> shape_result_;
 
-  NGPhysicalTextFragment::NGTextType text_type_ =
-      NGPhysicalTextFragment::kNormalText;
+  NGTextType text_type_ = NGTextType::kNormal;
 
   // Set from |NGInlineItem| by |SetItem()|.
   TextDirection resolved_direction_ = TextDirection::kLtr;

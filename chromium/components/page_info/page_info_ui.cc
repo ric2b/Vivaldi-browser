@@ -180,6 +180,10 @@ base::span<const PermissionsUIInfo> GetContentSettingsUIInfo() {
     {ContentSettingsType::NFC, IDS_PAGE_INFO_TYPE_NFC},
     {ContentSettingsType::VR, IDS_PAGE_INFO_TYPE_VR},
     {ContentSettingsType::AR, IDS_PAGE_INFO_TYPE_AR},
+    {ContentSettingsType::CAMERA_PAN_TILT_ZOOM,
+     IDS_PAGE_INFO_TYPE_CAMERA_PAN_TILT_ZOOM},
+    {ContentSettingsType::WINDOW_PLACEMENT,
+     IDS_PAGE_INFO_TYPE_WINDOW_PLACEMENT},
   };
   return kPermissionsUIInfo;
 }
@@ -424,7 +428,7 @@ base::string16 PageInfoUI::PermissionActionToUIString(
 
       button_text_ids = kPermissionButtonTextIDUserManaged;
       break;
-    case content_settings::SETTING_SOURCE_WHITELIST:
+    case content_settings::SETTING_SOURCE_ALLOWLIST:
     case content_settings::SETTING_SOURCE_NONE:
     default:
       NOTREACHED();
@@ -620,6 +624,12 @@ const gfx::ImageSkia PageInfoUI::GetPermissionIcon(const PermissionInfo& info,
     case ContentSettingsType::VR:
     case ContentSettingsType::AR:
       icon = &vector_icons::kVrHeadsetIcon;
+      break;
+    case ContentSettingsType::CAMERA_PAN_TILT_ZOOM:
+      icon = &vector_icons::kCameraPanTiltZoomIcon;
+      break;
+    case ContentSettingsType::WINDOW_PLACEMENT:
+      icon = &vector_icons::kWindowPlacementIcon;
       break;
     default:
       // All other |ContentSettingsType|s do not have icons on desktop or are

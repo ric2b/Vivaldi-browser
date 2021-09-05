@@ -106,6 +106,10 @@ class NET_EXPORT CanonicalCookie {
 
   const std::string& Name() const { return name_; }
   const std::string& Value() const { return value_; }
+  // We represent the cookie's host-only-flag as the absence of a leading dot in
+  // Domain(). See IsDomainCookie() and IsHostCookie() below.
+  // If you want the "cookie's domain" as described in RFC 6265bis, use
+  // DomainWithoutDot().
   const std::string& Domain() const { return domain_; }
   const std::string& Path() const { return path_; }
   const base::Time& CreationDate() const { return creation_date_; }
@@ -124,6 +128,10 @@ class NET_EXPORT CanonicalCookie {
     return !domain_.empty() && domain_[0] == '.'; }
   bool IsHostCookie() const { return !IsDomainCookie(); }
 
+  // Returns the cookie's domain, with the leading dot removed, if present.
+  // This corresponds to the "cookie's domain" as described in RFC 6265bis.
+  std::string DomainWithoutDot() const;
+
   bool IsExpired(const base::Time& current) const {
     return !expiry_date_.is_null() && current >= expiry_date_;
   }
@@ -137,7 +145,7 @@ class NET_EXPORT CanonicalCookie {
   bool IsEquivalent(const CanonicalCookie& ecc) const {
     // It seems like it would make sense to take secure, httponly, and samesite
     // into account, but the RFC doesn't specify this.
-    // NOTE: Keep this logic in-sync with TrimDuplicateCookiesForHost().
+    // NOTE: Keep this logic in-sync with TrimDuplicateCookiesForKey().
     return (name_ == ecc.Name() && domain_ == ecc.Domain()
             && path_ == ecc.Path());
   }
@@ -149,18 +157,40 @@ class NET_EXPORT CanonicalCookie {
   }
 
   // Checks a looser set of equivalency rules than 'IsEquivalent()' in order
-  // to support the stricter 'Secure' behaviors specified in
+  // to support the stricter 'Secure' behaviors specified in Step 12 of
+  // https://tools.ietf.org/html/draft-ietf-httpbis-rfc6265bis-05#section-5.4
+  // which originated from the proposal in
   // https://tools.ietf.org/html/draft-ietf-httpbis-cookie-alone#section-3
   //
-  // Returns 'true' if this cookie's name matches |ecc|, and this cookie is
-  // a domain-match for |ecc| (or vice versa), and |ecc|'s path is "on" this
-  // cookie's path (as per 'IsOnPath()').
+  // Returns 'true' if this cookie's name matches |secure_cookie|, and this
+  // cookie is a domain-match for |secure_cookie| (or vice versa), and
+  // |secure_cookie|'s path is "on" this cookie's path (as per 'IsOnPath()').
   //
   // Note that while the domain-match cuts both ways (e.g. 'example.com'
   // matches 'www.example.com' in either direction), the path-match is
   // unidirectional (e.g. '/login/en' matches '/login' and '/', but
   // '/login' and '/' do not match '/login/en').
-  bool IsEquivalentForSecureCookieMatching(const CanonicalCookie& ecc) const;
+  //
+  // Conceptually:
+  // If new_cookie.IsEquivalentForSecureCookieMatching(secure_cookie) is true,
+  // this means that new_cookie would "shadow" secure_cookie: they would would
+  // be indistinguishable when serialized into a Cookie header. This is
+  // important because, if an attacker is attempting to set new_cookie, it
+  // should not be allowed to mislead the server into using new_cookie's value
+  // instead of secure_cookie's.
+  //
+  // The reason for the asymmetric path comparison ("cookie1=bad; path=/a/b"
+  // from an insecure source is not allowed if "cookie1=good; secure; path=/a"
+  // exists, but "cookie2=bad; path=/a" from an insecure source is allowed if
+  // "cookie2=good; secure; path=/a/b" exists) is because cookies in the Cookie
+  // header are serialized with longer path first. (See CookieSorter in
+  // cookie_monster.cc.) That is, they would be serialized as "Cookie:
+  // cookie1=bad; cookie1=good" in one case, and "Cookie: cookie2=good;
+  // cookie2=bad" in the other case. The first scenario is not allowed because
+  // the attacker injects the bad value, whereas the second scenario is ok
+  // because the good value is still listed first.
+  bool IsEquivalentForSecureCookieMatching(
+      const CanonicalCookie& secure_cookie) const;
 
   void SetSourceScheme(CookieSourceScheme source_scheme) {
     source_scheme_ = source_scheme;
@@ -170,12 +200,28 @@ class NET_EXPORT CanonicalCookie {
   }
   void SetCreationDate(const base::Time& date) { creation_date_ = date; }
 
-  // Returns true if the given |url_path| path-matches the cookie-path as
-  // described in section 5.1.4 in RFC 6265.
+  // Returns true if the given |url_path| path-matches this cookie's cookie-path
+  // as described in section 5.1.4 in RFC 6265. This returns true if |path_| and
+  // |url_path| are identical, or if |url_path| is a subdirectory of |path_|.
   bool IsOnPath(const std::string& url_path) const;
 
-  // Returns true if the cookie domain matches the given |host| as described in
-  // section 5.1.3 of RFC 6265.
+  // This returns true if this cookie's |domain_| indicates that it can be
+  // accessed by |host|.
+  //
+  // In the case where |domain_| has no leading dot, this is a host cookie and
+  // will only domain match if |host| is identical to |domain_|.
+  //
+  // In the case where |domain_| has a leading dot, this is a domain cookie. It
+  // will match |host| if |domain_| is a suffix of |host|, or if |domain_| is
+  // exactly equal to |host| plus a leading dot.
+  //
+  // Note that this isn't quite the same as the "domain-match" algorithm in RFC
+  // 6265bis, since our implementation uses the presence of a leading dot in the
+  // |domain_| string in place of the spec's host-only-flag. That is, if
+  // |domain_| has no leading dot, then we only consider it matching if |host|
+  // is identical (which reflects the intended behavior when the cookie has a
+  // host-only-flag), whereas the RFC also treats them as domain-matching if
+  // |domain_| is a subdomain of |host|.
   bool IsDomainMatch(const std::string& host) const;
 
   // Returns if the cookie should be included (and if not, why) for the given
@@ -265,12 +311,6 @@ class NET_EXPORT CanonicalCookie {
     COOKIE_PREFIX_LAST
   };
 
-  // Applies the appropriate warning for the given cross-scheme
-  // SameSiteCookieContext.
-  void AddSameSiteCrossSchemeWarning(
-      CookieInclusionStatus* status,
-      const CookieOptions::SameSiteCookieContext context) const;
-
   // Returns the CookiePrefix (or COOKIE_PREFIX_NONE if none) that
   // applies to the given cookie |name|.
   static CookiePrefix GetCookiePrefix(const std::string& name);
@@ -303,9 +343,6 @@ class NET_EXPORT CanonicalCookie {
 
   // Returns whether the cookie was created at most |age_threshold| ago.
   bool IsRecentlyCreated(base::TimeDelta age_threshold) const;
-
-  // Returns the cookie's domain, with the leading dot removed, if present.
-  std::string DomainWithoutDot() const;
 
   std::string name_;
   std::string value_;
@@ -379,20 +416,82 @@ class NET_EXPORT CanonicalCookie::CookieInclusionStatus {
     // enough to activate the Lax-allow-unsafe intervention.
     WARN_SAMESITE_UNSPECIFIED_LAX_ALLOW_UNSAFE = 2,
 
-    // The following warnings indicate that a SameSite cookie is being sent/set
-    // across schemes and with what same-site context.
-    // See CookieOptions::SameSiteCookieContext.
-    WARN_SAMESITE_LAX_METHOD_UNSAFE_CROSS_SCHEME_SECURE_URL = 3,
-    WARN_SAMESITE_LAX_CROSS_SCHEME_SECURE_URL = 4,
-    WARN_SAMESITE_STRICT_CROSS_SCHEME_SECURE_URL = 5,
-    WARN_SAMESITE_LAX_METHOD_UNSAFE_CROSS_SCHEME_INSECURE_URL = 6,
-    WARN_SAMESITE_LAX_CROSS_SCHEME_INSECURE_URL = 7,
-    WARN_SAMESITE_STRICT_CROSS_SCHEME_INSECURE_URL = 8,
+    // The following warnings indicate that an included cookie with an effective
+    // SameSite is experiencing a SameSiteCookieContext::|context| ->
+    // SameSiteCookieContext::|schemeful_context| downgrade that will prevent
+    // its access schemefully.
+    // This situation means that a cookie is accessible when the
+    // SchemefulSameSite feature is disabled but not when it's enabled,
+    // indicating changed behavior and potential breakage.
+    //
+    // For example, a Strict to Lax downgrade for an effective SameSite=Strict
+    // cookie:
+    // This cookie would be accessible in the Strict context as its SameSite
+    // value is Strict. However its context for schemeful same-site becomes Lax.
+    // A strict cookie cannot be accessed in a Lax context and therefore the
+    // behavior has changed.
+    // As a counterexample, a Strict to Lax downgrade for an effective
+    // SameSite=Lax cookie: A Lax cookie can be accessed in both Strict and Lax
+    // contexts so there is no behavior change (and we don't warn about it).
+    //
+    // The warnings are in the following format:
+    // WARN_{context}_{schemeful_context}_DOWNGRADE_{samesite_value}_SAMESITE
+    //
+    // Of the following 5 SameSite warnings, there will be, at most, a single
+    // active one.
+
+    // Strict to Lax downgrade for an effective SameSite=Strict cookie.
+    // This warning is only applicable for cookies being sent because a Strict
+    // cookie will be set in both Strict and Lax Contexts so the downgrade will
+    // not affect it.
+    WARN_STRICT_LAX_DOWNGRADE_STRICT_SAMESITE = 3,
+    // Strict to Cross-site downgrade for an effective SameSite=Strict cookie.
+    // This also applies to Strict to Lax Unsafe downgrades due to Lax Unsafe
+    // behaving like Cross-site.
+    WARN_STRICT_CROSS_DOWNGRADE_STRICT_SAMESITE = 4,
+    // Strict to Cross-site downgrade for an effective SameSite=Lax cookie.
+    // This also applies to Strict to Lax Unsafe downgrades due to Lax Unsafe
+    // behaving like Cross-site.
+    WARN_STRICT_CROSS_DOWNGRADE_LAX_SAMESITE = 5,
+    // Lax to Cross-site downgrade for an effective SameSite=Strict cookie.
+    // This warning is only applicable for cookies being set because a Strict
+    // cookie will not be sent in a Lax context so the downgrade would not
+    // affect it.
+    WARN_LAX_CROSS_DOWNGRADE_STRICT_SAMESITE = 6,
+    // Lax to Cross-site downgrade for an effective SameSite=Lax cookie.
+    WARN_LAX_CROSS_DOWNGRADE_LAX_SAMESITE = 7,
 
     // This should be kept last.
     NUM_WARNING_REASONS
   };
 
+  // These enums encode the context downgrade warnings + the secureness of the
+  // url sending/setting the cookie. They're used for metrics only. The format
+  // is {context}_{schemeful_context}_{samesite_value}_{securness}.
+  // NO_DOWNGRADE_{securness} indicates that a cookie didn't have a breaking
+  // context downgrade and was A) included B) excluded only due to insufficient
+  // same-site context. I.e. the cookie wasn't excluded due to other reasons
+  // such as third-party cookie blocking. Keep this in line with
+  // SameSiteCookieContextBreakingDowngradeWithSecureness in enums.xml.
+  enum ContextDowngradeMetricValues {
+    NO_DOWNGRADE_INSECURE = 0,
+    NO_DOWNGRADE_SECURE = 1,
+
+    STRICT_LAX_STRICT_INSECURE = 2,
+    STRICT_CROSS_STRICT_INSECURE = 3,
+    STRICT_CROSS_LAX_INSECURE = 4,
+    LAX_CROSS_STRICT_INSECURE = 5,
+    LAX_CROSS_LAX_INSECURE = 6,
+
+    STRICT_LAX_STRICT_SECURE = 7,
+    STRICT_CROSS_STRICT_SECURE = 8,
+    STRICT_CROSS_LAX_SECURE = 9,
+    LAX_CROSS_STRICT_SECURE = 10,
+    LAX_CROSS_LAX_SECURE = 11,
+
+    // Keep last.
+    kMaxValue = LAX_CROSS_LAX_SECURE
+  };
   // Makes a status that says include and should not warn.
   CookieInclusionStatus();
 
@@ -422,16 +521,23 @@ class NET_EXPORT CanonicalCookie::CookieInclusionStatus {
   // warning about it (clear the warning).
   void MaybeClearSameSiteWarning();
 
+  // Whether to record the breaking downgrade metrics if the cookie is included
+  // or if it's only excluded because of insufficient same-site context.
+  bool ShouldRecordDowngradeMetrics() const;
+
   // Whether the cookie should be warned about.
   bool ShouldWarn() const;
 
   // Whether the given reason for warning is present.
   bool HasWarningReason(WarningReason reason) const;
 
-  // Whether a cross-scheme warning is present.
-  // If the function returns true and |reason| is valid then |reason| will
-  // contain which warning was found.
-  bool HasCrossSchemeWarning(
+  // Whether a schemeful downgrade warning is present.
+  // A schemeful downgrade means that an included cookie with an effective
+  // SameSite is experiencing a SameSiteCookieContext::|context| ->
+  // SameSiteCookieContext::|schemeful_context| downgrade that will prevent its
+  // access schemefully. If the function returns true and |reason| is valid then
+  // |reason| will contain which warning was found.
+  bool HasDowngradeWarning(
       CookieInclusionStatus::WarningReason* reason = nullptr) const;
 
   // Add an warning reason.
@@ -450,6 +556,9 @@ class NET_EXPORT CanonicalCookie::CookieInclusionStatus {
   void set_warning_reasons(uint32_t warning_reasons) {
     warning_reasons_ = warning_reasons;
   }
+
+  ContextDowngradeMetricValues GetBreakingDowngradeMetricsEnumValue(
+      const GURL& url) const;
 
   // Get exclusion reason(s) and warning in string format.
   std::string GetDebugString() const;

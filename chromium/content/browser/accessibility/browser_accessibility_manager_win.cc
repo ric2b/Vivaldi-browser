@@ -30,9 +30,8 @@ namespace content {
 // static
 BrowserAccessibilityManager* BrowserAccessibilityManager::Create(
     const ui::AXTreeUpdate& initial_tree,
-    BrowserAccessibilityDelegate* delegate,
-    BrowserAccessibilityFactory* factory) {
-  return new BrowserAccessibilityManagerWin(initial_tree, delegate, factory);
+    BrowserAccessibilityDelegate* delegate) {
+  return new BrowserAccessibilityManagerWin(initial_tree, delegate);
 }
 
 BrowserAccessibilityManagerWin*
@@ -42,10 +41,8 @@ BrowserAccessibilityManager::ToBrowserAccessibilityManagerWin() {
 
 BrowserAccessibilityManagerWin::BrowserAccessibilityManagerWin(
     const ui::AXTreeUpdate& initial_tree,
-    BrowserAccessibilityDelegate* delegate,
-    BrowserAccessibilityFactory* factory)
-    : BrowserAccessibilityManager(delegate, factory),
-      load_complete_pending_(false) {
+    BrowserAccessibilityDelegate* delegate)
+    : BrowserAccessibilityManager(delegate), load_complete_pending_(false) {
   ui::win::CreateATLModuleIfNeeded();
   Initialize(initial_tree);
 }
@@ -363,6 +360,7 @@ void BrowserAccessibilityManagerWin::FireGeneratedEvent(
       aria_properties_events_.insert(node);
       break;
     case ui::AXEventGenerator::Event::SORT_CHANGED:
+      FireWinAccessibilityEvent(IA2_EVENT_OBJECT_ATTRIBUTE_CHANGED, node);
       aria_properties_events_.insert(node);
       break;
     case ui::AXEventGenerator::Event::SUBTREE_CREATED:
@@ -658,33 +656,6 @@ void BrowserAccessibilityManagerWin::OnAtomicUpdateFinished(
   for (auto* node : objs_to_update) {
     static_cast<BrowserAccessibilityComWin*>(node)->UpdateStep3FireEvents();
   }
-}
-
-bool BrowserAccessibilityManagerWin::ShouldFireEventForNode(
-    BrowserAccessibility* node) const {
-  if (!node || !node->CanFireEvents())
-    return false;
-
-  // If the root delegate isn't the main-frame, this may be a new frame that
-  // hasn't yet been swapped in or added to the frame tree. Suppress firing
-  // events until then.
-  BrowserAccessibilityDelegate* root_delegate = GetDelegateFromRootManager();
-  if (!root_delegate)
-    return false;
-  if (!root_delegate->AccessibilityIsMainFrame())
-    return false;
-
-  // Don't fire events when this document might be stale as the user has
-  // started navigating to a new document.
-  if (user_is_navigating_away_)
-    return false;
-
-  // Inline text boxes are an internal implementation detail, we don't
-  // expose them to Windows.
-  if (node->GetRole() == ax::mojom::Role::kInlineTextBox)
-    return false;
-
-  return true;
 }
 
 void BrowserAccessibilityManagerWin::HandleSelectedStateChanged(

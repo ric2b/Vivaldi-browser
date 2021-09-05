@@ -7,7 +7,6 @@
 #include "base/bind.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/component_updater/soda_component_installer.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_preferences_util.h"
@@ -16,6 +15,10 @@
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/language/core/browser/pref_names.h"
 #include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
+
+#if defined(OS_CHROMEOS)
+#include "ash/public/cpp/ash_pref_names.h"
+#endif
 
 namespace {
 
@@ -52,6 +55,9 @@ const char* const kWebPrefsToObserve[] = {
     prefs::kWebkitTabsToLinks,
     prefs::kWebKitTextAreasAreResizable,
     prefs::kWebKitWebSecurityEnabled,
+#if defined(OS_CHROMEOS)
+    ash::prefs::kAccessibilityFocusHighlightEnabled,
+#endif
 };
 
 const int kWebPrefsToObserveLength = base::size(kWebPrefsToObserve);
@@ -87,11 +93,6 @@ PrefWatcher::PrefWatcher(Profile* profile) : profile_(profile) {
   profile_pref_change_registrar_.Add(prefs::kFullscreenAllowed,
                                      renderer_callback);
 #endif
-
-  profile_pref_change_registrar_.Add(
-      prefs::kLiveCaptionEnabled,
-      base::BindRepeating(&PrefWatcher::OnLiveCaptionEnabledPrefChanged,
-                          base::Unretained(this)));
 
   PrefChangeRegistrar::NamedChangeCallback webkit_callback =
       base::BindRepeating(&PrefWatcher::OnWebPrefChanged,
@@ -141,17 +142,6 @@ void PrefWatcher::UpdateRendererPreferences() {
 void PrefWatcher::OnWebPrefChanged(const std::string& pref_name) {
   for (auto* helper : tab_helpers_)
     helper->OnWebPrefChanged(pref_name);
-}
-
-void PrefWatcher::OnLiveCaptionEnabledPrefChanged(
-    const std::string& pref_name) {
-  PrefService* profile_prefs = profile_->GetPrefs();
-  if (profile_prefs->GetBoolean(prefs::kLiveCaptionEnabled)) {
-    component_updater::RegisterSODAComponent(
-        g_browser_process->component_updater(), profile_prefs,
-        base::BindOnce(&component_updater::SODAComponentInstallerPolicy::
-                           UpdateSODAComponentOnDemand));
-  }
 }
 
 // static

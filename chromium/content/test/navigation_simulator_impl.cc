@@ -24,6 +24,7 @@
 #include "content/test/test_navigation_url_loader.h"
 #include "content/test/test_render_frame_host.h"
 #include "content/test/test_web_contents.h"
+#include "ipc/ipc_message.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/load_flags.h"
@@ -605,8 +606,7 @@ void NavigationSimulatorImpl::Commit() {
   if (request_) {
     scoped_refptr<net::HttpResponseHeaders> response_headers =
         new net::HttpResponseHeaders(std::string());
-    response_headers->AddHeader(std::string("Content-Type: ") +
-                                contents_mime_type_);
+    response_headers->SetHeader("Content-Type", contents_mime_type_);
     request_->set_response_headers_for_testing(response_headers);
   }
 
@@ -815,6 +815,21 @@ void NavigationSimulatorImpl::CommitSameDocument() {
 
   CHECK_EQ(1, num_did_start_navigation_called_);
   CHECK_EQ(1, num_did_finish_navigation_called_);
+}
+
+void NavigationSimulatorImpl::SetInitiatorFrame(
+    RenderFrameHost* initiator_frame_host) {
+  // Browser-initiated navigations are not associated with an initiator frame.
+  CHECK(!browser_initiated_);
+  CHECK(initiator_frame_host);
+
+  // TODO(https://crbug.com/1072790): Support cross-process initiators here by
+  // using NavigationRequest::CreateBrowserInitiated() (like
+  // RenderFrameProxyHost does) for the navigation.
+  CHECK_EQ(render_frame_host_->GetProcess(), initiator_frame_host->GetProcess())
+      << "The initiator frame must belong to the same process as the frame you "
+         "are navigating";
+  initiator_frame_host_ = initiator_frame_host;
 }
 
 void NavigationSimulatorImpl::SetTransition(ui::PageTransition transition) {
@@ -1125,6 +1140,8 @@ bool NavigationSimulatorImpl::SimulateBrowserInitiatedStart() {
 bool NavigationSimulatorImpl::SimulateRendererInitiatedStart() {
   mojom::BeginNavigationParamsPtr begin_params =
       mojom::BeginNavigationParams::New(
+          initiator_frame_host_ ? initiator_frame_host_->GetRoutingID()
+                                : MSG_ROUTING_NONE /* initiator_routing_id */,
           std::string() /* headers */, net::LOAD_NORMAL,
           false /* skip_service_worker */,
           blink::mojom::RequestContextType::HYPERLINK,
@@ -1134,8 +1151,8 @@ bool NavigationSimulatorImpl::SimulateRendererInitiatedStart() {
           std::string() /* searchable_form_encoding */,
           GURL() /* client_side_redirect_url */,
           base::nullopt /* detools_initiator_info */,
-          false /* attach_same_site_cookies */,
-          nullptr /* trust_token_params */);
+          false /* force_ignore_site_for_cookies */,
+          nullptr /* trust_token_params */, impression_);
   auto common_params = CreateCommonNavigationParams();
   common_params->navigation_start = base::TimeTicks::Now();
   common_params->url = navigation_url_;
@@ -1392,7 +1409,7 @@ void NavigationSimulatorImpl::
   // The previous RenderFrameHost entered the back-forward cache and hasn't been
   // requested to unload. The browser process do not expect
   // FrameHostMsg_Unload_ACK.
-  if (previous_rfh->is_in_back_forward_cache())
+  if (previous_rfh->IsInBackForwardCache())
     return;
   previous_rfh->OnMessageReceived(
       FrameHostMsg_Unload_ACK(previous_rfh->GetRoutingID()));

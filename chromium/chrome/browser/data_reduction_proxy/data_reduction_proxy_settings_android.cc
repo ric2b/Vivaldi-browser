@@ -148,13 +148,6 @@ DataReductionProxySettingsAndroid::GetDailyReceivedContentLengths(
       env, data_reduction_proxy::prefs::kDailyHttpReceivedContentLength);
 }
 
-ScopedJavaLocalRef<jstring>
-DataReductionProxySettingsAndroid::GetDataReductionProxyPassThroughHeader(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj) {
-  return ConvertUTF8ToJavaString(
-      env, data_reduction_proxy::chrome_proxy_pass_through_header());
-}
 
 jboolean DataReductionProxySettingsAndroid::IsDataReductionProxyUnreachable(
     JNIEnv* env,
@@ -200,7 +193,7 @@ void DataReductionProxySettingsAndroid::QueryDataUsage(
   Settings()
       ->data_reduction_proxy_service()
       ->compression_stats()
-      ->GetHistoricalDataUsage(base::Bind(
+      ->GetHistoricalDataUsage(base::BindOnce(
           &DataReductionProxySettingsAndroid::OnQueryDataUsageComplete,
           weak_factory_.GetWeakPtr(), JavaObjectWeakGlobalRef(env, obj),
           base::android::ScopedJavaGlobalRef<jobject>(j_result_obj), num_days));

@@ -87,7 +87,7 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
                              const FrameLoadRequest&,
                              const AtomicString& name,
                              const WebWindowFeatures&,
-                             mojom::blink::WebSandboxFlags,
+                             network::mojom::blink::WebSandboxFlags,
                              const FeaturePolicy::FeatureState&,
                              const SessionStorageNamespaceId&) override;
   void Show(NavigationPolicy) override;
@@ -270,23 +270,17 @@ class CORE_EXPORT ChromeClientImpl final : public ChromeClient {
 
   void NotifySwapTime(LocalFrame& frame, ReportTimeCallback callback) override;
 
-  void FallbackCursorModeLockCursor(LocalFrame* frame,
-                                    bool left,
-                                    bool right,
-                                    bool up,
-                                    bool down) override;
-
-  void FallbackCursorModeSetCursorVisibility(LocalFrame* frame,
-                                             bool visible) override;
-
   void RequestBeginMainFrameNotExpected(LocalFrame& frame,
                                         bool request) override;
 
+  void DidUpdateTextAutosizerPageInfo(
+      const WebTextAutosizerPageInfo& page_info) override;
+
   int GetLayerTreeId(LocalFrame& frame) override;
 
-  void DidUpdateTextAutosizerPageInfo(const WebTextAutosizerPageInfo&) override;
-
   void DocumentDetached(Document&) override;
+
+  double UserZoomFactor() const override;
 
  private:
   bool IsChromeClientImpl() const override { return true; }

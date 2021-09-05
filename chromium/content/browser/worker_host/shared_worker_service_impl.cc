@@ -12,8 +12,8 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/check_op.h"
 #include "base/feature_list.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/task/post_task.h"
 #include "content/browser/appcache/appcache_navigation_handle.h"
@@ -35,6 +35,8 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "net/base/isolation_info.h"
+#include "net/cookies/site_for_cookies.h"
 #include "services/network/public/mojom/fetch_api.mojom.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/messaging/message_port_channel.h"
@@ -45,11 +47,6 @@
 #include "url/origin.h"
 
 namespace content {
-
-bool IsShuttingDown(RenderProcessHost* host) {
-  return !host || host->FastShutdownStarted() ||
-         host->IsKeepAliveRefCountDisabled();
-}
 
 SharedWorkerServiceImpl::SharedWorkerServiceImpl(
     StoragePartitionImpl* storage_partition,
@@ -282,7 +279,8 @@ SharedWorkerHost* SharedWorkerServiceImpl::CreateWorker(
   // Allocate the worker in the same process as the creator.
   auto* worker_process_host =
       RenderProcessHost::FromID(creator_render_frame_host_id.child_id);
-  DCHECK(!IsShuttingDown(worker_process_host));
+  DCHECK(worker_process_host);
+  DCHECK(worker_process_host->IsInitializedAndNotDead());
 
   // Create the host. We need to do this even before starting the worker,
   // because we are about to bounce to the IO thread. If another ConnectToWorker
@@ -304,7 +302,7 @@ SharedWorkerHost* SharedWorkerServiceImpl::CreateWorker(
 
   auto service_worker_handle =
       std::make_unique<ServiceWorkerMainResourceHandle>(
-          storage_partition_->GetServiceWorkerContext());
+          storage_partition_->GetServiceWorkerContext(), base::DoNothing());
   auto* service_worker_handle_raw = service_worker_handle.get();
   host->SetServiceWorkerHandle(std::move(service_worker_handle));
 
@@ -330,11 +328,14 @@ SharedWorkerHost* SharedWorkerServiceImpl::CreateWorker(
   // data across NetworkIsolationKeys and allow same-site cookies to be sent in
   // cross-site contexts. Fix this.
   WorkerScriptFetchInitiator::Start(
-      worker_process_host->GetID(), host->instance().url(),
-      creator_render_frame_host, net::SiteForCookies::FromOrigin(worker_origin),
+      worker_process_host->GetID(), DedicatedWorkerId(), host->id(),
+      host->instance().url(), creator_render_frame_host,
+      net::SiteForCookies::FromOrigin(worker_origin),
       host->instance().constructor_origin(),
-      net::NetworkIsolationKey(worker_origin, worker_origin), credentials_mode,
-      std::move(outside_fetch_client_settings_object),
+      net::IsolationInfo::Create(
+          net::IsolationInfo::RedirectMode::kUpdateNothing, worker_origin,
+          worker_origin, net::SiteForCookies::FromOrigin(worker_origin)),
+      credentials_mode, std::move(outside_fetch_client_settings_object),
       blink::mojom::ResourceType::kSharedWorker, service_worker_context_,
       service_worker_handle_raw, std::move(appcache_host),
       std::move(blob_url_loader_factory), url_loader_factory_override_,

@@ -283,6 +283,7 @@ void MockRenderThread::OnCreateChildFrame(
   params_reply->browser_interface_broker_handle =
       browser_interface_broker.PassPipe().release();
 
+  params_reply->frame_token = base::UnguessableToken::Create();
   params_reply->devtools_frame_token = base::UnguessableToken::Create();
 }
 
@@ -326,9 +327,25 @@ void MockRenderThread::OnCreateWindow(
   reply->main_frame_interface_bundle->browser_interface_broker =
       std::move(browser_interface_broker);
 
+  reply->main_frame_frame_token = base::UnguessableToken::Create();
   reply->main_frame_widget_route_id = GetNextRoutingID();
   reply->cloned_session_storage_namespace_id =
       blink::AllocateSessionStorageNamespaceId();
+
+  mojo::AssociatedRemote<blink::mojom::FrameWidget> blink_frame_widget;
+  mojo::PendingAssociatedReceiver<blink::mojom::FrameWidget>
+      blink_frame_widget_receiver =
+          blink_frame_widget
+              .BindNewEndpointAndPassDedicatedReceiverForTesting();
+
+  mojo::AssociatedRemote<blink::mojom::FrameWidgetHost> blink_frame_widget_host;
+  mojo::PendingAssociatedReceiver<blink::mojom::FrameWidgetHost>
+      blink_frame_widget_host_receiver =
+          blink_frame_widget_host
+              .BindNewEndpointAndPassDedicatedReceiverForTesting();
+
+  reply->frame_widget = std::move(blink_frame_widget_receiver);
+  reply->frame_widget_host = blink_frame_widget_host.Unbind();
 }
 
 }  // namespace content

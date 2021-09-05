@@ -37,6 +37,7 @@
 #include "components/policy/core/common/cloud/dm_auth.h"
 #include "components/policy/proto/chrome_device_policy.pb.h"
 #include "google_apis/gaia/gaia_auth_util.h"
+#include "google_apis/gaia/gaia_constants.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/http/http_status_code.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -251,8 +252,8 @@ void EnrollmentHandlerChromeOS::StartEnrollment() {
 
   VLOG(1) << "Requesting state keys.";
   state_keys_broker_->RequestStateKeys(
-      base::Bind(&EnrollmentHandlerChromeOS::HandleStateKeysResult,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(&EnrollmentHandlerChromeOS::HandleStateKeysResult,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 std::unique_ptr<CloudPolicyClient> EnrollmentHandlerChromeOS::ReleaseClient() {
@@ -568,6 +569,20 @@ void EnrollmentHandlerChromeOS::OnDeviceAccountClientError(
   // Do nothing, it would be handled in OnClientError.
 }
 
+enterprise_management::DeviceServiceApiAccessRequest::DeviceType
+EnrollmentHandlerChromeOS::GetRobotAuthCodeDeviceType() {
+  return em::DeviceServiceApiAccessRequest::CHROME_OS;
+}
+
+std::string EnrollmentHandlerChromeOS::GetRobotOAuthScopes() {
+  return GaiaConstants::kAnyApiOAuth2Scope;
+}
+
+scoped_refptr<network::SharedURLLoaderFactory>
+EnrollmentHandlerChromeOS::GetURLLoaderFactory() {
+  return g_browser_process->shared_url_loader_factory();
+}
+
 void EnrollmentHandlerChromeOS::SetFirmwareManagementParametersData() {
   DCHECK_EQ(STEP_SET_FWMP_DATA, enrollment_step_);
 
@@ -627,8 +642,8 @@ void EnrollmentHandlerChromeOS::StartLockDevice() {
 
   install_attributes_->LockDevice(
       device_mode_, domain_, realm_, device_id_,
-      base::Bind(&EnrollmentHandlerChromeOS::HandleLockDeviceResult,
-                 weak_ptr_factory_.GetWeakPtr()));
+      base::BindOnce(&EnrollmentHandlerChromeOS::HandleLockDeviceResult,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void EnrollmentHandlerChromeOS::HandleDMTokenStoreResult(bool success) {

@@ -27,7 +27,16 @@ using ::testing::_;
 namespace media_router {
 
 namespace {
-static constexpr char kCastSource[] = "cast:ABCDEFGH?clientId=123";
+static constexpr char kAppId[] = "ABCDEFGH";
+static constexpr char kAppParams[] =
+    "{requiredFeatures:[\"STREAM_TRANSFER\"],launchCheckerParams:{"
+    "credentialsData:{credentialsType:\"mobile\",credentials:"
+    "\"99843n2idsguyhga\"}}}";
+static constexpr char kCastSource[] =
+    "cast:ABCDEFGH?clientId=123&appParams=%7BrequiredFeatures%3A%5B%22STREAM_"
+    "TRANSFER%22%5D%2ClaunchCheckerParams%3A%7BcredentialsData%3A%"
+    "7BcredentialsType%3A%22mobile%22%2Ccredentials%3A%2299843n2idsguyhga%22%"
+    "7D%7D%7D";
 static constexpr char kPresentationId[] = "presentationId";
 static constexpr char kOrigin[] = "https://www.youtube.com";
 static constexpr int kTabId = 1;
@@ -178,7 +187,11 @@ TEST_F(CastMediaRouteProviderTest, CreateRoute) {
   MediaSinkInternal sink = CreateCastSink(1);
   media_sink_service_.AddOrUpdateSink(sink);
 
-  EXPECT_CALL(message_handler_, LaunchSession(_, _, _, _));
+  std::vector<std::string> default_supported_app_types = {"WEB"};
+  EXPECT_CALL(message_handler_,
+              LaunchSession(sink.cast_data().cast_channel_id, kAppId,
+                            kDefaultLaunchTimeout, default_supported_app_types,
+                            kAppParams, _));
   provider_->CreateRoute(
       kCastSource, sink.sink().id(), kPresentationId, origin_, kTabId,
       kRouteTimeout, /* incognito */ false,
@@ -191,7 +204,7 @@ TEST_F(CastMediaRouteProviderTest, TerminateRoute) {
   MediaSinkInternal sink = CreateCastSink(1);
   media_sink_service_.AddOrUpdateSink(sink);
 
-  EXPECT_CALL(message_handler_, LaunchSession(_, _, _, _));
+  EXPECT_CALL(message_handler_, LaunchSession(_, _, _, _, _, _));
   provider_->CreateRoute(
       kCastSource, sink.sink().id(), kPresentationId, origin_, kTabId,
       kRouteTimeout, /* incognito */ false,

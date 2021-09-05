@@ -10,6 +10,10 @@
         "export_header": "content/common/content_export.h",
         "options": [
             {
+                "domain": "Audits",
+                "include": ["enable", "disable"]
+            },
+            {
                 "domain": "BackgroundService",
                 "async": ["startObserving"]
             },
@@ -24,7 +28,7 @@
             },
             {
                 "domain": "Emulation",
-                "include": ["setGeolocationOverride", "clearGeolocationOverride", "setEmitTouchEventsForMouse", "canEmulate", "setDeviceMetricsOverride", "clearDeviceMetricsOverride", "setVisibleSize", "setUserAgentOverride"]
+                "include": ["setGeolocationOverride", "clearGeolocationOverride", "setEmitTouchEventsForMouse", "canEmulate", "setDeviceMetricsOverride", "clearDeviceMetricsOverride", "setVisibleSize", "setUserAgentOverride", "setFocusEmulationEnabled"]
             },
             {
                 "domain": "Input",
@@ -37,6 +41,10 @@
                 "domain": "IO",
                 "async": ["read"],
                 "exclude": ["resolveBlob"]
+            },
+            {
+                "domain": "Log",
+                "include": ["LogEntry", "entryAdded", "enable", "disable"]
             },
             {
                 "domain": "Memory",

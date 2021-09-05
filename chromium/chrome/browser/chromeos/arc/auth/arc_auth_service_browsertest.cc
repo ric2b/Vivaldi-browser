@@ -63,10 +63,12 @@
 #include "components/prefs/pref_service.h"
 #include "components/signin/public/identity_manager/accounts_mutator.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
+#include "components/signin/public/identity_manager/identity_test_utils.h"
 #include "components/user_manager/scoped_user_manager.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_names.h"
 #include "content/public/browser/browser_task_traits.h"
+#include "content/public/test/browser_test.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
@@ -134,7 +136,7 @@ class FakeAuthInstance : public mojom::AuthInstance {
 
   void RequestPrimaryAccountInfo(base::OnceClosure done_closure) {
     host_->RequestPrimaryAccountInfo(base::BindOnce(
-        &FakeAuthInstance::OnAccountInfoResponse,
+        &FakeAuthInstance::OnPrimaryAccountInfoResponse,
         weak_ptr_factory_.GetWeakPtr(), std::move(done_closure)));
   }
 
@@ -163,6 +165,8 @@ class FakeAuthInstance : public mojom::AuthInstance {
 
   mojom::ArcSignInStatus sign_in_status() const { return status_; }
 
+  bool sign_in_persistent_error() const { return persistent_error_; }
+
   int num_account_upserted_calls() const { return num_account_upserted_calls_; }
 
   std::string last_upserted_account() const { return last_upserted_account_; }
@@ -172,16 +176,27 @@ class FakeAuthInstance : public mojom::AuthInstance {
   std::string last_removed_account() const { return last_removed_account_; }
 
  private:
-  void OnAccountInfoResponse(base::OnceClosure done_closure,
-                             mojom::ArcSignInStatus status,
-                             mojom::AccountInfoPtr account_info) {
+  void OnPrimaryAccountInfoResponse(base::OnceClosure done_closure,
+                                    mojom::ArcSignInStatus status,
+                                    mojom::AccountInfoPtr account_info) {
     account_info_ = std::move(account_info);
     status_ = status;
     std::move(done_closure).Run();
   }
 
+  void OnAccountInfoResponse(base::OnceClosure done_closure,
+                             mojom::ArcSignInStatus status,
+                             mojom::AccountInfoPtr account_info,
+                             bool persistent_error) {
+    status_ = status;
+    account_info_ = std::move(account_info);
+    persistent_error_ = persistent_error;
+    std::move(done_closure).Run();
+  }
+
   mojom::AuthHostPtr host_;
   mojom::ArcSignInStatus status_;
+  bool persistent_error_;
   mojom::AccountInfoPtr account_info_;
   base::OnceClosure done_closure_;
 
@@ -360,6 +375,13 @@ class ArcAuthServiceTest : public InProcessBrowserTest {
   void SetRefreshTokenForAccount(const CoreAccountId& account_id) {
     identity_test_environment_adaptor_->identity_test_env()
         ->SetRefreshTokenForAccount(account_id);
+  }
+
+  void UpdatePersistentErrorOfRefreshTokenForAccount(
+      const CoreAccountId& account_id,
+      const GoogleServiceAuthError& error) {
+    identity_test_environment_adaptor_->identity_test_env()
+        ->UpdatePersistentErrorOfRefreshTokenForAccount(account_id, error);
   }
 
   void RequestGoogleAccountsInArc() {
@@ -559,6 +581,29 @@ IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest,
             auth_instance().account_info()->account_type);
   EXPECT_FALSE(auth_instance().account_info()->enrollment_token);
   EXPECT_FALSE(auth_instance().account_info()->is_managed);
+  EXPECT_FALSE(auth_instance().sign_in_persistent_error());
+}
+
+IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest,
+                       RetryAuthTokenExchangeRequestOnUnauthorizedError) {
+  SetAccountAndProfile(user_manager::USER_TYPE_REGULAR);
+
+  base::RunLoop run_loop;
+  auth_instance().RequestAccountInfo(kFakeUserName, run_loop.QuitClosure());
+
+  EXPECT_TRUE(
+      test_url_loader_factory()->IsPending(arc::kAuthTokenExchangeEndPoint));
+  test_url_loader_factory()->SimulateResponseForPendingRequest(
+      arc::kAuthTokenExchangeEndPoint, std::string(), net::HTTP_UNAUTHORIZED);
+
+  // Should retry auth token exchange request
+  EXPECT_TRUE(
+      test_url_loader_factory()->IsPending(arc::kAuthTokenExchangeEndPoint));
+  test_url_loader_factory()->SimulateResponseForPendingRequest(
+      arc::kAuthTokenExchangeEndPoint, GetFakeAuthTokenResponse());
+  run_loop.Run();
+
+  ASSERT_TRUE(auth_instance().account_info());
 }
 
 IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest,
@@ -597,6 +642,7 @@ IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest, FetchSecondaryAccountInfoSucceeds) {
             auth_instance().account_info()->account_type);
   EXPECT_FALSE(auth_instance().account_info()->enrollment_token);
   EXPECT_FALSE(auth_instance().account_info()->is_managed);
+  EXPECT_FALSE(auth_instance().sign_in_persistent_error());
 }
 
 IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest,
@@ -618,6 +664,45 @@ IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest,
             auth_instance().sign_in_status());
 }
 
+IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest,
+                       FetchSecondaryAccountInfoInvalidRefreshToken) {
+  const AccountInfo account_info = SetupGaiaAccount(kSecondaryAccountEmail);
+  SetInvalidRefreshTokenForAccount(account_info.account_id);
+  test_url_loader_factory()->AddResponse(arc::kAuthTokenExchangeEndPoint,
+                                         std::string() /* response */,
+                                         net::HTTP_UNAUTHORIZED);
+
+  base::RunLoop run_loop;
+  auth_instance().RequestAccountInfo(kSecondaryAccountEmail,
+                                     run_loop.QuitClosure());
+  run_loop.Run();
+
+  EXPECT_FALSE(auth_instance().account_info());
+  EXPECT_EQ(mojom::ArcSignInStatus::CHROME_SERVER_COMMUNICATION_ERROR,
+            auth_instance().sign_in_status());
+  EXPECT_TRUE(auth_instance().sign_in_persistent_error());
+}
+
+IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest,
+                       FetchSecondaryAccountRefreshTokenHasPersistentError) {
+  const AccountInfo account_info = SetupGaiaAccount(kSecondaryAccountEmail);
+  UpdatePersistentErrorOfRefreshTokenForAccount(
+      account_info.account_id,
+      GoogleServiceAuthError::FromInvalidGaiaCredentialsReason(
+          GoogleServiceAuthError::InvalidGaiaCredentialsReason::
+              CREDENTIALS_REJECTED_BY_SERVER));
+
+  base::RunLoop run_loop;
+  auth_instance().RequestAccountInfo(kSecondaryAccountEmail,
+                                     run_loop.QuitClosure());
+  run_loop.Run();
+
+  EXPECT_FALSE(auth_instance().account_info());
+  EXPECT_EQ(mojom::ArcSignInStatus::CHROME_SERVER_COMMUNICATION_ERROR,
+            auth_instance().sign_in_status());
+  EXPECT_TRUE(auth_instance().sign_in_persistent_error());
+}
+
 IN_PROC_BROWSER_TEST_F(
     ArcAuthServiceTest,
     FetchSecondaryAccountInfoReturnsErrorForNotFoundAccounts) {
@@ -632,6 +717,7 @@ IN_PROC_BROWSER_TEST_F(
   EXPECT_FALSE(auth_instance().account_info());
   EXPECT_EQ(mojom::ArcSignInStatus::CHROME_ACCOUNT_NOT_FOUND,
             auth_instance().sign_in_status());
+  EXPECT_TRUE(auth_instance().sign_in_persistent_error());
 }
 
 IN_PROC_BROWSER_TEST_F(ArcAuthServiceTest, FetchGoogleAccountsFromArc) {
@@ -966,6 +1052,7 @@ IN_PROC_BROWSER_TEST_F(ArcRobotAccountAuthServiceTest,
             auth_instance().account_info()->account_type);
   EXPECT_FALSE(auth_instance().account_info()->enrollment_token);
   EXPECT_TRUE(auth_instance().account_info()->is_managed);
+  EXPECT_FALSE(auth_instance().sign_in_persistent_error());
 }
 
 // Tests that when ARC requests account info for a child account, via

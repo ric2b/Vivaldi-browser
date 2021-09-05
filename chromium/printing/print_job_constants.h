@@ -105,14 +105,6 @@ PRINTING_EXPORT extern const char kXeroxAutomatic[];
 PRINTING_EXPORT extern const char kXeroxBW[];
 #endif
 
-// Print job duplex mode values.
-enum DuplexMode {
-  UNKNOWN_DUPLEX_MODE = -1,
-  SIMPLEX,
-  LONG_EDGE,
-  SHORT_EDGE,
-};
-
 // Specifies the horizontal alignment of the headers and footers.
 enum HorizontalHeaderFooterPosition { LEFT, CENTER, RIGHT };
 
@@ -176,13 +168,7 @@ enum ScalingType {
 
 // Must match print_preview.PrinterType in
 // chrome/browser/resources/print_preview/data/destination_match.js
-enum PrinterType {
-  kPrivetPrinter,
-  kExtensionPrinter,
-  kPdfPrinter,
-  kLocalPrinter,
-  kCloudPrinter
-};
+enum class PrinterType { kPrivet, kExtension, kPdf, kLocal, kCloud };
 
 }  // namespace printing
 

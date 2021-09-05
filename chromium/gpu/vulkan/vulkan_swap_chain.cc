@@ -5,6 +5,7 @@
 #include "gpu/vulkan/vulkan_swap_chain.h"
 
 #include "base/bind.h"
+#include "base/time/time.h"
 #include "gpu/vulkan/vulkan_command_buffer.h"
 #include "gpu/vulkan/vulkan_command_pool.h"
 #include "gpu/vulkan/vulkan_device_queue.h"
@@ -22,7 +23,7 @@ VkSemaphore CreateSemaphore(VkDevice vk_device) {
   VkSemaphore vk_semaphore;
   auto result = vkCreateSemaphore(vk_device, &semaphore_create_info, nullptr,
                                   &vk_semaphore);
-  DLOG_IF(FATAL, VK_SUCCESS != result)
+  LOG_IF(FATAL, VK_SUCCESS != result)
       << "vkCreateSemaphore() failed: " << result;
   return vk_semaphore;
 }
@@ -125,16 +126,18 @@ gfx::SwapResult VulkanSwapChain::PresentBuffer(const gfx::Rect& rect) {
 
   result = vkQueuePresentKHR(queue, &present_info);
   if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-    DLOG(ERROR) << "vkQueuePresentKHR() failed: " << result;
+    LOG(DFATAL) << "vkQueuePresentKHR() failed: " << result;
     return gfx::SwapResult::SWAP_FAILED;
   }
-  DLOG_IF(ERROR, result == VK_SUBOPTIMAL_KHR) << "Swapchian is suboptimal.";
+
+  current_image_data.is_acquired = false;
+  LOG_IF(ERROR, result == VK_SUBOPTIMAL_KHR) << "Swapchian is suboptimal.";
 
   if (current_image_data.present_begin_semaphore != VK_NULL_HANDLE) {
     // |present_begin_semaphore| for the previous present for this image can be
     // safely destroyed after semaphore got from vkAcquireNextImageHKR() is
     // passed. That acquired semaphore should be already waited on for a
-    // submitted GPU work. So we can safely eunqueue the
+    // submitted GPU work. So we can safely enqueue the
     // |present_begin_semaphore| for cleanup here (the enqueued semaphore will
     // be destroyed when all submitted GPU work is finished).
     fence_helper->EnqueueSemaphoreCleanupForSubmittedWork(
@@ -158,6 +161,7 @@ bool VulkanSwapChain::InitializeSwapChain(
     VkSurfaceTransformFlagBitsKHR pre_transform,
     bool use_protected_memory,
     std::unique_ptr<VulkanSwapChain> old_swap_chain) {
+  DCHECK(!acquired_image_);
   VkDevice device = device_queue_->GetVulkanDevice();
   VkResult result = VK_SUCCESS;
 
@@ -192,7 +196,7 @@ bool VulkanSwapChain::InitializeSwapChain(
   }
 
   if (VK_SUCCESS != result) {
-    DLOG(ERROR) << "vkCreateSwapchainKHR() failed: " << result;
+    LOG(FATAL) << "vkCreateSwapchainKHR() failed: " << result;
     return false;
   }
 
@@ -219,7 +223,7 @@ bool VulkanSwapChain::InitializeSwapImages(
   uint32_t image_count = 0;
   result = vkGetSwapchainImagesKHR(device, swap_chain_, &image_count, nullptr);
   if (VK_SUCCESS != result) {
-    DLOG(ERROR) << "vkGetSwapchainImagesKHR(NULL) failed: " << result;
+    LOG(FATAL) << "vkGetSwapchainImagesKHR(nullptr) failed: " << result;
     return false;
   }
 
@@ -227,7 +231,7 @@ bool VulkanSwapChain::InitializeSwapImages(
   result =
       vkGetSwapchainImagesKHR(device, swap_chain_, &image_count, images.data());
   if (VK_SUCCESS != result) {
-    DLOG(ERROR) << "vkGetSwapchainImagesKHR(images) failed: " << result;
+    LOG(FATAL) << "vkGetSwapchainImagesKHR(images) failed: " << result;
     return false;
   }
 
@@ -324,18 +328,17 @@ bool VulkanSwapChain::AcquireNextImage() {
   DCHECK(!acquired_image_);
   VkDevice device = device_queue_->GetVulkanDevice();
   // The Vulkan spec doesn't require vkAcquireNextImageKHR() returns images in
-  // the present order for a vulkan swap chain. However for the best performnce,
-  // the driver should return images in order. To avoid buggy drivers, we will
-  // call vkAcquireNextImageKHR() continueslly until the expected image is
-  // returned.
+  // the present order for a vulkan swap chain. However for the best
+  // performance, the driver should return images in order. To avoid buggy
+  // drivers, we will call vkAcquireNextImageKHR() continually until the
+  // expected image is returned.
   do {
     bool all_images_are_tracked = in_present_images_.size() == images_.size();
     if (all_images_are_tracked) {
       // Only check the expected_next_image, when all images are tracked.
       uint32_t expected_next_image = in_present_images_.front();
       // If the expected next image has been acquired, use it and return true.
-      if (images_[expected_next_image].present_end_semaphore !=
-          VK_NULL_HANDLE) {
+      if (images_[expected_next_image].is_acquired) {
         in_present_images_.pop_front();
         acquired_image_.emplace(expected_next_image);
         break;
@@ -345,18 +348,40 @@ bool VulkanSwapChain::AcquireNextImage() {
     VkSemaphore vk_semaphore = CreateSemaphore(device);
     DCHECK(vk_semaphore != VK_NULL_HANDLE);
 
+#if defined(USE_X11)
+    // The xserver should still composite windows with a 1Hz fake vblank when
+    // screen is off or the window is offscreen. However there is an xserver
+    // bug, the requested hardware vblanks are lost, when screen turns off, so
+    // FIFO swapchain will hang.
+    // Workaround the issue by using the 2 seconds timeout for
+    // vkAcquireNextImageKHR(). When timeout happens, we consider the swapchain
+    // hang happened, and then make the surface lost, so a new swapchain will
+    // be recreated.
+    constexpr uint64_t kTimeout = base::Time::kNanosecondsPerSecond * 2;
+#else
+    constexpr uint64_t kTimeout = UINT64_MAX;
+#endif
     // Acquire the next image.
     uint32_t next_image;
     auto result =
-        vkAcquireNextImageKHR(device, swap_chain_, UINT64_MAX, vk_semaphore,
+        vkAcquireNextImageKHR(device, swap_chain_, kTimeout, vk_semaphore,
                               VK_NULL_HANDLE, &next_image);
-    if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+    if (result == VK_TIMEOUT) {
+      LOG(ERROR) << "vkAcquireNextImageKHR() hangs.";
       vkDestroySemaphore(device, vk_semaphore, nullptr /* pAllocator */);
-      DLOG(ERROR) << "vkAcquireNextImageKHR() failed: " << result;
+      state_ = VK_ERROR_SURFACE_LOST_KHR;
+      return false;
+    }
+    if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+      LOG(DFATAL) << "vkAcquireNextImageKHR() failed: " << result;
+      vkDestroySemaphore(device, vk_semaphore, nullptr /* pAllocator */);
+      state_ = result;
       return false;
     }
 
+    DCHECK(!images_[next_image].is_acquired);
     DCHECK(images_[next_image].present_end_semaphore == VK_NULL_HANDLE);
+    images_[next_image].is_acquired = true;
     images_[next_image].present_end_semaphore = vk_semaphore;
 
     auto it = std::find(in_present_images_.begin(), in_present_images_.end(),
@@ -368,7 +393,7 @@ bool VulkanSwapChain::AcquireNextImage() {
       acquired_image_.emplace(next_image);
       break;
     }
-    DLOG_IF(ERROR, it != in_present_images_.begin())
+    LOG_IF(ERROR, it != in_present_images_.begin())
         << "vkAcquireNextImageKHR() returned an unexpected image.";
   } while (true);
   return true;

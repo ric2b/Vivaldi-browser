@@ -42,7 +42,6 @@
 #include "ppapi/buildflags/buildflags.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
 #include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
-#include "third_party/blink/public/platform/web_text_autosizer_page_info.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/point.h"
@@ -153,13 +152,6 @@ IPC_MESSAGE_ROUTED1(ViewHostMsg_UpdateTargetURL,
 
 IPC_MESSAGE_ROUTED0(ViewHostMsg_Focus)
 
-// Get the list of proxies to use for |url|, as a semicolon delimited list
-// of "<TYPE> <HOST>:<PORT>" | "DIRECT".
-IPC_SYNC_MESSAGE_CONTROL1_2(ViewHostMsg_ResolveProxy,
-                            GURL /* url */,
-                            bool /* result */,
-                            std::string /* proxy list */)
-
 #if BUILDFLAG(ENABLE_PLUGINS)
 // A renderer sends this to the browser process when it wants to access a PPAPI
 // broker. In contrast to FrameHostMsg_OpenChannelToPpapiBroker, this is called
@@ -176,10 +168,6 @@ IPC_MESSAGE_ROUTED3(ViewHostMsg_RequestPpapiBrokerPermission,
 // a cross-process frame, as appropriate.
 IPC_MESSAGE_ROUTED1(ViewHostMsg_TakeFocus,
                     bool /* reverse */)
-
-IPC_MESSAGE_ROUTED1(
-    ViewHostMsg_NotifyTextAutosizerPageInfoChangedInLocalMainFrame,
-    blink::WebTextAutosizerPageInfo /* page_info */)
 
 // Adding a new message? Stick to the sort order above: first platform
 // independent ViewMsg, then ifdefs for platform specific ViewMsg, then platform

@@ -52,6 +52,7 @@ import org.chromium.chrome.browser.sync.ui.PassphraseTypeDialogFragment;
 import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.signin.base.CoreAccountInfo;
+import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.sync.ModelType;
 import org.chromium.components.sync.PassphraseType;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
@@ -79,8 +80,8 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
     @VisibleForTesting
     public static final String FRAGMENT_PASSPHRASE_TYPE = "password_type";
 
-    private static final String PREF_SYNCING_CATEGORY = "syncing_category";
-
+    @VisibleForTesting
+    public static final String PREF_SYNCING_CATEGORY = "syncing_category";
     @VisibleForTesting
     public static final String PREF_SYNC_EVERYTHING = "sync_everything";
     @VisibleForTesting
@@ -103,8 +104,9 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
     public static final String PREF_ENCRYPTION = "encryption";
     @VisibleForTesting
     public static final String PREF_SYNC_MANAGE_DATA = "sync_manage_data";
+    @VisibleForTesting
+    public static final String PREF_SEARCH_AND_BROWSE_CATEGORY = "search_and_browse_category";
 
-    private static final String PREF_SEARCH_AND_BROWSE_CATEGORY = "search_and_browse_category";
     private static final String PREF_URL_KEYED_ANONYMIZED_DATA = "url_keyed_anonymized_data";
 
     private static final int REQUEST_CODE_TRUSTED_VAULT_KEY_RETRIEVAL = 1;
@@ -185,7 +187,8 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
             type.setOnPreferenceChangeListener(this);
         }
 
-        if (Profile.getLastUsedRegularProfile().isChild()) {
+        Profile profile = Profile.getLastUsedRegularProfile();
+        if (profile.isChild()) {
             mGoogleActivityControls.setSummary(
                     R.string.sign_in_google_activity_controls_summary_child_account);
         }
@@ -199,15 +202,15 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
         mUrlKeyedAnonymizedData =
                 (ChromeSwitchPreference) findPreference(PREF_URL_KEYED_ANONYMIZED_DATA);
         mUrlKeyedAnonymizedData.setChecked(
-                UnifiedConsentServiceBridge.isUrlKeyedAnonymizedDataCollectionEnabled());
+                UnifiedConsentServiceBridge.isUrlKeyedAnonymizedDataCollectionEnabled(profile));
         mUrlKeyedAnonymizedData.setOnPreferenceChangeListener((preference, newValue) -> {
             UnifiedConsentServiceBridge.setUrlKeyedAnonymizedDataCollectionEnabled(
-                    (boolean) newValue);
+                    profile, (boolean) newValue);
             return true;
         });
         mUrlKeyedAnonymizedData.setManagedPreferenceDelegate((
                 ChromeManagedPreferenceDelegate) (preference
-                -> UnifiedConsentServiceBridge.isUrlKeyedAnonymizedDataCollectionManaged()));
+                -> UnifiedConsentServiceBridge.isUrlKeyedAnonymizedDataCollectionManaged(profile)));
     }
 
     @Override
@@ -308,7 +311,8 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
      */
     private void updateSyncPreferences() {
         String signedInAccountName = CoreAccountInfo.getEmailFrom(
-                IdentityServicesProvider.get().getIdentityManager().getPrimaryAccountInfo());
+                IdentityServicesProvider.get().getIdentityManager().getPrimaryAccountInfo(
+                        ConsentLevel.SYNC));
         if (signedInAccountName == null) {
             // May happen if account is removed from the device while this screen is shown.
             getActivity().finish();
@@ -508,7 +512,8 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
             displayPassphraseDialog();
         } else if (mProfileSyncService.isTrustedVaultKeyRequired()) {
             CoreAccountInfo primaryAccountInfo =
-                    IdentityServicesProvider.get().getIdentityManager().getPrimaryAccountInfo();
+                    IdentityServicesProvider.get().getIdentityManager().getPrimaryAccountInfo(
+                            ConsentLevel.SYNC);
             if (primaryAccountInfo != null) {
                 SyncSettingsUtils.openTrustedVaultKeyRetrievalDialog(
                         this, primaryAccountInfo, REQUEST_CODE_TRUSTED_VAULT_KEY_RETRIEVAL);
@@ -591,7 +596,8 @@ public class ManageSyncSettings extends PreferenceFragmentCompat
         RecordUserAction.record("Signin_Signin_ConfirmAdvancedSyncSettings");
         ProfileSyncService.get().setFirstSetupComplete(
                 SyncFirstSetupCompleteSource.ADVANCED_FLOW_CONFIRM);
-        UnifiedConsentServiceBridge.recordSyncSetupDataTypesHistogram();
+        UnifiedConsentServiceBridge.recordSyncSetupDataTypesHistogram(
+                Profile.getLastUsedRegularProfile());
         // Settings will be applied when mSyncSetupInProgressHandle is released in onDestroy.
         getActivity().finish();
     }

@@ -129,18 +129,8 @@
 
     --cr-icon-button-margin-start: 16px;
 
+    /* Shift button so ripple overlaps the end of the row. */
     --cr-icon-ripple-margin: calc(var(--cr-icon-ripple-padding) * -1);
-
-    --cr-paper-icon-button-margin: {
-      /* Shift button so ripple overlaps the end of the row. */
-      margin-inline-end: var(--cr-icon-ripple-margin);
-      margin-inline-start: var(--cr-icon-button-margin-start);
-    }
-
-    --cr-secondary-text: {
-      color: var(--cr-secondary-text-color);
-      font-weight: 400;
-    }
 
     /* TODO (johntlee): re-implement with paddings instead; */
     /* These are used for row items such as radio buttons, check boxes, list
@@ -155,7 +145,7 @@
     --cr-section-indent-padding: calc(
         var(--cr-section-padding) + var(--cr-section-indent-width));
 
-    /* TODO(crbug.com/973674): Do not use this mixin. Use the class cr-section
+    /* TODO(crbug.com/973674): Do not use this mixin. Use the class cr-row
      * from shared_style_css.html instead. */
     --cr-section: {
       align-items: center;
@@ -169,24 +159,6 @@
 
     --cr-centered-card-max-width: 680px;
     --cr-centered-card-width-percentage: 0.96;
-    --cr-centered-card-container: {
-      box-sizing: border-box;
-      display: block;
-      height: inherit;
-      margin: 0 auto;
-      max-width: var(--cr-centered-card-max-width);
-      min-width: 550px;
-      position: relative;
-      width: calc(100% * var(--cr-centered-card-width-percentage));
-    }
-
-    --cr-tooltip: {
-      font-size: 92.31%;  /* Effectively 12px if the host default is 13px. */
-      font-weight: 500;
-      max-width: 330px;
-      min-width: 200px;
-      padding: 10px 8px;
-    }
 
     --cr-hairline: 1px solid rgba(var(--cr-hairline-rgb), .14);
 

@@ -5,7 +5,9 @@
 #include "components/exo/keyboard.h"
 
 #include "ash/accessibility/accessibility_controller_impl.h"
+#include "ash/public/cpp/ash_pref_names.h"
 #include "ash/shell.h"
+#include "ash/test/ash_test_helper.h"
 #include "ash/wm/desks/desks_controller.h"
 #include "ash/wm/desks/desks_test_util.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
@@ -45,6 +47,8 @@ class MockKeyboardDelegate : public KeyboardDelegate {
   MOCK_METHOD1(OnKeyboardLeave, void(Surface*));
   MOCK_METHOD3(OnKeyboardKey, uint32_t(base::TimeTicks, ui::DomCode, bool));
   MOCK_METHOD1(OnKeyboardModifiers, void(int));
+  MOCK_METHOD3(OnKeyRepeatSettingsChanged,
+               void(bool, base::TimeDelta, base::TimeDelta));
 };
 
 class MockKeyboardDeviceConfigurationDelegate
@@ -471,6 +475,116 @@ TEST_F(KeyboardTest, OnKeyboardTypeChanged_AccessibilityKeyboard) {
   keyboard.reset();
 }
 
+constexpr base::TimeDelta kDelta50Ms = base::TimeDelta::FromMilliseconds(50);
+constexpr base::TimeDelta kDelta500Ms = base::TimeDelta::FromMilliseconds(500);
+constexpr base::TimeDelta kDelta1000Ms =
+    base::TimeDelta::FromMilliseconds(1000);
+
+TEST_F(KeyboardTest, KeyRepeatSettingsLoadDefaults) {
+  MockKeyboardDelegate delegate;
+  Seat seat;
+
+  EXPECT_CALL(delegate, OnKeyRepeatSettingsChanged).Times(0);
+  EXPECT_CALL(delegate,
+              OnKeyRepeatSettingsChanged(true, kDelta500Ms, kDelta50Ms));
+  Keyboard keyboard(&delegate, &seat);
+}
+
+TEST_F(KeyboardTest, KeyRepeatSettingsLoadInitially) {
+  MockKeyboardDelegate delegate;
+  Seat seat;
+  std::string email = "user0@tray";
+
+  EXPECT_CALL(delegate, OnKeyRepeatSettingsChanged).Times(0);
+
+  SetUserPref(email, ash::prefs::kXkbAutoRepeatEnabled, base::Value(true));
+  SetUserPref(email, ash::prefs::kXkbAutoRepeatDelay, base::Value(1000));
+  SetUserPref(email, ash::prefs::kXkbAutoRepeatInterval, base::Value(1000));
+
+  EXPECT_CALL(delegate,
+              OnKeyRepeatSettingsChanged(true, kDelta1000Ms, kDelta1000Ms));
+  Keyboard keyboard(&delegate, &seat);
+}
+
+TEST_F(KeyboardTest, KeyRepeatSettingsUpdateAtRuntime) {
+  MockKeyboardDelegate delegate;
+
+  {
+    testing::InSequence s;
+
+    // Initially load defaults.
+    EXPECT_CALL(delegate, OnKeyRepeatSettingsChanged)
+        .Times(testing::AtLeast(1));
+
+    // Respond to pref changes, in order
+    EXPECT_CALL(delegate,
+                OnKeyRepeatSettingsChanged(false, testing::_, testing::_));
+    EXPECT_CALL(delegate,
+                OnKeyRepeatSettingsChanged(false, kDelta1000Ms, testing::_));
+    EXPECT_CALL(delegate,
+                OnKeyRepeatSettingsChanged(false, kDelta1000Ms, kDelta1000Ms));
+  }
+
+  Seat seat;
+  Keyboard keyboard(&delegate, &seat);
+
+  std::string email = "user0@tray";
+  SetUserPref(email, ash::prefs::kXkbAutoRepeatEnabled, base::Value(false));
+  SetUserPref(email, ash::prefs::kXkbAutoRepeatDelay, base::Value(1000));
+  SetUserPref(email, ash::prefs::kXkbAutoRepeatInterval, base::Value(1000));
+}
+
+TEST_F(KeyboardTest, KeyRepeatSettingsIgnoredForNonActiveUser) {
+  MockKeyboardDelegate delegate;
+
+  // Key repeat settings should be sent exactly once, for the default values.
+  EXPECT_CALL(delegate, OnKeyRepeatSettingsChanged).Times(0);
+  EXPECT_CALL(delegate,
+              OnKeyRepeatSettingsChanged(true, kDelta500Ms, kDelta50Ms));
+
+  // Simulate two users, with the first user as active.
+  CreateUserSessions(2);
+
+  Seat seat;
+  Keyboard keyboard(&delegate, &seat);
+
+  // Set prefs for non-active user; no calls should result.
+  std::string email = "user1@tray";
+  SetUserPref(email, ash::prefs::kXkbAutoRepeatEnabled, base::Value(true));
+  SetUserPref(email, ash::prefs::kXkbAutoRepeatDelay, base::Value(1000));
+  SetUserPref(email, ash::prefs::kXkbAutoRepeatInterval, base::Value(1000));
+}
+
+TEST_F(KeyboardTest, KeyRepeatSettingsUpdateOnProfileChange) {
+  MockKeyboardDelegate delegate;
+
+  EXPECT_CALL(delegate, OnKeyRepeatSettingsChanged).Times(0);
+
+  // Simulate two users, with the first user as active.
+  CreateUserSessions(2);
+
+  // Second user has different preferences.
+  std::string email = "user1@tray";
+  SetUserPref(email, ash::prefs::kXkbAutoRepeatEnabled, base::Value(true));
+  SetUserPref(email, ash::prefs::kXkbAutoRepeatDelay, base::Value(1000));
+  SetUserPref(email, ash::prefs::kXkbAutoRepeatInterval, base::Value(1000));
+
+  {
+    testing::InSequence s;
+    // Initially, load default prefs for first user.
+    EXPECT_CALL(delegate,
+                OnKeyRepeatSettingsChanged(true, kDelta500Ms, kDelta50Ms));
+    // Switching user should load new prefs.
+    EXPECT_CALL(delegate,
+                OnKeyRepeatSettingsChanged(true, kDelta1000Ms, kDelta1000Ms));
+  }
+
+  Seat seat;
+  Keyboard keyboard(&delegate, &seat);
+
+  SimulateUserLogin(email, user_manager::UserType::USER_TYPE_REGULAR);
+}
+
 TEST_F(KeyboardTest, KeyboardObserver) {
   MockKeyboardDelegate delegate;
   Seat seat;
@@ -591,6 +705,22 @@ TEST_F(KeyboardTest, AckKeyboardKey) {
   // Send ack for the key press.
   // AcceleratorPressed is not called when the accelerator is already handled.
   keyboard->AckKeyboardKey(3, true /* handled */);
+
+  // A repeat key event should not be sent to the client and also should not
+  // invoke the accelerator.
+  EXPECT_CALL(*shell_surface.get(), AcceleratorPressed(ui::Accelerator(
+                                        ui::VKEY_W, ui::EF_CONTROL_DOWN,
+                                        ui::Accelerator::KeyState::PRESSED)))
+      .Times(0);
+  generator.PressKey(ui::VKEY_W, ui::EF_CONTROL_DOWN | ui::EF_IS_REPEAT);
+
+  // Another key press event while holding the key is also ignored and should
+  // not invoke the accelerator.
+  EXPECT_CALL(*shell_surface.get(), AcceleratorPressed(ui::Accelerator(
+                                        ui::VKEY_W, ui::EF_CONTROL_DOWN,
+                                        ui::Accelerator::KeyState::PRESSED)))
+      .Times(0);
+  generator.PressKey(ui::VKEY_W, ui::EF_CONTROL_DOWN);
 
   // Release the key and reset modifier_flags.
   EXPECT_CALL(delegate, OnKeyboardModifiers(0));

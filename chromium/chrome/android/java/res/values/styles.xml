@@ -64,8 +64,8 @@
         <!-- With ActionBar but not window title -->
         <!-- TODO(huayinz): Check if windowActionBar is actually needed. -->
         <item name="windowActionBar">true</item>
-        <item name="colorPrimary">@color/light_active_color</item>
-        <item name="colorAccent">@color/light_active_color</item>
+        <item name="colorPrimary">@color/default_control_color_active</item>
+        <item name="colorAccent">@color/default_control_color_active</item>
     </style>
 
     <style name="Theme.Chromium" parent="Base.Theme.Chromium" />
@@ -133,19 +133,12 @@
     </style>
 
     <style name="Base.Theme.Chromium.Settings" parent="Theme.Chromium.WithActionBar">
-        <item name="android:spinnerItemStyle">@style/PreferenceSpinnerItem</item>
         <item name="actionBarStyle">@style/SettingsActionBarModern</item>
         <item name="preferenceTheme">@style/PreferenceTheme</item>
+        <item name="alertDialogTheme">@style/Theme.Chromium.AlertDialog</item>
     </style>
 
-    <!-- TODO(huayinz): Verify if these text styles are up to date with UX and override styles in
-                        v21 as well. -->
-    <style name="Theme.Chromium.Settings" parent="Base.Theme.Chromium.Settings">
-        <!-- Theme attributes pre-v21 -->
-        <item name="android:textAppearanceMedium">@style/TextAppearance.PreferenceMediumText</item>
-        <item name="android:textAppearanceSmall">@style/TextAppearance.TextMedium.Secondary</item>
-        <item name="android:windowContentOverlay">@null</item>
-    </style>
+    <style name="Theme.Chromium.Settings" parent="Base.Theme.Chromium.Settings" />
 
     <style name="Theme.Chromium.Settings.ManageSpace">
         <!-- Action bar color. This is intentionally a dark color. See crbug.com/871193. -->
@@ -173,7 +166,7 @@
         <item name="android:textAppearance">@style/TextAppearance.TextMedium.Primary</item>
         <item name="android:textColorLink">@color/default_text_color_link</item>
         <item name="colorPrimaryDark">@android:color/black</item>
-        <item name="colorAccent">@color/light_active_color</item>
+        <item name="colorAccent">@color/default_control_color_active</item>
         <item name="colorControlHighlight">@color/control_highlight_color</item>
         <item name="spinnerStyle">@style/SpinnerStyle</item>
 
@@ -199,7 +192,7 @@
     </style>
 
     <style name="SettingsFragment">
-        <item name="android:divider">@drawable/list_divider_compat</item>
+        <item name="android:divider">?android:attr/listDivider</item>
     </style>
 
     <style name="PreferenceItem">
@@ -207,8 +200,8 @@
     </style>
 
     <style name="SettingsFragmentList">
-        <item name="android:paddingStart">@dimen/pref_list_padding_kitkat</item>
-        <item name="android:paddingEnd">@dimen/pref_list_padding_kitkat</item>
+        <item name="android:paddingStart">0dp</item>
+        <item name="android:paddingEnd">0dp</item>
     </style>
 
     <style name="DialogPreference">
@@ -236,9 +229,6 @@
              a 16dp padding overall. -->
         <item name="android:paddingStart">@dimen/pref_autofill_content_spacing</item>
         <item name="android:paddingEnd">@dimen/pref_autofill_content_spacing</item>
-    </style>
-    <style name="PreferenceSpinnerItem">
-        <item name="android:textAppearance">@style/TextAppearance.PreferenceMediumText</item>
     </style>
     <style name="TextAppearance.AccessibilityTextPreference">
         <item name="android:textColor">?android:attr/textColorPrimary</item>
@@ -592,14 +582,6 @@
         parent="TextAppearance.TextLarge.Primary">
         <item name="android:textSize">20sp</item>
     </style>
-    <style name="TextAppearance.ConnectionInfoHeadline" parent="TextAppearance.RobotoMediumStyle">
-        <item name="android:textColor">@color/default_text_color</item>
-        <item name="android:textSize">@dimen/text_size_large</item>
-    </style>
-    <style name="TextAppearance.PageInfoPermissionSubtitle"
-        parent="TextAppearance.TextMedium.Secondary">
-        <item name="android:textColor">@color/secondary_text_default_material_light</item>
-    </style>
     <style name="TextAppearance.PhotoPickerSpecialTile"
         parent="TextAppearance.TextMediumThick.Primary">
         <item name="android:textColor">@color/photo_picker_special_tile_text_color</item>
@@ -702,17 +684,6 @@
     <!-- Content and Site Suggestions -->
     <style name="SuggestionCardModern" parent="Card">
         <item name="android:layout_marginBottom">@dimen/content_suggestions_card_modern_margin</item>
-    </style>
-    <!-- TODO(twellington): Use standard line height for SuggestionsCard*. Updating the leading
-     for these requires updating the NTP article suggestions thumbnail size as well. -->
-    <style name="SuggestionCardTitleModern" parent="TextAppearance.TextLarge.Primary">
-        <item name="android:ellipsize">end</item>
-        <item name="leading">20sp</item>
-    </style>
-    <style name="SuggestionCardBodyModern" parent="TextAppearance.TextMedium.Secondary">
-        <item name="android:layout_marginTop">8dp</item>
-        <item name="android:ellipsize">end</item>
-        <item name="leading">16sp</item>
     </style>
 
     <!-- Password manager settings page -->

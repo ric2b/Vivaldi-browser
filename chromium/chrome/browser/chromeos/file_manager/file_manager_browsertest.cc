@@ -20,6 +20,7 @@
 #include "components/signin/public/identity_manager/identity_test_utils.h"
 #include "components/user_manager/user_manager.h"
 #include "components/user_manager/user_manager_base.h"
+#include "content/public/test/browser_test.h"
 
 namespace file_manager {
 
@@ -306,7 +307,8 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("fileDisplayCheckSelectWithFakeItemSelected"),
         TestCase("fileDisplayCheckReadOnlyIconOnFakeDirectory"),
         TestCase("fileDisplayCheckNoReadOnlyIconOnDownloads"),
-        TestCase("fileDisplayCheckNoReadOnlyIconOnLinuxFiles")));
+        TestCase("fileDisplayCheckNoReadOnlyIconOnLinuxFiles"),
+        TestCase("fileDisplayStartupError")));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     OpenVideoFiles, /* open_video_files.js */
@@ -462,6 +464,7 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
     Toolbar, /* toolbar.js */
     FilesAppBrowserTest,
     ::testing::Values(TestCase("toolbarDeleteWithMenuItemNoEntrySelected"),
+                      TestCase("toolbarDeleteButtonKeepFocus"),
                       TestCase("toolbarDeleteEntry").InGuestMode(),
                       TestCase("toolbarDeleteEntry"),
                       TestCase("toolbarRefreshButtonWithSelection").EnableArc(),
@@ -484,7 +487,8 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("openQuickViewAudio"),
         TestCase("openQuickViewAudioOnDrive"),
         TestCase("openQuickViewAudioWithImageMetadata"),
-        TestCase("openQuickViewImage"),
+        TestCase("openQuickViewImageJpg"),
+        TestCase("openQuickViewImageJpeg"),
         TestCase("openQuickViewImageExif"),
         TestCase("openQuickViewImageRaw"),
         TestCase("openQuickViewImageRawWithOrientation"),
@@ -497,6 +501,7 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
         TestCase("openQuickViewKeyboardUpDownChangesView"),
         TestCase("openQuickViewKeyboardLeftRightChangesView"),
         TestCase("openQuickViewSniffedText"),
+        TestCase("openQuickViewTextFileWithUnknownMimeType"),
         TestCase("openQuickViewScrollText"),
         TestCase("openQuickViewScrollHtml"),
         TestCase("openQuickViewMhtml"),
@@ -626,7 +631,8 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
                       TestCase("driveAvailableOfflineDirectoryGearMenu"),
                       TestCase("driveLinkToDirectory"),
                       TestCase("driveLinkOpenFileThroughLinkedDirectory"),
-                      TestCase("driveLinkOpenFileThroughTransitiveLink")));
+                      TestCase("driveLinkOpenFileThroughTransitiveLink"),
+                      TestCase("driveWelcomeBanner")));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     Transfer, /* transfer.js */
@@ -869,7 +875,8 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
     ::testing::Values(TestCase("filesTooltipFocus"),
                       TestCase("filesTooltipMouseOver"),
                       TestCase("filesTooltipClickHides"),
-                      TestCase("filesTooltipHidesOnWindowResize")));
+                      TestCase("filesTooltipHidesOnWindowResize"),
+                      TestCase("filesCardTooltipClickHides")));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     FileList, /* file_list.js */
@@ -894,7 +901,8 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
     FilesAppBrowserTest,
     ::testing::Values(TestCase("mountCrostini"),
                       TestCase("enableDisableCrostini"),
-                      TestCase("sharePathWithCrostini")));
+                      TestCase("sharePathWithCrostini"),
+                      TestCase("pluginVmErrorDialog")));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     MyFiles, /* my_files.js */
@@ -974,7 +982,18 @@ WRAPPED_INSTANTIATE_TEST_SUITE_P(
     ::testing::Values(TestCase("breadcrumbsNavigate").DisableFilesNg(),
                       TestCase("breadcrumbsLeafNoFocus").DisableFilesNg(),
                       TestCase("breadcrumbsTooltip").DisableFilesNg(),
-                      TestCase("breadcrumbsDownloadsTranslation")));
+                      TestCase("breadcrumbsDownloadsTranslation"),
+                      TestCase("breadcrumbsRenderShortPath").FilesNg(),
+                      TestCase("breadcrumbsEliderButtonHidden").FilesNg(),
+                      TestCase("breadcrumbsRenderLongPath").FilesNg(),
+                      TestCase("breadcrumbsMainButtonClick").FilesNg(),
+                      TestCase("breadcrumbsMainButtonEnterKey").FilesNg(),
+                      TestCase("breadcrumbsEliderButtonClick").FilesNg(),
+                      TestCase("breadcrumbsEliderButtonKeyboard").FilesNg(),
+                      TestCase("breadcrumbsEliderMenuClickOutside").FilesNg(),
+                      TestCase("breadcrumbsEliderMenuItemClick").FilesNg(),
+                      TestCase("breadcrumbsEliderMenuItemTabLeft").FilesNg(),
+                      TestCase("breadcrumbsEliderMenuItemTabRight").FilesNg()));
 
 WRAPPED_INSTANTIATE_TEST_SUITE_P(
     FormatDialog, /* format_dialog.js */

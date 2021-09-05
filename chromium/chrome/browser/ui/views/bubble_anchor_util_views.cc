@@ -51,7 +51,7 @@ gfx::Rect GetPageInfoAnchorRect(Browser* browser) {
   // available.
   DCHECK_EQ(GetPageInfoAnchorConfiguration(browser).anchor_view, nullptr);
 
-  if (vivaldi::IsVivaldiRunning()) {
+  if (browser->is_vivaldi()) {
     extensions::VivaldiUtilitiesAPI* api =
         extensions::VivaldiUtilitiesAPI::GetFactoryInstance()->Get(
             browser->profile());

@@ -130,7 +130,8 @@ TEST_F(CacheAwareFontResourceTest, CacheAwareFontLoading) {
   CSSFontFaceSrcValue* src_value = CSSFontFaceSrcValue::Create(
       url.GetString(), url.GetString(),
       Referrer(document.Url(), document.GetReferrerPolicy()),
-      network::mojom::CSPDisposition::DO_NOT_CHECK, OriginClean::kTrue);
+      network::mojom::CSPDisposition::DO_NOT_CHECK, OriginClean::kTrue,
+      false /* is_ad_related */);
 
   // Route font requests in this test through CSSFontFaceSrcValue::Fetch
   // instead of calling FontResource::Fetch directly. CSSFontFaceSrcValue
@@ -141,7 +142,7 @@ TEST_F(CacheAwareFontResourceTest, CacheAwareFontLoading) {
   Persistent<MockFontResourceClient> client =
       MakeGarbageCollected<MockFontResourceClient>();
   FontResource& resource =
-      src_value->Fetch(document.ToExecutionContext(), client);
+      src_value->Fetch(document.GetExecutionContext(), client);
 
   fetcher->StartLoad(&resource);
   EXPECT_TRUE(resource.Loader()->IsCacheAwareLoadingActivated());
@@ -164,7 +165,7 @@ TEST_F(CacheAwareFontResourceTest, CacheAwareFontLoading) {
   Persistent<MockFontResourceClient> client2 =
       MakeGarbageCollected<MockFontResourceClient>();
   FontResource& resource2 =
-      src_value->Fetch(document.ToExecutionContext(), client2);
+      src_value->Fetch(document.GetExecutionContext(), client2);
   EXPECT_EQ(&resource, &resource2);
   EXPECT_TRUE(client2->FontLoadShortLimitExceededCalled());
   EXPECT_FALSE(client2->FontLoadLongLimitExceededCalled());
@@ -177,7 +178,7 @@ TEST_F(CacheAwareFontResourceTest, CacheAwareFontLoading) {
   Persistent<MockFontResourceClient> client3 =
       MakeGarbageCollected<MockFontResourceClient>();
   FontResource& resource3 =
-      src_value->Fetch(document.ToExecutionContext(), client3);
+      src_value->Fetch(document.GetExecutionContext(), client3);
   EXPECT_EQ(&resource, &resource3);
   EXPECT_TRUE(client3->FontLoadShortLimitExceededCalled());
   EXPECT_TRUE(client3->FontLoadLongLimitExceededCalled());

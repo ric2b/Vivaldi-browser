@@ -9,8 +9,8 @@
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom-shared.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
-#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/events/message_event.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/platform/mojo/mojo_helper.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 
@@ -41,9 +41,9 @@ GetThreadSpecificProvider() {
 BroadcastChannel* BroadcastChannel::Create(ExecutionContext* execution_context,
                                            const String& name,
                                            ExceptionState& exception_state) {
-  Document* document = Document::DynamicFrom(execution_context);
-  if (document && document->IsCrossSiteSubframe())
-    UseCounter::Count(document, WebFeature::kThirdPartyBroadcastChannel);
+  LocalDOMWindow* window = DynamicTo<LocalDOMWindow>(execution_context);
+  if (window && window->IsCrossSiteSubframe())
+    UseCounter::Count(window, WebFeature::kThirdPartyBroadcastChannel);
 
   if (execution_context->GetSecurityOrigin()->IsOpaque()) {
     // TODO(mek): Decide what to do here depending on

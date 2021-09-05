@@ -282,26 +282,10 @@ public class FullscreenManagerTest {
         gestureListenerManager.addListener(scrollListener);
 
         final CallbackHelper viewportCallback = new CallbackHelper();
-        ChromeFullscreenManager.FullscreenListener fullscreenListener =
-                new ChromeFullscreenManager.FullscreenListener() {
-                    @Override
-                    public void onContentOffsetChanged(int offset) {}
-                    @Override
-                    public void onControlsOffsetChanged(int topOffset,
-                            int topControlsMinHeightOffset, int bottomOffset,
-                            int bottomControlsMinHeightOffset, boolean needsAnimate) {}
-                    @Override
-                    public void onBottomControlsHeightChanged(
-                            int bottomControlsHeight, int bottomControlsMinHeight) {}
-                    @Override
-                    public void onUpdateViewportSize() {
-                        viewportCallback.notifyCalled();
-                    }
-                };
 
         ChromeFullscreenManager fullscreenManager =
                 mActivityTestRule.getActivity().getFullscreenManager();
-        fullscreenManager.addListener(fullscreenListener);
+        fullscreenManager.setViewportSizeDelegate(viewportCallback::notifyCalled);
 
         Assert.assertEquals(0, scrollStartCallback.getCallCount());
         Assert.assertEquals(0, viewportCallback.getCallCount());

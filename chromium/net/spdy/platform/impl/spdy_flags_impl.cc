@@ -4,6 +4,8 @@
 
 #include "net/spdy/platform/impl/spdy_flags_impl.h"
 
-bool spdy_enable_granular_decompress_errors = true;
+// If true, use indexed name if possible when sending
+// Literal Header Field without Indexing instruction.
+bool spdy_hpack_use_indexed_name = true;
 
 namespace spdy {}  // namespace spdy

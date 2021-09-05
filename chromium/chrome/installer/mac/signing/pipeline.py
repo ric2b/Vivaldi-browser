@@ -215,7 +215,11 @@ def _productbuild_distribution_path(paths, dist_config, component_pkg_path):
     <!-- The individual choices. -->
     <choice id="default"/>
     <choice id="{bundle_id}" visible="false" title="{app_product}">
-        <pkg-ref id="{bundle_id}"/>
+        <pkg-ref id="{bundle_id}">
+            <must-close>
+                <app id="{bundle_id}"/>
+            </must-close>
+        </pkg-ref>
     </choice>
 
     <!-- The lone component package. -->
@@ -248,8 +252,8 @@ def _package_and_sign_pkg(paths, dist_config):
     # There are two .pkg files to be built:
     #   1. The inner component package (which is the one that can contain things
     #      like postinstall scripts). This is built with `pkgbuild`.
-    #   2. The outer product archive (which is the installable thing that has
-    #      pre-install requirements). This is built with `productbuild`.
+    #   2. The outer distribution package (which is the installable thing that
+    #      has pre-install requirements). This is built with `productbuild`.
 
     ## The component package.
 
@@ -279,7 +283,7 @@ def _package_and_sign_pkg(paths, dist_config):
         '--scripts', scripts_path, component_pkg_path
     ])
 
-    ## The product archive.
+    ## The distribution package.
 
     distribution_path = _productbuild_distribution_path(paths, dist_config,
                                                         component_pkg_path)
@@ -288,8 +292,9 @@ def _package_and_sign_pkg(paths, dist_config):
         paths.output, '{}.pkg'.format(dist_config.packaging_basename))
 
     command = [
-        'productbuild', '--distribution', distribution_path, '--package-path',
-        paths.work, '--sign', dist_config.installer_identity
+        'productbuild', '--identifier', dist_config.base_bundle_id, '--version',
+        dist_config.version, '--distribution', distribution_path,
+        '--package-path', paths.work, '--sign', dist_config.installer_identity
     ]
     if dist_config.notary_user:
         # Assume if the config has notary authentication information that the

@@ -52,13 +52,16 @@ class RTCRtpReceiver final : public ScriptWrappable {
   RTCDtlsTransport* rtcpTransport();
   base::Optional<double> playoutDelayHint() const;
   void setPlayoutDelayHint(base::Optional<double>, ExceptionState&);
-  // TODO(crbug.com/1060971): Remove |is_null| version.
-  double playoutDelayHint(bool&);                           // DEPRECATED
-  void setPlayoutDelayHint(double, bool, ExceptionState&);  // DEPRECATED
   RTCRtpReceiveParameters* getParameters();
-  HeapVector<Member<RTCRtpSynchronizationSource>> getSynchronizationSources();
-  HeapVector<Member<RTCRtpContributingSource>> getContributingSources();
+  HeapVector<Member<RTCRtpSynchronizationSource>> getSynchronizationSources(
+      ScriptState*,
+      ExceptionState&);
+  HeapVector<Member<RTCRtpContributingSource>> getContributingSources(
+      ScriptState*,
+      ExceptionState&);
   ScriptPromise getStats(ScriptState*);
+  RTCInsertableStreams* createEncodedStreams(ScriptState*, ExceptionState&);
+  // TODO(crbug.com/1069295): Make these methods private.
   RTCInsertableStreams* createEncodedAudioStreams(ScriptState*,
                                                   ExceptionState&);
   RTCInsertableStreams* createEncodedVideoStreams(ScriptState*,

@@ -24,8 +24,8 @@
 #include "components/metrics/environment_recorder.h"
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_state_manager.h"
-#include "components/metrics/test_metrics_provider.h"
-#include "components/metrics/test_metrics_service_client.h"
+#include "components/metrics/test/test_metrics_provider.h"
+#include "components/metrics/test/test_metrics_service_client.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/variations/active_field_trials.h"
@@ -151,6 +151,7 @@ TEST_F(MetricsLogTest, BasicRecord) {
   system_profile->set_client_uuid(kClientId);
   system_profile->set_channel(client.GetChannel());
   system_profile->set_application_locale(client.GetApplicationLocale());
+  system_profile->set_brand_code(TestMetricsServiceClient::kBrandForTesting);
 
 #if defined(ADDRESS_SANITIZER) || DCHECK_IS_ON()
   system_profile->set_is_instrumented_build(true);

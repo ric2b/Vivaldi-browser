@@ -14,7 +14,6 @@
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 #include "chrome/browser/extensions/chrome_extensions_browser_client.h"
-#include "chrome/browser/extensions/extension_action.h"
 #include "chrome/browser/extensions/extension_action_manager.h"
 #include "chrome/browser/extensions/extension_action_runner.h"
 #include "chrome/browser/extensions/extension_action_test_util.h"
@@ -30,6 +29,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "content/public/browser/notification_service.h"
+#include "extensions/browser/extension_action.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/notification_types.h"
 #include "extensions/common/extension_builder.h"
@@ -401,7 +401,8 @@ TEST_P(ExtensionActionViewControllerUnitTest, OnlyHostPermissionsAppearance) {
 
   // After triggering the action it should have access, which is reflected in
   // the tooltip.
-  action_controller->ExecuteAction(true);
+  action_controller->ExecuteAction(
+      true, ToolbarActionViewController::InvocationSource::kToolbarButton);
   image_source = action_controller->GetIconImageSourceForTesting(web_contents,
                                                                  view_size());
   EXPECT_FALSE(image_source->grayscale());
@@ -729,11 +730,9 @@ ExtensionActionViewControllerGrayscaleTest::GetPageAccess(
     case PermissionType::kExplicitHost:
       return extension->permissions_data()->GetPageAccess(url, tab_id,
                                                           /*error=*/nullptr);
-      break;
     case PermissionType::kScriptableHost:
       return extension->permissions_data()->GetContentScriptAccess(
           url, tab_id, /*error=*/nullptr);
-      break;
   }
 }
 

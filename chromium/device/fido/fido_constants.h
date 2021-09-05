@@ -230,7 +230,33 @@ enum class CtapRequestCommand : uint8_t {
   kAuthenticatorCredentialManagementPreview = 0x41,
 };
 
-enum class CoseAlgorithmIdentifier : int { kCoseEs256 = -7 };
+// Enumerates the keys in a COSE Key structure. See
+// https://tools.ietf.org/html/rfc8152#section-7.1
+enum class CoseKeyKey : int {
+  kAlg = 3,
+  kKty = 1,
+  kRSAModulus = -1,
+  kRSAPublicExponent = -2,
+  kEllipticCurve = -1,
+  kEllipticX = -2,
+  kEllipticY = -3,
+};
+
+// Enumerates COSE key types. See
+// https://tools.ietf.org/html/rfc8152#section-13
+enum class CoseKeyTypes : int {
+  kEC2 = 2,
+  kRSA = 3,
+};
+
+// Enumerates COSE elliptic curves. See
+// https://tools.ietf.org/html/rfc8152#section-13.1
+enum class CoseCurves : int { kP256 = 1 };
+
+enum class CoseAlgorithmIdentifier : int {
+  kCoseEs256 = -7,
+  kCoseRs256 = -257,
+};
 
 // APDU instruction code for U2F request encoding.
 // https://fidoalliance.org/specs/fido-u2f-v1.0-ps-20141009/fido-u2f-u2f.h-v1.0-ps-20141009.pdf
@@ -283,6 +309,7 @@ extern const char kCredentialManagementPreviewMapKey[];
 COMPONENT_EXPORT(DEVICE_FIDO) extern const char kBioEnrollmentMapKey[];
 COMPONENT_EXPORT(DEVICE_FIDO) extern const char kBioEnrollmentPreviewMapKey[];
 COMPONENT_EXPORT(DEVICE_FIDO) extern const char kUvTokenMapKey[];
+extern const char kDefaultCredProtectKey[];
 
 // HID transport specific constants.
 constexpr uint32_t kHidBroadcastChannel = 0xffffffff;
@@ -365,8 +392,19 @@ extern const base::TimeDelta kBleDevicePairingModeWaitingInterval;
 // CredProtect enumerates the levels of credential protection specified by the
 // `credProtect` CTAP2 extension.
 enum class CredProtect : uint8_t {
+  kUVOptional = 1,
   kUVOrCredIDRequired = 2,
   kUVRequired = 3,
+};
+
+// CredProtectRequest extends |CredProtect| with an additional value that
+// represents a request for |kUVOrCredIDRequired|, unless the default is
+// higher.
+enum class CredProtectRequest : uint8_t {
+  kUVOptional = 1,
+  kUVOrCredIDRequired = 2,
+  kUVRequired = 3,
+  kUVOrCredIDRequiredOrBetter = 255,
 };
 
 // The map key for inserting the googleAndroidClientDataExtension output into a

@@ -33,6 +33,7 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "services/network/public/cpp/features.h"
@@ -239,13 +240,14 @@ class ReferrerPolicyTest : public InProcessBrowserTest {
       ui_test_utils::NavigateToURL(&params);
     } else if (button != blink::WebMouseEvent::Button::kNoButton) {
       blink::WebMouseEvent mouse_event(
-          blink::WebInputEvent::kMouseDown, blink::WebInputEvent::kNoModifiers,
+          blink::WebInputEvent::Type::kMouseDown,
+          blink::WebInputEvent::kNoModifiers,
           blink::WebInputEvent::GetStaticTimeStampForTests());
       mouse_event.button = button;
       mouse_event.SetPositionInWidget(15, 15);
       mouse_event.click_count = 1;
       tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
-      mouse_event.SetType(blink::WebInputEvent::kMouseUp);
+      mouse_event.SetType(blink::WebInputEvent::Type::kMouseUp);
       tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
     }
 

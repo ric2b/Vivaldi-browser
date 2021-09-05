@@ -10,6 +10,7 @@
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/chromeos/crostini/crostini_export_import.h"
 #include "chrome/browser/chromeos/crostini/crostini_manager.h"
+#include "chrome/browser/chromeos/crostini/crostini_port_forwarder.h"
 #include "chrome/browser/chromeos/usb/cros_usb_detector.h"
 #include "chrome/browser/ui/webui/settings/settings_page_ui_handler.h"
 #include "chromeos/dbus/session_manager/session_manager_client.h"
@@ -28,6 +29,10 @@ class CrostiniHandler : public ::settings::SettingsPageUIHandler,
                         public crostini::CrostiniDialogStatusObserver,
                         public crostini::CrostiniExportImport::Observer,
                         public crostini::CrostiniContainerPropertiesObserver,
+                        public crostini::CrostiniMicSharingEnabledObserver,
+                        public crostini::CrostiniPortForwarder::Observer,
+                        public crostini::ContainerStartedObserver,
+                        public crostini::ContainerShutdownObserver,
                         public chromeos::CrosUsbDeviceObserver {
  public:
   explicit CrostiniHandler(Profile* profile);
@@ -98,6 +103,16 @@ class CrostiniHandler : public ::settings::SettingsPageUIHandler,
       const base::ListValue* args);
   // Handles a request for forwarding a new port.
   void HandleAddCrostiniPortForward(const base::ListValue* args);
+  // Handles a request for removing one port.
+  void HandleRemoveCrostiniPortForward(const base::ListValue* args);
+  // Handles a request for removing all ports.
+  void HandleRemoveAllCrostiniPortForwards(const base::ListValue* args);
+  // CrostiniPortForwarder::Observer.
+  void OnActivePortsChanged(const base::ListValue& activePorts) override;
+  // Handles a request for activating an existing port.
+  void HandleActivateCrostiniPortForward(const base::ListValue* args);
+  // Handles a request for deactivating an existing port.
+  void HandleDeactivateCrostiniPortForward(const base::ListValue* args);
   // Callback of port forwarding requests.
   void OnPortForwardComplete(std::string callback_id, bool success);
   // Fetches disk info for a VM, can be slow (seconds).
@@ -111,6 +126,22 @@ class CrostiniHandler : public ::settings::SettingsPageUIHandler,
                                          bool succeeded);
   // Checks if a restart is required to update mic sharing settings.
   void HandleCheckCrostiniMicSharingStatus(const base::ListValue* args);
+  // Returns a list of currently forwarded ports.
+  void HandleGetCrostiniActivePorts(const base::ListValue* args);
+  // Checks if Crostini is running.
+  void HandleCheckCrostiniIsRunning(const base::ListValue* args);
+  // crostini::ContainerStartedObserver
+  void OnContainerStarted(const crostini::ContainerId& container_id) override;
+  // crostini::ContainerShutdownObserver
+  void OnContainerShutdown(const crostini::ContainerId& container_id) override;
+  // Handles a request to shut down Crostini.
+  void HandleShutdownCrostini(const base::ListValue* args);
+  // crostini::CrostiniMicSharingEnabledObserver
+  void OnCrostiniMicSharingEnabledChanged(bool enabled) override;
+  // Handles a request for setting the permissions for Crostini Mic access.
+  void HandleSetCrostiniMicSharingEnabled(const base::ListValue* args);
+  // Handles a request for getting the permissions for Crostini Mic access.
+  void HandleGetCrostiniMicSharingEnabled(const base::ListValue* args);
 
   Profile* profile_;
   // weak_ptr_factory_ should always be last member.

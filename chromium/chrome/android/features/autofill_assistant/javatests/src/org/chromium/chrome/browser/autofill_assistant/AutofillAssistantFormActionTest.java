@@ -30,9 +30,11 @@ import static android.support.test.espresso.matcher.ViewMatchers.withText;
 
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.iterableWithSize;
 import static org.hamcrest.Matchers.not;
 
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.hasTintColor;
+import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.hasTypefaceSpan;
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.startAutofillAssistant;
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.waitUntilViewMatchesCondition;
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.withParentIndex;
@@ -40,6 +42,7 @@ import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUi
 import android.app.Activity;
 import android.app.Instrumentation.ActivityResult;
 import android.content.Intent;
+import android.graphics.Typeface;
 import android.net.Uri;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.espresso.intent.Intents;
@@ -247,7 +250,7 @@ public class AutofillAssistantFormActionTest {
         testService.waitUntilGetNextActions(numNextActionsCalled + 1);
 
         List<ProcessedActionProto> processedActions = testService.getProcessedActions();
-        assertThat(processedActions.size(), is(1));
+        assertThat(processedActions, iterableWithSize(1));
         assertThat(
                 processedActions.get(0).getStatus(), is(ProcessedActionStatusProto.ACTION_APPLIED));
         assertThat(processedActions.get(0).getResultDataCase(),
@@ -294,33 +297,18 @@ public class AutofillAssistantFormActionTest {
                                                      .setMaxValue(9)
                                                      .setLabel("Counter 1")
                                                      .setDescriptionLine1("$34.00 per item")
-                                                     .setDescriptionLine2("<link4>Details</link4>"))
-                                .addCounters(CounterInputProto.Counter.newBuilder()
-                                                     .setMinValue(1)
-                                                     .setMaxValue(9)
-                                                     .setLabel("Counter 2")
-                                                     .setDescriptionLine1("$387.00 per item"))
+                                                     .setDescriptionLine2("<link4>Details</link4>")
+                                                     .setInitialValue(1))
                                 .setMinimizedCount(1)
                                 .setMinCountersSum(2)
                                 .setMinimizeText("Minimize")
                                 .setExpandText("Expand")));
-        // FormAction.
         list.add((ActionProto) ActionProto.newBuilder()
                          .setShowForm(ShowFormProto.newBuilder()
                                               .setChip(ChipProto.newBuilder()
                                                                .setType(ChipType.HIGHLIGHTED_ACTION)
                                                                .setText("Continue"))
                                               .setForm(formProto))
-                         .build());
-
-        // Prompt.
-        list.add((ActionProto) ActionProto.newBuilder()
-                         .setPrompt(PromptProto.newBuilder()
-                                            .setMessage("Finished")
-                                            .addChoices(Choice.newBuilder().setChip(
-                                                    ChipProto.newBuilder()
-                                                            .setType(ChipType.DONE_ACTION)
-                                                            .setText("End"))))
                          .build());
 
         AutofillAssistantTestScript script = new AutofillAssistantTestScript(
@@ -335,13 +323,31 @@ public class AutofillAssistantFormActionTest {
                 new AutofillAssistantTestService(Collections.singletonList(script));
         startAutofillAssistant(mTestRule.getActivity(), testService);
 
-        waitUntilViewMatchesCondition(withText("Continue"), isCompletelyDisplayed());
-        // TODO(b/144690738) Remove the isDisplayed() condition.
+        // Click on Counter 1 +, increase from 1 to 2.
+        onView(allOf(withId(R.id.increase_button), withEffectiveVisibility(VISIBLE),
+                       hasSibling(hasDescendant(withText("Counter 1")))))
+                .perform(scrollTo(), click());
 
+        int numNextActionsCalled = testService.getNextActionsCounter();
         onView(allOf(isDisplayed(), withText("Details"))).perform(click());
-        // TODO(b/144978160) Check that the correct link number was written to the action response.
+        testService.waitUntilGetNextActions(numNextActionsCalled + 1);
 
-        waitUntilViewMatchesCondition(withText("End"), isCompletelyDisplayed());
+        List<ProcessedActionProto> processedActions = testService.getProcessedActions();
+        assertThat(processedActions, iterableWithSize(1));
+        assertThat(
+                processedActions.get(0).getStatus(), is(ProcessedActionStatusProto.ACTION_APPLIED));
+        assertThat(processedActions.get(0).getResultDataCase(),
+                is(ProcessedActionProto.ResultDataCase.FORM_RESULT));
+
+        List<FormInputProto.Result> formResult =
+                processedActions.get(0).getFormResult().getInputResultsList();
+        assertThat(formResult.size(), is(1));
+        assertThat(processedActions.get(0).getFormResult().getLink(), is(4));
+        assertThat(formResult.get(0).getInputTypeCase(),
+                is(FormInputProto.Result.InputTypeCase.COUNTER));
+        assertThat(formResult.get(0).getCounter().getValuesCount(), is(1));
+        // Counter 1
+        assertThat(formResult.get(0).getCounter().getValues(0), is(2));
     }
 
     @Test
@@ -364,7 +370,7 @@ public class AutofillAssistantFormActionTest {
                                                 .setLabel("Counter 2")
                                                 .setDescriptionLine1("$20.00 per tick")
                                                 .setDescriptionLine2("<link1>Details</link1>"))))
-                        .setInfoLabel("Info label")
+                        .setInfoLabel("<b>Info label with bold text</b>")
                         .setInfoPopup(
                                 InfoPopupProto.newBuilder()
                                         .setTitle("Prompt title")
@@ -397,6 +403,12 @@ public class AutofillAssistantFormActionTest {
         startAutofillAssistant(mTestRule.getActivity(), testService);
 
         waitUntilViewMatchesCondition(withText("Continue"), isCompletelyDisplayed());
+        onView(withText("Info label with bold text"))
+                .check(matches(withEffectiveVisibility(VISIBLE)));
+        onView(withText("Info label with bold text"))
+                .check(matches(hasTypefaceSpan(
+                        0, "Info label with bold text".length() - 1, Typeface.BOLD)));
+
         onView(withId(R.id.info_button)).perform(click());
         waitUntilViewMatchesCondition(withText("Prompt title"), isCompletelyDisplayed());
         waitUntilViewMatchesCondition(withText("Prompt text"), isCompletelyDisplayed());

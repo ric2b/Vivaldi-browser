@@ -33,6 +33,7 @@ extern const char kVivaldiAppURLDomain[];
 extern const char kVivaldiNewTabURL[];
 extern const char kVivaldiIncognitoURL[];
 extern const char kVivaldiGuestSessionURL[];
+extern const char kVivaldiMailURL[];
 
 extern const char kVivaldiReservedApiError[];
 
@@ -49,6 +50,8 @@ extern const char kBasePathMappingUrl[];
 extern const char kBaseThumbnailUrl[];
 extern const char kVivaldiWebUIURL[];
 extern const char kVivaldiThumbURL[];
+
+extern const char kVivaldiDataUrlThumbnailDir[];
 
 extern const char kWindowExtDataKey[];
 

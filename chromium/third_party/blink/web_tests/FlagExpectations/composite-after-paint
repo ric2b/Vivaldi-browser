@@ -9,7 +9,6 @@ http/tests/devtools/tracing/* [ Skip ]
 
 virtual/composite-after-paint/* [ Skip ]
 
-virtual/gpu/fast/canvas/* [ Skip ]
 virtual/layout_ng_block_frag/* [ Skip ]
 virtual/layout_ng_fieldset/* [ Skip ]
 virtual/layout_ng_flex_box/* [ Skip ]
@@ -26,6 +25,16 @@ virtual/controls-refresh/* [ Skip ]
 virtual/controls-refresh-hc/* [ Skip ]
 virtual/web-components-v0-disabled/* [ Skip ]
 
+# They test Layer::ScrollsWithRespectTo() which is for pre-CompositeAfterPaint only.
+compositing/overflow/scrolls-with-respect-to-nested.html [ Skip ]
+compositing/overflow/scrolls-with-respect-to-transform.html [ Skip ]
+compositing/overflow/scrolls-with-respect-to.html [ Skip ]
+
+# We don't repaint when opacity changes from zero to non-zero, so it's not feasible
+# to detect that as a first paint. Won't fix.
+external/wpt/paint-timing/fcp-only/fcp-opacity.html [ Skip ]
+external/wpt/paint-timing/fcp-only/fcp-pseudo-element-opacity.html [ Skip ]
+
 # Can't rebaseline because the file path is too long.
 virtual/compositor_threaded_scrollbar_scrolling/paint/invalidation/scroll/sticky/invalidate-after-composited-scroll-with-sticky.html [ Skip ]
 
@@ -37,29 +46,16 @@ crbug.com/1039401 virtual/scroll_customization/fast/scrolling/scrollbar-mousedow
 paint/invalidation/compositing/subpixel-offset-scaled-transform-composited.html [ Pass ]
 crbug.com/957674 external/wpt/largest-contentful-paint/invisible-images-composited-2.html [ Pass ]
 crbug.com/957674 virtual/scalefactor200/external/wpt/largest-contentful-paint/invisible-images-composited-2.html [ Pass ]
-crbug.com/957674 virtual/scalefactor200withoutzoom/external/wpt/largest-contentful-paint/invisible-images-composited-2.html [ Pass ]
 
 virtual/android/fullscreen/video-overlay-scroll.html [ Failure ]
-virtual/android/rootscroller/fixed-chaining-with-implicit-pointer-events-none.html [ Failure ]
-virtual/android/rootscroller/nested-rootscroller-browser-controls-bounds-shown.html [ Crash ]
-virtual/android/url-bar/bottom-and-top-fixed-sticks-to-top.html [ Crash ]
-virtual/android/url-bar/bottom-fixed-adjusted-when-showing-url-bar.html [ Crash ]
 
 # Wrong clipping of the right side of nested composited reflection with non-zero filter origin.
 compositing/reflections/deeply-nested-reflections.html [ Failure ]
 
-# A fieldset paints its background twice.
-external/wpt/html/rendering/non-replaced-elements/the-fieldset-and-legend-elements/fieldset-overflow.html [ Crash ]
-
-#image-rendering: pixelated doesn't work on canvas.
-fast/webgl/pixelated.html [ Failure ]
-
 compositing/masks/broken-mask.html [ Failure ]
 compositing/masks/mask-with-removed-filters.html [ Failure ]
-crbug.com/667946 compositing/overflow/scrolls-with-respect-to-nested.html [ Failure ]
-crbug.com/667946 compositing/overflow/scrolls-with-respect-to-transform.html [ Failure ]
-crbug.com/667946 compositing/overflow/scrolls-with-respect-to.html [ Failure ]
 external/wpt/css/css-transforms/transform3d-backface-visibility-006.html [ Failure ]
+external/wpt/css/filter-effects/effect-reference-feimage-002.html [ Failure ]
 external/wpt/portals/portals-rendering.html [ Failure ]
 fullscreen/compositor-touch-hit-rects-fullscreen-video-controls.html [ Failure ]
 
@@ -78,11 +74,7 @@ paint/invalidation/raster-under-invalidation-checking.html [ Failure ]
 # No composited scrolling for overflow:hidden (on marquee).
 compositing/overflow/do-not-repaint-if-scrolling-composited-layers.html [ Failure ]
 
-# Extra layers for non-fast scrolling areas.
-compositing/overflow/textarea-scroll-touch.html [ Failure ]
-
 # Subpixel or invisible color differences that look benign, but we can't rebaseline ref tests.
-compositing/overflow/ancestor-with-clip-path.html [ Failure ]
 fullscreen/rendering/backdrop-object.html [ Failure ]
 
 # Passes on bot, timeouts locally.
@@ -90,42 +82,21 @@ virtual/threaded/fast/events/pinch/scroll-visual-viewport-send-boundary-events.h
 
 paint/invalidation/media-audio-no-spurious-repaints.html [ Failure ]
 
-crbug.com/940033 virtual/threaded-prefer-compositing/fast/scrolling/wheel-scrolling-over-custom-scrollbar.html [ Pass Failure ]
-
-# Crash during PictureLayer::GetPicture() when DisplayItemList is finished twice.
-http/tests/devtools/layers/layer-canvas-log.js [ Crash ]
-http/tests/devtools/layers/layer-replay-scale.js [ Crash ]
 # Missing compositing reasons
 http/tests/devtools/layers/layer-compositing-reasons.js [ Failure ]
 # Missing WheelEventHandler
 http/tests/devtools/layers/layer-scroll-rects-get.js [ Failure ]
 
-# Crash on non-contiguous effect on multiple columns
-crbug.com/1064341 fast/multicol/composited-layer-will-change.html [ Crash ]
-crbug.com/1064341 paint/clipath/change-mask-clip-path-multicol-crash.html [ Crash ]
-crbug.com/1064341 fast/multicol/composited-layer-multiple-fragments-translated.html [ Crash ]
-crbug.com/1064341 fast/multicol/composited-layer-multiple-fragments.html [ Crash ]
-crbug.com/1064341 fast/multicol/composited-layer-nested.html [ Crash ]
-
-# Outline paints incorrectly with columns. For now this is hidden by crbug.com/1064341.
-# crbug.com/1047358 paint/pagination/composited-paginated-outlined-box.html [ Failure ]
-crbug.com/1064341 paint/pagination/composited-paginated-outlined-box.html [ Crash ]
-
-# Crash on weird clip hierarchy in multiple columns
-compositing/geometry/composited-in-columns.html [ Crash ]
+# Outline paints incorrectly with columns.
+crbug.com/1047358 paint/pagination/composited-paginated-outlined-box.html [ Failure ]
 
 # Ad frame highlight size is incorrect
 crbug.com/1047359 http/tests/subresource_filter/ad-highlight-frame-resized.html [ Failure ]
 
-virtual/threaded/fast/scroll-snap/snaps-after-touchpad-scrolling.html [ Failure ]
-http/tests/devtools/a11y-axe-core/layers/layers-a11y-test.js [ Crash ]
-
-# DCHECK(latched_scroll_type_.has_value()) in LayerTreeHostImpl::ScrollLatchedScroller().
-crbug.com/1041322 virtual/threaded/synthetic_gestures/synthetic-pinch-zoom-gesture-touchscreen-desktop.html [ Crash ]
-crbug.com/1041322 virtual/threaded/synthetic_gestures/synthetic-pinch-zoom-gesture-touchscreen-zoom-in-slow-desktop.html [ Crash ]
-crbug.com/1041322 virtual/threaded/synthetic_gestures/synthetic-pinch-zoom-gesture-touchscreen-zoom-in-slow.html [ Crash ]
-crbug.com/1041322 virtual/threaded/synthetic_gestures/synthetic-pinch-zoom-gesture-touchscreen-zoom-out-slow.html [ Crash ]
-crbug.com/1041322 virtual/threaded/synthetic_gestures/synthetic-pinch-zoom-gesture-touchscreen.html [ Crash ]
-
 compositing/gestures/gesture-tapHighlight-composited-img.html [ Pass Failure ]
 http/tests/images/image-decode-in-frame.html [ Pass Failure ]
+
+# User Activation
+crbug.com/736415 external/wpt/html/user-activation/navigation-state-reset-crossorigin.sub.tentative.html [ Failure Timeout ]
+external/wpt/html/user-activation/consumption-crossorigin.sub.tentative.html [ Timeout ]
+external/wpt/html/user-activation/propagation-crossorigin.sub.tentative.html [ Timeout ]

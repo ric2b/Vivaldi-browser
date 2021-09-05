@@ -140,7 +140,13 @@ void RemoveProfileStatistics(const InstallerState& installer_state) {
 // for this mode of install was dropped from ToT in December 2016. Remove any
 // stray bits in the registry leftover from such installs.
 void RemoveBinariesVersionKey(const InstallerState& installer_state) {
-  base::string16 path(install_static::GetBinariesClientsKeyPath());
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  base::string16 path(install_static::GetClientsKeyPath(
+      L"{4DC8B4CA-1BDA-483e-B5FA-D3C12E15B62D}"));
+#else
+  // Assume that non-Google is Chromium branding.
+  base::string16 path(L"Software\\Chromium Binaries");
+#endif
   if (base::win::RegKey(installer_state.root_key(), path.c_str(),
                         KEY_QUERY_VALUE | KEY_WOW64_32KEY)
           .Valid()) {
@@ -607,7 +613,7 @@ int GetInstallAge(const InstallerState& installer_state) {
 
 void RecordUnPackMetrics(UnPackStatus unpack_status,
                          UnPackConsumer consumer) {
-  std::string consumer_name = "";
+  std::string consumer_name;
 
   switch (consumer) {
     case UnPackConsumer::CHROME_ARCHIVE_PATCH:
@@ -679,21 +685,6 @@ void DeRegisterEventLogProvider() {
   // but leaves files behind.
   InstallUtil::DeleteRegistryKey(HKEY_LOCAL_MACHINE, reg_path,
                                  WorkItem::kWow64Default);
-}
-
-bool AreBinariesInstalled(const InstallerState& installer_state) {
-  if (!install_static::InstallDetails::Get().supported_multi_install())
-    return false;
-
-  base::win::RegKey key;
-  base::string16 pv;
-
-  // True if the "pv" value exists and isn't empty.
-  return key.Open(installer_state.root_key(),
-                  install_static::GetBinariesClientsKeyPath().c_str(),
-                  KEY_QUERY_VALUE | KEY_WOW64_32KEY) == ERROR_SUCCESS &&
-         key.ReadValue(google_update::kRegVersionField, &pv) == ERROR_SUCCESS &&
-         !pv.empty();
 }
 
 void DoLegacyCleanups(const InstallerState& installer_state,
@@ -814,34 +805,6 @@ base::FilePath GetElevationServicePath(const base::FilePath& target_path,
                                        const base::Version& version) {
   return target_path.AppendASCII(version.GetString())
       .Append(kElevationServiceExe);
-}
-
-base::string16 GetElevationServiceGuid(base::StringPiece16 prefix) {
-  auto result = base::win::String16FromGUID(install_static::GetElevatorClsid());
-  result.insert(0, prefix.data(), prefix.size());
-  return result;
-}
-
-base::string16 GetElevationServiceClsidRegistryPath() {
-  return GetElevationServiceGuid(L"Software\\Classes\\CLSID\\");
-}
-
-base::string16 GetElevationServiceAppidRegistryPath() {
-  return GetElevationServiceGuid(L"Software\\Classes\\AppID\\");
-}
-
-base::string16 GetElevationServiceIid(base::StringPiece16 prefix) {
-  auto result = base::win::String16FromGUID(install_static::GetElevatorIid());
-  result.insert(0, prefix.data(), prefix.size());
-  return result;
-}
-
-base::string16 GetElevationServiceIidRegistryPath() {
-  return GetElevationServiceIid(L"Software\\Classes\\Interface\\");
-}
-
-base::string16 GetElevationServiceTypeLibRegistryPath() {
-  return GetElevationServiceIid(L"Software\\Classes\\TypeLib\\");
 }
 
 }  // namespace installer

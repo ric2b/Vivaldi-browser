@@ -35,9 +35,11 @@
 #include "components/previews/core/previews_switches.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_base.h"
 #include "content/public/test/browser_test_utils.h"
 #include "net/dns/mock_host_resolver.h"
+#include "net/nqe/effective_connection_type.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
@@ -132,8 +134,14 @@ class LazyLoadWithoutLiteModeBrowserTest
     scoped_feature_list_.InitWithFeaturesAndParameters(
         {{features::kLazyImageLoading,
           {{"automatic-lazy-load-images-enabled", "true"},
-           {"enable-lazy-load-images-metadata-fetch", "true"},
-           {"lazy_image_first_k_fully_load", "4G:0"}}},
+           {"lazy_image_first_k_fully_load",
+            base::StringPrintf("%s:0,%s:0,%s:0,%s:0,%s:0,%s:0",
+                               net::kEffectiveConnectionTypeUnknown,
+                               net::kEffectiveConnectionTypeOffline,
+                               net::kEffectiveConnectionTypeSlow2G,
+                               net::kEffectiveConnectionType2G,
+                               net::kEffectiveConnectionType3G,
+                               net::kEffectiveConnectionType4G)}}},
          {features::kLazyFrameLoading,
           {{"automatic-lazy-load-frames-enabled", "true"}}}},
         {});
@@ -151,8 +159,14 @@ class LazyLoadWithLiteModeBrowserTest
     scoped_feature_list_.InitWithFeaturesAndParameters(
         {{features::kLazyImageLoading,
           {{"automatic-lazy-load-images-enabled", "true"},
-           {"enable-lazy-load-images-metadata-fetch", "true"},
-           {"lazy_image_first_k_fully_load", "4G:0"}}},
+           {"lazy_image_first_k_fully_load",
+            base::StringPrintf("%s:0,%s:0,%s:0,%s:0,%s:0,%s:0",
+                               net::kEffectiveConnectionTypeUnknown,
+                               net::kEffectiveConnectionTypeOffline,
+                               net::kEffectiveConnectionTypeSlow2G,
+                               net::kEffectiveConnectionType2G,
+                               net::kEffectiveConnectionType3G,
+                               net::kEffectiveConnectionType4G)}}},
          {features::kLazyFrameLoading,
           {{"automatic-lazy-load-frames-enabled", "true"}}}},
         {});
@@ -211,7 +225,9 @@ class LazyLoadWithLiteModeBrowserTest
     waiter->Wait();
 
     // Scroll to remove data savings by loading the images.
-    ScrollToAndWaitForScroll(10000);
+    EXPECT_EQ(nullptr, content::EvalJs(
+                           browser()->tab_strip_model()->GetActiveWebContents(),
+                           "document.body.scrollIntoView({block: 'end'});"));
 
     waiter->AddMinimumCompleteResourcesExpectation(
         expected_initial_resources + expected_resources_post_scroll);
@@ -225,15 +241,6 @@ class LazyLoadWithLiteModeBrowserTest
   }
 
  private:
-  void ScrollToAndWaitForScroll(unsigned int scroll_offset) {
-    ASSERT_TRUE(content::ExecuteScript(
-        browser()->tab_strip_model()->GetActiveWebContents(),
-        base::StringPrintf("window.scrollTo(0, %d);", scroll_offset)));
-    content::RenderFrameSubmissionObserver observer(
-        browser()->tab_strip_model()->GetActiveWebContents());
-    observer.WaitForScrollOffset(gfx::Vector2dF(0, scroll_offset));
-  }
-
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
@@ -462,11 +469,9 @@ IN_PROC_BROWSER_TEST_F(LazyLoadWithLiteModeBrowserTest,
                        LazyLoadImagesImgElement) {
   // Choose reasonable minimum, any savings is indicative of the mechanism
   // working.
-  EXPECT_LE(
-      10000,
-      NavigateAndGetDataSavings(
-        "/lazyload/img.html",
-        10 /* main html, favicon, 8 images (2 eager, 4 placeholder, 2 full)*/));
+  EXPECT_LE(10000, NavigateAndGetDataSavings(
+                       "/lazyload/img.html",
+                       6 /* main html, favicon, 4 images (2 eager, 2 full)*/));
 }
 
 IN_PROC_BROWSER_TEST_F(LazyLoadWithLiteModeBrowserTest,
@@ -474,7 +479,7 @@ IN_PROC_BROWSER_TEST_F(LazyLoadWithLiteModeBrowserTest,
   // Choose reasonable minimum, any savings is indicative of the mechanism
   // working.
   // TODO(rajendrant): Check why sometimes data savings goes negative.
-  EXPECT_GE(0, NavigateAndGetDataSavingsAfterScroll("/lazyload/img.html", 10,
+  EXPECT_GE(0, NavigateAndGetDataSavingsAfterScroll("/lazyload/img.html", 6,
                                                     2 /* lazyloaded image */));
 }
 
@@ -589,9 +594,8 @@ IN_PROC_BROWSER_TEST_F(LazyLoadWithLiteModeBrowserTest,
   WaitForDBToInitialize();
   GURL test_url(embedded_test_server()->GetURL("foo.com", "/mainpage.html"));
   auto* web_contents = browser()->tab_strip_model()->GetActiveWebContents();
-  content::ConsoleObserverDelegate console_observer(
-      web_contents, "below-viewport iframe loaded");
-  web_contents->SetDelegate(&console_observer);
+  content::WebContentsConsoleObserver console_observer(web_contents);
+  console_observer.SetPattern("below-viewport iframe loaded");
 
   {
     uint64_t data_savings_before_navigation =
@@ -607,7 +611,7 @@ IN_PROC_BROWSER_TEST_F(LazyLoadWithLiteModeBrowserTest,
     waiter->Wait();
     EXPECT_EQ(50000U, GetDataSavings(test_url.HostNoBrackets()) -
                           data_savings_before_navigation);
-    EXPECT_EQ(std::string(), console_observer.message());
+    EXPECT_TRUE(console_observer.messages().empty());
   }
 
   // Reload will not have any savings.
@@ -626,6 +630,7 @@ IN_PROC_BROWSER_TEST_F(LazyLoadWithLiteModeBrowserTest,
     console_observer.Wait();
     EXPECT_EQ(0U, GetDataSavings(test_url.HostNoBrackets()) -
                       data_savings_before_navigation);
-    EXPECT_EQ("below-viewport iframe loaded", console_observer.message());
+    EXPECT_EQ("below-viewport iframe loaded",
+              console_observer.GetMessageAt(0u));
   }
 }

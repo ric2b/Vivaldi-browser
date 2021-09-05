@@ -24,6 +24,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/chromeos/search_box/search_box_constants.h"
+#include "ui/compositor_extra/shadow.h"
 #include "ui/views/background.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/layout/fill_layout.h"
@@ -56,15 +57,14 @@ AssistantPageView::AssistantPageView(
       min_height_dip_(kMinHeightEmbeddedDip) {
   InitLayout();
 
-  // |assistant_view_delegate_| could be nullptr in test.
-  if (assistant_view_delegate_)
-    assistant_view_delegate_->AddUiModelObserver(this);
+  if (AssistantController::Get())  // May be |nullptr| in tests.
+    assistant_controller_observer_.Add(AssistantController::Get());
+
+  if (AssistantUiController::Get())  // May be |nullptr| in tests.
+    assistant_ui_model_observer_.Add(AssistantUiController::Get());
 }
 
-AssistantPageView::~AssistantPageView() {
-  if (assistant_view_delegate_)
-    assistant_view_delegate_->RemoveUiModelObserver(this);
-}
+AssistantPageView::~AssistantPageView() = default;
 
 void AssistantPageView::InitLayout() {
   SetPaintToLayer();
@@ -114,10 +114,10 @@ void AssistantPageView::OnBoundsChanged(const gfx::Rect& prev_bounds) {
 }
 
 void AssistantPageView::RequestFocus() {
-  if (!assistant_view_delegate_)
+  if (!AssistantUiController::Get())  // May be |nullptr| in tests.
     return;
 
-  switch (assistant_view_delegate_->GetUiModel()->ui_mode()) {
+  switch (AssistantUiController::Get()->GetModel()->ui_mode()) {
     case AssistantUiMode::kLauncherEmbeddedUi:
       if (assistant_main_view_)
         assistant_main_view_->RequestFocus();
@@ -200,6 +200,40 @@ base::Optional<int> AssistantPageView::GetSearchBoxTop(
   return base::nullopt;
 }
 
+views::View* AssistantPageView::GetFirstFocusableView() {
+  return GetFocusManager()->GetNextFocusableView(
+      this, GetWidget(), /*reverse=*/false, /*dont_loop=*/false);
+}
+
+views::View* AssistantPageView::GetLastFocusableView() {
+  return GetFocusManager()->GetNextFocusableView(
+      this, GetWidget(), /*reverse=*/true, /*dont_loop=*/false);
+}
+
+void AssistantPageView::AnimateYPosition(AppListViewState target_view_state,
+                                         const TransformAnimator& animator,
+                                         float default_offset) {
+  // Assistant page view may host native views for its content. The native view
+  // hosts use view to widget coordinate conversion to calculate the native view
+  // bounds, and thus depend on the view transform values.
+  // Make sure the view is laid out before starting the transform animation so
+  // native views are not placed according to interim, animated page transform
+  // value.
+  layer()->GetAnimator()->StopAnimatingProperty(
+      ui::LayerAnimationElement::TRANSFORM);
+  if (needs_layout())
+    Layout();
+
+  animator.Run(default_offset, layer(), this);
+  animator.Run(default_offset, view_shadow_->shadow()->shadow_layer(), nullptr);
+}
+
+void AssistantPageView::UpdatePageOpacityForState(AppListState state,
+                                                  float search_box_opacity,
+                                                  bool restore_opacity) {
+  layer()->SetOpacity(search_box_opacity);
+}
+
 gfx::Rect AssistantPageView::GetPageBoundsForState(
     AppListState state,
     const gfx::Rect& contents_bounds,
@@ -211,14 +245,12 @@ gfx::Rect AssistantPageView::GetPageBoundsForState(
   return bounds;
 }
 
-views::View* AssistantPageView::GetFirstFocusableView() {
-  return GetFocusManager()->GetNextFocusableView(
-      this, GetWidget(), /*reverse=*/false, /*dont_loop=*/false);
-}
+void AssistantPageView::OnAssistantControllerDestroying() {
+  if (AssistantUiController::Get())  // May be |nullptr| in tests.
+    assistant_ui_model_observer_.Remove(AssistantUiController::Get());
 
-views::View* AssistantPageView::GetLastFocusableView() {
-  return GetFocusManager()->GetNextFocusableView(
-      this, GetWidget(), /*reverse=*/true, /*dont_loop=*/false);
+  if (AssistantController::Get())  // May be |nullptr| in tests.
+    assistant_controller_observer_.Remove(AssistantController::Get());
 }
 
 void AssistantPageView::OnUiVisibilityChanged(
@@ -248,8 +280,8 @@ void AssistantPageView::OnUiVisibilityChanged(
 
 int AssistantPageView::GetChildViewHeightForWidth(int width) const {
   int height = 0;
-  if (assistant_view_delegate_) {
-    switch (assistant_view_delegate_->GetUiModel()->ui_mode()) {
+  if (AssistantUiController::Get()) {  // May be |nullptr| in tests.
+    switch (AssistantUiController::Get()->GetModel()->ui_mode()) {
       case AssistantUiMode::kLauncherEmbeddedUi:
         if (assistant_main_view_)
           height = assistant_main_view_->GetHeightForWidth(width);

@@ -183,7 +183,8 @@ class AvdConfig(object):
              force=False,
              snapshot=False,
              keep=False,
-             cipd_json_output=None):
+             cipd_json_output=None,
+             dry_run=False):
     """Create an instance of the AVD CIPD package.
 
     This method:
@@ -192,7 +193,8 @@ class AvdConfig(object):
      - modifies the AVD's ini files to support running chromium tests
        in chromium infrastructure
      - optionally starts & stops the AVD for snapshotting (default no)
-     - creates and uploads an instance of the AVD CIPD package
+     - By default creates and uploads an instance of the AVD CIPD package
+       (can be turned off by dry_run flag).
      - optionally deletes the AVD (default yes)
 
     Args:
@@ -202,6 +204,8 @@ class AvdConfig(object):
       keep: bool indicating whether to keep the AVD after creating
         the CIPD package.
       cipd_json_output: string path to pass to `cipd create` via -json-output.
+      dry_run: When set to True, it will skip the CIPD package creation
+        after creating the AVD.
     """
     logging.info('Installing required packages.')
     self._InstallCipdPackages(packages=[
@@ -232,8 +236,9 @@ class AvdConfig(object):
       avd_dir = os.path.join(android_avd_home, '%s.avd' % self._config.avd_name)
       config_ini = os.path.join(avd_dir, 'config.ini')
 
-      with open(root_ini, 'a') as root_ini_file:
-        root_ini_file.write('path.rel=avd/%s.avd\n' % self._config.avd_name)
+      if os.path.exists(root_ini):
+        with open(root_ini, 'a') as root_ini_file:
+          root_ini_file.write('path.rel=avd/%s.avd\n' % self._config.avd_name)
 
       if os.path.exists(config_ini):
         with open(config_ini) as config_ini_file:
@@ -259,9 +264,17 @@ class AvdConfig(object):
       self._Initialize()
       instance = _AvdInstance(self._emulator_path, self._emulator_home,
                               self._config)
-      instance.Start(read_only=False, snapshot_save=snapshot)
+      # Enable debug for snapshot when it is set to True
+      debug_tags = 'init,snapshot' if snapshot else None
+      instance.Start(
+          read_only=False, snapshot_save=snapshot, debug_tags=debug_tags)
+      # Android devices with full-disk encryption are encrypted on first boot,
+      # and then get decrypted to continue the boot process (See details in
+      # https://bit.ly/3agmjcM).
+      # Wait for this step to complete since it can take a while for old OSs
+      # like M, otherwise the avd may have "Encryption Unsuccessful" error.
       device_utils.DeviceUtils(instance.serial).WaitUntilFullyBooted(
-          timeout=180, retries=0)
+          decrypt=True, timeout=180, retries=0)
       instance.Stop()
 
       # The multiinstance lock file seems to interfere with the emulator's
@@ -303,19 +316,27 @@ class AvdConfig(object):
             'create',
             '-pkg-def',
             package_def_path,
+            '-tag',
+            'emulator_version:%s' % self._config.emulator_package.version,
+            '-tag',
+            'system_image_version:%s' %
+            self._config.system_image_package.version,
         ]
         if cipd_json_output:
           cipd_create_cmd.extend([
               '-json-output',
               cipd_json_output,
           ])
-        try:
-          for line in cmd_helper.IterCmdOutputLines(cipd_create_cmd):
-            logging.info('    %s', line)
-        except subprocess.CalledProcessError as e:
-          raise AvdException(
-              'CIPD package creation failed: %s' % str(e),
-              command=cipd_create_cmd)
+        logging.info('running %r%s', cipd_create_cmd,
+                     ' (dry_run)' if dry_run else '')
+        if not dry_run:
+          try:
+            for line in cmd_helper.IterCmdOutputLines(cipd_create_cmd):
+              logging.info('    %s', line)
+          except subprocess.CalledProcessError as e:
+            raise AvdException(
+                'CIPD package creation failed: %s' % str(e),
+                command=cipd_create_cmd)
 
     finally:
       if not keep:
@@ -392,14 +413,14 @@ class AvdConfig(object):
     android_avd_home = os.path.join(self._emulator_home, 'avd')
     avd_dir = os.path.join(android_avd_home, '%s.avd' % self._config.avd_name)
 
-    hardware_qemu_path = os.path.join(avd_dir, 'hardware-qemu.ini')
-    if os.path.exists(hardware_qemu_path):
-      with open(hardware_qemu_path) as hardware_qemu_file:
-        hardware_qemu_contents = ini.load(hardware_qemu_file)
+    config_path = os.path.join(avd_dir, 'config.ini')
+    if os.path.exists(config_path):
+      with open(config_path) as config_file:
+        config_contents = ini.load(config_file)
     else:
-      hardware_qemu_contents = {}
+      config_contents = {}
 
-    hardware_qemu_contents['hw.sdCard'] = 'true'
+    config_contents['hw.sdCard'] = 'true'
     if self._config.avd_settings.sdcard.size:
       sdcard_path = os.path.join(avd_dir, 'cr-sdcard.img')
       if not os.path.exists(sdcard_path):
@@ -412,10 +433,10 @@ class AvdConfig(object):
         ]
         cmd_helper.RunCmd(mksdcard_cmd)
 
-      hardware_qemu_contents['hw.sdCard.path'] = sdcard_path
+      config_contents['hw.sdCard.path'] = sdcard_path
 
-    with open(hardware_qemu_path, 'w') as hardware_qemu_file:
-      ini.dump(hardware_qemu_contents, hardware_qemu_file)
+    with open(config_path, 'w') as config_file:
+      ini.dump(config_contents, config_file)
 
   def _Initialize(self):
     if self._initialized:
@@ -489,7 +510,8 @@ class _AvdInstance(object):
             read_only=True,
             snapshot_save=False,
             window=False,
-            writable_system=False):
+            writable_system=False,
+            debug_tags=None):
     """Starts the emulator running an instance of the given AVD."""
 
     with tempfile_ext.TemporaryFileName() as socket_path, (contextlib.closing(
@@ -510,6 +532,8 @@ class _AvdInstance(object):
         emulator_cmd.append('-no-snapshot-save')
       if writable_system:
         emulator_cmd.append('-writable-system')
+      if debug_tags:
+        emulator_cmd.extend(['-debug', debug_tags])
 
       emulator_env = {}
       if self._emulator_home:
@@ -524,11 +548,14 @@ class _AvdInstance(object):
 
       sock.listen(1)
 
-      logging.info('Starting emulator.')
+      logging.info('Starting emulator with commands: %s',
+                   ' '.join(emulator_cmd))
 
       # TODO(jbudorick): Add support for logging emulator stdout & stderr at
       # higher logging levels.
-      self._sink = open('/dev/null', 'w')
+      # Enable the emulator log when debug_tags is set.
+      if not debug_tags:
+        self._sink = open('/dev/null', 'w')
       self._emulator_proc = cmd_helper.Popen(
           emulator_cmd, stdout=self._sink, stderr=self._sink, env=emulator_env)
 

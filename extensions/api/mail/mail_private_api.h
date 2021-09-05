@@ -4,7 +4,6 @@
 #define EXTENSIONS_API_MAIL_MAIL_PRIVATE_API_H_
 
 #include "base/files/file_path.h"
-#include "chrome/browser/extensions/chrome_extension_function.h"
 #include "extensions/browser/api/file_system/file_system_api.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/extension_function.h"

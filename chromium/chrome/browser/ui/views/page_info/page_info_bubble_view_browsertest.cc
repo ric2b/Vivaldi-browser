@@ -38,6 +38,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/referrer.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "net/test/cert_test_util.h"
@@ -298,7 +299,6 @@ class PageInfoBubbleViewBrowserTest : public DialogBrowserTest {
   bool VerifyUi() override {
     if (!DialogBrowserTest::VerifyUi())
       return false;
-#if defined(TOOLKIT_VIEWS)
     // Check that each expected View is present in the Page Info bubble.
     views::View* page_info_bubble_view =
         PageInfoBubbleView::GetPageInfoBubbleForTesting()->GetContentsView();
@@ -308,10 +308,6 @@ class PageInfoBubbleViewBrowserTest : public DialogBrowserTest {
         return false;
     }
     return true;
-#else
-    NOTIMPLEMENTED();
-    return false;
-#endif
   }
 
  protected:

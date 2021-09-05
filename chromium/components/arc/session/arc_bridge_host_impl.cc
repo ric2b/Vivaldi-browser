@@ -43,7 +43,6 @@
 #include "components/arc/mojom/pip.mojom.h"
 #include "components/arc/mojom/policy.mojom.h"
 #include "components/arc/mojom/power.mojom.h"
-#include "components/arc/mojom/print.mojom.h"
 #include "components/arc/mojom/print_spooler.mojom.h"
 #include "components/arc/mojom/process.mojom.h"
 #include "components/arc/mojom/property.mojom.h"
@@ -63,23 +62,17 @@
 #include "components/arc/session/arc_bridge_service.h"
 #include "components/arc/session/mojo_channel.h"
 #include "content/public/browser/system_connector.h"
-#include "services/service_manager/public/cpp/connector.h"
 
 namespace arc {
 
 ArcBridgeHostImpl::ArcBridgeHostImpl(
     ArcBridgeService* arc_bridge_service,
-    mojo::PendingRemote<mojom::ArcBridgeInstance> instance)
+    mojo::PendingReceiver<mojom::ArcBridgeHost> pending_receiver)
     : arc_bridge_service_(arc_bridge_service),
-      receiver_(this),
-      instance_(std::move(instance)) {
+      receiver_(this, std::move(pending_receiver)) {
   DCHECK(arc_bridge_service_);
-  DCHECK(instance_.is_bound());
-  instance_.set_disconnect_handler(
+  receiver_.set_disconnect_handler(
       base::BindOnce(&ArcBridgeHostImpl::OnClosed, base::Unretained(this)));
-  mojom::ArcBridgeHostPtr host_proxy;
-  receiver_.Bind(mojo::MakeRequest(&host_proxy));
-  instance_->Init(std::move(host_proxy));
 }
 
 ArcBridgeHostImpl::~ArcBridgeHostImpl() {
@@ -261,11 +254,6 @@ void ArcBridgeHostImpl::OnPowerInstanceReady(
   OnInstanceReady(arc_bridge_service_->power(), std::move(power_ptr));
 }
 
-void ArcBridgeHostImpl::OnPrintInstanceReady(
-    mojom::PrintInstancePtr print_ptr) {
-  OnInstanceReady(arc_bridge_service_->print(), std::move(print_ptr));
-}
-
 void ArcBridgeHostImpl::OnPrintSpoolerInstanceReady(
     mojom::PrintSpoolerInstancePtr print_spooler_ptr) {
   OnInstanceReady(arc_bridge_service_->print_spooler(),
@@ -364,9 +352,7 @@ void ArcBridgeHostImpl::OnClosed() {
 
   // Close all mojo channels.
   mojo_channels_.clear();
-  instance_.reset();
-  if (receiver_.is_bound())
-    receiver_.reset();
+  receiver_.reset();
 
   arc_bridge_service_->ObserveAfterArcBridgeClosed();
 }

@@ -19,6 +19,7 @@ import android.provider.MediaStore;
 import android.support.test.filters.SmallTest;
 
 import androidx.core.content.FileProvider;
+import androidx.core.util.ObjectsCompat;
 
 import org.junit.After;
 import org.junit.Assert;
@@ -40,6 +41,8 @@ import org.chromium.chrome.browser.ChromeActivity;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.content_public.browser.test.util.Criteria;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.ui.base.Clipboard;
 
 import java.io.File;
@@ -140,6 +143,13 @@ public class ShareImageFileUtilsTest {
                 mActivityTestRule.getActivity(), TEST_IMAGE_DATA, fileExtension, imageCallback);
         imageCallback.waitForCallback(0, 1, WAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         Clipboard.getInstance().setImageUri(imageCallback.getImageUri());
+        CriteriaHelper.pollInstrumentationThread(new Criteria() {
+            @Override
+            public boolean isSatisfied() {
+                return ObjectsCompat.equals(
+                        Clipboard.getInstance().getImageUri(), imageCallback.getImageUri());
+            }
+        });
         return imageCallback.getImageUri();
     }
 

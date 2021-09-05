@@ -23,6 +23,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/branding_buildflags.h"
+#include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/metrics/subprocess_metrics_provider.h"
 #include "chrome/browser/safe_browsing/test_safe_browsing_database_helper.h"
@@ -168,9 +169,8 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterListInsertingBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(SubresourceFilterListInsertingBrowserTest,
                        MainFrameActivationWithWarning_BetterAdsList) {
-  content::ConsoleObserverDelegate console_observer1(web_contents(),
-                                                     "*show ads*");
-  web_contents()->SetDelegate(&console_observer1);
+  content::WebContentsConsoleObserver console_observer(web_contents());
+  console_observer.SetPattern("*show ads*");
   GURL url(GetTestUrl("subresource_filter/frame_with_included_script.html"));
   ConfigureURLWithWarning(url,
                           {safe_browsing::SubresourceFilterType::BETTER_ADS});
@@ -184,17 +184,18 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterListInsertingBrowserTest,
 
   ui_test_utils::NavigateToURL(browser(), url);
   EXPECT_TRUE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
-  EXPECT_EQ(kActivationWarningConsoleMessage, console_observer1.message());
+  ASSERT_EQ(1u, console_observer.messages().size());
+  EXPECT_EQ(kActivationWarningConsoleMessage,
+            console_observer.GetMessageAt(0u));
 
-  content::ConsoleObserverDelegate console_observer2(web_contents(),
-                                                     "*show ads*");
-  web_contents()->SetDelegate(&console_observer2);
   ASSERT_NO_FATAL_FAILURE(
       SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
   ui_test_utils::NavigateToURL(browser(), url);
   EXPECT_TRUE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
 
-  EXPECT_EQ(kActivationWarningConsoleMessage, console_observer2.message());
+  ASSERT_EQ(2u, console_observer.messages().size());
+  EXPECT_EQ(kActivationWarningConsoleMessage,
+            console_observer.GetMessageAt(1u));
 }
 
 IN_PROC_BROWSER_TEST_F(
@@ -296,9 +297,8 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest, SubFrameActivation) {
                            SubresourceFilterAction::kUIShown, 1);
 
   // Console message for subframe blocking should be displayed.
-  EXPECT_FALSE(console_observer.messages().empty());
   EXPECT_TRUE(base::MatchPattern(
-      base::UTF16ToUTF8(console_observer.messages()[0].message),
+      console_observer.GetMessageAt(0u),
       base::StringPrintf(kBlinkDisallowSubframeConsoleMessageFormat,
                          "*included_script.js")));
 }
@@ -634,8 +634,18 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
       std::vector<const char*>{"b", "d"}, {false, true});
 }
 
+// Disable the test as it's flaky on Win7 dbg.
+// crbug.com/1068185
+#if defined(OS_WIN) && !defined(NDEBUG)
+#define MAYBE_RendererDebugURL_NoLeakedThrottlePtrs \
+  DISABLED_RendererDebugURL_NoLeakedThrottlePtrs
+#else
+#define MAYBE_RendererDebugURL_NoLeakedThrottlePtrs \
+  RendererDebugURL_NoLeakedThrottlePtrs
+#endif
+
 IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
-                       RendererDebugURL_NoLeakedThrottlePtrs) {
+                       MAYBE_RendererDebugURL_NoLeakedThrottlePtrs) {
   // Allow crashes caused by the navigation to kChromeUICrashURL below.
   content::ScopedAllowRendererCrashes scoped_allow_renderer_crashes(
       browser()->tab_strip_model()->GetActiveWebContents());

@@ -23,7 +23,6 @@
 #include "third_party/skia/include/core/SkRefCnt.h"
 
 namespace blink {
-class Document;
 class HTMLCanvasElement;
 class HTMLVideoElement;
 class ImageData;
@@ -44,18 +43,15 @@ class CORE_EXPORT ImageBitmap final : public ScriptWrappable,
   static ScriptPromise CreateAsync(
       ImageElementBase*,
       base::Optional<IntRect>,
-      Document*,
       ScriptState*,
       const ImageBitmapOptions* = ImageBitmapOptions::Create());
   static sk_sp<SkImage> GetSkImageFromDecoder(std::unique_ptr<ImageDecoder>);
 
   ImageBitmap(ImageElementBase*,
               base::Optional<IntRect>,
-              Document*,
               const ImageBitmapOptions* = ImageBitmapOptions::Create());
   ImageBitmap(HTMLVideoElement*,
               base::Optional<IntRect>,
-              Document*,
               const ImageBitmapOptions* = ImageBitmapOptions::Create());
   ImageBitmap(HTMLCanvasElement*,
               base::Optional<IntRect>,
@@ -120,7 +116,6 @@ class CORE_EXPORT ImageBitmap final : public ScriptWrappable,
   // ImageBitmapSource implementation
   IntSize BitmapSourceSize() const override { return Size(); }
   ScriptPromise CreateImageBitmap(ScriptState*,
-                                  EventTarget&,
                                   base::Optional<IntRect>,
                                   const ImageBitmapOptions*,
                                   ExceptionState&) override;
@@ -145,12 +140,14 @@ class CORE_EXPORT ImageBitmap final : public ScriptWrappable,
   static void ResolvePromiseOnOriginalThread(ScriptPromiseResolver*,
                                              bool origin_clean,
                                              std::unique_ptr<ParsedOptions>,
-                                             sk_sp<SkImage>);
+                                             sk_sp<SkImage>,
+                                             const ImageOrientationEnum);
   static void RasterizeImageOnBackgroundThread(
       sk_sp<PaintRecord>,
       const IntRect&,
       scoped_refptr<base::SequencedTaskRunner>,
-      WTF::CrossThreadOnceFunction<void(sk_sp<SkImage>)> callback);
+      WTF::CrossThreadOnceFunction<void(sk_sp<SkImage>,
+                                        const ImageOrientationEnum)> callback);
   scoped_refptr<StaticBitmapImage> image_;
   bool is_neutered_ = false;
   int32_t memory_usage_ = 0;

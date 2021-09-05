@@ -33,9 +33,7 @@
   'android_webview_unittests': {
     'remove_from': [
       # On chromium.android, these do not need to run prior to M.
-      'android-kitkat-arm-rel',
-      'KitKat Phone Tester (dbg)',
-      'KitKat Tablet Tester',
+      'android-lollipop-arm-rel',
       'android-code-coverage-native', # crbug/1018434
     ],
   },
@@ -332,25 +330,13 @@
       },
       'linux-layout-tests-edit-ng': {
         'args': [
-          '--additional-driver-flag=--enable-blink-features=EditingNGruntime',
+          '--additional-driver-flag=--enable-blink-features=EditingNG',
         ],
       },
       'linux-layout-tests-fragment-item': {
         'args': [
           '--additional-driver-flag=--enable-blink-features=LayoutNGFragmentItem',
         ],
-      },
-      'mac-rel': {
-        'swarming': {
-          'dimension_sets': [
-            {
-              # Run the layout tests on a consistent set of hardware
-              # (Mac Minis).
-              'gpu': '8086:0a2e',
-            },
-          ],
-          'shards': 25,
-        },
       },
       'mac10.10-blink-rel-dummy': {
         'swarming': {
@@ -382,6 +368,11 @@
           'shards': 20,
         },
       },
+      'mac10.15-blink-rel-dummy': {
+        'swarming': {
+          'shards': 20,
+        },
+      },
     },
   },
   'boringssl_crypto_tests': {
@@ -409,7 +400,6 @@
     'remove_from': [
       'CrWinAsan(dll)', # https://crbug.com/935598
       'linux-win_cross-rel',
-      'mac-rel',  # crbug.com/1042757
       'ToTLinuxTSan',  # https://crbug.com/368525
       'Mac10.10 Tests',  # https://crbug.com/828031
       'Mac10.13 Tests',  # https://crbug.com/1042757
@@ -445,7 +435,8 @@
         # These are very slow on the Chrome OS MSAN trybot for some reason.
         # crbug.com/865455
         'swarming': {
-          'shards': 30,
+          # TODO(crbug.com/1071693): Drop back down to 32 shards.
+          'shards': 40,
         },
       },
       'Linux Tests (dbg)(1)': {
@@ -588,11 +579,6 @@
         ],
       },
     },
-    'remove_from': [
-      'Fuchsia ARM64', # https://crbug.com/1046552
-      'Fuchsia x64', # https://crbug.com/1046552
-      'fuchsia-fyi-arm64-rel',
-    ],
   },
   'checkbins': {
     'remove_from': [
@@ -618,18 +604,25 @@
     'remove_from': [
       'android-asan',  # https://crbug.com/964562
       'android-code-coverage-native', # https://crbug.com/1018780
-      'android-kitkat-arm-rel', # https://crbug.com/1060245
+      'android-lollipop-arm-rel', # https://crbug.com/1060245
     ],
     'modifications': {
-      'KitKat Phone Tester (dbg)': {
-        'swarming': {
-          'shards': 20,
-        },
+      'Android CFI': {
+        'args': [
+          '--exclude-annotation',
+          'Feature=RenderTest', # https://crbug.com/1068294
+        ],
       },
       'Marshmallow 64 bit Tester': {
         'swarming': {
           'shards': 14,
         },
+      },
+      'Marshmallow Tablet Tester': {
+        'args': [
+          '--timeout-scale',
+          '2.0',
+        ],
       },
       'Oreo Phone Tester': {
         # TODO(https://crbug.com/884413): Re-enable this once the tests are
@@ -641,9 +634,19 @@
           'shards': 25,
         },
       },
+      'android-lollipop-arm-rel-swarming': {
+        'swarming': {
+          'service_account': 'chrome-gold-dev@chops-service-accounts.iam.gserviceaccount.com'
+        },
+      },
       'android-marshmallow-arm64-rel': {
         'swarming': {
           'shards': 25,
+        },
+      },
+      'android-marshmallow-arm64-rel-swarming': {
+        'swarming': {
+          'service_account': 'chrome-gold-dev@chops-service-accounts.iam.gserviceaccount.com'
         },
       },
       'android-pie-arm64-rel': {
@@ -674,7 +677,6 @@
   },
   'chrome_public_test_vr_apk': {
     'remove_from': [
-      'KitKat Tablet Tester',
       'Lollipop Tablet Tester',
       'Marshmallow Tablet Tester',
       'android-marshmallow-x86-fyi-rel',
@@ -818,11 +820,6 @@
           'shards': 18,
         },
       },
-      'android-kitkat-arm-rel': {
-        'swarming': {
-          'shards': 15,
-        },
-      },
       'android-lollipop-arm-rel': {
         'swarming': {
           'shards': 15,
@@ -865,6 +862,24 @@
         'swarming': {
           'shards': 12,
         },
+      },
+    },
+  },
+  'content_browsertests_wayland': {
+    'modifications': {
+      'Linux Ozone Tester (Wayland)': {
+        'args': [
+          '--test-launcher-filter-file=../../testing/buildbot/filters/ozone-linux.wayland_content_browsertests.filter',
+        ],
+      },
+    },
+  },
+  'content_browsertests_x11': {
+    'modifications': {
+      'Linux Ozone Tester (X11)': {
+        'args': [
+          '--test-launcher-filter-file=../../testing/buildbot/filters/ozone-linux.x11_content_browsertests.filter',
+        ],
       },
     },
   },
@@ -981,6 +996,12 @@
         ],
       },
     },
+  },
+  'disk_usage_tast_test': {
+    # TODO(crbug.com/1077659): Add the test back after it's fixed.
+    'remove_from': [
+      'chromeos-kevin-rel',
+    ],
   },
   'extensions_browsertests': {
     'remove_from': [
@@ -1165,6 +1186,35 @@
       'Win V8 FYI Release (NVIDIA)',
     ],
     'modifications': {
+      # TODO(https://crbug.com/1099762): Remove the --expected-device-id args
+      # once JSON generation properly handles multiple GPUs.
+      'ANGLE GPU Win10 x64 Release (Intel HD 630)': {
+        'args': [
+          '--expected-device-id', '3e92',
+        ],
+      },
+      'Optional Win10 x64 Release (Intel HD 630)': {
+        'args': [
+          '--expected-device-id', '3e92',
+        ],
+      },
+      'Win10 FYI x64 Exp Release (Intel HD 630)': {
+        'args': [
+          # TODO(https://crbug.com/1053803): Add this to all tests once UHD
+          # 630 machines are used alongside HD 630 machines.
+          '--expected-device-id', '3e92',
+        ],
+      },
+      'Win10 FYI x64 Release (Intel HD 630)': {
+        'args': [
+          '--expected-device-id', '3e92',
+        ],
+      },
+      'Win10 FYI x64 dEQP Release (Intel HD 630)': {
+        'args': [
+          '--expected-device-id', '3e92',
+        ],
+      },
       'Win10 x64 Debug (NVIDIA)': {
         'args': [
           # TODO(https://crbug.com/1007013): Remove this flag when it's no
@@ -1368,11 +1418,6 @@
         },
       },
     },
-    'remove_from': [
-      # Don't run on trybots, which don't use proguard.
-      # https://crbug.com/1029936.
-      'android-kitkat-arm-rel',
-    ],
   },
   'monochrome_public_test_ar_apk': {
     'modifications': {
@@ -1402,6 +1447,11 @@
           ],
         },
       },
+      'android-10-arm64-rel': {
+        'args': [
+          '--replace-system-package=com.google.ar.core,//third_party/arcore-android-sdk/test-apks/arcore/arcore_current.apk'
+        ]
+      },
       'android-pie-arm64-dbg': {
         'args': [
           '--replace-system-package=com.google.ar.core,//third_party/arcore-android-sdk/test-apks/arcore/arcore_current.apk'
@@ -1425,7 +1475,6 @@
   'net_unittests': {
     'remove_from': [
       'Fuchsia ARM64',  # https://crbug.com/877248
-      'fuchsia-fyi-arm64-rel',  # https://crbug.com/877248
       'fuchsia-fyi-x64-dbg',  # https://crbug.com/844416
     ],
     'modifications': {
@@ -1517,7 +1566,6 @@
       'Mac10.13 Tests (dbg)',
       'Mac ASan 64 Tests (1)',
       'ToTMacASan',
-      'mac-rel',
     ],
     'modifications': {
       'Win10 Tests x64': {
@@ -1565,7 +1613,6 @@
       'Mac10.13 Tests (dbg)',
       'Mac ASan 64 Tests (1)',
       'ToTMacASan',
-      'mac-rel',
     ],
   },
   'network_service_content_browsertests': {
@@ -1583,7 +1630,6 @@
       'Mac10.13 Tests (dbg)',
       'Mac ASan 64 Tests (1)',
       'ToTMacASan',
-      'mac-rel',
     ],
   },
   'network_service_extensions_browsertests': {
@@ -1600,7 +1646,6 @@
       'Mac10.13 Tests (dbg)',
       'Mac ASan 64 Tests (1)',
       'ToTMacASan',
-      'mac-rel',
     ],
   },
   'network_service_headless_browsertests': {
@@ -1622,7 +1667,6 @@
       'Mac10.13 Tests (dbg)',
       'Mac ASan 64 Tests (1)',
       'ToTMacASan',
-      'mac-rel',
     ],
     'modifications': {
       'Win10 Tests x64 (dbg)': {
@@ -1634,16 +1678,21 @@
     'remove_from': [
       'android-asan',
       # Don't run on trybots; waterfall is enough.
-      'android-kitkat-arm-rel',
+      'android-lollipop-arm-rel',
       'android-marshmallow-arm64-rel',
       'android-pie-arm64-rel',
       # No capacity for tablet testers.
-      'KitKat Tablet Tester',
       'Lollipop Tablet Tester',
       'Marshmallow Tablet Tester',
       'android-code-coverage-native', # https://crbug.com/1018780
     ],
     'modifications': {
+      'Android CFI': {
+        'args': [
+          '--exclude-annotation',
+          'Feature=RenderTest', # https://crbug.com/1068294
+        ],
+      },
       'android-pie-x86-rel': {
         'args': [
           '--avd-config=../../tools/android/avd/proto/generic_playstore_android28.textpb',
@@ -1669,11 +1718,10 @@
     'remove_from': [
       'android-asan',
       # Don't run on trybots; waterfall is enough.
-      'android-kitkat-arm-rel',
+      'android-lollipop-arm-rel',
       'android-marshmallow-arm64-rel',
       'android-pie-arm64-rel',
       # No capacity for tablet testers.
-      'KitKat Tablet Tester',
       'Lollipop Tablet Tester',
       'Marshmallow Tablet Tester',
       'android-code-coverage-native', # crbug/1018434
@@ -1683,11 +1731,10 @@
     'remove_from': [
       'android-asan',
       # Don't run on trybots; waterfall is enough.
-      'android-kitkat-arm-rel',
+      'android-lollipop-arm-rel',
       'android-marshmallow-arm64-rel',
       'android-pie-arm64-rel',
       # No capacity for tablet testers.
-      'KitKat Tablet Tester',
       'Lollipop Tablet Tester',
       'Marshmallow Tablet Tester',
       'android-code-coverage-native', # crbug/1018434
@@ -1697,6 +1744,9 @@
         'args': [
           '--test-launcher-filter-file=../../testing/buildbot/filters/android.emulator.content_browsertests.filter',
         ],
+        'swarming': {
+          'shards': 10,
+        },
       },
       'android-pie-x86-rel': {
         'args': [
@@ -1712,11 +1762,10 @@
     'remove_from': [
       'android-asan',
       # Don't run on trybots; waterfall is enough.
-      'android-kitkat-arm-rel',
+      'android-lollipop-arm-rel',
       'android-marshmallow-arm64-rel',
       'android-pie-arm64-rel',
       # No capacity for tablet testers.
-      'KitKat Tablet Tester',
       'Lollipop Tablet Tester',
       'Marshmallow Tablet Tester',
       'android-code-coverage-native', # crbug/1018434
@@ -1737,13 +1786,11 @@
   'network_service_webview_instrumentation_test_apk': {
     # Only run these on the phone testers for now due to capacity.
     'remove_from': [
-      'android-kitkat-arm-rel',
+      'android-lollipop-arm-rel',
       'android-marshmallow-arm64-rel',
       'android-pie-arm64-rel',
-      'KitKat Tablet Tester',
       'Lollipop Tablet Tester',
       'Marshmallow Tablet Tester',
-      'KitKat Phone Tester (dbg)',
       'android-asan',  # https://crbug.com/964562
       'Android CFI',
       'ToTAndroid',
@@ -1824,15 +1871,12 @@
       'android-asan',
       'android-code-coverage',
       'android-code-coverage-native',
-      'android-kitkat-arm-rel',
       'android-lollipop-arm-rel',
       'android-marshmallow-arm64-rel',
       'android-marshmallow-x86-fyi-rel',
       'android-pie-arm64-rel',
       'android-pie-x86-rel',
       'Android CFI',
-      'KitKat Phone Tester (dbg)',
-      'KitKat Tablet Tester',
       'Lollipop Phone Tester',
       'Lollipop Tablet Tester',
       'Marshmallow 64 bit Tester',
@@ -1934,6 +1978,11 @@
           '--browser=release_x64',
         ],
       },
+      'Win10 x64 Release (NVIDIA) Code Coverage': {
+        'args': [
+          '--browser=release_x64',
+        ],
+      },
     },
   },
   'sandbox_linux_unittests': {
@@ -1971,6 +2020,14 @@
       'Linux ChromiumOS MSan Tests',  # https://crbug.com/831676
       'Linux MSan Tests',  # https://crbug.com/831676
     ],
+    'replacements': {
+      # TODO(crbug.com/1078982): Remove once the test is fixed on 10.15.4.
+      'Mac FYI Experimental Release (Intel)': {
+        'args': {
+          '--gtest_filter': '*Detection*:-FaceDetectionImplMacTest.ScanOneFace*',
+        },
+      },
+    },
   },
   'skia_renderer_gl_blink_web_tests': {
     'modifications': {
@@ -1981,6 +2038,25 @@
         ],
       },
     },
+  },
+  'storage_service_unsandboxed_content_browsertests': {
+    'modifications': {
+      'Linux Tests (dbg)(1)': {
+        'swarming': {
+          'shards': 4,
+        },
+      },
+    },
+  },
+  'storage_service_unsandboxed_interactive_ui_tests': {
+    'modifications': {
+      'linux-chromeos-chrome': {
+        # TODO(crbug.com/970649): Remove this filter.
+        'args': [
+          '--gtest_filter=-SadTabViewInteractiveUITest.ReloadMultipleSadTabs',
+        ],
+      },
+    }
   },
   'swiftshader_unittests': {
     'remove_from': [
@@ -2048,6 +2124,13 @@
       'Linux Release (NVIDIA)',
     ],
   },
+  'telemetry_monochrome_minidump_unittests': {
+    'remove_from': [
+      # Monochrome isn't supported on M.
+      'android-marshmallow-arm64-rel',
+      'android-marshmallow-x86-fyi-rel',
+    ],
+  },
   'telemetry_perf_unittests': {
     'modifications': {
       'Linux Tests': {
@@ -2087,20 +2170,6 @@
         },
         'experiment_percentage': 100,
       },
-      'android-kitkat-arm-rel': {
-        'args': [
-          '--browser=android-chromium',
-          '--device=android',
-        ],
-        'swarming': {
-          'dimension_sets': [
-            {
-              'temp_band': '<30',
-            },
-          ],
-          'shards': 15,
-        },
-      },
       'linux-chromium-tests-staging-tests': {
         'args': [
           '--xvfb',
@@ -2115,7 +2184,7 @@
       },
     },
     'remove_from': [
-      # There's no need to run telemetry_perf_unittests on both kitkat and
+      # There's no need to run telemetry_perf_unittests on both lollipop and
       # marshmallow on the CQ. https://crbug.com/1026487.
       'android-marshmallow-arm64-rel',
       'android-pie-arm64-rel',
@@ -2128,7 +2197,6 @@
       'Win10 Tests x64',
       'Win10 Tests x64 (dbg)',
       'Win10 Tests x64 Code Coverage',
-      'mac-rel',
     ],
   },
   'telemetry_unittests': {
@@ -2155,7 +2223,7 @@
   'unit_tests': {
     'remove_from': [
       'android-code-coverage-native', # crbug/1018434
-      # There's no need to run unit_tests on both kitkat and marshmallow
+      # There's no need to run unit_tests on both lollipop and marshmallow
       # on the CQ. https://crbug.com/1026487.
       'android-marshmallow-arm64-rel',
     ],
@@ -2423,15 +2491,13 @@
   'webview_instrumentation_test_apk': {
     'remove_from': [
       # This test frequently fails on Android, https://crbug.com/824959
-      'android-kitkat-arm-rel',
-      'KitKat Phone Tester (dbg)',
-      'KitKat Tablet Tester',
+      'android-lollipop-arm-rel',
       # matching android builders, the test fails on these.
       'ToTAndroid',
       'android-asan',  # https://crbug.com/964562
       # On chromium.swarm, this should possibly be being run (or removed
       # from android-marshmallow-arm64-rel-swarming).
-      'android-kitkat-arm-rel-swarming',
+      'android-lollipop-arm-rel-swarming',
       'android-code-coverage-native', # https://crbug.com/1018431
     ],
     'modifications': {

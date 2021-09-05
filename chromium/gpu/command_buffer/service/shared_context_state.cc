@@ -5,14 +5,17 @@
 #include "gpu/command_buffer/service/shared_context_state.h"
 
 #include "base/strings/stringprintf.h"
+#include "base/system/sys_info.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
+#include "build/build_config.h"
 #include "components/crash/core/common/crash_key.h"
 #include "gpu/command_buffer/common/activity_flags.h"
 #include "gpu/command_buffer/service/context_state.h"
 #include "gpu/command_buffer/service/gl_context_virtual.h"
 #include "gpu/command_buffer/service/service_transfer_cache.h"
 #include "gpu/command_buffer/service/service_utils.h"
+#include "gpu/command_buffer/service/skia_utils.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "gpu/config/skia_limits.h"
 #include "gpu/vulkan/buildflags.h"
@@ -29,6 +32,10 @@
 #include "gpu/vulkan/vulkan_device_queue.h"
 #endif
 
+#if defined(OS_ANDROID)
+#include "gpu/config/gpu_finch_features.h"
+#endif
+
 #if defined(OS_FUCHSIA)
 #include "gpu/vulkan/fuchsia/vulkan_fuchsia_ext.h"
 #endif
@@ -43,6 +50,20 @@
 
 namespace {
 static constexpr size_t kInitialScratchDeserializationBufferSize = 1024;
+
+size_t MaxNumSkSurface() {
+  static constexpr size_t kNormalMaxNumSkSurface = 16;
+#if defined(OS_ANDROID)
+  static constexpr size_t kLowEndMaxNumSkSurface = 4;
+  if (base::SysInfo::IsLowEndDevice()) {
+    return kLowEndMaxNumSkSurface;
+  } else {
+    return kNormalMaxNumSkSurface;
+  }
+#else
+  return kNormalMaxNumSkSurface;
+#endif
+}
 }
 
 namespace gpu {
@@ -99,7 +120,8 @@ SharedContextState::SharedContextState(
       share_group_(std::move(share_group)),
       context_(context),
       real_context_(std::move(context)),
-      surface_(std::move(surface)) {
+      surface_(std::move(surface)),
+      sk_surface_cache_(MaxNumSkSurface()) {
   if (GrContextIsVulkan()) {
 #if BUILDFLAG(ENABLE_VULKAN)
     gr_context_ = vk_context_provider_->GetGrContext();
@@ -189,18 +211,12 @@ void SharedContextState::InitializeGrContext(
 
   if (GrContextIsGL()) {
     DCHECK(context_->IsCurrent(nullptr));
-
-    std::vector<const char*> blacklisted_extensions;
-    constexpr char kQualcommTiledRendering[] = "GL_QCOM_tiled_rendering";
-    // We rely on |enable_threaded_texture_mailboxes| to limit the
-    // workaround to webview only.
-    if (workarounds.disable_qcomm_tiled_rendering &&
-        gpu_preferences.enable_threaded_texture_mailboxes) {
-      blacklisted_extensions.push_back(kQualcommTiledRendering);
-    }
+    bool use_version_es2 = false;
+#if defined(OS_ANDROID)
+    use_version_es2 = base::FeatureList::IsEnabled(features::kUseGles2ForOopR);
+#endif
     sk_sp<GrGLInterface> interface(gl::init::CreateGrGLInterface(
-        *context_->GetVersionInfo(), workarounds.use_es2_for_oopr,
-        progress_reporter, blacklisted_extensions));
+        *context_->GetVersionInfo(), use_version_es2, progress_reporter));
     if (!interface) {
       LOG(ERROR) << "OOP raster support disabled: GrGLInterface creation "
                     "failed.";
@@ -222,14 +238,9 @@ void SharedContextState::InitializeGrContext(
     // affect text rendering, make sure to match the capabilities initialized
     // in GetCapabilities and ensuring these are also used by the
     // PaintOpBufferSerializer.
-    GrContextOptions options;
-    if (GrContextIsMetal()) {
-      options.fRuntimeProgramCacheSize = 1024;
-    }
+    GrContextOptions options = GetDefaultGrContextOptions(GrContextType::kGL);
     options.fDriverBugWorkarounds =
         GrDriverBugWorkarounds(workarounds.ToIntSet());
-    options.fDisableCoverageCountingPaths = true;
-    options.fGlyphCacheTextureMaximumBytes = glyph_cache_max_texture_bytes;
     options.fPersistentCache = cache;
     options.fAvoidStencilBuffers = workarounds.avoid_stencil_buffers;
     if (workarounds.disable_program_disk_cache) {
@@ -239,9 +250,6 @@ void SharedContextState::InitializeGrContext(
     options.fShaderErrorHandler = this;
     if (gpu_preferences.force_max_texture_size)
       options.fMaxTextureSizeOverride = gpu_preferences.force_max_texture_size;
-    // TODO(csmartdalton): enable internal multisampling after the related Skia
-    // rolls are in.
-    options.fInternalMultisampleCount = 0;
     owned_gr_context_ = GrContext::MakeGL(std::move(interface), options);
     gr_context_ = owned_gr_context_.get();
   }
@@ -295,6 +303,18 @@ bool SharedContextState::InitializeGL(
     return false;
   }
 
+  const GLint kGLES2RequiredMinimumTextureUnits = 8u;
+  GLint max_texture_units = 0;
+  api->glGetIntegervFn(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &max_texture_units);
+  if (max_texture_units < kGLES2RequiredMinimumTextureUnits) {
+    LOG(ERROR)
+        << "SharedContextState::InitializeGL failure max_texture_units : "
+        << max_texture_units << " is less that minimum required : "
+        << kGLES2RequiredMinimumTextureUnits;
+    feature_info_ = nullptr;
+    return false;
+  }
+
   context_state_ = std::make_unique<gles2::ContextState>(
       feature_info_.get(), false /* track_texture_and_sampler_units */);
 
@@ -306,6 +326,11 @@ bool SharedContextState::InitializeGL(
   // if perf becomes a problem.
   context_state_->InitCapabilities(nullptr);
   context_state_->InitState(nullptr);
+
+  // Init |sampler_units|, ContextState uses the size of it to reset sampler to
+  // ground state.
+  // TODO(penghuang): remove it when GrContext is created with ES 3.0.
+  context_state_->sampler_units.resize(max_texture_units);
 
   GLenum driver_status = real_context_->CheckStickyGraphicsResetStatus();
   if (driver_status != GL_NO_ERROR) {
@@ -341,13 +366,13 @@ bool SharedContextState::InitializeGL(
       gpu_preferences.use_vulkan ==
           gpu::VulkanImplementationName::kForcedNative;
 
-  // Swiftshader GL and Vulkan report supporting external objects extensions,
-  // but they don't.
   bool gl_supports_memory_object =
       gl::g_current_gl_driver->ext.b_GL_EXT_memory_object_fd ||
+      gl::g_current_gl_driver->ext.b_GL_EXT_memory_object_win32 ||
       gl::g_current_gl_driver->ext.b_GL_ANGLE_memory_object_fuchsia;
   bool gl_supports_semaphore =
       gl::g_current_gl_driver->ext.b_GL_EXT_semaphore_fd ||
+      gl::g_current_gl_driver->ext.b_GL_EXT_semaphore_win32 ||
       gl::g_current_gl_driver->ext.b_GL_ANGLE_semaphore_fuchsia;
   bool vk_supports_external_memory = false;
   bool vk_supports_external_semaphore = false;
@@ -355,16 +380,17 @@ bool SharedContextState::InitializeGL(
   if (vk_context_provider_) {
     const auto& extensions =
         vk_context_provider_->GetDeviceQueue()->enabled_extensions();
-#if !defined(OS_FUCHSIA)
+#if defined(OS_WIN)
     vk_supports_external_memory =
         gfx::HasExtension(extensions, VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME) &&
-        gfx::HasExtension(extensions, VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
+        gfx::HasExtension(extensions,
+                          VK_KHR_EXTERNAL_MEMORY_WIN32_EXTENSION_NAME);
     vk_supports_external_semaphore =
         gfx::HasExtension(extensions,
                           VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME) &&
         gfx::HasExtension(extensions,
-                          VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME);
-#else
+                          VK_KHR_EXTERNAL_SEMAPHORE_WIN32_EXTENSION_NAME);
+#elif defined(OS_FUCHSIA)
     vk_supports_external_memory =
         gfx::HasExtension(extensions, VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME) &&
         gfx::HasExtension(extensions,
@@ -374,10 +400,21 @@ bool SharedContextState::InitializeGL(
                           VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME) &&
         gfx::HasExtension(extensions,
                           VK_FUCHSIA_EXTERNAL_SEMAPHORE_EXTENSION_NAME);
+#else
+    vk_supports_external_memory =
+        gfx::HasExtension(extensions, VK_KHR_EXTERNAL_MEMORY_EXTENSION_NAME) &&
+        gfx::HasExtension(extensions, VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
+    vk_supports_external_semaphore =
+        gfx::HasExtension(extensions,
+                          VK_KHR_EXTERNAL_SEMAPHORE_EXTENSION_NAME) &&
+        gfx::HasExtension(extensions,
+                          VK_KHR_EXTERNAL_SEMAPHORE_FD_EXTENSION_NAME);
 #endif
   }
 #endif  // BUILDFLAG(ENABLE_VULKAN)
 
+  // Swiftshader GL and Vulkan report supporting external objects extensions,
+  // but they don't.
   support_vulkan_external_object_ =
       !gl::g_current_gl_version->is_swiftshader && is_native_vulkan &&
       gl_supports_memory_object && gl_supports_semaphore &&
@@ -494,6 +531,7 @@ void SharedContextState::PurgeMemory(
       return;
     case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_MODERATE:
       // With moderate pressure, clear any unlocked resources.
+      sk_surface_cache_.Clear();
       gr_context_->purgeUnlockedResources(true /* scratchResourcesOnly */);
       UpdateSkiaOwnedMemorySize();
       scratch_deserialization_buffer_.resize(
@@ -502,6 +540,7 @@ void SharedContextState::PurgeMemory(
       break;
     case base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL:
       // With critical pressure, purge as much as possible.
+      sk_surface_cache_.Clear();
       gr_context_->freeGpuResources();
       UpdateSkiaOwnedMemorySize();
       scratch_deserialization_buffer_.resize(0u);

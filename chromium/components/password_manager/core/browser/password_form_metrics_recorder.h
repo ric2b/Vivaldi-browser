@@ -17,7 +17,7 @@
 #include "base/optional.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom.h"
 #include "components/autofill/core/common/password_form.h"
-#include "components/autofill/core/common/signatures_util.h"
+#include "components/autofill/core/common/signatures.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
@@ -253,6 +253,17 @@ class PasswordFormMetricsRecorder
     kMaxValue = kNoSavedCredentialsAndBlacklistedBySmartBubble,
   };
 
+  // Records which store(s) a filled password came from.
+  // These values are persisted to logs. Entries should not be renumbered and
+  // numeric values should never be reused.
+  enum class FillingSource {
+    kNotFilled = 0,
+    kFilledFromProfileStore = 1,
+    kFilledFromAccountStore = 2,
+    kFilledFromBothStores = 3,
+    kMaxValue = kFilledFromBothStores,
+  };
+
   // Records whether a password hash was saved or not on Chrome sign-in page.
   enum class ChromeSignInPageHashSaved {
     kPasswordTypedHashNotSaved = 0,
@@ -354,10 +365,14 @@ class PasswordFormMetricsRecorder
   // the successful submission is detected.
   void CalculateFillingAssistanceMetric(
       const autofill::FormData& submitted_form,
-      const std::set<base::string16>& saved_usernames,
-      const std::set<base::string16>& saved_passwords,
+      const std::set<std::pair<base::string16, autofill::PasswordForm::Store>>&
+          saved_usernames,
+      const std::set<std::pair<base::string16, autofill::PasswordForm::Store>>&
+          saved_passwords,
       bool is_blacklisted,
-      const std::vector<InteractionsStats>& interactions_stats);
+      const std::vector<InteractionsStats>& interactions_stats,
+      metrics_util::PasswordAccountStorageUsageLevel
+          account_storage_usage_level);
 
   // Calculates whether all field values in |submitted_form| came from
   // JavaScript. The result is stored in |js_only_input_|.
@@ -459,11 +474,16 @@ class PasswordFormMetricsRecorder
   bool password_hash_saved_on_chrome_sing_in_page_ = false;
 
   base::Optional<FillingAssistance> filling_assistance_;
+  base::Optional<FillingSource> filling_source_;
+  base::Optional<metrics_util::PasswordAccountStorageUsageLevel>
+      account_storage_usage_level_;
 
   bool possible_username_used_ = false;
   bool username_updated_in_bubble_ = false;
 
   base::Optional<JsOnlyInput> js_only_input_;
+
+  bool is_mixed_content_form_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(PasswordFormMetricsRecorder);
 };

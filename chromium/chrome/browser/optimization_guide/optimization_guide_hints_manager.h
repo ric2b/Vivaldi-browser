@@ -50,6 +50,7 @@ namespace optimization_guide {
 class HintCache;
 class HintsFetcherFactory;
 class OptimizationFilter;
+class OptimizationMetadata;
 class OptimizationGuideService;
 enum class OptimizationTargetDecision;
 enum class OptimizationTypeDecision;
@@ -96,9 +97,10 @@ class OptimizationGuideHintsManager
       const std::vector<optimization_guide::proto::OptimizationType>&
           optimization_types);
 
-  // Returns whether there have been any optimization types registered.
-  bool HasRegisteredOptimizationTypes() const {
-    return !registered_optimization_types_.empty();
+  // Returns the optimization types that are registered.
+  base::flat_set<optimization_guide::proto::OptimizationType>
+  registered_optimization_types() const {
+    return registered_optimization_types_;
   }
 
   // Returns whether there is an optimization filter loaded for
@@ -157,10 +159,14 @@ class OptimizationGuideHintsManager
                                    base::OnceClosure callback);
 
   // Notifies |this| that a navigation with redirect chain
-  // |navigation_redirect_chain| has finished. The |navigation_data| will be
-  // updated based on the current state of |this|.
-  void OnNavigationFinish(const std::vector<GURL>& navigation_redirect_chain,
-                          OptimizationGuideNavigationData* navigation_data);
+  // |navigation_redirect_chain| has finished.
+  void OnNavigationFinish(const std::vector<GURL>& navigation_redirect_chain);
+
+  // Add hints to the cache with the provided metadata. For testing only.
+  void AddHintForTesting(
+      const GURL& url,
+      optimization_guide::proto::OptimizationType optimization_type,
+      const base::Optional<optimization_guide::OptimizationMetadata>& metadata);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(OptimizationGuideHintsManagerTest, IsGoogleURL);
@@ -179,7 +185,13 @@ class OptimizationGuideHintsManager
       HintsFetched_AtSRP_ECT_SLOW_2G_NonHTTPOrHTTPSHostsRemoved);
   FRIEND_TEST_ALL_PREFIXES(
       OptimizationGuideHintsManagerFetchingTest,
-      HintsFetched_ExternalAndroidApp_ECT_SLOW_2G_NonHTTPOrHTTPSHostsRemoved);
+      HintsFetched_ExternalAndroidApp_ECT_SLOW_2G_NonHTTPOrHTTPSHostsRemovedAppWhitelisted);
+  FRIEND_TEST_ALL_PREFIXES(
+      OptimizationGuideHintsManagerFetchingTest,
+      HintsFetched_ExternalAndroidApp_ECT_SLOW_2G_NonHTTPOrHTTPSHostsRemovedNotAllAppsWhitelisted);
+  FRIEND_TEST_ALL_PREFIXES(
+      OptimizationGuideHintsManagerFetchingTest,
+      HintsFetched_ExternalAndroidApp_ECT_SLOW_2G_NonHTTPOrHTTPSHostsRemovedAppNotWhitelisted);
 
   // Processes the hints component.
   //
@@ -304,6 +316,11 @@ class OptimizationGuideHintsManager
   // search results page (www.google.*).
   bool IsGoogleURL(const GURL& url) const;
 
+  // Returns true if we can make a request for hints for |prediction|.
+  bool IsAllowedToFetchForNavigationPrediction(
+      const base::Optional<NavigationPredictorKeyedService::Prediction>
+          prediction) const;
+
   // NavigationPredictorKeyedService::Observer:
   void OnPredictionUpdated(
       const base::Optional<NavigationPredictorKeyedService::Prediction>
@@ -403,6 +420,10 @@ class OptimizationGuideHintsManager
   // used to create the initial fetcher for the batch update context.
   std::unique_ptr<optimization_guide::HintsFetcherFactory>
       hints_fetcher_factory_;
+
+  // The external app packages that have been approved for fetching from the
+  // remote Optimization Guide Service.
+  base::flat_set<std::string> external_app_packages_approved_for_fetch_;
 
   // The top host provider that can be queried. Not owned.
   optimization_guide::TopHostProvider* top_host_provider_ = nullptr;

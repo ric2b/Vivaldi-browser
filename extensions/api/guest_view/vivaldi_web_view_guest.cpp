@@ -10,6 +10,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
+#include "browser/startup_vivaldi_browser.h"
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/content_settings/mixed_content_settings_tab_helper.h"
 #include "chrome/browser/devtools/devtools_window.h"
@@ -29,10 +30,10 @@
 #include "chrome/browser/ui/tab_modal_confirm_dialog.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_utils.h"
-#include "chrome/browser/ui/webui/site_settings_helper.h"
-#include "chrome/common/content_settings_agent.mojom.h"
+#include "chrome/browser/ui/webui/settings/site_settings_helper.h"
 #include "chrome/common/chrome_render_frame.mojom.h"
 #include "chrome/common/render_messages.h"
+#include "components/content_settings/common/content_settings_agent.mojom.h"
 #include "components/guest_view/browser/guest_view_event.h"
 #include "components/guest_view/browser/guest_view_manager.h"
 #include "components/security_state/content/content_utils.h"
@@ -41,6 +42,7 @@
 #include "content/browser/browser_plugin/browser_plugin_guest.h" // nogncheck
 #include "content/browser/web_contents/web_contents_impl.h" // nogncheck
 #include "content/public/browser/devtools_agent_host.h"
+#include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/origin_util.h"
@@ -56,9 +58,12 @@
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/devtools/devtools_connector.h"
 #include "ui/vivaldi_browser_window.h"
 
 #if defined(USE_AURA)
+#include "ui/aura/client/cursor_client.h"
+#include "ui/aura/client/cursor_client_observer.h"
 #include "ui/aura/window.h"
 #endif
 
@@ -73,7 +78,7 @@ namespace extensions {
 namespace {
 
 void SetAllowRunningInsecureContent(content::RenderFrameHost* frame) {
-  mojo::AssociatedRemote<chrome::mojom::ContentSettingsAgent> renderer;
+  mojo::AssociatedRemote<content_settings::mojom::ContentSettingsAgent> renderer;
   frame->GetRemoteAssociatedInterfaces()->GetInterface(&renderer);
   renderer->SetAllowRunningInsecureContent();
 }
@@ -145,6 +150,29 @@ static std::string ContentSettingsTypeToString(
 }
 
 }  // namespace
+
+#if defined(USE_AURA)
+std::unique_ptr<WebViewGuest::CursorHider> WebViewGuest::CursorHider::Create(
+    aura::Window* window) {
+  return std::unique_ptr<CursorHider>(
+      base::WrapUnique(new CursorHider(window)));
+}
+
+void WebViewGuest::CursorHider::Hide() {
+  cursor_client_->HideCursor();
+}
+
+WebViewGuest::CursorHider::CursorHider(aura::Window* window) {
+  cursor_client_ = aura::client::GetCursorClient(window);
+  hide_timer_.Start(FROM_HERE,
+                    base::TimeDelta::FromMilliseconds(TIME_BEFORE_HIDING_MS),
+                    this, &CursorHider::Hide);
+}
+
+WebViewGuest::CursorHider::~CursorHider() {
+  cursor_client_->ShowCursor();
+}
+#endif  // USE_AURA
 
 WebContents::CreateParams WebViewGuest::GetWebContentsCreateParams(
     content::BrowserContext* context,
@@ -691,30 +719,36 @@ content::WebContentsDelegate* WebViewGuest::GetDevToolsConnector() {
 content::KeyboardEventProcessingResult WebViewGuest::PreHandleKeyboardEvent(
   content::WebContents* source,
   const content::NativeWebKeyboardEvent& event) {
+  DCHECK(source == web_contents());
   // We need override this at an early stage since |KeyboardEventManager| will
   // block the delegate(WebViewGuest::HandleKeyboardEvent) if the page does
   // event.preventDefault
+  bool handled = false;
   if (event.windows_key_code == ui::VKEY_ESCAPE) {
     // Go out of fullscreen or mouse-lock and pass the event as
     // handled if any of these modes are ended.
     Browser* browser = chrome::FindBrowserWithWebContents(web_contents());
     if (browser && browser->is_vivaldi()) {
-      VivaldiBrowserWindow* app_win =
-          static_cast<VivaldiBrowserWindow*>(browser->window());
-      // unlock mouse first
+      // If we have both an html5 full screen and a mouse lock, follow Chromium
+      // and unlock both.
+      //
+      // TODO(igor@vivaldi.com): Find out if we should check for
+      // rwhv->IsKeyboardLocked() here and unlock the keyboard as well.
       content::RenderWidgetHostView* rwhv =
           web_contents()->GetMainFrame()->GetView();
       if (rwhv->IsMouseLocked()) {
         rwhv->UnlockMouse();
-        return content::KeyboardEventProcessingResult::HANDLED;
-      } else if (GuestMadeEmbedderFullscreen()) {
+        handled = true;
+      }
+      if (IsFullscreenForTabOrPending(web_contents())) {
         // Go out of fullscreen if this was a webpage caused fullscreen.
         ExitFullscreenModeForTab(web_contents());
-        app_win->SetFullscreen(false);
-        return content::KeyboardEventProcessingResult::HANDLED;
+        handled = true;
       }
     }
   }
+  if (handled)
+    return content::KeyboardEventProcessingResult::HANDLED;
   return content::KeyboardEventProcessingResult::NOT_HANDLED;
 }
 

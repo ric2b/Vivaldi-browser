@@ -6,10 +6,9 @@
 
 #include "content/public/common/content_client.h"
 #include "content/public/renderer/render_thread.h"
-#include "content/public/test/web_test_support.h"
 #include "content/shell/common/web_test/web_test_switches.h"
-#include "content/shell/test_runner/test_interfaces.h"
-#include "content/shell/test_runner/test_runner.h"
+#include "content/shell/renderer/web_test/test_interfaces.h"
+#include "content/shell/renderer/web_test/test_runner.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_registry.h"
 #include "third_party/blink/public/web/blink.h"
 
@@ -29,10 +28,9 @@ WebTestRenderThreadObserver::WebTestRenderThreadObserver() {
   g_instance = this;
   RenderThread::Get()->AddObserver(this);
 
-  EnableRendererWebTestMode();
   blink::SetWebTestMode(true);
 
-  test_interfaces_ = std::make_unique<test_runner::TestInterfaces>();
+  test_interfaces_ = std::make_unique<TestInterfaces>();
   test_interfaces_->ResetAll();
 }
 
@@ -44,17 +42,17 @@ WebTestRenderThreadObserver::~WebTestRenderThreadObserver() {
 void WebTestRenderThreadObserver::RegisterMojoInterfaces(
     blink::AssociatedInterfaceRegistry* associated_interfaces) {
   associated_interfaces->AddInterface(base::BindRepeating(
-      &WebTestRenderThreadObserver::OnWebTestControlAssociatedRequest,
+      &WebTestRenderThreadObserver::OnWebTestRenderThreadAssociatedRequest,
       base::Unretained(this)));
 }
 
 void WebTestRenderThreadObserver::UnregisterMojoInterfaces(
     blink::AssociatedInterfaceRegistry* associated_interfaces) {
-  associated_interfaces->RemoveInterface(mojom::WebTestControl::Name_);
+  associated_interfaces->RemoveInterface(mojom::WebTestRenderThread::Name_);
 }
 
-void WebTestRenderThreadObserver::OnWebTestControlAssociatedRequest(
-    mojo::PendingAssociatedReceiver<mojom::WebTestControl> receiver) {
+void WebTestRenderThreadObserver::OnWebTestRenderThreadAssociatedRequest(
+    mojo::PendingAssociatedReceiver<mojom::WebTestRenderThread> receiver) {
   receiver_.reset();
   receiver_.Bind(std::move(receiver));
 }

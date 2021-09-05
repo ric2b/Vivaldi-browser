@@ -7,6 +7,12 @@
 
 #include "ios/chrome/browser/overlays/public/overlay_request_config.h"
 #include "ios/chrome/browser/overlays/public/overlay_response_info.h"
+#include "url/gurl.h"
+
+// Name of UMA User Action logged when user taps Sign In button.
+extern const char kHttpAuthSignInTappedActionName[];
+// Name of UMA User Action logged when user taps Cancel button.
+extern const char kHttpAuthCancelTappedActionName[];
 
 // Configuration object for OverlayRequests for HTTP authentication challenges.
 class HTTPAuthOverlayRequestConfig
@@ -14,6 +20,8 @@ class HTTPAuthOverlayRequestConfig
  public:
   ~HTTPAuthOverlayRequestConfig() override;
 
+  // The URL of the page requesting authentication.
+  const GURL& url() const { return url_; }
   // The message to be displayed in the auth dialog.
   const std::string& message() const { return message_; }
   // The default text to use for the username field.
@@ -21,9 +29,14 @@ class HTTPAuthOverlayRequestConfig
 
  private:
   OVERLAY_USER_DATA_SETUP(HTTPAuthOverlayRequestConfig);
-  HTTPAuthOverlayRequestConfig(const std::string& message,
+  HTTPAuthOverlayRequestConfig(const GURL& url,
+                               const std::string& message,
                                const std::string& default_username);
 
+  // OverlayUserData:
+  void CreateAuxiliaryData(base::SupportsUserData* user_data) override;
+
+  const GURL url_;
   const std::string message_;
   const std::string default_username_;
 };

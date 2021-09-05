@@ -36,8 +36,10 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.c
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.createTabs;
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.enterTabSwitcher;
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.getSwipeToDismissAction;
-import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.isShowingPopupTabList;
+import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.isPopupTabListCompletelyHidden;
+import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.isPopupTabListCompletelyShowing;
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.mergeAllNormalTabsToAGroup;
+import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.prepareTabsWithThumbnail;
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.rotateDeviceToOrientation;
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.verifyShowingPopupTabList;
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.verifyTabStripFaviconCount;
@@ -113,7 +115,7 @@ public class TabGridDialogTest {
     @Before
     public void setUp() {
         TabUiFeatureUtilities.setTabManagementModuleSupportedForTesting(true);
-        mActivityTestRule.startMainActivityFromLauncher();
+        mActivityTestRule.startMainActivityOnBlankPage();
         Layout layout = mActivityTestRule.getActivity().getLayoutManager().getOverviewLayout();
         assertTrue(layout instanceof StartSurfaceLayout);
         CriteriaHelper.pollUiThread(mActivityTestRule.getActivity()
@@ -528,6 +530,28 @@ public class TabGridDialogTest {
         verifyFirstCardTitle(CUSTOMIZED_TITLE2);
     }
 
+    @Test
+    @MediumTest
+    public void testDialogInitialShowFromStrip() throws Exception {
+        final ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        prepareTabsWithThumbnail(mActivityTestRule, 2, 0, "about:blank");
+        enterTabSwitcher(cta);
+        verifyTabSwitcherCardCount(cta, 2);
+
+        // Create a tab group.
+        mergeAllNormalTabsToAGroup(cta);
+        verifyTabSwitcherCardCount(cta, 1);
+
+        // Restart the activity and open the dialog from strip to check the initial setup of dialog.
+        TabUiTestHelper.finishActivity(cta);
+        mActivityTestRule.startMainActivityFromLauncher();
+        CriteriaHelper.pollUiThread(mActivityTestRule.getActivity()
+                                            .getTabModelSelector()
+                                            .getTabModelFilterProvider()
+                                            .getCurrentTabModelFilter()::isTabModelRestored);
+        openDialogFromStripAndVerify(mActivityTestRule.getActivity(), 2, null);
+    }
+
     private void openDialogFromTabSwitcherAndVerify(
             ChromeTabbedActivity cta, int tabCount, String customizedTitle) {
         clickFirstCardFromTabSwitcher(cta);
@@ -546,6 +570,7 @@ public class TabGridDialogTest {
             ChromeTabbedActivity cta, int tabCount, String customizedTitle) {
         verifyShowingPopupTabList(cta, tabCount);
 
+        // Check contents within dialog.
         onView(allOf(withParent(withId(R.id.main_content)), withId(R.id.title)))
                 .inRoot(withDecorView(not(cta.getWindow().getDecorView())))
                 .check((v, noMatchException) -> {
@@ -560,10 +585,23 @@ public class TabGridDialogTest {
                     Assert.assertEquals(title, titleText.getText().toString());
                     assertFalse(v.isFocused());
                 });
+
+        // Check dummy views used for animations are not visible.
+        onView(allOf(withParent(withId(R.id.dialog_parent_view)), withId(R.id.dialog_frame)))
+                .inRoot(withDecorView(not(cta.getWindow().getDecorView())))
+                .check((v, e) -> { assertEquals(0f, v.getAlpha(), 0.0); });
+        onView(allOf(withParent(withId(R.id.dialog_parent_view)),
+                       withId(R.id.dialog_animation_card_view)))
+                .inRoot(withDecorView(not(cta.getWindow().getDecorView())))
+                .check((v, e) -> { assertEquals(0f, v.getAlpha(), 0.0); });
     }
 
     private boolean isDialogShowing(ChromeTabbedActivity cta) {
-        return isShowingPopupTabList(cta);
+        return isPopupTabListCompletelyShowing(cta);
+    }
+
+    private boolean isDialogHidden(ChromeTabbedActivity cta) {
+        return isPopupTabListCompletelyHidden(cta);
     }
 
     private void showDialogFromStrip(ChromeTabbedActivity cta) {
@@ -645,7 +683,7 @@ public class TabGridDialogTest {
     }
 
     private void waitForDialogHidingAnimation(ChromeTabbedActivity cta) {
-        CriteriaHelper.pollInstrumentationThread(() -> !isDialogShowing(cta));
+        CriteriaHelper.pollInstrumentationThread(() -> isDialogHidden(cta));
     }
 
     private void waitForDialogHidingAnimationInTabSwitcher(ChromeTabbedActivity cta) {

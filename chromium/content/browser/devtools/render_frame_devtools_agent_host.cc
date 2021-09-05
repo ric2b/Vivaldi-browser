@@ -21,6 +21,7 @@
 #include "content/browser/devtools/devtools_manager.h"
 #include "content/browser/devtools/devtools_renderer_channel.h"
 #include "content/browser/devtools/devtools_session.h"
+#include "content/browser/devtools/protocol/audits_handler.h"
 #include "content/browser/devtools/protocol/background_service_handler.h"
 #include "content/browser/devtools/protocol/browser_handler.h"
 #include "content/browser/devtools/protocol/dom_handler.h"
@@ -29,6 +30,7 @@
 #include "content/browser/devtools/protocol/input_handler.h"
 #include "content/browser/devtools/protocol/inspector_handler.h"
 #include "content/browser/devtools/protocol/io_handler.h"
+#include "content/browser/devtools/protocol/log_handler.h"
 #include "content/browser/devtools/protocol/memory_handler.h"
 #include "content/browser/devtools/protocol/network_handler.h"
 #include "content/browser/devtools/protocol/overlay_handler.h"
@@ -91,12 +93,14 @@ bool ShouldCreateDevToolsForHost(RenderFrameHost* rfh) {
 }
 
 bool ShouldCreateDevToolsForNode(FrameTreeNode* ftn) {
-  return !ftn->parent() || ftn->current_frame_host()->IsCrossProcessSubframe();
+  return !ftn->parent() ||
+         (ftn->current_frame_host() &&
+          ftn->current_frame_host()->IsCrossProcessSubframe());
 }
 
 FrameTreeNode* GetFrameTreeNodeAncestor(FrameTreeNode* frame_tree_node) {
   while (frame_tree_node && !ShouldCreateDevToolsForNode(frame_tree_node))
-    frame_tree_node = frame_tree_node->parent();
+    frame_tree_node = FrameTreeNode::From(frame_tree_node->parent());
   DCHECK(frame_tree_node);
   return frame_tree_node;
 }
@@ -104,8 +108,8 @@ FrameTreeNode* GetFrameTreeNodeAncestor(FrameTreeNode* frame_tree_node) {
 }  // namespace
 
 // static
-scoped_refptr<DevToolsAgentHost>
-DevToolsAgentHost::GetOrCreateFor(WebContents* web_contents) {
+scoped_refptr<DevToolsAgentHost> DevToolsAgentHost::GetOrCreateFor(
+    WebContents* web_contents) {
   FrameTreeNode* node =
       static_cast<WebContentsImpl*>(web_contents)->GetFrameTree()->root();
   // TODO(dgozman): this check should not be necessary. See
@@ -288,6 +292,7 @@ bool RenderFrameDevToolsAgentHost::AttachSession(DevToolsSession* session) {
   auto emulation_handler = std::make_unique<protocol::EmulationHandler>();
   protocol::EmulationHandler* emulation_handler_ptr = emulation_handler.get();
 
+  session->AddHandler(std::make_unique<protocol::AuditsHandler>());
   session->AddHandler(std::make_unique<protocol::BackgroundServiceHandler>());
   auto browser_handler = std::make_unique<protocol::BrowserHandler>(
       session->GetClient()->MayWriteLocalFiles());
@@ -338,6 +343,7 @@ bool RenderFrameDevToolsAgentHost::AttachSession(DevToolsSession* session) {
     session->AddHandler(std::make_unique<protocol::TracingHandler>(
         frame_tree_node_, GetIOContext()));
   }
+  session->AddHandler(std::make_unique<protocol::LogHandler>());
 #if !defined(OS_ANDROID)
   session->AddHandler(std::make_unique<protocol::WebAuthnHandler>());
 #endif  // !defined(OS_ANDROID)
@@ -660,7 +666,7 @@ void RenderFrameDevToolsAgentHost::ConnectWebContents(WebContents* wc) {
 std::string RenderFrameDevToolsAgentHost::GetParentId() {
   if (IsChildFrame()) {
     FrameTreeNode* frame_tree_node =
-        GetFrameTreeNodeAncestor(frame_tree_node_->parent());
+        GetFrameTreeNodeAncestor(frame_tree_node_->parent()->frame_tree_node());
     return RenderFrameDevToolsAgentHost::GetOrCreateFor(frame_tree_node)
         ->GetId();
   }

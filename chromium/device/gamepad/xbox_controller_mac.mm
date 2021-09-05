@@ -17,8 +17,8 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/check_op.h"
 #include "base/location.h"
-#include "base/logging.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/scoped_ioobject.h"
 #include "base/sequenced_task_runner.h"
@@ -380,7 +380,9 @@ XboxControllerMac::OpenDeviceResult XboxControllerMac::OpenDevice(
   // elsewhere.
   DCHECK_NE(kXInputTypeNone,
             GamepadIdList::Get().GetXInputType(vendor_id, product_id));
-  RecordConnectedGamepad(vendor_id, product_id);
+  GamepadId gamepad_id = GamepadIdList::Get().GetGamepadId(
+      base::StringPiece(), vendor_id, product_id);
+  RecordConnectedGamepad(gamepad_id);
 
   // Only genuine Microsoft Xbox, Xbox 360, and Xbox One devices are supported.
   if (vendor_id != kVendorMicrosoft)

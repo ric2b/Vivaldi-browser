@@ -35,9 +35,7 @@ void UpdateVersionUIDataSource(content::WebUIDataSource* html_source) {
                              IDS_VIVALDI_VERSION_UI_LICENSE,
                              base::ASCIIToUTF16(chrome::kChromiumProjectURL),
                              base::ASCIIToUTF16(chrome::kChromeUICreditsURL)));
-  base::string16 tos = l10n_util::GetStringFUTF16(
-      IDS_ABOUT_TERMS_OF_SERVICE, base::UTF8ToUTF16(chrome::kChromeUITermsURL));
-  html_source->AddString("productTOS", tos);
+  html_source->AddLocalizedString("productTOS", IDS_ABOUT_TERMS_OF_SERVICE);
   html_source->AddResourcePath("vivaldi_about_version.js",
                                IDR_VIVALDI_VERSION_UI_JS);
 }

@@ -70,6 +70,12 @@ const size_t kWaitTimeForNewNetworkSecs = 10;
 
 const size_t kMinRetryTimeForDefaultNetworkSecs = 1;
 
+// Default value for maximum number of consecutive pings that can be sent
+// with aggressive initial retransmittable on wire timeout if there is no new
+// data received. After which, the timeout will be exponentially back off until
+// exceeds the default ping timeout.
+const int kDefaultMaxAggressiveRetransmittableOnWirePingCount = 200;
+
 // Maximum RTT time for this session when set initial timeout for probing
 // network.
 const int kDefaultRTTMilliSecs = 300;
@@ -102,36 +108,10 @@ void RecordUnexpectedNotGoingAway(Location location) {
                             NUM_LOCATIONS);
 }
 
-void RecordConnectionCloseErrorCode(const quic::QuicConnectionCloseFrame& frame,
-                                    quic::ConnectionCloseSource source,
-                                    const std::string& hostname,
-                                    bool handshake_confirmed) {
-  bool is_google_host = HasGoogleHost(GURL("https://" + hostname));
-  std::string histogram = "Net.QuicSession.ConnectionCloseErrorCode";
-
-  uint64_t error = 0;
-  if (source == quic::ConnectionCloseSource::FROM_PEER) {
-    histogram += "Server";
-    // When receiving a CONNECTION_CLOSE frame, record error code received on
-    // the wire.
-    switch (frame.close_type) {
-      case quic::GOOGLE_QUIC_CONNECTION_CLOSE:
-        error = frame.quic_error_code;
-        break;
-      case quic::IETF_QUIC_TRANSPORT_CONNECTION_CLOSE:
-        error = frame.transport_error_code;
-        histogram += "IetfTransport";
-        break;
-      case quic::IETF_QUIC_APPLICATION_CONNECTION_CLOSE:
-        error = frame.application_error_code;
-        histogram += "IetfApplication";
-    }
-  } else {
-    // When sending a CONNECTION_CLOSE frame, record QuicErrorCode.
-    histogram += "Client";
-    error = frame.extracted_error_code;
-  }
-
+void RecordConnectionCloseErrorCodeImpl(const std::string& histogram,
+                                        uint64_t error,
+                                        bool is_google_host,
+                                        bool handshake_confirmed) {
   base::UmaHistogramSparse(histogram, error);
 
   if (handshake_confirmed) {
@@ -141,14 +121,50 @@ void RecordConnectionCloseErrorCode(const quic::QuicConnectionCloseFrame& frame,
   }
 
   if (is_google_host) {
-    histogram += "Google";
-    base::UmaHistogramSparse(histogram, error);
+    base::UmaHistogramSparse(histogram + "Google", error);
 
     if (handshake_confirmed) {
-      base::UmaHistogramSparse(histogram + ".HandshakeConfirmed", error);
+      base::UmaHistogramSparse(histogram + "Google.HandshakeConfirmed", error);
     } else {
-      base::UmaHistogramSparse(histogram + ".HandshakeNotConfirmed", error);
+      base::UmaHistogramSparse(histogram + "Google.HandshakeNotConfirmed",
+                               error);
     }
+  }
+}
+
+void RecordConnectionCloseErrorCode(const quic::QuicConnectionCloseFrame& frame,
+                                    quic::ConnectionCloseSource source,
+                                    const std::string& hostname,
+                                    bool handshake_confirmed) {
+  bool is_google_host = HasGoogleHost(GURL("https://" + hostname));
+  std::string histogram = "Net.QuicSession.ConnectionCloseErrorCode";
+
+  if (source == quic::ConnectionCloseSource::FROM_SELF) {
+    // When sending a CONNECTION_CLOSE frame, it is sufficient to record
+    // |quic_error_code|.
+    histogram += "Client";
+    RecordConnectionCloseErrorCodeImpl(histogram, frame.quic_error_code,
+                                       is_google_host, handshake_confirmed);
+    return;
+  }
+
+  histogram += "Server";
+
+  // Record |quic_error_code|.  Note that when using IETF QUIC, this is
+  // extracted from the CONNECTION_CLOSE frame reason phrase, and might be
+  // QUIC_IETF_GQUIC_ERROR_MISSING.
+  RecordConnectionCloseErrorCodeImpl(histogram, frame.quic_error_code,
+                                     is_google_host, handshake_confirmed);
+
+  // For IETF QUIC frames, also record the error code received on the wire.
+  if (frame.close_type == quic::IETF_QUIC_TRANSPORT_CONNECTION_CLOSE) {
+    histogram += "IetfTransport";
+    RecordConnectionCloseErrorCodeImpl(histogram, frame.wire_error_code,
+                                       is_google_host, handshake_confirmed);
+  } else if (frame.close_type == quic::IETF_QUIC_APPLICATION_CONNECTION_CLOSE) {
+    histogram += "IetfApplication";
+    RecordConnectionCloseErrorCodeImpl(histogram, frame.wire_error_code,
+                                       is_google_host, handshake_confirmed);
   }
 }
 
@@ -851,6 +867,13 @@ QuicChromiumClientSession::QuicChromiumClientSession(
   if (!retransmittable_on_wire_timeout.IsZero()) {
     connection->set_initial_retransmittable_on_wire_timeout(
         retransmittable_on_wire_timeout);
+    if (GetQuicFlag(
+            FLAGS_quic_max_aggressive_retransmittable_on_wire_ping_count) ==
+        0) {
+      // Set a default value for this flag if no custom value is provided.
+      SetQuicFlag(FLAGS_quic_max_aggressive_retransmittable_on_wire_ping_count,
+                  kDefaultMaxAggressiveRetransmittableOnWirePingCount);
+    }
   }
 }
 
@@ -1128,7 +1151,7 @@ bool QuicChromiumClientSession::ShouldCreateOutgoingBidirectionalStream() {
   }
   if (!CanOpenNextOutgoingBidirectionalStream()) {
     DVLOG(1) << "Failed to create a new outgoing stream. "
-             << "Already " << GetNumOpenOutgoingStreams() << " open.";
+             << "Already " << GetNumActiveStreams() << " open.";
     return false;
   }
   if (goaway_received()) {
@@ -1175,11 +1198,11 @@ QuicChromiumClientSession::CreateOutgoingReliableStreamImpl(
   ActivateStream(base::WrapUnique(stream));
   ++num_total_streams_;
   UMA_HISTOGRAM_COUNTS_1M("Net.QuicSession.NumOpenStreams",
-                          GetNumOpenOutgoingStreams());
+                          GetNumActiveStreams());
   // The previous histogram puts 100 in a bucket betweeen 86-113 which does
   // not shed light on if chrome ever things it has more than 100 streams open.
   UMA_HISTOGRAM_BOOLEAN("Net.QuicSession.TooManyOpenStreams",
-                        GetNumOpenOutgoingStreams() > 100);
+                        GetNumActiveStreams() > 100);
   return stream;
 }
 
@@ -1504,33 +1527,41 @@ void QuicChromiumClientSession::OnCanCreateNewOutgoingStream(
 
 void QuicChromiumClientSession::OnConfigNegotiated() {
   quic::QuicSpdyClientSessionBase::OnConfigNegotiated();
-  if (!stream_factory_ || !config()->HasReceivedAlternateServerAddress())
+  if (!stream_factory_ || !stream_factory_->allow_server_migration() ||
+      (!config()->HasReceivedIPv6AlternateServerAddress() &&
+       !config()->HasReceivedIPv4AlternateServerAddress())) {
     return;
+  }
 
   // Server has sent an alternate address to connect to.
-  IPEndPoint new_address =
-      ToIPEndPoint(config()->ReceivedAlternateServerAddress());
   IPEndPoint old_address;
   GetDefaultSocket()->GetPeerAddress(&old_address);
 
   // Migrate only if address families match, or if new address family is v6,
   // since a v4 address should be reachable over a v6 network (using a
   // v4-mapped v6 address).
-  if (old_address.GetFamily() != new_address.GetFamily() &&
-      old_address.GetFamily() == ADDRESS_FAMILY_IPV4) {
-    return;
+  IPEndPoint new_address;
+  if (old_address.GetFamily() == ADDRESS_FAMILY_IPV6) {
+    if (config()->HasReceivedIPv6AlternateServerAddress()) {
+      new_address =
+          ToIPEndPoint(config()->ReceivedIPv6AlternateServerAddress());
+    } else {
+      new_address =
+          ToIPEndPoint(config()->ReceivedIPv4AlternateServerAddress());
+      // Use a v4-mapped v6 address.
+      new_address =
+          IPEndPoint(ConvertIPv4ToIPv4MappedIPv6(new_address.address()),
+                     new_address.port());
+    }
+  } else if (old_address.GetFamily() == ADDRESS_FAMILY_IPV4) {
+    if (config()->HasReceivedIPv4AlternateServerAddress()) {
+      new_address =
+          ToIPEndPoint(config()->ReceivedIPv4AlternateServerAddress());
+    } else {
+      return;
+    }
   }
-
-  if (old_address.GetFamily() != new_address.GetFamily()) {
-    DCHECK_EQ(old_address.GetFamily(), ADDRESS_FAMILY_IPV6);
-    DCHECK_EQ(new_address.GetFamily(), ADDRESS_FAMILY_IPV4);
-    // Use a v4-mapped v6 address.
-    new_address = IPEndPoint(ConvertIPv4ToIPv4MappedIPv6(new_address.address()),
-                             new_address.port());
-  }
-
-  if (!stream_factory_->allow_server_migration())
-    return;
+  DCHECK_EQ(new_address.GetFamily(), old_address.GetFamily());
 
   // Specifying kInvalidNetworkHandle for the |network| parameter
   // causes the session to use the default network for the new socket.
@@ -1607,7 +1638,7 @@ void QuicChromiumClientSession::OnConnectionClosed(
   RecordConnectionCloseErrorCode(frame, source, session_key_.host(),
                                  OneRttKeysAvailable());
 
-  const quic::QuicErrorCode error = frame.extracted_error_code;
+  const quic::QuicErrorCode error = frame.quic_error_code;
   const std::string& error_details = frame.error_details;
 
   if (source == quic::ConnectionCloseSource::FROM_PEER) {
@@ -1669,9 +1700,9 @@ void QuicChromiumClientSession::OnConnectionClosed(
   if (error == quic::QUIC_NETWORK_IDLE_TIMEOUT) {
     UMA_HISTOGRAM_COUNTS_1M(
         "Net.QuicSession.ConnectionClose.NumOpenStreams.TimedOut",
-        GetNumOpenOutgoingStreams());
+        GetNumActiveStreams());
     if (OneRttKeysAvailable()) {
-      if (GetNumOpenOutgoingStreams() > 0) {
+      if (GetNumActiveStreams() > 0) {
         UMA_HISTOGRAM_BOOLEAN(
             "Net.QuicSession.TimedOutWithOpenStreams.HasUnackedPackets",
             connection()->sent_packet_manager().HasInFlightPackets());
@@ -1688,7 +1719,7 @@ void QuicChromiumClientSession::OnConnectionClosed(
     } else {
       UMA_HISTOGRAM_COUNTS_1M(
           "Net.QuicSession.ConnectionClose.NumOpenStreams.HandshakeTimedOut",
-          GetNumOpenOutgoingStreams());
+          GetNumActiveStreams());
       UMA_HISTOGRAM_COUNTS_1M(
           "Net.QuicSession.ConnectionClose.NumTotalStreams.HandshakeTimedOut",
           num_total_streams_);
@@ -1703,9 +1734,12 @@ void QuicChromiumClientSession::OnConnectionClosed(
     // then QUIC traffic has become blackholed.
     if (stream_factory_ && (error == quic::QUIC_TOO_MANY_RTOS ||
                             (error == quic::QUIC_NETWORK_IDLE_TIMEOUT &&
-                             GetNumOpenOutgoingStreams() > 0))) {
+                             GetNumActiveStreams() > 0))) {
       stream_factory_->OnBlackholeAfterHandshakeConfirmed(this);
     }
+    UMA_HISTOGRAM_COUNTS_100(
+        "Net.QuicSession.CryptoRetransmitCount.HandshakeConfirmed",
+        connection()->GetStats().crypto_retransmit_count);
   } else {
     if (error == quic::QUIC_PUBLIC_RESET) {
       RecordHandshakeFailureReason(HANDSHAKE_FAILURE_PUBLIC_RESET);
@@ -1720,6 +1754,9 @@ void QuicChromiumClientSession::OnConnectionClosed(
           "Net.QuicSession.ConnectionClose.HandshakeFailureUnknown.QuicError",
           error);
     }
+    UMA_HISTOGRAM_COUNTS_100(
+        "Net.QuicSession.CryptoRetransmitCount.HandshakeNotConfirmed",
+        connection()->GetStats().crypto_retransmit_count);
   }
 
   base::UmaHistogramSparse("Net.QuicSession.QuicVersion",
@@ -2841,7 +2878,7 @@ base::Value QuicChromiumClientSession::GetInfoAsValue(
   base::DictionaryValue dict;
   dict.SetString("version",
                  QuicVersionToString(connection()->transport_version()));
-  dict.SetInteger("open_streams", GetNumOpenOutgoingStreams());
+  dict.SetInteger("open_streams", GetNumActiveStreams());
   std::unique_ptr<base::ListValue> stream_list(new base::ListValue());
   for (StreamMap::const_iterator it = stream_map().begin();
        it != stream_map().end(); ++it) {

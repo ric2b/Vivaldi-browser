@@ -122,14 +122,46 @@ struct DeviceProperties {
   std::string language;
 };
 
+// Extract information generated from |QuickAnswersRequest|.
+struct PreprocessedOutput {
+  PreprocessedOutput();
+  PreprocessedOutput(const PreprocessedOutput& other);
+  ~PreprocessedOutput();
+
+  // Predicted intent.
+  IntentType intent_type = IntentType::kUnknown;
+
+  // The text extracted from the selected_text associated with the intent.
+  std::string intent_text;
+
+  // Rewritten query based on |intent_type| and |intent_text|.
+  std::string query;
+};
+
+// Structure of quick answers request context, including device properties and
+// surrounding text.
+struct Context {
+  // Device specific properties.
+  DeviceProperties device_properties;
+
+  std::string surrounding_text;
+};
+
 // Structure to describe an quick answer request including selected content and
 // context.
 struct QuickAnswersRequest {
+  QuickAnswersRequest();
+  QuickAnswersRequest(const QuickAnswersRequest& other);
+  ~QuickAnswersRequest();
+
   // The selected Text.
   std::string selected_text;
 
-  // Device specific properties.
-  DeviceProperties device_properties;
+  // Output of processed result.
+  PreprocessedOutput preprocessed_output;
+
+  // Context information.
+  Context context;
 
   // TODO(llin): Add context and other targeted objects (e.g: images, links,
   // etc).

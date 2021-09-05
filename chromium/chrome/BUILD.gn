@@ -83,25 +83,6 @@ if (is_win) {
     ]
     deps = [ ":chrome_initial" ]
   }
-
-  if (!is_multi_dll_chrome) {
-    # Remove the chrome_child.dll build artifacts from the build directory if
-    # they're not needed to avoid packaging them in the installer.
-    # TODO(sebmarchand): Remove this once the multi DLL build isn't supported.
-    action("remove_chrome_child_artifacts") {
-      script = "//build/rm.py"
-      stamp = "$target_gen_dir/chrome_child_clean_up_stamp"
-      outputs = [ stamp ]
-      args = [
-        "--stamp",
-        rebase_path(stamp, root_build_dir),
-        "-f",
-        "chrome_child.dll",
-        "chrome_child.dll.lib",
-        "chrome_child.dll.pdb",
-      ]
-    }
-  }
 }
 
 # This target exists above chrome and it's main components in the dependency
@@ -118,10 +99,7 @@ group("assert_no_deps") {
   }
 
   if (is_win) {
-    deps += [
-      ":chrome_dll",
-      ":main_dll",
-    ]
+    deps += [ ":chrome_dll" ]
   }
 
   # This should not pull in installer strings. This is will bloat the binary
@@ -129,7 +107,6 @@ group("assert_no_deps") {
   # //chrome/installer/util/BUILD.gn.
   assert_no_deps = [ "//chrome/installer/util:strings" ]
 }
-
 if (!is_android && !is_mac) {
   group("chrome") {
     public_deps = [ ":chrome_initial" ]
@@ -258,7 +235,7 @@ if (!is_android && !is_mac) {
 
         # Needed to use the master_preferences functions
         "//chrome/installer/util:with_no_strings",
-        "//content/public/app:both",
+        "//content/public/app",
         "//content/public/common:service_names",
 
         # For headless mode.
@@ -284,13 +261,6 @@ if (!is_android && !is_mac) {
         inputs = [ version_script ]
         ldflags += [ "-Wl,--version-script=" +
                      rebase_path(version_script, root_build_dir) ]
-      }
-
-      if (use_x11) {
-        configs += [
-          "//build/config/linux:x11",
-          "//build/config/linux:xext",
-        ]
       }
     }
 
@@ -329,27 +299,11 @@ if (!is_android && !is_mac) {
       "//chrome/browser/resources/media/mei_preload:component",
       "//third_party/widevine/cdm",
     ]
-
-    if (is_multi_dll_chrome) {
-      defines += [ "CHROME_MULTIPLE_DLL" ]
-      data_deps += [ ":chrome_child" ]
-    }
   }
 }  # !is_android && !is_mac
 
 if (is_win) {
-  # This target is a forwarding target to compile the necessary DLLs used
-  # by Chrome.
-  group("chrome_dll") {
-    data_deps = [ ":main_dll" ]
-    if (is_multi_dll_chrome) {
-      data_deps += [ ":chrome_child" ]
-    } else {
-      deps = [ ":remove_chrome_child_artifacts" ]
-    }
-  }
-
-  shared_library("main_dll") {
+  shared_library("chrome_dll") {
     configs += [ "//build/config/compiler:wexit_time_destructors" ]
     defines = []
 
@@ -391,82 +345,20 @@ if (is_win) {
     ]
 
     configs += [ "//build/config/win:delayloads" ]
-    if (is_multi_dll_chrome) {
-      configs += [ "//build/config/win:delayloads_not_for_child_dll" ]
-    }
 
     if (use_aura) {
       deps += [ "//ui/compositor" ]
     }
 
-    if (is_multi_dll_chrome) {
-      defines += [ "CHROME_MULTIPLE_DLL_BROWSER" ]
-      deps += [ "//content/public/app:browser" ]
-      assert_no_deps = [
-        # The browser DLL may not depend on blink or v8.
-        "//gin",
-        "//third_party/blink/public:blink",
-        "//v8",
-
-        # Ditto for PDFium.
-        "//third_party/pdfium",
-      ]
-    } else {
-      deps += [
-        ":child_dependencies",
-        "//content/public/app:both",
-        "//headless:headless_renderer",
-      ]
-    }
+    deps += [
+      ":child_dependencies",
+      "//content/public/app",
+      "//headless:headless_renderer",
+    ]
 
     configs += [ "//build/config/compiler:chrome_orderfile_config" ]
   }
 
-  if (is_multi_dll_chrome) {
-    # This manifest matches what GYP produced. It may not even be necessary.
-    windows_manifest("chrome_child_manifest") {
-      sources = [ as_invoker_manifest ]
-    }
-
-    shared_library("chrome_child") {
-      sources = [
-        "app/chrome_main.cc",
-        "app/chrome_main_delegate.cc",
-        "app/chrome_main_delegate.h",
-      ]
-
-      configs += [ "//build/config/compiler:wexit_time_destructors" ]
-      defines = [ "CHROME_MULTIPLE_DLL_CHILD" ]
-
-      deps = [
-        ":child_dependencies",
-        ":chrome_child_manifest",
-        ":chrome_dll_version",
-        "//chrome/browser/policy:path_parser",
-        "//chrome/chrome_elf",
-        "//chrome/common:buildflags",
-        "//chrome/common/profiler",
-        "//chrome/install_static:install_static_util",
-        "//chrome/install_static:secondary_module",
-        "//components/browser_watcher:browser_watcher_client",
-        "//components/crash/core/app",
-        "//content/public/app:child",
-        "//content/public/common:service_names",
-        "//headless:headless_shell_child_lib",
-        "//services/service_manager/embedder",
-      ]
-
-      configs += [ "//build/config/win:delayloads" ]
-
-      if (symbol_level == 2) {
-        # Incremental linking doesn't work on this target in debug mode with
-        # full symbols, but does work in other cases, including minimal
-        # symbols.
-        configs -= [ "//build/config/win:default_incremental_linking" ]
-        configs += [ "//build/config/win:no_incremental_linking" ]
-      }
-    }
-  }
   copy("copy_first_run") {
     sources = [ "app/FirstRun" ]
     outputs = [ "$root_out_dir/First Run" ]
@@ -1044,7 +936,7 @@ if (is_win) {
       "//chrome/common/profiler",
       "//components/crash/core/app",
       "//components/policy:generated",
-      "//content/public/app:both",
+      "//content/public/app",
       "//content/public/common:service_names",
       "//headless:headless_shell_lib",
       "//services/service_manager/embedder",
@@ -1272,6 +1164,7 @@ group("browser_dependencies") {
     "//chrome/browser",
     "//chrome/common",
     "//components/gwp_asan/buildflags",
+    "//components/heap_profiling/in_process",
     "//components/sync",
     "//services/tracing/public/cpp",
   ]
@@ -1434,7 +1327,10 @@ group("extra_resources") {
   }
 
   if (!is_android && !is_chromeos) {
-    public_deps += [ "//chrome/browser/resources:welcome_resources" ]
+    public_deps += [
+      "//chrome/browser/resources:profile_picker_resources",
+      "//chrome/browser/resources:welcome_resources",
+    ]
   }
 
   if (enable_extensions) {
@@ -1520,24 +1416,10 @@ group("strings") {
 }
 
 if (is_android) {
-  java_cpp_enum("content_setting_javagen") {
-    sources =
-        [ "../components/content_settings/core/common/content_settings.h" ]
-  }
-
-  java_cpp_enum("cookie_controls_mode_javagen") {
-    sources =
-        [ "../components/content_settings/core/browser/cookie_settings.h" ]
-  }
-
   java_cpp_enum("assist_ranker_prediction_enum_javagen") {
     sources = [
       "browser/android/contextualsearch/contextual_search_ranker_logger_impl.h",
     ]
-  }
-
-  java_cpp_enum("page_info_connection_type_javagen") {
-    sources = [ "browser/ui/android/page_info/page_info_controller_android.h" ]
   }
 
   java_cpp_enum("partner_bookmarks_javagen") {
@@ -1572,7 +1454,7 @@ if (is_android) {
   }
 
   java_cpp_enum("context_menu_image_format_enum_javagen") {
-    sources = [ "browser/ui/android/context_menu_helper.h" ]
+    sources = [ "browser/android/context_menu/chrome_context_menu_populator.h" ]
   }
 
   source_set("chrome_android_core") {
@@ -1605,11 +1487,12 @@ if (is_android) {
       "//chrome/gpu",
       "//chrome/renderer",
       "//components/gwp_asan/buildflags",
+      "//components/heap_profiling/in_process",
       "//components/minidump_uploader",
       "//components/safe_browsing:buildflags",
       "//components/safe_browsing/android:safe_browsing_mobile",
       "//components/services/heap_profiling",
-      "//content/public/app:both",
+      "//content/public/app",
       "//content/public/common:service_names",
       "//services/service_manager/embedder",
     ]
@@ -1640,12 +1523,8 @@ if (enable_resource_whitelist_generation) {
       deps = [ "//chrome/android:libchrome" ]
       inputs = [ "$root_out_dir/lib.unstripped/libchrome$shlib_extension" ]
     } else if (is_win) {
-      deps = [ ":main_dll" ]
+      deps = [ ":chrome_dll" ]
       inputs = [ "$root_out_dir/chrome.dll.pdb" ]
-      if (is_multi_dll_chrome) {
-        deps += [ ":chrome_child" ]
-        inputs += [ "$root_out_dir/chrome_child.dll.pdb" ]
-      }
     } else {
       assert(false, "unsupported platform for whitelist generation")
     }

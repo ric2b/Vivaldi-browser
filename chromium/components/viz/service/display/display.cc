@@ -23,6 +23,7 @@
 #include "components/viz/common/quads/compositor_frame.h"
 #include "components/viz/common/quads/draw_quad.h"
 #include "components/viz/common/quads/shared_quad_state.h"
+#include "components/viz/common/viz_utils.h"
 #include "components/viz/service/display/damage_frame_annotator.h"
 #include "components/viz/service/display/direct_renderer.h"
 #include "components/viz/service/display/display_client.h"
@@ -36,6 +37,7 @@
 #include "components/viz/service/display/surface_aggregator.h"
 #include "components/viz/service/surfaces/surface.h"
 #include "components/viz/service/surfaces/surface_manager.h"
+#include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/ipc/scheduler_sequence.h"
 #include "services/viz/public/mojom/compositing/compositor_frame_sink.mojom.h"
@@ -46,6 +48,9 @@
 #include "ui/gfx/presentation_feedback.h"
 #include "ui/gfx/swap_result.h"
 
+#if defined(OS_ANDROID)
+#include "ui/gl/android/android_surface_control_compat.h"
+#endif
 namespace viz {
 
 namespace {
@@ -207,6 +212,14 @@ bool ReduceComplexity(const cc::Region& region,
   return true;
 }
 
+bool SupportsSetFrameRate(const OutputSurface* output_surface) {
+#if defined(OS_ANDROID)
+  return output_surface->capabilities().supports_surfaceless &&
+         gl::SurfaceControl::SupportsSetFrameRate();
+#endif
+  return false;
+}
+
 }  // namespace
 
 constexpr base::TimeDelta Display::kDrawToSwapMin;
@@ -273,6 +286,9 @@ Display::~Display() {
   allow_schedule_gpu_task_during_destruction_.reset(
       new gpu::ScopedAllowScheduleGpuTask);
 #endif
+  if (resource_provider_) {
+    resource_provider_->SetAllowAccessToGPUThread(true);
+  }
 #if defined(OS_ANDROID)
   // In certain cases, drivers hang when tearing down the display. Finishing
   // before teardown appears to address this. As we're during display teardown,
@@ -314,7 +330,8 @@ Display::~Display() {
 void Display::Initialize(DisplayClient* client,
                          SurfaceManager* surface_manager,
                          bool enable_shared_images,
-                         bool using_synthetic_bfs) {
+                         bool hw_support_for_multiple_refresh_rates,
+                         size_t num_of_frames_to_toggle_interval) {
   DCHECK(client);
   DCHECK(surface_manager);
   gpu::ScopedAllowScheduleGpuTask allow_schedule_gpu_task;
@@ -326,7 +343,9 @@ void Display::Initialize(DisplayClient* client,
     output_surface_->software_device()->BindToClient(this);
 
   frame_rate_decider_ = std::make_unique<FrameRateDecider>(
-      surface_manager_, this, using_synthetic_bfs);
+      surface_manager_, this, hw_support_for_multiple_refresh_rates,
+      SupportsSetFrameRate(output_surface_.get()),
+      num_of_frames_to_toggle_interval);
 
   InitializeRenderer(enable_shared_images);
 
@@ -584,7 +603,8 @@ bool Display::DrawAndSwap(base::TimeTicks expected_display_time) {
   // GL commands for deleting resources to after the draw, and prevents context
   // switching because the scheduler knows sync token dependencies at that time.
   DisplayResourceProvider::ScopedBatchReturnResources returner(
-      resource_provider_.get());
+      resource_provider_.get(), /*allow_access_to_gpu_thread=*/true);
+
   base::ElapsedTimer aggregate_timer;
   aggregate_timer.Begin();
   CompositorFrame frame;
@@ -595,6 +615,16 @@ bool Display::DrawAndSwap(base::TimeTicks expected_display_time) {
         aggregator_->Aggregate(current_surface_id_, expected_display_time,
                                current_display_transform, ++swapped_trace_id_);
   }
+
+#if defined(OS_ANDROID)
+  bool wide_color_enabled = display_color_spaces_.GetOutputColorSpace(
+                                frame.metadata.content_color_usage, true) !=
+                            gfx::ColorSpace::CreateSRGB();
+  if (wide_color_enabled != last_wide_color_enabled_) {
+    client_->SetWideColorEnabled(wide_color_enabled);
+    last_wide_color_enabled_ = wide_color_enabled;
+  }
+#endif
 
   UMA_HISTOGRAM_COUNTS_1M("Compositing.SurfaceAggregator.AggregateUs",
                           aggregate_timer.Elapsed().InMicroseconds());
@@ -925,11 +955,6 @@ void Display::RemoveOverdrawQuads(CompositorFrame* frame) {
   if (frame->render_pass_list.empty())
     return;
 
-  const SharedQuadState* last_sqs = nullptr;
-  cc::Region occlusion_in_target_space;
-  cc::Region backdrop_filters_in_target_space;
-  bool current_sqs_intersects_occlusion = false;
-
   base::flat_map<RenderPassId, gfx::Rect> backdrop_filter_rects;
   for (const auto& pass : frame->render_pass_list) {
     if (!pass->backdrop_filters.IsEmpty() &&
@@ -939,195 +964,215 @@ void Display::RemoveOverdrawQuads(CompositorFrame* frame) {
     }
   }
 
-  const auto& pass = frame->render_pass_list.back();
-  // TODO(yiyix): Add filter effects to draw occlusion calculation and perform
-  // draw occlusion on render pass.
-  if (!pass->filters.IsEmpty() || !pass->backdrop_filters.IsEmpty())
-    return;
+  for (const auto& pass : frame->render_pass_list) {
+    const SharedQuadState* last_sqs = nullptr;
+    cc::Region occlusion_in_target_space;
+    cc::Region backdrop_filters_in_target_space;
+    bool current_sqs_intersects_occlusion = false;
 
-  auto quad_list_end = pass->quad_list.end();
-  cc::Region occlusion_in_quad_content_space;
-  gfx::Rect render_pass_quads_in_content_space;
-  for (auto quad = pass->quad_list.begin(); quad != quad_list_end;) {
-    // Skip quad if it is a RenderPassDrawQuad because RenderPassDrawQuad is a
-    // special type of DrawQuad where the visible_rect of shared quad state is
-    // not entirely covered by draw quads in it.
-    if (quad->material == ContentDrawQuadBase::Material::kRenderPass) {
-      // A RenderPass with backdrop filters may apply to a quad underlying
-      // RenderPassQuad. These regions should be tracked so that correctly
-      // handle splitting and occlusion of the underlying quad.
-      auto it = backdrop_filter_rects.find(
-          RenderPassDrawQuad::MaterialCast(*quad)->render_pass_id);
-      if (it != backdrop_filter_rects.end()) {
-        backdrop_filters_in_target_space.Union(it->second);
-      }
-      ++quad;
+    // TODO(yiyix): Add filter effects to draw occlusion calculation
+    if (!pass->filters.IsEmpty() || !pass->backdrop_filters.IsEmpty())
       continue;
-    }
-    // Also skip quad if the DrawQuad size is smaller than the
-    // kMinimumDrawOcclusionSize; or the DrawQuad is inside a 3d object.
-    if (quad->shared_quad_state->sorting_context_id != 0) {
-      ++quad;
+
+    // When there is only one quad in the render pass, occlusion is not
+    // possible.
+    if (pass->quad_list.size() == 1)
       continue;
-    }
 
-    if (!last_sqs)
-      last_sqs = quad->shared_quad_state;
-
-    gfx::Transform transform =
-        quad->shared_quad_state->quad_to_target_transform;
-
-    // TODO(yiyix): Find a rect interior to each transformed quad.
-    if (last_sqs != quad->shared_quad_state) {
-      if (last_sqs->opacity == 1 && last_sqs->are_contents_opaque &&
-          last_sqs->quad_to_target_transform.Preserves2dAxisAlignment()) {
-        gfx::Rect sqs_rect_in_target =
-            cc::MathUtil::MapEnclosedRectWith2dAxisAlignedTransform(
-                last_sqs->quad_to_target_transform,
-                last_sqs->visible_quad_layer_rect);
-
-        // If a rounded corner is being applied then the visible rect for the
-        // sqs is actually even smaller. Reduce the rect size to get a
-        // rounded corner adjusted occluding region.
-        if (!last_sqs->rounded_corner_bounds.IsEmpty()) {
-          sqs_rect_in_target.Intersect(gfx::ToEnclosedRect(
-              GetOccludingRectForRRectF(last_sqs->rounded_corner_bounds)));
+    auto quad_list_end = pass->quad_list.end();
+    cc::Region occlusion_in_quad_content_space;
+    gfx::Rect render_pass_quads_in_content_space;
+    for (auto quad = pass->quad_list.begin(); quad != quad_list_end;) {
+      // Skip quad if it is a RenderPassDrawQuad because RenderPassDrawQuad is a
+      // special type of DrawQuad where the visible_rect of shared quad state is
+      // not entirely covered by draw quads in it.
+      if (quad->material == ContentDrawQuadBase::Material::kRenderPass) {
+        // A RenderPass with backdrop filters may apply to a quad underlying
+        // RenderPassQuad. These regions should be tracked so that correctly
+        // handle splitting and occlusion of the underlying quad.
+        auto it = backdrop_filter_rects.find(
+            RenderPassDrawQuad::MaterialCast(*quad)->render_pass_id);
+        if (it != backdrop_filter_rects.end()) {
+          backdrop_filters_in_target_space.Union(it->second);
         }
-
-        if (last_sqs->is_clipped)
-          sqs_rect_in_target.Intersect(last_sqs->clip_rect);
-
-        // If region complexity is above our threshold, remove the smallest
-        // rects from occlusion region.
-        occlusion_in_target_space.Union(sqs_rect_in_target);
-        while (occlusion_in_target_space.GetRegionComplexity() >
-               settings_.kMaximumOccluderComplexity) {
-          gfx::Rect smallest_rect = *occlusion_in_target_space.begin();
-          for (const auto& occluding_rect : occlusion_in_target_space) {
-            if (occluding_rect.size().GetArea() <
-                smallest_rect.size().GetArea())
-              smallest_rect = occluding_rect;
-          }
-          occlusion_in_target_space.Subtract(smallest_rect);
-        }
-      }
-      // If the visible_rect of the current shared quad state does not
-      // intersect with the occlusion rect, we can skip draw occlusion checks
-      // for quads in the current SharedQuadState.
-      last_sqs = quad->shared_quad_state;
-      occlusion_in_quad_content_space.Clear();
-      render_pass_quads_in_content_space = gfx::Rect();
-      const auto current_sqs_in_target_space =
-          cc::MathUtil::MapEnclosingClippedRect(
-              transform, last_sqs->visible_quad_layer_rect);
-      current_sqs_intersects_occlusion =
-          occlusion_in_target_space.Intersects(current_sqs_in_target_space);
-
-      // Compute the occlusion region in the quad content space for scale and
-      // translation transforms. Note that 0 scale transform will fail the
-      // positive scale check.
-      if (current_sqs_intersects_occlusion &&
-          transform.IsPositiveScaleOrTranslation()) {
-        gfx::Transform reverse_transform;
-        bool is_invertible = transform.GetInverse(&reverse_transform);
-        // Scale transform can be inverted by multiplying 1/scale (given
-        // scale > 0) and translation transform can be inverted by applying
-        // the reversed directional translation. Therefore, |transform| is
-        // always invertible.
-        DCHECK(is_invertible);
-        DCHECK_LE(occlusion_in_target_space.GetRegionComplexity(),
-                  settings_.kMaximumOccluderComplexity);
-
-        // Since transform can only be a scale or a translation matrix, it is
-        // safe to use function MapEnclosedRectWith2dAxisAlignedTransform to
-        // define occluded region in the quad content space with inverted
-        // transform.
-        for (const gfx::Rect& rect_in_target_space :
-             occlusion_in_target_space) {
-          if (current_sqs_in_target_space.Intersects(rect_in_target_space)) {
-            auto rect_in_content =
-                cc::MathUtil::MapEnclosedRectWith2dAxisAlignedTransform(
-                    reverse_transform, rect_in_target_space);
-            occlusion_in_quad_content_space.Union(
-                SafeConvertRectForRegion(rect_in_content));
-          }
-        }
-
-        // A render pass quad may apply some filter or transform to an
-        // underlying quad. Do not split quads when they intersect with a render
-        // pass quad.
-        if (current_sqs_in_target_space.Intersects(
-                backdrop_filters_in_target_space.bounds())) {
-          for (const auto& rect_in_target_space :
-               backdrop_filters_in_target_space) {
-            auto rect_in_content =
-                cc::MathUtil::MapEnclosedRectWith2dAxisAlignedTransform(
-                    reverse_transform, rect_in_target_space);
-            render_pass_quads_in_content_space.Union(rect_in_content);
-          }
-        }
-      }
-    }
-
-    if (!current_sqs_intersects_occlusion) {
-      ++quad;
-      continue;
-    }
-
-    if (occlusion_in_quad_content_space.Contains(quad->visible_rect)) {
-      // Case 1: for simple transforms (scale or translation), define the
-      // occlusion region in the quad content space. If |quad| is not
-      // shown on the screen, then set its rect and visible_rect to be empty.
-      quad->visible_rect.set_size(gfx::Size());
-    } else if (occlusion_in_quad_content_space.Intersects(quad->visible_rect)) {
-      // Case 2: for simple transforms, if the quad is partially shown on
-      // screen and the region formed by (occlusion region - visible_rect) is
-      // a rect, then update visible_rect to the resulting rect.
-      cc::Region visible_region = quad->visible_rect;
-      visible_region.Subtract(occlusion_in_quad_content_space);
-      quad->visible_rect = visible_region.bounds();
-
-      // Split quad into multiple draw quads when area can be reduce by
-      // more than X fragments.
-      const bool should_split_quads =
-          enable_quad_splitting_ &&
-          !visible_region.Intersects(render_pass_quads_in_content_space) &&
-          ReduceComplexity(visible_region, settings_.quad_split_limit,
-                           &cached_visible_region_) &&
-          CanSplitQuad(quad->material, ComputeArea(cached_visible_region_),
-                       visible_region.bounds().size().GetArea(),
-                       settings_.minimum_fragments_reduced,
-                       device_scale_factor_);
-      if (should_split_quads) {
-        auto new_quad = pass->quad_list.InsertCopyBeforeDrawQuad(
-            quad, cached_visible_region_.size() - 1);
-        for (const auto& visible_rect : cached_visible_region_) {
-          new_quad->visible_rect = visible_rect;
-          ++new_quad;
-        }
-        quad = new_quad;
+        ++quad;
         continue;
       }
-    } else if (occlusion_in_quad_content_space.IsEmpty() &&
-               occlusion_in_target_space.Contains(
-                   cc::MathUtil::MapEnclosingClippedRect(transform,
-                                                         quad->visible_rect))) {
-      // Case 3: for non simple transforms, define the occlusion region in
-      // target space. If |quad| is not shown on the screen, then set its
-      // rect and visible_rect to be empty.
-      quad->visible_rect.set_size(gfx::Size());
+      // Also skip quad if the DrawQuad is inside a 3d object.
+      if (quad->shared_quad_state->sorting_context_id != 0) {
+        ++quad;
+        continue;
+      }
+
+      if (!last_sqs)
+        last_sqs = quad->shared_quad_state;
+
+      gfx::Transform transform =
+          quad->shared_quad_state->quad_to_target_transform;
+
+      // TODO(yiyix): Find a rect interior to each transformed quad.
+      if (last_sqs != quad->shared_quad_state) {
+        if (last_sqs->opacity == 1 && last_sqs->are_contents_opaque &&
+            (last_sqs->blend_mode == SkBlendMode::kSrcOver ||
+             last_sqs->blend_mode == SkBlendMode::kSrc) &&
+            last_sqs->quad_to_target_transform.Preserves2dAxisAlignment()) {
+          gfx::Rect sqs_rect_in_target =
+              cc::MathUtil::MapEnclosedRectWith2dAxisAlignedTransform(
+                  last_sqs->quad_to_target_transform,
+                  last_sqs->visible_quad_layer_rect);
+
+          // If a rounded corner is being applied then the visible rect for the
+          // sqs is actually even smaller. Reduce the rect size to get a
+          // rounded corner adjusted occluding region.
+          if (!last_sqs->rounded_corner_bounds.IsEmpty()) {
+            sqs_rect_in_target.Intersect(gfx::ToEnclosedRect(
+                GetOccludingRectForRRectF(last_sqs->rounded_corner_bounds)));
+          }
+
+          if (last_sqs->is_clipped)
+            sqs_rect_in_target.Intersect(last_sqs->clip_rect);
+
+          // If region complexity is above our threshold, remove the smallest
+          // rects from occlusion region.
+          occlusion_in_target_space.Union(sqs_rect_in_target);
+          while (occlusion_in_target_space.GetRegionComplexity() >
+                 settings_.kMaximumOccluderComplexity) {
+            gfx::Rect smallest_rect = *occlusion_in_target_space.begin();
+            for (const auto& occluding_rect : occlusion_in_target_space) {
+              if (occluding_rect.size().GetArea() <
+                  smallest_rect.size().GetArea())
+                smallest_rect = occluding_rect;
+            }
+            occlusion_in_target_space.Subtract(smallest_rect);
+          }
+        }
+        // If the visible_rect of the current shared quad state does not
+        // intersect with the occlusion rect, we can skip draw occlusion checks
+        // for quads in the current SharedQuadState.
+        last_sqs = quad->shared_quad_state;
+        occlusion_in_quad_content_space.Clear();
+        render_pass_quads_in_content_space = gfx::Rect();
+        const auto current_sqs_in_target_space =
+            cc::MathUtil::MapEnclosingClippedRect(
+                transform, last_sqs->visible_quad_layer_rect);
+        current_sqs_intersects_occlusion =
+            occlusion_in_target_space.Intersects(current_sqs_in_target_space);
+
+        // Compute the occlusion region in the quad content space for scale and
+        // translation transforms. Note that 0 scale transform will fail the
+        // positive scale check.
+        if (current_sqs_intersects_occlusion &&
+            transform.IsPositiveScaleOrTranslation()) {
+          gfx::Transform reverse_transform;
+          bool is_invertible = transform.GetInverse(&reverse_transform);
+          // Scale transform can be inverted by multiplying 1/scale (given
+          // scale > 0) and translation transform can be inverted by applying
+          // the reversed directional translation. Therefore, |transform| is
+          // always invertible.
+          DCHECK(is_invertible);
+          DCHECK_LE(occlusion_in_target_space.GetRegionComplexity(),
+                    settings_.kMaximumOccluderComplexity);
+
+          // Since transform can only be a scale or a translation matrix, it is
+          // safe to use function MapEnclosedRectWith2dAxisAlignedTransform to
+          // define occluded region in the quad content space with inverted
+          // transform.
+          for (const gfx::Rect& rect_in_target_space :
+               occlusion_in_target_space) {
+            if (current_sqs_in_target_space.Intersects(rect_in_target_space)) {
+              auto rect_in_content =
+                  cc::MathUtil::MapEnclosedRectWith2dAxisAlignedTransform(
+                      reverse_transform, rect_in_target_space);
+              occlusion_in_quad_content_space.Union(
+                  SafeConvertRectForRegion(rect_in_content));
+            }
+          }
+
+          // A render pass quad may apply some filter or transform to an
+          // underlying quad. Do not split quads when they intersect with a
+          // render pass quad.
+          if (current_sqs_in_target_space.Intersects(
+                  backdrop_filters_in_target_space.bounds())) {
+            for (const auto& rect_in_target_space :
+                 backdrop_filters_in_target_space) {
+              auto rect_in_content =
+                  cc::MathUtil::MapEnclosedRectWith2dAxisAlignedTransform(
+                      reverse_transform, rect_in_target_space);
+              render_pass_quads_in_content_space.Union(rect_in_content);
+            }
+          }
+        }
+      }
+
+      if (!current_sqs_intersects_occlusion) {
+        ++quad;
+        continue;
+      }
+
+      if (occlusion_in_quad_content_space.Contains(quad->visible_rect)) {
+        // Case 1: for simple transforms (scale or translation), define the
+        // occlusion region in the quad content space. If |quad| is not
+        // shown on the screen, then set its rect and visible_rect to be empty.
+        quad->visible_rect.set_size(gfx::Size());
+      } else if (occlusion_in_quad_content_space.Intersects(
+                     quad->visible_rect)) {
+        // Case 2: for simple transforms, if the quad is partially shown on
+        // screen and the region formed by (occlusion region - visible_rect) is
+        // a rect, then update visible_rect to the resulting rect.
+        cc::Region visible_region = quad->visible_rect;
+        visible_region.Subtract(occlusion_in_quad_content_space);
+        quad->visible_rect = visible_region.bounds();
+
+        // Split quad into multiple draw quads when area can be reduce by
+        // more than X fragments.
+        const bool should_split_quads =
+            enable_quad_splitting_ &&
+            !visible_region.Intersects(render_pass_quads_in_content_space) &&
+            ReduceComplexity(visible_region, settings_.quad_split_limit,
+                             &cached_visible_region_) &&
+            CanSplitQuad(quad->material, ComputeArea(cached_visible_region_),
+                         visible_region.bounds().size().GetArea(),
+                         settings_.minimum_fragments_reduced,
+                         device_scale_factor_);
+        if (should_split_quads) {
+          auto new_quad = pass->quad_list.InsertCopyBeforeDrawQuad(
+              quad, cached_visible_region_.size() - 1);
+          for (const auto& visible_rect : cached_visible_region_) {
+            new_quad->visible_rect = visible_rect;
+            ++new_quad;
+          }
+          quad = new_quad;
+          continue;
+        }
+      } else if (occlusion_in_quad_content_space.IsEmpty() &&
+                 occlusion_in_target_space.Contains(
+                     cc::MathUtil::MapEnclosingClippedRect(
+                         transform, quad->visible_rect))) {
+        // Case 3: for non simple transforms, define the occlusion region in
+        // target space. If |quad| is not shown on the screen, then set its
+        // rect and visible_rect to be empty.
+        quad->visible_rect.set_size(gfx::Size());
+      }
+      ++quad;
     }
-    ++quad;
   }
 }
 
 void Display::SetPreferredFrameInterval(base::TimeDelta interval) {
+  if (frame_rate_decider_->supports_set_frame_rate()) {
+    float frame_rate =
+        interval.InSecondsF() == 0 ? 0 : (1 / interval.InSecondsF());
+    output_surface_->SetFrameRate(frame_rate);
+    return;
+  }
+
   client_->SetPreferredFrameInterval(interval);
 }
 
 base::TimeDelta Display::GetPreferredFrameIntervalForFrameSinkId(
-    const FrameSinkId& id) {
-  return client_->GetPreferredFrameIntervalForFrameSinkId(id);
+    const FrameSinkId& id,
+    mojom::CompositorFrameSinkType* type) {
+  return client_->GetPreferredFrameIntervalForFrameSinkId(id, type);
 }
 
 void Display::SetSupportedFrameIntervals(
@@ -1137,6 +1182,11 @@ void Display::SetSupportedFrameIntervals(
 
 base::ScopedClosureRunner Display::GetCacheBackBufferCb() {
   return output_surface_->GetCacheBackBufferCb();
+}
+
+void Display::DisableGPUAccessByDefault() {
+  DCHECK(resource_provider_);
+  resource_provider_->SetAllowAccessToGPUThread(false);
 }
 
 }  // namespace viz

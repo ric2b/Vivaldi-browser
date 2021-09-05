@@ -181,7 +181,7 @@ class ServiceWorkerContainerTest : public PageTestBase {
   void SetUp() override { PageTestBase::SetUp(IntSize()); }
 
   ~ServiceWorkerContainerTest() override {
-    V8GCController::CollectAllGarbageForTesting(GetIsolate());
+    ThreadState::Current()->CollectAllGarbageForTesting();
   }
 
   v8::Isolate* GetIsolate() { return v8::Isolate::GetCurrent(); }
@@ -205,7 +205,7 @@ class ServiceWorkerContainerTest : public PageTestBase {
     // the provider.
     ServiceWorkerContainer* container =
         ServiceWorkerContainer::CreateForTesting(
-            &GetDocument(),
+            *GetFrame().DomWindow(),
             std::make_unique<NotReachedWebServiceWorkerProvider>());
     ScriptState::Scope script_scope(GetScriptState());
     RegistrationOptions* options = RegistrationOptions::Create();
@@ -219,7 +219,7 @@ class ServiceWorkerContainerTest : public PageTestBase {
                                    const ScriptValueTest& value_test) {
     ServiceWorkerContainer* container =
         ServiceWorkerContainer::CreateForTesting(
-            &GetDocument(),
+            *GetFrame().DomWindow(),
             std::make_unique<NotReachedWebServiceWorkerProvider>());
     ScriptState::Scope script_scope(GetScriptState());
     ScriptPromise promise =
@@ -364,7 +364,7 @@ TEST_F(ServiceWorkerContainerTest,
 
   StubWebServiceWorkerProvider stub_provider;
   ServiceWorkerContainer* container = ServiceWorkerContainer::CreateForTesting(
-      &GetDocument(), stub_provider.Provider());
+      *GetFrame().DomWindow(), stub_provider.Provider());
 
   // register
   {
@@ -391,7 +391,7 @@ TEST_F(ServiceWorkerContainerTest,
 
   StubWebServiceWorkerProvider stub_provider;
   ServiceWorkerContainer* container = ServiceWorkerContainer::CreateForTesting(
-      &GetDocument(), stub_provider.Provider());
+      *GetFrame().DomWindow(), stub_provider.Provider());
 
   {
     ScriptState::Scope script_scope(GetScriptState());
@@ -411,7 +411,7 @@ TEST_F(ServiceWorkerContainerTest,
 
   StubWebServiceWorkerProvider stub_provider;
   ServiceWorkerContainer* container = ServiceWorkerContainer::CreateForTesting(
-      &GetDocument(), stub_provider.Provider());
+      *GetFrame().DomWindow(), stub_provider.Provider());
 
   // register
   {
@@ -437,7 +437,7 @@ TEST_F(ServiceWorkerContainerTest, Register_TypeOptionDelegatesToProvider) {
 
   StubWebServiceWorkerProvider stub_provider;
   ServiceWorkerContainer* container = ServiceWorkerContainer::CreateForTesting(
-      &GetDocument(), stub_provider.Provider());
+      *GetFrame().DomWindow(), stub_provider.Provider());
 
   // register
   {

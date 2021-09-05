@@ -25,7 +25,9 @@
 #include "third_party/blink/renderer/core/html/html_anchor_element.h"
 
 #include "base/metrics/histogram_macros.h"
+#include "base/time/time.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-blink.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_prescient_networking.h"
@@ -40,6 +42,8 @@
 #include "third_party/blink/renderer/core/html/anchor_element_metrics_sender.h"
 #include "third_party/blink/renderer/core/html/html_image_element.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_idioms.h"
+#include "third_party/blink/renderer/core/html_names.h"
+#include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/layout/layout_box.h"
 #include "third_party/blink/renderer/core/loader/frame_load_request.h"
 #include "third_party/blink/renderer/core/loader/navigation_policy.h"
@@ -50,6 +54,7 @@
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
+#include "third_party/blink/renderer/platform/weborigin/security_origin.h"
 #include "third_party/blink/renderer/platform/weborigin/security_policy.h"
 
 namespace blink {
@@ -78,7 +83,8 @@ bool ShouldInterveneDownloadByFramePolicy(LocalFrame* frame) {
         should_intervene_download = true;
     }
   }
-  if (document.IsSandboxed(mojom::blink::WebSandboxFlags::kDownloads)) {
+  if (document.IsSandboxed(
+          network::mojom::blink::WebSandboxFlags::kDownloads)) {
     UseCounter::Count(document, WebFeature::kDownloadInSandbox);
     if (RuntimeEnabledFeatures::BlockingDownloadsInSandboxEnabled())
       should_intervene_download = true;
@@ -336,6 +342,86 @@ bool HTMLAnchorElement::IsLiveLink() const {
   return IsLink() && !HasEditableStyle(*this);
 }
 
+bool HTMLAnchorElement::HasImpression() const {
+  return hasAttribute(html_names::kImpressiondataAttr) &&
+         hasAttribute(html_names::kConversiondestinationAttr);
+}
+
+base::Optional<WebImpression> HTMLAnchorElement::GetImpressionForNavigation()
+    const {
+  DCHECK(HasImpression());
+
+  if (!GetExecutionContext()->IsFeatureEnabled(
+          mojom::blink::FeaturePolicyFeature::kConversionMeasurement)) {
+    String message =
+        "The 'conversion-measurement' feature policy must be enabled to "
+        "declare an impression.";
+    GetExecutionContext()->AddConsoleMessage(
+        MakeGarbageCollected<ConsoleMessage>(
+            mojom::blink::ConsoleMessageSource::kOther,
+            mojom::blink::ConsoleMessageLevel::kError, message));
+    return base::nullopt;
+  }
+
+  // Conversion measurement is only allowed when both the frame and the main
+  // frame (if different) have a secure origin.
+  LocalFrame* frame = GetDocument().GetFrame();
+  const Frame& main_frame = frame->Tree().Top();
+  if (!main_frame.GetSecurityContext()
+           ->GetSecurityOrigin()
+           ->IsPotentiallyTrustworthy()) {
+    return base::nullopt;
+  }
+  if (!frame->IsMainFrame() && !frame->GetSecurityContext()
+                                    ->GetSecurityOrigin()
+                                    ->IsPotentiallyTrustworthy()) {
+    return base::nullopt;
+  }
+
+  const AtomicString& conversion_destination_string =
+      FastGetAttribute(html_names::kConversiondestinationAttr);
+  scoped_refptr<const SecurityOrigin> conversion_destination =
+      SecurityOrigin::CreateFromString(conversion_destination_string);
+  if (!conversion_destination->IsPotentiallyTrustworthy())
+    return base::nullopt;
+
+  bool impression_data_is_valid = false;
+  uint64_t impression_data = FastGetAttribute(html_names::kImpressiondataAttr)
+                                 .GetString()
+                                 .HexToUInt64Strict(&impression_data_is_valid);
+
+  // Provide a default of 0 if the impression data was not valid.
+  impression_data = impression_data_is_valid ? impression_data : 0UL;
+
+  // Reporting origin is an optional attribute. Reporting origins must be
+  // secure.
+  base::Optional<WebSecurityOrigin> reporting_origin;
+  if (hasAttribute(html_names::kReportingoriginAttr)) {
+    const AtomicString& reporting_origin_string =
+        FastGetAttribute(html_names::kReportingoriginAttr);
+    reporting_origin =
+        SecurityOrigin::CreateFromString(reporting_origin_string);
+
+    if (!reporting_origin->IsPotentiallyTrustworthy())
+      return base::nullopt;
+  }
+
+  // Impression expiry is an optional attribute.
+  base::Optional<base::TimeDelta> expiry;
+  if (hasAttribute(html_names::kImpressionexpiryAttr)) {
+    bool expiry_is_valid = false;
+    uint64_t expiry_milliseconds =
+        FastGetAttribute(html_names::kImpressionexpiryAttr)
+            .GetString()
+            .ToUInt64Strict(&expiry_is_valid);
+    if (expiry_is_valid)
+      expiry = base::TimeDelta::FromMilliseconds(expiry_milliseconds);
+  }
+
+  return WebImpression{conversion_destination, reporting_origin,
+                       impression_data, expiry};
+}
+
 void HTMLAnchorElement::SendPings(const KURL& destination_url) const {
   const AtomicString& ping_value = FastGetAttribute(html_names::kPingAttr);
   if (ping_value.IsNull() || !GetDocument().GetSettings() ||
@@ -454,28 +540,17 @@ void HTMLAnchorElement::HandleClick(Event& event) {
                       WebFeature::kHTMLAnchorElementHrefTranslateAttribute);
   }
 
-  if (target_frame) {
-    // If we also have a pending form submission, make sure this anchor
-    // navigation takes precedence over it, except in the case of href being
-    // a fragment, in which case pending form submissions should go through.
-    // In the case of a target RemoteFrame, don't cancel form submissions
-    // because we can't be sure what the remote document's urlForBinding is.
-    // In the case of href="javascript:", don't cancel form submissions because
-    // we have always let form submissions take precedence in this case.
-    // TODO(crbug.com/1053679): Remove this after making anchor navigations
-    //   async like the spec says to do, which will also provide the desired
-    //   behavior.
-    if (LocalFrame* target_local_frame = DynamicTo<LocalFrame>(target_frame)) {
-      KURL document_url = target_local_frame->GetDocument()->urlForBinding();
-      bool equal_ignoring_fragment =
-          completed_url.HasFragmentIdentifier() &&
-          EqualIgnoringFragmentIdentifier(completed_url, document_url);
-      if (!equal_ignoring_fragment && !completed_url.ProtocolIsJavaScript())
-        target_frame->CancelFormSubmission();
-    }
-
-    target_frame->Navigate(frame_request, WebFrameLoadType::kStandard);
+  // Only attach impressions for main frame navigations.
+  if (RuntimeEnabledFeatures::ConversionMeasurementEnabled() && target_frame &&
+      target_frame->IsMainFrame() && request.HasUserGesture() &&
+      HasImpression()) {
+    base::Optional<WebImpression> impression = GetImpressionForNavigation();
+    if (impression)
+      frame_request.SetImpression(*impression);
   }
+
+  if (target_frame)
+    target_frame->Navigate(frame_request, WebFrameLoadType::kStandard);
 }
 
 bool IsEnterKeyKeydownEvent(Event& event) {

@@ -20,9 +20,11 @@ android_assets("weblayer_shell_assets") {
 
 android_resources("weblayer_shell_resources") {
   sources = [
+    "shell_apk/res/layout/bottom_controls.xml",
     "shell_apk/res/layout/shell_browser_controls.xml",
     "shell_apk/res/menu/app_menu.xml",
     "shell_apk/res/values/strings.xml",
+    "shell_apk/res/values/styles.xml",
   ]
   custom_package = "org.chromium.weblayer.shell"
 }
@@ -34,6 +36,7 @@ android_library("weblayer_shell_java") {
     ":weblayer_shell_resources",
     "//base:base_java",
     "//third_party/android_deps:android_support_v4_java",
+    "//third_party/android_deps:android_support_v7_appcompat_java",
     "//weblayer/public/java",
   ]
   sources = [
@@ -190,6 +193,8 @@ android_apk("weblayer_support_apk") {
   target_sdk_version = 28
   android_manifest_dep = ":weblayer_support_manifest"
   shared_resources = true
+  version_name = chrome_version_name
+  version_code = webview_stable_version_code
 
   product_config_java_packages = [ weblayer_product_config_java_package ]
 

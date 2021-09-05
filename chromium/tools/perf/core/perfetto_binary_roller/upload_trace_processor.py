@@ -5,7 +5,7 @@
 
 import argparse
 import os
-import subprocess
+import re
 import sys
 
 # Add tools/perf to sys.path.
@@ -20,11 +20,15 @@ from core.tbmv3 import trace_processor
 
 
 def _PerfettoRevision():
-  perfetto_dir = os.path.join(path_util.GetChromiumSrcDir(), 'third_party',
-                              'perfetto')
-  revision = subprocess.check_output(
-      ['git', '-C', perfetto_dir, 'rev-parse', 'HEAD'])
-  return revision.strip()
+  deps_line_re = re.compile(
+      r".*'/platform/external/perfetto.git' \+ '@' \+ '([a-f0-9]+)'")
+  deps_file = os.path.join(path_util.GetChromiumSrcDir(), 'DEPS')
+  with open(deps_file) as deps:
+    for line in deps:
+      match = deps_line_re.match(line)
+      if match:
+        return match.group(1)
+  raise RuntimeError("Couldn't parse perfetto revision from DEPS")
 
 
 def main(args):
@@ -34,13 +38,19 @@ def main(args):
   parser.add_argument(
       '--revision',
       help=('Perfetto revision. '
-            'If not supplied, will try to infer from //third_party/perfetto.'))
-  args = parser.parse_args(args)
+            'If not supplied, will try to infer from DEPS file.'))
+
+  # When this script is invoked on a CI bot, there are some extra arguments
+  # that we have to ignore.
+  args, _ = parser.parse_known_args(args)
 
   revision = args.revision or _PerfettoRevision()
 
   binary_deps_manager.UploadHostBinary(trace_processor.TP_BINARY_NAME,
                                        args.path, revision)
+
+  # CI bot expects a valid JSON object as script output.
+  sys.stdout.write('{}\n')
 
 
 if __name__ == '__main__':

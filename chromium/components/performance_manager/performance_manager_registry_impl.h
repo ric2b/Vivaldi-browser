@@ -25,6 +25,7 @@ class WebContents;
 
 namespace performance_manager {
 
+class PerformanceManagerMainThreadMechanism;
 class PerformanceManagerMainThreadObserver;
 class ServiceWorkerContextAdapter;
 class WorkerWatcher;
@@ -46,19 +47,30 @@ class PerformanceManagerRegistryImpl
   static PerformanceManagerRegistryImpl* GetInstance();
 
   // Adds / removes an observer that is notified when a PageNode is created on
-  // the main thread.
+  // the main thread. Forwarded to from the public PerformanceManager interface.
   void AddObserver(PerformanceManagerMainThreadObserver* observer);
   void RemoveObserver(PerformanceManagerMainThreadObserver* observer);
+
+  // Adds / removes main thread mechanisms. Forwarded to from the public
+  // PerformanceManager interface.
+  void AddMechanism(PerformanceManagerMainThreadMechanism* mechanism);
+  void RemoveMechanism(PerformanceManagerMainThreadMechanism* mechanism);
+  bool HasMechanism(PerformanceManagerMainThreadMechanism* mechanism);
 
   // PerformanceManagerRegistry:
   void CreatePageNodeForWebContents(
       content::WebContents* web_contents) override;
-  void CreateProcessNodeForRenderProcessHost(
-      content::RenderProcessHost* render_process_host) override;
+  Throttles CreateThrottlesForNavigation(
+      content::NavigationHandle* handle) override;
   void NotifyBrowserContextAdded(
       content::BrowserContext* browser_context) override;
   void NotifyBrowserContextRemoved(
       content::BrowserContext* browser_context) override;
+  void CreateProcessNodeAndExposeInterfacesToRendererProcess(
+      service_manager::BinderRegistry* registry,
+      content::RenderProcessHost* render_process_host) override;
+  void ExposeInterfacesToRenderFrame(
+      mojo::BinderMapWithContext<content::RenderFrameHost*>* map) override;
   void TearDown() override;
 
   // PerformanceManagerTabHelper::DestructionObserver:
@@ -68,6 +80,12 @@ class PerformanceManagerRegistryImpl
   // RenderProcessUserData::DestructionObserver:
   void OnRenderProcessUserDataDestroying(
       content::RenderProcessHost* render_process_host) override;
+
+  // This is exposed so that the tab helper can call it as well, as in some
+  // testing configurations we otherwise miss RPH creation notifications that
+  // usually arrive when interfaces are exposed to the renderer.
+  void EnsureProcessNodeForRenderProcessHost(
+      content::RenderProcessHost* render_process_host);
 
  private:
   SEQUENCE_CHECKER(sequence_checker_);
@@ -92,6 +110,7 @@ class PerformanceManagerRegistryImpl
   performance_manager::TabHelperFrameNodeSource frame_node_source_;
 
   base::ObserverList<PerformanceManagerMainThreadObserver> observers_;
+  base::ObserverList<PerformanceManagerMainThreadMechanism> mechanisms_;
 };
 
 }  // namespace performance_manager

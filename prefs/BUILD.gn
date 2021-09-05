@@ -82,6 +82,8 @@ static_library("prefs_strings") {
 
 static_library("browser_prefs") {
   sources = [
+    "native_settings_helper_mac.h",
+    "native_settings_helper_mac.mm",
     "native_settings_observer.cc",
     "native_settings_observer.h",
     "native_settings_observer_linux.cc",

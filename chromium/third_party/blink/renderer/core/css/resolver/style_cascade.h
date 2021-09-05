@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/core/css/css_property_value.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_token.h"
 #include "third_party/blink/renderer/core/css/parser/css_parser_token_range.h"
+#include "third_party/blink/renderer/core/css/properties/css_bitset.h"
 #include "third_party/blink/renderer/core/css/properties/css_property.h"
 #include "third_party/blink/renderer/core/css/resolver/cascade_filter.h"
 #include "third_party/blink/renderer/core/css/resolver/cascade_interpolations.h"
@@ -87,6 +88,14 @@ class CORE_EXPORT StyleCascade {
   // provide a different filter.
   void Apply(CascadeFilter = CascadeFilter());
 
+  // Returns a CSSBitset containing the !important declarations (analyzing
+  // if needed). If there are no !important declarations, returns nullptr.
+  //
+  // Note that this function does not return any set bits for -internal-visited-
+  // properties. Instead, !important -internal-visited-* declarations cause
+  // the corresponding unvisited properties to be set in the return value.
+  std::unique_ptr<CSSBitset> GetImportantSet();
+
   // Resets the cascade to its initial state. Note that this does not undo
   // any changes already applied to the StyleResolverState/ComputedStyle.
   void Reset();
@@ -102,6 +111,7 @@ class CORE_EXPORT StyleCascade {
   // See documentation the other Resolve* functions for what resolve means.
   const CSSValue* Resolve(const CSSPropertyName&,
                           const CSSValue&,
+                          CascadeOrigin,
                           CascadeResolver&);
 
  private:
@@ -123,6 +133,16 @@ class CORE_EXPORT StyleCascade {
   void AnalyzeIfNeeded();
   void AnalyzeMatchResult();
   void AnalyzeInterpolations();
+
+  // Clears the CascadeMap and other state, and analyzes the MatchResult/
+  // interpolations again.
+  void Reanalyze();
+
+  // Some properties are "cascade affecting", in the sense that their computed
+  // value actually affects cascade behavior. For example, css-logical
+  // properties change their cascade behavior depending on the computed value
+  // of direction/writing-mode.
+  void ApplyCascadeAffecting(CascadeResolver&);
 
   // Applies kHighPropertyPriority properties.
   //
@@ -154,13 +174,6 @@ class CORE_EXPORT StyleCascade {
                           CascadePriority,
                           const ActiveInterpolations&,
                           CascadeResolver&);
-  // Surrogates (such as css-logical properties) require special handling, since
-  // both the surrogate and the original property exist in the cascade at the
-  // same time. For example, 'inline-size' and 'width' may both exist in the
-  // CascadeMap, and the winner must be determined Apply-time, since we don't
-  // know which physical property 'inline-size' corresponds to before
-  // 'writing-mode' and 'direction' have been applied.
-  void ApplySurrogate(const CSSProperty&, CascadePriority, CascadeResolver&);
 
   // Looks up a value with random access, and applies it.
   void LookupAndApply(const CSSPropertyName&, CascadeResolver&);
@@ -245,9 +258,11 @@ class CORE_EXPORT StyleCascade {
 
   const CSSValue* Resolve(const CSSProperty&,
                           const CSSValue&,
+                          CascadeOrigin,
                           CascadeResolver&);
   const CSSValue* ResolveCustomProperty(const CSSProperty&,
                                         const CSSCustomPropertyDeclaration&,
+                                        CascadeOrigin,
                                         CascadeResolver&);
   const CSSValue* ResolveVariableReference(const CSSProperty&,
                                            const CSSVariableReferenceValue&,
@@ -255,6 +270,9 @@ class CORE_EXPORT StyleCascade {
   const CSSValue* ResolvePendingSubstitution(const CSSProperty&,
                                              const CSSPendingSubstitutionValue&,
                                              CascadeResolver&);
+  const CSSValue* ResolveRevert(const CSSProperty&,
+                                CascadeOrigin,
+                                CascadeResolver&);
 
   scoped_refptr<CSSVariableData> ResolveVariableData(CSSVariableData*,
                                                      CascadeResolver&);
@@ -293,11 +311,7 @@ class CORE_EXPORT StyleCascade {
   void MarkHasVariableReference(const CSSProperty&);
 
   const Document& GetDocument() const;
-  const CSSProperty& SurrogateFor(const CSSProperty& surrogate) const;
-
-  bool HasAuthorDeclaration(const CSSProperty&) const;
-  bool HasAuthorBorder() const;
-  bool HasAuthorBackground() const;
+  const CSSProperty& ResolveSurrogate(const CSSProperty& surrogate);
 
   StyleResolverState& state_;
   MatchResult match_result_;
@@ -344,6 +358,10 @@ class CORE_EXPORT StyleCascade {
 
   bool needs_match_result_analyze_ = false;
   bool needs_interpolations_analyze_ = false;
+  // A cascade-affecting property is for example 'direction', since the
+  // computed value of the property affects how e.g. margin-inline-start
+  // (and other css-logical properties) cascade.
+  bool depends_on_cascade_affecting_property_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(StyleCascade);
 };

@@ -23,15 +23,20 @@
 #include "chrome/browser/chromeos/login/enrollment/enrollment_screen.h"
 #include "chrome/browser/chromeos/login/screen_manager.h"
 #include "chrome/browser/chromeos/login/screens/arc_terms_of_service_screen.h"
+#include "chrome/browser/chromeos/login/screens/assistant_optin_flow_screen.h"
 #include "chrome/browser/chromeos/login/screens/demo_preferences_screen.h"
 #include "chrome/browser/chromeos/login/screens/demo_setup_screen.h"
 #include "chrome/browser/chromeos/login/screens/enable_adb_sideloading_screen.h"
 #include "chrome/browser/chromeos/login/screens/enable_debugging_screen.h"
 #include "chrome/browser/chromeos/login/screens/eula_screen.h"
+#include "chrome/browser/chromeos/login/screens/fingerprint_setup_screen.h"
+#include "chrome/browser/chromeos/login/screens/gesture_navigation_screen.h"
 #include "chrome/browser/chromeos/login/screens/kiosk_autolaunch_screen.h"
+#include "chrome/browser/chromeos/login/screens/marketing_opt_in_screen.h"
 #include "chrome/browser/chromeos/login/screens/network_screen.h"
 #include "chrome/browser/chromeos/login/screens/packaged_license_screen.h"
 #include "chrome/browser/chromeos/login/screens/recommend_apps_screen.h"
+#include "chrome/browser/chromeos/login/screens/sync_consent_screen.h"
 #include "chrome/browser/chromeos/login/screens/terms_of_service_screen.h"
 #include "chrome/browser/chromeos/login/screens/update_screen.h"
 #include "chrome/browser/chromeos/policy/enrollment_config.h"
@@ -134,19 +139,6 @@ class WizardController {
   // Returns true if the current wizard instance has reached the login screen.
   bool login_screen_started() const { return login_screen_started_; }
 
-  // Returns true if packaged license screen should be shown.
-  // License screen should be shown when device packed with license and other
-  // enrollment flows are not triggered by the device state.
-  bool should_show_packaged_license_screen() const {
-    return prescribed_enrollment_config_.is_license_packaged_with_device &&
-           !prescribed_enrollment_config_.should_enroll();
-  }
-
-  void set_prescribed_enrollment_config_for_testing(
-      policy::EnrollmentConfig config) {
-    prescribed_enrollment_config_ = config;
-  }
-
   // Returns true if a given screen exists.
   bool HasScreen(OobeScreenId screen_id);
 
@@ -164,6 +156,9 @@ class WizardController {
 
   void SetSharedURLLoaderFactoryForTesting(
       scoped_refptr<network::SharedURLLoaderFactory> factory);
+
+  // Resets |current_screen_| when login screen has started.
+  void LoginScreenStarted();
 
  private:
   // Create BaseScreen instances. These are owned by |screen_manager_|.
@@ -204,6 +199,10 @@ class WizardController {
   // Shows images login screen.
   void ShowLoginScreen();
 
+  // Check if advancing to |screen| is allowed using screen priorities. Return
+  // true if the priority of |screen| is higher or equal to current screen.
+  bool CanNavigateTo(OobeScreenId screen_id);
+
   // Shows default screen depending on device ownership.
   void OnOwnershipStatusCheckDone(
       DeviceSettingsService::OwnershipStatus status);
@@ -232,20 +231,17 @@ class WizardController {
   void OnDemoPreferencesScreenExit(DemoPreferencesScreen::Result result);
   void OnDemoSetupScreenExit(DemoSetupScreen::Result result);
   void OnTermsOfServiceScreenExit(TermsOfServiceScreen::Result result);
-  void OnTermsOfServiceAccepted();
-  void OnSyncConsentScreenExit();
-  void OnSyncConsentFinished();
-  void OnFingerprintSetupScreenExit();
+  void OnFingerprintSetupScreenExit(FingerprintSetupScreen::Result result);
+  void OnSyncConsentScreenExit(SyncConsentScreen::Result result);
   void OnDiscoverScreenExit();
   void OnArcTermsOfServiceScreenExit(ArcTermsOfServiceScreen::Result result);
-  void OnArcTermsOfServiceSkipped();
   void OnArcTermsOfServiceAccepted();
   void OnRecommendAppsScreenExit(RecommendAppsScreen::Result result);
   void OnAppDownloadingScreenExit();
-  void OnAssistantOptInFlowScreenExit();
+  void OnAssistantOptInFlowScreenExit(AssistantOptInFlowScreen::Result result);
   void OnMultiDeviceSetupScreenExit();
-  void OnGestureNavigationScreenExit();
-  void OnMarketingOptInScreenExit();
+  void OnGestureNavigationScreenExit(GestureNavigationScreen::Result result);
+  void OnMarketingOptInScreenExit(MarketingOptInScreen::Result result);
   void OnResetScreenExit();
   void OnDeviceModificationCanceled();
   void OnSupervisionTransitionScreenExit();
@@ -382,11 +378,7 @@ class WizardController {
 
   // Time when the EULA was accepted. Used to measure the duration from the EULA
   // acceptance until the Sign-In screen is displayed.
-  base::Time time_eula_accepted_;
-
-  // Time when OOBE was started. Used to measure the total time from boot to
-  // user Sign-In completed.
-  base::Time time_oobe_started_;
+  base::TimeTicks time_eula_accepted_;
 
   // Whether OOBE has yet been marked as completed.
   bool oobe_marked_completed_ = false;
@@ -407,6 +399,7 @@ class WizardController {
   friend class WizardControllerFlowTest;
   friend class WizardControllerOobeConfigurationTest;
   friend class WizardControllerOobeResumeTest;
+  friend class WizardControllerScreenPriorityTest;
   friend class WizardControllerSupervisionTransitionOobeTest;
 
   std::unique_ptr<AccessibilityStatusSubscription> accessibility_subscription_;
@@ -424,7 +417,7 @@ class WizardController {
   std::unique_ptr<DemoSetupController> demo_setup_controller_;
 
   // Maps screen names to last time of their shows.
-  std::map<OobeScreenId, base::Time> screen_show_times_;
+  std::map<OobeScreenId, base::TimeTicks> screen_show_times_;
 
   // Tests check result of timezone resolve.
   bool timezone_resolved_ = false;

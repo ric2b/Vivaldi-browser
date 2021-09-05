@@ -23,6 +23,7 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
+#include "content/public/test/browser_test.h"
 #include "extensions/browser/api/automation_internal/automation_event_router.h"
 #include "extensions/common/api/automation_internal.h"
 #include "extensions/test/extension_test_message_listener.h"
@@ -425,6 +426,12 @@ IN_PROC_BROWSER_TEST_F(AutomationApiTest, ForceLayout) {
       << message_;
 }
 
+IN_PROC_BROWSER_TEST_F(AutomationApiTest, Intents) {
+  StartEmbeddedTestServer();
+  ASSERT_TRUE(RunExtensionSubtest("automation/tests/tabs", "intents.html"))
+      << message_;
+}
+
 #if defined(OS_CHROMEOS)
 
 class AutomationApiTestWithDeviceScaleFactor : public AutomationApiTest {
@@ -450,6 +457,13 @@ IN_PROC_BROWSER_TEST_F(AutomationApiTestWithDeviceScaleFactor, HitTest) {
 IN_PROC_BROWSER_TEST_F(AutomationApiTest, Position) {
   StartEmbeddedTestServer();
   ASSERT_TRUE(RunExtensionSubtest("automation/tests/desktop", "position.html"))
+      << message_;
+}
+
+IN_PROC_BROWSER_TEST_F(AutomationApiTest, AccessibilityFocus) {
+  StartEmbeddedTestServer();
+  ASSERT_TRUE(
+      RunExtensionSubtest("automation/tests/tabs", "accessibility_focus.html"))
       << message_;
 }
 

@@ -7,6 +7,7 @@
 
 #include "base/strings/string16.h"
 #include "build/build_config.h"
+#include "components/content_settings/browser/tab_specific_content_settings.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/permissions/permission_result.h"
 #include "components/permissions/permission_uma_util.h"
@@ -19,12 +20,9 @@ class PasswordProtectionService;
 }  // namespace safe_browsing
 
 namespace permissions {
+class ChooserContextBase;
 class PermissionDecisionAutoBlocker;
 }  // namespace permissions
-
-namespace permissions {
-class ChooserContextBase;
-}
 
 class HostContentSettingsMap;
 class StatefulSSLHostStateDelegate;
@@ -39,20 +37,6 @@ class PageInfoDelegate {
   // ChooserContextBase.
   virtual permissions::ChooserContextBase* GetChooserContext(
       ContentSettingsType type) = 0;
-
-  // Whether the content setting of type |type| has changed via Page Info UI.
-  virtual bool HasContentSettingChangedViaPageInfo(
-      ContentSettingsType type) = 0;
-
-  // Notifies the delegate that the content setting of type |type| has changed
-  // via Page Info UI.
-  virtual void ContentSettingChangedViaPageInfo(ContentSettingsType type) = 0;
-
-  // Get counts of allowed and blocked cookies.
-  virtual int GetFirstPartyAllowedCookiesCount(const GURL& site_url) = 0;
-  virtual int GetFirstPartyBlockedCookiesCount(const GURL& site_url) = 0;
-  virtual int GetThirdPartyAllowedCookiesCount(const GURL& site_url) = 0;
-  virtual int GetThirdPartyBlockedCookiesCount(const GURL& site_url) = 0;
 
 #if BUILDFLAG(FULL_SAFE_BROWSING)
   // Helper methods requiring access to PasswordProtectionService.
@@ -86,9 +70,16 @@ class PageInfoDelegate {
   // content settings (aka. site permissions).
   virtual HostContentSettingsMap* GetContentSettings() = 0;
 
+  virtual std::unique_ptr<
+      content_settings::TabSpecificContentSettings::Delegate>
+  GetTabSpecificContentSettingsDelegate() = 0;
   virtual bool IsContentDisplayedInVrHeadset() = 0;
   virtual security_state::SecurityLevel GetSecurityLevel() = 0;
   virtual security_state::VisibleSecurityState GetVisibleSecurityState() = 0;
+#if defined(OS_ANDROID)
+  // Gets the name of the embedder.
+  virtual const base::string16 GetClientApplicationName() = 0;
+#endif
 };
 
 #endif  // COMPONENTS_PAGE_INFO_PAGE_INFO_DELEGATE_H_

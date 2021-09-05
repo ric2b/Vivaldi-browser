@@ -4,6 +4,7 @@
 #define COMPONENTS_DATASOURCE_DESKTOP_DATA_SOURCE_WIN_H_
 
 #include <string>
+#include "base/win/scoped_co_mem.h"
 #include "components/datasource/vivaldi_data_source.h"
 
 class DesktopWallpaperDataClassHandlerWin : public VivaldiDataClassHandler {
@@ -11,16 +12,24 @@ class DesktopWallpaperDataClassHandlerWin : public VivaldiDataClassHandler {
   DesktopWallpaperDataClassHandlerWin();
   ~DesktopWallpaperDataClassHandlerWin() override;
 
-  bool GetData(
+  void GetData(
       const std::string& data_id,
       content::URLDataSource::GotDataCallback callback) override;
 
  private:
-   // Path to the previously served wallpaper
-   std::wstring previous_path_;
+  void GetDataOnFileThread(std::wstring file_path,
+                           content::URLDataSource::GotDataCallback callback);
 
-   // Cache image data
-   scoped_refptr<base::RefCountedMemory> cached_image_data_;
+  void SendDataResultsOnUiThread(
+      scoped_refptr<base::RefCountedMemory> image_data,
+      std::wstring path,
+      content::URLDataSource::GotDataCallback callback);
+
+  // Path to the previously served wallpaper
+  std::wstring previous_path_;
+
+  // Cache image data
+  scoped_refptr<base::RefCountedMemory> cached_image_data_;
 };
 
 #endif  // COMPONENTS_DATASOURCE_DESKTOP_DATA_SOURCE_WIN_H_

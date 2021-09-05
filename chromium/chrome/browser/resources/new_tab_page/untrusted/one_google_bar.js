@@ -2,53 +2,122 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-/**
- * The following |messageType|'s are sent to the parent frame:
- *  - loaded: initial load
- *  - deactivate: the pointer is not over OneGoogleBar content
- *  - activate: the pointer is over OneGoogleBar content
- *
- * TODO(crbug.com/1039913): add support for light/dark theme. add support for
- *     forwarding touch events when OneGoogleBar is active.
- *
- * @param {string} messageType
- */
-function postMessage(messageType) {
-  window.parent.postMessage(
-      {frameType: 'one-google-bar', messageType}, 'chrome://new-tab-page');
-}
-
-// Tracks if the OneGoogleBar is active and should accept pointer events.
-let isActive;
+const oneGoogleBarHeightInPixels = 64;
 
 /**
- * @param {number} x
- * @param {number} y
+ * @param {boolean} enabled
+ * @return {!Promise}
  */
-function updateActiveState(x, y) {
-  const shouldBeActive = document.elementFromPoint(x, y).tagName !== 'HTML';
-  if (shouldBeActive === isActive) {
+async function enableDarkTheme(enabled) {
+  if (!window.gbar) {
     return;
   }
-  isActive = shouldBeActive;
-  postMessage(shouldBeActive ? 'activate' : 'deactivate');
+  const ogb = await window.gbar.a.bf();
+  ogb.pc.call(ogb, enabled ? 1 : 0);
 }
 
-// Handle messages from parent frame which include forwarded mousemove events.
-// The OneGoogleBar is loaded in an iframe on top of the embedder parent frame.
-// The mousemove events are used to determine if the OneGoogleBar should be
-// active or not.
-// TODO(crbug.com/1039913): add support for touch which does not send mousemove
-//                          events.
+/**
+ * The following |messageType|'s are sent to the parent frame:
+ *  - loaded: sent on initial load.
+ *  - overlaysUpdated: sent when an overlay is updated. The overlay bounding
+ *       rects are included in the |data|.
+ * @param {string} messageType
+ * @param {Object} data
+ */
+function postMessage(messageType, data) {
+  if (window === window.parent) {
+    return;
+  }
+  window.parent.postMessage(
+      {frameType: 'one-google-bar', messageType, data},
+      'chrome://new-tab-page');
+}
+
+const overlays = new Set();
+
+function sendOverlayUpdate() {
+  // Remove overlays detached from DOM or elements in a parent overlay.
+  Array.from(overlays).forEach(overlay => {
+    if (!overlay.parentElement) {
+      overlays.delete(overlay);
+      return;
+    }
+    let parent = overlay.parentElement;
+    while (parent) {
+      if (overlays.has(parent)) {
+        overlays.delete(overlay);
+        return;
+      }
+      parent = parent.parentElement;
+    }
+  });
+  // Check if an overlay and its parents are visible.
+  const overlayRects =
+      Array.from(overlays)
+          .filter(overlay => {
+            if (window.getComputedStyle(overlay).visibility === 'hidden') {
+              return false;
+            }
+            let current = overlay;
+            while (current) {
+              if (window.getComputedStyle(current).display === 'none') {
+                return false;
+              }
+              current = current.parentElement;
+            }
+            return true;
+          })
+          .map(el => el.getBoundingClientRect());
+  postMessage('overlaysUpdated', overlayRects);
+}
+
+function trackOverlayState() {
+  const observer = new MutationObserver(mutations => {
+    // After loaded, there could exist overlays that are shown, but not mutated.
+    // Add all elements that could be an overlay. The children of the actual
+    // overlay element are removed before sending any overlay update message.
+    if (overlays.size === 0) {
+      Array.from(document.body.querySelectorAll('*')).forEach(el => {
+        if (el.offsetTop + el.offsetHeight > oneGoogleBarHeightInPixels) {
+          overlays.add(el);
+        }
+      });
+    }
+    // Add any mutated element that is an overlay to |overlays|.
+    mutations.forEach(({target}) => {
+      if (target.id === 'gb' || target.tagName === 'BODY' ||
+          overlays.has(target)) {
+        return;
+      }
+      if (target.offsetTop + target.offsetHeight > oneGoogleBarHeightInPixels) {
+        overlays.add(target);
+      }
+      // Update links that are loaded dynamically to ensure target is "_blank"
+      // or "_top".
+      // TODO(crbug.com/1039913): remove after OneGoogleBar links are updated.
+      if (target.parentElement) {
+        target.parentElement.querySelectorAll('a').forEach(el => {
+          if (el.target !== '_blank' && el.target !== '_top') {
+            el.target = '_top';
+          }
+        });
+      }
+    });
+    sendOverlayUpdate();
+  });
+  observer.observe(
+      document, {attributes: true, childList: true, subtree: true});
+}
+
 window.addEventListener('message', ({data}) => {
-  if (data.type === 'mousemove') {
-    updateActiveState(data.x, data.y);
+  if (data.type === 'enableDarkTheme') {
+    enableDarkTheme(data.enabled);
   }
 });
 
-window.addEventListener('mousemove', ({x, y}) => {
-  updateActiveState(x, y);
-});
+// Need to send overlay updates on resize because overlay bounding rects are
+// absolutely positioned.
+window.addEventListener('resize', sendOverlayUpdate);
 
 document.addEventListener('DOMContentLoaded', () => {
   // TODO(crbug.com/1039913): remove after OneGoogleBar links are updated.
@@ -59,4 +128,5 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
   postMessage('loaded');
+  trackOverlayState();
 });

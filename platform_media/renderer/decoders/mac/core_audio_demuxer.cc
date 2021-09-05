@@ -396,4 +396,9 @@ bool CoreAudioDemuxer::IsSupported(const std::string& content_type,
   return false;
 }
 
+base::Optional<container_names::MediaContainerName>
+CoreAudioDemuxer::GetContainerForMetrics() const {
+  return base::nullopt;
+}
+
 }  // namespace media

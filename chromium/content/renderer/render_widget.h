@@ -34,10 +34,8 @@
 #include "content/common/content_export.h"
 #include "content/common/content_to_visible_time_reporter.h"
 #include "content/common/drag_event_source_info.h"
-#include "content/common/edit_command.h"
 #include "content/common/widget.mojom.h"
 #include "content/public/common/drop_data.h"
-#include "content/renderer/compositor/layer_tree_view_delegate.h"
 #include "content/renderer/input/main_thread_event_queue.h"
 #include "content/renderer/input/render_widget_input_handler.h"
 #include "content/renderer/input/render_widget_input_handler_delegate.h"
@@ -53,7 +51,7 @@
 #include "ppapi/buildflags/buildflags.h"
 #include "services/network/public/mojom/referrer_policy.mojom.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
-#include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
+#include "third_party/blink/public/mojom/input/input_handler.mojom-shared.h"
 #include "third_party/blink/public/platform/viewport_intersection_state.h"
 #include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_text_input_info.h"
@@ -81,7 +79,6 @@ class SyncMessageFilter;
 
 namespace blink {
 namespace scheduler {
-class WebRenderWidgetSchedulingState;
 class WebWidgetScheduler;
 }
 struct WebDeviceEmulationParams;
@@ -94,7 +91,6 @@ class WebPagePopup;
 }  // namespace blink
 
 namespace cc {
-struct ApplyViewportChangesArgs;
 class SwapPromise;
 }
 
@@ -105,14 +101,13 @@ class Range;
 }
 
 namespace ui {
-struct DidOverscrollParams;
+class Cursor;
 }
 
 namespace content {
 class CompositorDependencies;
 class FrameSwapMessageQueue;
 class ImeEventGuard;
-class LayerTreeView;
 class MainThreadEventQueue;
 class PepperPluginInstanceImpl;
 class RenderFrameImpl;
@@ -146,14 +141,12 @@ class CONTENT_EXPORT RenderWidget
       public IPC::Sender,
       public blink::WebPagePopupClient,  // Is-a WebWidgetClient also.
       public mojom::Widget,
-      public LayerTreeViewDelegate,
       public RenderWidgetInputHandlerDelegate,
       public RenderWidgetScreenMetricsEmulatorDelegate,
       public MainThreadEventQueueClient {
  public:
   RenderWidget(int32_t widget_routing_id,
                CompositorDependencies* compositor_deps,
-               blink::mojom::DisplayMode display_mode,
                bool hidden,
                bool never_composited,
                mojo::PendingReceiver<mojom::Widget> widget_receiver);
@@ -174,9 +167,9 @@ class CONTENT_EXPORT RenderWidget
   // Convenience type for creation method taken by InstallCreateForFrameHook().
   // The method signature matches the RenderWidget constructor.
   using CreateRenderWidgetFunction = std::unique_ptr<RenderWidget> (*)(
-      int32_t,
+      int32_t routing_id,
       CompositorDependencies*,
-      blink::mojom::DisplayMode display_mode,
+      bool hidden,
       bool never_composited,
       mojo::PendingReceiver<mojom::Widget> widget_receiver);
   // Overrides the implementation of CreateForFrame() function below. Used by
@@ -190,7 +183,6 @@ class CONTENT_EXPORT RenderWidget
   static std::unique_ptr<RenderWidget> CreateForFrame(
       int32_t widget_routing_id,
       CompositorDependencies* compositor_deps,
-      blink::mojom::DisplayMode display_mode,
       bool never_composited);
 
   // Creates a RenderWidget for a popup. This is separate from CreateForFrame()
@@ -201,7 +193,6 @@ class CONTENT_EXPORT RenderWidget
   static RenderWidget* CreateForPopup(
       int32_t widget_routing_id,
       CompositorDependencies* compositor_deps,
-      blink::mojom::DisplayMode display_mode,
       bool hidden,
       bool never_composited,
       mojo::PendingReceiver<mojom::Widget> widget_receiver);
@@ -263,7 +254,6 @@ class CONTENT_EXPORT RenderWidget
 
   const gfx::Size& size() const { return size_; }
   bool is_fullscreen_granted() const { return is_fullscreen_granted_; }
-  blink::mojom::DisplayMode display_mode() const { return display_mode_; }
   bool is_hidden() const { return is_hidden_; }
   bool has_host_context_menu_location() const {
     return has_host_context_menu_location_;
@@ -284,7 +274,9 @@ class CONTENT_EXPORT RenderWidget
   bool IsForProvisionalFrame() const;
 
   // Manage edit commands to be used for the next keyboard event.
-  const EditCommands& edit_commands() const { return edit_commands_; }
+  const std::vector<blink::mojom::EditCommandPtr>& edit_commands() const {
+    return edit_commands_;
+  }
   void SetEditCommandForNextKeyEvent(const std::string& name,
                                      const std::string& value);
   void ClearEditCommands();
@@ -304,36 +296,6 @@ class CONTENT_EXPORT RenderWidget
   // IPC::Sender
   bool Send(IPC::Message* msg) override;
 
-  // LayerTreeViewDelegate
-  void ApplyViewportChanges(const cc::ApplyViewportChangesArgs& args) override;
-  void RecordManipulationTypeCounts(cc::ManipulationInfo info) override;
-  void SendOverscrollEventFromImplSide(
-      const gfx::Vector2dF& overscroll_delta,
-      cc::ElementId scroll_latched_element_id) override;
-  void SendScrollEndEventFromImplSide(
-      cc::ElementId scroll_latched_element_id) override;
-  void BeginMainFrame(base::TimeTicks frame_time) override;
-  void OnDeferMainFrameUpdatesChanged(bool) override;
-  void OnDeferCommitsChanged(bool) override;
-  void DidBeginMainFrame() override;
-  void RequestNewLayerTreeFrameSink(
-      LayerTreeFrameSinkCallback callback) override;
-  void DidCommitAndDrawCompositorFrame() override;
-  void WillCommitCompositorFrame() override;
-  void DidCommitCompositorFrame(base::TimeTicks commit_start_time) override;
-  void DidCompletePageScaleAnimation() override;
-  void RecordStartOfFrameMetrics() override;
-  void RecordEndOfFrameMetrics(
-      base::TimeTicks frame_begin_time,
-      cc::ActiveFrameSequenceTrackers trackers) override;
-  std::unique_ptr<cc::BeginMainFrameMetrics> GetBeginMainFrameMetrics()
-      override;
-
-  void BeginUpdateLayers() override;
-  void EndUpdateLayers() override;
-  void UpdateVisualState() override;
-  void WillBeginCompositorFrame() override;
-
   // RenderWidgetInputHandlerDelegate
   void FocusChangeComplete() override;
   void ObserveGestureEventAndResult(
@@ -343,7 +305,7 @@ class CONTENT_EXPORT RenderWidget
       bool event_processed) override;
 
   void OnDidHandleKeyEvent() override;
-  void OnDidOverscroll(const ui::DidOverscrollParams& params) override;
+  void OnDidOverscroll(blink::mojom::DidOverscrollParamsPtr params) override;
   void SetInputHandler(RenderWidgetInputHandler* input_handler) override;
   void ShowVirtualKeyboard() override;
   void UpdateTextInputState() override;
@@ -364,13 +326,8 @@ class CONTENT_EXPORT RenderWidget
 
   // blink::WebWidgetClient
   void ScheduleAnimation() override;
-  void IntrinsicSizingInfoChanged(
-      const blink::WebIntrinsicSizingInfo&) override;
   void DidMeaningfulLayout(blink::WebMeaningfulLayout layout_type) override;
   void DidChangeCursor(const ui::Cursor& cursor) override;
-  void AutoscrollStart(const gfx::PointF& point) override;
-  void AutoscrollFling(const gfx::Vector2dF& velocity) override;
-  void AutoscrollEnd() override;
   void ClosePopupWidgetSoon() override;
   void Show(blink::WebNavigationPolicy) override;
   blink::WebScreenInfo GetScreenInfo() override;
@@ -402,7 +359,6 @@ class CONTENT_EXPORT RenderWidget
       blink::WebLocalFrame* requester_frame,
       blink::WebWidgetClient::PointerLockCallback callback,
       bool request_unadjusted_movement) override;
-  void PointerLockLost();
   void RequestPointerUnlock() override;
   bool IsPointerLocked() override;
   void StartDragging(network::mojom::ReferrerPolicy policy,
@@ -413,18 +369,8 @@ class CONTENT_EXPORT RenderWidget
   void SetTouchAction(cc::TouchAction touch_action) override;
   void RequestUnbufferedInputEvents() override;
   void SetHasPointerRawUpdateEventHandlers(bool has_handlers) override;
-  void SetHasTouchEventHandlers(bool has_handlers) override;
   void SetNeedsLowLatencyInput(bool) override;
   void SetNeedsUnbufferedInputForDebugger(bool) override;
-  void AnimateDoubleTapZoomInMainFrame(const gfx::Point& point,
-                                       const blink::WebRect& bounds) override;
-  void ZoomToFindInPageRectInMainFrame(
-      const blink::WebRect& rect_to_zoom) override;
-  void FallbackCursorModeLockCursor(bool left,
-                                    bool right,
-                                    bool up,
-                                    bool down) override;
-  void FallbackCursorModeSetCursorVisibility(bool visible) override;
   void SetPageScaleStateAndLimits(float page_scale_factor,
                                   bool is_pinch_gesture_active,
                                   float minimum,
@@ -433,16 +379,21 @@ class CONTENT_EXPORT RenderWidget
   void RequestDecode(const cc::PaintImage& image,
                      base::OnceCallback<void(bool)> callback) override;
   viz::FrameSinkId GetFrameSinkId() override;
-  void AddPresentationCallback(
-      uint32_t frame_token,
-      base::OnceCallback<void(base::TimeTicks)> callback) override;
   void RecordTimeToFirstActivePaint(base::TimeDelta duration) override;
+  void OnDeferMainFrameUpdatesChanged(bool) override;
+  void OnDeferCommitsChanged(bool) override;
+  void DidCommitAndDrawCompositorFrame() override;
+  void DidCommitCompositorFrame(base::TimeTicks commit_start_time) override;
+  void DidCompletePageScaleAnimation() override;
+  void WillBeginMainFrame() override;
+  void RequestNewLayerTreeFrameSink(
+      LayerTreeFrameSinkCallback callback) override;
 
   // Returns the scale being applied to the document in blink by the device
   // emulator. Returns 1 if there is no emulation active. Use this to position
   // things when the coordinates did not come from blink, such as from the mouse
   // position.
-  float GetEmulatorScale() const;
+  float GetEmulatorScale() const override;
 
   // Override point to obtain that the current input method state and caret
   // position.
@@ -543,7 +494,6 @@ class CONTENT_EXPORT RenderWidget
 
   // MainThreadEventQueueClient overrides.
   bool HandleInputEvent(const blink::WebCoalescedInputEvent& input_event,
-                        const ui::LatencyInfo& latency_info,
                         HandledEventCallback callback) override;
   void SetNeedsMainFrame() override;
 
@@ -563,8 +513,8 @@ class CONTENT_EXPORT RenderWidget
   void OnSetFocus(bool enable);
   void OnMouseCaptureLost();
   void OnCursorVisibilityChange(bool is_visible);
-  void OnFallbackCursorModeToggled(bool is_on);
-  void OnSetEditCommandsForNextKeyEvent(const EditCommands& edit_commands);
+  void OnSetEditCommandsForNextKeyEvent(
+      std::vector<blink::mojom::EditCommandPtr> edit_commands);
   void OnImeSetComposition(
       const base::string16& text,
       const std::vector<blink::WebImeTextSpan>& ime_text_spans,
@@ -615,9 +565,6 @@ class CONTENT_EXPORT RenderWidget
   base::WeakPtr<RenderWidget> AsWeakPtr();
 
  protected:
-  // Notify subclasses that we initiated the paint operation.
-  virtual void DidInitiatePaint() {}
-
   // Notify subclasses that we handled OnUpdateVisualProperties.
   virtual void AfterUpdateVisualProperties() {}
 
@@ -700,10 +647,6 @@ class CONTENT_EXPORT RenderWidget
                            const gfx::Rect& window_screen_rect);
   void OnSetViewportIntersection(
       const blink::ViewportIntersectionState& intersection_state);
-  void OnSetIsInert(bool);
-  void OnSetInheritedEffectiveTouchAction(cc::TouchAction touch_action);
-  void OnUpdateRenderThrottlingStatus(bool is_throttled,
-                                      bool subtree_throttled);
   void OnDragTargetDragEnter(
       const std::vector<DropData::Metadata>& drop_meta_data,
       const gfx::PointF& client_pt,
@@ -723,7 +666,6 @@ class CONTENT_EXPORT RenderWidget
   void OnDragSourceEnded(const gfx::PointF& client_point,
                          const gfx::PointF& screen_point,
                          blink::WebDragOperation drag_operation);
-  void OnDragSourceSystemDragEnded();
   void OnOrientationChange();
   void OnWaitNextFrameForTests(int routing_id);
 
@@ -821,20 +763,17 @@ class CONTENT_EXPORT RenderWidget
   // features.
   CompositorDependencies* const compositor_deps_;
 
-  // We are responsible for destroying this object via its Close method, unless
-  // the RenderWidget is associated with a RenderViewImpl through |delegate_|.
-  // Becomes null once close is initiated on the RenderWidget.
-  blink::WebWidget* webwidget_ = nullptr;
-
   // The delegate for this object which is just a RenderViewImpl.
   // This member is non-null if and only if the RenderWidget is associated with
   // a RenderViewImpl.
   RenderWidgetDelegate* delegate_ = nullptr;
 
-  // Wraps the LayerTreeHost, providing clients for it with the ability to
-  // outlive RenderWidget during shutdown and keep the client pointers valid.
-  std::unique_ptr<LayerTreeView> layer_tree_view_;
-  // This is valid while |layer_tree_view_| is valid.
+  // We are responsible for destroying this object via its Close method, unless
+  // the RenderWidget is associated with a RenderViewImpl through |delegate_|.
+  // Becomes null once close is initiated on the RenderWidget.
+  blink::WebWidget* webwidget_ = nullptr;
+
+  // This is valid while |webwidget_| is valid.
   cc::LayerTreeHost* layer_tree_host_ = nullptr;
 
   // Present when emulation is enabled, only in a main frame RenderWidget. Used
@@ -897,9 +836,6 @@ class CONTENT_EXPORT RenderWidget
 
   // Indicates whether tab-initiated fullscreen was granted.
   bool is_fullscreen_granted_ = false;
-
-  // Indicates the display mode.
-  blink::mojom::DisplayMode display_mode_;
 
   // It is possible that one ImeEventGuard is nested inside another
   // ImeEventGuard. We keep track of the outermost one, and update it as needed.
@@ -998,9 +934,6 @@ class CONTENT_EXPORT RenderWidget
   bool has_host_context_menu_location_ = false;
   gfx::Point host_context_menu_location_;
 
-  std::unique_ptr<blink::scheduler::WebRenderWidgetSchedulingState>
-      render_widget_scheduling_state_;
-
   // Mouse Lock dispatcher attached to this view.
   std::unique_ptr<RenderWidgetMouseLockDispatcher> mouse_lock_dispatcher_;
 
@@ -1036,7 +969,7 @@ class CONTENT_EXPORT RenderWidget
 
   // Stores edit commands associated to the next key event.
   // Will be cleared as soon as the next key event is processed.
-  EditCommands edit_commands_;
+  std::vector<blink::mojom::EditCommandPtr> edit_commands_;
 
   // This field stores drag/drop related info for the event that is currently
   // being handled. If the current event results in starting a drag/drop
@@ -1061,10 +994,6 @@ class CONTENT_EXPORT RenderWidget
   mojo::Receiver<mojom::Widget> widget_receiver_;
 
   gfx::Rect compositor_visible_rect_;
-
-  // Different consumers in the browser process makes different assumptions, so
-  // must always send the first IPC regardless of value.
-  base::Optional<bool> has_touch_handlers_;
 
   uint32_t last_capture_sequence_number_ = 0u;
 

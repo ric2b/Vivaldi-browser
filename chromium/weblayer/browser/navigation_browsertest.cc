@@ -7,9 +7,13 @@
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/test/bind_test_util.h"
+#include "components/variations/net/variations_http_headers.h"
+#include "components/variations/variations_http_header_provider.h"
 #include "content/public/test/url_loader_interceptor.h"
+#include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/controllable_http_response.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "net/test/embedded_test_server/http_response.h"
 #include "weblayer/public/navigation.h"
 #include "weblayer/public/navigation_controller.h"
 #include "weblayer/public/navigation_observer.h"
@@ -42,12 +46,12 @@ class NavigationObserverImpl : public NavigationObserver {
     redirected_callback_ = std::move(callback);
   }
 
-  void SetFailedClosure(base::RepeatingClosure closure) {
-    failed_closure_ = std::move(closure);
+  void SetFailedCallback(Callback callback) {
+    failed_callback_ = std::move(callback);
   }
 
-  void SetCompletedClosure(Callback closure) {
-    completed_closure_ = std::move(closure);
+  void SetCompletedClosure(Callback callback) {
+    completed_callback_ = std::move(callback);
   }
 
   // NavigationObserver:
@@ -60,20 +64,20 @@ class NavigationObserverImpl : public NavigationObserver {
       redirected_callback_.Run(navigation);
   }
   void NavigationCompleted(Navigation* navigation) override {
-    if (completed_closure_)
-      completed_closure_.Run(navigation);
+    if (completed_callback_)
+      completed_callback_.Run(navigation);
   }
   void NavigationFailed(Navigation* navigation) override {
-    if (failed_closure_)
-      failed_closure_.Run();
+    if (failed_callback_)
+      failed_callback_.Run(navigation);
   }
 
  private:
   NavigationController* controller_;
   Callback started_callback_;
   Callback redirected_callback_;
-  Callback completed_closure_;
-  base::RepeatingClosure failed_closure_;
+  Callback completed_callback_;
+  Callback failed_callback_;
 };
 
 class OneShotNavigationObserver : public NavigationObserver {
@@ -90,6 +94,8 @@ class OneShotNavigationObserver : public NavigationObserver {
 
   bool completed() { return completed_; }
   bool is_error_page() { return is_error_page_; }
+  bool is_download() { return is_download_; }
+  bool was_stop_called() { return was_stop_called_; }
   Navigation::LoadError load_error() { return load_error_; }
   int http_status_code() { return http_status_code_; }
   NavigationState navigation_state() { return navigation_state_; }
@@ -105,6 +111,8 @@ class OneShotNavigationObserver : public NavigationObserver {
 
   void Finish(Navigation* navigation) {
     is_error_page_ = navigation->IsErrorPage();
+    is_download_ = navigation->IsDownload();
+    was_stop_called_ = navigation->WasStopCalled();
     load_error_ = navigation->GetLoadError();
     http_status_code_ = navigation->GetHttpStatusCode();
     navigation_state_ = navigation->GetState();
@@ -115,6 +123,8 @@ class OneShotNavigationObserver : public NavigationObserver {
   Tab* tab_;
   bool completed_ = false;
   bool is_error_page_ = false;
+  bool is_download_ = false;
+  bool was_stop_called_ = false;
   Navigation::LoadError load_error_ = Navigation::kNoError;
   int http_status_code_ = 0;
   NavigationState navigation_state_ = NavigationState::kWaitingResponse;
@@ -139,6 +149,8 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, NoError) {
   observer.WaitForNavigation();
   EXPECT_TRUE(observer.completed());
   EXPECT_FALSE(observer.is_error_page());
+  EXPECT_FALSE(observer.is_download());
+  EXPECT_FALSE(observer.was_stop_called());
   EXPECT_EQ(observer.load_error(), Navigation::kNoError);
   EXPECT_EQ(observer.http_status_code(), 200);
   EXPECT_EQ(observer.navigation_state(), NavigationState::kComplete);
@@ -210,14 +222,33 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, HttpConnectivityError) {
   EXPECT_EQ(observer.navigation_state(), NavigationState::kFailed);
 }
 
+IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, Download) {
+  EXPECT_TRUE(embedded_test_server()->Start());
+  GURL url(embedded_test_server()->GetURL("/content-disposition.html"));
+
+  OneShotNavigationObserver observer(shell());
+  GetNavigationController()->Navigate(url);
+
+  observer.WaitForNavigation();
+  EXPECT_FALSE(observer.completed());
+  EXPECT_FALSE(observer.is_error_page());
+  EXPECT_TRUE(observer.is_download());
+  EXPECT_FALSE(observer.was_stop_called());
+  EXPECT_EQ(observer.load_error(), Navigation::kOtherError);
+  EXPECT_EQ(observer.navigation_state(), NavigationState::kFailed);
+}
+
 IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, StopInOnStart) {
   ASSERT_TRUE(embedded_test_server()->Start());
   base::RunLoop run_loop;
   NavigationObserverImpl observer(GetNavigationController());
   observer.SetStartedCallback(base::BindLambdaForTesting(
       [&](Navigation*) { GetNavigationController()->Stop(); }));
-  observer.SetFailedClosure(
-      base::BindRepeating(&base::RunLoop::Quit, base::Unretained(&run_loop)));
+  observer.SetFailedCallback(
+      base::BindLambdaForTesting([&](Navigation* navigation) {
+        ASSERT_TRUE(navigation->WasStopCalled());
+        run_loop.Quit();
+      }));
   GetNavigationController()->Navigate(
       embedded_test_server()->GetURL("/simple_page.html"));
 
@@ -230,8 +261,11 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, StopInOnRedirect) {
   NavigationObserverImpl observer(GetNavigationController());
   observer.SetRedirectedCallback(base::BindLambdaForTesting(
       [&](Navigation*) { GetNavigationController()->Stop(); }));
-  observer.SetFailedClosure(
-      base::BindRepeating(&base::RunLoop::Quit, base::Unretained(&run_loop)));
+  observer.SetFailedCallback(
+      base::BindLambdaForTesting([&](Navigation* navigation) {
+        ASSERT_TRUE(navigation->WasStopCalled());
+        run_loop.Quit();
+      }));
   const GURL original_url = embedded_test_server()->GetURL("/simple_page.html");
   GetNavigationController()->Navigate(embedded_test_server()->GetURL(
       "/server-redirect?" + original_url.spec()));
@@ -248,8 +282,8 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
   int completed_count = 0;
   NavigationObserverImpl observer(controller);
   base::RunLoop run_loop;
-  observer.SetFailedClosure(
-      base::BindLambdaForTesting([&]() { failed_count++; }));
+  observer.SetFailedCallback(
+      base::BindLambdaForTesting([&](Navigation*) { failed_count++; }));
   observer.SetCompletedClosure(
       base::BindLambdaForTesting([&](Navigation* navigation) {
         completed_count++;
@@ -267,6 +301,35 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
   EXPECT_EQ(2, completed_count);
   ASSERT_EQ(2, controller->GetNavigationListSize());
   EXPECT_EQ(final_url, controller->GetNavigationEntryDisplayURL(1));
+}
+
+// Verifies calling Navigate() from NavigationRedirected() works.
+IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, NavigateFromRedirect) {
+  net::test_server::ControllableHttpResponse response_1(embedded_test_server(),
+                                                        "", true);
+  net::test_server::ControllableHttpResponse response_2(embedded_test_server(),
+                                                        "", true);
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  NavigationObserverImpl observer(GetNavigationController());
+  bool got_redirect = false;
+  const GURL url_to_load_on_redirect =
+      embedded_test_server()->GetURL("/url_to_load_on_redirect.html");
+  observer.SetRedirectedCallback(
+      base::BindLambdaForTesting([&](Navigation* navigation) {
+        shell()->LoadURL(url_to_load_on_redirect);
+        got_redirect = true;
+      }));
+
+  shell()->LoadURL(embedded_test_server()->GetURL("/initial_url.html"));
+  response_1.WaitForRequest();
+  response_1.Send(
+      "HTTP/1.1 302 Moved Temporarily\r\nLocation: /redirect_dest_url\r\n\r\n");
+  response_1.Done();
+  response_2.WaitForRequest();
+  response_2.Done();
+  EXPECT_EQ(url_to_load_on_redirect, response_2.http_request()->GetURL());
+  EXPECT_TRUE(got_redirect);
 }
 
 IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, SetRequestHeader) {
@@ -325,7 +388,336 @@ IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, SetRequestHeaderInRedirect) {
   response_2.WaitForRequest();
 
   // Header should be in redirect.
+  ASSERT_TRUE(base::Contains(response_2.http_request()->headers, header_name));
   EXPECT_EQ(header_value, response_2.http_request()->headers.at(header_name));
+}
+
+IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, PageSeesUserAgentString) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  const std::string custom_ua = "custom";
+  NavigationObserverImpl observer(GetNavigationController());
+  observer.SetStartedCallback(
+      base::BindLambdaForTesting([&](Navigation* navigation) {
+        navigation->SetUserAgentString(custom_ua);
+      }));
+  OneShotNavigationObserver navigation_observer(shell());
+  shell()->LoadURL(embedded_test_server()->GetURL("/simple_page.html"));
+  navigation_observer.WaitForNavigation();
+
+  base::RunLoop run_loop;
+  shell()->tab()->ExecuteScript(
+      base::ASCIIToUTF16("navigator.userAgent;"), false,
+      base::BindLambdaForTesting([&](base::Value value) {
+        ASSERT_TRUE(value.is_string());
+        EXPECT_EQ(custom_ua, value.GetString());
+        run_loop.Quit();
+      }));
+  run_loop.Run();
+}
+
+IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, SetUserAgentString) {
+  net::test_server::ControllableHttpResponse response_1(embedded_test_server(),
+                                                        "", true);
+  net::test_server::ControllableHttpResponse response_2(embedded_test_server(),
+                                                        "", true);
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  const std::string custom_ua = "CUSTOM";
+  NavigationObserverImpl observer(GetNavigationController());
+  observer.SetStartedCallback(
+      base::BindLambdaForTesting([&](Navigation* navigation) {
+        navigation->SetUserAgentString(custom_ua);
+      }));
+
+  shell()->LoadURL(embedded_test_server()->GetURL("/simple_page.html"));
+  response_1.WaitForRequest();
+
+  // |custom_ua| should be present in initial request.
+  ASSERT_TRUE(base::Contains(response_1.http_request()->headers,
+                             net::HttpRequestHeaders::kUserAgent));
+  const std::string new_header = response_1.http_request()->headers.at(
+      net::HttpRequestHeaders::kUserAgent);
+  EXPECT_EQ(custom_ua, new_header);
+
+  // Header should carry through to redirect.
+  response_1.Send(
+      "HTTP/1.1 302 Moved Temporarily\r\nLocation: /new_doc\r\n\r\n");
+  response_1.Done();
+  response_2.WaitForRequest();
+  EXPECT_EQ(custom_ua, response_2.http_request()->headers.at(
+                           net::HttpRequestHeaders::kUserAgent));
+}
+
+// Verifies changing the user agent twice in a row works.
+IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, UserAgentDoesntCarryThrough1) {
+  net::test_server::ControllableHttpResponse response_1(embedded_test_server(),
+                                                        "", true);
+  net::test_server::ControllableHttpResponse response_2(embedded_test_server(),
+                                                        "", true);
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  const std::string custom_ua1 = "my ua1";
+  const std::string custom_ua2 = "my ua2";
+  NavigationObserverImpl observer(GetNavigationController());
+  observer.SetStartedCallback(
+      base::BindLambdaForTesting([&](Navigation* navigation) {
+        navigation->SetUserAgentString(custom_ua1);
+      }));
+
+  shell()->LoadURL(embedded_test_server()->GetURL("/simple_page.html"));
+  response_1.WaitForRequest();
+  EXPECT_EQ(custom_ua1, response_1.http_request()->headers.at(
+                            net::HttpRequestHeaders::kUserAgent));
+
+  // Before the request is done, start another navigation.
+  observer.SetStartedCallback(
+      base::BindLambdaForTesting([&](Navigation* navigation) {
+        navigation->SetUserAgentString(custom_ua2);
+      }));
+  shell()->LoadURL(embedded_test_server()->GetURL("/simple_page2.html"));
+  response_2.WaitForRequest();
+  EXPECT_EQ(custom_ua2, response_2.http_request()->headers.at(
+                            net::HttpRequestHeaders::kUserAgent));
+}
+
+// Verifies changing the user agent doesn't bleed through to next navigation.
+IN_PROC_BROWSER_TEST_F(NavigationBrowserTest, UserAgentDoesntCarryThrough2) {
+  net::test_server::ControllableHttpResponse response_1(embedded_test_server(),
+                                                        "", true);
+  net::test_server::ControllableHttpResponse response_2(embedded_test_server(),
+                                                        "", true);
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  const std::string custom_ua = "my ua1";
+  NavigationObserverImpl observer(GetNavigationController());
+  observer.SetStartedCallback(
+      base::BindLambdaForTesting([&](Navigation* navigation) {
+        navigation->SetUserAgentString(custom_ua);
+      }));
+
+  shell()->LoadURL(embedded_test_server()->GetURL("/simple_page.html"));
+  response_1.WaitForRequest();
+  EXPECT_EQ(custom_ua, response_1.http_request()->headers.at(
+                           net::HttpRequestHeaders::kUserAgent));
+
+  // Before the request is done, start another navigation.
+  observer.SetStartedCallback(base::DoNothing());
+  shell()->LoadURL(embedded_test_server()->GetURL("/simple_page2.html"));
+  response_2.WaitForRequest();
+  EXPECT_NE(custom_ua, response_2.http_request()->headers.at(
+                           net::HttpRequestHeaders::kUserAgent));
+  EXPECT_FALSE(response_2.http_request()
+                   ->headers.at(net::HttpRequestHeaders::kUserAgent)
+                   .empty());
+}
+
+// Verifies changing the user-agent applies to child resources, such as an
+// <img>.
+IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
+                       UserAgentAppliesToChildResources) {
+  net::test_server::ControllableHttpResponse response_1(embedded_test_server(),
+                                                        "", true);
+  net::test_server::ControllableHttpResponse response_2(embedded_test_server(),
+                                                        "", true);
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  const std::string custom_ua = "custom-ua";
+  NavigationObserverImpl observer(GetNavigationController());
+  observer.SetStartedCallback(
+      base::BindLambdaForTesting([&](Navigation* navigation) {
+        navigation->SetUserAgentString(custom_ua);
+      }));
+
+  shell()->LoadURL(embedded_test_server()->GetURL("/foo.html"));
+  response_1.WaitForRequest();
+  response_1.Send(net::HTTP_OK, "text/html", "<img src=\"image.png\">");
+  response_1.Done();
+  EXPECT_EQ(custom_ua, response_1.http_request()->headers.at(
+                           net::HttpRequestHeaders::kUserAgent));
+  observer.SetStartedCallback(base::DoNothing());
+
+  response_2.WaitForRequest();
+  EXPECT_EQ(custom_ua, response_2.http_request()->headers.at(
+                           net::HttpRequestHeaders::kUserAgent));
+}
+
+IN_PROC_BROWSER_TEST_F(NavigationBrowserTest,
+                       SetUserAgentStringRendererInitiated) {
+  net::test_server::ControllableHttpResponse response_1(embedded_test_server(),
+                                                        "", true);
+  net::test_server::ControllableHttpResponse response_2(embedded_test_server(),
+                                                        "", true);
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  OneShotNavigationObserver load_observer(shell());
+  NavigationObserverImpl observer(GetNavigationController());
+  shell()->LoadURL(embedded_test_server()->GetURL("/simple_page.html"));
+  response_1.WaitForRequest();
+  response_1.Send(net::HTTP_OK, "text/html", "<html>");
+  response_1.Done();
+  load_observer.WaitForNavigation();
+
+  const std::string custom_ua = "custom-ua";
+  observer.SetStartedCallback(
+      base::BindLambdaForTesting([&](Navigation* navigation) {
+        navigation->SetUserAgentString(custom_ua);
+      }));
+  const GURL target_url = embedded_test_server()->GetURL("/foo.html");
+  shell()->tab()->ExecuteScript(
+      base::ASCIIToUTF16("location.href='" + target_url.spec() + "';"), false,
+      base::DoNothing());
+  response_2.WaitForRequest();
+  // |custom_ua| should be present in the renderer initiated navigation.
+  ASSERT_TRUE(base::Contains(response_2.http_request()->headers,
+                             net::HttpRequestHeaders::kUserAgent));
+  const std::string new_ua = response_2.http_request()->headers.at(
+      net::HttpRequestHeaders::kUserAgent);
+  EXPECT_EQ(custom_ua, new_ua);
+}
+
+class NavigationBrowserTest2 : public NavigationBrowserTest {
+ public:
+  void SetUp() override {
+    // HTTPS server only serves a valid cert for localhost, so this is needed to
+    // load pages from "www.google.com" without an interstitial.
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        "ignore-certificate-errors");
+
+    NavigationBrowserTest::SetUp();
+  }
+  void SetUpOnMainThread() override {
+    NavigationBrowserTest::SetUpOnMainThread();
+    https_server_ = std::make_unique<net::EmbeddedTestServer>(
+        net::EmbeddedTestServer::TYPE_HTTPS);
+    // The test makes requests to google.com which we want to redirect to the
+    // test server.
+    host_resolver()->AddRule("*", "127.0.0.1");
+
+    // Forces variations code to set the header.
+    auto* variations_provider =
+        variations::VariationsHttpHeaderProvider::GetInstance();
+    variations_provider->ForceVariationIds({"12", "456", "t789"}, "");
+  }
+
+  net::EmbeddedTestServer* https_server() { return https_server_.get(); }
+
+ private:
+  std::unique_ptr<net::EmbeddedTestServer> https_server_;
+};
+
+// This test verifies the embedder can replace the X-Client-Data header that
+// is also set by //components/variations.
+IN_PROC_BROWSER_TEST_F(NavigationBrowserTest2, ReplaceXClientDataHeader) {
+  std::unique_ptr<base::RunLoop> run_loop = std::make_unique<base::RunLoop>();
+  std::string last_header_value;
+  https_server()->RegisterRequestHandler(base::BindLambdaForTesting(
+      [&](const net::test_server::HttpRequest& request)
+          -> std::unique_ptr<net::test_server::HttpResponse> {
+        auto iter = request.headers.find(variations::kClientDataHeader);
+        if (iter != request.headers.end())
+          last_header_value = iter->second;
+        run_loop->Quit();
+        return std::make_unique<net::test_server::BasicHttpResponse>();
+      }));
+  ASSERT_TRUE(https_server()->Start());
+
+  // Verify the header is set by default.
+  const GURL url = https_server()->GetURL("www.google.com", "/");
+  shell()->LoadURL(url);
+  run_loop->Run();
+  EXPECT_FALSE(last_header_value.empty());
+
+  // Repeat, but clobber the header when navigating.
+  const std::string header_value = "value";
+  EXPECT_NE(last_header_value, header_value);
+  last_header_value.clear();
+  run_loop = std::make_unique<base::RunLoop>();
+  NavigationObserverImpl observer(GetNavigationController());
+  observer.SetStartedCallback(
+      base::BindLambdaForTesting([&](Navigation* navigation) {
+        navigation->SetRequestHeader(variations::kClientDataHeader,
+                                     header_value);
+      }));
+
+  shell()->LoadURL(https_server()->GetURL("www.google.com", "/foo"));
+  run_loop->Run();
+  EXPECT_EQ(header_value, last_header_value);
+}
+
+IN_PROC_BROWSER_TEST_F(NavigationBrowserTest2,
+                       SetXClientDataHeaderCarriesThroughToRedirect) {
+  std::unique_ptr<base::RunLoop> run_loop = std::make_unique<base::RunLoop>();
+  std::string last_header_value;
+  bool should_redirect = true;
+  https_server()->RegisterRequestHandler(base::BindLambdaForTesting(
+      [&](const net::test_server::HttpRequest& request)
+          -> std::unique_ptr<net::test_server::HttpResponse> {
+        auto response = std::make_unique<net::test_server::BasicHttpResponse>();
+        if (should_redirect) {
+          should_redirect = false;
+          response->set_code(net::HTTP_MOVED_PERMANENTLY);
+          response->AddCustomHeader(
+              "Location",
+              https_server()->GetURL("www.google.com", "/redirect").spec());
+        } else {
+          auto iter = request.headers.find(variations::kClientDataHeader);
+          last_header_value = iter->second;
+          run_loop->Quit();
+        }
+        return response;
+      }));
+  ASSERT_TRUE(https_server()->Start());
+
+  const std::string header_value = "value";
+  run_loop = std::make_unique<base::RunLoop>();
+  NavigationObserverImpl observer(GetNavigationController());
+  observer.SetStartedCallback(
+      base::BindLambdaForTesting([&](Navigation* navigation) {
+        navigation->SetRequestHeader(variations::kClientDataHeader,
+                                     header_value);
+      }));
+
+  shell()->LoadURL(https_server()->GetURL("www.google.com", "/foo"));
+  run_loop->Run();
+  EXPECT_EQ(header_value, last_header_value);
+}
+
+IN_PROC_BROWSER_TEST_F(NavigationBrowserTest2, SetXClientDataHeaderInRedirect) {
+  std::unique_ptr<base::RunLoop> run_loop = std::make_unique<base::RunLoop>();
+  std::string last_header_value;
+  bool should_redirect = true;
+  https_server()->RegisterRequestHandler(base::BindLambdaForTesting(
+      [&](const net::test_server::HttpRequest& request)
+          -> std::unique_ptr<net::test_server::HttpResponse> {
+        auto response = std::make_unique<net::test_server::BasicHttpResponse>();
+        if (should_redirect) {
+          should_redirect = false;
+          response->set_code(net::HTTP_MOVED_PERMANENTLY);
+          response->AddCustomHeader(
+              "Location",
+              https_server()->GetURL("www.google.com", "/redirect").spec());
+        } else {
+          auto iter = request.headers.find(variations::kClientDataHeader);
+          last_header_value = iter->second;
+          run_loop->Quit();
+        }
+        return response;
+      }));
+  ASSERT_TRUE(https_server()->Start());
+
+  const std::string header_value = "value";
+  run_loop = std::make_unique<base::RunLoop>();
+  NavigationObserverImpl observer(GetNavigationController());
+  observer.SetRedirectedCallback(
+      base::BindLambdaForTesting([&](Navigation* navigation) {
+        navigation->SetRequestHeader(variations::kClientDataHeader,
+                                     header_value);
+      }));
+
+  shell()->LoadURL(https_server()->GetURL("www.google.com", "/foo"));
+  run_loop->Run();
+  EXPECT_EQ(header_value, last_header_value);
 }
 
 }  // namespace weblayer

@@ -15,7 +15,6 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
-#include "base/feature_list.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -26,7 +25,6 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/device_event_log/device_event_log.h"
-#include "device/base/features.h"
 #include "device/bluetooth/bluetooth_common.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/bluetooth_discovery_session_outcome.h"
@@ -52,7 +50,6 @@
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
 #if defined(OS_CHROMEOS)
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/devicetype.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 #include "device/bluetooth/chromeos/bluetooth_utils.h"
@@ -126,9 +123,8 @@ device::BluetoothDevice::ManufacturerDataMap ConvertManufacturerDataMap(
 namespace device {
 
 // static
-base::WeakPtr<BluetoothAdapter> BluetoothAdapter::CreateAdapter(
-    InitCallback init_callback) {
-  return bluez::BluetoothAdapterBlueZ::CreateAdapter(std::move(init_callback));
+scoped_refptr<BluetoothAdapter> BluetoothAdapter::CreateAdapter() {
+  return bluez::BluetoothAdapterBlueZ::CreateAdapter();
 }
 
 }  // namespace device
@@ -183,11 +179,23 @@ void ResetAdvertisingErrorCallbackConnector(
 }  // namespace
 
 // static
-base::WeakPtr<BluetoothAdapter> BluetoothAdapterBlueZ::CreateAdapter(
-    InitCallback init_callback) {
-  BluetoothAdapterBlueZ* adapter =
-      new BluetoothAdapterBlueZ(std::move(init_callback));
-  return adapter->weak_ptr_factory_.GetWeakPtr();
+scoped_refptr<BluetoothAdapterBlueZ> BluetoothAdapterBlueZ::CreateAdapter() {
+  return base::WrapRefCounted(new BluetoothAdapterBlueZ());
+}
+
+void BluetoothAdapterBlueZ::Initialize(base::OnceClosure callback) {
+  init_callback_ = std::move(callback);
+
+  // Can't initialize the adapter until DBus clients are ready.
+  if (bluez::BluezDBusManager::Get()->IsObjectManagerSupportKnown()) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(&BluetoothAdapterBlueZ::Init,
+                                  weak_ptr_factory_.GetWeakPtr()));
+    return;
+  }
+  bluez::BluezDBusManager::Get()->CallWhenObjectManagerSupportIsKnown(
+      base::BindRepeating(&BluetoothAdapterBlueZ::Init,
+                          weak_ptr_factory_.GetWeakPtr()));
 }
 
 void BluetoothAdapterBlueZ::Shutdown() {
@@ -255,22 +263,10 @@ void BluetoothAdapterBlueZ::Shutdown() {
   dbus_is_shutdown_ = true;
 }
 
-BluetoothAdapterBlueZ::BluetoothAdapterBlueZ(InitCallback init_callback)
-    : init_callback_(std::move(init_callback)),
-      initialized_(false),
-      dbus_is_shutdown_(false) {
+BluetoothAdapterBlueZ::BluetoothAdapterBlueZ()
+    : initialized_(false), dbus_is_shutdown_(false) {
   ui_task_runner_ = base::ThreadTaskRunnerHandle::Get();
   socket_thread_ = device::BluetoothSocketThread::Get();
-
-  // Can't initialize the adapter until DBus clients are ready.
-  if (bluez::BluezDBusManager::Get()->IsObjectManagerSupportKnown()) {
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(&BluetoothAdapterBlueZ::Init,
-                                  weak_ptr_factory_.GetWeakPtr()));
-    return;
-  }
-  bluez::BluezDBusManager::Get()->CallWhenObjectManagerSupportIsKnown(
-      base::Bind(&BluetoothAdapterBlueZ::Init, weak_ptr_factory_.GetWeakPtr()));
 }
 
 void BluetoothAdapterBlueZ::Init() {
@@ -338,6 +334,19 @@ std::string BluetoothAdapterBlueZ::GetName() const {
   DCHECK(properties);
 
   return properties->alias.value();
+}
+
+std::string BluetoothAdapterBlueZ::GetSystemName() const {
+  if (!IsPresent())
+    return std::string();
+
+  bluez::BluetoothAdapterClient::Properties* properties =
+      bluez::BluezDBusManager::Get()
+          ->GetBluetoothAdapterClient()
+          ->GetProperties(object_path_);
+  DCHECK(properties);
+
+  return properties ? properties->name.value() : std::string();
 }
 
 void BluetoothAdapterBlueZ::SetName(const std::string& name,
@@ -1066,10 +1075,6 @@ void BluetoothAdapterBlueZ::SetAdapter(const dbus::ObjectPath& object_path) {
   if (properties->discovering.value())
     DiscoveringChanged(true);
 
-#if defined(OS_CHROMEOS)
-  SetChromeOSKernelSuspendNotifier(properties);
-#endif
-
   std::vector<dbus::ObjectPath> device_paths =
       bluez::BluezDBusManager::Get()
           ->GetBluetoothDeviceClient()
@@ -1108,25 +1113,6 @@ void BluetoothAdapterBlueZ::SetStandardChromeOSAdapterName() {
   alias = base::StringPrintf("%s_%04X", alias.c_str(),
                              base::PersistentHash(address) & 0xFFFF);
   SetName(alias, base::DoNothing(), base::DoNothing());
-}
-
-// If the property is available, set the value according to the feature flag.
-void BluetoothAdapterBlueZ::SetChromeOSKernelSuspendNotifier(
-    bluez::BluetoothAdapterClient::Properties* properties) {
-  if (!properties->use_kernel_suspend_notifier.is_valid())
-    return;
-
-  bool use_notifier = base::FeatureList::IsEnabled(
-      chromeos::features::kBluetoothKernelSuspendNotifier);
-
-  base::OnceCallback<void(bool)> cb = base::BindOnce(
-      [](bool value, bool success) {
-        if (!success) {
-          BLUETOOTH_LOG(ERROR) << "Failed to set suspend notifier to " << value;
-        }
-      },
-      use_notifier);
-  properties->use_kernel_suspend_notifier.Set(use_notifier, std::move(cb));
 }
 #endif
 

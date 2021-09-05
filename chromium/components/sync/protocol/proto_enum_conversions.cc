@@ -196,6 +196,7 @@ const char* ProtoEnumToString(sync_pb::SyncEnums::ErrorType error_type) {
     ENUM_CASE(sync_pb::SyncEnums, DEPRECATED_USER_ROLLBACK);
     ENUM_CASE(sync_pb::SyncEnums, PARTIAL_FAILURE);
     ENUM_CASE(sync_pb::SyncEnums, CLIENT_DATA_OBSOLETE);
+    ENUM_CASE(sync_pb::SyncEnums, ENCRYPTION_OBSOLETE);
     ENUM_CASE(sync_pb::SyncEnums, UNKNOWN);
   }
   NOTREACHED();
@@ -420,6 +421,19 @@ const char* ProtoEnumToString(
               USER_LOGGED_IN);
     ENUM_CASE(sync_pb::UserEventSpecifics::GaiaPasswordCaptured,
               EXPIRED_28D_TIMER);
+  }
+  NOTREACHED();
+  return "";
+}
+
+const char* ProtoEnumToString(
+    sync_pb::UserEventSpecifics::FlocIdComputed::EventTrigger trigger) {
+  ASSERT_ENUM_BOUNDS(sync_pb::UserEventSpecifics::FlocIdComputed, EventTrigger,
+                     UNSPECIFIED, REFRESHED);
+  switch (trigger) {
+    ENUM_CASE(sync_pb::UserEventSpecifics::FlocIdComputed, UNSPECIFIED);
+    ENUM_CASE(sync_pb::UserEventSpecifics::FlocIdComputed, NEW);
+    ENUM_CASE(sync_pb::UserEventSpecifics::FlocIdComputed, REFRESHED);
   }
   NOTREACHED();
   return "";

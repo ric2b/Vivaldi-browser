@@ -10,7 +10,9 @@ import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bun
  * @implements {discards.mojom.GraphChangeStreamInterface}
  */
 class DiscardsGraphChangeStreamImpl {
+  /** @param {Window} contentWindow */
   constructor(contentWindow) {
+    /** @private {Window} */
     this.contentWindow_ = contentWindow;
   }
 
@@ -92,6 +94,12 @@ Polymer({
    */
   changeListener_: null,
 
+  /**
+   * The WebView's content window object.
+   * @private {?Window}
+   */
+  contentWindow_: null,
+
   // NOTE(andre@vivaldi.com) : Added this as a hack to prevent contentload to
   // fire twice for the embedded webview. See
   // chromium\chrome\browser\resources\discards\graph_tab_template.html
@@ -109,19 +117,43 @@ Polymer({
     this.changeListener_ = null;
   },
 
+  /**
+   * @param {!Event} event A request from the WebView.
+   * @private
+   */
+  onMessage_(event) {
+    const type = /** @type {string} */ (event.data[0]);
+    const data = /** @type {Object|number} */ (event.data[1]);
+    switch (type) {
+      case 'requestNodeDescriptions':
+        // Forward the request through the mojoms and bounce the reply back.
+        this.graphDump_
+            .requestNodeDescriptions(/** @type {!Array<number>} */ (data))
+            .then(
+                (descriptions) => this.contentWindow_.postMessage(
+                    ['nodeDescriptions', descriptions.nodeDescriptionsJson],
+                    '*'));
+        break;
+    }
+  },
+
   /** @private */
   onWebViewReady_() {
+    this.contentWindow_ = this.$.webView.contentWindow;
+
     if (this.hasLoaded_) {
       return;
     }
     this.hasLoaded_ = true;
 
     this.changeListener_ =
-        new DiscardsGraphChangeStreamImpl(this.$.webView.contentWindow);
+        new DiscardsGraphChangeStreamImpl(this.contentWindow_);
     this.client_ =
         new discards.mojom.GraphChangeStreamReceiver(this.changeListener_);
     // Subscribe for graph updates.
     this.graphDump_.subscribeToChanges(
         this.client_.$.bindNewPipeAndPassRemote());
+
+    window.addEventListener('message', this.onMessage_.bind(this));
   },
 });

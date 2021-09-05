@@ -109,8 +109,9 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
   bool IsInheritedValue() const { return class_type_ == kInheritedClass; }
   bool IsInitialValue() const { return class_type_ == kInitialClass; }
   bool IsUnsetValue() const { return class_type_ == kUnsetClass; }
+  bool IsRevertValue() const { return class_type_ == kRevertClass; }
   bool IsCSSWideKeyword() const {
-    return class_type_ >= kInheritedClass && class_type_ <= kUnsetClass;
+    return class_type_ >= kInheritedClass && class_type_ <= kRevertClass;
   }
   bool IsLayoutFunctionValue() const {
     return class_type_ == kLayoutFunctionClass;
@@ -169,8 +170,8 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
   bool IsShorthandWrapperValue() const {
     return class_type_ == kKeyframeShorthandClass;
   }
-  bool IsLightDarkColorPair() const {
-    return class_type_ == kLightDarkColorPairClass;
+  bool IsLightDarkValuePair() const {
+    return class_type_ == kLightDarkValuePairClass;
   }
 
   bool HasFailedOrCanceledSubresources() const;
@@ -201,7 +202,7 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
     kStringClass,
     kURIClass,
     kValuePairClass,
-    kLightDarkColorPairClass,
+    kLightDarkValuePairClass,
 
     // Basic shape classes.
     // TODO(sashab): Represent these as a single subclass, BasicShapeClass.
@@ -236,6 +237,7 @@ class CORE_EXPORT CSSValue : public GarbageCollected<CSSValue> {
     kInheritedClass,
     kInitialClass,
     kUnsetClass,
+    kRevertClass,
 
     kReflectClass,
     kShadowClass,

@@ -62,8 +62,6 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "extensions/buildflags/buildflags.h"
-#include "net/ssl/client_cert_store.h"
-#include "services/network/ignore_errors_cert_verifier.h"
 #include "services/network/network_service.h"
 #include "services/network/public/cpp/features.h"
 #include "third_party/blink/public/public_buildflags.h"
@@ -88,8 +86,6 @@
 #include "components/user_manager/user_manager.h"
 #include "crypto/nss_util.h"
 #include "crypto/nss_util_internal.h"
-#include "services/network/cert_verifier_with_trust_anchors.h"
-#include "services/network/cert_verify_proc_chromeos.h"
 #endif  // defined(OS_CHROMEOS)
 
 #include "app/vivaldi_constants.h"
@@ -211,8 +207,8 @@ void StartNSSInitOnIOThread(const AccountId& account_id,
 
   if (IsTPMTokenEnabledForNSS()) {
     if (crypto::IsTPMTokenReady(
-            base::Bind(&StartTPMSlotInitializationOnIOThread, account_id,
-                       username_hash))) {
+            base::BindOnce(&StartTPMSlotInitializationOnIOThread, account_id,
+                           username_hash))) {
       StartTPMSlotInitializationOnIOThread(account_id, username_hash);
     } else {
       DVLOG(1) << "Waiting for tpm ready ...";

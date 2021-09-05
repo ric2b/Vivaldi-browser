@@ -4,7 +4,8 @@
 
 #include "components/mirroring/service/captured_audio_input.h"
 
-#include "base/logging.h"
+#include "base/check_op.h"
+#include "base/notreached.h"
 #include "media/mojo/mojom/audio_data_pipe.mojom.h"
 #include "mojo/public/cpp/system/platform_handle.h"
 
@@ -59,8 +60,7 @@ void CapturedAudioInput::SetOutputDeviceForAec(
 void CapturedAudioInput::StreamCreated(
     mojo::PendingRemote<media::mojom::AudioInputStream> stream,
     mojo::PendingReceiver<media::mojom::AudioInputStreamClient> client_receiver,
-    media::mojom::ReadOnlyAudioDataPipePtr data_pipe,
-    bool initially_muted) {
+    media::mojom::ReadOnlyAudioDataPipePtr data_pipe) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(delegate_);
   DCHECK(!stream_);
@@ -77,7 +77,8 @@ void CapturedAudioInput::StreamCreated(
   DCHECK(shared_memory_region.IsValid());
 
   delegate_->OnStreamCreated(std::move(shared_memory_region),
-                             std::move(socket_handle), initially_muted);
+                             std::move(socket_handle),
+                             /* initally_muted */ false);
 }
 
 void CapturedAudioInput::OnError() {

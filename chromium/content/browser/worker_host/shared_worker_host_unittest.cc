@@ -31,6 +31,7 @@
 #include "services/network/public/cpp/features.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/messaging/message_port_channel.h"
+#include "third_party/blink/public/common/messaging/message_port_descriptor.h"
 #include "url/origin.h"
 
 using blink::MessagePortChannel;
@@ -41,6 +42,7 @@ class SharedWorkerHostTest : public testing::Test {
  public:
   void SetUp() override {
     helper_.reset(new EmbeddedWorkerTestHelper(base::FilePath()));
+    ASSERT_TRUE(mock_render_process_host_.Init());
   }
 
   SharedWorkerHostTest()
@@ -95,7 +97,7 @@ class SharedWorkerHostTest : public testing::Test {
     // Set up for service worker.
     auto service_worker_handle =
         std::make_unique<ServiceWorkerMainResourceHandle>(
-            helper_->context_wrapper());
+            helper_->context_wrapper(), base::DoNothing());
     mojo::PendingAssociatedRemote<blink::mojom::ServiceWorkerContainer>
         client_remote;
     mojo::PendingAssociatedReceiver<blink::mojom::ServiceWorkerContainerHost>
@@ -106,11 +108,12 @@ class SharedWorkerHostTest : public testing::Test {
         client_remote.InitWithNewEndpointAndPassReceiver();
     host_receiver =
         provider_info->host_remote.InitWithNewEndpointAndPassReceiver();
-    base::WeakPtr<ServiceWorkerContainerHost> service_worker_container_host =
-        ServiceWorkerContainerHost::CreateForWebWorker(
-            helper_->context()->AsWeakPtr(), mock_render_process_host_.GetID(),
-            blink::mojom::ServiceWorkerContainerType::kForSharedWorker,
-            std::move(host_receiver), std::move(client_remote));
+
+    helper_->context()->CreateContainerHostForWorker(
+        std::move(host_receiver), mock_render_process_host_.GetID(),
+        std::move(client_remote),
+        blink::mojom::ServiceWorkerClientType::kSharedWorker,
+        DedicatedWorkerId(), host->id());
     service_worker_handle->OnCreatedProviderHost(std::move(provider_info));
     host->SetServiceWorkerHandle(std::move(service_worker_handle));
 
@@ -130,9 +133,9 @@ class SharedWorkerHostTest : public testing::Test {
     GlobalFrameRoutingId dummy_render_frame_host_id(
         mock_render_process_host_.GetID(), 22);
 
-    mojo::MessagePipe message_pipe;
-    MessagePortChannel local_port(std::move(message_pipe.handle0));
-    MessagePortChannel remote_port(std::move(message_pipe.handle1));
+    blink::MessagePortDescriptorPair port_pair;
+    MessagePortChannel local_port(port_pair.TakePort0());
+    MessagePortChannel remote_port(port_pair.TakePort1());
     host->AddClient(std::move(client), dummy_render_frame_host_id,
                     std::move(remote_port));
     return local_port;

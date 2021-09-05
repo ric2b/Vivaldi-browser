@@ -7,13 +7,13 @@
  * chrome.passwordsPrivate which facilitates testing.
  */
 
-// #import {addSingletonGetter} from 'chrome://resources/js/cr.m.js';
+import {addSingletonGetter} from 'chrome://resources/js/cr.m.js';
 
 /**
  * Interface for all callbacks to the password API.
  * @interface
  */
-/* #export */ class PasswordManagerProxy {
+export class PasswordManagerProxy {
   /**
    * Add an observer to the list of saved passwords.
    * @param {function(!Array<!PasswordManagerProxy.PasswordUiEntry>):void}
@@ -159,6 +159,7 @@
 
   /**
    * Requests the start of the bulk password check.
+   * @return {!Promise<(void)>}
    */
   startBulkPasswordCheck() {}
 
@@ -321,7 +322,7 @@ PasswordManagerProxy.PasswordCheckReferrer = {
  * Implementation that accesses the private API.
  * @implements {PasswordManagerProxy}
  */
-/* #export */ class PasswordManagerImpl {
+export class PasswordManagerImpl {
   /** @override */
   addSavedPasswordListChangedListener(listener) {
     chrome.passwordsPrivate.onSavedPasswordsListChanged.addListener(listener);
@@ -454,7 +455,15 @@ PasswordManagerProxy.PasswordCheckReferrer = {
 
   /** @override */
   startBulkPasswordCheck() {
-    chrome.passwordsPrivate.startPasswordCheck();
+    return new Promise((resolve, reject) => {
+      chrome.passwordsPrivate.startPasswordCheck(() => {
+        if (chrome.runtime.lastError) {
+          reject(chrome.runtime.lastError.message);
+          return;
+        }
+        resolve();
+      });
+    });
   }
 
   /** @override */
@@ -535,4 +544,4 @@ PasswordManagerProxy.PasswordCheckReferrer = {
   }
 }
 
-cr.addSingletonGetter(PasswordManagerImpl);
+addSingletonGetter(PasswordManagerImpl);

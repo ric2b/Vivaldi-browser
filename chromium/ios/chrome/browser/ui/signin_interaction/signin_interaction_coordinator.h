@@ -17,6 +17,9 @@ class Browser;
 @protocol BrowserCommands;
 @protocol BrowsingDataCommands;
 @class ChromeIdentity;
+namespace syncer {
+enum class KeyRetrievalTriggerForUMA;
+}  // namespace syncer
 
 // The coordinator for Sign In Interaction. This coordinator handles the
 // presentation and dismissal of the UI. This object should not be destroyed
@@ -33,10 +36,6 @@ class Browser;
 
 // Designated initializer.
 - (instancetype)initWithBrowser:(Browser*)browser NS_DESIGNATED_INITIALIZER;
-
-- (instancetype)initWithBaseViewController:(UIViewController*)viewController
-                              browserState:(ChromeBrowserState*)browserState
-    NS_UNAVAILABLE;
 
 // Creates a coordinator that uses |viewController| and |browser|.
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
@@ -87,6 +86,18 @@ class Browser;
 // * |presentingViewController| is the top presented view controller.
 - (void)showAdvancedSigninSettingsWithPresentingViewController:
     (UIViewController*)viewController;
+
+// Presents the Trusted Vault re-authentication dialog.
+// |viewController| presents the sign-in.
+// |retrievalTrigger| UI elements where the trusted vault reauth has been
+// triggered.
+- (void)
+    showTrustedVaultReauthenticationWithPresentingViewController:
+        (UIViewController*)viewController
+                                                retrievalTrigger:
+                                                    (syncer::
+                                                         KeyRetrievalTriggerForUMA)
+                                                        retrievalTrigger;
 
 // Cancels any current process. Calls the completion callback when done.
 // |abortAndDismissSettingsViewAnimated:completion:| should not be called after

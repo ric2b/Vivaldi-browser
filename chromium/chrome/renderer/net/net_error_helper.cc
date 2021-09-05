@@ -273,8 +273,9 @@ void NetErrorHelper::PrepareErrorPage(const error_page::Error& error,
                           error_html);
 }
 
-bool NetErrorHelper::ShouldSuppressErrorPage(const GURL& url) {
-  return core_->ShouldSuppressErrorPage(GetFrameType(render_frame()), url);
+bool NetErrorHelper::ShouldSuppressErrorPage(const GURL& url, int error_code) {
+  return core_->ShouldSuppressErrorPage(GetFrameType(render_frame()), url,
+                                        error_code);
 }
 
 std::unique_ptr<network::ResourceRequest> NetErrorHelper::CreatePostRequest(
@@ -282,8 +283,6 @@ std::unique_ptr<network::ResourceRequest> NetErrorHelper::CreatePostRequest(
   auto resource_request = std::make_unique<network::ResourceRequest>();
   resource_request->url = url;
   resource_request->method = "POST";
-  resource_request->fetch_request_context_type =
-      static_cast<int>(blink::mojom::RequestContextType::INTERNAL);
   resource_request->destination = network::mojom::RequestDestination::kEmpty;
   resource_request->resource_type =
       static_cast<int>(blink::mojom::ResourceType::kSubResource);

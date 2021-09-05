@@ -18,6 +18,7 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/web_applications/components/app_icon_manager.h"
 #include "chrome/browser/web_applications/components/app_registry_controller.h"
+#include "chrome/browser/web_applications/components/app_shortcut_manager.h"
 #include "chrome/browser/web_applications/components/install_finalizer.h"
 #include "chrome/browser/web_applications/components/install_manager.h"
 #include "chrome/browser/web_applications/components/pending_app_manager.h"
@@ -25,10 +26,12 @@
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/browser/web_applications/system_web_app_manager.h"
 #include "chrome/browser/web_applications/test/test_system_web_app_installation.h"
+#include "chrome/browser/web_applications/test/web_app_install_observer.h"
 #include "chrome/browser/web_applications/test/web_app_test.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/url_loader_interceptor.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
@@ -75,8 +78,9 @@ class UpdateCheckResultAwaiter {
   }
 
   void SetCallback() {
-    GetManifestUpdateManager(browser_).SetResultCallbackForTesting(base::Bind(
-        &UpdateCheckResultAwaiter::OnResult, base::Unretained(this)));
+    GetManifestUpdateManager(browser_).SetResultCallbackForTesting(
+        base::BindOnce(&UpdateCheckResultAwaiter::OnResult,
+                       base::Unretained(this)));
   }
 
   ManifestUpdateResult AwaitNextResult() && {
@@ -106,10 +110,7 @@ class ManifestUpdateManagerBrowserTest
     : public InProcessBrowserTest,
       public ::testing::WithParamInterface<ProviderType> {
  public:
-  ManifestUpdateManagerBrowserTest() = default;
-  ~ManifestUpdateManagerBrowserTest() override = default;
-
-  void SetUp() override {
+  ManifestUpdateManagerBrowserTest() {
     if (GetParam() == ProviderType::kWebApps) {
       scoped_feature_list_.InitWithFeatures(
           {features::kDesktopPWAsLocalUpdating,
@@ -120,7 +121,11 @@ class ManifestUpdateManagerBrowserTest
           {features::kDesktopPWAsLocalUpdating},
           {features::kDesktopPWAsWithoutExtensions});
     }
+  }
 
+  ~ManifestUpdateManagerBrowserTest() override = default;
+
+  void SetUp() override {
     http_server_.AddDefaultHandlers(GetChromeTestDataDir());
     http_server_.RegisterRequestHandler(base::BindRepeating(
         &ManifestUpdateManagerBrowserTest::RequestHandlerOverride,
@@ -128,6 +133,10 @@ class ManifestUpdateManagerBrowserTest
     ASSERT_TRUE(http_server_.Start());
 
     InProcessBrowserTest::SetUp();
+  }
+
+  void SetUpOnMainThread() override {
+    GetProvider().shortcut_manager().SuppressShortcutsForTesting();
   }
 
   std::unique_ptr<net::test_server::HttpResponse> RequestHandlerOverride(
@@ -169,16 +178,10 @@ class ManifestUpdateManagerBrowserTest
 
     AppId app_id;
     base::RunLoop run_loop;
-    InstallManager::InstallParams params;
-    params.fallback_start_url = http_server_.GetURL("/fallback-url");
-    params.add_to_applications_menu = false;
-    params.add_to_desktop = false;
-    params.add_to_quick_launch_bar = false;
-    params.bypass_service_worker_check = true;
-    params.require_manifest = false;
-    GetProvider().install_manager().InstallWebAppWithParams(
-        browser()->tab_strip_model()->GetActiveWebContents(), params,
-        WebappInstallSource::OMNIBOX_INSTALL_ICON,
+    GetProvider().install_manager().InstallWebAppFromManifestWithFallback(
+        browser()->tab_strip_model()->GetActiveWebContents(),
+        /*force_shortcut_app=*/false, WebappInstallSource::OMNIBOX_INSTALL_ICON,
+        base::BindOnce(TestAcceptDialogCallback),
         base::BindLambdaForTesting(
             [&](const AppId& new_app_id, InstallResultCode code) {
               EXPECT_EQ(code, InstallResultCode::kSuccessNewInstall);
@@ -464,8 +467,7 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest,
   OverrideManifest(kManifestTemplate, {kInstallableIconList, "blue"});
   AppId app_id = InstallWebApp();
 
-  GetProvider().registry_controller().SetAppIsLocallyInstalledForTesting(app_id,
-                                                                         false);
+  GetProvider().registry_controller().SetAppIsLocallyInstalled(app_id, false);
   EXPECT_FALSE(GetProvider().registrar().IsLocallyInstalled(app_id));
 
   OverrideManifest(kManifestTemplate, {kInstallableIconList, "red"});
@@ -530,6 +532,14 @@ IN_PROC_BROWSER_TEST_P(ManifestUpdateManagerBrowserTest,
   OverrideManifest(kManifestTemplate, {kInstallableIconList, "blue"});
   AppId app_id = InstallWebApp();
   EXPECT_EQ(GetProvider().registrar().GetAppThemeColor(app_id), SK_ColorBLUE);
+
+  // Check that OnWebAppInstalled and OnWebAppUninstalled are not called
+  // if in-place web app update happens.
+  WebAppInstallObserver install_observer(&GetProvider().registrar());
+  install_observer.SetWebAppInstalledDelegate(
+      base::BindLambdaForTesting([](const AppId& app_id) { NOTREACHED(); }));
+  install_observer.SetWebAppUninstalledDelegate(
+      base::BindLambdaForTesting([](const AppId& app_id) { NOTREACHED(); }));
 
   OverrideManifest(kManifestTemplate, {kInstallableIconList, "red"});
   EXPECT_EQ(GetResultAfterPageLoad(GetAppURL(), &app_id),

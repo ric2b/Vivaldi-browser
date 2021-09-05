@@ -40,11 +40,9 @@ import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabBrowserControlsConstraintsHelper;
 import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabHidingType;
-import org.chromium.chrome.browser.tab.TabImpl;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tab.TabThemeColorHelper;
-import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
 import org.chromium.chrome.browser.tabmodel.EmptyTabModelSelectorObserver;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModel;
@@ -64,6 +62,7 @@ import org.chromium.ui.util.TokenHolder;
 import java.util.List;
 
 import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.chrome.browser.night_mode.NightModeUtils;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.vivaldi.browser.preferences.VivaldiPreferences;
 
@@ -148,7 +147,7 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
     /**
      * Protected class to handle {@link TabModelObserver} related tasks. Extending classes will
      * need to override any related calls to add new functionality */
-    protected class LayoutManagerTabModelObserver extends EmptyTabModelObserver {
+    protected class LayoutManagerTabModelObserver implements TabModelObserver {
         @Override
         public void didSelectTab(Tab tab, @TabSelectionType int type, int lastId) {
             if (tab.getId() != lastId) tabSelected(tab.getId(), lastId, tab.isIncognito());
@@ -380,9 +379,6 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
 
         // Initialize Layouts
         mStaticLayout.onFinishNativeInitialization();
-        if (getActiveLayout() != null) {
-            getActiveLayout().onFinishNativeInitialization();
-        }
 
         // Contextual Search scene overlay.
         mContextualSearchPanel = new ContextualSearchPanel(mContext, this, mOverlayPanelManager);
@@ -655,18 +651,16 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
         boolean isNativePage = tab.isNativePage()
                 || (url != null && url.startsWith(UrlConstants.CHROME_NATIVE_URL_PREFIX));
         int themeColor = TabThemeColorHelper.getColor(tab);
-
         // Note (david@vivaldi.com): While the tab strip is showing and we swipe we do not support a
         // theme color
         if (ChromeApplication.isVivaldi() && getActiveLayout() instanceof ToolbarSwipeLayout) {
-            if (!((TabImpl) tab).getActivity().getNightModeStateProvider().isInNightMode()
+            if (!NightModeUtils.isInNightMode(tab.getContext())
                     && !tab.isIncognito()
                     && SharedPreferencesManager.getInstance().readBoolean(
                                VivaldiPreferences.SHOW_TAB_STRIP, true)) {
                 themeColor = -1;
             }
         }
-
         boolean canUseLiveTexture = tab.getWebContents() != null && !SadTab.isShowing(tab)
                 && !isNativePage && !tab.isHidden();
 
@@ -765,7 +759,13 @@ public class LayoutManager implements LayoutUpdateHost, LayoutProvider,
 
     @Override
     public void requestUpdate() {
-        if (!mUpdateRequested) mHost.requestRender();
+        requestUpdate(null);
+    }
+
+    @Override
+    public void requestUpdate(Runnable onUpdateEffective) {
+        if (mUpdateRequested && onUpdateEffective == null) return;
+        mHost.requestRender(onUpdateEffective);
         mUpdateRequested = true;
     }
 

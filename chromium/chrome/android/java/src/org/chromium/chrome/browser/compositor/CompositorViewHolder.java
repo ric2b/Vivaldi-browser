@@ -47,8 +47,8 @@ import org.chromium.chrome.browser.compositor.layouts.content.ContentOffsetProvi
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.contextualsearch.ContextualSearchManagementDelegate;
 import org.chromium.chrome.browser.device.DeviceClassManager;
+import org.chromium.chrome.browser.fullscreen.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager;
-import org.chromium.chrome.browser.fullscreen.ChromeFullscreenManager.FullscreenListener;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
@@ -74,7 +74,9 @@ import org.chromium.ui.resources.ResourceManager;
 import org.chromium.ui.resources.dynamics.DynamicResourceLoader;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * This class holds a {@link CompositorView}. This level of indirection is needed to benefit from
@@ -85,7 +87,7 @@ import java.util.List;
  */
 public class CompositorViewHolder extends FrameLayout
         implements ContentOffsetProvider, LayoutManagerHost, LayoutRenderHost, Invalidator.Host,
-                   FullscreenListener, InsetObserverView.WindowInsetObserver,
+                   BrowserControlsStateProvider.Observer, InsetObserverView.WindowInsetObserver,
                    AccessibilityUtil.Observer, TabObscuringHandler.Observer {
     private static final long SYSTEM_UI_VIEWPORT_UPDATE_DELAY_MS = 500;
 
@@ -164,6 +166,10 @@ public class CompositorViewHolder extends FrameLayout
     // Indicates if ContentCaptureConsumer should be created, we only try to create it once.
     private boolean mShouldCreateContentCaptureConsumer = true;
     private ContentCaptureConsumer mContentCaptureConsumer;
+
+    private Set<Runnable> mOnCompositorLayoutCallbacks = new HashSet<>();
+    private Set<Runnable> mDidSwapFrameCallbacks = new HashSet<>();
+    private Set<Runnable> mDidSwapBuffersCallbacks = new HashSet<>();
 
     /**
      * Last MotionEvent dispatched to this object for a currently active gesture. If there is no
@@ -750,7 +756,8 @@ public class CompositorViewHolder extends FrameLayout
      */
     public void onStart() {
         if (mFullscreenManager != null) {
-            mFullscreenManager.addListener(this);
+            mFullscreenManager.addObserver(this);
+            mFullscreenManager.setViewportSizeDelegate(this::onUpdateViewportSize);
         }
         requestRender();
     }
@@ -759,12 +766,10 @@ public class CompositorViewHolder extends FrameLayout
      * Called whenever the host activity is stopped.
      */
     public void onStop() {
-        if (mFullscreenManager != null) mFullscreenManager.removeListener(this);
-    }
-
-    @Override
-    public void onContentOffsetChanged(int offset) {
-        onViewportChanged();
+        if (mFullscreenManager != null) {
+            mFullscreenManager.removeObserver(this);
+            mFullscreenManager.setViewportSizeDelegate(null);
+        }
     }
 
     @Override
@@ -805,8 +810,7 @@ public class CompositorViewHolder extends FrameLayout
         webContents.notifyBrowserControlsHeightChanged();
     }
 
-    @Override
-    public void onUpdateViewportSize() {
+    private void onUpdateViewportSize() {
         // Reflect the changes that may have happened in in view/control size.
         Point viewportSize = getViewportSize();
         setSize(getWebContents(), getContentView(), viewportSize.x, viewportSize.y);
@@ -835,6 +839,9 @@ public class CompositorViewHolder extends FrameLayout
             mLayoutManager.onUpdate();
             mCompositorView.finalizeLayers(mLayoutManager, false);
         }
+
+        mDidSwapFrameCallbacks.addAll(mOnCompositorLayoutCallbacks);
+        mOnCompositorLayoutCallbacks.clear();
 
         TraceEvent.end("CompositorViewHolder:layout");
     }
@@ -876,6 +883,12 @@ public class CompositorViewHolder extends FrameLayout
 
     @Override
     public void requestRender() {
+        requestRender(null);
+    }
+
+    @Override
+    public void requestRender(Runnable onUpdateEffective) {
+        if (onUpdateEffective != null) mOnCompositorLayoutCallbacks.add(onUpdateEffective);
         mCompositorView.requestRender();
     }
 
@@ -910,6 +923,17 @@ public class CompositorViewHolder extends FrameLayout
 
         if (!mSkipInvalidation || pendingFrameCount == 0) flushInvalidation();
         mSkipInvalidation = !mSkipInvalidation;
+
+        mDidSwapBuffersCallbacks.addAll(mDidSwapFrameCallbacks);
+        mDidSwapFrameCallbacks.clear();
+    }
+
+    @Override
+    public void didSwapBuffers(boolean swappedCurrentSize) {
+        for (Runnable runnable : mDidSwapBuffersCallbacks) {
+            runnable.run();
+        }
+        mDidSwapBuffersCallbacks.clear();
     }
 
     @Override
@@ -971,7 +995,8 @@ public class CompositorViewHolder extends FrameLayout
      */
     public void setFullscreenHandler(ChromeFullscreenManager fullscreen) {
         mFullscreenManager = fullscreen;
-        mFullscreenManager.addListener(this);
+        mFullscreenManager.addObserver(this);
+        mFullscreenManager.setViewportSizeDelegate(this::onUpdateViewportSize);
         onViewportChanged();
     }
 

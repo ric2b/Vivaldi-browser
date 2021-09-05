@@ -12,9 +12,17 @@ interface RTCRtpReceiver {
     [RaisesException=Setter, Measure] attribute double? playoutDelayHint;
     static RTCRtpCapabilities?            getCapabilities(DOMString kind);
     RTCRtpReceiveParameters               getParameters();
-    sequence<RTCRtpSynchronizationSource> getSynchronizationSources();
-    sequence<RTCRtpContributingSource> getContributingSources();
+    [CallWith=ScriptState, RaisesException] sequence<RTCRtpSynchronizationSource> getSynchronizationSources();
+    [CallWith=ScriptState, RaisesException] sequence<RTCRtpContributingSource> getContributingSources();
     [CallWith=ScriptState] Promise<RTCStatsReport> getStats();
-    [Measure, RuntimeEnabled=RTCInsertableStreams, CallWith=ScriptState, RaisesException] RTCInsertableStreams createEncodedAudioStreams();
-    [Measure, RuntimeEnabled=RTCInsertableStreams, CallWith=ScriptState, RaisesException] RTCInsertableStreams createEncodedVideoStreams();
+    [Measure, RuntimeEnabled=RTCInsertableStreams,
+     CallWith=ScriptState,
+     RaisesException] RTCInsertableStreams createEncodedStreams();
+    [DeprecateAs=V8RTCRtpReceiver_CreateEncodedAudioStreams_Method,
+     RuntimeEnabled=RTCInsertableStreams,
+     CallWith=ScriptState, RaisesException] RTCInsertableStreams createEncodedAudioStreams();
+    [DeprecateAs=V8RTCRtpReceiver_CreateEncodedVideoStreams_Method,
+     RuntimeEnabled=RTCInsertableStreams,
+     CallWith=ScriptState,
+     RaisesException] RTCInsertableStreams createEncodedVideoStreams();
 };

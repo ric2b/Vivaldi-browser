@@ -164,7 +164,7 @@ EchoPrivateGetOobeTimestampFunction::GetOobeTimestampOnFileSequence() {
       extensions::GetExtensionFileTaskRunner()->RunsTasksInCurrentSequence());
 
   const char kOobeTimestampFile[] = "/home/chronos/.oobe_completed";
-  std::string timestamp = "";
+  std::string timestamp;
   base::File::Info fileInfo;
   if (base::GetFileInfo(base::FilePath(kOobeTimestampFile), &fileInfo)) {
     base::Time::Exploded ctime;
@@ -223,9 +223,8 @@ void EchoPrivateGetUserConsentFunction::OnMoreInfoLinkClicked() {
 
 void EchoPrivateGetUserConsentFunction::CheckRedeemOffersAllowed() {
   chromeos::CrosSettingsProvider::TrustedStatus status =
-      chromeos::CrosSettings::Get()->PrepareTrustedValues(base::Bind(
-          &EchoPrivateGetUserConsentFunction::CheckRedeemOffersAllowed,
-          this));
+      chromeos::CrosSettings::Get()->PrepareTrustedValues(base::BindOnce(
+          &EchoPrivateGetUserConsentFunction::CheckRedeemOffersAllowed, this));
   if (status == chromeos::CrosSettingsProvider::TEMPORARILY_UNTRUSTED)
     return;
 

@@ -614,7 +614,7 @@ InputImeSetCandidateWindowPropertiesFunction::Run() {
   }
 
   InputMethodEngine::CandidateWindowProperty properties_out =
-      engine->GetCandidateWindowProperty();
+      engine->GetCandidateWindowProperty(params.engine_id);
   bool modified = false;
 
   if (properties.cursor_visible) {
@@ -651,8 +651,19 @@ InputImeSetCandidateWindowPropertiesFunction::Run() {
     modified = true;
   }
 
+  if (properties.current_candidate_index) {
+    properties_out.current_candidate_index =
+        *properties.current_candidate_index;
+    modified = true;
+  }
+
+  if (properties.total_candidates) {
+    properties_out.total_candidates = *properties.total_candidates;
+    modified = true;
+  }
+
   if (modified) {
-    engine->SetCandidateWindowProperty(properties_out);
+    engine->SetCandidateWindowProperty(params.engine_id, properties_out);
   }
 
   return RespondNow(OneArgument(std::make_unique<base::Value>(true)));

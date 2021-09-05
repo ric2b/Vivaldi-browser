@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/callback_forward.h"
+#include "base/clang_profiling_buildflags.h"
 #include "base/location.h"
 #include "base/run_loop.h"
 #include "base/task/post_task.h"
@@ -99,13 +100,6 @@ class TestGpuService : public viz::mojom::GpuService {
                               const gpu::SyncToken& sync_token) override {}
   void GetVideoMemoryUsageStats(
       GetVideoMemoryUsageStatsCallback callback) override {}
-#if defined(OS_WIN)
-  void RequestCompleteGpuInfo(
-      RequestCompleteGpuInfoCallback callback) override {}
-  void GetGpuSupportedRuntimeVersionAndDevicePerfInfo(
-      GetGpuSupportedRuntimeVersionAndDevicePerfInfoCallback callback)
-      override {}
-#endif
   void RequestHDRStatus(RequestHDRStatusCallback callback) override {}
   void LoadedShader(int32_t client_id,
                     const std::string& key,
@@ -125,6 +119,10 @@ class TestGpuService : public viz::mojom::GpuService {
 #if defined(OS_MACOSX)
   void BeginCATransaction() override {}
   void CommitCATransaction(CommitCATransactionCallback callback) override {}
+#endif
+#if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
+  void WriteClangProfilingProfile(
+      WriteClangProfilingProfileCallback callback) override {}
 #endif
   void Crash() override {}
   void Hang() override {}

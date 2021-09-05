@@ -33,7 +33,6 @@ include_rules = [
     "+net/cert",
     "+net/dns/public",
     "+net/http",
-    "+services/network/public/cpp/blocked_by_response_reason.h",
     "+services/network/public/cpp/cors/cors_error_status.h",
     "+services/network/public/cpp/cors/preflight_result.h",
     "+services/network/public/cpp/shared_url_loader_factory.h",
@@ -41,10 +40,13 @@ include_rules = [
     # Enforce to use mojom-shared.h in blink/public so that it can compile
     # inside and outside Blink.
     "+media/mojo/mojom/display_media_information.mojom-shared.h",
+    "+services/network/public/mojom/blocked_by_response_reason.mojom-shared.h",
     "+services/network/public/mojom/content_security_policy.mojom-shared.h",
     "+services/network/public/mojom/cors.mojom-shared.h",
     "+services/network/public/mojom/fetch_api.mojom-shared.h",
     "+services/network/public/mojom/referrer_policy.mojom-shared.h",
+    "+services/network/public/mojom/trust_tokens.mojom-shared.h",
+    "+services/network/public/mojom/web_client_hints_types.mojom-shared.h",
 
     "+services/service_manager/public/mojom",
     "+third_party/blink/public/common/web_cache/web_cache_resource_type_stats.h",

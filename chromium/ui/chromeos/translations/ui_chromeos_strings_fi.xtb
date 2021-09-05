@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">Näppäimistö: saksa</translation>
 <translation id="1972984168337863910">Laajenna tiedostojen palautepaneelit</translation>
 <translation id="1984603991036629094">Armenialainen foneettinen näppäimistö</translation>
+<translation id="1995337122023280937">Siirry tiedoston sijaintiin</translation>
 <translation id="2001796770603320721">Ylläpidä Drivessa</translation>
 <translation id="2009067268969781306">Driven alustaminen poistaa kaiken sille tallennetun datan. Tätä toimintoa ei voi kumota.</translation>
 <translation id="2028997212275086731">RAR-arkisto</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">Google Driveen ei saada yhteyttä. <ph name="BEGIN_LINK" />Kirjaudu ulos<ph name="END_LINK" /> ja takaisin sisään.</translation>
 <translation id="2649120831653069427">Kala</translation>
 <translation id="2661146741306740526">16 x 9</translation>
+<translation id="2664412712123763093">Tiedoston sijainti</translation>
 <translation id="2672394958563893062">Tapahtui virhe. Aloita alusta klikkaamalla.</translation>
 <translation id="2676946222714718093">Toistetaan Chromecastilla</translation>
 <translation id="2735698359135166290">Romanialainen vakionäppäimistö</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" /> virhettä.</translation>
 <translation id="3519867315646775981">Translitterointi (shalom ← שלום)</translation>
 <translation id="3522708245912499433">portugali</translation>
+<translation id="3524311639100184459">Varoitus: Nämä tiedostot ovat tilapäisiä ja ne voidaan poistaa automaattisesti levytilan vapauttamiseksi.  <ph name="BEGIN_LINK" />Lue lisää<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Kansio</translation>
 <translation id="3549797760399244642">Siirry osoitteeseen drive.google.com...</translation>
 <translation id="357479282490346887">liettua</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">Kiivi</translation>
 <translation id="3966388904776714213">Äänisoitin</translation>
 <translation id="4002066346123236978">Nimi</translation>
+<translation id="4065397611279318371">Jos haluat avata tiedostoja <ph name="APP_NAME" /> ‑sovelluksilla, siirrä ne ensin kansioon: <ph name="SHARED_DIRECTORY_LABEL" />.</translation>
 <translation id="4070370845051020638">Kantoninkiina-syöttötapa</translation>
 <translation id="4072248638558688893">Tamilinkielinen näppäimistö (foneettinen)</translation>
 <translation id="4124935795427217608">Yksisarvinen</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">Automaattinen korjaus</translation>
 <translation id="4881695831933465202">Avaa</translation>
 <translation id="4886021172213954916">Tamilinkielinen näppäimistö (kirjoituskone)</translation>
+<translation id="4892969127351273348"><ph name="APP_NAME" /> ei onnistunut avaamaan tiedostoa</translation>
 <translation id="4905417359854579806"><ph name="FILE_COUNT" /> valmiina varmuuskopiointiin</translation>
 <translation id="4924638091161556692">Korjattu</translation>
 <translation id="4935975195727477204">Kukka</translation>
@@ -500,6 +505,7 @@
 <translation id="6806699711453372963">Määritä Linux-jakaminen</translation>
 <translation id="6808193438228982088">Kettu</translation>
 <translation id="6820687829547641339">Gzip-pakattu Tar-arkisto</translation>
+<translation id="6823166707458800069">Kaikki tähän kansioon tallennetut tiedostot varmuuskopioidaan verkkoon automaattisesti.</translation>
 <translation id="6825883775269213504">venäjä</translation>
 <translation id="6827236167376090743">Tätä videota näytetään niin kauan, kunnes lehmät tulevat kotiin.</translation>
 <translation id="6847101934483209767"><ph name="ENTRY_NAME" /> poistettiin valinnasta.</translation>
@@ -556,6 +562,7 @@
 <translation id="7417705661718309329">Google-kartta</translation>
 <translation id="7419631653042041064">Näppäimistö: katalaani</translation>
 <translation id="7434823369735508263">Näppäimistö: UK, Dvorak</translation>
+<translation id="7447678886297481665">Tämän kansion tiedostoja voi vain lukea. Joitain toimintoja ei tueta.</translation>
 <translation id="7460898608667578234">ukraina</translation>
 <translation id="7474889694310679759">Näppäimistö: englanti (Kanada)</translation>
 <translation id="7489215562877293245"><ph name="FILE_COUNT" /> löytyi

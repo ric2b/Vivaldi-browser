@@ -18,6 +18,7 @@
 
 #include "base/macros.h"
 #include "base/memory/read_only_shared_memory_region.h"
+#include "components/media_control/browser/media_blocker.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "fuchsia/engine/browser/accessibility_bridge.h"
@@ -30,16 +31,14 @@
 #include "ui/wm/core/focus_controller.h"
 #include "url/gurl.h"
 
-namespace aura {
-class WindowTreeHost;
-}  // namespace aura
-
 namespace content {
 class FromRenderFrameHost;
 }  // namespace content
 
 class ContextImpl;
+class FrameWindowTreeHost;
 class FrameLayoutManager;
+class MediaPlayerImpl;
 
 // Implementation of fuchsia.web.Frame based on content::WebContents.
 class FrameImpl : public fuchsia::web::Frame,
@@ -113,7 +112,7 @@ class FrameImpl : public fuchsia::web::Frame,
     DISALLOW_COPY_AND_ASSIGN(OriginScopedScript);
   };
 
-  aura::Window* root_window() const { return window_tree_host_->window(); }
+  aura::Window* root_window() const;
 
   // Shared implementation for the ExecuteJavaScript[NoResult]() APIs.
   void ExecuteJavaScriptInternal(std::vector<std::string> origins,
@@ -126,10 +125,12 @@ class FrameImpl : public fuchsia::web::Frame,
 
   void OnPopupListenerDisconnected(zx_status_t status);
 
-  // Sets the WindowTreeHost to use for this Frame. Only one WindowTreeHost can
-  // be set at a time.
-  void SetWindowTreeHost(
-      std::unique_ptr<aura::WindowTreeHost> window_tree_host);
+  // Cleans up the MediaPlayerImpl on disconnect.
+  void OnMediaPlayerDisconnect();
+
+  // Initializes WindowTreeHost for the view with the specified |view_token|.
+  // |view_token| may be uninitialized in headless mode.
+  void InitWindowTreeHost(fuchsia::ui::views::ViewToken view_token);
 
   // Destroys the WindowTreeHost along with its view or other associated
   // resources.
@@ -140,6 +141,8 @@ class FrameImpl : public fuchsia::web::Frame,
 
   // fuchsia::web::Frame implementation.
   void CreateView(fuchsia::ui::views::ViewToken view_token) override;
+  void GetMediaPlayer(fidl::InterfaceRequest<fuchsia::media::sessions2::Player>
+                          player) override;
   void GetNavigationController(
       fidl::InterfaceRequest<fuchsia::web::NavigationController> controller)
       override;
@@ -179,6 +182,14 @@ class FrameImpl : public fuchsia::web::Frame,
   void SetPermissionState(fuchsia::web::PermissionDescriptor permission,
                           std::string web_origin,
                           fuchsia::web::PermissionState state) override;
+  void SetBlockMediaLoading(bool blocked) override;
+  void MediaStartedPlaying(const MediaPlayerInfo& video_type,
+                           const content::MediaPlayerId& id) override;
+  void MediaStoppedPlaying(
+      const MediaPlayerInfo& video_type,
+      const content::MediaPlayerId& id,
+      WebContentsObserver::MediaStoppedReason reason) override;
+  void GetPrivateMemorySize(GetPrivateMemorySizeCallback callback) override;
 
   // content::WebContentsDelegate implementation.
   void CloseContents(content::WebContents* source) override;
@@ -201,6 +212,7 @@ class FrameImpl : public fuchsia::web::Frame,
                           content::WebContents* new_contents) override;
   void AddNewContents(content::WebContents* source,
                       std::unique_ptr<content::WebContents> new_contents,
+                      const GURL& target_url,
                       WindowOpenDisposition disposition,
                       const gfx::Rect& initial_rect,
                       bool user_gesture,
@@ -220,11 +232,16 @@ class FrameImpl : public fuchsia::web::Frame,
                      const GURL& validated_url) override;
   void RenderViewCreated(content::RenderViewHost* render_view_host) override;
   void RenderViewReady() override;
+  void DidFirstVisuallyNonEmptyPaint() override;
+  void ResourceLoadComplete(
+      content::RenderFrameHost* render_frame_host,
+      const content::GlobalRequestID& request_id,
+      const blink::mojom::ResourceLoadInfo& resource_load_info) override;
 
   const std::unique_ptr<content::WebContents> web_contents_;
   ContextImpl* const context_;
 
-  std::unique_ptr<aura::WindowTreeHost> window_tree_host_;
+  std::unique_ptr<FrameWindowTreeHost> window_tree_host_;
 
   std::unique_ptr<wm::FocusController> focus_controller_;
 
@@ -254,7 +271,10 @@ class FrameImpl : public fuchsia::web::Frame,
   bool popup_ack_outstanding_ = false;
   gfx::Size render_size_override_;
 
+  std::unique_ptr<MediaPlayerImpl> media_player_;
+
   fidl::Binding<fuchsia::web::Frame> binding_;
+  media_control::MediaBlocker media_blocker_;
 };
 
 #endif  // FUCHSIA_ENGINE_BROWSER_FRAME_IMPL_H_

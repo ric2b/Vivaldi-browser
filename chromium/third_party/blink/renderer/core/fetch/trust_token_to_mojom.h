@@ -6,10 +6,12 @@
 #define THIRD_PARTY_BLINK_RENDERER_CORE_FETCH_TRUST_TOKEN_TO_MOJOM_H_
 
 #include "services/network/public/mojom/trust_tokens.mojom-blink.h"
-#include "third_party/blink/renderer/core/fetch/trust_token.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_trust_token.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 
 namespace blink {
+
+class DOMException;
 
 // Converts an IDL trustToken object to its Mojo counterpart.
 // The elements of trustToken (and of TrustTokenParams) comprise:
@@ -31,6 +33,13 @@ namespace blink {
 bool ConvertTrustTokenToMojom(const TrustToken& in,
                               ExceptionState* exception_state,
                               network::mojom::blink::TrustTokenParams* out);
+
+// Converts a Mojo TrustTokenOperationStatus denoting an error into a
+// DOMException suitable for displaying to the API's client.
+//
+// This should only be called on failure; |status| must not equal kOk.
+DOMException* TrustTokenErrorToDOMException(
+    network::mojom::blink::TrustTokenOperationStatus error);
 
 }  // namespace blink
 

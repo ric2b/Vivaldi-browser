@@ -4,14 +4,6 @@ import("//build/toolchain/gcc_toolchain.gni")
 import("//vivaldi/gn/config/product.gni")
 import("//vivaldi/gn/config/version.gni")
 
-if (is_multi_dll_chrome) {
-  update_target("//chrome:chrome_child") {
-    if (is_win) {
-      output_name = "vivaldi_child"
-    }
-  }
-}
-
 if (!is_android && !is_mac) {
   update_target("//chrome:chrome_initial") {
     if (is_win) {
@@ -23,10 +15,8 @@ if (!is_android && !is_mac) {
 }
 
 if (is_win) {
-  update_target("//chrome:main_dll") {
-    if (is_win) {
-      output_name = "vivaldi"
-    }
+  update_target("//chrome:chrome_dll") {
+    output_name = "vivaldi"
   }
 
   update_target("//chrome:reorder_imports") {
@@ -177,10 +167,6 @@ if (enable_resource_whitelist_generation && is_win) {
   update_template_instance("//chrome:resource_whitelist") {
     inputs -= [ "$root_out_dir/chrome.dll.pdb" ]
     inputs += [ "$root_out_dir/vivaldi.dll.pdb" ]
-    if (is_multi_dll_chrome) {
-      inputs -= [ "$root_out_dir/chrome_child.dll.pdb" ]
-      inputs += [ "$root_out_dir/vivaldi_child.dll.pdb" ]
-    }
     # Update notifier resources
     inputs += [ "$root_out_dir/update_notifier.exe.pdb" ]
     deps += [ "//vivaldi/update_notifier"]

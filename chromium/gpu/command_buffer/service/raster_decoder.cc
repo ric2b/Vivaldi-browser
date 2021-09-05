@@ -14,6 +14,7 @@
 
 #include "base/atomic_sequence_num.h"
 #include "base/bind.h"
+#include "base/bits.h"
 #include "base/containers/flat_map.h"
 #include "base/debug/crash_logging.h"
 #include "base/logging.h"
@@ -398,6 +399,7 @@ class RasterDecoderImpl final : public RasterDecoder,
     // macOS OpenGL driver.
     // https://crbug.com/906453
     if (!flush_workaround_disabled_for_test_) {
+      TRACE_EVENT0("gpu", "RasterDecoderImpl::FlushToWorkAroundMacCrashes");
       if (gr_context())
         gr_context()->flush();
       api()->glFlushFn();
@@ -470,6 +472,21 @@ class RasterDecoderImpl final : public RasterDecoder,
                                     GLboolean unpack_premultiply_alpha,
                                     const Mailbox& source_mailbox,
                                     const Mailbox& dest_mailbox);
+  void DoWritePixelsINTERNAL(GLint x_offset,
+                             GLint y_offset,
+                             GLuint src_width,
+                             GLuint src_height,
+                             GLuint row_bytes,
+                             GLuint src_sk_color_type,
+                             GLuint src_sk_alpha_type,
+                             GLint shm_id,
+                             GLuint shm_offset,
+                             GLuint shm_size,
+                             const volatile GLbyte* mailbox);
+  void DoConvertYUVMailboxesToRGBINTERNAL(GLenum yuv_color_space,
+                                          GLboolean is_nv12,
+                                          const volatile GLbyte* mailboxes);
+
   void DoLoseContextCHROMIUM(GLenum current, GLenum other) { NOTIMPLEMENTED(); }
   void DoBeginRasterCHROMIUM(GLuint sk_color,
                              GLuint msaa_sample_count,
@@ -499,6 +516,11 @@ class RasterDecoderImpl final : public RasterDecoder,
       GLsizei n,
       const volatile GLuint* paint_cache_ids);
   void DoClearPaintCacheINTERNAL();
+
+  // Generates a DDL, if necessary, and compiles shaders requires to raster it.
+  // Returns false each time a shader needed to be compiled and the decoder
+  // should yield. Returns true once all shaders in the DDL have been compiled.
+  bool EnsureDDLReadyForRaster();
 
 #if defined(NDEBUG)
   void LogClientServiceMapping(const char* /* function_name */,
@@ -602,11 +624,14 @@ class RasterDecoderImpl final : public RasterDecoder,
   std::unique_ptr<SharedImageRepresentationSkia::ScopedWriteAccess>
       scoped_shared_image_write_;
   SkSurface* sk_surface_ = nullptr;
+
   sk_sp<SkSurface> sk_surface_for_testing_;
   std::vector<GrBackendSemaphore> end_semaphores_;
   std::unique_ptr<cc::ServicePaintCache> paint_cache_;
 
   std::unique_ptr<SkDeferredDisplayListRecorder> recorder_;
+  std::unique_ptr<SkDeferredDisplayList> ddl_;
+  base::Optional<SkDeferredDisplayList::ProgramIterator> program_iterator_;
   SkCanvas* raster_canvas_ = nullptr;  // ptr into recorder_ or sk_surface_
   std::vector<SkDiscardableHandleId> locked_handles_;
 
@@ -2238,6 +2263,317 @@ void RasterDecoderImpl::DoCopySubTextureINTERNALSkia(
   }
 }
 
+void RasterDecoderImpl::DoWritePixelsINTERNAL(GLint x_offset,
+                                              GLint y_offset,
+                                              GLuint src_width,
+                                              GLuint src_height,
+                                              GLuint row_bytes,
+                                              GLuint src_sk_color_type,
+                                              GLuint src_sk_alpha_type,
+                                              GLint shm_id,
+                                              GLuint shm_offset,
+                                              GLuint pixels_offset,
+                                              const volatile GLbyte* mailbox) {
+  if (src_sk_color_type > kLastEnum_SkColorType) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_ENUM, "WritePixels",
+                       "src_sk_color_type must be a valid SkColorType");
+    return;
+  }
+  if (src_sk_alpha_type > kLastEnum_SkAlphaType) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_ENUM, "WritePixels",
+                       "src_sk_alpha_type must be a valid SkAlphaType");
+    return;
+  }
+
+  Mailbox dest_mailbox = Mailbox::FromVolatile(
+      *reinterpret_cast<const volatile Mailbox*>(mailbox));
+  DLOG_IF(ERROR, !dest_mailbox.Verify())
+      << "WritePixels was passed an invalid mailbox";
+  auto dest_shared_image = shared_image_representation_factory_.ProduceSkia(
+      dest_mailbox, shared_context_state_);
+  if (!dest_shared_image) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "glWritePixels",
+                       "Attempting to write to unknown mailbox.");
+    return;
+  }
+
+  // If present, the color space is serialized into shared memory before the
+  // pixel data.
+  sk_sp<SkColorSpace> color_space;
+  if (pixels_offset > 0) {
+    void* color_space_bytes =
+        GetSharedMemoryAs<void*>(shm_id, shm_offset, pixels_offset);
+    if (!color_space_bytes) {
+      LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "glWritePixels",
+                         "Failed to retrieve serialized SkColorSpace.");
+      return;
+    }
+
+    color_space = SkColorSpace::Deserialize(color_space_bytes, pixels_offset);
+    if (!color_space) {
+      LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "glWritePixels",
+                         "Failed to deserialize expected SkColorSpace");
+      return;
+    }
+  }
+
+  SkImageInfo src_info = SkImageInfo::Make(
+      src_width, src_height, static_cast<SkColorType>(src_sk_color_type),
+      static_cast<SkAlphaType>(src_sk_alpha_type), std::move(color_space));
+
+  if (row_bytes < src_info.minRowBytes()) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glWritePixels",
+                       "row_bytes be >= "
+                       "SkImageInfo::minRowBytes() for source image.");
+    return;
+  }
+
+  std::vector<GrBackendSemaphore> begin_semaphores;
+  std::vector<GrBackendSemaphore> end_semaphores;
+
+  // Allow uncleared access, as we manually handle clear tracking.
+  std::unique_ptr<SharedImageRepresentationSkia::ScopedWriteAccess>
+      dest_scoped_access = dest_shared_image->BeginScopedWriteAccess(
+          &begin_semaphores, &end_semaphores,
+          SharedImageRepresentation::AllowUnclearedAccess::kYes);
+  if (!dest_scoped_access) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glWritePixels",
+                       "Dest shared image is not writable");
+    return;
+  }
+
+  if (!begin_semaphores.empty()) {
+    bool result = dest_scoped_access->surface()->wait(begin_semaphores.size(),
+                                                      begin_semaphores.data());
+    if (!result) {
+      LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "glWritePixels",
+                         "Unable to obtain write access to dest shared image.");
+      return;
+    }
+  }
+
+  // The pixels are stored after the serialized SkColorSpace + padding
+  void* pixel_data = GetSharedMemoryAs<void*>(
+      shm_id, shm_offset + pixels_offset, src_info.computeByteSize(row_bytes));
+  if (!pixel_data) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "glWritePixels",
+                       "Couldn't retrieve pixel data.");
+    return;
+  }
+  auto* canvas = dest_scoped_access->surface()->getCanvas();
+  bool written =
+      canvas->writePixels(src_info, pixel_data, row_bytes, x_offset, y_offset);
+  if (!written) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_OPERATION, "glWritePixels",
+                       "Failed to write pixels to SkCanvas");
+  }
+
+  GrFlushInfo flush_info = {
+      .fFlags = kNone_GrFlushFlags,
+      .fNumSemaphores = end_semaphores.size(),
+      .fSignalSemaphores = end_semaphores.data(),
+  };
+  gpu::AddVulkanCleanupTaskForSkiaFlush(
+      shared_context_state_->vk_context_provider(), &flush_info);
+  dest_scoped_access->surface()->flush(
+      SkSurface::BackendSurfaceAccess::kNoAccess, flush_info);
+
+  if (!dest_shared_image->IsCleared()) {
+    dest_shared_image->SetClearedRect(
+        gfx::Rect(x_offset, y_offset, src_width, src_height));
+  }
+}
+
+namespace {
+// Helper class for mailbox index iteration that handles NV12 images which have
+// no separate V plane mailbox.
+class YUVConversionMailboxIndex {
+ public:
+  explicit YUVConversionMailboxIndex(bool is_nv12)
+      : is_nv12_(is_nv12), cur_index_(kYIndex) {}
+  ~YUVConversionMailboxIndex() = default;
+
+  YUVConversionMailboxIndex& operator++() {
+    cur_index_++;
+    if (cur_index_ == kVIndex && is_nv12_)
+      cur_index_++;
+    return *this;
+  }
+
+  size_t operator()() { return cur_index_; }
+
+  void reset() { cur_index_ = kYIndex; }
+
+  enum Index : size_t {
+    kYIndex = 0,
+    kUIndex = 1,
+    kVIndex = 2,
+    kDestIndex = 3,
+  };
+
+  std::string ToString() {
+    switch (cur_index_) {
+      case YUVConversionMailboxIndex::kYIndex:
+        return "Y Plane";
+      case YUVConversionMailboxIndex::kUIndex:
+        return is_nv12_ ? "UV Plane" : "U Plane";
+      case YUVConversionMailboxIndex::kVIndex:
+        DCHECK(!is_nv12_);
+        return "V Plane";
+      case YUVConversionMailboxIndex::kDestIndex:
+        return "Destination";
+      default:
+        return "Invalid mailbox index";
+    }
+  }
+
+  static constexpr size_t kNumInputMailboxes =
+      YUVConversionMailboxIndex::kVIndex + 1;
+  static constexpr size_t kTotalMailboxes =
+      YUVConversionMailboxIndex::kDestIndex + 1;
+
+ private:
+  bool is_nv12_;
+  size_t cur_index_;
+};
+
+}  // namespace
+
+void RasterDecoderImpl::DoConvertYUVMailboxesToRGBINTERNAL(
+    GLenum planes_yuv_color_space,
+    GLboolean is_nv12,
+    const volatile GLbyte* mailboxes_in) {
+  if (planes_yuv_color_space > kLastEnum_SkYUVColorSpace) {
+    LOCAL_SET_GL_ERROR(
+        GL_INVALID_ENUM, "glConvertYUVMailboxesToRGB",
+        "planes_yuv_color_space must be a valid SkYUVColorSpace");
+    return;
+  }
+  SkYUVColorSpace src_color_space =
+      static_cast<SkYUVColorSpace>(planes_yuv_color_space);
+
+  YUVConversionMailboxIndex idx(is_nv12);
+
+  // Mailboxes are sent over in the order y_plane, u_plane, v_plane, destination
+  std::array<gpu::Mailbox, YUVConversionMailboxIndex::kTotalMailboxes>
+      mailboxes;
+  for (idx.reset(); idx() < mailboxes.size(); ++idx) {
+    mailboxes[idx()] = Mailbox::FromVolatile(
+        reinterpret_cast<const volatile Mailbox*>(mailboxes_in)[idx()]);
+    DLOG_IF(ERROR, !mailboxes[idx()].Verify())
+        << "ConvertYUVMailboxesToRGB was "
+           "passed an invalid mailbox: "
+        << idx.ToString();
+  }
+
+  std::array<std::unique_ptr<SharedImageRepresentationSkia>,
+             YUVConversionMailboxIndex::kTotalMailboxes>
+      images;
+  for (idx.reset(); idx() < images.size(); ++idx) {
+    images[idx()] = shared_image_representation_factory_.ProduceSkia(
+        mailboxes[idx()], shared_context_state_);
+    if (!images[idx()]) {
+      LOCAL_SET_GL_ERROR(
+          GL_INVALID_OPERATION, "glConvertYUVMailboxesToRGB",
+          ("Attempting to operate on unknown mailbox:" + idx.ToString())
+              .c_str());
+      return;
+    }
+  }
+
+  std::vector<GrBackendSemaphore> begin_semaphores;
+  std::vector<GrBackendSemaphore> end_semaphores;
+
+  auto dest_scoped_access =
+      images[YUVConversionMailboxIndex::kDestIndex]->BeginScopedWriteAccess(
+          &begin_semaphores, &end_semaphores,
+          SharedImageRepresentation::AllowUnclearedAccess::kYes);
+  if (!dest_scoped_access) {
+    LOCAL_SET_GL_ERROR(GL_INVALID_VALUE, "glConvertYUVMailboxesToRGB",
+                       "Destination shared image is not writable");
+    DCHECK(begin_semaphores.empty());
+    return;
+  }
+
+  bool source_access_valid = true;
+  std::array<std::unique_ptr<SharedImageRepresentationSkia::ScopedReadAccess>,
+             YUVConversionMailboxIndex::kNumInputMailboxes>
+      source_scoped_access;
+  for (idx.reset(); idx() < source_scoped_access.size(); ++idx) {
+    source_scoped_access[idx()] = images[idx()]->BeginScopedReadAccess(
+        &begin_semaphores, &end_semaphores);
+
+    if (!source_scoped_access[idx()]) {
+      LOCAL_SET_GL_ERROR(
+          GL_INVALID_OPERATION, "glConvertYUVMailboxesToRGB",
+          ("Couldn't access shared image for mailbox:" + idx.ToString())
+              .c_str());
+      source_access_valid = false;
+      break;
+    }
+  }
+
+  auto* dest_surface = dest_scoped_access->surface();
+  if (!begin_semaphores.empty()) {
+    bool result =
+        dest_surface->wait(begin_semaphores.size(), begin_semaphores.data());
+    DCHECK(result);
+  }
+
+  bool drew_image = false;
+  if (source_access_valid) {
+    std::array<GrBackendTexture, YUVConversionMailboxIndex::kNumInputMailboxes>
+        yuva_textures;
+    for (idx.reset(); idx() < yuva_textures.size(); ++idx) {
+      yuva_textures[idx()] = source_scoped_access[idx()]
+                                 ->promise_image_texture()
+                                 ->backendTexture();
+    }
+
+    SkISize dest_size =
+        SkISize::Make(dest_surface->width(), dest_surface->height());
+
+    std::array<SkYUVAIndex, SkYUVAIndex::kIndexCount> yuva_indices;
+    yuva_indices[SkYUVAIndex::kY_Index] = {0, SkColorChannel::kR};
+    yuva_indices[SkYUVAIndex::kU_Index] = {1, SkColorChannel::kR};
+    if (is_nv12)
+      yuva_indices[SkYUVAIndex::kV_Index] = {1, SkColorChannel::kG};
+    else
+      yuva_indices[SkYUVAIndex::kV_Index] = {2, SkColorChannel::kR};
+    yuva_indices[SkYUVAIndex::kA_Index] = {-1, SkColorChannel::kA};
+
+    auto result_image = SkImage::MakeFromYUVATextures(
+        gr_context(), src_color_space, yuva_textures.data(),
+        yuva_indices.data(), dest_size, kTopLeft_GrSurfaceOrigin, nullptr);
+    if (!result_image) {
+      LOCAL_SET_GL_ERROR(
+          GL_INVALID_OPERATION, "glConvertYUVMailboxesToRGB",
+          "Couldn't create destination images from provided sources");
+    } else {
+      dest_surface->getCanvas()->drawImage(result_image, 0, 0);
+      drew_image = true;
+    }
+  }
+
+  // Always flush the surface even if we don't have scoped_access
+  // so the begin_semaphores can be released, and end_semaphores can be
+  // signalled.
+  GrFlushInfo flush_info = {
+      .fFlags = kNone_GrFlushFlags,
+      .fNumSemaphores = end_semaphores.size(),
+      .fSignalSemaphores = end_semaphores.data(),
+  };
+  gpu::AddVulkanCleanupTaskForSkiaFlush(
+      shared_context_state_->vk_context_provider(), &flush_info);
+  dest_scoped_access->surface()->flush(
+      SkSurface::BackendSurfaceAccess::kNoAccess, flush_info);
+
+  if (!images[YUVConversionMailboxIndex::kDestIndex]->IsCleared() &&
+      drew_image) {
+    images[YUVConversionMailboxIndex::kDestIndex]->SetCleared();
+  }
+}
+
 namespace {
 
 // Helper to read client data from transfer cache.
@@ -2313,11 +2649,10 @@ void RasterDecoderImpl::DoClearPaintCacheINTERNAL() {
   paint_cache_->PurgeAll();
 }
 
-void RasterDecoderImpl::DoBeginRasterCHROMIUM(
-    GLuint sk_color,
-    GLuint msaa_sample_count,
-    GLboolean can_use_lcd_text,
-    const volatile GLbyte* key) {
+void RasterDecoderImpl::DoBeginRasterCHROMIUM(GLuint sk_color,
+                                              GLuint msaa_sample_count,
+                                              GLboolean can_use_lcd_text,
+                                              const volatile GLbyte* key) {
   // Workaround for https://crbug.com/906453: Flush before BeginRaster (the
   // commands between BeginRaster and EndRaster will not flush).
   FlushToWorkAroundMacCrashes();
@@ -2372,8 +2707,8 @@ void RasterDecoderImpl::DoBeginRasterCHROMIUM(
   std::vector<GrBackendSemaphore> begin_semaphores;
   DCHECK(end_semaphores_.empty());
   DCHECK(!scoped_shared_image_write_);
-  // Allow uncleared access, as raster specifically handles uncleared images by
-  // clearing them before writing.
+  // Allow uncleared access, as raster specifically handles uncleared images
+  // by clearing them before writing.
   scoped_shared_image_write_ = shared_image_->BeginScopedWriteAccess(
       final_msaa_count, surface_props, &begin_semaphores, &end_semaphores_,
       SharedImageRepresentation::AllowUnclearedAccess::kYes);
@@ -2502,6 +2837,33 @@ void RasterDecoderImpl::DoRasterCHROMIUM(GLuint raster_shm_id,
   }
 }
 
+bool RasterDecoderImpl::EnsureDDLReadyForRaster() {
+  DCHECK(use_ddl_);
+  DCHECK_EQ(current_decoder_error_, error::kNoError);
+
+  if (!ddl_) {
+    DCHECK(recorder_);
+    DCHECK(!program_iterator_);
+
+    TRACE_EVENT0("gpu",
+                 "RasterDecoderImpl::EnsureDDLReadyForRaster::DetachDDL");
+    ddl_ = recorder_->detach();
+    program_iterator_.emplace(shared_context_state_->gr_context(), ddl_.get());
+  }
+
+  while (!program_iterator_->done()) {
+    TRACE_EVENT0("gpu",
+                 "RasterDecoderImpl::EnsureDDLReadyForRaster::MaybeCompile");
+    bool did_compile = program_iterator_->compile();
+    program_iterator_->next();
+    if (did_compile)
+      return false;
+  }
+
+  program_iterator_.reset();
+  return true;
+}
+
 void RasterDecoderImpl::DoEndRasterCHROMIUM() {
   TRACE_EVENT0("gpu", "RasterDecoderImpl::DoEndRasterCHROMIUM");
   if (!sk_surface_) {
@@ -2511,18 +2873,18 @@ void RasterDecoderImpl::DoEndRasterCHROMIUM() {
   }
 
   shared_context_state_->set_need_context_state_reset(true);
-
   raster_canvas_ = nullptr;
 
-  // The DDL pins memory for the recorded ops so it must be kept alive until its
-  // flushed.
-  std::unique_ptr<SkDeferredDisplayList> ddl;
   if (use_ddl_) {
-    TRACE_EVENT0("gpu",
-                 "RasterDecoderImpl::DoEndRasterCHROMIUM::DetachAndDrawDDL");
-    ddl = recorder_->detach();
-    recorder_ = nullptr;
-    sk_surface_->draw(ddl.get());
+    if (!EnsureDDLReadyForRaster()) {
+      // This decoder error indicates that this command has not finished
+      // executing. The decoder will yield and re-execute this command when it
+      // resumes decoding.
+      current_decoder_error_ = error::kDeferCommandUntilLater;
+      return;
+    }
+    TRACE_EVENT0("gpu", "RasterDecoderImpl::DoEndRasterCHROMIUM::DrawDDL");
+    sk_surface_->draw(ddl_.get());
   }
 
   {
@@ -2543,7 +2905,10 @@ void RasterDecoderImpl::DoEndRasterCHROMIUM() {
                                      flush_info);
     DCHECK(result == GrSemaphoresSubmitted::kYes || end_semaphores_.empty());
     end_semaphores_.clear();
-    ddl.reset();
+
+    // The DDL pins memory for the recorded ops so it must be kept alive until
+    // its flushed.
+    ddl_.reset();
   }
 
   shared_context_state_->UpdateSkiaOwnedMemorySize();

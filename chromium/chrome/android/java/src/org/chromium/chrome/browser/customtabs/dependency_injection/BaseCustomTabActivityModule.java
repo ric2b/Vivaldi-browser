@@ -8,9 +8,11 @@ import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProv
 import org.chromium.chrome.browser.browserservices.trustedwebactivityui.TwaIntentHandlingStrategy;
 import org.chromium.chrome.browser.browserservices.trustedwebactivityui.controller.TwaVerifier;
 import org.chromium.chrome.browser.browserservices.trustedwebactivityui.controller.Verifier;
+import org.chromium.chrome.browser.customtabs.CustomTabNightModeStateController;
 import org.chromium.chrome.browser.customtabs.content.CustomTabIntentHandler.IntentIgnoringCriterion;
 import org.chromium.chrome.browser.customtabs.content.CustomTabIntentHandlingStrategy;
 import org.chromium.chrome.browser.customtabs.content.DefaultCustomTabIntentHandlingStrategy;
+import org.chromium.chrome.browser.flags.ActivityType;
 import org.chromium.chrome.browser.webapps.AddToHomescreenVerifier;
 import org.chromium.chrome.browser.webapps.WebApkPostShareTargetNavigator;
 import org.chromium.chrome.browser.webapps.WebApkVerifier;
@@ -26,11 +28,16 @@ import dagger.Reusable;
 @Module
 public class BaseCustomTabActivityModule {
     private final BrowserServicesIntentDataProvider mIntentDataProvider;
+    private final @ActivityType int mActivityType;
+    private final CustomTabNightModeStateController mNightModeController;
     private final IntentIgnoringCriterion mIntentIgnoringCriterion;
 
     public BaseCustomTabActivityModule(BrowserServicesIntentDataProvider intentDataProvider,
+            CustomTabNightModeStateController nightModeController,
             IntentIgnoringCriterion intentIgnoringCriterion) {
         mIntentDataProvider = intentDataProvider;
+        mActivityType = intentDataProvider.getActivityType();
+        mNightModeController = nightModeController;
         mIntentIgnoringCriterion = intentIgnoringCriterion;
     }
 
@@ -43,8 +50,8 @@ public class BaseCustomTabActivityModule {
     public CustomTabIntentHandlingStrategy provideIntentHandler(
             Lazy<DefaultCustomTabIntentHandlingStrategy> defaultHandler,
             Lazy<TwaIntentHandlingStrategy> twaHandler) {
-        return (mIntentDataProvider.isTrustedWebActivity()
-                       || mIntentDataProvider.isWebApkActivity())
+        return (mActivityType == ActivityType.TRUSTED_WEB_ACTIVITY
+                       || mActivityType == ActivityType.WEB_APK)
                 ? twaHandler.get()
                 : defaultHandler.get();
     }
@@ -52,10 +59,10 @@ public class BaseCustomTabActivityModule {
     @Provides
     public Verifier provideVerifier(Lazy<WebApkVerifier> webApkVerifier,
             Lazy<AddToHomescreenVerifier> addToHomescreenVerifier, Lazy<TwaVerifier> twaVerifier) {
-        if (mIntentDataProvider.isWebApkActivity()) {
+        if (mActivityType == ActivityType.WEB_APK) {
             return webApkVerifier.get();
         }
-        if (mIntentDataProvider.isWebappOrWebApkActivity()) {
+        if (mActivityType == ActivityType.WEBAPP) {
             return addToHomescreenVerifier.get();
         }
         return twaVerifier.get();
@@ -64,6 +71,11 @@ public class BaseCustomTabActivityModule {
     @Provides
     public IntentIgnoringCriterion provideIntentIgnoringCriterion() {
         return mIntentIgnoringCriterion;
+    }
+
+    @Provides
+    public CustomTabNightModeStateController provideNightModeController() {
+        return mNightModeController;
     }
 
     @Provides

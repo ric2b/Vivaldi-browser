@@ -985,6 +985,16 @@ void ChromePasswordProtectionService::HandleUserActionOnPageInfo(
           prefs::kSafeBrowsingUnhandledGaiaPasswordReuses);
       update->RemoveKey(origin.Serialize());
     }
+
+    // If the site is marked as legitimate and the phished password is
+    // a saved password, remove the matching saved password credentials
+    // from the compromised credentials table as the user has considered
+    // the site safe.
+    if (password_type.account_type() ==
+        ReusedPasswordAccountType::SAVED_PASSWORD) {
+      RemovePhishedSavedPasswordCredential(
+          saved_passwords_matching_reused_credentials());
+    }
     for (auto& observer : observer_list_)
       observer.OnMarkingSiteAsLegitimate(url);
     return;
@@ -1063,7 +1073,7 @@ ChromePasswordProtectionService::GetPlaceholdersForSavedPasswordWarningText()
   std::vector<base::string16> placeholders;
   for (auto priority_domain_iter = spoofed_domains.begin();
        priority_domain_iter != spoofed_domains.end(); ++priority_domain_iter) {
-    std::string matching_domain = "";
+    std::string matching_domain;
 
     // Check if any of the matching domains is equal or a suffix to the current
     // priority domain.
@@ -1423,15 +1433,15 @@ bool ChromePasswordProtectionService::IsPingingEnabled(
     return false;
   }
   bool extended_reporting_enabled = IsExtendedReporting();
+  if (!extended_reporting_enabled) {
+    *reason = RequestOutcome::DISABLED_DUE_TO_USER_POPULATION;
+  }
   if (trigger_type == LoginReputationClientRequest::PASSWORD_REUSE_EVENT) {
     if (password_type.account_type() ==
         ReusedPasswordAccountType::SAVED_PASSWORD) {
-      bool enabled = extended_reporting_enabled ||
-                     base::FeatureList::IsEnabled(
-                         safe_browsing::kPasswordProtectionForSavedPasswords);
-      if (!enabled)
-        *reason = RequestOutcome::DISABLED_DUE_TO_USER_POPULATION;
-      return enabled;
+      return extended_reporting_enabled ||
+             base::FeatureList::IsEnabled(
+                 safe_browsing::kPasswordProtectionForSavedPasswords);
     }
 
     PasswordProtectionTrigger trigger_level =
@@ -1462,11 +1472,7 @@ bool ChromePasswordProtectionService::IsPingingEnabled(
     *reason = RequestOutcome::DISABLED_DUE_TO_INCOGNITO;
     return false;
   }
-  if (!extended_reporting_enabled) {
-    *reason = RequestOutcome::DISABLED_DUE_TO_USER_POPULATION;
-    return false;
-  }
-  return true;
+  return extended_reporting_enabled;
 }
 
 bool ChromePasswordProtectionService::IsHistorySyncEnabled() {
@@ -1676,6 +1682,26 @@ void ChromePasswordProtectionService::PersistPhishedSavedPasswordCredential(
     password_store->AddCompromisedCredentials(
         {credential.signon_realm, credential.username, base::Time::Now(),
          password_manager::CompromiseType::kPhished});
+  }
+}
+
+void ChromePasswordProtectionService::RemovePhishedSavedPasswordCredential(
+    const std::vector<password_manager::MatchingReusedCredential>&
+        matching_reused_credentials) {
+  if (!profile_)
+    return;
+  scoped_refptr<password_manager::PasswordStore> password_store =
+      GetProfilePasswordStore();
+
+  // Password store can be null in tests.
+  if (!password_store) {
+    return;
+  }
+  for (const auto& credential : matching_reused_credentials) {
+    password_store->RemoveCompromisedCredentials(
+        credential.signon_realm, credential.username,
+        password_manager::RemoveCompromisedCredentialsReason::
+            kMarkSiteAsLegitimate);
   }
 }
 

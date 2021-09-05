@@ -37,6 +37,7 @@
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
+#include "third_party/blink/renderer/core/display_lock/display_lock_document_state.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
 #include "third_party/blink/renderer/core/dom/attr.h"
 #include "third_party/blink/renderer/core/dom/attribute.h"
@@ -965,18 +966,24 @@ void Node::remove() {
 Node* Node::cloneNode(bool deep, ExceptionState& exception_state) const {
   // https://dom.spec.whatwg.org/#dom-node-clonenode
 
-  // 1. If context object is a shadow root, then throw a
-  // "NotSupportedError" DOMException.
+  // 1. If this is a shadow root, then throw a "NotSupportedError" DOMException.
   if (IsShadowRoot()) {
     exception_state.ThrowDOMException(DOMExceptionCode::kNotSupportedError,
                                       "ShadowRoot nodes are not clonable.");
     return nullptr;
   }
 
-  // 2. Return a clone of the context object, with the clone children
-  // flag set if deep is true.
+  // 2. Return a clone of this, with the clone children flag set if deep is
+  // true, and the clone shadows flag set if this is a DocumentFragment whose
+  // host is an HTML template element.
+  auto* fragment = DynamicTo<DocumentFragment>(this);
+  bool clone_shadows_flag =
+      fragment && fragment->IsTemplateContent() &&
+      RuntimeEnabledFeatures::DeclarativeShadowDOMEnabled();
   return Clone(GetDocument(),
-               deep ? CloneChildrenFlag::kClone : CloneChildrenFlag::kSkip);
+               deep ? (clone_shadows_flag ? CloneChildrenFlag::kCloneWithShadows
+                                          : CloneChildrenFlag::kClone)
+                    : CloneChildrenFlag::kSkip);
 }
 
 Node* Node::cloneNode(bool deep) const {
@@ -1294,8 +1301,6 @@ bool Node::ShouldSkipMarkingStyleDirty() const {
       parent = parent->GetStyleRecalcParent();
     return !parent || !parent->GetComputedStyle();
   }
-  if (!RuntimeEnabledFeatures::FlatTreeStyleRecalcEnabled())
-    return false;
   // If this is the root element, and it does not have a computed style, we
   // still need to mark it for style recalc since it may change from
   // display:none. Otherwise, the node is not in the flat tree, and we can
@@ -1318,7 +1323,7 @@ void Node::MarkAncestorsWithChildNeedsStyleRecalc() {
       break;
     // If we reach a locked ancestor, we should abort since the ancestor marking
     // will be done when the lock is committed.
-    if (RuntimeEnabledFeatures::CSSSubtreeVisibilityEnabled()) {
+    if (RuntimeEnabledFeatures::CSSContentVisibilityEnabled()) {
       auto* ancestor_element = DynamicTo<Element>(ancestor);
       if (ancestor_element && ancestor_element->StyleRecalcBlockedByDisplayLock(
                                   DisplayLockLifecycleTarget::kChildren)) {
@@ -1332,21 +1337,18 @@ void Node::MarkAncestorsWithChildNeedsStyleRecalc() {
   // early return here is a performance optimization.
   if (parent_dirty)
     return;
-  // If we are outside the flat tree and FlatTreeStyleRecalc is enabled, we
-  // should not update the recalc root because we should not traverse those
-  // nodes from StyleEngine::RecalcStyle().
-  if (RuntimeEnabledFeatures::FlatTreeStyleRecalcEnabled()) {
-    if (const ComputedStyle* current_style = GetComputedStyle()) {
-      if (current_style->IsEnsuredOutsideFlatTree())
-        return;
-    } else {
-      while (style_parent && !style_parent->CanParticipateInFlatTree())
-        style_parent = style_parent->GetStyleRecalcParent();
-      if (style_parent) {
-        if (const auto* parent_style = style_parent->GetComputedStyle()) {
-          if (parent_style->IsEnsuredOutsideFlatTree())
-            return;
-        }
+  // If we are outside the flat tree we should not update the recalc root
+  // because we should not traverse those nodes from StyleEngine::RecalcStyle().
+  if (const ComputedStyle* current_style = GetComputedStyle()) {
+    if (current_style->IsEnsuredOutsideFlatTree())
+      return;
+  } else {
+    while (style_parent && !style_parent->CanParticipateInFlatTree())
+      style_parent = style_parent->GetStyleRecalcParent();
+    if (style_parent) {
+      if (const auto* parent_style = style_parent->GetComputedStyle()) {
+        if (parent_style->IsEnsuredOutsideFlatTree())
+          return;
       }
     }
   }
@@ -1354,8 +1356,9 @@ void Node::MarkAncestorsWithChildNeedsStyleRecalc() {
   // roots. These would be updated when we commit the lock. If we have locked
   // display locks somewhere in the document, we iterate up the ancestor chain
   // to check if we're in one such subtree.
-  if (RuntimeEnabledFeatures::CSSSubtreeVisibilityEnabled() &&
-      GetDocument().LockedDisplayLockCount() > 0) {
+  if (RuntimeEnabledFeatures::CSSContentVisibilityEnabled() &&
+      GetDocument().GetDisplayLockDocumentState().LockedDisplayLockCount() >
+          0) {
     for (auto* ancestor_copy = ancestor; ancestor_copy;
          ancestor_copy = ancestor_copy->GetStyleRecalcParent()) {
       auto* ancestor_copy_element = DynamicTo<Element>(ancestor_copy);
@@ -1391,12 +1394,6 @@ Element* Node::FlatTreeParentForChildDirty() const {
   return ParentOrShadowHostElement();
 }
 
-ContainerNode* Node::GetStyleRecalcParent() const {
-  if (RuntimeEnabledFeatures::FlatTreeStyleRecalcEnabled())
-    return FlatTreeParentForChildDirty();
-  return ParentOrShadowHostNode();
-}
-
 void Node::MarkAncestorsWithChildNeedsReattachLayoutTree() {
   DCHECK(isConnected());
   Element* ancestor = GetReattachParent();
@@ -1427,13 +1424,7 @@ void Node::SetNeedsStyleRecalc(StyleChangeType change_type,
                                const StyleChangeReasonForTracing& reason) {
   DCHECK(!GetDocument().GetStyleEngine().InRebuildLayoutTree());
   DCHECK(change_type != kNoStyleChange);
-  // TODO(crbug.com/972752): ShadowRoot can be marked kSubtreeStyleChange from
-  // RescheduleSiblingInvalidationsAsDescendants() for WholeSubtreeInvalid(). We
-  // should instead mark the shadow host for subtree recalc when we traverse the
-  // flat tree (and skip non-slotted host children).
-  DCHECK(IsElementNode() || IsTextNode() ||
-         (IsShadowRoot() &&
-          !RuntimeEnabledFeatures::FlatTreeStyleRecalcEnabled()));
+  DCHECK(IsElementNode() || IsTextNode());
 
   if (!InActiveDocument())
     return;
@@ -1765,6 +1756,16 @@ bool Node::CanStartSelection() const {
   }
   ContainerNode* parent = FlatTreeTraversal::Parent(*this);
   return parent ? parent->CanStartSelection() : true;
+}
+
+void Node::NotifyPriorityScrollAnchorStatusChanged() {
+  auto* node = this;
+  while (node && !node->GetLayoutObject())
+    node = FlatTreeTraversal::Parent(*node);
+  if (node) {
+    DCHECK(node->GetLayoutObject());
+    node->GetLayoutObject()->NotifyPriorityScrollAnchorStatusChanged();
+  }
 }
 
 // StyledElements allow inline style (style="border: 1px"), presentational
@@ -3338,12 +3339,11 @@ void Node::FlatTreeParentChanged() {
   // The node changed the flat tree position by being slotted to a new slot or
   // slotted for the first time. We need to recalc style since the inheritance
   // parent may have changed.
-  if (NeedsStyleRecalc() &&
-      RuntimeEnabledFeatures::FlatTreeStyleRecalcEnabled()) {
-    // For flat tree style recalc, the ancestor chain may have changed. We need
-    // make sure that the child-dirty flags are updated, but the
-    // SetNeedsStyleRecalc() call below will skip
-    // MarkAncestorsWithChildNeedsStyleRecalc() if the node was already dirty.
+  if (NeedsStyleRecalc()) {
+    // The ancestor chain may have changed. We need to make sure that the
+    // child-dirty flags are updated, but the SetNeedsStyleRecalc() call below
+    // will skip MarkAncestorsWithChildNeedsStyleRecalc() if the node was
+    // already dirty.
     MarkAncestorsWithChildNeedsStyleRecalc();
   }
   SetNeedsStyleRecalc(kLocalStyleChange,

@@ -26,7 +26,19 @@ class CastMessageHandler;
 
 namespace media_router {
 
+class CastActivityRecord;
+class MirroringActivityRecord;
 class CastSessionTracker;
+
+class ActivityRecordFactoryForTest {
+ public:
+  virtual std::unique_ptr<CastActivityRecord> MakeCastActivityRecord(
+      const MediaRoute& route,
+      const std::string& app_id) = 0;
+  virtual std::unique_ptr<MirroringActivityRecord> MakeMirroringActivityRecord(
+      const MediaRoute& route,
+      const std::string& app_id) = 0;
+};
 
 class ActivityRecord {
  public:
@@ -135,6 +147,7 @@ class ActivityRecord {
   using ClientMap =
       base::flat_map<std::string, std::unique_ptr<CastSessionClient>>;
 
+  // Gets the session associated with this activity.  May return nullptr.
   CastSession* GetSession() const;
 
   CastSessionClient* GetClient(const std::string& client_id) {

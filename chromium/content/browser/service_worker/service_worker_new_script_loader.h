@@ -22,7 +22,6 @@
 namespace content {
 
 class ServiceWorkerVersion;
-struct HttpResponseInfoIOBuffer;
 
 // This is the URLLoader used for loading scripts for a new (installing) service
 // worker. It fetches the script (the main script or imported script) and
@@ -81,9 +80,11 @@ class CONTENT_EXPORT ServiceWorkerNewScriptLoader final
   ~ServiceWorkerNewScriptLoader() override;
 
   // network::mojom::URLLoader:
-  void FollowRedirect(const std::vector<std::string>& removed_headers,
-                      const net::HttpRequestHeaders& modified_headers,
-                      const base::Optional<GURL>& new_url) override;
+  void FollowRedirect(
+      const std::vector<std::string>& removed_headers,
+      const net::HttpRequestHeaders& modified_headers,
+      const net::HttpRequestHeaders& modified_cors_exempt_headers,
+      const base::Optional<GURL>& new_url) override;
   void SetPriority(net::RequestPriority priority,
                    int32_t intra_priority_value) override;
   void PauseReadingBodyFromNet() override;
@@ -122,7 +123,7 @@ class CONTENT_EXPORT ServiceWorkerNewScriptLoader final
       int64_t cache_resource_id);
 
   // Writes the given headers into the service worker script storage.
-  void WriteHeaders(scoped_refptr<HttpResponseInfoIOBuffer> info_buffer);
+  void WriteHeaders(network::mojom::URLResponseHeadPtr response_head);
   void OnWriteHeadersComplete(net::Error error);
 
   // Starts watching the data pipe for the network load (i.e.,
@@ -157,15 +158,12 @@ class CONTENT_EXPORT ServiceWorkerNewScriptLoader final
   // If not all data are received, it continues to download from network.
   void OnCacheWriterResumed(net::Error error);
 
-#if DCHECK_IS_ON()
-  void CheckVersionStatusBeforeLoad();
-#endif  // DCHECK_IS_ON()
-
   const GURL request_url_;
 
-  // This is blink::mojom::ResourceType::kServiceWorker for the main script or
-  // blink::mojom::ResourceType::kScript for an imported script.
-  const blink::mojom::ResourceType resource_type_;
+  // This is network::mojom::RequestDestination::kServiceWorker for the
+  // main script or network::mojom::RequestDestination::kScript for
+  // an imported script.
+  const network::mojom::RequestDestination resource_destination_;
 
   // Load options originally passed to this loader. The options passed to the
   // network loader might be different from this.

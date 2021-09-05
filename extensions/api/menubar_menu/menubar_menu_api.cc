@@ -331,7 +331,8 @@ std::string MenubarMenuShowFunction::PopulateModel(
               gfx::Image img = gfx::Image::CreateFrom1xPNGBytes(
                 reinterpret_cast<const unsigned char*>(png_data.c_str()),
                 png_data.length());
-              menu_model->SetIcon(menu_model->GetIndexOfCommandId(id), img);
+              menu_model->SetIcon(menu_model->GetIndexOfCommandId(id),
+                                  ui::ImageModel::FromImage(img));
             }
           }
         }

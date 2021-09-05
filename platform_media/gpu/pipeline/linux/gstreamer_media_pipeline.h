@@ -21,8 +21,7 @@ class GStreamerMediaPipeline : public PlatformMediaPipeline {
 
   ~GStreamerMediaPipeline() override;
 
-  void Initialize(ipc_data_source::Reader source_reader,
-                  ipc_data_source::Info source_info,
+  void Initialize(ipc_data_source::Info source_info,
                   InitializeCB initialize_cb) override;
 
   void ReadAudioData(const ReadDataCB& read_audio_data_cb) override;

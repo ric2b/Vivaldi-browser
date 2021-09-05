@@ -137,6 +137,14 @@ class NATIVE_THEME_EXPORT NativeTheme {
                             // Win)
   };
 
+  // This enum represents the available unique security chip color states.
+  enum class SecurityChipColorId {
+    DEFAULT,
+    SECURE,
+    SECURE_WITH_CERT,
+    DANGEROUS,
+  };
+
   // Each structure below holds extra information needed when painting a given
   // part.
 
@@ -436,6 +444,10 @@ class NATIVE_THEME_EXPORT NativeTheme {
       bool is_dark_mode,
       bool is_high_contrast,
       const base::flat_map<SystemThemeColor, uint32_t>& colors);
+
+  // On certain platforms, currently only Mac, there is a unique visual for
+  // pressed states.
+  virtual SkColor GetSystemButtonPressedColor(SkColor base_color) const;
 
  protected:
   explicit NativeTheme(bool should_only_use_dark_colors);

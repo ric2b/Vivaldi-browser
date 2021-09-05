@@ -40,11 +40,10 @@
 #include "base/memory/weak_ptr.h"
 #include "cc/test/test_task_graph_runner.h"
 #include "cc/trees/layer_tree_host.h"
-#include "content/renderer/compositor/layer_tree_view.h"
-#include "content/test/stub_layer_tree_view_delegate.h"
-#include "third_party/blink/public/common/frame/frame_owner_element_type.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/frame/frame_owner_element_type.mojom-blink.h"
+#include "third_party/blink/public/mojom/frame/tree_scope_type.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/scheduler/test/web_fake_thread_scheduler.h"
 #include "third_party/blink/public/platform/web_string.h"
@@ -87,10 +86,6 @@ namespace base {
 class TickClock;
 }
 
-namespace cc {
-class AnimationHost;
-}
-
 namespace blink {
 class WebFrame;
 class WebLocalFrameImpl;
@@ -104,6 +99,8 @@ class TestWebRemoteFrameClient;
 class TestWebWidgetClient;
 class TestWebViewClient;
 class WebViewHelper;
+
+cc::LayerTreeSettings GetSynchronousSingleThreadLayerTreeSettings();
 
 // Loads a url into the specified WebLocalFrame for testing purposes.
 void LoadFrameDontWait(WebLocalFrame*, const WebURL& url);
@@ -143,14 +140,14 @@ WebMouseEvent CreateMouseEvent(WebInputEvent::Type,
 
 // Helper for creating a local child frame of a local parent frame.
 WebLocalFrameImpl* CreateLocalChild(WebLocalFrame& parent,
-                                    WebTreeScopeType,
+                                    blink::mojom::blink::TreeScopeType,
                                     TestWebFrameClient* = nullptr);
 
 // Similar, but unlike the overload which takes the client as a raw pointer,
 // ownership of the TestWebFrameClient is transferred to the test framework.
 // TestWebFrameClient may not be null.
 WebLocalFrameImpl* CreateLocalChild(WebLocalFrame& parent,
-                                    WebTreeScopeType,
+                                    blink::mojom::blink::TreeScopeType,
                                     std::unique_ptr<TestWebFrameClient>);
 
 // Helper for creating a provisional local frame that can replace a remote
@@ -179,21 +176,6 @@ WebRemoteFrameImpl* CreateRemoteChild(WebRemoteFrame& parent,
                                       scoped_refptr<SecurityOrigin> = nullptr,
                                       TestWebRemoteFrameClient* = nullptr);
 
-// A class that constructs and owns a LayerTreeView for blink
-// unit tests.
-class LayerTreeViewFactory {
-  DISALLOW_NEW();
-
- public:
-  // Use this to specify a delegate instead of using a stub.
-  content::LayerTreeView* Initialize(content::LayerTreeViewDelegate*);
-
- private:
-  cc::TestTaskGraphRunner test_task_graph_runner_;
-  blink::scheduler::WebFakeThreadScheduler fake_thread_scheduler_;
-  std::unique_ptr<content::LayerTreeView> layer_tree_view_;
-};
-
 struct InjectedScrollGestureData {
   gfx::Vector2dF delta;
   ScrollGranularity granularity;
@@ -201,8 +183,7 @@ struct InjectedScrollGestureData {
   WebInputEvent::Type type;
 };
 
-class TestWebWidgetClient : public WebWidgetClient,
-                            public content::StubLayerTreeViewDelegate {
+class TestWebWidgetClient : public WebWidgetClient {
  public:
   TestWebWidgetClient();
   ~TestWebWidgetClient() override = default;
@@ -211,27 +192,8 @@ class TestWebWidgetClient : public WebWidgetClient,
   // before usage of this class occurs.
   void SetFrameWidget(WebFrameWidget* widget);
 
-  // WebWidgetClient implementation.
-  void ScheduleAnimation() override { animation_scheduled_ = true; }
-  void SetPageScaleStateAndLimits(float page_scale_factor,
-                                  bool is_pinch_gesture_active,
-                                  float minimum,
-                                  float maximum) override;
-  void InjectGestureScrollEvent(WebGestureDevice device,
-                                const gfx::Vector2dF& delta,
-                                ScrollGranularity granularity,
-                                cc::ElementId scrollable_area_element_id,
-                                WebInputEvent::Type injected_type) override;
-  void DidMeaningfulLayout(WebMeaningfulLayout) override;
-  viz::FrameSinkId GetFrameSinkId() override;
-
-  cc::LayerTreeHost* layer_tree_host() {
-    return layer_tree_view_->layer_tree_host();
-  }
-  const cc::LayerTreeHost* layer_tree_host() const {
-    return layer_tree_view_->layer_tree_host();
-  }
-  cc::AnimationHost* animation_host() { return animation_host_; }
+  cc::LayerTreeHost* layer_tree_host() { return layer_tree_host_; }
+  const cc::LayerTreeHost* layer_tree_host() const { return layer_tree_host_; }
 
   bool AnimationScheduled() const { return animation_scheduled_; }
   void ClearAnimationScheduled() { animation_scheduled_ = false; }
@@ -252,20 +214,34 @@ class TestWebWidgetClient : public WebWidgetClient,
     return injected_scroll_gesture_data_;
   }
 
+  cc::TaskGraphRunner* task_graph_runner() { return &test_task_graph_runner_; }
+
+  void set_layer_tree_host(cc::LayerTreeHost* layer_tree_host) {
+    layer_tree_host_ = layer_tree_host;
+  }
+
  protected:
-  // LayerTreeViewDelegate implementation.
-  void BeginMainFrame(base::TimeTicks frame_time) override;
-  void DidBeginMainFrame() override;
-  void UpdateVisualState() override;
-  void ApplyViewportChanges(const ApplyViewportChangesArgs& args) override;
+  // WebWidgetClient overrides;
+  void ScheduleAnimation() override { animation_scheduled_ = true; }
+  void SetPageScaleStateAndLimits(float page_scale_factor,
+                                  bool is_pinch_gesture_active,
+                                  float minimum,
+                                  float maximum) override;
+  void InjectGestureScrollEvent(WebGestureDevice device,
+                                const gfx::Vector2dF& delta,
+                                ScrollGranularity granularity,
+                                cc::ElementId scrollable_area_element_id,
+                                WebInputEvent::Type injected_type) override;
+  void DidMeaningfulLayout(WebMeaningfulLayout) override;
+  viz::FrameSinkId GetFrameSinkId() override;
   void RequestNewLayerTreeFrameSink(
       LayerTreeFrameSinkCallback callback) override;
 
  private:
   WebFrameWidget* frame_widget_ = nullptr;
-  content::LayerTreeView* layer_tree_view_ = nullptr;
-  cc::AnimationHost* animation_host_ = nullptr;
-  LayerTreeViewFactory layer_tree_view_factory_;
+  cc::LayerTreeHost* layer_tree_host_ = nullptr;
+  cc::TestTaskGraphRunner test_task_graph_runner_;
+  blink::scheduler::WebFakeThreadScheduler fake_thread_scheduler_;
   Vector<InjectedScrollGestureData> injected_scroll_gesture_data_;
   bool animation_scheduled_ = false;
   int visually_non_empty_layout_count_ = 0;
@@ -288,12 +264,11 @@ class TestWebViewClient : public WebViewClient {
                       const WebWindowFeatures&,
                       const WebString& name,
                       WebNavigationPolicy,
-                      mojom::blink::WebSandboxFlags,
+                      network::mojom::blink::WebSandboxFlags,
                       const FeaturePolicy::FeatureState&,
                       const SessionStorageNamespaceId&) override;
 
  private:
-  LayerTreeViewFactory layer_tree_view_factory_;
   WTF::Vector<std::unique_ptr<WebViewHelper>> child_web_views_;
 };
 
@@ -424,12 +399,12 @@ class TestWebFrameClient : public WebLocalFrameClient {
   // WebLocalFrameClient:
   void FrameDetached(DetachType) override;
   WebLocalFrame* CreateChildFrame(WebLocalFrame* parent,
-                                  WebTreeScopeType,
+                                  blink::mojom::blink::TreeScopeType,
                                   const WebString& name,
                                   const WebString& fallback_name,
                                   const FramePolicy&,
                                   const WebFrameOwnerProperties&,
-                                  FrameOwnerElementType) override;
+                                  mojom::blink::FrameOwnerElementType) override;
   void DidStartLoading() override;
   void DidStopLoading() override;
   std::unique_ptr<blink::WebURLLoaderFactory> CreateURLLoaderFactory()

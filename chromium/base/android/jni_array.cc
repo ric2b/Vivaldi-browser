@@ -4,9 +4,11 @@
 
 #include "base/android/jni_array.h"
 
+#include <ostream>
+
 #include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
-#include "base/logging.h"
+#include "base/check_op.h"
 
 namespace base {
 namespace android {
@@ -349,6 +351,17 @@ void JavaFloatArrayToFloatVector(JNIEnv* env,
   if (!len)
     return;
   env->GetFloatArrayRegion(float_array.obj(), 0, len, out->data());
+}
+
+void JavaDoubleArrayToDoubleVector(JNIEnv* env,
+                                   const JavaRef<jdoubleArray>& double_array,
+                                   std::vector<double>* out) {
+  DCHECK(out);
+  size_t len = SafeGetArrayLength(env, double_array);
+  out->resize(len);
+  if (!len)
+    return;
+  env->GetDoubleArrayRegion(double_array.obj(), 0, len, out->data());
 }
 
 void JavaArrayOfByteArrayToStringVector(JNIEnv* env,

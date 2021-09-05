@@ -18,20 +18,21 @@ import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.IntentHandler;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
+import org.chromium.chrome.browser.customtabs.BaseCustomTabActivity;
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityTabProvider;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.PauseResumeWithNativeObserver;
-import org.chromium.chrome.browser.notifications.ChromeNotification;
 import org.chromium.chrome.browser.notifications.NotificationBuilderFactory;
 import org.chromium.chrome.browser.notifications.NotificationConstants;
-import org.chromium.chrome.browser.notifications.NotificationManagerProxy;
-import org.chromium.chrome.browser.notifications.NotificationManagerProxyImpl;
-import org.chromium.chrome.browser.notifications.NotificationMetadata;
 import org.chromium.chrome.browser.notifications.NotificationUmaTracker;
-import org.chromium.chrome.browser.notifications.PendingIntentProvider;
-import org.chromium.chrome.browser.notifications.channels.ChannelDefinitions;
+import org.chromium.chrome.browser.notifications.channels.ChromeChannelDefinitions;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.components.browser_ui.notifications.ChromeNotification;
+import org.chromium.components.browser_ui.notifications.NotificationManagerProxy;
+import org.chromium.components.browser_ui.notifications.NotificationManagerProxyImpl;
+import org.chromium.components.browser_ui.notifications.NotificationMetadata;
+import org.chromium.components.browser_ui.notifications.PendingIntentProvider;
 import org.chromium.ui.base.Clipboard;
 
 import java.lang.ref.WeakReference;
@@ -113,7 +114,7 @@ class WebappActionsNotificationManager implements PauseResumeWithNativeObserver 
                 null /* notificationTag */, NotificationConstants.NOTIFICATION_ID_WEBAPP_ACTIONS);
         return NotificationBuilderFactory
                 .createChromeNotificationBuilder(true /* prefer compat */,
-                        ChannelDefinitions.ChannelId.WEBAPP_ACTIONS,
+                        ChromeChannelDefinitions.ChannelId.WEBAPP_ACTIONS,
                         null /* remoteAppPackageName */, metadata)
                 .setSmallIcon(R.drawable.ic_chrome)
                 .setContentTitle(webappExtras.shortName)
@@ -156,25 +157,25 @@ class WebappActionsNotificationManager implements PauseResumeWithNativeObserver 
 
         int tabId =
                 IntentUtils.safeGetIntExtra(intent, IntentHandler.EXTRA_TAB_ID, Tab.INVALID_TAB_ID);
-        WeakReference<WebappActivity> webappActivityRef =
-                WebappActivity.findWebappActivityWithTabId(tabId);
-        if (webappActivityRef == null) return false;
+        WeakReference<BaseCustomTabActivity<?>> customTabActivityRef =
+                WebappLocator.findWebappActivityWithTabId(tabId);
+        if (customTabActivityRef == null) return false;
 
-        WebappActivity webappActivity = webappActivityRef.get();
-        if (webappActivity == null) return false;
+        BaseCustomTabActivity<?> customTabActivity = customTabActivityRef.get();
+        if (customTabActivity == null) return false;
 
         if (ACTION_SHARE.equals(intent.getAction())) {
             // Not routing through onMenuOrKeyboardAction to control UMA String.
-            Tab tab = webappActivity.getActivityTab();
+            Tab tab = customTabActivity.getActivityTab();
             boolean isIncognito = tab.isIncognito();
-            webappActivity.getShareDelegateSupplier().get().share(tab, false);
+            customTabActivity.getShareDelegateSupplier().get().share(tab, false);
             RecordUserAction.record("Webapp.NotificationShare");
             return true;
         } else if (ACTION_OPEN_IN_CHROME.equals(intent.getAction())) {
-            webappActivity.onMenuOrKeyboardAction(R.id.open_in_browser_id, false /* fromMenu */);
+            customTabActivity.onMenuOrKeyboardAction(R.id.open_in_browser_id, false /* fromMenu */);
             return true;
         } else if (ACTION_FOCUS.equals(intent.getAction())) {
-            Tab tab = webappActivity.getActivityTab();
+            Tab tab = customTabActivity.getActivityTab();
             if (tab != null) {
                 Clipboard.getInstance().copyUrlToClipboard(tab.getOriginalUrl());
             }

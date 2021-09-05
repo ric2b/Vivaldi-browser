@@ -25,7 +25,7 @@ bool GuestViewInternalCreateGuestFunction::GetExternalWebContents(
       create_params->GetInteger("inspect_tab_id", &tab_id)) {
     int tab_index = 0;
     bool include_incognito = true;
-    Profile* profile = Profile::FromBrowserContext(context_);
+    Profile* profile = Profile::FromBrowserContext(browser_context());
     Browser* browser;
     TabStripModel* tab_strip;
     extensions::ExtensionTabUtil::GetTabById(tab_id, profile, include_incognito,

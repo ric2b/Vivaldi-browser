@@ -5,9 +5,13 @@
 #ifndef CONTENT_PUBLIC_TEST_FAKE_LOCAL_FRAME_H_
 #define CONTENT_PUBLIC_TEST_FAKE_LOCAL_FRAME_H_
 
+#include "base/optional.h"
+#include "base/unguessable_token.h"
+#include "build/build_config.h"
 #include "mojo/public/cpp/bindings/associated_receiver_set.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
+#include "third_party/blink/public/common/messaging/transferable_message.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-forward.h"
@@ -43,6 +47,7 @@ class FakeLocalFrame : public blink::mojom::LocalFrame {
                            bool discard_duplicates) override;
   void AddInspectorIssue(blink::mojom::InspectorIssueInfoPtr info) override;
   void CheckCompleted() override;
+  void StopLoading() override;
   void Collapse(bool collapsed) override;
   void EnableViewSourceMode() override;
   void Focus() override;
@@ -58,10 +63,26 @@ class FakeLocalFrame : public blink::mojom::LocalFrame {
   void BeforeUnload(bool is_reload, BeforeUnloadCallback callback) override;
   void MediaPlayerActionAt(const gfx::Point& location,
                            blink::mojom::MediaPlayerActionPtr action) override;
+  void AdvanceFocusInFrame(blink::mojom::FocusType focus_type,
+                           const base::Optional<base::UnguessableToken>&
+                               source_frame_token) override;
   void AdvanceFocusInForm(blink::mojom::FocusType focus_type) override;
   void ReportContentSecurityPolicyViolation(
       network::mojom::CSPViolationPtr violation) override;
   void DidUpdateFramePolicy(const blink::FramePolicy& frame_policy) override;
+  void OnScreensChange() override;
+  void PostMessageEvent(
+      const base::Optional<base::UnguessableToken>& source_frame_token,
+      const base::string16& source_origin,
+      const base::string16& target_origin,
+      blink::TransferableMessage message) override;
+
+#if defined(OS_MACOSX)
+  void GetCharacterIndexAtPoint(const gfx::Point& point) override;
+  void GetFirstRectForRange(const gfx::Range& range) override;
+#endif
+  void BindReportingObserver(
+      mojo::PendingReceiver<blink::mojom::ReportingObserver> receiver) override;
 
  private:
   void BindFrameHostReceiver(mojo::ScopedInterfaceEndpointHandle handle);

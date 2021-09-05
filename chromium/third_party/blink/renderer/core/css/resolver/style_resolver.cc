@@ -90,6 +90,7 @@
 #include "third_party/blink/renderer/core/html/track/vtt/vtt_cue.h"
 #include "third_party/blink/renderer/core/html/track/vtt/vtt_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
+#include "third_party/blink/renderer/core/mathml_names.h"
 #include "third_party/blink/renderer/core/media_type_names.h"
 #include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/style/style_inherited_variables.h"
@@ -116,10 +117,6 @@ void SetAnimationUpdateIfNeeded(StyleResolverState& state, Element& element) {
     auto& element_animations = element.EnsureElementAnimations();
     element_animations.CssAnimations().SetPendingUpdate(
         state.AnimationUpdate());
-    if (state.HasImportantOverrides())
-      element_animations.SetHasImportantOverrides();
-    if (state.HasFontAffectingAnimation())
-      element_animations.SetHasFontAffectingAnimation();
   }
 }
 
@@ -206,6 +203,26 @@ static CSSPropertyValueSet* RightToLeftDeclaration() {
                                     CSSValueID::kRtl);
   }
   return right_to_left_decl;
+}
+
+static CSSPropertyValueSet* MarkerUserAgentDeclarations() {
+  DEFINE_STATIC_LOCAL(
+      Persistent<MutableCSSPropertyValueSet>, marker_ua_decl,
+      (MakeGarbageCollected<MutableCSSPropertyValueSet>(kHTMLQuirksMode)));
+  if (marker_ua_decl->IsEmpty()) {
+    // Set 'unicode-bidi: isolate'
+    marker_ua_decl->SetProperty(
+        CSSPropertyID::kUnicodeBidi,
+        *CSSIdentifierValue::Create(CSSValueID::kIsolate));
+
+    // Set 'font-variant-numeric: tabular-nums'
+    CSSValueList* variant_numeric = CSSValueList::CreateSpaceSeparated();
+    variant_numeric->Append(
+        *CSSIdentifierValue::Create(CSSValueID::kTabularNums));
+    marker_ua_decl->SetProperty(CSSPropertyID::kFontVariantNumeric,
+                                *variant_numeric);
+  }
+  return marker_ua_decl;
 }
 
 static void CollectScopedResolversForHostedShadowTrees(
@@ -610,15 +627,22 @@ void StyleResolver::MatchUserRules(ElementRuleCollector& collector) {
   collector.FinishAddingUserRules();
 }
 
-void StyleResolver::MatchUARules(ElementRuleCollector& collector) {
+void StyleResolver::MatchUARules(const Element& element,
+                                 ElementRuleCollector& collector) {
   collector.SetMatchingUARules(true);
 
   CSSDefaultStyleSheets& default_style_sheets =
       CSSDefaultStyleSheets::Instance();
-  RuleSet* user_agent_style_sheet =
-      print_media_type_ ? default_style_sheets.DefaultPrintStyle()
-                        : default_style_sheets.DefaultStyle();
-  MatchRuleSet(collector, user_agent_style_sheet);
+  if (!print_media_type_) {
+    if (LIKELY(element.IsHTMLElement() || element.IsVTTElement()))
+      MatchRuleSet(collector, default_style_sheets.DefaultStyle());
+    else if (element.IsSVGElement())
+      MatchRuleSet(collector, default_style_sheets.DefaultSVGStyle());
+    else if (element.namespaceURI() == mathml_names::kNamespaceURI)
+      MatchRuleSet(collector, default_style_sheets.DefaultMathMLStyle());
+  } else {
+    MatchRuleSet(collector, default_style_sheets.DefaultPrintStyle());
+  }
 
   // In quirks mode, we match rules from the quirks user agent sheet.
   if (GetDocument().InQuirksMode())
@@ -649,7 +673,7 @@ DISABLE_CFI_PERF
 void StyleResolver::MatchAllRules(StyleResolverState& state,
                                   ElementRuleCollector& collector,
                                   bool include_smil_properties) {
-  MatchUARules(collector);
+  MatchUARules(state.GetElement(), collector);
   MatchUserRules(collector);
 
   // Now check author rules, beginning first with presentational attributes
@@ -765,13 +789,15 @@ void StyleResolver::LoadPendingResources(StyleResolverState& state) {
   state.GetElementStyleResources().LoadPendingResources(state.Style());
 }
 
-static const ComputedStyle* CachedAnimationBaseComputedStyle(
-    StyleResolverState& state) {
+static ElementAnimations* GetElementAnimations(StyleResolverState& state) {
   if (!state.GetAnimatingElement())
     return nullptr;
+  return state.GetAnimatingElement()->GetElementAnimations();
+}
 
-  ElementAnimations* element_animations =
-      state.GetAnimatingElement()->GetElementAnimations();
+static const ComputedStyle* CachedAnimationBaseComputedStyle(
+    StyleResolverState& state) {
+  ElementAnimations* element_animations = GetElementAnimations(state);
   if (!element_animations)
     return nullptr;
 
@@ -783,20 +809,56 @@ static const ComputedStyle* CachedAnimationBaseComputedStyle(
     return nullptr;
   }
 
+  if (CSSAnimations::IsAnimatingRevert(element_animations)) {
+    state.SetIsAnimatingRevert(true);
+    return nullptr;
+  }
+
+  if (CSSAnimations::IsAnimatingFontAffectingProperties(element_animations)) {
+    state.SetHasFontAffectingAnimation();
+    if (element_animations->BaseComputedStyle() &&
+        element_animations->BaseComputedStyle()->HasFontRelativeUnits()) {
+      return nullptr;
+    }
+  }
+
+  if (CSSAnimations::IsAnimatingStandardProperties(
+          element_animations, element_animations->BaseImportantSet(),
+          KeyframeEffect::kDefaultPriority)) {
+    state.SetHasImportantOverrides();
+    return nullptr;
+  }
+
   return element_animations->BaseComputedStyle();
 }
 
-static void UpdateAnimationBaseComputedStyle(StyleResolverState& state) {
+static void UpdateAnimationBaseComputedStyle(StyleResolverState& state,
+                                             StyleCascade* cascade) {
   if (!state.GetAnimatingElement())
     return;
 
   ElementAnimations* element_animations =
       state.GetAnimatingElement()->GetElementAnimations();
   if (element_animations) {
-    if (state.IsAnimatingCustomProperties()) {
+    std::unique_ptr<CSSBitset> important_set;
+    if (!element_animations->BaseComputedStyle()) {
+      important_set = (cascade ? cascade->GetImportantSet() : nullptr);
+      if (CSSAnimations::IsAnimatingStandardProperties(
+              element_animations, important_set.get(),
+              KeyframeEffect::kDefaultPriority)) {
+        state.SetHasImportantOverrides();
+      }
+    }
+
+    if (!element_animations->IsAnimationStyleChange() ||
+        state.IsAnimatingCustomProperties() || state.IsAnimatingRevert() ||
+        state.HasImportantOverrides() ||
+        (state.HasFontAffectingAnimation() &&
+         state.Style()->HasFontRelativeUnits())) {
       element_animations->ClearBaseComputedStyle();
     } else {
-      element_animations->UpdateBaseComputedStyle(state.Style());
+      element_animations->UpdateBaseComputedStyle(state.Style(),
+                                                  std::move(important_set));
     }
   }
 }
@@ -980,7 +1042,7 @@ void StyleResolver::ApplyBaseComputedStyle(
       DCHECK(ValidateBaseComputedStyle(animation_base_computed_style,
                                        *state.Style()));
       if (!animation_base_computed_style)
-        UpdateAnimationBaseComputedStyle(state);
+        UpdateAnimationBaseComputedStyle(state, cascade);
     }
   }
 
@@ -1072,25 +1134,16 @@ bool StyleResolver::PseudoStyleForElementInternal(
     // but that would use a slow universal element selector. So instead we apply
     // the styles here as an optimization.
     if (pseudo_style_request.pseudo_id == kPseudoIdMarker) {
-      // Set 'unicode-bidi: isolate'
-      state.Style()->SetUnicodeBidi(UnicodeBidi::kIsolate);
-
-      // Set 'font-variant-numeric: tabular-nums'
-      FontVariantNumeric variant_numeric;
-      variant_numeric.SetNumericSpacing(FontVariantNumeric::kTabularNums);
-      state.GetFontBuilder().SetVariantNumeric(variant_numeric);
-      UpdateFont(state);
-
-      // Don't bother matching rules if there is no style for ::marker
-      if (!state.ParentStyle()->HasPseudoElementStyle(kPseudoIdMarker)) {
-        StyleAdjuster::AdjustComputedStyle(state, nullptr);
-        return true;
-      }
+      cascade.MutableMatchResult().AddMatchedProperties(
+          MarkerUserAgentDeclarations());
     }
 
-    MatchUARules(collector);
-    MatchUserRules(collector);
-    MatchAuthorRules(state.GetElement(), collector);
+    // TODO(obrufau): support styling nested pseudo-elements
+    if (!element.IsPseudoElement()) {
+      MatchUARules(state.GetElement(), collector);
+      MatchUserRules(collector);
+      MatchAuthorRules(state.GetElement(), collector);
+    }
     collector.FinishAddingAuthorRulesForTreeScope();
 
     if (tracker_)
@@ -1119,7 +1172,7 @@ bool StyleResolver::PseudoStyleForElementInternal(
                                      *state.Style()));
 
     if (!animation_base_computed_style)
-      UpdateAnimationBaseComputedStyle(state);
+      UpdateAnimationBaseComputedStyle(state, &cascade);
   }
 
   if (animation_base_computed_style) {
@@ -1304,8 +1357,11 @@ RuleIndexList* StyleResolver::PseudoCSSRulesForElement(
                                  match_result, state.Style(),
                                  EInsideLink::kNotInsideLink);
   collector.SetMode(SelectorChecker::kCollectingCSSRules);
-  CollectPseudoRulesForElement(*element, collector, pseudo_id,
-                               rules_to_include);
+  // TODO(obrufau): support collecting rules for nested ::marker
+  if (!element->IsPseudoElement()) {
+    CollectPseudoRulesForElement(*element, collector, pseudo_id,
+                                 rules_to_include);
+  }
 
   if (tracker_)
     AddMatchedRulesToTracker(collector);
@@ -1325,7 +1381,7 @@ void StyleResolver::CollectPseudoRulesForElement(
   collector.SetPseudoElementStyleRequest(PseudoElementStyleRequest(pseudo_id));
 
   if (rules_to_include & kUAAndUserCSSRules) {
-    MatchUARules(collector);
+    MatchUARules(element, collector);
     MatchUserRules(collector);
   }
 
@@ -1674,12 +1730,6 @@ void StyleResolver::ApplyMatchedProperties(StyleResolverState& state,
   }
 }
 
-static unsigned ComputeMatchedPropertiesHash(
-    const MatchedProperties* properties,
-    unsigned size) {
-  return StringHasher::HashMemory(properties, sizeof(MatchedProperties) * size);
-}
-
 void StyleResolver::InvalidateMatchedPropertiesCache() {
   matched_properties_cache_.Clear();
 }
@@ -1795,17 +1845,12 @@ StyleResolver::CacheSuccess StyleResolver::ApplyMatchedCache(
     const MatchResult& match_result) {
   const Element& element = state.GetElement();
 
-  unsigned cache_hash = match_result.IsCacheable()
-                            ? ComputeMatchedPropertiesHash(
-                                  match_result.GetMatchedProperties().data(),
-                                  match_result.GetMatchedProperties().size())
-                            : 0;
+  MatchedPropertiesCache::Key key(match_result);
+
   bool is_inherited_cache_hit = false;
   bool is_non_inherited_cache_hit = false;
   const CachedMatchedProperties* cached_matched_properties =
-      cache_hash ? matched_properties_cache_.Find(
-                       cache_hash, state, match_result.GetMatchedProperties())
-                 : nullptr;
+      key.IsValid() ? matched_properties_cache_.Find(key, state) : nullptr;
 
   if (cached_matched_properties && MatchedPropertiesCache::IsCacheable(state)) {
     INCREMENT_STYLE_STATS_COUNTER(GetDocument().GetStyleEngine(),
@@ -1843,8 +1888,8 @@ StyleResolver::CacheSuccess StyleResolver::ApplyMatchedCache(
     UpdateFont(state);
   }
 
-  return CacheSuccess(is_inherited_cache_hit, is_non_inherited_cache_hit,
-                      cache_hash, cached_matched_properties);
+  return CacheSuccess(is_inherited_cache_hit, is_non_inherited_cache_hit, key,
+                      cached_matched_properties);
 }
 
 void StyleResolver::MaybeAddToMatchedPropertiesCache(
@@ -1852,13 +1897,14 @@ void StyleResolver::MaybeAddToMatchedPropertiesCache(
     const CacheSuccess& cache_success,
     const MatchResult& match_result) {
   if (!state.IsAnimatingCustomProperties() &&
-      !cache_success.cached_matched_properties && cache_success.cache_hash &&
+      !cache_success.cached_matched_properties && cache_success.key.IsValid() &&
       MatchedPropertiesCache::IsCacheable(state)) {
     INCREMENT_STYLE_STATS_COUNTER(GetDocument().GetStyleEngine(),
                                   matched_property_cache_added, 1);
-    matched_properties_cache_.Add(*state.Style(), *state.ParentStyle(),
-                                  cache_success.cache_hash,
-                                  match_result.GetMatchedProperties());
+    // TODO(crbug.com/1057072): Pass dependencies to MatchedPropertiesCache.
+    HashSet<CSSPropertyName> unused_dependencies;
+    matched_properties_cache_.Add(cache_success.key, *state.Style(),
+                                  *state.ParentStyle(), unused_dependencies);
   }
 }
 

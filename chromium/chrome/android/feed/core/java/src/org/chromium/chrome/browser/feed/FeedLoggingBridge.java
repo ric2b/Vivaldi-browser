@@ -335,16 +335,15 @@ public class FeedLoggingBridge implements BasicLoggingApi {
      * Reports how long a user spends on the page.
      *
      * @param visitTimeMs Time spent reading the page.
-     * @param isOffline If the page is viewed in offline mode or not.
      * @param returnToNtp User backed to NTP after visit the page.
      */
-    public void onContentTargetVisited(long visitTimeMs, boolean isOffline, boolean returnToNtp) {
+    public void onContentTargetVisited(long visitTimeMs, boolean returnToNtp) {
         // We cannot assume that the|mNativeFeedLoggingBridge| is always available like other
         // methods. This method is called by objects not controlled by Feed lifetimes, and destroy()
         // may have already been called if Feed is disabled by policy.
         if (mNativeFeedLoggingBridge != 0) {
-            FeedLoggingBridgeJni.get().onContentTargetVisited(mNativeFeedLoggingBridge,
-                    FeedLoggingBridge.this, visitTimeMs, isOffline, returnToNtp);
+            FeedLoggingBridgeJni.get().onContentTargetVisited(
+                    mNativeFeedLoggingBridge, FeedLoggingBridge.this, visitTimeMs, returnToNtp);
         }
     }
 
@@ -362,6 +361,7 @@ public class FeedLoggingBridge implements BasicLoggingApi {
                 return WindowOpenDisposition.SAVE_TO_DISK;
             case ActionType.LEARN_MORE:
             case ActionType.MANAGE_INTERESTS:
+            case ActionType.BLOCK_CONTENT:
             case ActionType.UNKNOWN:
             default:
                 return WindowOpenDisposition.UNKNOWN;
@@ -370,6 +370,9 @@ public class FeedLoggingBridge implements BasicLoggingApi {
 
     private void recordUserAction(@ActionType int actionType) {
         switch (actionType) {
+            case ActionType.BLOCK_CONTENT:
+                NewTabPageUma.recordAction(NewTabPageUma.ACTION_BLOCK_CONTENT);
+                break;
             case ActionType.OPEN_URL:
             case ActionType.OPEN_URL_INCOGNITO:
             case ActionType.OPEN_URL_NEW_TAB:
@@ -378,9 +381,11 @@ public class FeedLoggingBridge implements BasicLoggingApi {
                 break;
             case ActionType.LEARN_MORE:
                 NewTabPageUma.recordAction(NewTabPageUma.ACTION_CLICKED_LEARN_MORE);
+                FeedUma.recordFeedControlsAction(FeedUma.CONTROLS_ACTION_CLICKED_LEARN_MORE);
                 break;
             case ActionType.MANAGE_INTERESTS:
                 NewTabPageUma.recordAction(NewTabPageUma.ACTION_CLICKED_MANAGE_INTERESTS);
+                FeedUma.recordFeedControlsAction(FeedUma.CONTROLS_ACTION_CLICKED_MANAGE_INTERESTS);
                 break;
             case ActionType.DOWNLOAD:
             case ActionType.UNKNOWN:
@@ -542,7 +547,7 @@ public class FeedLoggingBridge implements BasicLoggingApi {
         void onTaskFinished(long nativeFeedLoggingBridge, FeedLoggingBridge caller, int task,
                 int delayTimeMs, int taskTimeMs);
         void onContentTargetVisited(long nativeFeedLoggingBridge, FeedLoggingBridge caller,
-                long visitTimeMs, boolean isOffline, boolean returnToNtp);
+                long visitTimeMs, boolean returnToNtp);
         void reportScrolledAfterOpen(long nativeFeedLoggingBridge, FeedLoggingBridge caller);
     }
 }

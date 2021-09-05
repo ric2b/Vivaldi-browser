@@ -20,12 +20,14 @@
 #include "components/bookmarks/browser/url_and_title.h"
 #include "components/sync/driver/profile_sync_service.h"
 #include "components/sync/driver/sync_driver_switches.h"
+#include "components/sync/engine_impl/bookmark_update_preprocessing.h"
 #include "components/sync/engine_impl/loopback_server/loopback_server_entity.h"
 #include "components/sync/test/fake_server/bookmark_entity_builder.h"
 #include "components/sync/test/fake_server/entity_builder_factory.h"
 #include "components/sync/test/fake_server/fake_server_verifier.h"
 #include "components/sync_bookmarks/switches.h"
 #include "components/undo/bookmark_undo_service.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/test_launcher.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -38,6 +40,7 @@ using bookmarks::BookmarkNode;
 using bookmarks::UrlAndTitle;
 using bookmarks_helper::AddFolder;
 using bookmarks_helper::AddURL;
+using bookmarks_helper::BookmarkFaviconLoadedChecker;
 using bookmarks_helper::BookmarksGUIDChecker;
 using bookmarks_helper::BookmarksMatchVerifierChecker;
 using bookmarks_helper::BookmarksTitleChecker;
@@ -53,6 +56,7 @@ using bookmarks_helper::GetBookmarkBarNode;
 using bookmarks_helper::GetBookmarkModel;
 using bookmarks_helper::GetBookmarkUndoService;
 using bookmarks_helper::GetOtherNode;
+using bookmarks_helper::GetUniqueNodeByURL;
 using bookmarks_helper::ModelMatchesVerifier;
 using bookmarks_helper::Move;
 using bookmarks_helper::Remove;
@@ -427,6 +431,42 @@ IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTest,
   EXPECT_EQ(lowercase_guid, server_bookmarks[0].specifics().bookmark().guid());
 }
 
+IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTest,
+                       DownloadModernBookmarkCollidingPre2015BookmarkId) {
+  const std::string title1 = "Title1";
+  const std::string title2 = "Title2";
+
+  const std::string kOriginalOriginatorCacheGuid = base::GenerateGUID();
+  const std::string kOriginalOriginatorClientItemId = "1";
+
+  // One pre-2015 bookmark, nothing special here.
+  fake_server::BookmarkEntityBuilder bookmark_builder1(
+      title1, kOriginalOriginatorCacheGuid, kOriginalOriginatorClientItemId);
+
+  // A second bookmark, possibly uploaded by a buggy client, happens to use an
+  // originator client item ID that collides with the GUID that would have been
+  // inferred for the original pre-2015 bookmark.
+  fake_server::BookmarkEntityBuilder bookmark_builder2(
+      title2, /*originator_cache_guid=*/base::GenerateGUID(),
+      /*originator_client_item_id=*/
+      syncer::InferGuidForLegacyBookmarkForTesting(
+          kOriginalOriginatorCacheGuid, kOriginalOriginatorClientItemId));
+
+  fake_server_->InjectEntity(bookmark_builder1.BuildBookmark(
+      GURL("http://page1.com"), /*is_legacy=*/true));
+  fake_server_->InjectEntity(bookmark_builder2.BuildBookmark(
+      GURL("http://page2.com"), /*is_legacy=*/true));
+
+  DisableVerifier();
+  ASSERT_TRUE(SetupSync());
+
+  const BookmarkNode* bookmark_bar_node =
+      GetBookmarkBarNode(kSingleProfileIndex);
+  // Check only number of bookmarks since any of them may be removed as
+  // duplicate.
+  EXPECT_EQ(1u, bookmark_bar_node->children().size());
+}
+
 // Test that a client doesn't mutate the favicon data in the process
 // of storing the favicon data from sync to the database or in the process
 // of requesting data from the database for sync.
@@ -731,7 +771,7 @@ IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTest,
 IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTest,
                        ShouldTruncateBlanksWhenMatchingTitles) {
   const std::string remote_blank_title = " ";
-  const std::string local_empty_title = "";
+  const std::string local_empty_title;
 
   // Create a folder on the server under BookmarkBar with a title with a blank
   // space.
@@ -1220,6 +1260,61 @@ IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTest,
   EXPECT_TRUE(BookmarksGUIDChecker(kSingleProfileIndex, new_guid).Wait());
   EXPECT_FALSE(ContainsBookmarkNodeWithGUID(kSingleProfileIndex, old_guid));
   EXPECT_EQ(1u, GetBookmarkBarNode(kSingleProfileIndex)->children().size());
+}
+
+IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTest,
+                       PRE_ShouldNotReploadUponFaviconLoad) {
+  const GURL url = GURL("http://www.foo.com");
+  fake_server::EntityBuilderFactory entity_builder_factory;
+  fake_server::BookmarkEntityBuilder bookmark_builder =
+      entity_builder_factory.NewBookmarkEntityBuilder("Foo Title");
+
+  // Create a legacy bookmark on the server (no GUID field populated). The fact
+  // that it's a legacy bookmark means any locally-produced specifics would be
+  // different for this bookmark (new fields like GUID would be populated).
+  std::unique_ptr<syncer::LoopbackServerEntity> bookmark =
+      bookmark_builder.BuildBookmark(url, /*is_legacy=*/true);
+  ASSERT_TRUE(bookmark.get()->GetSpecifics().bookmark().guid().empty());
+  fake_server_->InjectEntity(std::move(bookmark));
+
+  // Start syncing.
+  DisableVerifier();
+  ASSERT_TRUE(SetupSync());
+  ASSERT_TRUE(BookmarksUrlChecker(kSingleProfileIndex, url, 1).Wait());
+}
+
+IN_PROC_BROWSER_TEST_P(SingleClientBookmarksSyncTest,
+                       ShouldNotReploadUponFaviconLoad) {
+  const GURL url = GURL("http://www.foo.com");
+
+  base::HistogramTester histogram_tester;
+  DisableVerifier();
+  ASSERT_TRUE(SetupClients());
+#if defined(OS_CHROMEOS)
+  // signin::SetRefreshTokenForPrimaryAccount() is needed on ChromeOS in order
+  // to get a non-empty refresh token on startup.
+  GetClient(0)->SignInPrimaryAccount();
+#endif  // defined(OS_CHROMEOS)
+  ASSERT_TRUE(GetClient(kSingleProfileIndex)->AwaitEngineInitialization());
+
+  // Make sure the favicon gets loaded.
+  const BookmarkNode* bookmark_node =
+      GetUniqueNodeByURL(kSingleProfileIndex, url);
+  ASSERT_NE(nullptr, bookmark_node);
+  GetBookmarkModel(kSingleProfileIndex)->GetFavicon(bookmark_node);
+  ASSERT_TRUE(BookmarkFaviconLoadedChecker(kSingleProfileIndex, url).Wait());
+
+  // Make sure all local commits make it to the server.
+  ASSERT_TRUE(
+      UpdatedProgressMarkerChecker(GetSyncService(kSingleProfileIndex)).Wait());
+
+  // Verify that the bookmark hasn't been uploaded (no local updates issued). No
+  // commits are expected despite the fact that the server-side bookmark is a
+  // legacy bookmark without the most recent fields (e.g. GUID), because loading
+  // favicons should not lead to commits unless the favicon itself changed.
+  EXPECT_EQ(
+      0, histogram_tester.GetBucketCount("Sync.ModelTypeEntityChange3.BOOKMARK",
+                                         /*LOCAL_UPDATE=*/2));
 }
 
 #if !defined(VIVALDI_RENAMED_SYNC_CLIENT_TESTS)

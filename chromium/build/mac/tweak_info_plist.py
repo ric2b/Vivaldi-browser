@@ -243,10 +243,9 @@ def _AddSparkleKeys(plist, vivaldi_release_kind):
   if vivaldi_release_kind == 'vivaldi_final':
     plist['SUFeedURL'] = 'https://update.vivaldi.com/update/1.0/public/mac/appcast.xml'
   elif vivaldi_release_kind == 'vivaldi_snapshot':
-    plist['SUFeedURL'] = 'https://update.vivaldi.com/update/1.0/mac/appcast.xml'
+    plist['SUFeedURL'] = 'https://update.vivaldi.com/update/1.0/snapshot/mac/appcast.xml'
   else: #vivaldi_sopranos
     plist['SUFeedURL'] = 'https://update.vivaldi.com/update/1.0/sopranos_new/mac/appcast.xml'
-  #plist['SUPublicDSAKeyFile'] = 'dsa_pub.pem'
 
 def _RemoveSparkleKeys(plist):
   """Removes any set Sparkle keys."""
@@ -254,8 +253,7 @@ def _RemoveSparkleKeys(plist):
     'SUScheduledCheckInterval',
     'SUEnableAutomaticChecks',
     'SUAllowsAutomaticUpdates',
-    'SUFeedURL')#, note(tomas): remove DSA stuff for now
-    #'SUPublicDSAKeyFile')
+    'SUFeedURL')
 
 def Main(argv):
   parser = optparse.OptionParser('%prog [options]')

@@ -89,6 +89,7 @@ class CONTENT_EXPORT CompositorImpl
  private:
   class AndroidHostDisplayClient;
   class ScopedCachedBackBuffer;
+  class ReadbackRefImpl;
 
   // Compositor implementation.
   void SetRootWindow(gfx::NativeWindow root_window) override;
@@ -143,13 +144,15 @@ class CONTENT_EXPORT CompositorImpl
       cc::ActiveFrameSequenceTrackers trackers) override {}
   std::unique_ptr<cc::BeginMainFrameMetrics> GetBeginMainFrameMetrics()
       override;
+  void NotifyThroughputTrackerResults(
+      cc::CustomTrackerResults results) override {}
 
   // LayerTreeHostSingleThreadClient implementation.
   void DidSubmitCompositorFrame() override;
   void DidLoseLayerTreeFrameSink() override;
 
   // WindowAndroidCompositor implementation.
-  void AttachLayerForReadback(scoped_refptr<cc::Layer> layer) override;
+  std::unique_ptr<ReadbackRef> TakeReadbackRef() override;
   void RequestCopyOfOutputOnRootLayer(
       std::unique_ptr<viz::CopyOutputRequest> request) override;
   void SetNeedsAnimate() override;
@@ -182,8 +185,6 @@ class CONTENT_EXPORT CompositorImpl
       scoped_refptr<viz::ContextProvider> context_provider);
   void DidSwapBuffers(const gfx::Size& swap_size);
 
-  bool HavePendingReadbacks();
-
   void DetachRootWindow();
 
   // Helper functions to perform delayed cleanup after the compositor is no
@@ -211,14 +212,13 @@ class CONTENT_EXPORT CompositorImpl
   void InitializeVizLayerTreeFrameSink(
       scoped_refptr<viz::ContextProviderCommandBuffer> context_provider);
 
+  void DecrementPendingReadbacks();
+
   viz::FrameSinkId frame_sink_id_;
 
   // root_layer_ is the persistent internal root layer, while subroot_layer_
   // is the one attached by the compositor client.
   scoped_refptr<cc::Layer> subroot_layer_;
-
-  // Subtree for hidden layers with CopyOutputRequests on them.
-  scoped_refptr<cc::Layer> readback_layer_tree_;
 
   // Destruction order matters here:
   std::unique_ptr<cc::AnimationHost> animation_host_;
@@ -269,6 +269,8 @@ class CONTENT_EXPORT CompositorImpl
   size_t num_of_consecutive_surface_failures_ = 0u;
 
   base::TimeTicks latest_frame_time_;
+
+  uint32_t pending_readbacks_ = 0u;
 
   base::WeakPtrFactory<CompositorImpl> weak_factory_{this};
 

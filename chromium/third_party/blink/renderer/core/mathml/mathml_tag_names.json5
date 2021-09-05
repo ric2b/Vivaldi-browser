@@ -40,6 +40,18 @@
       interfaceName: "MathMLElement",
     },
     {
+      name: "msub",
+      interfaceName: "MathMLScriptsElement",
+    },
+    {
+      name: "msup",
+      interfaceName: "MathMLScriptsElement",
+    },
+    {
+      name: "msubsup",
+      interfaceName: "MathMLScriptsElement",
+    },
+    {
       name: "mi",
       interfaceName: "MathMLElement",
     },
@@ -74,6 +86,18 @@
     {
       name: "mtext",
       interfaceName: "MathMLElement",
+    },
+    {
+      name: "mover",
+      interfaceName: "MathMLUnderOverElement",
+    },
+    {
+      name: "munder",
+      interfaceName: "MathMLUnderOverElement",
+    },
+    {
+      name: "munderover",
+      interfaceName: "MathMLUnderOverElement",
     },
     {
       name: "semantics",

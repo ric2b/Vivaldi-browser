@@ -6,6 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/logging.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -133,9 +134,7 @@ bool DumpAccessibilityTestHelper::ValidateAgainstExpectation(
     base::ScopedAllowBlockingForTesting allow_blocking;
     std::string actual_contents_for_output =
         base::JoinString(actual_lines, "\n") + "\n";
-    CHECK(base::WriteFile(expected_file, actual_contents_for_output.c_str(),
-                          actual_contents_for_output.size()) ==
-          static_cast<int>(actual_contents_for_output.size()));
+    CHECK(base::WriteFile(expected_file, actual_contents_for_output));
     LOG(INFO) << "Wrote expectations to: " << expected_file.LossyDisplayName();
   }
 

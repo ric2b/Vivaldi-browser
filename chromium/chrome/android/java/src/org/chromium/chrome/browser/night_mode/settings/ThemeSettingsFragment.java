@@ -20,6 +20,11 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.ui.UiUtils;
 
+import androidx.preference.PreferenceCategory;
+
+import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
+
 /**
  * Fragment to manage the theme user settings.
  */
@@ -47,6 +52,28 @@ public class ThemeSettingsFragment extends PreferenceFragmentCompat {
             sharedPreferencesManager.writeInt(UI_THEME_SETTING, theme);
             return true;
         });
+
+        // Note(david@vivaldi.com): Switch to handle dark mode for web pages.
+        if (ChromeApplication.isVivaldi()
+                && ChromeFeatureList.isEnabled(
+                           ChromeFeatureList.DARKEN_WEBSITES_CHECKBOX_IN_THEMES_SETTING)) {
+            PreferenceCategory darkWebPagesCategory =
+                    new PreferenceCategory(getPreferenceManager().getContext());
+            darkWebPagesCategory.setTitle(R.string.web_pages_dark_mode);
+            getPreferenceScreen().addPreference(darkWebPagesCategory);
+            ChromeSwitchPreference darkWebPagesSwitch =
+                    new ChromeSwitchPreference(getPreferenceManager().getContext(), null);
+            darkWebPagesSwitch.setTitle(R.string.web_pages_dark_mode_switch);
+            darkWebPagesSwitch.setSummary(R.string.web_pages_dark_mode_switch_desc);
+            darkWebPagesSwitch.setChecked(
+                    sharedPreferencesManager.readBoolean(UI_THEME_DARKEN_WEBSITES_ENABLED, false));
+            darkWebPagesSwitch.setOnPreferenceChangeListener((preference, newValue) -> {
+                sharedPreferencesManager.writeBoolean(
+                        UI_THEME_DARKEN_WEBSITES_ENABLED, (boolean) newValue);
+                return true;
+            });
+            getPreferenceScreen().addPreference(darkWebPagesSwitch);
+        }
     }
 
     @Override

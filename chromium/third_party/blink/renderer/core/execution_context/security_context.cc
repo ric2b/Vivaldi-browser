@@ -27,10 +27,13 @@
 #include "third_party/blink/renderer/core/execution_context/security_context.h"
 
 #include "base/metrics/histogram_macros.h"
+#include "services/network/public/cpp/web_sandbox_flags.h"
 #include "services/network/public/mojom/ip_address_space.mojom-blink.h"
+#include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
 #include "third_party/blink/public/common/feature_policy/document_policy_features.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink.h"
+#include "third_party/blink/public/mojom/feature_policy/policy_value.mojom-blink.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/core/execution_context/agent.h"
@@ -69,7 +72,7 @@ SecurityContext::SecurityContext(const SecurityContextInit& init,
       insecure_request_policy_(
           mojom::blink::InsecureRequestPolicy::kLeaveInsecureRequestsAlone),
       require_safe_types_(false),
-      context_type_(context_type),
+      context_type_for_asserts_(context_type),
       agent_(init.GetAgent()),
       secure_context_mode_(init.GetSecureContextMode()),
       origin_trial_context_(init.GetOriginTrialContext()),
@@ -88,13 +91,21 @@ void SecurityContext::SetSecurityOrigin(
   CHECK(security_origin);
   // The purpose of this check is to ensure that the SecurityContext does not
   // change after script has executed in the ExecutionContext. If this is a
-  // RemoteSecurityContext, then there is no local script execution, so it is
-  // safe for the SecurityOrigin to change.
-  // Exempting null ExecutionContexts is also necessary because RemoteFrames and
-  // RemoteSecurityContexts do not change when a cross-origin navigation happens
-  // remotely.
-  CHECK(context_type_ == kRemote || !security_origin_ ||
-        security_origin_->CanAccess(security_origin.get()));
+  // RemoteSecurityContext, then there is no local script execution and the
+  // context is permitted to represent multiple origins over its lifetime, so it
+  // is safe for the SecurityOrigin to change.
+  // NOTE: A worker may need to make its origin opaque after the main worker
+  // script is loaded if the worker is origin-sandboxed. Specifically exempt
+  // that transition. See https://crbug.com/1068008. It would be great if we
+  // could get rid of this exemption.
+  bool is_worker_transition_to_opaque =
+      context_type_for_asserts_ == kWorker &&
+      IsSandboxed(network::mojom::blink::WebSandboxFlags::kOrigin) &&
+      security_origin->IsOpaque() &&
+      security_origin->GetOriginOrPrecursorOriginIfOpaque() == security_origin_;
+  CHECK(context_type_for_asserts_ == kRemoteFrame || !security_origin_ ||
+        security_origin_->CanAccess(security_origin.get()) ||
+        is_worker_transition_to_opaque);
   security_origin_ = std::move(security_origin);
 }
 
@@ -108,14 +119,21 @@ void SecurityContext::SetContentSecurityPolicy(
   content_security_policy_ = content_security_policy;
 }
 
-bool SecurityContext::IsSandboxed(mojom::blink::WebSandboxFlags mask) const {
+bool SecurityContext::IsSandboxed(
+    network::mojom::blink::WebSandboxFlags mask) const {
   if (RuntimeEnabledFeatures::FeaturePolicyForSandboxEnabled()) {
     mojom::blink::FeaturePolicyFeature feature =
         FeaturePolicy::FeatureForSandboxFlag(mask);
     if (feature != mojom::blink::FeaturePolicyFeature::kNotFound)
       return !feature_policy_->IsFeatureEnabled(feature);
   }
-  return (sandbox_flags_ & mask) != mojom::blink::WebSandboxFlags::kNone;
+  return (sandbox_flags_ & mask) !=
+         network::mojom::blink::WebSandboxFlags::kNone;
+}
+
+void SecurityContext::ApplySandboxFlags(
+    network::mojom::blink::WebSandboxFlags flags) {
+  sandbox_flags_ |= flags;
 }
 
 void SecurityContext::SetRequireTrustedTypes() {
@@ -143,22 +161,13 @@ void SecurityContext::SetDocumentPolicyForTesting(
 }
 
 bool SecurityContext::IsFeatureEnabled(
-    mojom::blink::FeaturePolicyFeature feature) const {
-  return IsFeatureEnabled(
-      feature, PolicyValue::CreateMaxPolicyValue(
-                   feature_policy_->GetFeatureList().at(feature).second));
-}
-
-bool SecurityContext::IsFeatureEnabled(
     mojom::blink::FeaturePolicyFeature feature,
-    PolicyValue threshold_value,
     bool* should_report) const {
   DCHECK(feature_policy_);
-  bool feature_policy_result =
-      feature_policy_->IsFeatureEnabled(feature, threshold_value);
+  bool feature_policy_result = feature_policy_->IsFeatureEnabled(feature);
   bool report_only_feature_policy_result =
       !report_only_feature_policy_ ||
-      report_only_feature_policy_->IsFeatureEnabled(feature, threshold_value);
+      report_only_feature_policy_->IsFeatureEnabled(feature);
 
   if (should_report) {
     *should_report =

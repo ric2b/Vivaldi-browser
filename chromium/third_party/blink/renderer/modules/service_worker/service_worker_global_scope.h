@@ -31,6 +31,7 @@
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_SERVICE_WORKER_SERVICE_WORKER_GLOBAL_SCOPE_H_
 
 #include <memory>
+
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -297,6 +298,8 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
   // is still waiting for a Response.
   bool HasRelatedFetchEvent(const KURL& request_url) const;
 
+  int GetOutstandingThrottledLimit() const override;
+
  protected:
   // EventTarget
   bool AddEventListenerInternal(
@@ -310,6 +313,9 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
       KURL* out_response_url,
       String* out_source_code,
       std::unique_ptr<Vector<uint8_t>>* out_cached_meta_data) override;
+
+  ResourceLoadScheduler::ThrottleOptionOverride GetThrottleOptionOverride()
+      const override;
 
  private:
   void importScripts(const Vector<String>& urls, ExceptionState&) override;
@@ -390,7 +396,8 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final
       mojom::blink::ServiceWorkerObjectInfoPtr service_worker_info,
       mojom::blink::FetchHandlerExistence fetch_handler_existence,
       std::unique_ptr<PendingURLLoaderFactoryBundle>
-          subresource_loader_factories) override;
+          subresource_loader_factories,
+      mojo::PendingReceiver<mojom::blink::ReportingObserver>) override;
   void DispatchInstallEvent(DispatchInstallEventCallback callback) override;
   void DispatchActivateEvent(DispatchActivateEventCallback callback) override;
   void DispatchBackgroundFetchAbortEvent(

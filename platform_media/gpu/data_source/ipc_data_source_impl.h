@@ -33,32 +33,18 @@ class IPCDataSourceImpl {
   IPCDataSourceImpl(IPC::Sender* channel, int32_t routing_id);
   ~IPCDataSourceImpl();
 
-  void Read(int64_t position,
-            int read_size,
-            ipc_data_source::ReadCB read_cb);
+  void Read(ipc_data_source::Buffer buffer);
 
   void Stop();
 
-  void OnRawDataReady(int64_t tag,
-                      int size,
-                      base::ReadOnlySharedMemoryRegion raw_region);
+  void OnRawDataReady(int64_t tag, int size);
 
  private:
-  void FinishRead();
-
   IPC::Sender* channel_;
   const int32_t routing_id_;
 
-  int64_t last_read_position_ = -1;
-  int last_requested_size_ = -1;
-  int last_read_size_ = -1;
-  ipc_data_source::ReadCB read_callback_;
-
   int64_t last_message_tag_ = 0;
-
-  // A buffer for raw media data, shared with the render process.  Filled in the
-  // render process, consumed in the GPU process.
-  base::ReadOnlySharedMemoryMapping raw_mapping_;
+  ipc_data_source::Buffer buffer_;
 
   THREAD_CHECKER(thread_checker_);
 

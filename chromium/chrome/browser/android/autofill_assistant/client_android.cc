@@ -30,7 +30,8 @@
 #include "components/autofill_assistant/browser/access_token_fetcher.h"
 #include "components/autofill_assistant/browser/controller.h"
 #include "components/autofill_assistant/browser/features.h"
-#include "components/autofill_assistant/browser/website_login_fetcher_impl.h"
+#include "components/autofill_assistant/browser/switches.h"
+#include "components/autofill_assistant/browser/website_login_manager_impl.h"
 #include "components/password_manager/content/browser/content_password_manager_driver.h"
 #include "components/password_manager/content/browser/content_password_manager_driver_factory.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
@@ -40,7 +41,6 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
-#include "google_apis/google_api_keys.h"
 #include "url/gurl.h"
 
 using base::android::AttachCurrentThread;
@@ -48,15 +48,7 @@ using base::android::JavaParamRef;
 using base::android::JavaRef;
 
 namespace autofill_assistant {
-namespace switches {
-const char* const kAutofillAssistantServerKey = "autofill-assistant-key";
-const char* const kAutofillAssistantUrl = "autofill-assistant-url";
-}  // namespace switches
-
 namespace {
-
-const char* const kDefaultAutofillAssistantServerUrl =
-    "https://automate-pa.googleapis.com";
 
 // A direct action that corresponds to pressing the close or cancel button on
 // the UI.
@@ -105,13 +97,7 @@ ClientAndroid::ClientAndroid(content::WebContents* web_contents)
     : web_contents_(web_contents),
       java_object_(Java_AutofillAssistantClient_create(
           AttachCurrentThread(),
-          reinterpret_cast<intptr_t>(this))) {
-  server_url_ = base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-      switches::kAutofillAssistantUrl);
-  if (server_url_.empty()) {
-    server_url_ = kDefaultAutofillAssistantServerUrl;
-  }
-}
+          reinterpret_cast<intptr_t>(this))) {}
 
 ClientAndroid::~ClientAndroid() {
   if (controller_ != nullptr && started_) {
@@ -200,10 +186,8 @@ void ClientAndroid::TransferUITo(
   // From this point on, the UIController, in ui_ptr, is either transferred or
   // deleted.
 
-  GetPasswordManagerClient()
-      ->GetPasswordManager()
-      ->set_autofill_assistance_mode(
-          password_manager::AutofillAssistantMode::kNotRunning);
+  GetPasswordManagerClient()->GetPasswordManager()->SetAutofillAssistantMode(
+      password_manager::AutofillAssistantMode::kNotRunning);
 
   if (!jother_web_contents)
     return;
@@ -224,11 +208,8 @@ void ClientAndroid::TransferUITo(
 base::android::ScopedJavaLocalRef<jstring> ClientAndroid::GetPrimaryAccountName(
     JNIEnv* env,
     const JavaParamRef<jobject>& jcaller) {
-  CoreAccountInfo account_info =
-      IdentityManagerFactory::GetForProfile(
-          Profile::FromBrowserContext(web_contents_->GetBrowserContext()))
-          ->GetPrimaryAccountInfo();
-  return base::android::ConvertUTF8ToJavaString(env, account_info.email);
+  return base::android::ConvertUTF8ToJavaString(
+      env, GetChromeSignedInEmailAddress());
 }
 
 void ClientAndroid::OnAccessToken(JNIEnv* env,
@@ -433,42 +414,45 @@ void ClientAndroid::AttachUI(
     }
   }
 
-  if (!ui_controller_android_->IsAttached()) {
+  if (!ui_controller_android_->IsAttached() ||
+      (controller_ != nullptr &&
+       !ui_controller_android_->IsAttachedTo(controller_.get()))) {
     if (!controller_)
       CreateController(nullptr);
-
     ui_controller_android_->Attach(web_contents_, this, controller_.get());
-  }
 
-  GetPasswordManagerClient()
-      ->GetPasswordManager()
-      ->set_autofill_assistance_mode(
-          password_manager::AutofillAssistantMode::kManuallyCuratedScript);
+    // Suppress password manager's prompts while running a password change
+    // script.
+    auto* password_manager_client = GetPasswordManagerClient();
+    if (password_manager_client &&
+        password_manager_client->WasCredentialLeakDialogShown()) {
+      password_manager_client->GetPasswordManager()->SetAutofillAssistantMode(
+          password_manager::AutofillAssistantMode::kRunning);
+    }
+  }
 }
 
 void ClientAndroid::DestroyUI() {
   ui_controller_android_.reset();
 }
 
-std::string ClientAndroid::GetApiKey() const {
-  std::string api_key;
-  if (google_apis::IsGoogleChromeAPIKeyUsed()) {
-    api_key = chrome::GetChannel() == version_info::Channel::STABLE
-                  ? google_apis::GetAPIKey()
-                  : google_apis::GetNonStableAPIKey();
-  }
-  const auto* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kAutofillAssistantServerKey)) {
-    api_key = command_line->GetSwitchValueASCII(
-        switches::kAutofillAssistantServerKey);
-  }
-  return api_key;
+version_info::Channel ClientAndroid::GetChannel() const {
+  return chrome::GetChannel();
 }
 
-std::string ClientAndroid::GetAccountEmailAddress() const {
+std::string ClientAndroid::GetEmailAddressForAccessTokenAccount() const {
   JNIEnv* env = AttachCurrentThread();
   return base::android::ConvertJavaStringToUTF8(
-      Java_AutofillAssistantClient_getAccountEmailAddress(env, java_object_));
+      Java_AutofillAssistantClient_getEmailAddressForAccessTokenAccount(
+          env, java_object_));
+}
+
+std::string ClientAndroid::GetChromeSignedInEmailAddress() const {
+  CoreAccountInfo account_info =
+      IdentityManagerFactory::GetForProfile(
+          Profile::FromBrowserContext(web_contents_->GetBrowserContext()))
+          ->GetPrimaryAccountInfo();
+  return account_info.email;
 }
 
 AccessTokenFetcher* ClientAndroid::GetAccessTokenFetcher() {
@@ -489,8 +473,8 @@ ClientAndroid::GetPasswordManagerClient() const {
   return password_manager_client_;
 }
 
-WebsiteLoginFetcher* ClientAndroid::GetWebsiteLoginFetcher() const {
-  if (!website_login_fetcher_) {
+WebsiteLoginManager* ClientAndroid::GetWebsiteLoginManager() const {
+  if (!website_login_manager_) {
     auto* client = GetPasswordManagerClient();
     auto* factory =
         password_manager::ContentPasswordManagerDriverFactory::FromWebContents(
@@ -499,14 +483,10 @@ WebsiteLoginFetcher* ClientAndroid::GetWebsiteLoginFetcher() const {
     // frame has a different origin than the main frame, passwords-related
     // features may not work.
     auto* driver = factory->GetDriverForFrame(web_contents_->GetMainFrame());
-    website_login_fetcher_ =
-        std::make_unique<WebsiteLoginFetcherImpl>(client, driver);
+    website_login_manager_ =
+        std::make_unique<WebsiteLoginManagerImpl>(client, driver);
   }
-  return website_login_fetcher_.get();
-}
-
-std::string ClientAndroid::GetServerUrl() const {
-  return server_url_;
+  return website_login_manager_.get();
 }
 
 std::string ClientAndroid::GetLocale() const {
@@ -514,9 +494,12 @@ std::string ClientAndroid::GetLocale() const {
 }
 
 std::string ClientAndroid::GetCountryCode() const {
-  return base::android::ConvertJavaStringToUTF8(
-      Java_AutofillAssistantClient_getCountryCode(AttachCurrentThread(),
-                                                  java_object_));
+  JNIEnv* env = AttachCurrentThread();
+  auto code = Java_AutofillAssistantClient_getCountryCode(env, java_object_);
+  // Use fallback "ZZ". It is an unused country code.
+  if (!code)
+    return "ZZ";
+  return base::android::ConvertJavaStringToUTF8(env, code);
 }
 
 DeviceContext ClientAndroid::GetDeviceContext() const {
@@ -543,10 +526,8 @@ void ClientAndroid::Shutdown(Metrics::DropOutReason reason) {
   if (!controller_)
     return;
 
-  GetPasswordManagerClient()
-      ->GetPasswordManager()
-      ->set_autofill_assistance_mode(
-          password_manager::AutofillAssistantMode::kNotRunning);
+  GetPasswordManagerClient()->GetPasswordManager()->SetAutofillAssistantMode(
+      password_manager::AutofillAssistantMode::kNotRunning);
 
   if (ui_controller_android_ && ui_controller_android_->IsAttached())
     DestroyUI();
@@ -597,4 +578,4 @@ bool ClientAndroid::NeedsUI() {
 
 WEB_CONTENTS_USER_DATA_KEY_IMPL(ClientAndroid)
 
-}  // namespace autofill_assistant.
+}  // namespace autofill_assistant

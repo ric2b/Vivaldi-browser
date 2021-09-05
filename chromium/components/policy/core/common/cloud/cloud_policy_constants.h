@@ -70,6 +70,8 @@ POLICY_EXPORT extern const char kChromeMachineLevelUserCloudPolicyType[];
 POLICY_EXPORT extern const char kChromeMachineLevelExtensionCloudPolicyType[];
 POLICY_EXPORT extern const char kChromeRemoteCommandPolicyType[];
 
+POLICY_EXPORT extern const char kChromeMachineLevelUserCloudPolicyTypeBase64[];
+
 // These codes are sent in the |error_code| field of PolicyFetchResponse.
 enum PolicyFetchStatus {
   POLICY_FETCH_SUCCESS = 200,
@@ -131,6 +133,8 @@ enum DeviceManagementStatus {
   DM_STATUS_SERVICE_ARC_DISABLED = 904,
   // Service error: Non-dasher account with packaged license can't enroll.
   DM_STATUS_SERVICE_CONSUMER_ACCOUNT_WITH_PACKAGED_LICENSE = 905,
+  // Service error: Enterprise TOS has not been accepted.
+  DM_STATUS_SERVICE_ENTERPRISE_TOS_HAS_NOT_BEEN_ACCEPTED = 907,
 };
 
 // List of modes that the device can be locked into.

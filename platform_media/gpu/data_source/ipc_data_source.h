@@ -12,6 +12,8 @@
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
+#include "base/memory/read_only_shared_memory_region.h"
+#include "media/base/media_export.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -21,21 +23,71 @@ namespace ipc_data_source {
 
 constexpr int kReadError = -1;
 
-using ReadCB = base::OnceCallback<void(int read_size, const uint8_t* data)>;
+class Buffer;
 
-// Perform asynchronous read. The Run() method must not be called again until
-// the callback returns. Run() must be called from the main thread and the
-// callback will be called also from this thread. The callback can be called
-// before the method returns if there is cached data or on errors.
-using Reader = base::RepeatingCallback<
-    void(int64_t position, int size, ReadCB read_cb)>;
+using ReadCB = base::OnceCallback<void(Buffer buffer)>;
 
+using Reader = base::RepeatingCallback<void(Buffer buffer)>;
+
+// Move-only class to cache the shared region holding the result of the
+// previouis IPC read operation while allowing lock-free access from media
+// decoding threads to the received data.
+class MEDIA_EXPORT Buffer {
+ public:
+  Buffer();
+  Buffer(Buffer&& buffer);
+  ~Buffer();
+
+  // The move assignment is only allowed if this is not initialized or was moved
+  // out.
+  Buffer& operator=(Buffer&& buffer);
+
+  void Init(base::ReadOnlySharedMemoryMapping mapping, Reader source_reader);
+
+  operator bool() const { return !is_null(); }
+
+  // Check for not initialized or moved out buffer.
+  bool is_null() const { return !impl_; }
+
+  int GetCapacity();
+
+  // Set start and size of the read request.
+  void SetReadRange(int64_t position, int size);
+  int64_t GetReadPosition() const;
+  int GetRequestedSize() const;
+
+  // Perform an asynchronous read. The method consumes this instance. It will be
+  // handed back to the caller as a callback argument. The method must not be
+  // called again until the callback returns. Read() must be called from the
+  // main thread and the callback will be called also from this thread. The
+  // callback can be called before the method returns if there is cached data or
+  // on errors.
+  static void Read(Buffer buffer, ReadCB read_cb);
+
+  // Indicate that the last read operation completed with an error. Once set,
+  // the error status cannot be cleared.
+  void SetReadError();
+
+  // Set the last read size. The value must not be negative.
+  void SetReadSize(int read_size);
+
+  // Deliver the buffer with new data back to the callback passed to Read(). The
+  // method consumes the instance.
+  static void SendReply(Buffer buffer);
+
+  bool IsReadError() const;
+  int GetReadSize() const;
+  int64_t GetLastReadEnd() const;
+  const uint8_t* GetReadData() const;
+
+ private:
+  // To make the move cheap wrap the implemenatation around unique_ptr.
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
+};
+
+// Move-only struct with information about the data source.
 struct Info {
-  Info() = default;
-  Info(Info&&) = default;
-  ~Info() = default;
-  Info& operator=(Info&&) = default;
-
   bool is_streaming = false;
 
   // A negative value means the size is not known.
@@ -43,7 +95,8 @@ struct Info {
 
   std::string mime_type;
 
-  DISALLOW_COPY_AND_ASSIGN(Info);
+  // The shared memory buffer to use for IPC.
+  Buffer buffer;
 };
 
 }  // namespace ipc_data_source

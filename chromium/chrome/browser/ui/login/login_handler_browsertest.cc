@@ -32,13 +32,13 @@
 #include "components/prefs/pref_service.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
 #include "components/security_interstitials/content/ssl_blocking_page.h"
-#include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/network_service_util.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/slow_http_response.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -1707,63 +1707,6 @@ IN_PROC_BROWSER_TEST_P(LoginPromptBrowserTest,
   EXPECT_EQ("www.b.com", contents->GetVisibleURL().host());
 }
 
-// Test the scenario where proceeding through a different type of interstitial
-// that ends up with an auth URL works fine. This can happen if a URL that
-// triggers the auth dialog can also trigger an SSL interstitial (or any other
-// type of interstitial).
-IN_PROC_BROWSER_TEST_P(
-    LoginPromptBrowserTest,
-    DISABLED_LoginInterstitialShouldReplaceExistingInterstitial) {
-  net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
-  https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_EXPIRED);
-  ASSERT_TRUE(https_server.Start());
-
-  content::WebContents* contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  NavigationController* controller = &contents->GetController();
-  LoginPromptBrowserTestObserver observer;
-
-  observer.Register(content::Source<NavigationController>(controller));
-
-  // Load a page which triggers an SSL interstitial. Proceeding through it
-  // should show the login page with the blank interstitial.
-  {
-    GURL test_page = https_server.GetURL(kAuthBasicPage);
-    ASSERT_EQ("127.0.0.1", test_page.host());
-
-    WindowedAuthNeededObserver auth_needed_waiter(controller);
-    browser()->OpenURL(OpenURLParams(test_page, Referrer(),
-                                     WindowOpenDisposition::CURRENT_TAB,
-                                     ui::PAGE_TRANSITION_TYPED, false));
-    ASSERT_EQ("127.0.0.1", contents->GetURL().host());
-    content::WaitForInterstitialAttach(contents);
-
-    EXPECT_EQ(SSLBlockingPage::kTypeForTesting, contents->GetInterstitialPage()
-                                                    ->GetDelegateForTesting()
-                                                    ->GetTypeForTesting());
-    // An overrideable SSL interstitial is now being displayed. Proceed through
-    // the interstitial to see the login prompt.
-    contents->GetInterstitialPage()->Proceed();
-    auth_needed_waiter.Wait();
-    ASSERT_EQ(1u, observer.handlers().size());
-    content::WaitForInterstitialAttach(contents);
-
-    // The omnibox should show the correct origin while the login prompt is
-    // being displayed.
-    EXPECT_EQ("127.0.0.1", contents->GetVisibleURL().host());
-
-    // Cancelling the login prompt should detach the interstitial while keeping
-    // the correct origin.
-    LoginHandler* handler = *observer.handlers().begin();
-    content::RunTaskAndWaitForInterstitialDetach(
-        contents,
-        base::BindOnce(&LoginHandler::CancelAuth, base::Unretained(handler)));
-
-    EXPECT_EQ("127.0.0.1", contents->GetVisibleURL().host());
-    EXPECT_FALSE(contents->ShowingInterstitialPage());
-  }
-}
-
 // Test the scenario where an auth interstitial should replace a different type
 // of interstitial (e.g. SSL) even though the navigation isn't cross origin.
 // This is different than the above scenario in that the last
@@ -1984,6 +1927,41 @@ IN_PROC_BROWSER_TEST_P(LoginPromptBrowserTest,
   ASSERT_EQ(1u, observer.handlers().size());
 
   // Test that credentials are handled correctly.
+  WindowedAuthSuppliedObserver auth_supplied_waiter(controller);
+  LoginHandler* handler = *observer.handlers().begin();
+  SetAuthFor(handler);
+  auth_supplied_waiter.Wait();
+
+  base::string16 expected_title = ExpectedTitleFromAuth(
+      base::ASCIIToUTF16("basicuser"), base::ASCIIToUTF16("secret"));
+  content::TitleWatcher auth_supplied_title_watcher(contents, expected_title);
+  EXPECT_EQ(expected_title, auth_supplied_title_watcher.WaitAndGetTitle());
+}
+
+// Tests that the repost dialog is not shown when credentials are entered for a
+// POST navigation. Regression test for https://crbug.com/1062317.
+IN_PROC_BROWSER_TEST_P(LoginPromptBrowserTest, NoRepostDialogAfterCredentials) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  content::WebContents* contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  NavigationController* controller = &contents->GetController();
+  LoginPromptBrowserTestObserver observer;
+  observer.Register(content::Source<NavigationController>(controller));
+  WindowedAuthNeededObserver auth_needed_waiter(controller);
+
+  // Navigate to a blank page and inject a form to trigger a POST navigation
+  // that requests credentials.
+  ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("/login/form.html"));
+  ASSERT_TRUE(
+      content::ExecJs(contents, "document.getElementById('submit').click()"));
+
+  auth_needed_waiter.Wait();
+  ASSERT_EQ(1u, observer.handlers().size());
+
+  // Enter credentials and test that the page loads. If the repost dialog is
+  // shown, the test will hang while waiting for input.
   WindowedAuthSuppliedObserver auth_supplied_waiter(controller);
   LoginHandler* handler = *observer.handlers().begin();
   SetAuthFor(handler);
@@ -2341,6 +2319,28 @@ IN_PROC_BROWSER_TEST_P(LoginPromptExtensionBrowserTest,
   ASSERT_EQ(2u, console_observer.messages().size());
   EXPECT_EQ(base::ASCIIToUTF16("onAuthRequired " + second_test_page.spec()),
             console_observer.messages()[1].message);
+}
+
+// Tests that extensions can cancel authentication requests to suppress a
+// prompt. Regression test for https://crbug.com/1075442.
+IN_PROC_BROWSER_TEST_P(LoginPromptExtensionBrowserTest, OnAuthRequiredCancels) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  // Load an extension that cancels each auth request.
+  const extensions::Extension* extension =
+      LoadExtension(test_data_dir_.AppendASCII("cancel_auth_required"));
+  ASSERT_TRUE(extension);
+
+  // Navigate to a page that prompts for basic auth and test that the 401
+  // response body is rendered.
+  content::WebContents* contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  GURL test_page = embedded_test_server()->GetURL(kAuthBasicPage);
+  ui_test_utils::NavigateToURL(browser(), test_page);
+
+  base::string16 expected_title(
+      base::UTF8ToUTF16("Denied: Missing Authorization Header"));
+  EXPECT_EQ(expected_title, contents->GetTitle());
 }
 
 }  // namespace

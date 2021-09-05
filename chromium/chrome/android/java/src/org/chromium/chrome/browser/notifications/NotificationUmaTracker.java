@@ -19,7 +19,7 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.MathUtils;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.metrics.RecordHistogram;
-import org.chromium.chrome.browser.notifications.channels.ChannelDefinitions;
+import org.chromium.chrome.browser.notifications.channels.ChromeChannelDefinitions;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
@@ -53,7 +53,8 @@ public class NotificationUmaTracker {
             SystemNotificationType.CLICK_TO_CALL, SystemNotificationType.SHARED_CLIPBOARD,
             SystemNotificationType.PERMISSION_REQUESTS,
             SystemNotificationType.PERMISSION_REQUESTS_HIGH, SystemNotificationType.ANNOUNCEMENT,
-            SystemNotificationType.SHARE_SAVE_IMAGE})
+            SystemNotificationType.SHARE_SAVE_IMAGE, SystemNotificationType.TWA_DISCLOSURE_INITIAL,
+            SystemNotificationType.TWA_DISCLOSURE_SUBSEQUENT})
     @Retention(RetentionPolicy.SOURCE)
     public @interface SystemNotificationType {
         int UNKNOWN = -1;
@@ -80,8 +81,10 @@ public class NotificationUmaTracker {
         int PERMISSION_REQUESTS_HIGH = 20;
         int ANNOUNCEMENT = 21;
         int SHARE_SAVE_IMAGE = 22;
+        int TWA_DISCLOSURE_INITIAL = 23;
+        int TWA_DISCLOSURE_SUBSEQUENT = 24;
 
-        int NUM_ENTRIES = 23;
+        int NUM_ENTRIES = 25;
     }
 
     /*
@@ -130,8 +133,10 @@ public class NotificationUmaTracker {
         int ANNOUNCEMENT_ACK = 13;
         // Open button on announcement notification.
         int ANNOUNCEMENT_OPEN = 14;
+        // "Got it" button on the TWA "Running in Chrome" notification.
+        int TWA_NOTIFICATION_ACCEPTANCE = 15;
 
-        int NUM_ENTRIES = 15;
+        int NUM_ENTRIES = 16;
     }
 
     private static class LazyHolder {
@@ -261,16 +266,14 @@ public class NotificationUmaTracker {
     }
 
     /**
-     * Logs when failed to create notification with Android API.
-     * @param type Type of the notification.
+     * Tracks UMA when failed to notify {@link NotificationManager}.
      */
-    public static void onNotificationFailedToCreate(@SystemNotificationType int type) {
-        if (type == SystemNotificationType.UNKNOWN) return;
-        recordHistogram("Mobile.SystemNotification.CreationFailure", type);
+    public void onFailedToNotify(@SystemNotificationType int type) {
+        recordHistogram("Mobile.SystemNotification.NotifyFailure", type);
     }
 
-    private void logNotificationShown(
-            @SystemNotificationType int type, @ChannelDefinitions.ChannelId String channelId) {
+    private void logNotificationShown(@SystemNotificationType int type,
+            @ChromeChannelDefinitions.ChannelId String channelId) {
         if (!mNotificationManager.areNotificationsEnabled()) {
             logPotentialBlockedCause();
             recordHistogram("Mobile.SystemNotification.Blocked", type);
@@ -286,7 +289,7 @@ public class NotificationUmaTracker {
     }
 
     @TargetApi(26)
-    private boolean isChannelBlocked(@ChannelDefinitions.ChannelId String channelId) {
+    private boolean isChannelBlocked(@ChromeChannelDefinitions.ChannelId String channelId) {
         // Use non-compat notification manager as compat does not have getNotificationChannel (yet).
         NotificationManager notificationManager =
                 ContextUtils.getApplicationContext().getSystemService(NotificationManager.class);

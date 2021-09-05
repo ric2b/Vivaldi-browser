@@ -5,7 +5,6 @@
 #include "chrome/browser/geolocation/geolocation_permission_context_delegate.h"
 
 #include "base/bind.h"
-#include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/permissions/permission_request_id.h"
 #include "content/public/browser/browser_thread.h"
@@ -46,19 +45,4 @@ bool GeolocationPermissionContextDelegate::DecidePermission(
     return true;
   }
   return false;
-}
-
-void GeolocationPermissionContextDelegate::UpdateTabContext(
-    const permissions::PermissionRequestID& id,
-    const GURL& requesting_frame,
-    bool allowed) {
-  TabSpecificContentSettings* content_settings =
-      TabSpecificContentSettings::GetForFrame(id.render_process_id(),
-                                              id.render_frame_id());
-
-  // WebContents might not exist (extensions) or no longer exist. In which case,
-  // TabSpecificContentSettings will be null.
-  if (content_settings)
-    content_settings->OnGeolocationPermissionSet(requesting_frame.GetOrigin(),
-                                                 allowed);
 }

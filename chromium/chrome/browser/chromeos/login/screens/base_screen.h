@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "chrome/browser/chromeos/login/oobe_screen.h"
@@ -21,6 +22,10 @@ namespace chromeos {
 // method called just once.
 class BaseScreen {
  public:
+  // String which represents not applicable exit code. This exit code refers to
+  // skipping the screen due to specific unmet condition.
+  constexpr static const char kNotApplicable[] = "NotApplicable";
+
   BaseScreen(OobeScreenId screen_id, OobeScreenPriority screen_priority);
   virtual ~BaseScreen();
 
@@ -29,6 +34,10 @@ class BaseScreen {
 
   // Makes wizard screen invisible.
   void Hide();
+
+  // Returns whether the screen should be skipped i. e. should be exited due to
+  // specific unmet conditions. Returns true if skips the screen.
+  virtual bool MaybeSkip() WARN_UNUSED_RESULT;
 
   // Forwards user action if screen is shown.
   void HandleUserAction(const std::string& action_id);

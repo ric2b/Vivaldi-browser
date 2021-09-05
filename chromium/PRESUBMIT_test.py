@@ -1022,6 +1022,90 @@ class IncludeGuardTest(unittest.TestCase):
                      'Header using the wrong include guard name '
                      'WrongInBlink_h')
 
+class AccessibilityRelnotesFieldTest(unittest.TestCase):
+  def testRelnotesPresent(self):
+    mock_input_api = MockInputApi()
+    mock_output_api = MockOutputApi()
+
+    mock_input_api.files = [MockAffectedFile('ui/accessibility/foo.bar', [''])]
+    mock_input_api.change.footers['AX-Relnotes'] = [
+        'Important user facing change']
+
+    msgs = PRESUBMIT._CheckAccessibilityRelnotesField(
+        mock_input_api, mock_output_api)
+    self.assertEqual(0, len(msgs),
+                     'Expected %d messages, found %d: %s'
+                     % (0, len(msgs), msgs))
+
+  def testRelnotesMissingFromAccessibilityChange(self):
+    mock_input_api = MockInputApi()
+    mock_output_api = MockOutputApi()
+
+    mock_input_api.files = [
+        MockAffectedFile('some/file', ['']),
+        MockAffectedFile('ui/accessibility/foo.bar', ['']),
+        MockAffectedFile('some/other/file', [''])
+    ]
+
+    msgs = PRESUBMIT._CheckAccessibilityRelnotesField(
+        mock_input_api, mock_output_api)
+    self.assertEqual(1, len(msgs),
+                     'Expected %d messages, found %d: %s'
+                     % (1, len(msgs), msgs))
+    self.assertTrue("Missing 'AX-Relnotes:' field" in msgs[0].message,
+                    'Missing AX-Relnotes field message not found in errors')
+
+  # The relnotes footer is not required for changes which do not touch any
+  # accessibility directories.
+  def testIgnoresNonAccesssibilityCode(self):
+    mock_input_api = MockInputApi()
+    mock_output_api = MockOutputApi()
+
+    mock_input_api.files = [
+        MockAffectedFile('some/file', ['']),
+        MockAffectedFile('some/other/file', [''])
+    ]
+
+    msgs = PRESUBMIT._CheckAccessibilityRelnotesField(
+        mock_input_api, mock_output_api)
+    self.assertEqual(0, len(msgs),
+                     'Expected %d messages, found %d: %s'
+                     % (0, len(msgs), msgs))
+
+  # Test that our presubmit correctly raises an error for a set of known paths.
+  def testExpectedPaths(self):
+    filesToTest = [
+      "chrome/browser/accessibility/foo.py",
+      "chrome/browser/chromeos/arc/accessibility/foo.cc",
+      "chrome/browser/ui/views/accessibility/foo.h",
+      "chrome/browser/extensions/api/automation/foo.h",
+      "chrome/browser/extensions/api/automation_internal/foo.cc",
+      "chrome/renderer/extensions/accessibility_foo.h",
+      "chrome/tests/data/accessibility/foo.html",
+      "content/browser/accessibility/foo.cc",
+      "content/renderer/accessibility/foo.h",
+      "content/tests/data/accessibility/foo.cc",
+      "extensions/renderer/api/automation/foo.h",
+      "ui/accessibility/foo/bar/baz.cc",
+      "ui/views/accessibility/foo/bar/baz.h",
+    ]
+
+    for testFile in filesToTest:
+      mock_input_api = MockInputApi()
+      mock_output_api = MockOutputApi()
+
+      mock_input_api.files = [
+          MockAffectedFile(testFile, [''])
+      ]
+
+      msgs = PRESUBMIT._CheckAccessibilityRelnotesField(
+          mock_input_api, mock_output_api)
+      self.assertEqual(1, len(msgs),
+                       'Expected %d messages, found %d: %s, for file %s'
+                       % (1, len(msgs), msgs, testFile))
+      self.assertTrue("Missing 'AX-Relnotes:' field" in msgs[0].message,
+                      ('Missing AX-Relnotes field message not found in errors '
+                       ' for file %s' % (testFile)))
 
 class AndroidDeprecatedTestAnnotationTest(unittest.TestCase):
   def testCheckAndroidTestAnnotationUsage(self):
@@ -1919,45 +2003,6 @@ class CorrectProductNameInMessagesTest(unittest.TestCase):
 
 
 class ServiceManifestOwnerTest(unittest.TestCase):
-  def testServiceManifestJsonChangeNeedsSecurityOwner(self):
-    mock_input_api = MockInputApi()
-    mock_input_api.files = [
-      MockAffectedFile('services/goat/manifest.json',
-                       [
-                         '{',
-                         '  "name": "teleporter",',
-                         '  "display_name": "Goat Teleporter",'
-                         '  "interface_provider_specs": {',
-                         '  }',
-                         '}',
-                       ])
-    ]
-    mock_output_api = MockOutputApi()
-    errors = PRESUBMIT._CheckIpcOwners(
-        mock_input_api, mock_output_api)
-    self.assertEqual(1, len(errors))
-    self.assertEqual(
-        'Found OWNERS files that need to be updated for IPC security review ' +
-        'coverage.\nPlease update the OWNERS files below:', errors[0].message)
-
-    # No warning if already covered by an OWNERS rule.
-
-  def testNonManifestJsonChangesDoNotRequireSecurityOwner(self):
-    mock_input_api = MockInputApi()
-    mock_input_api.files = [
-      MockAffectedFile('services/goat/species.json',
-                       [
-                         '[',
-                         '  "anglo-nubian",',
-                         '  "angora"',
-                         ']',
-                       ])
-    ]
-    mock_output_api = MockOutputApi()
-    errors = PRESUBMIT._CheckIpcOwners(
-        mock_input_api, mock_output_api)
-    self.assertEqual([], errors)
-
   def testServiceManifestChangeNeedsSecurityOwner(self):
     mock_input_api = MockInputApi()
     mock_input_api.files = [
@@ -1967,7 +2012,7 @@ class ServiceManifestOwnerTest(unittest.TestCase):
                          'const service_manager::Manifest& GetManifest() {}',
                        ])]
     mock_output_api = MockOutputApi()
-    errors = PRESUBMIT._CheckIpcOwners(
+    errors = PRESUBMIT._CheckSecurityOwners(
         mock_input_api, mock_output_api)
     self.assertEqual(1, len(errors))
     self.assertEqual(
@@ -1982,9 +2027,189 @@ class ServiceManifestOwnerTest(unittest.TestCase):
                          'const char kNoEnforcement[] = "not a manifest!";',
                        ])]
     mock_output_api = MockOutputApi()
-    errors = PRESUBMIT._CheckIpcOwners(
+    errors = PRESUBMIT._CheckSecurityOwners(
         mock_input_api, mock_output_api)
     self.assertEqual([], errors)
+
+
+class FuchsiaSecurityOwnerTest(unittest.TestCase):
+  def testFidlChangeNeedsSecurityOwner(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+      MockAffectedFile('potentially/scary/ipc.fidl',
+                       [
+                         'library test.fidl'
+                       ])]
+    mock_output_api = MockOutputApi()
+    errors = PRESUBMIT._CheckSecurityOwners(
+        mock_input_api, mock_output_api)
+    self.assertEqual(1, len(errors))
+    self.assertEqual(
+        'Found OWNERS files that need to be updated for IPC security review ' +
+        'coverage.\nPlease update the OWNERS files below:', errors[0].message)
+
+  def testComponentManifestV1ChangeNeedsSecurityOwner(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+      MockAffectedFile('potentially/scary/v2_manifest.cmx',
+                       [
+                         '{ "that is no": "manifest!" }'
+                       ])]
+    mock_output_api = MockOutputApi()
+    errors = PRESUBMIT._CheckSecurityOwners(
+        mock_input_api, mock_output_api)
+    self.assertEqual(1, len(errors))
+    self.assertEqual(
+        'Found OWNERS files that need to be updated for IPC security review ' +
+        'coverage.\nPlease update the OWNERS files below:', errors[0].message)
+
+  def testComponentManifestV2NeedsSecurityOwner(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+      MockAffectedFile('potentially/scary/v2_manifest.cml',
+                       [
+                         '{ "that is no": "manifest!" }'
+                       ])]
+    mock_output_api = MockOutputApi()
+    errors = PRESUBMIT._CheckSecurityOwners(
+        mock_input_api, mock_output_api)
+    self.assertEqual(1, len(errors))
+    self.assertEqual(
+        'Found OWNERS files that need to be updated for IPC security review ' +
+        'coverage.\nPlease update the OWNERS files below:', errors[0].message)
+
+  def testOtherFuchsiaChangesDoNotRequireSecurityOwner(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+      MockAffectedFile('some/non/service/thing/fuchsia_fidl_cml_cmx_magic.cc',
+                       [
+                         'const char kNoEnforcement[] = "Security?!? Pah!";',
+                       ])]
+    mock_output_api = MockOutputApi()
+    errors = PRESUBMIT._CheckSecurityOwners(
+        mock_input_api, mock_output_api)
+    self.assertEqual([], errors)
+
+
+class SecurityChangeTest(unittest.TestCase):
+  class _MockOwnersDB(object):
+    def __init__(self):
+      self.email_regexp = '.*'
+
+    def owners_rooted_at_file(self, f):
+      return ['apple@chromium.org', 'orange@chromium.org']
+
+  def _mockChangeOwnerAndReviewers(self, input_api, owner, reviewers):
+    def __MockOwnerAndReviewers(input_api, email_regexp, approval_needed=False):
+      return [owner, reviewers]
+    input_api.canned_checks.GetCodereviewOwnerAndReviewers = \
+        __MockOwnerAndReviewers
+
+  def testDiffWithSandboxType(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.files = [
+        MockAffectedFile(
+          'services/goat/teleporter_host.cc',
+          [
+            'content::ServiceProcessHost::Launch<mojom::GoatTeleporter>(',
+            '    content::ServiceProcessHost::LaunchOptions()',
+            '        .WithSandboxType(content::SandboxType::kGoaty)',
+            '        .WithDisplayName("goat_teleporter")',
+            '        .Build())'
+          ]
+        ),
+    ]
+    files_to_functions = PRESUBMIT._GetFilesUsingSecurityCriticalFunctions(
+        mock_input_api)
+    self.assertEqual({
+        'services/goat/teleporter_host.cc': set([
+            'content::ServiceProcessHost::LaunchOptions::WithSandboxType'
+        ])},
+        files_to_functions)
+
+  def testDiffRemovingLine(self):
+    mock_input_api = MockInputApi()
+    mock_file = MockAffectedFile('services/goat/teleporter_host.cc', '')
+    mock_file._scm_diff = """--- old 2020-05-04 14:08:25.000000000 -0400
++++ new 2020-05-04 14:08:32.000000000 -0400
+@@ -1,5 +1,4 @@
+ content::ServiceProcessHost::Launch<mojom::GoatTeleporter>(
+     content::ServiceProcessHost::LaunchOptions()
+-        .WithSandboxType(content::SandboxType::kGoaty)
+         .WithDisplayName("goat_teleporter")
+         .Build())
+"""
+    mock_input_api.files = [mock_file]
+    files_to_functions = PRESUBMIT._GetFilesUsingSecurityCriticalFunctions(
+        mock_input_api)
+    self.assertEqual({
+        'services/goat/teleporter_host.cc': set([
+            'content::ServiceProcessHost::LaunchOptions::WithSandboxType'
+        ])},
+        files_to_functions)
+
+  def testChangeOwnersMissing(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.owners_db = self._MockOwnersDB()
+    mock_input_api.is_committing = False
+    mock_input_api.files = [
+        MockAffectedFile('file.cc', ['WithSandboxType(Sandbox)'])
+    ]
+    mock_output_api = MockOutputApi()
+    self._mockChangeOwnerAndReviewers(
+        mock_input_api, 'owner@chromium.org', ['banana@chromium.org'])
+    result = PRESUBMIT._CheckSecurityChanges(mock_input_api, mock_output_api)
+    self.assertEquals(1, len(result))
+    self.assertEquals(result[0].type, 'notify')
+    self.assertEquals(result[0].message,
+        'The following files change calls to security-sensive functions\n' \
+        'that need to be reviewed by ipc/SECURITY_OWNERS.\n'
+        '  file.cc\n'
+        '    content::ServiceProcessHost::LaunchOptions::WithSandboxType\n\n')
+
+  def testChangeOwnersMissingAtCommit(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.owners_db = self._MockOwnersDB()
+    mock_input_api.is_committing = True
+    mock_input_api.files = [
+        MockAffectedFile('file.cc', ['WithSandboxType(Sandbox)'])
+    ]
+    mock_output_api = MockOutputApi()
+    self._mockChangeOwnerAndReviewers(
+        mock_input_api, 'owner@chromium.org', ['banana@chromium.org'])
+    result = PRESUBMIT._CheckSecurityChanges(mock_input_api, mock_output_api)
+    self.assertEquals(1, len(result))
+    self.assertEquals(result[0].type, 'error')
+    self.assertEquals(result[0].message,
+        'The following files change calls to security-sensive functions\n' \
+        'that need to be reviewed by ipc/SECURITY_OWNERS.\n'
+        '  file.cc\n'
+        '    content::ServiceProcessHost::LaunchOptions::WithSandboxType\n\n')
+
+  def testChangeOwnersPresent(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.owners_db = self._MockOwnersDB()
+    mock_input_api.files = [
+        MockAffectedFile('file.cc', ['WithSandboxType(Sandbox)'])
+    ]
+    mock_output_api = MockOutputApi()
+    self._mockChangeOwnerAndReviewers(
+        mock_input_api, 'owner@chromium.org',
+        ['apple@chromium.org', 'banana@chromium.org'])
+    result = PRESUBMIT._CheckSecurityChanges(mock_input_api, mock_output_api)
+    self.assertEquals(0, len(result))
+
+  def testChangeOwnerIsSecurityOwner(self):
+    mock_input_api = MockInputApi()
+    mock_input_api.owners_db = self._MockOwnersDB()
+    mock_input_api.files = [
+        MockAffectedFile('file.cc', ['WithSandboxType(Sandbox)'])
+    ]
+    mock_output_api = MockOutputApi()
+    self._mockChangeOwnerAndReviewers(
+        mock_input_api, 'orange@chromium.org', ['pear@chromium.org'])
+    result = PRESUBMIT._CheckSecurityChanges(mock_input_api, mock_output_api)
+    self.assertEquals(1, len(result))
 
 
 class BannedTypeCheckTest(unittest.TestCase):

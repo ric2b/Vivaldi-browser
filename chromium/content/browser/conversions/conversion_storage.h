@@ -8,10 +8,12 @@
 #include <stdint.h>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/time/time.h"
 #include "content/browser/conversions/conversion_report.h"
 #include "content/browser/conversions/storable_conversion.h"
 #include "content/browser/conversions/storable_impression.h"
+#include "url/origin.h"
 
 namespace content {
 
@@ -41,6 +43,21 @@ class ConversionStorage {
     // Impressions will be checked against this limit after they schedule a new
     // report.
     virtual int GetMaxConversionsPerImpression() const = 0;
+
+    // These limits are designed solely to avoid excessive disk / memory usage.
+    // In particular, they do not correspond with any privacy parameters.
+    // TODO(crbug.com/1082754): Consider replacing this functionality (and the
+    // data deletion logic) with the quota system.
+    //
+    // Returns the maximum number of impressions that can be in storage at any
+    // time for an impression top-level origin.
+    virtual int GetMaxImpressionsPerOrigin() const = 0;
+    //  Returns the maximum number of conversions that can be in storage at any
+    //  time for a conversion top-level origin. Note that since reporting
+    //  origins are the actual entities that invoke conversion registration, we
+    //  could consider changing this limit to be keyed by a <conversion origin,
+    //  reporting origin> tuple.
+    virtual int GetMaxConversionsPerOrigin() const = 0;
   };
   virtual ~ConversionStorage() = default;
 
@@ -69,6 +86,13 @@ class ConversionStorage {
   virtual std::vector<ConversionReport> GetConversionsToReport(
       base::Time max_report_time) = 0;
 
+  // Returns all active impressions in storage. Active impressions are all
+  // impressions that can still convert. Impressions that: are past expiry,
+  // reached the conversion limit, or was marked inactive due to having
+  // converted and then superceded by a matching impression should not be
+  // returned.
+  virtual std::vector<StorableImpression> GetActiveImpressions() = 0;
+
   // Deletes all impressions that have expired and have no pending conversion
   // reports. Returns the number of impressions that were deleted.
   virtual int DeleteExpiredImpressions() = 0;
@@ -77,9 +101,18 @@ class ConversionStorage {
   // whether the deletion was successful.
   virtual bool DeleteConversion(int64_t conversion_id) = 0;
 
-  // TODO(johnidel): Add an API to ConversionStorage that removes site data, and
-  // hook it into the data remover. This should be added before the API is
-  // enabled.
+  // Deletes all data in storage for URLs matching |filter|, between
+  // |delete_begin| and |delete_end| time. More specifically, this:
+  // 1. Deletes all impressions within the time range. If any conversion is
+  //    attributed to this impression it is also deleted.
+  // 2. Deletes all conversions within the time range. All impressions
+  //    attributed to the conversion are also deleted.
+  //
+  // Note: if |filter| is null, it means that all Origins should match.
+  virtual void ClearData(
+      base::Time delete_begin,
+      base::Time delete_end,
+      base::RepeatingCallback<bool(const url::Origin& origin)> filter) = 0;
 };
 
 }  // namespace content

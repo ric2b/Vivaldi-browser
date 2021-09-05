@@ -106,6 +106,7 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kDisableRGBA4444Textures,
     ::switches::kDisableThreadedScrolling,
     ::switches::kDisableTouchDragDrop,
+    ::switches::kDisableVideoCaptureUseGpuMemoryBuffer,
     ::switches::kDisableYUVImageDecoding,
     ::switches::kDisableZeroCopy,
     ::switches::kEnableBlinkFeatures,
@@ -171,8 +172,6 @@ void DeriveCommandLine(const GURL& start_url,
     ash::switches::kAuraLegacyPowerButton,
     ash::switches::kEnableDimShelf,
     ash::switches::kShowTaps,
-    ash::switches::kShowWebUiLock,
-    ash::switches::kShowWebUiLogin,
     chromeos::switches::kDefaultWallpaperLarge,
     chromeos::switches::kDefaultWallpaperSmall,
     chromeos::switches::kGuestWallpaperLarge,
@@ -186,6 +185,7 @@ void DeriveCommandLine(const GURL& start_url,
     cc::switches::kDisableThreadedAnimation,
     cc::switches::kEnableGpuBenchmarking,
     cc::switches::kEnableMainFrameBeforeActivation,
+    cc::switches::kHighlightNonLCDTextLayers,
     cc::switches::kShowCompositedLayerBorders,
     cc::switches::kShowFPSCounter,
     cc::switches::kShowLayerAnimationBounds,
@@ -323,8 +323,8 @@ void ChromeRestartRequest::RestartJob() {
   // of the socket-pair alive for the duration of the RPC.
   SessionManagerClient::Get()->RestartJob(
       remote_auth_fd.get(), argv_,
-      base::Bind(&ChromeRestartRequest::OnRestartJob, AsWeakPtr(),
-                 base::Passed(&local_auth_fd)));
+      base::BindOnce(&ChromeRestartRequest::OnRestartJob, AsWeakPtr(),
+                     base::Passed(&local_auth_fd)));
 }
 
 void ChromeRestartRequest::OnRestartJob(base::ScopedFD local_auth_fd,

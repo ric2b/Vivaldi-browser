@@ -40,6 +40,7 @@ using base::test::ios::kWaitForUIElementTimeout;
 using base::test::ios::WaitUntilConditionOrTimeout;
 
 namespace {
+NSString* const kWaitForPageToStartLoadingError = @"Page did not start to load";
 NSString* const kWaitForPageToFinishLoadingError =
     @"Page did not finish loading";
 NSString* const kTypedURLError =
@@ -161,6 +162,10 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
   [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
 }
 
+- (NSInteger)getBrowsingHistoryEntryCount {
+  return [ChromeEarlGreyAppInterface getBrowsingHistoryEntryCount];
+}
+
 - (void)removeBrowsingCache {
   EG_TEST_HELPER_ASSERT_NO_ERROR(
       [ChromeEarlGreyAppInterface removeBrowsingCache]);
@@ -265,7 +270,24 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
 }
 
 - (void)simulateExternalAppURLOpening {
-  [ChromeEarlGreyAppInterface simulateExternalAppURLOpening];
+  NSURL* openedNSURL =
+      [ChromeEarlGreyAppInterface simulateExternalAppURLOpening];
+  // Wait until the navigation is finished.
+  GURL openedGURL = net::GURLWithNSURL(openedNSURL);
+  GREYCondition* finishedLoading = [GREYCondition
+      conditionWithName:kWaitForPageToStartLoadingError
+                  block:^{
+                    return openedGURL == [ChromeEarlGrey webStateVisibleURL];
+                  }];
+  bool pageLoaded = [finishedLoading waitWithTimeout:kWaitForPageLoadTimeout];
+  EG_TEST_HELPER_ASSERT_TRUE(pageLoaded, kWaitForPageToStartLoadingError);
+  // Wait until the page is loaded.
+  [self waitForPageToFinishLoading];
+  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+}
+
+- (void)simulateAddAccountFromWeb {
+  [ChromeEarlGreyAppInterface simulateAddAccountFromWeb];
   [self waitForPageToFinishLoading];
   [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
 }
@@ -621,10 +643,13 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
   [ChromeEarlGreyAppInterface stopSync];
 }
 
-- (void)addUserDemographicsToSyncServerWithBirthYear:(int)birthYear
-                                              gender:(int)gender {
+- (void)
+    addUserDemographicsToSyncServerWithBirthYear:(int)rawBirthYear
+                                          gender:
+                                              (metrics::UserDemographicsProto::
+                                                   Gender)gender {
   [ChromeEarlGreyAppInterface
-      addUserDemographicsToSyncServerWithBirthYear:birthYear
+      addUserDemographicsToSyncServerWithBirthYear:rawBirthYear
                                             gender:gender];
 }
 
@@ -782,6 +807,10 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
 
 - (void)signOutAndClearAccounts {
   [self signOutAndClearIdentities];
+}
+
+- (void)addBookmarkWithSyncPassphrase:(NSString*)syncPassphrase {
+  [ChromeEarlGreyAppInterface addBookmarkWithSyncPassphrase:syncPassphrase];
 }
 
 #pragma mark - Bookmarks Utilities (EG2)

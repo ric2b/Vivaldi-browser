@@ -6,14 +6,11 @@
 
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/apps/app_service/app_icon_factory.h"
+#include "chrome/browser/apps/app_service/extension_apps_chromeos.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/native_window_tracker.h"
 #include "chrome/services/app_service/public/cpp/icon_loader.h"
 #include "extensions/browser/uninstall_reason.h"
-
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/apps/app_service/extension_apps.h"
-#endif  // OS_CHROMEOS
 
 namespace {
 
@@ -42,6 +39,7 @@ UninstallDialog::UninstallDialog(Profile* profile,
 
   switch (app_type) {
     case apps::mojom::AppType::kArc:
+    case apps::mojom::AppType::kPluginVm:
       break;
     case apps::mojom::AppType::kCrostini:
       // Crostini icons might be a big image, and not fit the size, so add the
@@ -75,12 +73,10 @@ UninstallDialog::~UninstallDialog() = default;
 void UninstallDialog::OnDialogClosed(bool uninstall,
                                      bool clear_site_data,
                                      bool report_abuse) {
-#if defined(OS_CHROMEOS)
   if (!uninstall && (app_type_ == apps::mojom::AppType::kExtension ||
                      app_type_ == apps::mojom::AppType::kWeb)) {
-    ExtensionApps::RecordUninstallCanceledAction(profile_, app_id_);
+    ExtensionAppsChromeOs::RecordUninstallCanceledAction(profile_, app_id_);
   }
-#endif  // OS_CHROMEOS
 
   std::move(uninstall_callback_)
       .Run(uninstall, clear_site_data, report_abuse, this);

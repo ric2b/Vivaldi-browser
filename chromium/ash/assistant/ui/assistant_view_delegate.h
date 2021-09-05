@@ -8,8 +8,8 @@
 #include <map>
 #include <string>
 
-#include "ash/public/cpp/assistant/assistant_image_downloader.h"
 #include "ash/public/cpp/assistant/assistant_state.h"
+#include "ash/public/cpp/image_downloader.h"
 #include "base/component_export.h"
 #include "base/observer_list_types.h"
 #include "chromeos/services/assistant/public/mojom/assistant.mojom.h"
@@ -19,14 +19,8 @@ namespace ash {
 
 class AssistantAlarmTimerModel;
 class AssistantAlarmTimerModelObserver;
-class AssistantInteractionModel;
-class AssistantInteractionModelObserver;
 class AssistantNotificationModel;
 class AssistantNotificationModelObserver;
-class AssistantSuggestionsModel;
-class AssistantSuggestionsModelObserver;
-class AssistantUiModel;
-class AssistantUiModelObserver;
 enum class AssistantButtonId;
 
 namespace assistant {
@@ -77,17 +71,8 @@ class COMPONENT_EXPORT(ASSISTANT_UI) AssistantViewDelegate {
   // Gets the alarm/timer model.
   virtual const AssistantAlarmTimerModel* GetAlarmTimerModel() const = 0;
 
-  // Gets the interaction model.
-  virtual const AssistantInteractionModel* GetInteractionModel() const = 0;
-
   // Gets the notification model.
   virtual const AssistantNotificationModel* GetNotificationModel() const = 0;
-
-  // Gets the suggestions model.
-  virtual const AssistantSuggestionsModel* GetSuggestionsModel() const = 0;
-
-  // Gets the ui model.
-  virtual const AssistantUiModel* GetUiModel() const = 0;
 
   // Adds/removes the specified view delegate observer.
   virtual void AddObserver(AssistantViewDelegateObserver* observer) = 0;
@@ -99,34 +84,17 @@ class COMPONENT_EXPORT(ASSISTANT_UI) AssistantViewDelegate {
   virtual void RemoveAlarmTimerModelObserver(
       AssistantAlarmTimerModelObserver* observer) = 0;
 
-  // Adds/removes the interaction model observer.
-  virtual void AddInteractionModelObserver(
-      AssistantInteractionModelObserver* observer) = 0;
-  virtual void RemoveInteractionModelObserver(
-      AssistantInteractionModelObserver* observer) = 0;
-
   // Adds/removes the notification model observer.
   virtual void AddNotificationModelObserver(
       AssistantNotificationModelObserver* observer) = 0;
   virtual void RemoveNotificationModelObserver(
       AssistantNotificationModelObserver* observer) = 0;
 
-  // Adds/removes the suggestions model observer.
-  virtual void AddSuggestionsModelObserver(
-      AssistantSuggestionsModelObserver* observer) = 0;
-  virtual void RemoveSuggestionsModelObserver(
-      AssistantSuggestionsModelObserver* observer) = 0;
-
-  // Adds/removes the ui model observer.
-  virtual void AddUiModelObserver(AssistantUiModelObserver* observer) = 0;
-  virtual void RemoveUiModelObserver(AssistantUiModelObserver* observer) = 0;
-
   // Downloads the image found at the specified |url|. On completion, the
   // supplied |callback| will be run with the downloaded image. If the download
   // attempt is unsuccessful, a NULL image is returned.
-  virtual void DownloadImage(
-      const GURL& url,
-      AssistantImageDownloader::DownloadCallback callback) = 0;
+  virtual void DownloadImage(const GURL& url,
+                             ImageDownloader::DownloadCallback callback) = 0;
 
   // Returns the cursor_manager.
   virtual ::wm::CursorManager* GetCursorManager() = 0;
@@ -168,10 +136,6 @@ class COMPONENT_EXPORT(ASSISTANT_UI) AssistantViewDelegate {
   // Invoked when suggestion chip is pressed.
   virtual void OnSuggestionChipPressed(
       const AssistantSuggestion* suggestion) = 0;
-
-  // Opens the specified |url| in a new browser tab. Special handling is applied
-  // to deep links which may cause deviation from this behavior.
-  virtual void OpenUrlFromView(const GURL& url) = 0;
 };
 
 }  // namespace ash

@@ -52,6 +52,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/platform/bindings/microtask.h"
 #include "third_party/blink/renderer/platform/bindings/v8_per_isolate_data.h"
+#include "third_party/blink/renderer/platform/disk_data_allocator.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/instrumentation/histogram.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread.h"
@@ -160,14 +161,16 @@ void InitializeCommon(Platform* platform, mojo::BinderMap* binders) {
 
 }  // namespace
 
+// Function defined in third_party/blink/public/web/blink.h.
 void Initialize(Platform* platform,
                 mojo::BinderMap* binders,
                 scheduler::WebThreadScheduler* main_thread_scheduler) {
   DCHECK(binders);
-  Platform::Initialize(platform, main_thread_scheduler);
+  Platform::InitializeMainThread(platform, main_thread_scheduler);
   InitializeCommon(platform, binders);
 }
 
+// Function defined in third_party/blink/public/web/blink.h.
 void CreateMainThreadAndInitialize(Platform* platform,
                                    mojo::BinderMap* binders) {
   DCHECK(binders);
@@ -200,6 +203,10 @@ void BlinkInitializer::RegisterInterfaces(mojo::BinderMap& binders) {
 
   binders.Add(ConvertToBaseRepeatingCallback(
                   CrossThreadBindRepeating(&BlinkLeakDetector::Create)),
+              main_thread->GetTaskRunner());
+
+  binders.Add(ConvertToBaseRepeatingCallback(
+                  CrossThreadBindRepeating(&DiskDataAllocator::Bind)),
               main_thread->GetTaskRunner());
 }
 

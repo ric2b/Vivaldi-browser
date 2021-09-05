@@ -55,7 +55,7 @@ class LinkedHashSetConstIterator;
 template <typename LinkedHashSet>
 class LinkedHashSetConstReverseIterator;
 
-template <typename Value, typename HashFunctions>
+template <typename Value, typename HashFunctions, typename TraitsArg>
 struct LinkedHashSetTranslator;
 template <typename Value>
 struct LinkedHashSetExtractor;
@@ -216,7 +216,8 @@ class LinkedHashSet {
   typedef TraitsArg Traits;
   typedef LinkedHashSetNode<Value> Node;
   typedef LinkedHashSetNodeBase NodeBase;
-  typedef LinkedHashSetTranslator<Value, HashFunctions> NodeHashFunctions;
+  typedef LinkedHashSetTranslator<Value, HashFunctions, Traits>
+      NodeHashFunctions;
   typedef LinkedHashSetTraits<Value, Traits, Allocator> NodeHashTraits;
 
   typedef HashTable<Node,
@@ -250,7 +251,7 @@ class LinkedHashSet {
     bool is_new_entry;
   };
 
-  typedef typename HashTraits<Value>::PeekInType ValuePeekInType;
+  typedef typename TraitsArg::PeekInType ValuePeekInType;
 
   LinkedHashSet();
   LinkedHashSet(const LinkedHashSet&);
@@ -260,11 +261,6 @@ class LinkedHashSet {
 
   // Needs finalization. The anchor needs to unlink itself from the chain.
   ~LinkedHashSet();
-
-  static void Finalize(void* pointer) {
-    reinterpret_cast<LinkedHashSet*>(pointer)->~LinkedHashSet();
-  }
-  void FinalizeGarbageCollectedObject() { Finalize(this); }
 
   void Swap(LinkedHashSet&);
 
@@ -342,14 +338,16 @@ class LinkedHashSet {
 
   template <typename VisitorDispatcher>
   void Trace(VisitorDispatcher visitor) const {
-    if (visitor->ConcurrentTracingBailOut(
-            {this, [](blink::Visitor* visitor, const void* object) {
-               reinterpret_cast<const LinkedHashSet<ValueArg, HashFunctions,
-                                                    TraitsArg, Allocator>*>(
-                   object)
-                   ->Trace(visitor);
-             }}))
-      return;
+    if (!NodeHashTraits::kCanTraceConcurrently) {
+      if (visitor->DeferredTraceIfConcurrent(
+              {this, [](blink::Visitor* visitor, const void* object) {
+                 reinterpret_cast<const LinkedHashSet<ValueArg, HashFunctions,
+                                                      TraitsArg, Allocator>*>(
+                     object)
+                     ->Trace(visitor);
+               }}))
+        return;
+    }
 
     impl_.Trace(visitor);
     // Should the underlying table be moved by GC, register a callback
@@ -402,12 +400,12 @@ class LinkedHashSet {
   NodeBase anchor_;
 };
 
-template <typename Value, typename HashFunctions>
+template <typename Value, typename HashFunctions, typename TraitsArg>
 struct LinkedHashSetTranslator {
   STATIC_ONLY(LinkedHashSetTranslator);
   typedef LinkedHashSetNode<Value> Node;
   typedef LinkedHashSetNodeBase NodeBase;
-  typedef typename HashTraits<Value>::PeekInType ValuePeekInType;
+  typedef typename TraitsArg::PeekInType ValuePeekInType;
   static unsigned GetHash(const Node& node) {
     return HashFunctions::GetHash(node.value_);
   }
@@ -549,6 +547,9 @@ struct LinkedHashSetTraits
           reinterpret_cast<NodeBase*>(reinterpret_cast<uintptr_t>(to) + diff);
     }
   }
+
+  static constexpr bool kCanTraceConcurrently =
+      ValueTraitsArg::kCanTraceConcurrently;
 };
 
 template <typename LinkedHashSetType>

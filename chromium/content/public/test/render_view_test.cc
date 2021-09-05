@@ -28,27 +28,28 @@
 #include "content/public/common/use_zoom_for_dsf_policy.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/public/renderer/render_view_visitor.h"
+#include "content/public/test/fake_render_widget_host.h"
 #include "content/public/test/frame_load_waiter.h"
 #include "content/renderer/history_serialization.h"
 #include "content/renderer/loader/resource_dispatcher.h"
+#include "content/renderer/render_process.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/render_view_impl.h"
 #include "content/renderer/renderer_blink_platform_impl.h"
 #include "content/renderer/renderer_main_platform_delegate.h"
 #include "content/test/fake_compositor_dependencies.h"
-#include "content/test/mock_render_process.h"
 #include "content/test/test_content_client.h"
 #include "content/test/test_render_frame.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/escape.h"
-#include "services/service_manager/public/cpp/connector.h"
 #include "third_party/blink/public/common/dom_storage/session_storage_namespace_id.h"
 #include "third_party/blink/public/common/input/web_gesture_event.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/mojom/leak_detector/leak_detector.mojom.h"
 #include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
+#include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
 #include "third_party/blink/public/platform/web_runtime_features.h"
 #include "third_party/blink/public/platform/web_url_loader_client.h"
@@ -249,6 +250,7 @@ RenderViewTest::RendererBlinkPlatformImplTestOverride::Get() const {
 }
 
 void RenderViewTest::RendererBlinkPlatformImplTestOverride::Initialize() {
+  blink::Platform::InitializeBlink();
   main_thread_scheduler_ =
       blink::scheduler::WebThreadScheduler::CreateMainThreadScheduler();
   blink_platform_impl_ =
@@ -378,6 +380,8 @@ void RenderViewTest::SetUp() {
   if (!render_thread_)
     render_thread_ = std::make_unique<MockRenderThread>();
 
+  render_widget_host_.reset(new FakeRenderWidgetHost());
+
   // Blink needs to be initialized before calling CreateContentRendererClient()
   // because it uses blink internally.
   blink_platform_impl_.Initialize();
@@ -431,7 +435,7 @@ void RenderViewTest::SetUp() {
   }
 
   compositor_deps_ = CreateCompositorDependencies();
-  mock_process_ = std::make_unique<MockRenderProcess>();
+  process_ = std::make_unique<RenderProcess>();
 
   mojom::CreateViewParamsPtr view_params = mojom::CreateViewParams::New();
   view_params->opener_frame_route_id = MSG_ROUTING_NONE;
@@ -441,6 +445,7 @@ void RenderViewTest::SetUp() {
   view_params->view_id = render_thread_->GetNextRoutingID();
   view_params->main_frame_widget_routing_id =
       render_thread_->GetNextRoutingID();
+  view_params->main_frame_frame_token = base::UnguessableToken::Create();
   view_params->main_frame_routing_id = render_thread_->GetNextRoutingID();
   view_params->main_frame_interface_bundle =
       mojom::DocumentScopedInterfaceBundle::New();
@@ -462,6 +467,8 @@ void RenderViewTest::SetUp() {
   view_params->hidden = false;
   view_params->never_composited = false;
   view_params->visual_properties = InitialVisualProperties();
+  std::tie(view_params->frame_widget_host, view_params->frame_widget) =
+      render_widget_host_->BindNewFrameWidgetInterfaces();
 
   RenderViewImpl* view = RenderViewImpl::Create(
       compositor_deps_.get(), std::move(view_params),
@@ -485,7 +492,7 @@ void RenderViewTest::TearDown() {
   mojo::Remote<blink::mojom::LeakDetector> leak_detector;
   mojo::GenericPendingReceiver receiver(
       leak_detector.BindNewPipeAndPassReceiver());
-  ignore_result(binders_.Bind(&receiver));
+  ignore_result(binders_.TryBind(&receiver));
 
   // Close the main |view_| as well as any other windows that might have been
   // opened by the test.
@@ -496,9 +503,9 @@ void RenderViewTest::TearDown() {
   // |view_| is ref-counted and deletes itself during the RunUntilIdle() call
   // below.
   view_ = nullptr;
-  mock_process_.reset();
+  process_.reset();
 
-  // After telling the view to close and resetting mock_process_ we may get
+  // After telling the view to close and resetting process_ we may get
   // some new tasks which need to be processed before shutting down WebKit
   // (http://crbug.com/21508).
   base::RunLoop().RunUntilIdle();
@@ -553,8 +560,9 @@ void RenderViewTest::SendNativeKeyEvent(
 void RenderViewTest::SendInputEvent(const blink::WebInputEvent& input_event) {
   RenderViewImpl* view = static_cast<RenderViewImpl*>(view_);
   RenderWidget* widget = view->GetMainRenderFrame()->GetLocalRootRenderWidget();
-  widget->HandleInputEvent(blink::WebCoalescedInputEvent(input_event),
-                           ui::LatencyInfo(), HandledEventCallback());
+  widget->HandleInputEvent(
+      blink::WebCoalescedInputEvent(input_event, ui::LatencyInfo()),
+      HandledEventCallback());
 }
 
 void RenderViewTest::SendWebKeyboardEvent(
@@ -630,18 +638,20 @@ bool RenderViewTest::SimulateElementClick(const std::string& element_id) {
 }
 
 void RenderViewTest::SimulatePointClick(const gfx::Point& point) {
-  WebMouseEvent mouse_event(WebInputEvent::kMouseDown,
+  WebMouseEvent mouse_event(WebInputEvent::Type::kMouseDown,
                             WebInputEvent::kNoModifiers, ui::EventTimeForNow());
   mouse_event.button = WebMouseEvent::Button::kLeft;
   mouse_event.SetPositionInWidget(point.x(), point.y());
   mouse_event.click_count = 1;
   RenderViewImpl* view = static_cast<RenderViewImpl*>(view_);
   RenderWidget* widget = view->GetMainRenderFrame()->GetLocalRootRenderWidget();
-  widget->HandleInputEvent(blink::WebCoalescedInputEvent(mouse_event),
-                           ui::LatencyInfo(), HandledEventCallback());
-  mouse_event.SetType(WebInputEvent::kMouseUp);
-  widget->HandleInputEvent(blink::WebCoalescedInputEvent(mouse_event),
-                           ui::LatencyInfo(), HandledEventCallback());
+  widget->HandleInputEvent(
+      blink::WebCoalescedInputEvent(mouse_event, ui::LatencyInfo()),
+      HandledEventCallback());
+  mouse_event.SetType(WebInputEvent::Type::kMouseUp);
+  widget->HandleInputEvent(
+      blink::WebCoalescedInputEvent(mouse_event, ui::LatencyInfo()),
+      HandledEventCallback());
 }
 
 
@@ -654,23 +664,25 @@ bool RenderViewTest::SimulateElementRightClick(const std::string& element_id) {
 }
 
 void RenderViewTest::SimulatePointRightClick(const gfx::Point& point) {
-  WebMouseEvent mouse_event(WebInputEvent::kMouseDown,
+  WebMouseEvent mouse_event(WebInputEvent::Type::kMouseDown,
                             WebInputEvent::kNoModifiers, ui::EventTimeForNow());
   mouse_event.button = WebMouseEvent::Button::kRight;
   mouse_event.SetPositionInWidget(point.x(), point.y());
   mouse_event.click_count = 1;
   RenderViewImpl* view = static_cast<RenderViewImpl*>(view_);
   RenderWidget* widget = view->GetMainRenderFrame()->GetLocalRootRenderWidget();
-  widget->HandleInputEvent(blink::WebCoalescedInputEvent(mouse_event),
-                           ui::LatencyInfo(), HandledEventCallback());
-  mouse_event.SetType(WebInputEvent::kMouseUp);
-  widget->HandleInputEvent(blink::WebCoalescedInputEvent(mouse_event),
-                           ui::LatencyInfo(), HandledEventCallback());
+  widget->HandleInputEvent(
+      blink::WebCoalescedInputEvent(mouse_event, ui::LatencyInfo()),
+      HandledEventCallback());
+  mouse_event.SetType(WebInputEvent::Type::kMouseUp);
+  widget->HandleInputEvent(
+      blink::WebCoalescedInputEvent(mouse_event, ui::LatencyInfo()),
+      HandledEventCallback());
 }
 
 void RenderViewTest::SimulateRectTap(const gfx::Rect& rect) {
   WebGestureEvent gesture_event(
-      WebInputEvent::kGestureTap, WebInputEvent::kNoModifiers,
+      WebInputEvent::Type::kGestureTap, WebInputEvent::kNoModifiers,
       ui::EventTimeForNow(), blink::WebGestureDevice::kTouchscreen);
   gesture_event.SetPositionInWidget(gfx::PointF(rect.CenterPoint()));
   gesture_event.data.tap.tap_count = 1;
@@ -678,8 +690,9 @@ void RenderViewTest::SimulateRectTap(const gfx::Rect& rect) {
   gesture_event.data.tap.height = rect.height();
   RenderViewImpl* view = static_cast<RenderViewImpl*>(view_);
   RenderWidget* widget = view->GetMainRenderFrame()->GetLocalRootRenderWidget();
-  widget->HandleInputEvent(blink::WebCoalescedInputEvent(gesture_event),
-                           ui::LatencyInfo(), HandledEventCallback());
+  widget->HandleInputEvent(
+      blink::WebCoalescedInputEvent(gesture_event, ui::LatencyInfo()),
+      HandledEventCallback());
   widget->FocusChangeComplete();
 }
 
@@ -735,16 +748,16 @@ void RenderViewTest::SimulateUserTypingASCIICharacter(char ascii_character,
     modifiers = blink::WebKeyboardEvent::kShiftKey;
   }
 
-  blink::WebKeyboardEvent event(blink::WebKeyboardEvent::kRawKeyDown, modifiers,
-                                ui::EventTimeForNow());
+  blink::WebKeyboardEvent event(blink::WebKeyboardEvent::Type::kRawKeyDown,
+                                modifiers, ui::EventTimeForNow());
   event.text[0] = ascii_character;
   ASSERT_TRUE(GetWindowsKeyCode(ascii_character, &event.windows_key_code));
   SendWebKeyboardEvent(event);
 
-  event.SetType(blink::WebKeyboardEvent::kChar);
+  event.SetType(blink::WebKeyboardEvent::Type::kChar);
   SendWebKeyboardEvent(event);
 
-  event.SetType(blink::WebKeyboardEvent::kKeyUp);
+  event.SetType(blink::WebKeyboardEvent::Type::kKeyUp);
   SendWebKeyboardEvent(event);
 
   if (flush_message_loop) {

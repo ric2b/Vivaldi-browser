@@ -6,8 +6,11 @@ package org.chromium.components.signin;
 
 import android.accounts.Account;
 
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
 
@@ -22,6 +25,8 @@ public class AccountUtils {
     @VisibleForTesting
     public static final String GOOGLE_ACCOUNT_TYPE = "com.google";
 
+    private AccountUtils() {}
+
     /**
      * Creates an Account object for the given name.
      */
@@ -30,9 +35,35 @@ public class AccountUtils {
     }
 
     /**
+     * Converts a list of the accounts to a list of account names.
+     */
+    public static List<String> toAccountNames(final List<Account> accounts) {
+        List<String> accountNames = new ArrayList<>();
+        for (Account account : accounts) {
+            accountNames.add(account.name);
+        }
+        return accountNames;
+    }
+
+    /**
+     * Finds the first account of the account list whose canonical name equal the given
+     * accountName's canonical name; null if account does not exist.
+     */
+    public static @Nullable Account findAccountByName(
+            final List<Account> accounts, String accountName) {
+        String canonicalName = AccountUtils.canonicalizeName(accountName);
+        for (Account account : accounts) {
+            if (AccountUtils.canonicalizeName(account.name).equals(canonicalName)) {
+                return account;
+            }
+        }
+        return null;
+    }
+
+    /**
      * Canonicalizes the account name.
      */
-    static String canonicalizeName(String name) {
+    private static String canonicalizeName(String name) {
         String[] parts = AT_SYMBOL.split(name);
         if (parts.length != 2) return name;
 

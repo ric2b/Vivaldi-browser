@@ -9,6 +9,7 @@
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/css/css_font_selector.h"
+#include "third_party/blink/renderer/core/css/css_value_id_mappings.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/dom/element_traversal.h"
 #include "third_party/blink/renderer/core/dom/events/scoped_event_queue.h"
@@ -46,18 +47,7 @@ const char* FontStyleToString(FontSelectionValue slope) {
 }
 
 const char* TextTransformToString(ETextTransform transform) {
-  switch (transform) {
-    case ETextTransform::kCapitalize:
-      return "capitalize";
-    case ETextTransform::kUppercase:
-      return "uppercase";
-    case ETextTransform::kLowercase:
-      return "lowercase";
-    case ETextTransform::kNone:
-      return "none";
-  }
-  NOTREACHED();
-  return "";
+  return getValueName(PlatformEnumToCSSValueID(transform));
 }
 
 }  // anonymous namespace
@@ -78,7 +68,7 @@ class PopupMenuCSSFontSelector : public CSSFontSelector,
   void Trace(Visitor*) override;
 
  private:
-  void FontsNeedUpdate(FontSelector*) override;
+  void FontsNeedUpdate(FontSelector*, FontInvalidationReason) override;
 
   Member<CSSFontSelector> owner_font_selector_;
 };
@@ -98,8 +88,9 @@ scoped_refptr<FontData> PopupMenuCSSFontSelector::GetFontData(
   return owner_font_selector_->GetFontData(description, name);
 }
 
-void PopupMenuCSSFontSelector::FontsNeedUpdate(FontSelector* font_selector) {
-  DispatchInvalidationCallbacks();
+void PopupMenuCSSFontSelector::FontsNeedUpdate(FontSelector* font_selector,
+                                               FontInvalidationReason reason) {
+  DispatchInvalidationCallbacks(reason);
 }
 
 void PopupMenuCSSFontSelector::Trace(Visitor* visitor) {
@@ -227,7 +218,7 @@ void InternalPopupMenu::WriteDocument(SharedBuffer* data) {
   // When writing the document, we ensure the ComputedStyle of the select
   // element's items (see AddElementStyle). This requires a style-clean tree.
   // See Element::EnsureComputedStyle for further explanation.
-  owner_element.GetDocument().UpdateStyleAndLayoutTree();
+  DCHECK(!owner_element.GetDocument().NeedsLayoutTreeUpdate());
   IntRect anchor_rect_in_screen = chrome_client_->ViewportToScreen(
       owner_element.VisibleBoundsInVisualViewport(),
       owner_element.GetDocument().View());
@@ -508,20 +499,12 @@ void InternalPopupMenu::Hide() {
 }
 
 void InternalPopupMenu::UpdateFromElement(UpdateReason) {
-  if (needs_update_)
-    return;
   needs_update_ = true;
-  OwnerElement()
-      .GetDocument()
-      .GetTaskRunner(TaskType::kUserInteraction)
-      ->PostTask(FROM_HERE,
-                 WTF::Bind(&InternalPopupMenu::Update, WrapPersistent(this)));
 }
 
-void InternalPopupMenu::Update() {
-  if (!popup_ || !owner_element_)
+void InternalPopupMenu::Update(bool force_update) {
+  if (!popup_ || !owner_element_ || (!needs_update_ && !force_update))
     return;
-  OwnerElement().GetDocument().UpdateStyleAndLayoutTree();
   // disconnectClient() might have been called.
   if (!owner_element_)
     return;

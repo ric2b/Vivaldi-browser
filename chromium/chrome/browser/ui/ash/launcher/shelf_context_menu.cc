@@ -10,6 +10,7 @@
 #include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/tablet_mode.h"
 #include "base/metrics/user_metrics.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
@@ -29,6 +30,7 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/vector_icons/vector_icons.h"
+#include "ui/base/models/image_model.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/vector_icons.h"
@@ -238,10 +240,8 @@ const gfx::VectorIcon& ShelfContextMenu::GetCommandIdVectorIcon(
       NOTREACHED() << "NOTIFICATION_CONTAINER does not have an icon, and it is "
                       "added to the model by NotificationMenuController.";
       return gfx::kNoneIcon;
-    case ash::STOP_APP:
-      if (string_id == IDS_CROSTINI_SHUT_DOWN_LINUX_MENU_ITEM)
-        return views::kLinuxShutdownIcon;
-      return gfx::kNoneIcon;
+    case ash::SHUTDOWN_GUEST_OS:
+      return kShutdownGuestOsIcon;
     case ash::CROSTINI_USE_HIGH_DENSITY:
       return views::kLinuxHighDensityIcon;
     case ash::CROSTINI_USE_LOW_DENSITY:
@@ -306,7 +306,8 @@ void ShelfContextMenu::AddContextMenuOption(ui::SimpleMenuModel* menu_model,
 
   const gfx::VectorIcon& icon = GetCommandIdVectorIcon(type, string_id);
   if (!icon.is_empty()) {
-    menu_model->AddItemWithStringIdAndIcon(type, string_id, icon);
+    menu_model->AddItemWithStringIdAndIcon(
+        type, string_id, ui::ImageModel::FromVectorIcon(icon));
     return;
   }
   // If the MenuType is a check item.

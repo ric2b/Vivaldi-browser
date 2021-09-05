@@ -27,9 +27,9 @@ class NGPaintFragment;
 struct MinMaxSizes;
 struct PhysicalSize;
 
-// Input to the min/max inline size calculation algorithm for child nodes. Child
-// nodes within the same formatting context need to know which floats are beside
-// them.
+// The input to the min/max inline size calculation algorithm for child nodes.
+// Child nodes within the same formatting context need to know which floats are
+// beside them.
 struct MinMaxSizesInput {
   // The min-max size calculation (un-intuitively) requires a percentage
   // resolution size!
@@ -46,6 +46,14 @@ struct MinMaxSizesInput {
   LayoutUnit float_left_inline_size;
   LayoutUnit float_right_inline_size;
   LayoutUnit percentage_resolution_block_size;
+};
+
+// The output of the min/max inline size calculation algorithm. Contains the
+// min/max sizes, and if this calculation will change if the
+// |MinMaxSizesInput::percentage_resolution_block_size| value changes.
+struct MinMaxSizesResult {
+  MinMaxSizes sizes;
+  bool depends_on_percentage_block_size = false;
 };
 
 // Represents the input to a layout algorithm for a given node. The layout
@@ -111,6 +119,8 @@ class CORE_EXPORT NGLayoutInputNode {
   bool IsFieldsetContainer() const {
     return IsBlock() && box_->IsLayoutNGFieldset();
   }
+  bool IsRubyRun() const { return IsBlock() && box_->IsRubyRun(); }
+  bool IsRubyText() const { return IsBlock() && box_->IsRubyText(); }
 
   // Return true if this is the legend child of a fieldset that gets special
   // treatment (i.e. placed over the block-start border).
@@ -155,10 +165,10 @@ class CORE_EXPORT NGLayoutInputNode {
     return false;
   }
 
-  // Returns border box.
-  MinMaxSizes ComputeMinMaxSizes(WritingMode,
-                                 const MinMaxSizesInput&,
-                                 const NGConstraintSpace* = nullptr);
+  // Returns the border-box min/max content sizes for the node.
+  MinMaxSizesResult ComputeMinMaxSizes(WritingMode,
+                                       const MinMaxSizesInput&,
+                                       const NGConstraintSpace* = nullptr);
 
   // Returns intrinsic sizing information for replaced elements.
   // ComputeReplacedSize can use it to compute actual replaced size.
@@ -181,6 +191,14 @@ class CORE_EXPORT NGLayoutInputNode {
 
   bool ShouldApplySizeContainment() const {
     return box_->ShouldApplySizeContainment();
+  }
+
+  // CSS defines certain cases to synthesize inline block baselines from box.
+  // See comments in UseLogicalBottomMarginEdgeForInlineBlockBaseline().
+  bool UseBlockEndMarginEdgeForInlineBlockBaseline() const {
+    if (auto* layout_box = DynamicTo<LayoutBlock>(GetLayoutBox()))
+      return layout_box->UseLogicalBottomMarginEdgeForInlineBlockBaseline();
+    return false;
   }
 
   // CSS intrinsic sizing getters.

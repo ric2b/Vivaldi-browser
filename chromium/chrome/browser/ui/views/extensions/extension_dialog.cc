@@ -37,8 +37,8 @@
 using content::BrowserContext;
 using content::WebContents;
 
-ExtensionDialog::InitParams::InitParams(int width, int height)
-    : width(width), height(height) {}
+ExtensionDialog::InitParams::InitParams(gfx::Size size)
+    : size(std::move(size)) {}
 ExtensionDialog::InitParams::InitParams(const InitParams& other) = default;
 ExtensionDialog::InitParams::~InitParams() = default;
 
@@ -56,9 +56,8 @@ ExtensionDialog* ExtensionDialog::Show(const GURL& url,
   // Preferred size must be set before views::Widget::CreateWindowWithParent()
   // is called because CreateWindowWithParent() references CanResize().
   ExtensionViewViews* view = GetExtensionView(host.get());
-  view->SetPreferredSize(gfx::Size(init_params.width, init_params.height));
-  view->set_minimum_size(
-      gfx::Size(init_params.min_width, init_params.min_height));
+  view->SetPreferredSize(init_params.size);
+  view->set_minimum_size(init_params.min_size);
   host->SetAssociatedWebContents(web_contents);
 
   DCHECK(parent_window);
@@ -182,8 +181,8 @@ ExtensionDialog::ExtensionDialog(
     std::unique_ptr<extensions::ExtensionViewHost> host,
     ExtensionDialogObserver* observer)
     : host_(std::move(host)), observer_(observer) {
-  DialogDelegate::SetButtons(ui::DIALOG_BUTTON_NONE);
-  DialogDelegate::set_use_custom_frame(false);
+  SetButtons(ui::DIALOG_BUTTON_NONE);
+  set_use_custom_frame(false);
 
   AddRef();  // Balanced in DeleteDelegate();
 
@@ -214,16 +213,18 @@ void ExtensionDialog::InitWindow(gfx::NativeWindow parent,
   gfx::Rect bounds = parent ? views::Widget::GetWidgetForNativeWindow(parent)
                                   ->GetWindowBoundsInScreen()
                             : screen_rect;
-  bounds.ClampToCenteredSize({init_params.width, init_params.height});
+  bounds.ClampToCenteredSize(init_params.size);
 
-  // Make sure bounds is larger than {min_width, min_height}.
-  if (bounds.width() < init_params.min_width) {
-    bounds.set_x(bounds.x() + (bounds.width() - init_params.min_width) / 2);
-    bounds.set_width(init_params.min_width);
+  // Make sure bounds is larger than {min_size}.
+  if (bounds.width() < init_params.min_size.width()) {
+    bounds.set_x(bounds.x() +
+                 (bounds.width() - init_params.min_size.width()) / 2);
+    bounds.set_width(init_params.min_size.width());
   }
-  if (bounds.height() < init_params.min_height) {
-    bounds.set_y(bounds.y() + (bounds.height() - init_params.min_height) / 2);
-    bounds.set_height(init_params.min_height);
+  if (bounds.height() < init_params.min_size.height()) {
+    bounds.set_y(bounds.y() +
+                 (bounds.height() - init_params.min_size.height()) / 2);
+    bounds.set_height(init_params.min_size.height());
   }
 
   // Make sure bounds is still on screen.
@@ -231,11 +232,16 @@ void ExtensionDialog::InitWindow(gfx::NativeWindow parent,
   window->SetBounds(bounds);
 
 #if defined(OS_CHROMEOS)
+  aura::Window* native_view = window->GetNativeWindow();
   if (init_params.title_color) {
-    aura::Window* native_view = window->GetNativeWindow();
     // Frame active color changes the title color when dialog is active.
     native_view->SetProperty(ash::kFrameActiveColorKey,
                              init_params.title_color.value());
+  }
+  if (init_params.title_inactive_color) {
+    // Frame inactive color changes the title color when dialog is inactive.
+    native_view->SetProperty(ash::kFrameInactiveColorKey,
+                             init_params.title_inactive_color.value());
   }
 #endif
 

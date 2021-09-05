@@ -75,9 +75,11 @@ VulkanSurface::~VulkanSurface() {
 }
 
 VulkanSurface::VulkanSurface(VkInstance vk_instance,
+                             gfx::AcceleratedWidget accelerated_widget,
                              VkSurfaceKHR surface,
                              bool enforce_protected_memory)
     : vk_instance_(vk_instance),
+      accelerated_widget_(accelerated_widget),
       surface_(surface),
       enforce_protected_memory_(enforce_protected_memory) {
   DCHECK_NE(static_cast<VkSurfaceKHR>(VK_NULL_HANDLE), surface_);
@@ -201,8 +203,8 @@ bool VulkanSurface::CreateSwapChain(const gfx::Size& size,
   VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
       device_queue_->GetVulkanPhysicalDevice(), surface_, &surface_caps);
   if (VK_SUCCESS != result) {
-    DLOG(ERROR) << "vkGetPhysicalDeviceSurfaceCapabilitiesKHR() failed: "
-                << result;
+    LOG(FATAL) << "vkGetPhysicalDeviceSurfaceCapabilitiesKHR() failed: "
+               << result;
     return false;
   }
 
@@ -248,8 +250,10 @@ bool VulkanSurface::CreateSwapChain(const gfx::Size& size,
   DCHECK_GT(static_cast<uint32_t>(image_size.width()), 0u);
   DCHECK_GT(static_cast<uint32_t>(image_size.height()), 0u);
 
-  if (image_size_ == image_size && transform_ == transform)
+  if (image_size_ == image_size && transform_ == transform &&
+      swap_chain_->state() == VK_SUCCESS) {
     return true;
+  }
 
   image_size_ = image_size;
   transform_ = transform;

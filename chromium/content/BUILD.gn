@@ -82,7 +82,7 @@ if (!is_nacl_nonsfi) {
 if (is_component_build) {
   component("content") {
     public_deps =
-        content_shared_components + [ "//content/public/app:both_sources" ]
+        content_shared_components + [ "//content/public/app:app_sources" ]
   }
 } else if (is_nacl_nonsfi) {
   source_set("content") {
@@ -138,7 +138,10 @@ grit("dev_ui_content_resources") {
     "-E",
     "root_gen_dir=" + rebase_path(root_gen_dir, root_build_dir),
   ]
-  deps = [ "//content/browser/process_internals:mojo_bindings_js" ]
+  deps = [
+    "//content/browser/conversions:mojo_bindings_js",
+    "//content/browser/process_internals:mojo_bindings_js",
+  ]
 }
 
 # This target exists to "hold" the content_export header so we can do proper

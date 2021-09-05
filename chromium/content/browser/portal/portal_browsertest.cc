@@ -3,13 +3,16 @@
 // found in the LICENSE file.
 
 #include <memory>
+#include <tuple>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/memory/ptr_util.h"
+#include "base/strings/stringprintf.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/test_timeouts.h"
 #include "build/build_config.h"
 #include "components/viz/host/host_frame_sink_manager.h"
 #include "content/browser/compositor/surface_utils.h"
@@ -27,7 +30,9 @@
 #include "content/public/browser/site_isolation_policy.h"
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/page_type.h"
 #include "content/public/test/accessibility_notification_waiter.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -40,6 +45,7 @@
 #include "content/test/portal/portal_created_observer.h"
 #include "content/test/portal/portal_interceptor_for_testing.h"
 #include "content/test/test_render_frame_host_factory.h"
+#include "net/base/net_errors.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -77,7 +83,8 @@ class PortalBrowserTest : public ContentBrowserTest {
 
   Portal* CreatePortalToUrl(WebContentsImpl* host_contents,
                             GURL portal_url,
-                            int number_of_navigations = 1) {
+                            int number_of_navigations = 1,
+                            bool expected_to_succeed = true) {
     EXPECT_GE(number_of_navigations, 1);
     RenderFrameHostImpl* main_frame = host_contents->GetMainFrame();
 
@@ -103,7 +110,7 @@ class PortalBrowserTest : public ContentBrowserTest {
     EXPECT_TRUE(portal_contents);
 
     navigation_observer.WaitForNavigationFinished();
-    EXPECT_TRUE(WaitForLoadStop(portal_contents));
+    EXPECT_EQ(expected_to_succeed, WaitForLoadStop(portal_contents));
 
     return portal;
   }
@@ -400,10 +407,10 @@ IN_PROC_BROWSER_TEST_F(PortalHitTestBrowserTest, DispatchInputEvent) {
   gfx::Point root_location =
       portal_view->TransformPointToRootCoordSpace(gfx::Point(5, 5));
   InputEventAckWaiter waiter(main_frame->GetRenderWidgetHost(),
-                             blink::WebInputEvent::kMouseDown);
-  SimulateRoutedMouseEvent(web_contents_impl, blink::WebInputEvent::kMouseDown,
-                           blink::WebPointerProperties::Button::kLeft,
-                           root_location);
+                             blink::WebInputEvent::Type::kMouseDown);
+  SimulateRoutedMouseEvent(
+      web_contents_impl, blink::WebInputEvent::Type::kMouseDown,
+      blink::WebPointerProperties::Button::kLeft, root_location);
   waiter.Wait();
 
   // Check that the click event was only received by the main frame.
@@ -480,10 +487,10 @@ IN_PROC_BROWSER_TEST_F(PortalHitTestBrowserTest, NoInputToOOPIFInPortal) {
   gfx::Point root_location =
       oopif_view->TransformPointToRootCoordSpace(gfx::Point(5, 5));
   InputEventAckWaiter waiter(main_frame->GetRenderWidgetHost(),
-                             blink::WebInputEvent::kMouseDown);
-  SimulateRoutedMouseEvent(web_contents_impl, blink::WebInputEvent::kMouseDown,
-                           blink::WebPointerProperties::Button::kLeft,
-                           root_location);
+                             blink::WebInputEvent::Type::kMouseDown);
+  SimulateRoutedMouseEvent(
+      web_contents_impl, blink::WebInputEvent::Type::kMouseDown,
+      blink::WebPointerProperties::Button::kLeft, root_location);
   waiter.Wait();
 
   // Check that the click event was only received by the main frame.
@@ -595,9 +602,9 @@ IN_PROC_BROWSER_TEST_F(PortalHitTestBrowserTest,
   gfx::Point root_location =
       oopif_view->TransformPointToRootCoordSpace(gfx::Point(10, 10));
   InputEventAckWaiter waiter(oopif->GetRenderWidgetHost(),
-                             blink::WebInputEvent::kMouseDown);
+                             blink::WebInputEvent::Type::kMouseDown);
   SimulateRoutedMouseEvent(
-      shell()->web_contents(), blink::WebInputEvent::kMouseDown,
+      shell()->web_contents(), blink::WebInputEvent::Type::kMouseDown,
       blink::WebPointerProperties::Button::kLeft, root_location);
   waiter.Wait();
 
@@ -1155,30 +1162,92 @@ IN_PROC_BROWSER_TEST_F(PortalBrowserTest, RemovePortalWhenUnloading) {
   EXPECT_TRUE(ExecJs(main_frame, "div.remove();"));
 }
 
+class PortalOrphanedNavigationBrowserTest
+    : public PortalBrowserTest,
+      public testing::WithParamInterface<std::tuple<bool, bool>> {
+ public:
+  PortalOrphanedNavigationBrowserTest()
+      : cross_site_(std::get<0>(GetParam())),
+        commit_after_adoption_(std::get<1>(GetParam())) {}
+
+  // Provides meaningful param names instead of /0, /1, ...
+  static std::string DescribeParams(
+      const testing::TestParamInfo<ParamType>& info) {
+    bool cross_site;
+    bool commit_after_adoption;
+    std::tie(cross_site, commit_after_adoption) = info.param;
+    return base::StringPrintf("%sSite_Commit%sAdoption",
+                              cross_site ? "Cross" : "Same",
+                              commit_after_adoption ? "After" : "Before");
+  }
+
+ protected:
+  bool cross_site() const { return cross_site_; }
+  bool commit_after_adoption() const { return commit_after_adoption_; }
+
+ private:
+  // Whether the predecessor navigates cross site while orphaned.
+  const bool cross_site_;
+  // Whether the predecessor's navigation commits before or after adoption.
+  const bool commit_after_adoption_;
+};
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         PortalOrphanedNavigationBrowserTest,
+                         testing::Combine(testing::Bool(), testing::Bool()),
+                         PortalOrphanedNavigationBrowserTest::DescribeParams);
+
 // Tests that a portal can navigate while orphaned.
-IN_PROC_BROWSER_TEST_F(PortalBrowserTest, OrphanedNavigation) {
-  EXPECT_TRUE(NavigateToURL(
-      shell(), embedded_test_server()->GetURL("portal.test", "/title1.html")));
+IN_PROC_BROWSER_TEST_P(PortalOrphanedNavigationBrowserTest,
+                       OrphanedNavigation) {
+  GURL main_url(embedded_test_server()->GetURL("portal.test", "/title1.html"));
+  ASSERT_TRUE(NavigateToURL(shell(), main_url));
   WebContentsImpl* web_contents_impl =
       static_cast<WebContentsImpl*>(shell()->web_contents());
-  RenderFrameHostImpl* main_frame = web_contents_impl->GetMainFrame();
 
-  GURL a_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
-  Portal* portal = CreatePortalToUrl(web_contents_impl, a_url);
-  WebContentsImpl* portal_contents = portal->GetPortalContents();
+  GURL portal_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  Portal* portal = CreatePortalToUrl(web_contents_impl, portal_url);
 
-  // Block the activate callback so that the predecessor portal stays orphaned.
-  EXPECT_TRUE(ExecJs(portal_contents->GetMainFrame(),
-                     "window.onportalactivate = e => { while(true) {} };"));
+  GURL predecessor_nav_url(embedded_test_server()->GetURL(
+      cross_site() ? "b.com" : "portal.test", "/title2.html"));
+
+  if (commit_after_adoption()) {
+    // Block the activate callback so that there is ample time to start the
+    // navigation while orphaned.
+    // TODO(mcnee): Ideally, we would have a test interceptor to precisely
+    // control when to proceed with adoption.
+    const int adoption_delay = TestTimeouts::tiny_timeout().InMilliseconds();
+    EXPECT_TRUE(
+        ExecJs(portal->GetPortalContents()->GetMainFrame(),
+               JsReplace("window.onportalactivate = e => {"
+                         "  let end = performance.now() + $1;"
+                         "  while (performance.now() < end);"
+                         "  document.body.appendChild(e.adoptPredecessor());"
+                         "};",
+                         adoption_delay)));
+  } else {
+    // Block the activate callback so that the predecessor portal stays
+    // orphaned.
+    EXPECT_TRUE(ExecJs(portal->GetPortalContents()->GetMainFrame(),
+                       "window.onportalactivate = e => { while(true) {} };"));
+  }
 
   // Activate the portal and navigate the predecessor.
   PortalActivatedObserver activated_observer(portal);
-  TestNavigationObserver main_frame_navigation_observer(web_contents_impl);
-  ExecuteScriptAsync(main_frame,
-                     "document.querySelector('portal').activate();"
-                     "window.location.reload()");
+  TestNavigationManager navigation_manager(web_contents_impl,
+                                           predecessor_nav_url);
+  ExecuteScriptAsync(web_contents_impl->GetMainFrame(),
+                     JsReplace("document.querySelector('portal').activate();"
+                               "window.location.href = $1;",
+                               predecessor_nav_url));
   activated_observer.WaitForActivate();
-  main_frame_navigation_observer.Wait();
+  if (commit_after_adoption()) {
+    ASSERT_TRUE(navigation_manager.WaitForRequestStart());
+    EXPECT_EQ(blink::mojom::PortalActivateResult::kPredecessorWasAdopted,
+              activated_observer.WaitForActivateResult());
+  }
+  navigation_manager.WaitForNavigationFinished();
+  EXPECT_TRUE(navigation_manager.was_successful());
 }
 
 // Tests that the browser doesn't crash if the renderer tries to create the
@@ -1355,11 +1424,14 @@ class RenderFrameHostFactoryForNavigationControlInterceptor
       FrameTree* frame_tree,
       FrameTreeNode* frame_tree_node,
       int32_t routing_id,
+      const base::UnguessableToken& frame_token,
       bool renderer_initiated_creation) override {
     return base::WrapUnique(
         new RenderFrameHostImplForNavigationControlInterceptor(
             site_instance, std::move(render_view_host), delegate, frame_tree,
-            frame_tree_node, routing_id, renderer_initiated_creation));
+            frame_tree_node, routing_id, frame_token,
+            renderer_initiated_creation,
+            RenderFrameHostImpl::LifecycleState::kActive));
   }
 };
 
@@ -1749,6 +1821,60 @@ IN_PROC_BROWSER_TEST_F(PortalBrowserTest, NavigationPrecedence) {
 
   pending_back_navigation.WaitForNavigationFinished();
   EXPECT_TRUE(pending_back_navigation.was_successful());
+}
+
+IN_PROC_BROWSER_TEST_F(PortalBrowserTest, RejectActivationOfErrorPages) {
+  net::EmbeddedTestServer bad_https_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  bad_https_server.AddDefaultHandlers(GetTestDataFilePath());
+  bad_https_server.SetSSLConfig(net::EmbeddedTestServer::CERT_EXPIRED);
+  ASSERT_TRUE(bad_https_server.Start());
+
+  GURL main_url(embedded_test_server()->GetURL("portal.test", "/title1.html"));
+  ASSERT_TRUE(NavigateToURL(shell(), main_url));
+  WebContentsImpl* web_contents_impl =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+  RenderFrameHostImpl* main_frame = web_contents_impl->GetMainFrame();
+
+  GURL bad_portal_url(bad_https_server.GetURL("a.com", "/title1.html"));
+  Portal* portal = CreatePortalToUrl(web_contents_impl, bad_portal_url,
+                                     /* number_of_navigations */ 1,
+                                     /* expected_to_succeed */ false);
+
+  PortalActivatedObserver activated_observer(portal);
+  EXPECT_EQ("reject", EvalJs(main_frame,
+                             "document.querySelector('portal').activate().then("
+                             "    () => 'resolve', () => 'reject');"));
+  EXPECT_EQ(blink::mojom::PortalActivateResult::kRejectedDueToErrorInPortal,
+            activated_observer.result());
+}
+
+IN_PROC_BROWSER_TEST_F(PortalBrowserTest,
+                       RejectActivationOfPostCommitErrorPages) {
+  GURL main_url(embedded_test_server()->GetURL("portal.test", "/title1.html"));
+  ASSERT_TRUE(NavigateToURL(shell(), main_url));
+  WebContentsImpl* web_contents_impl =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+  RenderFrameHostImpl* main_frame = web_contents_impl->GetMainFrame();
+
+  GURL portal_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  Portal* portal = CreatePortalToUrl(web_contents_impl, portal_url);
+  WebContentsImpl* portal_contents = portal->GetPortalContents();
+
+  std::string error_html = "Error page";
+  TestNavigationObserver error_observer(portal_contents);
+  portal_contents->GetController().LoadPostCommitErrorPage(
+      portal_contents->GetMainFrame(), portal_url, error_html,
+      net::ERR_BLOCKED_BY_CLIENT);
+  error_observer.Wait();
+  EXPECT_FALSE(error_observer.last_navigation_succeeded());
+  EXPECT_EQ(net::ERR_BLOCKED_BY_CLIENT, error_observer.last_net_error_code());
+
+  PortalActivatedObserver activated_observer(portal);
+  EXPECT_EQ("reject", EvalJs(main_frame,
+                             "document.querySelector('portal').activate().then("
+                             "    () => 'resolve', () => 'reject');"));
+  EXPECT_EQ(blink::mojom::PortalActivateResult::kRejectedDueToErrorInPortal,
+            activated_observer.result());
 }
 
 IN_PROC_BROWSER_TEST_F(PortalBrowserTest, CallCreateProxyAndAttachPortalTwice) {

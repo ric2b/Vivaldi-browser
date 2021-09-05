@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "base/cancelable_callback.h"
+#include "base/clang_profiling_buildflags.h"
 #include "base/macros.h"
 #include "base/memory/discardable_memory_allocator.h"
 #include "base/memory/memory_pressure_listener.h"
@@ -202,10 +203,7 @@ class CONTENT_EXPORT RenderThreadImpl
   bool IsGpuMemoryBufferCompositorResourcesEnabled() override;
   bool IsElasticOverscrollEnabled() override;
   bool IsUseZoomForDSFEnabled() override;
-  scoped_refptr<base::SingleThreadTaskRunner>
-  GetCompositorMainThreadTaskRunner() override;
-  scoped_refptr<base::SingleThreadTaskRunner>
-  GetCompositorImplThreadTaskRunner() override;
+  bool IsSingleThreaded() override;
   scoped_refptr<base::SingleThreadTaskRunner> GetCleanupTaskRunner() override;
   blink::scheduler::WebThreadScheduler* GetWebMainThreadScheduler() override;
   cc::TaskGraphRunner* GetTaskGraphRunner() override;
@@ -222,6 +220,8 @@ class CONTENT_EXPORT RenderThreadImpl
 #endif
 
   bool IsThreadedAnimationEnabled();
+  scoped_refptr<base::SingleThreadTaskRunner>
+  GetCompositorMainThreadTaskRunner();
 
   // viz::mojom::CompositingModeWatcher implementation.
   void CompositingModeFallbackToSoftware() override;
@@ -240,12 +240,6 @@ class CONTENT_EXPORT RenderThreadImpl
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager();
 
   blink::AssociatedInterfaceRegistry* GetAssociatedInterfaceRegistry();
-
-  // True if we are running web tests. This currently disables forwarding
-  // various status messages to the console, skips network error pages, and
-  // short circuits size update and focus events.
-  bool web_test_mode() const { return web_test_mode_; }
-  void enable_web_test_mode() { web_test_mode_ = true; }
 
   base::DiscardableMemoryAllocator* GetDiscardableMemoryAllocatorForTest()
       const {
@@ -477,6 +471,7 @@ class CONTENT_EXPORT RenderThreadImpl
       int32_t opener_routing_id,
       int32_t parent_routing_id,
       const FrameReplicationState& replicated_state,
+      const base::UnguessableToken& frame_token,
       const base::UnguessableToken& devtools_frame_token) override;
   void OnNetworkConnectionChanged(
       net::NetworkChangeNotifier::ConnectionType type,
@@ -501,7 +496,10 @@ class CONTENT_EXPORT RenderThreadImpl
   void SetSchedulerKeepActive(bool keep_active) override;
   void SetIsLockedToSite() override;
   void EnableV8LowMemoryMode() override;
-
+#if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
+  void WriteClangProfilingProfile(
+      WriteClangProfilingProfileCallback callback) override;
+#endif
   void OnMemoryPressure(
       base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level);
 
@@ -560,9 +558,6 @@ class CONTENT_EXPORT RenderThreadImpl
 
   blink::WebString user_agent_;
   blink::UserAgentMetadata user_agent_metadata_;
-
-  // Used to control web test specific behavior.
-  bool web_test_mode_ = false;
 
   // Sticky once true, indicates that compositing is done without Gpu, so
   // resources given to the compositor or to the viz service should be
@@ -638,30 +633,9 @@ class CONTENT_EXPORT RenderThreadImpl
   // Target rendering ColorSpace.
   gfx::ColorSpace rendering_color_space_;
 
-  class PendingFrameCreate : public base::RefCounted<PendingFrameCreate> {
-   public:
-    PendingFrameCreate(int routing_id,
-                       mojo::PendingReceiver<mojom::Frame> frame_receiver);
-
-    mojo::PendingReceiver<mojom::Frame> TakeFrameReceiver() {
-      return std::move(frame_receiver_);
-    }
-
-   private:
-    friend class base::RefCounted<PendingFrameCreate>;
-
-    ~PendingFrameCreate();
-
-    // Mojo error handler.
-    void OnConnectionError();
-
-    int routing_id_;
-    mojo::PendingReceiver<mojom::Frame> frame_receiver_;
-  };
-
-  using PendingFrameCreateMap =
-      std::map<int, scoped_refptr<PendingFrameCreate>>;
-  PendingFrameCreateMap pending_frame_creates_;
+  // Used when AddRoute() is called and the RenderFrameImpl hasn't been created
+  // yet.
+  std::map<int, mojo::PendingReceiver<mojom::Frame>> pending_frames_;
 
   mojo::AssociatedRemote<mojom::RendererHost> renderer_host_;
 

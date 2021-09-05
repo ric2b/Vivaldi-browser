@@ -4,7 +4,7 @@
 
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_coordinator.h"
 
-#include "base/logging.h"
+#include "base/check.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
@@ -226,19 +226,23 @@ PopupMenuCommandType CommandTypeFromPopupType(PopupMenuType type) {
 
   self.mediator = [[PopupMenuMediator alloc]
                    initWithType:type
-                    isIncognito:self.browserState->IsOffTheRecord()
+                    isIncognito:self.browser->GetBrowserState()
+                                    ->IsOffTheRecord()
                readingListModel:ReadingListModelFactory::GetForBrowserState(
-                                    self.browserState)
+                                    self.browser->GetBrowserState())
       triggerNewIncognitoTabTip:triggerNewIncognitoTabTip];
   self.mediator.engagementTracker =
-      feature_engagement::TrackerFactory::GetForBrowserState(self.browserState);
+      feature_engagement::TrackerFactory::GetForBrowserState(
+          self.browser->GetBrowserState());
   self.mediator.webStateList = self.browser->GetWebStateList();
   self.mediator.dispatcher =
       static_cast<id<BrowserCommands>>(self.browser->GetCommandDispatcher());
-  self.mediator.bookmarkModel =
-      ios::BookmarkModelFactory::GetForBrowserState(self.browserState);
+  self.mediator.bookmarkModel = ios::BookmarkModelFactory::GetForBrowserState(
+      self.browser->GetBrowserState());
+  self.mediator.prefService = self.browser->GetBrowserState()->GetPrefs();
   self.mediator.templateURLService =
-      ios::TemplateURLServiceFactory::GetForBrowserState(self.browserState);
+      ios::TemplateURLServiceFactory::GetForBrowserState(
+          self.browser->GetBrowserState());
   self.mediator.popupMenu = tableViewController;
   self.mediator.webContentAreaOverlayPresenter = OverlayPresenter::FromBrowser(
       self.browser, OverlayModality::kWebContentArea);

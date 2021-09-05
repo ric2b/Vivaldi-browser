@@ -491,9 +491,6 @@ void PredictionManager::FetchModelsAndHostModelFeatures() {
   if (!IsUserPermittedToFetchFromRemoteOptimizationGuide(profile_))
     return;
 
-  // TODO(crbug/1027596): Update the prediction model fetcher to run the
-  // callback even in failure so that the fetch can be rescheduled on failure
-  // rather than preemptively.
   ScheduleModelsAndHostModelFeaturesFetch();
 
   // Models and host model features should not be fetched if there are no
@@ -579,9 +576,6 @@ void PredictionManager::OnModelsAndHostFeaturesFetched(
     get_models_response_data_to_store_ = std::move(*get_models_response_data);
   }
 
-  // TODO(crbug/1001194): After the models and host model features are stored
-  // asynchronously, the timer will be set based on the update time provided
-  // by the store.
   fetch_timer_.Stop();
   fetch_timer_.Start(
       FROM_HERE, kUpdateModelsAndFeaturesDelay, this,
@@ -628,6 +622,11 @@ void PredictionManager::UpdatePredictionModels(
     if (ProcessAndStorePredictionModel(model)) {
       prediction_model_update_data->CopyPredictionModelIntoUpdateData(model);
       models_to_store = true;
+      base::UmaHistogramSparse(
+          "OptimizationGuide.PredictionModelUpdateVersion." +
+              GetStringNameForOptimizationTarget(
+                  model.model_info().optimization_target()),
+          model.model_info().version());
     }
   }
   if (models_to_store) {
@@ -659,9 +658,6 @@ void PredictionManager::OnHostModelFeaturesStored() {
   // Purge any expired host model features from the store.
   model_and_features_store_->PurgeExpiredHostModelFeatures();
 
-  // TODO(crbug/1027596): Stopping the timer can be removed once the fetch
-  // callback refactor is done. Otherwise, at the start of a fetch, a timer is
-  // running to handle the cases that a fetch fails but the callback is not run.
   fetch_timer_.Stop();
   ScheduleModelsAndHostModelFeaturesFetch();
 }
@@ -739,8 +735,15 @@ void PredictionManager::LoadPredictionModels(
 void PredictionManager::OnLoadPredictionModel(
     std::unique_ptr<proto::PredictionModel> model) {
   SEQUENCE_CHECKER(sequence_checker_);
-  if (model)
-    ProcessAndStorePredictionModel(*model);
+  if (!model)
+    return;
+
+  if (ProcessAndStorePredictionModel(*model)) {
+    base::UmaHistogramSparse("OptimizationGuide.PredictionModelLoadedVersion." +
+                                 GetStringNameForOptimizationTarget(
+                                     model->model_info().optimization_target()),
+                             model->model_info().version());
+  }
 }
 
 bool PredictionManager::ProcessAndStorePredictionModel(
@@ -820,9 +823,6 @@ void PredictionManager::MaybeScheduleModelAndHostModelFeaturesFetch() {
   if (optimization_guide::switches::
           ShouldOverrideFetchModelsAndFeaturesTimer()) {
     SetLastModelAndFeaturesFetchAttemptTime(clock_->Now());
-    // TODO(crbug/1030358): Remove delay during tests after adding network
-    // observer to the prediction model fetcher or adding the check for offline
-    // here.
     fetch_timer_.Start(FROM_HERE, base::TimeDelta::FromSeconds(1), this,
                        &PredictionManager::FetchModelsAndHostModelFeatures);
   } else {

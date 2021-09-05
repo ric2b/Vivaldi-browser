@@ -639,9 +639,7 @@ void KeyboardUIController::HideAnimationFinished() {
       // The position of the container window will be adjusted shortly in
       // |PopulateKeyboardContent| before showing animation, so we can set the
       // passed bounds directly.
-      if (queued_container_type_->target_bounds())
-        SetKeyboardWindowBounds(
-            queued_container_type_->target_bounds().value());
+      SetKeyboardWindowBounds(queued_container_type_->target_bounds());
       ShowKeyboard(false /* lock */);
     }
 
@@ -1020,6 +1018,25 @@ bool KeyboardUIController::SetAreaToRemainOnScreen(
   return true;
 }
 
+bool KeyboardUIController::SetKeyboardWindowBoundsInScreen(
+    const gfx::Rect& bounds_in_screen) {
+  const display::Display& current_display =
+      display_util_.GetNearestDisplayToWindow(GetRootWindow());
+
+  gfx::Rect display_bounds = current_display.bounds();
+  if (bounds_in_screen.width() > display_bounds.width() ||
+      bounds_in_screen.height() > display_bounds.height()) {
+    return false;
+  }
+
+  gfx::Rect constrained_bounds_in_screen =
+      AdjustSetBoundsRequest(current_display.bounds(), bounds_in_screen);
+
+  GetKeyboardWindow()->SetBoundsInScreen(constrained_bounds_in_screen,
+                                         current_display);
+  return true;
+}
+
 gfx::Rect KeyboardUIController::AdjustSetBoundsRequest(
     const gfx::Rect& display_bounds,
     const gfx::Rect& requested_bounds_in_screen) const {
@@ -1043,7 +1060,7 @@ bool KeyboardUIController::HandleGestureEvent(const ui::GestureEvent& event) {
 
 void KeyboardUIController::SetContainerType(
     ContainerType type,
-    const base::Optional<gfx::Rect>& target_bounds_in_root,
+    const gfx::Rect& target_bounds_in_root,
     base::OnceCallback<void(bool)> callback) {
   if (container_behavior_->GetType() == type) {
     std::move(callback).Run(false);
@@ -1060,8 +1077,7 @@ void KeyboardUIController::SetContainerType(
     // Keyboard is hidden. Switching the container type immediately and invoking
     // the passed callback now.
     SetContainerBehaviorInternal(type);
-    if (target_bounds_in_root)
-      SetKeyboardWindowBounds(*target_bounds_in_root);
+    SetKeyboardWindowBounds(target_bounds_in_root);
     DCHECK_EQ(GetActiveContainerType(), type);
     std::move(callback).Run(true /* change_successful */);
   }

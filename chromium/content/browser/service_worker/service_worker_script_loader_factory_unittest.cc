@@ -60,8 +60,8 @@ class ServiceWorkerScriptLoaderFactoryTest : public testing::Test {
     mojo::PendingRemote<network::mojom::URLLoader> loader;
     network::ResourceRequest resource_request;
     resource_request.url = script_url_;
-    resource_request.resource_type =
-        static_cast<int>(blink::mojom::ResourceType::kServiceWorker);
+    resource_request.destination =
+        network::mojom::RequestDestination::kServiceWorker;
     factory_->CreateLoaderAndStart(
         loader.InitWithNewPipeAndPassReceiver(), 0 /* routing_id */,
         0 /* request_id */, network::mojom::kURLLoadOptionNone,
@@ -187,7 +187,7 @@ TEST_F(ServiceWorkerScriptLoaderFactoryCopyResumeTest,
        CreateResumeTypeScriptLoader) {
   const std::string kNewHeaders =
       "HTTP/1.0 200 OK\0Content-Type: text/javascript\0Content-Length: 0\0\0";
-  const std::string kNewData = "";
+  const std::string kNewData;
 
   ServiceWorkerUpdateCheckTestUtils::CreateAndSetComparedScriptInfoForVersion(
       script_url_, 0, kNewHeaders, kNewData, kOldResourceId, kNewResourceId,

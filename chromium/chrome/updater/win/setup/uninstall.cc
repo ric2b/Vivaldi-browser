@@ -32,8 +32,11 @@
 namespace updater {
 
 void DeleteComServer(HKEY root) {
-  InstallUtil::DeleteRegistryKey(root, GetComServerClsidRegistryPath(),
-                                 WorkItem::kWow64Default);
+  for (const auto& clsid :
+       {__uuidof(UpdaterClass), __uuidof(GoogleUpdate3WebUserClass)}) {
+    InstallUtil::DeleteRegistryKey(root, GetComServerClsidRegistryPath(clsid),
+                                   WorkItem::kWow64Default);
+  }
 }
 
 void DeleteComService() {
@@ -45,13 +48,17 @@ void DeleteComService() {
   InstallUtil::DeleteRegistryKey(HKEY_LOCAL_MACHINE,
                                  GetComServiceAppidRegistryPath(),
                                  WorkItem::kWow64Default);
-  if (!installer::InstallServiceWorkItem::DeleteService(kWindowsServiceName))
+  if (!installer::InstallServiceWorkItem::DeleteService(
+          kWindowsServiceName, base::ASCIIToUTF16(UPDATER_KEY),
+          __uuidof(UpdaterServiceClass), GUID_NULL))
     LOG(WARNING) << "DeleteService failed.";
 }
 
 void DeleteComInterfaces(HKEY root) {
-  for (const auto iid : {__uuidof(IUpdater), __uuidof(IUpdaterObserver),
-                         __uuidof(ICompleteStatus)}) {
+  for (const auto& iid :
+       {__uuidof(IUpdater), __uuidof(IUpdaterObserver),
+        __uuidof(ICompleteStatus), __uuidof(IGoogleUpdate3Web),
+        __uuidof(IAppBundleWeb), __uuidof(IAppWeb), __uuidof(ICurrentState)}) {
     for (const auto& reg_path :
          {GetComIidRegistryPath(iid), GetComTypeLibRegistryPath(iid)}) {
       InstallUtil::DeleteRegistryKey(root, reg_path, WorkItem::kWow64Default);

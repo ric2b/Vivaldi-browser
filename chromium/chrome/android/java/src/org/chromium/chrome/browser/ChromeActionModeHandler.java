@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser;
 
 import android.content.pm.ResolveInfo;
-import android.text.TextUtils;
 import android.view.ActionMode;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -17,28 +16,22 @@ import org.chromium.base.CollectionUtil;
 import org.chromium.base.Consumer;
 import org.chromium.base.PackageManagerUtils;
 import org.chromium.base.metrics.RecordUserAction;
-import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.chrome.browser.locale.LocaleManager;
-import org.chromium.chrome.browser.omnibox.geo.GeolocationHeader;
-import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.chrome.browser.tab.TabWebContentsObserver;
-import org.chromium.chrome.browser.tabmodel.TabModelSelector;
-import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.content.R;
 import org.chromium.content_public.browser.ActionModeCallbackHelper;
-import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.SelectionPopupController;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.ui.base.PageTransition;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+
+import org.vivaldi.browser.VivaldiNonSelectionActionModeCallback;
+import org.vivaldi.browser.notes.NoteSelectionPopupController;
 
 /**
  * A class that handles selection action mode for the active {@link Tab}.
@@ -55,13 +48,19 @@ public class ChromeActionModeHandler {
      * @param activityTabProvider {@link ActivityTabProvider} instance.
      * @param actionBarObserver observer called when the contextual action bar's visibility
      *        has changed.
+     * @param searchCallback Callback to run when search action is selected in the action mode.
      */
-    public ChromeActionModeHandler(
-            ActivityTabProvider activityTabProvider, Consumer<Boolean> actionBarObserver) {
+    public ChromeActionModeHandler(ActivityTabProvider activityTabProvider,
+            Consumer<Boolean> actionBarObserver, Callback<String> searchCallback) {
         mInitWebContentsObserver = (webContents) -> {
             SelectionPopupController.fromWebContents(webContents)
-                    .setActionModeCallback(
-                            new ActionModeCallback(mActiveTab, webContents, actionBarObserver));
+                    .setActionModeCallback(new ActionModeCallback(
+                            mActiveTab, webContents, actionBarObserver, searchCallback));
+
+            // Note(david@vivaldi.com): Set NonSelectionActionModeCallback for Vivaldi
+            SelectionPopupController.fromWebContents(webContents)
+                    .setNonSelectionActionModeCallback(
+                            new VivaldiNonSelectionActionModeCallback(webContents));
         };
 
         mActivityTabTabObserver =
@@ -90,11 +89,14 @@ public class ChromeActionModeHandler {
         private final Tab mTab;
         private final ActionModeCallbackHelper mHelper;
         private final Consumer<Boolean> mActionBarObserver;
+        private final Callback<String> mSearchCallback;
 
-        protected ActionModeCallback(Tab tab, WebContents webContents, Consumer<Boolean> observer) {
+        protected ActionModeCallback(Tab tab, WebContents webContents, Consumer<Boolean> observer,
+                Callback<String> searchCallback) {
             mTab = tab;
             mHelper = getActionModeCallbackHelper(webContents);
             mActionBarObserver = observer;
+            mSearchCallback = searchCallback;
         }
 
         @VisibleForTesting
@@ -122,6 +124,7 @@ public class ChromeActionModeHandler {
 
         @Override
         public boolean onPrepareActionMode(ActionMode mode, Menu menu) {
+            recordUserAction();
             notifyContextualActionBarVisibilityChanged(true);
             boolean res = mHelper.onPrepareActionMode(mode, menu);
             Set<String> browsers = getPackageNames(PackageManagerUtils.queryAllWebBrowsersInfo());
@@ -153,6 +156,11 @@ public class ChromeActionModeHandler {
                 LocaleManager.getInstance().showSearchEnginePromoIfNeeded(
                         TabUtils.getActivity(mTab), callback);
                 mHelper.finishActionMode();
+            } else if (item.getItemId()
+                    == org.chromium.chrome.R.id.select_action_menu_copy_to_note) { // Vivaldi
+                new NoteSelectionPopupController().addNoteFromSelection(
+                        mHelper.getSelectedText(), mTab.getUrl().getSpec());
+                mHelper.finishActionMode();
             } else {
                 return mHelper.onActionItemClicked(mode, item);
             }
@@ -175,33 +183,17 @@ public class ChromeActionModeHandler {
             return set;
         }
 
-        /**
-         * Generate the LoadUrlParams necessary to load the specified search query.
-         */
-        @VisibleForTesting
-        protected LoadUrlParams generateUrlParamsForSearch(String query) {
-            String url = TemplateUrlServiceFactory.get().getUrlForSearchQuery(query);
-            String headers = GeolocationHeader.getGeoHeader(url, mTab);
-
-            LoadUrlParams loadUrlParams = new LoadUrlParams(url);
-            loadUrlParams.setVerbatimHeaders(headers);
-            loadUrlParams.setTransitionType(PageTransition.GENERATED);
-            return loadUrlParams;
-        }
-
         private void search(String searchText) {
             RecordUserAction.record("MobileActionMode.WebSearch");
-            TabModelSelector selector = TabModelSelector.from(mTab);
-            if (selector == null) return;
+            mSearchCallback.onResult(searchText);
+        }
 
-            String query = ActionModeCallbackHelper.sanitizeQuery(
-                    searchText, ActionModeCallbackHelper.MAX_SEARCH_QUERY_LENGTH);
-            if (TextUtils.isEmpty(query)) return;
-
-            TrackerFactory.getTrackerForProfile(Profile.fromWebContents(mTab.getWebContents()))
-                    .notifyEvent(EventConstants.WEB_SEARCH_PERFORMED);
-            selector.openNewTab(generateUrlParamsForSearch(query),
-                    TabLaunchType.FROM_LONGPRESS_FOREGROUND, mTab, mTab.isIncognito());
+        private void recordUserAction() {
+            if (mHelper.supportsFloatingActionMode()) {
+                RecordUserAction.record("MobileActionBarShown.Floating");
+            } else {
+                RecordUserAction.record("MobileActionBarShown.Toolbar");
+            }
         }
     }
 }

@@ -6,13 +6,13 @@
 
 #include <fuchsia/ui/gfx/cpp/fidl.h>
 #include <lib/sys/cpp/component_context.h>
-#include <lib/ui/scenic/cpp/view_ref_pair.h>
 #include <limits>
 
 #include "base/bind_helpers.h"
 #include "base/fuchsia/default_context.h"
 #include "base/fuchsia/fuchsia_logging.h"
 #include "base/json/json_writer.h"
+#include "base/metrics/user_metrics.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/post_task.h"
@@ -20,10 +20,12 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/media_session.h"
 #include "content/public/browser/message_port_provider.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/permission_controller_delegate.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/render_widget_host_view.h"
@@ -36,19 +38,19 @@
 #include "fuchsia/engine/browser/context_impl.h"
 #include "fuchsia/engine/browser/event_filter.h"
 #include "fuchsia/engine/browser/frame_layout_manager.h"
+#include "fuchsia/engine/browser/frame_window_tree_host.h"
+#include "fuchsia/engine/browser/media_player_impl.h"
 #include "fuchsia/engine/browser/web_engine_devtools_controller.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/system/platform_handle.h"
+#include "net/base/net_errors.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/logging/logging_utils.h"
 #include "third_party/blink/public/common/messaging/web_message_port.h"
-#include "ui/aura/client/window_parenting_client.h"
+#include "third_party/blink/public/mojom/loader/resource_load_info.mojom.h"
 #include "ui/aura/window.h"
-#include "ui/aura/window_tree_host_platform.h"
-#include "ui/base/ime/input_method_base.h"
 #include "ui/gfx/switches.h"
 #include "ui/ozone/public/ozone_switches.h"
-#include "ui/platform_window/platform_window_init_properties.h"
 #include "ui/wm/core/base_focus_rules.h"
 #include "url/gurl.h"
 
@@ -115,66 +117,6 @@ bool IsOriginWhitelisted(const GURL& url,
   }
   return false;
 }
-
-class WindowParentingClientImpl : public aura::client::WindowParentingClient {
- public:
-  explicit WindowParentingClientImpl(aura::Window* root_window)
-      : root_window_(root_window) {
-    aura::client::SetWindowParentingClient(root_window_, this);
-  }
-  ~WindowParentingClientImpl() override {
-    aura::client::SetWindowParentingClient(root_window_, nullptr);
-  }
-
-  // WindowParentingClient implementation.
-  aura::Window* GetDefaultParent(aura::Window* window,
-                                 const gfx::Rect& bounds) override {
-    return root_window_;
-  }
-
- private:
-  aura::Window* root_window_;
-
-  DISALLOW_COPY_AND_ASSIGN(WindowParentingClientImpl);
-};
-
-// WindowTreeHost that hosts web frames.
-class FrameWindowTreeHost : public aura::WindowTreeHostPlatform {
- public:
-  explicit FrameWindowTreeHost(ui::PlatformWindowInitProperties properties,
-                               content::WebContents* web_contents)
-      : aura::WindowTreeHostPlatform(std::move(properties)),
-        window_parenting_client_(window()),
-        web_contents_(web_contents) {}
-
-  ~FrameWindowTreeHost() override = default;
-
-  // Route focus & blur events to the window's focus observer and its
-  // InputMethod.
-  void OnActivationChanged(bool active) override {
-    if (active) {
-      aura::client::GetFocusClient(window())->FocusWindow(window());
-      GetInputMethod()->OnFocus();
-    } else {
-      aura::client::GetFocusClient(window())->FocusWindow(nullptr);
-      GetInputMethod()->OnBlur();
-    }
-  }
-
-  void OnWindowStateChanged(ui::PlatformWindowState new_state) override {
-    if (new_state == ui::PlatformWindowState::kMinimized) {
-      web_contents_->WasOccluded();
-    } else {
-      web_contents_->WasShown();
-    }
-  }
-
- private:
-  WindowParentingClientImpl window_parenting_client_;
-  content::WebContents* web_contents_;
-
-  DISALLOW_COPY_AND_ASSIGN(FrameWindowTreeHost);
-};
 
 logging::LogSeverity ConsoleLogLevelToLoggingSeverity(
     fuchsia::web::ConsoleLogLevel level) {
@@ -300,7 +242,8 @@ FrameImpl::FrameImpl(std::unique_ptr<content::WebContents> web_contents,
       navigation_controller_(web_contents_.get()),
       log_level_(kLogSeverityNone),
       url_request_rewrite_rules_manager_(web_contents_.get()),
-      binding_(this, std::move(frame_request)) {
+      binding_(this, std::move(frame_request)),
+      media_blocker_(web_contents_.get()) {
   DCHECK(!WebContentsToFrameImplMap()[web_contents_.get()]);
   WebContentsToFrameImplMap()[web_contents_.get()] = this;
 
@@ -346,6 +289,10 @@ FrameImpl::OriginScopedScript& FrameImpl::OriginScopedScript::operator=(
 }
 
 FrameImpl::OriginScopedScript::~OriginScopedScript() = default;
+
+aura::Window* FrameImpl::root_window() const {
+  return window_tree_host_->window();
+}
 
 void FrameImpl::ExecuteJavaScriptInternal(std::vector<std::string> origins,
                                           fuchsia::mem::Buffer script,
@@ -432,6 +379,7 @@ bool FrameImpl::IsWebContentsCreationOverridden(
 void FrameImpl::AddNewContents(
     content::WebContents* source,
     std::unique_ptr<content::WebContents> new_contents,
+    const GURL& target_url,
     WindowOpenDisposition disposition,
     const gfx::Rect& initial_rect,
     bool user_gesture,
@@ -543,6 +491,10 @@ void FrameImpl::OnPopupListenerDisconnected(zx_status_t status) {
   pending_popups_.clear();
 }
 
+void FrameImpl::OnMediaPlayerDisconnect() {
+  media_player_ = nullptr;
+}
+
 void FrameImpl::CreateView(fuchsia::ui::views::ViewToken view_token) {
   if (IsHeadless()) {
     LOG(WARNING) << "CreateView() called on a HEADLESS Context.";
@@ -553,30 +505,23 @@ void FrameImpl::CreateView(fuchsia::ui::views::ViewToken view_token) {
   // If a View to this Frame is already active then disconnect it.
   DestroyWindowTreeHost();
 
-  ui::PlatformWindowInitProperties properties;
-  properties.view_token = std::move(view_token);
-  properties.view_ref_pair = scenic::ViewRefPair::New();
-
-  // Create a ViewRef and register it to the Fuchsia SemanticsManager.
-  fuchsia::ui::views::ViewRef accessibility_view_ref;
-  zx_status_t status = properties.view_ref_pair.view_ref.reference.duplicate(
-      ZX_RIGHT_SAME_RIGHTS, &accessibility_view_ref.reference);
-  if (status != ZX_OK) {
-    ZX_LOG(ERROR, status) << "zx_object_duplicate";
-    context_->DestroyFrame(this);
-    return;
-  }
+  InitWindowTreeHost(std::move(view_token));
 
   fuchsia::accessibility::semantics::SemanticsManagerPtr semantics_manager =
       base::fuchsia::ComponentContextForCurrentProcess()
           ->svc()
           ->Connect<fuchsia::accessibility::semantics::SemanticsManager>();
   accessibility_bridge_ = std::make_unique<AccessibilityBridge>(
-      std::move(semantics_manager), std::move(accessibility_view_ref),
+      std::move(semantics_manager), window_tree_host_->CreateViewRef(),
       web_contents_.get());
+}
 
-  SetWindowTreeHost(std::make_unique<FrameWindowTreeHost>(std::move(properties),
-                                                          web_contents_.get()));
+void FrameImpl::GetMediaPlayer(
+    fidl::InterfaceRequest<fuchsia::media::sessions2::Player> player) {
+  media_player_ = std::make_unique<MediaPlayerImpl>(
+      content::MediaSession::Get(web_contents_.get()), std::move(player),
+      base::BindOnce(&FrameImpl::OnMediaPlayerDisconnect,
+                     base::Unretained(this)));
 }
 
 void FrameImpl::GetNavigationController(
@@ -773,15 +718,13 @@ void FrameImpl::EnableHeadlessRendering() {
     return;
   }
 
-  SetWindowTreeHost(std::make_unique<FrameWindowTreeHost>(
-      ui::PlatformWindowInitProperties(), web_contents_.get()));
+  InitWindowTreeHost(fuchsia::ui::views::ViewToken());
 
   gfx::Rect bounds(kHeadlessWindowSize);
   if (semantics_manager_for_test_) {
-    scenic::ViewRefPair view_ref_pair = scenic::ViewRefPair::New();
     accessibility_bridge_ = std::make_unique<AccessibilityBridge>(
         std::move(semantics_manager_for_test_),
-        std::move(view_ref_pair.view_ref), web_contents_.get());
+        window_tree_host_->CreateViewRef(), web_contents_.get());
 
     // Set bounds for testing hit testing.
     bounds.set_size(kSemanticsTestingWindowSize);
@@ -801,11 +744,11 @@ void FrameImpl::DisableHeadlessRendering() {
   DestroyWindowTreeHost();
 }
 
-void FrameImpl::SetWindowTreeHost(
-    std::unique_ptr<aura::WindowTreeHost> window_tree_host) {
+void FrameImpl::InitWindowTreeHost(fuchsia::ui::views::ViewToken view_token) {
   DCHECK(!window_tree_host_);
 
-  window_tree_host_ = std::move(window_tree_host);
+  window_tree_host_ = std::make_unique<FrameWindowTreeHost>(
+      std::move(view_token), web_contents_.get());
   window_tree_host_->InitHost();
   root_window()->AddPreTargetHandler(&event_filter_);
 
@@ -831,6 +774,40 @@ void FrameImpl::SetWindowTreeHost(
 
 void FrameImpl::SetMediaSessionId(uint64_t session_id) {
   media_session_id_ = session_id;
+}
+
+void FrameImpl::MediaStartedPlaying(const MediaPlayerInfo& video_type,
+                                    const content::MediaPlayerId& id) {
+  base::RecordComputedAction("MediaPlay");
+}
+
+void FrameImpl::MediaStoppedPlaying(
+    const MediaPlayerInfo& video_type,
+    const content::MediaPlayerId& id,
+    WebContentsObserver::MediaStoppedReason reason) {
+  base::RecordComputedAction("MediaPause");
+}
+
+void FrameImpl::GetPrivateMemorySize(GetPrivateMemorySizeCallback callback) {
+  if (!web_contents_->GetMainFrame()->GetProcess()->IsReady()) {
+    // Renderer process is not yet started.
+    callback(0);
+    return;
+  }
+
+  zx_info_task_stats_t task_stats;
+  zx_status_t status = zx_object_get_info(
+      web_contents_->GetMainFrame()->GetProcess()->GetProcess().Handle(),
+      ZX_INFO_TASK_STATS, &task_stats, sizeof(task_stats), nullptr, nullptr);
+
+  if (status != ZX_OK) {
+    // Fail gracefully by returning zero.
+    ZX_LOG(WARNING, status) << "zx_object_get_info(ZX_INFO_TASK_STATS)";
+    callback(0);
+    return;
+  }
+
+  callback(task_stats.mem_private_bytes);
 }
 
 void FrameImpl::ForceContentDimensions(
@@ -887,6 +864,10 @@ void FrameImpl::SetPermissionState(
 void FrameImpl::CloseContents(content::WebContents* source) {
   DCHECK_EQ(source, web_contents_.get());
   context_->DestroyFrame(this);
+}
+
+void FrameImpl::SetBlockMediaLoading(bool blocked) {
+  media_blocker_.BlockMediaLoading(blocked);
 }
 
 bool FrameImpl::DidAddMessageToConsole(
@@ -1045,4 +1026,19 @@ void FrameImpl::RenderViewReady() {
   // request a redraw if there is a view connected to this Frame.
   if (window_tree_host_)
     window_tree_host_->compositor()->ScheduleDraw();
+}
+
+void FrameImpl::DidFirstVisuallyNonEmptyPaint() {
+  base::RecordComputedAction("AppFirstPaint");
+}
+
+void FrameImpl::ResourceLoadComplete(
+    content::RenderFrameHost* render_frame_host,
+    const content::GlobalRequestID& request_id,
+    const blink::mojom::ResourceLoadInfo& resource_load_info) {
+  int net_error = resource_load_info.net_error;
+  if (net_error != net::OK) {
+    base::RecordComputedAction(
+        base::StringPrintf("WebEngine.ResourceRequestError:%d", net_error));
+  }
 }

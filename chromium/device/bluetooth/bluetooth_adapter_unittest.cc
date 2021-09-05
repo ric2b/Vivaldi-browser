@@ -64,6 +64,10 @@ class TestBluetoothAdapter final : public BluetoothAdapter {
  public:
   TestBluetoothAdapter() = default;
 
+  void Initialize(base::OnceClosure callback) override {
+    std::move(callback).Run();
+  }
+
   std::string GetAddress() const override { return ""; }
 
   std::string GetName() const override { return ""; }
@@ -207,7 +211,7 @@ class TestBluetoothAdapter final : public BluetoothAdapter {
                   run_loop_quit.Run();
                 }
               }),
-          base::Bind(&TestBluetoothAdapter::TestErrorCallback, this));
+          base::BindOnce(&TestBluetoothAdapter::TestErrorCallback, this));
     };
   }
 
@@ -216,8 +220,8 @@ class TestBluetoothAdapter final : public BluetoothAdapter {
       base::RepeatingClosure run_loop_quit) {
     StartDiscoverySessionWithFilter(
         std::move(discovery_filter),
-        base::Bind(&TestBluetoothAdapter::OnStartDiscoverySessionQuitLoop, this,
-                   run_loop_quit),
+        base::BindOnce(&TestBluetoothAdapter::OnStartDiscoverySessionQuitLoop,
+                       this, run_loop_quit),
         base::DoNothing());
   }
 
@@ -765,6 +769,7 @@ TEST_F(BluetoothTest, MAYBE_ConstructFakeAdapter) {
   EXPECT_TRUE(adapter_->CanPower());
   EXPECT_TRUE(adapter_->IsPresent());
   EXPECT_TRUE(adapter_->IsPowered());
+  EXPECT_TRUE(adapter_->IsPeripheralRoleSupported());
   EXPECT_FALSE(adapter_->IsDiscoverable());
   EXPECT_FALSE(adapter_->IsDiscovering());
 }

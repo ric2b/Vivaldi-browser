@@ -30,7 +30,8 @@
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/common/content_client.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
-#include "net/base/network_isolation_key.h"
+#include "net/base/isolation_info.h"
+#include "net/cookies/site_for_cookies.h"
 #include "third_party/blink/public/common/loader/url_loader_factory_bundle.h"
 #include "third_party/blink/public/common/messaging/message_port_channel.h"
 #include "third_party/blink/public/mojom/appcache/appcache.mojom.h"
@@ -100,7 +101,7 @@ SharedWorkerHost::SharedWorkerHost(SharedWorkerServiceImpl* service,
       scoped_process_host_observer_(this),
       next_connection_request_id_(1) {
   DCHECK(worker_process_host_);
-  DCHECK(!IsShuttingDown(worker_process_host_));
+  DCHECK(worker_process_host_->IsInitializedAndNotDead());
 
   // Set up the worker pending receiver. This is needed first in either
   // AddClient() or Start(). AddClient() can sometimes be called before Start()
@@ -263,13 +264,16 @@ SharedWorkerHost::CreateNetworkFactoryForSubresources(
       default_factory_receiver =
           pending_default_factory.InitWithNewPipeAndPassReceiver();
 
-  const url::Origin& origin = instance_.constructor_origin();
+  url::Origin origin = url::Origin::Create(instance_.url());
+
   // TODO(https://crbug.com/1060832): Implement COEP reporter for shared
   // workers.
   network::mojom::URLLoaderFactoryParamsPtr factory_params =
       URLLoaderFactoryParamsHelper::CreateForWorker(
-          worker_process_host_, origin,
-          net::NetworkIsolationKey(origin, origin),
+          worker_process_host_, instance_.constructor_origin(),
+          net::IsolationInfo::Create(
+              net::IsolationInfo::RedirectMode::kUpdateNothing, origin, origin,
+              net::SiteForCookies::FromOrigin(origin)),
           /*coep_reporter=*/mojo::NullRemote());
   GetContentClient()->browser()->WillCreateURLLoaderFactory(
       worker_process_host_->GetBrowserContext(),
@@ -335,10 +339,11 @@ void SharedWorkerHost::CreateQuicTransportConnector(
     mojo::PendingReceiver<blink::mojom::QuicTransportConnector> receiver) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   const url::Origin origin = url::Origin::Create(instance().url());
-  mojo::MakeSelfOwnedReceiver(std::make_unique<QuicTransportConnectorImpl>(
-                                  worker_process_host_->GetID(), origin,
-                                  net::NetworkIsolationKey(origin, origin)),
-                              std::move(receiver));
+  mojo::MakeSelfOwnedReceiver(
+      std::make_unique<QuicTransportConnectorImpl>(
+          worker_process_host_->GetID(), /*frame=*/nullptr, origin,
+          net::NetworkIsolationKey(origin, origin)),
+      std::move(receiver));
 }
 
 void SharedWorkerHost::BindCacheStorage(

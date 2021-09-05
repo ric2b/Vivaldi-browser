@@ -33,7 +33,8 @@ class NET_EXPORT_PRIVATE ProofSourceChromium : public quic::ProofSource {
                   const base::FilePath& sct_path);
 
   // quic::ProofSource interface
-  void GetProof(const quic::QuicSocketAddress& server_ip,
+  void GetProof(const quic::QuicSocketAddress& server_address,
+                const quic::QuicSocketAddress& client_address,
                 const std::string& hostname,
                 const std::string& server_config,
                 quic::QuicTransportVersion quic_version,
@@ -42,14 +43,19 @@ class NET_EXPORT_PRIVATE ProofSourceChromium : public quic::ProofSource {
 
   quic::QuicReferenceCountedPointer<Chain> GetCertChain(
       const quic::QuicSocketAddress& server_address,
+      const quic::QuicSocketAddress& client_address,
       const std::string& hostname) override;
 
   void ComputeTlsSignature(
       const quic::QuicSocketAddress& server_address,
+      const quic::QuicSocketAddress& client_address,
       const std::string& hostname,
       uint16_t signature_algorithm,
       quiche::QuicheStringPiece in,
       std::unique_ptr<SignatureCallback> callback) override;
+
+  TicketCrypter* GetTicketCrypter() override;
+  void SetTicketCrypter(std::unique_ptr<TicketCrypter> ticket_crypter);
 
  private:
   bool GetProofInner(
@@ -64,6 +70,7 @@ class NET_EXPORT_PRIVATE ProofSourceChromium : public quic::ProofSource {
   std::unique_ptr<crypto::RSAPrivateKey> private_key_;
   quic::QuicReferenceCountedPointer<quic::ProofSource::Chain> chain_;
   std::string signed_certificate_timestamp_;
+  std::unique_ptr<TicketCrypter> ticket_crypter_;
 
   DISALLOW_COPY_AND_ASSIGN(ProofSourceChromium);
 };

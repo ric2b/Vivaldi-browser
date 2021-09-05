@@ -36,7 +36,7 @@ decltype(auto) EqualsMojo(const mojo::StructPtr<T>& value) {
 
 }  // namespace
 
-TEST(TrustTokenKeyCommitmentParsing, RejectsEmpty) {
+TEST(TrustTokenKeyCommitmentParser, RejectsEmpty) {
   // If the input isn't valid JSON, we should
   // reject it. In particular, we should reject
   // empty input.
@@ -44,7 +44,7 @@ TEST(TrustTokenKeyCommitmentParsing, RejectsEmpty) {
   EXPECT_FALSE(TrustTokenKeyCommitmentParser().Parse(""));
 }
 
-TEST(TrustTokenKeyCommitmentParsing, RejectsNonemptyMalformed) {
+TEST(TrustTokenKeyCommitmentParser, RejectsNonemptyMalformed) {
   // If the input isn't valid JSON, we should
   // reject it.
   const char input[] = "certainly not valid JSON";
@@ -55,7 +55,7 @@ TEST(TrustTokenKeyCommitmentParsing, RejectsNonemptyMalformed) {
   EXPECT_FALSE(TrustTokenKeyCommitmentParser().Parse(input));
 }
 
-TEST(TrustTokenKeyCommitmentParsing, RejectsNonDictionaryInput) {
+TEST(TrustTokenKeyCommitmentParser, RejectsNonDictionaryInput) {
   // The outermost value should be a dictionary.
 
   // Valid JSON, but not a dictionary.
@@ -67,13 +67,14 @@ TEST(TrustTokenKeyCommitmentParsing, RejectsNonDictionaryInput) {
   EXPECT_FALSE(TrustTokenKeyCommitmentParser().Parse(input));
 }
 
-TEST(TrustTokenKeyCommitmentParsing, AcceptsMinimal) {
-  std::string input = R"( { "srrkey": "aaaa" } )";
+TEST(TrustTokenKeyCommitmentParser, AcceptsMinimal) {
+  std::string input = R"( { "batchsize": 5, "srrkey": "aaaa" } )";
 
   // Sanity check that the input is actually valid JSON.
   ASSERT_TRUE(base::JSONReader::Read(input));
 
   auto expectation = mojom::TrustTokenKeyCommitmentResult::New();
+  expectation->batch_size = 5;
   base::Base64Decode("aaaa",
                      &expectation->signed_redemption_record_verification_key);
 
@@ -81,8 +82,8 @@ TEST(TrustTokenKeyCommitmentParsing, AcceptsMinimal) {
               EqualsMojo(expectation));
 }
 
-TEST(TrustTokenKeyCommitmentParsing, RejectsMissingSrrkey) {
-  std::string input = R"( {} )";
+TEST(TrustTokenKeyCommitmentParser, RejectsMissingSrrkey) {
+  std::string input = R"( {"batchsize": 5} )";
 
   // Sanity check that the input is actually valid JSON.
   ASSERT_TRUE(base::JSONReader::Read(input));
@@ -92,8 +93,8 @@ TEST(TrustTokenKeyCommitmentParsing, RejectsMissingSrrkey) {
   EXPECT_FALSE(result);
 }
 
-TEST(TrustTokenKeyCommitmentParsing, RejectsTypeUnsafeSrrkey) {
-  std::string input = R"( { "srrkey": 5 } )";
+TEST(TrustTokenKeyCommitmentParser, RejectsTypeUnsafeSrrkey) {
+  std::string input = R"( { "batchsize": 5, "srrkey": 5 } )";
 
   // Sanity check that the input is actually valid JSON.
   ASSERT_TRUE(base::JSONReader::Read(input));
@@ -103,8 +104,9 @@ TEST(TrustTokenKeyCommitmentParsing, RejectsTypeUnsafeSrrkey) {
   EXPECT_FALSE(result);
 }
 
-TEST(TrustTokenKeyCommitmentParsing, RejectsNonBase64Srrkey) {
-  std::string input = R"( { "srrkey": "spaces aren't valid base64" } )";
+TEST(TrustTokenKeyCommitmentParser, RejectsNonBase64Srrkey) {
+  std::string input = R"( { "batchsize": 5,
+    "srrkey": "spaces aren't valid base64" } )";
 
   // Sanity check that the input is actually valid JSON.
   ASSERT_TRUE(base::JSONReader::Read(input));
@@ -114,7 +116,7 @@ TEST(TrustTokenKeyCommitmentParsing, RejectsNonBase64Srrkey) {
   EXPECT_FALSE(result);
 }
 
-TEST(TrustTokenKeyCommitmentParsing, RejectsKeyWithTypeUnsafeKeyLabel) {
+TEST(TrustTokenKeyCommitmentParser, RejectsKeyWithTypeUnsafeKeyLabel) {
   base::test::TaskEnvironment env(
       base::test::TaskEnvironment::TimeSource::MOCK_TIME);
 
@@ -127,7 +129,7 @@ TEST(TrustTokenKeyCommitmentParsing, RejectsKeyWithTypeUnsafeKeyLabel) {
   // it's encoded as a string.)
   const std::string input = base::StringPrintf(
       R"({
-            "srrkey": "aaaa",
+            "batchsize": 5, "srrkey": "aaaa",
             "this label is not an integer": {
               "Y": "akey",
               "expiry": "%s"
@@ -143,7 +145,7 @@ TEST(TrustTokenKeyCommitmentParsing, RejectsKeyWithTypeUnsafeKeyLabel) {
   EXPECT_FALSE(TrustTokenKeyCommitmentParser().Parse(input));
 }
 
-TEST(TrustTokenKeyCommitmentParsing, RejectsKeyWithKeyLabelTooSmall) {
+TEST(TrustTokenKeyCommitmentParser, RejectsKeyWithKeyLabelTooSmall) {
   base::test::TaskEnvironment env(
       base::test::TaskEnvironment::TimeSource::MOCK_TIME);
 
@@ -154,7 +156,7 @@ TEST(TrustTokenKeyCommitmentParsing, RejectsKeyWithKeyLabelTooSmall) {
 
   const std::string input = base::StringPrintf(
       R"({
-            "srrkey": "aaaa",
+            "batchsize": 5, "srrkey": "aaaa",
             "-1": {
               "Y": "akey",
               "expiry": "%s"
@@ -170,7 +172,7 @@ TEST(TrustTokenKeyCommitmentParsing, RejectsKeyWithKeyLabelTooSmall) {
   EXPECT_FALSE(TrustTokenKeyCommitmentParser().Parse(input));
 }
 
-TEST(TrustTokenKeyCommitmentParsing, RejectsKeyWithKeyLabelTooLarge) {
+TEST(TrustTokenKeyCommitmentParser, RejectsKeyWithKeyLabelTooLarge) {
   base::test::TaskEnvironment env(
       base::test::TaskEnvironment::TimeSource::MOCK_TIME);
 
@@ -181,7 +183,7 @@ TEST(TrustTokenKeyCommitmentParsing, RejectsKeyWithKeyLabelTooLarge) {
 
   const std::string input = base::StringPrintf(
       R"({
-            "srrkey": "aaaa",
+            "batchsize": 5, "srrkey": "aaaa",
             "1000000000000": {
               "Y": "akey",
               "expiry": "%s"
@@ -197,7 +199,7 @@ TEST(TrustTokenKeyCommitmentParsing, RejectsKeyWithKeyLabelTooLarge) {
   EXPECT_FALSE(TrustTokenKeyCommitmentParser().Parse(input));
 }
 
-TEST(TrustTokenKeyCommitmentParsing, RejectsOtherwiseValidButNonBase64Key) {
+TEST(TrustTokenKeyCommitmentParser, RejectsOtherwiseValidButNonBase64Key) {
   base::test::TaskEnvironment env(
       base::test::TaskEnvironment::TimeSource::MOCK_TIME);
 
@@ -208,7 +210,7 @@ TEST(TrustTokenKeyCommitmentParsing, RejectsOtherwiseValidButNonBase64Key) {
 
   const std::string input = base::StringPrintf(
       R"({
-            "srrkey": "aaaa",
+            "batchsize": 5, "srrkey": "aaaa",
             "1": {
               "Y": "this key isn't valid base64, so it should be rejected",
               "expiry": "%s"
@@ -223,7 +225,7 @@ TEST(TrustTokenKeyCommitmentParsing, RejectsOtherwiseValidButNonBase64Key) {
   EXPECT_FALSE(TrustTokenKeyCommitmentParser().Parse(input));
 }
 
-TEST(TrustTokenKeyCommitmentParsing, AcceptsKeyWithExpiryAndBody) {
+TEST(TrustTokenKeyCommitmentParser, AcceptsKeyWithExpiryAndBody) {
   base::test::TaskEnvironment env(
       base::test::TaskEnvironment::TimeSource::MOCK_TIME);
 
@@ -234,7 +236,7 @@ TEST(TrustTokenKeyCommitmentParsing, AcceptsKeyWithExpiryAndBody) {
 
   const std::string input = base::StringPrintf(
       R"({
-            "srrkey": "aaaa",
+            "batchsize": 5, "srrkey": "aaaa",
             "1": { "Y": "akey", "expiry": "%s" }
          })",
       base::NumberToString(one_minute_from_now_in_micros).c_str());
@@ -244,7 +246,6 @@ TEST(TrustTokenKeyCommitmentParsing, AcceptsKeyWithExpiryAndBody) {
   ASSERT_TRUE(base::JSONReader::Read(input));
 
   auto my_key = mojom::TrustTokenVerificationKey::New();
-  my_key->label = 1;
   ASSERT_TRUE(base::Base64Decode("akey", &my_key->body));
   my_key->expiry = one_minute_from_now;
 
@@ -253,7 +254,7 @@ TEST(TrustTokenKeyCommitmentParsing, AcceptsKeyWithExpiryAndBody) {
   EXPECT_THAT(result->keys, ElementsAre(EqualsMojo(my_key)));
 }
 
-TEST(TrustTokenKeyCommitmentParsing, AcceptsMultipleKeys) {
+TEST(TrustTokenKeyCommitmentParser, AcceptsMultipleKeys) {
   base::test::TaskEnvironment env(
       base::test::TaskEnvironment::TimeSource::MOCK_TIME);
 
@@ -269,7 +270,7 @@ TEST(TrustTokenKeyCommitmentParsing, AcceptsMultipleKeys) {
 
   const std::string input = base::StringPrintf(
       R"({
-            "srrkey": "aaaa",
+            "batchsize": 5, "srrkey": "aaaa",
             "1": { "Y": "akey", "expiry": "%s" },
             "2": { "Y": "aaaa", "expiry": "%s" }
          })",
@@ -281,12 +282,10 @@ TEST(TrustTokenKeyCommitmentParsing, AcceptsMultipleKeys) {
   ASSERT_TRUE(base::JSONReader::Read(input));
 
   auto a_key = mojom::TrustTokenVerificationKey::New();
-  a_key->label = 1;
   ASSERT_TRUE(base::Base64Decode("akey", &a_key->body));
   a_key->expiry = one_minute_from_now;
 
   auto another_key = mojom::TrustTokenVerificationKey::New();
-  another_key->label = 2;
   ASSERT_TRUE(base::Base64Decode("aaaa", &another_key->body));
   another_key->expiry = two_minutes_from_now;
 
@@ -296,10 +295,10 @@ TEST(TrustTokenKeyCommitmentParsing, AcceptsMultipleKeys) {
               UnorderedElementsAre(EqualsMojo(a_key), EqualsMojo(another_key)));
 }
 
-TEST(TrustTokenKeyCommitmentParsing, RejectsKeyWithNoExpiry) {
+TEST(TrustTokenKeyCommitmentParser, RejectsKeyWithNoExpiry) {
   // If a key has a missing "expiry" field, we should reject the entire
   // record.
-  const std::string input = R"( { "srrkey": "aaaa",
+  const std::string input = R"( { "batchsize": 5, "srrkey": "aaaa",
                                   "1": { "Y": "akey" } })";
 
   // Sanity check that the input is actually valid JSON.
@@ -309,13 +308,13 @@ TEST(TrustTokenKeyCommitmentParsing, RejectsKeyWithNoExpiry) {
   EXPECT_FALSE(TrustTokenKeyCommitmentParser().Parse(input));
 }
 
-TEST(TrustTokenKeyCommitmentParsing, RejectsKeyWithMalformedExpiry) {
+TEST(TrustTokenKeyCommitmentParser, RejectsKeyWithMalformedExpiry) {
   // If a key has a malformed "expiry" field, we should reject the entire
   // record.
   const std::string input =
       R"(
    {
-     "srrkey": "aaaa",
+     "batchsize": 5, "srrkey": "aaaa",
      "1": {
        "Y": "akey",
        "expiry": "absolutely not a valid timestamp"
@@ -329,7 +328,7 @@ TEST(TrustTokenKeyCommitmentParsing, RejectsKeyWithMalformedExpiry) {
   EXPECT_FALSE(TrustTokenKeyCommitmentParser().Parse(input));
 }
 
-TEST(TrustTokenKeyCommitmentParsing, IgnoreKeyWithExpiryInThePast) {
+TEST(TrustTokenKeyCommitmentParser, IgnoreKeyWithExpiryInThePast) {
   base::test::TaskEnvironment env(
       base::test::TaskEnvironment::TimeSource::MOCK_TIME);
 
@@ -348,7 +347,7 @@ TEST(TrustTokenKeyCommitmentParsing, IgnoreKeyWithExpiryInThePast) {
   // If the time has passed a key's "expiry" field, we should reject the entire
   // record.
   const std::string input = base::StringPrintf(
-      R"( { "srrkey": "aaaa",
+      R"( { "batchsize": 5, "srrkey": "aaaa",
             "1": { "Y": "akey", "expiry": "%s" } })",
       base::NumberToString(one_minute_before_now_in_micros).c_str());
 
@@ -358,12 +357,13 @@ TEST(TrustTokenKeyCommitmentParsing, IgnoreKeyWithExpiryInThePast) {
   auto expectation = mojom::TrustTokenKeyCommitmentResult::New();
   base::Base64Decode("aaaa",
                      &expectation->signed_redemption_record_verification_key);
+  expectation->batch_size = 5;
 
   EXPECT_TRUE(
       mojo::Equals(TrustTokenKeyCommitmentParser().Parse(input), expectation));
 }
 
-TEST(TrustTokenKeyCommitmentParsing, RejectsKeyWithNoBody) {
+TEST(TrustTokenKeyCommitmentParser, RejectsKeyWithNoBody) {
   base::test::TaskEnvironment env(
       base::test::TaskEnvironment::TimeSource::MOCK_TIME);
 
@@ -375,7 +375,8 @@ TEST(TrustTokenKeyCommitmentParsing, RejectsKeyWithNoBody) {
   // If a key has an expiry but is missing its body,
   // we should reject the entire result.
   const std::string input = base::StringPrintf(
-      R"( { "srrkey": "aaaa", "1": { "expiry": "%s" } } )",
+      R"( { "batchsize": 5, "srrkey": "aaaa",
+      "1": { "expiry": "%s" } } )",
       base::NumberToString(one_minute_from_now_in_micros).c_str());
 
   // Sanity check that the input is actually valid JSON,
@@ -386,11 +387,12 @@ TEST(TrustTokenKeyCommitmentParsing, RejectsKeyWithNoBody) {
   EXPECT_FALSE(TrustTokenKeyCommitmentParser().Parse(input));
 }
 
-TEST(TrustTokenKeyCommitmentParsing, RejectsEmptyKey) {
+TEST(TrustTokenKeyCommitmentParser, RejectsEmptyKey) {
   // If a key has neither an expiry or a body,
   // we should reject the entire result.
 
-  const std::string input = R"( { "srrkey": "aaaa", "1": { } })";
+  const std::string input = R"( { "batchsize": 5,
+    "srrkey": "aaaa", "1": { } })";
 
   // Sanity check that the input is actually valid JSON,
   // and that the date is valid.
@@ -400,21 +402,44 @@ TEST(TrustTokenKeyCommitmentParsing, RejectsEmptyKey) {
   EXPECT_FALSE(TrustTokenKeyCommitmentParser().Parse(input));
 }
 
-TEST(TrustTokenKeyCommitmentParsing, ParsesBatchSize) {
+TEST(TrustTokenKeyCommitmentParser, ParsesBatchSize) {
   std::string input =
       R"({
-     "srrkey": "aaaa",
-     "batchsize": 5
+     "batchsize": 5,
+     "srrkey": "aaaa"
    })";
 
   mojom::TrustTokenKeyCommitmentResultPtr result =
       TrustTokenKeyCommitmentParser().Parse(input);
   ASSERT_TRUE(result);
   ASSERT_TRUE(result->batch_size);
-  EXPECT_EQ(result->batch_size->value, 5);
+  EXPECT_EQ(result->batch_size, 5);
 }
 
-TEST(TrustTokenKeyCommitmentParsing, RejectsTypeUnsafeBatchSize) {
+TEST(TrustTokenKeyCommitmentParser, RejectsMissingBatchSize) {
+  std::string input =
+      R"({
+     "srrkey": "aaaa",
+   })";
+
+  mojom::TrustTokenKeyCommitmentResultPtr result =
+      TrustTokenKeyCommitmentParser().Parse(input);
+  EXPECT_FALSE(result);
+}
+
+TEST(TrustTokenKeyCommitmentParser, RejectsNonpositiveBatchSize) {
+  std::string input =
+      R"({
+     "srrkey": "aaaa",
+     "batchsize": "0",
+   })";
+
+  mojom::TrustTokenKeyCommitmentResultPtr result =
+      TrustTokenKeyCommitmentParser().Parse(input);
+  EXPECT_FALSE(result);
+}
+
+TEST(TrustTokenKeyCommitmentParser, RejectsTypeUnsafeBatchSize) {
   std::string input =
       R"({
      "srrkey": "aaaa",
@@ -424,6 +449,164 @@ TEST(TrustTokenKeyCommitmentParsing, RejectsTypeUnsafeBatchSize) {
   mojom::TrustTokenKeyCommitmentResultPtr result =
       TrustTokenKeyCommitmentParser().Parse(input);
   EXPECT_FALSE(result);
+}
+
+TEST(TrustTokenKeyCommitmentParserMultipleIssuers, InvalidJson) {
+  std::string input = "";
+  ASSERT_FALSE(
+      base::JSONReader::Read(input));  // Make sure it's really not valid JSON.
+
+  auto result = TrustTokenKeyCommitmentParser().ParseMultipleIssuers(input);
+  EXPECT_FALSE(result);
+}
+
+TEST(TrustTokenKeyCommitmentParserMultipleIssuers, NotADictionary) {
+  std::string input = "3";
+
+  auto result = TrustTokenKeyCommitmentParser().ParseMultipleIssuers(input);
+  EXPECT_FALSE(result);
+}
+
+TEST(TrustTokenKeyCommitmentParserMultipleIssuers, Empty) {
+  std::string input = "{}";
+
+  // Make sure the input is actually valid JSON.
+  ASSERT_TRUE(base::JSONReader::Read(input));
+
+  auto result = TrustTokenKeyCommitmentParser().ParseMultipleIssuers(input);
+  ASSERT_TRUE(result);
+  EXPECT_TRUE(result->empty());
+}
+
+TEST(TrustTokenKeyCommitmentParserMultipleIssuers, UnsuitableKey) {
+  // Test that a key with an unsuitable Trust Tokens origin gets skipped.
+  std::string input =
+      R"( { "http://insecure.example/":
+             { "batchsize": 5, "srrkey": "aaaa" } } )";
+
+  // Make sure the input is actually valid JSON.
+  ASSERT_TRUE(base::JSONReader::Read(input));
+
+  auto result = TrustTokenKeyCommitmentParser().ParseMultipleIssuers(input);
+  ASSERT_TRUE(result);
+  EXPECT_TRUE(result->empty());
+}
+
+TEST(TrustTokenKeyCommitmentParserMultipleIssuers, SuitableKeyInvalidValue) {
+  // Test that a key-value pair with a malformed value gets skipped.
+  std::string input =
+      R"( { "https://insecure.example/":
+              "not a valid encoding of a key commitment result" } )";
+
+  // Make sure the input is actually valid JSON.
+  ASSERT_TRUE(base::JSONReader::Read(input));
+
+  auto result = TrustTokenKeyCommitmentParser().ParseMultipleIssuers(input);
+  ASSERT_TRUE(result);
+  EXPECT_TRUE(result->empty());
+}
+
+TEST(TrustTokenKeyCommitmentParserMultipleIssuers, SingleIssuer) {
+  std::string input =
+      R"( { "https://issuer.example/": {
+              "batchsize": 5, "srrkey": "aaaa" } } )";
+
+  // Make sure the input is actually valid JSON.
+  ASSERT_TRUE(base::JSONReader::Read(input));
+
+  TrustTokenKeyCommitmentParser parser;
+
+  auto result = parser.ParseMultipleIssuers(input);
+  ASSERT_TRUE(result);
+  auto issuer =
+      *SuitableTrustTokenOrigin::Create(GURL("https://issuer.example"));
+  ASSERT_TRUE(result->count(issuer));
+  EXPECT_TRUE(mojo::Equals(result->at(issuer), parser.Parse(R"({ "batchsize": 5,
+                           "srrkey": "aaaa" })")));
+}
+
+TEST(TrustTokenKeyCommitmentParserMultipleIssuers, DuplicateIssuer) {
+  std::string input =
+      R"( { "https://issuer.example/": { "batchsize": 5, "srrkey": "aaaa" },
+    "https://other.example/": { "batchsize": 5, "srrkey": "aaab" },
+    "https://issuer.example/this-is-really-the-same-issuer-as-the-first-entry":
+      { "batchsize": 5, "srrkey": "aaac" }
+    } )";
+
+  // Make sure the input is actually valid JSON.
+  ASSERT_TRUE(base::JSONReader::Read(input));
+
+  TrustTokenKeyCommitmentParser parser;
+
+  auto result = parser.ParseMultipleIssuers(input);
+  ASSERT_TRUE(result);
+
+  // The result should have been deduplicated. Moreover, the entry with the
+  // largest issuer JSON string lexicographically should win.
+  ASSERT_EQ(result->size(), 2u);
+
+  auto issuer =
+      *SuitableTrustTokenOrigin::Create(GURL("https://issuer.example"));
+  ASSERT_TRUE(result->count(issuer));
+  EXPECT_TRUE(
+      mojo::Equals(result->at(issuer),
+                   parser.Parse(R"({ "batchsize": 5, "srrkey": "aaac" })")));
+}
+
+TEST(TrustTokenKeyCommitmentParserMultipleIssuers, DuplicateIssuerFirstWins) {
+  // This is the same as DuplicateIssuer, except this time the first entry
+  // position-wise is the longest lexicographically, so deduplication should
+  // favor it.
+
+  std::string input =
+      R"( {
+    "https://issuer.example/longer": { "batchsize": 5, "srrkey": "aaaa" },
+    "https://other.example/": { "batchsize": 5, "srrkey": "aaab" },
+    "https://issuer.example/":
+      { "batchsize": 5, "srrkey": "aaac" }
+    } )";
+
+  // Make sure the input is actually valid JSON.
+  ASSERT_TRUE(base::JSONReader::Read(input));
+
+  TrustTokenKeyCommitmentParser parser;
+
+  auto result = parser.ParseMultipleIssuers(input);
+  ASSERT_TRUE(result);
+
+  // The result should have been deduplicated. Moreover, the entry with the
+  // largest issuer JSON string lexicographically should win.
+  ASSERT_EQ(result->size(), 2u);
+
+  auto issuer =
+      *SuitableTrustTokenOrigin::Create(GURL("https://issuer.example"));
+  ASSERT_TRUE(result->count(issuer));
+  EXPECT_TRUE(
+      mojo::Equals(result->at(issuer),
+                   parser.Parse(R"({ "batchsize": 5, "srrkey": "aaaa" })")));
+}
+
+TEST(TrustTokenKeyCommitmentParserMultipleIssuers,
+     MixOfSuitableAndUnsuitableIssuers) {
+  std::string input = R"( {
+    "https://issuer.example/": { "batchsize": 5, "srrkey": "aaaa" },
+    "http://insecure.example": { "batchsize": 5, "srrkey": "bbbb" } } )";
+
+  // Make sure the input is actually valid JSON.
+  ASSERT_TRUE(base::JSONReader::Read(input));
+
+  TrustTokenKeyCommitmentParser parser;
+
+  auto result = parser.ParseMultipleIssuers(input);
+  ASSERT_TRUE(result);
+  EXPECT_EQ(result->size(), 1u);
+
+  auto issuer =
+      *SuitableTrustTokenOrigin::Create(GURL("https://issuer.example"));
+  ASSERT_TRUE(result->count(issuer));
+  EXPECT_TRUE(
+      mojo::Equals(result->at(issuer),
+                   parser.Parse(R"({ "batchsize": 5, "srrkey": "aaaa" })")));
 }
 
 }  // namespace network

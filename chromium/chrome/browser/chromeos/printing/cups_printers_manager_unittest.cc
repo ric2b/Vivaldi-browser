@@ -357,9 +357,6 @@ class CupsPrintersManagerTest : public testing::Test,
     auto usb_notif_controller =
         std::make_unique<FakeUsbPrinterNotificationController>();
     usb_notif_controller_ = usb_notif_controller.get();
-    auto server_printers_provider =
-        std::make_unique<FakeServerPrintersProvider>();
-    server_printers_provider_ = server_printers_provider.get();
     auto enterprise_printers_provider =
         std::make_unique<FakeEnterprisePrintersProvider>();
     enterprise_printers_provider_ = enterprise_printers_provider.get();
@@ -371,9 +368,8 @@ class CupsPrintersManagerTest : public testing::Test,
         &synced_printers_manager_, std::move(usb_detector),
         std::move(zeroconf_detector), ppd_provider_,
         std::move(printer_configurer), std::move(usb_notif_controller),
-        std::move(server_printers_provider),
-        std::move(enterprise_printers_provider), &event_tracker_,
-        &pref_service_);
+        &server_printers_provider_, std::move(enterprise_printers_provider),
+        &event_tracker_, &pref_service_);
     manager_->AddObserver(this);
   }
 
@@ -414,7 +410,7 @@ class CupsPrintersManagerTest : public testing::Test,
   FakePrinterDetector* zeroconf_detector_;     // Not owned.
   TestPrinterConfigurer* printer_configurer_;  // Not owned.
   FakeUsbPrinterNotificationController* usb_notif_controller_;  // Not owned.
-  FakeServerPrintersProvider* server_printers_provider_;        // Not owned.
+  FakeServerPrintersProvider server_printers_provider_;
   scoped_refptr<FakePpdProvider> ppd_provider_;
 
   // This is unused, it's just here for memory ownership.
@@ -521,12 +517,10 @@ TEST_F(CupsPrintersManagerTest, SyncedPrintersTrumpDetections) {
   // into the Saved class and thus *remove* them from their previous
   // classes.
   manager_->PrinterInstalled(Printer("DiscoveredPrinter0"),
-                             /*is_automatic=*/true,
-                             PrinterSetupSource::kSettings);
+                             /*is_automatic=*/true);
   manager_->SavePrinter(Printer("DiscoveredPrinter0"));
   manager_->PrinterInstalled(Printer("AutomaticPrinter0"),
-                             /*is_automatic=*/true,
-                             PrinterSetupSource::kPrintPreview);
+                             /*is_automatic=*/true);
   manager_->SavePrinter(Printer("AutomaticPrinter0"));
   task_environment_.RunUntilIdle();
   ExpectPrintersInClassAre(PrinterClass::kDiscovered, {"DiscoveredPrinter1"});
@@ -741,8 +735,7 @@ TEST_F(CupsPrintersManagerTest, PrinterNotInstalled) {
 
 TEST_F(CupsPrintersManagerTest, PrinterIsInstalled) {
   Printer printer(kPrinterId);
-  manager_->PrinterInstalled(printer, /*is_automatic=*/false,
-                             PrinterSetupSource::kSettings);
+  manager_->PrinterInstalled(printer, /*is_automatic=*/false);
   EXPECT_TRUE(manager_->IsPrinterInstalled(printer));
 }
 
@@ -750,8 +743,7 @@ TEST_F(CupsPrintersManagerTest, PrinterIsInstalled) {
 // relevant fields change.
 TEST_F(CupsPrintersManagerTest, UpdatedPrinterConfiguration) {
   Printer printer(kPrinterId);
-  manager_->PrinterInstalled(printer, /*is_automatic=*/false,
-                             PrinterSetupSource::kSettings);
+  manager_->PrinterInstalled(printer, /*is_automatic=*/false);
 
   Printer updated(printer);
   updated.set_uri("different value");
@@ -792,8 +784,7 @@ TEST_F(CupsPrintersManagerTest, SavePrinterSucceedsOnManualPrinter) {
 // Test that installing a printer does not put it in the saved class.
 TEST_F(CupsPrintersManagerTest, PrinterInstalledDoesNotSavePrinter) {
   Printer printer(kPrinterId);
-  manager_->PrinterInstalled(printer, /*is_automatic=*/false,
-                             PrinterSetupSource::kSettings);
+  manager_->PrinterInstalled(printer, /*is_automatic=*/false);
 
   auto saved_printers = manager_->GetPrinters(PrinterClass::kSaved);
   EXPECT_EQ(0u, saved_printers.size());
@@ -803,8 +794,7 @@ TEST_F(CupsPrintersManagerTest, PrinterInstalledDoesNotSavePrinter) {
 // the saved printer but does not install the updated printer.
 TEST_F(CupsPrintersManagerTest, SavePrinterUpdatesPreviouslyInstalledPrinter) {
   Printer printer(kPrinterId);
-  manager_->PrinterInstalled(printer, /*is_automatic=*/false,
-                             PrinterSetupSource::kSettings);
+  manager_->PrinterInstalled(printer, /*is_automatic=*/false);
   manager_->SavePrinter(printer);
   EXPECT_TRUE(manager_->IsPrinterInstalled(printer));
 
@@ -893,6 +883,19 @@ TEST_F(CupsPrintersManagerTest,
 
   EXPECT_FALSE(
       usb_notif_controller_->IsConfigurationNotification("Discovered"));
+}
+
+TEST_F(CupsPrintersManagerTest, IsIppUri) {
+  // IPP protocol
+  ASSERT_TRUE(IsIppUri("ipp://1.2.3.4"));
+  // IPPS protocol
+  ASSERT_TRUE(IsIppUri("ipps://1.2.3.4"));
+  // USB protocol
+  ASSERT_FALSE(IsIppUri("usb://1.2.3.4"));
+  // Malformed URI
+  ASSERT_FALSE(IsIppUri("ipp/1.2.3.4"));
+  // Empty URI
+  ASSERT_FALSE(IsIppUri(""));
 }
 
 }  // namespace

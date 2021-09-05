@@ -4,6 +4,8 @@
 
 #include "fuchsia/runners/cast/application_controller_impl.h"
 
+#include <utility>
+
 #include "base/fuchsia/fuchsia_logging.h"
 #include "base/logging.h"
 
@@ -30,4 +32,18 @@ void ApplicationControllerImpl::SetTouchInputEnabled(bool enable) {
                                   fuchsia::web::InputTypes::GESTURE_DRAG,
                               (enable ? fuchsia::web::AllowInputState::ALLOW
                                       : fuchsia::web::AllowInputState::DENY));
+}
+
+void ApplicationControllerImpl::GetMediaPlayer(
+    fidl::InterfaceRequest<fuchsia::media::sessions2::Player> request) {
+  frame_->GetMediaPlayer(std::move(request));
+}
+
+void ApplicationControllerImpl::SetBlockMediaLoading(bool blocked) {
+  frame_->SetBlockMediaLoading(blocked);
+}
+
+void ApplicationControllerImpl::GetPrivateMemorySize(
+    GetPrivateMemorySizeCallback callback) {
+  frame_->GetPrivateMemorySize(std::move(callback));
 }

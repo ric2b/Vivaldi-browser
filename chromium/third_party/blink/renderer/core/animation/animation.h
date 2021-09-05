@@ -142,21 +142,10 @@ class CORE_EXPORT Animation : public EventTargetWithInlineData,
 
   void cancel();
 
-  base::Optional<double> currentTimeForBinding() const;
-  // TODO(crbug.com/1060971): Remove |is_null| version.
-  double currentTimeForBinding(bool& is_null);  // DEPRECATED
-  void setCurrentTimeForBinding(base::Optional<double> new_current_time,
-                                ExceptionState& exception_state);
-  // TODO(crbug.com/1060971): Remove |is_null| version.
-  void setCurrentTimeForBinding(double new_current_time,  // DEPRECATED
-                                bool is_null,
-                                ExceptionState& exception_state);
-
-  double currentTime() const;
-  double currentTime(bool& is_null);
-  void setCurrentTime(double new_current_time,
-                      bool is_null,
-                      ExceptionState& = ASSERT_NO_EXCEPTION);
+  base::Optional<double> currentTime() const;
+  void setCurrentTime(base::Optional<double> new_current_time,
+                      ExceptionState& exception_state);
+  void setCurrentTime(base::Optional<double> new_current_time);
 
   base::Optional<double> UnlimitedCurrentTime() const;
 
@@ -214,14 +203,9 @@ class CORE_EXPORT Animation : public EventTargetWithInlineData,
   Document* GetDocument() const;
 
   base::Optional<double> startTime() const;
-  // TODO(crbug.com/1060971): Remove |is_null| version.
-  double startTime(bool& is_null) const;  // DEPRECATED
   base::Optional<double> StartTimeInternal() const { return start_time_; }
   virtual void setStartTime(base::Optional<double>, ExceptionState&);
-  // TODO(crbug.com/1060971): Remove |is_null| version.
-  void setStartTime(double,  // DEPRECATED
-                    bool is_null,
-                    ExceptionState& = ASSERT_NO_EXCEPTION);
+  void setStartTime(base::Optional<double>);
 
   const AnimationEffect* effect() const { return content_.Get(); }
   AnimationEffect* effect() { return content_.Get(); }
@@ -266,7 +250,7 @@ class CORE_EXPORT Animation : public EventTargetWithInlineData,
   bool PreCommit(int compositor_group,
                  const PaintArtifactCompositor*,
                  bool start_on_compositor);
-  void PostCommit(double timeline_time);
+  void PostCommit();
 
   unsigned SequenceNumber() const override { return sequence_number_; }
 
@@ -422,6 +406,7 @@ class CORE_EXPORT Animation : public EventTargetWithInlineData,
   // control.
   bool pending_pause_;
   bool pending_play_;
+  // Indicates finish notification queued but not processed.
   bool pending_finish_notification_;
   bool has_queued_microtask_;
 
@@ -429,7 +414,11 @@ class CORE_EXPORT Animation : public EventTargetWithInlineData,
   // has changed by means other than the ordinary progression of time
   bool outdated_;
 
+  // Indicates the animation is no longer active. Cancelled animation is marked
+  // as finished_.
   bool finished_;
+  // Indicates finish notification has been handled.
+  bool committed_finish_notification_;
   // Holds a 'finished' event queued for asynchronous dispatch via the
   // ScriptedAnimationController. This object remains active until the
   // event is actually dispatched.

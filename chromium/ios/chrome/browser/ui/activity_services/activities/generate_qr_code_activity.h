@@ -13,15 +13,12 @@
 // Activity that ends up showing a QR code for the given URL.
 @interface GenerateQrCodeActivity : UIActivity
 
-// Identifier for the generate QR code activity.
-+ (NSString*)activityIdentifier;
-
 // Initializes the GenerateQrCodeActivity with the |activityURL| used to
 // generate the QR code, the |title| of the page at that URL, and a |dispatcher|
 // to handle the command.
 - (instancetype)initWithURL:(const GURL&)activityURL
                       title:(NSString*)title
-                 dispatcher:(id<QRGenerationCommands>)dispatcher
+                    handler:(id<QRGenerationCommands>)handler
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;

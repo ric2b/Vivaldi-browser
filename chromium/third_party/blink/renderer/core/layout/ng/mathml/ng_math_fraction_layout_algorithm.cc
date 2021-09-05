@@ -192,10 +192,6 @@ scoped_refptr<const NGLayoutResult> NGMathFractionLayoutAlgorithm::Layout() {
       ConstraintSpace().GetWritingMode(), ConstraintSpace().Direction(),
       To<NGPhysicalBoxFragment>(denominator_layout_result->PhysicalFragment()));
 
-  LayoutUnit content_inline_size = std::max(
-      numerator_fragment.InlineSize() + numerator_margins.InlineSum(),
-      denominator_fragment.InlineSize() + denominator_margins.InlineSum());
-
   LayoutUnit numerator_ascent =
       numerator_margins.block_start +
       numerator_fragment.Baseline().value_or(numerator_fragment.BlockSize());
@@ -252,13 +248,13 @@ scoped_refptr<const NGLayoutResult> NGMathFractionLayoutAlgorithm::Layout() {
   LogicalOffset denominator_offset;
   numerator_offset.inline_offset =
       border_scrollbar_padding_.inline_start + numerator_margins.inline_start +
-      (content_inline_size -
+      (child_available_size.inline_size -
        (numerator_fragment.InlineSize() + numerator_margins.InlineSum())) /
           2;
   denominator_offset.inline_offset =
       border_scrollbar_padding_.inline_start +
       denominator_margins.inline_start +
-      (content_inline_size -
+      (child_available_size.inline_size -
        (denominator_fragment.InlineSize() + denominator_margins.InlineSum())) /
           2;
 
@@ -278,7 +274,8 @@ scoped_refptr<const NGLayoutResult> NGMathFractionLayoutAlgorithm::Layout() {
   denominator.StoreMargins(ConstraintSpace(), denominator_margins);
 
   LayoutUnit block_size = ComputeBlockSizeForFragment(
-      ConstraintSpace(), Style(), border_scrollbar_padding_, total_block_size);
+      ConstraintSpace(), Style(), border_scrollbar_padding_, total_block_size,
+      border_box_size.inline_size);
 
   container_builder_.SetIntrinsicBlockSize(total_block_size);
   container_builder_.SetBlockSize(block_size);
@@ -290,34 +287,31 @@ scoped_refptr<const NGLayoutResult> NGMathFractionLayoutAlgorithm::Layout() {
   return container_builder_.ToBoxFragment();
 }
 
-base::Optional<MinMaxSizes> NGMathFractionLayoutAlgorithm::ComputeMinMaxSizes(
-    const MinMaxSizesInput& input) const {
-  base::Optional<MinMaxSizes> sizes =
-      CalculateMinMaxSizesIgnoringChildren(Node(), border_scrollbar_padding_);
-  if (sizes)
-    return sizes;
+MinMaxSizesResult NGMathFractionLayoutAlgorithm::ComputeMinMaxSizes(
+    const MinMaxSizesInput& child_input) const {
+  if (auto result = CalculateMinMaxSizesIgnoringChildren(
+          Node(), border_scrollbar_padding_))
+    return *result;
 
-  sizes.emplace();
-  LayoutUnit child_percentage_resolution_block_size =
-      CalculateChildPercentageBlockSizeForMinMax(
-          ConstraintSpace(), Node(), border_scrollbar_padding_,
-          input.percentage_resolution_block_size);
-
-  MinMaxSizesInput child_input(child_percentage_resolution_block_size);
+  MinMaxSizes sizes;
+  bool depends_on_percentage_block_size = false;
 
   for (NGLayoutInputNode child = Node().FirstChild(); child;
        child = child.NextSibling()) {
     if (child.IsOutOfFlowPositioned())
       continue;
-    auto child_sizes =
+    auto child_result =
         ComputeMinAndMaxContentContribution(Style(), child, child_input);
     NGBoxStrut margins = ComputeMinMaxMargins(Style(), child);
-    child_sizes += margins.InlineSum();
-    sizes->Encompass(child_sizes);
+    child_result.sizes += margins.InlineSum();
+
+    sizes.Encompass(child_result.sizes);
+    depends_on_percentage_block_size |=
+        child_result.depends_on_percentage_block_size;
   }
 
-  *sizes += border_scrollbar_padding_.InlineSum();
-  return sizes;
+  sizes += border_scrollbar_padding_.InlineSum();
+  return {sizes, depends_on_percentage_block_size};
 }
 
 }  // namespace blink

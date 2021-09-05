@@ -29,7 +29,8 @@ const char kCdmSandbox[] = "cdm";
 const char kPrintCompositorSandbox[] = "print_compositor";
 const char kAudioSandbox[] = "audio";
 const char kSharingServiceSandbox[] = "sharing_service";
-const char kSodaSandbox[] = "soda";
+const char kSpeechRecognitionSandbox[] = "speech_recognition";
+const char kVideoCaptureSandbox[] = "video_capture";
 
 #if defined(OS_WIN)
 const char kPdfConversionSandbox[] = "pdf_conversion";
@@ -111,11 +112,14 @@ const char kEnableSandboxLogging[] = "enable-sandbox-logging";
 
 // Flags spied upon from other layers.
 const char kGpuProcess[] = "gpu-process";
+const char kNaClBrokerProcess[] = "nacl-broker";
 const char kNaClLoaderProcess[] = "nacl-loader";
 const char kPpapiBrokerProcess[] = "ppapi-broker";
 const char kPpapiPluginProcess[] = "ppapi";
 const char kRendererProcess[] = "renderer";
 const char kUtilityProcess[] = "utility";
+const char kCloudPrintServiceProcess[] = "service";
+const char kZygoteProcessType[] = "zygote";
 
 }  // namespace switches
 

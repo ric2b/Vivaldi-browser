@@ -7,14 +7,16 @@
 #include <vector>
 
 #include "base/debug/dump_without_crashing.h"
-#include "base/logging.h"
+#include "base/notreached.h"
 #include "mojo/public/cpp/base/file_mojom_traits.h"
 #include "mojo/public/cpp/base/file_path_mojom_traits.h"
 #include "mojo/public/cpp/base/time_mojom_traits.h"
 #include "mojo/public/cpp/base/unguessable_token_mojom_traits.h"
 #include "services/network/public/cpp/http_request_headers_mojom_traits.h"
+#include "services/network/public/cpp/isolation_info_mojom_traits.h"
 #include "services/network/public/cpp/network_ipc_param_traits.h"
 #include "services/network/public/cpp/resource_request_body.h"
+#include "services/network/public/mojom/cookie_access_observer.mojom.h"
 #include "services/network/public/mojom/trust_tokens.mojom.h"
 #include "services/network/public/mojom/url_loader.mojom-shared.h"
 #include "url/mojom/origin_mojom_traits.h"
@@ -156,12 +158,12 @@ bool StructTraits<network::mojom::TrustedUrlRequestParamsDataView,
                   network::ResourceRequest::TrustedParams>::
     Read(network::mojom::TrustedUrlRequestParamsDataView data,
          network::ResourceRequest::TrustedParams* out) {
-  if (!data.ReadNetworkIsolationKey(&out->network_isolation_key))
+  if (!data.ReadIsolationInfo(&out->isolation_info))
     return false;
-  out->update_network_isolation_key_on_redirect =
-      data.update_network_isolation_key_on_redirect();
   out->disable_secure_dns = data.disable_secure_dns();
   out->has_user_activation = data.has_user_activation();
+  out->cookie_observer = data.TakeCookieObserver<
+      mojo::PendingRemote<network::mojom::CookieAccessObserver>>();
   return true;
 }
 
@@ -201,7 +203,7 @@ bool StructTraits<
     base::debug::DumpWithoutCrashing();
   }
 
-  out->attach_same_site_cookies = data.attach_same_site_cookies();
+  out->force_ignore_site_for_cookies = data.force_ignore_site_for_cookies();
   out->update_first_party_url_on_redirect =
       data.update_first_party_url_on_redirect();
   out->load_flags = data.load_flags();
@@ -212,7 +214,6 @@ bool StructTraits<
   out->skip_service_worker = data.skip_service_worker();
   out->corb_detachable = data.corb_detachable();
   out->corb_excluded = data.corb_excluded();
-  out->fetch_request_context_type = data.fetch_request_context_type();
   out->destination = data.destination();
   out->keepalive = data.keepalive();
   out->has_user_gesture = data.has_user_gesture();

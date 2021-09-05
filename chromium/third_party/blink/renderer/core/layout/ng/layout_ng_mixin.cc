@@ -26,6 +26,8 @@ LayoutNGMixin<Base>::LayoutNGMixin(Element* element) : Base(element) {
       std::is_base_of<LayoutBlock, Base>::value,
       "Base class of LayoutNGMixin must be LayoutBlock or derived class.");
   DCHECK(!element || !element->ShouldForceLegacyLayout());
+  if (element)
+    Base::GetDocument().IncLayoutBlockCounterNG();
 }
 
 template <typename Base>
@@ -88,9 +90,11 @@ MinMaxSizes LayoutNGMixin<Base>::ComputeIntrinsicLogicalWidths() const {
       LayoutBoxUtils::AvailableLogicalHeight(*this, Base::ContainingBlock());
 
   NGConstraintSpace space = ConstraintSpaceForMinMaxSizes();
-  MinMaxSizes sizes = node.ComputeMinMaxSizes(
-      node.Style().GetWritingMode(), MinMaxSizesInput(available_logical_height),
-      &space);
+  MinMaxSizes sizes =
+      node.ComputeMinMaxSizes(node.Style().GetWritingMode(),
+                              MinMaxSizesInput(available_logical_height),
+                              &space)
+          .sizes;
 
   if (Base::IsTableCell()) {
     // If a table cell, or the column that it belongs to, has a specified fixed
@@ -276,6 +280,10 @@ LayoutNGMixin<Base>::UpdateInFlowBlockLayout() {
 template class CORE_TEMPLATE_EXPORT LayoutNGMixin<LayoutBlock>;
 template class CORE_TEMPLATE_EXPORT LayoutNGMixin<LayoutBlockFlow>;
 template class CORE_TEMPLATE_EXPORT LayoutNGMixin<LayoutProgress>;
+template class CORE_TEMPLATE_EXPORT LayoutNGMixin<LayoutRubyAsBlock>;
+template class CORE_TEMPLATE_EXPORT LayoutNGMixin<LayoutRubyBase>;
+template class CORE_TEMPLATE_EXPORT LayoutNGMixin<LayoutRubyRun>;
+template class CORE_TEMPLATE_EXPORT LayoutNGMixin<LayoutRubyText>;
 template class CORE_TEMPLATE_EXPORT LayoutNGMixin<LayoutTableCaption>;
 template class CORE_TEMPLATE_EXPORT LayoutNGMixin<LayoutTableCell>;
 

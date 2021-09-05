@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">Nemška tipkovnica</translation>
 <translation id="1972984168337863910">Razširitev datotek podoken povratnih informacij</translation>
 <translation id="1984603991036629094">Ameriška fonetična tipkovnica</translation>
+<translation id="1995337122023280937">Na lokacijo datoteke</translation>
 <translation id="2001796770603320721">Upravljanje v Googlu Drive</translation>
 <translation id="2009067268969781306">Če formatirate pogon, se izbrišejo vsi podatki, shranjeni na njem. Tega dejanja ni mogoče razveljaviti.</translation>
 <translation id="2028997212275086731">Arhiv RAR</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">Google Drive ni dosegljiv. <ph name="BEGIN_LINK" />Odjavite se<ph name="END_LINK" /> in se znova prijavite.</translation>
 <translation id="2649120831653069427">Riba mavričarka</translation>
 <translation id="2661146741306740526">16 x 9</translation>
+<translation id="2664412712123763093">Mesto datoteke</translation>
 <translation id="2672394958563893062">Prišlo je do napake. Kliknite, da začnete znova od začetka.</translation>
 <translation id="2676946222714718093">Predvajanje v:</translation>
 <translation id="2735698359135166290">Romunska standardna tipkovnica</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826">Št. napak: <ph name="COUNT" />.</translation>
 <translation id="3519867315646775981">Prečrkovanje (shalom ← שלום)</translation>
 <translation id="3522708245912499433">portugalščina</translation>
+<translation id="3524311639100184459">Pozor: Te datoteke so začasne in bodo morda samodejno izbrisane, da se sprosti prostor na disku.  <ph name="BEGIN_LINK" />Več o tem<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Mapa</translation>
 <translation id="3549797760399244642">Pojdite na drive.google.com ...</translation>
 <translation id="357479282490346887">litovščina</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">Kivi</translation>
 <translation id="3966388904776714213">Zvočni predvajalnik</translation>
 <translation id="4002066346123236978">Naslov</translation>
+<translation id="4065397611279318371">Če želite odpirati datoteke z aplikacijami <ph name="APP_NAME" />, jih najprej premaknite v mapo <ph name="SHARED_DIRECTORY_LABEL" />.</translation>
 <translation id="4070370845051020638">Način vnosa za kantonščino</translation>
 <translation id="4072248638558688893">Tipkovnica za tamilščino (fonetična)</translation>
 <translation id="4124935795427217608">Samorog</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">Samodejno popravi</translation>
 <translation id="4881695831933465202">Odpri</translation>
 <translation id="4886021172213954916">Tipkovnica za tamilščino (pisalni stroj)</translation>
+<translation id="4892969127351273348">Ni mogoče odpreti z aplikacijo <ph name="APP_NAME" /></translation>
 <translation id="4905417359854579806">Pripravljeno za varnostno kopiranje: <ph name="FILE_COUNT" /></translation>
 <translation id="4924638091161556692">Popravljeno</translation>
 <translation id="4935975195727477204">Roža</translation>
@@ -500,6 +505,7 @@
 <translation id="6806699711453372963">Upravljanje skupne rabe z okoljem Linux</translation>
 <translation id="6808193438228982088">Lisica</translation>
 <translation id="6820687829547641339">Stisnjen arhiv tar Gzip</translation>
+<translation id="6823166707458800069">Datoteke, shranjene v tej mapi, se samodejno varnostno kopirajo v splet.</translation>
 <translation id="6825883775269213504">ruščina</translation>
 <translation id="6827236167376090743">Ta videoposnetek se bo neprekinjeno stalno predvajal.</translation>
 <translation id="6847101934483209767">Vnos <ph name="ENTRY_NAME" /> je bil odstranjen iz izbora.</translation>
@@ -556,6 +562,7 @@
 <translation id="7417705661718309329">Googlov zemljevid</translation>
 <translation id="7419631653042041064">Katalonska tipkovnica</translation>
 <translation id="7434823369735508263">Angleška tipkovnica Dvorak (Velika Britanija)</translation>
+<translation id="7447678886297481665">Datoteke v tej mapi so samo za branje. Nekatere dejavnosti niso podprte.</translation>
 <translation id="7460898608667578234">ukrajinščina</translation>
 <translation id="7474889694310679759">Angleška tipkovnica (Kanada)</translation>
 <translation id="7489215562877293245">Št. najdenih: <ph name="FILE_COUNT" />

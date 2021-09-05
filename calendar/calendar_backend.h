@@ -111,7 +111,6 @@ class CalendarBackend
                             std::shared_ptr<CreateEventsResult> result);
 
   void GetAllEvents(std::shared_ptr<EventQueryResults> results);
-
   // Updates an event
   void UpdateEvent(EventID event_id,
                    const CalendarEvent& event,
@@ -167,6 +166,8 @@ class CalendarBackend
 
   void GetAllAccounts(std::shared_ptr<AccountRows> results);
 
+  void GetAllEventTemplates(std::shared_ptr<EventQueryResults> results);
+
   EventResult FillEvent(EventID id);
 
   void NotifyEventCreated(const EventResult& event) override;
@@ -192,7 +193,7 @@ class CalendarBackend
 
   // Does the work of Init.
   void InitImpl(const CalendarDatabaseParams& calendar_database_params);
-
+  void GetEvents(EventRows rows, std::shared_ptr<EventQueryResults> results);
   // Closes all databases managed by CalendarBackend. Commits any pending
   // transactions.
   void CloseAllDatabases();

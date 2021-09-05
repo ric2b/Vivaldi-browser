@@ -63,7 +63,6 @@
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/file_select_listener.h"
-#include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/network_service_instance.h"
@@ -80,6 +79,7 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/page_type.h"
 #include "content/public/common/referrer.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/signed_exchange_browser_test_helper.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -1809,16 +1809,9 @@ IN_PROC_BROWSER_TEST_F(SecurityStateTabHelperTestWithHttpDangerous,
 
 // Visit a valid HTTPS page, then a broken HTTPS page, and then go back,
 // and test that the observed security style matches.
-#if defined(OS_CHROMEOS)
-// Flaky on Chrome OS. See https://crbug.com/638576.
-#define MAYBE_DidChangeVisibleSecurityStateObserverGoBack \
-  DISABLED_DidChangeVisibleSecurityStateObserverGoBack
-#else
-#define MAYBE_DidChangeVisibleSecurityStateObserverGoBack \
-  DidChangeVisibleSecurityStateObserverGoBack
-#endif
+// TODO(https://crbug.com/638576) disabled due to flakiness.
 IN_PROC_BROWSER_TEST_F(DidChangeVisibleSecurityStateTest,
-                       MAYBE_DidChangeVisibleSecurityStateObserverGoBack) {
+                       DISABLED_DidChangeVisibleSecurityStateObserverGoBack) {
   ASSERT_TRUE(https_server_.Start());
 
   net::EmbeddedTestServer https_test_server_expired(

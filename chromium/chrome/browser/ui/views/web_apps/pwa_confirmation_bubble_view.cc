@@ -14,12 +14,14 @@
 #include "chrome/browser/ui/views/frame/toolbar_button_provider.h"
 #include "chrome/browser/ui/views/page_action/page_action_icon_view.h"
 #include "chrome/browser/ui/views/web_apps/web_app_info_image_source.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/elide_url.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/text_elider.h"
+#include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
@@ -89,9 +91,13 @@ PWAConfirmationBubbleView::PWAConfirmationBubbleView(
       web_app_info_(std::move(web_app_info)),
       callback_(std::move(callback)) {
   DCHECK(web_app_info_);
-  DialogDelegate::SetButtonLabel(
-      ui::DIALOG_BUTTON_OK,
-      l10n_util::GetStringUTF16(IDS_INSTALL_PWA_BUTTON_LABEL));
+
+  WidgetDelegate::SetShowCloseButton(true);
+  WidgetDelegate::SetTitle(
+      l10n_util::GetStringUTF16(IDS_INSTALL_TO_OS_LAUNCH_SURFACE_BUBBLE_TITLE));
+
+  SetButtonLabel(ui::DIALOG_BUTTON_OK,
+                 l10n_util::GetStringUTF16(IDS_INSTALL_PWA_BUTTON_LABEL));
   base::TrimWhitespace(web_app_info_->title, base::TRIM_ALL,
                        &web_app_info_->title);
   // PWAs should always be configured to open in a window.
@@ -122,21 +128,23 @@ PWAConfirmationBubbleView::PWAConfirmationBubbleView(
   labels->AddChildView(
       CreateOriginLabel(url::Origin::Create(web_app_info_->app_url)).release());
 
+  if (base::FeatureList::IsEnabled(features::kDesktopPWAsTabStrip)) {
+    // This UI is only for prototyping and is not intended for shipping.
+    DCHECK_EQ(features::kDesktopPWAsTabStrip.default_state,
+              base::FEATURE_DISABLED_BY_DEFAULT);
+    tabbed_window_checkbox_ = labels->AddChildView(
+        std::make_unique<views::Checkbox>(l10n_util::GetStringUTF16(
+            IDS_BOOKMARK_APP_BUBBLE_OPEN_AS_TABBED_WINDOW)));
+    tabbed_window_checkbox_->SetChecked(
+        web_app_info_->enable_experimental_tabbed_window);
+  }
+
   chrome::RecordDialogCreation(chrome::DialogIdentifier::PWA_CONFIRMATION);
 
   SetHighlightedButton(highlight_button);
 }
 
 PWAConfirmationBubbleView::~PWAConfirmationBubbleView() = default;
-
-bool PWAConfirmationBubbleView::ShouldShowCloseButton() const {
-  return true;
-}
-
-base::string16 PWAConfirmationBubbleView::GetWindowTitle() const {
-  return l10n_util::GetStringUTF16(
-      IDS_INSTALL_TO_OS_LAUNCH_SURFACE_BUBBLE_TITLE);
-}
 
 views::View* PWAConfirmationBubbleView::GetInitiallyFocusedView() {
   return nullptr;
@@ -153,6 +161,10 @@ void PWAConfirmationBubbleView::WindowClosing() {
 
 bool PWAConfirmationBubbleView::Accept() {
   DCHECK(web_app_info_);
+  if (tabbed_window_checkbox_) {
+    web_app_info_->enable_experimental_tabbed_window =
+        tabbed_window_checkbox_->GetChecked();
+  }
   std::move(callback_).Run(true, std::move(web_app_info_));
   return true;
 }

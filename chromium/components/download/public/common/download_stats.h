@@ -21,6 +21,7 @@
 #include "components/download/public/common/download_export.h"
 #include "components/download/public/common/download_interrupt_reasons.h"
 #include "components/download/public/common/download_source.h"
+#include "net/base/network_change_notifier.h"
 #include "net/http/http_response_info.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
@@ -250,13 +251,17 @@ COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadCountWithSource(
     DownloadCountTypes type,
     DownloadSource download_source);
 
+// Record metrics when a new download is started.
+COMPONENTS_DOWNLOAD_EXPORT void RecordNewDownloadStarted(
+    net::NetworkChangeNotifier::ConnectionType connection_type,
+    DownloadSource download_source);
+
 // Record COMPLETED_COUNT and how long the download took.
 COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadCompleted(
     int64_t download_len,
     bool is_parallelizable,
-    DownloadSource download_source,
-    bool has_resumed,
-    bool has_strong_validators);
+    net::NetworkChangeNotifier::ConnectionType connection_type,
+    DownloadSource download_source);
 
 // Record INTERRUPTED_COUNT, |reason|, |received| and |total| bytes.
 COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadInterrupted(
@@ -420,13 +425,6 @@ COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadConnectionSecurity(
     const GURL& download_url,
     const std::vector<GURL>& url_chain);
 
-COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadContentTypeSecurity(
-    const GURL& download_url,
-    const std::vector<GURL>& url_chain,
-    const std::string& mime_type,
-    const base::RepeatingCallback<bool(const GURL&)>&
-        is_origin_secure_callback);
-
 COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadSourcePageTransitionType(
     const base::Optional<ui::PageTransition>& transition);
 
@@ -450,14 +448,6 @@ COMPONENTS_DOWNLOAD_EXPORT void RecordResumptionStrongValidators(
 
 COMPONENTS_DOWNLOAD_EXPORT void RecordResumptionRestartCount(
     ResumptionRestartCountTypes type);
-
-// Records that download was resumed.
-COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadResumed(
-    bool has_strong_validators);
-
-// Records connection info of the download.
-COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadConnectionInfo(
-    net::HttpResponseInfo::ConnectionInfo connection_info);
 
 COMPONENTS_DOWNLOAD_EXPORT void RecordDownloadManagerCreationTimeSinceStartup(
     base::TimeDelta elapsed_time);

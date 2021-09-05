@@ -190,6 +190,12 @@ message ClientSettingsProto {
 
   // Optional settings intended for integration tests.
   optional IntegrationTestSettings integration_test_settings = 17;
+
+  // Optional setting defining the size of the bottom sheet when Talkback is
+  // enabled as a fraction of the available height. When set, the bottomsheet
+  // will stop resizing automatically in talkback mode. It will always have the
+  // specified size instead.
+  optional float talkback_sheet_size_fraction = 18;
 }
 
 message ScriptTimeoutError {
@@ -340,7 +346,7 @@ message InitialScriptActionsRequestProto {
     // The backend expects the |script_path| to be a repeated field. This field
     // is expected to contain only one element.
     repeated string script_path = 1;
-    // The exact URL on which the script is triggered.
+    // The exact URL on which the script was initially started.
     optional string url = 2;
     optional PolicyType policy = 3;
   }
@@ -412,6 +418,21 @@ enum DropdownSelectStrategy {
   LABEL_STARTS_WITH = 3;
 }
 
+// This type disambiguates the term "clicking" on a node in the DOM by defining
+// what strategy should be used to execute the "click".
+enum ClickType {
+  NOT_SET = 0;
+
+  // Send a tap event to the node.
+  TAP = 1;
+
+  // Use JavaScript's `node.click()` to click the element.
+  JAVASCRIPT = 2;
+
+  // Send a click event to the node.
+  CLICK = 3;
+}
+
 // An action could be performed.
 message ActionProto {
   // Wait these many milliseconds before executing the action, if set.
@@ -447,6 +468,8 @@ message ActionProto {
     PopupMessageProto popup_message = 44;
     WaitForDocumentProto wait_for_document = 45;
     ShowGenericUiProto show_generic_ui = 49;
+    GeneratePasswordForFormFieldProto generate_password_for_form_field = 52;
+    SaveGeneratedPasswordProto save_generated_password = 53;
   }
 
   // Set to true to make the client remove any contextual information if the
@@ -454,7 +477,7 @@ message ActionProto {
   // action sent to the client after this one. Default is false.
   optional bool clean_contextual_ui = 33;
 
-  reserved 34, 46, 47, 48;
+  reserved 34, 46, 47, 48, 50, 51;
 }
 
 // Result of |CollectUserDataProto| to be sent to the server.
@@ -722,12 +745,6 @@ enum VisibilityRequirement {
 
 // Contain all arguments to perform a click.
 message ClickProto {
-  enum ClickType {
-    NOT_SET = 0;
-    TAP = 1;
-    JAVASCRIPT = 2;
-    CLICK = 3;
-  }
   optional ElementReferenceProto element_to_click = 1;
   optional ClickType click_type = 2;
 }
@@ -848,6 +865,14 @@ message UseAddressProto {
     // Usually used together with simulate_key_presses.
     optional bool forced = 5;
 
+    // For JavaScript implemented dropdowns. This first clicks on the |element|,
+    // then waits for |option_element_to_click| to appear and clicks it. The
+    // selector must match a generic option, an |inner_text_pattern| will be
+    // added to this element reference to match a single option.
+    // Both clicks use the same |click_type|.
+    optional ElementReferenceProto option_element_to_click = 9;
+    optional ClickType click_type = 10;
+
     reserved 1, 3;
   }
 
@@ -864,6 +889,12 @@ message UseAddressProto {
 
   // An optional list of fields that should be filled by this action.
   repeated RequiredField required_fields = 6;
+
+  // If true, this skips the Autofill step jumping straight to the
+  // |required_fields|.
+  optional bool skip_autofill = 10;
+
+  reserved 7, 8, 9;
 }
 
 // Fill a form with a credit card if there is one stored in client memory,
@@ -908,6 +939,14 @@ message UseCreditCardProto {
     // Usually used together with simulate_key_presses.
     optional bool forced = 5;
 
+    // For JavaScript implemented dropdowns. This first clicks on the |element|,
+    // then waits for |option_element_to_click| to appear and clicks it. The
+    // selector must match a generic option, an |inner_text_pattern| will be
+    // added to this element reference to match a single option.
+    // Both clicks use the same |click_type|.
+    optional ElementReferenceProto option_element_to_click = 9;
+    optional ClickType click_type = 10;
+
     reserved 1, 3;
   }
 
@@ -919,6 +958,12 @@ message UseCreditCardProto {
   optional ElementReferenceProto form_field_element = 3;
 
   repeated RequiredField required_fields = 7;
+
+  // If true, this skips the Autofill step jumping straight to the
+  // |required_fields|.
+  optional bool skip_autofill = 8;
+
+  reserved 4, 5, 6;
 }
 
 // Ask Chrome to wait for an element in the DOM. This can be used to only
@@ -1098,6 +1143,23 @@ message WaitForDocumentProto {
 //   log should contain additional information about the issue, if verbose
 //   logging is enabled (suggested level: 2 or 3).
 message ShowGenericUiProto {
+  message RequestAutofillCreditCards { optional string model_identifier = 1; }
+  message RequestAutofillProfiles { optional string model_identifier = 1; }
+  message RequestLoginOptions {
+    message PasswordManagerLogins {
+      optional string sublabel = 1;
+      optional bytes payload = 2;
+    }
+    message LoginOption {
+      oneof type {
+        LoginOptionProto custom_login_option = 1;
+        PasswordManagerLogins password_manager_logins = 2;
+      }
+    }
+
+    repeated LoginOption login_options = 1;
+    optional string model_identifier = 2;
+  }
   message Result {
     // The model containing the values for all keys specified in
     // |output_model_identifiers|.
@@ -1110,6 +1172,19 @@ message ShowGenericUiProto {
   // The set of model identifiers to write to the result. Note: this must be a
   // subset of the input model identifiers!
   repeated string output_model_identifiers = 2;
+
+  // If specified, available autofill credit cards will be provided and
+  // auto-updated in the specified |model_identifier|.
+  optional RequestAutofillCreditCards request_credit_cards = 3;
+
+  // If specified, available autofill profiles will be provided and auto-updated
+  // in the specified |model_identifier|.
+  optional RequestAutofillProfiles request_profiles = 4;
+
+  // If specified, available login options (including those provided by password
+  // manager) will be provided and auto-updated in the specified
+  // |model_identifier|.
+  optional RequestLoginOptions request_login_options = 5;
 }
 
 // Allow choosing one or more possibility. If FocusElement was called just
@@ -1147,6 +1222,11 @@ message PromptProto {
     // be transmitted as-is by the client without interpreting.
     optional bytes server_payload = 5;
 
+    // This field is only used when crafting a response Choice for the server
+    // when the |end_on_navigation| option is set. It means there was a
+    // navigation event while in prompt mode that ended the action.
+    optional bool navigation_ended = 17;
+
     reserved 4, 6, 8, 13, 14;
   }
   repeated Choice choices = 4;
@@ -1163,6 +1243,11 @@ message PromptProto {
   // like go_back do not shut down autofill assistant.
   // TODO(marianfe): Consider introducing a BrowseAction instead.
   optional bool browse_mode = 7;
+
+  // When set to true, end prompt on navigation events happening during a prompt
+  // action. The result sent back to the server will contain a Choice marked as
+  // |navigation_ended|.
+  optional bool end_on_navigation = 8;
 
   // A list of domains and subdomains to allow users to navigate to when in
   // browse mode.
@@ -1199,6 +1284,9 @@ message ContactDetailsProto {
   repeated AutofillContactField full_fields = 7;
   // The maximum number of lines for contacts in the expanded contact section.
   optional int32 max_number_full_lines = 8;
+  // If present, it will be used as the title to be displayed for the contact
+  // details section instead of the default one.
+  optional string contact_details_section_title = 9;
 }
 
 message LoginDetailsProto {
@@ -1223,9 +1311,9 @@ message LoginDetailsProto {
     // If the option was chosen, this payload will be returned to the server.
     optional bytes payload = 1;
 
-    // Whether the UI should automatically choose this login option if it is the
-    // only available choice.
-    optional bool choose_automatically_if_no_other_options = 2;
+    // Whether the UI should automatically choose this login option if no
+    // password manager login options are available.
+    optional bool choose_automatically_if_no_stored_login = 2;
 
     // Determines the priority with which to pre-select this login choice.
     // The lower the value, the higher the priority.
@@ -1348,7 +1436,7 @@ message PopupListSectionProto {
 
 // Asks to provide the data used by UseAddressAction and
 // UseCreditCardAction.
-// Next: 32
+// Next: 33
 message CollectUserDataProto {
   enum TermsAndConditionsState {
     // No choice has been made yet.
@@ -1367,6 +1455,9 @@ message CollectUserDataProto {
   // specified name. If empty we won't ask for the shipping address. Data saved
   // under this name can be reused by UseAddressAction.
   optional string shipping_address_name = 3;
+  // If present, it will be used as the title to be displayed for the shipping
+  // address section instead of the default one.
+  optional string shipping_address_section_title = 32;
   // When 'true' will ask for the credit card.
   optional bool request_payment_method = 4;
   // If non-empty, the UI will filter the available basic-card networks
@@ -1553,10 +1644,6 @@ message ShowDetailsProto {
 // Set the value of an form element.
 message SetFormFieldValueProto {
   message Result { optional bool fallback_to_simulate_key_presses = 1; }
-  message GeneratePassword {
-    // Save the generated password at the specified memory location.
-    optional string memory_key = 1;
-  }
   message KeyPress {
     oneof keypress {
       // Text to insert as-is into a form field.
@@ -1575,9 +1662,9 @@ message SetFormFieldValueProto {
       bool use_password = 5;
       // Use the value stored at the specified memory location.
       string client_memory_key = 6;
-      // Use a password generated by Chrome password manager.
-      GeneratePassword generate_password = 7;
     }
+
+    reserved 7;
   }
 
   // A reference to the form element whose value should be set.
@@ -1593,6 +1680,24 @@ message SetFormFieldValueProto {
   optional int32 delay_in_millisecond = 6 [default = 20];
 
   reserved 5;
+}
+
+// Asks the password manager to generate a suitable password for |element|. The
+// generated password can be filled in subsequent SetFormFieldValueProto
+// actions. Generated password will be presaved to password store,
+// login details need to be available in the client memory for this action.
+message GeneratePasswordForFormFieldProto {
+  // A reference to the form element for which to generate a password.
+  optional ElementReferenceProto element = 1;
+  // The client memory key to store the generated password.
+  optional string memory_key = 2;
+}
+
+// Asks the password save manager to save generated password after successful
+// submission.
+message SaveGeneratedPasswordProto {
+  // The client memory key of stored password.
+  optional string memory_key = 1;
 }
 
 // Set an element attribute to a specific value.
@@ -1624,7 +1729,9 @@ message ShowInfoBoxProto {
 }
 
 // Allow scripts to configure the peek height of the sheet and whether we should
-// resize the viewport by this peek height.
+// resize the viewport by this peek height. If talkback is enabled, the mode is
+// set to RESIZE_VISUAL_VIEWPORT. Changes to the mode are only applied after
+// talkback is disabled.
 message ConfigureBottomSheetProto {
   enum ViewportResizing {
     // Don't change resizing configuration.

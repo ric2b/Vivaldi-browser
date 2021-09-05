@@ -35,9 +35,7 @@ class CORE_EXPORT AnimationTimeline : public ScriptWrappable {
   AnimationTimeline(Document*);
   ~AnimationTimeline() override = default;
 
-  double currentTime(bool& is_null);
-  double currentTime();
-  base::Optional<double> CurrentTime();
+  base::Optional<double> currentTime();
   base::Optional<double> CurrentTimeSeconds();
 
   String phase();
@@ -45,6 +43,11 @@ class CORE_EXPORT AnimationTimeline : public ScriptWrappable {
   virtual bool IsDocumentTimeline() const { return false; }
   virtual bool IsScrollTimeline() const { return false; }
   virtual bool IsActive() const = 0;
+  virtual double ZeroTimeInSeconds() = 0;
+  // https://drafts.csswg.org/web-animations/#monotonically-increasing-timeline
+  // A timeline is monotonically increasing if its reported current time is
+  // always greater than or equal than its previously reported current time.
+  bool IsMonotonicallyIncreasing() const { return IsDocumentTimeline(); }
   // Returns the initial start time for animations that are linked to this
   // timeline. This method gets invoked when initializing the start time of an
   // animation on this timeline for the first time. It exists because the
@@ -84,6 +87,8 @@ class CORE_EXPORT AnimationTimeline : public ScriptWrappable {
     return compositor_timeline_.get();
   }
   virtual CompositorAnimationTimeline* EnsureCompositorTimeline() = 0;
+
+  void MarkAnimationsCompositorPending(bool source_changed = false);
 
   void Trace(Visitor*) override;
 

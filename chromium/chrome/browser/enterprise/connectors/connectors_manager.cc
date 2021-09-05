@@ -3,11 +3,14 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/enterprise/connectors/connectors_manager.h"
+
 #include <memory>
 
 #include "base/feature_list.h"
+#include "base/memory/singleton.h"
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/enterprise/connectors/connectors_prefs.h"
 #include "components/policy/core/browser/url_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
@@ -15,6 +18,9 @@
 #include "components/url_matcher/url_matcher.h"
 
 namespace enterprise_connectors {
+
+const base::Feature kEnterpriseConnectorsEnabled{
+    "EnterpriseConnectorsEnabled", base::FEATURE_DISABLED_BY_DEFAULT};
 
 namespace {
 
@@ -50,18 +56,76 @@ bool MatchURLAgainstPatterns(const GURL& url,
 }  // namespace
 
 // ConnectorsManager implementation---------------------------------------------
-ConnectorsManager::~ConnectorsManager() = default;
-
-ConnectorsManager::ConnectorsManager() = default;
-
-void ConnectorsManager::GetAnalysisSettings(const GURL& url,
-                                            AnalysisConnector connector,
-                                            AnalysisSettingsCallback callback) {
-  std::move(callback).Run(
-      GetAnalysisSettingsFromLegacyPolicies(url, connector));
+ConnectorsManager::ConnectorsManager() {
+  StartObservingPrefs();
 }
 
-base::Optional<ConnectorsManager::AnalysisSettings>
+ConnectorsManager::~ConnectorsManager() = default;
+
+// static
+ConnectorsManager* ConnectorsManager::GetInstance() {
+  return base::Singleton<ConnectorsManager>::get();
+}
+
+bool ConnectorsManager::IsConnectorEnabled(AnalysisConnector connector) {
+  if (!base::FeatureList::IsEnabled(kEnterpriseConnectorsEnabled))
+    return false;
+
+  if (connector_settings_.count(connector) == 1)
+    return true;
+
+  const char* pref = ConnectorPref(connector);
+  return pref && g_browser_process->local_state()->HasPrefPath(pref);
+}
+
+base::Optional<AnalysisSettings> ConnectorsManager::GetAnalysisSettings(
+    const GURL& url,
+    AnalysisConnector connector) {
+  // Prioritize new Connector policies over legacy ones.
+  if (IsConnectorEnabled(connector))
+    return GetAnalysisSettingsFromConnectorPolicy(url, connector);
+
+  return GetAnalysisSettingsFromLegacyPolicies(url, connector);
+}
+
+base::Optional<AnalysisSettings>
+ConnectorsManager::GetAnalysisSettingsFromConnectorPolicy(
+    const GURL& url,
+    AnalysisConnector connector) {
+  if (connector_settings_.count(connector) == 0)
+    CacheConnectorPolicy(connector);
+
+  // If the connector is still not in memory, it means the pref is set to an
+  // empty list or that it is not a list.
+  if (connector_settings_.count(connector) == 0)
+    return base::nullopt;
+
+  // While multiple services can be set by the connector policies, only the
+  // first one is considered for now.
+  return connector_settings_[connector][0].GetAnalysisSettings(url);
+}
+
+void ConnectorsManager::CacheConnectorPolicy(AnalysisConnector connector) {
+  connector_settings_.erase(connector);
+
+  // Connectors with non-existing policies should not reach this code.
+  const char* pref = ConnectorPref(connector);
+  DCHECK(pref);
+
+  const base::ListValue* policy_value =
+      g_browser_process->local_state()->GetList(pref);
+  if (policy_value && policy_value->is_list()) {
+    for (const base::Value& service_settings : policy_value->GetList())
+      connector_settings_[connector].emplace_back(service_settings);
+  }
+}
+
+bool ConnectorsManager::DelayUntilVerdict(AnalysisConnector connector) const {
+  bool upload = connector != AnalysisConnector::FILE_DOWNLOADED;
+  return LegacyBlockUntilVerdict(upload) == BlockUntilVerdict::BLOCK;
+}
+
+base::Optional<AnalysisSettings>
 ConnectorsManager::GetAnalysisSettingsFromLegacyPolicies(
     const GURL& url,
     AnalysisConnector connector) const {
@@ -189,22 +253,37 @@ std::set<std::string> ConnectorsManager::MatchURLAgainstLegacyPolicies(
   return tags;
 }
 
-// ConnectorsManager structs implementation-------------------------------------
+void ConnectorsManager::StartObservingPrefs() {
+  pref_change_registrar_.Init(g_browser_process->local_state());
+  if (base::FeatureList::IsEnabled(kEnterpriseConnectorsEnabled)) {
+    StartObservingPref(AnalysisConnector::FILE_ATTACHED);
+    StartObservingPref(AnalysisConnector::FILE_DOWNLOADED);
+    StartObservingPref(AnalysisConnector::BULK_DATA_ENTRY);
+  }
+}
 
-ConnectorsManager::AnalysisSettings::AnalysisSettings() = default;
-ConnectorsManager::AnalysisSettings::AnalysisSettings(
-    ConnectorsManager::AnalysisSettings&&) = default;
-ConnectorsManager::AnalysisSettings&
-ConnectorsManager::AnalysisSettings::operator=(
-    ConnectorsManager::AnalysisSettings&&) = default;
-ConnectorsManager::AnalysisSettings::~AnalysisSettings() = default;
+void ConnectorsManager::StartObservingPref(AnalysisConnector connector) {
+  const char* pref = ConnectorPref(connector);
+  DCHECK(pref);
+  if (!pref_change_registrar_.IsObserved(pref)) {
+    pref_change_registrar_.Add(
+        pref, base::BindRepeating(&ConnectorsManager::CacheConnectorPolicy,
+                                  base::Unretained(this), connector));
+  }
+}
 
-ConnectorsManager::ReportingSettings::ReportingSettings() = default;
-ConnectorsManager::ReportingSettings::ReportingSettings(
-    ConnectorsManager::ReportingSettings&&) = default;
-ConnectorsManager::ReportingSettings&
-ConnectorsManager::ReportingSettings::operator=(
-    ConnectorsManager::ReportingSettings&&) = default;
-ConnectorsManager::ReportingSettings::~ReportingSettings() = default;
+const ConnectorsManager::AnalysisConnectorsSettings&
+ConnectorsManager::GetAnalysisConnectorsSettingsForTesting() const {
+  return connector_settings_;
+}
+
+void ConnectorsManager::SetUpForTesting() {
+  StartObservingPrefs();
+}
+
+void ConnectorsManager::TearDownForTesting() {
+  pref_change_registrar_.RemoveAll();
+  connector_settings_.clear();
+}
 
 }  // namespace enterprise_connectors

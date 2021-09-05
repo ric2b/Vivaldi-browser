@@ -25,8 +25,8 @@
 #include "components/cdm/browser/media_drm_storage_impl.h"
 #include "content/public/browser/render_process_host.h"
 #include "media/mojo/buildflags.h"
+#include "mojo/public/cpp/bindings/binder_map.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "services/service_manager/public/cpp/binder_map.h"
 #include "url/origin.h"
 
 #if BUILDFLAG(ENABLE_CAST_RENDERER)
@@ -112,27 +112,34 @@ void CastContentBrowserClient::ExposeInterfacesToRenderer(
 #endif  // !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
 }
 
-void CastContentBrowserClient::ExposeInterfacesToMediaService(
-    service_manager::BinderRegistry* registry,
-    content::RenderFrameHost* render_frame_host) {
-  registry->AddInterface(
-      base::BindRepeating(&CreateMediaDrmStorage, render_frame_host));
+void CastContentBrowserClient::BindMediaServiceReceiver(
+    content::RenderFrameHost* render_frame_host,
+    mojo::GenericPendingReceiver receiver) {
+  if (auto r = receiver.As<::media::mojom::MediaDrmStorage>()) {
+    CreateMediaDrmStorage(render_frame_host, std::move(r));
+    return;
+  }
 
-  registry->AddInterface(base::BindRepeating(&ServiceConnector::BindReceiver,
-                                             kMediaServiceClientId));
+  if (auto r = receiver.As<mojom::ServiceConnector>()) {
+    ServiceConnector::BindReceiver(kMediaServiceClientId, std::move(r));
+    return;
+  }
 
-  std::string application_session_id;
-  bool mixer_audio_enabled;
-  GetApplicationMediaInfo(&application_session_id, &mixer_audio_enabled,
-                          render_frame_host);
-  registry->AddInterface(base::BindRepeating(
-      &media::CreateApplicationMediaInfoManager, render_frame_host,
-      std::move(application_session_id), mixer_audio_enabled));
+  if (auto r = receiver.As<::media::mojom::CastApplicationMediaInfoManager>()) {
+    std::string application_session_id;
+    bool mixer_audio_enabled;
+    GetApplicationMediaInfo(&application_session_id, &mixer_audio_enabled,
+                            render_frame_host);
+    media::CreateApplicationMediaInfoManager(render_frame_host,
+                                             std::move(application_session_id),
+                                             mixer_audio_enabled, std::move(r));
+    return;
+  }
 }
 
 void CastContentBrowserClient::RegisterBrowserInterfaceBindersForFrame(
     content::RenderFrameHost* render_frame_host,
-    service_manager::BinderMapWithContext<content::RenderFrameHost*>* map) {
+    mojo::BinderMapWithContext<content::RenderFrameHost*>* map) {
   PopulateCastFrameBinders(render_frame_host, map);
 }
 

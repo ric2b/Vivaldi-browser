@@ -33,6 +33,7 @@
 #include "third_party/blink/renderer/core/css/properties/css_property.h"
 #include "third_party/blink/renderer/core/css/style_auto_color.h"
 #include "third_party/blink/renderer/core/css/style_color.h"
+#include "third_party/blink/renderer/core/layout/geometry/logical_size.h"
 #include "third_party/blink/renderer/core/scroll/scroll_types.h"
 #include "third_party/blink/renderer/core/style/border_value.h"
 #include "third_party/blink/renderer/core/style/computed_style_base.h"
@@ -94,6 +95,7 @@ typedef Vector<scoped_refptr<const ComputedStyle>, 4> PseudoElementStyleCache;
 
 namespace css_longhand {
 
+class Appearance;
 class BackgroundColor;
 class BorderBottomColor;
 class BorderLeftColor;
@@ -125,7 +127,6 @@ class Resize;
 class StopColor;
 class Stroke;
 class TextDecorationColor;
-class WebkitAppearance;
 class WebkitTapHighlightColor;
 class WebkitTextEmphasisColor;
 class WebkitTextFillColor;
@@ -238,7 +239,7 @@ class ComputedStyle : public ComputedStyleBase,
   friend class LayoutTheme;
   friend class StyleAdjuster;
   friend class StyleCascade;
-  friend class css_longhand::WebkitAppearance;
+  friend class css_longhand::Appearance;
   // Editing has to only reveal unvisited info.
   friend class ApplyStyleCommand;
   // Editing has to only reveal unvisited info.
@@ -435,6 +436,8 @@ class ComputedStyle : public ComputedStyleBase,
     DCHECK(BackdropFilterInternal().Get());
     return MutableBackdropFilterInternal()->operations_;
   }
+  // For containing blocks, use |HasNonInitialBackdropFilter()| which includes
+  // will-change: backdrop-filter.
   bool HasBackdropFilter() const {
     DCHECK(BackdropFilterInternal().Get());
     return !BackdropFilterInternal()->operations_.Operations().IsEmpty();
@@ -457,6 +460,8 @@ class ComputedStyle : public ComputedStyleBase,
     DCHECK(FilterInternal().Get());
     return FilterInternal()->operations_;
   }
+  // For containing blocks, use |HasNonInitialFilter()| which includes
+  // will-change: filter.
   bool HasFilter() const {
     DCHECK(FilterInternal().Get());
     return !FilterInternal()->operations_.Operations().IsEmpty();
@@ -707,7 +712,7 @@ class ComputedStyle : public ComputedStyleBase,
            OutlineColorIsCurrentColor() == other.OutlineColorIsCurrentColor() &&
            OutlineColor() == other.OutlineColor() &&
            OutlineStyle() == other.OutlineStyle() &&
-           OutlineOffsetInternal() == other.OutlineOffsetInternal() &&
+           OutlineOffset() == other.OutlineOffset() &&
            OutlineStyleIsAuto() == other.OutlineStyleIsAuto();
   }
 
@@ -720,17 +725,22 @@ class ComputedStyle : public ComputedStyleBase,
   }
 
   // outline-width
-  uint16_t OutlineWidth() const {
+  float OutlineWidth() const {
+    if (OutlineStyle() == EBorderStyle::kNone)
+      return 0;
+    return OutlineWidthInternal();
+  }
+  void SetOutlineWidth(float v) { SetOutlineWidthInternal(LayoutUnit(v)); }
+  // TODO(rego): This is a temporal method that will be removed once we start
+  // using the float OutlineWidth() in the painting code.
+  uint16_t OutlineWidthInt() const {
     if (OutlineStyle() == EBorderStyle::kNone)
       return 0;
     return OutlineWidthInternal().ToUnsigned();
   }
-  void SetOutlineWidth(uint16_t v) { SetOutlineWidthInternal(LayoutUnit(v)); }
 
   // outline-offset
-  int OutlineOffset() const {
-    return OutlineOffsetInternal();
-  }
+  int16_t OutlineOffsetInt() const { return OutlineOffset().ToInt(); }
 
   // -webkit-perspective-origin-x
   const Length& PerspectiveOriginX() const { return PerspectiveOrigin().X(); }
@@ -899,7 +909,6 @@ class ComputedStyle : public ComputedStyleBase,
   }
 
   CORE_EXPORT bool SetEffectiveZoom(float);
-  float EffectiveZoom() const;
 
   // -webkit-clip-path
   bool ClipPathDataEquivalent(const ComputedStyle& other) const {
@@ -1229,6 +1238,7 @@ class ComputedStyle : public ComputedStyleBase,
 
   // Variables.
   bool HasVariables() const;
+  CORE_EXPORT HashSet<AtomicString> GetVariableNames() const;
   CORE_EXPORT StyleInheritedVariables* InheritedVariables() const;
   CORE_EXPORT StyleNonInheritedVariables* NonInheritedVariables() const;
 
@@ -1261,9 +1271,6 @@ class ComputedStyle : public ComputedStyleBase,
   CSSTransitionData& AccessTransitions();
 
   // Callback selectors.
-  const Vector<String>& CallbackSelectors() const {
-    return CallbackSelectorsInternal();
-  }
   void AddCallbackSelector(const String& selector);
 
   // Non-property flags.
@@ -1484,6 +1491,13 @@ class ComputedStyle : public ComputedStyleBase,
     return WillChangeProperties().Contains(CSSPropertyID::kOpacity);
   }
   bool HasWillChangeTransformHint() const;
+  bool HasWillChangeFilterHint() const {
+    return WillChangeProperties().Contains(CSSPropertyID::kFilter) ||
+           WillChangeProperties().Contains(CSSPropertyID::kAliasWebkitFilter);
+  }
+  bool HasWillChangeBackdropFilterHint() const {
+    return WillChangeProperties().Contains(CSSPropertyID::kBackdropFilter);
+  }
 
   // Hyphen utility functions.
   Hyphenation* GetHyphenation() const;
@@ -2014,7 +2028,6 @@ class ComputedStyle : public ComputedStyleBase,
   }
   CORE_EXPORT int OutlineOutsetExtent() const;
   CORE_EXPORT float GetOutlineStrokeWidthForFocusRing() const;
-  CORE_EXPORT int GetDefaultOffsetForFocusRing() const;
   bool HasOutlineWithCurrentColor() const {
     return HasOutline() && OutlineColor().IsCurrentColor();
   }
@@ -2344,7 +2357,19 @@ class ComputedStyle : public ComputedStyleBase,
   // Returns |true| if any property that renders using filter operations is
   // used (including, but not limited to, 'filter' and 'box-reflect').
   bool HasFilterInducingProperty() const {
-    return HasFilter() || HasBoxReflect();
+    return HasNonInitialFilter() || HasBoxReflect();
+  }
+
+  // Returns |true| if filter should be considered to have non-initial value
+  // for the purposes of containing blocks.
+  bool HasNonInitialFilter() const {
+    return HasFilter() || HasWillChangeFilterHint();
+  }
+
+  // Returns |true| if backdrop-filter should be considered to have non-initial
+  // value for the purposes of containing blocks.
+  bool HasNonInitialBackdropFilter() const {
+    return HasBackdropFilter() || HasWillChangeBackdropFilterHint();
   }
 
   // Returns |true| if opacity should be considered to have non-initial value
@@ -2423,6 +2448,8 @@ class ComputedStyle : public ComputedStyleBase,
   bool CanContainAbsolutePositionObjects() const {
     return GetPosition() != EPosition::kStatic;
   }
+  // TODO(pdr): Should this function be unified with
+  // LayoutObject::ComputeIsFixedContainer?
   bool CanContainFixedPositionObjects(bool is_document_element) const {
     return HasTransformRelatedProperty() ||
            // Filter establishes containing block for non-document elements:
@@ -2430,7 +2457,8 @@ class ComputedStyle : public ComputedStyleBase,
            // Backdrop-filter creates a containing block for fixed and absolute
            // positioned elements:
            // https://drafts.fxtf.org/filter-effects-2/#backdrop-filter-operation
-           (!is_document_element && (HasFilter() || HasBackdropFilter()));
+           (!is_document_element &&
+            (HasNonInitialFilter() || HasNonInitialBackdropFilter()));
   }
 
   // Whitespace utility functions.
@@ -2500,7 +2528,8 @@ class ComputedStyle : public ComputedStyleBase,
   bool HasBoxDecorations() const {
     return HasBorderDecoration() || HasBorderRadius() || HasOutline() ||
            HasEffectiveAppearance() || BoxShadow() ||
-           HasFilterInducingProperty() || HasBackdropFilter() || HasResize();
+           HasFilterInducingProperty() || HasNonInitialBackdropFilter() ||
+           HasResize();
   }
 
   // "Box decoration background" includes all box decorations and backgrounds
@@ -2599,6 +2628,15 @@ class ComputedStyle : public ComputedStyleBase,
   bool GeneratesMarkerImage() const {
     return Display() == EDisplay::kListItem && ListStyleImage() &&
            !ListStyleImage()->ErrorOccurred();
+  }
+
+  base::Optional<LogicalSize> LogicalAspectRatio() const {
+    if (!AspectRatio())
+      return base::nullopt;
+    IntSize ratio = *AspectRatio();
+    if (!IsHorizontalWritingMode())
+      ratio = ratio.TransposedSize();
+    return LogicalSize(LayoutUnit(ratio.Width()), LayoutUnit(ratio.Height()));
   }
 
  private:
@@ -2886,7 +2924,7 @@ class ComputedStyle : public ComputedStyleBase,
   StyleInheritedVariables& MutableInheritedVariables();
   StyleNonInheritedVariables& MutableNonInheritedVariables();
 
-  void SetInitialData(scoped_refptr<StyleInitialData>);
+  CORE_EXPORT void SetInitialData(scoped_refptr<StyleInitialData>);
 
   PhysicalToLogical<const Length&> PhysicalMarginToLogical(
       const ComputedStyle& other) const {
@@ -2966,11 +3004,10 @@ class ComputedStyle : public ComputedStyleBase,
                            UpdatePropertySpecificDifferencesHasAlpha);
   FRIEND_TEST_ALL_PREFIXES(ComputedStyleTest, CustomPropertiesEqual_Values);
   FRIEND_TEST_ALL_PREFIXES(ComputedStyleTest, CustomPropertiesEqual_Data);
+  FRIEND_TEST_ALL_PREFIXES(ComputedStyleTest, InitialVariableNames);
+  FRIEND_TEST_ALL_PREFIXES(ComputedStyleTest,
+                           InitialAndInheritedAndNonInheritedVariableNames);
 };
-
-inline float ComputedStyle::EffectiveZoom() const {
-  return InternalEffectiveZoom();
-}
 
 inline bool ComputedStyle::HasAnyPseudoElementStyles() const {
   return !!PseudoBitsInternal();

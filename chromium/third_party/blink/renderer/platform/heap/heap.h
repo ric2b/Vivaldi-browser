@@ -151,6 +151,8 @@ class UntracedMember;
 
 namespace internal {
 
+class LivenessBrokerFactory;
+
 template <typename T, bool = NeedsAdjustPointer<T>::value>
 class ObjectAliveTrait;
 
@@ -173,7 +175,8 @@ class ObjectAliveTrait<T, true> {
   NO_SANITIZE_ADDRESS
   static bool IsHeapObjectAlive(const T* object) {
     static_assert(sizeof(T), "T must be fully defined");
-    const HeapObjectHeader* header = object->GetHeapObjectHeader();
+    const HeapObjectHeader* header = HeapObjectHeader::FromTraceDescriptor(
+        TraceTrait<T>::GetTraceDescriptor(object));
     if (header == BlinkGC::kNotFullyConstructedObject) {
       // Objects under construction are always alive.
       return true;
@@ -198,37 +201,6 @@ class PLATFORM_EXPORT ThreadHeap {
  public:
   explicit ThreadHeap(ThreadState*);
   ~ThreadHeap();
-
-  template <typename T>
-  static inline bool IsHeapObjectAlive(const T* object) {
-    static_assert(sizeof(T), "T must be fully defined");
-    // The strongification of collections relies on the fact that once a
-    // collection has been strongified, there is no way that it can contain
-    // non-live entries, so no entries will be removed. Since you can't set
-    // the mark bit on a null pointer, that means that null pointers are
-    // always 'alive'.
-    if (!object)
-      return true;
-    // TODO(keishi): some tests create CrossThreadPersistent on non attached
-    // threads.
-    if (!ThreadState::Current())
-      return true;
-    DCHECK(&ThreadState::Current()->Heap() ==
-           &PageFromObject(object)->Arena()->GetThreadState()->Heap());
-    return internal::ObjectAliveTrait<T>::IsHeapObjectAlive(object);
-  }
-  template <typename T>
-  static inline bool IsHeapObjectAlive(const Member<T>& member) {
-    return IsHeapObjectAlive(member.Get());
-  }
-  template <typename T>
-  static inline bool IsHeapObjectAlive(const WeakMember<T>& member) {
-    return IsHeapObjectAlive(member.Get());
-  }
-  template <typename T>
-  static inline bool IsHeapObjectAlive(const UntracedMember<T>& member) {
-    return IsHeapObjectAlive(member.Get());
-  }
 
   MarkingWorklist* GetMarkingWorklist() const {
     return marking_worklist_.get();
@@ -588,19 +560,28 @@ struct MakeGarbageCollectedTrait {
   }
 };
 
+template <typename T, typename = void>
+struct PostConstructionHookTrait {
+  static void Call(T*) {}
+};
+
 // Default MakeGarbageCollected: Constructs an instance of T, which is a garbage
 // collected type.
 template <typename T, typename... Args>
 T* MakeGarbageCollected(Args&&... args) {
-  return MakeGarbageCollectedTrait<T>::Call(std::forward<Args>(args)...);
+  T* object = MakeGarbageCollectedTrait<T>::Call(std::forward<Args>(args)...);
+  PostConstructionHookTrait<T>::Call(object);
+  return object;
 }
 
 // Constructs an instance of T, which is a garbage collected type. This special
 // version takes size which enables constructing inline objects.
 template <typename T, typename... Args>
 T* MakeGarbageCollected(AdditionalBytes additional_bytes, Args&&... args) {
-  return MakeGarbageCollectedTrait<T>::Call(additional_bytes,
-                                            std::forward<Args>(args)...);
+  T* object = MakeGarbageCollectedTrait<T>::Call(additional_bytes,
+                                                 std::forward<Args>(args)...);
+  PostConstructionHookTrait<T>::Call(object);
+  return object;
 }
 
 // Assigning class types to their arenas.
@@ -664,23 +645,7 @@ inline void ThreadHeap::SetLastAllocatedRegion(Address start, size_t length) {
   last_allocated_region_.length = length;
 }
 
-template <typename T>
-void Visitor::HandleWeakCell(const WeakCallbackInfo&, const void* object) {
-  WeakMember<T>* weak_member =
-      reinterpret_cast<WeakMember<T>*>(const_cast<void*>(object));
-  if (weak_member->Get()) {
-    if (weak_member->IsHashTableDeletedValue()) {
-      // This can happen when weak fields are deleted while incremental marking
-      // is running. Deleted values need to be preserved to avoid reviving
-      // objects in containers.
-      return;
-    }
-    if (!ThreadHeap::IsHeapObjectAlive(weak_member->Get()))
-      weak_member->Clear();
-  }
-}
-
-class PLATFORM_EXPORT WeakCallbackInfo final {
+class PLATFORM_EXPORT LivenessBroker final {
  public:
   template <typename T>
   bool IsHeapObjectAlive(const T*) const;
@@ -690,26 +655,64 @@ class PLATFORM_EXPORT WeakCallbackInfo final {
   bool IsHeapObjectAlive(const UntracedMember<T>&) const;
 
  private:
-  WeakCallbackInfo() = default;
-  friend class ThreadHeap;
+  LivenessBroker() = default;
+  friend class internal::LivenessBrokerFactory;
 };
 
 template <typename T>
-bool WeakCallbackInfo::IsHeapObjectAlive(const T* object) const {
-  return ThreadHeap::IsHeapObjectAlive(object);
+bool LivenessBroker::IsHeapObjectAlive(const T* object) const {
+  static_assert(sizeof(T), "T must be fully defined");
+  // The strongification of collections relies on the fact that once a
+  // collection has been strongified, there is no way that it can contain
+  // non-live entries, so no entries will be removed. Since you can't set
+  // the mark bit on a null pointer, that means that null pointers are
+  // always 'alive'.
+  if (!object)
+    return true;
+  // TODO(keishi): some tests create CrossThreadPersistent on non attached
+  // threads.
+  if (!ThreadState::Current())
+    return true;
+  DCHECK(&ThreadState::Current()->Heap() ==
+         &PageFromObject(object)->Arena()->GetThreadState()->Heap());
+  return internal::ObjectAliveTrait<T>::IsHeapObjectAlive(object);
 }
 
 template <typename T>
-bool WeakCallbackInfo::IsHeapObjectAlive(
-    const WeakMember<T>& weak_member) const {
-  return ThreadHeap::IsHeapObjectAlive(weak_member);
+bool LivenessBroker::IsHeapObjectAlive(const WeakMember<T>& weak_member) const {
+  return IsHeapObjectAlive(weak_member.Get());
 }
 
 template <typename T>
-bool WeakCallbackInfo::IsHeapObjectAlive(
+bool LivenessBroker::IsHeapObjectAlive(
     const UntracedMember<T>& untraced_member) const {
-  return ThreadHeap::IsHeapObjectAlive(untraced_member.Get());
+  return IsHeapObjectAlive(untraced_member.Get());
 }
+
+template <typename T>
+void Visitor::HandleWeakCell(const LivenessBroker& broker, const void* object) {
+  WeakMember<T>* weak_member =
+      reinterpret_cast<WeakMember<T>*>(const_cast<void*>(object));
+  if (weak_member->Get()) {
+    if (weak_member->IsHashTableDeletedValue()) {
+      // This can happen when weak fields are deleted while incremental marking
+      // is running. Deleted values need to be preserved to avoid reviving
+      // objects in containers.
+      return;
+    }
+    if (!broker.IsHeapObjectAlive(weak_member->Get()))
+      weak_member->Clear();
+  }
+}
+
+namespace internal {
+
+class LivenessBrokerFactory final {
+ public:
+  static LivenessBroker Create() { return LivenessBroker(); }
+};
+
+}  // namespace internal
 
 }  // namespace blink
 

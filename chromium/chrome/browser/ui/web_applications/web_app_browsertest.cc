@@ -27,6 +27,7 @@
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
 #include "chrome/browser/ui/web_applications/web_app_menu_model.h"
+#include "chrome/browser/web_applications/components/app_registrar.h"
 #include "chrome/browser/web_applications/components/app_registry_controller.h"
 #include "chrome/browser/web_applications/components/external_install_options.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
@@ -36,6 +37,7 @@
 #include "chrome/common/web_application_info.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/sessions/core/tab_restore_service.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -44,6 +46,10 @@
 #include "ui/base/clipboard/clipboard_buffer.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
+
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
+#endif
 
 namespace {
 
@@ -496,6 +502,14 @@ IN_PROC_BROWSER_TEST_P(WebAppBrowserTest, UninstallMenuOption) {
 #else
   EXPECT_TRUE(found);
   EXPECT_TRUE(model->IsEnabledAt(index));
+
+  base::HistogramTester tester;
+  app_menu_model->ExecuteCommand(WebAppMenuModel::kUninstallAppCommandId,
+                                 /*event_flags=*/0);
+  tester.ExpectUniqueSample("HostedAppFrame.WrenchMenu.MenuAction",
+                            MENU_ACTION_UNINSTALL_APP, 1);
+  tester.ExpectUniqueSample("WrenchMenu.MenuAction", MENU_ACTION_UNINSTALL_APP,
+                            1);
 #endif  // defined(OS_CHROMEOS)
 }
 
@@ -533,6 +547,20 @@ IN_PROC_BROWSER_TEST_P(WebAppBrowserTest,
   EXPECT_EQ(GetAppMenuCommandState(IDC_INSTALL_PWA, browser()), kEnabled);
 }
 
+// Tests that both installing a PWA and creating a shortcut app are disabled
+// when page crashes.
+IN_PROC_BROWSER_TEST_P(WebAppBrowserTest, ShortcutMenuOptionsForCrashedTab) {
+  EXPECT_TRUE(
+      NavigateAndAwaitInstallabilityCheck(browser(), GetInstallableAppURL()));
+  content::WebContents* tab_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  tab_contents->SetIsCrashed(base::TERMINATION_STATUS_PROCESS_CRASHED, -1);
+  ASSERT_TRUE(tab_contents->IsCrashed());
+
+  EXPECT_EQ(GetAppMenuCommandState(IDC_CREATE_SHORTCUT, browser()), kDisabled);
+  EXPECT_EQ(GetAppMenuCommandState(IDC_INSTALL_PWA, browser()), kDisabled);
+}
+
 // Tests that an installed PWA is not used when out of scope by one path level.
 IN_PROC_BROWSER_TEST_P(WebAppBrowserTest, MenuOptionsOutsideInstalledPwaScope) {
   NavigateToURLAndWait(
@@ -565,6 +593,11 @@ IN_PROC_BROWSER_TEST_P(WebAppBrowserTest, InstallInstallableSite) {
 
   EXPECT_EQ(1, user_action_tester.GetActionCount("InstallWebAppFromMenu"));
   EXPECT_EQ(0, user_action_tester.GetActionCount("CreateShortcut"));
+
+#if defined(OS_CHROMEOS)
+  // Apps on Chrome OS should not be pinned after install.
+  EXPECT_FALSE(ChromeLauncherController::instance()->IsAppPinned(app_id));
+#endif
 }
 
 IN_PROC_BROWSER_TEST_P(WebAppBrowserTest, CanInstallOverTabPwa) {

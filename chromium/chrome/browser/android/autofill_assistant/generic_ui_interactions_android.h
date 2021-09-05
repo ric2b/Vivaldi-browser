@@ -12,7 +12,7 @@
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/android/autofill_assistant/interaction_handler_android.h"
 #include "components/autofill_assistant/browser/basic_interactions.h"
-#include "components/autofill_assistant/browser/interactions.pb.h"
+#include "components/autofill_assistant/browser/generic_ui.pb.h"
 
 namespace autofill_assistant {
 namespace android_interactions {
@@ -54,6 +54,12 @@ void ShowCalendarPopup(base::WeakPtr<UserModel> user_model,
                        base::android::ScopedJavaGlobalRef<jobject> jcontext,
                        base::android::ScopedJavaGlobalRef<jobject> jdelegate);
 
+// Displays a generic popup on the screen.
+void ShowGenericPopup(const ShowGenericUiPopupProto& proto,
+                      base::android::ScopedJavaGlobalRef<jobject> jcontent_view,
+                      base::android::ScopedJavaGlobalRef<jobject> jcontext,
+                      base::android::ScopedJavaGlobalRef<jobject> jdelegate);
+
 // Sets the text of a view.
 void SetViewText(
     base::WeakPtr<UserModel> user_model,
@@ -65,6 +71,12 @@ void SetViewText(
 void SetViewVisibility(
     base::WeakPtr<UserModel> user_model,
     const SetViewVisibilityProto& proto,
+    std::map<std::string, base::android::ScopedJavaGlobalRef<jobject>>* views);
+
+// Enables or disables a view.
+void SetViewEnabled(
+    base::WeakPtr<UserModel> user_model,
+    const SetViewEnabledProto& proto,
     std::map<std::string, base::android::ScopedJavaGlobalRef<jobject>>* views);
 
 // A simple wrapper around a basic interaction, needed because we can't directly

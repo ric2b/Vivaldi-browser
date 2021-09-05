@@ -45,7 +45,7 @@ public class TailSuggestionProcessor extends BaseSuggestionViewProcessor {
     }
 
     @Override
-    public PropertyModel createModelForSuggestion(OmniboxSuggestion suggestion) {
+    public PropertyModel createModel() {
         return new PropertyModel(TailSuggestionViewProperties.ALL_KEYS);
     }
 
@@ -67,6 +67,7 @@ public class TailSuggestionProcessor extends BaseSuggestionViewProcessor {
                         .forDrawableRes(mContext, R.drawable.ic_suggestion_magnifier)
                         .setAllowTint(true)
                         .build());
+        setRefineAction(model, suggestion);
     }
 
     @Override

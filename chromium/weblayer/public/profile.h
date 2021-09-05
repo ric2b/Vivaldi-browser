@@ -23,6 +23,10 @@ enum class BrowsingDataType {
   CACHE = 1,
 };
 
+enum class SettingType {
+  BASIC_SAFE_BROWSING_ENABLED = 0,
+};
+
 class Profile {
  public:
   // Pass an empty |name| for an in-memory profile.
@@ -30,12 +34,15 @@ class Profile {
   // underscore.
   static std::unique_ptr<Profile> Create(const std::string& name);
 
-  virtual ~Profile() {}
-
   // Delete all profile's data from disk. If there are any existing usage
-  // of this profile, return false immediately and |done_callback| will not
-  // be called. Otherwise |done_callback| is called when deletion is complete.
-  virtual bool DeleteDataFromDisk(base::OnceClosure done_callback) = 0;
+  // of this profile, return |profile| immediately and |done_callback| will not
+  // be called. Otherwise return nullptr and |done_callback| is called when
+  // deletion is complete.
+  static std::unique_ptr<Profile> DestroyAndDeleteDataFromDisk(
+      std::unique_ptr<Profile> profile,
+      base::OnceClosure done_callback);
+
+  virtual ~Profile() {}
 
   virtual void ClearBrowsingData(
       const std::vector<BrowsingDataType>& data_types,
@@ -53,6 +60,12 @@ class Profile {
 
   // Gets the cookie manager for this profile.
   virtual CookieManager* GetCookieManager() = 0;
+
+  // Set the boolean value of the given setting type.
+  virtual void SetBooleanSetting(SettingType type, bool value) = 0;
+
+  // Get the boolean value of the given setting type.
+  virtual bool GetBooleanSetting(SettingType type) = 0;
 };
 
 }  // namespace weblayer

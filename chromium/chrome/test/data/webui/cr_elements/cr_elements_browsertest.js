@@ -7,6 +7,8 @@
 // Polymer BrowserTest fixture.
 GEN_INCLUDE(['//chrome/test/data/webui/polymer_browser_test_base.js']);
 
+GEN('#include "content/public/test/browser_test.h"');
+
 /**
  * Test fixture for shared Polymer elements.
  * @constructor
@@ -621,7 +623,6 @@ TEST_F('CrElementsViewManagerTest', 'EventFiringTest', function() {
   runMochaTest(this.suiteName, cr_view_manager_test.TestNames.EventFiring);
 });
 
-GEN('#if defined(OS_CHROMEOS)');
 /**
  * @constructor
  * @extends {CrElementsBrowserTest}
@@ -632,8 +633,7 @@ CrElementsLottieTest.prototype = {
   __proto__: CrElementsBrowserTest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://resources/cr_elements/chromeos/cr_lottie/' +
-      'cr_lottie.html',
+  browsePreload: 'chrome://resources/cr_elements/cr_lottie/cr_lottie.html',
 
   /** @override */
   commandLineSwitches: [{
@@ -647,7 +647,6 @@ CrElementsLottieTest.prototype = {
   ]),
 };
 
-TEST_F('CrElementsLottieTest', 'DISABLED_All', function() {
+TEST_F('CrElementsLottieTest', 'All', function() {
   mocha.run();
 });
-GEN('#endif');

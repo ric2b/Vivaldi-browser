@@ -21,6 +21,7 @@
 #include "ash/public/cpp/fps_counter.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/tablet_mode.h"
+#include "ash/public/cpp/test/shell_test_api.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
@@ -1604,13 +1605,6 @@ TEST_P(TabletModeControllerTest, TabletModeTransitionHistogramsSnappedWindows) {
   EXPECT_FALSE(window2->layer()->GetAnimator()->is_animating());
   histogram_tester.ExpectTotalCount(kEnterHistogram, 0);
   histogram_tester.ExpectTotalCount(kExitHistogram, 0);
-
-  tablet_mode_controller()->SetEnabledForTest(false);
-  EXPECT_FALSE(window->layer()->GetAnimator()->is_animating());
-  EXPECT_FALSE(window2->layer()->GetAnimator()->is_animating());
-
-  histogram_tester.ExpectTotalCount(kEnterHistogram, 0);
-  histogram_tester.ExpectTotalCount(kExitHistogram, 0);
 }
 
 class TabletModeControllerOnDeviceTest : public TabletModeControllerTest {
@@ -1670,9 +1664,13 @@ class TabletModeControllerScreenshotTest : public TabletModeControllerTest {
     ui::DeviceDataManager::GetInstance()->RemoveObserver(
         tablet_mode_controller());
 
+    // Screenshot relies on the animation status of windows. These animations
+    // can be triggered in multiple ways such as tablet enter/exit or overview
+    // enter/exit. With a NONZERO_DURATION, occasionally they may trigger too
+    // quickly in tests so use NORMAL_DURATION.
     scoped_animation_duration_scale_mode_ =
         std::make_unique<ui::ScopedAnimationDurationScaleMode>(
-            ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+            ui::ScopedAnimationDurationScaleMode::NORMAL_DURATION);
 
     // PowerManagerClient callback is a posted task.
     base::RunLoop().RunUntilIdle();
@@ -1724,8 +1722,7 @@ TEST_P(TabletModeControllerScreenshotTest, NoAnimationNoScreenshot) {
 
 // Regression test for screenshot staying visible when entering tablet mode when
 // already in overview mode. See https://crbug.com/1002735.
-// Flaky in remote builds, see: crbug.com/1007961
-TEST_P(TabletModeControllerScreenshotTest, DISABLED_FromOverviewNoScreenshot) {
+TEST_P(TabletModeControllerScreenshotTest, FromOverviewNoScreenshot) {
   // Create two maximized windows.
   auto window = CreateTestWindow(gfx::Rect(200, 200));
   auto window2 = CreateTestWindow(gfx::Rect(200, 200));
@@ -1736,21 +1733,24 @@ TEST_P(TabletModeControllerScreenshotTest, DISABLED_FromOverviewNoScreenshot) {
 
   // Enter overview.
   Shell::Get()->overview_controller()->StartOverview();
-  window->layer()->GetAnimator()->StopAnimating();
-  window2->layer()->GetAnimator()->StopAnimating();
+  ShellTestApi().WaitForOverviewAnimationState(
+      OverviewAnimationState::kEnterAnimationComplete);
 
-  // Enter tablet mode.
+  // Enter tablet mode. This triggers an overview exit, so |window2| will be
+  // animating from the overview exit animation. Therefore, we do not show the
+  // screenshot.
   TabletMode::Waiter waiter(/*enable=*/true);
   SetTabletMode(true);
   EXPECT_FALSE(IsScreenshotShown());
-  EXPECT_FALSE(IsShelfOpaque());
+  EXPECT_TRUE(IsShelfOpaque());
+  EXPECT_TRUE(window2->layer()->GetAnimator()->is_animating());
 
   waiter.Wait();
-  EXPECT_TRUE(IsScreenshotShown());
+  EXPECT_FALSE(IsScreenshotShown());
   EXPECT_TRUE(IsShelfOpaque());
 
-  // Tests that after ending the overview animation, the screenshot is
-  // destroyed.
+  // Tests that after ending the window animation, the screenshot is still not
+  // shown.
   window->layer()->GetAnimator()->StopAnimating();
   window2->layer()->GetAnimator()->StopAnimating();
   EXPECT_FALSE(IsScreenshotShown());

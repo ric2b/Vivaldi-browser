@@ -15,6 +15,8 @@ import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
+import org.chromium.chrome.browser.ChromeApplication;
+
 /**
  * A controller class could enable or disable web content dark mode feature based on the night mode
  * and the user preference
@@ -56,6 +58,9 @@ public class WebContentsDarkModeController implements ApplicationStateListener {
     }
 
     private static boolean shouldEnableWebContentsDarkMode() {
+        if (ChromeApplication.isVivaldi())
+            return SharedPreferencesManager.getInstance().readBoolean(
+                    UI_THEME_DARKEN_WEBSITES_ENABLED, false);
         return GlobalNightModeStateProviderHolder.getInstance().isInNightMode()
                 && SharedPreferencesManager.getInstance().readBoolean(
                         UI_THEME_DARKEN_WEBSITES_ENABLED, false);

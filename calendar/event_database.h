@@ -39,6 +39,7 @@ class EventDatabase {
 
   bool CreateEventTable();
   bool GetAllCalendarEvents(EventRows* events);
+  bool GetAllCalendarEventTemplates(EventRows* events);
 
   bool GetRowForEvent(EventID event_id, EventRow* out_event);
   bool UpdateEventRow(const EventRow& event);
@@ -52,6 +53,7 @@ class EventDatabase {
   bool MigrateEventsWithoutSequenceAndIcalColumns();
   bool MigrateCalendarToVersion4();
   bool MigrateCalendarToVersion6();
+  bool MigrateCalendarToVersion8();
 
  private:
   DISALLOW_COPY_AND_ASSIGN(EventDatabase);

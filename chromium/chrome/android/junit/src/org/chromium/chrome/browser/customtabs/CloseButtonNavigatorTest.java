@@ -17,7 +17,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import org.junit.Before;
-import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
@@ -28,10 +27,10 @@ import org.robolectric.ParameterizedRobolectricTestRunner.Parameter;
 import org.robolectric.ParameterizedRobolectricTestRunner.Parameters;
 import org.robolectric.annotation.Config;
 
-import org.chromium.base.metrics.test.DisableHistogramsRule;
 import org.chromium.chrome.browser.browserservices.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityTabController;
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityTabProvider;
+import org.chromium.chrome.browser.flags.ActivityType;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.webapps.WebappExtras;
 import org.chromium.content_public.browser.NavigationController;
@@ -49,8 +48,6 @@ import java.util.Stack;
 @RunWith(ParameterizedRobolectricTestRunner.class)
 @Config(sdk = 21, manifest = Config.NONE)
 public class CloseButtonNavigatorTest {
-    @Rule
-    public DisableHistogramsRule mDisableHistogramsRule = new DisableHistogramsRule();
 
     @Parameters
     public static Collection<Object[]> data() {
@@ -78,7 +75,9 @@ public class CloseButtonNavigatorTest {
             mWebappExtras = null;
         }
         doReturn(mWebappExtras).when(mIntentDataProvider).getWebappExtras();
-        doReturn(mIsWebapp).when(mIntentDataProvider).isWebappOrWebApkActivity();
+        doReturn(mIsWebapp ? ActivityType.WEBAPP : ActivityType.CUSTOM_TAB)
+                .when(mIntentDataProvider)
+                .getActivityType();
 
         mCloseButtonNavigator =
                 new CloseButtonNavigator(mTabController, mTabProvider, mIntentDataProvider);

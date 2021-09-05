@@ -32,6 +32,7 @@
 #include "base/macros.h"
 #include "gin/public/gin_embedders.h"
 #include "gin/public/isolate_holder.h"
+#include "third_party/blink/renderer/platform/bindings/active_script_wrappable_manager.h"
 #include "third_party/blink/renderer/platform/bindings/runtime_call_stats.h"
 #include "third_party/blink/renderer/platform/bindings/scoped_persistent.h"
 #include "third_party/blink/renderer/platform/bindings/v8_global_value_map.h"
@@ -48,7 +49,6 @@ class SingleThreadTaskRunner;
 
 namespace blink {
 
-class ActiveScriptWrappableBase;
 class DOMWrapperWorld;
 class ScriptState;
 class StringCache;
@@ -208,12 +208,19 @@ class PLATFORM_EXPORT V8PerIsolateData {
   void SetProfilerGroup(V8PerIsolateData::GarbageCollectedData*);
   V8PerIsolateData::GarbageCollectedData* ProfilerGroup();
 
-  using ActiveScriptWrappableSet =
-      HeapHashSet<WeakMember<ActiveScriptWrappableBase>>;
-  void AddActiveScriptWrappable(ActiveScriptWrappableBase*);
-  const ActiveScriptWrappableSet* ActiveScriptWrappables() const {
-    return active_script_wrappables_.Get();
+  ActiveScriptWrappableManager* GetActiveScriptWrappableManager() const {
+    DCHECK(active_script_wrappable_manager_);
+    return active_script_wrappable_manager_;
   }
+
+  void SetActiveScriptWrappableManager(ActiveScriptWrappableManager* manager) {
+    DCHECK(manager);
+    active_script_wrappable_manager_ = manager;
+  }
+
+  void SetGCCallbacks(v8::Isolate* isolate,
+                      v8::Isolate::GCCallback prologue_callback,
+                      v8::Isolate::GCCallback epilogue_callback);
 
  private:
   V8PerIsolateData(scoped_refptr<base::SingleThreadTaskRunner>,
@@ -282,9 +289,12 @@ class PLATFORM_EXPORT V8PerIsolateData {
   std::unique_ptr<Data> thread_debugger_;
   Persistent<GarbageCollectedData> profiler_group_;
 
-  Persistent<ActiveScriptWrappableSet> active_script_wrappables_;
+  Persistent<ActiveScriptWrappableManager> active_script_wrappable_manager_;
 
   RuntimeCallStats runtime_call_stats_;
+
+  v8::Isolate::GCCallback prologue_callback_;
+  v8::Isolate::GCCallback epilogue_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(V8PerIsolateData);
 };

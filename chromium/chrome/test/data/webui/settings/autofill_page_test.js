@@ -3,15 +3,16 @@
 // found in the LICENSE file.
 
 // clang-format off
-// #import {CrSettingsPrefs, OpenWindowProxyImpl, PasswordManagerImpl, PluralStringProxyImpl, Router, routes} from 'chrome://settings/settings.js';
-// #import {AutofillManagerImpl, PaymentsManagerImpl} from 'chrome://settings/lazy_load.js';
-// #import {createAddressEntry, createCreditCardEntry, createExceptionEntry, createPasswordEntry, AutofillManagerExpectations, PasswordManagerExpectations, PaymentsManagerExpectations, TestAutofillManager, TestPaymentsManager} from 'chrome://test/settings/passwords_and_autofill_fake_data.m.js';
-// #import {FakeSettingsPrivate} from 'chrome://test/settings/fake_settings_private.m.js';
-// #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-// #import {makeCompromisedCredential} from 'chrome://test/settings/passwords_and_autofill_fake_data.m.js';
-// #import {TestPasswordManagerProxy} from 'chrome://test/settings/test_password_manager_proxy.m.js';
-// #import {TestPluralStringProxy} from 'chrome://test/settings/test_plural_string_proxy.m.js';
-// #import {TestOpenWindowProxy} from 'chrome://test/settings/test_open_window_proxy.m.js';
+import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {AutofillManagerImpl, PaymentsManagerImpl} from 'chrome://settings/lazy_load.js';
+import {CrSettingsPrefs, OpenWindowProxyImpl, PasswordManagerImpl, PluralStringProxyImpl, Router, routes} from 'chrome://settings/settings.js';
+import {FakeSettingsPrivate} from 'chrome://test/settings/fake_settings_private.m.js';
+import {AutofillManagerExpectations, createAddressEntry, createCreditCardEntry, createExceptionEntry, createPasswordEntry, PaymentsManagerExpectations, TestAutofillManager, TestPaymentsManager} from 'chrome://test/settings/passwords_and_autofill_fake_data.js';
+import {makeCompromisedCredential} from 'chrome://test/settings/passwords_and_autofill_fake_data.js';
+import {TestOpenWindowProxy} from 'chrome://test/settings/test_open_window_proxy.js';
+import { PasswordManagerExpectations,TestPasswordManagerProxy} from 'chrome://test/settings/test_password_manager_proxy.js';
+import {TestPluralStringProxy} from 'chrome://test/settings/test_plural_string_proxy.js';
+
 // clang-format on
 
 suite('PasswordsAndForms', function() {
@@ -27,7 +28,7 @@ suite('PasswordsAndForms', function() {
     element.$$('dom-if[route-path="/passwords"]').if = true;
     element.$$('dom-if[route-path="/payments"]').if = true;
     element.$$('dom-if[route-path="/addresses"]').if = true;
-    Polymer.dom.flush();
+    flush();
     return element;
   }
 
@@ -40,7 +41,7 @@ suite('PasswordsAndForms', function() {
     return new Promise(function(resolve) {
       CrSettingsPrefs.deferInitialization = true;
       const prefs = document.createElement('settings-prefs');
-      prefs.initialize(new settings.FakeSettingsPrivate([
+      prefs.initialize(new FakeSettingsPrivate([
         {
           key: 'autofill.enabled',
           type: chrome.settingsPrivate.PrefType.BOOLEAN,
@@ -87,10 +88,10 @@ suite('PasswordsAndForms', function() {
   /**
    * Creates PasswordManagerExpectations with the values expected after first
    * creating the element.
-   * @return {!autofill_test_util.PasswordManagerExpectations}
+   * @return {!PasswordManagerExpectations}
    */
   function basePasswordExpectations() {
-    const expected = new autofill_test_util.PasswordManagerExpectations();
+    const expected = new PasswordManagerExpectations();
     expected.requested.passwords = 1;
     expected.requested.exceptions = 1;
     expected.requested.accountStorageOptInState = 1;
@@ -103,10 +104,10 @@ suite('PasswordsAndForms', function() {
   /**
    * Creates AutofillManagerExpectations with the values expected after first
    * creating the element.
-   * @return {!autofill_test_util.AutofillManagerExpectations}
+   * @return {!AutofillManagerExpectations}
    */
   function baseAutofillExpectations() {
-    const expected = new autofill_test_util.AutofillManagerExpectations();
+    const expected = new AutofillManagerExpectations();
     expected.requestedAddresses = 1;
     expected.listeningAddresses = 1;
     return expected;
@@ -115,10 +116,10 @@ suite('PasswordsAndForms', function() {
   /**
    * Creates PaymentsManagerExpectations with the values expected after first
    * creating the element.
-   * @return {!autofill_test_util.PaymentsManagerExpectations}
+   * @return {!PaymentsManagerExpectations}
    */
   function basePaymentsExpectations() {
-    const expected = new autofill_test_util.PaymentsManagerExpectations();
+    const expected = new PaymentsManagerExpectations();
     expected.requestedCreditCards = 1;
     expected.listeningCreditCards = 1;
     return expected;
@@ -131,19 +132,18 @@ suite('PasswordsAndForms', function() {
 
   setup(async function() {
     PolymerTest.clearBody();
-    /* #ignore */ await settings.forceLazyLoaded();
 
     // Override the PasswordManagerImpl for testing.
     passwordManager = new TestPasswordManagerProxy();
     PasswordManagerImpl.instance_ = passwordManager;
 
     // Override the AutofillManagerImpl for testing.
-    autofillManager = new autofill_test_util.TestAutofillManager();
-    settings.AutofillManagerImpl.instance_ = autofillManager;
+    autofillManager = new TestAutofillManager();
+    AutofillManagerImpl.instance_ = autofillManager;
 
     // Override the PaymentsManagerImpl for testing.
-    paymentsManager = new autofill_test_util.TestPaymentsManager();
-    settings.PaymentsManagerImpl.instance_ = paymentsManager;
+    paymentsManager = new TestPaymentsManager();
+    PaymentsManagerImpl.instance_ = paymentsManager;
   });
 
   test('baseLoadAndRemove', function() {
@@ -160,7 +160,7 @@ suite('PasswordsAndForms', function() {
       paymentsManager.assertExpectations(paymentsExpectations);
 
       element.remove();
-      Polymer.dom.flush();
+      flush();
 
       passwordsExpectations.listening.passwords = 0;
       passwordsExpectations.listening.exceptions = 0;
@@ -181,13 +181,10 @@ suite('PasswordsAndForms', function() {
     return createPrefs(true, true).then(function(prefs) {
       const element = createAutofillElement(prefs);
 
-      const list = [
-        autofill_test_util.createPasswordEntry(),
-        autofill_test_util.createPasswordEntry()
-      ];
+      const list = [createPasswordEntry(), createPasswordEntry()];
 
       passwordManager.lastCallback.addSavedPasswordListChangedListener(list);
-      Polymer.dom.flush();
+      flush();
 
       assertDeepEquals(
           list,
@@ -208,12 +205,9 @@ suite('PasswordsAndForms', function() {
     return createPrefs(true, true).then(function(prefs) {
       const element = createAutofillElement(prefs);
 
-      const list = [
-        autofill_test_util.createExceptionEntry(),
-        autofill_test_util.createExceptionEntry()
-      ];
+      const list = [createExceptionEntry(), createExceptionEntry()];
       passwordManager.lastCallback.addExceptionListChangedListener(list);
-      Polymer.dom.flush();
+      flush();
 
       assertEquals(list, element.$$('#passwordSection').passwordExceptions);
 
@@ -231,17 +225,11 @@ suite('PasswordsAndForms', function() {
     return createPrefs(true, true).then(function(prefs) {
       const element = createAutofillElement(prefs);
 
-      const addressList = [
-        autofill_test_util.createAddressEntry(),
-        autofill_test_util.createAddressEntry()
-      ];
-      const cardList = [
-        autofill_test_util.createCreditCardEntry(),
-        autofill_test_util.createCreditCardEntry()
-      ];
+      const addressList = [createAddressEntry(), createAddressEntry()];
+      const cardList = [createCreditCardEntry(), createCreditCardEntry()];
       autofillManager.lastCallback.setPersonalDataManagerListener(
           addressList, cardList);
-      Polymer.dom.flush();
+      flush();
 
       assertEquals(addressList, element.$$('#autofillSection').addresses);
 
@@ -259,17 +247,11 @@ suite('PasswordsAndForms', function() {
     return createPrefs(true, true).then(function(prefs) {
       const element = createAutofillElement(prefs);
 
-      const addressList = [
-        autofill_test_util.createAddressEntry(),
-        autofill_test_util.createAddressEntry()
-      ];
-      const cardList = [
-        autofill_test_util.createCreditCardEntry(),
-        autofill_test_util.createCreditCardEntry()
-      ];
+      const addressList = [createAddressEntry(), createAddressEntry()];
+      const cardList = [createCreditCardEntry(), createCreditCardEntry()];
       paymentsManager.lastCallback.setPersonalDataManagerListener(
           addressList, cardList);
-      Polymer.dom.flush();
+      flush();
 
       assertEquals(cardList, element.$$('#paymentsSection').creditCards);
 
@@ -294,14 +276,14 @@ function createAutofillPageSection() {
   };
   PolymerTest.clearBody();
   document.body.appendChild(autofillPage);
-  Polymer.dom.flush();
+  flush();
   return autofillPage;
 }
 
 suite('PasswordsUITest', function() {
   /** @type {SettingsAutofillPageElement} */
   let autofillPage = null;
-  /** @type {settings.OpenWindowProxy} */
+  /** @type {OpenWindowProxy} */
   let openWindowProxy = null;
   let passwordManager;
   let pluaralString;
@@ -316,12 +298,12 @@ suite('PasswordsUITest', function() {
 
   setup(function() {
     openWindowProxy = new TestOpenWindowProxy();
-    settings.OpenWindowProxyImpl.instance_ = openWindowProxy;
+    OpenWindowProxyImpl.instance_ = openWindowProxy;
     // Override the PasswordManagerImpl for testing.
     passwordManager = new TestPasswordManagerProxy();
     PasswordManagerImpl.instance_ = passwordManager;
     pluaralString = new TestPluralStringProxy();
-    settings.PluralStringProxyImpl.instance_ = pluaralString;
+    PluralStringProxyImpl.instance_ = pluaralString;
 
     autofillPage = createAutofillPageSection();
   });
@@ -333,11 +315,9 @@ suite('PasswordsUITest', function() {
   test('Google Password Manager Off', function() {
     assertTrue(!!autofillPage.$$('#passwordManagerButton'));
     autofillPage.$$('#passwordManagerButton').click();
-    Polymer.dom.flush();
+    flush();
 
-    assertEquals(
-        settings.Router.getInstance().getCurrentRoute(),
-        settings.routes.PASSWORDS);
+    assertEquals(Router.getInstance().getCurrentRoute(), routes.PASSWORDS);
   });
 
   test('Google Password Manager On', function() {
@@ -352,7 +332,7 @@ suite('PasswordsUITest', function() {
 
     assertTrue(!!autofillPage.$$('#passwordManagerButton'));
     autofillPage.$$('#passwordManagerButton').click();
-    Polymer.dom.flush();
+    flush();
 
     return openWindowProxy.whenCalled('openURL').then(url => {
       assertEquals(googlePasswordManagerUrl, url);
@@ -362,13 +342,11 @@ suite('PasswordsUITest', function() {
   test('Compromised Credential', async function() {
     // Check if sublabel is empty
     assertEquals(
-        '',
-        autofillPage.$$('#passwordManagerSubLabel').innerText.trim());
+        '', autofillPage.$$('#passwordManagerSubLabel').innerText.trim());
 
     // Simulate one compromised password
     const leakedPasswords = [
-      autofill_test_util.makeCompromisedCredential(
-          'google.com', 'jdoerrie', 'LEAKED'),
+      makeCompromisedCredential('google.com', 'jdoerrie', 'LEAKED'),
     ];
     passwordManager.data.leakedCredentials = leakedPasswords;
 
@@ -380,7 +358,6 @@ suite('PasswordsUITest', function() {
 
     // With compromised credentials sublabel should have text
     assertNotEquals(
-        '',
-        autofillPage.$$('#passwordManagerSubLabel').innerText.trim());
+        '', autofillPage.$$('#passwordManagerSubLabel').innerText.trim());
   });
 });

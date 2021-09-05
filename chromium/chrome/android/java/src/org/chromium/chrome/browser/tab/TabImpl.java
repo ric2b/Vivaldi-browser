@@ -31,7 +31,6 @@ import org.chromium.chrome.browser.WebContentsFactory;
 import org.chromium.chrome.browser.content.ContentUtils;
 import org.chromium.chrome.browser.contextmenu.ContextMenuPopulator;
 import org.chromium.chrome.browser.native_page.NativePageAssassin;
-import org.chromium.chrome.browser.native_page.NativePageFactory;
 import org.chromium.chrome.browser.night_mode.NightModeUtils;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.prerender.ExternalPrerenderHandler;
@@ -95,6 +94,9 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
 
     /** The parent view of the ContentView and the InfoBarContainer. */
     private ContentView mContentView;
+
+    /** The view provided by {@link TabViewManager} to be shown on top of Content view. */
+    private View mCustomView;
 
     /** A list of Tab observers.  These are used to broadcast Tab events to listeners. */
     private final ObserverList<TabObserver> mObservers = new ObserverList<>();
@@ -321,14 +323,20 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
         return mWindowAndroid;
     }
 
-    @Override
+    /**
+     * Update the attachment state to Window(Activity).
+     * @param window A new {@link WindowAndroid} to attach the tab to. If {@code null},
+     *        the tab is being detached. See {@link ReparentingTask#detach()} for details.
+     * @param tabDelegateFactory The new delegate factory this tab should be using. Can be
+     *        {@code null} even when {@code window} is not, meaning we simply want to swap out
+     *        {@link WindowAndroid} for this tab and keep using the current delegate factory.
+     */
     public void updateAttachment(
             @Nullable WindowAndroid window, @Nullable TabDelegateFactory tabDelegateFactory) {
         // Non-null delegate factory while being detached is not valid.
         assert !(window == null && tabDelegateFactory != null);
 
-        boolean attached = window != null;
-        if (attached) {
+        if (window != null) {
             updateWindowAndroid(window);
             if (tabDelegateFactory != null) setDelegateFactory(tabDelegateFactory);
 
@@ -343,9 +351,17 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
                 || (window == null && tabDelegateFactory == null);
         if (notify) {
             for (TabObserver observer : mObservers) {
-                observer.onActivityAttachmentChanged(this, attached);
+                observer.onActivityAttachmentChanged(this, window);
             }
         }
+    }
+
+    /**
+     * Sets a custom {@link View} for this {@link Tab} that replaces Content view.
+     */
+    void setCustomView(@Nullable View view) {
+        mCustomView = view;
+        notifyContentChanged();
     }
 
     @Override
@@ -355,7 +371,11 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
 
     @Override
     public View getView() {
-        return mNativePage != null ? mNativePage.getView() : mContentView;
+        if (mCustomView != null) return mCustomView;
+
+        if (mNativePage != null) return mNativePage.getView();
+
+        return mContentView;
     }
 
     @Override
@@ -720,7 +740,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
      *         {@link TabModel}.
      */
     @Deprecated
-    public ChromeActivity<?> getActivity() {
+    ChromeActivity<?> getActivity() {
         if (getWindowAndroid() == null) return null;
         Activity activity = ContextUtils.activityFromContext(getWindowAndroid().getContext().get());
         if (activity instanceof ChromeActivity) return (ChromeActivity<?>) activity;
@@ -806,7 +826,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
 
         WebContentsAccessibility wcax = getWebContentsAccessibility(getWebContents());
         if (wcax != null) {
-            boolean isWebContentObscured = isObscured || SadTab.isShowing(this);
+            boolean isWebContentObscured = isObscured || mCustomView != null;
             wcax.setObscuredByAnotherView(isWebContentObscured);
         }
     }
@@ -868,7 +888,12 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
             if (mTimestampMillis == INVALID_TIMESTAMP) {
                 mTimestampMillis = System.currentTimeMillis();
             }
-            for (TabObserver observer : mObservers) observer.onInitialized(this, tabState);
+            String appId = tabState != null ? tabState.openerAppId : null;
+            Boolean hasThemeColor = tabState != null ? tabState.hasThemeColor() : null;
+            int themeColor = tabState != null ? tabState.getThemeColor() : 0;
+            for (TabObserver observer : mObservers) {
+                observer.onInitialized(this, appId, hasThemeColor, themeColor);
+            }
             TraceEvent.end("Tab.initialize");
         }
     }
@@ -926,10 +951,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
         assert windowAndroid != null;
         mWindowAndroid = windowAndroid;
         WebContents webContents = getWebContents();
-        if (webContents != null) {
-            webContents.setTopLevelNativeWindow(mWindowAndroid);
-            webContents.notifyRendererPreferenceUpdate();
-        }
+        if (webContents != null) webContents.setTopLevelNativeWindow(mWindowAndroid);
     }
 
     TabDelegateFactory getDelegateFactory() {
@@ -1098,8 +1120,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
         // completed.
         if (isDetached(this)) return false;
         NativePage candidateForReuse = forceReload ? null : getNativePage();
-        NativePage nativePage = NativePageFactory.createNativePageForURL(
-                url, candidateForReuse, this, getActivity());
+        NativePage nativePage = mDelegateFactory.createNativePage(url, candidateForReuse, this);
         if (nativePage != null) {
             showNativePage(nativePage);
             notifyPageTitleChanged();
@@ -1357,10 +1378,12 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
 
         mWebContentsDelegate = mDelegateFactory.createWebContentsDelegate(this);
 
-        if (getWebContents() != null) {
+        WebContents webContents = getWebContents();
+        if (webContents != null) {
             TabImplJni.get().updateDelegates(mNativeTabAndroid, TabImpl.this, mWebContentsDelegate,
                     new TabContextMenuPopulator(
                             mDelegateFactory.createContextMenuPopulator(this), this));
+            webContents.notifyRendererPreferenceUpdate();
         }
     }
 

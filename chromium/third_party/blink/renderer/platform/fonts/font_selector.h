@@ -28,6 +28,7 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/renderer/platform/fonts/font_cache_client.h"
+#include "third_party/blink/renderer/platform/fonts/font_invalidation_reason.h"
 #include "third_party/blink/renderer/platform/fonts/segmented_font_data.h"
 #include "third_party/blink/renderer/platform/platform_export.h"
 #include "third_party/blink/renderer/platform/wtf/forward.h"
@@ -39,6 +40,7 @@ class ExecutionContext;
 class FontData;
 class FontDescription;
 class FontFaceCache;
+class FontFallbackMap;
 class FontSelectorClient;
 class GenericFontFamilySettings;
 
@@ -83,7 +85,7 @@ class PLATFORM_EXPORT FontSelector : public FontCacheClient {
   virtual void RegisterForInvalidationCallbacks(FontSelectorClient*) = 0;
   virtual void UnregisterForInvalidationCallbacks(FontSelectorClient*) = 0;
 
-  virtual void FontFaceInvalidated() {}
+  virtual void FontFaceInvalidated(FontInvalidationReason) {}
 
   virtual ExecutionContext* GetExecutionContext() const = 0;
 
@@ -93,11 +95,18 @@ class PLATFORM_EXPORT FontSelector : public FontCacheClient {
       const FontDescription&,
       const AtomicString& passed_family) = 0;
 
+  FontFallbackMap& GetFontFallbackMap();
+
+  void Trace(Visitor* visitor) override;
+
  protected:
   static AtomicString FamilyNameFromSettings(
       const GenericFontFamilySettings&,
       const FontDescription&,
       const AtomicString& generic_family_name);
+
+ private:
+  Member<FontFallbackMap> font_fallback_map_;
 };
 
 }  // namespace blink

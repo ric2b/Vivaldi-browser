@@ -36,6 +36,8 @@ class LayerTreeHostFiltersPixelTest
         return "skia_gl";
       case RENDERER_SKIA_VK:
         return "skia_vk";
+      case RENDERER_SKIA_DAWN:
+        return "skia_dawn";
       case RENDERER_SOFTWARE:
         return "sw";
     }
@@ -71,14 +73,14 @@ class LayerTreeHostFiltersPixelTest
 };
 
 LayerTreeTest::RendererType const kRendererTypes[] = {
-#if !defined(GL_NOT_ON_PLATFORM)
-    LayerTreeTest::RENDERER_GL,
-    LayerTreeTest::RENDERER_SKIA_GL,
-#endif  // !defined(GL_NOT_ON_PLATFORM)
+    LayerTreeTest::RENDERER_GL,        LayerTreeTest::RENDERER_SKIA_GL,
     LayerTreeTest::RENDERER_SOFTWARE,
 #if defined(ENABLE_CC_VULKAN_TESTS)
     LayerTreeTest::RENDERER_SKIA_VK,
 #endif  // defined(ENABLE_CC_VULKAN_TESTS)
+#if defined(ENABLE_CC_DAWN_TESTS)
+    LayerTreeTest::RENDERER_SKIA_DAWN,
+#endif  // defined(ENABLE_CC_DAWN_TESTS)
 };
 
 INSTANTIATE_TEST_SUITE_P(All,
@@ -87,21 +89,20 @@ INSTANTIATE_TEST_SUITE_P(All,
 
 using LayerTreeHostFiltersPixelTestGPU = LayerTreeHostFiltersPixelTest;
 
-#if !defined(GL_NOT_ON_PLATFORM) || defined(ENABLE_CC_VULKAN_TESTS)
 LayerTreeTest::RendererType const kRendererTypesGpu[] = {
-#if !defined(GL_NOT_ON_PLATFORM)
     LayerTreeTest::RENDERER_GL,
     LayerTreeTest::RENDERER_SKIA_GL,
-#endif  // !defined(GL_NOT_ON_PLATFORM)
 #if defined(ENABLE_CC_VULKAN_TESTS)
     LayerTreeTest::RENDERER_SKIA_VK,
 #endif  // defined(ENABLE_CC_VULKAN_TESTS)
+#if defined(ENABLE_CC_DAWN_TESTS)
+    LayerTreeTest::RENDERER_SKIA_DAWN,
+#endif  // defined(ENABLE_CC_DAWN_TESTS)
 };
 
 INSTANTIATE_TEST_SUITE_P(All,
                          LayerTreeHostFiltersPixelTestGPU,
                          ::testing::ValuesIn(kRendererTypesGpu));
-#endif  //  !defined(GL_NOT_ON_PLATFORM) || defined(ENABLE_CC_VULKAN_TESTS)
 
 TEST_P(LayerTreeHostFiltersPixelTest, BackdropFilterBlurRect) {
   scoped_refptr<SolidColorLayer> background = CreateSolidColorLayer(
@@ -196,6 +197,9 @@ TEST_P(LayerTreeHostFiltersPixelTest, BackdropFilterBlurRadius) {
   float average_error_allowed_in_bad_pixels = 1.f;
   int large_error_allowed = 1;
   int small_error_allowed = 0;
+  // Windows using Dawn D3D12 has 2982 pixels off by 1.
+  if (use_d3d12())
+    percentage_pixels_large_error = 1.864f;  // 2982px / (400*400)
   pixel_comparator_.reset(new FuzzyPixelComparator(
       true,  // discard_alpha
       percentage_pixels_large_error, percentage_pixels_small_error,
@@ -296,7 +300,7 @@ TEST_P(LayerTreeHostFiltersPixelTest, BackdropFilterBlurOutsets) {
       large_error_allowed,
       small_error_allowed));
 #else
-  if (use_vulkan())
+  if (use_skia_vulkan())
     pixel_comparator_ = std::make_unique<FuzzyPixelOffByOneComparator>(true);
 #endif
 
@@ -425,11 +429,19 @@ class LayerTreeHostBlurFiltersPixelTestGPULayerList
   }
 };
 
-#if !defined(GL_NOT_ON_PLATFORM) || defined(ENABLE_CC_VULKAN_TESTS)
+// TODO(sgilhuly): Enable these tests for Skia Dawn, and switch over to using
+// kRendererTypesGpu.
+LayerTreeTest::RendererType const kRendererTypesGpuNonDawn[] = {
+    LayerTreeTest::RENDERER_GL,
+    LayerTreeTest::RENDERER_SKIA_GL,
+#if defined(ENABLE_CC_VULKAN_TESTS)
+    LayerTreeTest::RENDERER_SKIA_VK,
+#endif  // defined(ENABLE_CC_VULKAN_TESTS)
+};
+
 INSTANTIATE_TEST_SUITE_P(PixelResourceTest,
                          LayerTreeHostBlurFiltersPixelTestGPULayerList,
-                         ::testing::ValuesIn(kRendererTypesGpu));
-#endif  //  !defined(GL_NOT_ON_PLATFORM) || defined(ENABLE_CC_VULKAN_TESTS)
+                         ::testing::ValuesIn(kRendererTypesGpuNonDawn));
 
 TEST_P(LayerTreeHostBlurFiltersPixelTestGPULayerList,
        BackdropFilterBlurOffAxis) {
@@ -453,7 +465,7 @@ TEST_P(LayerTreeHostBlurFiltersPixelTestGPULayerList,
       large_error_allowed,
       small_error_allowed));
 #else
-  if (use_vulkan())
+  if (use_skia_vulkan())
     pixel_comparator_ = std::make_unique<FuzzyPixelOffByOneComparator>(true);
 #endif
 
@@ -645,6 +657,11 @@ TEST_P(LayerTreeHostFiltersPixelTest, ImageFilterScaled) {
   // Windows has 153 pixels off by at most 2: crbug.com/225027
   float percentage_pixels_large_error = 0.3825f;  // 153px / (200*200)
   int large_error_allowed = 2;
+  // Windows using Dawn D3D12 has 166 pixels off by 1.
+  if (use_d3d12()) {
+    percentage_pixels_large_error = 0.415f;  // 166px / (200*200)
+    large_error_allowed = 1;
+  }
 #elif defined(_MIPS_ARCH_LOONGSON)
   // Loongson has 2 pixels off by at most 2: crbug.com/819075
   float percentage_pixels_large_error = 0.005f;  // 2px / (200*200)
@@ -755,20 +772,27 @@ TEST_P(LayerTreeHostFiltersPixelTest, ImageRenderSurfaceScaled) {
 
   background->AddChild(render_surface_layer);
 
-  // Software has some huge differences in the AA'd pixels on the different
-  // trybots. See crbug.com/452198.
+  float percentage_pixels_large_error = 0.0f;
+  float percentage_pixels_small_error = 0.0f;
+  float average_error_allowed_in_bad_pixels = 0.0f;
+  int large_error_allowed = 0;
+  int small_error_allowed = 0;
   if (use_software_renderer()) {
-    float percentage_pixels_large_error = 0.686f;
-    float percentage_pixels_small_error = 0.0f;
-    float average_error_allowed_in_bad_pixels = 16.f;
-    int large_error_allowed = 17;
-    int small_error_allowed = 0;
-    pixel_comparator_.reset(new FuzzyPixelComparator(
-        true,  // discard_alpha
-        percentage_pixels_large_error, percentage_pixels_small_error,
-        average_error_allowed_in_bad_pixels, large_error_allowed,
-        small_error_allowed));
+    // Software has some huge differences in the AA'd pixels on the different
+    // trybots. See crbug.com/452198.
+    percentage_pixels_large_error = 0.686f;
+    average_error_allowed_in_bad_pixels = 16.f;
+    large_error_allowed = 17;
+  } else if (use_d3d12()) {
+    // Windows using Dawn D3D12 has 25 pixels off by 1.
+    percentage_pixels_large_error = 0.028;
+    average_error_allowed_in_bad_pixels = 1.f;
+    large_error_allowed = 1;
   }
+  pixel_comparator_.reset(new FuzzyPixelComparator(
+      /*discard_alpha=*/true, percentage_pixels_large_error,
+      percentage_pixels_small_error, average_error_allowed_in_bad_pixels,
+      large_error_allowed, small_error_allowed));
 
   RunPixelTest(
       background,
@@ -776,7 +800,24 @@ TEST_P(LayerTreeHostFiltersPixelTest, ImageRenderSurfaceScaled) {
           .InsertBeforeExtensionASCII(GetRendererSuffix()));
 }
 
-TEST_P(LayerTreeHostFiltersPixelTest, ZoomFilter) {
+// TODO(sgilhuly): Enable these tests for Skia Dawn, and switch over to using
+// kRendererTypes.
+using LayerTreeHostFiltersPixelTestNonDawn = LayerTreeHostFiltersPixelTest;
+
+LayerTreeTest::RendererType const kRendererTypesNonDawn[] = {
+    LayerTreeTest::RENDERER_GL,
+    LayerTreeTest::RENDERER_SKIA_GL,
+    LayerTreeTest::RENDERER_SOFTWARE,
+#if defined(ENABLE_CC_VULKAN_TESTS)
+    LayerTreeTest::RENDERER_SKIA_VK,
+#endif  // defined(ENABLE_CC_VULKAN_TESTS)
+};
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         LayerTreeHostFiltersPixelTestNonDawn,
+                         ::testing::ValuesIn(kRendererTypesNonDawn));
+
+TEST_P(LayerTreeHostFiltersPixelTestNonDawn, ZoomFilter) {
   scoped_refptr<SolidColorLayer> root =
       CreateSolidColorLayer(gfx::Rect(300, 300), SK_ColorWHITE);
 
@@ -879,6 +920,9 @@ TEST_P(LayerTreeHostFiltersPixelTest, RotatedFilter) {
   float percentage_pixels_large_error = 0.00111112f;  // 1px / (300*300)
   float average_error_allowed_in_bad_pixels = 1.f;
   int large_error_allowed = 1;
+  // Windows using Dawn D3D12 has 104 pixels off by 1.
+  if (use_d3d12())
+    percentage_pixels_large_error = 0.115556f;  // 104px / (300*300)
 #else
   float percentage_pixels_large_error = 0.0f;  // 1px / (300*300)
   float average_error_allowed_in_bad_pixels = 0.0f;
@@ -936,6 +980,9 @@ TEST_P(LayerTreeHostFiltersPixelTest, RotatedDropShadowFilter) {
   float percentage_pixels_large_error = 0.00333334f;  // 3px / (300*300)
   float average_error_allowed_in_bad_pixels = 1.f;
   int large_error_allowed = 1;
+  // Windows using Dawn D3D12 has 22 pixels off by 1.
+  if (use_d3d12())
+    percentage_pixels_large_error = 0.02445;  // 22px / (300*300)
 #endif
   float percentage_pixels_small_error = 0.0f;
   int small_error_allowed = 0;
@@ -945,7 +992,7 @@ TEST_P(LayerTreeHostFiltersPixelTest, RotatedDropShadowFilter) {
       average_error_allowed_in_bad_pixels, large_error_allowed,
       small_error_allowed));
 #else
-  if (use_vulkan())
+  if (use_skia_vulkan())
     pixel_comparator_ = std::make_unique<FuzzyPixelOffByOneComparator>(true);
 #endif
 
@@ -989,7 +1036,7 @@ TEST_P(LayerTreeHostFiltersPixelTest, TranslatedFilter) {
   parent->AddChild(child);
   clip->AddChild(parent);
 
-  if (use_software_renderer())
+  if (use_software_renderer() || renderer_type_ == RENDERER_SKIA_DAWN)
     pixel_comparator_ = std::make_unique<FuzzyPixelOffByOneComparator>(true);
 
   RunPixelTest(clip, base::FilePath(
@@ -1225,6 +1272,18 @@ class BackdropFilterInvertTest : public LayerTreeHostFiltersPixelTest {
         base::NumberToString(device_scale_factor) + "x");
     if (use_software_renderer()) {
       expected_result = expected_result.InsertBeforeExtensionASCII("_sw");
+    } else if (use_d3d12()) {
+      // Windows using Dawn D3D12 has 16 pixels off by 1.
+      float percentage_pixels_large_error = 0.04f;  // 16px / (200*200)
+      float average_error_allowed_in_bad_pixels = 1.f;
+      int large_error_allowed = 1;
+      float percentage_pixels_small_error = 0.0f;
+      int small_error_allowed = 0;
+      pixel_comparator_.reset(new FuzzyPixelComparator(
+          true,  // discard_alpha
+          percentage_pixels_large_error, percentage_pixels_small_error,
+          average_error_allowed_in_bad_pixels, large_error_allowed,
+          small_error_allowed));
     }
     RunPixelTest(std::move(root), expected_result);
   }

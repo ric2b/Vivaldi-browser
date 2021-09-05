@@ -69,7 +69,12 @@ class NavigationControllerImpl::NavigationThrottleImpl
 
   ThrottleCheckResult WillRedirectRequest() override {
     controller_->WillRedirectRequest(this, navigation_handle());
-    return should_cancel_ ? CANCEL : PROCEED;
+
+    const bool should_cancel = should_cancel_;
+    if (load_params_)
+      controller_->DoNavigate(std::move(load_params_));
+    // WARNING: this may have been deleted.
+    return should_cancel ? CANCEL : PROCEED;
   }
 
   const char* GetNameForLogging() override {
@@ -111,21 +116,13 @@ void NavigationControllerImpl::SetNavigationControllerImpl(
   java_controller_ = java_controller;
 }
 
-void NavigationControllerImpl::GoToIndex(JNIEnv* env,
-                                         const JavaParamRef<jobject>& obj,
-                                         int index) {
-  return GoToIndex(index);
-}
-
 void NavigationControllerImpl::Navigate(JNIEnv* env,
-                                        const JavaParamRef<jobject>& obj,
                                         const JavaParamRef<jstring>& url) {
   Navigate(GURL(base::android::ConvertJavaStringToUTF8(env, url)));
 }
 
 void NavigationControllerImpl::NavigateWithParams(
     JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
     const JavaParamRef<jstring>& url,
     jboolean should_replace_current_entry) {
   auto params = std::make_unique<content::NavigationController::LoadURLParams>(
@@ -137,7 +134,6 @@ void NavigationControllerImpl::NavigateWithParams(
 ScopedJavaLocalRef<jstring>
 NavigationControllerImpl::GetNavigationEntryDisplayUri(
     JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
     int index) {
   return ScopedJavaLocalRef<jstring>(base::android::ConvertUTF8ToJavaString(
       env, GetNavigationEntryDisplayURL(index).spec()));
@@ -145,7 +141,6 @@ NavigationControllerImpl::GetNavigationEntryDisplayUri(
 
 ScopedJavaLocalRef<jstring> NavigationControllerImpl::GetNavigationEntryTitle(
     JNIEnv* env,
-    const JavaParamRef<jobject>& obj,
     int index) {
   return ScopedJavaLocalRef<jstring>(base::android::ConvertUTF8ToJavaString(
       env, GetNavigationEntryTitle(index)));
@@ -223,12 +218,21 @@ void NavigationControllerImpl::Reload() {
 }
 
 void NavigationControllerImpl::Stop() {
-  if (navigation_starting_)
+  NavigationImpl* navigation = nullptr;
+  if (navigation_starting_) {
     navigation_starting_->set_should_stop_when_throttle_created();
-  else if (active_throttle_)
+    navigation = navigation_starting_;
+  } else if (active_throttle_) {
     active_throttle_->ScheduleCancel();
-  else
+    DCHECK(navigation_map_.find(active_throttle_->navigation_handle()) !=
+           navigation_map_.end());
+    navigation = navigation_map_[active_throttle_->navigation_handle()].get();
+  } else {
     web_contents()->Stop();
+  }
+
+  if (navigation)
+    navigation->set_was_stopped();
 }
 
 int NavigationControllerImpl::GetNavigationListSize() {
@@ -268,6 +272,7 @@ void NavigationControllerImpl::DidStartNavigation(
   base::AutoReset<NavigationImpl*> auto_reset(&navigation_starting_,
                                               navigation);
   navigation->set_safe_to_set_request_headers(true);
+  navigation->set_safe_to_set_user_agent(true);
 #if defined(OS_ANDROID)
   if (java_controller_) {
     JNIEnv* env = AttachCurrentThread();
@@ -284,6 +289,7 @@ void NavigationControllerImpl::DidStartNavigation(
 #endif
   for (auto& observer : observers_)
     observer.NavigationStarted(navigation);
+  navigation->set_safe_to_set_user_agent(false);
   navigation->set_safe_to_set_request_headers(false);
 }
 
@@ -400,6 +406,10 @@ void NavigationControllerImpl::NotifyLoadStateChanged() {
 
 void NavigationControllerImpl::DoNavigate(
     std::unique_ptr<content::NavigationController::LoadURLParams> params) {
+  // Navigations should use the default user-agent. If the embedder wants a
+  // custom user-agent, the embedder will call Navigation::SetUserAgentString().
+  params->override_user_agent =
+      content::NavigationController::UA_OVERRIDE_FALSE;
   if (navigation_starting_) {
     // DoNavigate() is being called reentrantly. Delay processing until it's
     // safe.
@@ -408,8 +418,20 @@ void NavigationControllerImpl::DoNavigate(
     return;
   }
 
-  params->transition_type = ui::PageTransitionFromInt(
-      ui::PAGE_TRANSITION_TYPED | ui::PAGE_TRANSITION_FROM_ADDRESS_BAR);
+  if (active_throttle_) {
+    // DoNavigate() is being called reentrantly. Delay processing until it's
+    // safe.
+    Stop();
+    active_throttle_->ScheduleNavigate(std::move(params));
+    return;
+  }
+
+  // For WebLayer's production use cases, navigations from the embedder are most
+  // appropriately viewed as being from links with user gestures. In particular,
+  // this ensures that intents resulting from these navigations get launched as
+  // the embedder expects.
+  params->transition_type = ui::PageTransitionFromInt(ui::PAGE_TRANSITION_LINK);
+  params->has_user_gesture = true;
   web_contents()->GetController().LoadURLWithParams(*params);
   // So that if the user had entered the UI in a bar it stops flashing the
   // caret.

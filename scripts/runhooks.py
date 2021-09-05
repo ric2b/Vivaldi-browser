@@ -18,8 +18,6 @@ chromium_git_hooks_folder = os.path.join(SRC, ".git", "modules", "chromium", "ho
 
 depot_tools_path = os.path.join(SRC, "chromium/third_party/depot_tools")
 os.environ["PATH"] = os.pathsep.join([depot_tools_path, os.environ["PATH"]])
-if platform.system() == "Windows":
-  os.environ["DEPOT_TOOLS_WIN_TOOLCHAIN"]="0"
 
 OS_CHOICES = {
   "win32": "win",

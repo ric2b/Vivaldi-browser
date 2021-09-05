@@ -10,7 +10,6 @@
 #include <string>
 
 #include "components/autofill/core/common/mojom/autofill_types.mojom.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/autofill/core/common/password_generation_util.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
 
@@ -31,6 +30,8 @@ enum UIDisplayDisposition {
   AUTOMATIC_WITH_PASSWORD_PENDING_UPDATE,
   MANUAL_GENERATED_PASSWORD_CONFIRMATION,
   AUTOMATIC_SAVE_UNSYNCED_CREDENTIALS_LOCALLY,
+  AUTOMATIC_COMPROMISED_CREDENTIALS_REMINDER,
+  AUTOMATIC_MOVE_TO_ACCOUNT_STORE,
   NUM_DISPLAY_DISPOSITIONS,
 };
 
@@ -79,67 +80,6 @@ enum class LeakDialogDismissalReason {
   kClickedCheckPasswords = 2,
   kClickedOk = 3,
   kMaxValue = kClickedOk,
-};
-
-// Metrics: "PasswordManager.Onboarding.State"
-// Enum recording the state of showing the onboarding to the user. This
-// will be recorded on startup. Needs to stay in sync with the
-// PasswordManagerOnboardingState enum in enums.xml.
-//
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
-// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.password_manager
-enum class OnboardingState {
-  // The onboarding wasn't shown to the user.
-  kDoNotShow = 0,
-  // The onboarding wasn't shown to the user,
-  // but it should be shown the next time they are prompted to save a password.
-  kShouldShow = 1,
-  // The onboarding was shown to the user.
-  kShown = 2,
-  kMaxValue = kShown,
-};
-
-// Metrics: "PasswordManager.Onboarding.UIDismissalReason"
-// Enum recording the dismissal reason of the onboarding dialog which is shown
-// when the user is offered to save their password for the first time.
-// Needs to stay in sync with the PasswordManagerOnboardingUIDismissalReason
-// enum in enums.xml.
-//
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
-enum class OnboardingUIDismissalReason {
-  // The accepting button was pressed, e.g. "Continue" or "Got it".
-  kAccepted = 0,
-  // The rejecting button was pressed, e.g. "Cancel".
-  kRejected = 1,
-  // The dialog was dismissed, e.g. by pressing the back button, or
-  // opening a new tab.
-  kDismissed = 2,
-  kMaxValue = kDismissed,
-};
-
-// Metrics: "PasswordManager.Onboarding.ResultOfSavingFlow"
-// Metrics: "PasswordManager.Onboarding.ResultOfSavingFlowAfterOnboarding"
-// Enum recording the result of the combined saving flow consisting of the
-// potentially shown onboarding dialog and the save infobar.
-// Needs to stay in sync with the PasswordManagerOnboardingResultOfSavingFlow
-// enum in enums.xml.
-//
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
-enum class OnboardingResultOfSavingFlow {
-  // Possible infobar responses from the |UIDismissalReason| enum.
-  kInfobarNoDirectInteraction = 0,
-  kInfobarClickedSave = 1,
-  kInfobarClickedCancel = 2,
-  kInfobarClickedNever = 3,
-  // The rejecting button on the onboarding dialog was pressed, e.g. "Cancel".
-  kOnboardingRejected = 4,
-  // The onboarding dialog was dismissed, e.g. by pressing the back button, or
-  // opening a new tab.
-  kOnboardingDismissed = 5,
-  kMaxValue = kOnboardingDismissed,
 };
 
 enum FormDeserializationStatus {
@@ -222,7 +162,9 @@ enum class CredentialManagerGetResult {
   kAccountChooser,
   // User is auto signed in.
   kAutoSignIn,
-  kMaxValue = kAutoSignIn,
+  // No credentials are returned in incognito mode.
+  kNoneIncognito,
+  kMaxValue = kNoneIncognito,
 };
 
 enum PasswordReusePasswordFieldDetected {
@@ -433,17 +375,47 @@ enum class GenerationDialogChoice {
   kMaxValue = kRejected
 };
 
-// Type of the conflict with existing credentials when starting password
-// generation.
-enum class GenerationPresaveConflict {
-  // Credential can be presaved as is.
-  kNoUsernameConflict = 0,
-  // Credential can be presaved without username.
-  kNoConflictWithEmptyUsername = 1,
-  // Credential should overwrite one without username.
-  kConflictWithEmptyUsername = 2,
-  kMaxValue = kConflictWithEmptyUsername
+// Represents the state of the user wrt. sign-in and account-scoped storage.
+// Used for metrics. Always keep this enum in sync with the corresponding
+// histogram_suffixes in histograms.xml!
+enum class PasswordAccountStorageUserState {
+  // Signed-out user (and no account storage opt-in exists).
+  kSignedOutUser,
+  // Signed-out user, but an account storage opt-in exists.
+  kSignedOutAccountStoreUser,
+  // Signed-in user, not opted in to the account storage (but will save
+  // passwords to the account storage by default).
+  kSignedInUser,
+  // Signed-in user, not opted in to the account storage, and has explicitly
+  // chosen to save passwords only on the device.
+  kSignedInUserSavingLocally,
+  // Signed-in user, opted in to the account storage, and saving passwords to
+  // the account storage.
+  kSignedInAccountStoreUser,
+  // Signed-in user and opted in to the account storage, but has chosen to save
+  // passwords only on the device.
+  kSignedInAccountStoreUserSavingLocally,
+  // Syncing user.
+  kSyncUser,
 };
+std::string GetPasswordAccountStorageUserStateHistogramSuffix(
+    PasswordAccountStorageUserState user_state);
+
+// The usage level of the account-scoped password storage. This is essentially
+// a less-detailed version of PasswordAccountStorageUserState, for metrics that
+// don't need the fully-detailed breakdown. Always keep this enum in sync with
+// the corresponding histogram_suffixes in histograms.xml!
+enum class PasswordAccountStorageUsageLevel {
+  // The user is not using the account-scoped password storage. Either they're
+  // not signed in, or they haven't opted in to the account storage.
+  kNotUsingAccountStorage,
+  // The user is signed in and has opted in to the account storage.
+  kUsingAccountStorage,
+  // The user has enabled Sync.
+  kSyncing,
+};
+std::string GetPasswordAccountStorageUsageLevelHistogramSuffix(
+    PasswordAccountStorageUsageLevel usage_level);
 
 // Log the |reason| a user dismissed the password manager UI except save/update
 // bubbles.
@@ -455,27 +427,10 @@ void LogSaveUIDismissalReason(UIDismissalReason reason);
 // Log the |reason| a user dismissed the update password bubble.
 void LogUpdateUIDismissalReason(UIDismissalReason reason);
 
-// Log the |reason| a user dismissed the update password bubble when resolving a
-// conflict during generation.
-void LogPresavedUpdateUIDismissalReason(UIDismissalReason reason);
-
 // Log the |type| of a leak dialog shown to the user and the |reason| why it was
 // dismissed.
 void LogLeakDialogTypeAndDismissalReason(LeakDialogType type,
                                          LeakDialogDismissalReason reason);
-
-// Log the current onboarding |state| of the user.
-void LogOnboardingState(OnboardingState state);
-
-// Log the |reason| a user dismissed the onboarding UI.
-void LogOnboardingUIDismissalReason(OnboardingUIDismissalReason reason);
-
-// Log the |result| of the password saving flow.
-void LogResultOfSavingFlow(OnboardingResultOfSavingFlow result);
-
-// Log the |result| of the password saving flow if the onboarding was shown in
-// the process.
-void LogResultOfOnboardingSavingFlow(OnboardingResultOfSavingFlow result);
 
 // Log the appropriate display disposition.
 void LogUIDisplayDisposition(UIDisplayDisposition disposition);
@@ -557,17 +512,15 @@ void LogDeleteUndecryptableLoginsReturnValue(
 void LogDeleteCorruptedPasswordsResult(DeleteCorruptedPasswordsResult result);
 
 // Log whether a saved password was generated.
-void LogNewlySavedPasswordIsGenerated(bool value);
+void LogNewlySavedPasswordIsGenerated(
+    bool value,
+    PasswordAccountStorageUsageLevel account_storage_usage_level);
 
 // Log whether the generated password was accepted or rejected for generation of
 // |type| (automatic or manual).
 void LogGenerationDialogChoice(
     GenerationDialogChoice choice,
     autofill::password_generation::PasswordGenerationType type);
-
-// Log whether there is a conflict with existing credentials when presaving
-// a generated password.
-void LogGenerationPresaveConflict(GenerationPresaveConflict value);
 
 #if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
 // Log a save gaia password change event.

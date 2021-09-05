@@ -32,6 +32,8 @@
 #include "ash/sticky_keys/sticky_keys_controller.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/accessibility/accessibility_feature_disable_dialog.h"
+#include "ash/system/accessibility/floating_accessibility_controller.h"
+#include "ash/system/accessibility/switch_access_menu_bubble_controller.h"
 #include "ash/system/power/backlights_forced_off_setter.h"
 #include "ash/system/power/power_status.h"
 #include "ash/system/power/scoped_backlights_forced_off.h"
@@ -90,6 +92,8 @@ const FeatureData kFeatures[] = {
      &kDictationMenuIcon},
     {FeatureType::kFocusHighlight, prefs::kAccessibilityFocusHighlightEnabled,
      nullptr, /* conflicting_feature= */ FeatureType::kSpokenFeedback},
+    {FeatureType::kFloatingMenu, prefs::kAccessibilityFloatingMenuEnabled,
+     nullptr},
     {FeatureType::kFullscreenMagnifier,
      prefs::kAccessibilityScreenMagnifierEnabled,
      &kSystemMenuAccessibilityFullscreenMagnifierIcon},
@@ -524,7 +528,9 @@ AccessibilityControllerImpl::AccessibilityControllerImpl()
   CreateAccessibilityFeatures();
 }
 
-AccessibilityControllerImpl::~AccessibilityControllerImpl() = default;
+AccessibilityControllerImpl::~AccessibilityControllerImpl() {
+  floating_menu_controller_.reset();
+}
 
 void AccessibilityControllerImpl::CreateAccessibilityFeatures() {
   DCHECK(VerifyFeaturesData());
@@ -583,6 +589,13 @@ void AccessibilityControllerImpl::RegisterProfilePrefs(
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
   registry->RegisterBooleanPref(
       prefs::kAccessibilityDictationEnabled, false,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
+  registry->RegisterBooleanPref(
+      prefs::kAccessibilityFloatingMenuEnabled, false,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
+  registry->RegisterIntegerPref(
+      prefs::kAccessibilityFloatingMenuPosition,
+      static_cast<int>(kDefaultFloatingMenuPosition),
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
   registry->RegisterBooleanPref(
       prefs::kAccessibilityFocusHighlightEnabled, false,
@@ -800,6 +813,11 @@ AccessibilityControllerImpl::dictation() const {
 AccessibilityControllerImpl::Feature&
 AccessibilityControllerImpl::focus_highlight() const {
   return GetFeature(FeatureType::kFocusHighlight);
+}
+
+AccessibilityControllerImpl::Feature&
+AccessibilityControllerImpl::floating_menu() const {
+  return GetFeature(FeatureType::kFloatingMenu);
 }
 
 AccessibilityControllerImpl::FeatureWithDialog&
@@ -1096,6 +1114,25 @@ void AccessibilityControllerImpl::
   switch_access_event_handler_->set_ignore_virtual_key_events(should_ignore);
 }
 
+void AccessibilityControllerImpl::HideSwitchAccessBackButton() {
+  switch_access_bubble_controller_->HideBackButton();
+}
+
+void AccessibilityControllerImpl::HideSwitchAccessMenu() {
+  switch_access_bubble_controller_->HideMenuBubble();
+}
+
+void AccessibilityControllerImpl::ShowSwitchAccessBackButton(
+    const gfx::Rect& anchor) {
+  switch_access_bubble_controller_->ShowBackButton(anchor);
+}
+
+void AccessibilityControllerImpl::ShowSwitchAccessMenu(
+    const gfx::Rect& anchor,
+    std::vector<std::string> actions_to_show) {
+  switch_access_bubble_controller_->ShowMenu(anchor, actions_to_show);
+}
+
 void AccessibilityControllerImpl::
     DisablePolicyRecommendationRestorerForTesting() {
   Shell::Get()->policy_recommendation_restorer()->DisableForTesting();
@@ -1134,6 +1171,21 @@ bool AccessibilityControllerImpl::IsVirtualKeyboardSettingVisibleInTray() {
 
 bool AccessibilityControllerImpl::IsEnterpriseIconVisibleForVirtualKeyboard() {
   return virtual_keyboard().IsEnterpriseIconVisible();
+}
+
+void AccessibilityControllerImpl::ShowFloatingMenuIfEnabled() {
+  if (floating_menu().enabled() && !floating_menu_controller_) {
+    floating_menu_controller_ =
+        std::make_unique<FloatingAccessibilityController>(this);
+    floating_menu_controller_->Show(GetFloatingMenuPosition());
+  } else {
+    always_show_floating_menu_when_enabled_ = true;
+  }
+}
+
+FloatingAccessibilityController*
+AccessibilityControllerImpl::GetFloatingMenuController() {
+  return floating_menu_controller_.get();
 }
 
 void AccessibilityControllerImpl::SetTabletModeShelfNavigationButtonsEnabled(
@@ -1377,6 +1429,11 @@ void AccessibilityControllerImpl::ObservePrefs(PrefService* prefs) {
           &AccessibilityControllerImpl::UpdateAutoclickMenuPositionFromPref,
           base::Unretained(this)));
   pref_change_registrar_->Add(
+      prefs::kAccessibilityFloatingMenuPosition,
+      base::BindRepeating(
+          &AccessibilityControllerImpl::UpdateFloatingMenuPositionFromPref,
+          base::Unretained(this)));
+  pref_change_registrar_->Add(
       prefs::kAccessibilityLargeCursorDipSize,
       base::BindRepeating(
           &AccessibilityControllerImpl::UpdateLargeCursorFromPref,
@@ -1434,6 +1491,7 @@ void AccessibilityControllerImpl::ObservePrefs(PrefService* prefs) {
   UpdateAutoclickStabilizePositionFromPref();
   UpdateAutoclickMovementThresholdFromPref();
   UpdateAutoclickMenuPositionFromPref();
+  UpdateFloatingMenuPositionFromPref();
   UpdateLargeCursorFromPref();
   UpdateShortcutsEnabledFromPref();
   UpdateTabletModeShelfNavigationButtonsFromPref();
@@ -1505,7 +1563,7 @@ void AccessibilityControllerImpl::UpdateAutoclickMenuPositionFromPref() {
 }
 
 void AccessibilityControllerImpl::SetAutoclickMenuPosition(
-    AutoclickMenuPosition position) {
+    FloatingMenuPosition position) {
   if (!active_user_prefs_)
     return;
   active_user_prefs_->SetInteger(prefs::kAccessibilityAutoclickMenuPosition,
@@ -1514,9 +1572,9 @@ void AccessibilityControllerImpl::SetAutoclickMenuPosition(
   Shell::Get()->autoclick_controller()->SetMenuPosition(position);
 }
 
-AutoclickMenuPosition AccessibilityControllerImpl::GetAutoclickMenuPosition() {
+FloatingMenuPosition AccessibilityControllerImpl::GetAutoclickMenuPosition() {
   DCHECK(active_user_prefs_);
-  return static_cast<AutoclickMenuPosition>(active_user_prefs_->GetInteger(
+  return static_cast<FloatingMenuPosition>(active_user_prefs_->GetInteger(
       prefs::kAccessibilityAutoclickMenuPosition));
 }
 
@@ -1534,6 +1592,26 @@ void AccessibilityControllerImpl::OnAutoclickScrollableBoundsFound(
     gfx::Rect& bounds_in_screen) {
   Shell::Get()->autoclick_controller()->OnAutoclickScrollableBoundsFound(
       bounds_in_screen);
+}
+
+void AccessibilityControllerImpl::SetFloatingMenuPosition(
+    FloatingMenuPosition position) {
+  if (!active_user_prefs_)
+    return;
+  active_user_prefs_->SetInteger(prefs::kAccessibilityFloatingMenuPosition,
+                                 static_cast<int>(position));
+  active_user_prefs_->CommitPendingWrite();
+}
+
+void AccessibilityControllerImpl::UpdateFloatingMenuPositionFromPref() {
+  if (floating_menu_controller_)
+    floating_menu_controller_->SetMenuPosition(GetFloatingMenuPosition());
+}
+
+FloatingMenuPosition AccessibilityControllerImpl::GetFloatingMenuPosition() {
+  DCHECK(active_user_prefs_);
+  return static_cast<FloatingMenuPosition>(active_user_prefs_->GetInteger(
+      prefs::kAccessibilityFloatingMenuPosition));
 }
 
 void AccessibilityControllerImpl::UpdateLargeCursorFromPref() {
@@ -1659,6 +1737,7 @@ void AccessibilityControllerImpl::SwitchAccessDisableDialogClosed(
   if (disable_dialog_accepted) {
     // The pref was already disabled, but we left switch access on until they
     // accepted the dialog.
+    switch_access_bubble_controller_.reset();
     switch_access_event_handler_.reset();
     NotifyAccessibilityStatusChanged();
   } else {
@@ -1764,6 +1843,12 @@ void AccessibilityControllerImpl::UpdateFeatureFromPref(FeatureType feature) {
       break;
     case FeatureType::kDictation:
       break;
+    case FeatureType::kFloatingMenu:
+      if (enabled && always_show_floating_menu_when_enabled_)
+        ShowFloatingMenuIfEnabled();
+      else
+        floating_menu_controller_.reset();
+      break;
     case FeatureType::kFocusHighlight:
       UpdateAccessibilityHighlightingFromPrefs();
       break;
@@ -1812,7 +1897,7 @@ void AccessibilityControllerImpl::UpdateFeatureFromPref(FeatureType feature) {
         ShowAccessibilityNotification(A11yNotificationType::kNone);
 
         if (no_switch_access_disable_confirmation_dialog_for_testing_) {
-          switch_access_event_handler_.reset();
+          SwitchAccessDisableDialogClosed(true);
         } else {
           new AccessibilityFeatureDisableDialog(
               IDS_ASH_SWITCH_ACCESS_DISABLE_CONFIRMATION_TITLE,
@@ -1823,9 +1908,11 @@ void AccessibilityControllerImpl::UpdateFeatureFromPref(FeatureType feature) {
               base::BindOnce(
                   &AccessibilityControllerImpl::SwitchAccessDisableDialogClosed,
                   weak_ptr_factory_.GetWeakPtr(), false));
-          return;
         }
+        return;
       } else {
+        switch_access_bubble_controller_ =
+            std::make_unique<SwitchAccessMenuBubbleController>();
         MaybeCreateSwitchAccessEventHandler();
         ShowAccessibilityNotification(
             A11yNotificationType::kSwitchAccessEnabled);

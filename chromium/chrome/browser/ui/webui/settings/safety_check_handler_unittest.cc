@@ -29,6 +29,7 @@
 #include "components/password_manager/core/browser/leak_detection/bulk_leak_check.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
+#include "components/safety_check/test_update_check_helper.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/version_info/version_info.h"
 #include "content/public/test/test_web_ui.h"
@@ -43,6 +44,7 @@
 #endif
 
 // Components for building event strings.
+constexpr char kParent[] = "parent";
 constexpr char kUpdates[] = "updates";
 constexpr char kPasswords[] = "passwords";
 constexpr char kSafeBrowsing[] = "safe-browsing";
@@ -60,12 +62,14 @@ class TestingSafetyCheckHandler : public SafetyCheckHandler {
   using SafetyCheckHandler::SetVersionUpdaterForTesting;
 
   TestingSafetyCheckHandler(
+      std::unique_ptr<safety_check::UpdateCheckHelper> update_helper,
       std::unique_ptr<VersionUpdater> version_updater,
       password_manager::BulkLeakCheckService* leak_service,
       extensions::PasswordsPrivateDelegate* passwords_delegate,
       extensions::ExtensionPrefs* extension_prefs,
       extensions::ExtensionServiceInterface* extension_service)
-      : SafetyCheckHandler(std::move(version_updater),
+      : SafetyCheckHandler(std::move(update_helper),
+                           std::move(version_updater),
                            leak_service,
                            passwords_delegate,
                            extension_prefs,
@@ -192,12 +196,9 @@ class SafetyCheckHandlerTest : public ChromeRenderViewHostTestHarness {
                            const base::string16& expected);
   void VerifyDisplayString(const base::DictionaryValue* event,
                            const std::string& expected);
-  void VerifyButtonString(const base::DictionaryValue* event,
-                          const base::string16& expected);
-  void VerifyButtonString(const base::DictionaryValue* event,
-                          const std::string& expected);
 
  protected:
+  safety_check::TestUpdateCheckHelper* update_helper_ = nullptr;
   TestVersionUpdater* version_updater_ = nullptr;
   std::unique_ptr<password_manager::BulkLeakCheckService> test_leak_service_;
   TestPasswordsDelegate test_passwords_delegate_;
@@ -220,17 +221,19 @@ void SafetyCheckHandlerTest::SetUp() {
   // The unique pointer to a TestVersionUpdater gets moved to
   // SafetyCheckHandler, but a raw pointer is retained here to change its
   // state.
+  auto update_helper = std::make_unique<safety_check::TestUpdateCheckHelper>();
+  update_helper_ = update_helper.get();
   auto version_updater = std::make_unique<TestVersionUpdater>();
+  version_updater_ = version_updater.get();
   test_leak_service_ = std::make_unique<password_manager::BulkLeakCheckService>(
       nullptr, nullptr);
   test_passwords_delegate_.SetBulkLeakCheckService(test_leak_service_.get());
-  version_updater_ = version_updater.get();
   test_web_ui_.set_web_contents(web_contents());
   test_extension_prefs_ = extensions::ExtensionPrefs::Get(profile());
   safety_check_ = std::make_unique<TestingSafetyCheckHandler>(
-      std::move(version_updater), test_leak_service_.get(),
-      &test_passwords_delegate_, test_extension_prefs_,
-      &test_extension_service_);
+      std::move(update_helper), std::move(version_updater),
+      test_leak_service_.get(), &test_passwords_delegate_,
+      test_extension_prefs_, &test_extension_service_);
   test_web_ui_.ClearTrackedCalls();
   safety_check_->set_web_ui(&test_web_ui_);
   safety_check_->AllowJavascript();
@@ -290,20 +293,6 @@ void SafetyCheckHandlerTest::VerifyDisplayString(
   VerifyDisplayString(event, base::ASCIIToUTF16(expected));
 }
 
-void SafetyCheckHandlerTest::VerifyButtonString(
-    const base::DictionaryValue* event,
-    const base::string16& expected) {
-  base::string16 button;
-  ASSERT_TRUE(event->GetString("buttonString", &button));
-  EXPECT_EQ(expected, button);
-}
-
-void SafetyCheckHandlerTest::VerifyButtonString(
-    const base::DictionaryValue* event,
-    const std::string& expected) {
-  VerifyButtonString(event, base::ASCIIToUTF16(expected));
-}
-
 void SafetyCheckHandlerTest::ReplaceBrowserName(base::string16* s) {
   base::ReplaceSubstringsAfterOffset(s, 0, base::ASCIIToUTF16("Google Chrome"),
                                      base::ASCIIToUTF16("Browser"));
@@ -321,7 +310,7 @@ TEST_F(SafetyCheckHandlerTest, CheckUpdates_Checking) {
           kUpdates,
           static_cast<int>(SafetyCheckHandler::UpdateStatus::kChecking));
   ASSERT_TRUE(event);
-  VerifyDisplayString(event, base::UTF8ToUTF16("Running…"));
+  VerifyDisplayString(event, base::UTF8ToUTF16(""));
   // Checking state should not get recorded.
   histogram_tester_.ExpectTotalCount("Settings.SafetyCheck.UpdatesResult", 0);
 }
@@ -442,7 +431,8 @@ TEST_F(SafetyCheckHandlerTest, CheckUpdates_FailedOffline) {
       SafetyCheckHandler::UpdateStatus::kFailedOffline, 1);
 }
 
-TEST_F(SafetyCheckHandlerTest, CheckUpdates_Failed) {
+TEST_F(SafetyCheckHandlerTest, CheckUpdates_Failed_ConnectivityOnline) {
+  update_helper_->SetConnectivity(true);
   version_updater_->SetReturnedStatus(VersionUpdater::Status::FAILED);
   safety_check_->PerformSafetyCheck();
   const base::DictionaryValue* event =
@@ -460,6 +450,23 @@ TEST_F(SafetyCheckHandlerTest, CheckUpdates_Failed) {
                                       1);
 }
 
+TEST_F(SafetyCheckHandlerTest, CheckUpdates_Failed_ConnectivityOffline) {
+  update_helper_->SetConnectivity(false);
+  version_updater_->SetReturnedStatus(VersionUpdater::Status::FAILED);
+  safety_check_->PerformSafetyCheck();
+  const base::DictionaryValue* event =
+      GetSafetyCheckStatusChangedWithDataIfExists(
+          kUpdates,
+          static_cast<int>(SafetyCheckHandler::UpdateStatus::kFailedOffline));
+  ASSERT_TRUE(event);
+  VerifyDisplayString(event,
+                      "Browser can't check for updates. Try checking your "
+                      "internet connection.");
+  histogram_tester_.ExpectBucketCount(
+      "Settings.SafetyCheck.UpdatesResult",
+      SafetyCheckHandler::UpdateStatus::kFailedOffline, 1);
+}
+
 TEST_F(SafetyCheckHandlerTest, CheckUpdates_DestroyedOnJavascriptDisallowed) {
   EXPECT_FALSE(TestDestructionVersionUpdater::GetDestructorInvoked());
   safety_check_->SetVersionUpdaterForTesting(
@@ -469,22 +476,66 @@ TEST_F(SafetyCheckHandlerTest, CheckUpdates_DestroyedOnJavascriptDisallowed) {
   EXPECT_TRUE(TestDestructionVersionUpdater::GetDestructorInvoked());
 }
 
-TEST_F(SafetyCheckHandlerTest, CheckSafeBrowsing_Enabled) {
+TEST_F(SafetyCheckHandlerTest, CheckSafeBrowsing_EnabledStandard) {
   Profile::FromWebUI(&test_web_ui_)
       ->GetPrefs()
       ->SetBoolean(prefs::kSafeBrowsingEnabled, true);
+  Profile::FromWebUI(&test_web_ui_)
+      ->GetPrefs()
+      ->SetBoolean(prefs::kSafeBrowsingEnhanced, false);
   safety_check_->PerformSafetyCheck();
   const base::DictionaryValue* event =
       GetSafetyCheckStatusChangedWithDataIfExists(
           kSafeBrowsing,
-          static_cast<int>(SafetyCheckHandler::SafeBrowsingStatus::kEnabled));
+          static_cast<int>(
+              SafetyCheckHandler::SafeBrowsingStatus::kEnabledStandard));
   ASSERT_TRUE(event);
-  VerifyDisplayString(event,
-                      "Safe Browsing is on and protecting you from harmful "
-                      "sites and downloads");
+  VerifyDisplayString(event, "Standard Protection is on");
   histogram_tester_.ExpectBucketCount(
       "Settings.SafetyCheck.SafeBrowsingResult",
-      SafetyCheckHandler::SafeBrowsingStatus::kEnabled, 1);
+      SafetyCheckHandler::SafeBrowsingStatus::kEnabledStandard, 1);
+}
+
+TEST_F(SafetyCheckHandlerTest, CheckSafeBrowsing_EnabledEnhanced) {
+  Profile::FromWebUI(&test_web_ui_)
+      ->GetPrefs()
+      ->SetBoolean(prefs::kSafeBrowsingEnabled, true);
+  Profile::FromWebUI(&test_web_ui_)
+      ->GetPrefs()
+      ->SetBoolean(prefs::kSafeBrowsingEnhanced, true);
+  safety_check_->PerformSafetyCheck();
+  const base::DictionaryValue* event =
+      GetSafetyCheckStatusChangedWithDataIfExists(
+          kSafeBrowsing,
+          static_cast<int>(
+              SafetyCheckHandler::SafeBrowsingStatus::kEnabledEnhanced));
+  ASSERT_TRUE(event);
+  VerifyDisplayString(event, "Enhanced Protection is on");
+  histogram_tester_.ExpectBucketCount(
+      "Settings.SafetyCheck.SafeBrowsingResult",
+      SafetyCheckHandler::SafeBrowsingStatus::kEnabledEnhanced, 1);
+}
+
+TEST_F(SafetyCheckHandlerTest, CheckSafeBrowsing_InconsistentEnhanced) {
+  // Tests the corner case of SafeBrowsingEnhanced pref being on, while
+  // SafeBrowsing enabled is off. This should be treated as SB off.
+  Profile::FromWebUI(&test_web_ui_)
+      ->GetPrefs()
+      ->SetBoolean(prefs::kSafeBrowsingEnabled, false);
+  Profile::FromWebUI(&test_web_ui_)
+      ->GetPrefs()
+      ->SetBoolean(prefs::kSafeBrowsingEnhanced, true);
+  safety_check_->PerformSafetyCheck();
+  const base::DictionaryValue* event =
+      GetSafetyCheckStatusChangedWithDataIfExists(
+          kSafeBrowsing,
+          static_cast<int>(SafetyCheckHandler::SafeBrowsingStatus::kDisabled));
+  ASSERT_TRUE(event);
+  VerifyDisplayString(
+      event, "Safe Browsing is off. Browser recommends turning it on.");
+  histogram_tester_.ExpectBucketCount(
+      "Settings.SafetyCheck.SafeBrowsingResult",
+      SafetyCheckHandler::SafeBrowsingStatus::kDisabled, 1);
 }
 
 TEST_F(SafetyCheckHandlerTest, CheckSafeBrowsing_Disabled) {
@@ -556,7 +607,7 @@ TEST_F(SafetyCheckHandlerTest, CheckPasswords_ObserverRemovedAfterError) {
           kPasswords,
           static_cast<int>(SafetyCheckHandler::PasswordsStatus::kChecking));
   ASSERT_TRUE(event);
-  VerifyDisplayString(event, base::UTF8ToUTF16("Running…"));
+  VerifyDisplayString(event, base::UTF8ToUTF16(""));
   histogram_tester_.ExpectTotalCount("Settings.SafetyCheck.PasswordsResult", 0);
   // Second, an "offline" state.
   test_leak_service_->set_state_and_notify(
@@ -596,7 +647,7 @@ TEST_F(SafetyCheckHandlerTest, CheckPasswords_InterruptedAndRefreshed) {
           kPasswords,
           static_cast<int>(SafetyCheckHandler::PasswordsStatus::kChecking));
   ASSERT_TRUE(event);
-  VerifyDisplayString(event, base::UTF8ToUTF16("Running…"));
+  VerifyDisplayString(event, base::UTF8ToUTF16(""));
   // The check gets interrupted and the page is refreshed.
   safety_check_->DisallowJavascript();
   safety_check_->AllowJavascript();
@@ -717,7 +768,6 @@ TEST_F(SafetyCheckHandlerTest, CheckPasswords_CompromisedExist) {
   ASSERT_TRUE(event2);
   VerifyDisplayString(
       event2, base::NumberToString(kCompromised) + " compromised passwords");
-  VerifyButtonString(event2, "Change passwords");
   histogram_tester_.ExpectBucketCount(
       "Settings.SafetyCheck.PasswordsResult",
       SafetyCheckHandler::PasswordsStatus::kCompromisedExist, 1);
@@ -757,7 +807,6 @@ TEST_F(SafetyCheckHandlerTest, CheckPasswords_RunningOneCompromised) {
               SafetyCheckHandler::PasswordsStatus::kCompromisedExist));
   ASSERT_TRUE(event);
   VerifyDisplayString(event, "1 compromised password");
-  VerifyButtonString(event, "Change password");
   histogram_tester_.ExpectBucketCount(
       "Settings.SafetyCheck.PasswordsResult",
       SafetyCheckHandler::PasswordsStatus::kCompromisedExist, 1);
@@ -1013,9 +1062,12 @@ TEST_F(SafetyCheckHandlerTest, CheckExtensions_Error) {
 }
 
 TEST_F(SafetyCheckHandlerTest, CheckParentRanDisplayString) {
-  // 1 second before midnight, so that -(24h-1s) is still on the same day.
-  const base::Time systemTime =
-      base::Time::Now().LocalMidnight() - base::TimeDelta::FromSeconds(1);
+  // 1 second before midnight Dec 31st 2020, so that -(24h-1s) is still on the
+  // same day. This test time is hard coded to prevent DST flakiness, see
+  // crbug.com/1066576.
+  const base::Time system_time =
+      base::Time::FromDoubleT(1609459199).LocalMidnight() -
+      base::TimeDelta::FromSeconds(1);
   // Display strings for given time deltas in seconds.
   std::vector<std::tuple<std::string, int>> tuples{
       std::make_tuple("Safety check ran a moment ago", 1),
@@ -1035,9 +1087,63 @@ TEST_F(SafetyCheckHandlerTest, CheckParentRanDisplayString) {
   // Test that above time deltas produce the corresponding display strings.
   for (auto tuple : tuples) {
     const base::Time time =
-        systemTime - base::TimeDelta::FromSeconds(std::get<1>(tuple));
-    const base::string16 displayString = safety_check_->GetStringForParentRan(
-        time.ToJsTimeIgnoringNull(), systemTime);
-    EXPECT_EQ(base::UTF8ToUTF16(std::get<0>(tuple)), displayString);
+        system_time - base::TimeDelta::FromSeconds(std::get<1>(tuple));
+    const base::string16 display_string =
+        safety_check_->GetStringForParentRan(time, system_time);
+    EXPECT_EQ(base::UTF8ToUTF16(std::get<0>(tuple)), display_string);
   }
+}
+
+TEST_F(SafetyCheckHandlerTest, CheckSafetyCheckStartedWebUiEvents) {
+  safety_check_->SendSafetyCheckStartedWebUiUpdates();
+
+  // Check that all initial updates ("running" states) are sent.
+  const base::DictionaryValue* event_parent =
+      GetSafetyCheckStatusChangedWithDataIfExists(
+          kParent,
+          static_cast<int>(SafetyCheckHandler::ParentStatus::kChecking));
+  ASSERT_TRUE(event_parent);
+  VerifyDisplayString(event_parent, base::UTF8ToUTF16("Running…"));
+  const base::DictionaryValue* event_updates =
+      GetSafetyCheckStatusChangedWithDataIfExists(
+          kUpdates,
+          static_cast<int>(SafetyCheckHandler::UpdateStatus::kChecking));
+  ASSERT_TRUE(event_updates);
+  VerifyDisplayString(event_updates, base::UTF8ToUTF16(""));
+  const base::DictionaryValue* event_pws =
+      GetSafetyCheckStatusChangedWithDataIfExists(
+          kPasswords,
+          static_cast<int>(SafetyCheckHandler::PasswordsStatus::kChecking));
+  ASSERT_TRUE(event_pws);
+  VerifyDisplayString(event_pws, base::UTF8ToUTF16(""));
+  const base::DictionaryValue* event_sb =
+      GetSafetyCheckStatusChangedWithDataIfExists(
+          kSafeBrowsing,
+          static_cast<int>(SafetyCheckHandler::SafeBrowsingStatus::kChecking));
+  ASSERT_TRUE(event_sb);
+  VerifyDisplayString(event_sb, base::UTF8ToUTF16(""));
+  const base::DictionaryValue* event_extensions =
+      GetSafetyCheckStatusChangedWithDataIfExists(
+          kExtensions,
+          static_cast<int>(SafetyCheckHandler::ExtensionsStatus::kChecking));
+  ASSERT_TRUE(event_extensions);
+  VerifyDisplayString(event_extensions, base::UTF8ToUTF16(""));
+}
+
+TEST_F(SafetyCheckHandlerTest, CheckSafetyCheckCompletedWebUiEvents) {
+  // Mock safety check invocation.
+  safety_check_->PerformSafetyCheck();
+
+  // Password mocks need to be triggered with a non-checking state to fire.
+  // All other mocks fire automatically when invoked.
+  test_leak_service_->set_state_and_notify(
+      password_manager::BulkLeakCheckService::State::kSignedOut);
+
+  // Check that the parent update is sent after all children checks completed.
+  const base::DictionaryValue* event_parent =
+      GetSafetyCheckStatusChangedWithDataIfExists(
+          kParent, static_cast<int>(SafetyCheckHandler::ParentStatus::kAfter));
+  ASSERT_TRUE(event_parent);
+  VerifyDisplayString(event_parent,
+                      base::UTF8ToUTF16("Safety check ran a moment ago"));
 }

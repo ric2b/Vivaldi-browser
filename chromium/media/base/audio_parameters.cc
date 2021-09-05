@@ -4,7 +4,8 @@
 
 #include "media/base/audio_parameters.h"
 
-#include "base/logging.h"
+#include <sstream>
+
 #include "media/base/limits.h"
 
 namespace media {

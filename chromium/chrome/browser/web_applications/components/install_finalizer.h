@@ -8,7 +8,9 @@
 #include <memory>
 
 #include "base/callback_forward.h"
+#include "base/optional.h"
 #include "chrome/browser/installable/installable_metrics.h"
+#include "chrome/browser/web_applications/components/web_app_chromeos_data.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
 
 struct WebApplicationInfo;
@@ -23,6 +25,7 @@ namespace web_app {
 enum class ExternalInstallSource;
 enum class InstallResultCode;
 class AppRegistrar;
+class AppRegistryController;
 class WebAppUiManager;
 
 // An abstract finalizer for the installation process, represents the last step.
@@ -35,8 +38,14 @@ class InstallFinalizer {
   using UninstallWebAppCallback = base::OnceCallback<void(bool uninstalled)>;
 
   struct FinalizeOptions {
+    FinalizeOptions();
+    ~FinalizeOptions();
+    FinalizeOptions(const FinalizeOptions&);
+
     WebappInstallSource install_source = WebappInstallSource::COUNT;
     bool locally_installed = true;
+
+    base::Optional<WebAppChromeOsData> chromeos_data;
   };
 
   // Write the WebApp data to disk and register the app.
@@ -94,19 +103,20 @@ class InstallFinalizer {
                            bool shortcut_created,
                            content::WebContents* web_contents);
 
-  virtual bool CanRevealAppShim() const = 0;
-  virtual void RevealAppShim(const AppId& app_id) = 0;
-
-  void SetSubsystems(AppRegistrar* registrar, WebAppUiManager* ui_manager);
+  void SetSubsystems(AppRegistrar* registrar,
+                     WebAppUiManager* ui_manager,
+                     AppRegistryController* registry_controller);
 
   virtual ~InstallFinalizer() = default;
 
  protected:
   AppRegistrar& registrar() const { return *registrar_; }
   WebAppUiManager& ui_manager() const { return *ui_manager_; }
+  AppRegistryController& registry_controller() { return *registry_controller_; }
 
  private:
   AppRegistrar* registrar_ = nullptr;
+  AppRegistryController* registry_controller_ = nullptr;
   WebAppUiManager* ui_manager_ = nullptr;
 };
 

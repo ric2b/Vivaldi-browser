@@ -123,6 +123,7 @@ struct CONTENT_EXPORT WebPreferences {
   bool webgl_errors_to_console_enabled;
   bool hide_scrollbars;
   bool accelerated_2d_canvas_enabled;
+  bool new_canvas_2d_api_enabled;
   bool antialiased_2d_canvas_disabled;
   bool antialiased_clips_2d_canvas_enabled;
   int accelerated_2d_canvas_msaa_sample_count;
@@ -356,6 +357,10 @@ struct CONTENT_EXPORT WebPreferences {
   // Setting to false disables upgrades to HTTPS for HTTP resources in HTTPS
   // sites.
   bool allow_mixed_content_upgrades;
+
+  // Whether the focused element should always be indicated (for example, by
+  // forcing :focus-visible to match regardless of focus method).
+  bool always_show_focus;
 
   // Vivaldi specific preferences:
   // Maps to the Cycle focus setting in Vivaldi.

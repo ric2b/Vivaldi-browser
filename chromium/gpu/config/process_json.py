@@ -201,12 +201,15 @@ def write_gl_strings(entry_id, is_exception, exception_id, data,
 def write_version(version_info, name_tag, data_file):
   op = ''
   style = ''
+  schema = ''
   version1 = ''
   version2 = ''
   if version_info:
     op = version_info['op']
     if 'style' in version_info:
       style = version_info['style']
+    if 'schema' in version_info:
+      schema = version_info['schema']
     version1 = version_info['value']
     if 'value2' in version_info:
       version2 = version_info['value2']
@@ -230,6 +233,13 @@ def write_version(version_info, name_tag, data_file):
   }
   assert style in style_map
   data_file.write('GpuControlList::kVersionStyle%s, ' % style_map[style])
+  schema_map = {
+    'common': 'Common',
+    'intel_driver': 'IntelDriver',
+    '': 'Common',
+  }
+  assert schema in schema_map
+  data_file.write('GpuControlList::kVersionSchema%s, ' % schema_map[schema])
   write_string(version1, data_file)
   data_file.write(', ')
   write_string(version2, data_file)
@@ -428,6 +438,9 @@ def write_conditions(entry_id, is_exception, exception_id, entry,
     elif key == 'description':
       assert not is_exception
       continue
+    elif key == 'driver_update_url':
+      assert not is_exception
+      continue
     elif key == 'features':
       assert not is_exception
       continue
@@ -517,14 +530,19 @@ def write_conditions(entry_id, is_exception, exception_id, entry,
   write_multi_gpu_style(multi_gpu_style, data_file)
   # group driver info
   if driver_vendor != '' or driver_version != None:
-    if driver_version and os_type == 'win':
-      if (format(vendor_id, '#04x') == '0x8086' or intel_gpu_series_list
-          or intel_gpu_generation or 'Intel' in driver_vendor):
-        if not check_intel_driver_version(driver_version['value']):
-          assert False, INTEL_DRIVER_VERSION_SCHEMA
-        if 'value2' in driver_version:
-          if not check_intel_driver_version(driver_version['value2']):
-            assert False, INTEL_DRIVER_VERSION_SCHEMA
+    if (driver_version and driver_version.has_key('schema') and
+        driver_version['schema'] == 'intel_driver'):
+      assert os_type == 'win', 'Intel driver schema is only for Windows'
+      is_intel = (format(vendor_id, '#04x') == '0x8086' or
+                  intel_gpu_series_list or
+                  intel_gpu_generation or
+                  'Intel' in driver_vendor)
+      assert is_intel, 'Intel driver schema is only for Intel GPUs'
+      valid_version = check_intel_driver_version(driver_version['value'])
+      if driver_version.has_key('value2'):
+        valid_version = (valid_version and
+                         check_intel_driver_version(driver_version['value2']))
+      assert valid_version, INTEL_DRIVER_VERSION_SCHEMA
 
     write_driver_info(entry_id, is_exception, exception_id, driver_vendor,
                       driver_version, unique_symbol_id,
@@ -571,6 +589,9 @@ def write_intel_gpu_series_list(entry_id, is_exception, exception_id,
     data_helper_file.write('const IntelGpuSeriesType %s[%d] = {\n' %
                            (var_name, len(intel_gpu_series_list)))
     intel_gpu_series_map = {
+      'broadwater': 'kBroadwater',
+      'eaglelake': 'kEaglelake',
+      'ironlake': 'kIronlake',
       'sandybridge': 'kSandybridge',
       'baytrail': 'kBaytrail',
       'ivybridge': 'kIvybridge',
@@ -585,7 +606,10 @@ def write_intel_gpu_series_list(entry_id, is_exception, exception_id,
       'whiskeylake': 'kWhiskeylake',
       'cometlake': 'kCometlake',
       'cannonlake': 'kCannonlake',
-      'icelake': 'kIcelake'
+      'icelake': 'kIcelake',
+      'elkhartlake': 'kElkhartlake',
+      'jasperlake': 'kJasperlake',
+      'tigerlake': 'kTigerlake'
     }
     for series in intel_gpu_series_list:
       assert series in intel_gpu_series_map
@@ -645,7 +669,11 @@ def write_entry(entry, total_feature_set, feature_name_prefix,
   # ID
   entry_id = entry['id']
   data_file.write('%d,  // id\n' % entry_id)
-  data_file.write('"%s",\n' % entry['description']);
+  description = entry['description']
+  if 'driver_update_url' in entry:
+    description += (' Please update your graphics driver via this link: ' +
+                    entry['driver_update_url'])
+  data_file.write('"%s",\n' % description);
   # Features
   if 'features' in entry:
     var_name = 'kFeatureListFor%sEntry%d' % (unique_symbol_id, entry_id)

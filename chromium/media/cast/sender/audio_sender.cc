@@ -7,7 +7,8 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/logging.h"
+#include "base/check_op.h"
+#include "base/notreached.h"
 #include "media/cast/common/rtp_time.h"
 #include "media/cast/net/cast_transport_config.h"
 #include "media/cast/sender/audio_encoder.h"
@@ -17,7 +18,7 @@ namespace cast {
 
 AudioSender::AudioSender(scoped_refptr<CastEnvironment> cast_environment,
                          const FrameSenderConfig& audio_config,
-                         StatusChangeCallback status_change_cb,
+                         StatusChangeOnceCallback status_change_cb,
                          CastTransport* const transport_sender)
     : FrameSender(cast_environment,
                   transport_sender,

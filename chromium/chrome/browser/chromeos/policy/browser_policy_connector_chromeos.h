@@ -56,7 +56,7 @@ class ServerBackedStateKeysBroker;
 class TPMAutoUpdateModePolicyHandler;
 class DeviceScheduledUpdateChecker;
 class DeviceCloudExternalDataPolicyHandler;
-class SystemProxySettingsPolicyHandler;
+class SystemProxyManager;
 
 // Extends ChromeBrowserPolicyConnector with the setup specific to Chrome OS.
 class BrowserPolicyConnectorChromeOS
@@ -171,13 +171,19 @@ class BrowserPolicyConnectorChromeOS
     return tpm_auto_update_mode_policy_handler_.get();
   }
 
-  SystemProxySettingsPolicyHandler* GetSystemProxySettingsPolicyHandler()
-      const {
-    return system_proxy_settings_policy_handler_.get();
+  SystemProxyManager* GetSystemProxyManager() const {
+    return system_proxy_manager_.get();
   }
 
   HostnameHandler* GetHostnameHandler() const {
     return hostname_handler_.get();
+  }
+
+  // Return a pointer to the device-wide client certificate provisioning
+  // scheduler. The callers do not take ownership of that pointer.
+  chromeos::cert_provisioning::CertProvisioningScheduler*
+  GetDeviceCertProvisioningScheduler() {
+    return device_cert_provisioning_scheduler_.get();
   }
 
   // Returns device's market segment.
@@ -266,8 +272,7 @@ class BrowserPolicyConnectorChromeOS
       device_scheduled_update_checker_;
   std::vector<std::unique_ptr<policy::DeviceCloudExternalDataPolicyHandler>>
       device_cloud_external_data_policy_handlers_;
-  std::unique_ptr<SystemProxySettingsPolicyHandler>
-      system_proxy_settings_policy_handler_;
+  std::unique_ptr<SystemProxyManager> system_proxy_manager_;
 
   // This policy provider is used on Chrome OS to feed user policy into the
   // global PolicyService instance. This works by installing the cloud policy
@@ -283,6 +288,11 @@ class BrowserPolicyConnectorChromeOS
   // The ConfigurationPolicyProviders created in the constructor are initially
   // added here, and then pushed to the super class in BuildPolicyProviders().
   std::vector<std::unique_ptr<ConfigurationPolicyProvider>> providers_for_init_;
+
+  // Manages provisioning of certificates from
+  // RequiredClientCertificateForDevice device policy.
+  std::unique_ptr<chromeos::cert_provisioning::CertProvisioningScheduler>
+      device_cert_provisioning_scheduler_;
 
   base::WeakPtrFactory<BrowserPolicyConnectorChromeOS> weak_ptr_factory_{this};
 

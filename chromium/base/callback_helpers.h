@@ -33,10 +33,23 @@ struct IsBaseCallbackImpl<OnceCallback<R(Args...)>> : std::true_type {};
 template <typename R, typename... Args>
 struct IsBaseCallbackImpl<RepeatingCallback<R(Args...)>> : std::true_type {};
 
+template <typename T>
+struct IsOnceCallbackImpl : std::false_type {};
+
+template <typename R, typename... Args>
+struct IsOnceCallbackImpl<OnceCallback<R(Args...)>> : std::true_type {};
+
 }  // namespace internal
 
+// IsBaseCallback<T>::value is true when T is any of the Closure or Callback
+// family of types.
 template <typename T>
 using IsBaseCallback = internal::IsBaseCallbackImpl<std::decay_t<T>>;
+
+// IsOnceCallback<T>::value is true when T is a OnceClosure or OnceCallback
+// type.
+template <typename T>
+using IsOnceCallback = internal::IsOnceCallbackImpl<std::decay_t<T>>;
 
 // SFINAE friendly enabler allowing to overload methods for both Repeating and
 // OnceCallbacks.

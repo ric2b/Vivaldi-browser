@@ -13,6 +13,7 @@
 #include "ash/session/session_controller_impl.h"
 #include "ash/shelf/contextual_tooltip.h"
 #include "ash/shell.h"
+#include "ash/shell_delegate.h"
 #include "ash/wm/gestures/back_gesture/back_gesture_affordance.h"
 #include "ash/wm/gestures/back_gesture/back_gesture_contextual_nudge_controller_impl.h"
 #include "ash/wm/overview/overview_controller.h"
@@ -21,10 +22,12 @@
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
+#include "base/i18n/rtl.h"
 #include "base/metrics/user_metrics.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/wm/core/coordinate_conversion.h"
+#include "ui/wm/core/window_util.h"
 
 namespace ash {
 
@@ -75,8 +78,15 @@ bool CanStartGoingBackFromSplitViewDivider(const gfx::Point& screen_location) {
     return false;
   }
 
-  divider_bounds.set_x(divider_bounds.x() -
-                       SplitViewDivider::kDividerEdgeInsetForTouch);
+  if (!base::i18n::IsRTL()) {
+    divider_bounds.set_x(divider_bounds.x() -
+                         SplitViewDivider::kDividerEdgeInsetForTouch);
+  } else {
+    divider_bounds.set_x(divider_bounds.x() -
+                         SplitViewDivider::kDividerEdgeInsetForTouch -
+                         BackGestureEventHandler::kStartGoingBackLeftEdgeInset);
+  }
+
   divider_bounds.set_width(
       divider_bounds.width() + SplitViewDivider::kDividerEdgeInsetForTouch +
       BackGestureEventHandler::kStartGoingBackLeftEdgeInset);
@@ -101,8 +111,11 @@ void ActivateUnderneathWindowInSplitViewMode(
   if (!split_view_controller->InTabletSplitViewMode())
     return;
 
-  auto* left_window = split_view_controller->left_window();
-  auto* right_window = split_view_controller->right_window();
+  const bool is_rtl = base::i18n::IsRTL();
+  auto* left_window = is_rtl ? split_view_controller->right_window()
+                             : split_view_controller->left_window();
+  auto* right_window = is_rtl ? split_view_controller->left_window()
+                              : split_view_controller->right_window();
   const OrientationLockType current_orientation = GetCurrentScreenOrientation();
   if (current_orientation == OrientationLockType::kLandscapePrimary) {
     ActivateWindow(dragged_from_splitview_divider ? right_window : left_window);
@@ -159,15 +172,26 @@ void BackGestureEventHandler::OnDisplayMetricsChanged(
   }
 }
 
-void BackGestureEventHandler::OnGestureEvent(ui::GestureEvent* event) {}
+void BackGestureEventHandler::OnGestureEvent(ui::GestureEvent* event) {
+  if (should_wait_for_touch_ack_) {
+    aura::Window* target = static_cast<aura::Window*>(event->target());
+    gfx::Point screen_location = event->location();
+    ::wm::ConvertPointToScreen(target, &screen_location);
+    if (MaybeHandleBackGesture(event, screen_location))
+      event->StopPropagation();
+
+    // Reset |should_wait_for_touch_ack_| for the last gesture event in the
+    // sequence.
+    if (event->type() == ui::ET_GESTURE_END)
+      should_wait_for_touch_ack_ = false;
+  }
+}
 
 void BackGestureEventHandler::OnTouchEvent(ui::TouchEvent* event) {
   // Do not handle PEN and ERASER events for back gesture. PEN events can come
   // from stylus device.
-  if (event->pointer_details().pointer_type ==
-          ui::EventPointerType::POINTER_TYPE_PEN ||
-      event->pointer_details().pointer_type ==
-          ui::EventPointerType::POINTER_TYPE_ERASER) {
+  if (event->pointer_details().pointer_type == ui::EventPointerType::kPen ||
+      event->pointer_details().pointer_type == ui::EventPointerType::kEraser) {
     return;
   }
 
@@ -191,20 +215,13 @@ void BackGestureEventHandler::OnTouchEvent(ui::TouchEvent* event) {
 
     // Do not update |during_reverse_dragging_| if touch point's location
     // doesn't change.
-    if (current_location.x() < last_touch_point_.x())
-      during_reverse_dragging_ = true;
-    else if (current_location.x() > last_touch_point_.x())
-      during_reverse_dragging_ = false;
+    if (current_location.x() != last_touch_point_.x()) {
+      during_reverse_dragging_ = current_location.x() < last_touch_point_.x();
+      if (base::i18n::IsRTL())
+        during_reverse_dragging_ = !during_reverse_dragging_;
+    }
   }
   last_touch_point_ = event->location();
-
-  ui::TouchEvent touch_event_copy = *event;
-  if (!gesture_provider_.OnTouchEvent(&touch_event_copy))
-    return;
-
-  gesture_provider_.OnTouchEventAck(
-      touch_event_copy.unique_event_id(), /*event_consumed=*/false,
-      /*is_source_touch_event_set_non_blocking=*/false);
 
   // Get the event target from TouchEvent since target of the GestureEvent
   // from GetAndResetPendingGestures is nullptr. The coordinate conversion is
@@ -216,11 +233,28 @@ void BackGestureEventHandler::OnTouchEvent(ui::TouchEvent* event) {
   aura::Window* target = static_cast<aura::Window*>(event->target());
   gfx::Point screen_location = event->location();
   ::wm::ConvertPointToScreen(target, &screen_location);
-  const std::vector<std::unique_ptr<ui::GestureEvent>> gestures =
-      gesture_provider_.GetAndResetPendingGestures();
-  for (const auto& gesture : gestures) {
-    if (MaybeHandleBackGesture(gesture.get(), screen_location))
-      event->StopPropagation();
+
+  if (event->type() == ui::ET_TOUCH_PRESSED &&
+      ShouldWaitForTouchPressAck(screen_location)) {
+    should_wait_for_touch_ack_ = true;
+    return;
+  }
+
+  if (!should_wait_for_touch_ack_) {
+    ui::TouchEvent touch_event_copy = *event;
+    if (!gesture_provider_.OnTouchEvent(&touch_event_copy))
+      return;
+
+    gesture_provider_.OnTouchEventAck(
+        touch_event_copy.unique_event_id(), /*event_consumed=*/false,
+        /*is_source_touch_event_set_non_blocking=*/false);
+
+    std::vector<std::unique_ptr<ui::GestureEvent>> gestures =
+        gesture_provider_.GetAndResetPendingGestures();
+    for (const auto& gesture : gestures) {
+      if (MaybeHandleBackGesture(gesture.get(), screen_location))
+        event->StopPropagation();
+    }
   }
 }
 
@@ -376,6 +410,8 @@ bool BackGestureEventHandler::CanStartGoingBack(
   if (!top_window && !shell->overview_controller()->InOverviewSession())
     return false;
 
+  // If the event location falls into the window's gesture exclusion zone, do
+  // not handle it.
   for (aura::Window* window = top_window; window; window = window->parent()) {
     SkRegion* gesture_exclusion =
         window->GetProperty(kSystemGestureExclusionKey);
@@ -389,9 +425,17 @@ bool BackGestureEventHandler::CanStartGoingBack(
     }
   }
 
+  // If the target window does not allow touch action, do not handle it.
+  if (!Shell::Get()->shell_delegate()->AllowDefaultTouchActions(top_window))
+    return false;
+
   gfx::Rect hit_bounds_in_screen(display::Screen::GetScreen()
                                      ->GetDisplayNearestWindow(top_window)
                                      .work_area());
+  if (base::i18n::IsRTL()) {
+    hit_bounds_in_screen.set_x(hit_bounds_in_screen.right() -
+                               kStartGoingBackLeftEdgeInset);
+  }
   hit_bounds_in_screen.set_width(kStartGoingBackLeftEdgeInset);
   if (hit_bounds_in_screen.Contains(screen_location))
     return true;
@@ -405,6 +449,16 @@ void BackGestureEventHandler::SendBackEvent(const gfx::Point& screen_location) {
   window_util::SendBackKeyEvent(window_util::GetRootWindowAt(screen_location));
   RecordEndScenarioType(GetEndScenarioType(back_gesture_start_scenario_type_,
                                            BackGestureEndType::kBack));
+}
+
+bool BackGestureEventHandler::ShouldWaitForTouchPressAck(
+    const gfx::Point& screen_location) {
+  if (!CanStartGoingBack(screen_location))
+    return false;
+
+  aura::Window* top_window = window_util::GetTopWindow();
+  return !top_window->GetProperty(kIsShowingInOverviewKey) &&
+         Shell::Get()->shell_delegate()->ShouldWaitForTouchPressAck(top_window);
 }
 
 }  // namespace ash

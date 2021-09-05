@@ -11,11 +11,12 @@
 
 namespace feed {
 
-enum NetworkRequestType : int {
+enum class NetworkRequestType : int {
   kFeedQuery = 0,
   kUploadActions = 1,
 };
 
+// This must be kept in sync with FeedLoadStreamStatus in enums.xml.
 enum class LoadStreamStatus {
   // Loading was not attempted.
   kNoStatus = 0,
@@ -36,9 +37,39 @@ enum class LoadStreamStatus {
   kCannotLoadFromNetworkThrottled = 12,
   kLoadNotAllowedEulaNotAccepted = 13,
   kLoadNotAllowedArticlesListHidden = 14,
+  // TODO(harringtond): Emit this status value.
+  kCannotParseNetworkResponseBody = 15,
+  kLoadMoreModelIsNotLoaded = 16,
+  kMaxValue = kLoadMoreModelIsNotLoaded,
 };
 
 std::ostream& operator<<(std::ostream& out, LoadStreamStatus value);
+
+// Keep this in sync with FeedUploadActionsStatus in enums.xml.
+enum class UploadActionsStatus {
+  kNoStatus = 0,
+  kNoPendingActions = 1,
+  kFailedToStorePendingAction = 2,
+  kStoredPendingAction = 3,
+  kUpdatedConsistencyToken = 4,
+  kFinishedWithoutUpdatingConsistencyToken = 5,
+  kMaxValue = kFinishedWithoutUpdatingConsistencyToken,
+};
+
+// Keep this in sync with FeedUploadActionsBatchStatus in enums.xml.
+enum class UploadActionsBatchStatus {
+  kNoStatus = 0,
+  kFailedToUpdateStore = 1,
+  kFailedToUpload = 2,
+  kFailedToRemoveUploadedActions = 3,
+  kExhaustedUploadQuota = 4,
+  kAllActionsWereStale = 5,
+  kSuccessfullyUploadedBatch = 6,
+  kMaxValue = kSuccessfullyUploadedBatch,
+};
+
+std::ostream& operator<<(std::ostream& out, UploadActionsStatus value);
+std::ostream& operator<<(std::ostream& out, UploadActionsBatchStatus value);
 
 }  // namespace feed
 

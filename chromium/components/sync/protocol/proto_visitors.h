@@ -883,6 +883,11 @@ VISIT_PROTO_FIELDS(
   VISIT_ENUM(event_trigger);
 }
 
+VISIT_PROTO_FIELDS(const sync_pb::UserEventSpecifics::FlocIdComputed& proto) {
+  VISIT_ENUM(event_trigger);
+  VISIT(floc_id);
+}
+
 VISIT_PROTO_FIELDS(const sync_pb::TabNavigation& proto) {
   VISIT(virtual_url);
   VISIT(referrer);
@@ -1003,6 +1008,7 @@ VISIT_PROTO_FIELDS(const sync_pb::UserEventSpecifics& proto) {
   VISIT(test_event);
   VISIT(gaia_password_reuse_event);
   VISIT(gaia_password_captured_event);
+  VISIT(floc_id_computed_event);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::UserEventSpecifics::Test& proto) {}
@@ -1082,12 +1088,22 @@ VISIT_PROTO_FIELDS(const sync_pb::WebAppSpecifics& proto) {
   VISIT(theme_color);
 }
 
+VISIT_PROTO_FIELDS(const sync_pb::WifiConfigurationSpecifics::
+                       ProxyConfiguration::ManualProxyConfiguration& proto) {
+  VISIT(http_proxy_url);
+  VISIT(http_proxy_port);
+  VISIT(secure_http_proxy_url);
+  VISIT(secure_http_proxy_port);
+  VISIT(socks_host_url);
+  VISIT(socks_host_port);
+  VISIT_REP(whitelisted_domains);
+}
+
 VISIT_PROTO_FIELDS(
     const sync_pb::WifiConfigurationSpecifics::ProxyConfiguration& proto) {
   VISIT_ENUM(proxy_option);
-  VISIT(proxy_url);
-  VISIT(proxy_port);
-  VISIT_REP(whitelisted_domains);
+  VISIT(autoconfiguration_url);
+  VISIT(manual_proxy_configuration);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::WifiConfigurationSpecifics& proto) {
@@ -1098,7 +1114,7 @@ VISIT_PROTO_FIELDS(const sync_pb::WifiConfigurationSpecifics& proto) {
   VISIT_ENUM(is_preferred);
   VISIT(proxy_configuration);
   VISIT_REP(custom_dns);
-  VISIT(last_update_timestamp);
+  VISIT(last_connected_timestamp);
 }
 
 // Vivaldi specific

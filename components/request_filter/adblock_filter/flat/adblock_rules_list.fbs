@@ -1,0 +1,126 @@
+// Copyright (c) 2019 Vivaldi Technologies AS. All rights reserved
+
+namespace adblock_filter.flat;
+
+enum PatternType : ubyte {
+  PLAIN,
+  WILDCARDED,
+  REGEXP,
+}
+
+enum AnchorType : ubyte (bit_flags) {
+  START,
+  END,
+  HOST,
+}
+
+enum OptionFlag : ubyte (bit_flags) {
+  IS_ALLOW_RULE,
+  IS_CASE_SENSITIVE,
+  IS_CSP_RULE,
+  FIRST_PARTY,
+  THIRD_PARTY,
+}
+
+// The options controlling whether or not to activate filtering for subresources
+// of documents that match the URL pattern of the rule.
+enum ActivationType : ubyte (bit_flags) {
+  POPUP ,         // Block popups.
+  DOCUMENT,       // Disable all rules on the page.
+  ELEMENT_HIDE,   // Disable all element hiding rules on the page.
+  GENERIC_HIDE,   // Disable generic hiding rules on the page.
+  GENERIC_BLOCK,  // Disable generic blocking rules on the page.
+}
+
+// The types of subresource requests that a URL rule should be applied to.
+enum ResourceType : ushort (bit_flags) {
+  STYLESHEET,
+  IMAGE,
+  OBJECT,
+  SCRIPT,
+  XMLHTTPREQUEST,
+  SUBDOCUMENT,
+  FONT,
+  MEDIA,
+  WEBSOCKET,
+  WEBRTC,
+  PING,
+  OTHER,
+}
+
+enum RedirectResource : ubyte {
+  NO_REDIRECT,
+  BLANK_TEXT,
+  BLANK_CSS,
+  BANK_JS,
+  BLANK_HTML,
+  BLANK_MP3,
+  BLANK_MP4,
+  TRANSPARENT_1x1_GIF,
+  TRANSPARENT_2x2_PNG,
+  TRANSPARENT_3x2_PNG,
+  TRANSPARENT_32x32_PNG,
+}
+
+table FilterRule {
+  // Rule matching options, a bitmask consisting of OptionFlags.
+  options : ubyte;
+
+  // A bitmask of ResourceType. Rules most commonly have all types set.
+  resource_types : ushort = 8191;
+
+  // A bitmask of ActivationType. Most rules have none set.
+  activation_types : ubyte = 0;
+
+  // Use PLAIN as default, since it's the most used pattern type.
+  pattern_type : PatternType = PLAIN;
+
+  // Most rules are not anchored.
+  anchor_type : ubyte = 0;
+
+  // Limits the pattern to only activate if the host part of the request matches
+  // or is a subdomain of the given host.
+  host : string;
+
+  // The list of origin domains to be included/excluded from the filter's
+  // affected set. Should either be null or have at least a single element. The
+  // domains should be in lower-case and must consist of only ascii
+  // characters. Punycode encoding is used for internationalized domains.
+  domains_included : [string];
+  domains_excluded : [string];
+
+  // Set for redirect/rewrite rules
+  redirect: RedirectResource = NO_REDIRECT;
+
+  // Set for CSP rules.
+  csp: string;
+
+  // A URL pattern in the format defined by |pattern_type|.  This should
+  // only consist of ascii characters, since it's matched against a url where
+  // the host is encoded in the punycode format (in case of internationalized
+  // domains) and any other non-ascii characters are percent-escaped in utf-8.
+  // This should be in lower case if the rule is case-insensitive.
+  pattern : string;
+
+  // For regular expression pattern types, this sets a string that is safe to
+  // use for ngram extraction. It contains only string pieces that a url must
+  // match to match the full regex, separated by wildcards
+  ngram_search_string: string;
+}
+
+table CosmeticRule {
+  is_allow_rule : bool = false;
+
+  domains_included : [string];
+  domains_excluded : [string];
+
+  selector: string;
+}
+
+
+table RulesList {
+  filter_rules_list: [FilterRule];
+  cosmetic_rules_list: [CosmeticRule];
+}
+
+root_type RulesList;

@@ -4,7 +4,9 @@
 
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 
+#include "base/compiler_specific.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task/post_task.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/chrome/browser/main/browser.h"
@@ -28,31 +30,42 @@
 BROWSER_USER_DATA_KEY_IMPL(UrlLoadingBrowserAgent)
 
 namespace {
-// Helper method for inducing intentional freezes and crashes, in a separate
-// function so it will show up in stack traces. If a delay parameter is present,
-// the main thread will be frozen for that number of seconds. If a crash
-// parameter is "true" (which is the default value), the browser will crash
-// after this delay. Any other value will not trigger a crash.
-void InduceBrowserCrash(const GURL& url) {
-  int delay = 0;
+
+// Rapidly starts leaking memory by 10MB blocks.
+void StartLeakingMemory() {
+  int* leak = new int[10 * 1024 * 1024];
+  ALLOW_UNUSED_LOCAL(leak);
+  base::PostTask(FROM_HERE, base::BindOnce(&StartLeakingMemory));
+}
+
+// Helper method for inducing intentional freezes, leaks and crashes, in a
+// separate function so it will show up in stack traces. If a delay parameter is
+// present, the main thread will be frozen for that number of seconds. If a
+// crash parameter is "true" (which is the default value), the browser will
+// crash after this delay. Any other value will not trigger a crash.
+NOINLINE void InduceBrowserCrash(const GURL& url) {
   std::string delay_string;
   if (net::GetValueForKeyInQuery(url, "delay", &delay_string)) {
-    base::StringToInt(delay_string, &delay);
-  }
-  if (delay > 0) {
-    sleep(delay);
+    int delay = 0;
+    if (base::StringToInt(delay_string, &delay) && delay > 0) {
+      sleep(delay);
+    }
   }
 
-  bool crash = true;
+#if !TARGET_IPHONE_SIMULATOR  // Leaking memory does not cause UTE on simulator.
+  std::string leak_string;
+  if (net::GetValueForKeyInQuery(url, "leak", &leak_string) &&
+      (leak_string == "" || leak_string == "true")) {
+    StartLeakingMemory();
+  }
+#endif
+
   std::string crash_string;
-  if (net::GetValueForKeyInQuery(url, "crash", &crash_string)) {
-    crash = crash_string == "" || crash_string == "true";
-  }
-
-  if (crash) {
+  if (!net::GetValueForKeyInQuery(url, "crash", &crash_string) ||
+      (crash_string == "" || crash_string == "true")) {
     // Induce an intentional crash in the browser process.
     CHECK(false);
-    // Call another function, so that the above CHECK can't be tail-call
+    // Call another function, so that the above CHECK can't be tail call
     // optimized. This ensures that this method's name will show up in the stack
     // for easier identification.
     CHECK(true);
@@ -69,8 +82,8 @@ UrlLoadingBrowserAgent::UrlLoadingBrowserAgent(Browser* browser)
 UrlLoadingBrowserAgent::~UrlLoadingBrowserAgent() {}
 
 void UrlLoadingBrowserAgent::SetSceneService(
-    SceneUrlLoadingService* app_service) {
-  app_service_ = app_service;
+    SceneUrlLoadingService* scene_service) {
+  scene_service_ = scene_service;
 }
 
 void UrlLoadingBrowserAgent::SetDelegate(id<URLLoadingDelegate> delegate) {
@@ -213,7 +226,7 @@ void UrlLoadingBrowserAgent::LoadUrlInCurrentTab(const UrlLoadParams& params) {
 }
 
 void UrlLoadingBrowserAgent::SwitchToTab(const UrlLoadParams& params) {
-  DCHECK(app_service_);
+  DCHECK(scene_service_);
 
   web::NavigationManager::WebLoadParams web_params = params.web_params;
 
@@ -236,7 +249,7 @@ void UrlLoadingBrowserAgent::SwitchToTab(const UrlLoadParams& params) {
       new_tab_params.web_params.referrer = web::Referrer();
       new_tab_params.in_incognito = browser_state->IsOffTheRecord();
       new_tab_params.append_to = kCurrentTab;
-      app_service_->LoadUrlInNewTab(new_tab_params);
+      scene_service_->LoadUrlInNewTab(new_tab_params);
     }
     return;
   }
@@ -257,12 +270,12 @@ void UrlLoadingBrowserAgent::SwitchToTab(const UrlLoadParams& params) {
 }
 
 void UrlLoadingBrowserAgent::LoadUrlInNewTab(const UrlLoadParams& params) {
-  DCHECK(app_service_);
+  DCHECK(scene_service_);
   DCHECK(delegate_);
   DCHECK(browser_);
   ChromeBrowserState* browser_state = browser_->GetBrowserState();
   ChromeBrowserState* active_browser_state =
-      app_service_->GetCurrentBrowser()->GetBrowserState();
+      scene_service_->GetCurrentBrowser()->GetBrowserState();
 
   // Two UrlLoadingServices exist, normal and incognito.  Handle two special
   // cases that need to be sent up to the SceneUrlLoadingService:
@@ -277,9 +290,9 @@ void UrlLoadingBrowserAgent::LoadUrlInNewTab(const UrlLoadParams& params) {
     // ends up appended to the end of the model, not just next to what is
     // currently selected in the other mode. This is done with the |append_to|
     // parameter.
-    UrlLoadParams app_params = params;
-    app_params.append_to = kLastTab;
-    app_service_->LoadUrlInNewTab(app_params);
+    UrlLoadParams scene_params = params;
+    scene_params.append_to = kLastTab;
+    scene_service_->LoadUrlInNewTab(scene_params);
     return;
   }
 

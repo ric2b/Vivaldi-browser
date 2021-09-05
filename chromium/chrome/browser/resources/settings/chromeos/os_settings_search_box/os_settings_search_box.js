@@ -11,64 +11,10 @@ const mojom = chromeos.settings.mojom;
  * @fileoverview 'os-settings-search-box' is the container for the search input
  * and settings search results.
  */
-
-/**
- * Fake function to simulate async SettingsSearchHandler Search().
- * TODO(crbug/1056909): Remove once Settings Search is complete.
- * @param {string} query The query used to fetch results.
- * @return {Promise<!Array<mojom.SearchResult>>} A promise resolving results.
- */
-function fakeSettingsSearchHandlerSearch(query) {
-  /**
-   * @param {number} min The lower bound integer.
-   * @param {number} max The upper bound integer.
-   * @return {number} A random integer between min and max inclusive.
-   */
-  function getRandomInt(min, max) {
-    min = Math.ceil(min);
-    max = Math.floor(max);
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-  }
-
-  /**
-   * @param {*} resultArr Result stored in arr like [text, path, icon].
-   * @return {!mojom.SearchResult} Search result entry.
-   */
-  function generateFakeResult(resultArr) {
-    return /** @type {!mojom.SearchResult} */ ({
-      resultText: {
-        data: Array.from(resultArr[0], c => c.charCodeAt()),
-      },
-      urlPathWithParameters: resultArr[1],
-      icon: resultArr[2],
-    });
-  }
-
-  const Icon = mojom.SearchResultIcon;
-  const fakeRandomResults = [
-    ['bluetooth devices', 'bluetoothDevices', Icon.kWifi],
-    ['wifi', 'networks?type=WiFi', Icon.kWifi],
-    ['languages', 'languages/details', Icon.kWifi],
-    ['people', 'people', Icon.kWifi],
-    ['security', 'privacy', Icon.kWifi],
-    ['personalization', 'personalization', Icon.kWifi],
-    ['keyboard', 'keyboard-overlay', Icon.kWifi],
-    ['touchpad', 'pointer-overlay', Icon.kWifi],
-    ['lock screen', 'lockScreen', Icon.kWifi],
-    ['time zone', 'dateTime/timeZone', Icon.kWifi],
-  ].map(result => generateFakeResult(result));
-
-  fakeRandomResults.sort(() => Math.random() - 0.5);
-  return new Promise(resolve => {
-    setTimeout(() => {
-      resolve(fakeRandomResults.splice(
-          0, getRandomInt(1, fakeRandomResults.length - 1)));
-    }, 0);
-  });
-}
-
 Polymer({
   is: 'os-settings-search-box',
+
+  behaviors: [I18nBehavior],
 
   properties: {
     // True when the toolbar is displaying in narrow mode.
@@ -117,14 +63,22 @@ Polymer({
      */
     searchResults_: {
       type: Array,
-      observer: 'selectFirstRow_',
+      value: [],
+      observer: 'onSearchResultsChanged_',
     },
 
     /** @private */
     shouldShowDropdown_: {
       type: Boolean,
       value: false,
-      computed: 'computeShouldShowDropdown_(searchResults_)',
+      reflectToAttribute: true,
+    },
+
+    /** @private */
+    searchResultsExist_: {
+      type: Boolean,
+      value: false,
+      computed: 'computeSearchResultsExist_(searchResults_)',
     },
 
     /**
@@ -141,36 +95,21 @@ Polymer({
     listBlurred_: Boolean,
   },
 
-  /**
-   * Mojo OS Settings Search handler used to fetch search results.
-   * @private {?mojom.SearchHandlerInterface}
-   */
-  searchHandler_: null,
-
   listeners: {
     'blur': 'onBlur_',
     'keydown': 'onKeyDown_',
     'search-changed': 'fetchSearchResults_',
   },
 
-  /* override */
-  created() {
-    this.searchHandler_ = mojom.SearchHandler.getRemote();
-  },
-
-  /** @private */
+  /** @override */
   attached() {
     const toolbarSearchField = this.$.search;
     const searchInput = toolbarSearchField.getSearchInput();
     searchInput.addEventListener(
         'focus', this.onSearchInputFocused_.bind(this));
-  },
 
-  /**
-   * @param {?mojom.SearchHandlerInterface} searchHandler
-   */
-  setSearchHandlerForTesting(searchHandler) {
-    this.searchHandler_ = searchHandler;
+    // Initialize the announcer once.
+    Polymer.IronA11yAnnouncer.requestAvailability();
   },
 
   /**
@@ -185,16 +124,24 @@ Polymer({
   },
 
   /**
+   * @return {string} The current input string.
+   * @private
+   */
+  getCurrentQuery_() {
+    return this.$.search.getSearchInput().value;
+  },
+
+  /**
    * @return {boolean}
    * @private
    */
-  computeShouldShowDropdown_() {
+  computeSearchResultsExist_() {
     return this.searchResults_.length !== 0;
   },
 
   /** @private */
   fetchSearchResults_() {
-    const query = this.$.search.getSearchInput().value;
+    const query = this.getCurrentQuery_();
     if (query === '') {
       this.searchResults_ = [];
       return;
@@ -202,19 +149,11 @@ Polymer({
 
     this.spinnerActive = true;
 
-    if (!this.searchHandler_) {
-      // TODO(crbug/1056909): Remove once Settings Search is complete.
-      fakeSettingsSearchHandlerSearch(query).then(results => {
-        this.onSearchResultsReceived_(query, results);
-      });
-      return;
-    }
-
     // The C++ layer uses base::string16, which use 16 bit characters. JS
     // strings support either 8 or 16 bit characters, and must be converted to
     // an array of 16 bit character codes that match base::string16.
     const queryMojoString16 = {data: Array.from(query, c => c.charCodeAt())};
-    this.searchHandler_.search(queryMojoString16).then(response => {
+    settings.getSearchHandler().search(queryMojoString16).then(response => {
       this.onSearchResultsReceived_(query, response.results);
     });
   },
@@ -226,7 +165,7 @@ Polymer({
    * @private
    */
   onSearchResultsReceived_(query, results) {
-    if (query !== this.$.search.getSearchInput().value) {
+    if (query !== this.getCurrentQuery_()) {
       // Received search results are invalid as the query has since changed.
       return;
     }
@@ -237,10 +176,33 @@ Polymer({
     settings.recordSearch();
   },
 
+  /**
+   * Causes ChromeVox to announce number of search results.
+   * @private
+   */
+  makeA11ySearchResultAnnouncement_() {
+    let a11yAlertText;
+    switch (this.searchResults_.length) {
+      case 0:
+        a11yAlertText = this.i18n('searchNoResults');
+        break;
+      case 1:
+        a11yAlertText = this.i18n('searchResultsOne', this.getCurrentQuery_());
+        break;
+      default:
+        a11yAlertText = this.i18n(
+            'searchResultsNumber', this.searchResults_.length,
+            this.getCurrentQuery_());
+        break;
+    }
+
+    this.fire('iron-announce', {text: a11yAlertText});
+  },
+
   /** @private */
-  onNavigatedtoResultRowRoute_() {
+  onNavigatedToResultRowRoute_() {
     // Settings has navigated to another page; close search results dropdown.
-    this.$.searchResults.close();
+    this.shouldShowDropdown_ = false;
 
     // Blur search input to prevent blinking caret.
     this.$.search.blur();
@@ -253,18 +215,17 @@ Polymer({
   onBlur_(e) {
     e.stopPropagation();
 
-    // The user has clicked a region outside the search box or the input has
-    // been blurred; close the dropdown regardless if there are searchResults_.
-    this.$.searchResults.close();
+    // Close the dropdown because  a region outside the search box was clicked.
+    this.shouldShowDropdown_ = false;
   },
 
   /** @private */
   onSearchInputFocused_() {
     this.lastFocused_ = null;
 
-    if (this.shouldShowDropdown_) {
+    if (this.searchResultsExist_) {
       // Restore previous results instead of re-fetching.
-      this.$.searchResults.open();
+      this.shouldShowDropdown_ = true;
       return;
     }
 
@@ -282,6 +243,14 @@ Polymer({
   },
 
   /**
+   * @return {number} Length of the search results array.
+   * @private
+   */
+  getListLength_() {
+    return this.searchResults_.length;
+  },
+
+  /**
    * Returns the correct tab index since <iron-list>'s default tabIndex property
    * does not automatically add selectedItem_'s <os-search-result-row> to the
    * default navigation flow, unless the user explicitly clicks on the row.
@@ -291,15 +260,26 @@ Polymer({
    * @private
    */
   getRowTabIndex_(item) {
-    return this.isItemSelected_(item) ? 0 : -1;
+    return this.isItemSelected_(item) && this.shouldShowDropdown_ ? 0 : -1;
   },
 
   /** @private */
-  selectFirstRow_() {
+  onSearchResultsChanged_() {
+    // Only show dropdown if focus is on search field with a non empty query.
+    this.shouldShowDropdown_ =
+        this.$.search.isSearchFocused() && !!this.getCurrentQuery_();
+
     if (!this.shouldShowDropdown_) {
       return;
     }
 
+    this.makeA11ySearchResultAnnouncement_();
+
+    if (!this.searchResultsExist_) {
+      return;
+    }
+
+    // Select the first search result.
     this.selectedItem_ = this.searchResults_[0];
   },
 
@@ -307,7 +287,6 @@ Polymer({
    * |selectedItem| is not changed by the time this is called. The value that
    * |selectedItem| will be assigned to is stored in
    * |this.$.searchResultList.selectedItem|.
-   * TODO(crbug/1056909): Add test for this specific case.
    * @private
    */
   onSelectedItemChanged_() {
@@ -346,6 +325,10 @@ Polymer({
       // containing the attribute 'focus-row-control'.
       this.getSelectedOsSearchResultRow_().focus();
     }
+
+    // The newly selected item might not be visible because the list needs
+    // to be scrolled. So scroll the dropdown if necessary.
+    this.getSelectedOsSearchResultRow_().scrollIntoViewIfNeeded();
   },
 
   /**
@@ -356,8 +339,11 @@ Polymer({
    * @private
    */
   onKeyDown_(e) {
-    if (!this.shouldShowDropdown_) {
-      // No action should be taken if there are no search results.
+    if (!this.searchResultsExist_ ||
+        (!this.$.search.isSearchFocused() && !this.lastFocused_)) {
+      // No action should be taken if there are no search results, or when
+      // neither the search input nor a <os-search-result-row> is focused
+      // (ChromeVox may focus on clear search input button).
       return;
     }
 

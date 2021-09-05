@@ -68,20 +68,6 @@ class Latch : public base::RefCountedThreadSafe<
 
 namespace web_app {
 
-void RevealAppShimInFinderForAppOnFileThread(
-    const base::FilePath& app_path,
-    const ShortcutInfo& shortcut_info) {
-  WebAppShortcutCreator shortcut_creator(app_path, &shortcut_info);
-  shortcut_creator.RevealAppShimInFinder();
-}
-
-void RevealAppShimInFinderForApp(Profile* profile,
-                                 const extensions::Extension* app) {
-  web_app::internals::PostShortcutIOTask(
-      base::BindOnce(&RevealAppShimInFinderForAppOnFileThread, app->path()),
-      ShortcutInfoForExtensionAndProfile(app, profile));
-}
-
 void RebuildAppAndLaunch(std::unique_ptr<ShortcutInfo> shortcut_info) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
@@ -167,6 +153,20 @@ void ShowCreateChromeAppShortcutsDialog(
   CreateShortcuts(web_app::SHORTCUT_CREATION_BY_USER,
                   web_app::ShortcutLocations(), profile, app,
                   base::DoNothing());
+  if (!close_callback.is_null())
+    close_callback.Run(true);
+}
+
+void ShowCreateChromeAppShortcutsDialog(
+    gfx::NativeWindow /*parent_window*/,
+    Profile* profile,
+    const std::string& app_id,
+    const base::Callback<void(bool)>& close_callback) {
+  // On Mac, the Applications folder is the only option, so don't bother asking
+  // the user anything. Just create shortcuts.
+  CreateShortcutsForWebApp(web_app::SHORTCUT_CREATION_BY_USER,
+                           web_app::ShortcutLocations(), profile, app_id,
+                           base::DoNothing());
   if (!close_callback.is_null())
     close_callback.Run(true);
 }

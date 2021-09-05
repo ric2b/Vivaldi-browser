@@ -40,16 +40,15 @@ std::unique_ptr<views::View> CreateExtraView(views::ButtonListener* listener) {
 ConfirmBubbleViews::ConfirmBubbleViews(
     std::unique_ptr<ConfirmBubbleModel> model)
     : model_(std::move(model)), help_button_(nullptr) {
-  DialogDelegate::SetButtonLabel(
-      ui::DIALOG_BUTTON_OK, model_->GetButtonLabel(ui::DIALOG_BUTTON_OK));
-  DialogDelegate::SetButtonLabel(
-      ui::DIALOG_BUTTON_CANCEL,
-      model_->GetButtonLabel(ui::DIALOG_BUTTON_CANCEL));
-  DialogDelegate::SetAcceptCallback(base::BindOnce(
-      &ConfirmBubbleModel::Accept, base::Unretained(model_.get())));
-  DialogDelegate::SetCancelCallback(base::BindOnce(
-      &ConfirmBubbleModel::Cancel, base::Unretained(model_.get())));
-  help_button_ = DialogDelegate::SetExtraView(::CreateExtraView(this));
+  SetButtonLabel(ui::DIALOG_BUTTON_OK,
+                 model_->GetButtonLabel(ui::DIALOG_BUTTON_OK));
+  SetButtonLabel(ui::DIALOG_BUTTON_CANCEL,
+                 model_->GetButtonLabel(ui::DIALOG_BUTTON_CANCEL));
+  SetAcceptCallback(base::BindOnce(&ConfirmBubbleModel::Accept,
+                                   base::Unretained(model_.get())));
+  SetCancelCallback(base::BindOnce(&ConfirmBubbleModel::Cancel,
+                                   base::Unretained(model_.get())));
+  help_button_ = SetExtraView(::CreateExtraView(this));
 
   set_margins(ChromeLayoutProvider::Get()->GetDialogInsetsForContentType(
       views::TEXT, views::TEXT));
@@ -60,8 +59,8 @@ ConfirmBubbleViews::ConfirmBubbleViews(
   const int kMaxMessageWidth = 400;
   views::ColumnSet* cs = layout->AddColumnSet(0);
   cs->AddColumn(views::GridLayout::LEADING, views::GridLayout::CENTER,
-                views::GridLayout::kFixedSize, views::GridLayout::FIXED,
-                kMaxMessageWidth, false);
+                views::GridLayout::kFixedSize,
+                views::GridLayout::ColumnSize::kFixed, kMaxMessageWidth, false);
 
   // Add the message label.
   auto label = std::make_unique<views::Label>(

@@ -39,8 +39,6 @@ target(link_target_type, "renderer") {
     "accessibility/ax_image_annotator.h",
     "accessibility/blink_ax_action_target.cc",
     "accessibility/blink_ax_action_target.h",
-    "accessibility/blink_ax_enum_conversion.cc",
-    "accessibility/blink_ax_enum_conversion.h",
     "accessibility/blink_ax_tree_source.cc",
     "accessibility/blink_ax_tree_source.h",
     "accessibility/render_accessibility_impl.cc",
@@ -57,9 +55,6 @@ target(link_target_type, "renderer") {
     "child_frame_compositing_helper.h",
     "child_frame_compositor.h",
     "compositor/compositor_dependencies.h",
-    "compositor/layer_tree_view.cc",
-    "compositor/layer_tree_view.h",
-    "compositor/layer_tree_view_delegate.h",
     "content_security_policy_util.cc",
     "content_security_policy_util.h",
     "context_menu_params_builder.cc",
@@ -88,6 +83,8 @@ target(link_target_type, "renderer") {
     "history_serialization.h",
     "ime_event_guard.cc",
     "ime_event_guard.h",
+    "impression_conversions.cc",
+    "impression_conversions.h",
     "in_process_renderer_thread.cc",
     "in_process_renderer_thread.h",
     "input/frame_input_handler_impl.cc",
@@ -104,8 +101,6 @@ target(link_target_type, "renderer") {
     "input/render_widget_input_handler.cc",
     "input/render_widget_input_handler.h",
     "input/render_widget_input_handler_delegate.h",
-    "input/scoped_web_input_event_with_latency_info.cc",
-    "input/scoped_web_input_event_with_latency_info.h",
     "input/widget_input_handler_impl.cc",
     "input/widget_input_handler_impl.h",
     "input/widget_input_handler_manager.cc",
@@ -191,6 +186,8 @@ target(link_target_type, "renderer") {
     "media/inspector_media_event_handler.h",
     "media/media_factory.cc",
     "media/media_factory.h",
+    "media/media_interface_factory.cc",
+    "media/media_interface_factory.h",
     "media/media_permission_dispatcher.cc",
     "media/media_permission_dispatcher.h",
     "media/power_status_helper_impl.cc",
@@ -409,6 +406,7 @@ target(link_target_type, "renderer") {
     "//ui/accessibility",
     "//ui/base",
     "//ui/base/clipboard",
+    "//ui/base/cursor",
     "//ui/base/ime",
     "//ui/display",
     "//ui/events:dom_keycode_converter",
@@ -422,13 +420,6 @@ target(link_target_type, "renderer") {
     "//v8",
   ]
   allow_circular_includes_from = []
-
-  if (use_external_popup_menu) {
-    sources += [
-      "external_popup_menu.cc",
-      "external_popup_menu.h",
-    ]
-  }
 
   if (is_android) {
     set_sources_assignment_filter([])
@@ -648,10 +639,11 @@ target(link_target_type, "renderer") {
       "//ppapi/host",
       "//ppapi/proxy",
       "//ppapi/shared_impl",
+      "//printing/mojom",
       "//third_party/libvpx",
       "//third_party/opus",
       "//ui/base/cursor",
-      "//ui/base/mojom:cursor_type",
+      "//ui/base/cursor/mojom:cursor_type",
     ]
   }
 
@@ -659,15 +651,15 @@ target(link_target_type, "renderer") {
     deps += [ "//printing" ]
   }
 
-  if (enable_mojo_media) {
-    sources += [
-      "media/media_interface_factory.cc",
-      "media/media_interface_factory.h",
-    ]
-  }
-
   if (is_linux || is_android) {
     deps += [ "//sandbox:sandbox_buildflags" ]
+  }
+
+  if (is_chromeos) {
+    deps += [
+      "//chromeos:chromeos_export",
+      "//chromeos/system:system",
+    ]
   }
 
   if (use_ozone) {
@@ -682,7 +674,7 @@ target(link_target_type, "renderer") {
 # See comment at the top of //content/BUILD.gn for how this works.
 group("for_content_tests") {
   visibility = [
-    "//content/shell/test_runner",
+    "//content/shell:web_test_renderer",
     "//content/test/*",
   ]
 

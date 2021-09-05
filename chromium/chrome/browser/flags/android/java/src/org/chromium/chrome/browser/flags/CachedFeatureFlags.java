@@ -47,6 +47,8 @@ public class CachedFeatureFlags {
      */
     private static Map<String, Boolean> sDefaults = new HashMap<String, Boolean>() {
         {
+            put(ChromeFeatureList.ANDROID_PARTNER_CUSTOMIZATION_PHENOTYPE, false);
+            put(ChromeFeatureList.CONDITIONAL_TAB_STRIP_ANDROID, false);
             put(ChromeFeatureList.HOMEPAGE_LOCATION_POLICY, false);
             put(ChromeFeatureList.SERVICE_MANAGER_FOR_DOWNLOAD, false);
             put(ChromeFeatureList.SERVICE_MANAGER_FOR_BACKGROUND_PREFETCH, false);
@@ -69,6 +71,7 @@ public class CachedFeatureFlags {
             put(ChromeFeatureList.INSTANT_START, false);
             put(ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID, false);
             put(ChromeFeatureList.TAB_TO_GTS_ANIMATION, false);
+            put(ChromeFeatureList.OMNIBOX_SUGGESTIONS_RECYCLER_VIEW, false);
             put(ChromeFeatureList.TEST_DEFAULT_DISABLED, false);
             put(ChromeFeatureList.TEST_DEFAULT_ENABLED, true);
         }
@@ -195,7 +198,12 @@ public class CachedFeatureFlags {
     @VisibleForTesting
     public static void setFeaturesForTesting(Map<String, Boolean> features) {
         assert features != null;
-        sOverridesTestFeatures = new HashMap<>();
+
+        // Do not overwrite if there are already existing overridden features in
+        // sOverridesTestFeatures.
+        if (sOverridesTestFeatures == null) {
+            sOverridesTestFeatures = new HashMap<>();
+        }
 
         for (Map.Entry<String, Boolean> entry : features.entrySet()) {
             String key = entry.getKey();

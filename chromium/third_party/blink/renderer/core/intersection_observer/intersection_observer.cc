@@ -293,7 +293,7 @@ IntersectionObserver::IntersectionObserver(
   }
 }
 
-void IntersectionObserver::ProcessCustomWeakness(const WeakCallbackInfo& info) {
+void IntersectionObserver::ProcessCustomWeakness(const LivenessBroker& info) {
   // For explicit-root observers, if the root element disappears for any reason,
   // any remaining obsevations must be dismantled.
   if (root() && !info.IsHeapObjectAlive(root()))
@@ -314,10 +314,6 @@ void IntersectionObserver::observe(Element* target,
   if (!target || root() == target)
     return;
 
-  LocalFrame* target_frame = target->GetDocument().GetFrame();
-  if (!target_frame)
-    return;
-
   if (target->EnsureIntersectionObserverData().GetObservationFor(*this))
     return;
 
@@ -335,7 +331,7 @@ void IntersectionObserver::observe(Element* target,
     target->GetDocument()
         .EnsureIntersectionObserverController()
         .AddTrackedObservation(*observation);
-    if (LocalFrameView* frame_view = target_frame->View()) {
+    if (LocalFrameView* frame_view = target->GetDocument().View()) {
       // The IntersectionObsever spec requires that at least one observation
       // be recorded after observe() is called, even if the frame is throttled.
       frame_view->SetIntersectionObservationState(LocalFrameView::kRequired);

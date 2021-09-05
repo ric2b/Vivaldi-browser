@@ -32,8 +32,10 @@
 #define THIRD_PARTY_BLINK_PUBLIC_WEB_WEB_VIEW_CLIENT_H_
 
 #include "base/strings/string_piece.h"
+#include "services/network/public/mojom/web_sandbox_flags.mojom-shared.h"
 #include "third_party/blink/public/common/dom_storage/session_storage_namespace_id.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy.h"
+#include "third_party/blink/public/mojom/page/page_visibility_state.mojom-forward.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/web/web_ax_enums.h"
 #include "third_party/blink/public/web/web_frame.h"
@@ -45,12 +47,8 @@ class WebPagePopup;
 class WebURL;
 class WebURLRequest;
 class WebView;
-namespace mojom {
-enum class WebSandboxFlags;
-}
 struct WebRect;
 struct WebSize;
-struct WebTextAutosizerPageInfo;
 struct WebWindowFeatures;
 
 class WebViewClient {
@@ -71,7 +69,7 @@ class WebViewClient {
       const WebWindowFeatures& features,
       const WebString& name,
       WebNavigationPolicy policy,
-      mojom::WebSandboxFlags,
+      network::mojom::WebSandboxFlags,
       const FeaturePolicy::FeatureState&,
       const SessionStorageNamespaceId& session_storage_namespace_id) {
     return nullptr;
@@ -103,6 +101,8 @@ class WebViewClient {
   // children, to print.  Otherwise, the main frame and its children
   // should be printed.
   virtual void PrintPage(WebLocalFrame*) {}
+
+  virtual void OnPageVisibilityChanged(mojom::PageVisibilityState visibility) {}
 
   // UI ------------------------------------------------------------------
 
@@ -163,15 +163,6 @@ class WebViewClient {
 
   virtual void DidUpdateInspectorSetting(const WebString& key,
                                          const WebString& value) {}
-
-  // Zoom ----------------------------------------------------------------
-
-  // Informs the browser that page metrics relevant to Blink's TextAutosizer
-  // have changed, so that they can be shared with other renderers. Only called
-  // in the renderer hosting the local main frame. The browser will share this
-  // information with other renderers that have frames in the page.
-  virtual void DidUpdateTextAutosizerPageInfo(const WebTextAutosizerPageInfo&) {
-  }
 
   // Gestures -------------------------------------------------------------
 

@@ -366,6 +366,7 @@ experimental domain Animation
       Animation animation
 
 experimental domain ApplicationCache
+  depends on Page
 
   # Detailed application cache resource information.
   type ApplicationCacheResource extends object
@@ -454,9 +455,18 @@ experimental domain Audits
       string name
       string path
       string domain
-      # Optionally identifies the site-for-cookies, which may be used by the
-      # front-end as additional context.
-      optional string siteForCookies
+
+  # Information about a request that is affected by an inspector issue.
+  type AffectedRequest extends object
+    properties
+      # The unique request id.
+      Network.RequestId requestId
+      optional string url
+
+  # Information about the frame affected by an inspector issue.
+  type AffectedFrame extends object
+    properties
+      Page.FrameId frameId
 
   type SameSiteCookieExclusionReason extends string
     enum
@@ -468,46 +478,107 @@ experimental domain Audits
       WarnSameSiteUnspecifiedCrossSiteContext
       WarnSameSiteNoneInsecure
       WarnSameSiteUnspecifiedLaxAllowUnsafe
-      WarnSameSiteCrossSchemeSecureUrlMethodUnsafe
-      WarnSameSiteCrossSchemeSecureUrlLax
-      WarnSameSiteCrossSchemeSecureUrlStrict
-      WarnSameSiteCrossSchemeInsecureUrlMethodUnsafe
-      WarnSameSiteCrossSchemeInsecureUrlLax
-      WarnSameSiteCrossSchemeInsecureUrlStrict
+      WarnSameSiteStrictLaxDowngradeStrict
+      WarnSameSiteStrictCrossDowngradeStrict
+      WarnSameSiteStrictCrossDowngradeLax
+      WarnSameSiteLaxCrossDowngradeStrict
+      WarnSameSiteLaxCrossDowngradeLax
+
+  type SameSiteCookieOperation extends string
+    enum
+      SetCookie
+      ReadCookie
 
   # This information is currently necessary, as the front-end has a difficult
   # time finding a specific cookie. With this, we can convey specific error
   # information without the cookie.
   type SameSiteCookieIssueDetails extends object
     properties
+      AffectedCookie cookie
       array of SameSiteCookieWarningReason cookieWarningReasons
       array of SameSiteCookieExclusionReason cookieExclusionReasons
+      # Optionally identifies the site-for-cookies and the cookie url, which
+      # may be used by the front-end as additional context.
+      SameSiteCookieOperation operation
+      optional string siteForCookies
+      optional string cookieUrl
+      optional AffectedRequest request
 
-  type AffectedResources extends object
+  type MixedContentResolutionStatus extends string
+    enum
+      MixedContentBlocked
+      MixedContentAutomaticallyUpgraded
+      MixedContentWarning
+
+  type MixedContentResourceType extends string
+    enum
+      Audio
+      Beacon
+      CSPReport
+      Download
+      EventSource
+      Favicon
+      Font
+      Form
+      Frame
+      Image
+      Import
+      Manifest
+      Ping
+      PluginData
+      PluginResource
+      Prefetch
+      Resource
+      Script
+      ServiceWorker
+      SharedWorker
+      Stylesheet
+      Track
+      Video
+      Worker
+      XMLHttpRequest
+      XSLT
+
+  type MixedContentIssueDetails extends object
     properties
-      optional array of AffectedCookie cookies
+      # The type of resource causing the mixed content issue (css, js, iframe,
+      # form,...). Marked as optional because it is mapped to from
+      # blink::mojom::RequestContextType, which will be replaced
+      # by network::mojom::RequestDestination
+      optional MixedContentResourceType resourceType
+      # The way the mixed content issue is being resolved.
+      MixedContentResolutionStatus resolutionStatus
+      # The unsafe http url causing the mixed content issue.
+      string insecureURL
+      # The url responsible for the call to an unsafe url.
+      string mainResourceURL
+      # The mixed content request.
+      # Does not always exist (e.g. for unsafe form submission urls).
+      optional AffectedRequest request
+      # Optional because not every mixed content issue is necessarily linked to a frame.
+      optional AffectedFrame frame
 
   # A unique identifier for the type of issue. Each type may use one of the
   # optional fields in InspectorIssueDetails to convey more specific
-  # information about the kind of issue, and AffectedResources to identify
-  # resources that are affected by this issue.
+  # information about the kind of issue.
   type InspectorIssueCode extends string
     enum
       SameSiteCookieIssue
+      MixedContentIssue
 
   # This struct holds a list of optional fields with additional information
-  # pertaining to the kind of issue. This is useful if there is a number of
-  # very similar issues that only differ in details.
+  # specific to the kind of issue. When adding a new issue code, please also
+  # add a new optional field to this type.
   type InspectorIssueDetails extends object
     properties
       optional SameSiteCookieIssueDetails sameSiteCookieIssueDetails
+      optional MixedContentIssueDetails mixedContentIssueDetails
 
   # An inspector issue reported from the back-end.
   type InspectorIssue extends object
     properties
       InspectorIssueCode code
       InspectorIssueDetails details
-      AffectedResources resources
 
   # Returns the response body and size if it were re-encoded with the specified settings. Only
   # applies to images.
@@ -690,21 +761,21 @@ domain Browser
   # Set permission settings for given origin.
   experimental command setPermission
     parameters
-      # Origin the permission applies to, all origins if not specified.
-      optional string origin
       # Descriptor of permission to override.
       PermissionDescriptor permission
       # Setting of the permission.
       PermissionSetting setting
+      # Origin the permission applies to, all origins if not specified.
+      optional string origin
       # Context to override. When omitted, default browser context is used.
       optional BrowserContextID browserContextId
 
   # Grant specific permissions to the given origin and reject all others.
   experimental command grantPermissions
     parameters
+      array of PermissionType permissions
       # Origin the permission applies to, all origins if not specified.
       optional string origin
-      array of PermissionType permissions
       # BrowserContext to override permissions. When omitted, default browser context is used.
       optional BrowserContextID browserContextId
 
@@ -854,6 +925,7 @@ domain Browser
 # subsequently load the required stylesheet contents using the `getStyleSheet[Text]()` methods.
 experimental domain CSS
   depends on DOM
+  depends on Page
 
   type StyleSheetId extends string
 
@@ -2826,6 +2898,23 @@ domain Emulation
       pause
       pauseIfNetworkFetchesPending
 
+  # Used to specify User Agent Cient Hints to emulate. See https://wicg.github.io/ua-client-hints
+  experimental type UserAgentBrandVersion extends object
+    properties
+      string brand
+      string version
+
+  # Used to specify User Agent Cient Hints to emulate. See https://wicg.github.io/ua-client-hints
+  experimental type UserAgentMetadata extends object
+    properties
+      array of UserAgentBrandVersion brands
+      string fullVersion
+      string platform
+      string platformVersion
+      string architecture
+      string model
+      boolean mobile
+
   # Tells whether emulation is supported.
   command canEmulate
     returns
@@ -3025,6 +3114,8 @@ domain Emulation
       optional string acceptLanguage
       # The platform navigator.platform should return.
       optional string platform
+      # To be sent in Sec-CH-UA-* headers and returned in navigator.userAgentData
+      experimental optional UserAgentMetadata userAgentMetadata
 
 # This domain provides experimental commands only supported in headless mode.
 experimental domain HeadlessExperimental
@@ -4780,6 +4871,9 @@ domain Network
       optional string acceptLanguage
       # The platform navigator.platform should return.
       optional string platform
+      # To be sent in Sec-CH-UA-* headers and returned in navigator.userAgentData
+      experimental optional Emulation.UserAgentMetadata userAgentMetadata
+
 
   # Fired when data chunk was received over the network.
   event dataReceived
@@ -5017,9 +5111,9 @@ domain Network
     parameters
       # Request identifier. Used to match this information to an existing requestWillBeSent event.
       RequestId requestId
-      # A list of cookies which will not be sent with this request along with corresponding reasons
-      # for blocking.
-      array of BlockedCookieWithReason blockedCookies
+      # A list of cookies potentially associated to the requested URL. This includes both cookies sent with
+      # the request and the ones not sent; the latter are distinguished by having blockedReason field set.
+      array of BlockedCookieWithReason associatedCookies
       # Raw request headers as they will be sent over the wire.
       Headers headers
 
@@ -5045,6 +5139,28 @@ experimental domain Overlay
   depends on DOM
   depends on Page
   depends on Runtime
+
+  # Configuration data for the highlighting of Grid elements.
+  type GridHighlightConfig extends object
+    properties
+      # Whether the extension lines from grid cells to the rulers should be shown (default: false).
+      optional boolean showGridExtensionLines
+      # The grid container border highlight color (default: transparent).
+      optional DOM.RGBA gridBorderColor
+      # The cell border color (default: transparent).
+      optional DOM.RGBA cellBorderColor
+      # Whether the grid border is dashed (default: false).
+      optional boolean gridBorderDash
+      # Whether the cell border is dashed (default: false).
+      optional boolean cellBorderDash
+      # The row gap highlight fill color (default: transparent).
+      optional DOM.RGBA rowGapColor
+      # The row gap hatching fill color (default: transparent).
+      optional DOM.RGBA rowHatchColor
+      # The column gap highlight fill color (default: transparent).
+      optional DOM.RGBA columnGapColor
+      # The column gap hatching fill color (default: transparent).
+      optional DOM.RGBA columnHatchColor
 
   # Configuration data for the highlighting of page elements.
   type HighlightConfig extends object
@@ -5073,6 +5189,26 @@ experimental domain Overlay
       optional DOM.RGBA shapeMarginColor
       # The grid layout color (default: transparent).
       optional DOM.RGBA cssGridColor
+      # The color format used to format color styles (default: hex).
+      optional ColorFormat colorFormat
+      # The grid layout highlight configuration (default: all transparent).
+      optional GridHighlightConfig gridHighlightConfig
+
+  type ColorFormat extends string
+    enum
+      rgb
+      hsl
+      hex
+
+  # Configuration for dual screen hinge
+  type HingeConfig extends object
+    properties
+      # A rectangle represent hinge
+      DOM.Rect rect
+      # The content box highlight fill color (default: a dark color).
+      optional DOM.RGBA contentColor
+      # The content box highlight outline color (default: transparent).
+      optional DOM.RGBA outlineColor
 
   type InspectMode extends string
     enum
@@ -5097,6 +5233,8 @@ experimental domain Overlay
       optional boolean includeDistance
       # Whether to include style info.
       optional boolean includeStyle
+      # The color format to get config with (default: hex)
+      optional ColorFormat colorFormat
     returns
       # Highlight data for the node.
       object highlight
@@ -5217,6 +5355,12 @@ experimental domain Overlay
     parameters
       # Whether to paint size or not.
       boolean show
+
+  # Add a dual screen device hinge
+  command setShowHinge
+    parameters
+      # hinge data, null means hideHinge
+      optional HingeConfig hingeConfig
 
   # Fired when the node should be inspected. This happens after call to `setInspectMode` or when
   # user manually inspects an element.
@@ -5468,6 +5612,13 @@ domain Page
       pageBlockInterstitial
       reload
       anchorClick
+
+  experimental type ClientNavigationDisposition extends string
+    enum
+      currentTab
+      newTab
+      newWindow
+      download
 
   experimental type InstallabilityErrorArgument extends object
     properties
@@ -6045,6 +6196,8 @@ domain Page
       ClientNavigationReason reason
       # The destination URL for the requested navigation.
       string url
+      # The disposition for the navigation.
+      ClientNavigationDisposition disposition
 
   # Fired when frame schedules a potential navigation.
   deprecated event frameScheduledNavigation
@@ -6080,6 +6233,8 @@ domain Page
       string guid
       # URL of the resource being downloaded.
       string url
+      # Suggested file name of the resource (the actual name of the file saved on disk may differ).
+      string suggestedFilename
 
   # Fired when download makes progress. Last call has |done| == true.
   experimental event downloadProgress
@@ -6429,6 +6584,8 @@ domain Security
       optional string summary
 
 experimental domain ServiceWorker
+  depends on Target
+
   type RegistrationID extends string
 
   # ServiceWorker registration.
@@ -7698,27 +7855,51 @@ experimental domain Media
 
   type Timestamp extends number
 
-  # Player Property type
+  # Have one type per entry in MediaLogRecord::Type
+  # Corresponds to kMessage
+  type PlayerMessage extends object
+    properties
+      # Keep in sync with MediaLogMessageLevel
+      # We are currently keeping the message level 'error' separate from the
+      # PlayerError type because right now they represent different things,
+      # this one being a DVLOG(ERROR) style log message that gets printed
+      # based on what log level is selected in the UI, and the other is a
+      # representation of a media::PipelineStatus object. Soon however we're
+      # going to be moving away from using PipelineStatus for errors and
+      # introducing a new error type which should hopefully let us integrate
+      # the error log level into the PlayerError type.
+      enum level
+        error
+        warning
+        info
+        debug
+      string message
+
+  # Corresponds to kMediaPropertyChange
   type PlayerProperty extends object
     properties
       string name
-      optional string value
+      string value
 
-  # Break out events into different types
-  type PlayerEventType extends string
-    enum
-      errorEvent
-      triggeredEvent
-      messageEvent
-
+  # Corresponds to kMediaEventTriggered
   type PlayerEvent extends object
     properties
-      PlayerEventType type
-      # Events are timestamped relative to the start of the player creation
-      # not relative to the start of playback.
       Timestamp timestamp
-      string name
       string value
+
+  # Corresponds to kMediaError
+  type PlayerError extends object
+    properties
+      enum type
+        # Compatability until we switch to media_error
+        pipeline_error
+        media_error
+      # When this switches to using media::Status instead of PipelineStatus
+      # we can remove "errorCode" and replace it with the fields from
+      # a Status instance. This also seems like a duplicate of the error
+      # level enum - there is a todo bug to have that level removed and
+      # use this instead. (crbug.com/1068454)
+      string errorCode
 
   # This can be called multiple times, and can be used to set / override /
   # remove player properties. A null propValue indicates removal.
@@ -7733,6 +7914,18 @@ experimental domain Media
     parameters
       PlayerId playerId
       array of PlayerEvent events
+
+  # Send a list of any messages that need to be delivered.
+  event playerMessagesLogged
+    parameters
+      PlayerId playerId
+      array of PlayerMessage messages
+
+  # Send a list of any errors that need to be delivered.
+  event playerErrorsRaised
+    parameters
+      PlayerId playerId
+      array of PlayerError errors
 
   # Called whenever a player is created, or when a new agent joins and recieves
   # a list of active players. If an agent is restored, it will recieve the full

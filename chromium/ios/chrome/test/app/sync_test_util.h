@@ -9,6 +9,7 @@
 #include <string>
 
 #include "components/sync/base/model_type.h"
+#include "third_party/metrics_proto/user_demographics.pb.h"
 #include "url/gurl.h"
 
 namespace chrome_test_util {
@@ -50,8 +51,9 @@ void AddLegacyBookmarkToFakeSyncServer(std::string url,
                                        std::string originator_client_item_id);
 
 // Injects user demographics into the fake sync server.
-// TODO(crbug.com/1066297): Refactor to remove duplicate code.
-void AddUserDemographicsToSyncServer(int birth_year, int gender);
+void AddUserDemographicsToSyncServer(
+    int birth_year,
+    metrics::UserDemographicsProto::Gender gender);
 
 // Injects an autofill profile into the fake sync server with |guid| and
 // |full_name|.
@@ -103,6 +105,10 @@ void DeleteTypedUrlFromClient(const GURL& url);
 
 // Deletes typed URL on FakeServer by injecting a tombstone.
 void DeleteTypedUrlFromFakeSyncServer(std::string url);
+
+// Adds a bookmark with a sync passphrase. The sync server will need the sync
+// passphrase to start.
+void AddBookmarkWithSyncPassphrase(const std::string& sync_passphrase);
 
 }  // namespace chrome_test_util
 

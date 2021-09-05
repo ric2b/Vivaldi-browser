@@ -3,14 +3,14 @@
 // found in the LICENSE file.
 
 // clang-format off
-// #import {beforeNextRender,flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-// #import {ContentSetting,ContentSettingsTypes,SiteSettingsPrefsBrowserProxyImpl,LocalDataBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
-// #import {CrSettingsPrefs,routes, Router} from 'chrome://settings/settings.js';
-// #import {createContentSettingTypeToValuePair,createOriginInfo,createRawSiteException,createSiteGroup,createSiteSettingsPrefs} from 'chrome://test/settings/test_util.m.js';
-// #import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
-// #import {PromiseResolver} from 'chrome://resources/js/promise_resolver.m.js';
-// #import {TestLocalDataBrowserProxy} from 'chrome://test/settings/test_local_data_browser_proxy.m.js';
-// #import {TestSiteSettingsPrefsBrowserProxy} from 'chrome://test/settings/test_site_settings_prefs_browser_proxy.m.js';
+import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {beforeNextRender,flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {ContentSetting,ContentSettingsTypes,LocalDataBrowserProxyImpl,SiteSettingsPrefsBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
+import {CrSettingsPrefs, Router,routes} from 'chrome://settings/settings.js';
+import {TestLocalDataBrowserProxy} from 'chrome://test/settings/test_local_data_browser_proxy.js';
+import {TestSiteSettingsPrefsBrowserProxy} from 'chrome://test/settings/test_site_settings_prefs_browser_proxy.js';
+import {createContentSettingTypeToValuePair,createOriginInfo,createRawSiteException,createSiteGroup,createSiteSettingsPrefs} from 'chrome://test/settings/test_util.js';
+
 // clang-format on
 
 suite('AllSites', function() {
@@ -30,7 +30,7 @@ suite('AllSites', function() {
    * An example eTLD+1 Object with multiple origins grouped under it.
    * @type {!SiteGroup}
    */
-  const TEST_MULTIPLE_SITE_GROUP = test_util.createSiteGroup('example.com', [
+  const TEST_MULTIPLE_SITE_GROUP = createSiteGroup('example.com', [
     'http://example.com',
     'https://www.example.com',
     'https://login.example.com',
@@ -72,35 +72,34 @@ suite('AllSites', function() {
   // Initialize a site-list before each test.
   setup(async function() {
     PolymerTest.clearBody();
-    /* #ignore */ await settings.forceLazyLoaded();
 
-    prefsVarious = test_util.createSiteSettingsPrefs([], [
-      test_util.createContentSettingTypeToValuePair(
-          settings.ContentSettingsTypes.GEOLOCATION,
+    prefsVarious = createSiteSettingsPrefs([], [
+      createContentSettingTypeToValuePair(
+          ContentSettingsTypes.GEOLOCATION,
           [
-            test_util.createRawSiteException('https://foo.com'),
-            test_util.createRawSiteException('https://bar.com', {
-              setting: settings.ContentSetting.BLOCK,
+            createRawSiteException('https://foo.com'),
+            createRawSiteException('https://bar.com', {
+              setting: ContentSetting.BLOCK,
             })
           ]),
-      test_util.createContentSettingTypeToValuePair(
-          settings.ContentSettingsTypes.NOTIFICATIONS,
+      createContentSettingTypeToValuePair(
+          ContentSettingsTypes.NOTIFICATIONS,
           [
-            test_util.createRawSiteException('https://google.com', {
-              setting: settings.ContentSetting.BLOCK,
+            createRawSiteException('https://google.com', {
+              setting: ContentSetting.BLOCK,
             }),
-            test_util.createRawSiteException('https://bar.com', {
-              setting: settings.ContentSetting.BLOCK,
+            createRawSiteException('https://bar.com', {
+              setting: ContentSetting.BLOCK,
             }),
-            test_util.createRawSiteException('https://foo.com', {
-              setting: settings.ContentSetting.BLOCK,
+            createRawSiteException('https://foo.com', {
+              setting: ContentSetting.BLOCK,
             }),
           ])
     ]);
     browserProxy = new TestSiteSettingsPrefsBrowserProxy();
     localDataBrowserProxy = new TestLocalDataBrowserProxy();
-    settings.SiteSettingsPrefsBrowserProxyImpl.instance_ = browserProxy;
-    settings.LocalDataBrowserProxyImpl.instance_ = localDataBrowserProxy;
+    SiteSettingsPrefsBrowserProxyImpl.instance_ = browserProxy;
+    LocalDataBrowserProxyImpl.instance_ = localDataBrowserProxy;
     testElement = document.createElement('all-sites');
     assertTrue(!!testElement);
     document.body.appendChild(testElement);
@@ -109,7 +108,7 @@ suite('AllSites', function() {
   teardown(function() {
     // The code being tested changes the Route. Reset so that state is not
     // leaked across tests.
-    settings.Router.getInstance().resetRouteForTesting();
+    Router.getInstance().resetRouteForTesting();
     loadTimeData.overrideValues({enableStoragePressureUI: false});
   });
 
@@ -123,12 +122,10 @@ suite('AllSites', function() {
     browserProxy.setPrefs(prefs);
     if (sortOrder) {
       loadTimeData.overrideValues({enableStoragePressureUI: true});
-      settings.Router.getInstance().navigateTo(
-          settings.routes.SITE_SETTINGS_ALL,
-          new URLSearchParams(`sort=${sortOrder}`));
+      Router.getInstance().navigateTo(
+          routes.SITE_SETTINGS_ALL, new URLSearchParams(`sort=${sortOrder}`));
     } else {
-      settings.Router.getInstance().navigateTo(
-          settings.routes.SITE_SETTINGS_ALL);
+      Router.getInstance().navigateTo(routes.SITE_SETTINGS_ALL);
     }
   }
 
@@ -136,22 +133,13 @@ suite('AllSites', function() {
     setUpAllSites(prefsVarious);
     testElement.populateList_();
     return browserProxy.whenCalled('getAllSites').then(() => {
-      // Use resolver to ensure that the list container is populated.
-      const resolver = new PromiseResolver();
-      // In Polymer2, we need to wait until after the next render for the list
-      // to be populated.
-      Polymer.RenderStatus.beforeNextRender(testElement, () => {
-        resolver.resolve();
-      });
-      return resolver.promise.then(() => {
-        assertEquals(3, testElement.siteGroupMap.size);
+      assertEquals(3, testElement.siteGroupMap.size);
 
-        // Flush to be sure list container is populated.
-        Polymer.dom.flush();
-        const siteEntries =
-            testElement.$.listContainer.querySelectorAll('site-entry');
-        assertEquals(3, siteEntries.length);
-      });
+      // Flush to be sure list container is populated.
+      flush();
+      const siteEntries =
+          testElement.$.listContainer.querySelectorAll('site-entry');
+      assertEquals(3, siteEntries.length);
     });
   });
 
@@ -162,7 +150,7 @@ suite('AllSites', function() {
     return browserProxy.whenCalled('getAllSites')
         .then(() => {
           // Flush to be sure list container is populated.
-          Polymer.dom.flush();
+          flush();
           const siteEntries =
               testElement.$.listContainer.querySelectorAll('site-entry');
           assertEquals(3, siteEntries.length);
@@ -170,7 +158,7 @@ suite('AllSites', function() {
           testElement.filter = SEARCH_QUERY;
         })
         .then(() => {
-          Polymer.dom.flush();
+          flush();
           const siteEntries =
               testElement.$.listContainer.querySelectorAll('site-entry');
           const hiddenSiteEntries =
@@ -197,8 +185,8 @@ suite('AllSites', function() {
       // to sort.
       assertEquals(3, testElement.siteGroupMap.size);
       const fooSiteGroup = testElement.siteGroupMap.get('foo.com');
-      fooSiteGroup.origins.push(test_util.createOriginInfo(
-          'https://login.foo.com', {engagement: 20}));
+      fooSiteGroup.origins.push(
+          createOriginInfo('https://login.foo.com', {engagement: 20}));
       assertEquals(2, fooSiteGroup.origins.length);
       fooSiteGroup.origins[0].engagement = 50.4;
       const googleSiteGroup = testElement.siteGroupMap.get('google.com');
@@ -212,7 +200,7 @@ suite('AllSites', function() {
       // method first to ensure changing to 'Most visited' works.
       testElement.root.querySelector('select').value = 'name';
       testElement.onSortMethodChanged_();
-      Polymer.dom.flush();
+      flush();
       let siteEntries =
           testElement.$.listContainer.querySelectorAll('site-entry');
       assertEquals('bar.com', siteEntries[0].$.displayName.innerText.trim());
@@ -221,7 +209,7 @@ suite('AllSites', function() {
 
       testElement.root.querySelector('select').value = 'most-visited';
       testElement.onSortMethodChanged_();
-      Polymer.dom.flush();
+      flush();
       siteEntries = testElement.$.listContainer.querySelectorAll('site-entry');
       // Each site entry is sorted by its maximum engagement, so expect
       // 'foo.com' to come after 'google.com'.
@@ -235,58 +223,51 @@ suite('AllSites', function() {
     localDataBrowserProxy.setCookieDetails(TEST_COOKIE_LIST);
     setUpAllSites(prefsVarious);
     testElement.populateList_();
-    return browserProxy.whenCalled('getAllSites')
-        .then(() => {
-          Polymer.dom.flush();
-          let siteEntries =
-              testElement.$.listContainer.querySelectorAll('site-entry');
-          // Add additional origins to SiteGroups with cookies to simulate their
-          // being grouped entries, plus add local storage.
-          siteEntries[0].siteGroup.origins[0].usage = 900;
-          siteEntries[1].siteGroup.origins.push(
-              test_util.createOriginInfo('http://bar.com'));
-          siteEntries[1].siteGroup.origins[0].usage = 500;
-          siteEntries[1].siteGroup.origins[1].usage = 500;
-          siteEntries[2].siteGroup.origins.push(
-              test_util.createOriginInfo('http://google.com'));
+    return browserProxy.whenCalled('getAllSites').then(() => {
+      flush();
+      let siteEntries =
+          testElement.$.listContainer.querySelectorAll('site-entry');
+      // Add additional origins to SiteGroups with cookies to simulate their
+      // being grouped entries, plus add local storage.
+      siteEntries[0].siteGroup.origins[0].usage = 900;
+      siteEntries[1].siteGroup.origins.push(createOriginInfo('http://bar.com'));
+      siteEntries[1].siteGroup.origins[0].usage = 500;
+      siteEntries[1].siteGroup.origins[1].usage = 500;
+      siteEntries[2].siteGroup.origins.push(
+          createOriginInfo('http://google.com'));
 
-          testElement.onSortMethodChanged_();
-          siteEntries =
-              testElement.$.listContainer.querySelectorAll('site-entry');
-          // Verify all sites is not sorted by storage.
-          assertEquals(3, siteEntries.length);
-          assertEquals(
-              'foo.com', siteEntries[0].$.displayName.innerText.trim());
-          assertEquals(
-              'bar.com', siteEntries[1].$.displayName.innerText.trim());
-          assertEquals(
-              'google.com', siteEntries[2].$.displayName.innerText.trim());
+      testElement.onSortMethodChanged_();
+      siteEntries = testElement.$.listContainer.querySelectorAll('site-entry');
+      // Verify all sites is not sorted by storage.
+      assertEquals(3, siteEntries.length);
+      assertEquals('foo.com', siteEntries[0].$.displayName.innerText.trim());
+      assertEquals('bar.com', siteEntries[1].$.displayName.innerText.trim());
+      assertEquals('google.com', siteEntries[2].$.displayName.innerText.trim());
 
-          // Change the sort method, then verify all sites is now sorted by
-          // name.
-          testElement.root.querySelector('select').value = 'data-stored';
-          testElement.onSortMethodChanged_();
+      // Change the sort method, then verify all sites is now sorted by
+      // name.
+      testElement.root.querySelector('select').value = 'data-stored';
+      testElement.onSortMethodChanged_();
 
 
-          Polymer.dom.flush();
-          siteEntries =
-              testElement.$.listContainer.querySelectorAll('site-entry');
-          assertEquals(
-              'bar.com',
-              siteEntries[0]
-                  .root.querySelector('#displayName .url-directionality')
-                  .innerText.trim());
-          assertEquals(
-              'foo.com',
-              siteEntries[1]
-                  .root.querySelector('#displayName .url-directionality')
-                  .innerText.trim());
-          assertEquals(
-              'google.com',
-              siteEntries[2]
-                  .root.querySelector('#displayName .url-directionality')
-                  .innerText.trim());
-        });
+      flush();
+      siteEntries = testElement.$.listContainer.querySelectorAll('site-entry');
+      assertEquals(
+          'bar.com',
+          siteEntries[0]
+              .root.querySelector('#displayName .url-directionality')
+              .innerText.trim());
+      assertEquals(
+          'foo.com',
+          siteEntries[1]
+              .root.querySelector('#displayName .url-directionality')
+              .innerText.trim());
+      assertEquals(
+          'google.com',
+          siteEntries[2]
+              .root.querySelector('#displayName .url-directionality')
+              .innerText.trim());
+    });
   });
 
   test('can be sorted by storage by passing URL param', function() {
@@ -297,9 +278,9 @@ suite('AllSites', function() {
     setUpAllSites(prefsVarious, 'data-stored');
     testElement = document.createElement('all-sites');
     document.body.appendChild(testElement);
-    testElement.currentRouteChanged(settings.routes.SITE_SETTINGS_ALL);
+    testElement.currentRouteChanged(routes.SITE_SETTINGS_ALL);
     return browserProxy.whenCalled('getAllSites').then(() => {
-      Polymer.dom.flush();
+      flush();
       const siteEntries =
           testElement.$.listContainer.querySelectorAll('site-entry');
 
@@ -325,7 +306,7 @@ suite('AllSites', function() {
     setUpAllSites(prefsVarious);
     testElement.populateList_();
     return browserProxy.whenCalled('getAllSites').then(() => {
-      Polymer.dom.flush();
+      flush();
       let siteEntries =
           testElement.$.listContainer.querySelectorAll('site-entry');
 
@@ -338,7 +319,7 @@ suite('AllSites', function() {
       // Change the sort method, then verify all sites is now sorted by name.
       testElement.root.querySelector('select').value = 'name';
       testElement.onSortMethodChanged_();
-      Polymer.dom.flush();
+      flush();
       siteEntries = testElement.$.listContainer.querySelectorAll('site-entry');
       assertEquals('bar.com', siteEntries[0].$.displayName.innerText.trim());
       assertEquals('foo.com', siteEntries[1].$.displayName.innerText.trim());
@@ -351,9 +332,9 @@ suite('AllSites', function() {
     setUpAllSites(prefsVarious, 'name');
     testElement = document.createElement('all-sites');
     document.body.appendChild(testElement);
-    testElement.currentRouteChanged(settings.routes.SITE_SETTINGS_ALL);
+    testElement.currentRouteChanged(routes.SITE_SETTINGS_ALL);
     return browserProxy.whenCalled('getAllSites').then(() => {
-      Polymer.dom.flush();
+      flush();
       const siteEntries =
           testElement.$.listContainer.querySelectorAll('site-entry');
 
@@ -367,7 +348,7 @@ suite('AllSites', function() {
     setUpAllSites(prefsVarious);
     testElement.populateList_();
     return browserProxy.whenCalled('getAllSites').then(() => {
-      Polymer.dom.flush();
+      flush();
       let siteEntries =
           testElement.$.listContainer.querySelectorAll('site-entry');
       assertEquals(3, siteEntries.length);
@@ -382,19 +363,19 @@ suite('AllSites', function() {
           // Test merging an existing site works, with overlapping origin lists.
           'etldPlus1': fooEtldPlus1,
           'origins': [
-            test_util.createOriginInfo(fooOrigin),
-            test_util.createOriginInfo('https://foo.com'),
+            createOriginInfo(fooOrigin),
+            createOriginInfo('https://foo.com'),
           ],
         },
         {
           // Test adding a new site entry works.
           'etldPlus1': addEtldPlus1,
-          'origins': [test_util.createOriginInfo(addOrigin)],
+          'origins': [createOriginInfo(addOrigin)],
         }
       ]);
       testElement.onStorageListFetched(STORAGE_SITE_GROUP_LIST);
 
-      Polymer.dom.flush();
+      flush();
       siteEntries = testElement.$.listContainer.querySelectorAll('site-entry');
       assertEquals(4, siteEntries.length);
 
@@ -413,7 +394,7 @@ suite('AllSites', function() {
   function resetSettingsViaOverflowMenu(buttonType) {
     assertTrue(
         buttonType === 'cancel-button' || buttonType === 'action-button');
-    Polymer.dom.flush();
+    flush();
     const siteEntries =
         testElement.$.listContainer.querySelectorAll('site-entry');
     assertEquals(1, siteEntries.length);
@@ -508,7 +489,7 @@ suite('AllSites', function() {
   function clearDataViaOverflowMenu(buttonType) {
     assertTrue(
         buttonType === 'cancel-button' || buttonType === 'action-button');
-    Polymer.dom.flush();
+    flush();
     const siteEntries =
         testElement.$.listContainer.querySelectorAll('site-entry');
     assertEquals(1, siteEntries.length);
@@ -599,7 +580,7 @@ suite('AllSites', function() {
   function clearDataViaClearAllButton(buttonType) {
     assertTrue(
         buttonType === 'cancel-button' || buttonType === 'action-button');
-    Polymer.dom.flush();
+    flush();
     const siteEntries =
         testElement.$.listContainer.querySelectorAll('site-entry');
     assertTrue(siteEntries.length >= 1);
@@ -638,7 +619,7 @@ suite('AllSites', function() {
     testElement.siteGroupMap.set(
         TEST_MULTIPLE_SITE_GROUP.etldPlus1,
         JSON.parse(JSON.stringify(TEST_MULTIPLE_SITE_GROUP)));
-    const googleSiteGroup = test_util.createSiteGroup('google.com', [
+    const googleSiteGroup = createSiteGroup('google.com', [
       'https://www.google.com',
       'https://docs.google.com',
       'https://mail.google.com',
@@ -660,7 +641,7 @@ suite('AllSites', function() {
         siteGroup.origins[0].hasPermissionSettings = true;
         testElement.siteGroupMap.set(
             siteGroup.etldPlus1, JSON.parse(JSON.stringify(siteGroup)));
-        const googleSiteGroup = test_util.createSiteGroup('google.com', [
+        const googleSiteGroup = createSiteGroup('google.com', [
           'https://www.google.com',
           'https://docs.google.com',
           'https://mail.google.com',
@@ -690,7 +671,7 @@ suite('AllSites', function() {
   function clearOriginDataViaOverflowMenu(buttonType, siteGroup, originIndex) {
     assertTrue(
         buttonType === 'cancel-button' || buttonType === 'action-button');
-    Polymer.dom.flush();
+    flush();
     const siteEntries =
         testElement.$.listContainer.querySelectorAll('site-entry');
     assertEquals(1, siteEntries.length);
@@ -788,7 +769,7 @@ suite('AllSites', function() {
       buttonType, siteGroup, originIndex) {
     assertTrue(
         buttonType === 'cancel-button' || buttonType === 'action-button');
-    Polymer.dom.flush();
+    flush();
     const siteEntries =
         testElement.$.listContainer.querySelectorAll('site-entry');
     assertEquals(1, siteEntries.length);

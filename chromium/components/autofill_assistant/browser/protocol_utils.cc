@@ -13,10 +13,12 @@
 #include "components/autofill_assistant/browser/actions/configure_bottom_sheet_action.h"
 #include "components/autofill_assistant/browser/actions/expect_navigation_action.h"
 #include "components/autofill_assistant/browser/actions/focus_element_action.h"
+#include "components/autofill_assistant/browser/actions/generate_password_for_form_field_action.h"
 #include "components/autofill_assistant/browser/actions/highlight_element_action.h"
 #include "components/autofill_assistant/browser/actions/navigate_action.h"
 #include "components/autofill_assistant/browser/actions/popup_message_action.h"
 #include "components/autofill_assistant/browser/actions/prompt_action.h"
+#include "components/autofill_assistant/browser/actions/save_generated_password_action.h"
 #include "components/autofill_assistant/browser/actions/select_option_action.h"
 #include "components/autofill_assistant/browser/actions/set_attribute_action.h"
 #include "components/autofill_assistant/browser/actions/set_form_field_value_action.h"
@@ -59,6 +61,7 @@ void FillClientContext(const ClientContextProto& client_context,
   if (trigger_context.is_direct_action()) {
     proto->set_is_direct_action(true);
   }
+  // TODO(b/156882027): Add an integration test for accounts handling.
   if (trigger_context.get_caller_account_hash().empty()) {
     proto->set_accounts_matching_status(ClientContextProto::UNKNOWN);
   } else {
@@ -320,6 +323,16 @@ bool ProtocolUtils::ParseActions(ActionDelegate* delegate,
       }
       case ActionProto::ActionInfoCase::kShowGenericUi: {
         client_action = std::make_unique<ShowGenericUiAction>(delegate, action);
+        break;
+      }
+      case ActionProto::ActionInfoCase::kGeneratePasswordForFormField: {
+        client_action = std::make_unique<GeneratePasswordForFormFieldAction>(
+            delegate, action);
+        break;
+      }
+      case ActionProto::ActionInfoCase::kSaveGeneratedPassword: {
+        client_action =
+            std::make_unique<SaveGeneratedPasswordAction>(delegate, action);
         break;
       }
       case ActionProto::ActionInfoCase::ACTION_INFO_NOT_SET: {

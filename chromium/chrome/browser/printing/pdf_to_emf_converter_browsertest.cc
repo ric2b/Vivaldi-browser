@@ -18,6 +18,7 @@
 #include "build/build_config.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/test/base/in_process_browser_test.h"
+#include "content/public/test/browser_test.h"
 #include "printing/emf_win.h"
 #include "printing/metafile.h"
 #include "printing/pdf_render_settings.h"
@@ -252,6 +253,26 @@ IN_PROC_BROWSER_TEST_F(PdfToEmfConverterBrowserTest, EmfBasic) {
       kLetter200DpiRect, gfx::Point(0, 0), k200DpiSize,
       /*autorotate=*/false,
       /*use_color=*/true, PdfRenderSettings::Mode::NORMAL);
+  constexpr int kNumberOfPages = 3;
+
+  ASSERT_TRUE(GetTestInput("pdf_converter_basic.pdf"));
+  ASSERT_TRUE(StartPdfConverter(pdf_settings, kNumberOfPages));
+  for (int i = 0; i < kNumberOfPages; ++i) {
+    ASSERT_TRUE(GetPage(i));
+    ASSERT_TRUE(GetPageExpectedEmfData(
+        GetFileNameForPageNumber("pdf_converter_basic_emf_page_", i)));
+    ComparePageEmfHeader();
+    // TODO(thestig): Check if ComparePageEmfPayload() works on bots.
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(PdfToEmfConverterBrowserTest,
+                       EmfWithReducedRasterizationBasic) {
+  const PdfRenderSettings pdf_settings(
+      kLetter200DpiRect, gfx::Point(0, 0), k200DpiSize,
+      /*autorotate=*/false,
+      /*use_color=*/true,
+      PdfRenderSettings::Mode::EMF_WITH_REDUCED_RASTERIZATION);
   constexpr int kNumberOfPages = 3;
 
   ASSERT_TRUE(GetTestInput("pdf_converter_basic.pdf"));

@@ -28,6 +28,8 @@
 
 #include "third_party/blink/renderer/modules/accessibility/ax_object.h"
 
+#include <algorithm>
+
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
 #include "third_party/blink/renderer/core/aom/accessible_node.h"
@@ -35,7 +37,7 @@
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
-#include "third_party/blink/renderer/core/dom/element_traversal.h"
+#include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
@@ -71,6 +73,8 @@
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
 #include "third_party/skia/include/core/SkMatrix44.h"
+#include "ui/accessibility/ax_node_data.h"
+#include "ui/accessibility/ax_role_properties.h"
 
 namespace blink {
 
@@ -350,6 +354,7 @@ const InternalRoleEntry kInternalRoles[] = {
     {ax::mojom::Role::kIgnored, "Ignored"},
     {ax::mojom::Role::kImageMap, "ImageMap"},
     {ax::mojom::Role::kImage, "Image"},
+    {ax::mojom::Role::kImeCandidate, "ImeCandidate"},
     {ax::mojom::Role::kInlineTextBox, "InlineTextBox"},
     {ax::mojom::Role::kInputTime, "InputTime"},
     {ax::mojom::Role::kKeyboard, "Keyboard"},
@@ -714,18 +719,222 @@ void AXObject::GetSparseAXAttributes(
   }
 }
 
+void AXObject::Serialize(ui::AXNodeData* node_data) {
+  AccessibilityExpanded expanded = IsExpanded();
+  if (expanded) {
+    if (expanded == kExpandedCollapsed)
+      node_data->AddState(ax::mojom::blink::State::kCollapsed);
+    else if (expanded == kExpandedExpanded)
+      node_data->AddState(ax::mojom::blink::State::kExpanded);
+  }
+
+  if (CanSetFocusAttribute())
+    node_data->AddState(ax::mojom::blink::State::kFocusable);
+
+  if (HasPopup() != ax::mojom::blink::HasPopup::kFalse)
+    node_data->SetHasPopup(HasPopup());
+  else if (RoleValue() == ax::mojom::blink::Role::kPopUpButton)
+    node_data->SetHasPopup(ax::mojom::blink::HasPopup::kMenu);
+
+  if (IsAutofillAvailable())
+    node_data->AddState(ax::mojom::blink::State::kAutofillAvailable);
+
+  if (IsDefault())
+    node_data->AddState(ax::mojom::blink::State::kDefault);
+
+  // aria-grabbed is deprecated in WAI-ARIA 1.1.
+  if (IsGrabbed() != kGrabbedStateUndefined) {
+    node_data->AddBoolAttribute(ax::mojom::blink::BoolAttribute::kGrabbed,
+                                IsGrabbed() == kGrabbedStateTrue);
+  }
+
+  if (IsHovered())
+    node_data->AddState(ax::mojom::blink::State::kHovered);
+
+  if (!IsVisible())
+    node_data->AddState(ax::mojom::blink::State::kInvisible);
+
+  if (IsLinked())
+    node_data->AddState(ax::mojom::blink::State::kLinked);
+
+  if (IsMultiline())
+    node_data->AddState(ax::mojom::blink::State::kMultiline);
+
+  if (IsMultiSelectable())
+    node_data->AddState(ax::mojom::blink::State::kMultiselectable);
+
+  if (IsPasswordField())
+    node_data->AddState(ax::mojom::blink::State::kProtected);
+
+  if (IsRequired())
+    node_data->AddState(ax::mojom::blink::State::kRequired);
+
+  if (IsEditable())
+    node_data->AddState(ax::mojom::blink::State::kEditable);
+
+  if (IsSelected() != blink::kSelectedStateUndefined) {
+    node_data->AddBoolAttribute(ax::mojom::blink::BoolAttribute::kSelected,
+                                IsSelected() == blink::kSelectedStateTrue);
+  }
+
+  if (IsRichlyEditable())
+    node_data->AddState(ax::mojom::blink::State::kRichlyEditable);
+
+  if (IsVisited())
+    node_data->AddState(ax::mojom::blink::State::kVisited);
+
+  if (Orientation() == kAccessibilityOrientationVertical)
+    node_data->AddState(ax::mojom::blink::State::kVertical);
+  else if (Orientation() == blink::kAccessibilityOrientationHorizontal)
+    node_data->AddState(ax::mojom::blink::State::kHorizontal);
+
+  if (AccessibilityIsIgnored())
+    node_data->AddState(ax::mojom::blink::State::kIgnored);
+}
+
+bool AXObject::IsAXNodeObject() const {
+  return false;
+}
+
+bool AXObject::IsAXLayoutObject() const {
+  return false;
+}
+
+bool AXObject::IsAXInlineTextBox() const {
+  return false;
+}
+
+bool AXObject::IsList() const {
+  return ui::IsList(RoleValue());
+}
+
+bool AXObject::IsAXListBox() const {
+  return false;
+}
+
+bool AXObject::IsAXListBoxOption() const {
+  return false;
+}
+
+bool AXObject::IsMenuList() const {
+  return false;
+}
+
+bool AXObject::IsMenuListOption() const {
+  return false;
+}
+
+bool AXObject::IsMenuListPopup() const {
+  return false;
+}
+
+bool AXObject::IsMockObject() const {
+  return false;
+}
+
+bool AXObject::IsProgressIndicator() const {
+  return false;
+}
+
+bool AXObject::IsAXRadioInput() const {
+  return false;
+}
+
+bool AXObject::IsSlider() const {
+  return false;
+}
+
+bool AXObject::IsAXSVGRoot() const {
+  return false;
+}
+
+bool AXObject::IsValidationMessage() const {
+  return false;
+}
+
+bool AXObject::IsVirtualObject() const {
+  return false;
+}
+
+ax::mojom::Role AXObject::RoleValue() const {
+  return role_;
+}
+
 bool AXObject::IsARIATextControl() const {
   return AriaRoleAttribute() == ax::mojom::Role::kTextField ||
          AriaRoleAttribute() == ax::mojom::Role::kSearchBox ||
          AriaRoleAttribute() == ax::mojom::Role::kTextFieldWithComboBox;
 }
 
-bool AXObject::IsButton() const {
-  ax::mojom::Role role = RoleValue();
+bool AXObject::IsAnchor() const {
+  return IsLink() && !IsNativeImage();
+}
 
-  return role == ax::mojom::Role::kButton ||
-         role == ax::mojom::Role::kPopUpButton ||
-         role == ax::mojom::Role::kToggleButton;
+bool AXObject::IsButton() const {
+  return ui::IsButton(RoleValue());
+}
+
+bool AXObject::IsCanvas() const {
+  return RoleValue() == ax::mojom::Role::kCanvas;
+}
+
+bool AXObject::IsCheckbox() const {
+  return RoleValue() == ax::mojom::Role::kCheckBox;
+}
+
+bool AXObject::IsCheckboxOrRadio() const {
+  return IsCheckbox() || IsRadioButton();
+}
+
+bool AXObject::IsColorWell() const {
+  return RoleValue() == ax::mojom::Role::kColorWell;
+}
+
+bool AXObject::IsControl() const {
+  return ui::IsControl(RoleValue());
+}
+
+bool AXObject::IsDefault() const {
+  return false;
+}
+
+bool AXObject::IsFieldset() const {
+  return false;
+}
+
+bool AXObject::IsHeading() const {
+  return ui::IsHeading(RoleValue());
+}
+
+bool AXObject::IsImage() const {
+  // Canvas is not currently included so that it is not exposed unless there is
+  // a label, fallback content or something to make it accessible. This decision
+  // may be revisited at a later date.
+  return ui::IsImage(RoleValue()) && RoleValue() != ax::mojom::Role::kCanvas;
+}
+
+bool AXObject::IsInputImage() const {
+  return false;
+}
+
+bool AXObject::IsLink() const {
+  return ui::IsLink(RoleValue());
+}
+
+bool AXObject::IsInPageLinkTarget() const {
+  return false;
+}
+
+bool AXObject::IsImageMapLink() const {
+  return false;
+}
+
+bool AXObject::IsMenu() const {
+  return RoleValue() == ax::mojom::Role::kMenu;
+}
+
+bool AXObject::IsMenuButton() const {
+  return RoleValue() == ax::mojom::Role::kMenuButton;
 }
 
 bool AXObject::IsCheckable() const {
@@ -846,17 +1055,31 @@ bool AXObject::IsLandmarkRelated() const {
 }
 
 bool AXObject::IsMenuRelated() const {
-  switch (RoleValue()) {
-    case ax::mojom::Role::kMenu:
-    case ax::mojom::Role::kMenuBar:
-    case ax::mojom::Role::kMenuButton:
-    case ax::mojom::Role::kMenuItem:
-    case ax::mojom::Role::kMenuItemCheckBox:
-    case ax::mojom::Role::kMenuItemRadio:
-      return true;
-    default:
-      return false;
-  }
+  return ui::IsMenuRelated(RoleValue());
+}
+
+bool AXObject::IsMeter() const {
+  return RoleValue() == ax::mojom::Role::kMeter;
+}
+
+bool AXObject::IsNativeImage() const {
+  return false;
+}
+
+bool AXObject::IsNativeSpinButton() const {
+  return false;
+}
+
+bool AXObject::IsNativeTextControl() const {
+  return false;
+}
+
+bool AXObject::IsNonNativeTextControl() const {
+  return false;
+}
+
+bool AXObject::IsPasswordField() const {
+  return false;
 }
 
 bool AXObject::IsPasswordFieldAndShouldHideValue() const {
@@ -865,6 +1088,10 @@ bool AXObject::IsPasswordFieldAndShouldHideValue() const {
     return false;
 
   return IsPasswordField();
+}
+
+bool AXObject::IsPresentational() const {
+  return ui::IsPresentational(RoleValue());
 }
 
 bool AXObject::IsTextObject() const {
@@ -880,30 +1107,17 @@ bool AXObject::IsTextObject() const {
   }
 }
 
-bool AXObject::IsClickable() const {
-  if (IsButton() || IsLink() || IsTextControl())
-    return true;
-
-  // TODO(dmazzoni): Ensure that ax::mojom::Role::kColorWell and
-  // ax::mojom::Role::kSpinButton are correctly handled here via their
-  // constituent parts.
-  switch (RoleValue()) {
-    case ax::mojom::Role::kCheckBox:
-    case ax::mojom::Role::kComboBoxMenuButton:
-    case ax::mojom::Role::kDisclosureTriangle:
-    case ax::mojom::Role::kListBox:
-    case ax::mojom::Role::kListBoxOption:
-    case ax::mojom::Role::kMenuItemCheckBox:
-    case ax::mojom::Role::kMenuItemRadio:
-    case ax::mojom::Role::kMenuItem:
-    case ax::mojom::Role::kMenuListOption:
-    case ax::mojom::Role::kRadioButton:
-    case ax::mojom::Role::kSwitch:
-    case ax::mojom::Role::kTab:
-      return true;
-    default:
-      return false;
+bool AXObject::IsRangeValueSupported() const {
+  if (RoleValue() == ax::mojom::Role::kSplitter) {
+    // According to the ARIA spec, role="separator" acts as a splitter only
+    // when focusable, and supports a range only in that case.
+    return CanSetFocusAttribute();
   }
+  return ui::IsRangeValueSupported(RoleValue());
+}
+
+bool AXObject::IsClickable() const {
+  return ui::IsClickable(RoleValue());
 }
 
 bool AXObject::AccessibilityIsIgnored() const {
@@ -1336,9 +1550,45 @@ bool AXObject::CanSetValueAttribute() const {
     case ax::mojom::Role::kSearchBox:
       return Restriction() == kRestrictionNone;
     default:
-      break;
+      return false;
   }
-  return false;
+}
+
+bool AXObject::IsFocusableStyleUsingBestAvailableState() const {
+  auto* element = GetElement();
+  DCHECK(element);
+
+  // If this element's layout tree does not need an update, it means that we can
+  // rely on Element's IsFocusableStyle directly, which is the best available
+  // source of information.
+  // Note that we also allow this to be used if we're in a style recalc, since
+  // we might get here through layout object attachment. In that case, the dirty
+  // bits may not have been cleared yet, but all relevant style and layout tree
+  // should be up to date. Note that this quirk can be fixed by deferring AX
+  // tree updates to happen after the layout tree attachment has finished.
+  if (GetDocument()->InStyleRecalc() ||
+      !GetDocument()->NeedsLayoutTreeUpdateForNodeIncludingDisplayLocked(
+          *element)) {
+    return element->IsFocusableStyle();
+  }
+
+  // The best available source of information is now the AX tree, so use that to
+  // figure out whether we have focusable style.
+
+  // If we're in a canvas subtree, then use the canvas visibility instead of
+  // self visibility. The elements in a canvas subtree are fallback elements,
+  // which are not necessarily rendered but are allowed to be focusable.
+  if (element->IsInCanvasSubtree()) {
+    const HTMLCanvasElement* canvas =
+        Traversal<HTMLCanvasElement>::FirstAncestorOrSelf(*element);
+    DCHECK(canvas);
+    return canvas->GetLayoutObject() &&
+           canvas->GetLayoutObject()->Style()->Visibility() ==
+               EVisibility::kVisible;
+  }
+
+  return GetLayoutObject() &&
+         GetLayoutObject()->Style()->Visibility() == EVisibility::kVisible;
 }
 
 // This does not use Element::IsFocusable(), as that can sometimes recalculate
@@ -1347,13 +1597,25 @@ bool AXObject::CanSetFocusAttribute() const {
   if (IsDetached())
     return false;
 
-  // NOT focusable: anything inside a <portal> (the portal element itself is).
-  if (GetDocument() && GetDocument()->GetPage() &&
-      GetDocument()->GetPage()->InsidePortal()) {
+  // Objects within a portal are not focusable.
+  // Note that they are ignored but can be included in the tree.
+  bool inside_portal = GetDocument() && GetDocument()->GetPage() &&
+                       GetDocument()->GetPage()->InsidePortal();
+  if (inside_portal)
+    return false;
+
+  // Display-locked nodes that have content-visibility: hidden are not exposed
+  // to accessibility in any way, so they are not focusable. Note that for
+  // content-visibility: auto cases, `ShouldIgnoreNodeDueToDisplayLock()` would
+  // return false, since we're not ignoring the element in that case.
+  if (GetNode() &&
+      DisplayLockUtilities::ShouldIgnoreNodeDueToDisplayLock(
+          *GetNode(), DisplayLockActivationReason::kAccessibility)) {
     return false;
   }
 
-  // Focusable: web area -- this is the only focusable non-element.
+  // Focusable: web area -- this is the only focusable non-element. Web areas
+  // inside portals are not focusable though (portal contents cannot get focus).
   if (IsWebArea())
     return true;
 
@@ -1382,29 +1644,9 @@ bool AXObject::CanSetFocusAttribute() const {
     return true;
 
   // NOT focusable: hidden elements.
-  // This is imperfect, because the only way to really know whether something
-  // is hidden via style is to EnsureComputedStyle(). The method
-  // AXObject::IsHiddenViaStyle() does this, but it relies on
-  // EnsureComputedStyle() which could cause instability in callers.
-  // This code assumes that a canvas descendant has the same visibility as
-  // the canvas itself.
   // TODO(aleventhal) Consider caching visibility when it's safe to compute.
-  if (!IsA<HTMLAreaElement>(elem)) {
-    if (!GetLayoutObject()) {
-      if (!elem->IsInCanvasSubtree())
-        return false;
-      const HTMLCanvasElement* canvas =
-          Traversal<HTMLCanvasElement>::FirstAncestorOrSelf(*elem);
-      if (!canvas->GetLayoutObject() ||
-          canvas->GetLayoutObject()->Style()->Visibility() !=
-              EVisibility::kVisible) {
-        return false;
-      }
-    } else if (GetLayoutObject()->Style()->Visibility() !=
-               EVisibility::kVisible) {
-      return false;
-    }
-  }
+  if (!IsA<HTMLAreaElement>(elem) && !IsFocusableStyleUsingBestAvailableState())
+    return false;
 
   // Focusable: options in a combobox or listbox.
   // Similar to menu list option treatment above, but not focusable if hidden.
@@ -1554,7 +1796,7 @@ bool AXObject::IsSubWidget() const {
     case ax::mojom::Role::kColumnHeader:
     case ax::mojom::Role::kRowHeader:
     case ax::mojom::Role::kColumn:
-    case ax::mojom::Role::kRow: {
+    case ax::mojom::Role::kRow:
       // If it has an explicit ARIA role, it's a subwidget.
       //
       // Reasoning:
@@ -1573,45 +1815,24 @@ bool AXObject::IsSubWidget() const {
 
       // Otherwise it's only a subwidget if it's in a grid or treegrid,
       // not in a table.
-      AXObject* parent = ParentObjectUnignored();
-      while (parent && !parent->IsTableLikeRole())
-        parent = parent->ParentObjectUnignored();
-      if (parent && (parent->RoleValue() == ax::mojom::Role::kGrid ||
-                     parent->RoleValue() == ax::mojom::Role::kTreeGrid))
-        return true;
-      return false;
-    }
+      return std::any_of(
+          AncestorsBegin(), AncestorsEnd(), [](const AXObject& ancestor) {
+            return ancestor.RoleValue() == ax::mojom::Role::kGrid ||
+                   ancestor.RoleValue() == ax::mojom::Role::kTreeGrid;
+          });
+
     case ax::mojom::Role::kListBoxOption:
     case ax::mojom::Role::kMenuListOption:
     case ax::mojom::Role::kTab:
     case ax::mojom::Role::kTreeItem:
       return true;
     default:
-      break;
+      return false;
   }
-  return false;
 }
 
 bool AXObject::SupportsARIASetSizeAndPosInSet() const {
-  switch (RoleValue()) {
-    case ax::mojom::Role::kArticle:
-    case ax::mojom::Role::kComment:
-    case ax::mojom::Role::kListBoxOption:
-    case ax::mojom::Role::kListItem:
-    case ax::mojom::Role::kMenuItem:
-    case ax::mojom::Role::kMenuItemRadio:
-    case ax::mojom::Role::kMenuItemCheckBox:
-    case ax::mojom::Role::kMenuListOption:
-    case ax::mojom::Role::kRadioButton:
-    case ax::mojom::Role::kRow:
-    case ax::mojom::Role::kTab:
-    case ax::mojom::Role::kTreeItem:
-      return true;
-    default:
-      break;
-  }
-
-  return false;
+  return ui::IsSetLike(RoleValue()) || ui::IsItemLike(RoleValue());
 }
 
 // Simplify whitespace, but preserve a single leading and trailing whitespace
@@ -1703,28 +1924,21 @@ String AXObject::RecursiveTextAlternative(const AXObject& ax_obj,
 }
 
 bool AXObject::IsHiddenViaStyle() const {
+  Node* node = GetNode();
+  if (!node)
+    return false;
+
+  // Display-locked nodes are always hidden.
+  if (DisplayLockUtilities::NearestLockedExclusiveAncestor(*node))
+    return true;
+
   if (GetLayoutObject())
     return GetLayoutObject()->Style()->Visibility() != EVisibility::kVisible;
-  if (Node* node = GetNode()) {
-    if (node->isConnected()) {
-      bool is_first_loop = true;
-      auto* element = DynamicTo<Element>(node);
-      while (element && !element->GetLayoutObject()) {
-        const ComputedStyle* style = element->EnsureComputedStyle();
-        if (is_first_loop && style->Visibility() != EVisibility::kVisible)
-          return true;
-        // CSS Display:
-        // - does not inherit
-        // - display: none affects entire subtrees regardless of descendants
-        //   attempting to override it
-        // - causes elements to have no associated layout object
-        // Therefore, check each consecutive parent without a layout object.
-        if (style->Display() == EDisplay::kNone)
-          return true;
-        element = element->parentElement();
-        is_first_loop = false;
-      }
-    }
+
+  if (Element* element = DynamicTo<Element>(node)) {
+    const ComputedStyle* style = element->GetComputedStyle();
+    return !style || style->IsEnsuredInDisplayNone() ||
+           style->Visibility() != EVisibility::kVisible;
   }
   return false;
 }
@@ -1733,9 +1947,18 @@ bool AXObject::IsHiddenForTextAlternativeCalculation() const {
   if (AOMPropertyOrARIAAttributeIsFalse(AOMBooleanProperty::kHidden))
     return false;
 
+  auto* node = GetNode();
+  if (!node)
+    return false;
+
+  // Display-locked elements are available for text/name resolution.
+  if (DisplayLockUtilities::NearestLockedExclusiveAncestor(*node))
+    return false;
+
   if (GetLayoutObject())
     return GetLayoutObject()->Style()->Visibility() != EVisibility::kVisible;
-  else if (GetNode() && IsA<HTMLNoScriptElement>(GetNode()))
+
+  if (IsA<HTMLNoScriptElement>(node))
     return true;
 
   // This is an obscure corner case: if a node has no LayoutObject, that means
@@ -1747,13 +1970,13 @@ bool AXObject::IsHiddenForTextAlternativeCalculation() const {
   Document* document = GetDocument();
   if (!document || !document->GetFrame())
     return false;
-  if (Node* node = GetNode()) {
-    auto* element = DynamicTo<Element>(node);
-    if (element && node->isConnected()) {
-      const ComputedStyle* style = element->EnsureComputedStyle();
-      return style->Display() == EDisplay::kNone ||
-             style->Visibility() != EVisibility::kVisible;
-    }
+  auto* element = DynamicTo<Element>(node);
+  if (element && node->isConnected()) {
+    const ComputedStyle* style = element->EnsureComputedStyle();
+    if (!style)
+      return false;
+    return style->Display() == EDisplay::kNone ||
+           style->Visibility() != EVisibility::kVisible;
   }
   return false;
 }
@@ -1916,14 +2139,12 @@ void AXObject::ElementsFromAttribute(HeapVector<Member<Element>>& elements,
   if (!element)
     return;
 
-  bool attr_associated_elements_are_null = true;
-  HeapVector<Member<Element>> attr_associated_elements =
-      element->GetElementArrayAttribute(attribute,
-                                        attr_associated_elements_are_null);
-  if (attr_associated_elements_are_null)
+  base::Optional<HeapVector<Member<Element>>> attr_associated_elements =
+      element->GetElementArrayAttribute(attribute);
+  if (!attr_associated_elements)
     return;
 
-  for (const auto& element : attr_associated_elements)
+  for (const auto& element : attr_associated_elements.value())
     elements.push_back(element);
 }
 
@@ -2132,11 +2353,6 @@ bool AXObject::HasGlobalARIAAttribute() const {
       return true;
   }
   return false;
-}
-
-bool AXObject::SupportsRangeValue() const {
-  return IsProgressIndicator() || IsMeter() || IsSlider() || IsScrollbar() ||
-         IsSpinButton() || IsMoveableSplitter();
 }
 
 int AXObject::IndexInParent() const {
@@ -2369,14 +2585,14 @@ AXObject* AXObject::ElementAccessibilityHitTest(const IntPoint& point) const {
   return const_cast<AXObject*>(this);
 }
 
-AXObject::AncestorsIterator AXObject::AncestorsBegin() {
+AXObject::AncestorsIterator AXObject::AncestorsBegin() const {
   AXObject* parent = ParentObjectUnignored();
   if (parent)
     return AXObject::AncestorsIterator(*parent);
   return AncestorsEnd();
 }
 
-AXObject::AncestorsIterator AXObject::AncestorsEnd() {
+AXObject::AncestorsIterator AXObject::AncestorsEnd() const {
   return AXObject::AncestorsIterator();
 }
 
@@ -2680,23 +2896,7 @@ AXObject* AXObject::ParentObjectIncludedInTree() const {
 // Container widgets are those that a user tabs into and arrows around
 // sub-widgets
 bool AXObject::IsContainerWidget() const {
-  switch (RoleValue()) {
-    case ax::mojom::Role::kComboBoxGrouping:
-    case ax::mojom::Role::kComboBoxMenuButton:
-    case ax::mojom::Role::kGrid:
-    case ax::mojom::Role::kListBox:
-    case ax::mojom::Role::kMenuBar:
-    case ax::mojom::Role::kMenu:
-    case ax::mojom::Role::kRadioGroup:
-    case ax::mojom::Role::kSpinButton:
-    case ax::mojom::Role::kTabList:
-    case ax::mojom::Role::kToolbar:
-    case ax::mojom::Role::kTreeGrid:
-    case ax::mojom::Role::kTree:
-      return true;
-    default:
-      return false;
-  }
+  return ui::IsContainerWithSelectableChildren(RoleValue());
 }
 
 AXObject* AXObject::ContainerWidget() const {
@@ -2920,32 +3120,18 @@ void AXObject::SetScrollOffset(const IntPoint& offset) const {
 }
 
 bool AXObject::IsTableLikeRole() const {
-  switch (RoleValue()) {
-    case ax::mojom::Role::kLayoutTable:
-    case ax::mojom::Role::kTable:
-    case ax::mojom::Role::kGrid:
-    case ax::mojom::Role::kTreeGrid:
-      return true;
-    default:
-      return false;
-  }
+  return ui::IsTableLike(RoleValue()) ||
+         RoleValue() == ax::mojom::Role::kLayoutTable;
 }
 
 bool AXObject::IsTableRowLikeRole() const {
-  return RoleValue() == ax::mojom::Role::kRow ||
+  return ui::IsTableRow(RoleValue()) ||
          RoleValue() == ax::mojom::Role::kLayoutTableRow;
 }
 
 bool AXObject::IsTableCellLikeRole() const {
-  switch (RoleValue()) {
-    case ax::mojom::Role::kLayoutTableCell:
-    case ax::mojom::Role::kCell:
-    case ax::mojom::Role::kColumnHeader:
-    case ax::mojom::Role::kRowHeader:
-      return true;
-    default:
-      return false;
-  }
+  return ui::IsCellOrTableHeader(RoleValue()) ||
+         RoleValue() == ax::mojom::Role::kLayoutTableCell;
 }
 
 unsigned AXObject::ColumnCount() const {
@@ -3045,14 +3231,14 @@ int AXObject::AriaRowCount() const {
   if (!HasAOMPropertyOrARIAAttribute(AOMIntProperty::kRowCount, row_count))
     return 0;
 
-  if (row_count > static_cast<int>(RowCount()))
+  if (row_count > int{RowCount()})
     return row_count;
 
   // Spec says that if all of the rows are present in the DOM, it is
   // not necessary to set this attribute as the user agent can
   // automatically calculate the total number of rows.
   // It returns 0 in order not to set this attribute.
-  if (row_count == (int)RowCount() || row_count != -1)
+  if (row_count == int{RowCount()} || row_count != -1)
     return 0;
 
   // In the spec, -1 explicitly means an unknown number of rows.
@@ -3415,18 +3601,21 @@ bool AXObject::InternalSetAccessibilityFocusAction() {
   return false;
 }
 
-bool AXObject::OnNativeScrollToMakeVisibleAction() const {
+LayoutObject* AXObject::GetLayoutObjectForNativeScrollAction() const {
   Node* node = GetNode();
   if (!node || !node->isConnected())
-    return false;
+    return nullptr;
 
   // Node might not have a LayoutObject due to the fact that it is in a locked
   // subtree. Force the update to create the LayoutObject (and update position
   // information) for this node.
-  DisplayLockUtilities::ScopedChainForcedUpdate scoped_force_update(node);
-  GetDocument()->UpdateStyleAndLayout(DocumentUpdateReason::kDisplayLock);
+  GetDocument()->UpdateStyleAndLayoutForNode(
+      node, DocumentUpdateReason::kDisplayLock);
+  return node->GetLayoutObject();
+}
 
-  LayoutObject* layout_object = node->GetLayoutObject();
+bool AXObject::OnNativeScrollToMakeVisibleAction() const {
+  LayoutObject* layout_object = GetLayoutObjectForNativeScrollAction();
   if (!layout_object)
     return false;
   PhysicalRect target_rect(layout_object->AbsoluteBoundingBoxRect());
@@ -3446,10 +3635,10 @@ bool AXObject::OnNativeScrollToMakeVisibleWithSubFocusAction(
     const IntRect& rect,
     blink::mojom::blink::ScrollAlignment horizontal_scroll_alignment,
     blink::mojom::blink::ScrollAlignment vertical_scroll_alignment) const {
-  Node* node = GetNode();
-  LayoutObject* layout_object = node ? node->GetLayoutObject() : nullptr;
-  if (!layout_object || !node->isConnected())
+  LayoutObject* layout_object = GetLayoutObjectForNativeScrollAction();
+  if (!layout_object)
     return false;
+
   PhysicalRect target_rect =
       layout_object->LocalToAbsoluteRect(PhysicalRect(rect));
   layout_object->ScrollRectToVisible(
@@ -3466,10 +3655,10 @@ bool AXObject::OnNativeScrollToMakeVisibleWithSubFocusAction(
 
 bool AXObject::OnNativeScrollToGlobalPointAction(
     const IntPoint& global_point) const {
-  Node* node = GetNode();
-  LayoutObject* layout_object = node ? node->GetLayoutObject() : nullptr;
-  if (!layout_object || !node->isConnected())
+  LayoutObject* layout_object = GetLayoutObjectForNativeScrollAction();
+  if (!layout_object)
     return false;
+
   PhysicalRect target_rect(layout_object->AbsoluteBoundingBoxRect());
   target_rect.Move(-PhysicalOffset(global_point));
   layout_object->ScrollRectToVisible(
@@ -3597,7 +3786,6 @@ bool AXObject::NameFromContents(bool recursive) const {
     case ax::mojom::Role::kCell:
     case ax::mojom::Role::kCheckBox:
     case ax::mojom::Role::kColumnHeader:
-    case ax::mojom::Role::kComboBoxMenuButton:
     case ax::mojom::Role::kDocBackLink:
     case ax::mojom::Role::kDocBiblioRef:
     case ax::mojom::Role::kDocNoteRef:
@@ -3608,7 +3796,6 @@ bool AXObject::NameFromContents(bool recursive) const {
     case ax::mojom::Role::kLineBreak:
     case ax::mojom::Role::kLink:
     case ax::mojom::Role::kListBoxOption:
-    case ax::mojom::Role::kMenuButton:
     case ax::mojom::Role::kMenuItem:
     case ax::mojom::Role::kMenuItemCheckBox:
     case ax::mojom::Role::kMenuItemRadio:
@@ -3640,6 +3827,7 @@ bool AXObject::NameFromContents(bool recursive) const {
     case ax::mojom::Role::kClient:
     case ax::mojom::Role::kColorWell:
     case ax::mojom::Role::kColumn:
+    case ax::mojom::Role::kComboBoxMenuButton:  // Only value from content.
     case ax::mojom::Role::kComboBoxGrouping:
     case ax::mojom::Role::kComment:
     case ax::mojom::Role::kComplementary:
@@ -3698,6 +3886,7 @@ bool AXObject::NameFromContents(bool recursive) const {
     case ax::mojom::Role::kIframePresentational:
     case ax::mojom::Role::kIframe:
     case ax::mojom::Role::kImage:
+    case ax::mojom::Role::kImeCandidate:  // Internal role, not used on the web.
     case ax::mojom::Role::kInputTime:
     case ax::mojom::Role::kKeyboard:
     case ax::mojom::Role::kListBox:
@@ -3709,6 +3898,7 @@ bool AXObject::NameFromContents(bool recursive) const {
     case ax::mojom::Role::kMenuListPopup:
     case ax::mojom::Role::kMenu:
     case ax::mojom::Role::kMenuBar:
+    case ax::mojom::Role::kMenuButton:  // Only value from content, not name.
     case ax::mojom::Role::kMeter:
     case ax::mojom::Role::kNavigation:
     case ax::mojom::Role::kNote:
@@ -3743,6 +3933,7 @@ bool AXObject::NameFromContents(bool recursive) const {
     case ax::mojom::Role::kVideo:
     case ax::mojom::Role::kWebArea:
     case ax::mojom::Role::kWebView:
+    case ax::mojom::Role::kWindow:
       result = false;
       break;
 
@@ -3838,7 +4029,6 @@ bool AXObject::NameFromContents(bool recursive) const {
     }
 
     case ax::mojom::Role::kUnknown:
-    case ax::mojom::Role::kMaxValue:
       LOG(ERROR) << "ax::mojom::Role::kUnknown for " << GetNode();
       NOTREACHED();
       break;
@@ -3848,36 +4038,18 @@ bool AXObject::NameFromContents(bool recursive) const {
 }
 
 bool AXObject::SupportsARIAReadOnly() const {
-  switch (RoleValue()) {
-    case ax::mojom::Role::kCell:
-    case ax::mojom::Role::kCheckBox:
-    case ax::mojom::Role::kColorWell:
-    case ax::mojom::Role::kColumnHeader:
-    case ax::mojom::Role::kComboBoxGrouping:
-    case ax::mojom::Role::kComboBoxMenuButton:
-    case ax::mojom::Role::kDate:
-    case ax::mojom::Role::kDateTime:
-    case ax::mojom::Role::kGrid:
-    case ax::mojom::Role::kInputTime:
-    case ax::mojom::Role::kListBox:
-    case ax::mojom::Role::kMenuButton:
-    case ax::mojom::Role::kMenuItemCheckBox:
-    case ax::mojom::Role::kMenuItemRadio:
-    case ax::mojom::Role::kPopUpButton:
-    case ax::mojom::Role::kRadioGroup:
-    case ax::mojom::Role::kRowHeader:
-    case ax::mojom::Role::kSearchBox:
-    case ax::mojom::Role::kSlider:
-    case ax::mojom::Role::kSpinButton:
-    case ax::mojom::Role::kSwitch:
-    case ax::mojom::Role::kTextField:
-    case ax::mojom::Role::kTextFieldWithComboBox:
-    case ax::mojom::Role::kToggleButton:
-    case ax::mojom::Role::kTreeGrid:
-      return true;
-    default:
-      break;
+  if (ui::IsReadOnlySupported(RoleValue()))
+    return true;
+
+  if (ui::IsCellOrTableHeader(RoleValue())) {
+    // For cells and row/column headers, readonly is supported within a grid.
+    return std::any_of(
+        AncestorsBegin(), AncestorsEnd(), [](const AXObject& ancestor) {
+          return ancestor.RoleValue() == ax::mojom::Role::kGrid ||
+                 ancestor.RoleValue() == ax::mojom::Role::kTreeGrid;
+        });
   }
+
   return false;
 }
 
@@ -3951,11 +4123,37 @@ const AXObject* AXObject::LowestCommonAncestor(const AXObject& first,
   return common_ancestor;
 }
 
-String AXObject::ToString() const {
-  return AXObject::InternalRoleName(RoleValue())
-             .GetString()
-             .EncodeForDebugging() +
-         ": " + ComputedName().EncodeForDebugging();
+String AXObject::ToString(bool verbose) const {
+  // Build a friendly name for debugging the object.
+  // If verbose, build a longer name name in the form of:
+  // CheckBox axid#28 <input.someClass#cbox1> name="checkbox"
+  String string_builder =
+      AXObject::InternalRoleName(RoleValue()).GetString().EncodeForDebugging();
+
+  if (verbose) {
+    string_builder = string_builder + " axid#" + String::Number(AXObjectID());
+    // Add useful HTML element info, like <div.myClass#myId>.
+    if (GetElement()) {
+      string_builder =
+          string_builder + " <" + GetElement()->tagName().LowerASCII();
+      if (GetElement()->FastHasAttribute(html_names::kClassAttr)) {
+        string_builder = string_builder + "." +
+                         GetElement()->FastGetAttribute(html_names::kClassAttr);
+      }
+      if (GetElement()->FastHasAttribute(html_names::kIdAttr)) {
+        string_builder = string_builder + "#" +
+                         GetElement()->FastGetAttribute(html_names::kIdAttr);
+      }
+      string_builder = string_builder + ">";
+    }
+
+    string_builder = string_builder + " name=";
+  } else {
+    string_builder = string_builder + ": ";
+  }
+
+  // Append name last, in case it is long.
+  return string_builder + ComputedName().EncodeForDebugging();
 }
 
 bool operator==(const AXObject& first, const AXObject& second) {
@@ -4009,7 +4207,7 @@ bool operator>=(const AXObject& first, const AXObject& second) {
 }
 
 std::ostream& operator<<(std::ostream& stream, const AXObject& obj) {
-  return stream << obj.ToString().Utf8();
+  return stream << obj.ToString(true).Utf8();
 }
 
 void AXObject::Trace(Visitor* visitor) {

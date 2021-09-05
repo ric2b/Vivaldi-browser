@@ -29,12 +29,10 @@ import org.chromium.chrome.browser.customtabs.CloseButtonVisibilityManager;
 import org.chromium.chrome.browser.customtabs.content.CustomTabActivityTabProvider;
 import org.chromium.chrome.browser.customtabs.content.TabObserverRegistrar;
 import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabToolbarCoordinator;
-import org.chromium.chrome.browser.ssl.ChromeSecurityStateModelDelegate;
-import org.chromium.chrome.browser.ssl.ChromeSecurityStateModelDelegateJni;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabImpl;
 import org.chromium.chrome.browser.webapps.WebDisplayMode;
-import org.chromium.chrome.test.util.browser.webapps.WebApkInfoBuilder;
+import org.chromium.chrome.test.util.browser.webapps.WebApkIntentDataProviderBuilder;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
 import org.chromium.components.security_state.SecurityStateModel;
 import org.chromium.components.security_state.SecurityStateModelJni;
@@ -53,8 +51,6 @@ public class TrustedWebActivityBrowserControlsVisibilityManagerTest {
     @Mock
     public TabImpl mTab;
     @Mock
-    ChromeSecurityStateModelDelegate.Natives mChromeSecurityStateModelDelegateMocks;
-    @Mock
     SecurityStateModel.Natives mSecurityStateMocks;
     @Mock
     public CustomTabToolbarCoordinator mToolbarCoordinator;
@@ -68,8 +64,6 @@ public class TrustedWebActivityBrowserControlsVisibilityManagerTest {
     public void setUp() {
         MockitoAnnotations.initMocks(this);
         SecurityStateModelJni.TEST_HOOKS.setInstanceForTesting(mSecurityStateMocks);
-        ChromeSecurityStateModelDelegateJni.TEST_HOOKS.setInstanceForTesting(
-                mChromeSecurityStateModelDelegateMocks);
         when(mTabProvider.getTab()).thenReturn(mTab);
         when(mTab.getParentId()).thenReturn(Tab.INVALID_TAB_ID);
         setTabSecurityLevel(ConnectionSecurityLevel.NONE);
@@ -82,7 +76,7 @@ public class TrustedWebActivityBrowserControlsVisibilityManagerTest {
     public void testDangerousSecurityLevel() {
         mController = buildController(mock(BrowserServicesIntentDataProvider.class));
         setTabSecurityLevel(ConnectionSecurityLevel.DANGEROUS);
-        mController.updateIsInTwaMode(true);
+        mController.updateIsInAppMode(true);
         assertEquals(BrowserControlsState.SHOWN, getLastBrowserControlsState());
         assertFalse(getLastCloseButtonVisibility());
     }
@@ -93,7 +87,7 @@ public class TrustedWebActivityBrowserControlsVisibilityManagerTest {
     @Test
     public void testMinimalUiDisplayMode() {
         mController = buildController(buildWebApkIntentDataProvider(WebDisplayMode.MINIMAL_UI));
-        mController.updateIsInTwaMode(true);
+        mController.updateIsInAppMode(true);
         assertEquals(BrowserControlsState.BOTH, getLastBrowserControlsState());
         assertFalse(getLastCloseButtonVisibility());
     }
@@ -105,7 +99,7 @@ public class TrustedWebActivityBrowserControlsVisibilityManagerTest {
     @Test
     public void testStandaloneDisplayMode() {
         mController = buildController(buildWebApkIntentDataProvider(WebDisplayMode.STANDALONE));
-        mController.updateIsInTwaMode(true);
+        mController.updateIsInAppMode(true);
         assertEquals(BrowserControlsState.HIDDEN, getLastBrowserControlsState());
     }
 
@@ -116,8 +110,8 @@ public class TrustedWebActivityBrowserControlsVisibilityManagerTest {
     @Test
     public void testStandaloneDisplayModeOutOfScope() {
         mController = buildController(buildWebApkIntentDataProvider(WebDisplayMode.STANDALONE));
-        mController.updateIsInTwaMode(true);
-        mController.updateIsInTwaMode(false);
+        mController.updateIsInAppMode(true);
+        mController.updateIsInAppMode(false);
         assertEquals(BrowserControlsState.BOTH, getLastBrowserControlsState());
         assertTrue(getLastCloseButtonVisibility());
     }
@@ -128,7 +122,7 @@ public class TrustedWebActivityBrowserControlsVisibilityManagerTest {
     @Test
     public void testTwa() {
         mController = buildController(mock(BrowserServicesIntentDataProvider.class));
-        mController.updateIsInTwaMode(true);
+        mController.updateIsInAppMode(true);
         assertEquals(BrowserControlsState.HIDDEN, getLastBrowserControlsState());
     }
 
@@ -138,8 +132,8 @@ public class TrustedWebActivityBrowserControlsVisibilityManagerTest {
     @Test
     public void testTwaOutOfScope() {
         mController = buildController(mock(BrowserServicesIntentDataProvider.class));
-        mController.updateIsInTwaMode(true);
-        mController.updateIsInTwaMode(false);
+        mController.updateIsInAppMode(true);
+        mController.updateIsInAppMode(false);
         assertEquals(BrowserControlsState.BOTH, getLastBrowserControlsState());
         assertTrue(getLastCloseButtonVisibility());
     }
@@ -150,10 +144,11 @@ public class TrustedWebActivityBrowserControlsVisibilityManagerTest {
 
     private BrowserServicesIntentDataProvider buildWebApkIntentDataProvider(
             @WebDisplayMode int displayMode) {
-        WebApkInfoBuilder webApkInfoBuilder =
-                new WebApkInfoBuilder("org.chromium.webapk.abcd", "https://pwa.rocks/");
-        webApkInfoBuilder.setDisplayMode(displayMode);
-        return webApkInfoBuilder.build().getProvider();
+        WebApkIntentDataProviderBuilder intentDataProviderBuilder =
+                new WebApkIntentDataProviderBuilder(
+                        "org.chromium.webapk.abcd", "https://pwa.rocks/");
+        intentDataProviderBuilder.setDisplayMode(displayMode);
+        return intentDataProviderBuilder.build();
     }
 
     private TrustedWebActivityBrowserControlsVisibilityManager buildController(

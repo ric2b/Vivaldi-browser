@@ -442,6 +442,7 @@
     "uppercase",
     "lowercase",
     //none
+    "math-auto",
     //
     // visibility
     //
@@ -623,9 +624,15 @@
     // auto
     // none
 
-    // text-underline-position
+    //
+    // text-decoration-thickness
+    //
     // auto
     "from-font",
+
+    // text-underline-position
+    // auto
+    // "from-font",
     // under
     // left
     // right
@@ -784,6 +791,7 @@
     //
     "document",
     "reset",
+    "-internal-reset-effective",
 
     //
     // user-zoom
@@ -899,6 +907,11 @@
 
     // image-orientation
     "from-image",
+
+    // page-orientation
+    // upright
+    "rotate-left",
+    "rotate-right",
 
     // shape-outside
     "nonzero",
@@ -1087,7 +1100,7 @@
     "rgba",
     "hsl",
     "hsla",
-    "-internal-light-dark-color",
+    "-internal-light-dark",
 
     // transform
     "matrix",
@@ -1221,7 +1234,7 @@
     // none
     "back-button",
 
-    // subtree-visibility
+    // content-visibility
     "hidden-matchable",
 
     // -internal-empty-line-height
@@ -1231,5 +1244,10 @@
     // @supports selector(...)
     // https://drafts.csswg.org/css-conditional-4/#typedef-supports-selector-fn
     "selector",
+
+    // (screen-spanning) media feature
+    // none
+    "single-fold-vertical",
+    "single-fold-horizontal",
   ],
 }

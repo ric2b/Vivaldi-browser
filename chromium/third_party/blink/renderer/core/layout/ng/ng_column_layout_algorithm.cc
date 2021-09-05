@@ -127,12 +127,6 @@ scoped_refptr<const NGLayoutResult> NGColumnLayoutAlgorithm::Layout() {
   is_constrained_by_outer_fragmentation_context_ =
       ConstraintSpace().HasKnownFragmentainerBlockSize();
 
-  if (ConstraintSpace().HasBlockFragmentation()) {
-    container_builder_.SetHasBlockFragmentation();
-    if (ConstraintSpace().IsInitialColumnBalancingPass())
-      container_builder_.SetIsInitialColumnBalancingPass();
-  }
-
   container_builder_.SetIsBlockFragmentationContextRoot();
 
   intrinsic_block_size_ = border_scrollbar_padding_.block_start;
@@ -188,39 +182,37 @@ scoped_refptr<const NGLayoutResult> NGColumnLayoutAlgorithm::Layout() {
   return container_builder_.ToBoxFragment();
 }
 
-base::Optional<MinMaxSizes> NGColumnLayoutAlgorithm::ComputeMinMaxSizes(
+MinMaxSizesResult NGColumnLayoutAlgorithm::ComputeMinMaxSizes(
     const MinMaxSizesInput& input) const {
   // First calculate the min/max sizes of columns.
   NGConstraintSpace space = CreateConstraintSpaceForMinMax();
   NGFragmentGeometry fragment_geometry =
       CalculateInitialMinMaxFragmentGeometry(space, Node());
   NGBlockLayoutAlgorithm algorithm({Node(), fragment_geometry, space});
-  base::Optional<MinMaxSizes> min_max_sizes =
-      algorithm.ComputeMinMaxSizes(input);
-  DCHECK(min_max_sizes.has_value());
-  MinMaxSizes sizes = *min_max_sizes;
+  MinMaxSizesResult result = algorithm.ComputeMinMaxSizes(input);
 
   // If column-width is non-auto, pick the larger of that and intrinsic column
   // width.
   if (!Style().HasAutoColumnWidth()) {
-    sizes.min_size =
-        std::max(sizes.min_size, LayoutUnit(Style().ColumnWidth()));
-    sizes.max_size = std::max(sizes.max_size, sizes.min_size);
+    result.sizes.min_size =
+        std::max(result.sizes.min_size, LayoutUnit(Style().ColumnWidth()));
+    result.sizes.max_size =
+        std::max(result.sizes.max_size, result.sizes.min_size);
   }
 
   // Now convert those column min/max values to multicol container min/max
   // values. We typically have multiple columns and also gaps between them.
   int column_count = Style().ColumnCount();
   DCHECK_GE(column_count, 1);
-  sizes.min_size *= column_count;
-  sizes.max_size *= column_count;
+  result.sizes.min_size *= column_count;
+  result.sizes.max_size *= column_count;
   LayoutUnit column_gap = ResolveUsedColumnGap(LayoutUnit(), Style());
-  sizes += column_gap * (column_count - 1);
+  result.sizes += column_gap * (column_count - 1);
 
   // TODO(mstensho): Need to include spanners.
 
-  sizes += border_scrollbar_padding_.InlineSum();
-  return sizes;
+  result.sizes += border_scrollbar_padding_.InlineSum();
+  return result;
 }
 
 NGBreakStatus NGColumnLayoutAlgorithm::LayoutChildren() {
@@ -512,6 +504,8 @@ scoped_refptr<const NGLayoutResult> NGColumnLayoutAlgorithm::LayoutRow(
 
       if (result->ColumnSpanner())
         break;
+
+      Node().AddColumnResult(result, column_break_token.get());
 
       column_break_token = To<NGBlockBreakToken>(column.BreakToken());
 
@@ -997,8 +991,8 @@ NGConstraintSpace NGColumnLayoutAlgorithm::CreateConstraintSpaceForSpanner(
   space_builder.SetPercentageResolutionSize(content_box_size_);
 
   if (ConstraintSpace().HasBlockFragmentation()) {
-    SetupFragmentation(ConstraintSpace(), spanner, block_offset, &space_builder,
-                       /* is_new_fc */ true);
+    SetupSpaceBuilderForFragmentation(ConstraintSpace(), spanner, block_offset,
+                                      &space_builder, /* is_new_fc */ true);
   }
 
   return space_builder.ToConstraintSpace();

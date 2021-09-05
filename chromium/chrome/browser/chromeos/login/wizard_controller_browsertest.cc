@@ -28,6 +28,7 @@
 #include "chrome/browser/chromeos/login/enrollment/mock_auto_enrollment_check_screen.h"
 #include "chrome/browser/chromeos/login/enrollment/mock_enrollment_screen.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
+#include "chrome/browser/chromeos/login/login_manager_test.h"
 #include "chrome/browser/chromeos/login/login_wizard.h"
 #include "chrome/browser/chromeos/login/oobe_screen.h"
 #include "chrome/browser/chromeos/login/screens/device_disabled_screen.h"
@@ -50,6 +51,8 @@
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/test/device_state_mixin.h"
 #include "chrome/browser/chromeos/login/test/js_checker.h"
+#include "chrome/browser/chromeos/login/test/login_manager_mixin.h"
+#include "chrome/browser/chromeos/login/test/oobe_base_test.h"
 #include "chrome/browser/chromeos/login/test/oobe_configuration_waiter.h"
 #include "chrome/browser/chromeos/login/test/oobe_screen_waiter.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
@@ -63,14 +66,17 @@
 #include "chrome/browser/lifetime/browser_shutdown.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/webui/chromeos/login/error_screen_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
+#include "chrome/browser/ui/webui/chromeos/login/reset_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/update_required_screen_handler.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/test/base/mixin_based_in_process_browser_test.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chromeos/audio/cras_audio_handler.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/constants/dbus_switches.h"
 #include "chromeos/dbus/cryptohome/fake_cryptohome_client.h"
@@ -95,6 +101,7 @@
 #include "components/session_manager/core/session_manager.h"
 #include "components/session_manager/session_manager_types.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "net/test/spawned_test_server/spawned_test_server.h"
@@ -345,29 +352,15 @@ template <typename Mock>
 Mock* MockScreenExpectLifecycle(std::unique_ptr<Mock> mock) {
   auto mock0 = MockScreen(std::move(mock));
   EXPECT_CALL(*mock0, ShowImpl()).Times(0);
-  EXPECT_CALL(*mock0, HideImpl()).Times(0);
   return mock0;
 }
 
 }  // namespace
 
-class WizardControllerTest : public MixinBasedInProcessBrowserTest {
+class WizardControllerTest : public OobeBaseTest {
  protected:
   WizardControllerTest() = default;
   ~WizardControllerTest() override = default;
-
-  // MixinBasedInProcessBrowserTest:
-  void SetUpOnMainThread() override {
-    MixinBasedInProcessBrowserTest::SetUpOnMainThread();
-    AccessibilityManager::Get()->SetProfileForTest(
-        ProfileHelper::GetSigninProfile());
-    ShowLoginWizard(OobeScreen::SCREEN_TEST_NO_WINDOW);
-  }
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    MixinBasedInProcessBrowserTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch(switches::kLoginManager);
-  }
 
   ErrorScreen* GetErrorScreen() { return GetOobeUI()->GetErrorScreen(); }
 
@@ -415,8 +408,12 @@ class WizardControllerTest : public MixinBasedInProcessBrowserTest {
   }
 
   void CheckCurrentScreen(OobeScreenId screen) {
-    EXPECT_EQ(WizardController::default_controller()->GetScreen(screen),
-              WizardController::default_controller()->current_screen());
+    BaseScreen* current_screen =
+        WizardController::default_controller()->current_screen();
+    const std::string actual_screen =
+        current_screen ? current_screen->screen_id().name : "nullptr";
+    const std::string expected_screen = screen.name;
+    EXPECT_EQ(actual_screen, expected_screen);
   }
 
   WrongHWIDScreen* GetWrongHWIDScreen() {
@@ -510,6 +507,7 @@ class WizardControllerFlowTest : public WizardControllerTest {
 
     WizardController* wizard_controller =
         WizardController::default_controller();
+    wizard_controller->SetCurrentScreen(nullptr);
     wizard_controller->SetSharedURLLoaderFactoryForTesting(
         base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
             &test_url_loader_factory_));
@@ -748,7 +746,7 @@ class WizardControllerFlowTest : public WizardControllerTest {
     mock_update_screen_->RunExit(UpdateScreen::Result::UPDATE_NOT_REQUIRED);
 
     CheckCurrentScreen(AutoEnrollmentCheckScreenView::kScreenId);
-    EXPECT_CALL(*mock_auto_enrollment_check_screen_, HideImpl()).Times(0);
+    EXPECT_CALL(*mock_auto_enrollment_check_screen_, HideImpl()).Times(1);
     EXPECT_CALL(*mock_eula_screen_, ShowImpl()).Times(0);
     mock_auto_enrollment_check_screen_->ExitScreen();
 
@@ -852,7 +850,7 @@ IN_PROC_BROWSER_TEST_F(WizardControllerFlowTest,
   mock_update_screen_->RunExit(UpdateScreen::Result::UPDATE_NOT_REQUIRED);
 
   CheckCurrentScreen(AutoEnrollmentCheckScreenView::kScreenId);
-  EXPECT_CALL(*mock_auto_enrollment_check_screen_, HideImpl()).Times(0);
+  EXPECT_CALL(*mock_auto_enrollment_check_screen_, HideImpl()).Times(1);
   EXPECT_CALL(*mock_eula_screen_, ShowImpl()).Times(0);
   mock_auto_enrollment_check_screen_->ExitScreen();
 
@@ -981,14 +979,28 @@ IN_PROC_BROWSER_TEST_F(WizardControllerFlowTest,
                        ControlFlowWrongHWIDScreenFromLogin) {
   CheckCurrentScreen(WelcomeView::kScreenId);
 
+  // Verify and clear all expectations on the mock welcome screen before setting
+  // new ones.
+  testing::Mock::VerifyAndClearExpectations(mock_welcome_screen_);
+
+  EXPECT_CALL(*mock_welcome_screen_, HideImpl()).Times(1);
+  EXPECT_CALL(*mock_welcome_screen_, SetConfiguration(IsNull())).Times(1);
   LoginDisplayHost::default_host()->StartSignInScreen();
   EXPECT_FALSE(ExistingUserController::current_controller() == NULL);
-  ExistingUserController::current_controller()->ShowWrongHWIDScreen();
+
+  EXPECT_CALL(*mock_wrong_hwid_screen_, ShowImpl()).Times(1);
+  WizardController::default_controller()->AdvanceToScreen(
+      WrongHWIDScreenView::kScreenId);
 
   CheckCurrentScreen(WrongHWIDScreenView::kScreenId);
 
+  // Verify and clear all expectations on the mock wrong hid screen before
+  // setting new ones.
+  testing::Mock::VerifyAndClearExpectations(mock_wrong_hwid_screen_);
+
   // After warning is skipped, user returns to sign-in screen.
   // And this destroys WizardController.
+  EXPECT_CALL(*mock_wrong_hwid_screen_, HideImpl()).Times(1);
   GetWrongHWIDScreen()->OnExit();
   EXPECT_FALSE(ExistingUserController::current_controller() == NULL);
 }
@@ -998,17 +1010,18 @@ IN_PROC_BROWSER_TEST_F(WizardControllerFlowTest,
 // after the OOBE is marked complete.
 class WizardControllerUpdateAfterCompletedOobeTest
     : public WizardControllerFlowTest,
-      public testing::WithParamInterface<UpdateScreen::Result> {
+      public testing::WithParamInterface<UpdateScreen::Result>,
+      public LocalStateMixin::Delegate {
  protected:
   WizardControllerUpdateAfterCompletedOobeTest() = default;
 
-  // WizardControllerFlowTest:
-  void SetUpOnMainThread() override {
+  // LocalStateMixin::Delegate:
+  void SetUpLocalState() override {
     StartupUtils::MarkOobeCompleted();  // Pretend OOBE was complete.
-    WizardControllerFlowTest::SetUpOnMainThread();
   }
 
  private:
+  LocalStateMixin local_state_mixin_{&mixin_host_, this};
   DISALLOW_COPY_AND_ASSIGN(WizardControllerUpdateAfterCompletedOobeTest);
 };
 
@@ -1017,6 +1030,11 @@ class WizardControllerUpdateAfterCompletedOobeTest
 IN_PROC_BROWSER_TEST_P(WizardControllerUpdateAfterCompletedOobeTest,
                        ControlFlowErrorUpdate) {
   CheckCurrentScreen(WelcomeView::kScreenId);
+
+  // Verify and clear all expectations on the mock welcome screen before setting
+  // new ones.
+  testing::Mock::VerifyAndClearExpectations(mock_welcome_screen_);
+
   EXPECT_CALL(*mock_update_screen_, ShowImpl()).Times(0);
   EXPECT_CALL(*mock_network_screen_, ShowImpl()).Times(1);
   EXPECT_CALL(*mock_welcome_screen_, HideImpl()).Times(1);
@@ -1024,11 +1042,18 @@ IN_PROC_BROWSER_TEST_P(WizardControllerUpdateAfterCompletedOobeTest,
   mock_welcome_screen_->ExitScreen();
 
   CheckCurrentScreen(NetworkScreenView::kScreenId);
+
+  // Verify and clear all expectations on the mock network screen before setting
+  // new ones.
+  testing::Mock::VerifyAndClearExpectations(mock_network_screen_);
+
   EXPECT_CALL(*mock_eula_screen_, ShowImpl()).Times(1);
   EXPECT_CALL(*mock_network_screen_, HideImpl()).Times(1);
   mock_network_screen_->ExitScreen(NetworkScreen::Result::CONNECTED);
 
   CheckCurrentScreen(EulaView::kScreenId);
+
+  testing::Mock::VerifyAndClearExpectations(mock_eula_screen_);
   EXPECT_CALL(*mock_eula_screen_, HideImpl()).Times(1);
   EXPECT_CALL(*mock_update_screen_, ShowImpl()).Times(1);
   mock_eula_screen_->ExitScreen(
@@ -1038,12 +1063,17 @@ IN_PROC_BROWSER_TEST_P(WizardControllerUpdateAfterCompletedOobeTest,
   content::RunAllPendingInMessageLoop();
 
   CheckCurrentScreen(UpdateView::kScreenId);
+
+  testing::Mock::VerifyAndClearExpectations(mock_update_screen_);
   EXPECT_CALL(*mock_update_screen_, HideImpl()).Times(1);
   EXPECT_CALL(*mock_auto_enrollment_check_screen_, ShowImpl()).Times(1);
   mock_update_screen_->RunExit(GetParam());
 
   CheckCurrentScreen(AutoEnrollmentCheckScreenView::kScreenId);
-  EXPECT_CALL(*mock_auto_enrollment_check_screen_, HideImpl()).Times(0);
+
+  testing::Mock::VerifyAndClearExpectations(mock_auto_enrollment_check_screen_);
+  testing::Mock::VerifyAndClearExpectations(mock_eula_screen_);
+  EXPECT_CALL(*mock_auto_enrollment_check_screen_, HideImpl()).Times(1);
   EXPECT_CALL(*mock_eula_screen_, ShowImpl()).Times(0);
   mock_auto_enrollment_check_screen_->ExitScreen();
 
@@ -1254,12 +1284,7 @@ class WizardControllerDeviceStateExplicitRequirementTest
     : public WizardControllerDeviceStateTest,
       public testing::WithParamInterface<bool /* fre_explicitly_required */> {
  protected:
-  WizardControllerDeviceStateExplicitRequirementTest() {}
-
-  // WizardControllerDeviceStateTest:
-  void SetUpOnMainThread() override {
-    WizardControllerDeviceStateTest::SetUpOnMainThread();
-
+  WizardControllerDeviceStateExplicitRequirementTest() {
     if (IsFREExplicitlyRequired()) {
       fake_statistics_provider_.SetMachineStatistic(
           chromeos::system::kCheckEnrollmentKey, "1");
@@ -1461,12 +1486,6 @@ IN_PROC_BROWSER_TEST_P(WizardControllerDeviceStateExplicitRequirementTest,
     EXPECT_EQ(0, FakeSessionManagerClient::Get()
                      ->clear_forced_re_enrollment_vpd_call_count());
   } else {
-    // Don't expect that the auto enrollment screen will be hidden, because
-    // OOBE is exited from the auto enrollment screen. Instead only expect
-    // that the sign-in screen is reached.
-    content::WindowedNotificationObserver login_screen_waiter(
-        chrome::NOTIFICATION_LOGIN_OR_LOCK_WEBUI_VISIBLE,
-        content::NotificationService::AllSources());
 
     // Make AutoEnrollmentClient notify the controller that a server error
     // occurred.
@@ -1475,7 +1494,10 @@ IN_PROC_BROWSER_TEST_P(WizardControllerDeviceStateExplicitRequirementTest,
     base::RunLoop().RunUntilIdle();
 
     EXPECT_TRUE(StartupUtils::IsOobeCompleted());
-    login_screen_waiter.Wait();
+    // Don't expect that the auto enrollment screen will be hidden, because
+    // OOBE is exited from the auto enrollment screen. Instead only expect
+    // that the sign-in screen is reached.
+    OobeScreenWaiter(GaiaView::kScreenId).Wait();
     EXPECT_EQ(
         0, FakeCryptohomeClient::Get()
                ->remove_firmware_management_parameters_from_tpm_call_count());
@@ -1959,27 +1981,122 @@ IN_PROC_BROWSER_TEST_F(WizardControllerDeviceStateWithInitialEnrollmentTest,
             auto_enrollment_controller()->state());
 }
 
+class WizardControllerScreenPriorityOOBETest : public OobeBaseTest {
+ protected:
+  WizardControllerScreenPriorityOOBETest() {
+    feature_list_.InitAndEnableFeature(
+        chromeos::features::kOobeScreensPriority);
+  }
+  ~WizardControllerScreenPriorityOOBETest() override = default;
+
+  void CheckCurrentScreen(OobeScreenId screen) {
+    EXPECT_EQ(WizardController::default_controller()->GetScreen(screen),
+              WizardController::default_controller()->current_screen());
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(WizardControllerScreenPriorityOOBETest,
+                       DefaultPriorityTest) {
+  ASSERT_TRUE(WizardController::default_controller() != nullptr);
+  CheckCurrentScreen(WelcomeView::kScreenId);
+
+  // Showing network screen should pass it has default priority which is same as
+  // welcome screen.
+  WizardController::default_controller()->AdvanceToScreen(
+      NetworkScreenView::kScreenId);
+  CheckCurrentScreen(NetworkScreenView::kScreenId);
+
+  // Showing eula screen should pass it has default priority which is same as
+  // network screen.
+  WizardController::default_controller()->AdvanceToScreen(EulaView::kScreenId);
+  CheckCurrentScreen(EulaView::kScreenId);
+
+  // Showing update screen should pass it has default priority which is same as
+  // eula screen.
+  WizardController::default_controller()->AdvanceToScreen(
+      UpdateView::kScreenId);
+  CheckCurrentScreen(UpdateView::kScreenId);
+}
+
+class WizardControllerScreenPriorityTest : public LoginManagerTest,
+                                           public LocalStateMixin::Delegate {
+ protected:
+  WizardControllerScreenPriorityTest() {
+    login_manager_mixin_.AppendRegularUsers(1);
+    feature_list_.InitAndEnableFeature(
+        chromeos::features::kOobeScreensPriority);
+  }
+  ~WizardControllerScreenPriorityTest() override = default;
+
+  void CheckCurrentScreen(OobeScreenId screen) {
+    EXPECT_EQ(WizardController::default_controller()->GetScreen(screen),
+              WizardController::default_controller()->current_screen());
+  }
+
+  // LocalStateMixin::Delegate:
+  void SetUpLocalState() override {
+    // Set pref to show reset screen on startup.
+    g_browser_process->local_state()->SetBoolean(prefs::kFactoryResetRequested,
+                                                 true);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+  LoginManagerMixin login_manager_mixin_{&mixin_host_};
+  LocalStateMixin local_state_mixin_{&mixin_host_, this};
+};
+
+IN_PROC_BROWSER_TEST_F(WizardControllerScreenPriorityTest, CanNavigateToTest) {
+  WizardController* const wizard_controller =
+      WizardController::default_controller();
+  ASSERT_TRUE(wizard_controller != nullptr);
+  EXPECT_EQ(1, ash::LoginScreenTestApi::GetUsersCount());
+
+  // Check reset screen is visible on startup.
+  OobeScreenWaiter(ResetView::kScreenId).Wait();
+  EXPECT_TRUE(ash::LoginScreenTestApi::IsOobeDialogVisible());
+
+  // Showing update required screen should fail due to lower priority than reset
+  // screen.
+  LoginDisplayHost::default_host()->StartWizard(UpdateRequiredView::kScreenId);
+  CheckCurrentScreen(ResetView::kScreenId);
+  // Wizard controller should not be recreated.
+  EXPECT_EQ(wizard_controller, WizardController::default_controller());
+
+  // Showing device disabled screen is allowed due to higher priority than reset
+  // screen.
+  LoginDisplayHost::default_host()->StartWizard(
+      DeviceDisabledScreenView::kScreenId);
+  CheckCurrentScreen(DeviceDisabledScreenView::kScreenId);
+  // Wizard controller should not be recreated.
+  EXPECT_EQ(wizard_controller, WizardController::default_controller());
+
+  // Showing update required screen should fail due to lower priority than
+  // device disabled screen.
+  LoginDisplayHost::default_host()->StartWizard(UpdateRequiredView::kScreenId);
+  CheckCurrentScreen(DeviceDisabledScreenView::kScreenId);
+  EXPECT_EQ(wizard_controller, WizardController::default_controller());
+}
+
 class WizardControllerBrokenLocalStateTest : public WizardControllerTest {
  protected:
   WizardControllerBrokenLocalStateTest() = default;
   ~WizardControllerBrokenLocalStateTest() override = default;
 
   // WizardControllerTest:
-  void SetUpOnMainThread() override {
+  void SetUpInProcessBrowserTestFixture() override {
+    WizardControllerTest::SetUpInProcessBrowserTestFixture();
     PrefServiceFactory factory;
     factory.set_user_prefs(base::MakeRefCounted<PrefStoreStub>());
     local_state_ = factory.Create(new PrefRegistrySimple());
     WizardController::set_local_state_for_testing(local_state_.get());
-
-    WizardControllerTest::SetUpOnMainThread();
-
-    // Make sure that OOBE is run as an "official" build.
-    branded_build_override_ = WizardController::ForceBrandedBuildForTesting();
   }
 
  private:
   std::unique_ptr<PrefService> local_state_;
-  std::unique_ptr<base::AutoReset<bool>> branded_build_override_;
 
   DISALLOW_COPY_AND_ASSIGN(WizardControllerBrokenLocalStateTest);
 };
@@ -2056,7 +2173,7 @@ class WizardControllerKioskFlowTest : public WizardControllerFlowTest {
  protected:
   WizardControllerKioskFlowTest() {}
 
-  // MixinBasedInProcessBrowserTest:
+  // WizardControllerFlowTest:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     WizardControllerFlowTest::SetUpCommandLine(command_line);
     base::FilePath test_data_dir;
@@ -2718,6 +2835,7 @@ class WizardControllerOobeResumeTest : public WizardControllerTest {
 
     WizardController* wizard_controller =
         WizardController::default_controller();
+    wizard_controller->SetCurrentScreen(nullptr);
 
     // Clear portal list (as it is by default in OOBE).
     NetworkHandler::Get()->network_state_handler()->SetCheckPortalList("");

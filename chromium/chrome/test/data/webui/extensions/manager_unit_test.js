@@ -42,7 +42,7 @@ suite(extension_manager_unit_tests.suiteName, function() {
   const testActivities = {activities: []};
 
   setup(function() {
-    PolymerTest.clearBody();
+    document.body.innerHTML = '';
 
     service = new TestService();
     Service.instance_ = service;
@@ -132,7 +132,7 @@ suite(extension_manager_unit_tests.suiteName, function() {
     expectEquals(description, detailsView.data.description);
     expectEquals(
         description,
-        detailsView.$$('.cr-section .section-content').textContent.trim());
+        detailsView.$$('.section .section-content').textContent.trim());
   });
 
   test(
@@ -170,7 +170,7 @@ suite(extension_manager_unit_tests.suiteName, function() {
         expectEquals(newDescription, detailsView.data.description);
         expectEquals(
             newDescription,
-            detailsView.$$('.cr-section .section-content').textContent.trim());
+            detailsView.$$('.section .section-content').textContent.trim());
       });
 
   test(

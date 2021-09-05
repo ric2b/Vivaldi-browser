@@ -21,6 +21,7 @@
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/password_form.h"
+#include "components/autofill/core/common/renderer_id.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -67,7 +68,7 @@ struct FieldDataDescription {
   bool is_enabled = true;
   bool is_readonly = false;
   autofill::FieldPropertiesMask properties_mask =
-      FieldPropertiesFlags::NO_FLAGS;
+      FieldPropertiesFlags::kNoFlags;
   const char* autocomplete_attribute = nullptr;
   const char* value = kNonimportantValue;
   const char* typed_value = nullptr;
@@ -104,57 +105,54 @@ struct FormParsingTestCase {
 
 // Returns numbers which are distinct from each other within the scope of one
 // test.
-uint32_t GetUniqueId() {
+autofill::FieldRendererId GetUniqueId() {
   static uint32_t counter = 10;
-  return counter++;
+  return autofill::FieldRendererId(counter++);
 }
 
 // Use to add a number suffix which is unique in the scope of the test.
 base::string16 StampUniqueSuffix(const char* base_str) {
   return ASCIIToUTF16(base_str) + ASCIIToUTF16("_") +
-         base::NumberToString16(GetUniqueId());
+         base::NumberToString16(GetUniqueId().value());
 }
 
 // Describes which renderer IDs are expected for username/password fields
 // identified in a PasswordForm.
 struct ParseResultIds {
-  uint32_t username_id = FormData::kNotSetRendererId;
-  uint32_t password_id = FormData::kNotSetRendererId;
-  uint32_t new_password_id = FormData::kNotSetRendererId;
-  uint32_t confirmation_password_id = FormData::kNotSetRendererId;
+  autofill::FieldRendererId username_id;
+  autofill::FieldRendererId password_id;
+  autofill::FieldRendererId new_password_id;
+  autofill::FieldRendererId confirmation_password_id;
 
   bool IsEmpty() const {
-    return username_id == FormData::kNotSetRendererId &&
-           password_id == FormData::kNotSetRendererId &&
-           new_password_id == FormData::kNotSetRendererId &&
-           confirmation_password_id == FormData::kNotSetRendererId;
+    return username_id.is_null() && password_id.is_null() &&
+           new_password_id.is_null() && confirmation_password_id.is_null();
   }
 };
 
 // Updates |result| by putting |id| in the appropriate |result|'s field based
 // on |role|.
 void UpdateResultWithIdByRole(ParseResultIds* result,
-                              uint32_t id,
+                              autofill::FieldRendererId id,
                               ElementRole role) {
-  constexpr uint32_t kUnassigned = FormData::kNotSetRendererId;
   switch (role) {
     case ElementRole::NONE:
       // Nothing to update.
       break;
     case ElementRole::USERNAME:
-      DCHECK_EQ(kUnassigned, result->username_id);
+      DCHECK(result->username_id.is_null());
       result->username_id = id;
       break;
     case ElementRole::CURRENT_PASSWORD:
-      DCHECK_EQ(kUnassigned, result->password_id);
+      DCHECK(result->password_id.is_null());
       result->password_id = id;
       break;
     case ElementRole::NEW_PASSWORD:
-      DCHECK_EQ(kUnassigned, result->new_password_id);
+      DCHECK(result->new_password_id.is_null());
       result->new_password_id = id;
       break;
     case ElementRole::CONFIRMATION_PASSWORD:
-      DCHECK_EQ(kUnassigned, result->confirmation_password_id);
+      DCHECK(result->confirmation_password_id.is_null());
       result->confirmation_password_id = id;
       break;
   }
@@ -174,7 +172,7 @@ FormData GetFormDataAndExpectation(const FormParsingTestCase& test_case,
   form_data.submission_event = test_case.submission_event;
   for (const FieldDataDescription& field_description : test_case.fields) {
     FormFieldData field;
-    const uint32_t renderer_id = GetUniqueId();
+    const autofill::FieldRendererId renderer_id = GetUniqueId();
     field.unique_renderer_id = renderer_id;
     field.id_attribute = StampUniqueSuffix("html_id");
     if (field_description.name == kNonimportantValue) {
@@ -229,30 +227,29 @@ FormData GetFormDataAndExpectation(const FormParsingTestCase& test_case,
   // Fill unused ranks in predictions with fresh IDs to check that those are
   // correctly ignored. In real situation, this might correspond, e.g., to
   // fields which were not fillable and hence dropped from the selection.
-  for (uint32_t& id : form_data.username_predictions) {
-    if (id == 0)
+  for (autofill::FieldRendererId& id : form_data.username_predictions) {
+    if (id.is_null())
       id = GetUniqueId();
   }
   return form_data;
 }
 
 // Check that |fields| has a field with unique renderer ID |renderer_id| which
-// has the name |element_name| and value |*element_value|. If |renderer_id| is
-// FormData::kNotSetRendererId, then instead check that
-// |element_name| and |*element_value| are empty. Set |element_kind| to identify
-// the type of the field in logging: 'username', 'password', etc. The argument
-// |element_value| can be null, in which case all checks involving it are
-// skipped (useful for the confirmation password value, which is not represented
-// in PasswordForm).
+// has the name |element_name| and value |*element_value|. If
+// |renderer_id|.is_null(), then instead check that |element_name| and
+// |*element_value| are empty. Set |element_kind| to identify the type of the
+// field in logging: 'username', 'password', etc. The argument |element_value|
+// can be null, in which case all checks involving it are skipped (useful for
+// the confirmation password value, which is not represented in PasswordForm).
 void CheckField(const std::vector<FormFieldData>& fields,
-                uint32_t renderer_id,
+                autofill::FieldRendererId renderer_id,
                 const base::string16& element_name,
                 const base::string16* element_value,
                 const char* element_kind) {
   SCOPED_TRACE(testing::Message("Looking for element of kind ")
                << element_kind);
 
-  if (renderer_id == FormData::kNotSetRendererId) {
+  if (renderer_id.is_null()) {
     EXPECT_EQ(base::string16(), element_name);
     if (element_value)
       EXPECT_EQ(base::string16(), *element_value);
@@ -289,7 +286,7 @@ testing::Message DescribeFormData(const FormData& form_data) {
   for (const FormFieldData& field : form_data.fields) {
     result << "type=" << field.form_control_type << ", name=" << field.name
            << ", value=" << field.value
-           << ", unique id=" << field.unique_renderer_id << "\n";
+           << ", unique id=" << field.unique_renderer_id.value() << "\n";
   }
   return result;
 }
@@ -1112,11 +1109,11 @@ TEST(FormParserTest, ReadonlyFields) {
                   {.role = ElementRole::CURRENT_PASSWORD,
                    .is_readonly = true,
                    .properties_mask =
-                       FieldPropertiesFlags::AUTOFILLED_ON_PAGELOAD,
+                       FieldPropertiesFlags::kAutofilledOnPageLoad,
                    .form_control_type = "password"},
                   {.role = ElementRole::NEW_PASSWORD,
                    .is_readonly = true,
-                   .properties_mask = FieldPropertiesFlags::USER_TYPED,
+                   .properties_mask = FieldPropertiesFlags::kUserTyped,
                    .form_control_type = "password"},
                   {.is_readonly = true, .form_control_type = "password"},
               },
@@ -1133,11 +1130,11 @@ TEST(FormParserTest, ReadonlyFields) {
                   {.role = ElementRole::CURRENT_PASSWORD,
                    .is_readonly = true,
                    .properties_mask =
-                       FieldPropertiesFlags::AUTOFILLED_ON_USER_TRIGGER,
+                       FieldPropertiesFlags::kAutofilledOnUserTrigger,
                    .form_control_type = "password"},
                   {.role = ElementRole::NEW_PASSWORD,
                    .is_readonly = true,
-                   .properties_mask = FieldPropertiesFlags::USER_TYPED,
+                   .properties_mask = FieldPropertiesFlags::kUserTyped,
                    .form_control_type = "password"},
                   {.is_readonly = true, .form_control_type = "password"},
               },
@@ -1381,17 +1378,17 @@ TEST(FormParserTest, Interactability) {
               {
                   {.role = ElementRole::USERNAME,
                    .is_focusable = false,
-                   .properties_mask = FieldPropertiesFlags::USER_TYPED,
+                   .properties_mask = FieldPropertiesFlags::kUserTyped,
                    .form_control_type = "text"},
                   {.is_focusable = true, .form_control_type = "text"},
                   {.is_focusable = false, .form_control_type = "password"},
                   {.role = ElementRole::CURRENT_PASSWORD,
                    .is_focusable = true,
-                   .properties_mask = FieldPropertiesFlags::AUTOFILLED,
+                   .properties_mask = FieldPropertiesFlags::kAutofilled,
                    .form_control_type = "password"},
                   {.role = ElementRole::NEW_PASSWORD,
                    .is_focusable = true,
-                   .properties_mask = FieldPropertiesFlags::USER_TYPED,
+                   .properties_mask = FieldPropertiesFlags::kUserTyped,
                    .form_control_type = "password"},
               },
           .number_of_all_possible_passwords = 3,
@@ -1409,11 +1406,11 @@ TEST(FormParserTest, Interactability) {
               {
                   {.role = ElementRole::USERNAME,
                    .is_focusable = false,
-                   .properties_mask = FieldPropertiesFlags::AUTOFILLED,
+                   .properties_mask = FieldPropertiesFlags::kAutofilled,
                    .form_control_type = "text"},
                   {.role = ElementRole::CURRENT_PASSWORD,
                    .is_focusable = true,
-                   .properties_mask = FieldPropertiesFlags::AUTOFILLED,
+                   .properties_mask = FieldPropertiesFlags::kAutofilled,
                    .form_control_type = "password"},
                   {.is_focusable = true,
                    .value = "",
@@ -1974,7 +1971,7 @@ TEST(FormParserTest, ReadonlyStatus) {
                    // autofilled before.
                    .is_readonly = true,
                    .properties_mask =
-                       FieldPropertiesFlags::AUTOFILLED_ON_PAGELOAD,
+                       FieldPropertiesFlags::kAutofilledOnPageLoad,
                    .form_control_type = "password"},
                   {.role_filling = ElementRole::NEW_PASSWORD,
                    .role_saving = ElementRole::NEW_PASSWORD,
@@ -2200,7 +2197,7 @@ TEST(FormParserTest, MultipleUsernames) {
               {
                   {.role = ElementRole::USERNAME,
                    .properties_mask =
-                       FieldPropertiesFlags::AUTOFILLED_ON_PAGELOAD,
+                       FieldPropertiesFlags::kAutofilledOnPageLoad,
                    .form_control_type = "text",
                    .prediction = {.type = autofill::USERNAME}},
                   {.form_control_type = "text",
@@ -2415,29 +2412,54 @@ TEST(FormParserTest, GetSignonRealm) {
 }
 
 TEST(FormParserTest, TypedValues) {
-  CheckTestData({{
-      .description_for_logging = "Simple sign-in forms with typed values",
-      // Tests that typed values are taken as username, password and
-      // new password instead of values that are set by JavaScript.
-      .fields =
-          {
-              {.role = ElementRole::USERNAME,
-               .autocomplete_attribute = "username",
-               .value = "js_username",
-               .typed_value = "typed_username",
-               .form_control_type = "text"},
-              {.role = ElementRole::CURRENT_PASSWORD,
-               .autocomplete_attribute = "current-password",
-               .value = "js_password",
-               .typed_value = "typed_password",
-               .form_control_type = "password"},
-              {.role = ElementRole::NEW_PASSWORD,
-               .autocomplete_attribute = "new-password",
-               .value = "js_new_password",
-               .typed_value = "typed_new_password",
-               .form_control_type = "password"},
-          },
-  }});
+  CheckTestData({
+      {
+          .description_for_logging = "Form with changed by JavaScript values",
+          // Tests that typed values are taken as username, password and
+          // new password instead of values that are set by JavaScript.
+          .fields =
+              {
+                  {.role = ElementRole::USERNAME,
+                   .autocomplete_attribute = "username",
+                   .value = "js_username",
+                   .typed_value = "typed_username",
+                   .form_control_type = "text"},
+                  {.role = ElementRole::CURRENT_PASSWORD,
+                   .autocomplete_attribute = "current-password",
+                   .value = "js_password",
+                   .typed_value = "typed_password",
+                   .form_control_type = "password"},
+                  {.role = ElementRole::NEW_PASSWORD,
+                   .autocomplete_attribute = "new-password",
+                   .value = "js_new_password",
+                   .typed_value = "typed_new_password",
+                   .form_control_type = "password"},
+              },
+      },
+      {
+          .description_for_logging = "Form with cleared by JavaScript values",
+          // Tests that typed values are taken as username, password and
+          // new password instead of values that are cleared by JavaScript.
+          .fields =
+              {
+                  {.role = ElementRole::USERNAME,
+                   .autocomplete_attribute = "username",
+                   .value = "",
+                   .typed_value = "typed_username",
+                   .form_control_type = "text"},
+                  {.role = ElementRole::CURRENT_PASSWORD,
+                   .autocomplete_attribute = "current-password",
+                   .value = "",
+                   .typed_value = "typed_password",
+                   .form_control_type = "password"},
+                  {.role = ElementRole::NEW_PASSWORD,
+                   .autocomplete_attribute = "new-password",
+                   .value = "",
+                   .typed_value = "typed_new_password",
+                   .form_control_type = "password"},
+              },
+      },
+  });
 }
 
 TEST(FormParserTest, ContradictingPasswordPredictionAndAutocomplete) {
@@ -2483,6 +2505,26 @@ TEST(FormParserTest, SingleUsernamePrediction) {
               },
       },
   });
+}
+
+// Invalid form URLs should cause the parser to fail.
+TEST(FormParserTest, InvalidURL) {
+  FormParsingTestCase form_desc = {
+      .fields =
+          {
+              {.form_control_type = "text"},
+              {.form_control_type = "password"},
+          },
+  };
+  FormPredictions no_predictions;
+  ParseResultIds dummy;
+  FormData form_data =
+      GetFormDataAndExpectation(form_desc, &no_predictions, &dummy, &dummy);
+  // URL comes from https://crbug.com/1075515.
+  form_data.url = GURL("FilEsysteM:htTp:E=/.");
+  FormDataParser parser;
+  EXPECT_FALSE(parser.Parse(form_data, FormDataParser::Mode::kFilling));
+  EXPECT_FALSE(parser.Parse(form_data, FormDataParser::Mode::kSaving));
 }
 
 }  // namespace

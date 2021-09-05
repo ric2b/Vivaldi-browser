@@ -37,11 +37,11 @@ constexpr char kComponentsRootPath[] = "cros-components";
 const ComponentConfig kConfigs[] = {
     {"epson-inkjet-printer-escpr", "5.0",
      "1913a5e0a6cad30b6f03e176177e0d7ed62c5d6700a9c66da556d7c3f5d6a47e"},
-    {"cros-termina", "830.1",
+    {"cros-termina", "840.1",
      "e9d960f84f628e1f42d05de4046bb5b3154b6f1f65c08412c6af57a29aecaffb"},
-    {"rtanalytics-light", "17.0",
+    {"rtanalytics-light", "84.0",
      "69f09d33c439c2ab55bbbe24b47ab55cb3f6c0bd1f1ef46eefea3216ec925038"},
-    {"rtanalytics-full", "17.0",
+    {"rtanalytics-full", "84.0",
      "c93c3e1013c52100a20038b405ac854d69fa889f6dc4fa6f188267051e05e444"},
     {"star-cups-driver", "1.1",
      "6d24de30f671da5aee6d463d9e446cafe9ddac672800a9defe86877dcde6c466"},
@@ -49,6 +49,8 @@ const ComponentConfig kConfigs[] = {
      "5714811c04f0a63aac96b39096faa759ace4c04e9b68291e7c9716128f5a2722"},
     {"demo-mode-resources", "1.0",
      "93c093ebac788581389015e9c59c5af111d2fa5174d206eb795042e6376cbd10"},
+    {"lacros-fishfood", "",
+     "7a85ffb4b316a3b89135a3f43660ef3049950a61a2f8df4237e1ec213852b848"},
 };
 
 const ComponentConfig* FindConfig(const std::string& name) {
@@ -148,12 +150,14 @@ void CrOSComponentInstallerPolicy::ComponentReady(
     const base::Version& version,
     const base::FilePath& path,
     std::unique_ptr<base::DictionaryValue> manifest) {
-  std::string min_env_version;
-  if (!manifest || !manifest->GetString("min_env_version", &min_env_version))
-    return;
+  if (env_version_.size()) {
+    std::string min_env_version;
+    if (!manifest || !manifest->GetString("min_env_version", &min_env_version))
+      return;
 
-  if (!IsCompatible(env_version_, min_env_version))
-    return;
+    if (!IsCompatible(env_version_, min_env_version))
+      return;
+  }
 
   cros_component_installer_->RegisterCompatiblePath(GetName(), path);
 }
@@ -270,7 +274,7 @@ void CrOSComponentInstaller::EmitInstalledSignal(const std::string& component) {
     delegate_->EmitInstalledSignal(component);
 }
 
-bool CrOSComponentInstaller::IsRegistered(const std::string& name) const {
+bool CrOSComponentInstaller::IsRegisteredMayBlock(const std::string& name) {
   base::FilePath root;
   if (!base::PathService::Get(DIR_COMPONENT_USER, &root))
     return false;

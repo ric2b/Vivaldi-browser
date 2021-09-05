@@ -18,7 +18,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -158,7 +157,6 @@ std::string getCurrentAbi() {
 #endif
 }
 
-// Populates the webapk::Image::image_data field of |image| with |icon|.
 void SetImageData(webapk::Image* image, const SkBitmap& icon) {
   std::vector<unsigned char> png_bytes;
   gfx::PNGCodec::EncodeBGRASkBitmap(icon, false, &png_bytes);
@@ -538,6 +536,11 @@ void WebApkInstaller::InstallAsync(const ShortcutInfo& shortcut_info,
   finish_callback_ = std::move(finish_callback);
   task_type_ = INSTALL;
 
+  if (!server_url_.is_valid()) {
+    OnResult(WebApkInstallResult::FAILURE);
+    return;
+  }
+
   CheckFreeSpace();
 }
 
@@ -551,9 +554,6 @@ void WebApkInstaller::OnGotSpaceStatus(
     const base::android::JavaParamRef<jobject>& obj,
     jint status) {
   SpaceStatus space_status = static_cast<SpaceStatus>(status);
-  UMA_HISTOGRAM_ENUMERATION("WebApk.Install.SpaceStatus", status,
-                            static_cast<int>(SpaceStatus::COUNT));
-
   if (space_status == SpaceStatus::NOT_ENOUGH_SPACE) {
     OnResult(WebApkInstallResult::FAILURE);
     return;
@@ -573,6 +573,11 @@ void WebApkInstaller::UpdateAsync(const base::FilePath& update_request_path,
                                   FinishCallback finish_callback) {
   finish_callback_ = std::move(finish_callback);
   task_type_ = UPDATE;
+
+  if (!server_url_.is_valid()) {
+    OnResult(WebApkInstallResult::FAILURE);
+    return;
+  }
 
   base::PostTaskAndReplyWithResult(
       GetBackgroundTaskRunner().get(), FROM_HERE,
@@ -692,10 +697,12 @@ void WebApkInstaller::OnGotIconMurmur2Hashes(
 
 void WebApkInstaller::SendRequest(
     std::unique_ptr<std::string> serialized_proto) {
+  DCHECK(server_url_.is_valid());
+
   timer_.Start(
       FROM_HERE, base::TimeDelta::FromMilliseconds(webapk_server_timeout_ms_),
-      base::Bind(&WebApkInstaller::OnResult, weak_ptr_factory_.GetWeakPtr(),
-                 WebApkInstallResult::FAILURE));
+      base::BindOnce(&WebApkInstaller::OnResult, weak_ptr_factory_.GetWeakPtr(),
+                     WebApkInstallResult::FAILURE));
 
   auto request = std::make_unique<network::ResourceRequest>();
   request->url = server_url_;

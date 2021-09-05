@@ -21,8 +21,9 @@
 #import "ios/chrome/browser/store_kit/store_kit_coordinator.h"
 #import "ios/chrome/browser/store_kit/store_kit_tab_helper.h"
 #import "ios/chrome/browser/tabs/tab_title_util.h"
+#import "ios/chrome/browser/ui/activity_services/activity_service_coordinator.h"
+#import "ios/chrome/browser/ui/activity_services/requirements/activity_service_presentation.h"
 #import "ios/chrome/browser/ui/alert_coordinator/repost_form_coordinator.h"
-#import "ios/chrome/browser/ui/app_launcher/app_launcher_coordinator.h"
 #import "ios/chrome/browser/ui/autofill/form_input_accessory/form_input_accessory_coordinator.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_all_password_coordinator.h"
 #import "ios/chrome/browser/ui/autofill/manual_fill/manual_fill_injection_handler.h"
@@ -31,6 +32,7 @@
 #import "ios/chrome/browser/ui/browser_view/browser_view_controller+private.h"
 #import "ios/chrome/browser/ui/browser_view/browser_view_controller.h"
 #import "ios/chrome/browser/ui/browser_view/browser_view_controller_dependency_factory.h"
+#import "ios/chrome/browser/ui/commands/activity_service_commands.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_coordinator_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
@@ -53,6 +55,7 @@
 #import "ios/chrome/browser/ui/page_info/page_info_legacy_coordinator.h"
 #import "ios/chrome/browser/ui/passwords/password_breach_coordinator.h"
 #import "ios/chrome/browser/ui/print/print_controller.h"
+#import "ios/chrome/browser/ui/qr_generator/qr_generator_coordinator.h"
 #import "ios/chrome/browser/ui/qr_scanner/qr_scanner_legacy_coordinator.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_coordinator.h"
 #import "ios/chrome/browser/ui/recent_tabs/recent_tabs_coordinator.h"
@@ -62,6 +65,7 @@
 #import "ios/chrome/browser/ui/toolbar/accessory/toolbar_accessory_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/toolbar/accessory/toolbar_accessory_presenter.h"
 #import "ios/chrome/browser/ui/translate/legacy_translate_infobar_coordinator.h"
+#include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/url_loading/url_loading_browser_agent.h"
 #import "ios/chrome/browser/url_loading/url_loading_params.h"
 #import "ios/chrome/browser/web/features.h"
@@ -78,7 +82,9 @@
 #error "This file requires ARC support."
 #endif
 
-@interface BrowserCoordinator () <AutofillSecurityAlertPresenter,
+@interface BrowserCoordinator () <ActivityServiceCommands,
+                                  ActivityServicePresentation,
+                                  AutofillSecurityAlertPresenter,
                                   BrowserCoordinatorCommands,
                                   FormInputAccessoryCoordinatorNavigator,
                                   PageInfoCommands,
@@ -105,11 +111,12 @@
 // Child Coordinators, listed in alphabetical order.
 // =================================================
 
-// Coordinator for UI related to launching external apps.
-@property(nonatomic, strong) AppLauncherCoordinator* appLauncherCoordinator;
-
 // Presents a QLPreviewController in order to display USDZ format 3D models.
 @property(nonatomic, strong) ARQuickLookCoordinator* ARQuickLookCoordinator;
+
+// Coordinator for the activity view.
+@property(nonatomic, strong)
+    ActivityServiceCoordinator* activityServiceCoordinator;
 
 // Coordinator to add new credit card.
 @property(nonatomic, strong)
@@ -151,6 +158,9 @@
 // Used to display the Print UI. Nil if not visible.
 // TODO(crbug.com/910017): Convert to coordinator.
 @property(nonatomic, strong) PrintController* printController;
+
+// Coordinator for the QR generator UI.
+@property(nonatomic, strong) QRGeneratorCoordinator* qrGeneratorCoordinator;
 
 // Coordinator for the QR scanner.
 @property(nonatomic, strong) QRScannerLegacyCoordinator* qrScannerCoordinator;
@@ -207,7 +217,6 @@
   if (self.started)
     return;
 
-  DCHECK(self.browserState);
   DCHECK(!self.viewController);
   [self startBrowserContainer];
   [self.dispatcher startDispatchingToTarget:self
@@ -216,6 +225,8 @@
                                 forProtocol:@protocol(FindInPageCommands)];
   [self createViewController];
   [self startChildCoordinators];
+  [self.dispatcher startDispatchingToTarget:self
+                                forProtocol:@protocol(ActivityServiceCommands)];
   [self.dispatcher
       startDispatchingToTarget:self
                    forProtocol:@protocol(BrowserCoordinatorCommands)];
@@ -259,6 +270,9 @@
 
 - (void)clearPresentedStateWithCompletion:(ProceduralBlock)completion
                            dismissOmnibox:(BOOL)dismissOmnibox {
+  [self.activityServiceCoordinator stop];
+  self.activityServiceCoordinator = nil;
+
   [self.passKitCoordinator stop];
 
   [self.openInMediator disableAll];
@@ -267,6 +281,9 @@
 
   [self.readingListCoordinator stop];
   self.readingListCoordinator = nil;
+
+  [self.qrGeneratorCoordinator stop];
+  self.qrGeneratorCoordinator = nil;
 
   [self.passwordBreachCoordinator stop];
 
@@ -291,8 +308,7 @@
   DCHECK(self.browserContainerCoordinator.viewController);
   BrowserViewControllerDependencyFactory* factory =
       [[BrowserViewControllerDependencyFactory alloc]
-          initWithBrowserState:self.browserState
-                  webStateList:self.browser->GetWebStateList()];
+          initWithBrowser:self.browser];
   _viewController = [[BrowserViewController alloc]
                      initWithBrowser:self.browser
                    dependencyFactory:factory
@@ -326,10 +342,7 @@
   // coordinators.
   DCHECK(self.dispatcher);
 
-  self.appLauncherCoordinator = [[AppLauncherCoordinator alloc]
-      initWithBaseViewController:self.viewController
-                         browser:self.browser];
-  [self.appLauncherCoordinator start];
+  /* ActivityServiceCoordinator is created and started by a command. */
 
   self.ARQuickLookCoordinator = [[ARQuickLookCoordinator alloc]
       initWithBaseViewController:self.viewController
@@ -374,6 +387,8 @@
                          browser:self.browser];
   [self.qrScannerCoordinator start];
 
+  /* QRGeneratorCoordinator is created and started by a command. */
+
   /* ReadingListCoordinator is created and started by a BrowserCommand */
 
   /* RecentTabsCoordinator is created and started by a BrowserCommand */
@@ -411,11 +426,11 @@
 
 // Stops child coordinators.
 - (void)stopChildCoordinators {
+  [self.activityServiceCoordinator stop];
+  self.activityServiceCoordinator = nil;
+
   [self.allPasswordCoordinator stop];
   self.allPasswordCoordinator = nil;
-
-  [self.appLauncherCoordinator stop];
-  self.appLauncherCoordinator = nil;
 
   [self.ARQuickLookCoordinator stop];
   self.ARQuickLookCoordinator = nil;
@@ -439,6 +454,9 @@
   self.passwordBreachCoordinator = nil;
 
   self.printController = nil;
+
+  [self.qrGeneratorCoordinator stop];
+  self.qrGeneratorCoordinator = nil;
 
   [self.qrScannerCoordinator stop];
   self.qrScannerCoordinator = nil;
@@ -497,6 +515,25 @@
     presenter = presenter.presentedViewController;
   }
   [presenter presentViewController:alert animated:YES completion:nil];
+}
+
+#pragma mark - ActivityServiceCommands
+
+- (void)sharePage {
+  self.activityServiceCoordinator = [[ActivityServiceCoordinator alloc]
+      initWithBaseViewController:self.viewController
+                         browser:self.browser];
+  self.activityServiceCoordinator.positionProvider =
+      [self.viewController activityServicePositioner];
+  self.activityServiceCoordinator.presentationProvider = self;
+  [self.activityServiceCoordinator start];
+}
+
+#pragma mark - ActivityServicePresentation
+
+- (void)activityServiceDidEndPresenting {
+  [self.activityServiceCoordinator stop];
+  self.activityServiceCoordinator = nil;
 }
 
 #pragma mark - BrowserCoordinatorCommands
@@ -597,13 +634,10 @@
   web::WebState* currentWebState =
       self.browser->GetWebStateList()->GetActiveWebState();
 
-  __weak __typeof(self) weakSelf = self;
   if (currentWebState) {
     FindTabHelper* findTabHelper = FindTabHelper::FromWebState(currentWebState);
     if (findTabHelper->IsFindUIActive()) {
-      findTabHelper->StopFinding(^{
-        [weakSelf.findBarCoordinator stop];
-      });
+      findTabHelper->StopFinding();
     } else {
       [self.findBarCoordinator stop];
     }
@@ -633,14 +667,9 @@
       self.browser->GetWebStateList()->GetActiveWebState();
   DCHECK(currentWebState);
   FindTabHelper* helper = FindTabHelper::FromWebState(currentWebState);
-  __weak __typeof(self) weakSelf = self;
-  helper->StartFinding([self.findBarCoordinator.findBarController searchTerm],
-                       ^(FindInPageModel* model) {
-                         [weakSelf.findBarCoordinator.findBarController
-                             updateResultsCount:model];
-                       });
+  helper->StartFinding([self.findBarCoordinator.findBarController searchTerm]);
 
-  if (!self.browserState->IsOffTheRecord())
+  if (!self.browser->GetBrowserState()->IsOffTheRecord())
     helper->PersistSearchTerm();
 }
 
@@ -650,9 +679,7 @@
   DCHECK(currentWebState);
   // TODO(crbug.com/603524): Reshow find bar if necessary.
   FindTabHelper::FromWebState(currentWebState)
-      ->ContinueFinding(FindTabHelper::FORWARD, ^(FindInPageModel* model) {
-        [self.findBarCoordinator.findBarController updateResultsCount:model];
-      });
+      ->ContinueFinding(FindTabHelper::FORWARD);
 }
 
 - (void)findPreviousStringInPage {
@@ -661,9 +688,7 @@
   DCHECK(currentWebState);
   // TODO(crbug.com/603524): Reshow find bar if necessary.
   FindTabHelper::FromWebState(currentWebState)
-      ->ContinueFinding(FindTabHelper::REVERSE, ^(FindInPageModel* model) {
-        [self.findBarCoordinator.findBarController updateResultsCount:model];
-      });
+      ->ContinueFinding(FindTabHelper::REVERSE);
 }
 
 #pragma mark - FindInPageCommands Helpers
@@ -710,7 +735,7 @@
 
 - (void)showSecurityHelpPage {
   UrlLoadParams params = UrlLoadParams::InNewTab(GURL(kPageInfoHelpCenterURL));
-  params.in_incognito = self.browserState->IsOffTheRecord();
+  params.in_incognito = self.browser->GetBrowserState()->IsOffTheRecord();
   UrlLoadingBrowserAgent::FromBrowser(self.browser)->Load(params);
   [self hidePageInfo];
 }
@@ -718,7 +743,18 @@
 #pragma mark - QRGenerationCommands
 
 - (void)generateQRCode:(GenerateQRCodeCommand*)command {
-  // TODO(crbug.com/1064990): Implement Coordinator and starting here.
+  DCHECK(base::FeatureList::IsEnabled(kQRCodeGeneration));
+  self.qrGeneratorCoordinator = [[QRGeneratorCoordinator alloc]
+      initWithBaseViewController:self.viewController
+                         browser:self.browser
+                           title:command.title
+                             URL:command.URL];
+  [self.qrGeneratorCoordinator start];
+}
+
+- (void)hideQRCode {
+  [self.qrGeneratorCoordinator stop];
+  self.qrGeneratorCoordinator = nil;
 }
 
 #pragma mark - FormInputAccessoryCoordinatorNavigator
@@ -892,8 +928,7 @@
 
 // Installs delegates for each WebState in WebStateList.
 - (void)installDelegatesForAllWebStates {
-  self.openInMediator = [[OpenInMediator alloc]
-      initWithWebStateList:self.browser->GetWebStateList()];
+  self.openInMediator = [[OpenInMediator alloc] initWithBrowser:self.browser];
 
   for (int i = 0; i < self.browser->GetWebStateList()->count(); i++) {
     web::WebState* webState = self.browser->GetWebStateList()->GetWebStateAt(i);
@@ -932,10 +967,6 @@
 
 // Install delegates for |webState|.
 - (void)installDelegatesForWebState:(web::WebState*)webState {
-  AppLauncherTabHelper::CreateForWebState(
-      webState, [[AppLauncherAbuseDetector alloc] init],
-      self.appLauncherCoordinator);
-
   if (AutofillTabHelper::FromWebState(webState)) {
     AutofillTabHelper::FromWebState(webState)->SetBaseViewController(
         self.viewController);

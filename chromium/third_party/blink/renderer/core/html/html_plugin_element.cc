@@ -281,8 +281,7 @@ ParsedFeaturePolicy HTMLPlugInElement::ConstructContainerPolicy(
   // https://fullscreen.spec.whatwg.org/#model
   ParsedFeaturePolicy container_policy;
   ParsedFeaturePolicyDeclaration allowlist(
-      mojom::blink::FeaturePolicyFeature::kFullscreen,
-      mojom::blink::PolicyValueType::kBool);
+      mojom::blink::FeaturePolicyFeature::kFullscreen);
   container_policy.push_back(allowlist);
   return container_policy;
 }
@@ -483,7 +482,7 @@ bool HTMLPlugInElement::IsKeyboardFocusable() const {
   if (HTMLFrameOwnerElement::IsKeyboardFocusable())
     return true;
   return GetDocument().IsActive() && PluginEmbeddedContentView() &&
-         PluginEmbeddedContentView()->SupportsKeyboardFocus();
+         PluginEmbeddedContentView()->SupportsKeyboardFocus() && IsFocusable();
 }
 
 bool HTMLPlugInElement::HasCustomFocusLogic() const {
@@ -727,12 +726,14 @@ bool HTMLPlugInElement::AllowedToLoadObject(const KURL& url,
   return (!mime_type.IsEmpty() && url.IsEmpty()) ||
          !MixedContentChecker::ShouldBlockFetch(
              frame, mojom::RequestContextType::OBJECT,
-             ResourceRequest::RedirectStatus::kNoRedirect, url);
+             ResourceRequest::RedirectStatus::kNoRedirect, url,
+             /* devtools_id= */ base::nullopt);
 }
 
 bool HTMLPlugInElement::AllowedToLoadPlugin(const KURL& url,
                                             const String& mime_type) {
-  if (GetDocument().IsSandboxed(mojom::blink::WebSandboxFlags::kPlugins)) {
+  if (GetDocument().IsSandboxed(
+          network::mojom::blink::WebSandboxFlags::kPlugins)) {
     GetDocument().AddConsoleMessage(MakeGarbageCollected<ConsoleMessage>(
         mojom::ConsoleMessageSource::kSecurity,
         mojom::ConsoleMessageLevel::kError,

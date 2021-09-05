@@ -4,10 +4,10 @@
 
 #import "ios/chrome/browser/infobars/overlays/infobar_overlay_request_cancel_handler.h"
 
-#include "base/logging.h"
+#include "base/check.h"
 #include "components/infobars/core/infobar.h"
 #include "ios/chrome/browser/infobars/infobar_ios.h"
-#include "ios/chrome/browser/infobars/overlays/overlay_request_infobar_util.h"
+#include "ios/chrome/browser/infobars/overlays/infobar_overlay_util.h"
 #import "ios/chrome/browser/overlays/public/overlay_request.h"
 #import "ios/chrome/browser/overlays/public/overlay_request_queue.h"
 
@@ -22,9 +22,10 @@ using infobars::InfoBarManager;
 
 InfobarOverlayRequestCancelHandler::InfobarOverlayRequestCancelHandler(
     OverlayRequest* request,
-    OverlayRequestQueue* queue)
+    OverlayRequestQueue* queue,
+    InfoBarIOS* infobar)
     : OverlayRequestCancelHandler(request, queue),
-      infobar_(GetOverlayRequestInfobar(request)),
+      infobar_(infobar),
       removal_observer_(this) {
   DCHECK(infobar_);
 }

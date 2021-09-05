@@ -73,9 +73,11 @@ class HardwareRendererViz::OnViz : public viz::DisplayClient {
   void DisplayDidReceiveCALayerParams(
       const gfx::CALayerParams& ca_layer_params) override {}
   void DisplayDidCompleteSwapWithSize(const gfx::Size& pixel_size) override {}
+  void SetWideColorEnabled(bool enabled) override {}
   void SetPreferredFrameInterval(base::TimeDelta interval) override {}
   base::TimeDelta GetPreferredFrameIntervalForFrameSinkId(
-      const viz::FrameSinkId& id) override;
+      const viz::FrameSinkId& id,
+      viz::mojom::CompositorFrameSinkType* type) override;
 
  private:
   viz::FrameSinkManagerImpl* GetFrameSinkManager();
@@ -124,6 +126,7 @@ HardwareRendererViz::OnViz::OnViz(
                        output_surface_provider->enable_shared_image());
 
   display_->SetVisible(true);
+  display_->DisableGPUAccessByDefault();
 }
 
 HardwareRendererViz::OnViz::~OnViz() {
@@ -252,9 +255,11 @@ void HardwareRendererViz::OnViz::DisplayWillDrawAndSwap(
 
 base::TimeDelta
 HardwareRendererViz::OnViz::GetPreferredFrameIntervalForFrameSinkId(
-    const viz::FrameSinkId& id) {
+    const viz::FrameSinkId& id,
+    viz::mojom::CompositorFrameSinkType* type) {
   DCHECK_CALLED_ON_VALID_THREAD(viz_thread_checker_);
-  return GetFrameSinkManager()->GetPreferredFrameIntervalForFrameSinkId(id);
+  return GetFrameSinkManager()->GetPreferredFrameIntervalForFrameSinkId(id,
+                                                                        type);
 }
 
 HardwareRendererViz::HardwareRendererViz(

@@ -431,12 +431,12 @@ TEST_F(ProfileManagerTest, LoadNonExistingProfile) {
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   profile_manager->LoadProfile(
       profile_name, false /* incognito */,
-      base::Bind(&ExpectNullProfile, run_loop_1.QuitClosure()));
+      base::BindOnce(&ExpectNullProfile, run_loop_1.QuitClosure()));
   run_loop_1.Run();
 
   profile_manager->LoadProfile(
       profile_name, true /* incognito */,
-      base::Bind(&ExpectNullProfile, run_loop_2.QuitClosure()));
+      base::BindOnce(&ExpectNullProfile, run_loop_2.QuitClosure()));
   run_loop_2.Run();
 }
 
@@ -457,23 +457,23 @@ TEST_F(ProfileManagerTest, LoadExistingProfile) {
   bool incognito = false;
   profile_manager->LoadProfile(
       profile_name, incognito,
-      base::Bind(&ExpectProfileWithName, profile_name, incognito,
-                 load_profile.QuitClosure()));
+      base::BindOnce(&ExpectProfileWithName, profile_name, incognito,
+                     load_profile.QuitClosure()));
   load_profile.Run();
 
   base::RunLoop load_profile_incognito;
   incognito = true;
   profile_manager->LoadProfile(
       profile_name, incognito,
-      base::Bind(&ExpectProfileWithName, profile_name, incognito,
-                 load_profile_incognito.QuitClosure()));
+      base::BindOnce(&ExpectProfileWithName, profile_name, incognito,
+                     load_profile_incognito.QuitClosure()));
   load_profile_incognito.Run();
 
   // Loading some other non existing profile should still return null.
   base::RunLoop load_other_profile;
   profile_manager->LoadProfile(
       other_name, false,
-      base::Bind(&ExpectNullProfile, load_other_profile.QuitClosure()));
+      base::BindOnce(&ExpectNullProfile, load_other_profile.QuitClosure()));
   load_other_profile.Run();
 }
 
@@ -885,8 +885,8 @@ TEST_F(ProfileManagerTest, GetLastUsedProfileAllowedByPolicy) {
 
 #if defined(OS_CHROMEOS)
   // On CrOS, profile returned by GetLastUsedProfile is a sign-in profile that
-  // is forced to be incognito. That's why we need to create at least one user
-  // to get a regular profile.
+  // is forced to be off-the-record. That's why we need to create at least one
+  // user to get a regular profile.
   RegisterUser(
       AccountId::FromUserEmailGaiaId("test-user@example.com", "1234567890"));
 #endif
@@ -898,13 +898,13 @@ TEST_F(ProfileManagerTest, GetLastUsedProfileAllowedByPolicy) {
   EXPECT_EQ(IncognitoModePrefs::kDefaultAvailability,
             IncognitoModePrefs::GetAvailability(prefs));
 
-  ASSERT_TRUE(profile->GetOffTheRecordProfile());
+  ASSERT_TRUE(profile->GetPrimaryOTRProfile());
 
   IncognitoModePrefs::SetAvailability(prefs, IncognitoModePrefs::DISABLED);
   EXPECT_FALSE(
       profile_manager->GetLastUsedProfileAllowedByPolicy()->IsOffTheRecord());
 
-  // GetLastUsedProfileAllowedByPolicy() returns the incognito Profile when
+  // GetLastUsedProfileAllowedByPolicy() returns the off-the-record Profile when
   // incognito mode is forced.
   IncognitoModePrefs::SetAvailability(prefs, IncognitoModePrefs::FORCED);
   EXPECT_TRUE(
@@ -1057,8 +1057,7 @@ TEST_F(ProfileManagerTest, LastOpenedProfilesDoesNotContainIncognito) {
   EXPECT_EQ(profile1, last_opened_profiles[0]);
 
   // And for profile2.
-  Browser::CreateParams profile2_params(profile1->GetOffTheRecordProfile(),
-                                        true);
+  Browser::CreateParams profile2_params(profile1->GetPrimaryOTRProfile(), true);
   std::unique_ptr<Browser> browser2a(
       CreateBrowserWithTestWindowForParams(&profile2_params));
 
@@ -1214,15 +1213,29 @@ TEST_F(ProfileManagerTest, CleanUpEphemeralProfiles) {
   PrefService* local_state = g_browser_process->local_state();
   local_state->SetString(prefs::kProfileLastUsed, profile_name1);
 
+  // Set the last used profiles.
+  ListPrefUpdate update(local_state, prefs::kProfilesLastActive);
+  base::ListValue* initial_last_active_profile_list = update.Get();
+  initial_last_active_profile_list->Append(
+      std::make_unique<base::Value>(path1.BaseName().MaybeAsASCII()));
+  initial_last_active_profile_list->Append(
+      std::make_unique<base::Value>(path2.BaseName().MaybeAsASCII()));
+
   profile_manager->CleanUpEphemeralProfiles();
   content::RunAllTasksUntilIdle();
+  const base::ListValue* final_last_active_profile_list =
+      local_state->GetList(prefs::kProfilesLastActive);
 
   // The ephemeral profile should be deleted, and the last used profile set to
-  // the other one.
+  // the other one. Also, the ephemeral profile should be removed from the
+  // kProfilesLastActive list.
   EXPECT_FALSE(base::DirectoryExists(path1));
   EXPECT_TRUE(base::DirectoryExists(path2));
   EXPECT_EQ(profile_name2, local_state->GetString(prefs::kProfileLastUsed));
   ASSERT_EQ(1u, storage.GetNumberOfProfiles());
+  ASSERT_EQ(1u, final_last_active_profile_list->GetSize());
+  ASSERT_EQ(path2.BaseName().MaybeAsASCII(),
+            (final_last_active_profile_list->GetList())[0].GetString());
 
   // Mark the remaining profile ephemeral and clean up.
   storage.GetAllProfilesAttributes()[0]->SetIsEphemeral(true);
@@ -1233,6 +1246,7 @@ TEST_F(ProfileManagerTest, CleanUpEphemeralProfiles) {
   EXPECT_FALSE(base::DirectoryExists(path2));
   EXPECT_EQ(0u, storage.GetNumberOfProfiles());
   EXPECT_EQ("Profile 1", local_state->GetString(prefs::kProfileLastUsed));
+  ASSERT_EQ(0u, final_last_active_profile_list->GetSize());
 }
 
 TEST_F(ProfileManagerTest, CleanUpEphemeralProfilesWithGuestLastUsedProfile) {

@@ -79,6 +79,7 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/page_type.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/simple_url_loader_test_helper.h"
 #include "content/public/test/url_loader_interceptor.h"
@@ -312,6 +313,7 @@ class ExtensionWebRequestApiTest : public ExtensionApiTest {
     network::mojom::URLLoaderFactoryParamsPtr params =
         network::mojom::URLLoaderFactoryParams::New();
     params->process_id = network::mojom::kBrowserProcessId;
+    params->automatically_assign_isolation_info = true;
     params->is_corb_enabled = false;
     mojo::PendingRemote<network::mojom::URLLoaderFactory> loader_factory;
     content::BrowserContext::GetDefaultStoragePartition(profile())
@@ -427,13 +429,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, WebRequestApi) {
   ASSERT_TRUE(RunExtensionSubtest("webrequest", "test_api.html")) << message_;
 }
 
-// Fails often on Windows dbg bots. http://crbug.com/177163
-#if defined(OS_WIN)
-#define MAYBE_WebRequestSimple DISABLED_WebRequestSimple
-#else
-#define MAYBE_WebRequestSimple WebRequestSimple
-#endif  // defined(OS_WIN)
-IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, MAYBE_WebRequestSimple) {
+IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, WebRequestSimple) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   ASSERT_TRUE(RunExtensionSubtest("webrequest", "test_simple.html")) <<
       message_;
@@ -807,13 +803,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest,
       << message_;
 }
 
-// Fails often on Windows dbg bots. http://crbug.com/177163
-#if defined(OS_WIN)
-#define MAYBE_WebRequestNewTab DISABLED_WebRequestNewTab
-#else
-#define MAYBE_WebRequestNewTab WebRequestNewTab
-#endif  // defined(OS_WIN)
-IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, MAYBE_WebRequestNewTab) {
+IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, WebRequestNewTab) {
   ASSERT_TRUE(StartEmbeddedTestServer());
   // Wait for the extension to set itself up and return control to us.
   ASSERT_TRUE(RunExtensionSubtest("webrequest", "test_newTab.html"))
@@ -834,13 +824,14 @@ IN_PROC_BROWSER_TEST_F(ExtensionWebRequestApiTest, MAYBE_WebRequestNewTab) {
   // There's a link on a.html with target=_blank. Click on it to open it in a
   // new tab.
   blink::WebMouseEvent mouse_event(
-      blink::WebInputEvent::kMouseDown, blink::WebInputEvent::kNoModifiers,
+      blink::WebInputEvent::Type::kMouseDown,
+      blink::WebInputEvent::kNoModifiers,
       blink::WebInputEvent::GetStaticTimeStampForTests());
   mouse_event.button = blink::WebMouseEvent::Button::kLeft;
   mouse_event.SetPositionInWidget(7, 7);
   mouse_event.click_count = 1;
   tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
-  mouse_event.SetType(blink::WebInputEvent::kMouseUp);
+  mouse_event.SetType(blink::WebInputEvent::Type::kMouseUp);
   tab->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(mouse_event);
 
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
@@ -2807,6 +2798,10 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerWebRequestApiTest,
 IN_PROC_BROWSER_TEST_P(ServiceWorkerWebRequestApiTest, ServiceWorkerScript) {
   // The extension to be used in this test adds foo=bar request header.
   const char kScriptPath[] = "/echoheader_service_worker.js";
+  // The request handler below will run on the EmbeddedTestServer's IO thread.
+  // Hence guard access to |served_service_worker_count| and |foo_header_value|
+  // using a lock.
+  base::Lock lock;
   int served_service_worker_count = 0;
   std::string foo_header_value;
 
@@ -2818,6 +2813,7 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerWebRequestApiTest, ServiceWorkerScript) {
         if (request.relative_url != kScriptPath)
           return nullptr;
 
+        base::AutoLock auto_lock(lock);
         ++served_service_worker_count;
         foo_header_value.clear();
         if (request.headers.find("foo") != request.headers.end())
@@ -2845,15 +2841,21 @@ IN_PROC_BROWSER_TEST_P(ServiceWorkerWebRequestApiTest, ServiceWorkerScript) {
   std::string script =
       content::JsReplace("register($1, './in-scope');", kScriptPath);
   EXPECT_EQ("DONE", EvalJs(web_contents, script));
-  EXPECT_EQ(1, served_service_worker_count);
-  EXPECT_EQ("bar", foo_header_value);
+  {
+    base::AutoLock auto_lock(lock);
+    EXPECT_EQ(1, served_service_worker_count);
+    EXPECT_EQ("bar", foo_header_value);
+  }
 
   // Update the worker. The worker should have "foo: bar" request header in the
   // request for update checking.
   EXPECT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   EXPECT_EQ("DONE", EvalJs(web_contents, "update('./in-scope');"));
-  EXPECT_EQ(2, served_service_worker_count);
-  EXPECT_EQ("bar", foo_header_value);
+  {
+    base::AutoLock auto_lock(lock);
+    EXPECT_EQ(2, served_service_worker_count);
+    EXPECT_EQ("bar", foo_header_value);
+  }
 }
 
 // Ensure that extensions can intercept service worker navigation preload
@@ -3318,8 +3320,12 @@ IN_PROC_BROWSER_TEST_P(RedirectInfoWebRequestApiTest,
   EXPECT_TRUE(resource_request->site_for_cookies.IsFirstParty(redirected_url));
   ASSERT_TRUE(resource_request->trusted_params);
   url::Origin redirected_origin = url::Origin::Create(redirected_url);
-  EXPECT_EQ(resource_request->trusted_params->network_isolation_key,
-            net::NetworkIsolationKey(redirected_origin, redirected_origin));
+  EXPECT_TRUE(
+      resource_request->trusted_params->isolation_info.IsEqualForTesting(
+          net::IsolationInfo::Create(
+              net::IsolationInfo::RedirectMode::kUpdateTopFrame,
+              redirected_origin, redirected_origin,
+              net::SiteForCookies::FromOrigin(redirected_origin))));
 }
 
 // Test that a sub frame request redirected by an extension has the correct
@@ -3365,8 +3371,12 @@ IN_PROC_BROWSER_TEST_P(RedirectInfoWebRequestApiTest,
   ASSERT_TRUE(resource_request->trusted_params);
   url::Origin top_level_origin = url::Origin::Create(page_with_iframe_url);
   url::Origin redirected_origin = url::Origin::Create(redirected_url);
-  EXPECT_EQ(resource_request->trusted_params->network_isolation_key,
-            net::NetworkIsolationKey(top_level_origin, redirected_origin));
+  EXPECT_TRUE(
+      resource_request->trusted_params->isolation_info.IsEqualForTesting(
+          net::IsolationInfo::Create(
+              net::IsolationInfo::RedirectMode::kUpdateFrameOnly,
+              top_level_origin, redirected_origin,
+              net::SiteForCookies::FromOrigin(top_level_origin))));
 }
 
 }  // namespace extensions

@@ -17,11 +17,13 @@
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/time.h"
 #include "components/sync/driver/profile_sync_service.h"
+#include "components/sync/nigori/nigori_test_utils.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync/test/fake_server/bookmark_entity_builder.h"
 #include "components/sync/test/fake_server/fake_server.h"
 #include "components/sync/test/fake_server/fake_server_jni/FakeServerHelper_jni.h"
 #include "components/sync/test/fake_server/fake_server_network_resources.h"
+#include "components/sync/test/fake_server/fake_server_nigori_helper.h"
 #include "components/sync/test/fake_server/fake_server_verifier.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -157,9 +159,9 @@ void FakeServerHelperAndroid::InjectUniqueClientEntity(
 
 void FakeServerHelperAndroid::SetWalletData(
     JNIEnv* env,
-    const base::android::JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& obj,
     jlong fake_server,
-    const base::android::JavaParamRef<jbyteArray>& serialized_entity) {
+    const JavaParamRef<jbyteArray>& serialized_entity) {
   fake_server::FakeServer* fake_server_ptr =
       reinterpret_cast<fake_server::FakeServer*>(fake_server);
 
@@ -330,12 +332,25 @@ void FakeServerHelperAndroid::DeleteEntity(
     const JavaParamRef<jobject>& obj,
     jlong fake_server,
     const JavaParamRef<jstring>& id,
-    const base::android::JavaParamRef<jstring>& client_tag_hash) {
+    const JavaParamRef<jstring>& client_tag_hash) {
   fake_server::FakeServer* fake_server_ptr =
       reinterpret_cast<fake_server::FakeServer*>(fake_server);
   std::string native_id = base::android::ConvertJavaStringToUTF8(env, id);
   fake_server_ptr->InjectEntity(syncer::PersistentTombstoneEntity::CreateNew(
       native_id, base::android::ConvertJavaStringToUTF8(env, client_tag_hash)));
+}
+
+void FakeServerHelperAndroid::SetTrustedVaultNigori(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    jlong fake_server,
+    const JavaParamRef<jbyteArray>& trusted_vault_key) {
+  std::vector<uint8_t> native_trusted_vault_key;
+  base::android::JavaByteArrayToByteVector(env, trusted_vault_key,
+                                           &native_trusted_vault_key);
+  SetNigoriInFakeServer(
+      syncer::BuildTrustedVaultNigoriSpecifics({native_trusted_vault_key}),
+      reinterpret_cast<fake_server::FakeServer*>(fake_server));
 }
 
 void FakeServerHelperAndroid::ClearServerData(JNIEnv* env,

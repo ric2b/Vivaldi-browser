@@ -44,7 +44,6 @@ class XRPlane : public ScriptWrappable {
 
   ScriptPromise createAnchor(ScriptState* script_state,
                              XRRigidTransform* initial_pose,
-                             XRSpace* space,
                              ExceptionState& exception_state);
 
   // Updates plane data from passed in |plane_data|. The resulting instance
@@ -68,7 +67,8 @@ class XRPlane : public ScriptWrappable {
   HeapVector<Member<DOMPointReadOnly>> polygon_;
   base::Optional<Orientation> orientation_;
 
-  // Plane center's pose in device (mojo) space.
+  // Plane center's pose in device (mojo) space.  Nullptr if the pose of the
+  // anchor is unknown in the current frame.
   std::unique_ptr<TransformationMatrix> mojo_from_plane_;
 
   Member<XRSession> session_;

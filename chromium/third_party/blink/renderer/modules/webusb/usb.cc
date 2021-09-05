@@ -93,19 +93,15 @@ UsbDeviceFilterPtr ConvertDeviceFilter(const USBDeviceFilter* filter,
 }  // namespace
 
 USB::USB(ExecutionContext& context)
-    : ExecutionContextLifecycleObserver(&context) {}
+    : ExecutionContextLifecycleObserver(&context),
+      service_(&context),
+      client_receiver_(this, &context) {}
 
 USB::~USB() {
   // |service_| may still be valid but there should be no more outstanding
   // requests to them because each holds a persistent handle to this object.
   DCHECK(get_devices_requests_.IsEmpty());
   DCHECK(get_permission_requests_.IsEmpty());
-}
-
-void USB::Dispose() {
-  // The pipe to this object must be closed when is marked unreachable to
-  // prevent messages from being dispatched before lazy sweeping.
-  client_receiver_.reset();
 }
 
 ScriptPromise USB::getDevices(ScriptState* script_state,
@@ -187,7 +183,6 @@ const AtomicString& USB::InterfaceName() const {
 }
 
 void USB::ContextDestroyed() {
-  service_.reset();
   get_devices_requests_.clear();
   get_permission_requests_.clear();
 }
@@ -222,7 +217,7 @@ void USB::OnGetPermission(ScriptPromiseResolver* resolver,
 
   EnsureServiceConnection();
 
-  if (service_ && device_info) {
+  if (service_.is_bound() && device_info) {
     resolver->Resolve(GetOrCreateDevice(std::move(device_info)));
   } else {
     resolver->Reject(MakeGarbageCollected<DOMException>(
@@ -232,7 +227,7 @@ void USB::OnGetPermission(ScriptPromiseResolver* resolver,
 }
 
 void USB::OnDeviceAdded(UsbDeviceInfoPtr device_info) {
-  if (!service_)
+  if (!service_.is_bound())
     return;
 
   DispatchEvent(*USBConnectionEvent::Create(
@@ -254,15 +249,22 @@ void USB::OnDeviceRemoved(UsbDeviceInfoPtr device_info) {
 void USB::OnServiceConnectionError() {
   service_.reset();
   client_receiver_.reset();
-  for (ScriptPromiseResolver* resolver : get_devices_requests_)
-    resolver->Resolve(HeapVector<Member<USBDevice>>(0));
-  get_devices_requests_.clear();
 
-  for (ScriptPromiseResolver* resolver : get_permission_requests_) {
+  // Move the set to a local variable to prevent script execution in Resolve()
+  // from invalidating the iterator used by the loop.
+  HeapHashSet<Member<ScriptPromiseResolver>> get_devices_requests;
+  get_devices_requests.swap(get_devices_requests_);
+  for (auto& resolver : get_devices_requests)
+    resolver->Resolve(HeapVector<Member<USBDevice>>(0));
+
+  // Move the set to a local variable to prevent script execution in Reject()
+  // from invalidating the iterator used by the loop.
+  HeapHashSet<Member<ScriptPromiseResolver>> get_permission_requests;
+  get_permission_requests.swap(get_permission_requests_);
+  for (auto& resolver : get_permission_requests) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kNotFoundError, kNoDeviceSelected));
   }
-  get_permission_requests_.clear();
 }
 
 void USB::AddedEventListener(const AtomicString& event_type,
@@ -280,7 +282,7 @@ void USB::AddedEventListener(const AtomicString& event_type,
 }
 
 void USB::EnsureServiceConnection() {
-  if (service_)
+  if (service_.is_bound())
     return;
 
   DCHECK(IsContextSupported());
@@ -321,8 +323,10 @@ bool USB::IsFeatureEnabled(ReportOptions report_options) const {
 }
 
 void USB::Trace(Visitor* visitor) {
+  visitor->Trace(service_);
   visitor->Trace(get_devices_requests_);
   visitor->Trace(get_permission_requests_);
+  visitor->Trace(client_receiver_);
   visitor->Trace(device_cache_);
   EventTargetWithInlineData::Trace(visitor);
   ExecutionContextLifecycleObserver::Trace(visitor);

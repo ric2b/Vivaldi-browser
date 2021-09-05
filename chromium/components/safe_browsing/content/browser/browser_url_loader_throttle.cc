@@ -5,7 +5,7 @@
 #include "components/safe_browsing/content/browser/browser_url_loader_throttle.h"
 
 #include "base/bind.h"
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "components/safe_browsing/core/browser/safe_browsing_url_checker_impl.h"
@@ -208,7 +208,8 @@ void BrowserURLLoaderThrottle::WillRedirectRequest(
     const network::mojom::URLResponseHead& /* response_head */,
     bool* defer,
     std::vector<std::string>* /* to_be_removed_headers */,
-    net::HttpRequestHeaders* /* modified_headers */) {
+    net::HttpRequestHeaders* /* modified_headers */,
+    net::HttpRequestHeaders* /* modified_cors_exempt_headers */) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (blocked_) {
     // OnCheckUrlResult() has set |blocked_| to true and called
@@ -290,10 +291,9 @@ void BrowserURLLoaderThrottle::OnCompleteCheck(bool slow_check,
     pending_slow_checks_ = 0;
     // If we didn't show an interstitial, we cancel with ERR_ABORTED to not show
     // an error page either.
-    delegate_->CancelWithError(showed_interstitial
-                                   ? GetNetErrorCodeForSafeBrowsing()
-                                   : net::ERR_ABORTED,
-                               kCustomCancelReasonForURLLoader);
+    delegate_->CancelWithError(
+        showed_interstitial ? kNetErrorCodeForSafeBrowsing : net::ERR_ABORTED,
+        kCustomCancelReasonForURLLoader);
   }
 }
 

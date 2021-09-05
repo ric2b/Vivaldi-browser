@@ -4,9 +4,10 @@
 
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 
+#include "base/check_op.h"
 #include "base/command_line.h"
-#include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/notreached.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -393,6 +394,15 @@ bool IsURLWhitelistedByPolicy(const GURL& url, const PrefService& pref) {
       pref.GetList(prefs::kSafeBrowsingWhitelistDomains);
   for (const base::Value& value : whitelist->GetList()) {
     if (url.DomainIs(value.GetString()))
+      return true;
+  }
+  return false;
+}
+
+bool MatchesEnterpriseWhitelist(const PrefService& pref,
+                                const std::vector<GURL>& url_chain) {
+  for (const GURL& url : url_chain) {
+    if (IsURLWhitelistedByPolicy(url, pref))
       return true;
   }
   return false;

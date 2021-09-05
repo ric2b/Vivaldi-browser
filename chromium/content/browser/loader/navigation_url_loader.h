@@ -59,6 +59,7 @@ class CONTENT_EXPORT NavigationURLLoader {
           prefetched_signed_exchange_cache,
       NavigationURLLoaderDelegate* delegate,
       bool is_served_from_back_forward_cache,
+      mojo::PendingRemote<network::mojom::CookieAccessObserver> cookie_observer,
       std::vector<std::unique_ptr<NavigationLoaderInterceptor>>
           initial_interceptors = {});
 
@@ -71,9 +72,11 @@ class CONTENT_EXPORT NavigationURLLoader {
   // request. |new_previews_state| will be updated for newly created URLLoaders,
   // but the existing default URLLoader will not see |new_previews_state| unless
   // the URLLoader happens to be reset.
-  virtual void FollowRedirect(const std::vector<std::string>& removed_headers,
-                              const net::HttpRequestHeaders& modified_headers,
-                              PreviewsState new_previews_state) = 0;
+  virtual void FollowRedirect(
+      const std::vector<std::string>& removed_headers,
+      const net::HttpRequestHeaders& modified_headers,
+      const net::HttpRequestHeaders& modified_cors_exempt_headers,
+      PreviewsState new_previews_state) = 0;
 
  protected:
   NavigationURLLoader() {}

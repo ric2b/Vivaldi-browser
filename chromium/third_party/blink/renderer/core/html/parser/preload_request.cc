@@ -91,9 +91,7 @@ Resource* PreloadRequest::Start(Document* document) {
   FetchParameters params(std::move(resource_request), options);
 
   if (resource_type_ == ResourceType::kImportResource) {
-    const SecurityOrigin* security_origin =
-        document->ContextDocument()->GetSecurityOrigin();
-    params.SetCrossOriginAccessControl(security_origin,
+    params.SetCrossOriginAccessControl(document->GetSecurityOrigin(),
                                        kCrossOriginAttributeAnonymous);
   }
 
@@ -138,11 +136,6 @@ Resource* PreloadRequest::Start(Document* document) {
     MaybeDisallowFetchForDocWrittenScript(params, *document);
     // We intentionally ignore the returned value, because we don't resend
     // the async request to the blocked script here.
-  }
-
-  if (resource_type_ == ResourceType::kImage &&
-      params.Url().ProtocolIsInHTTPFamily() && is_lazy_load_image_enabled_) {
-    params.SetLazyImagePlaceholder();
   }
 
   return PreloadHelper::StartPreload(resource_type_, params, *document);

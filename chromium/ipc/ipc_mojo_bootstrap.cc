@@ -15,8 +15,8 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/check_op.h"
 #include "base/containers/queue.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/no_destructor.h"
@@ -170,8 +170,8 @@ class ChannelAssociatedGroupController
         task_runner_));
     connector_->set_incoming_receiver(&dispatcher_);
     connector_->set_connection_error_handler(
-        base::BindRepeating(&ChannelAssociatedGroupController::OnPipeError,
-                            base::Unretained(this)));
+        base::BindOnce(&ChannelAssociatedGroupController::OnPipeError,
+                       base::Unretained(this)));
     connector_->set_enforce_errors_from_incoming_receiver(false);
     connector_->SetWatcherHeapProfilerTag("IPC Channel");
     if (quota_checker_)
@@ -245,7 +245,8 @@ class ChannelAssociatedGroupController
   void ShutDown() {
     DCHECK(thread_checker_.CalledOnValidThread());
     shut_down_ = true;
-    connector_->CloseMessagePipe();
+    if (connector_)
+      connector_->CloseMessagePipe();
     OnPipeError();
     connector_.reset();
 

@@ -305,7 +305,7 @@ void VizProcessTransportFactory::DisableGpuCompositing(
     LOG(FATAL) << "Software compositing fallback is unavailable. Goodbye.";
   }
 
-  DLOG(ERROR) << "Switching to software compositing.";
+  DVLOG(1) << "Switching to software compositing.";
 
   is_gpu_compositing_disabled_ = true;
 
@@ -428,6 +428,8 @@ void VizProcessTransportFactory::OnEstablishedGpuChannel(
 
   root_params->use_preferred_interval_for_video =
       features::IsUsingPreferredIntervalForVideo();
+  root_params->num_of_frames_to_toggle_interval =
+      features::NumOfFramesToToggleInterval();
 
   // Connects the viz process end of CompositorFrameSink message pipes. The
   // browser compositor may request a new CompositorFrameSink on context loss,
@@ -453,6 +455,17 @@ void VizProcessTransportFactory::OnEstablishedGpuChannel(
     compositor->SetExternalBeginFrameController(
         compositor_data.external_begin_frame_controller.get());
   }
+
+#if defined(OS_WIN)
+  // Windows using the ANGLE D3D backend for compositing needs to disable swap
+  // on resize to avoid D3D scaling the framebuffer texture. This isn't a
+  // problem with software compositing or ANGLE D3D with direct composition.
+  bool using_angle_d3d_compositing =
+      gpu_compositing && !GpuDataManagerImpl::GetInstance()
+                              ->GetGPUInfo()
+                              .overlay_info.direct_composition;
+  compositor->SetShouldDisableSwapUntilResize(using_angle_d3d_compositing);
+#endif
 }
 
 gpu::ContextResult

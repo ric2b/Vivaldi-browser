@@ -14,10 +14,8 @@
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/main/browser_list.h"
 #import "ios/chrome/browser/main/browser_list_factory.h"
-#import "ios/chrome/browser/sessions/session_ios.h"
 #import "ios/chrome/browser/sessions/session_restoration_browser_agent.h"
-#import "ios/chrome/browser/sessions/session_service_ios.h"
-#import "ios/chrome/browser/sessions/session_window_ios.h"
+
 #import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/ui/browser_view/browser_coordinator.h"
 #import "ios/chrome/browser/ui/browser_view/browser_view_controller.h"
@@ -25,6 +23,7 @@
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browsing_data_commands.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
+#import "ios/chrome/browser/ui/util/multi_window_support.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -115,10 +114,6 @@
 @property(nonatomic, readonly) Browser* mainBrowser;
 @property(nonatomic, readonly) Browser* otrBrowser;
 
-// Restore session to the given |browser|, any existing tabs that have been
-// saved for the |browser| will be loaded.
-- (void)restoreSessionToBrowser:(Browser*)browser;
-
 // Setters for the main and otr Browsers.
 - (void)setMainBrowser:(std::unique_ptr<Browser>)browser;
 - (void)setOtrBrowser:(std::unique_ptr<Browser>)browser;
@@ -159,7 +154,11 @@
       BrowserListFactory::GetForBrowserState(_mainBrowser->GetBrowserState());
   browserList->AddBrowser(_mainBrowser.get());
   [self dispatchToEndpointsForBrowser:_mainBrowser.get()];
-  [self restoreSessionToBrowser:_mainBrowser.get()];
+
+  SessionRestorationBrowserAgent::FromBrowser(_mainBrowser.get())
+      ->SetSessionID(base::SysNSStringToUTF8(_sessionID));
+  SessionRestorationBrowserAgent::FromBrowser(_mainBrowser.get())
+      ->RestoreSession();
   breakpad::MonitorTabStateForWebStateList(_mainBrowser->GetWebStateList());
   // Follow loaded URLs in the main tab model to send those in case of
   // crashes.
@@ -368,8 +367,12 @@
       BrowserListFactory::GetForBrowserState(browser->GetBrowserState());
   browserList->AddIncognitoBrowser(browser.get());
   [self dispatchToEndpointsForBrowser:browser.get()];
-  if (restorePersistedState)
-    [self restoreSessionToBrowser:browser.get()];
+  SessionRestorationBrowserAgent::FromBrowser(browser.get())
+      ->SetSessionID(base::SysNSStringToUTF8(_sessionID));
+  if (restorePersistedState) {
+    SessionRestorationBrowserAgent::FromBrowser(browser.get())
+        ->RestoreSession();
+  }
 
   breakpad::MonitorTabStateForWebStateList(browser->GetWebStateList());
 
@@ -400,20 +403,6 @@
   [browser->GetCommandDispatcher()
       startDispatchingToTarget:_browsingDataCommandEndpoint
                    forProtocol:@protocol(BrowsingDataCommands)];
-}
-
-- (void)restoreSessionToBrowser:(Browser*)browser {
-  SessionWindowIOS* sessionWindow = nil;
-  NSString* statePath = base::SysUTF8ToNSString(
-      browser->GetBrowserState()->GetStatePath().AsUTF8Unsafe());
-  SessionIOS* session =
-      [[SessionServiceIOS sharedService] loadSessionFromDirectory:statePath];
-  if (session) {
-    DCHECK_EQ(session.sessionWindows.count, 1u);
-    sessionWindow = session.sessionWindows[0];
-  }
-  SessionRestorationBrowserAgent::FromBrowser(browser)->RestoreSessionWindow(
-      sessionWindow);
 }
 
 @end

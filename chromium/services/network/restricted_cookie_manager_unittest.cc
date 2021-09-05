@@ -15,6 +15,7 @@
 #include "mojo/core/embedder/embedder.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
+#include "mojo/public/cpp/bindings/receiver_set.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "net/base/features.h"
 #include "net/cookies/canonical_cookie_test_helpers.h"
@@ -22,8 +23,10 @@
 #include "net/cookies/cookie_monster.h"
 #include "net/cookies/cookie_store.h"
 #include "net/cookies/cookie_store_test_callbacks.h"
+#include "net/cookies/cookie_util.h"
 #include "net/cookies/test_cookie_access_delegate.h"
 #include "services/network/cookie_settings.h"
+#include "services/network/public/mojom/cookie_access_observer.mojom.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
 #include "services/network/test/test_network_context_client.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
@@ -32,10 +35,7 @@
 
 namespace network {
 
-const int kProcessId = 42;
-const int kRoutingId = 43;
-
-class RecordingNetworkContextClient : public network::TestNetworkContextClient {
+class RecordingCookieObserver : public network::mojom::CookieAccessObserver {
  public:
   struct CookieOp {
     bool get = false;
@@ -45,58 +45,43 @@ class RecordingNetworkContextClient : public network::TestNetworkContextClient {
     // one thing.
     std::vector<net::CanonicalCookie> cookie;
     net::CanonicalCookie::CookieInclusionStatus status;
+    base::Optional<std::string> devtools_request_id;
   };
 
-  RecordingNetworkContextClient() {}
-  ~RecordingNetworkContextClient() override {}
+  RecordingCookieObserver() = default;
+  ~RecordingCookieObserver() override = default;
 
   const std::vector<CookieOp>& recorded_activity() const {
     return recorded_activity_;
   }
 
-  void OnCookiesChanged(
-      bool is_service_worker,
-      int32_t process_id,
-      int32_t routing_id,
-      const GURL& url,
-      const net::SiteForCookies& site_for_cookies,
-      const std::vector<net::CookieWithStatus>& cookie_list) override {
-    EXPECT_EQ(false, is_service_worker);
-    EXPECT_EQ(kProcessId, process_id);
-    EXPECT_EQ(kRoutingId, routing_id);
-    for (const auto& cookie_and_status : cookie_list) {
-      CookieOp set;
-      set.url = url;
-      set.site_for_cookies = site_for_cookies.RepresentativeUrl();
-      set.cookie.push_back(cookie_and_status.cookie);
-      set.status = cookie_and_status.status;
-      recorded_activity_.push_back(set);
+  mojo::PendingRemote<mojom::CookieAccessObserver> GetRemote() {
+    mojo::PendingRemote<mojom::CookieAccessObserver> remote;
+    receivers_.Add(this, remote.InitWithNewPipeAndPassReceiver());
+    return remote;
+  }
+
+  void OnCookiesAccessed(mojom::CookieAccessDetailsPtr details) override {
+    for (const auto& cookie_and_status : details->cookie_list) {
+      CookieOp op;
+      op.get = details->type == mojom::CookieAccessDetails::Type::kRead;
+      op.url = details->url;
+      op.site_for_cookies = details->site_for_cookies.RepresentativeUrl();
+      op.cookie.push_back(cookie_and_status.cookie);
+      op.status = cookie_and_status.status;
+      op.devtools_request_id = details->devtools_request_id;
+      recorded_activity_.push_back(op);
     }
   }
 
-  void OnCookiesRead(
-      bool is_service_worker,
-      int32_t process_id,
-      int32_t routing_id,
-      const GURL& url,
-      const net::SiteForCookies& site_for_cookies,
-      const std::vector<net::CookieWithStatus>& cookie_list) override {
-    EXPECT_EQ(false, is_service_worker);
-    EXPECT_EQ(kProcessId, process_id);
-    EXPECT_EQ(kRoutingId, routing_id);
-    for (const auto& cookie_and_status : cookie_list) {
-      CookieOp get;
-      get.get = true;
-      get.url = url;
-      get.site_for_cookies = site_for_cookies.RepresentativeUrl();
-      get.cookie.push_back(cookie_and_status.cookie);
-      get.status = cookie_and_status.status;
-      recorded_activity_.push_back(get);
-    }
+  void Clone(
+      mojo::PendingReceiver<mojom::CookieAccessObserver> observer) override {
+    receivers_.Add(this, std::move(observer));
   }
 
  private:
   std::vector<CookieOp> recorded_activity_;
+  mojo::ReceiverSet<mojom::CookieAccessObserver> receivers_;
 };
 
 // Synchronous proxies to a wrapped RestrictedCookieManager's methods.
@@ -176,10 +161,7 @@ class RestrictedCookieManagerTest
             url::Origin::Create(GURL("https://example.com")),
             net::SiteForCookies::FromUrl(GURL("https://example.com")),
             url::Origin::Create(GURL("https://example.com")),
-            &recording_client_,
-            false /* is_service_worker*/,
-            kProcessId,
-            kRoutingId)),
+            recording_client_.GetRemote())),
         receiver_(service_.get(),
                   service_remote_.BindNewPipeAndPassReceiver()) {
     sync_service_ =
@@ -209,7 +191,7 @@ class RestrictedCookieManagerTest
       options.set_include_httponly();
     cookie_monster_.SetCanonicalCookieAsync(
         std::make_unique<net::CanonicalCookie>(cookie),
-        std::move(source_scheme), options,
+        net::cookie_util::SimulatedCookieSource(cookie, source_scheme), options,
         base::BindOnce(&net::ResultSavingCookieCallback<
                            net::CanonicalCookie::CookieInclusionStatus>::Run,
                        base::Unretained(&callback)));
@@ -261,8 +243,8 @@ class RestrictedCookieManagerTest
     received_bad_message_ = true;
   }
 
-  const std::vector<RecordingNetworkContextClient::CookieOp>&
-  recorded_activity() const {
+  const std::vector<RecordingCookieObserver::CookieOp>& recorded_activity()
+      const {
     return recording_client_.recorded_activity();
   }
 
@@ -270,7 +252,7 @@ class RestrictedCookieManagerTest
       base::test::SingleThreadTaskEnvironment::MainThreadType::IO};
   net::CookieMonster cookie_monster_;
   CookieSettings cookie_settings_;
-  RecordingNetworkContextClient recording_client_;
+  RecordingCookieObserver recording_client_;
   std::unique_ptr<RestrictedCookieManager> service_;
   mojo::Remote<mojom::RestrictedCookieManager> service_remote_;
   mojo::Receiver<mojom::RestrictedCookieManager> receiver_;
@@ -411,6 +393,25 @@ TEST_P(RestrictedCookieManagerTest, GetAllForUrlFromWrongOrigin) {
   ExpectBadMessage();
   std::vector<net::CanonicalCookie> cookies = sync_service_->GetAllForUrl(
       GURL("https://not-example.com/test/"), GURL("https://example.com"),
+      url::Origin::Create(GURL("https://example.com")), std::move(options));
+  EXPECT_TRUE(received_bad_message());
+
+  ASSERT_THAT(cookies, testing::SizeIs(0));
+}
+
+TEST_P(RestrictedCookieManagerTest, GetAllForUrlFromOpaqueOrigin) {
+  SetSessionCookie("cookie-name", "cookie-value", "example.com", "/");
+
+  url::Origin opaque_origin;
+  ASSERT_TRUE(opaque_origin.opaque());
+  service_->OverrideOriginForTesting(opaque_origin);
+
+  auto options = mojom::CookieManagerGetOptions::New();
+  options->name = "";
+  options->match_type = mojom::CookieMatchType::STARTS_WITH;
+  ExpectBadMessage();
+  std::vector<net::CanonicalCookie> cookies = sync_service_->GetAllForUrl(
+      GURL("https://example.com/test/"), GURL("https://example.com"),
       url::Origin::Create(GURL("https://example.com")), std::move(options));
   EXPECT_TRUE(received_bad_message());
 
@@ -634,6 +635,23 @@ TEST_P(RestrictedCookieManagerTest, SetCanonicalCookieFromWrongOrigin) {
           /* httponly = */ false, net::CookieSameSite::NO_RESTRICTION,
           net::COOKIE_PRIORITY_DEFAULT),
       GURL("https://not-example.com/test/"), GURL("https://example.com"),
+      url::Origin::Create(GURL("https://example.com"))));
+  ASSERT_TRUE(received_bad_message());
+}
+
+TEST_P(RestrictedCookieManagerTest, SetCanonicalCookieFromOpaqueOrigin) {
+  url::Origin opaque_origin;
+  ASSERT_TRUE(opaque_origin.opaque());
+  service_->OverrideOriginForTesting(opaque_origin);
+
+  ExpectBadMessage();
+  EXPECT_FALSE(sync_service_->SetCanonicalCookie(
+      net::CanonicalCookie(
+          "new-name", "new-value", "not-example.com", "/", base::Time(),
+          base::Time(), base::Time(), /* secure = */ true,
+          /* httponly = */ false, net::CookieSameSite::NO_RESTRICTION,
+          net::COOKIE_PRIORITY_DEFAULT),
+      GURL("https://example.com/test/"), GURL("https://example.com"),
       url::Origin::Create(GURL("https://example.com"))));
   ASSERT_TRUE(received_bad_message());
 }
@@ -961,6 +979,25 @@ TEST_P(RestrictedCookieManagerTest, AddChangeListenerFromWrongOrigin) {
   EXPECT_EQ("cookie-value", good_listener.observed_changes()[0].cookie.Value());
 }
 
+TEST_P(RestrictedCookieManagerTest, AddChangeListenerFromOpaqueOrigin) {
+  url::Origin opaque_origin;
+  ASSERT_TRUE(opaque_origin.opaque());
+  service_->OverrideOriginForTesting(opaque_origin);
+
+  mojo::PendingRemote<network::mojom::CookieChangeListener> bad_listener_remote;
+  mojo::PendingReceiver<network::mojom::CookieChangeListener> bad_receiver =
+      bad_listener_remote.InitWithNewPipeAndPassReceiver();
+  ExpectBadMessage();
+  sync_service_->AddChangeListener(
+      GURL("https://example.com/test/"), GURL("https://example.com"),
+      url::Origin::Create(GURL("https://example.com")),
+      std::move(bad_listener_remote));
+  EXPECT_TRUE(received_bad_message());
+
+  TestCookieChangeListener bad_listener(std::move(bad_receiver));
+  ASSERT_THAT(bad_listener.observed_changes(), testing::SizeIs(0));
+}
+
 // Test that the Change listener receives the access semantics, and that they
 // are taken into account when deciding when to dispatch the change.
 TEST_P(RestrictedCookieManagerTest, ChangeNotificationIncludesAccessSemantics) {
@@ -990,15 +1027,16 @@ TEST_P(RestrictedCookieManagerTest, ChangeNotificationIncludesAccessSemantics) {
 
   ASSERT_THAT(listener.observed_changes(), testing::SizeIs(0));
 
+  GURL cookie_url("https://example.com");
   auto cookie = net::CanonicalCookie::Create(
-      GURL("https://example.com"), "cookie_with_no_samesite=unspecified",
-      base::Time::Now(), base::nullopt);
+      cookie_url, "cookie_with_no_samesite=unspecified", base::Time::Now(),
+      base::nullopt);
 
   // Set cookie directly into the CookieMonster, using all-inclusive options.
   net::ResultSavingCookieCallback<net::CanonicalCookie::CookieInclusionStatus>
       callback;
   cookie_monster_.SetCanonicalCookieAsync(
-      std::move(cookie), "https", net::CookieOptions::MakeAllInclusive(),
+      std::move(cookie), cookie_url, net::CookieOptions::MakeAllInclusive(),
       base::BindOnce(&net::ResultSavingCookieCallback<
                          net::CanonicalCookie::CookieInclusionStatus>::Run,
                      base::Unretained(&callback)));
@@ -1040,20 +1078,21 @@ TEST_P(RestrictedCookieManagerTest, NoChangeNotificationForNonlegacyCookie) {
 
   ASSERT_THAT(listener.observed_changes(), testing::SizeIs(0));
 
+  GURL cookie_url("https://example.com");
+
   auto unspecified_cookie = net::CanonicalCookie::Create(
-      GURL("https://example.com"), "cookie_with_no_samesite=unspecified",
-      base::Time::Now(), base::nullopt);
+      cookie_url, "cookie_with_no_samesite=unspecified", base::Time::Now(),
+      base::nullopt);
 
   auto samesite_none_cookie = net::CanonicalCookie::Create(
-      GURL("https://example.com"),
-      "samesite_none_cookie=none; SameSite=None; Secure", base::Time::Now(),
-      base::nullopt);
+      cookie_url, "samesite_none_cookie=none; SameSite=None; Secure",
+      base::Time::Now(), base::nullopt);
 
   // Set cookies directly into the CookieMonster, using all-inclusive options.
   net::ResultSavingCookieCallback<net::CanonicalCookie::CookieInclusionStatus>
       callback1;
   cookie_monster_.SetCanonicalCookieAsync(
-      std::move(unspecified_cookie), "https",
+      std::move(unspecified_cookie), cookie_url,
       net::CookieOptions::MakeAllInclusive(),
       base::BindOnce(&net::ResultSavingCookieCallback<
                          net::CanonicalCookie::CookieInclusionStatus>::Run,
@@ -1069,7 +1108,7 @@ TEST_P(RestrictedCookieManagerTest, NoChangeNotificationForNonlegacyCookie) {
   net::ResultSavingCookieCallback<net::CanonicalCookie::CookieInclusionStatus>
       callback2;
   cookie_monster_.SetCanonicalCookieAsync(
-      std::move(samesite_none_cookie), "https",
+      std::move(samesite_none_cookie), cookie_url,
       net::CookieOptions::MakeAllInclusive(),
       base::BindOnce(&net::ResultSavingCookieCallback<
                          net::CanonicalCookie::CookieInclusionStatus>::Run,

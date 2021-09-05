@@ -10,6 +10,7 @@ import sys
 sys.path.append(os.path.dirname(__file__))
 
 from signing import config_factory, commands, logger, model, pipeline
+from signing import vivaldi_config
 
 
 def _link_stdout_and_stderr():
@@ -63,6 +64,8 @@ def create_config(config_args, development):
             def is_development_version(self):
                 return True
         config_class = DevelopmentCodeSignConfig
+
+    config_class = vivaldi_config.getCodeSignConfigClass(development)
 
     return config_class(*config_args)
 
@@ -123,6 +126,12 @@ def main():
         action='append',
         default=[],
         help='Causes any distribution whose brand code matches to be skipped.')
+    parser.add_argument(
+        '--vivaldi-release-kind',
+        dest='vivaldi_release_kind',
+        action='store',
+        default=None,
+        help='The type of Vivaldi build')
 
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument(
@@ -146,6 +155,8 @@ def main():
     config = create_config(
         (args.identity, args.installer_identity, args.notary_user,
          args.notary_password, args.notary_asc_provider), args.development)
+    if args.vivaldi_release_kind != None:
+        setattr(config, 'vivaldi_release_kind', args.vivaldi_release_kind)
     paths = model.Paths(args.input, args.output, None)
 
     if not os.path.exists(paths.output):

@@ -19,203 +19,95 @@
 #include "components/feed/core/v2/enums.h"
 #include "components/feed/core/v2/feed_network.h"
 #include "components/feed/core/v2/feed_store.h"
+#include "components/feed/core/v2/metrics_reporter.h"
+#include "components/feed/core/v2/prefs.h"
+#include "components/feed/core/v2/protocol_translator.h"
 #include "components/feed/core/v2/refresh_task_scheduler.h"
 #include "components/feed/core/v2/scheduling.h"
 #include "components/feed/core/v2/stream_model.h"
-#include "components/feed/core/v2/stream_model_update_request.h"
+#include "components/feed/core/v2/surface_updater.h"
+#include "components/feed/core/v2/tasks/clear_all_task.h"
 #include "components/feed/core/v2/tasks/load_stream_task.h"
+#include "components/feed/core/v2/tasks/upload_actions_task.h"
 #include "components/feed/core/v2/tasks/wait_for_store_initialize_task.h"
+#include "components/offline_pages/task/closure_task.h"
 #include "components/prefs/pref_service.h"
 
 namespace feed {
+namespace {
 
-// Tracks UI changes in |StreamModel| and forwards them to |SurfaceInterface|s.
-// TODO(harringtond): implement spinner slice.
-class FeedStream::SurfaceUpdater : public StreamModel::Observer {
- public:
-  using ContentRevision = ContentRevision;
-  explicit SurfaceUpdater(const base::ObserverList<SurfaceInterface>* surfaces)
-      : surfaces_(surfaces) {}
-  ~SurfaceUpdater() override = default;
-  SurfaceUpdater(const SurfaceUpdater&) = delete;
-  SurfaceUpdater& operator=(const SurfaceUpdater&) = delete;
+void PopulateDebugStreamData(const LoadStreamTask::Result& load_result,
+                             PrefService* profile_prefs) {
+  DebugStreamData debug_data = ::feed::prefs::GetDebugStreamData(profile_prefs);
+  std::stringstream ss;
+  ss << "Code: " << load_result.final_status;
+  debug_data.load_stream_status = ss.str();
+  debug_data.fetch_info = load_result.network_response_info;
+  ::feed::prefs::SetDebugStreamData(debug_data, profile_prefs);
+}
 
-  void SetModel(StreamModel* model) {
-    if (model_ == model)
-      return;
-    if (model_)
-      model_->SetObserver(nullptr);
-    model_ = model;
-    if (model_) {
-      model_->SetObserver(this);
+}  // namespace
 
-      const std::vector<ContentRevision>& content_list =
-          model_->GetContentList();
-      current_content_set_.insert(content_list.begin(), content_list.end());
-      for (SurfaceInterface& surface : *surfaces_) {
-        surface.StreamUpdate(GetUpdateForNewSurface(*model_));
-      }
-    }
-  }
-
-  // StreamModel::Observer.
-  void OnUiUpdate(const StreamModel::UiUpdate& update) override {
-    DCHECK(model_);  // The update comes from the model.
-
-    if (!update.content_list_changed)
-      return;
-    feedui::StreamUpdate stream_update;
-    const std::vector<ContentRevision>& content_list = model_->GetContentList();
-    for (ContentRevision content_revision : content_list) {
-      AddSliceUpdate(*model_, content_revision,
-                     current_content_set_.count(content_revision) == 0,
-                     &stream_update);
-    }
-    for (const StreamModel::UiUpdate::SharedStateInfo& info :
-         update.shared_states) {
-      if (info.updated)
-        AddSharedState(*model_, info.shared_state_id, &stream_update);
-    }
-
-    current_content_set_.clear();
-    current_content_set_.insert(content_list.begin(), content_list.end());
-
-    for (SurfaceInterface& surface : *surfaces_) {
-      surface.StreamUpdate(stream_update);
-    }
-  }
-
-  // Sends the initial stream state to a newly connected surface.
-  void SurfaceAdded(SurfaceInterface* surface) {
-    if (model_) {
-      surface->StreamUpdate(GetUpdateForNewSurface(*model_));
-    }
-  }
-
-  void LoadStreamFailed(LoadStreamStatus load_stream_status) {
-    auto zero_state_type = feedui::ZeroStateSlice::NO_CARDS_AVAILABLE;
-    switch (load_stream_status) {
-      case LoadStreamStatus::kProtoTranslationFailed:
-      case LoadStreamStatus::kNoResponseBody:
-      case LoadStreamStatus::kCannotLoadFromNetworkOffline:
-      case LoadStreamStatus::kCannotLoadFromNetworkThrottled:
-        zero_state_type = feedui::ZeroStateSlice::CANT_REFRESH;
-        break;
-      default:
-        break;
-    }
-    // Note that with multiple surface, it's possible that we send a zero-state
-    // to a single surface multiple times.
-    for (SurfaceInterface& surface : *surfaces_) {
-      SendZeroStateUpdate(zero_state_type, &surface);
-    }
-  }
-
- private:
-  static std::string ToSliceId(ContentRevision content_revision) {
-    auto integer_value = content_revision.value();
-    return std::string(reinterpret_cast<char*>(&integer_value),
-                       sizeof(integer_value));
-  }
-
-  static feedui::StreamUpdate GetUpdateForNewSurface(const StreamModel& model) {
-    feedui::StreamUpdate result;
-    for (ContentRevision content_revision : model.GetContentList()) {
-      AddSliceUpdate(model, content_revision, /*is_content_new=*/true, &result);
-    }
-    for (std::string& id : model.GetSharedStateIds()) {
-      AddSharedState(model, id, &result);
-    }
-
-    return result;
-  }
-
-  static void SendZeroStateUpdate(feedui::ZeroStateSlice::Type zero_state_type,
-                                  SurfaceInterface* surface) {
-    feedui::StreamUpdate update;
-    feedui::Slice* slice = update.add_updated_slices()->mutable_slice();
-    slice->mutable_zero_state_slice()->set_type(zero_state_type);
-    slice->set_slice_id("zero-state");
-    surface->StreamUpdate(update);
-  }
-
-  static void AddSharedState(const StreamModel& model,
-                             const std::string& shared_state_id,
-                             feedui::StreamUpdate* stream_update) {
-    const std::string* shared_state_data =
-        model.FindSharedStateData(shared_state_id);
-    if (!shared_state_data)
-      return;
-    feedui::SharedState* added_shared_state =
-        stream_update->add_new_shared_states();
-    added_shared_state->set_id(shared_state_id);
-    added_shared_state->set_xsurface_shared_state(*shared_state_data);
-  }
-
-  static void AddSliceUpdate(const StreamModel& model,
-                             ContentRevision content_revision,
-                             bool is_content_new,
-                             feedui::StreamUpdate* stream_update) {
-    if (is_content_new) {
-      feedui::Slice* slice =
-          stream_update->add_updated_slices()->mutable_slice();
-      slice->set_slice_id(ToSliceId(content_revision));
-      const feedstore::Content* content = model.FindContent(content_revision);
-      DCHECK(content);
-      slice->mutable_xsurface_slice()->set_xsurface_frame(content->frame());
-    } else {
-      stream_update->add_updated_slices()->set_slice_id(
-          ToSliceId(content_revision));
-    }
-  }
-
-  // Owned by |FeedStream|.
-  // Warning!: Null when the model is not yet loaded.
-  StreamModel* model_ = nullptr;
-  const base::ObserverList<SurfaceInterface>* surfaces_;
-
-  std::set<ContentRevision> current_content_set_;
-};
-
-std::unique_ptr<StreamModelUpdateRequest>
-FeedStream::WireResponseTranslator::TranslateWireResponse(
+RefreshResponseData FeedStream::WireResponseTranslator::TranslateWireResponse(
     feedwire::Response response,
-    base::TimeDelta response_time,
+    StreamModelUpdateRequest::Source source,
     base::Time current_time) {
-  return ::feed::TranslateWireResponse(std::move(response), response_time,
+  return ::feed::TranslateWireResponse(std::move(response), source,
                                        current_time);
 }
 
-FeedStream::FeedStream(
-    RefreshTaskScheduler* refresh_task_scheduler,
-    EventObserver* stream_event_observer,
-    Delegate* delegate,
-    PrefService* profile_prefs,
-    FeedNetwork* feed_network,
-    FeedStore* feed_store,
-    const base::Clock* clock,
-    const base::TickClock* tick_clock,
-    scoped_refptr<base::SequencedTaskRunner> background_task_runner)
+FeedStream::Metadata::Metadata(FeedStore* store) : store_(store) {}
+FeedStream::Metadata::~Metadata() = default;
+
+void FeedStream::Metadata::Populate(feedstore::Metadata metadata) {
+  metadata_ = std::move(metadata);
+}
+
+std::string FeedStream::Metadata::GetConsistencyToken() const {
+  return metadata_.consistency_token();
+}
+
+void FeedStream::Metadata::SetConsistencyToken(std::string consistency_token) {
+  metadata_.set_consistency_token(std::move(consistency_token));
+  store_->WriteMetadata(metadata_, base::DoNothing());
+}
+
+LocalActionId FeedStream::Metadata::GetNextActionId() {
+  uint32_t id = metadata_.next_action_id();
+  metadata_.set_next_action_id(id + 1);
+  store_->WriteMetadata(metadata_, base::DoNothing());
+  return LocalActionId(id);
+}
+
+FeedStream::FeedStream(RefreshTaskScheduler* refresh_task_scheduler,
+                       MetricsReporter* metrics_reporter,
+                       Delegate* delegate,
+                       PrefService* profile_prefs,
+                       FeedNetwork* feed_network,
+                       FeedStore* feed_store,
+                       const base::Clock* clock,
+                       const base::TickClock* tick_clock,
+                       const ChromeInfo& chrome_info)
     : refresh_task_scheduler_(refresh_task_scheduler),
-      stream_event_observer_(stream_event_observer),
+      metrics_reporter_(metrics_reporter),
       delegate_(delegate),
       profile_prefs_(profile_prefs),
       feed_network_(feed_network),
       store_(feed_store),
       clock_(clock),
       tick_clock_(tick_clock),
-      background_task_runner_(background_task_runner),
+      chrome_info_(chrome_info),
       task_queue_(this),
-      user_classifier_(std::make_unique<UserClassifier>(profile_prefs, clock)),
-      request_throttler_(profile_prefs, clock) {
+      request_throttler_(profile_prefs, clock),
+      metadata_(feed_store) {
   static WireResponseTranslator default_translator;
   wire_response_translator_ = &default_translator;
 
-  surface_updater_ = std::make_unique<SurfaceUpdater>(&surfaces_);
+  surface_updater_ = std::make_unique<SurfaceUpdater>(metrics_reporter_);
 
   // Inserting this task first ensures that |store_| is initialized before
   // it is used.
-  task_queue_.AddTask(std::make_unique<WaitForStoreInitializeTask>(store_));
+  task_queue_.AddTask(std::make_unique<WaitForStoreInitializeTask>(this));
 }
 
 void FeedStream::InitializeScheduling() {
@@ -223,9 +115,6 @@ void FeedStream::InitializeScheduling() {
     refresh_task_scheduler_->Cancel();
     return;
   }
-
-  refresh_task_scheduler_->EnsureScheduled(
-      GetUserClassTriggerThreshold(GetUserClass(), TriggerType::kFixedTimer));
 }
 
 FeedStream::~FeedStream() = default;
@@ -235,45 +124,43 @@ void FeedStream::TriggerStreamLoad() {
     return;
 
   // If we should not load the stream, abort and send a zero-state update.
-  if (!IsArticlesListVisible()) {
-    LoadStreamTaskComplete(LoadStreamTask::Result(
-        LoadStreamStatus::kLoadNotAllowedArticlesListHidden));
-    return;
-  }
-  if (!delegate_->IsEulaAccepted()) {
-    LoadStreamTaskComplete(LoadStreamTask::Result(
-        LoadStreamStatus::kLoadNotAllowedEulaNotAccepted));
+  LoadStreamStatus do_not_attempt_reason = ShouldAttemptLoad();
+  if (do_not_attempt_reason != LoadStreamStatus::kNoStatus) {
+    InitialStreamLoadComplete(LoadStreamTask::Result(do_not_attempt_reason));
     return;
   }
 
   model_loading_in_progress_ = true;
+  surface_updater_->LoadStreamStarted();
   task_queue_.AddTask(std::make_unique<LoadStreamTask>(
-      this, base::BindOnce(&FeedStream::LoadStreamTaskComplete,
-                           base::Unretained(this))));
+      LoadStreamTask::LoadType::kInitialLoad, this,
+      base::BindOnce(&FeedStream::InitialStreamLoadComplete,
+                     base::Unretained(this))));
 }
 
-void FeedStream::LoadStreamTaskComplete(LoadStreamTask::Result result) {
-  stream_event_observer_->OnLoadStream(result.load_from_store_status,
-                                       result.final_status);
-  DVLOG(1) << "LoadStreamTaskComplete load_from_store_status="
-           << result.load_from_store_status
-           << " final_status=" << result.final_status;
+void FeedStream::InitialStreamLoadComplete(LoadStreamTask::Result result) {
+  PopulateDebugStreamData(result, profile_prefs_);
+  metrics_reporter_->OnLoadStream(result.load_from_store_status,
+                                  result.final_status);
+
   model_loading_in_progress_ = false;
 
-  // If loading failed, update surfaces with an appropriate zero-state error.
-  if (!model_) {
-    surface_updater_->LoadStreamFailed(result.final_status);
-  }
+  surface_updater_->LoadStreamComplete(model_ != nullptr, result.final_status);
+}
+
+void FeedStream::OnEnterBackground() {
+  metrics_reporter_->OnEnterBackground();
 }
 
 void FeedStream::AttachSurface(SurfaceInterface* surface) {
-  surfaces_.AddObserver(surface);
-  surface_updater_->SurfaceAdded(surface);
+  metrics_reporter_->SurfaceOpened(surface->GetSurfaceId());
   TriggerStreamLoad();
+  surface_updater_->SurfaceAdded(surface);
 }
 
 void FeedStream::DetachSurface(SurfaceInterface* surface) {
-  surfaces_.RemoveObserver(surface);
+  metrics_reporter_->SurfaceClosed(surface->GetSurfaceId());
+  surface_updater_->SurfaceRemoved(surface);
 }
 
 void FeedStream::SetArticlesListVisible(bool is_visible) {
@@ -282,6 +169,37 @@ void FeedStream::SetArticlesListVisible(bool is_visible) {
 
 bool FeedStream::IsArticlesListVisible() {
   return profile_prefs_->GetBoolean(prefs::kArticlesListVisible);
+}
+
+void FeedStream::LoadMore(SurfaceId surface_id,
+                          base::OnceCallback<void(bool)> callback) {
+  metrics_reporter_->OnLoadMoreBegin(surface_id);
+  if (!model_) {
+    DLOG(ERROR) << "Ignoring LoadMore() before the model is loaded";
+    return std::move(callback).Run(false);
+  }
+  surface_updater_->SetLoadingMore(true);
+  // Have at most one in-flight LoadMore() request. Send the result to all
+  // requestors.
+  load_more_complete_callbacks_.push_back(std::move(callback));
+  if (load_more_complete_callbacks_.size() == 1) {
+    task_queue_.AddTask(std::make_unique<LoadMoreTask>(
+        this,
+        base::BindOnce(&FeedStream::LoadMoreComplete, base::Unretained(this))));
+  }
+}
+
+void FeedStream::LoadMoreComplete(LoadMoreTask::Result result) {
+  metrics_reporter_->OnLoadMore(result.final_status);
+  // TODO(harringtond): In the case of failure, do we need to load an error
+  // message slice?
+  surface_updater_->SetLoadingMore(false);
+  std::vector<base::OnceCallback<void(bool)>> moved_callbacks =
+      std::move(load_more_complete_callbacks_);
+  bool success = result.final_status == LoadStreamStatus::kLoadedFromNetwork;
+  for (auto& callback : moved_callbacks) {
+    std::move(callback).Run(success);
+  }
 }
 
 void FeedStream::ExecuteOperations(
@@ -314,8 +232,28 @@ bool FeedStream::RejectEphemeralChange(EphemeralChangeId id) {
   return model_->RejectEphemeralChange(id);
 }
 
-UserClass FeedStream::GetUserClass() {
-  return user_classifier_->GetUserClass();
+DebugStreamData FeedStream::GetDebugStreamData() {
+  return ::feed::prefs::GetDebugStreamData(profile_prefs_);
+}
+
+void FeedStream::ForceRefreshForDebugging() {
+  task_queue_.AddTask(
+      std::make_unique<offline_pages::ClosureTask>(base::BindOnce(
+          &FeedStream::ForceRefreshForDebuggingTask, base::Unretained(this))));
+}
+
+void FeedStream::ForceRefreshForDebuggingTask() {
+  UnloadModel();
+  store_->ClearStreamData(base::DoNothing());
+  TriggerStreamLoad();
+}
+
+std::string FeedStream::DumpStateForDebugging() {
+  std::stringstream ss;
+  if (model_) {
+    ss << "model loaded, " << model_->GetContentList().size() << " contents\n";
+  }
+  return ss.str();
 }
 
 base::Time FeedStream::GetLastFetchTime() {
@@ -325,6 +263,10 @@ base::Time FeedStream::GetLastFetchTime() {
   if (fetch_time > clock_->Now())
     return base::Time();
   return fetch_time;
+}
+
+bool FeedStream::HasSurfaceAttached() const {
+  return surface_updater_->HasSurfaceAttached();
 }
 
 void FeedStream::LoadModelForTesting(std::unique_ptr<StreamModel> model) {
@@ -344,22 +286,58 @@ void FeedStream::SetIdleCallbackForTesting(
   idle_callback_ = idle_callback;
 }
 
-void FeedStream::SetUserClassifierForTesting(
-    std::unique_ptr<UserClassifier> user_classifier) {
-  user_classifier_ = std::move(user_classifier);
+void FeedStream::OnStoreChange(StreamModel::StoreUpdate update) {
+  if (!update.operations.empty()) {
+    DCHECK(!update.update_request);
+    store_->WriteOperations(update.sequence_number, update.operations);
+  } else {
+    DCHECK(update.update_request);
+    if (update.overwrite_stream_data) {
+      DCHECK_EQ(update.sequence_number, 0);
+      store_->OverwriteStream(std::move(update.update_request),
+                              base::DoNothing());
+    } else {
+      store_->SaveStreamUpdate(update.sequence_number,
+                               std::move(update.update_request),
+                               base::DoNothing());
+    }
+  }
 }
 
-void FeedStream::OnStoreChange(const StreamModel::StoreUpdate& update) {
-  store_->WriteOperations(update.sequence_number, update.operations);
+LoadStreamStatus FeedStream::ShouldAttemptLoad(bool model_loading) {
+  // Don't try to load the model if it's already loaded, or in the process of
+  // being loaded. Because |ShouldAttemptLoad()| is used both before and during
+  // the load process, we need to ignore this check when |model_loading| is
+  // true.
+  if (model_ || (!model_loading && model_loading_in_progress_))
+    return LoadStreamStatus::kModelAlreadyLoaded;
+
+  if (!IsArticlesListVisible())
+    return LoadStreamStatus::kLoadNotAllowedArticlesListHidden;
+
+  if (!delegate_->IsEulaAccepted())
+    return LoadStreamStatus::kLoadNotAllowedEulaNotAccepted;
+
+  return LoadStreamStatus::kNoStatus;
 }
 
-LoadStreamStatus FeedStream::ShouldMakeFeedQueryRequest() {
-  // TODO(harringtond): |suppress_refreshes_until_| was historically used for
-  // privacy purposes after clearing data to make sure sync data made it to the
-  // server. I'm not sure we need this now. But also, it was documented as not
-  // affecting manually triggered refreshes, but coded in a way that it does.
-  // I've tried to keep the same functionality as the old feed code, but we
-  // should revisit this.
+LoadStreamStatus FeedStream::ShouldMakeFeedQueryRequest(bool is_load_more) {
+  if (!is_load_more) {
+    // Time has passed since calling |ShouldAttemptLoad()|, call it again to
+    // confirm we should still attempt loading.
+    const LoadStreamStatus should_not_attempt_reason =
+        ShouldAttemptLoad(/*model_loading=*/true);
+    if (should_not_attempt_reason != LoadStreamStatus::kNoStatus) {
+      return should_not_attempt_reason;
+    }
+  }
+
+  // TODO(harringtond): |suppress_refreshes_until_| was historically used
+  // for privacy purposes after clearing data to make sure sync data made it
+  // to the server. I'm not sure we need this now. But also, it was
+  // documented as not affecting manually triggered refreshes, but coded in
+  // a way that it does. I've tried to keep the same functionality as the
+  // old feed code, but we should revisit this.
   if (tick_clock_->NowTicks() < suppress_refreshes_until_) {
     return LoadStreamStatus::kCannotLoadFromNetworkSupressedForHistoryDelete;
   }
@@ -375,8 +353,17 @@ LoadStreamStatus FeedStream::ShouldMakeFeedQueryRequest() {
   return LoadStreamStatus::kNoStatus;
 }
 
+RequestMetadata FeedStream::GetRequestMetadata() const {
+  RequestMetadata result;
+  result.chrome_info = chrome_info_;
+  result.display_metrics = delegate_->GetDisplayMetrics();
+  result.language_tag = delegate_->GetLanguageTag();
+  return result;
+}
+
 void FeedStream::OnEulaAccepted() {
-  MaybeTriggerRefresh(TriggerType::kForegrounded);
+  if (surface_updater_->HasSurfaceAttached())
+    TriggerStreamLoad();
 }
 
 void FeedStream::OnHistoryDeleted() {
@@ -400,35 +387,40 @@ void FeedStream::OnSignedOut() {
   ClearAll();
 }
 
-void FeedStream::OnEnterForeground() {
-  MaybeTriggerRefresh(TriggerType::kForegrounded);
-}
-
 void FeedStream::ExecuteRefreshTask() {
-  if (!IsArticlesListVisible()) {
-    // While the check and cancel isn't strictly necessary, a long lived session
-    // could be issuing refreshes due to the background trigger while articles
-    // are not visible.
-    refresh_task_scheduler_->Cancel();
+  // Schedule the next refresh attempt. If a new refresh schedule is returned
+  // through this refresh, it will be overwritten.
+  SetRequestSchedule(feed::prefs::GetRequestSchedule(profile_prefs_));
+
+  LoadStreamStatus do_not_attempt_reason = ShouldAttemptLoad();
+  if (do_not_attempt_reason != LoadStreamStatus::kNoStatus) {
+    BackgroundRefreshComplete(LoadStreamTask::Result(do_not_attempt_reason));
     return;
   }
-  MaybeTriggerRefresh(TriggerType::kFixedTimer);
+
+  task_queue_.AddTask(std::make_unique<LoadStreamTask>(
+      LoadStreamTask::LoadType::kBackgroundRefresh, this,
+      base::BindOnce(&FeedStream::BackgroundRefreshComplete,
+                     base::Unretained(this))));
+}
+
+void FeedStream::BackgroundRefreshComplete(LoadStreamTask::Result result) {
+  metrics_reporter_->OnBackgroundRefresh(result.final_status);
+  refresh_task_scheduler_->RefreshTaskComplete();
 }
 
 void FeedStream::ClearAll() {
-  // TODO(harringtond): How should we handle in-progress tasks.
-  stream_event_observer_->OnClearAll(clock_->Now() - GetLastFetchTime());
+  metrics_reporter_->OnClearAll(clock_->Now() - GetLastFetchTime());
 
-  // TODO(harringtond): This should result in clearing feed data
-  // and _maybe_ triggering refresh with TriggerType::kNtpShown.
-  // That work should be embedded in a task.
+  task_queue_.AddTask(std::make_unique<ClearAllTask>(this));
 }
 
-void FeedStream::MaybeTriggerRefresh(TriggerType trigger,
-                                     bool clear_all_before_refresh) {
-  stream_event_observer_->OnMaybeTriggerRefresh(trigger,
-                                                clear_all_before_refresh);
-  // TODO(harringtond): Implement refresh (with LoadStreamTask).
+void FeedStream::UploadAction(
+    feedwire::FeedAction action,
+    bool upload_now,
+    base::OnceCallback<void(UploadActionsTask::Result)> callback) {
+  task_queue_.AddTask(std::make_unique<UploadActionsTask>(
+      std::move(action), upload_now, this, std::move(callback)));
 }
 
 void FeedStream::LoadModel(std::unique_ptr<StreamModel> model) {
@@ -438,11 +430,75 @@ void FeedStream::LoadModel(std::unique_ptr<StreamModel> model) {
   surface_updater_->SetModel(model_.get());
 }
 
+void FeedStream::SetRequestSchedule(RequestSchedule schedule) {
+  const base::Time now = clock_->Now();
+  base::Time run_time = NextScheduledRequestTime(now, &schedule);
+  if (!run_time.is_null()) {
+    refresh_task_scheduler_->EnsureScheduled(run_time - now);
+  } else {
+    refresh_task_scheduler_->Cancel();
+  }
+  feed::prefs::SetRequestSchedule(schedule, profile_prefs_);
+}
+
 void FeedStream::UnloadModel() {
+  // Note: This should only be called from a running Task, as some tasks assume
+  // the model remains loaded.
   if (!model_)
     return;
   surface_updater_->SetModel(nullptr);
   model_.reset();
+}
+
+void FeedStream::ReportOpenAction(const std::string& slice_id) {
+  int index = surface_updater_->GetSliceIndexFromSliceId(slice_id);
+  if (index >= 0)
+    metrics_reporter_->OpenAction(index);
+}
+void FeedStream::ReportOpenInNewTabAction(const std::string& slice_id) {
+  int index = surface_updater_->GetSliceIndexFromSliceId(slice_id);
+  if (index >= 0)
+    metrics_reporter_->OpenInNewTabAction(index);
+}
+void FeedStream::ReportOpenInNewIncognitoTabAction() {
+  metrics_reporter_->OpenInNewIncognitoTabAction();
+}
+void FeedStream::ReportSliceViewed(SurfaceId surface_id,
+                                   const std::string& slice_id) {
+  int index = surface_updater_->GetSliceIndexFromSliceId(slice_id);
+  if (index >= 0)
+    metrics_reporter_->ContentSliceViewed(surface_id, index);
+}
+
+void FeedStream::ReportSendFeedbackAction() {
+  metrics_reporter_->SendFeedbackAction();
+}
+void FeedStream::ReportLearnMoreAction() {
+  metrics_reporter_->LearnMoreAction();
+}
+void FeedStream::ReportDownloadAction() {
+  metrics_reporter_->DownloadAction();
+}
+void FeedStream::ReportNavigationStarted() {
+  metrics_reporter_->NavigationStarted();
+}
+void FeedStream::ReportPageLoaded() {
+  metrics_reporter_->PageLoaded();
+}
+void FeedStream::ReportRemoveAction() {
+  metrics_reporter_->RemoveAction();
+}
+void FeedStream::ReportNotInterestedInAction() {
+  metrics_reporter_->NotInterestedInAction();
+}
+void FeedStream::ReportManageInterestsAction() {
+  metrics_reporter_->ManageInterestsAction();
+}
+void FeedStream::ReportContextMenuOpened() {
+  metrics_reporter_->ContextMenuOpened();
+}
+void FeedStream::ReportStreamScrolled(int distance_dp) {
+  metrics_reporter_->StreamScrolled(distance_dp);
 }
 
 }  // namespace feed

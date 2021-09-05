@@ -56,31 +56,6 @@ const base::Feature kHideSteadyStateUrlPathQueryAndRef {
 const base::Feature kOmniboxLocalEntitySuggestions{
     "OmniboxLocalEntitySuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Feature used to cap the number of URL-type matches shown within the
-// Omnibox. If enabled, the number of URL-type matches is limited (unless
-// there are no more non-URL matches available.) If enabled, there is a
-// companion parameter - OmniboxMaxURLMatches - which specifies the maximum
-// desired number of URL-type matches.
-const base::Feature kOmniboxMaxURLMatches {
-  "OmniboxMaxURLMatches",
-#if defined(OS_IOS) || defined(OS_ANDROID)
-      base::FEATURE_DISABLED_BY_DEFAULT
-#else
-      base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-};
-
-// Feature used to enable entity suggestion images and enhanced presentation
-// showing more context and descriptive text about the entity.
-const base::Feature kOmniboxRichEntitySuggestions{
-    "OmniboxRichEntitySuggestions",
-#if defined(OS_IOS) || defined(OS_ANDROID)
-      base::FEATURE_DISABLED_BY_DEFAULT
-#else
-      base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-};
-
 // Feature used to enable swapping the rows on answers.
 const base::Feature kOmniboxReverseAnswers{"OmniboxReverseAnswers",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
@@ -159,11 +134,6 @@ const base::Feature kDisplayTitleForCurrentUrl{
 #endif
 };
 
-// Feature used for the max autocomplete matches UI experiment.
-const base::Feature kUIExperimentMaxAutocompleteMatches{
-    "OmniboxUIExperimentMaxAutocompleteMatches",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Feature used to display the search terms instead of the URL in the Omnibox
 // when the user is on the search results page of the default search provider.
 const base::Feature kQueryInOmnibox{"QueryInOmnibox",
@@ -212,12 +182,13 @@ const base::Feature kOmniboxSearchEngineLogo{"OmniboxSearchEngineLogo",
 
 // Feature used to allow users to remove suggestions from clipboard.
 const base::Feature kOmniboxRemoveSuggestionsFromClipboard{
-    "OmniboxRemoveSuggestionsFromClipboard", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Feature to provide non personalized head search suggestion from a compact
-// on device model.
-const base::Feature kOnDeviceHeadProvider{"OmniboxOnDeviceHeadProvider",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+  "OmniboxRemoveSuggestionsFromClipboard",
+#if defined(OS_ANDROID)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
 
 // Feature to debounce drive requests from the document provider.
 const base::Feature kDebounceDocumentProvider{
@@ -242,12 +213,64 @@ const base::Feature kOmniboxDemoteByType{"OmniboxDemoteByType",
 const base::Feature kNewSearchFeatures{"OmniboxNewSearchFeatures",
                                        base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Feature to configure on-focus suggestions provided by ZeroSuggestProvider.
-// This feature's main job is to contain some field trial parameters such as:
-//  - "ZeroSuggestVariant" configures the per-page-classification mode of
-//    ZeroSuggestProvider.
+// Feature used to cap max zero suggestions shown according to the param
+// OmniboxMaxZeroSuggestMatches. If omitted,
+// OmniboxUIExperimentMaxAutocompleteMatches will be used instead. If present,
+// OmniboxMaxZeroSuggestMatches will override
+// OmniboxUIExperimentMaxAutocompleteMatches when |from_omnibox_focus| is true.
+const base::Feature kMaxZeroSuggestMatches{"OmniboxMaxZeroSuggestMatches",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Feature used to cap max suggestions shown according to the params
+// UIMaxAutocompleteMatches and UIMaxAutocompleteMatchesByProvider.
+const base::Feature kUIExperimentMaxAutocompleteMatches{
+    "OmniboxUIExperimentMaxAutocompleteMatches",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Feature used to cap the number of URL-type matches shown within the
+// Omnibox. If enabled, the number of URL-type matches is limited (unless
+// there are no more non-URL matches available.) If enabled, there is a
+// companion parameter - OmniboxMaxURLMatches - which specifies the maximum
+// desired number of URL-type matches.
+const bool kOmniboxMaxURLMatchesEnabledByDefault =
+#if defined(OS_IOS) || defined(OS_ANDROID)
+    false;
+#else
+    true;
+#endif
+const base::Feature kOmniboxMaxURLMatches{
+    "OmniboxMaxURLMatches", kOmniboxMaxURLMatchesEnabledByDefault
+                                ? base::FEATURE_ENABLED_BY_DEFAULT
+                                : base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Feature that configures ZeroSuggestProvider using the "ZeroSuggestVariant"
+// per-page-classification parameter.
+//
+// Generally speaking - do NOT use this for future server-side experiments.
+// Instead, create your a new narrowly scoped base::Feature for each experiment.
+//
+// Because our Field Trial system can only configure this base::Feature in a
+// single study, and does not merge parameters, using this creates conflicts.
 const base::Feature kOnFocusSuggestions{"OmniboxOnFocusSuggestions",
                                         base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Enables on-focus suggestions on the Open Web, that are contextual to the
+// current URL. Will only work if user is signed-in and syncing, or is
+// otherwise eligible to send the current page URL to the suggest server.
+const base::Feature kOnFocusSuggestionsContextualWeb{
+    "OmniboxOnFocusSuggestionsContextualWeb",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables Proactive ZeroSuggestions (PZPS) on the NTP, for the Omnibox and
+// Realbox respectively. Note: enabling this feature merely makes
+// ZeroSuggestProvider send the request. There are additional requirements,
+// like the user being signed-in, and the suggest server having PZPS enabled.
+const base::Feature kProactiveZeroSuggestionsOnNTPOmnibox{
+    "OmniboxProactiveZeroSuggestionsOnNTPOmnibox",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kProactiveZeroSuggestionsOnNTPRealbox{
+    "OmniboxProactiveZeroSuggestionsOnNTPRealbox",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Allow suggestions to be shown to the user on the New Tab Page upon focusing
 // URL bar (the omnibox).
@@ -262,6 +285,16 @@ const base::Feature kZeroSuggestionsOnNTPRealbox{
 // Allow on-focus query refinements to be shown on the default SERP.
 const base::Feature kZeroSuggestionsOnSERP{"OmniboxZeroSuggestionsOnSERP",
                                            base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Features to provide non personalized head search suggestion from a compact
+// on device model. More specifically, feature name with suffix Incognito /
+// NonIncognito will only controls behaviors under incognito / non-incognito
+// mode respectively.
+const base::Feature kOnDeviceHeadProviderIncognito{
+    "OmniboxOnDeviceHeadProviderIncognito", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kOnDeviceHeadProviderNonIncognito{
+    "OmniboxOnDeviceHeadProviderNonIncognito",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // If enabled, changes the way Google-provided search suggestions are scored by
 // the backend. Note that this Feature is only used for triggering a server-
@@ -318,6 +351,11 @@ const base::Feature kOmniboxLooseMaxLimitOnDedicatedRows{
 // elements like keywords, tab-switch buttons, and Pedals.
 const base::Feature kOmniboxSuggestionButtonRow{
     "OmniboxSuggestionButtonRow", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables using an Android RecyclerView to render the suggestions dropdown
+// instead of a ListView.
+const base::Feature kOmniboxSuggestionsRecyclerView{
+    "OmniboxSuggestionsRecyclerView", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // If enabled, uses WebUI to render the omnibox suggestions popup, similar to
 // how the NTP "fakebox" is implemented.

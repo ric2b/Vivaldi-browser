@@ -11,11 +11,11 @@
 #include "ash/ash_export.h"
 #include "ash/public/cpp/quick_answers_controller.h"
 #include "chromeos/components/quick_answers/quick_answers_client.h"
+#include "chromeos/components/quick_answers/quick_answers_model.h"
 #include "ui/gfx/geometry/rect.h"
 
 namespace chromeos {
 namespace quick_answers {
-struct QuickAnswer;
 class QuickAnswersConsent;
 }  // namespace quick_answers
 }  // namespace chromeos
@@ -41,8 +41,10 @@ class ASH_EXPORT QuickAnswersControllerImpl
 
   // SetClient is required to be called before using these methods.
   // TODO(yanxiao): refactor to delegate to browser.
-  void MaybeShowQuickAnswers(const gfx::Rect& anchor_bounds,
-                             const std::string& title) override;
+  void MaybeShowQuickAnswers(
+      const gfx::Rect& anchor_bounds,
+      const std::string& title,
+      const chromeos::quick_answers::Context& context) override;
 
   void DismissQuickAnswers(bool is_active) override;
 
@@ -57,6 +59,9 @@ class ASH_EXPORT QuickAnswersControllerImpl
       std::unique_ptr<chromeos::quick_answers::QuickAnswer> answer) override;
   void OnEligibilityChanged(bool eligible) override;
   void OnNetworkError() override;
+  void OnRequestPreprocessFinished(
+      const chromeos::quick_answers::QuickAnswersRequest& processed_request)
+      override;
 
   // Retry sending quick answers request to backend.
   void OnRetryQuickAnswersRequest();
@@ -76,7 +81,6 @@ class ASH_EXPORT QuickAnswersControllerImpl
   void OpenQuickAnswersDogfoodLink();
 
  private:
-  void SendAssistantQuery(const std::string& query);
   void MaybeDismissQuickAnswersConsent();
 
   // Bounds of the anchor view.
@@ -84,6 +88,12 @@ class ASH_EXPORT QuickAnswersControllerImpl
 
   // Query used to retrieve quick answer.
   std::string query_;
+
+  // Title to be shown on the QuickAnswers view.
+  std::string title_;
+
+  // Context information, including surrounding text and device properties.
+  chromeos::quick_answers::Context context_;
 
   std::unique_ptr<chromeos::quick_answers::QuickAnswersClient>
       quick_answers_client_;

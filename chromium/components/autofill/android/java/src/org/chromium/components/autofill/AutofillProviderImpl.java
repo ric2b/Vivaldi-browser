@@ -10,6 +10,7 @@ import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.os.Build;
+import android.os.Bundle;
 import android.util.SparseArray;
 import android.view.View;
 import android.view.ViewGroup;
@@ -18,9 +19,11 @@ import android.view.autofill.AutofillValue;
 
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.Log;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.DoNotInline;
 import org.chromium.base.metrics.ScopedSysTraceEvent;
+import org.chromium.components.version_info.VersionConstants;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.display.DisplayAndroid;
@@ -40,6 +43,7 @@ import org.chromium.ui.display.DisplayAndroid;
 @DoNotInline
 @TargetApi(Build.VERSION_CODES.O)
 public class AutofillProviderImpl extends AutofillProvider {
+    private static final String TAG = "AutofillProviderImpl";
     private static class FocusField {
         public final short fieldIndex;
         public final Rect absBound;
@@ -136,20 +140,26 @@ public class AutofillProviderImpl extends AutofillProvider {
                 if (index < 0 || index >= mFormData.mFields.size()) return false;
                 FormFieldData field = mFormData.mFields.get(index);
                 if (field == null) return false;
-                switch (field.getControlType()) {
-                    case FormFieldData.ControlType.LIST:
-                        int j = value.getListValue();
-                        if (j < 0 && j >= field.mOptionValues.length) continue;
-                        field.setAutofillValue(field.mOptionValues[j]);
-                        break;
-                    case FormFieldData.ControlType.TOGGLE:
-                        field.setChecked(value.getToggleValue());
-                        break;
-                    case FormFieldData.ControlType.TEXT:
-                        field.setAutofillValue((String) value.getTextValue());
-                        break;
-                    default:
-                        break;
+                try {
+                    switch (field.getControlType()) {
+                        case FormFieldData.ControlType.LIST:
+                            int j = value.getListValue();
+                            if (j < 0 && j >= field.mOptionValues.length) continue;
+                            field.setAutofillValue(field.mOptionValues[j]);
+                            break;
+                        case FormFieldData.ControlType.TOGGLE:
+                            field.setChecked(value.getToggleValue());
+                            break;
+                        case FormFieldData.ControlType.TEXT:
+                            field.setAutofillValue((String) value.getTextValue());
+                            break;
+                        default:
+                            break;
+                    }
+                } catch (IllegalStateException e) {
+                    // Refer to crbug.com/1080580 .
+                    Log.e(TAG, "The given AutofillValue wasn't expected, abort autofill.", e);
+                    return false;
                 }
             }
             return true;
@@ -220,6 +230,7 @@ public class AutofillProviderImpl extends AutofillProvider {
         }
     }
 
+    private final String mProviderName;
     private AutofillManagerWrapper mAutofillManager;
     private ViewGroup mContainerView;
     private WebContents mWebContents;
@@ -230,13 +241,14 @@ public class AutofillProviderImpl extends AutofillProvider {
     private AutofillManagerWrapper.InputUIObserver mInputUIObserver;
     private long mAutofillTriggeredTimeMillis;
 
-    public AutofillProviderImpl(Context context, ViewGroup containerView) {
-        this(containerView, new AutofillManagerWrapper(context), context);
+    public AutofillProviderImpl(Context context, ViewGroup containerView, String providerName) {
+        this(containerView, new AutofillManagerWrapper(context), context, providerName);
     }
 
-    @VisibleForTesting
-    public AutofillProviderImpl(
-            ViewGroup containerView, AutofillManagerWrapper manager, Context context) {
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    public AutofillProviderImpl(ViewGroup containerView, AutofillManagerWrapper manager,
+            Context context, String providerName) {
+        mProviderName = providerName;
         try (ScopedSysTraceEvent e =
                         ScopedSysTraceEvent.scoped("AutofillProviderImpl.constructor")) {
             assert Build.VERSION.SDK_INT >= Build.VERSION_CODES.O;
@@ -268,6 +280,13 @@ public class AutofillProviderImpl extends AutofillProvider {
         // control outside of the scope of autofill, e.g. the URL bar, in this case, we simply
         // return.
         if (mRequest == null) return;
+
+        Bundle bundle = structure.getExtras();
+        if (bundle != null) {
+            bundle.putCharSequence("VIRTUAL_STRUCTURE_PROVIDER_NAME", mProviderName);
+            bundle.putCharSequence(
+                    "VIRTUAL_STRUCTURE_PROVIDER_VERSION", VersionConstants.PRODUCT_VERSION);
+        }
         mRequest.fillViewStructure(structure);
         if (AutofillManagerWrapper.isLoggable()) {
             AutofillManagerWrapper.log(
@@ -456,14 +475,11 @@ public class AutofillProviderImpl extends AutofillProvider {
         // frameworks autofill manager, but in the latter case the
         // binder connection has already been dropped in a framework
         // finalizer, and so the methods we call will throw. It's not
-        // possible to know which case we're in, so just catch and
-        // ignore the exception.
-        try {
-            if (mNativeAutofillProvider != 0) mRequest = null;
-            mNativeAutofillProvider = nativeAutofillProvider;
-            if (nativeAutofillProvider == 0) mAutofillManager.destroy();
-        } catch (IllegalStateException e) {
-        }
+        // possible to know which case we're in, so just catch the exception
+        // in AutofillManagerWrapper.destroy().
+        if (mNativeAutofillProvider != 0) mRequest = null;
+        mNativeAutofillProvider = nativeAutofillProvider;
+        if (nativeAutofillProvider == 0) mAutofillManager.destroy();
     }
 
     @Override
@@ -483,7 +499,8 @@ public class AutofillProviderImpl extends AutofillProvider {
         for (int i = 0; i < mRequest.getFieldCount(); ++i) notifyVirtualValueChanged(i);
     }
 
-    private Rect transformToWindowBounds(RectF rect) {
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    public Rect transformToWindowBounds(RectF rect) {
         // Convert bounds to device pixel.
         WindowAndroid windowAndroid = mWebContents.getTopLevelNativeWindow();
         DisplayAndroid displayAndroid = windowAndroid.getDisplay();
@@ -505,7 +522,8 @@ public class AutofillProviderImpl extends AutofillProvider {
      *
      * @param formData the form need to be transformed.
      */
-    private void transformFormFieldToContainViewCoordinates(FormData formData) {
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    public void transformFormFieldToContainViewCoordinates(FormData formData) {
         WindowAndroid windowAndroid = mWebContents.getTopLevelNativeWindow();
         DisplayAndroid displayAndroid = windowAndroid.getDisplay();
         float dipScale = displayAndroid.getDipScale();

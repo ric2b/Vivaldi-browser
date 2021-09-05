@@ -9,15 +9,18 @@
 
 namespace ash {
 
-class PhotoModel;
+class AmbientBackendModel;
 
 class ASH_EXPORT AmbientViewDelegate {
  public:
   virtual ~AmbientViewDelegate() = default;
 
-  virtual PhotoModel* GetPhotoModel() = 0;
+  // Returns the model store stores all the information we get from the backdrop
+  // server to render the photo frame and the glanceable weather information on
+  // Ambient Mode.
+  virtual AmbientBackendModel* GetAmbientBackendModel() = 0;
 
-  // Invoked when user interacts with the background photo using mouse,
+  // Invoked when user interacting with the background photo using mouse,
   // touchpad, or touchscreen.
   virtual void OnBackgroundPhotoEvents() = 0;
 };

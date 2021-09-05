@@ -42,6 +42,12 @@ const char kAudioDevicesState[] = "settings.audio.device_state";
 // consent in EDU account addition flow.
 const char kEduCoexistenceId[] = "account_manager.edu_coexistence_id";
 
+// A string pref storing a parental consent text version that requires
+// invalidation of the secondary accounts added with the previous consent
+// versions.
+const char kEduCoexistenceSecondaryAccountsInvalidationVersion[] =
+    "account_manager.edu_coexistence_secondary_accounts_invalidation_version";
+
 // A dictionary of info for Quirks Client/Server interaction, mostly last server
 // request times, keyed to display product_id's.
 const char kQuirksClientLastServerCheck[] = "quirks_client.last_server_check";
@@ -67,6 +73,11 @@ const char kSamlPasswordExpirationTime[] = "saml.password_expiration_time";
 // A string pref - the URL where the user can update their password, according
 // to the SAML IdP.
 const char kSamlPasswordChangeUrl[] = "saml.password_change_url";
+
+// Boolean pref indicating whether a user has enabled the display password
+// button on the login/lock screen.
+const char kLoginDisplayPasswordButtonEnabled[] =
+    "login_display_password_button_enabled";
 
 }  // namespace prefs
 }  // namespace chromeos

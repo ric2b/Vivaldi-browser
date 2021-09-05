@@ -15,9 +15,8 @@ namespace content {
 
 const char kSmsFetcherImplKeyName[] = "sms_fetcher";
 
-SmsFetcherImpl::SmsFetcherImpl(BrowserContext* context,
-                               std::unique_ptr<SmsProvider> provider)
-    : context_(context), provider_(std::move(provider)) {
+SmsFetcherImpl::SmsFetcherImpl(BrowserContext* context, SmsProvider* provider)
+    : context_(context), provider_(provider) {
   if (provider_)
     provider_->AddObserver(this);
 }
@@ -30,33 +29,30 @@ SmsFetcherImpl::~SmsFetcherImpl() {
 // static
 SmsFetcher* SmsFetcher::Get(BrowserContext* context) {
   if (!context->GetUserData(kSmsFetcherImplKeyName)) {
-    auto fetcher = std::make_unique<SmsFetcherImpl>(context, nullptr);
-    context->SetUserData(kSmsFetcherImplKeyName, std::move(fetcher));
-  }
-
-  return static_cast<SmsFetcherImpl*>(
-      context->GetUserData(kSmsFetcherImplKeyName));
-}
-
-SmsFetcher* SmsFetcher::Get(BrowserContext* context,
-                            base::WeakPtr<RenderFrameHost> rfh) {
-  auto* stored_fetcher = static_cast<SmsFetcherImpl*>(
-      context->GetUserData(kSmsFetcherImplKeyName));
-  if (!stored_fetcher || !stored_fetcher->CanReceiveSms()) {
     auto fetcher = std::make_unique<SmsFetcherImpl>(
-        context, SmsProvider::Create(std::move(rfh)));
+        context, BrowserMainLoop::GetInstance()->GetSmsProvider());
     context->SetUserData(kSmsFetcherImplKeyName, std::move(fetcher));
   }
+
   return static_cast<SmsFetcherImpl*>(
       context->GetUserData(kSmsFetcherImplKeyName));
 }
 
+// TODO(crbug.com/1015645): Add implementation.
 void SmsFetcherImpl::Subscribe(const url::Origin& origin,
                                SmsQueue::Subscriber* subscriber) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  NOTIMPLEMENTED();
+}
 
-  if (subscribers_.HasSubscriber(origin, subscriber))
-    return;
+void SmsFetcherImpl::Subscribe(const url::Origin& origin,
+                               SmsQueue::Subscriber* subscriber,
+                               RenderFrameHost* render_frame_host) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  DCHECK(subscriber);
+  DCHECK(render_frame_host);
+  // Should not be called multiple times for the same subscriber and origin.
+  DCHECK(!subscribers_.HasSubscriber(origin, subscriber));
 
   subscribers_.Push(origin, subscriber);
 
@@ -68,11 +64,13 @@ void SmsFetcherImpl::Subscribe(const url::Origin& origin,
 
   // Fetches a local SMS.
   if (provider_)
-    provider_->Retrieve();
+    provider_->Retrieve(render_frame_host);
 }
 
 void SmsFetcherImpl::Unsubscribe(const url::Origin& origin,
                                  SmsQueue::Subscriber* subscriber) {
+  // Unsubscribe does not make a call to the provider because currently there
+  // is no mechanism to cancel a subscription.
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   subscribers_.Remove(origin, subscriber);
 }
@@ -80,13 +78,13 @@ void SmsFetcherImpl::Unsubscribe(const url::Origin& origin,
 bool SmsFetcherImpl::Notify(const url::Origin& origin,
                             const std::string& one_time_code) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // The received OTP is returned to the first subscriber for the origin.
   auto* subscriber = subscribers_.Pop(origin);
 
   if (!subscriber)
     return false;
 
   subscriber->OnReceive(one_time_code);
-
   return true;
 }
 
@@ -112,17 +110,6 @@ bool SmsFetcherImpl::OnReceive(const url::Origin& origin,
 bool SmsFetcherImpl::HasSubscribers() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return subscribers_.HasSubscribers();
-}
-
-bool SmsFetcherImpl::CanReceiveSms() {
-  return provider_ != nullptr;
-}
-
-void SmsFetcherImpl::SetSmsProviderForTesting(
-    std::unique_ptr<SmsProvider> provider) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  provider_ = std::move(provider);
-  provider_->AddObserver(this);
 }
 
 }  // namespace content

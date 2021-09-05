@@ -99,7 +99,6 @@ jumbo_component("base") {
     "default_style.h",
     "device_form_factor.h",
     "device_form_factor_desktop.cc",
-    "dragdrop/download_file_interface.h",
     "dragdrop/drag_drop_types.h",
     "dragdrop/drop_target_event.cc",
     "dragdrop/drop_target_event.h",
@@ -123,6 +122,8 @@ jumbo_component("base") {
     "models/combobox_model.cc",
     "models/combobox_model.h",
     "models/combobox_model_observer.h",
+    "models/image_model.cc",
+    "models/image_model.h",
     "models/list_model.h",
     "models/list_model_observer.h",
     "models/list_selection_model.cc",
@@ -266,6 +267,8 @@ jumbo_component("base") {
       "cocoa/focus_window_set.mm",
       "cocoa/menu_controller.h",
       "cocoa/menu_controller.mm",
+      "cocoa/permissions_utils.h",
+      "cocoa/permissions_utils.mm",
       "cocoa/quartz_util.h",
       "cocoa/quartz_util.mm",
       "cocoa/remote_accessibility_api.h",
@@ -332,8 +335,6 @@ jumbo_component("base") {
       "base_window.h",
       "cursor/cursor_util.cc",
       "cursor/cursor_util.h",
-      "default_theme_provider.cc",
-      "default_theme_provider.h",
       "emoji/emoji_panel_helper.h",
       "pointer/pointer_device.h",
       "pointer/pointer_device_util.cc",
@@ -425,7 +426,7 @@ jumbo_component("base") {
     "//base",
     "//skia",
     "//ui/base/cursor",
-    "//ui/base/mojom:cursor_type",
+    "//ui/base/cursor/mojom:cursor_type",
     "//ui/gfx",
     "//ui/gfx/geometry",
   ]
@@ -439,6 +440,7 @@ jumbo_component("base") {
     "//third_party/modp_b64",
     "//third_party/zlib:zlib",
     "//third_party/zlib/google:compression_utils",
+    "//ui/base:data_exchange",
     "//ui/base/clipboard:clipboard_types",
     "//ui/display",
     "//ui/events",
@@ -479,13 +481,11 @@ jumbo_component("base") {
 
   if (is_desktop_linux && (use_x11 || ozone_platform_x11)) {
     public_deps += [ "//ui/base/x" ]
-    configs += [ "//build/config/linux:x11" ]
 
     # X11 drag and drop wants to use common drag and drop types.
     allow_circular_includes_from = [ "//ui/base/x" ]
 
     if (!is_chromeos) {
-      configs += [ "//build/config/linux:xscrnsaver" ]
       deps += [ "//ui/gfx/x" ]
     }
   }
@@ -507,8 +507,8 @@ jumbo_component("base") {
     if (!is_chromeos) {
       # These Aura X11 files aren't used on ChromeOS.
       sources += [
-        "dragdrop/os_exchange_data_provider_aurax11.cc",
-        "dragdrop/os_exchange_data_provider_aurax11.h",
+        "dragdrop/os_exchange_data_provider_x11.cc",
+        "dragdrop/os_exchange_data_provider_x11.h",
       ]
     }
   }
@@ -629,7 +629,6 @@ jumbo_component("base") {
     libs += [ "jnigraphics" ]
 
     sources -= [
-      "default_theme_provider.cc",
       "l10n/l10n_font_util.cc",
       "models/button_menu_item_model.cc",
       "pointer/touch_editing_controller.cc",
@@ -653,6 +652,28 @@ jumbo_component("base") {
   }
 }
 
+component("data_exchange") {
+  defines = [ "IS_UI_BASE_DATA_EXCHANGE_IMPL" ]
+
+  sources = [
+    "dragdrop/download_file_info.cc",
+    "dragdrop/download_file_info.h",
+    "dragdrop/download_file_interface.h",
+    "dragdrop/os_exchange_data_provider.h",
+    "dragdrop/os_exchange_data_provider_factory_ozone.cc",
+    "dragdrop/os_exchange_data_provider_factory_ozone.h",
+  ]
+
+  deps = [
+    "//base",
+    "//ui/base/clipboard:clipboard_types",
+    "//ui/base/dragdrop/file_info",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//url",
+  ]
+}
+
 component("features") {
   output_name = "ui_base_features"
 
@@ -669,7 +690,7 @@ component("features") {
   ]
 }
 
-if (!is_ios) {
+if (is_win || is_mac || (is_linux && !is_chromeos)) {
   jumbo_static_library("pixel_diff_test_support") {
     testonly = true
     sources = [
@@ -687,7 +708,9 @@ if (!is_ios) {
       data_deps = [ ":goldctl" ]
     }
   }
+}
 
+if (!is_ios) {
   group("goldctl") {
     data = []
 
@@ -747,6 +770,8 @@ jumbo_static_library("test_support") {
     sources += [
       "accelerators/test_accelerator_target.cc",
       "accelerators/test_accelerator_target.h",
+      "test/mock_base_window.cc",
+      "test/mock_base_window.h",
       "test/ui_controls.h",
       "test/view_tree_validator.h",
     ]
@@ -893,6 +918,7 @@ test("ui_base_unittests") {
     "l10n/l10n_util_unittest.cc",
     "l10n/time_format_unittest.cc",
     "layout_unittest.cc",
+    "models/image_model_unittest.cc",
     "models/simple_menu_model_unittest.cc",
     "models/tree_node_iterator_unittest.cc",
     "pointer/touch_ui_controller_unittest.cc",
@@ -938,6 +964,7 @@ test("ui_base_unittests") {
     "//third_party/icu",
     "//third_party/zlib/google:compression_utils",
     "//ui/base",
+    "//ui/base:data_exchange",
     "//ui/base:test_support",
     "//ui/base:ui_data_pack",
     "//ui/base/clipboard:clipboard_test",
@@ -977,14 +1004,12 @@ test("ui_base_unittests") {
       "models/list_model_unittest.cc",
       "models/list_selection_model_unittest.cc",
       "models/tree_node_model_unittest.cc",
-      "test/skia_gold_pixel_diff_unittest.cc",
       "text/bytes_formatting_unittest.cc",
       "webui/web_ui_util_unittest.cc",
     ]
     deps += [
-      ":pixel_diff_test_support",
       "//components/system_media_controls:test_support",
-      "//ui/base/mojom:cursor_type",
+      "//ui/base/cursor/mojom:cursor_type",
     ]
 
     if (is_linux) {
@@ -1006,6 +1031,11 @@ test("ui_base_unittests") {
         "cocoa/weak_ptr_nsobject_unittest.mm",
       ]
     }
+  }
+
+  if (is_win || is_mac || (is_linux && !is_chromeos)) {
+    sources += [ "test/skia_gold_pixel_diff_unittest.cc" ]
+    deps += [ ":pixel_diff_test_support" ]
   }
 
   if (build_ime) {
@@ -1077,7 +1107,7 @@ test("ui_base_unittests") {
   } else {
     deps += [
       "//ui/base/accelerators/mojom:unittests",
-      "//ui/base/mojom:unittests",
+      "//ui/base/cursor/mojom:unittests",
     ]
   }
 
@@ -1115,8 +1145,6 @@ test("ui_base_unittests") {
   }
 
   if (use_x11) {
-    configs += [ "//build/config/linux:x11" ]
-
     deps += [
       "//ui/events/platform/x11",
       "//ui/gfx/x",
@@ -1142,7 +1170,7 @@ test("ui_base_unittests") {
 
   if (use_x11) {
     sources += [
-      "dragdrop/os_exchange_data_provider_aurax11_unittest.cc",
+      "dragdrop/os_exchange_data_provider_x11_unittest.cc",
       "x/selection_requestor_unittest.cc",
     ]
   }

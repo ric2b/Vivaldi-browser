@@ -210,8 +210,8 @@ LayoutUnit MenuListIntrinsicInlineSize(const HTMLSelectElement& select,
   LayoutTheme& theme = LayoutTheme::GetTheme();
   int paddings = theme.PopupInternalPaddingStart(style) +
                  theme.PopupInternalPaddingEnd(box.GetFrame(), style);
-  return std::max(static_cast<int>(ceilf(max_option_width)),
-                  LayoutTheme::GetTheme().MinimumMenuListSize(style)) +
+  return std::max(LayoutUnit(ceilf(max_option_width)),
+                  LayoutUnit(theme.MinimumMenuListSize(style))) +
          LayoutUnit(paddings);
 }
 
@@ -270,7 +270,8 @@ PaintLayerType LayoutBox::LayerTypeRequired() const {
   // since position:static elements that are not flex-items get their z-index
   // coerced to auto.
   if (IsPositioned() || CreatesGroup() || HasTransformRelatedProperty() ||
-      HasHiddenBackface() || HasReflection() || StyleRef().SpecifiesColumns() ||
+      HasHiddenBackface() || HasReflection() ||
+      (StyleRef().SpecifiesColumns() && !CanTraversePhysicalFragments()) ||
       StyleRef().IsStackingContext() ||
       StyleRef().ShouldCompositeForCurrentAnimations() ||
       IsEffectiveRootScroller())
@@ -296,8 +297,15 @@ void LayoutBox::WillBeDestroyed() {
   ShapeOutsideInfo::RemoveInfo(*this);
 
   if (!DocumentBeingDestroyed()) {
-    if (NGPaintFragment* first_inline_fragment = FirstInlineFragment())
-      first_inline_fragment->LayoutObjectWillBeDestroyed();
+    if (!RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled()) {
+      if (NGPaintFragment* first_inline_fragment = FirstInlineFragment())
+        first_inline_fragment->LayoutObjectWillBeDestroyed();
+    } else if (FirstInlineFragmentItemIndex()) {
+      NGFragmentItems::LayoutObjectWillBeDestroyed(*this);
+      ClearFirstInlineFragmentItemIndex();
+    }
+    if (measure_result_)
+      measure_result_->PhysicalFragment().LayoutObjectWillBeDestroyed();
     for (auto result : layout_results_)
       result->PhysicalFragment().LayoutObjectWillBeDestroyed();
   }
@@ -886,6 +894,11 @@ void LayoutBox::UpdateAfterLayout() {
   // Legacy, then NG again, NG won't use a stale layout result.
   if (IsOutOfFlowPositioned() && !IsLayoutNGObject())
     ClearLayoutResults();
+
+  Document& document = GetDocument();
+  document.IncLayoutCallsCounter();
+  if (IsLayoutNGObject())
+    document.IncLayoutCallsCounterNG();
 }
 
 bool LayoutBox::HasOverrideIntrinsicContentWidth() const {
@@ -1121,13 +1134,10 @@ PhysicalRect LayoutBox::PhysicalBackgroundRect(
   switch (background_box) {
     case EFillBox::kBorder:
       return PhysicalBorderBoxRect();
-      break;
     case EFillBox::kPadding:
       return PhysicalPaddingBoxRect();
-      break;
     case EFillBox::kContent:
       return PhysicalContentBoxRect();
-      break;
     default:
       break;
   }
@@ -1517,6 +1527,10 @@ LayoutUnit LayoutBox::OverrideLogicalHeight() const {
   if (extra_input_ && extra_input_->override_block_size)
     return *extra_input_->override_block_size;
   return rare_data_->override_logical_height_;
+}
+
+bool LayoutBox::IsOverrideLogicalHeightDefinite() const {
+  return extra_input_ && extra_input_->is_override_block_size_definite;
 }
 
 bool LayoutBox::HasOverrideLogicalHeight() const {
@@ -2468,17 +2482,12 @@ bool LayoutBox::HasInlineFragments() const {
     return inline_box_wrapper_;
   if (!RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled())
     return first_paint_fragment_;
-  // TODO(yosin): We should use |first_fragment_item_index_|.
-  NGInlineCursor cursor;
-  cursor.MoveTo(*this);
-  return cursor;
+  return first_fragment_item_index_;
 }
 
 void LayoutBox::SetFirstInlineFragment(NGPaintFragment* fragment) {
   CHECK(IsInLayoutNGInlineFormattingContext()) << *this;
-  // TODO(yosin): Once we remove |NGPaintFragment|, we should get rid of
-  // |!fragment|.
-  DCHECK(!fragment || !RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled());
+  DCHECK(!RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled());
   first_paint_fragment_ = fragment;
 }
 
@@ -2492,17 +2501,26 @@ void LayoutBox::SetFirstInlineFragmentItemIndex(wtf_size_t index) {
   CHECK(IsInLayoutNGInlineFormattingContext()) << *this;
   DCHECK(RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled());
   DCHECK_NE(index, 0u);
-  // TDOO(yosin): Once we update all |LayoutObject::FirstInlineFragment()|,
-  // we should enable below.
-  // first_fragment_item_index_ = index;
+  first_fragment_item_index_ = index;
 }
 
 void LayoutBox::InLayoutNGInlineFormattingContextWillChange(bool new_value) {
-  DeleteLineBoxWrapper();
+  if (IsInLayoutNGInlineFormattingContext()) {
+    if (!RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled()) {
+      SetFirstInlineFragment(nullptr);
+    } else {
+      ClearFirstInlineFragmentItemIndex();
+    }
+  } else {
+    DeleteLineBoxWrapper();
+  }
 
   // Because |first_paint_fragment_| and |inline_box_wrapper_| are union, when
   // one is deleted, the other should be initialized to nullptr.
-  DCHECK(new_value ? !first_paint_fragment_ : !inline_box_wrapper_);
+  DCHECK(new_value ? (RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled()
+                          ? !first_fragment_item_index_
+                          : !first_paint_fragment_)
+                   : !inline_box_wrapper_);
 }
 
 void LayoutBox::SetCachedLayoutResult(
@@ -2512,10 +2530,18 @@ void LayoutBox::SetCachedLayoutResult(
 
   if (result->GetConstraintSpaceForCaching().CacheSlot() ==
       NGCacheSlot::kMeasure) {
+    // We don't early return here, when setting the "measure" result we also
+    // set the "layout" result.
     if (measure_result_)
       InvalidateItems(*measure_result_);
     measure_result_ = result;
-    // When setting the "measure" result we also set the "layout" result.
+  } else {
+    // We have a "layout" result, and we may need to clear the old "measure"
+    // result if we needed non-simplified layout.
+    if (measure_result_ && NeedsLayout() && !NeedsSimplifiedLayoutOnly()) {
+      InvalidateItems(*measure_result_);
+      measure_result_ = nullptr;
+    }
   }
 
   AddLayoutResult(std::move(result), 0);
@@ -2524,9 +2550,50 @@ void LayoutBox::SetCachedLayoutResult(
 void LayoutBox::AddLayoutResult(scoped_refptr<const NGLayoutResult> result,
                                 wtf_size_t index) {
   DCHECK_EQ(result->Status(), NGLayoutResult::kSuccess);
-  if (index != WTF::kNotFound)
-    ShrinkLayoutResults(index);
+  if (index != WTF::kNotFound && layout_results_.size() > index) {
+    if (layout_results_.size() > index + 1)
+      ShrinkLayoutResults(index + 1);
+    ReplaceLayoutResult(std::move(result), index);
+    return;
+  }
+  const auto& fragment = To<NGPhysicalBoxFragment>(result->PhysicalFragment());
   layout_results_.push_back(std::move(result));
+  // If this is the last fragment for the node, and its node establishes an
+  // inline formatting context, we have some finalization to do.
+  if (!fragment.BreakToken() && fragment.Items())
+    NGFragmentItems::FinalizeAfterLayout(layout_results_);
+}
+
+void LayoutBox::ReplaceLayoutResult(scoped_refptr<const NGLayoutResult> result,
+                                    wtf_size_t index) {
+  DCHECK_LE(index, layout_results_.size());
+  const NGLayoutResult* old_result = layout_results_[index].get();
+  if (old_result == result.get())
+    return;
+  const auto& fragment = To<NGPhysicalBoxFragment>(result->PhysicalFragment());
+  bool got_new_fragment = &old_result->PhysicalFragment() != &fragment;
+  if (got_new_fragment) {
+    // Clear associations with the LayoutObjects and the items in the *first*
+    // box fragment. We only ever associate LayoutObjects with the items in the
+    // first box fragment, but this doesn't take place until we have added all
+    // the fragments for the node. Therefore we need to clean up this now,
+    // regardless of which index we're at. This means that we're potentially
+    // doing duplicate work here (for each fragment we replace), but only if
+    // we're split into multiple box fragments.
+    // TODO(layout-dev): Make this work for multiple box fragments (block
+    // fragmentation).
+    if (To<NGPhysicalBoxFragment>(layout_results_[0]->PhysicalFragment())
+            .HasItems()) {
+      if (!index)
+        InvalidateItems(*old_result);
+      NGFragmentItems::ClearAssociatedFragments(this);
+    }
+  }
+  layout_results_[index] = std::move(result);
+  // If this is the last fragment for the node, and its node establishes an
+  // inline formatting context, we have some finalization to do.
+  if (!fragment.BreakToken() && fragment.Items() && (index || got_new_fragment))
+    NGFragmentItems::FinalizeAfterLayout(layout_results_);
 }
 
 void LayoutBox::ClearLayoutResults() {
@@ -2542,6 +2609,12 @@ void LayoutBox::ShrinkLayoutResults(wtf_size_t results_to_keep) {
   // Invalidate if inline |DisplayItemClient|s will be destroyed.
   for (wtf_size_t i = results_to_keep; i < layout_results_.size(); i++)
     InvalidateItems(*layout_results_[i]);
+  if (results_to_keep == 0 && !layout_results_.IsEmpty()) {
+    if (To<NGPhysicalBoxFragment>(layout_results_[0]->PhysicalFragment())
+            .HasItems()) {
+      NGFragmentItems::ClearAssociatedFragments(this);
+    }
+  }
   layout_results_.Shrink(results_to_keep);
 }
 
@@ -2551,8 +2624,13 @@ void LayoutBox::InvalidateItems(const NGLayoutResult& result) {
       To<NGPhysicalBoxFragment>(result.PhysicalFragment());
   if (!box_fragment.HasItems())
     return;
-
-  DCHECK_EQ(this, box_fragment.GetLayoutObject());
+#if DCHECK_IS_ON()
+  // Column fragments are not really associated with a layout object.
+  if (IsLayoutFlowThread())
+    DCHECK(box_fragment.IsColumnBox());
+  else
+    DCHECK_EQ(this, box_fragment.GetLayoutObject());
+#endif
   ObjectPaintInvalidator(*this).SlowSetPaintingLayerNeedsRepaint();
 }
 
@@ -2563,6 +2641,7 @@ const NGLayoutResult* LayoutBox::GetCachedLayoutResult() const {
   const NGLayoutResult* result = layout_results_[0].get();
   if (result->IsSingleUse())
     return nullptr;
+  DCHECK(result->PhysicalFragment().IsAlive());
   DCHECK_EQ(layout_results_.size(), 1u);
   return result;
 }
@@ -2585,11 +2664,12 @@ scoped_refptr<const NGLayoutResult> LayoutBox::CachedLayoutResult(
     NGLayoutCacheStatus* out_cache_status) {
   *out_cache_status = NGLayoutCacheStatus::kNeedsLayout;
 
-  const NGLayoutResult* cached_layout_result =
+  const bool use_layout_cache_slot =
       new_space.CacheSlot() == NGCacheSlot::kLayout &&
-              !layout_results_.IsEmpty()
-          ? GetCachedLayoutResult()
-          : GetCachedMeasureResult();
+      !layout_results_.IsEmpty();
+  const NGLayoutResult* cached_layout_result = use_layout_cache_slot
+                                                   ? GetCachedLayoutResult()
+                                                   : GetCachedMeasureResult();
 
   if (!cached_layout_result)
     return nullptr;
@@ -2613,35 +2693,59 @@ scoped_refptr<const NGLayoutResult> LayoutBox::CachedLayoutResult(
       !LayoutBlockedByDisplayLock(DisplayLockLifecycleTarget::kChildren) &&
       (PosChildNeedsLayout() || NormalChildNeedsLayout());
 
+  const NGPhysicalBoxFragment& physical_fragment =
+      To<NGPhysicalBoxFragment>(cached_layout_result->PhysicalFragment());
   if (SelfNeedsLayoutForStyle() || child_needs_layout_unless_locked ||
       NeedsSimplifiedNormalFlowLayout() ||
       (NeedsPositionedMovementLayout() &&
        !NeedsPositionedMovementLayoutOnly())) {
-    // Check if we only need "simplified" layout. We don't abort yet, as we
-    // need to check if other things (like floats) will require us to perform a
-    // full layout.
-    //
-    // We don't regenerate any lineboxes during our "simplified" layout pass.
-    // If something needs "simplified" layout within a linebox, (e.g. an
-    // atomic-inline) we miss the cache.
-    if (NeedsSimplifiedLayoutOnly() &&
-        (!ChildrenInline() || !NeedsSimplifiedNormalFlowLayout()))
+    if (!ChildrenInline()) {
+      // Check if we only need "simplified" layout. We don't abort yet, as we
+      // need to check if other things (like floats) will require us to perform
+      // a full layout.
+      if (!NeedsSimplifiedLayoutOnly())
+        return nullptr;
+
       cache_status = NGLayoutCacheStatus::kNeedsSimplifiedLayout;
-    else
-      return nullptr;
+    } else if (!NeedsSimplifiedLayoutOnly() ||
+               NeedsSimplifiedNormalFlowLayout()) {
+      // We don't regenerate any lineboxes during our "simplified" layout pass.
+      // If something needs "simplified" layout within a linebox, (e.g. an
+      // atomic-inline) we miss the cache.
+
+      if (!RuntimeEnabledFeatures::LayoutNGFragmentItemEnabled())
+        return nullptr;
+
+      // Check if some of line boxes are reusable.
+
+      // Only for the layout cache slot. Measure has several special
+      // optimizations that makes reusing lines complicated.
+      if (!use_layout_cache_slot)
+        return nullptr;
+
+      if (SelfNeedsLayout())
+        return nullptr;
+
+      if (!physical_fragment.HasItems())
+        return nullptr;
+
+      // Propagating OOF needs re-layout.
+      if (physical_fragment.HasOutOfFlowPositionedDescendants())
+        return nullptr;
+
+      // Any floats might need to move, causing lines to wrap differently,
+      // needing re-layout, either in cached result or in new constraint space.
+      if (!cached_layout_result->ExclusionSpace().IsEmpty() ||
+          new_space.HasFloats())
+        return nullptr;
+
+      cache_status = NGLayoutCacheStatus::kCanReuseLines;
+    } else {
+      cache_status = NGLayoutCacheStatus::kNeedsSimplifiedLayout;
+    }
   }
 
-  const NGPhysicalContainerFragment& physical_fragment =
-      cached_layout_result->PhysicalFragment();
-
   DCHECK(!physical_fragment.BreakToken());
-
-  // If we have an orthogonal flow root descendant, we don't attempt to cache
-  // our layout result. This is because the initial containing block size may
-  // have changed, having a high likelihood of changing the size of the
-  // orthogonal flow root.
-  if (physical_fragment.HasOrthogonalFlowRoots())
-    return nullptr;
 
   NGBlockNode node(this);
   NGLayoutCacheStatus size_cache_status = CalculateSizeBasedLayoutCacheStatus(
@@ -2707,7 +2811,8 @@ scoped_refptr<const NGLayoutResult> LayoutBox::CachedLayoutResult(
     // sibling.
     // The "simplified" layout algorithm doesn't have the required logic to
     // shift any added exclusions within the output exclusion space.
-    if (cache_status == NGLayoutCacheStatus::kNeedsSimplifiedLayout)
+    if (cache_status == NGLayoutCacheStatus::kNeedsSimplifiedLayout ||
+        cache_status == NGLayoutCacheStatus::kCanReuseLines)
       return nullptr;
 
     DCHECK_EQ(cache_status, NGLayoutCacheStatus::kHit);
@@ -2721,7 +2826,8 @@ scoped_refptr<const NGLayoutResult> LayoutBox::CachedLayoutResult(
   // We've performed all of the cache checks at this point. If we need
   // "simplified" layout then abort now.
   *out_cache_status = cache_status;
-  if (*out_cache_status == NGLayoutCacheStatus::kNeedsSimplifiedLayout)
+  if (cache_status == NGLayoutCacheStatus::kNeedsSimplifiedLayout ||
+      cache_status == NGLayoutCacheStatus::kCanReuseLines)
     return cached_layout_result;
 
   physical_fragment.CheckType();
@@ -4180,9 +4286,12 @@ bool LayoutBox::LogicalHeightComputesAsNone(SizeType size_type) const {
     return true;
 
   if (logical_height.IsPercentOrCalc() &&
-      HasOverrideContainingBlockContentLogicalHeight() &&
-      OverrideContainingBlockContentLogicalHeight() == kIndefiniteSize)
-    return true;
+      HasOverrideContainingBlockContentLogicalHeight()) {
+    if (OverrideContainingBlockContentLogicalHeight() == kIndefiniteSize)
+      return true;
+    else if (!GetDocument().InQuirksMode())
+      return false;
+  }
 
   // CustomLayout items can resolve their percentages against an available or
   // percentage size override.
@@ -4356,9 +4465,15 @@ LayoutUnit LayoutBox::AvailableLogicalHeightUsing(
       const LayoutFlexibleBox& flex_box = ToLayoutFlexibleBox(*Parent());
       if (flex_box.UseOverrideLogicalHeightForPerentageResolution(*this))
         return OverrideContentLogicalHeight();
-    } else if (GetCachedLayoutResult()) {
+    } else if (HasOverrideContainingBlockContentLogicalWidth() &&
+               IsOrthogonalWritingModeRoot()) {
+      return OverrideContainingBlockContentLogicalWidth();
+    } else if (HasOverrideLogicalHeight() &&
+               IsOverrideLogicalHeightDefinite()) {
+      return OverrideContentLogicalHeight();
+    } else if (const auto* previous_result = GetCachedLayoutResult()) {
       const NGConstraintSpace& space =
-          GetCachedLayoutResult()->GetConstraintSpaceForCaching();
+          previous_result->GetConstraintSpaceForCaching();
       if (space.IsFixedBlockSize() && !space.IsFixedBlockSizeIndefinite())
         return space.AvailableSize().block_size;
     }
@@ -6397,6 +6512,11 @@ LayoutUnit LayoutBox::PageRemainingLogicalHeightForOffset(
         offset, page_boundary_rule);
   }
   return remaining_height - footer_height;
+}
+
+int LayoutBox::CurrentPageNumber(LayoutUnit child_logical_top) const {
+  LayoutUnit offset = OffsetFromLogicalTopOfFirstPage() + child_logical_top;
+  return (offset / View()->PageLogicalHeight()).Floor();
 }
 
 bool LayoutBox::CrossesPageBoundary(LayoutUnit offset,

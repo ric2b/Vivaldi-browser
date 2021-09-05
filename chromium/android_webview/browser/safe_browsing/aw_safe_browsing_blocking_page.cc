@@ -24,13 +24,11 @@
 #include "components/security_interstitials/core/base_safe_browsing_error_ui.h"
 #include "components/security_interstitials/core/safe_browsing_quiet_error_ui.h"
 #include "components/security_interstitials/core/unsafe_resource.h"
-#include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "net/base/net_errors.h"
 
-using content::InterstitialPage;
 using content::WebContents;
 using security_interstitials::BaseSafeBrowsingErrorUI;
 using security_interstitials::SafeBrowsingQuietErrorUI;
@@ -84,29 +82,6 @@ AwSafeBrowsingBlockingPage::AwSafeBrowsingBlockingPage(
                 unsafe_resources[0], url_loader_factory,
                 /*history_service*/ nullptr,
                 sb_error_ui()->get_error_display_options());
-  }
-}
-
-// static
-void AwSafeBrowsingBlockingPage::ShowBlockingPage(
-    AwSafeBrowsingUIManager* ui_manager,
-    const UnsafeResource& unsafe_resource) {
-  DVLOG(1) << __func__ << " " << unsafe_resource.url.spec();
-  WebContents* web_contents = unsafe_resource.web_contents_getter.Run();
-
-  if (InterstitialPage::GetInterstitialPage(web_contents) &&
-      unsafe_resource.is_subresource) {
-    // This is an interstitial for a page's resource, let's queue it.
-    UnsafeResourceMap* unsafe_resource_map = GetUnsafeResourcesMap();
-    (*unsafe_resource_map)[web_contents].push_back(unsafe_resource);
-  } else {
-    // There is no interstitial currently showing, or we are about to display a
-    // new one for the main frame. If there is already an interstitial, showing
-    // the new one will automatically hide the old one.
-    AwSafeBrowsingBlockingPage* blocking_page = CreateBlockingPage(
-        ui_manager, unsafe_resource.web_contents_getter.Run(), GURL(),
-        unsafe_resource, nullptr);
-    blocking_page->Show();
   }
 }
 
@@ -178,9 +153,6 @@ void AwSafeBrowsingBlockingPage::FinishThreatDetails(
 
 void AwSafeBrowsingBlockingPage::OnInterstitialClosing() {
   if (resource_request_ && !proceeded()) {
-    // resource_request_ should only be set for committed interstitials.
-    DCHECK(
-        base::FeatureList::IsEnabled(safe_browsing::kCommittedSBInterstitials));
     AwContentsClientBridge* client =
         AwContentsClientBridge::FromWebContents(web_contents());
     // With committed interstitials, the navigation to the site is failed before
@@ -188,8 +160,8 @@ void AwSafeBrowsingBlockingPage::OnInterstitialClosing() {
     // time, and manually trigger them here.
     if (client) {
       client->OnReceivedError(*resource_request_,
-                              safe_browsing::GetNetErrorCodeForSafeBrowsing(),
-                              true, false);
+                              safe_browsing::kNetErrorCodeForSafeBrowsing, true,
+                              false);
     }
   }
   safe_browsing::BaseBlockingPage::OnInterstitialClosing();

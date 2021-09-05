@@ -54,9 +54,13 @@ function showLoadingIndicator(isLastPage) {
 }
 
 // Sets the title.
-function setTitle(title) {
+function setTitle(title, documentTitleSuffix) {
   $('title-holder').textContent = title;
-  document.title = title;
+  if (documentTitleSuffix) {
+    document.title = title + documentTitleSuffix;
+  } else {
+    document.title = title;
+  }
 }
 
 // Set the text direction of the document ('ltr', 'rtl', or 'auto').
@@ -80,14 +84,10 @@ function useTheme(theme) {
   updateToolbarColor(theme);
 }
 
-function getClassFromElement(element, classList) {
-  let foundClass = classList[0];
-  classList.forEach((cls) => {
-    if (element.classList.contains(cls)) {
-      foundClass = cls;
-    }
-  });
-  return foundClass;
+function getPageTheme() {
+  const cls = Array.from(document.body.classList)
+                  .find((cls) => themeClasses.includes(cls));
+  return cls ? cls : themeClasses[0];
 }
 
 function updateToolbarColor(theme) {
@@ -166,7 +166,9 @@ class FontSizeSlider {
 const fontSizeSlider = new FontSizeSlider(
     $('font-size-selection'), [14, 15, 16, 18, 20, 24, 28, 32, 40, 48]);
 
-updateToolbarColor(getClassFromElement(document.body, themeClasses));
+// Set the toolbar color to match the page's theme.
+updateToolbarColor(getPageTheme());
+
 maybeSetWebFont();
 
 // The zooming speed relative to pinching speed.
@@ -434,27 +436,51 @@ class Pincher {
 
 const pincher = new Pincher;
 
-$('settings-toggle').addEventListener('click', (e) => {
-  const dialog = $('settings-dialog');
-  const toggle = $('settings-toggle');
-  if (dialog.open) {
-    toggle.classList.remove('activated');
-    dialog.close();
-  } else {
-    toggle.classList.add('activated');
-    dialog.showModal();
+class SettingsDialog {
+  constructor(toggleElement, dialogElement, backdropElement) {
+    this._toggleElement = toggleElement;
+    this._dialogElement = dialogElement;
+    this._backdropElement = backdropElement;
+
+    this._toggleElement.addEventListener('click', this.toggle.bind(this));
+    this._dialogElement.addEventListener('close', this.close.bind(this));
+    this._backdropElement.addEventListener('click', this.close.bind(this));
+
+    $('close-settings-button').addEventListener('click', this.close.bind(this));
+
+    $('theme-selection').addEventListener('change', (e) => {
+      const newTheme = e.target.value;
+      useTheme(newTheme);
+      distiller.storeThemePref(themeClasses.indexOf(newTheme));
+    });
+
+    $('font-family-selection').addEventListener('change', (e) => {
+      const newFontFamily = e.target.value;
+      useFontFamily(newFontFamily);
+      distiller.storeFontFamilyPref(fontFamilyClasses.indexOf(newFontFamily));
+    });
   }
-});
 
-$('close-settings-button').addEventListener('click', (e) => {
-  $('settings-toggle').classList.remove('activated');
-  $('settings-dialog').close();
-});
+  toggle() {
+    if (this._dialogElement.open) {
+      this.close();
+    } else {
+      this.showModal();
+    }
+  }
 
-$('theme-selection').addEventListener('change', (e) => {
-  useTheme(e.target.value);
-});
+  showModal() {
+    this._toggleElement.classList.add('activated');
+    this._backdropElement.style.display = 'block';
+    this._dialogElement.showModal();
+  }
 
-$('font-family-selection').addEventListener('change', (e) => {
-  useFontFamily(e.target.value);
-});
+  close() {
+    this._toggleElement.classList.remove('activated');
+    this._backdropElement.style.display = 'none';
+    this._dialogElement.close();
+  }
+}
+
+const settingsDialog = new SettingsDialog(
+    $('settings-toggle'), $('settings-dialog'), $('dialog-backdrop'));

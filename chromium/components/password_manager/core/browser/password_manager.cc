@@ -16,6 +16,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/platform_thread.h"
+#include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_field.h"
 #include "components/autofill/core/browser/autofill_type.h"
@@ -23,6 +24,7 @@
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/common/form_data_predictions.h"
 #include "components/autofill/core/common/save_password_progress_logger.h"
+#include "components/autofill/core/common/signatures.h"
 #include "components/password_manager/core/browser/browser_save_password_progress_logger.h"
 #include "components/password_manager/core/browser/field_info_manager.h"
 #include "components/password_manager/core/browser/password_autofill_manager.h"
@@ -108,21 +110,11 @@ bool IsThereVisiblePasswordField(const FormData& form) {
   return false;
 }
 
-// Finds the matched form manager for |form| in |form_managers|.
-PasswordFormManager* FindMatchedManager(
-    const FormData& form,
-    const std::vector<std::unique_ptr<PasswordFormManager>>& form_managers,
-    const PasswordManagerDriver* driver) {
-  for (const auto& form_manager : form_managers) {
-    if (form_manager->DoesManage(form, driver))
-      return form_manager.get();
-  }
-  return nullptr;
-}
-
-// Finds the matched form manager with id |form_renderer_id| in |form_managers|.
+#if !defined(OS_IOS)
+// Finds the matched form manager with id |form_renderer_id| in
+// |form_managers|.
 PasswordFormManager* FindMatchedManagerByRendererId(
-    uint32_t form_renderer_id,
+    autofill::FormRendererId form_renderer_id,
     const std::vector<std::unique_ptr<PasswordFormManager>>& form_managers,
     const PasswordManagerDriver* driver) {
   for (const auto& form_manager : form_managers) {
@@ -131,6 +123,7 @@ PasswordFormManager* FindMatchedManagerByRendererId(
   }
   return nullptr;
 }
+#endif  // !defined(OS_IOS)
 
 bool HasSingleUsernameVote(const FormPredictions& form) {
   if (!base::FeatureList::IsEnabled(
@@ -182,12 +175,23 @@ void AddLocallySavedPredictions(FieldInfoManager* field_info_manager,
     }
     if (logger && local_prediction != UNKNOWN_TYPE) {
       std::string message =
-          "form signature=" + NumberToString(predictions->form_signature) +
-          " , field signature=" + NumberToString(field.signature) + ", type=" +
+          "form signature=" +
+          NumberToString(predictions->form_signature.value()) +
+          " , field signature=" + NumberToString(field.signature.value()) +
+          ", type=" +
           autofill::AutofillType::ServerFieldTypeToString(local_prediction);
       logger->LogString(Logger::STRING_LOCALLY_SAVED_PREDICTION, message);
     }
   }
+}
+
+FormData SimplifiedFormDataFromFormStructure(
+    const FormStructure& form_structure) {
+  FormData form_data;
+  form_data.name = form_structure.form_name();
+  form_data.is_form_tag = form_structure.is_form_tag();
+  form_data.unique_renderer_id = form_structure.unique_renderer_id();
+  return form_data;
 }
 
 }  // namespace
@@ -212,9 +216,8 @@ void PasswordManager::RegisterProfilePrefs(
   registry->RegisterDoublePref(prefs::kLastTimeObsoleteHttpCredentialsRemoved,
                                0.0);
   registry->RegisterDoublePref(prefs::kLastTimePasswordCheckCompleted, 0.0);
-  registry->RegisterIntegerPref(
-      prefs::kPasswordManagerOnboardingState,
-      static_cast<int>(metrics_util::OnboardingState::kDoNotShow));
+  registry->RegisterIntegerPref(prefs::kPasswordManagerOnboardingState,
+                                static_cast<int>(OnboardingState::kDoNotShow));
   registry->RegisterBooleanPref(prefs::kWasOnboardingFeatureCheckedBefore,
                                 false);
 
@@ -253,7 +256,7 @@ PasswordManager::~PasswordManager() = default;
 void PasswordManager::OnGeneratedPasswordAccepted(
     PasswordManagerDriver* driver,
     const FormData& form_data,
-    uint32_t generation_element_id,
+    autofill::FieldRendererId generation_element_id,
     const base::string16& password) {
   PasswordFormManager* manager = GetMatchedManager(driver, form_data);
   if (manager) {
@@ -440,7 +443,7 @@ void PasswordManager::OnPasswordFormSubmittedNoChecksForiOS(
 
 void PasswordManager::OnUserModifiedNonPasswordField(
     PasswordManagerDriver* driver,
-    int32_t renderer_id,
+    autofill::FieldRendererId renderer_id,
     const base::string16& value) {
   // |driver| might be empty on iOS or in tests.
   int driver_id = driver ? driver->GetId() : 0;
@@ -533,8 +536,7 @@ void PasswordManager::CreateFormManagers(
     if (!client_->IsFillingEnabled(form_data.url))
       continue;
 
-    PasswordFormManager* manager =
-        FindMatchedManager(form_data, form_managers_, driver);
+    PasswordFormManager* manager = GetMatchedManager(driver, form_data);
 
     if (manager) {
       // This extra filling is just duplicating redundancy that was in
@@ -642,15 +644,18 @@ PasswordFormManager* PasswordManager::ProvisionallySaveForm(
   return matched_manager;
 }
 
-void PasswordManager::LogFirstFillingResult(PasswordManagerDriver* driver,
-                                            uint32_t form_renderer_id,
-                                            int32_t result) {
+#if !defined(OS_IOS)
+void PasswordManager::LogFirstFillingResult(
+    PasswordManagerDriver* driver,
+    autofill::FormRendererId form_renderer_id,
+    int32_t result) {
   PasswordFormManager* matching_manager =
       FindMatchedManagerByRendererId(form_renderer_id, form_managers_, driver);
   if (!matching_manager)
     return;
   matching_manager->GetMetricsRecorder()->RecordFirstFillingResult(result);
 }
+#endif  // !defined(OS_IOS)
 
 void PasswordManager::NotifyStorePasswordCalled() {
   store_password_called_ = true;
@@ -663,8 +668,7 @@ void PasswordManager::PresaveGeneratedPassword(
     const FormData& form,
     const base::string16& generated_password,
     const base::string16& generation_element) {
-  PasswordFormManager* form_manager =
-      FindMatchedManager(form, form_managers_, driver);
+  PasswordFormManager* form_manager = GetMatchedManager(driver, form);
   UMA_HISTOGRAM_BOOLEAN("PasswordManager.GeneratedFormHasNoFormManager",
                         !form_manager);
 
@@ -828,8 +832,12 @@ void PasswordManager::OnPasswordFormsRendered(
 }
 
 void PasswordManager::OnLoginSuccessful() {
-  if (autofill_assistant_mode_ == AutofillAssistantMode::kManuallyCuratedScript)
+  if (autofill_assistant_mode_ == AutofillAssistantMode::kRunning) {
+    // Autofillassistan performs one login. Only one prompt should
+    // be suppressed.
+    SetAutofillAssistantMode(AutofillAssistantMode::kNotRunning);
     return;
+  }
 
   std::unique_ptr<BrowserSavePasswordProgressLogger> logger;
   if (password_manager_util::IsLoggingActive(client_)) {
@@ -905,7 +913,7 @@ void PasswordManager::OnLoginSuccessful() {
 
     if (!submitted_manager->IsNewLogin()) {
       client_->NotifySuccessfulLoginWithExistingPassword(
-          submitted_manager->GetPendingCredentials());
+          submitted_manager->Clone());
     }
 
     if (submitted_manager->HasGeneratedPassword())
@@ -1002,8 +1010,8 @@ void PasswordManager::ProcessAutofillPredictions(
   for (const FormStructure* form : forms) {
     if (logger)
       logger->LogFormStructure(Logger::STRING_SERVER_PREDICTIONS, *form);
-    if (FindMatchedManagerByRendererId(form->unique_renderer_id(),
-                                       form_managers_, driver)) {
+    FormData form_data = SimplifiedFormDataFromFormStructure(*form);
+    if (GetMatchedManager(driver, form_data)) {
       // The form manager is already created.
       continue;
     }
@@ -1154,6 +1162,34 @@ void PasswordManager::ShowManualFallbackForSavingImpl(
   } else {
     HideManualFallbackForSaving();
   }
+}
+
+void PasswordManager::SetAutofillAssistantMode(AutofillAssistantMode mode) {
+  autofill_assistant_mode_ = mode;
+
+  if (autofill_assistant_mode_ == AutofillAssistantMode::kRunning) {
+    DCHECK(!disable_prompts_timer_.IsRunning())
+        << "Autofill Assistant tried to disable prompts twice in a row.";
+    disable_prompts_timer_.Start(FROM_HERE, GetTimeoutForDisablingPrompts(),
+                                 this,
+                                 &PasswordManager::ResetAutofillAssistantMode);
+  } else {
+    disable_prompts_timer_.Stop();
+  }
+}
+
+void PasswordManager::ResetAutofillAssistantMode() {
+  // The timeout is 0 only in the dedicated test. Otherwise, the call can happen
+  // only due to a bug.
+  DCHECK(disable_prompts_timeout_in_seconds_ == 0)
+      << "Autofill assistant failed to re-enable Password Manager's "
+         "prompts before timing out.";
+
+  autofill_assistant_mode_ = AutofillAssistantMode::kNotRunning;
+}
+
+base::TimeDelta PasswordManager::GetTimeoutForDisablingPrompts() {
+  return base::TimeDelta::FromSeconds(disable_prompts_timeout_in_seconds_);
 }
 
 }  // namespace password_manager

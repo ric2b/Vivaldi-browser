@@ -36,13 +36,15 @@ class ExtensionActionTestHelper {
   // Returns the number of browser action buttons in the window toolbar.
   virtual int NumberOfBrowserActions() = 0;
 
-  // Returns the number of browser action currently visible.
+  // Returns the number of browser action currently visible. Note that a correct
+  // result may require a UI layout. Ensure the UI layout is up-to-date (e.g. by
+  // calling InProcessBrowserTest::RunScheduledLayouts()) for a browser test.
   virtual int VisibleBrowserActions() = 0;
 
   // Inspects the extension popup for the action at the given index.
   virtual void InspectPopup(int index) = 0;
 
-  // Returns whether the browser action at |index| has a non-null icon. Note
+  // Returns whether the brownser action at |index| has a non-null icon. Note
   // that the icon is loaded asynchronously, in which case you can wait for it
   // to load by calling WaitForBrowserActionUpdated.
   virtual bool HasIcon(int index) = 0;
@@ -73,10 +75,6 @@ class ExtensionActionTestHelper {
   // Hides the given popup and returns whether the hide was successful.
   virtual bool HidePopup() = 0;
 
-  // Tests that the button at the given |index| is displaying that it wants
-  // to run.
-  virtual bool ActionButtonWantsToRun(size_t index) = 0;
-
   // Sets the current width of the browser actions container without resizing
   // the underlying controller. This is to simulate e.g. when the browser window
   // is too small for the preferred width.
@@ -93,6 +91,10 @@ class ExtensionActionTestHelper {
   virtual std::unique_ptr<ExtensionActionTestHelper> CreateOverflowBar(
       Browser* browser) = 0;
 
+  // Forces a layout of an overflow bar. Must only be called on the helper
+  // returned by CreateOverflowBar().
+  virtual void LayoutForOverflowBar() = 0;
+
   // Returns the minimum allowed size of an extension popup.
   virtual gfx::Size GetMinPopupSize() = 0;
 
@@ -101,9 +103,6 @@ class ExtensionActionTestHelper {
 
   // Returns the maximum allowed size of an extension popup.
   virtual gfx::Size GetMaxPopupSize() = 0;
-
-  // Returns whether the browser action container can currently be resized.
-  virtual bool CanBeResized() = 0;
 
  protected:
   ExtensionActionTestHelper() {}

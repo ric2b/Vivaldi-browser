@@ -15,6 +15,7 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/login/error_screens_histogram_helper.h"
 #include "chrome/browser/chromeos/login/helper.h"
+#include "chrome/browser/chromeos/login/screen_manager.h"
 #include "chrome/browser/chromeos/login/ui/login_display.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
@@ -38,6 +39,12 @@ constexpr const base::TimeDelta kDelayErrorMessage =
 }  // namespace
 
 namespace chromeos {
+
+// static
+UpdateRequiredScreen* UpdateRequiredScreen::Get(ScreenManager* manager) {
+  return static_cast<UpdateRequiredScreen*>(
+      manager->GetScreen(UpdateRequiredView::kScreenId));
+}
 
 UpdateRequiredScreen::UpdateRequiredScreen(UpdateRequiredView* view,
                                            ErrorScreen* error_screen)
@@ -83,6 +90,7 @@ void UpdateRequiredScreen::ShowImpl() {
   }
   // Check network state to set initial screen UI.
   RefreshNetworkState();
+
   version_updater_->GetEolInfo(base::BindOnce(
       &UpdateRequiredScreen::OnGetEolInfo, weak_factory_.GetWeakPtr()));
 }
@@ -140,7 +148,10 @@ void UpdateRequiredScreen::DefaultNetworkChanged(const NetworkState* network) {
 }
 
 void UpdateRequiredScreen::RefreshNetworkState() {
-  if (!view_)
+  // Do not refresh the UI if the update process has started. This can be
+  // encountered if error screen is shown and later hidden due to captive portal
+  // after starting the update process.
+  if (!view_ || is_updating_now_)
     return;
 
   const NetworkState* network =
@@ -152,19 +163,28 @@ void UpdateRequiredScreen::RefreshNetworkState() {
   // till the update process is triggered. Post that, update engine status
   // drives the UI state.
   if (!network || !network->IsConnectedState()) {
+    // No network is available for the update process to start.
     view_->SetUIState(UpdateRequiredView::UPDATE_NO_NETWORK);
-    waiting_for_connection_ = true;
+    waiting_for_connection_ = false;
   } else if (network->IsUsingMobileData()) {
+    // The device is either connected to a metered network at the start or has
+    // switched to one.
     view_->SetUIState(UpdateRequiredView::UPDATE_NEED_PERMISSION);
     waiting_for_connection_ = true;
   } else if (waiting_for_connection_) {
-    // Network is good for the update process to start. Start the update process
-    // and unsubscribe from the network change notifications as any change in
-    // network state is reflected in the update engine result.
+    // The device has switched from a metered network to a good network. Start
+    // the update process automatically and unsubscribe from the network change
+    // notifications as any change in network state is reflected in the update
+    // engine result.
     waiting_for_connection_ = false;
+    is_updating_now_ = true;
     view_->SetUIState(UpdateRequiredView::UPDATE_PROCESS);
     StopObservingNetworkState();
     version_updater_->StartNetworkCheck();
+  } else {
+    // The device is either connected to a good network at the start or has
+    // switched from no network to good network.
+    view_->SetUIState(UpdateRequiredView::UPDATE_REQUIRED_MESSAGE);
   }
 }
 
@@ -248,7 +268,7 @@ void UpdateRequiredScreen::ShowErrorMessage() {
                           weak_factory_.GetWeakPtr()));
   error_screen_->SetUIState(NetworkError::UI_STATE_UPDATE);
   error_screen_->SetParentScreen(UpdateRequiredView::kScreenId);
-  error_screen_->SetHideCallback(base::BindRepeating(
+  error_screen_->SetHideCallback(base::BindOnce(
       &UpdateRequiredScreen::OnErrorScreenHidden, weak_factory_.GetWeakPtr()));
   error_screen_->SetIsPersistentError(true /* is_persistent */);
   error_screen_->Show();

@@ -126,10 +126,10 @@ class ServiceWorkerUpdatedScriptLoaderTest : public testing::Test {
     network::ResourceRequest request;
     request.url = url;
     request.method = "GET";
-    request.resource_type =
-        static_cast<int>((url == version_->script_url())
-                             ? blink::mojom::ResourceType::kServiceWorker
-                             : blink::mojom::ResourceType::kScript);
+    request.destination =
+        url == version_->script_url()
+            ? network::mojom::RequestDestination::kServiceWorker
+            : network::mojom::RequestDestination::kScript;
 
     *out_client = std::make_unique<network::TestURLLoaderClient>();
     *out_loader = ServiceWorkerUpdatedScriptLoader::CreateAndStart(
@@ -337,7 +337,7 @@ TEST_F(ServiceWorkerUpdatedScriptLoaderTest, NewScriptLargerThanOld) {
 TEST_F(ServiceWorkerUpdatedScriptLoaderTest, NewScriptEmptyBody) {
   const std::string kNewHeaders =
       "HTTP/1.0 200 OK\0Content-Type: text/javascript\0Content-Length: 0\0\0";
-  const std::string kNewData = "";
+  const std::string kNewData;
 
   SetUpComparedScriptInfo(
       0, kNewHeaders, kNewData,

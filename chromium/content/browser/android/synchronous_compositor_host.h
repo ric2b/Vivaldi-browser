@@ -21,9 +21,9 @@
 #include "content/common/content_export.h"
 #include "content/common/input/synchronous_compositor.mojom.h"
 #include "content/public/browser/android/synchronous_compositor.h"
-#include "content/public/common/input_event_ack_state.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
+#include "third_party/blink/public/mojom/input/input_event_result.mojom-shared.h"
 #include "ui/android/view_android.h"
 #include "ui/gfx/geometry/scroll_offset.h"
 #include "ui/gfx/geometry/size_f.h"
@@ -38,7 +38,6 @@ class RenderProcessHost;
 class RenderWidgetHostViewAndroid;
 class SynchronousCompositorClient;
 class SynchronousCompositorSyncCallBridge;
-struct SyncCompositorCommonRendererParams;
 
 class CONTENT_EXPORT SynchronousCompositorHost
     : public SynchronousCompositor,
@@ -91,7 +90,8 @@ class CONTENT_EXPORT SynchronousCompositorHost
 
   // mojom::SynchronousCompositorHost overrides.
   void LayerTreeFrameSinkCreated() override;
-  void UpdateState(const SyncCompositorCommonRendererParams& params) override;
+  void UpdateState(
+      mojom::SyncCompositorCommonRendererParamsPtr params) override;
   void SetNeedsBeginFrames(bool needs_begin_frames) override;
 
   // viz::BeginFrameObserver implementation.

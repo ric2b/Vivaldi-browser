@@ -38,9 +38,8 @@ bool ConstructNonce(uint32_t counter, base::span<uint8_t, 12> out_nonce) {
   // Nonce is just a little-endian counter.
   std::array<uint8_t, sizeof(counter)> counter_bytes;
   memcpy(counter_bytes.data(), &counter, sizeof(counter));
-  auto remaining =
-      std::copy(counter_bytes.begin(), counter_bytes.end(), out_nonce.begin());
-  std::fill(remaining, out_nonce.end(), 0);
+  std::copy(counter_bytes.begin(), counter_bytes.end(), out_nonce.begin());
+  std::fill(out_nonce.begin() + counter_bytes.size(), out_nonce.end(), 0);
   return true;
 }
 
@@ -219,9 +218,10 @@ std::vector<uint8_t> HandshakeInitiator::BuildInitialMessage() {
     uint8_t es_key[32];
     CHECK(EC_POINT_oct2point(group, peer_identity_point.get(),
                              peer_identity_->data(), peer_identity_->size(),
-                             /*ctx=*/nullptr) &&
-          ECDH_compute_key(es_key, sizeof(es_key), peer_identity_point.get(),
-                           ephemeral_key_.get(), /*kdf=*/nullptr));
+                             /*ctx=*/nullptr));
+    CHECK(ECDH_compute_key(es_key, sizeof(es_key), peer_identity_point.get(),
+                           ephemeral_key_.get(),
+                           /*kdf=*/nullptr) == sizeof(es_key));
     noise_.MixKey(es_key);
   }
 
@@ -256,8 +256,9 @@ HandshakeInitiator::ProcessResponse(base::span<const uint8_t> response) {
   const EC_GROUP* group = EC_KEY_get0_group(ephemeral_key_.get());
   if (!EC_POINT_oct2point(group, peer_point.get(), peer_point_bytes.data(),
                           peer_point_bytes.size(), /*ctx=*/nullptr) ||
-      !ECDH_compute_key(shared_key_ee, sizeof(shared_key_ee), peer_point.get(),
-                        ephemeral_key_.get(), /*kdf=*/nullptr)) {
+      ECDH_compute_key(shared_key_ee, sizeof(shared_key_ee), peer_point.get(),
+                       ephemeral_key_.get(),
+                       /*kdf=*/nullptr) != sizeof(shared_key_ee)) {
     FIDO_LOG(DEBUG) << "Peer's P-256 point not on curve.";
     return base::nullopt;
   }
@@ -270,9 +271,9 @@ HandshakeInitiator::ProcessResponse(base::span<const uint8_t> response) {
     uint8_t shared_key_se[32];
     bssl::UniquePtr<EC_KEY> identity_key(EC_KEY_derive_from_secret(
         group, local_seed_->data(), local_seed_->size()));
-    if (!ECDH_compute_key(shared_key_se, sizeof(shared_key_se),
-                          peer_point.get(), identity_key.get(),
-                          /*kdf=*/nullptr)) {
+    if (ECDH_compute_key(shared_key_se, sizeof(shared_key_se), peer_point.get(),
+                         identity_key.get(),
+                         /*kdf=*/nullptr) != sizeof(shared_key_se)) {
       return base::nullopt;
     }
     noise_.MixKey(shared_key_se);
@@ -396,8 +397,8 @@ base::Optional<std::unique_ptr<Crypter>> RespondToHandshake(
 
   if (identity) {
     uint8_t es_key[32];
-    if (!ECDH_compute_key(es_key, sizeof(es_key), peer_point.get(), identity,
-                          /*kdf=*/nullptr)) {
+    if (ECDH_compute_key(es_key, sizeof(es_key), peer_point.get(), identity,
+                         /*kdf=*/nullptr) != sizeof(es_key)) {
       return base::nullopt;
     }
     noise.MixKey(es_key);
@@ -419,16 +420,18 @@ base::Optional<std::unique_ptr<Crypter>> RespondToHandshake(
   noise.MixKey(ephemeral_key_public_bytes);
 
   uint8_t shared_key_ee[32];
-  if (!ECDH_compute_key(shared_key_ee, sizeof(shared_key_ee), peer_point.get(),
-                        ephemeral_key.get(), /*kdf=*/nullptr)) {
+  if (ECDH_compute_key(shared_key_ee, sizeof(shared_key_ee), peer_point.get(),
+                       ephemeral_key.get(),
+                       /*kdf=*/nullptr) != sizeof(shared_key_ee)) {
     return base::nullopt;
   }
   noise.MixKey(shared_key_ee);
 
   if (peer_identity) {
     uint8_t shared_key_se[32];
-    if (!ECDH_compute_key(shared_key_se, sizeof(shared_key_se), peer_identity,
-                          ephemeral_key.get(), /*kdf=*/nullptr)) {
+    if (ECDH_compute_key(shared_key_se, sizeof(shared_key_se), peer_identity,
+                         ephemeral_key.get(),
+                         /*kdf=*/nullptr) != sizeof(shared_key_se)) {
       return base::nullopt;
     }
     noise.MixKey(shared_key_se);

@@ -52,10 +52,14 @@ class DequeConstIterator;
 template <typename T,
           wtf_size_t inlineCapacity = 0,
           typename Allocator = PartitionAllocator>
-class Deque : public ConditionalDestructor<Deque<T, INLINE_CAPACITY, Allocator>,
-                                           (INLINE_CAPACITY == 0) &&
-                                               Allocator::kIsGarbageCollected> {
+class Deque
+    : public ConditionalDestructor<Deque<T, INLINE_CAPACITY, Allocator>,
+                                   !VectorTraits<T>::kNeedsDestruction &&
+                                       Allocator::kIsGarbageCollected> {
   USE_ALLOCATOR(Deque, Allocator);
+
+  static_assert((inlineCapacity == 0) || !Allocator::kIsGarbageCollected,
+                "inlineCapacity not supported with garbage collection.");
 
  public:
   typedef DequeIterator<T, inlineCapacity, Allocator> iterator;
@@ -683,13 +687,15 @@ template <typename VisitorDispatcher, typename A>
 std::enable_if_t<A::kIsGarbageCollected>
 Deque<T, inlineCapacity, Allocator>::Trace(VisitorDispatcher visitor) const {
   // Bail out for concurrent marking.
-  if (visitor->ConcurrentTracingBailOut(
-          {this, [](blink::Visitor* visitor, const void* object) {
-             reinterpret_cast<const Deque<T, inlineCapacity, Allocator>*>(
-                 object)
-                 ->Trace(visitor);
-           }}))
-    return;
+  if (!VectorTraits<T>::kCanTraceConcurrently) {
+    if (visitor->DeferredTraceIfConcurrent(
+            {this, [](blink::Visitor* visitor, const void* object) {
+               reinterpret_cast<const Deque<T, inlineCapacity, Allocator>*>(
+                   object)
+                   ->Trace(visitor);
+             }}))
+      return;
+  }
 
   static_assert(inlineCapacity == 0,
                 "Heap allocated Deque should not use inline buffer");

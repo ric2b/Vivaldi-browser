@@ -403,7 +403,6 @@ HWNDMessageHandler::HWNDMessageHandler(HWNDMessageHandlerDelegate* delegate,
       use_system_default_icon_(false),
       restored_enabled_(false),
       current_cursor_(nullptr),
-      previous_cursor_(nullptr),
       dpi_(0),
       called_enable_non_client_dpi_scaling_(false),
       active_mouse_tracking_flags_(0),
@@ -864,13 +863,9 @@ bool HWNDMessageHandler::SetTitle(const base::string16& title) {
 }
 
 void HWNDMessageHandler::SetCursor(HCURSOR cursor) {
-  if (cursor) {
-    previous_cursor_ = ::SetCursor(cursor);
-    current_cursor_ = cursor;
-  } else if (previous_cursor_) {
-    ::SetCursor(previous_cursor_);
-    previous_cursor_ = nullptr;
-  }
+  TRACE_EVENT1("ui,input", "HWNDMessageHandler::SetCursor", "cursor", cursor);
+  ::SetCursor(cursor);
+  current_cursor_ = cursor;
 }
 
 void HWNDMessageHandler::FrameTypeChanged() {
@@ -2390,17 +2385,41 @@ void HWNDMessageHandler::OnPaint(HDC dc) {
   }
 
   if (!IsRectEmpty(&ps.rcPaint)) {
+    HBRUSH brush = reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+
     if (HasChildRenderingWindow()) {
       // If there's a child window that's being rendered to then clear the
       // area outside it (as WS_CLIPCHILDREN is set) with transparent black.
       // Otherwise, other portions of the backing store for the window can
       // flicker opaque black. http://crbug.com/586454
 
-      FillRect(ps.hdc, &ps.rcPaint,
-               reinterpret_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+      FillRect(ps.hdc, &ps.rcPaint, brush);
+    } else if (exposed_pixels_.height() > 0 || exposed_pixels_.width() > 0) {
+      // Fill in newly exposed window client area with black to ensure Windows
+      // doesn't put something else there (eg. copying existing pixels). This
+      // isn't needed if we've just cleared the whole client area outside the
+      // child window above.
+      RECT cr;
+      if (GetClientRect(hwnd(), &cr)) {
+        if (exposed_pixels_.height() > 0) {
+          DCHECK_GE(cr.bottom, exposed_pixels_.height());
+          RECT rect = {cr.left, cr.bottom - exposed_pixels_.height(), cr.right,
+                       cr.bottom};
+          FillRect(ps.hdc, &rect, brush);
+        }
+        if (exposed_pixels_.width() > 0) {
+          DCHECK_GE(cr.right, exposed_pixels_.width());
+          RECT rect = {cr.right - exposed_pixels_.width(), cr.top, cr.right,
+                       cr.bottom - exposed_pixels_.height()};
+          FillRect(ps.hdc, &rect, brush);
+        }
+      }
     }
+
     delegate_->HandlePaintAccelerated(gfx::Rect(ps.rcPaint));
   }
+
+  exposed_pixels_ = gfx::Size();
 
   EndPaint(hwnd(), &ps);
 }
@@ -2819,6 +2838,10 @@ void HWNDMessageHandler::OnWindowPosChanging(WINDOWPOS* window_pos) {
   gfx::Size new_size = gfx::Size(window_pos->cx, window_pos->cy);
   if ((old_size != new_size && !(window_pos->flags & SWP_NOSIZE)) ||
       window_pos->flags & SWP_FRAMECHANGED) {
+    // If the window is getting larger then fill the exposed area on the next
+    // WM_PAINT.
+    exposed_pixels_ = new_size - old_size;
+
     delegate_->HandleWindowSizeChanging();
     sent_window_size_changing_ = true;
 
@@ -2831,6 +2854,9 @@ void HWNDMessageHandler::OnWindowPosChanging(WINDOWPOS* window_pos) {
     // resizing. See https://crbug.com/739724
     if (is_translucent_)
       window_pos->flags |= SWP_NOCOPYBITS;
+  } else {
+    // The window size isn't changing so there are no exposed pixels.
+    exposed_pixels_ = gfx::Size();
   }
 
   if (ScopedFullscreenVisibility::IsHiddenForFullscreen(hwnd())) {
@@ -2871,9 +2897,12 @@ LRESULT HWNDMessageHandler::OnWindowSizingFinished(UINT message,
   // received after this message was posted.
   if (current_window_size_message_ != w_param)
     return 0;
-
   delegate_->HandleWindowSizeUnchanged();
   sent_window_size_changing_ = false;
+
+  // The window size didn't actually change, so nothing was exposed that needs
+  // to be filled black.
+  exposed_pixels_ = gfx::Size();
 
   return 0;
 }
@@ -3130,9 +3159,8 @@ LRESULT HWNDMessageHandler::HandlePointerEventTypeTouch(UINT message,
 
   ui::TouchEvent event(
       event_type, touch_point, event_time,
-      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH,
-                         mapped_pointer_id, radius_x, radius_y, pressure,
-                         rotation_angle),
+      ui::PointerDetails(ui::EventPointerType::kTouch, mapped_pointer_id,
+                         radius_x, radius_y, pressure, rotation_angle),
       ui::GetModifiersFromKeyState());
 
   event.latency()->AddLatencyNumberWithTimestamp(
@@ -3286,9 +3314,8 @@ void HWNDMessageHandler::GenerateTouchEvent(ui::EventType event_type,
                                             size_t id,
                                             base::TimeTicks time_stamp,
                                             TouchEvents* touch_events) {
-  ui::TouchEvent event(
-      event_type, point, time_stamp,
-      ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, id));
+  ui::TouchEvent event(event_type, point, time_stamp,
+                       ui::PointerDetails(ui::EventPointerType::kTouch, id));
 
   event.set_flags(ui::GetModifiersFromKeyState());
 

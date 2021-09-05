@@ -92,6 +92,7 @@ class PaymentRequestBrowserTestBase
     ABORT_CALLED,
     PROCESSING_SPINNER_SHOWN,
     PROCESSING_SPINNER_HIDDEN,
+    PAYMENT_HANDLER_WINDOW_OPENED,
   };
 
  protected:
@@ -137,6 +138,7 @@ class PaymentRequestBrowserTestBase
   void OnCvcPromptShown() override;
   void OnProcessingSpinnerShown() override;
   void OnProcessingSpinnerHidden() override;
+  void OnPaymentHandlerWindowOpened() override;
 
   // Will call JavaScript to invoke the PaymentRequest dialog and verify that
   // it's open and ready for input.
@@ -214,6 +216,9 @@ class PaymentRequestBrowserTestBase
   void RetryPaymentRequest(const std::string& validation_errors,
                            const DialogEvent& dialog_event,
                            PaymentRequestDialogView* dialog_view);
+
+  // Returns whether a given view is visible in the current dialog.
+  bool IsViewVisible(DialogViewID view_id) const;
 
   // Getting/setting the |value| in the textfield of a given |type|.
   base::string16 GetEditorTextfieldValue(autofill::ServerFieldType type);

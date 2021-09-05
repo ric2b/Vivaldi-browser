@@ -33,6 +33,7 @@
 #include "services/network/public/mojom/ip_address_space.mojom-blink.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/security_context/insecure_request_policy.h"
+#include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink.h"
 #include "third_party/blink/public/mojom/loader/request_context_frame_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
@@ -41,6 +42,7 @@
 #include "third_party/blink/public/platform/web_worker_fetch_context.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/frame.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
@@ -48,6 +50,7 @@
 #include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/loader/frame_fetch_context.h"
 #include "third_party/blink/renderer/core/loader/worker_fetch_context.h"
+#include "third_party/blink/renderer/core/probe/core_probes.h"
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
 #include "third_party/blink/renderer/core/workers/worker_or_worklet_global_scope.h"
 #include "third_party/blink/renderer/core/workers/worker_settings.h"
@@ -209,6 +212,38 @@ bool IsWebSocketAllowedInWorker(const BaseFetchContext& fetch_context,
   return settings && settings->GetAllowRunningOfInsecureContent();
 }
 
+void CreateMixedContentIssue(
+    const KURL& main_resource_url,
+    const KURL& insecure_url,
+    const mojom::blink::RequestContextType request_context,
+    LocalFrame* frame,
+    const mojom::blink::MixedContentResolutionStatus resolution_status,
+    const base::Optional<String>& devtools_id) {
+  auto mixedContent = mojom::blink::MixedContentIssueDetails::New();
+  mixedContent->request_context = request_context,
+  mixedContent->resolution_status = resolution_status;
+  mixedContent->insecure_url = insecure_url.GetString();
+  mixedContent->main_resource_url = main_resource_url.GetString();
+
+  if (devtools_id) {
+    auto affected_request = mojom::blink::AffectedRequest::New();
+    affected_request->request_id = *devtools_id;
+    affected_request->url = insecure_url.GetString();
+    mixedContent->request = std::move(affected_request);
+  }
+
+  auto affected_frame = mojom::blink::AffectedFrame::New();
+  affected_frame->frame_id = frame->GetDevToolsFrameToken().ToString().c_str();
+  mixedContent->frame = std::move(affected_frame);
+
+  auto details = mojom::blink::InspectorIssueDetails::New();
+  details->mixed_content_issue_details = std::move(mixedContent);
+
+  frame->AddInspectorIssue(mojom::blink::InspectorIssueInfo::New(
+      mojom::blink::InspectorIssueCode::kMixedContentIssue,
+      std::move(details)));
+}
+
 }  // namespace
 
 static void MeasureStricterVersionOfIsMixedContent(Frame& frame,
@@ -254,8 +289,14 @@ static bool IsInsecureUrl(const KURL& url) {
 // static
 bool MixedContentChecker::IsMixedContent(const SecurityOrigin* security_origin,
                                          const KURL& url) {
+  return IsMixedContent(security_origin->Protocol(), url);
+}
+
+// static
+bool MixedContentChecker::IsMixedContent(const String& origin_protocol,
+                                         const KURL& url) {
   if (!SchemeRegistry::ShouldTreatURLSchemeAsRestrictingMixedContent(
-          security_origin->Protocol()))
+          origin_protocol))
     return false;
 
   return IsInsecureUrl(url);
@@ -381,6 +422,7 @@ bool MixedContentChecker::ShouldBlockFetch(
     mojom::RequestContextType request_context,
     ResourceRequest::RedirectStatus redirect_status,
     const KURL& url,
+    const base::Optional<String>& devtools_id,
     ReportingDisposition reporting_disposition) {
   Frame* mixed_frame = InWhichFrameIsContentMixed(frame, url);
   if (!mixed_frame)
@@ -496,6 +538,14 @@ bool MixedContentChecker::ShouldBlockFetch(
         CreateConsoleMessageAboutFetch(MainResourceUrlForFrame(mixed_frame),
                                        url, request_context, allowed, nullptr));
   }
+  // Issue is created even when reporting disposition is false i.e. for
+  // speculative prefetches. Otherwise the DevTools frontend would not
+  // receive an issue with a devtools_id which it can match to a request.
+  CreateMixedContentIssue(
+      MainResourceUrlForFrame(mixed_frame), url, request_context, frame,
+      allowed ? mojom::blink::MixedContentResolutionStatus::MixedContentWarning
+              : mojom::blink::MixedContentResolutionStatus::MixedContentBlocked,
+      devtools_id);
   return !allowed;
 }
 
@@ -612,7 +662,12 @@ bool MixedContentChecker::IsWebSocketAllowed(
 
   frame->GetDocument()->AddConsoleMessage(CreateConsoleMessageAboutWebSocket(
       MainResourceUrlForFrame(mixed_frame), url, allowed));
-
+  CreateMixedContentIssue(
+      MainResourceUrlForFrame(mixed_frame), url,
+      mojom::blink::RequestContextType::FETCH, frame,
+      allowed ? mojom::blink::MixedContentResolutionStatus::MixedContentWarning
+              : mojom::blink::MixedContentResolutionStatus::MixedContentBlocked,
+      base::Optional<String>());
   return allowed;
 }
 
@@ -679,6 +734,14 @@ bool MixedContentChecker::IsMixedFormAction(
             mojom::ConsoleMessageSource::kSecurity,
             mojom::ConsoleMessageLevel::kWarning, message));
   }
+  // Issue is created even when reporting disposition is false i.e. for
+  // speculative prefetches. Otherwise the DevTools frontend would not
+  // receive an issue with a devtools_id which it can match to a request.
+  CreateMixedContentIssue(
+      MainResourceUrlForFrame(mixed_frame), url,
+      mojom::blink::RequestContextType::FORM, frame,
+      mojom::blink::MixedContentResolutionStatus::MixedContentWarning,
+      base::Optional<String>());
 
   return true;
 }
@@ -775,6 +838,13 @@ void MixedContentChecker::MixedContentFound(
   frame->GetDocument()->AddConsoleMessage(CreateConsoleMessageAboutFetch(
       main_resource_url, mixed_content_url, request_context, was_allowed,
       std::move(source_location)));
+
+  CreateMixedContentIssue(
+      main_resource_url, mixed_content_url, request_context, frame,
+      was_allowed
+          ? mojom::blink::MixedContentResolutionStatus::MixedContentWarning
+          : mojom::blink::MixedContentResolutionStatus::MixedContentBlocked,
+      base::Optional<String>());
   // Reports to the CSP policy.
   ContentSecurityPolicy* policy =
       frame->GetSecurityContext()->GetContentSecurityPolicy();
@@ -854,13 +924,19 @@ void MixedContentChecker::UpgradeInsecureRequest(
     // due to scheme not being http, so any redirects get upgraded.
     resource_request.SetUpgradeIfInsecure(true);
     if (resource_request.Url().ProtocolIs("http")) {
-      if (execution_context_for_logging->IsDocument()) {
-        Document* document = Document::From(execution_context_for_logging);
-        document->AddConsoleMessage(
+      if (auto* window =
+              DynamicTo<LocalDOMWindow>(execution_context_for_logging)) {
+        window->AddConsoleMessage(
             MixedContentChecker::CreateConsoleMessageAboutFetchAutoupgrade(
                 fetch_client_settings_object->GlobalObjectUrl(),
                 resource_request.Url()));
-        resource_request.SetUkmSourceId(document->UkmSourceID());
+        resource_request.SetUkmSourceId(window->document()->UkmSourceID());
+        CreateMixedContentIssue(fetch_client_settings_object->GlobalObjectUrl(),
+                                resource_request.Url(), context,
+                                window->document()->GetFrame(),
+                                mojom::blink::MixedContentResolutionStatus::
+                                    MixedContentAutomaticallyUpgraded,
+                                resource_request.GetDevToolsId());
       }
       resource_request.SetIsAutomaticUpgrade(true);
     } else {

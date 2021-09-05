@@ -29,6 +29,7 @@
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_resource_paint_server.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_text.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_resources_cache.h"
+#include "third_party/blink/renderer/core/paint/filter_effect_builder.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style/reference_clip_path_operation.h"
 #include "third_party/blink/renderer/core/style/style_svg_resource.h"
@@ -598,14 +599,20 @@ void SVGResources::ClearClipPathFilterMask(SVGElement& element,
                                            const ComputedStyle* style) {
   if (!style)
     return;
-  SVGResourceClient* client = element.GetSVGResourceClient();
+  SVGElementResourceClient* client = element.GetSVGResourceClient();
   if (!client)
     return;
   if (auto* old_reference_clip =
           DynamicTo<ReferenceClipPathOperation>(style->ClipPath()))
     old_reference_clip->RemoveClient(*client);
-  if (style->HasFilter())
+  if (style->HasFilter()) {
     style->Filter().RemoveClient(*client);
+    if (client->ClearFilterData()) {
+      LayoutObject* layout_object = element.GetLayoutObject();
+      LayoutSVGResourceContainer::MarkClientForInvalidation(
+          *layout_object, SVGResourceClient::kPaintInvalidation);
+    }
+  }
   if (StyleSVGResource* masker_resource = style->SvgStyle().MaskerResource())
     masker_resource->RemoveClient(*client);
 }
@@ -799,8 +806,33 @@ void SVGElementResourceClient::FilterPrimitiveChanged(
       *layout_object, SVGResourceClient::kPaintInvalidation);
 }
 
-void SVGElementResourceClient::SetFilterData(FilterData* filter_data) {
-  filter_data_ = filter_data;
+FilterData* SVGElementResourceClient::UpdateFilterData() {
+  DCHECK(element_->GetLayoutObject());
+  if (filter_data_) {
+    // If the filterData already exists we do not need to record the
+    // content to be filtered. This can occur if the content was
+    // previously recorded or we are in a cycle.
+    filter_data_->UpdateStateOnPrepare();
+    return filter_data_;
+  }
+  const LayoutObject& object = *element_->GetLayoutObject();
+  const ComputedStyle& style = object.StyleRef();
+  // Caller should make sure this holds.
+  DCHECK(GetFilterResourceForSVG(style));
+
+  auto* node_map = MakeGarbageCollected<SVGFilterGraphNodeMap>();
+  FilterEffectBuilder builder(SVGResources::ReferenceBoxForEffects(object), 1);
+  Filter* filter = builder.BuildReferenceFilter(
+      To<ReferenceFilterOperation>(*style.Filter().at(0)), nullptr, node_map);
+  if (!filter || !filter->LastEffect())
+    return nullptr;
+
+  IntRect source_region = EnclosingIntRect(object.StrokeBoundingBox());
+  filter->GetSourceGraphic()->SetSourceRect(source_region);
+
+  filter_data_ =
+      MakeGarbageCollected<FilterData>(filter->LastEffect(), node_map);
+  return filter_data_;
 }
 
 bool SVGElementResourceClient::ClearFilterData() {

@@ -16,9 +16,12 @@
 #include "chromeos/network/network_metadata_store.h"
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/network_state_test_helper.h"
+#include "components/account_id/account_id.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
+#include "components/user_manager/fake_user_manager.h"
+#include "components/user_manager/scoped_user_manager.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 
@@ -35,13 +38,29 @@ class TestNetworkMetadataObserver : public NetworkMetadataObserver {
   void OnFirstConnectionToNetwork(const std::string& guid) override {
     connections_.insert(guid);
   }
+  void OnNetworkUpdate(const std::string& guid,
+                       base::DictionaryValue* set_properties) override {
+    if (!updates_.contains(guid)) {
+      updates_[guid] = 1;
+    } else {
+      updates_[guid]++;
+    }
+  }
 
   bool HasConnected(const std::string& guid) {
     return connections_.count(guid) != 0;
   }
 
+  int GetNumberOfUpdates(const std::string& guid) {
+    if (!updates_.contains(guid)) {
+      return 0;
+    }
+    return updates_[guid];
+  }
+
  private:
   std::set<std::string> connections_;
+  base::flat_map<std::string, int> updates_;
 };
 
 class NetworkMetadataStoreTest : public ::testing::Test {
@@ -65,6 +84,15 @@ class NetworkMetadataStoreTest : public ::testing::Test {
     NetworkMetadataStore::RegisterPrefs(user_prefs_->registry());
     NetworkMetadataStore::RegisterPrefs(device_prefs_->registry());
 
+    auto fake_user_manager = std::make_unique<user_manager::FakeUserManager>();
+    auto account_id = AccountId::FromUserEmail("account@test.com");
+    const user_manager::User* user = fake_user_manager->AddUser(account_id);
+    fake_user_manager->UserLoggedIn(user->GetAccountId(), user->username_hash(),
+                                    true /* browser_restart */,
+                                    false /* is_child */);
+    scoped_user_manager_ = std::make_unique<user_manager::ScopedUserManager>(
+        std::move(fake_user_manager));
+
     metadata_store_ = std::make_unique<NetworkMetadataStore>(
         network_configuration_handler_, network_connection_handler_.get(),
         network_state_handler_, user_prefs_.get(), device_prefs_.get());
@@ -80,6 +108,7 @@ class NetworkMetadataStoreTest : public ::testing::Test {
     device_prefs_.reset();
     network_configuration_handler_ = nullptr;
     network_connection_handler_.reset();
+    scoped_user_manager_.reset();
     NetworkHandler::Shutdown();
   }
 
@@ -113,6 +142,7 @@ class NetworkMetadataStoreTest : public ::testing::Test {
   std::unique_ptr<sync_preferences::TestingPrefServiceSyncable> user_prefs_;
   std::unique_ptr<NetworkMetadataStore> metadata_store_;
   std::unique_ptr<TestNetworkMetadataObserver> metadata_observer_;
+  std::unique_ptr<user_manager::ScopedUserManager> scoped_user_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(NetworkMetadataStoreTest);
 };
@@ -137,6 +167,14 @@ TEST_F(NetworkMetadataStoreTest, FirstConnect) {
   ASSERT_TRUE(metadata_observer()->HasConnected(kGuid));
 }
 
+TEST_F(NetworkMetadataStoreTest, ConfigurationCreated) {
+  std::string service_path = ConfigureService(kConfigWifi0Connectable);
+  metadata_store()->OnConfigurationCreated(service_path, kGuid);
+  base::RunLoop().RunUntilIdle();
+
+  ASSERT_TRUE(metadata_store()->GetIsCreatedByUser(kGuid));
+}
+
 TEST_F(NetworkMetadataStoreTest, ConfigurationUpdated) {
   std::string service_path = ConfigureService(kConfigWifi0Connectable);
   network_connection_handler()->ConnectToNetwork(
@@ -146,6 +184,7 @@ TEST_F(NetworkMetadataStoreTest, ConfigurationUpdated) {
   metadata_store()->SetIsConfiguredBySync(kGuid);
   ASSERT_FALSE(metadata_store()->GetLastConnectedTimestamp(kGuid).is_zero());
   ASSERT_TRUE(metadata_store()->GetIsConfiguredBySync(kGuid));
+  ASSERT_EQ(0, metadata_observer()->GetNumberOfUpdates(kGuid));
 
   base::DictionaryValue properties;
   properties.SetKey(shill::kSecurityProperty, base::Value(shill::kSecurityPsk));
@@ -157,6 +196,7 @@ TEST_F(NetworkMetadataStoreTest, ConfigurationUpdated) {
 
   ASSERT_TRUE(metadata_store()->GetLastConnectedTimestamp(kGuid).is_zero());
   ASSERT_FALSE(metadata_store()->GetIsConfiguredBySync(kGuid));
+  ASSERT_EQ(1, metadata_observer()->GetNumberOfUpdates(kGuid));
 }
 
 TEST_F(NetworkMetadataStoreTest, ConfigurationRemoved) {

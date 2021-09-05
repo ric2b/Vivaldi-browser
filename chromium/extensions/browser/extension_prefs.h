@@ -24,6 +24,7 @@
 #include "extensions/browser/disable_reason.h"
 #include "extensions/browser/extension_prefs_scope.h"
 #include "extensions/browser/install_flag.h"
+#include "extensions/common/api/declarative_net_request/constants.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_id.h"
@@ -591,12 +592,14 @@ class ExtensionPrefs : public KeyedService {
   // Returns false if there is no ruleset checksum corresponding to the given
   // |extension_id| and |ruleset_id|. On success, returns true and populates the
   // checksum.
-  bool GetDNRStaticRulesetChecksum(const ExtensionId& extension_id,
-                                   int ruleset_id,
-                                   int* checksum) const;
-  void SetDNRStaticRulesetChecksum(const ExtensionId& extension_id,
-                                   int ruleset_id,
-                                   int checksum);
+  bool GetDNRStaticRulesetChecksum(
+      const ExtensionId& extension_id,
+      declarative_net_request::RulesetID ruleset_id,
+      int* checksum) const;
+  void SetDNRStaticRulesetChecksum(
+      const ExtensionId& extension_id,
+      declarative_net_request::RulesetID ruleset_id,
+      int checksum);
 
   // Returns false if there is no dynamic ruleset corresponding to
   // |extension_id|. On success, returns true and populates the checksum.
@@ -604,6 +607,16 @@ class ExtensionPrefs : public KeyedService {
                                     int* checksum) const;
   void SetDNRDynamicRulesetChecksum(const ExtensionId& extension_id,
                                     int checksum);
+
+  // Returns the set of enabled static ruleset IDs or base::nullopt if the
+  // extension hasn't updated the set of enabled static rulesets.
+  base::Optional<std::set<declarative_net_request::RulesetID>>
+  GetDNREnabledStaticRulesets(const ExtensionId& extension_id) const;
+  // Updates the set of enabled static rulesets for the |extension_id|. This
+  // preference gets cleared on extension update.
+  void SetDNREnabledStaticRulesets(
+      const ExtensionId& extension_id,
+      const std::set<declarative_net_request::RulesetID>& ids);
 
   // Whether the extension with the given |extension_id| is using its ruleset's
   // matched action count for the badge text. This is set via the

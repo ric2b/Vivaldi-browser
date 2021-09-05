@@ -43,7 +43,7 @@ WebGPUSwapBufferProvider::WebGPUSwapBufferProvider(
 
   layer_->SetIsDrawable(true);
   layer_->SetBlendBackgroundColor(false);
-  layer_->SetNearestNeighbor(true);
+  layer_->SetNearestNeighbor(false);
   layer_->SetFlipped(false);
   // TODO(cwallez@chromium.org): These flags aren't taken into account when the
   // layer is promoted to an overlay. Make sure we have fallback / emulation
@@ -59,6 +59,13 @@ WebGPUSwapBufferProvider::~WebGPUSwapBufferProvider() {
 cc::Layer* WebGPUSwapBufferProvider::CcLayer() {
   DCHECK(!neutered_);
   return layer_.get();
+}
+
+void WebGPUSwapBufferProvider::SetFilterQuality(
+    SkFilterQuality filter_quality) {
+  if (layer_) {
+    layer_->SetNearestNeighbor(filter_quality == kNone_SkFilterQuality);
+  }
 }
 
 void WebGPUSwapBufferProvider::Neuter() {
@@ -139,7 +146,7 @@ bool WebGPUSwapBufferProvider::PrepareTransferableResource(
   client_->OnTextureTransferred();
 
   // Make Dawn relinquish access to the texture so it can be used by the
-  // compositor. This will call dawn::Texture::Destroy so that further accesses
+  // compositor. This will call wgpu::Texture::Destroy so that further accesses
   // to the texture are errors.
   gpu::webgpu::WebGPUInterface* webgpu = dawn_control_client_->GetInterface();
   DCHECK_NE(wire_texture_id_, 0u);

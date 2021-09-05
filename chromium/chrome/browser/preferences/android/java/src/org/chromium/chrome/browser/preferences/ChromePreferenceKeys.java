@@ -83,6 +83,30 @@ public final class ChromePreferenceKeys {
     public static final String CLIPBOARD_SHARED_URI = "Chrome.Clipboard.SharedUri";
 
     /**
+     * Saves a counter of how many continuous feature sessions in which a user has dismissed
+     * conditional tab strip.
+     */
+    public static final String CONDITIONAL_TAB_STRIP_CONTINUOUS_DISMISS_COUNTER =
+            "Chrome.ConditionalTabStrip.ContinuousDismissCounter";
+
+    /**
+     * Saves the feature status of conditional tab strip.
+     */
+    public static final String CONDITIONAL_TAB_STRIP_FEATURE_STATUS =
+            "Chrome.ConditionalTabStrip.FeatureStatus";
+
+    /**
+     * Saves the timestamp of the last time that conditional tab strip shows.
+     */
+    public static final String CONDITIONAL_TAB_STRIP_LAST_SHOWN_TIMESTAMP =
+            "Chrome.ConditionalTabStrip.LastShownTimeStamp";
+
+    /**
+     * Saves whether a user has chosen to opt-out the conditional tab strip feature.
+     */
+    public static final String CONDITIONAL_TAB_STRIP_OPT_OUT = "Chrome.ConditionalTabStrip.OptOut";
+
+    /**
      * Marks that the content suggestions surface has been shown.
      * Default value is false.
      */
@@ -297,6 +321,7 @@ public final class ChromePreferenceKeys {
      * Default value is true.
      */
     public static final String FLAGS_CACHED_ADAPTIVE_TOOLBAR_ENABLED = "adaptive_toolbar_enabled";
+
     /**
      * Whether or not the bottom toolbar is enabled.
      * Default value is false.
@@ -485,6 +510,15 @@ public final class ChromePreferenceKeys {
             "com.google.android.apps.chrome.ChromeMobileApplication.BOOT_TIMESTAMP";
 
     /**
+     * Key prefix for base promo component. Used in {@link
+     * org.chromium.components.browser_ui.widget.promo.PromoCardCoordinator} to store related state
+     * or statistics.
+     */
+    public static final KeyPrefix PROMO_IS_DISMISSED =
+            new KeyPrefix("Chrome.PromoCard.IsDismissed.*");
+    public static final KeyPrefix PROMO_TIMES_SEEN = new KeyPrefix("Chrome.PromoCard.TimesSeen.*");
+
+    /**
      * Key to cache the enabled bottom toolbar parameter.
      */
     public static final String VARIATION_CACHED_BOTTOM_TOOLBAR = "bottom_toolbar_variation";
@@ -627,6 +661,8 @@ public final class ChromePreferenceKeys {
             "twa_dialog_number_of_dismissals_on_uninstall";
     public static final String TWA_DISCLOSURE_ACCEPTED_PACKAGES =
             "trusted_web_activity_disclosure_accepted_packages";
+    public static final String TWA_DISCLOSURE_SEEN_PACKAGES =
+            "Chrome.TrustedWebActivities.DisclosureAcceptedPackages";
 
     /**
      * Whether or not darken websites is enabled.
@@ -668,6 +704,36 @@ public final class ChromePreferenceKeys {
     /** Key for deferred recording of list of uninstalled WebAPK packages. */
     public static final String WEBAPK_UNINSTALLED_PACKAGES = "webapk_uninstalled_packages";
 
+    /** Cached Suggestions and Suggestion Headers. */
+    public static final String KEY_ZERO_SUGGEST_LIST_SIZE = "zero_suggest_list_size";
+    public static final KeyPrefix KEY_ZERO_SUGGEST_URL_PREFIX = new KeyPrefix("zero_suggest_url*");
+    public static final KeyPrefix KEY_ZERO_SUGGEST_DISPLAY_TEXT_PREFIX =
+            new KeyPrefix("zero_suggest_display_text*");
+    public static final KeyPrefix KEY_ZERO_SUGGEST_DESCRIPTION_PREFIX =
+            new KeyPrefix("zero_suggest_description*");
+    public static final KeyPrefix KEY_ZERO_SUGGEST_NATIVE_TYPE_PREFIX =
+            new KeyPrefix("zero_suggest_native_type*");
+    public static final KeyPrefix KEY_ZERO_SUGGEST_IS_SEARCH_TYPE_PREFIX =
+            new KeyPrefix("zero_suggest_is_search*");
+    public static final KeyPrefix KEY_ZERO_SUGGEST_ANSWER_TEXT_PREFIX =
+            new KeyPrefix("zero_suggest_answer_text*");
+    public static final KeyPrefix KEY_ZERO_SUGGEST_GROUP_ID_PREFIX =
+            new KeyPrefix("zero_suggest_group_id*");
+    @Deprecated
+    public static final KeyPrefix KEY_ZERO_SUGGEST_IS_DELETABLE_PREFIX =
+            new KeyPrefix("zero_suggest_is_deletable*");
+    public static final KeyPrefix KEY_ZERO_SUGGEST_IS_STARRED_PREFIX =
+            new KeyPrefix("zero_suggest_is_starred*");
+    public static final KeyPrefix KEY_ZERO_SUGGEST_POST_CONTENT_TYPE_PREFIX =
+            new KeyPrefix("zero_suggest_post_content_type*");
+    public static final KeyPrefix KEY_ZERO_SUGGEST_POST_CONTENT_DATA_PREFIX =
+            new KeyPrefix("zero_suggest_post_content_data*");
+    public static final String KEY_ZERO_SUGGEST_HEADER_LIST_SIZE = "zero_suggest_header_list_size";
+    public static final KeyPrefix KEY_ZERO_SUGGEST_HEADER_GROUP_ID_PREFIX =
+            new KeyPrefix("zero_suggest_header_group_id*");
+    public static final KeyPrefix KEY_ZERO_SUGGEST_HEADER_GROUP_TITLE_PREFIX =
+            new KeyPrefix("zero_suggest_header_group_title*");
+
     /**
      * These values are currently used as SharedPreferences keys, along with the keys in
      * {@link GrandfatheredChromePreferenceKeys#getKeysInUse()}. Add new SharedPreferences keys
@@ -680,6 +746,10 @@ public final class ChromePreferenceKeys {
         // clang-format off
         return Arrays.asList(
                 CLIPBOARD_SHARED_URI,
+                CONDITIONAL_TAB_STRIP_CONTINUOUS_DISMISS_COUNTER,
+                CONDITIONAL_TAB_STRIP_FEATURE_STATUS,
+                CONDITIONAL_TAB_STRIP_LAST_SHOWN_TIMESTAMP,
+                CONDITIONAL_TAB_STRIP_OPT_OUT,
                 CONTEXT_MENU_OPEN_IMAGE_IN_EPHEMERAL_TAB_CLICKED,
                 CONTEXT_MENU_OPEN_IN_EPHEMERAL_TAB_CLICKED,
                 CONTEXT_MENU_SEARCH_WITH_GOOGLE_LENS_CLICKED,
@@ -689,7 +759,10 @@ public final class ChromePreferenceKeys {
                 FLAGS_CACHED_DUET_TABSTRIP_INTEGRATION_ANDROID_ENABLED,
                 FLAGS_FIELD_TRIAL_PARAM_CACHED.pattern(),
                 HOMEPAGE_LOCATION_POLICY,
-                HOMEPAGE_USE_CHROME_NTP
+                HOMEPAGE_USE_CHROME_NTP,
+                PROMO_IS_DISMISSED.pattern(),
+                PROMO_TIMES_SEEN.pattern(),
+                TWA_DISCLOSURE_SEEN_PACKAGES
         );
         // clang-format on
     }

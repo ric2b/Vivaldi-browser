@@ -9,30 +9,42 @@
 
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager_observer.h"
+#include "chrome/browser/profiles/profile_observer.h"
 
 namespace enterprise_reporting {
 
 class ExtensionRequestObserver;
 
 // Factory class for ExtensionRequestObserver. It creates
-// ExtensionRequestObserver for each Profile.
-class ExtensionRequestObserverFactory : public ProfileManagerObserver {
+// ExtensionRequestObserver for each Profile or a specific profile.
+class ExtensionRequestObserverFactory : public ProfileManagerObserver,
+                                        public ProfileObserver {
  public:
-  ExtensionRequestObserverFactory();
+  // If a specific |profile| is given, this factory class only create an
+  // observer for it. If no |profile| is given, this factory class create
+  // observers for all loaded profiles respectively.
+  explicit ExtensionRequestObserverFactory(Profile* profile = nullptr);
   ExtensionRequestObserverFactory(const ExtensionRequestObserverFactory&) =
       delete;
   ExtensionRequestObserverFactory& operator=(
       const ExtensionRequestObserverFactory&) = delete;
   ~ExtensionRequestObserverFactory() override;
 
-  ExtensionRequestObserver* GetObserverByProfileForTesting(Profile* profile);
-  int GetNumberOfObserversForTesting();
-
- private:
   // ProfileManagerObserver
   void OnProfileAdded(Profile* profile) override;
   void OnProfileMarkedForPermanentDeletion(Profile* profile) override;
 
+  // ProfileObserver
+  // According to the destructor of ProfileImpl, the ExtensionManager may be
+  // disposed before this class is released in the CrOS environment. So we use
+  // this OnProfileWillBeDestroyed method to remove all observers earlier.
+  void OnProfileWillBeDestroyed(Profile* profile) override;
+
+  ExtensionRequestObserver* GetObserverByProfileForTesting(Profile* profile);
+  int GetNumberOfObserversForTesting();
+
+ private:
+  Profile* profile_;
   std::map<Profile*, std::unique_ptr<ExtensionRequestObserver>, ProfileCompare>
       observers_;
 };

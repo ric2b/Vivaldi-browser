@@ -139,7 +139,6 @@ component("net") {
     "base/host_port_pair.cc",
     "base/host_port_pair.h",
     "base/interval.h",
-    "base/interval_set.h",
     "base/io_buffer.cc",
     "base/io_buffer.h",
     "base/ip_address.cc",
@@ -446,8 +445,6 @@ component("net") {
       "base/host_mapping_rules.cc",
       "base/host_mapping_rules.h",
       "base/http_user_agent_settings.h",
-      "base/ip_pattern.cc",
-      "base/ip_pattern.h",
       "base/isolation_info.cc",
       "base/isolation_info.h",
       "base/load_flags.h",
@@ -1327,16 +1324,16 @@ component("net") {
         "http/http_auth_sspi_win.cc",
         "http/http_auth_sspi_win.h",
         "http/url_security_manager_win.cc",
-        "proxy_resolution/dhcp_pac_file_adapter_fetcher_win.cc",
-        "proxy_resolution/dhcp_pac_file_adapter_fetcher_win.h",
-        "proxy_resolution/dhcp_pac_file_fetcher_win.cc",
-        "proxy_resolution/dhcp_pac_file_fetcher_win.h",
-        "proxy_resolution/dhcpcsvc_init_win.cc",
-        "proxy_resolution/dhcpcsvc_init_win.h",
-        "proxy_resolution/proxy_config_service_win.cc",
-        "proxy_resolution/proxy_config_service_win.h",
-        "proxy_resolution/proxy_resolver_winhttp.cc",
-        "proxy_resolution/proxy_resolver_winhttp.h",
+        "proxy_resolution/win/dhcp_pac_file_adapter_fetcher_win.cc",
+        "proxy_resolution/win/dhcp_pac_file_adapter_fetcher_win.h",
+        "proxy_resolution/win/dhcp_pac_file_fetcher_win.cc",
+        "proxy_resolution/win/dhcp_pac_file_fetcher_win.h",
+        "proxy_resolution/win/dhcpcsvc_init_win.cc",
+        "proxy_resolution/win/dhcpcsvc_init_win.h",
+        "proxy_resolution/win/proxy_config_service_win.cc",
+        "proxy_resolution/win/proxy_config_service_win.h",
+        "proxy_resolution/win/proxy_resolver_winhttp.cc",
+        "proxy_resolution/win/proxy_resolver_winhttp.h",
         "proxy_resolution/win/windows_system_proxy_resolution_request.cc",
         "proxy_resolution/win/windows_system_proxy_resolution_request.h",
         "proxy_resolution/win/windows_system_proxy_resolution_service.cc",
@@ -1442,15 +1439,9 @@ component("net") {
 
         # These files are part of the partial implementation of NSS for
         # cert verification, so keep them in that case.
-        "cert/cert_verify_proc_nss.cc",
-        "cert/cert_verify_proc_nss.h",
         "cert/test_root_certs_nss.cc",
         "cert/x509_util_nss.cc",
         "cert/x509_util_nss.h",
-        "cert_net/nss_ocsp.cc",
-        "cert_net/nss_ocsp.h",
-        "cert_net/nss_ocsp_session_url_request.cc",
-        "cert_net/nss_ocsp_session_url_request.h",
       ]
       if (!is_chromecast) {
         sources += [
@@ -1961,6 +1952,8 @@ bundle_data("test_support_bundle_data") {
     "data/ssl/certificates/duplicate_cn_2.pem",
     "data/ssl/certificates/eku-test-root.pem",
     "data/ssl/certificates/empty_subject_cert.der",
+    "data/ssl/certificates/ev_test.pem",
+    "data/ssl/certificates/ev_test_state_only.pem",
     "data/ssl/certificates/expired_cert.pem",
     "data/ssl/certificates/explicit-policy-chain.pem",
     "data/ssl/certificates/foaf.me.chromium-test-cert.der",
@@ -2187,10 +2180,10 @@ static_library("test_support") {
     "test/net_test_suite.h",
     "test/quic_simple_test_server.cc",
     "test/quic_simple_test_server.h",
+    "test/revocation_builder.cc",
+    "test/revocation_builder.h",
     "test/scoped_disable_exit_on_dfatal.cc",
     "test/scoped_disable_exit_on_dfatal.h",
-    "test/tcp_socket_proxy.cc",
-    "test/tcp_socket_proxy.h",
     "test/test_certificate_data.h",
     "test/test_data_directory.cc",
     "test/test_data_directory.h",
@@ -2271,8 +2264,6 @@ static_library("test_support") {
     sources += [
       "test/spawned_test_server/remote_test_server.cc",
       "test/spawned_test_server/remote_test_server.h",
-      "test/spawned_test_server/remote_test_server_config.cc",
-      "test/spawned_test_server/remote_test_server_config.h",
       "test/spawned_test_server/remote_test_server_spawner_request.cc",
       "test/spawned_test_server/remote_test_server_spawner_request.h",
     ]
@@ -2643,6 +2634,7 @@ source_set("quic_test_tools") {
     "quic/platform/impl/quic_test_output_impl.h",
     "quic/test_task_runner.cc",
     "quic/test_task_runner.h",
+    "third_party/quiche/src/quic/test_tools/test_ticket_crypter.cc",
   ]
   deps = [
     ":net",
@@ -2692,6 +2684,7 @@ source_set("simple_quic_tools") {
     ":net",
     "//base",
     "//base/third_party/dynamic_annotations",
+    "//net/third_party/quiche:simple_quic_tools_core",
     "//third_party/protobuf:protobuf_lite",
     "//url",
   ]
@@ -4128,11 +4121,9 @@ test("net_unittests") {
     "base/hex_utils_test.cc",
     "base/host_mapping_rules_unittest.cc",
     "base/host_port_pair_unittest.cc",
-    "base/interval_set_test.cc",
     "base/interval_test.cc",
     "base/ip_address_unittest.cc",
     "base/ip_endpoint_unittest.cc",
-    "base/ip_pattern_unittest.cc",
     "base/isolation_info_unittest.cc",
     "base/lookup_string_in_fixed_set_unittest.cc",
     "base/mime_sniffer_unittest.cc",
@@ -4287,6 +4278,7 @@ test("net_unittests") {
     "http/http_vary_data_unittest.cc",
     "http/mock_allow_http_auth_preferences.cc",
     "http/mock_allow_http_auth_preferences.h",
+    "http/structured_headers_generated_unittest.cc",
     "http/structured_headers_unittest.cc",
     "http/transport_security_persister_unittest.cc",
     "http/transport_security_state_unittest.cc",
@@ -4417,7 +4409,6 @@ test("net_unittests") {
     "test/embedded_test_server/http_request_unittest.cc",
     "test/embedded_test_server/http_response_unittest.cc",
     "test/run_all_unittests.cc",
-    "test/tcp_socket_proxy_unittest.cc",
     "third_party/nist-pkits/pkits_testcases-inl.h",
     "third_party/uri_template/uri_template_test.cc",
     "tools/content_decoder_tool/content_decoder_tool.cc",
@@ -4494,9 +4485,9 @@ test("net_unittests") {
       "http/http_auth_sspi_win_unittest.cc",
       "http/mock_sspi_library_win.cc",
       "http/mock_sspi_library_win.h",
-      "proxy_resolution/dhcp_pac_file_adapter_fetcher_win_unittest.cc",
-      "proxy_resolution/dhcp_pac_file_fetcher_win_unittest.cc",
-      "proxy_resolution/proxy_config_service_win_unittest.cc",
+      "proxy_resolution/win/dhcp_pac_file_adapter_fetcher_win_unittest.cc",
+      "proxy_resolution/win/dhcp_pac_file_fetcher_win_unittest.cc",
+      "proxy_resolution/win/proxy_config_service_win_unittest.cc",
       "proxy_resolution/win/windows_system_proxy_resolution_service_unittest.cc",
       "ssl/client_cert_store_win_unittest.cc",
       "ssl/ssl_platform_key_win_unittest.cc",
@@ -4643,7 +4634,6 @@ test("net_unittests") {
       "cert/internal/trust_store_nss_unittest.cc",
       "cert/nss_cert_database_unittest.cc",
       "cert/x509_util_nss_unittest.cc",
-      "cert_net/nss_ocsp_unittest.cc",
     ]
     if (!is_chromecast) {
       sources += [
@@ -4928,6 +4918,26 @@ fuzzer_test("disk_cache_lpm_fuzzer") {
   ]
 }
 
+proto_library("backoff_entry_serializer_fuzzer_input") {
+  proto_in_dir = "//"
+  sources = [ "base/backoff_entry_serializer_fuzzer_input.proto" ]
+  link_deps = [ "//testing/libfuzzer/proto:json_proto" ]
+}
+
+fuzzer_test("net_backoff_entry_serializer_fuzzer") {
+  sources = [ "base/backoff_entry_serializer_fuzzer.cc" ]
+  deps = [
+    ":backoff_entry_serializer_fuzzer_input",
+    ":net_fuzzer_test_support",
+    ":test_support",
+    "//base",
+    "//net",
+    "//testing/libfuzzer/proto:json_proto",
+    "//testing/libfuzzer/proto:json_proto_converter",
+    "//third_party/libprotobuf-mutator",
+  ]
+}
+
 fuzzer_test("net_data_url_fuzzer") {
   sources = [ "base/data_url_fuzzer.cc" ]
   deps = [
@@ -4991,14 +5001,6 @@ fuzzer_test("net_parse_proxy_rules_fuzzer") {
     "//net",
   ]
   dict = "data/fuzzer_dictionaries/net_parse_proxy_bypass_rules_fuzzer.dict"
-}
-
-fuzzer_test("net_parse_ip_pattern_fuzzer") {
-  sources = [ "base/parse_ip_pattern_fuzzer.cc" ]
-  deps = [
-    ":net_fuzzer_test_support",
-    "//net",
-  ]
 }
 
 fuzzer_test("net_get_domain_and_registry_fuzzer") {

@@ -210,8 +210,6 @@ bool IsCreditCardMigrationEnabled(PersonalDataManager* personal_data_manager,
     case AutofillSyncSigninState::kSyncPaused:
       return false;
     case AutofillSyncSigninState::kSignedInAndWalletSyncTransportEnabled:
-      return base::FeatureList::IsEnabled(
-          features::kAutofillEnableLocalCardMigrationForNonSyncUser);
     case AutofillSyncSigninState::kSignedInAndSyncFeatureEnabled:
       return true;
     case AutofillSyncSigninState::kNumSyncStates:
@@ -225,11 +223,6 @@ bool IsInAutofillSuggestionsDisabledExperiment() {
   std::string group_name =
       base::FieldTrialList::FindFullName("AutofillEnabled");
   return group_name == "Disabled";
-}
-
-bool IsAutofillNoLocalSaveOnUploadSuccessExperimentEnabled() {
-  return base::FeatureList::IsEnabled(
-      features::kAutofillNoLocalSaveOnUploadSuccess);
 }
 
 bool OfferStoreUnmaskedCards(bool is_off_the_record) {

@@ -23,6 +23,9 @@ bool StubPasswordManagerClient::PromptUserToSaveOrUpdatePassword(
   return false;
 }
 
+void StubPasswordManagerClient::PromptUserToMovePasswordToAccount(
+    std::unique_ptr<PasswordFormManagerForUI> form_to_move) {}
+
 bool StubPasswordManagerClient::ShowOnboarding(
     std::unique_ptr<PasswordFormManagerForUI> form_to_save) {
   return false;
@@ -54,7 +57,7 @@ void StubPasswordManagerClient::NotifyUserCouldBeAutoSignedIn(
     std::unique_ptr<autofill::PasswordForm> form) {}
 
 void StubPasswordManagerClient::NotifySuccessfulLoginWithExistingPassword(
-    const autofill::PasswordForm& form) {}
+    std::unique_ptr<PasswordFormManagerForUI> submitted_manager) {}
 
 void StubPasswordManagerClient::NotifyStorePasswordCalled() {}
 
@@ -129,7 +132,7 @@ ukm::SourceId StubPasswordManagerClient::GetUkmSourceId() {
 PasswordManagerMetricsRecorder*
 StubPasswordManagerClient::GetMetricsRecorder() {
   if (!metrics_recorder_) {
-    metrics_recorder_.emplace(GetUkmSourceId(), GetMainFrameURL());
+    metrics_recorder_.emplace(GetUkmSourceId(), GetMainFrameURL(), nullptr);
   }
   return base::OptionalOrNullptr(metrics_recorder_);
 }

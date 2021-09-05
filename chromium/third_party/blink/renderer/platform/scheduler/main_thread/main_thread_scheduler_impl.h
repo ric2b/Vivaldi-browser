@@ -16,6 +16,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/single_sample_metrics.h"
 #include "base/optional.h"
+#include "base/profiler/sample_metadata.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
 #include "base/task/sequence_manager/task_queue.h"
@@ -41,7 +42,6 @@
 #include "third_party/blink/renderer/platform/scheduler/main_thread/non_waking_time_domain.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/page_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/pending_user_input.h"
-#include "third_party/blink/renderer/platform/scheduler/main_thread/prioritize_compositing_after_input_experiment.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/queueing_time_estimator.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/render_widget_signals.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/use_case.h"
@@ -210,7 +210,8 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   void AddRAILModeObserver(RAILModeObserver* observer) override;
   void RemoveRAILModeObserver(RAILModeObserver const* observer) override;
   void SetRendererProcessType(WebRendererProcessType type) override;
-  PendingUserInputInfo GetPendingUserInputInfo() const override;
+  Vector<WebInputEventAttribution> GetPendingUserInputInfo(
+      bool include_continuous) const override;
   bool IsBeginMainFrameScheduled() const override;
 
   // ThreadScheduler implementation:
@@ -366,8 +367,7 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     return task_queue_throttler_.get();
   }
 
-  void OnFirstContentfulPaint();
-  void OnFirstMeaningfulPaint();
+  void OnMainFramePaint();
 
   void OnShutdownTaskQueue(const scoped_refptr<MainThreadTaskQueue>& queue);
 
@@ -396,7 +396,8 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
 
   const SchedulingSettings& scheduling_settings() const;
 
-  void SetShouldPrioritizeCompositing(bool should_prioritize_compositing);
+  void SetPrioritizeCompositingAfterInput(
+      bool prioritize_compositing_after_input);
 
   void OnCompositorPriorityExperimentUpdateCompositorPriority();
 
@@ -473,6 +474,9 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   static const char* TimeDomainTypeToString(TimeDomainType domain_type);
 
   bool ContainsLocalMainFrame();
+
+  bool IsAnyMainFrameWaitingForFirstContentfulPaint() const;
+  bool IsAnyMainFrameWaitingForFirstMeaningfulPaint() const;
 
   struct TaskQueuePolicy {
     // Default constructor of TaskQueuePolicy should match behaviour of a
@@ -879,21 +883,18 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     TraceableState<RAILMode, TracingCategoryName::kInfo>
         rail_mode_for_tracing;  // Don't use except for tracing.
     TraceableState<bool, TracingCategoryName::kTopLevel> renderer_hidden;
+    base::Optional<base::ScopedSampleMetadata> renderer_hidden_metadata;
     TraceableState<bool, TracingCategoryName::kTopLevel> renderer_backgrounded;
     TraceableState<bool, TracingCategoryName::kDefault>
         keep_active_fetch_or_worker;
     TraceableState<bool, TracingCategoryName::kDefault>
         blocking_input_expected_soon;
     TraceableState<bool, TracingCategoryName::kDebug>
-        have_seen_a_begin_main_frame;
-    TraceableState<bool, TracingCategoryName::kDebug>
         have_reported_blocking_intervention_in_current_policy;
     TraceableState<bool, TracingCategoryName::kDebug>
         have_reported_blocking_intervention_since_navigation;
     TraceableState<bool, TracingCategoryName::kDebug>
         has_visible_render_widget_with_touch_handler;
-    TraceableState<bool, TracingCategoryName::kDebug>
-        begin_frame_not_expected_soon;
     TraceableState<bool, TracingCategoryName::kDebug>
         in_idle_period_for_testing;
     TraceableState<bool, TracingCategoryName::kInfo> use_virtual_time;
@@ -907,8 +908,8 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     base::TimeTicks background_status_changed_at;
     HashSet<PageSchedulerImpl*> page_schedulers;  // Not owned.
     base::ObserverList<RAILModeObserver>::Unchecked
-        rail_mode_observers;                                      // Not owned.
-    WakeUpBudgetPool* wake_up_budget_pool;                        // Not owned.
+        rail_mode_observers;                // Not owned.
+    WakeUpBudgetPool* wake_up_budget_pool;  // Not owned.
     MainThreadMetricsHelper metrics_helper;
     TraceableState<WebRendererProcessType, TracingCategoryName::kTopLevel>
         process_type;
@@ -948,9 +949,11 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     // True if a nested RunLoop is running.
     bool nested_runloop;
 
-    // High-priority for compositing events after input experiment.
-    PrioritizeCompositingAfterInputExperiment compositing_experiment;
-    bool should_prioritize_compositing;
+    // High-priority for compositing events after input. This will cause
+    // compositing events get a higher priority until the start of the next
+    // animation frame.
+    TraceableState<bool, TracingCategoryName::kDefault>
+        prioritize_compositing_after_input;
 
     // List of callbacks to execute after the current task.
     WTF::Vector<base::OnceClosure> on_task_completion_callbacks;
@@ -980,9 +983,9 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     TraceableState<bool, TracingCategoryName::kInfo>
         have_seen_a_blocking_gesture;
     TraceableState<bool, TracingCategoryName::kInfo>
-        waiting_for_contentful_paint;
+        waiting_for_any_main_frame_contentful_paint;
     TraceableState<bool, TracingCategoryName::kInfo>
-        waiting_for_meaningful_paint;
+        waiting_for_any_main_frame_meaningful_paint;
     TraceableState<bool, TracingCategoryName::kInfo>
         have_seen_input_since_navigation;
     TraceableCounter<uint32_t, TracingCategoryName::kInfo>

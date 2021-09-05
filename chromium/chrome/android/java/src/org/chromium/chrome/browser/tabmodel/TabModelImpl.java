@@ -11,7 +11,7 @@ import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.homepage.HomepageManager;
 import org.chromium.chrome.browser.ntp.RecentlyClosedBridge;
-import org.chromium.chrome.browser.tab.InterceptNavigationDelegateImpl;
+import org.chromium.chrome.browser.tab.InterceptNavigationDelegateTabHelper;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabLaunchType;
@@ -19,6 +19,7 @@ import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tab.TabState;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager.TabCreator;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
+import org.chromium.components.external_intents.InterceptNavigationDelegateImpl;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.common.ResourceRequestBody;
@@ -106,11 +107,15 @@ public class TabModelImpl extends TabModelJniBridge {
 
     @Override
     public void destroy() {
-        // When reparenting tabs, only commit that tab closures and keep the rest of the tabs alive.
-        if (!mModelDelegate.isReparentingInProgress()) {
-            for (Tab tab : mTabs) {
-                if (tab.isInitialized()) tab.destroy();
+        for (Tab tab : mTabs) {
+            // When reparenting tabs, we skip destoying tabs that we're intentionally keeping in
+            // memory.
+            if (mModelDelegate.isReparentingInProgress()
+                    && AsyncTabParamsManager.hasParamsForTabId(tab.getId())) {
+                continue;
             }
+
+            if (tab.isInitialized()) tab.destroy();
         }
 
         mRewoundList.destroy();
@@ -123,6 +128,19 @@ public class TabModelImpl extends TabModelJniBridge {
     @Override
     public void broadcastSessionRestoreComplete() {
         super.broadcastSessionRestoreComplete();
+
+        // This is to make sure TabModel has a valid index when it has at least one valid Tab after
+        // TabState is initialized. Otherwise, TabModel can have an invalid index even though it has
+        // valid tabs, if the TabModel becomes active before any Tab is restored to that model.
+        if (hasValidTab() && mIndex == INVALID_TAB_INDEX) {
+            // Actually select the first tab if it is the active model, otherwise just set mIndex.
+            if (isCurrentModel()) {
+                TabModelUtils.setIndex(this, 0);
+            } else {
+                mIndex = 0;
+            }
+        }
+
         for (TabModelObserver observer : mObservers) observer.restoreCompleted();
     }
 
@@ -813,7 +831,7 @@ public class TabModelImpl extends TabModelJniBridge {
 
         // If shouldIgnoreNewTab returns true, the intent is handled by another
         // activity. As a result, don't launch a new tab to open the URL.
-        InterceptNavigationDelegateImpl delegate = InterceptNavigationDelegateImpl.get(parent);
+        InterceptNavigationDelegateImpl delegate = InterceptNavigationDelegateTabHelper.get(parent);
         if (delegate != null && delegate.shouldIgnoreNewTab(url, incognito)) return;
 
         LoadUrlParams loadUrlParams = new LoadUrlParams(url);

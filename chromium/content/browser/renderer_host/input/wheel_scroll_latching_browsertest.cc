@@ -8,6 +8,7 @@
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/common/input/synthetic_web_input_event_builders.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -125,7 +126,7 @@ class WheelScrollLatchingBrowserTest : public ContentBrowserTest {
     return value;
   }
   std::string ExecuteScriptAndExtractString(const std::string& script) {
-    std::string value = "";
+    std::string value;
     EXPECT_TRUE(content::ExecuteScriptAndExtractString(
         shell(), "domAutomationController.send(" + script + ")", &value));
     return value;
@@ -153,7 +154,7 @@ IN_PROC_BROWSER_TEST_F(WheelScrollLatchingBrowserTest, MAYBE_WheelEventTarget) {
       shell()->web_contents()->GetRenderViewHost()->GetWidget());
 
   auto input_msg_watcher = std::make_unique<InputMsgWatcher>(
-      GetWidgetHost(), blink::WebInputEvent::kMouseWheel);
+      GetWidgetHost(), blink::WebInputEvent::Type::kMouseWheel);
 
   float scrollable_div_top = ExecuteScriptAndExtractDouble(
       "scrollableDiv.getBoundingClientRect().top");
@@ -175,7 +176,7 @@ IN_PROC_BROWSER_TEST_F(WheelScrollLatchingBrowserTest, MAYBE_WheelEventTarget) {
                                     ui::LatencyInfo());
 
   // Runs until we get the InputMsgAck callback.
-  EXPECT_EQ(INPUT_EVENT_ACK_STATE_NOT_CONSUMED,
+  EXPECT_EQ(blink::mojom::InputEventResultState::kNotConsumed,
             input_msg_watcher->WaitForAck());
 
   while (ExecuteScriptAndExtractDouble("document.scrollingElement.scrollTop") <
@@ -207,7 +208,7 @@ IN_PROC_BROWSER_TEST_F(WheelScrollLatchingBrowserTest,
   EXPECT_EQ(0, ExecuteScriptAndExtractInt("scrollableDivWheelEventCounter"));
 
   auto update_msg_watcher = std::make_unique<InputMsgWatcher>(
-      GetWidgetHost(), blink::WebInputEvent::kGestureScrollUpdate);
+      GetWidgetHost(), blink::WebInputEvent::Type::kGestureScrollUpdate);
 
   float scrollable_div_top = ExecuteScriptAndExtractDouble(
       "scrollableDiv.getBoundingClientRect().top");
@@ -228,7 +229,8 @@ IN_PROC_BROWSER_TEST_F(WheelScrollLatchingBrowserTest,
                                     ui::LatencyInfo());
 
   // Runs until we get the UpdateMsgAck callback.
-  EXPECT_EQ(INPUT_EVENT_ACK_STATE_CONSUMED, update_msg_watcher->WaitForAck());
+  EXPECT_EQ(blink::mojom::InputEventResultState::kConsumed,
+            update_msg_watcher->WaitForAck());
 
   EXPECT_EQ(
       0, ExecuteScriptAndExtractDouble("document.scrollingElement.scrollTop"));
@@ -244,7 +246,8 @@ IN_PROC_BROWSER_TEST_F(WheelScrollLatchingBrowserTest,
                                     ui::LatencyInfo());
 
   // Runs until we get the UpdateMsgAck callbacks.
-  EXPECT_EQ(INPUT_EVENT_ACK_STATE_CONSUMED, update_msg_watcher->WaitForAck());
+  EXPECT_EQ(blink::mojom::InputEventResultState::kConsumed,
+            update_msg_watcher->WaitForAck());
 
   // Wait for the document event listenr to handle the second wheel event.
   while (ExecuteScriptAndExtractInt("documentWheelEventCounter") != 1) {
@@ -285,7 +288,7 @@ IN_PROC_BROWSER_TEST_F(WheelScrollLatchingBrowserTest,
 #endif
   // Send a GSB event to start scrolling the scrollableDiv.
   blink::WebGestureEvent gesture_scroll_begin(
-      blink::WebGestureEvent::kGestureScrollBegin,
+      blink::WebGestureEvent::Type::kGestureScrollBegin,
       blink::WebInputEvent::kNoModifiers,
       blink::WebInputEvent::GetStaticTimeStampForTests(),
       blink::WebGestureDevice::kTouchpad);
@@ -300,7 +303,8 @@ IN_PROC_BROWSER_TEST_F(WheelScrollLatchingBrowserTest,
 
   // Send the first GSU event.
   blink::WebGestureEvent gesture_scroll_update(gesture_scroll_begin);
-  gesture_scroll_update.SetType(blink::WebGestureEvent::kGestureScrollUpdate);
+  gesture_scroll_update.SetType(
+      blink::WebGestureEvent::Type::kGestureScrollUpdate);
   gesture_scroll_update.data.scroll_update.delta_units =
       precise ? ui::ScrollGranularity::kScrollByPrecisePixel
               : ui::ScrollGranularity::kScrollByPixel;
@@ -378,7 +382,7 @@ IN_PROC_BROWSER_TEST_F(WheelScrollLatchingBrowserTest,
 
   // Send the first wheel event.
   auto wheel_msg_watcher = std::make_unique<InputMsgWatcher>(
-      GetWidgetHost(), blink::WebInputEvent::kMouseWheel);
+      GetWidgetHost(), blink::WebInputEvent::Type::kMouseWheel);
   blink::WebMouseWheelEvent wheel_event =
       SyntheticWebMouseWheelEventBuilder::Build(
           x, y, x, y, 1, 1, 0, ui::ScrollGranularity::kScrollByPrecisePixel);
@@ -387,18 +391,19 @@ IN_PROC_BROWSER_TEST_F(WheelScrollLatchingBrowserTest,
                                     ui::LatencyInfo());
 
   // Run until we get the callback, then check the target.
-  EXPECT_EQ(INPUT_EVENT_ACK_STATE_CONSUMED, wheel_msg_watcher->WaitForAck());
+  EXPECT_EQ(blink::mojom::InputEventResultState::kConsumed,
+            wheel_msg_watcher->WaitForAck());
   EXPECT_EQ("blueDiv", ExecuteScriptAndExtractString("domTarget"));
 
   // Send the second wheel event.
   wheel_msg_watcher = std::make_unique<InputMsgWatcher>(
-      GetWidgetHost(), blink::WebInputEvent::kMouseWheel);
+      GetWidgetHost(), blink::WebInputEvent::Type::kMouseWheel);
   wheel_event.phase = blink::WebMouseWheelEvent::kPhaseChanged;
   GetRouter()->RouteMouseWheelEvent(GetRootView(), &wheel_event,
                                     ui::LatencyInfo());
 
   // Run until we get the callback, then check the target.
-  EXPECT_EQ(INPUT_EVENT_ACK_STATE_NOT_CONSUMED,
+  EXPECT_EQ(blink::mojom::InputEventResultState::kNotConsumed,
             wheel_msg_watcher->WaitForAck());
   EXPECT_EQ("redDiv", ExecuteScriptAndExtractString("domTarget"));
 }

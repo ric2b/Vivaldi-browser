@@ -106,6 +106,18 @@ struct TestRuleRedirect : public DictionarySource {
   std::unique_ptr<base::DictionaryValue> ToValue() const override;
 };
 
+struct TestHeaderInfo : public DictionarySource {
+  TestHeaderInfo(std::string header, std::string operation);
+  ~TestHeaderInfo() override;
+  TestHeaderInfo(const TestHeaderInfo&);
+  TestHeaderInfo& operator=(const TestHeaderInfo&);
+
+  base::Optional<std::string> header;
+  base::Optional<std::string> operation;
+
+  std::unique_ptr<base::DictionaryValue> ToValue() const override;
+};
+
 struct TestRuleAction : public DictionarySource {
   TestRuleAction();
   ~TestRuleAction() override;
@@ -113,7 +125,8 @@ struct TestRuleAction : public DictionarySource {
   TestRuleAction& operator=(const TestRuleAction&);
 
   base::Optional<std::string> type;
-  base::Optional<std::vector<std::string>> remove_headers_list;
+  base::Optional<std::vector<TestHeaderInfo>> request_headers;
+  base::Optional<std::vector<TestHeaderInfo>> response_headers;
   base::Optional<TestRuleRedirect> redirect;
 
   std::unique_ptr<base::DictionaryValue> ToValue() const override;
@@ -150,23 +163,46 @@ enum ConfigFlag {
 
   // Whether the extension has the activeTab permission.
   kConfig_HasActiveTab = 1 << 2,
+
+  // Whether the "declarative_net_request" manifest key should be omitted.
+  kConfig_OmitDeclarativeNetRequestKey = 1 << 3,
 };
 
 // Describes a single extension ruleset.
 struct TestRulesetInfo {
+  TestRulesetInfo(const std::string& manifest_id_and_path,
+                  const base::Value& rules_value,
+                  bool enabled = true);
+  TestRulesetInfo(const std::string& manifest_id,
+                  const std::string& relative_file_path,
+                  const base::Value& rules_value,
+                  bool enabled = true);
+  TestRulesetInfo(const TestRulesetInfo&);
+  TestRulesetInfo& operator=(const TestRulesetInfo&);
+
+  // Unique ID for the ruleset.
+  const std::string manifest_id;
+
   // File path relative to the extension directory.
-  std::string relative_file_path;
+  const std::string relative_file_path;
 
   // The base::Value corresponding to the rules in the ruleset.
-  base::Value rules_value;
+  const base::Value rules_value;
+
+  // Whether the ruleset is enabled by default.
+  const bool enabled;
+
+  // Returns the corresponding value to be specified in the manifest for the
+  // ruleset.
+  std::unique_ptr<base::DictionaryValue> GetManifestValue() const;
 };
 
 // Helper to build an extension manifest which uses the
 // kDeclarativeNetRequestKey manifest key. |hosts| specifies the host
 // permissions to grant. |flags| is a bitmask of ConfigFlag to configure the
-// extension. Should be used when the extension has a single static ruleset.
+// extension. |ruleset_info| specifies the static rulesets for the extension.
 std::unique_ptr<base::DictionaryValue> CreateManifest(
-    const std::string& json_rules_filename,
+    const std::vector<TestRulesetInfo>& ruleset_info,
     const std::vector<std::string>& hosts = {},
     unsigned flags = ConfigFlag::kConfig_None);
 

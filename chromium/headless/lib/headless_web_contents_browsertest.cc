@@ -7,9 +7,9 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/json/json_writer.h"
-#include "base/logging.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -1176,8 +1176,9 @@ class DontBlockWebContentsOpenTest : public WebContentsOpenTest {
   }
 };
 
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(OS_LINUX)
 // TODO(crbug.com/1045980): Disabled due to flakiness.
+// TODO(crbug.com/1078405): Disabled due to flakiness.
 DISABLED_HEADLESS_ASYNC_DEVTOOLED_TEST_F(DontBlockWebContentsOpenTest);
 #else
 HEADLESS_ASYNC_DEVTOOLED_TEST_F(DontBlockWebContentsOpenTest);

@@ -27,6 +27,7 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
+#include "content/public/test/browser_test.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/events/keycodes/keyboard_codes.h"
@@ -526,13 +527,7 @@ IN_PROC_BROWSER_TEST_F(FindInPageTest, PrepopulateRespectBlank) {
 // Flaky on Win. http://crbug.com/92467
 // Flaky on ChromeOS. http://crbug.com/118216
 // Flaky on linux aura. http://crbug.com/163931
-#if defined(TOOLKIT_VIEWS)
-#define MAYBE_PasteWithoutTextChange DISABLED_PasteWithoutTextChange
-#else
-#define MAYBE_PasteWithoutTextChange PasteWithoutTextChange
-#endif
-
-IN_PROC_BROWSER_TEST_F(FindInPageTest, MAYBE_PasteWithoutTextChange) {
+IN_PROC_BROWSER_TEST_F(FindInPageTest, DISABLED_PasteWithoutTextChange) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Make sure Chrome is in the foreground, otherwise sending input
@@ -619,9 +614,8 @@ IN_PROC_BROWSER_TEST_F(FindInPageTest, MAYBE_CtrlEnter) {
   observer.Wait();
 }
 
-// FindInPage on Mac doesn't use prepopulated values. Search there is global.
-#if !defined(OS_MACOSX)
-IN_PROC_BROWSER_TEST_F(FindInPageTest, SelectionDuringFind) {
+// Flaky: https://crbug.com/1072464
+IN_PROC_BROWSER_TEST_F(FindInPageTest, DISABLED_SelectionDuringFind) {
   ASSERT_TRUE(embedded_test_server()->Start());
   // Make sure Chrome is in the foreground, otherwise sending input
   // won't do anything and the test will hang.
@@ -645,12 +639,14 @@ IN_PROC_BROWSER_TEST_F(FindInPageTest, SelectionDuringFind) {
   browser()->GetFindBarController()->Show();
   EXPECT_TRUE(IsViewFocused(browser(), VIEW_ID_FIND_IN_PAGE_TEXT_FIELD));
 
-  // verify the text matches the selection
+  // Verify the text matches the selection
   EXPECT_EQ(ASCIIToUTF16("text"), GetFindBarText());
   find_in_page::FindNotificationDetails details = WaitForFindResult();
-  EXPECT_TRUE(details.number_of_matches() > 0);
+  // Verify the correct match is highlighted (the one corresponding to the
+  // text that was selected). See http://crbug.com/1043550
+  EXPECT_EQ(2, details.active_match_ordinal());
+  EXPECT_EQ(5, details.number_of_matches());
 }
-#endif
 
 IN_PROC_BROWSER_TEST_F(FindInPageTest, GlobalEscapeClosesFind) {
   ASSERT_TRUE(embedded_test_server()->Start());

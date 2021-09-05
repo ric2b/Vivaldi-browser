@@ -23,7 +23,53 @@ namespace bindings {
 class PLATFORM_EXPORT V8InterfaceBridgeBase {
   STATIC_ONLY(V8InterfaceBridgeBase);
 
- protected:
+ public:
+  // Selects properties to be installed according to origin trial features.
+  //
+  // There are two usages.
+  // 1) At the first call of V8T::InstallContextDependentProperties, install
+  //   (a) properties that are not associated to origin trial features (e.g.
+  //   secure contexts) plus (b) properties that are associated to origin trial
+  //   features and are already enabled by the moment of the call.
+  // 2) On 2nd+ call of V8T::InstallContextDependentProperties (when an origin
+  //   trial feature gets enabled later on), install only (c) properties that
+  //   are associated to the origin trial feature that has got enabled.
+  //
+  // FeatureSelector() is used for usage 1) and
+  // FeatureSelector(feature) is used for usage 2).
+  class FeatureSelector final {
+   public:
+    // Selects all properties not associated to any origin trial feature and
+    // properties associated with the origin trial features that are already
+    // enabled.
+    FeatureSelector() : does_select_all_(true) {}
+    // Selects only the properties that are associated to the given origin
+    // trial feature.
+    FeatureSelector(OriginTrialFeature feature) : selector_(feature) {}
+    FeatureSelector(const FeatureSelector&) = default;
+    FeatureSelector(FeatureSelector&&) = default;
+    ~FeatureSelector() = default;
+
+    FeatureSelector& operator=(const FeatureSelector&) = default;
+    FeatureSelector& operator=(FeatureSelector&&) = default;
+
+    // Returns true if properties should be installed.  Arguments |featureN|
+    // represent the origin trial features to which the properties are
+    // associated.  No argument means that the properties are not associated
+    // with any origin trial feature.
+    bool AnyOf() const { return does_select_all_; }
+    bool AnyOf(OriginTrialFeature feature1) const {
+      return does_select_all_ || selector_ == feature1;
+    }
+    bool AnyOf(OriginTrialFeature feature1, OriginTrialFeature feature2) const {
+      return does_select_all_ || selector_ == feature1 || selector_ == feature2;
+    }
+
+   private:
+    bool does_select_all_ = false;
+    OriginTrialFeature selector_ = OriginTrialFeature::kNonExisting;
+  };
+
   using InstallInterfaceTemplateFuncType =
       void (*)(v8::Isolate* isolate,
                const DOMWrapperWorld& world,
@@ -45,7 +91,9 @@ class PLATFORM_EXPORT V8InterfaceBridgeBase {
                const DOMWrapperWorld& world,
                v8::Local<v8::Object> instance_object,
                v8::Local<v8::Object> prototype_object,
-               v8::Local<v8::Function> interface_object);
+               v8::Local<v8::Function> interface_object,
+               v8::Local<v8::FunctionTemplate> interface_template,
+               FeatureSelector feature_selector);
 };
 
 template <class V8T, class T>
@@ -78,17 +126,6 @@ class V8InterfaceBridge : public V8InterfaceBridgeBase {
   static T* ToImplWithTypeCheck(v8::Isolate* isolate,
                                 v8::Local<v8::Value> value) {
     return ToWrappable(isolate, value);
-  }
-
-  static void InstallContextDependentAdapter(
-      v8::Local<v8::Context> context,
-      const DOMWrapperWorld& world,
-      v8::Local<v8::Object> instance_object,
-      v8::Local<v8::Object> prototype_object,
-      v8::Local<v8::Function> interface_object,
-      v8::Local<v8::FunctionTemplate> interface_template) {
-    V8T::InstallContextDependentProperties(context, world, instance_object,
-                                           prototype_object, interface_object);
   }
 };
 

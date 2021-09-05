@@ -196,12 +196,11 @@ class SandboxedUnpackerTest : public ExtensionsTest {
   void SetupUnpacker(const std::string& crx_name,
                      const std::string& package_hash) {
     base::FilePath crx_path = GetCrxFullPath(crx_name);
+    extensions::CRXFileInfo crx_info(crx_path, GetTestVerifierFormat());
+    crx_info.expected_hash = package_hash;
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::BindOnce(
-            &SandboxedUnpacker::StartWithCrx, sandboxed_unpacker_,
-            extensions::CRXFileInfo(std::string(), crx_path, package_hash,
-                                    GetTestVerifierFormat())));
+        FROM_HERE, base::BindOnce(&SandboxedUnpacker::StartWithCrx,
+                                  sandboxed_unpacker_, crx_info));
     client_->WaitForUnpack();
   }
 
@@ -466,7 +465,7 @@ TEST_F(SandboxedUnpackerTest, InvalidMessagesFile) {
   EXPECT_FALSE(base::PathExists(install_path));
   EXPECT_TRUE(base::MatchPattern(
       GetInstallErrorMessage(),
-      base::ASCIIToUTF16("*_locales?en_US?messages.json': Line: 2, column: 10,"
+      base::ASCIIToUTF16("*_locales?en_US?messages.json': Line: 4, column: 1,"
                          " Syntax error.'.")))
       << GetInstallErrorMessage();
   ASSERT_EQ(CrxInstallErrorType::SANDBOXED_UNPACKER_FAILURE,

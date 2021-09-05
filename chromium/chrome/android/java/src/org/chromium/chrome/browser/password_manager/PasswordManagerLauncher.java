@@ -5,7 +5,6 @@
 package org.chromium.chrome.browser.password_manager;
 
 import android.app.Activity;
-import android.os.Build;
 
 import com.google.android.gms.common.ConnectionResult;
 
@@ -17,6 +16,7 @@ import org.chromium.chrome.browser.password_manager.settings.PasswordSettings;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.settings.SettingsLauncher;
+import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
 import org.chromium.components.sync.ModelType;
@@ -61,7 +61,8 @@ public class PasswordManagerLauncher {
             }
         }
 
-        SettingsLauncher.getInstance().launchSettingsPage(activity, PasswordSettings.class);
+        SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
+        settingsLauncher.launchSettingsActivity(activity, PasswordSettings.class);
     }
 
     @CalledByNative
@@ -91,8 +92,6 @@ public class PasswordManagerLauncher {
         GooglePasswordManagerUIProvider googlePasswordManagerUIProvider =
                 AppHooks.get().createGooglePasswordManagerUIProvider();
         if (googlePasswordManagerUIProvider == null) return false;
-
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return false;
 
         int minGooglePlayServicesVersion = ChromeFeatureList.getFieldTrialParamByFeatureAsInt(
                 GOOGLE_ACCOUNT_PWM_UI, MIN_GOOGLE_PLAY_SERVICES_VERSION_PARAM,

@@ -5,7 +5,7 @@ update_target("//chrome:child_dependencies") {
   ]
 }
 
-update_template_instance("//chrome/browser:browser") {
+update_target("//chrome/browser:browser") {
   deps += [
     "//vivaldi/importer:browser",
     "//vivaldi/importer:importer",

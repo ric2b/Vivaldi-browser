@@ -33,9 +33,9 @@ n * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
 
 #include "base/optional.h"
 #include "base/single_thread_task_runner.h"
+#include "services/network/public/mojom/web_client_hints_types.mojom-blink-forward.h"
 #include "third_party/blink/public/common/user_agent/user_agent_metadata.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom-blink-forward.h"
-#include "third_party/blink/public/mojom/web_client_hints/web_client_hints_types.mojom-blink-forward.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/loader/base_fetch_context.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -54,7 +54,6 @@ class ContentSecurityPolicy;
 class CoreProbeSink;
 class Document;
 class DocumentLoader;
-class FrameOrImportedDocument;
 class LocalFrame;
 class LocalFrameClient;
 class Settings;
@@ -64,11 +63,8 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
  public:
   static ResourceFetcher* CreateFetcherForCommittedDocument(DocumentLoader&,
                                                             Document&);
-  // Used for creating a FrameFetchContext for an imported Document.
-  // |document_loader_| will be set to nullptr.
-  static ResourceFetcher* CreateFetcherForImportedDocument(Document* document);
-
-  FrameFetchContext(const FrameOrImportedDocument&,
+  FrameFetchContext(DocumentLoader& document_loader,
+                    Document& document,
                     const DetachableResourceFetcherProperties&);
   ~FrameFetchContext() override = default;
 
@@ -107,8 +103,10 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
 
   void Trace(Visitor*) override;
 
-  bool CalculateIfAdSubresource(const ResourceRequest& resource_request,
-                                ResourceType type) override;
+  bool CalculateIfAdSubresource(
+      const ResourceRequest& resource_request,
+      ResourceType type,
+      const FetchInitiatorInfo& initiator_info) override;
 
   bool SendConversionRequestInsteadOfRedirecting(
       const KURL& url,
@@ -151,10 +149,12 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   bool ShouldBlockWebSocketByMixedContentCheck(const KURL&) const override;
   std::unique_ptr<WebSocketHandshakeThrottle> CreateWebSocketHandshakeThrottle()
       override;
-  bool ShouldBlockFetchByMixedContentCheck(mojom::RequestContextType,
-                                           ResourceRequest::RedirectStatus,
-                                           const KURL&,
-                                           ReportingDisposition) const override;
+  bool ShouldBlockFetchByMixedContentCheck(
+      mojom::blink::RequestContextType request_context,
+      ResourceRequest::RedirectStatus redirect_status,
+      const KURL& url,
+      ReportingDisposition reporting_disposition,
+      const base::Optional<String>& devtools_id) const override;
   bool ShouldBlockFetchAsCredentialedSubresource(const ResourceRequest&,
                                                  const KURL&) const override;
 
@@ -167,6 +167,7 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   Settings* GetSettings() const;
   String GetUserAgent() const;
   base::Optional<UserAgentMetadata> GetUserAgentMetadata() const;
+  const FeaturePolicy* GetFeaturePolicy() const override;
   const ClientHintsPreferences GetClientHintsPreferences() const;
   float GetDevicePixelRatio() const;
 
@@ -175,8 +176,7 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
                             const FeaturePolicy*,
                             const url::Origin& resource_origin,
                             bool is_1p_origin,
-                            mojom::blink::WebClientHintsType,
-                            mojom::blink::FeaturePolicyFeature,
+                            network::mojom::blink::WebClientHintsType,
                             const ClientHintsPreferences&,
                             const WebEnabledClientHints&) const;
   void SetFirstPartyCookie(ResourceRequest&);
@@ -195,7 +195,8 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
 
   CoreProbeSink* Probe() const;
 
-  Member<const FrameOrImportedDocument> frame_or_imported_document_;
+  Member<DocumentLoader> document_loader_;
+  Member<Document> document_;
 
   // The value of |save_data_enabled_| is read once per frame from
   // NetworkStateNotifier, which is guarded by a mutex lock, and cached locally

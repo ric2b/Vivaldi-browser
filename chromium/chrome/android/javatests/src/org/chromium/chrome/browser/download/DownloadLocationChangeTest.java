@@ -32,7 +32,6 @@ import org.chromium.chrome.browser.download.DownloadTestRule.CustomMainActivityS
 import org.chromium.chrome.browser.download.settings.DownloadDirectoryAdapter;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
-import org.chromium.chrome.download.R;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -172,8 +171,8 @@ public class DownloadLocationChangeTest implements CustomMainActivityStart {
      */
     private void startDownload(boolean hasSDCard) {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            Assert.assertEquals(
-                    DownloadPromptStatus.SHOW_INITIAL, DownloadUtils.getPromptForDownloadAndroid());
+            Assert.assertEquals(DownloadPromptStatus.SHOW_INITIAL,
+                    DownloadLocationDialogBridge.getPromptForDownloadAndroid());
 
             simulateDownloadDirectories(hasSDCard);
 
@@ -212,6 +211,6 @@ public class DownloadLocationChangeTest implements CustomMainActivityStart {
 
     private void promptDownloadLocationDialog(@DownloadPromptStatus int promptStatus) {
         TestThreadUtils.runOnUiThreadBlocking(
-                () -> { DownloadUtils.setPromptForDownloadAndroid(promptStatus); });
+                () -> { DownloadLocationDialogBridge.setPromptForDownloadAndroid(promptStatus); });
     }
 }

@@ -136,6 +136,16 @@ class WebUIBrowserProxy {
   sendMessage(extensionId, message) {
     NOTIMPLEMENTED();
   }
+
+  /** @override */
+  addDummyHistoryIfNotAvailable() {
+    // no-ops
+  }
+
+  /** @override */
+  isMp4RecordingEnabled() {
+    return false;
+  }
 }
 
 export const browserProxy = new WebUIBrowserProxy();

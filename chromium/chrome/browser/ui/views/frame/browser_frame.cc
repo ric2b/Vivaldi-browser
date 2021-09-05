@@ -202,7 +202,7 @@ bool BrowserFrame::GetAccelerator(int command_id,
 
 const ui::ThemeProvider* BrowserFrame::GetThemeProvider() const {
   Browser* browser = browser_view_->browser();
-  if (browser->app_controller())
+  if (browser->app_controller() && !IsUsingGtkTheme(browser->profile()))
     return browser->app_controller()->GetThemeProvider();
   return &ThemeService::GetThemeProviderForProfile(browser->profile());
 }
@@ -219,9 +219,14 @@ const ui::NativeTheme* BrowserFrame::GetNativeTheme() const {
 void BrowserFrame::OnNativeWidgetWorkspaceChanged() {
   chrome::SaveWindowWorkspace(browser_view_->browser(), GetWorkspace());
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+  // If the window was sent to a different workspace, prioritize it if
+  // it was sent to the current workspace and deprioritize it
+  // otherwise.  This is done by MoveBrowsersInWorkspaceToFront()
+  // which reorders the browsers such that the ones in the current
+  // workspace appear before ones in other workspaces.
   auto workspace = display::Screen::GetScreen()->GetCurrentWorkspace();
-  BrowserList::MoveBrowsersInWorkspaceToFront(workspace.empty() ? GetWorkspace()
-                                                                : workspace);
+  if (!workspace.empty())
+    BrowserList::MoveBrowsersInWorkspaceToFront(workspace);
 #endif
   Widget::OnNativeWidgetWorkspaceChanged();
 }
@@ -300,6 +305,16 @@ void BrowserFrame::OnMenuClosed() {
 
 void BrowserFrame::OnTouchUiChanged() {
   client_view()->InvalidateLayout();
-  non_client_view()->InvalidateLayout();
+
+  // For standard browser frame, if we do not invalidate the NonClientFrameView
+  // the client window bounds will not be properly updated which could cause
+  // visual artifacts. See crbug.com/1035959 for details.
+  if (non_client_view()->frame_view()) {
+    // Note that invalidating a view invalidates all of its ancestors, so it is
+    // not necessary to also invalidate the NonClientView or RootView here.
+    non_client_view()->frame_view()->InvalidateLayout();
+  } else {
+    non_client_view()->InvalidateLayout();
+  }
   GetRootView()->Layout();
 }

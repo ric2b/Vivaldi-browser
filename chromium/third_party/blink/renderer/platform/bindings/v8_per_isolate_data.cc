@@ -55,7 +55,7 @@ constexpr char kInterfaceMapLabel[] =
 
 }  // namespace
 
-// Wrapper function defined in blink.h
+// Function defined in third_party/blink/public/web/blink.h.
 v8::Isolate* MainThreadIsolate() {
   return V8PerIsolateData::MainThreadIsolate();
 }
@@ -165,8 +165,6 @@ void V8PerIsolateData::WillBeDestroyed(v8::Isolate* isolate) {
     data->profiler_group_ = nullptr;
   }
 
-  data->active_script_wrappables_.Clear();
-
   // Detach V8's garbage collector.
   // Need to finalize an already running garbage collection as otherwise
   // callbacks are missing and state gets out of sync.
@@ -175,7 +173,20 @@ void V8PerIsolateData::WillBeDestroyed(v8::Isolate* isolate) {
       BlinkGC::CollectionType::kMajor, BlinkGC::kHeapPointersOnStack,
       BlinkGC::kAtomicMarking, BlinkGC::kEagerSweeping,
       BlinkGC::GCReason::kThreadTerminationGC);
+  data->active_script_wrappable_manager_.Clear();
   thread_state->DetachFromIsolate();
+  isolate->RemoveGCPrologueCallback(data->prologue_callback_);
+  isolate->RemoveGCEpilogueCallback(data->epilogue_callback_);
+}
+
+void V8PerIsolateData::SetGCCallbacks(
+    v8::Isolate* isolate,
+    v8::Isolate::GCCallback prologue_callback,
+    v8::Isolate::GCCallback epilogue_callback) {
+  prologue_callback_ = prologue_callback;
+  epilogue_callback_ = epilogue_callback;
+  isolate->AddGCPrologueCallback(prologue_callback_);
+  isolate->AddGCEpilogueCallback(epilogue_callback_);
 }
 
 // destroy() clear things that should be cleared after ThreadState::detach()
@@ -389,16 +400,6 @@ void V8PerIsolateData::SetProfilerGroup(
 
 V8PerIsolateData::GarbageCollectedData* V8PerIsolateData::ProfilerGroup() {
   return profiler_group_;
-}
-
-void V8PerIsolateData::AddActiveScriptWrappable(
-    ActiveScriptWrappableBase* wrappable) {
-  if (!active_script_wrappables_) {
-    active_script_wrappables_ =
-        MakeGarbageCollected<ActiveScriptWrappableSet>();
-  }
-
-  active_script_wrappables_->insert(wrappable);
 }
 
 }  // namespace blink

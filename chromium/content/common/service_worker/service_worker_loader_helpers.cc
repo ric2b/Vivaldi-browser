@@ -11,15 +11,9 @@
 #include <vector>
 
 #include "base/strings/stringprintf.h"
-#include "content/public/common/content_features.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "net/http/http_util.h"
-#include "net/http/structured_headers.h"
 #include "net/url_request/redirect_util.h"
-#include "services/network/public/cpp/content_security_policy/content_security_policy.h"
-#include "services/network/public/cpp/cross_origin_embedder_policy.h"
-#include "services/network/public/cpp/cross_origin_opener_policy_parser.h"
-#include "services/network/public/cpp/features.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/resource_request_body.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
@@ -48,37 +42,6 @@ class BlobCompleteCaller : public blink::mojom::BlobReaderClient {
  private:
   BlobCompleteCallback callback_;
 };
-
-std::pair<network::mojom::CrossOriginEmbedderPolicyValue,
-          base::Optional<std::string>>
-ParseCrossOriginEmbedderPolicyValueInternal(
-    const net::HttpResponseHeaders* headers,
-    base::StringPiece header_name) {
-  static constexpr char kRequireCorp[] = "require-corp";
-  constexpr auto kNone = network::mojom::CrossOriginEmbedderPolicyValue::kNone;
-  using Item = net::structured_headers::Item;
-  std::string header_value;
-  if (!headers ||
-      !headers->GetNormalizedHeader(header_name.as_string(), &header_value)) {
-    return std::make_pair(kNone, base::nullopt);
-  }
-  const auto item = net::structured_headers::ParseItem(header_value);
-  if (!item || item->item.Type() != Item::kTokenType ||
-      item->item.GetString() != kRequireCorp) {
-    return std::make_pair(kNone, base::nullopt);
-  }
-  base::Optional<std::string> endpoint;
-  auto it = std::find_if(item->params.cbegin(), item->params.cend(),
-                         [](const std::pair<std::string, Item>& param) {
-                           return param.first == "report-to";
-                         });
-  if (it != item->params.end() && it->second.Type() == Item::kStringType) {
-    endpoint = it->second.GetString();
-  }
-  return std::make_pair(
-      network::mojom::CrossOriginEmbedderPolicyValue::kRequireCorp,
-      std::move(endpoint));
-}
 
 }  // namespace
 
@@ -123,44 +86,6 @@ void ServiceWorkerLoaderHelpers::SaveResponseHeaders(
   // headers.
   if (out_head->content_length == -1)
     out_head->content_length = out_head->headers->GetContentLength();
-
-  // TODO(yhirano): Remove the code duplication with
-  // //services/network/url_loader.cc.
-  if (base::FeatureList::IsEnabled(
-          network::features::kCrossOriginEmbedderPolicy)) {
-    // Parse the Cross-Origin-Embedder-Policy and
-    // Cross-Origin-Embedder-Policy-Report-Only headers.
-
-    static constexpr char kCrossOriginEmbedderPolicyValueHeader[] =
-        "Cross-Origin-Embedder-Policy";
-    static constexpr char kCrossOriginEmbedderPolicyValueReportOnlyHeader[] =
-        "Cross-Origin-Embedder-Policy-Report-Only";
-    network::CrossOriginEmbedderPolicy coep;
-    std::tie(coep.value, coep.reporting_endpoint) =
-        ParseCrossOriginEmbedderPolicyValueInternal(
-            out_head->headers.get(), kCrossOriginEmbedderPolicyValueHeader);
-    std::tie(coep.report_only_value, coep.report_only_reporting_endpoint) =
-        ParseCrossOriginEmbedderPolicyValueInternal(
-            out_head->headers.get(),
-            kCrossOriginEmbedderPolicyValueReportOnlyHeader);
-    out_head->cross_origin_embedder_policy = coep;
-  }
-
-  // TODO(pmeuleman): Remove the code duplication with
-  // //services/network/url_loader.cc.
-  if (base::FeatureList::IsEnabled(
-          network::features::kCrossOriginOpenerPolicy)) {
-    // Parse the Cross-Origin-Opener-Policy header.
-    constexpr char kCrossOriginOpenerPolicyHeader[] =
-        "Cross-Origin-Opener-Policy";
-    std::string raw_coop_string;
-    if (out_head->headers &&
-        out_head->headers->GetNormalizedHeader(kCrossOriginOpenerPolicyHeader,
-                                               &raw_coop_string)) {
-      out_head->cross_origin_opener_policy =
-          network::ParseCrossOriginOpenerPolicyHeader(raw_coop_string);
-    }
-  }
 }
 
 // static
@@ -181,8 +106,7 @@ void ServiceWorkerLoaderHelpers::SaveResponseInfo(
     out_head->cache_storage_cache_name.clear();
   out_head->cors_exposed_header_names = response.cors_exposed_header_names;
   out_head->did_service_worker_navigation_preload = false;
-  out_head->content_security_policy =
-      mojo::Clone(response.content_security_policy);
+  out_head->parsed_headers = mojo::Clone(response.parsed_headers);
 }
 
 // static

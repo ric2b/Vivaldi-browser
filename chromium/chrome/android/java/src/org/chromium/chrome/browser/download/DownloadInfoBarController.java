@@ -26,11 +26,10 @@ import org.chromium.chrome.browser.download.items.OfflineContentAggregatorFactor
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.infobar.DownloadProgressInfoBar;
 import org.chromium.chrome.browser.infobar.IPHInfoBarSupport;
-import org.chromium.chrome.browser.infobar.InfoBar;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
 import org.chromium.chrome.browser.infobar.InfoBarIdentifier;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.tab.TabImpl;
+import org.chromium.chrome.browser.ui.messages.infobar.InfoBar;
 import org.chromium.components.download.DownloadState;
 import org.chromium.components.feature_engagement.FeatureConstants;
 import org.chromium.components.offline_items_collection.ContentId;
@@ -363,11 +362,6 @@ public class DownloadInfoBarController implements OfflineContentProvider.Observe
         return mCurrentInfoBar != null;
     }
 
-    private ChromeActivity getActivity() {
-        Tab tab = getCurrentTab();
-        return tab == null ? null : ((TabImpl) tab).getActivity();
-    }
-
     /**
      * Helper method to get the parameters for showing accelerated download infobar IPH.
      * @return The UI parameters to show IPH, if an IPH should be shown, null otherwise.
@@ -617,8 +611,9 @@ public class DownloadInfoBarController implements OfflineContentProvider.Observe
                             R.plurals.download_infobar_downloading_files, inProgressDownloadCount,
                             inProgressDownloadCount);
                 } else {
-                    String bytesString = DownloadUtils.getStringForBytes(
-                            getContext(), totalDownloadingSizeBytes);
+                    String bytesString =
+                            org.chromium.components.browser_ui.util.DownloadUtils.getStringForBytes(
+                                    getContext(), totalDownloadingSizeBytes);
                     info.message = inProgressDownloadCount == 1
                             ? getContext().getString(
                                       R.string.downloading_file_with_bytes, bytesString)
@@ -844,22 +839,32 @@ public class DownloadInfoBarController implements OfflineContentProvider.Observe
 
     private void maybeShowDownloadsStillInProgressIPH() {
         if (getDownloadCount().inProgress == 0) return;
-        if (getCurrentTab() == null || !(getActivity() instanceof ChromeTabbedActivity)) {
-            return;
-        }
-
-        ChromeTabbedActivity activity = (ChromeTabbedActivity) getActivity();
+        if (getCurrentTab() == null || getTabbedActivity() == null) return;
+        ChromeTabbedActivity activity = getTabbedActivity();
         activity.getToolbarButtonInProductHelpController().showDownloadContinuingIPH();
     }
 
     @Nullable
     private Tab getCurrentTab() {
-        if (!ApplicationStatus.hasVisibleActivities()) return null;
-        Activity activity = ApplicationStatus.getLastTrackedFocusedActivity();
-        if (!(activity instanceof ChromeTabbedActivity)) return null;
-        Tab tab = ((ChromeTabbedActivity) activity).getActivityTab();
+        ChromeActivity activity = getActivity();
+        if (activity == null) return null;
+        Tab tab = activity.getActivityTab();
         if (tab == null || tab.isIncognito() != mIsIncognito) return null;
         return tab;
+    }
+
+    @Nullable
+    private static ChromeTabbedActivity getTabbedActivity() {
+        ChromeActivity activity = getActivity();
+        if (activity == null || !(activity instanceof ChromeTabbedActivity)) return null;
+        return (ChromeTabbedActivity) activity;
+    }
+
+    @Nullable
+    private static ChromeActivity getActivity() {
+        if (!ApplicationStatus.hasVisibleActivities()) return null;
+        Activity activity = ApplicationStatus.getLastTrackedFocusedActivity();
+        return (activity instanceof ChromeActivity) ? (ChromeActivity) activity : null;
     }
 
     private Context getContext() {

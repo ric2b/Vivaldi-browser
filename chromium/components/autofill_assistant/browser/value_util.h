@@ -38,6 +38,26 @@ bool operator==(const UserActionProto& value_a, const UserActionProto& value_b);
 bool operator==(const DateProto& value_a, const DateProto& value_b);
 bool operator<(const DateProto& value_a, const DateProto& value_b);
 
+// Custom comparison operator for |AutofillCreditCardProto|.
+bool operator==(const AutofillCreditCardProto& value_a,
+                const AutofillCreditCardProto& value_b);
+
+// Custom comparison operator for |AutofillProfileProto|.
+bool operator==(const AutofillProfileProto& value_a,
+                const AutofillProfileProto& value_b);
+
+// Custom comparison operator for |LoginOptionProto|.
+bool operator==(const LoginOptionProto& value_a,
+                const LoginOptionProto& value_b);
+
+// Custom comparison operator for |CreditCardResponseProto|.
+bool operator==(const CreditCardResponseProto& value_a,
+                const CreditCardResponseProto& value_b);
+
+// Custom comparison operator for |LoginOptionResponseProto|.
+bool operator==(const LoginOptionResponseProto& value_a,
+                const LoginOptionResponseProto& value_b);
+
 // Intended for debugging.
 std::ostream& operator<<(std::ostream& out, const ValueProto& value);
 std::ostream& operator<<(std::ostream& out,
@@ -46,12 +66,22 @@ std::ostream& operator<<(std::ostream& out,
                          const ModelProto::ModelValue& value);
 std::ostream& operator<<(std::ostream& out, const UserActionProto& value);
 std::ostream& operator<<(std::ostream& out, const DateProto& value);
+std::ostream& operator<<(std::ostream& out,
+                         const AutofillCreditCardProto& value);
+std::ostream& operator<<(std::ostream& out, const AutofillProfileProto& value);
+std::ostream& operator<<(std::ostream& out, const LoginOptionProto& value);
+std::ostream& operator<<(std::ostream& out,
+                         const CreditCardResponseProto& value);
+std::ostream& operator<<(std::ostream& out,
+                         const LoginOptionResponseProto& value);
 
 // Convenience constructors.
-ValueProto SimpleValue(bool value);
-ValueProto SimpleValue(const std::string& value);
-ValueProto SimpleValue(int value);
-ValueProto SimpleValue(const DateProto& value);
+ValueProto SimpleValue(bool value, bool is_client_side_only = false);
+ValueProto SimpleValue(const std::string& value,
+                       bool is_client_side_only = false);
+ValueProto SimpleValue(int value, bool is_client_side_only = false);
+ValueProto SimpleValue(const DateProto& value,
+                       bool is_client_side_only = false);
 ModelProto::ModelValue SimpleModelValue(const std::string& identifier,
                                         const ValueProto& value);
 
@@ -62,10 +92,15 @@ bool AreAllValuesOfType(const std::vector<ValueProto>& values,
 // Returns true if all |values| share the specified |target_size|.
 bool AreAllValuesOfSize(const std::vector<ValueProto>& values, int target_size);
 
-// Combines all specified |values| in a single ValueProto where the individual
-// value lists are appended after each other. Returns nullopt if |values| do not
-// share the same type.
-base::Optional<ValueProto> CombineValues(const std::vector<ValueProto>& values);
+// Returns if any of the provided |values| has |is_client_side_only| = true.
+bool ContainsClientOnlyValue(const std::vector<ValueProto>& values);
+
+// Returns the number of elements in |value|.
+int GetValueSize(const ValueProto& value);
+
+// Returns the |index|'th item of |value| or nullopt if |index| is
+// out-of-bounds.
+base::Optional<ValueProto> GetNthValue(const ValueProto& value, int index);
 
 }  //  namespace autofill_assistant
 

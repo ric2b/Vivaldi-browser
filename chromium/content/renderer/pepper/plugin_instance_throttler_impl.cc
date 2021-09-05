@@ -161,7 +161,7 @@ void PluginInstanceThrottlerImpl::Initialize(
         observer.OnPeripheralStateChange();
 
       if (status == RenderFrame::CONTENT_STATUS_ESSENTIAL_CROSS_ORIGIN_BIG)
-        frame->WhitelistContentOrigin(content_origin);
+        frame->AllowlistContentOrigin(content_origin);
 
       return;
     }
@@ -172,7 +172,7 @@ void PluginInstanceThrottlerImpl::Initialize(
         content_origin,
         base::BindOnce(&PluginInstanceThrottlerImpl::MarkPluginEssential,
                        weak_factory_.GetWeakPtr(),
-                       UNTHROTTLE_METHOD_BY_WHITELIST));
+                       UNTHROTTLE_METHOD_BY_ALLOWLIST));
   }
 }
 
@@ -206,7 +206,7 @@ bool PluginInstanceThrottlerImpl::ConsumeInputEvent(
     return false;
 
   if (state_ != THROTTLER_STATE_MARKED_ESSENTIAL &&
-      event.GetType() == blink::WebInputEvent::kMouseUp &&
+      event.GetType() == blink::WebInputEvent::Type::kMouseUp &&
       (event.GetModifiers() & blink::WebInputEvent::kLeftButtonDown)) {
     bool was_throttled = IsThrottled();
     MarkPluginEssential(UNTHROTTLE_METHOD_BY_CLICK);

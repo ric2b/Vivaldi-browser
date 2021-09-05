@@ -4,8 +4,12 @@
 
 #include "content/browser/service_worker/service_worker_test_utils.h"
 
+#include <algorithm>
+#include <map>
 #include <memory>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "base/barrier_closure.h"
 #include "base/run_loop.h"
@@ -102,7 +106,8 @@ class FakeNavigationClient : public mojom::NavigationClient {
   using ReceivedProviderInfoCallback = base::OnceCallback<void(
       blink::mojom::ServiceWorkerProviderInfoForClientPtr)>;
 
-  FakeNavigationClient(ReceivedProviderInfoCallback on_received_callback)
+  explicit FakeNavigationClient(
+      ReceivedProviderInfoCallback on_received_callback)
       : on_received_callback_(std::move(on_received_callback)) {}
   ~FakeNavigationClient() override = default;
 
@@ -211,7 +216,7 @@ void WriteToDiskCacheAsyncInternal(
   http_info->headers =
       base::MakeRefCounted<net::HttpResponseHeaders>("HTTP/1.0 200 OK\0\0");
   for (const auto& header : headers)
-    http_info->headers->AddHeader(header.first + ": " + header.second);
+    http_info->headers->AddHeader(header.first, header.second);
 
   scoped_refptr<HttpResponseInfoIOBuffer> info_buffer =
       base::MakeRefCounted<HttpResponseInfoIOBuffer>(std::move(http_info));
@@ -344,9 +349,9 @@ CreateContainerHostAndInfoForWindow(
   info->client_receiver = client_remote.InitWithNewEndpointAndPassReceiver();
   host_receiver = info->host_remote.InitWithNewEndpointAndPassReceiver();
   return std::make_unique<ServiceWorkerContainerHostAndInfo>(
-      ServiceWorkerContainerHost::CreateForWindow(
-          context, are_ancestors_secure, FrameTreeNode::kFrameTreeNodeInvalidId,
-          std::move(host_receiver), std::move(client_remote)),
+      context->CreateContainerHostForWindow(
+          std::move(host_receiver), are_ancestors_secure,
+          std::move(client_remote), FrameTreeNode::kFrameTreeNodeInvalidId),
       std::move(info));
 }
 
@@ -541,6 +546,17 @@ MockServiceWorkerResponseReader::~MockServiceWorkerResponseReader() {}
 void MockServiceWorkerResponseReader::ReadInfo(
     HttpResponseInfoIOBuffer* info_buf,
     net::CompletionOnceCallback callback) {
+  // We need to allocate HttpResponseInfo for
+  // ServiceWorkerCacheCacheWriterTest.CopyScript_Async to pass.
+  // It reads/writes response headers and the current implementation
+  // of ServiceWorkerCacheWriter::WriteInfo() requires a valid
+  // HttpResponseInfo. This workaround will be gone once we remove
+  // HttpResponseInfo dependencies from service worker codebase.
+  DCHECK(!info_buf->http_info);
+  info_buf->http_info = std::make_unique<net::HttpResponseInfo>();
+  info_buf->http_info->headers =
+      base::MakeRefCounted<net::HttpResponseHeaders>("HTTP/1.0 200 OK\0\0");
+
   DCHECK(!expected_reads_.empty());
   ExpectedRead expected = expected_reads_.front();
   EXPECT_TRUE(expected.info);
@@ -727,13 +743,12 @@ ServiceWorkerUpdateCheckTestUtils::CreatePausedCacheWriter(
       worker_test_helper->context()->storage()->CreateResponseWriter(
           new_resource_id),
       true /* pause_when_not_identical */);
-  auto info = std::make_unique<net::HttpResponseInfo>();
-  info->request_time = base::Time::Now();
-  info->response_time = base::Time::Now();
-  info->was_cached = false;
-  info->headers = base::MakeRefCounted<net::HttpResponseHeaders>(new_headers);
-  cache_writer->headers_to_write_ =
-      base::MakeRefCounted<HttpResponseInfoIOBuffer>(std::move(info));
+  cache_writer->response_head_to_write_ =
+      network::mojom::URLResponseHead::New();
+  cache_writer->response_head_to_write_->request_time = base::Time::Now();
+  cache_writer->response_head_to_write_->response_time = base::Time::Now();
+  cache_writer->response_head_to_write_->headers =
+      base::MakeRefCounted<net::HttpResponseHeaders>(new_headers);
   cache_writer->bytes_compared_ = bytes_compared;
   cache_writer->data_to_write_ = base::MakeRefCounted<net::WrappedIOBuffer>(
       pending_network_buffer ? pending_network_buffer->buffer() : nullptr);
@@ -870,6 +885,52 @@ bool ServiceWorkerUpdateCheckTestUtils::VerifyStoredResponse(
     EXPECT_EQ(expected_body, received_body);
   }
   return true;
+}
+
+void ReadDataPipeInternal(mojo::DataPipeConsumerHandle handle,
+                          std::string* result,
+                          base::OnceClosure quit_closure) {
+  while (true) {
+    uint32_t num_bytes;
+    const void* buffer = nullptr;
+    MojoResult rv =
+        handle.BeginReadData(&buffer, &num_bytes, MOJO_READ_DATA_FLAG_NONE);
+    switch (rv) {
+      case MOJO_RESULT_BUSY:
+      case MOJO_RESULT_INVALID_ARGUMENT:
+        NOTREACHED();
+        return;
+      case MOJO_RESULT_FAILED_PRECONDITION:
+        std::move(quit_closure).Run();
+        return;
+      case MOJO_RESULT_SHOULD_WAIT:
+        base::ThreadTaskRunnerHandle::Get()->PostTask(
+            FROM_HERE, base::BindOnce(&ReadDataPipeInternal, handle, result,
+                                      std::move(quit_closure)));
+        return;
+      case MOJO_RESULT_OK:
+        EXPECT_NE(nullptr, buffer);
+        EXPECT_GT(num_bytes, 0u);
+        uint32_t before_size = result->size();
+        result->append(static_cast<const char*>(buffer), num_bytes);
+        uint32_t read_size = result->size() - before_size;
+        EXPECT_EQ(num_bytes, read_size);
+        rv = handle.EndReadData(read_size);
+        EXPECT_EQ(MOJO_RESULT_OK, rv);
+        break;
+    }
+  }
+  NOTREACHED();
+  return;
+}
+
+std::string ReadDataPipe(mojo::ScopedDataPipeConsumerHandle handle) {
+  EXPECT_TRUE(handle.is_valid());
+  std::string result;
+  base::RunLoop loop;
+  ReadDataPipeInternal(handle.get(), &result, loop.QuitClosure());
+  loop.Run();
+  return result;
 }
 
 }  // namespace content

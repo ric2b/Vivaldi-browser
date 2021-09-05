@@ -125,13 +125,14 @@ WebApkIconHasher::WebApkIconHasher(
 
   download_timeout_timer_.Start(
       FROM_HERE, base::TimeDelta::FromMilliseconds(timeout_ms),
-      base::Bind(&WebApkIconHasher::OnDownloadTimedOut,
-                 base::Unretained(this)));
+      base::BindOnce(&WebApkIconHasher::OnDownloadTimedOut,
+                     base::Unretained(this)));
 
   auto resource_request = std::make_unique<network::ResourceRequest>();
   resource_request->trusted_params = network::ResourceRequest::TrustedParams();
-  resource_request->trusted_params->network_isolation_key =
-      net::NetworkIsolationKey(request_initiator, request_initiator);
+  resource_request->trusted_params->isolation_info = net::IsolationInfo::Create(
+      net::IsolationInfo::RedirectMode::kUpdateNothing, request_initiator,
+      request_initiator, net::SiteForCookies());
   resource_request->request_initiator = request_initiator;
   resource_request->url = icon_url;
   simple_url_loader_ = network::SimpleURLLoader::Create(

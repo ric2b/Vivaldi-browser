@@ -8,6 +8,8 @@ import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.MediumTest;
 import android.view.ViewGroup;
 
+import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -15,10 +17,13 @@ import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.BaseSwitches;
+import org.chromium.base.GarbageCollectionTestUtils;
 import org.chromium.base.SysUtils;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
+import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
@@ -32,10 +37,12 @@ import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
+import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.UiRestriction;
 
 import java.io.IOException;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -63,6 +70,8 @@ public class TabSelectionEditorTest {
     private TabSelectionEditorCoordinator
             .TabSelectionEditorController mTabSelectionEditorController;
     private TabSelectionEditorLayout mTabSelectionEditorLayout;
+    private TabSelectionEditorCoordinator mTabSelectionEditorCoordinator;
+    private WeakReference<TabSelectionEditorLayout> mRef;
 
     @Before
     public void setUp() throws Exception {
@@ -71,17 +80,25 @@ public class TabSelectionEditorTest {
         mTabModelSelector = mActivityTestRule.getActivity().getTabModelSelector();
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            TabSelectionEditorCoordinator tabSelectionEditorCoordinator =
-                    new TabSelectionEditorCoordinator(mActivityTestRule.getActivity(),
-                            (ViewGroup) mActivityTestRule.getActivity().getWindow().getDecorView(),
-                            mTabModelSelector,
-                            mActivityTestRule.getActivity().getTabContentManager(), null,
-                            getMode());
+            mTabSelectionEditorCoordinator = new TabSelectionEditorCoordinator(
+                    mActivityTestRule.getActivity(),
+                    (ViewGroup) mActivityTestRule.getActivity().getWindow().getDecorView(),
+                    mTabModelSelector, mActivityTestRule.getActivity().getTabContentManager(), null,
+                    getMode());
 
-            mTabSelectionEditorController = tabSelectionEditorCoordinator.getController();
+            mTabSelectionEditorController = mTabSelectionEditorCoordinator.getController();
             mTabSelectionEditorLayout =
-                    tabSelectionEditorCoordinator.getTabSelectionEditorLayoutForTesting();
+                    mTabSelectionEditorCoordinator.getTabSelectionEditorLayoutForTesting();
+            mRef = new WeakReference<>(mTabSelectionEditorLayout);
         });
+    }
+
+    @After
+    public void tearDown() {
+        if (mTabSelectionEditorCoordinator != null) {
+            TestThreadUtils.runOnUiThreadBlocking(
+                    () -> { mTabSelectionEditorCoordinator.destroy(); });
+        }
     }
 
     private @TabListCoordinator.TabListMode int getMode() {
@@ -199,6 +216,30 @@ public class TabSelectionEditorTest {
         // TODO(1021803): verify the undo snack after the bug is resolved.
         // verifyUndoSnackbarWithTextIsShown(mActivityTestRule.getActivity().getString(
         //     R.string.undo_bar_group_tabs_message, 2));
+    }
+
+    @Test
+    @MediumTest
+    public void testUndoToolbarGroup() {
+        ChromeTabbedActivity cta = mActivityTestRule.getActivity();
+        prepareBlankTab(2, false);
+        List<Tab> tabs = getTabsInCurrentTabModel();
+        TabUiTestHelper.enterTabSwitcher(cta);
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> mTabSelectionEditorController.show(tabs));
+
+        mRobot.resultRobot.verifyToolbarActionButtonWithResourceId(
+                R.string.tab_selection_editor_group);
+
+        mRobot.actionRobot.clickItemAtAdapterPosition(0)
+                .clickItemAtAdapterPosition(1)
+                .clickToolbarActionButton();
+
+        mRobot.resultRobot.verifyTabSelectionEditorIsHidden();
+        TabUiTestHelper.verifyTabSwitcherCardCount(cta, 1);
+
+        CriteriaHelper.pollInstrumentationThread(TabUiTestHelper::verifyUndoBarShowingAndClickUndo);
+        TabUiTestHelper.verifyTabSwitcherCardCount(cta, 2);
     }
 
     @Test
@@ -414,6 +455,22 @@ public class TabSelectionEditorTest {
 
         ChromeRenderTestRule.sanitize(mTabSelectionEditorLayout);
         mRenderTestRule.render(mTabSelectionEditorLayout, "list_view_one_selected_tab");
+    }
+
+    @Test
+    @MediumTest
+    @DisableFeatures({ChromeFeatureList.TAB_GROUPS_ANDROID})
+    @DisabledTest(message = "crbug.com/1075816")
+    public void testTabSelectionEditorLayoutCanBeGarbageCollected() {
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            mTabSelectionEditorCoordinator.destroy();
+            mTabSelectionEditorCoordinator = null;
+            mTabSelectionEditorLayout = null;
+            mTabSelectionEditorController = null;
+        });
+
+        InstrumentationRegistry.getInstrumentation().waitForIdleSync();
+        Assert.assertTrue(GarbageCollectionTestUtils.canBeGarbageCollected(mRef));
     }
 
     private List<Tab> getTabsInCurrentTabModel() {

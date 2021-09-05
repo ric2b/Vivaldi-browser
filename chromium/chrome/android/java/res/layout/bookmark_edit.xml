@@ -35,7 +35,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="22dp"
-                app:hint="@string/bookmark_name"
+                android:hint="@string/bookmark_name"
                 app:emptyErrorMessage="@string/bookmark_missing_title">
                 <com.google.android.material.textfield.TextInputEditText
                     android:layout_width="match_parent"
@@ -68,7 +68,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="24dp"
-                app:hint="@string/bookmark_url"
+                android:hint="@string/bookmark_url"
                 app:emptyErrorMessage="@string/bookmark_missing_url">
 
                 <com.google.android.material.textfield.TextInputEditText
@@ -85,9 +85,9 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="24dp"
-                app:hint="@string/bookmark_description">
+                android:hint="@string/bookmark_description">
 
-                <android.support.design.widget.TextInputEditText
+                <com.google.android.material.textfield.TextInputEditText
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:imeOptions="flagNoExtractUi"
@@ -100,9 +100,9 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="24dp"
-                app:hint="@string/bookmark_nick">
+                android:hint="@string/bookmark_nick">
 
-                <android.support.design.widget.TextInputEditText
+                <com.google.android.material.textfield.TextInputEditText
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:imeOptions="flagNoExtractUi"

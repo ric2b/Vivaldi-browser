@@ -26,9 +26,8 @@ class ExecutionContextCSPDelegate final
 
   // ContentSecurityPolicyDelegate overrides:
   const SecurityOrigin* GetSecurityOrigin() override;
-  SecureContextMode GetSecureContextMode() override;
   const KURL& Url() const override;
-  void SetSandboxFlags(SandboxFlags) override;
+  void SetSandboxFlags(network::mojom::blink::WebSandboxFlags) override;
   void SetRequireTrustedTypes() override;
   void AddInsecureRequestPolicy(mojom::blink::InsecureRequestPolicy) override;
   std::unique_ptr<SourceLocation> GetSourceLocation() override;

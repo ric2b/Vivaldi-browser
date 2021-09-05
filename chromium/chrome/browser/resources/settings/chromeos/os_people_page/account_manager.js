@@ -168,11 +168,12 @@ Polymer({
    * @param {!settings.Account} account
    * @return {string} An appropriate management status label. e.g.
    *    "Primary account" for unmanaged accounts, "Managed by <Domain>"
-   *    for Enterprise managed accounts etc.
+   *    for Enterprise managed accounts etc. Child accounts get the label
+   *    for unmanaged accounts.
    * @private
    */
   getManagementLabel_(account) {
-    if (account.organization) {
+    if (!this.isChildUser_ && account.organization) {
       return this.i18n('accountManagerManagedLabel', account.organization);
     }
 

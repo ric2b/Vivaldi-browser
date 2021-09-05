@@ -111,6 +111,14 @@ TEST_F(UseCreditCardActionTest, FillCreditCardNoCardSelected) {
             ProcessAction(action));
 }
 
+TEST_F(UseCreditCardActionTest,
+       InvalidActionnSkipAutofillWithoutRequiredFields) {
+  ActionProto action;
+  auto* use_card = action.mutable_use_card();
+  use_card->set_skip_autofill(true);
+  EXPECT_EQ(ProcessedActionStatusProto::INVALID_ACTION, ProcessAction(action));
+}
+
 TEST_F(UseCreditCardActionTest, FillCreditCard) {
   ActionProto action = CreateUseCreditCardAction();
 
@@ -322,6 +330,41 @@ TEST_F(UseCreditCardActionTest, ForcedFallbackWithKeystrokes) {
   EXPECT_EQ(ProcessedActionStatusProto::ACTION_APPLIED, ProcessAction(action));
 }
 
+TEST_F(UseCreditCardActionTest, SkippingAutofill) {
+  ON_CALL(mock_action_delegate_, GetElementTag(_, _))
+      .WillByDefault(RunOnceCallback<1>(OkClientStatus(), "INPUT"));
+
+  ActionProto action = CreateUseCreditCardAction();
+  AddRequiredField(
+      &action,
+      base::NumberToString(static_cast<int>(
+          UseCreditCardProto::RequiredField::CREDIT_CARD_VERIFICATION_CODE)),
+      "#cvc");
+  action.mutable_use_card()->set_skip_autofill(true);
+
+  autofill::CreditCard credit_card;
+  user_data_.selected_card_ =
+      std::make_unique<autofill::CreditCard>(credit_card);
+  EXPECT_CALL(mock_action_delegate_, OnGetFullCard(_))
+      .WillOnce(RunOnceCallback<0>(credit_card, base::UTF8ToUTF16("123")));
+  EXPECT_CALL(mock_action_delegate_, OnFillCardForm(_, _, _, _)).Times(0);
+
+  // First validation fails.
+  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(Selector({"#cvc"}), _))
+      .WillOnce(RunOnceCallback<1>(OkClientStatus(), ""));
+  // Fill cvc.
+  Expectation set_cvc =
+      EXPECT_CALL(mock_action_delegate_,
+                  OnSetFieldValue(Selector({"#cvc"}), "123", _))
+          .WillOnce(RunOnceCallback<2>(OkClientStatus()));
+  // Second validation succeeds.
+  EXPECT_CALL(mock_web_controller_, OnGetFieldValue(Selector({"#cvc"}), _))
+      .After(set_cvc)
+      .WillOnce(RunOnceCallback<1>(OkClientStatus(), "not empty"));
+
+  EXPECT_EQ(ProcessedActionStatusProto::ACTION_APPLIED, ProcessAction(action));
+}
+
 TEST_F(UseCreditCardActionTest, AutofillFailureWithoutRequiredFieldsIsFatal) {
   ActionProto action_proto = CreateUseCreditCardAction();
 
@@ -438,6 +481,44 @@ TEST_F(UseCreditCardActionTest, FallbackForCardExpirationSucceeds) {
       .WillRepeatedly(RunOnceCallback<1>(OkClientStatus(), "not empty"));
 
   EXPECT_EQ(ProcessedActionStatusProto::ACTION_APPLIED,
+            ProcessAction(action_proto));
+}
+
+TEST_F(UseCreditCardActionTest, FallbackFails) {
+  ON_CALL(mock_action_delegate_, GetElementTag(_, _))
+      .WillByDefault(RunOnceCallback<1>(OkClientStatus(), "INPUT"));
+
+  ActionProto action_proto = CreateUseCreditCardAction();
+  AddRequiredField(&action_proto, "57", "#expiration_date");
+
+  // Autofill succeeds.
+  autofill::CreditCard credit_card;
+  credit_card.SetExpirationMonth(9);
+  credit_card.SetExpirationYear(2050);
+  credit_card.SetRawInfo(autofill::CREDIT_CARD_NAME_FULL,
+                         base::UTF8ToUTF16("Jon Doe"));
+  credit_card.SetRawInfo(autofill::CREDIT_CARD_NUMBER,
+                         base::UTF8ToUTF16("4111111111111111"));
+  user_data_.selected_card_ =
+      std::make_unique<autofill::CreditCard>(credit_card);
+  EXPECT_CALL(mock_action_delegate_, OnGetFullCard(_))
+      .WillOnce(RunOnceCallback<0>(credit_card, base::UTF8ToUTF16("123")));
+  EXPECT_CALL(mock_action_delegate_,
+              OnFillCardForm(_, base::UTF8ToUTF16("123"),
+                             Selector({kFakeSelector}).MustBeVisible(), _))
+      .WillOnce(RunOnceCallback<3>(OkClientStatus()));
+
+  // Validation fails when getting expiration date.
+  EXPECT_CALL(mock_web_controller_,
+              OnGetFieldValue(Eq(Selector({"#expiration_date"})), _))
+      .WillOnce(RunOnceCallback<1>(OkClientStatus(), ""));
+
+  // Fallback fails.
+  EXPECT_CALL(mock_action_delegate_,
+              OnSetFieldValue(Eq(Selector({"#expiration_date"})), "09/2050", _))
+      .WillOnce(RunOnceCallback<2>(ClientStatus(OTHER_ACTION_STATUS)));
+
+  EXPECT_EQ(ProcessedActionStatusProto::AUTOFILL_INCOMPLETE,
             ProcessAction(action_proto));
 }
 

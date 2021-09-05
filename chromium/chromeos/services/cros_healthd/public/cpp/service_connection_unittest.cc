@@ -18,6 +18,7 @@
 #include "chromeos/services/cros_healthd/public/mojom/cros_healthd.mojom.h"
 #include "chromeos/services/cros_healthd/public/mojom/cros_healthd_diagnostics.mojom.h"
 #include "chromeos/services/cros_healthd/public/mojom/cros_healthd_probe.mojom.h"
+#include "mojo/public/cpp/bindings/receiver.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -74,8 +75,7 @@ mojom::RoutineUpdatePtr MakeNonInteractiveRoutineUpdate() {
       /*output=*/mojo::ScopedHandle(), update_union.Clone());
 }
 
-base::Optional<std::vector<mojom::NonRemovableBlockDeviceInfoPtr>>
-MakeNonRemovableBlockDeviceInfo() {
+mojom::NonRemovableBlockDeviceResultPtr MakeNonRemovableBlockDeviceResult() {
   std::vector<mojom::NonRemovableBlockDeviceInfoPtr> info;
   info.push_back(mojom::NonRemovableBlockDeviceInfo::New(
       "test_path", 123 /* size */, "test_type", 10 /* manfid */, "test_name",
@@ -83,78 +83,172 @@ MakeNonRemovableBlockDeviceInfo() {
   info.push_back(mojom::NonRemovableBlockDeviceInfo::New(
       "test_path2", 124 /* size */, "test_type2", 11 /* manfid */, "test_name2",
       767 /* serial */));
-  return base::Optional<std::vector<mojom::NonRemovableBlockDeviceInfoPtr>>(
+  return mojom::NonRemovableBlockDeviceResult::NewBlockDeviceInfo(
       std::move(info));
 }
 
-mojom::BatteryInfoPtr MakeBatteryInfo() {
-  mojom::SmartBatteryInfoPtr smart_info = mojom::SmartBatteryInfo::New(
-      "2018-08-06" /* manufacture_date */, 981729 /* temperature */);
-  return mojom::BatteryInfo::New(
+mojom::BatteryResultPtr MakeBatteryResult() {
+  return mojom::BatteryResult::NewBatteryInfo(mojom::BatteryInfo::New(
       2 /* cycle_count */, 12.9 /* voltage_now */,
       "battery_vendor" /* vendor */, "serial_number" /* serial_number */,
       5.275 /* charge_full_design */, 5.292 /* charge_full */,
       11.55 /* voltage_min_design */, "battery_model" /* model_name */,
       5.123 /* charge_now */, 98.123 /* current_now */,
       "battery_technology" /* technology */, "battery_status" /* status */,
-      std::move(smart_info));
+      "2018-08-06" /* manufacture_date */,
+      mojom::UInt64Value::New(981729) /* temperature */));
 }
 
-mojom::CachedVpdInfoPtr MakeCachedVpdInfo() {
-  return mojom::CachedVpdInfo::New("fake_sku_number" /* sku_number */);
+mojom::CachedVpdResultPtr MakeCachedVpdResult() {
+  return mojom::CachedVpdResult::NewVpdInfo(
+      mojom::CachedVpdInfo::New("fake_sku_number" /* sku_number */));
 }
 
-base::Optional<std::vector<mojom::CpuInfoPtr>> MakeCpuInfo() {
-  std::vector<mojom::CpuInfoPtr> cpu_info;
-  cpu_info.push_back(mojom::CpuInfo::New(
-      "Dank CPU 1" /* model_name */,
+std::vector<mojom::CpuCStateInfoPtr> MakeCStateInfo() {
+  std::vector<mojom::CpuCStateInfoPtr> c_states;
+  c_states.push_back(mojom::CpuCStateInfo::New(
+      "c_state_0" /* name */, 679 /* time_in_state_since_last_boot_us */));
+  c_states.push_back(mojom::CpuCStateInfo::New(
+      "c_state_1" /* name */, 12354 /* time_in_state_since_last_boot_us */));
+  return c_states;
+}
+
+std::vector<mojom::LogicalCpuInfoPtr> MakeLogicalCpus() {
+  std::vector<mojom::LogicalCpuInfoPtr> logical_cpus;
+  logical_cpus.push_back(mojom::LogicalCpuInfo::New(
+      11 /* max_clock_speed_khz */, 14 /* scaling_max_frequency_khz */,
+      99 /* scaling_current_frequency_khz */, 889 /* idle_time_user_hz */,
+      MakeCStateInfo()));
+  logical_cpus.push_back(mojom::LogicalCpuInfo::New(
+      987 /* max_clock_speed_khz */, 543 /* scaling_max_frequency_khz */,
+      2349 /* scaling_current_frequency_khz */, 688 /* idle_time_user_hz */,
+      MakeCStateInfo()));
+  return logical_cpus;
+}
+
+std::vector<mojom::PhysicalCpuInfoPtr> MakePhysicalCpus() {
+  std::vector<mojom::PhysicalCpuInfoPtr> physical_cpus;
+  physical_cpus.push_back(mojom::PhysicalCpuInfo::New(
+      "Dank CPU 1" /* model_name */, MakeLogicalCpus()));
+  physical_cpus.push_back(mojom::PhysicalCpuInfo::New(
+      "Dank CPU 2" /* model_name */, MakeLogicalCpus()));
+  return physical_cpus;
+}
+
+mojom::CpuResultPtr MakeCpuResult() {
+  return mojom::CpuResult::NewCpuInfo(mojom::CpuInfo::New(
+      10 /* num_total_threads */,
       mojom::CpuArchitectureEnum::kX86_64 /* architecture */,
-      3400000 /* max_clock_speed_khz */));
-  cpu_info.push_back(mojom::CpuInfo::New(
-      "Dank CPU 2" /* model_name */,
-      mojom::CpuArchitectureEnum::kX86_64 /* architecture */,
-      2600000 /* max_clock_speed_khz */));
-  return cpu_info;
+      MakePhysicalCpus()));
 }
 
-mojom::TimezoneInfoPtr MakeTimezoneInfo() {
-  return mojom::TimezoneInfo::New("MST7MDT,M3.2.0,M11.1.0" /* posix */,
-                                  "America/Denver" /* region */);
+mojom::TimezoneResultPtr MakeTimezoneResult() {
+  return mojom::TimezoneResult::NewTimezoneInfo(mojom::TimezoneInfo::New(
+      "MST7MDT,M3.2.0,M11.1.0" /* posix */, "America/Denver" /* region */));
 }
 
-mojom::MemoryInfoPtr MakeMemoryInfo() {
-  return mojom::MemoryInfo::New(987123 /* total_memory_kib */,
-                                346432 /* free_memory_kib */,
-                                45863 /* available_memory_kib */,
-                                43264 /* page_faults_since_last_boot */);
+mojom::MemoryResultPtr MakeMemoryResult() {
+  return mojom::MemoryResult::NewMemoryInfo(mojom::MemoryInfo::New(
+      987123 /* total_memory_kib */, 346432 /* free_memory_kib */,
+      45863 /* available_memory_kib */,
+      43264 /* page_faults_since_last_boot */));
 }
 
-base::Optional<std::vector<mojom::BacklightInfoPtr>> MakeBacklightInfo() {
+mojom::BacklightResultPtr MakeBacklightResult() {
   std::vector<mojom::BacklightInfoPtr> backlight_info;
   backlight_info.push_back(mojom::BacklightInfo::New(
       "path_1" /* path */, 6537 /* max_brightness */, 987 /* brightness */));
   backlight_info.push_back(mojom::BacklightInfo::New(
       "path_2" /* path */, 3242 /* max_brightness */, 65 /* brightness */));
-  return backlight_info;
+  return mojom::BacklightResult::NewBacklightInfo(std::move(backlight_info));
 }
 
-base::Optional<std::vector<mojom::FanInfoPtr>> MakeFanInfo() {
-  std::vector<mojom::FanInfoPtr> fan_info;
-  fan_info.push_back(mojom::FanInfo::New(1200 /* speed_rpm */));
-  fan_info.push_back(mojom::FanInfo::New(2650 /* speed_rpm */));
-  return fan_info;
+mojom::FanResultPtr MakeFanResult() {
+  std::vector<mojom::FanInfoPtr> fan_vector;
+  fan_vector.push_back(mojom::FanInfo::New(1200 /* speed_rpm */));
+  fan_vector.push_back(mojom::FanInfo::New(2650 /* speed_rpm */));
+  return mojom::FanResult::NewFanInfo(std::move(fan_vector));
+}
+
+mojom::StatefulPartitionResultPtr MakeStatefulPartitionResult() {
+  return mojom::StatefulPartitionResult::NewPartitionInfo(
+      mojom::StatefulPartitionInfo::New(9238571212ul, 23420982409ul));
 }
 
 mojom::TelemetryInfoPtr MakeTelemetryInfo() {
   return mojom::TelemetryInfo::New(
-      MakeBatteryInfo() /* battery_info */,
-      MakeNonRemovableBlockDeviceInfo() /* block_device_info */,
-      MakeCachedVpdInfo() /* vpd_info */, MakeCpuInfo() /* cpu_info */,
-      MakeTimezoneInfo() /* timezone_info */,
-      MakeMemoryInfo() /* memory_info */,
-      MakeBacklightInfo() /* backlight_info */, MakeFanInfo() /* fan_info */
+      MakeBatteryResult() /* battery_result */,
+      MakeNonRemovableBlockDeviceResult() /* block_device_result */,
+      MakeCachedVpdResult() /* vpd_result */, MakeCpuResult() /* cpu_result */,
+      MakeTimezoneResult() /* timezone_result */,
+      MakeMemoryResult() /* memory_result */,
+      MakeBacklightResult() /* backlight_result */,
+      MakeFanResult() /* fan_result */,
+      MakeStatefulPartitionResult() /* partition_result */
   );
 }
+
+class MockCrosHealthdBluetoothObserver
+    : public mojom::CrosHealthdBluetoothObserver {
+ public:
+  MockCrosHealthdBluetoothObserver() : receiver_{this} {}
+  MockCrosHealthdBluetoothObserver(const MockCrosHealthdBluetoothObserver&) =
+      delete;
+  MockCrosHealthdBluetoothObserver& operator=(
+      const MockCrosHealthdBluetoothObserver&) = delete;
+
+  MOCK_METHOD(void, OnAdapterAdded, (), (override));
+  MOCK_METHOD(void, OnAdapterRemoved, (), (override));
+  MOCK_METHOD(void, OnAdapterPropertyChanged, (), (override));
+  MOCK_METHOD(void, OnDeviceAdded, (), (override));
+  MOCK_METHOD(void, OnDeviceRemoved, (), (override));
+  MOCK_METHOD(void, OnDevicePropertyChanged, (), (override));
+
+  mojo::PendingRemote<mojom::CrosHealthdBluetoothObserver> pending_remote() {
+    return receiver_.BindNewPipeAndPassRemote();
+  }
+
+ private:
+  mojo::Receiver<mojom::CrosHealthdBluetoothObserver> receiver_;
+};
+
+class MockCrosHealthdLidObserver : public mojom::CrosHealthdLidObserver {
+ public:
+  MockCrosHealthdLidObserver() : receiver_{this} {}
+  MockCrosHealthdLidObserver(const MockCrosHealthdLidObserver&) = delete;
+  MockCrosHealthdLidObserver& operator=(const MockCrosHealthdLidObserver&) =
+      delete;
+
+  MOCK_METHOD(void, OnLidClosed, (), (override));
+  MOCK_METHOD(void, OnLidOpened, (), (override));
+
+  mojo::PendingRemote<mojom::CrosHealthdLidObserver> pending_remote() {
+    return receiver_.BindNewPipeAndPassRemote();
+  }
+
+ private:
+  mojo::Receiver<mojom::CrosHealthdLidObserver> receiver_;
+};
+
+class MockCrosHealthdPowerObserver : public mojom::CrosHealthdPowerObserver {
+ public:
+  MockCrosHealthdPowerObserver() : receiver_{this} {}
+  MockCrosHealthdPowerObserver(const MockCrosHealthdPowerObserver&) = delete;
+  MockCrosHealthdPowerObserver& operator=(const MockCrosHealthdPowerObserver&) =
+      delete;
+
+  MOCK_METHOD(void, OnAcInserted, (), (override));
+  MOCK_METHOD(void, OnAcRemoved, (), (override));
+  MOCK_METHOD(void, OnOsSuspend, (), (override));
+  MOCK_METHOD(void, OnOsResume, (), (override));
+
+  mojo::PendingRemote<mojom::CrosHealthdPowerObserver> pending_remote() {
+    return receiver_.BindNewPipeAndPassRemote();
+  }
+
+ private:
+  mojo::Receiver<mojom::CrosHealthdPowerObserver> receiver_;
+};
 
 class CrosHealthdServiceConnectionTest : public testing::Test {
  public:
@@ -419,6 +513,52 @@ TEST_F(CrosHealthdServiceConnectionTest, RunBatteryDischargeRoutine) {
         EXPECT_EQ(response, MakeRunRoutineResponse());
         run_loop.Quit();
       }));
+  run_loop.Run();
+}
+
+// Test that we can add a Bluetooth observer.
+TEST_F(CrosHealthdServiceConnectionTest, AddBluetoothObserver) {
+  MockCrosHealthdBluetoothObserver observer;
+  ServiceConnection::GetInstance()->AddBluetoothObserver(
+      observer.pending_remote());
+
+  // Send out an event to verify the observer is connected.
+  base::RunLoop run_loop;
+  EXPECT_CALL(observer, OnAdapterAdded()).WillOnce(Invoke([&]() {
+    run_loop.Quit();
+  }));
+  FakeCrosHealthdClient::Get()->EmitAdapterAddedEventForTesting();
+
+  run_loop.Run();
+}
+
+// Test that we can add a lid observer.
+TEST_F(CrosHealthdServiceConnectionTest, AddLidObserver) {
+  MockCrosHealthdLidObserver observer;
+  ServiceConnection::GetInstance()->AddLidObserver(observer.pending_remote());
+
+  // Send out an event to make sure the observer is connected.
+  base::RunLoop run_loop;
+  EXPECT_CALL(observer, OnLidClosed()).WillOnce(Invoke([&]() {
+    run_loop.Quit();
+  }));
+  FakeCrosHealthdClient::Get()->EmitLidClosedEventForTesting();
+
+  run_loop.Run();
+}
+
+// Test that we can add a power observer.
+TEST_F(CrosHealthdServiceConnectionTest, AddPowerObserver) {
+  MockCrosHealthdPowerObserver observer;
+  ServiceConnection::GetInstance()->AddPowerObserver(observer.pending_remote());
+
+  // Send out an event to make sure the observer is connected.
+  base::RunLoop run_loop;
+  EXPECT_CALL(observer, OnAcInserted()).WillOnce(Invoke([&]() {
+    run_loop.Quit();
+  }));
+  FakeCrosHealthdClient::Get()->EmitAcInsertedEventForTesting();
+
   run_loop.Run();
 }
 

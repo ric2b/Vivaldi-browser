@@ -37,7 +37,8 @@ void ReportSensitiveDataWarningBypass(Profile* profile,
                                       const std::string& download_digest_sha256,
                                       const std::string& mime_type,
                                       const std::string& trigger,
-                                      const int64_t content_size);
+                                      const int64_t content_size,
+                                      const DlpDeepScanningVerdict& verdict);
 
 // Access points used to record UMA metrics and specify which code location is
 // initiating a deep scan. Any new caller of
@@ -77,12 +78,10 @@ void RecordDeepScanMetrics(DeepScanAccessPoint access_point,
                            bool success);
 
 // Returns an array of the file types supported for DLP scanning.
-std::array<const base::FilePath::CharType*, 21> SupportedDlpFileTypes();
+std::array<const base::FilePath::CharType*, 24> SupportedDlpFileTypes();
 
 // Returns true if the given file type is supported for DLP scanning.
-bool FileTypeSupported(bool for_malware_scan,
-                       bool for_dlp_scan,
-                       const base::FilePath& path);
+bool FileTypeSupportedForDlp(const base::FilePath& path);
 
 // Helper function to make DeepScanningClientResponses for tests.
 DeepScanningClientResponse SimpleDeepScanningClientResponseForTesting(

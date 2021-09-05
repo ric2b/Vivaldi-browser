@@ -4,7 +4,7 @@
 
 #import "ios/chrome/browser/ui/overlays/infobar_banner/infobar_banner_overlay_coordinator.h"
 
-#include "base/logging.h"
+#include "base/check.h"
 #include "base/mac/foundation_util.h"
 #include "base/no_destructor.h"
 #import "ios/chrome/browser/overlays/public/common/infobars/infobar_overlay_request_config.h"
@@ -16,6 +16,7 @@
 #import "ios/chrome/browser/ui/infobars/infobar_constants.h"
 #import "ios/chrome/browser/ui/infobars/presentation/infobar_banner_positioner.h"
 #import "ios/chrome/browser/ui/infobars/presentation/infobar_banner_transition_driver.h"
+#import "ios/chrome/browser/ui/overlays/infobar_banner/confirm/confirm_infobar_banner_overlay_mediator.h"
 #import "ios/chrome/browser/ui/overlays/infobar_banner/infobar_banner_overlay_mediator.h"
 #import "ios/chrome/browser/ui/overlays/infobar_banner/passwords/save_password_infobar_banner_overlay_mediator.h"
 #import "ios/chrome/browser/ui/overlays/overlay_request_coordinator+subclassing.h"
@@ -42,7 +43,10 @@
 #pragma mark - Accessors
 
 + (NSArray<Class>*)supportedMediatorClasses {
-  return @ [[SavePasswordInfobarBannerOverlayMediator class]];
+  return @[
+    [SavePasswordInfobarBannerOverlayMediator class],
+    [ConfirmInfobarBannerOverlayMediator class]
+  ];
 }
 
 + (const OverlayRequestSupport*)requestSupport {
@@ -140,12 +144,11 @@
 // Creates a mediator instance from the supported mediator class list that
 // supports the coordinator's request.
 - (InfobarBannerOverlayMediator*)newMediator {
-  for (Class mediatorClass in [self class].supportedMediatorClasses) {
-    if (mediatorClass.requestSupport->IsRequestSupported(self.request))
-      return [[mediatorClass alloc] initWithRequest:self.request];
-  }
-  NOTREACHED() << "None of the supported mediator classes support request.";
-  return nil;
+  InfobarBannerOverlayMediator* mediator =
+      base::mac::ObjCCast<InfobarBannerOverlayMediator>(GetMediatorForRequest(
+          [self class].supportedMediatorClasses, self.request));
+  DCHECK(mediator) << "None of the supported mediator classes support request.";
+  return mediator;
 }
 
 @end

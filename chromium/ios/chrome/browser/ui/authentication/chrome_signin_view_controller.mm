@@ -35,8 +35,10 @@
 #import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/authentication_flow.h"
 #import "ios/chrome/browser/ui/authentication/authentication_ui_util.h"
+#import "ios/chrome/browser/ui/authentication/signin/signin_constants.h"
 #include "ios/chrome/browser/ui/authentication/unified_consent/unified_consent_coordinator.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
+#include "ios/chrome/browser/ui/ui_feature_flags.h"
 #import "ios/chrome/browser/ui/util/label_link_controller.h"
 #import "ios/chrome/browser/ui/util/rtl_geometry.h"
 #import "ios/chrome/browser/ui/util/ui_util.h"
@@ -45,6 +47,7 @@
 #include "ios/chrome/common/string_util.h"
 #import "ios/chrome/common/ui/colors/UIColor+cr_semantic_colors.h"
 #import "ios/chrome/common/ui/colors/semantic_color_names.h"
+#import "ios/chrome/common/ui/util/pointer_interaction_util.h"
 #include "ios/chrome/grit/ios_chromium_strings.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
@@ -540,7 +543,7 @@ enum AuthenticationState {
   if (!ShouldHandleSigninError(error)) {
     return;
   }
-  _alertCoordinator = ErrorCoordinator(error, nil, self);
+  _alertCoordinator = ErrorCoordinator(error, nil, self, self.browser);
   [_alertCoordinator start];
 }
 
@@ -836,6 +839,18 @@ enum AuthenticationState {
                      action:@selector(onPrimaryButtonPressed:)
            forControlEvents:UIControlEventTouchUpInside];
   _primaryButton.hidden = YES;
+#if defined(__IPHONE_13_4)
+  if (@available(iOS 13.4, *)) {
+    if (base::FeatureList::IsEnabled(kPointerSupport)) {
+      _primaryButton.pointerInteractionEnabled = YES;
+      // This button can either have an opaque background (i.e., "Add Account"
+      // or "Yes, I'm in!") or a transparent background (i.e., "More") when
+      // scrolling is needed to reach the bottom of the screen.
+      _primaryButton.pointerStyleProvider =
+          CreateOpaqueOrTransparentButtonPointerStyleProvider();
+    }
+  }
+#endif  // defined(__IPHONE_13_4)
   [self.view addSubview:_primaryButton];
 
   _secondaryButton = [[MDCFlatButton alloc] init];
@@ -843,8 +858,17 @@ enum AuthenticationState {
   [_secondaryButton addTarget:self
                        action:@selector(onSecondaryButtonPressed:)
              forControlEvents:UIControlEventTouchUpInside];
-  [_secondaryButton setAccessibilityIdentifier:@"ic_close"];
+  _secondaryButton.accessibilityIdentifier = kSkipSigninAccessibilityIdentifier;
   _secondaryButton.hidden = YES;
+#if defined(__IPHONE_13_4)
+  if (@available(iOS 13.4, *)) {
+    if (base::FeatureList::IsEnabled(kPointerSupport)) {
+      _secondaryButton.pointerInteractionEnabled = YES;
+      _secondaryButton.pointerStyleProvider =
+          CreateTransparentButtonPointerStyleProvider();
+    }
+  }
+#endif  // defined(__IPHONE_13_4)
   [self.view addSubview:_secondaryButton];
 
   if (gChromeSigninViewControllerShowsActivityIndicator) {

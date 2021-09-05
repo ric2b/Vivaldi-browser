@@ -43,6 +43,7 @@
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/accessibility_notification_waiter.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_renderer_host.h"
 #include "content/public/test/test_utils.h"
@@ -255,7 +256,16 @@ IN_PROC_BROWSER_TEST_F(AutofillTest, AggregatesMinValidProfileDifferentJS) {
 
 // Form submitted via JavaScript, the user's personal data is updated even
 // if the event handler on the submit event prevents submission of the form.
-IN_PROC_BROWSER_TEST_F(AutofillTest, ProfilesAggregatedWithSubmitHandler) {
+// Flaky on Mac: https://crbug.com/1078506.
+#if defined(OS_MACOSX)
+#define MAYBE_ProfilesAggregatedWithSubmitHandler \
+  DISABLED_ProfilesAggregatedWithSubmitHandler
+#else
+#define MAYBE_ProfilesAggregatedWithSubmitHandler \
+  ProfilesAggregatedWithSubmitHandler
+#endif
+IN_PROC_BROWSER_TEST_F(AutofillTest,
+                       MAYBE_ProfilesAggregatedWithSubmitHandler) {
   FormMap data;
   data["NAME_FIRST"] = "Bob";
   data["NAME_LAST"] = "Smith";

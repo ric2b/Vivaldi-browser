@@ -21,6 +21,8 @@ class PDFiumEngine;
 class PDFiumFormFiller : public FPDF_FORMFILLINFO, public IPDF_JSPLATFORM {
  public:
   PDFiumFormFiller(PDFiumEngine* engine, bool enable_javascript);
+  PDFiumFormFiller(const PDFiumFormFiller&) = delete;
+  PDFiumFormFiller& operator=(const PDFiumFormFiller&) = delete;
   ~PDFiumFormFiller();
 
  private:
@@ -67,6 +69,9 @@ class PDFiumFormFiller : public FPDF_FORMFILLINFO, public IPDF_JSPLATFORM {
                                 int zoom_mode,
                                 float* position_array,
                                 int size_of_array);
+  static void Form_DoURIActionWithKeyboardModifier(FPDF_FORMFILLINFO* param,
+                                                   FPDF_BYTESTRING uri,
+                                                   int modifiers);
 
 #if defined(PDF_ENABLE_XFA)
   static void Form_EmailTo(FPDF_FORMFILLINFO* param,
@@ -186,9 +191,6 @@ class PDFiumFormFiller : public FPDF_FORMFILLINFO, public IPDF_JSPLATFORM {
   PDFiumEngine* const engine_;
 
   std::map<int, std::unique_ptr<base::RepeatingTimer>> timers_;
-  int last_timer_id_ = 0;
-
-  DISALLOW_COPY_AND_ASSIGN(PDFiumFormFiller);
 };
 
 }  // namespace chrome_pdf

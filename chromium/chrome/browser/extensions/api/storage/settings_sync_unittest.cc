@@ -104,20 +104,17 @@ class MockSyncChangeProcessor : public syncer::SyncChangeProcessor {
   MockSyncChangeProcessor() : fail_all_requests_(false) {}
 
   // syncer::SyncChangeProcessor implementation.
-  syncer::SyncError ProcessSyncChanges(
+  base::Optional<syncer::ModelError> ProcessSyncChanges(
       const base::Location& from_here,
       const syncer::SyncChangeList& change_list) override {
     if (fail_all_requests_) {
-      return syncer::SyncError(
-          FROM_HERE,
-          syncer::SyncError::DATATYPE_ERROR,
-          "MockSyncChangeProcessor: configured to fail",
-          change_list[0].sync_data().GetDataType());
+      return syncer::ModelError(FROM_HERE,
+                                "MockSyncChangeProcessor: configured to fail");
     }
     for (auto it = change_list.cbegin(); it != change_list.cend(); ++it) {
       changes_.push_back(std::make_unique<SettingSyncData>(*it));
     }
-    return syncer::SyncError();
+    return base::nullopt;
   }
 
   syncer::SyncDataList GetAllSyncData(syncer::ModelType type) const override {
@@ -1458,15 +1455,7 @@ static void UnlimitedLocalStorageTestCallback(ValueStore* local_storage) {
 
 }  // namespace
 
-#if defined(OS_WIN)
-// See: http://crbug.com/227296
-#define MAYBE_UnlimitedStorageForLocalButNotSync \
-  DISABLED_UnlimitedStorageForLocalButNotSync
-#else
-#define MAYBE_UnlimitedStorageForLocalButNotSync \
-  UnlimitedStorageForLocalButNotSync
-#endif
-TEST_F(ExtensionSettingsSyncTest, MAYBE_UnlimitedStorageForLocalButNotSync) {
+TEST_F(ExtensionSettingsSyncTest, UnlimitedStorageForLocalButNotSync) {
   const std::string id = "ext";
   std::set<std::string> permissions;
   permissions.insert("unlimitedStorage");

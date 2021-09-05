@@ -14,6 +14,7 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
+#include "chrome/browser/web_applications/components/app_icon_manager.h"
 #include "chrome/browser/web_applications/components/install_manager.h"
 #include "chrome/browser/web_applications/test/web_app_install_observer.h"
 #include "chrome/browser/web_applications/test/web_app_test.h"
@@ -21,6 +22,7 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/web_application_info.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
 
 namespace web_app {
@@ -286,6 +288,136 @@ IN_PROC_BROWSER_TEST_P(TwoClientWebAppsSyncTest, DISABLED_SyncFaviconOnly) {
   EXPECT_EQ(synced_app_id, app_id);
   EXPECT_EQ(GetRegistrar(destProfile).GetAppShortName(app_id), "Favicon only");
   EXPECT_EQ(GetRegistrar(destProfile).GetAppIconInfos(app_id).size(), 1u);
+}
+
+// Tests that we don't use the manifest start_url if it differs from what came
+// through sync.
+IN_PROC_BROWSER_TEST_P(TwoClientWebAppsSyncTest, SyncUsingStartUrlFallback) {
+  ASSERT_TRUE(SetupSync());
+  ASSERT_TRUE(AllProfilesHaveSameWebAppIds());
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  Profile* source_profile = GetProfile(0);
+  Profile* dest_profile = GetProfile(1);
+
+  WebAppInstallObserver dest_install_observer(dest_profile);
+
+  // Install app with name.
+  WebApplicationInfo info;
+  info.title = base::UTF8ToUTF16("Test app");
+  info.app_url =
+      embedded_test_server()->GetURL("/web_apps/different_start_url.html");
+  AppId app_id = InstallApp(info, GetProfile(0));
+  EXPECT_EQ(GetRegistrar(source_profile).GetAppShortName(app_id), "Test app");
+  EXPECT_EQ(GetRegistrar(source_profile).GetAppLaunchURL(app_id), info.app_url);
+
+  // Wait for app to sync across.
+  AppId synced_app_id = dest_install_observer.AwaitNextInstall();
+  ASSERT_EQ(synced_app_id, app_id);
+  EXPECT_EQ(GetRegistrar(dest_profile).GetAppShortName(app_id), "Test app");
+  EXPECT_EQ(GetRegistrar(dest_profile).GetAppLaunchURL(app_id), info.app_url);
+}
+
+// Tests that we don't use the page title if there's no manifest.
+// Pages without a manifest are usually not the correct page to draw information
+// from e.g. login redirects or loading pages.
+// Context: https://crbug.com/1078286
+IN_PROC_BROWSER_TEST_P(TwoClientWebAppsSyncTest, SyncUsingNameFallback) {
+  ASSERT_TRUE(SetupSync());
+  ASSERT_TRUE(AllProfilesHaveSameWebAppIds());
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  Profile* source_profile = GetProfile(0);
+  Profile* dest_profile = GetProfile(1);
+
+  WebAppInstallObserver dest_install_observer(dest_profile);
+
+  // Install app with name.
+  WebApplicationInfo info;
+  info.title = base::UTF8ToUTF16("Correct App Name");
+  info.app_url =
+      embedded_test_server()->GetURL("/web_apps/bad_title_only.html");
+  AppId app_id = InstallApp(info, GetProfile(0));
+  EXPECT_EQ(GetRegistrar(source_profile).GetAppShortName(app_id),
+            "Correct App Name");
+
+  // Wait for app to sync across.
+  AppId synced_app_id = dest_install_observer.AwaitNextInstall();
+  EXPECT_EQ(synced_app_id, app_id);
+  EXPECT_EQ(GetRegistrar(dest_profile).GetAppShortName(app_id),
+            "Correct App Name");
+}
+
+// Negative test of SyncUsingNameFallback above. Don't use the app name fallback
+// if there's a name provided by the manifest during sync.
+IN_PROC_BROWSER_TEST_P(TwoClientWebAppsSyncTest, SyncWithoutUsingNameFallback) {
+  ASSERT_TRUE(SetupSync());
+  ASSERT_TRUE(AllProfilesHaveSameWebAppIds());
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  Profile* source_profile = GetProfile(0);
+  Profile* dest_profile = GetProfile(1);
+
+  WebAppInstallObserver dest_install_observer(dest_profile);
+
+  // Install app with name.
+  WebApplicationInfo info;
+  info.title = base::UTF8ToUTF16("Incorrect App Name");
+  info.app_url = embedded_test_server()->GetURL("/web_apps/basic.html");
+  AppId app_id = InstallApp(info, GetProfile(0));
+  EXPECT_EQ(GetRegistrar(source_profile).GetAppShortName(app_id),
+            "Incorrect App Name");
+
+  // Wait for app to sync across.
+  AppId synced_app_id = dest_install_observer.AwaitNextInstall();
+  EXPECT_EQ(synced_app_id, app_id);
+  EXPECT_EQ(GetRegistrar(dest_profile).GetAppShortName(app_id),
+            "Basic web app");
+}
+
+IN_PROC_BROWSER_TEST_P(TwoClientWebAppsSyncTest, SyncUsingIconUrlFallback) {
+  // TODO(crbug.com/1090227): Support this behaviour for BMO.
+  if (GetParam() == ProviderType::kWebApps)
+    return;
+
+  ASSERT_TRUE(SetupSync());
+  ASSERT_TRUE(AllProfilesHaveSameWebAppIds());
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  Profile* source_profile = GetProfile(0);
+  Profile* dest_profile = GetProfile(1);
+
+  WebAppInstallObserver dest_install_observer(dest_profile);
+
+  // Install app with name.
+  WebApplicationInfo info;
+  info.title = base::UTF8ToUTF16("Blue icon");
+  info.app_url = GURL("https://does-not-exist.org");
+  WebApplicationIconInfo icon_info;
+  icon_info.square_size_px = 192;
+  icon_info.url = embedded_test_server()->GetURL("/web_apps/blue-192.png");
+  info.icon_infos.push_back(icon_info);
+  AppId app_id = InstallApp(info, GetProfile(0));
+  EXPECT_EQ(GetRegistrar(source_profile).GetAppShortName(app_id), "Blue icon");
+
+  // Wait for app to sync across.
+  AppId synced_app_id = dest_install_observer.AwaitNextInstall();
+  EXPECT_EQ(synced_app_id, app_id);
+  EXPECT_EQ(GetRegistrar(dest_profile).GetAppShortName(app_id), "Blue icon");
+
+  // Make sure icon downloaded despite not loading start_url.
+  {
+    base::RunLoop run_loop;
+    WebAppProvider::Get(dest_profile)
+        ->icon_manager()
+        .ReadSmallestIcon(
+            synced_app_id, 192,
+            base::BindLambdaForTesting([&run_loop](const SkBitmap& bitmap) {
+              EXPECT_EQ(bitmap.getColor(0, 0), SK_ColorBLUE);
+              run_loop.Quit();
+            }));
+    run_loop.Run();
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(All,

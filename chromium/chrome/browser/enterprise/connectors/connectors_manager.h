@@ -5,78 +5,93 @@
 #ifndef CHROME_BROWSER_ENTERPRISE_CONNECTORS_CONNECTORS_MANAGER_H_
 #define CHROME_BROWSER_ENTERPRISE_CONNECTORS_CONNECTORS_MANAGER_H_
 
+#include <set>
+
 #include "base/callback_forward.h"
+#include "base/feature_list.h"
 #include "base/optional.h"
+#include "chrome/browser/enterprise/connectors/analysis_service_settings.h"
+#include "chrome/browser/enterprise/connectors/common.h"
+#include "components/prefs/pref_change_registrar.h"
 #include "url/gurl.h"
+
+namespace base {
+template <typename T>
+struct DefaultSingletonTraits;
+}
 
 namespace enterprise_connectors {
 
-// Enums representing each connector to be used as arguments so the manager can
-// read the appropriate policies/settings.
-enum class AnalysisConnector {
-  FILE_DOWNLOADED,
-  FILE_ATTACHED,
-  BULK_DATA_ENTRY,
-};
-
-enum class ReportingConnector {
-  SECURITY_EVENT,
-};
-
-// Enum representing if an analysis should block further interactions with the
-// browser until its verdict is obtained.
-enum class BlockUntilVerdict {
-  NO_BLOCK = 0,
-  BLOCK = 1,
-};
+// Controls whether the Enterprise Connectors policies should be read by
+// ConnectorsManager. Legacy policies will be read as a fallback if this feature
+// is disabled.
+extern const base::Feature kEnterpriseConnectorsEnabled;
 
 // Manages access to Connector policies. This class is responsible for caching
 // the Connector policies, validate them against approved service providers and
 // provide a simple interface to them.
 class ConnectorsManager {
  public:
-  // Structs representing settings to be used for an analysis or a report. These
-  // settings should only be kept and considered valid for the specific
-  // analysis/report they were obtained for.
-  struct AnalysisSettings {
-    AnalysisSettings();
-    AnalysisSettings(AnalysisSettings&&);
-    AnalysisSettings& operator=(AnalysisSettings&&);
-    ~AnalysisSettings();
+  // Map used to cache analysis connectors settings.
+  using AnalysisConnectorsSettings =
+      std::map<AnalysisConnector, std::vector<AnalysisServiceSettings>>;
 
-    GURL analysis_url;
-    std::set<std::string> tags;
-    BlockUntilVerdict block_until_verdict;
-    bool block_password_protected_files;
-    bool block_large_files;
-    bool block_unsupported_file_types;
-  };
+  static ConnectorsManager* GetInstance();
 
-  struct ReportingSettings {
-    ReportingSettings();
-    ReportingSettings(ReportingSettings&&);
-    ReportingSettings& operator=(ReportingSettings&&);
-    ~ReportingSettings();
+  // Validates which settings should be applied to an analysis connector event
+  // against cached policies. This function will prioritize new connector
+  // policies over legacy ones if they are set.
+  base::Optional<AnalysisSettings> GetAnalysisSettings(
+      const GURL& url,
+      AnalysisConnector connector);
 
-    std::vector<GURL> reporting_urls;
-  };
+  // Checks if the corresponding connector is enabled.
+  bool IsConnectorEnabled(AnalysisConnector connector);
 
-  // Callback used to retrieve AnalysisSettings objects from the manager
-  // asynchronously. base::nullopt means no analysis should take place.
-  using AnalysisSettingsCallback =
-      base::OnceCallback<void(base::Optional<AnalysisSettings>)>;
+  bool DelayUntilVerdict(AnalysisConnector connector) const;
 
+  // Public legacy functions.
+  // These functions are used to interact with legacy policies and should only
+  // be called while the connectors equivalent isn't available. They should be
+  // removed once legacy policies are deprecated.
+
+  // Check a url against the corresponding URL patterns policies.
+  bool MatchURLAgainstLegacyDlpPolicies(const GURL& url, bool upload) const;
+  bool MatchURLAgainstLegacyMalwarePolicies(const GURL& url, bool upload) const;
+
+  // Public testing functions.
+  const AnalysisConnectorsSettings& GetAnalysisConnectorsSettingsForTesting()
+      const;
+
+  // Helpers to reset the ConnectorManager instance across test since it's a
+  // singleton that would otherwise persist its state.
+  void SetUpForTesting();
+  void TearDownForTesting();
+
+ private:
+  friend struct base::DefaultSingletonTraits<ConnectorsManager>;
+
+  // Constructor and destructor are declared as private so callers use
+  // GetInstance instead.
   ConnectorsManager();
   ~ConnectorsManager();
 
   // Validates which settings should be applied to an analysis connector event
-  // against cached policies.
-  void GetAnalysisSettings(const GURL& url,
-                           AnalysisConnector connector,
-                           AnalysisSettingsCallback callback);
+  // against connector policies. Cache the policy value the first time this is
+  // called for every different connector.
+  base::Optional<AnalysisSettings> GetAnalysisSettingsFromConnectorPolicy(
+      const GURL& url,
+      AnalysisConnector connector);
 
- private:
-  // Legacy functions.
+  // Read and cache the policy corresponding to |connector|.
+  void CacheConnectorPolicy(AnalysisConnector connector);
+
+  // Sets up |pref_change_registrar_| if kEnterpriseConntorsEnabled is true.
+  // Used by the constructor and SetUpForTesting.
+  void StartObservingPrefs();
+  void StartObservingPref(AnalysisConnector connector);
+
+  // Private legacy functions.
   // These functions are used to interact with legacy policies and should stay
   // private. They should be removed once legacy policies are deprecated.
 
@@ -90,10 +105,16 @@ class ConnectorsManager {
   bool LegacyBlockLargeFiles(bool upload) const;
   bool LegacyBlockUnsupportedFileTypes(bool upload) const;
 
-  bool MatchURLAgainstLegacyDlpPolicies(const GURL& url, bool upload) const;
-  bool MatchURLAgainstLegacyMalwarePolicies(const GURL& url, bool upload) const;
   std::set<std::string> MatchURLAgainstLegacyPolicies(const GURL& url,
                                                       bool upload) const;
+
+  // Cached values of the connector policies. Updated when a connector is first
+  // used or when a policy is updated.
+  AnalysisConnectorsSettings connector_settings_;
+
+  // Used to track changes of connector policies and propagate them in
+  // |connector_settings_|.
+  PrefChangeRegistrar pref_change_registrar_;
 };
 
 }  // namespace enterprise_connectors

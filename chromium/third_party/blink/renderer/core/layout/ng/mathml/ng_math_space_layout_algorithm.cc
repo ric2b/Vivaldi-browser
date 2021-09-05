@@ -23,7 +23,8 @@ scoped_refptr<const NGLayoutResult> NGMathSpaceLayoutAlgorithm::Layout() {
   DCHECK(!BreakToken());
 
   LayoutUnit block_size = ComputeBlockSizeForFragment(
-      ConstraintSpace(), Style(), border_padding_, border_padding_.BlockSum());
+      ConstraintSpace(), Style(), border_padding_, border_padding_.BlockSum(),
+      container_builder_.InitialBorderBoxSize().inline_size);
 
   container_builder_.SetIntrinsicBlockSize(border_padding_.BlockSum());
   container_builder_.SetBlockSize(block_size);
@@ -34,9 +35,16 @@ scoped_refptr<const NGLayoutResult> NGMathSpaceLayoutAlgorithm::Layout() {
   return container_builder_.ToBoxFragment();
 }
 
-base::Optional<MinMaxSizes> NGMathSpaceLayoutAlgorithm::ComputeMinMaxSizes(
-    const MinMaxSizesInput& input) const {
-  return CalculateMinMaxSizesIgnoringChildren(Node(), border_padding_);
+MinMaxSizesResult NGMathSpaceLayoutAlgorithm::ComputeMinMaxSizes(
+    const MinMaxSizesInput&) const {
+  if (auto result =
+          CalculateMinMaxSizesIgnoringChildren(Node(), border_padding_))
+    return *result;
+
+  MinMaxSizes sizes;
+  sizes += border_padding_.InlineSum();
+
+  return {sizes, /* depends_on_percentage_block_size */ false};
 }
 
 }  // namespace blink

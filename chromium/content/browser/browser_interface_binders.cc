@@ -13,6 +13,8 @@
 #include "content/browser/bad_message.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/content_index/content_index_service_impl.h"
+#include "content/browser/conversions/conversion_internals.mojom.h"
+#include "content/browser/conversions/conversion_internals_ui.h"
 #include "content/browser/cookie_store/cookie_store_context.h"
 #include "content/browser/eye_dropper_chooser_impl.h"
 #include "content/browser/feature_observer.h"
@@ -37,6 +39,7 @@
 #include "content/browser/worker_host/dedicated_worker_host.h"
 #include "content/browser/worker_host/shared_worker_connector_impl.h"
 #include "content/browser/worker_host/shared_worker_host.h"
+#include "content/browser/xr/service/vr_service_impl.h"
 #include "content/common/input/input_injector.mojom.h"
 #include "content/common/media/renderer_audio_input_stream_factory.mojom.h"
 #include "content/common/media/renderer_audio_output_stream_factory.mojom.h"
@@ -45,18 +48,17 @@
 #include "content/public/browser/device_service.h"
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/shared_worker_instance.h"
-#include "content/public/browser/webvr_service_provider.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/url_constants.h"
 #include "device/gamepad/gamepad_monitor.h"
 #include "device/gamepad/public/mojom/gamepad.mojom.h"
+#include "device/vr/buildflags/buildflags.h"
 #include "device/vr/public/mojom/vr_service.mojom.h"
 #include "media/capture/mojom/image_capture.mojom.h"
 #include "media/mojo/mojom/interface_factory.mojom-forward.h"
 #include "media/mojo/mojom/media_metrics_provider.mojom.h"
 #include "media/mojo/mojom/remoting.mojom.h"
-#include "media/mojo/mojom/soda_service.mojom.h"
 #include "media/mojo/mojom/video_decode_perf_history.mojom.h"
 #include "media/mojo/services/video_decode_perf_history.h"
 #include "services/device/public/mojom/sensor_provider.mojom.h"
@@ -116,6 +118,7 @@
 #if !defined(OS_ANDROID)
 #include "content/browser/installedapp/installed_app_provider_impl.h"
 #include "content/public/common/content_switches.h"
+#include "media/mojo/mojom/speech_recognition_service.mojom.h"
 #include "third_party/blink/public/mojom/hid/hid.mojom.h"
 #include "third_party/blink/public/mojom/installedapp/installed_app_provider.mojom.h"
 #include "third_party/blink/public/mojom/serial/serial.mojom.h"
@@ -132,6 +135,11 @@
 
 #if BUILDFLAG(ENABLE_MEDIA_REMOTING)
 #include "media/mojo/mojom/remoting.mojom-forward.h"
+#endif
+
+#if defined(OS_MACOSX)
+#include "content/browser/renderer_host/text_input_host_impl.h"
+#include "third_party/blink/public/mojom/input/text_input_host.mojom.h"
 #endif
 
 namespace content {
@@ -178,6 +186,15 @@ void BindTextDetection(
   GetShapeDetectionService()->BindTextDetection(std::move(receiver));
 }
 
+#if defined(OS_MACOSX)
+void BindTextInputHost(
+    mojo::PendingReceiver<blink::mojom::TextInputHost> receiver) {
+  base::PostTask(
+      FROM_HERE, {BrowserThread::IO},
+      base::BindOnce(&TextInputHostImpl::Create, std::move(receiver)));
+}
+#endif
+
 void BindBadgeServiceForServiceWorkerOnUI(
     int service_worker_process_id,
     const GURL& service_worker_scope,
@@ -211,6 +228,33 @@ void BindColorChooserFactoryForFrame(
   auto* web_contents =
       static_cast<WebContentsImpl*>(WebContents::FromRenderFrameHost(host));
   web_contents->OnColorChooserFactoryReceiver(std::move(receiver));
+}
+
+void BindConversionInternalsHandler(
+    content::RenderFrameHost* host,
+    mojo::PendingReceiver<::mojom::ConversionInternalsHandler> receiver) {
+  auto* contents = WebContents::FromRenderFrameHost(host);
+  DCHECK_EQ(contents->GetLastCommittedURL().host_piece(),
+            kChromeUIConversionInternalsHost);
+  DCHECK(contents->GetLastCommittedURL().SchemeIs(kChromeUIScheme));
+
+  content::WebUI* web_ui = contents->GetWebUI();
+
+  // Performs a safe downcast to the concrete ConversionInternalsUI subclass.
+  ConversionInternalsUI* conversion_internals_ui =
+      web_ui ? web_ui->GetController()->GetAs<ConversionInternalsUI>()
+             : nullptr;
+
+  // This is expected to be called only for main frames and for the right WebUI
+  // pages matching the same WebUI associated to the RenderFrameHost.
+  if (host->GetParent() || !conversion_internals_ui) {
+    ReceivedBadMessage(
+        host->GetProcess(),
+        bad_message::BadMessageReason::RFH_INVALID_WEB_UI_CONTROLLER);
+    return;
+  }
+
+  conversion_internals_ui->BindInterface(std::move(receiver));
 }
 
 void BindProcessInternalsHandler(
@@ -442,8 +486,7 @@ void BindVibrationManager(
 }  // namespace
 
 // Documents/frames
-void PopulateFrameBinders(RenderFrameHostImpl* host,
-                          service_manager::BinderMap* map) {
+void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
   map->Add<blink::mojom::AppCacheBackend>(base::BindRepeating(
       &RenderFrameHostImpl::CreateAppCacheBackend, base::Unretained(host)));
 
@@ -502,7 +545,8 @@ void PopulateFrameBinders(RenderFrameHostImpl* host,
       &RenderFrameHostImpl::GetSpeechSynthesis, base::Unretained(host)));
 
   map->Add<blink::mojom::ScreenEnumeration>(
-      base::BindRepeating(&ScreenEnumerationImpl::Create));
+      base::BindRepeating(&RenderFrameHostImpl::BindScreenEnumerationReceiver,
+                          base::Unretained(host)));
 
   if (base::FeatureList::IsEnabled(features::kSmsReceiver)) {
     map->Add<blink::mojom::SmsReceiver>(base::BindRepeating(
@@ -544,9 +588,6 @@ void PopulateFrameBinders(RenderFrameHostImpl* host,
 
   map->Add<blink::mojom::PushMessaging>(base::BindRepeating(
       &RenderFrameHostImpl::GetPushMessaging, base::Unretained(host)));
-
-  map->Add<blink::mojom::CredentialManager>(base::BindRepeating(
-      &RenderFrameHostImpl::GetCredentialManager, base::Unretained(host)));
 
   map->Add<blink::mojom::Authenticator>(base::BindRepeating(
       &RenderFrameHostImpl::GetAuthenticator, base::Unretained(host)));
@@ -590,7 +631,7 @@ void PopulateFrameBinders(RenderFrameHostImpl* host,
                           base::Unretained(host)));
 
   map->Add<media::mojom::ImageCapture>(
-      base::BindRepeating(&ImageCaptureImpl::Create));
+      base::BindRepeating(&ImageCaptureImpl::Create, base::Unretained(host)));
 
   map->Add<media::mojom::InterfaceFactory>(base::BindRepeating(
       &RenderFrameHostImpl::BindMediaInterfaceFactoryReceiver,
@@ -612,6 +653,10 @@ void PopulateFrameBinders(RenderFrameHostImpl* host,
 
   map->Add<network::mojom::RestrictedCookieManager>(
       base::BindRepeating(&RenderFrameHostImpl::BindRestrictedCookieManager,
+                          base::Unretained(host)));
+
+  map->Add<network::mojom::HasTrustTokensAnswerer>(
+      base::BindRepeating(&RenderFrameHostImpl::BindHasTrustTokensAnswerer,
                           base::Unretained(host)));
 
   map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
@@ -646,11 +691,16 @@ void PopulateFrameBinders(RenderFrameHostImpl* host,
   map->Add<blink::mojom::SerialService>(base::BindRepeating(
       &RenderFrameHostImpl::BindSerialService, base::Unretained(host)));
 #endif  // !defined(OS_ANDROID)
+
+#if defined(OS_MACOSX)
+  map->Add<blink::mojom::TextInputHost>(
+      base::BindRepeating(&BindTextInputHost));
+#endif
 }
 
 void PopulateBinderMapWithContext(
     RenderFrameHostImpl* host,
-    service_manager::BinderMapWithContext<RenderFrameHost*>* map) {
+    mojo::BinderMapWithContext<RenderFrameHost*>* map) {
   // Register empty binders for interfaces not bound by content but requested
   // by blink.
   // This avoids renderer kills when no binder is found in the absence of the
@@ -663,8 +713,12 @@ void PopulateBinderMapWithContext(
       &EmptyBinderForFrame<payments::mojom::PaymentRequest>));
   map->Add<blink::mojom::AnchorElementMetricsHost>(base::BindRepeating(
       &EmptyBinderForFrame<blink::mojom::AnchorElementMetricsHost>));
-  map->Add<media::mojom::SodaContext>(
-      base::BindRepeating(&EmptyBinderForFrame<media::mojom::SodaContext>));
+  map->Add<blink::mojom::CredentialManager>(base::BindRepeating(
+      &EmptyBinderForFrame<blink::mojom::CredentialManager>));
+#if !defined(OS_ANDROID)
+  map->Add<media::mojom::SpeechRecognitionContext>(base::BindRepeating(
+      &EmptyBinderForFrame<media::mojom::SpeechRecognitionContext>));
+#endif
 #if BUILDFLAG(ENABLE_UNHANDLED_TAP)
   map->Add<blink::mojom::UnhandledTapNotifier>(base::BindRepeating(
       &EmptyBinderForFrame<blink::mojom::UnhandledTapNotifier>));
@@ -688,8 +742,15 @@ void PopulateBinderMapWithContext(
       base::BindRepeating(&PictureInPictureServiceImpl::Create));
   map->Add<blink::mojom::WakeLockService>(
       base::BindRepeating(&WakeLockServiceImpl::Create));
+#if BUILDFLAG(ENABLE_VR)
   map->Add<device::mojom::VRService>(
-      base::BindRepeating(&WebvrServiceProvider::BindWebvrService));
+      base::BindRepeating(&VRServiceImpl::Create));
+#else
+  map->Add<device::mojom::VRService>(
+      base::BindRepeating(&EmptyBinderForFrame<device::mojom::VRService>));
+#endif
+  map->Add<::mojom::ConversionInternalsHandler>(
+      base::BindRepeating(&BindConversionInternalsHandler));
   map->Add<::mojom::ProcessInternalsHandler>(
       base::BindRepeating(&BindProcessInternalsHandler));
 #if defined(OS_ANDROID)
@@ -712,8 +773,7 @@ void PopulateBinderMapWithContext(
                                                                          map);
 }
 
-void PopulateBinderMap(RenderFrameHostImpl* host,
-                       service_manager::BinderMap* map) {
+void PopulateBinderMap(RenderFrameHostImpl* host, mojo::BinderMap* map) {
   PopulateFrameBinders(host, map);
 }
 
@@ -727,14 +787,12 @@ const url::Origin& GetContextForHost(DedicatedWorkerHost* host) {
 }
 
 void PopulateDedicatedWorkerBinders(DedicatedWorkerHost* host,
-                                    service_manager::BinderMap* map) {
+                                    mojo::BinderMap* map) {
   // Do nothing for interfaces that the renderer might request, but doesn't
   // always expect to be bound.
   map->Add<blink::mojom::FeatureObserver>(base::DoNothing());
 
   // static binders
-  map->Add<blink::mojom::ScreenEnumeration>(
-      base::BindRepeating(&ScreenEnumerationImpl::Create));
   map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
       base::BindRepeating(&BindBarcodeDetectionProvider));
   map->Add<shape_detection::mojom::FaceDetectionProvider>(
@@ -777,7 +835,7 @@ void PopulateDedicatedWorkerBinders(DedicatedWorkerHost* host,
 
 void PopulateBinderMapWithContext(
     DedicatedWorkerHost* host,
-    service_manager::BinderMapWithContext<const url::Origin&>* map) {
+    mojo::BinderMapWithContext<const url::Origin&>* map) {
   // render process host binders taking an origin
   map->Add<payments::mojom::PaymentManager>(BindWorkerReceiverForOrigin(
       &RenderProcessHostImpl::CreatePaymentManagerForOrigin, host));
@@ -804,8 +862,7 @@ void PopulateBinderMapWithContext(
           &RenderProcessHostImpl::BindQuotaManagerHost, host));
 }
 
-void PopulateBinderMap(DedicatedWorkerHost* host,
-                       service_manager::BinderMap* map) {
+void PopulateBinderMap(DedicatedWorkerHost* host, mojo::BinderMap* map) {
   PopulateDedicatedWorkerBinders(host, map);
 }
 
@@ -814,15 +871,12 @@ url::Origin GetContextForHost(SharedWorkerHost* host) {
   return url::Origin::Create(host->instance().url());
 }
 
-void PopulateSharedWorkerBinders(SharedWorkerHost* host,
-                                 service_manager::BinderMap* map) {
+void PopulateSharedWorkerBinders(SharedWorkerHost* host, mojo::BinderMap* map) {
   // Do nothing for interfaces that the renderer might request, but doesn't
   // always expect to be bound.
   map->Add<blink::mojom::FeatureObserver>(base::DoNothing());
 
   // static binders
-  map->Add<blink::mojom::ScreenEnumeration>(
-      base::BindRepeating(&ScreenEnumerationImpl::Create));
   map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
       base::BindRepeating(&BindBarcodeDetectionProvider));
   map->Add<shape_detection::mojom::FaceDetectionProvider>(
@@ -847,7 +901,7 @@ void PopulateSharedWorkerBinders(SharedWorkerHost* host,
 
 void PopulateBinderMapWithContext(
     SharedWorkerHost* host,
-    service_manager::BinderMapWithContext<const url::Origin&>* map) {
+    mojo::BinderMapWithContext<const url::Origin&>* map) {
   // render process host binders taking an origin
   map->Add<blink::mojom::FileSystemManager>(BindWorkerReceiverForOrigin(
       &RenderProcessHostImpl::BindFileSystemManager, host));
@@ -876,8 +930,7 @@ void PopulateBinderMapWithContext(
           &RenderProcessHostImpl::BindQuotaManagerHost, host));
 }
 
-void PopulateBinderMap(SharedWorkerHost* host,
-                       service_manager::BinderMap* map) {
+void PopulateBinderMap(SharedWorkerHost* host, mojo::BinderMap* map) {
   PopulateSharedWorkerBinders(host, map);
 }
 
@@ -889,7 +942,7 @@ ServiceWorkerVersionInfo GetContextForHost(ServiceWorkerProviderHost* host) {
 }
 
 void PopulateServiceWorkerBinders(ServiceWorkerProviderHost* host,
-                                  service_manager::BinderMap* map) {
+                                  mojo::BinderMap* map) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
 
   // Do nothing for interfaces that the renderer might request, but doesn't
@@ -897,8 +950,6 @@ void PopulateServiceWorkerBinders(ServiceWorkerProviderHost* host,
   map->Add<blink::mojom::FeatureObserver>(base::DoNothing());
 
   // static binders
-  map->Add<blink::mojom::ScreenEnumeration>(
-      base::BindRepeating(&ScreenEnumerationImpl::Create));
   map->Add<shape_detection::mojom::BarcodeDetectionProvider>(
       base::BindRepeating(&BindBarcodeDetectionProvider));
   map->Add<shape_detection::mojom::FaceDetectionProvider>(
@@ -922,8 +973,7 @@ void PopulateServiceWorkerBinders(ServiceWorkerProviderHost* host,
 
 void PopulateBinderMapWithContext(
     ServiceWorkerProviderHost* host,
-    service_manager::BinderMapWithContext<const ServiceWorkerVersionInfo&>*
-        map) {
+    mojo::BinderMapWithContext<const ServiceWorkerVersionInfo&>* map) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
 
   // static binders
@@ -981,8 +1031,7 @@ void PopulateBinderMapWithContext(
           &RenderProcessHostImpl::BindQuotaManagerHost, host));
 }
 
-void PopulateBinderMap(ServiceWorkerProviderHost* host,
-                       service_manager::BinderMap* map) {
+void PopulateBinderMap(ServiceWorkerProviderHost* host, mojo::BinderMap* map) {
   DCHECK_CURRENTLY_ON(ServiceWorkerContext::GetCoreThreadId());
   PopulateServiceWorkerBinders(host, map);
 }

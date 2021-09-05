@@ -18,7 +18,7 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.components.signin.AccountManagerDelegateException;
-import org.chromium.components.signin.AccountManagerFacade;
+import org.chromium.components.signin.AccountManagerFacadeImpl;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.test.util.FakeAccountManagerDelegate;
 
@@ -36,7 +36,10 @@ public class AccountManagerFacadeTest {
 
     @Before
     public void setUp() {
-        AccountManagerFacadeProvider.overrideAccountManagerFacadeForTests(mDelegate);
+        ThreadUtils.runOnUiThreadBlocking(() -> {
+            AccountManagerFacadeProvider.setInstanceForTests(
+                    new AccountManagerFacadeImpl(mDelegate));
+        });
     }
 
     @Test

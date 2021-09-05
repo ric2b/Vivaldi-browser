@@ -12,7 +12,7 @@
 const SyncPrefsIndividualDataTypes = [
   'osAppsSynced',
   'osPreferencesSynced',
-  'wifiConfigurationsSynced',
+  'osWifiConfigurationsSynced',
 
   // Note: Wallpaper uses a different naming scheme because it's stored as its
   // own separate pref instead of through the sync service.
@@ -41,8 +41,9 @@ Polymer({
     },
 
     /**
-     * Injected sync system status.
-     * @type {?settings.SyncStatus}
+     * Injected sync system status. Undefined until the parent component injects
+     * the value.
+     * @type {settings.SyncStatus|undefined}
      */
     syncStatus: Object,
 
@@ -129,6 +130,9 @@ Polymer({
    * @private
    */
   getAccountTitle_() {
+    if (!this.syncStatus) {
+      return '';
+    }
     return this.syncStatus.hasError ? this.i18n('syncNotWorking') :
                                       this.profileName;
   },
@@ -138,9 +142,54 @@ Polymer({
    * @private
    */
   getAccountSubtitle_() {
+    if (!this.syncStatus) {
+      return '';
+    }
     return this.osSyncFeatureEnabled && !this.syncStatus.hasError ?
         this.i18n('syncingTo', this.profileEmail) :
         this.profileEmail;
+  },
+
+  /**
+   * Returns the CSS class for the sync status icon.
+   * @return {string}
+   * @private
+   */
+  getSyncIconStyle_() {
+    if (!this.syncStatus) {
+      return 'sync';
+    }
+    if (this.syncStatus.disabled) {
+      return 'sync-disabled';
+    }
+    if (!this.syncStatus.hasError) {
+      return 'sync';
+    }
+    // Specific error cases below.
+    if (this.syncStatus.hasUnrecoverableError) {
+      return 'sync-problem';
+    }
+    if (this.syncStatus.statusAction == settings.StatusAction.REAUTHENTICATE) {
+      return 'sync-paused';
+    }
+    return 'sync-problem';
+  },
+
+  /**
+   * Returns the image to use for the sync status icon. The value must match
+   * one of iron-icon's settings:(*) icon names.
+   * @return {string}
+   * @private
+   */
+  getSyncIcon_() {
+    switch (this.getSyncIconStyle_()) {
+      case 'sync-problem':
+        return 'settings:sync-problem';
+      case 'sync-paused':
+        return 'settings:sync-disabled';
+      default:
+        return 'cr:sync';
+    }
   },
 
   /**

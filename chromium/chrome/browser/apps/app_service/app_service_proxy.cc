@@ -14,7 +14,6 @@
 #include "chrome/browser/apps/app_service/app_icon_source.h"
 #include "chrome/browser/apps/app_service/app_service_metrics.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
-#include "chrome/browser/apps/app_service/uninstall_dialog.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/services/app_service/app_service_impl.h"
@@ -25,8 +24,12 @@
 #include "url/url_constants.h"
 
 #if defined(OS_CHROMEOS)
+#include "chrome/browser/apps/app_service/lacros_apps.h"
+#include "chrome/browser/apps/app_service/uninstall_dialog.h"
 #include "chrome/browser/chromeos/child_accounts/time_limits/app_time_limit_interface.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/supervised_user/grit/supervised_user_unscaled_resources.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "extensions/common/constants.h"
 #endif
 
@@ -121,8 +124,8 @@ void AppServiceProxy::Initialize() {
 
   browser_app_launcher_ = std::make_unique<apps::BrowserAppLauncher>(profile_);
 
-  app_service_impl_ =
-      std::make_unique<apps::AppServiceImpl>(profile_->GetPrefs());
+  app_service_impl_ = std::make_unique<apps::AppServiceImpl>(
+      profile_->GetPrefs(), profile_->GetPath());
   app_service_impl_->BindReceiver(app_service_.BindNewPipeAndPassReceiver());
 
   if (app_service_.is_connected()) {
@@ -139,24 +142,42 @@ void AppServiceProxy::Initialize() {
     built_in_chrome_os_apps_ =
         std::make_unique<BuiltInChromeOsApps>(app_service_, profile_);
     crostini_apps_ = std::make_unique<CrostiniApps>(app_service_, profile_);
-    extension_apps_ = std::make_unique<ExtensionApps>(
+    extension_apps_ = std::make_unique<ExtensionAppsChromeOs>(
         app_service_, profile_, apps::mojom::AppType::kExtension,
         &instance_registry_);
+    plugin_vm_apps_ = std::make_unique<PluginVmApps>(app_service_, profile_);
+    if (chromeos::features::IsLacrosSupportEnabled()) {
+      // LacrosApps uses LacrosLoader, which is a singleton. Don't create an
+      // instance of LacrosApps for the lock screen app profile, as we want to
+      // maintain a single instance of LacrosApps.
+      // TODO(jamescook): Multiprofile support. Consider adding a list of
+      // "ready" callbacks to LacrosLoader.
+      if (!chromeos::ProfileHelper::IsLockScreenAppProfile(profile_)) {
+        lacros_apps_ = std::make_unique<LacrosApps>(app_service_);
+      }
+    }
     if (base::FeatureList::IsEnabled(features::kDesktopPWAsWithoutExtensions)) {
-      web_apps_ = std::make_unique<WebApps>(app_service_, profile_,
-                                            &instance_registry_);
+      web_apps_ = std::make_unique<WebAppsChromeOs>(app_service_, profile_,
+                                                    &instance_registry_);
     } else {
-      extension_web_apps_ = std::make_unique<ExtensionApps>(
+      extension_web_apps_ = std::make_unique<ExtensionAppsChromeOs>(
           app_service_, profile_, apps::mojom::AppType::kWeb,
           &instance_registry_);
     }
+#else
+    if (base::FeatureList::IsEnabled(features::kDesktopPWAsWithoutExtensions)) {
+      web_apps_ = std::make_unique<WebApps>(app_service_, profile_);
+    } else {
+      extension_web_apps_ = std::make_unique<ExtensionApps>(
+          app_service_, profile_, apps::mojom::AppType::kWeb);
+    }
+#endif
 
     // Asynchronously add app icon source, so we don't do too much work in the
     // constructor.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE, base::BindOnce(&AppServiceProxy::AddAppIconSource,
                                   weak_ptr_factory_.GetWeakPtr(), profile_));
-#endif  // OS_CHROMEOS
   }
 
   Observe(&cache_);
@@ -244,11 +265,12 @@ void AppServiceProxy::LaunchAppWithFiles(
 
 void AppServiceProxy::LaunchAppWithIntent(
     const std::string& app_id,
+    int32_t event_flags,
     apps::mojom::IntentPtr intent,
     apps::mojom::LaunchSource launch_source,
     int64_t display_id) {
   if (app_service_.is_connected()) {
-    cache_.ForOneApp(app_id, [this, &intent, launch_source,
+    cache_.ForOneApp(app_id, [this, event_flags, &intent, launch_source,
                               display_id](const apps::AppUpdate& update) {
 #if defined(OS_CHROMEOS)
       if (MaybeShowLaunchPreventionDialog(update)) {
@@ -257,17 +279,18 @@ void AppServiceProxy::LaunchAppWithIntent(
 #endif
       RecordAppLaunch(update.AppId(), launch_source);
       app_service_->LaunchAppWithIntent(update.AppType(), update.AppId(),
-                                        std::move(intent), launch_source,
-                                        display_id);
+                                        event_flags, std::move(intent),
+                                        launch_source, display_id);
     });
   }
 }
 
 void AppServiceProxy::LaunchAppWithUrl(const std::string& app_id,
+                                       int32_t event_flags,
                                        GURL url,
                                        apps::mojom::LaunchSource launch_source,
                                        int64_t display_id) {
-  LaunchAppWithIntent(app_id, apps_util::CreateIntentFromUrl(url),
+  LaunchAppWithIntent(app_id, event_flags, apps_util::CreateIntentFromUrl(url),
                       launch_source, display_id);
 }
 
@@ -284,7 +307,20 @@ void AppServiceProxy::SetPermission(const std::string& app_id,
 
 void AppServiceProxy::Uninstall(const std::string& app_id,
                                 gfx::NativeWindow parent_window) {
+#if defined(OS_CHROMEOS)
   UninstallImpl(app_id, parent_window, base::DoNothing());
+#else
+  // On non-ChromeOS, publishers run the remove dialog.
+  apps::mojom::AppType app_type = cache_.GetAppType(app_id);
+  if (app_type == apps::mojom::AppType::kWeb) {
+    if (!base::FeatureList::IsEnabled(
+            features::kDesktopPWAsWithoutExtensions)) {
+      ExtensionApps::UninstallImpl(profile_, app_id, parent_window);
+    } else {
+      WebApps::UninstallImpl(profile_, app_id, parent_window);
+    }
+  }
+#endif
 }
 
 #if defined(OS_CHROMEOS)
@@ -333,6 +369,7 @@ void AppServiceProxy::UnpauseApps(const std::set<std::string>& app_ids) {
       continue;
     }
 
+    pending_pause_requests_.MaybeRemoveApp(app_id);
     app_service_->UnpauseApps(app_type, app_id);
   }
 }
@@ -366,6 +403,10 @@ void AppServiceProxy::FlushMojoCallsForTesting() {
   built_in_chrome_os_apps_->FlushMojoCallsForTesting();
   crostini_apps_->FlushMojoCallsForTesting();
   extension_apps_->FlushMojoCallsForTesting();
+  plugin_vm_apps_->FlushMojoCallsForTesting();
+  if (lacros_apps_) {
+    lacros_apps_->FlushMojoCallsForTesting();
+  }
   if (web_apps_) {
     web_apps_->FlushMojoCallsForTesting();
   } else {
@@ -383,12 +424,11 @@ apps::IconLoader* AppServiceProxy::OverrideInnerIconLoaderForTesting(
   return old;
 }
 
-void AppServiceProxy::ReInitializeCrostiniForTesting(Profile* profile) {
 #if defined(OS_CHROMEOS)
+void AppServiceProxy::ReInitializeCrostiniForTesting(Profile* profile) {
   if (app_service_.is_connected()) {
     crostini_apps_->ReInitializeForTesting(app_service_, profile);
   }
-#endif
 }
 
 void AppServiceProxy::SetDialogCreatedCallbackForTesting(
@@ -401,6 +441,7 @@ void AppServiceProxy::UninstallForTesting(const std::string& app_id,
                                           base::OnceClosure callback) {
   UninstallImpl(app_id, parent_window, std::move(callback));
 }
+#endif
 
 std::vector<std::string> AppServiceProxy::GetAppIdsForUrl(const GURL& url) {
   return GetAppIdsForIntent(apps_util::CreateIntentFromUrl(url));
@@ -453,13 +494,10 @@ void AppServiceProxy::AddPreferredApp(const std::string& app_id,
   }
   preferred_apps_.AddPreferredApp(app_id, intent_filter);
   if (app_service_.is_connected()) {
-    cache_.ForOneApp(
-        app_id, [this, &intent_filter, &intent](const apps::AppUpdate& update) {
-          constexpr bool kFromPublisher = false;
-          app_service_->AddPreferredApp(update.AppType(), update.AppId(),
-                                        std::move(intent_filter),
-                                        intent->Clone(), kFromPublisher);
-        });
+    constexpr bool kFromPublisher = false;
+    app_service_->AddPreferredApp(cache_.GetAppType(app_id), app_id,
+                                  std::move(intent_filter), intent->Clone(),
+                                  kFromPublisher);
   }
 }
 
@@ -470,9 +508,9 @@ void AppServiceProxy::AddAppIconSource(Profile* profile) {
 }
 
 void AppServiceProxy::Shutdown() {
+#if defined(OS_CHROMEOS)
   uninstall_dialogs_.clear();
 
-#if defined(OS_CHROMEOS)
   if (app_service_.is_connected()) {
     extension_apps_->Shutdown();
     if (web_apps_) {
@@ -481,7 +519,7 @@ void AppServiceProxy::Shutdown() {
       extension_web_apps_->Shutdown();
     }
   }
-#endif  // OS_CHROMEOS
+#endif
 }
 
 void AppServiceProxy::OnApps(std::vector<apps::mojom::AppPtr> deltas) {
@@ -510,6 +548,7 @@ void AppServiceProxy::InitializePreferredApps(
   preferred_apps_.Init(preferred_apps);
 }
 
+#if defined(OS_CHROMEOS)
 void AppServiceProxy::UninstallImpl(const std::string& app_id,
                                     gfx::NativeWindow parent_window,
                                     base::OnceClosure callback) {
@@ -550,7 +589,6 @@ void AppServiceProxy::OnUninstallDialogClosed(
   uninstall_dialogs_.erase(it);
 }
 
-#if defined(OS_CHROMEOS)
 bool AppServiceProxy::MaybeShowLaunchPreventionDialog(
     const apps::AppUpdate& update) {
   if (update.AppId() == extension_misc::kChromeAppId) {
@@ -615,7 +653,7 @@ void AppServiceProxy::LoadIconForDialog(
   // Load the family link kite logo icon for the app pause dialog or the app
   // block dialog for the child profile.
   LoadIconFromResource(apps::mojom::IconCompression::kUncompressed, kIconSize,
-                       IDR_FAMILY_LINK_LOGO, kAllowPlaceholderIcon,
+                       IDR_SUPERVISED_USER_ICON, kAllowPlaceholderIcon,
                        IconEffects::kNone, std::move(callback));
 }
 
@@ -661,7 +699,18 @@ void AppServiceProxy::OnLoadIconForPauseDialog(
 
 void AppServiceProxy::OnPauseDialogClosed(apps::mojom::AppType app_type,
                                           const std::string& app_id) {
-  app_service_->PauseApp(app_type, app_id);
+  bool should_pause_app = pending_pause_requests_.IsPaused(app_id);
+  if (!should_pause_app) {
+    cache_.ForOneApp(
+        app_id, [&should_pause_app](const apps::AppUpdate& update) {
+          if (update.Paused() == apps::mojom::OptionalBool::kTrue) {
+            should_pause_app = true;
+          }
+        });
+  }
+  if (should_pause_app) {
+    app_service_->PauseApp(app_type, app_id);
+  }
 }
 #endif  // OS_CHROMEOS
 

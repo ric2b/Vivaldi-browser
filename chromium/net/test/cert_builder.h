@@ -107,6 +107,10 @@ class CertBuilder {
 
   void SetRandomSerialNumber();
 
+  // Returns the CertBuilder that issues this certificate. (Will be |this| if
+  // certificate is self-signed.)
+  CertBuilder* issuer() { return issuer_; }
+
   // Returns a CRYPTO_BUFFER to the generated certificate.
   CRYPTO_BUFFER* GetCertBuffer();
 
@@ -117,6 +121,10 @@ class CertBuilder {
 
   // Returns the serial number for the generated certificate.
   uint64_t GetSerialNumber();
+
+  // Parses and returns validity period for the generated certificate in
+  // |not_before| and |not_after|, returning true on success.
+  bool GetValidity(base::Time* not_before, base::Time* not_after) const;
 
   // Returns the (RSA) key for the generated certificate.
   EVP_PKEY* GetKey();
@@ -130,13 +138,6 @@ class CertBuilder {
 
   // Returns a copy of the certificate's DER.
   std::string GetDER();
-
-  // Creates a CRL issued and signed by |crl_issuer|, marking |revoked_serials|
-  // as revoked.
-  // Returns the DER-encoded CRL.
-  static std::string CreateCrl(CertBuilder* crl_issuer,
-                               const std::vector<uint64_t>& revoked_serials,
-                               DigestAlgorithm digest);
 
  private:
   // Marks the generated certificate DER as invalid, so it will need to

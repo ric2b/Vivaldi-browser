@@ -62,31 +62,15 @@ public class BasicSuggestionProcessor extends BaseSuggestionViewProcessor {
     }
 
     @Override
-    public PropertyModel createModelForSuggestion(OmniboxSuggestion suggestion) {
+    public PropertyModel createModel() {
         return new PropertyModel(SuggestionViewProperties.ALL_KEYS);
     }
 
     @Override
-    public void recordSuggestionPresented(OmniboxSuggestion suggestion, PropertyModel model) {
+    public void recordItemPresented(PropertyModel model) {
         RecordHistogram.recordEnumeratedHistogram("Omnibox.IconOrFaviconShown",
                 model.get(SuggestionViewProperties.SUGGESTION_ICON_TYPE),
                 SuggestionIcon.TOTAL_COUNT);
-    }
-
-    @Override
-    public void recordSuggestionUsed(OmniboxSuggestion suggestion, PropertyModel model) {
-        RecordHistogram.recordEnumeratedHistogram("Omnibox.SuggestionUsed.IconOrFaviconType",
-                model.get(SuggestionViewProperties.SUGGESTION_ICON_TYPE),
-                SuggestionIcon.TOTAL_COUNT);
-    }
-
-    /** Decide whether suggestion should receive a refine arrow. */
-    @Override
-    protected boolean canRefine(OmniboxSuggestion suggestion) {
-        final @OmniboxSuggestionType int suggestionType = suggestion.getType();
-
-        return !mUrlBarEditingTextProvider.getTextWithoutAutocomplete().trim().equalsIgnoreCase(
-                suggestion.getDisplayText());
     }
 
     /**
@@ -97,13 +81,7 @@ public class BasicSuggestionProcessor extends BaseSuggestionViewProcessor {
      * when we know we have a valid and large enough site favicon to present.
      */
     private @SuggestionIcon int getSuggestionIconType(OmniboxSuggestion suggestion) {
-        if (suggestion.isUrlSuggestion()) {
-            if (suggestion.isStarred()) {
-                return SuggestionIcon.BOOKMARK;
-            } else {
-                return SuggestionIcon.GLOBE;
-            }
-        } else /* Search suggestion */ {
+        if (suggestion.isSearchSuggestion()) {
             switch (suggestion.getType()) {
                 case OmniboxSuggestionType.VOICE_SUGGEST:
                     return SuggestionIcon.VOICE;
@@ -114,6 +92,12 @@ public class BasicSuggestionProcessor extends BaseSuggestionViewProcessor {
 
                 default:
                     return SuggestionIcon.MAGNIFIER;
+            }
+        } else {
+            if (suggestion.isStarred()) {
+                return SuggestionIcon.BOOKMARK;
+            } else {
+                return SuggestionIcon.GLOBE;
             }
         }
     }
@@ -164,8 +148,8 @@ public class BasicSuggestionProcessor extends BaseSuggestionViewProcessor {
         SuggestionSpannable textLine2 = null;
         boolean urlHighlighted = false;
 
-        if (suggestion.isUrlSuggestion()) {
-            if (!TextUtils.isEmpty(suggestion.getUrl())) {
+        if (!suggestion.isSearchSuggestion()) {
+            if (!suggestion.getUrl().isEmpty()) {
                 SuggestionSpannable str = new SuggestionSpannable(suggestion.getDisplayText());
                 urlHighlighted = applyHighlightToMatchRegions(
                         str, suggestion.getDisplayTextClassifications());
@@ -176,15 +160,20 @@ public class BasicSuggestionProcessor extends BaseSuggestionViewProcessor {
         }
 
         final SuggestionSpannable textLine1 =
-                getSuggestedQuery(suggestion, suggestion.isUrlSuggestion(), !urlHighlighted);
+                getSuggestedQuery(suggestion, !suggestion.isSearchSuggestion(), !urlHighlighted);
 
         updateSuggestionIcon(suggestion, model);
-        model.set(SuggestionViewProperties.IS_SEARCH_SUGGESTION, !suggestion.isUrlSuggestion());
+        model.set(SuggestionViewProperties.IS_SEARCH_SUGGESTION, suggestion.isSearchSuggestion());
         model.set(SuggestionViewProperties.TEXT_LINE_1_TEXT, textLine1);
         model.set(SuggestionViewProperties.TEXT_LINE_2_TEXT, textLine2);
         fetchSuggestionFavicon(model, suggestion.getUrl(), mIconBridgeSupplier.get(), () -> {
             model.set(SuggestionViewProperties.SUGGESTION_ICON_TYPE, SuggestionIcon.FAVICON);
         });
+
+        if (!mUrlBarEditingTextProvider.getTextWithoutAutocomplete().trim().equalsIgnoreCase(
+                    suggestion.getDisplayText())) {
+            setRefineAction(model, suggestion);
+        }
     }
 
     /**
@@ -197,10 +186,9 @@ public class BasicSuggestionProcessor extends BaseSuggestionViewProcessor {
      */
     private SuggestionSpannable getSuggestedQuery(OmniboxSuggestion suggestion,
             boolean showDescriptionIfPresent, boolean shouldHighlight) {
-        String userQuery = mUrlBarEditingTextProvider.getTextWithoutAutocomplete();
         String suggestedQuery = null;
         List<OmniboxSuggestion.MatchClassification> classifications;
-        if (showDescriptionIfPresent && !TextUtils.isEmpty(suggestion.getUrl())
+        if (showDescriptionIfPresent && !suggestion.getUrl().isEmpty()
                 && !TextUtils.isEmpty(suggestion.getDescription())) {
             suggestedQuery = suggestion.getDescription();
             classifications = suggestion.getDescriptionClassifications();

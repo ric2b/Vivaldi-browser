@@ -7,6 +7,8 @@
 #import <UIKit/UIKit.h>
 
 #import "ios/chrome/common/credential_provider/credential.h"
+#import "ios/chrome/credential_provider_extension/ui/credential_details_consumer.h"
+#import "ios/chrome/credential_provider_extension/ui/credential_details_view_controller.h"
 #import "ios/chrome/credential_provider_extension/ui/credential_list_consumer.h"
 #import "ios/chrome/credential_provider_extension/ui/credential_list_view_controller.h"
 
@@ -28,10 +30,12 @@
 @synthesize validationIdentifier = _validationIdentifier;
 
 - (instancetype)initWithServiceName:(NSString*)serviceName
+                  serviceIdentifier:(NSString*)serviceIdentifier
                                user:(NSString*)user {
   self = [super init];
   if (self) {
     _serviceName = serviceName;
+    _serviceIdentifier = serviceIdentifier;
     _user = user;
   }
   return self;
@@ -41,22 +45,43 @@
 
 namespace {
 NSArray<id<Credential>>* suggestedPasswords = @[
-  [[SCCredential alloc] initWithServiceName:@"www.domain.com"
+  [[SCCredential alloc] initWithServiceName:@"domain.com"
+                          serviceIdentifier:@"www.domain.com"
                                        user:@"johnsmith"],
-  [[SCCredential alloc] initWithServiceName:@"www.domain.com"
+  [[SCCredential alloc] initWithServiceName:@"domain.com"
+                          serviceIdentifier:@"www.domain.com"
+                                       user:@"janesmythe"],
+  [[SCCredential alloc] initWithServiceName:@"domain.com"
+                          serviceIdentifier:@"www.domain.com"
+                                       user:@"johnsmith"],
+  [[SCCredential alloc] initWithServiceName:@"domain.com"
+                          serviceIdentifier:@"www.domain.com"
                                        user:@"janesmythe"],
 ];
 NSArray<id<Credential>>* allPasswords = @[
-  [[SCCredential alloc] initWithServiceName:@"www.domain1.com"
+  [[SCCredential alloc] initWithServiceName:@"domain1.com"
+                          serviceIdentifier:@"www.domain1.com"
                                        user:@"jsmythe@fazebook.com"],
-  [[SCCredential alloc] initWithServiceName:@"www.domain2.com"
+  [[SCCredential alloc] initWithServiceName:@"domain2.com"
+                          serviceIdentifier:@"www.domain2.com"
                                        user:@"jasmith@twitcher.com"],
-  [[SCCredential alloc] initWithServiceName:@"www.domain3.com"
+  [[SCCredential alloc] initWithServiceName:@"domain3.com"
+                          serviceIdentifier:@"www.domain3.com"
+                                       user:@"HughZername"],
+  [[SCCredential alloc] initWithServiceName:@"domain1.com"
+                          serviceIdentifier:@"www.domain1.com"
+                                       user:@"jsmythe@fazebook.com"],
+  [[SCCredential alloc] initWithServiceName:@"domain2.com"
+                          serviceIdentifier:@"www.domain2.com"
+                                       user:@"jasmith@twitcher.com"],
+  [[SCCredential alloc] initWithServiceName:@"domain3.com"
+                          serviceIdentifier:@"www.domain3.com"
                                        user:@"HughZername"],
 ];
 }
 
-@interface SCCredentialListCoordinator () <CredentialListConsumerDelegate>
+@interface SCCredentialListCoordinator () <CredentialDetailsConsumerDelegate,
+                                           CredentialListConsumerDelegate>
 @property(nonatomic, strong) CredentialListViewController* viewController;
 @end
 
@@ -66,7 +91,6 @@ NSArray<id<Credential>>* allPasswords = @[
 
 - (void)start {
   self.viewController = [[CredentialListViewController alloc] init];
-  self.viewController.title = @"Autofill Chrome Password";
   self.viewController.delegate = self;
   [self.baseViewController setHidesBarsOnSwipe:NO];
   [self.baseViewController pushViewController:self.viewController animated:YES];
@@ -81,7 +105,6 @@ NSArray<id<Credential>>* allPasswords = @[
 }
 
 - (void)updateResultsWithFilter:(NSString*)filter {
-  // TODO(crbug.com/1045454): Implement this method.
   NSMutableArray<id<Credential>>* suggested = [[NSMutableArray alloc] init];
   for (id<Credential> credential in suggestedPasswords) {
     if ([filter length] == 0 ||
@@ -99,6 +122,25 @@ NSArray<id<Credential>>* allPasswords = @[
     }
   }
   [self.viewController presentSuggestedPasswords:suggested allPasswords:all];
+}
+
+- (void)userSelectedCredential:(id<Credential>)credential {
+}
+
+- (void)showDetailsForCredential:(id<Credential>)credential {
+  CredentialDetailsViewController* detailsViewController =
+      [[CredentialDetailsViewController alloc] init];
+  detailsViewController.delegate = self;
+  [detailsViewController presentCredential:credential];
+  [self.baseViewController pushViewController:detailsViewController
+                                     animated:YES];
+}
+
+#pragma mark - CredentialDetailsConsumerDelegate
+
+- (void)unlockPasswordForCredential:(id<Credential>)credential
+                  completionHandler:(void (^)(NSString*))completionHandler {
+  completionHandler(@"DreamOn");
 }
 
 @end

@@ -36,6 +36,7 @@
 #include "base/trace_event/trace_event.h"
 #include "net/base/url_util.h"
 #include "storage/browser/quota/client_usage_tracker.h"
+#include "storage/browser/quota/quota_client_type.h"
 #include "storage/browser/quota/quota_features.h"
 #include "storage/browser/quota/quota_macros.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
@@ -355,12 +356,12 @@ class QuotaManager::UsageAndQuotaInfoGatherer : public QuotaTask {
 
   void OnBarrierComplete() { CallCompleted(); }
 
-  url::Origin origin_;
+  const url::Origin origin_;
   QuotaManager::UsageAndQuotaWithBreakdownCallback callback_;
-  StorageType type_;
-  bool is_unlimited_;
-  bool is_session_only_;
-  bool is_incognito_;
+  const StorageType type_;
+  const bool is_unlimited_;
+  const bool is_session_only_;
+  const bool is_incognito_;
   int64_t available_space_ = 0;
   int64_t total_space_ = 0;
   int64_t desired_host_quota_ = 0;
@@ -450,11 +451,6 @@ class QuotaManager::EvictionRoundInfoHelper : public QuotaTask {
   void OnGotGlobalUsage(int64_t usage, int64_t unlimited_usage) {
     global_usage_ = std::max(INT64_C(0), usage - unlimited_usage);
     global_usage_is_complete_ = true;
-    if (total_space_ > 0) {
-      UMA_HISTOGRAM_PERCENTAGE("Quota.PercentUsedForTemporaryStorage",
-          std::min(100,
-              static_cast<int>((global_usage_ * 100) / total_space_)));
-    }
     CallCompleted();
   }
 
@@ -537,13 +533,13 @@ class QuotaManager::OriginDataDeleter : public QuotaTask {
   OriginDataDeleter(QuotaManager* manager,
                     const url::Origin& origin,
                     StorageType type,
-                    int quota_client_mask,
+                    QuotaClientTypes quota_client_types,
                     bool is_eviction,
                     StatusCallback callback)
       : QuotaTask(manager),
         origin_(origin),
         type_(type),
-        quota_client_mask_(quota_client_mask),
+        quota_client_types_(std::move(quota_client_types)),
         error_count_(0),
         remaining_clients_(0),
         skipped_clients_(0),
@@ -555,11 +551,11 @@ class QuotaManager::OriginDataDeleter : public QuotaTask {
     error_count_ = 0;
     remaining_clients_ = manager()->clients_.size();
     for (const auto& client : manager()->clients_) {
-      if (quota_client_mask_ & client->id()) {
+      if (quota_client_types_.contains(client->type())) {
         static int tracing_id = 0;
         TRACE_EVENT_ASYNC_BEGIN2(
             "browsing_data", "QuotaManager::OriginDataDeleter", ++tracing_id,
-            "client_id", client->id(), "origin", origin_.Serialize());
+            "client_type", client->type(), "origin", origin_.Serialize());
         client->DeleteOriginData(
             origin_, type_,
             base::BindOnce(&OriginDataDeleter::DidDeleteOriginData,
@@ -608,13 +604,13 @@ class QuotaManager::OriginDataDeleter : public QuotaTask {
     return static_cast<QuotaManager*>(observer());
   }
 
-  url::Origin origin_;
-  StorageType type_;
-  int quota_client_mask_;
+  const url::Origin origin_;
+  const StorageType type_;
+  const QuotaClientTypes quota_client_types_;
   int error_count_;
   size_t remaining_clients_;
   int skipped_clients_;
-  bool is_eviction_;
+  const bool is_eviction_;
   StatusCallback callback_;
 
   base::WeakPtrFactory<OriginDataDeleter> weak_factory_{this};
@@ -626,12 +622,12 @@ class QuotaManager::HostDataDeleter : public QuotaTask {
   HostDataDeleter(QuotaManager* manager,
                   const std::string& host,
                   StorageType type,
-                  int quota_client_mask,
+                  QuotaClientTypes quota_client_types,
                   StatusCallback callback)
       : QuotaTask(manager),
         host_(host),
         type_(type),
-        quota_client_mask_(quota_client_mask),
+        quota_client_types_(std::move(quota_client_types)),
         error_count_(0),
         remaining_clients_(0),
         remaining_deleters_(0),
@@ -683,7 +679,7 @@ class QuotaManager::HostDataDeleter : public QuotaTask {
     remaining_deleters_ = origins_.size();
     for (const auto& origin : origins_) {
       OriginDataDeleter* deleter = new OriginDataDeleter(
-          manager(), origin, type_, quota_client_mask_, false,
+          manager(), origin, type_, std::move(quota_client_types_), false,
           base::BindOnce(&HostDataDeleter::DidDeleteOriginData,
                          weak_factory_.GetWeakPtr()));
       deleter->Start();
@@ -704,9 +700,9 @@ class QuotaManager::HostDataDeleter : public QuotaTask {
     return static_cast<QuotaManager*>(observer());
   }
 
-  std::string host_;
-  StorageType type_;
-  int quota_client_mask_;
+  const std::string host_;
+  const StorageType type_;
+  const QuotaClientTypes quota_client_types_;
   std::set<url::Origin> origins_;
   int error_count_;
   size_t remaining_clients_;
@@ -721,11 +717,11 @@ class QuotaManager::StorageCleanupHelper : public QuotaTask {
  public:
   StorageCleanupHelper(QuotaManager* manager,
                        StorageType type,
-                       int quota_client_mask,
+                       QuotaClientTypes quota_client_types,
                        base::OnceClosure callback)
       : QuotaTask(manager),
         type_(type),
-        quota_client_mask_(quota_client_mask),
+        quota_client_types_(std::move(quota_client_types)),
         callback_(std::move(callback)) {}
 
  protected:
@@ -738,7 +734,7 @@ class QuotaManager::StorageCleanupHelper : public QuotaTask {
     // This may synchronously trigger |callback_| at the end of the for loop,
     // make sure we do nothing after this block.
     for (const auto& client : manager()->clients_) {
-      if (quota_client_mask_ & client->id()) {
+      if (quota_client_types_.contains(client->type())) {
         client->PerformStorageCleanup(type_, barrier);
       } else {
         barrier.Run();
@@ -763,8 +759,8 @@ class QuotaManager::StorageCleanupHelper : public QuotaTask {
     return static_cast<QuotaManager*>(observer());
   }
 
-  StorageType type_;
-  int quota_client_mask_;
+  const StorageType type_;
+  const QuotaClientTypes quota_client_types_;
   base::OnceClosure callback_;
   base::WeakPtrFactory<StorageCleanupHelper> weak_factory_{this};
   DISALLOW_COPY_AND_ASSIGN(StorageCleanupHelper);
@@ -994,7 +990,7 @@ void QuotaManager::NotifyStorageAccessed(const url::Origin& origin,
   NotifyStorageAccessedInternal(origin, type, base::Time::Now());
 }
 
-void QuotaManager::NotifyStorageModified(QuotaClient::ID client_id,
+void QuotaManager::NotifyStorageModified(QuotaClientType client_id,
                                          const url::Origin& origin,
                                          StorageType type,
                                          int64_t delta) {
@@ -1038,7 +1034,7 @@ void QuotaManager::NotifyOriginNoLongerInUse(const url::Origin& origin) {
     origins_in_use_.erase(origin);
 }
 
-void QuotaManager::SetUsageCacheEnabled(QuotaClient::ID client_id,
+void QuotaManager::SetUsageCacheEnabled(QuotaClientType client_id,
                                         const url::Origin& origin,
                                         StorageType type,
                                         bool enabled) {
@@ -1050,25 +1046,25 @@ void QuotaManager::SetUsageCacheEnabled(QuotaClient::ID client_id,
 
 void QuotaManager::DeleteOriginData(const url::Origin& origin,
                                     StorageType type,
-                                    int quota_client_mask,
+                                    QuotaClientTypes quota_client_types,
                                     StatusCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  DeleteOriginDataInternal(origin, type, quota_client_mask, false,
+  DeleteOriginDataInternal(origin, type, std::move(quota_client_types), false,
                            std::move(callback));
 }
 
 void QuotaManager::PerformStorageCleanup(StorageType type,
-                                         int quota_client_mask,
+                                         QuotaClientTypes quota_client_types,
                                          base::OnceClosure callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   StorageCleanupHelper* deleter = new StorageCleanupHelper(
-      this, type, quota_client_mask, std::move(callback));
+      this, type, std::move(quota_client_types), std::move(callback));
   deleter->Start();
 }
 
 void QuotaManager::DeleteHostData(const std::string& host,
                                   StorageType type,
-                                  int quota_client_mask,
+                                  QuotaClientTypes quota_client_types,
                                   StatusCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   LazyInitialize();
@@ -1078,7 +1074,7 @@ void QuotaManager::DeleteHostData(const std::string& host,
   }
 
   HostDataDeleter* deleter = new HostDataDeleter(
-      this, host, type, quota_client_mask, std::move(callback));
+      this, host, type, std::move(quota_client_types), std::move(callback));
   deleter->Start();
 }
 
@@ -1160,22 +1156,6 @@ void QuotaManager::GetHostUsage(const std::string& host,
   GetUsageTracker(type)->GetHostUsage(host, std::move(callback));
 }
 
-void QuotaManager::GetHostUsage(const std::string& host,
-                                StorageType type,
-                                QuotaClient::ID client_id,
-                                UsageCallback callback) {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  LazyInitialize();
-  DCHECK(GetUsageTracker(type));
-  ClientUsageTracker* tracker =
-      GetUsageTracker(type)->GetClientTracker(client_id);
-  if (!tracker) {
-    std::move(callback).Run(0);
-    return;
-  }
-  tracker->GetHostUsage(host, std::move(callback));
-}
-
 void QuotaManager::GetHostUsageWithBreakdown(
     const std::string& host,
     StorageType type,
@@ -1184,13 +1164,6 @@ void QuotaManager::GetHostUsageWithBreakdown(
   LazyInitialize();
   DCHECK(GetUsageTracker(type));
   GetUsageTracker(type)->GetHostUsageWithBreakdown(host, std::move(callback));
-}
-
-bool QuotaManager::IsTrackingHostUsage(StorageType type,
-                                       QuotaClient::ID client_id) const {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  UsageTracker* tracker = GetUsageTracker(type);
-  return tracker && tracker->GetClientTracker(client_id);
 }
 
 std::map<std::string, std::string> QuotaManager::GetStatistics() {
@@ -1386,7 +1359,7 @@ void QuotaManager::NotifyStorageAccessedInternal(const url::Origin& origin,
                      weak_factory_.GetWeakPtr()));
 }
 
-void QuotaManager::NotifyStorageModifiedInternal(QuotaClient::ID client_id,
+void QuotaManager::NotifyStorageModifiedInternal(QuotaClientType client_id,
                                                  const url::Origin& origin,
                                                  StorageType type,
                                                  int64_t delta,
@@ -1472,7 +1445,7 @@ void QuotaManager::DidOriginDataEvicted(blink::mojom::QuotaStatusCode status) {
 
 void QuotaManager::DeleteOriginDataInternal(const url::Origin& origin,
                                             StorageType type,
-                                            int quota_client_mask,
+                                            QuotaClientTypes quota_client_types,
                                             bool is_eviction,
                                             StatusCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
@@ -1483,8 +1456,9 @@ void QuotaManager::DeleteOriginDataInternal(const url::Origin& origin,
     return;
   }
 
-  OriginDataDeleter* deleter = new OriginDataDeleter(
-      this, origin, type, quota_client_mask, is_eviction, std::move(callback));
+  OriginDataDeleter* deleter =
+      new OriginDataDeleter(this, origin, type, std::move(quota_client_types),
+                            is_eviction, std::move(callback));
   deleter->Start();
 }
 
@@ -1672,7 +1646,7 @@ void QuotaManager::EvictOriginData(const url::Origin& origin,
   eviction_context_.evicted_type = type;
   eviction_context_.evict_origin_data_callback = std::move(callback);
 
-  DeleteOriginDataInternal(origin, type, QuotaClient::kAllClientsMask, true,
+  DeleteOriginDataInternal(origin, type, AllQuotaClientTypes(), true,
                            base::BindOnce(&QuotaManager::DidOriginDataEvicted,
                                           weak_factory_.GetWeakPtr()));
 }

@@ -66,11 +66,9 @@ IPC_MESSAGE_ROUTED3(MediaPipelineMsg_ReadRawData,
                     int64_t /* position */,
                     int /* size */)
 
-IPC_MESSAGE_ROUTED3(MediaPipelineMsg_RawDataReady,
+IPC_MESSAGE_ROUTED2(MediaPipelineMsg_RawDataReady,
                     int64_t /* tag */,
-                    int /* size (DataSource::kReadError on error, 0 on EOS) */,
-                    base::ReadOnlySharedMemoryRegion
-                    /* new region or not valid to reuse cached one */)
+                    int /* size (DataSource::kReadError on error, 0 on EOS) */)
 
 IPC_MESSAGE_ROUTED1(MediaPipelineMsg_ReadDecodedData,
                     media::PlatformMediaDataType /* type */)
@@ -80,10 +78,11 @@ IPC_MESSAGE_ROUTED2(MediaPipelineMsg_DecodedDataReady,
                     base::ReadOnlySharedMemoryRegion
                     /* new region or not valid to reuse cached one*/)
 
-IPC_MESSAGE_ROUTED3(MediaPipelineMsg_Initialize,
+IPC_MESSAGE_ROUTED4(MediaPipelineMsg_Initialize,
                     int64_t /* data_source_size (<0 means "unknown") */,
                     bool /* is_data_source_streaming */,
-                    std::string /* mime_type */)
+                    std::string /* mime_type */,
+                    base::ReadOnlySharedMemoryRegion /* data source buffer */)
 
 IPC_MESSAGE_ROUTED5(MediaPipelineMsg_Initialized,
                     bool /* status */,

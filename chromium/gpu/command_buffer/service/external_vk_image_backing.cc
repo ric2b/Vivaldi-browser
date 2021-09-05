@@ -7,9 +7,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/memory/ptr_util.h"
-#include "base/memory/unsafe_shared_memory_region.h"
-#include "base/posix/eintr_wrapper.h"
 #include "base/stl_util.h"
 #include "base/system/sys_info.h"
 #include "build/build_config.h"
@@ -19,6 +16,7 @@
 #include "gpu/command_buffer/service/external_vk_image_skia_representation.h"
 #include "gpu/command_buffer/service/skia_utils.h"
 #include "gpu/ipc/common/vulkan_ycbcr_info.h"
+#include "gpu/vulkan/vma_wrapper.h"
 #include "gpu/vulkan/vulkan_command_buffer.h"
 #include "gpu/vulkan/vulkan_command_pool.h"
 #include "gpu/vulkan/vulkan_fence_helper.h"
@@ -28,6 +26,8 @@
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gl/buildflags.h"
 #include "ui/gl/gl_context.h"
+#include "ui/gl/gl_version_info.h"
+#include "ui/gl/scoped_binders.h"
 
 #if defined(OS_LINUX) && BUILDFLAG(USE_DAWN)
 #include "gpu/command_buffer/service/external_vk_image_dawn_representation.h"
@@ -37,19 +37,15 @@
 #include "gpu/vulkan/fuchsia/vulkan_fuchsia_ext.h"
 #endif
 
-#if defined(OS_LINUX) || defined(OS_ANDROID) || defined(OS_FUCHSIA)
 #define GL_DEDICATED_MEMORY_OBJECT_EXT 0x9581
 #define GL_TEXTURE_TILING_EXT 0x9580
 #define GL_TILING_TYPES_EXT 0x9583
 #define GL_OPTIMAL_TILING_EXT 0x9584
 #define GL_LINEAR_TILING_EXT 0x9585
 #define GL_HANDLE_TYPE_OPAQUE_FD_EXT 0x9586
-#endif
-
-#if defined(OS_FUCHSIA)
+#define GL_HANDLE_TYPE_OPAQUE_WIN32_EXT 0x9587
 #define GL_HANDLE_TYPE_ZIRCON_VMO_ANGLE 0x93AE
 #define GL_HANDLE_TYPE_ZIRCON_EVENT_ANGLE 0x93AF
-#endif
 
 namespace gpu {
 
@@ -84,26 +80,6 @@ static const struct {
 static_assert(base::size(kFormatTable) == (viz::RESOURCE_FORMAT_MAX + 1),
               "kFormatTable does not handle all cases.");
 
-uint32_t FindMemoryTypeIndex(SharedContextState* context_state,
-                             const VkMemoryRequirements& requirements,
-                             VkMemoryPropertyFlags flags) {
-  VkPhysicalDevice physical_device = context_state->vk_context_provider()
-                                         ->GetDeviceQueue()
-                                         ->GetVulkanPhysicalDevice();
-  VkPhysicalDeviceMemoryProperties properties;
-  vkGetPhysicalDeviceMemoryProperties(physical_device, &properties);
-  constexpr uint32_t kInvalidTypeIndex = 32;
-  for (uint32_t i = 0; i < kInvalidTypeIndex; i++) {
-    if (((1u << i) & requirements.memoryTypeBits) == 0)
-      continue;
-    if ((properties.memoryTypes[i].propertyFlags & flags) != flags)
-      continue;
-    return i;
-  }
-  NOTREACHED();
-  return kInvalidTypeIndex;
-}
-
 class ScopedPixelStore {
  public:
   ScopedPixelStore(gl::GLApi* api, GLenum name, GLint value)
@@ -124,6 +100,23 @@ class ScopedPixelStore {
   GLint old_value_;
 
   DISALLOW_COPY_AND_ASSIGN(ScopedPixelStore);
+};
+
+class ScopedDedicatedMemoryObject {
+ public:
+  explicit ScopedDedicatedMemoryObject(gl::GLApi* api) : api_(api) {
+    api_->glCreateMemoryObjectsEXTFn(1, &id_);
+    int dedicated = GL_TRUE;
+    api_->glMemoryObjectParameterivEXTFn(id_, GL_DEDICATED_MEMORY_OBJECT_EXT,
+                                         &dedicated);
+  }
+  ~ScopedDedicatedMemoryObject() { api_->glDeleteMemoryObjectsEXTFn(1, &id_); }
+
+  GLuint id() const { return id_; }
+
+ private:
+  gl::GLApi* const api_;
+  GLuint id_;
 };
 
 }  // namespace
@@ -387,7 +380,7 @@ bool ExternalVkImageBacking::BeginAccess(
   if (use_separate_gl_texture())
     return true;
 
-  DCHECK(need_sychronization());
+  DCHECK(need_synchronization());
 
   auto command_buffer = command_pool_->CreatePrimaryCommandBuffer();
   {
@@ -536,81 +529,84 @@ ExternalVkImageBacking::ProduceDawn(SharedImageManager* manager,
 }
 
 GLuint ExternalVkImageBacking::ProduceGLTextureInternal() {
-#if defined(OS_LINUX) || defined(OS_ANDROID) || defined(OS_FUCHSIA) || \
-    defined(OS_WIN)
   GrVkImageInfo image_info;
   bool result = backend_texture_.getVkImageInfo(&image_info);
   DCHECK(result);
-
   gl::GLApi* api = gl::g_current_gl_context;
-  GLuint memory_object = 0;
+  base::Optional<ScopedDedicatedMemoryObject> memory_object;
   if (!use_separate_gl_texture()) {
 #if defined(OS_LINUX) || defined(OS_ANDROID)
     auto memory_fd = image_->GetMemoryFd();
-    if (!memory_fd.is_valid()) {
+    if (!memory_fd.is_valid())
       return 0;
-    }
-
-    api->glCreateMemoryObjectsEXTFn(1, &memory_object);
-    int dedicated = GL_TRUE;
-    api->glMemoryObjectParameterivEXTFn(
-        memory_object, GL_DEDICATED_MEMORY_OBJECT_EXT, &dedicated);
-    api->glImportMemoryFdEXTFn(memory_object, image_info.fAlloc.fSize,
+    memory_object.emplace(api);
+    api->glImportMemoryFdEXTFn(memory_object->id(), image_info.fAlloc.fSize,
                                GL_HANDLE_TYPE_OPAQUE_FD_EXT,
                                memory_fd.release());
+#elif defined(OS_WIN)
+    auto memory_handle = image_->GetMemoryHandle();
+    if (!memory_handle.IsValid()) {
+      return 0;
+    }
+    memory_object.emplace(api);
+    api->glImportMemoryWin32HandleEXTFn(
+        memory_object->id(), image_info.fAlloc.fSize,
+        GL_HANDLE_TYPE_OPAQUE_WIN32_EXT, memory_handle.Take());
 #elif defined(OS_FUCHSIA)
     zx::vmo vmo = image_->GetMemoryZirconHandle();
     if (!vmo)
       return 0;
-
-    api->glCreateMemoryObjectsEXTFn(1, &memory_object);
-    // ANGLE doesn't implement glMemoryObjectParameterivEXTFn yet. Avoid
-    // calling it on Fuchsia until its implemented.
-    // TODO(spang): Implement glMemoryObjectParameterivEXTFn in ANGLE.
+    memory_object.emplace(api);
     api->glImportMemoryZirconHandleANGLEFn(
-        memory_object, image_info.fAlloc.fSize, GL_HANDLE_TYPE_ZIRCON_VMO_ANGLE,
-        vmo.release());
-#elif defined(OS_WIN)
-    // TODO(penghuang): support interop on Windows
-    NOTIMPLEMENTED();
-    return 0;
+        memory_object->id(), image_info.fAlloc.fSize,
+        GL_HANDLE_TYPE_ZIRCON_VMO_ANGLE, vmo.release());
 #else
 #error Unsupported OS
 #endif
   }
 
   GLuint internal_format = viz::TextureStorageFormat(format());
-  GLint old_texture_binding = 0;
-  api->glGetIntegervFn(GL_TEXTURE_BINDING_2D, &old_texture_binding);
+  bool is_bgra8 = (internal_format == GL_BGRA8_EXT);
+  if (is_bgra8) {
+    const auto& ext = gl::g_current_gl_driver->ext;
+    if (!ext.b_GL_EXT_texture_format_BGRA8888) {
+      bool support_swizzle = ext.b_GL_ARB_texture_swizzle ||
+                             ext.b_GL_EXT_texture_swizzle ||
+                             gl::g_current_gl_version->IsAtLeastGL(3, 3) ||
+                             gl::g_current_gl_version->IsAtLeastGLES(3, 0);
+      if (!support_swizzle) {
+        LOG(ERROR) << "BGRA_88888 is not supported.";
+        return 0;
+      }
+      internal_format = GL_RGBA8;
+    }
+  }
+
   GLuint texture_service_id = 0;
   api->glGenTexturesFn(1, &texture_service_id);
-  api->glBindTextureFn(GL_TEXTURE_2D, texture_service_id);
+  gl::ScopedTextureBinder scoped_texture_binder(GL_TEXTURE_2D,
+                                                texture_service_id);
   api->glTexParameteriFn(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   api->glTexParameteriFn(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   api->glTexParameteriFn(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
   api->glTexParameteriFn(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
   if (use_separate_gl_texture()) {
+    DCHECK(!memory_object);
     api->glTexStorage2DEXTFn(GL_TEXTURE_2D, 1, internal_format, size().width(),
                              size().height());
   } else {
     DCHECK(memory_object);
-    bool is_brga8 = (internal_format == GL_BGRA8_EXT);
-    if (is_brga8)
-      internal_format = GL_RGBA8;
     api->glTexStorageMem2DEXTFn(GL_TEXTURE_2D, 1, internal_format,
-                                size().width(), size().height(), memory_object,
-                                0);
-    api->glDeleteMemoryObjectsEXTFn(1, &memory_object);
-    if (is_brga8) {
-      api->glTexParameteriFn(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_RED);
-      api->glTexParameteriFn(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R, GL_BLUE);
-    }
+                                size().width(), size().height(),
+                                memory_object->id(), 0);
   }
-  api->glBindTextureFn(GL_TEXTURE_2D, old_texture_binding);
+
+  if (is_bgra8 && internal_format == GL_RGBA8) {
+    api->glTexParameteriFn(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_RED);
+    api->glTexParameteriFn(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_R, GL_BLUE);
+  }
+
   return texture_service_id;
-#else  // !defined(OS_LINUX) && !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
-#error Unsupported OS
-#endif
 }
 
 std::unique_ptr<SharedImageRepresentationGLTexture>
@@ -622,8 +618,6 @@ ExternalVkImageBacking::ProduceGLTexture(SharedImageManager* manager,
     return nullptr;
   }
 
-#if defined(OS_LINUX) || defined(OS_ANDROID) || defined(OS_FUCHSIA) || \
-    defined(OS_WIN)
   if (!texture_) {
     GLuint texture_service_id = ProduceGLTextureInternal();
     if (!texture_service_id)
@@ -651,9 +645,6 @@ ExternalVkImageBacking::ProduceGLTexture(SharedImageManager* manager,
   }
   return std::make_unique<ExternalVkImageGLRepresentation>(
       manager, this, tracker, texture_, texture_->service_id());
-#else
-#error Unsupported OS
-#endif
 }
 
 std::unique_ptr<SharedImageRepresentationGLTexturePassthrough>
@@ -666,8 +657,6 @@ ExternalVkImageBacking::ProduceGLTexturePassthrough(
     return nullptr;
   }
 
-#if defined(OS_LINUX) || defined(OS_ANDROID) || defined(OS_FUCHSIA) || \
-    defined(OS_WIN)
   if (!texture_passthrough_) {
     GLuint texture_service_id = ProduceGLTextureInternal();
     if (!texture_service_id)
@@ -684,9 +673,6 @@ ExternalVkImageBacking::ProduceGLTexturePassthrough(
 
   return std::make_unique<ExternalVkImageGLPassthroughRepresentation>(
       manager, this, tracker, texture_passthrough_->service_id());
-#else
-#error Unsupported OS
-#endif
 }
 
 std::unique_ptr<SharedImageRepresentationSkia>
@@ -766,70 +752,42 @@ bool ExternalVkImageBacking::WritePixels(size_t data_size,
                                          size_t stride,
                                          FillBufferCallback callback) {
   DCHECK(stride == 0 || size().height() * stride <= data_size);
+
   VkBufferCreateInfo buffer_create_info = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
       .size = data_size,
       .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
       .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
   };
+
+  VmaAllocator allocator =
+      context_state()->vk_context_provider()->GetDeviceQueue()->vma_allocator();
   VkBuffer stage_buffer = VK_NULL_HANDLE;
-  // TODO: Consider reusing stage_buffer and stage_memory, if allocation causes
-  // performance issue.
-  VkResult result = vkCreateBuffer(device(), &buffer_create_info,
-                                   nullptr /* pAllocator */, &stage_buffer);
+  VmaAllocation stage_allocation = VK_NULL_HANDLE;
+  VkResult result = vma::CreateBuffer(allocator, &buffer_create_info,
+                                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                          VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                                      0, &stage_buffer, &stage_allocation);
   if (result != VK_SUCCESS) {
     DLOG(ERROR) << "vkCreateBuffer() failed." << result;
     return false;
   }
 
-  VkMemoryRequirements memory_requirements;
-  vkGetBufferMemoryRequirements(device(), stage_buffer, &memory_requirements);
-
-  VkMemoryAllocateInfo memory_allocate_info = {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .allocationSize = memory_requirements.size,
-      .memoryTypeIndex =
-          FindMemoryTypeIndex(context_state_, memory_requirements,
-                              VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                                  VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
-
-  };
-  VkDeviceMemory stage_memory = VK_NULL_HANDLE;
-  result = vkAllocateMemory(device(), &memory_allocate_info,
-                            nullptr /* pAllocator */, &stage_memory);
-  if (result != VK_SUCCESS) {
-    DLOG(ERROR) << "vkAllocateMemory() failed. " << result;
-    vkDestroyBuffer(device(), stage_buffer, nullptr /* pAllocator */);
-    return false;
-  }
-
-  result = vkBindBufferMemory(device(), stage_buffer, stage_memory,
-                              0 /* memoryOffset */);
-  if (result != VK_SUCCESS) {
-    DLOG(ERROR) << "vkBindBufferMemory() failed. " << result;
-    vkDestroyBuffer(device(), stage_buffer, nullptr /* pAllocator */);
-    vkFreeMemory(device(), stage_memory, nullptr /* pAllocator */);
-    return false;
-  }
-
   void* buffer = nullptr;
-  result = vkMapMemory(device(), stage_memory, 0 /* memoryOffset */, data_size,
-                       0, &buffer);
+  result = vma::MapMemory(allocator, stage_allocation, &buffer);
   if (result != VK_SUCCESS) {
-    DLOG(ERROR) << "vkMapMemory() failed. " << result;
-    vkDestroyBuffer(device(), stage_buffer, nullptr /* pAllocator */);
-    vkFreeMemory(device(), stage_memory, nullptr /* pAllocator */);
+    DLOG(ERROR) << "vma::MapMemory() failed. " << result;
+    vma::DestroyBuffer(allocator, stage_buffer, stage_allocation);
     return false;
   }
 
   std::move(callback).Run(buffer);
-  vkUnmapMemory(device(), stage_memory);
+  vma::UnmapMemory(allocator, stage_allocation);
 
   std::vector<gpu::SemaphoreHandle> handles;
   if (!BeginAccessInternal(false /* readonly */, &handles)) {
     DLOG(ERROR) << "BeginAccess() failed.";
-    vkDestroyBuffer(device(), stage_buffer, nullptr /* pAllocator */);
-    vkFreeMemory(device(), stage_memory, nullptr /* pAllocator */);
+    vma::DestroyBuffer(allocator, stage_buffer, stage_allocation);
     return false;
   }
 
@@ -853,7 +811,7 @@ bool ExternalVkImageBacking::WritePixels(size_t data_size,
                                       size().width(), size().height());
   }
 
-  if (!need_sychronization()) {
+  if (!need_synchronization()) {
     DCHECK(handles.empty());
     command_buffer->Submit(0, nullptr, 0, nullptr);
     EndAccessInternal(false /* readonly */, SemaphoreHandle());
@@ -864,7 +822,7 @@ bool ExternalVkImageBacking::WritePixels(size_t data_size,
     fence_helper->EnqueueVulkanObjectCleanupForSubmittedWork(
         std::move(command_buffer));
     fence_helper->EnqueueBufferCleanupForSubmittedWork(stage_buffer,
-                                                       stage_memory);
+                                                       stage_allocation);
 
     return true;
   }
@@ -896,7 +854,7 @@ bool ExternalVkImageBacking::WritePixels(size_t data_size,
   fence_helper->EnqueueSemaphoresCleanupForSubmittedWork(
       begin_access_semaphores);
   fence_helper->EnqueueBufferCleanupForSubmittedWork(stage_buffer,
-                                                     stage_memory);
+                                                     stage_allocation);
 
   return true;
 }
@@ -1065,7 +1023,7 @@ void ExternalVkImageBacking::EndAccessInternal(
     is_write_in_progress_ = false;
   }
 
-  if (need_sychronization()) {
+  if (need_synchronization()) {
     DCHECK(semaphore_handle.is_valid());
     if (readonly) {
       read_semaphore_handles_.push_back(std::move(semaphore_handle));

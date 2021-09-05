@@ -445,16 +445,21 @@ bool LayerNeedsUpdate(LayerType* layer,
     // backface is not visible.
     if (TransformToScreenIsKnown(layer, backface_transform_id, tree) &&
         !HasSingularTransform(backface_transform_id, tree) &&
-        IsLayerBackFaceVisible(layer, backface_transform_id, property_trees))
+        IsLayerBackFaceVisible(layer, backface_transform_id, property_trees)) {
+      UMA_HISTOGRAM_BOOLEAN(
+          "Compositing.Renderer.LayerUpdateSkippedDueToBackface", true);
       return false;
+    }
   }
+
+  UMA_HISTOGRAM_BOOLEAN("Compositing.Renderer.LayerUpdateSkippedDueToBackface",
+                        false);
 
   return true;
 }
 
-template <typename LayerType>
 inline bool LayerShouldBeSkippedForDrawPropertiesComputation(
-    LayerType* layer,
+    Layer* layer,
     const TransformTree& transform_tree,
     const EffectTree& effect_tree) {
   const EffectNode* effect_node = effect_tree.Node(layer->effect_tree_index());
@@ -466,7 +471,36 @@ inline bool LayerShouldBeSkippedForDrawPropertiesComputation(
   const TransformNode* transform_node =
       transform_tree.Node(layer->transform_tree_index());
   return !transform_node->node_and_ancestors_are_animated_or_invertible ||
-         effect_node->hidden_by_backface_visibility || !effect_node->is_drawn;
+         !effect_node->is_drawn;
+}
+
+inline bool LayerShouldBeSkippedForDrawPropertiesComputation(
+    LayerImpl* layer,
+    const TransformTree& transform_tree,
+    const EffectTree& effect_tree) {
+  const EffectNode* effect_node = effect_tree.Node(layer->effect_tree_index());
+
+  if (effect_node->HasRenderSurface() && effect_node->subtree_has_copy_request)
+    return false;
+
+  // Skip if the node's subtree is hidden and no need to cache.
+  if (effect_node->subtree_hidden && !effect_node->cache_render_surface)
+    return true;
+
+  // If the layer transform is not invertible, it should be skipped. In case the
+  // transform is animating and singular, we should not skip it.
+  const TransformNode* transform_node =
+      transform_tree.Node(layer->transform_tree_index());
+
+  if (!transform_node->node_and_ancestors_are_animated_or_invertible ||
+      !effect_node->is_drawn)
+    return true;
+
+  UMA_HISTOGRAM_BOOLEAN(
+      "Compositing.Renderer.LayerSkippedForDrawPropertiesDueToBackface",
+      effect_node->hidden_by_backface_visibility);
+
+  return effect_node->hidden_by_backface_visibility;
 }
 
 gfx::Rect LayerDrawableContentRect(

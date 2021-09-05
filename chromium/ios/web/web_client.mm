@@ -120,9 +120,13 @@ bool WebClient::ForceMobileVersionByDefault(const GURL&) {
   return false;
 }
 
-UserAgentType WebClient::GetDefaultUserAgent(UIView* web_view,
+UserAgentType WebClient::GetDefaultUserAgent(id<UITraitEnvironment> web_view,
                                              const GURL& url) {
   return UserAgentType::MOBILE;
+}
+
+bool WebClient::IsEmbedderBlockRestoreUrlEnabled() {
+  return false;
 }
 
 }  // namespace web

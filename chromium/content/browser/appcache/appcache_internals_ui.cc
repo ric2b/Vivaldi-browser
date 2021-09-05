@@ -8,7 +8,8 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/logging.h"
+#include "base/check_op.h"
+#include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
@@ -146,7 +147,6 @@ GetDictionaryValueForAppCacheResourceInfo(
   dict->SetBoolean("isFallback", resource_info.is_fallback);
   dict->SetBoolean("isIntercept", resource_info.is_intercept);
   dict->SetBoolean("isForeign", resource_info.is_foreign);
-  dict->SetDouble("tokenExpires", resource_info.token_expires.ToJsTime());
 
   return dict;
 }

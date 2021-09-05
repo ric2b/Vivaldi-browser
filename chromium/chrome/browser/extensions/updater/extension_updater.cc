@@ -411,6 +411,13 @@ void ExtensionUpdater::OnExtensionDownloadCacheStatusRetrieved(
       id, cache_status);
 }
 
+void ExtensionUpdater::OnExtensionManifestUpdateCheckStatusReceived(
+    const ExtensionId& id,
+    const std::string& status) {
+  InstallationReporter::Get(profile_)->ReportManifestUpdateCheckStatus(id,
+                                                                       status);
+}
+
 void ExtensionUpdater::OnExtensionDownloadFailed(
     const ExtensionId& id,
     Error error,
@@ -439,8 +446,9 @@ void ExtensionUpdater::OnExtensionDownloadFailed(
           id, InstallationReporter::FailureReason::MANIFEST_FETCH_FAILED, data);
       break;
     case Error::MANIFEST_INVALID:
-      installation_reporter->ReportFailure(
-          id, InstallationReporter::FailureReason::MANIFEST_INVALID);
+      DCHECK(data.manifest_invalid_error);
+      installation_reporter->ReportManifestInvalidFailure(
+          id, data.manifest_invalid_error.value());
       break;
     case Error::NO_UPDATE_AVAILABLE:
       installation_reporter->ReportFailure(
@@ -474,7 +482,6 @@ void ExtensionUpdater::OnExtensionDownloadFinished(
     const CRXFileInfo& file,
     bool file_ownership_passed,
     const GURL& download_url,
-    const std::string& version,
     const PingResult& ping,
     const std::set<int>& request_ids,
     const InstallCallback& callback) {

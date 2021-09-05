@@ -21,7 +21,6 @@
     <link rel="stylesheet" href="foreground/css/menu.css">
     <link rel="stylesheet" href="foreground/css/combobutton.css">
     <link rel="stylesheet" href="foreground/css/file_manager.css">
-    <link rel="stylesheet" href="foreground/css/share_dialog.css">
     <link rel="stylesheet" href="foreground/css/file_status.css">
     <link rel="stylesheet" href="foreground/css/file_types.css">
     <link rel="stylesheet" href="foreground/css/common.css">
@@ -31,7 +30,7 @@
     <script src="foreground/js/main_scripts.js" defer></script>
   </head>
 
-  <body aria-label="$i18n{FILEMANAGER_APP_NAME}" tabindex="-1">
+  <body aria-label="$i18n{FILEMANAGER_APP_NAME}" tabindex="-1" class="files-ng">
     <custom-style>
       <style>
         .dialog-footer cr-input {
@@ -58,9 +57,6 @@
           --files-ripple-bg-color: black;
         }
 
-        files-format-dialog::part(dialog) {
-          border-radius: 2px;
-        }
       </style>
     </custom-style>
 
@@ -338,9 +334,10 @@
       </cr-menu>
     </menus>
 
-    <div class="dialog-header" role="contentinfo">
+    <div class="dialog-header files-ng" role="contentinfo">
       <div id="location-breadcrumbs" class="breadcrumbs"></div>
-      <div id="read-only-indicator" hidden>
+      <div id="read-only-indicator" aria-label="$i18n{READONLY_INDICATOR_TOOLTIP}" hidden
+           has-tooltip show-card-tooltip>
         <span id="read-only-icon"></span>
         <span id="read-only-label">$i18n{READ_ONLY_LABEL}</span>
       </div>
@@ -358,14 +355,14 @@
                 tabindex="0" hidden
                 aria-label="$i18n{TASKS_BUTTON_LABEL}">
         </button>
-        <cr-button id="share-menu-button" class="icon-button menu-button" tabindex="0" hidden
+        <button id="share-menu-button" class="icon-button menu-button" tabindex="0" hidden
                 menu="#share-menu"
                 aria-label="$i18n{SHARE_BUTTON_TOOLTIP}"
                 aria-activedescendant="share-menu"
                 has-tooltip>
           <files-toggle-ripple></files-toggle-ripple>
           <div class="icon"></div>
-        </cr-button>
+        </button>
         <cr-button id="delete-button" class="icon-button menu-button" tabindex="0" hidden
                 aria-label="$i18n{DELETE_BUTTON_LABEL}"
                 visibleif="full-page"
@@ -444,14 +441,14 @@
           <files-toggle-ripple></files-toggle-ripple>
           <div class="icon"></div>
         </button>
-        <cr-button id="selection-menu-button" class="icon-button menu-button" tabindex="0"
+        <button id="selection-menu-button" class="icon-button menu-button" tabindex="0"
                 menu="#file-context-menu"
                 aria-label="$i18n{SELECTION_MENU_BUTTON_TOOLTIP}"
                 aria-activedescendant="file-context-menu"
                 has-tooltip hidden>
           <files-toggle-ripple></files-toggle-ripple>
           <div class="icon"></div>
-        </cr-button>
+        </button>
       </div>
     </div>
 
@@ -478,7 +475,7 @@
     <div class="dialog-container">
       <div class="dialog-navigation-list">
         <div class="dialog-navigation-list-contents" role="navigation">
-          <tree id="directory-tree" role="tree" tabindex="0"></tree>
+          <tree id="directory-tree" role="tree" tabindex="0" files-ng></tree>
         </div>
         <div class="dialog-navigation-list-footer" hidden>
           <div id="progress-center" hidden>
@@ -532,6 +529,7 @@
                 </div>
                 <grid class="thumbnail-grid" tabindex="0" hidden></grid>
                 <paper-progress class="loading-indicator" indeterminate hidden></paper-progress>
+                <files-spinner class="loading-indicator" hidden></files-spinner>
                 <div class="drive-welcome page"></div>
               </div>
             </div>

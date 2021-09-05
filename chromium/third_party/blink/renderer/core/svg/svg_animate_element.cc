@@ -183,7 +183,7 @@ void SVGAnimateElement::ResolveTargetProperty() {
     type_ = SVGElement::AnimatedPropertyTypeForCSSAttribute(AttributeName());
     css_property_id_ =
         type_ != kAnimatedUnknown
-            ? cssPropertyID(targetElement()->GetDocument().ToExecutionContext(),
+            ? cssPropertyID(targetElement()->GetExecutionContext(),
                             AttributeName().LocalName())
             : CSSPropertyID::kInvalid;
   }
@@ -239,7 +239,7 @@ SVGPropertyBase* SVGAnimateElement::CreatePropertyForAttributeAnimation(
   // http://www.w3.org/TR/SVG/single-page.html#animate-AnimateTransformElement
   DCHECK_NE(type_, kAnimatedTransformList);
   DCHECK(target_property_);
-  return target_property_->CurrentValueBase()->CloneForAnimation(value);
+  return target_property_->BaseValueBase().CloneForAnimation(value);
 }
 
 SVGPropertyBase* SVGAnimateElement::CreatePropertyForCSSAnimation(

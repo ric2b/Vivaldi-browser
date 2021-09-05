@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//android_webview/variables.gni")
+import("//base/android/resource_exclusions.gni")
 import("//build/config/android/config.gni")
 import("//build/config/android/rules.gni")
 import("//build/config/locales.gni")
@@ -19,7 +20,7 @@ declare_args() {
   system_webview_package_name = "com.android.webview"
 
   # Whether to enable standalone and trichrome WebView bundle build targets.
-  enable_webview_bundles = false
+  enable_webview_bundles = true
 }
 
 template("system_webview_apk_or_module_tmpl") {
@@ -55,6 +56,13 @@ template("system_webview_apk_or_module_tmpl") {
       deps += [ "//android_webview:android_webview_no_weblayer_java" ]
     } else {
       deps += [ "//android_webview:android_webview_java" ]
+
+      # Resources from this target will be kept in the base bundle module
+      # instead of in language splits.
+      if (!defined(invoker.shared_resources_allowlist_target)) {
+        shared_resources_allowlist_target =
+            "//android_webview:system_webview_no_weblayer_apk"
+      }
     }
 
     target_sdk_version = android_sdk_version
@@ -170,14 +178,8 @@ template("system_webview_apk_or_module_tmpl") {
 
     aapt_locale_allowlist = locales
 
-    # Match drawables, but not mipmaps.
-    resource_exclusion_regex = "drawable[^/]*-xxxhdpi"
-
-    # Exception rationale in https://crbug.com/691733.
-    resource_exclusion_exceptions = [
-      "*shadow*",  # Combination of gradient & transparency cause pixelation.
-      "*.9.*",  # Most nine-patches contain shadows.
-    ]
+    resource_exclusion_regex = common_resource_exclusion_regex
+    resource_exclusion_exceptions = common_resource_exclusion_exceptions
 
     if (!_is_bundle_module) {
       # Used as an additional apk in test scripts.

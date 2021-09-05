@@ -8,6 +8,7 @@
 #include <bitset>
 #include "base/single_thread_task_runner.h"
 #include "services/network/public/mojom/fetch_api.mojom-blink-forward.h"
+#include "services/network/public/mojom/web_sandbox_flags.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_cache_options.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -19,6 +20,7 @@
 #include "third_party/blink/renderer/core/workers/global_scope_creation_params.h"
 #include "third_party/blink/renderer/core/workers/worker_clients.h"
 #include "third_party/blink/renderer/core/workers/worker_navigator.h"
+#include "third_party/blink/renderer/platform/loader/fetch/resource_load_scheduler.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_loader_options.h"
 #include "third_party/blink/renderer/platform/scheduler/public/worker_scheduler.h"
 #include "third_party/blink/renderer/platform/wtf/casting.h"
@@ -152,9 +154,11 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope : public EventTargetWithInlineData,
 
   scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner(TaskType) override;
 
-  void ApplySandboxFlags(SandboxFlags mask);
+  void ApplySandboxFlags(network::mojom::blink::WebSandboxFlags mask);
 
   void SetDefersLoadingForResourceFetchers(bool defers);
+
+  virtual int GetOutstandingThrottledLimit() const;
 
  protected:
   // Sets outside's CSP used for off-main-thread top-level worker script
@@ -186,6 +190,13 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope : public EventTargetWithInlineData,
   WebWorkerFetchContext* web_worker_fetch_context() const {
     return web_worker_fetch_context_.get();
   }
+
+  virtual ResourceLoadScheduler::ThrottleOptionOverride
+  GetThrottleOptionOverride() const;
+
+  // This method must be call after the fetcher is created if conditions
+  // change such that a different ThrottleOptionOverride should be applied.
+  void UpdateFetcherThrottleOptionOverride();
 
  private:
   void InitializeWebFetchContextIfNeeded();

@@ -76,15 +76,12 @@ void SensorProviderProxyImpl::GetSensor(SensorType type,
       GetDeviceService().BindSensorProvider(std::move(receiver));
   }
 
-  // TODO(shalamov): base::BindOnce should be used (https://crbug.com/714018),
-  // however, PermissionController::RequestPermission enforces use of repeating
-  // callback.
   permission_controller_->RequestPermission(
       PermissionType::SENSORS, render_frame_host_,
       render_frame_host_->GetLastCommittedURL().GetOrigin(), false,
-      base::BindRepeating(
-          &SensorProviderProxyImpl::OnPermissionRequestCompleted,
-          weak_factory_.GetWeakPtr(), type, base::Passed(std::move(callback))));
+      base::BindOnce(&SensorProviderProxyImpl::OnPermissionRequestCompleted,
+                     weak_factory_.GetWeakPtr(), type,
+                     base::Passed(std::move(callback))));
 }
 
 void SensorProviderProxyImpl::OnPermissionRequestCompleted(

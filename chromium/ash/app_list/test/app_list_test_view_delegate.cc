@@ -84,6 +84,10 @@ void AppListTestViewDelegate::SetSearchEngineIsGoogle(bool is_google) {
   search_model_->SetSearchEngineIsGoogle(is_google);
 }
 
+void AppListTestViewDelegate::SetIsTabletModeEnabled(bool is_tablet_mode) {
+  is_tablet_mode_ = is_tablet_mode;
+}
+
 const std::vector<SkColor>&
 AppListTestViewDelegate::GetWallpaperProminentColors() {
   return wallpaper_prominent_colors_;
@@ -187,6 +191,8 @@ void AppListTestViewDelegate::MarkAssistantPrivacyInfoDismissed() {}
 void AppListTestViewDelegate::OnStateTransitionAnimationCompleted(
     ash::AppListViewState state) {}
 
+void AppListTestViewDelegate::OnViewStateChanged(AppListViewState state) {}
+
 void AppListTestViewDelegate::GetAppLaunchedMetricParams(
     AppLaunchedMetricParams* metric_params) {}
 
@@ -199,6 +205,14 @@ int AppListTestViewDelegate::GetShelfSize() {
   // TODO(mmourgos): change this to 48 once shelf-hotseat flag is enabled.
   // Return the height of the shelf when clamshell mode is active.
   return 56;
+}
+
+bool AppListTestViewDelegate::IsInTabletMode() {
+  return is_tablet_mode_;
+}
+
+AppListNotifier* AppListTestViewDelegate::GetNotifier() {
+  return nullptr;
 }
 
 void AppListTestViewDelegate::RecordAppLaunched(

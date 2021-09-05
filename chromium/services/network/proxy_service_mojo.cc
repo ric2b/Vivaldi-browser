@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/logging.h"
+#include "base/check.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/proxy_resolution/configured_proxy_resolution_service.h"
 #include "net/proxy_resolution/network_delegate_error_observer.h"
@@ -26,6 +26,7 @@ CreateConfiguredProxyResolutionServiceUsingMojoFactory(
     std::unique_ptr<net::DhcpPacFileFetcher> dhcp_pac_file_fetcher,
     net::HostResolver* host_resolver,
     net::NetLog* net_log,
+    bool pac_quick_check_enabled,
     net::NetworkDelegate* network_delegate) {
   DCHECK(proxy_config_service);
   DCHECK(pac_file_fetcher);
@@ -41,7 +42,7 @@ CreateConfiguredProxyResolutionServiceUsingMojoFactory(
                                   network_delegate,
                                   base::ThreadTaskRunnerHandle::Get()),
               net_log),
-          net_log));
+          net_log, pac_quick_check_enabled));
 
   // Configure fetchers to use for PAC script downloads and auto-detect.
   proxy_resolution_service->SetPacFileFetchers(

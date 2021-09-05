@@ -29,8 +29,10 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/policy/core/common/cloud/cloud_policy_constants.h"
 #include "components/policy/core/common/cloud/dm_auth.h"
+#include "components/policy/proto/device_management_backend.pb.h"
 #include "google_apis/gaia/gaia_auth_consumer.h"
 #include "google_apis/gaia/gaia_auth_fetcher.h"
+#include "google_apis/gaia/gaia_constants.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 namespace {
@@ -205,6 +207,21 @@ void EnterpriseEnrollmentHelperImpl::OnDeviceAccountClientError(
       FROM_HERE, device_account_initializer_.release());
 }
 
+enterprise_management::DeviceServiceApiAccessRequest::DeviceType
+EnterpriseEnrollmentHelperImpl::GetRobotAuthCodeDeviceType() {
+  return enterprise_management::DeviceServiceApiAccessRequest::CHROME_OS;
+}
+
+std::string EnterpriseEnrollmentHelperImpl::GetRobotOAuthScopes() {
+  return GaiaConstants::kAnyApiOAuth2Scope;
+}
+
+scoped_refptr<network::SharedURLLoaderFactory>
+EnterpriseEnrollmentHelperImpl::GetURLLoaderFactory() {
+  return g_browser_process->system_network_context_manager()
+      ->GetSharedURLLoaderFactory();
+}
+
 void EnterpriseEnrollmentHelperImpl::ClearAuth(base::OnceClosure callback) {
   if (oauth_status_ != OAUTH_NOT_STARTED) {
     if (oauth_fetcher_) {
@@ -280,7 +297,7 @@ void EnterpriseEnrollmentHelperImpl::GetDeviceAttributeUpdatePermission() {
 
   client->GetDeviceAttributeUpdatePermission(
       auth_data_->Clone(),
-      base::Bind(
+      base::BindOnce(
           &EnterpriseEnrollmentHelperImpl::OnDeviceAttributeUpdatePermission,
           weak_ptr_factory_.GetWeakPtr()));
 }
@@ -297,7 +314,7 @@ void EnterpriseEnrollmentHelperImpl::UpdateDeviceAttributes(
 
   client->UpdateDeviceAttributes(
       auth_data_->Clone(), asset_id, location,
-      base::Bind(
+      base::BindOnce(
           &EnterpriseEnrollmentHelperImpl::OnDeviceAttributeUploadCompleted,
           weak_ptr_factory_.GetWeakPtr()));
 }
@@ -433,6 +450,9 @@ void EnterpriseEnrollmentHelperImpl::ReportEnrollmentStatus(
         case policy::DM_STATUS_SERVICE_CONSUMER_ACCOUNT_WITH_PACKAGED_LICENSE:
           UMA(policy::
                   kMetricEnrollmentRegisterConsumerAccountWithPackagedLicense);
+          break;
+        case policy::DM_STATUS_SERVICE_ENTERPRISE_TOS_HAS_NOT_BEEN_ACCEPTED:
+          UMA(policy::kMetricEnrollmentRegisterEnterpriseTosHasNotBeenAccepted);
           break;
       }
       break;

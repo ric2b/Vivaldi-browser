@@ -24,6 +24,7 @@
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 // TODO(https://crbug.com/1060801): Here and elsewhere, possibly switch build
 // flag to #if defined(OS_CHROMEOS)
+#include "chrome/browser/supervised_user/supervised_user_extensions_metrics_recorder.h"
 #include "chrome/browser/ui/supervised_user/parent_permission_dialog.h"
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
@@ -80,13 +81,20 @@ class WebstorePrivateBeginInstallWithManifest3Function
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   void OnParentPermissionDone(ParentPermissionDialog::Result result);
+
   void OnParentPermissionReceived();
+
   void OnParentPermissionCanceled();
+
   void OnParentPermissionFailed();
+
   // Returns true if the parental approval prompt was shown, false if there was
   // an error showing it.
   bool PromptForParentApproval();
+
+  void OnBlockedByParentDialogDone();
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
+
   void OnInstallPromptDone(ExtensionInstallPrompt::Result result);
   void OnRequestPromptDone(ExtensionInstallPrompt::Result result);
   void OnBlockByPolicyPromptDone();
@@ -100,7 +108,7 @@ class WebstorePrivateBeginInstallWithManifest3Function
   std::unique_ptr<base::ListValue> CreateResults(
       api::webstore_private::Result result) const;
 
-  // Shows block dialog when |extension| is blcoked by policy on the Window that
+  // Shows block dialog when |extension| is blocked by policy on the Window that
   // |contents| belongs to. |done_callback| will be invoked once the dialog is
   // closed by user.
   // Custom error message will be appended if it's set by the policy.
@@ -128,7 +136,9 @@ class WebstorePrivateBeginInstallWithManifest3Function
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   std::unique_ptr<ParentPermissionDialog> parent_permission_dialog_;
-#endif
+  SupervisedUserExtensionsMetricsRecorder
+      supervised_user_extensions_metrics_recorder_;
+#endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS)
 
   std::unique_ptr<ExtensionInstallPrompt> install_prompt_;
 };

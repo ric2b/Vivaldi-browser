@@ -36,13 +36,14 @@ class AccountTable {
   virtual ~AccountTable();
 
   bool CreateAccountTable();
-  bool CreateDefaultAccount();
+  AccountID CreateDefaultAccount();
 
   AccountID CreateAccount(AccountRow row);
   bool GetAllAccounts(AccountRows* accounts);
   bool GetRowForAccount(AccountID account_id, AccountRow* out_account);
   bool UpdateAccountRow(const AccountRow& account);
   bool DeleteAccount(AccountID account_id);
+  bool MigrateCalendarToVersion7();
 
  protected:
   virtual sql::Database& GetDB() = 0;
@@ -55,7 +56,8 @@ class AccountTable {
   DISALLOW_COPY_AND_ASSIGN(AccountTable);
 };
 
-#define ACCOUNT_ROW_FIELDS " id, name, url, type, created, last_modified "
+#define ACCOUNT_ROW_FIELDS \
+  " id, name, url, username, type, created, last_modified "
 
 }  // namespace calendar
 

@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/files/scoped_temp_dir.h"
-#include "base/logging.h"
 #include "base/run_loop.h"
 #include "base/scoped_observer.h"
 #include "base/time/time.h"
@@ -1027,8 +1026,6 @@ TEST_F(ServiceWorkerContextTest, ContainerHostIterator) {
       CreateProviderHostForServiceWorkerContext(
           kRenderProcessId2, true /* is_parent_frame_secure */, version.get(),
           context()->AsWeakPtr(), &remote_endpoints.back());
-  EXPECT_NE(provider_host4->provider_id(),
-            blink::kInvalidServiceWorkerProviderId);
 
   ASSERT_TRUE(container_host1);
   ASSERT_TRUE(container_host2);
@@ -1058,10 +1055,6 @@ TEST_F(ServiceWorkerContextTest, ContainerHostIterator) {
   }
   EXPECT_EQ(1u, results.size());
   EXPECT_TRUE(base::Contains(results, container_host2.get()));
-
-  context()->UnregisterContainerHostByClientID(container_host1->client_uuid());
-  context()->UnregisterContainerHostByClientID(container_host2->client_uuid());
-  context()->UnregisterContainerHostByClientID(container_host3->client_uuid());
 }
 
 class ServiceWorkerContextRecoveryTest

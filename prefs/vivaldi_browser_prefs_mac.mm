@@ -6,7 +6,12 @@
 
 #include "base/values.h"
 #include "base/mac/mac_util.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/strings/string_split.h"
+#include "base/strings/stringprintf.h"
+#include "base/values.h"
 #include "components/pref_registry/pref_registry_syncable.h"
+#include "prefs/native_settings_helper_mac.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
@@ -19,34 +24,32 @@ void MigrateOldPlatformPrefs(PrefService* prefs) {
 }
 
 base::Value GetPlatformComputedDefault(const std::string& path) {
-  NSUserDefaults* userDefaults = [NSUserDefaults standardUserDefaults];
-
   if (path == vivaldiprefs::kSystemMacActionOnDoubleClick) {
-    NSString* appleActionOnDoubleClick =
-        [userDefaults stringForKey:@"AppleActionOnDoubleClick"];
-    std::string val = "";
-    if (appleActionOnDoubleClick) {
-      val = [appleActionOnDoubleClick UTF8String];
-    }
-    return base::Value(val);
+    return base::Value(getActionOnDoubleClick());
   }
 
   if (path == vivaldiprefs::kSystemMacAquaColorVariant) {
-    NSNumber* appleAquaColorVariant =
-        [userDefaults objectForKey:@"AppleAquaColorVariant"];
-    return base::Value([appleAquaColorVariant intValue]);
+    return base::Value(getAquaColor());
   }
 
   if (path == vivaldiprefs::kSystemMacKeyboardUiMode) {
-    NSNumber* appleKeyboardUIMode =
-        [userDefaults objectForKey:@"AppleKeyboardUIMode"];
-    return base::Value([appleKeyboardUIMode intValue]);
+    return base::Value(getKeyboardUIMode());
   }
 
   if (path == vivaldiprefs::kSystemMacSwipeScrollDirection) {
-    bool appleSwipeScrollDirection =
-        [[userDefaults objectForKey:@"com.apple.swipescrolldirection"] boolValue];
-    return base::Value(appleSwipeScrollDirection);
+    return base::Value(getSwipeDirection());
+  }
+
+  if (path == vivaldiprefs::kSystemDesktopThemeColor) {
+    return base::Value(getSystemDarkMode());
+  }
+
+  if (path == vivaldiprefs::kSystemAccentColor) {
+    return base::Value(getSystemAccentColor());
+  }
+
+  if (path == vivaldiprefs::kSystemHighlightColor) {
+    return base::Value(getSystemHighlightColor());
   }
 
   return base::Value();

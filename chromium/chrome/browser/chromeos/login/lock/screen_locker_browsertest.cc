@@ -26,6 +26,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/user_manager/user_names.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
@@ -58,8 +59,8 @@ class ScreenLockerTest : public InProcessBrowserTest {
 
     FakeBiodClient::Get()->StartEnrollSession(
         "test-user", std::string(),
-        base::BindRepeating(&ScreenLockerTest::OnStartSession,
-                            base::Unretained(this)));
+        base::BindOnce(&ScreenLockerTest::OnStartSession,
+                       base::Unretained(this)));
     base::RunLoop().RunUntilIdle();
 
     FakeBiodClient::Get()->SendEnrollScanDone(

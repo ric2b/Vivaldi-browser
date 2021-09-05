@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "base/callback_forward.h"
-#include "components/autofill_assistant/browser/actions/click_action.h"
 #include "components/autofill_assistant/browser/batch_element_checker.h"
 #include "components/autofill_assistant/browser/details.h"
 #include "components/autofill_assistant/browser/info_box.h"
@@ -40,7 +39,7 @@ class ClientStatus;
 struct ClientSettings;
 struct CollectUserDataOptions;
 class UserAction;
-class WebsiteLoginFetcher;
+class WebsiteLoginManager;
 
 // Action delegate called when processing actions.
 class ActionDelegate {
@@ -98,7 +97,7 @@ class ActionDelegate {
   // Click or tap the element given by |selector| on the web page.
   virtual void ClickOrTapElement(
       const Selector& selector,
-      ClickAction::ClickType click_type,
+      ClickType click_type,
       base::OnceCallback<void(const ClientStatus&)> callback) = 0;
 
   // Have the UI enter the prompt mode and make the given actions available.
@@ -111,9 +110,11 @@ class ActionDelegate {
   // When |browse_mode| is true, navigation and user gestures like go_back no
   // longer shut down the autofill assistant client, except for navigating to
   // a different domain.
-  virtual void Prompt(std::unique_ptr<std::vector<UserAction>> user_actions,
-                      bool disable_force_expand_sheet,
-                      bool browse_mode = false) = 0;
+  virtual void Prompt(
+      std::unique_ptr<std::vector<UserAction>> user_actions,
+      bool disable_force_expand_sheet,
+      base::OnceCallback<void()> end_on_navigation_callback = base::DoNothing(),
+      bool browse_mode = false) = 0;
 
   // Have the UI leave the prompt state and go back to its previous state.
   virtual void CleanUpAfterPrompt() = 0;
@@ -132,6 +133,10 @@ class ActionDelegate {
   virtual void WriteUserData(
       base::OnceCallback<void(UserData*, UserData::FieldChange*)>
           write_callback) = 0;
+
+  // Executes |write_callback| on the currently stored user_model.
+  virtual void WriteUserModel(
+      base::OnceCallback<void(UserModel*)> write_callback) = 0;
 
   using GetFullCardCallback =
       base::OnceCallback<void(std::unique_ptr<autofill::CreditCard> card,
@@ -286,14 +291,14 @@ class ActionDelegate {
   virtual autofill::PersonalDataManager* GetPersonalDataManager() = 0;
 
   // Get current login fetcher.
-  virtual WebsiteLoginFetcher* GetWebsiteLoginFetcher() = 0;
+  virtual WebsiteLoginManager* GetWebsiteLoginManager() = 0;
 
   // Get associated web contents.
   virtual content::WebContents* GetWebContents() = 0;
 
   // Returns the e-mail address that corresponds to the access token or an empty
   // string.
-  virtual std::string GetAccountEmailAddress() = 0;
+  virtual std::string GetEmailAddressForAccessTokenAccount() = 0;
 
   // Returns the locale for the current device or platform.
   virtual std::string GetLocale() = 0;

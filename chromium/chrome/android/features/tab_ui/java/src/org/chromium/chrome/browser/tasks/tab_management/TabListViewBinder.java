@@ -8,8 +8,6 @@ import android.content.res.Resources;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.InsetDrawable;
 import android.os.Build;
-import android.support.graphics.drawable.AnimatedVectorDrawableCompat;
-import android.support.v4.graphics.drawable.DrawableCompat;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
@@ -17,6 +15,8 @@ import android.widget.TextView;
 
 import androidx.annotation.Nullable;
 import androidx.core.content.res.ResourcesCompat;
+import androidx.core.graphics.drawable.DrawableCompat;
+import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.chrome.tab_ui.R;
@@ -63,7 +63,7 @@ class TabListViewBinder {
                 Resources.Theme theme = view.getContext().getTheme();
                 Drawable drawable = new InsetDrawable(
                         ResourcesCompat.getDrawable(res, selectedTabBackground, theme),
-                        (int) res.getDimension(R.dimen.tab_list_selected_inset));
+                        (int) res.getDimension(R.dimen.tab_list_selected_inset_low_end));
                 view.setForeground(model.get(TabProperties.IS_SELECTED) ? drawable : null);
             }
         } else if (TabProperties.TAB_SELECTED_LISTENER == propertyKey) {
@@ -71,9 +71,9 @@ class TabListViewBinder {
                 int tabId = model.get(TabProperties.TAB_ID);
                 model.get(TabProperties.TAB_SELECTED_LISTENER).run(tabId);
             });
-        } else if (TabProperties.URL == propertyKey) {
-            String title = model.get(TabProperties.URL);
-            ((TextView) fastView.findViewById(R.id.description)).setText(title);
+        } else if (TabProperties.URL_DOMAIN == propertyKey) {
+            String domain = model.get(TabProperties.URL_DOMAIN);
+            ((TextView) fastView.findViewById(R.id.description)).setText(domain);
         }
     }
 

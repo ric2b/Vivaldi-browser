@@ -12,7 +12,7 @@
 #include "content/public/browser/global_routing_id.h"
 #include "extensions/browser/api/declarative_net_request/flat/extension_ruleset_generated.h"
 #include "extensions/browser/api/declarative_net_request/request_action.h"
-#include "extensions/common/api/declarative_net_request.h"
+#include "extensions/common/api/declarative_net_request/constants.h"
 #include "extensions/common/extension_id.h"
 
 class GURL;
@@ -30,8 +30,7 @@ struct RequestParams;
 // matchers, e.g. filter lists and regex.
 class RulesetMatcherBase {
  public:
-  RulesetMatcherBase(const ExtensionId& extension_id,
-                     api::declarative_net_request::SourceType source_type);
+  RulesetMatcherBase(const ExtensionId& extension_id, RulesetID ruleset_id);
 
   virtual ~RulesetMatcherBase();
 
@@ -42,25 +41,21 @@ class RulesetMatcherBase {
   base::Optional<RequestAction> GetBeforeRequestAction(
       const RequestParams& params) const;
 
-  // Returns the bitmask of headers to remove from the request. The bitmask
-  // corresponds to flat::RemoveHeaderType. |excluded_remove_headers_mask|
-  // denotes the mask of headers to be skipped for evaluation and is excluded in
-  // the return value.
-  virtual uint8_t GetRemoveHeadersMask(
-      const RequestParams& params,
-      uint8_t excluded_remove_headers_mask,
-      std::vector<RequestAction>* remove_headers_actions) const = 0;
+  // Returns a vector of RequestAction for all matching modifyHeaders rules.
+  virtual std::vector<RequestAction> GetModifyHeadersActions(
+      const RequestParams& params) const = 0;
 
   // Returns whether this modifies "extraHeaders".
   virtual bool IsExtraHeadersMatcher() const = 0;
 
+  // Returns the number of rules in this matcher.
+  virtual size_t GetRulesCount() const = 0;
+
   // Returns the extension ID with which this matcher is associated.
   const ExtensionId& extension_id() const { return extension_id_; }
 
-  // The source type of the matcher.
-  api::declarative_net_request::SourceType source_type() const {
-    return source_type_;
-  }
+  // The ruleset ID of the matcher.
+  RulesetID ruleset_id() const { return ruleset_id_; }
 
   void OnRenderFrameCreated(content::RenderFrameHost* host);
   void OnRenderFrameDeleted(content::RenderFrameHost* host);
@@ -108,11 +103,12 @@ class RulesetMatcherBase {
       const url_pattern_index::flat::UrlRule& rule,
       GURL redirect_url) const;
 
-  // Helper to create a RequestAction of type |REMOVE_HEADERS|. |mask|
-  // corresponds to bitmask of flat::RemoveHeaderType, and must be non-empty.
-  RequestAction GetRemoveHeadersActionForMask(
-      const url_pattern_index::flat::UrlRule& rule,
-      uint8_t mask) const;
+  // Helper to create a list of RequestActions of type |MODIFY_HEADERS| with the
+  // appropriate list of headers for each action.
+  std::vector<RequestAction> GetModifyHeadersActionsFromMetadata(
+      const RequestParams& params,
+      const std::vector<const url_pattern_index::flat::UrlRule*>& rules,
+      const ExtensionMetadataList& metadata_list) const;
 
  private:
   // Returns the ruleset's highest priority matching allowAllRequests action or
@@ -139,7 +135,7 @@ class RulesetMatcherBase {
       content::GlobalFrameRoutingId frame_id) const;
 
   const ExtensionId extension_id_;
-  const api::declarative_net_request::SourceType source_type_;
+  const RulesetID ruleset_id_;
 
   // Stores the IDs for the RenderFrameHosts which are allow-listed due to an
   // allowAllRequests action and the corresponding highest priority

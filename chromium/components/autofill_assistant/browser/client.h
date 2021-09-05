@@ -17,11 +17,15 @@ class PersonalDataManager;
 
 namespace password_manager {
 class PasswordManagerClient;
-}
+}  // namespace password_manager
+
+namespace version_info {
+enum class Channel;
+}  // namespace version_info
 
 namespace autofill_assistant {
 class AccessTokenFetcher;
-class WebsiteLoginFetcher;
+class WebsiteLoginManager;
 
 // A client interface that needs to be supplied to the controller by the
 // embedder.
@@ -38,12 +42,17 @@ class Client {
   // Destroys the UI immediately.
   virtual void DestroyUI() = 0;
 
-  // Returns the API key to be used for requests to the backend.
-  virtual std::string GetApiKey() const = 0;
+  // Returns the channel for the installation (canary, dev, beta, stable).
+  // Returns unknown otherwise.
+  virtual version_info::Channel GetChannel() const = 0;
 
   // Returns the e-mail address that corresponds to the auth credentials. Might
   // be empty.
-  virtual std::string GetAccountEmailAddress() const = 0;
+  virtual std::string GetEmailAddressForAccessTokenAccount() const = 0;
+
+  // Returns the e-mail address used to sign into Chrome, or an empty string if
+  // the user is not signed in.
+  virtual std::string GetChromeSignedInEmailAddress() const = 0;
 
   // Returns the AccessTokenFetcher to use to get oauth credentials.
   virtual AccessTokenFetcher* GetAccessTokenFetcher() = 0;
@@ -56,10 +65,7 @@ class Client {
       const = 0;
 
   // Returns the currently active login fetcher.
-  virtual WebsiteLoginFetcher* GetWebsiteLoginFetcher() const = 0;
-
-  // Returns the server URL to be used for requests to the backend.
-  virtual std::string GetServerUrl() const = 0;
+  virtual WebsiteLoginManager* GetWebsiteLoginManager() const = 0;
 
   // Returns the locale.
   virtual std::string GetLocale() const = 0;

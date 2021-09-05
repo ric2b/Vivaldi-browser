@@ -38,6 +38,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/origin.h"
 
+using autofill::GaiaIdHash;
 using autofill::PasswordForm;
 using autofill::ValueElementPair;
 using autofill::ValueElementVector;
@@ -89,6 +90,8 @@ void GenerateExamplePasswordForm(PasswordForm* form) {
       url::Origin::Create(GURL("https://accounts.google.com/"));
   form->skip_zero_click = true;
   form->in_store = PasswordForm::Store::kProfileStore;
+  form->moving_blocked_for_list.push_back(GaiaIdHash::FromGaiaId("user1"));
+  form->moving_blocked_for_list.push_back(GaiaIdHash::FromGaiaId("user2"));
 }
 
 // Helper functions to read the value of the first column of an executed
@@ -181,6 +184,8 @@ MATCHER(IsBasicAuthAccount, "") {
 // Serialization routines for vectors implemented in login_database.cc.
 base::Pickle SerializeValueElementPairs(const ValueElementVector& vec);
 ValueElementVector DeserializeValueElementPairs(const base::Pickle& pickle);
+base::Pickle SerializeGaiaIdHashVector(const std::vector<GaiaIdHash>& hashes);
+std::vector<GaiaIdHash> DeserializeGaiaIdHashVector(const base::Pickle& p);
 
 class LoginDatabaseTest : public testing::Test {
  protected:
@@ -189,7 +194,7 @@ class LoginDatabaseTest : public testing::Test {
     file_ = temp_dir_.GetPath().AppendASCII("TestMetadataStoreMacDatabase");
     OSCryptMocker::SetUp();
 
-    db_.reset(new LoginDatabase(file_, IsAccountStore(false)));
+    db_ = std::make_unique<LoginDatabase>(file_, IsAccountStore(false));
     ASSERT_TRUE(db_->Init());
   }
 
@@ -1148,6 +1153,23 @@ TEST_F(LoginDatabaseTest, VectorSerialization) {
   EXPECT_THAT(output, Eq(vec));
 }
 
+TEST_F(LoginDatabaseTest, GaiaIdHashVectorSerialization) {
+  // Empty vector.
+  std::vector<GaiaIdHash> vec;
+  base::Pickle temp = SerializeGaiaIdHashVector(vec);
+  std::vector<GaiaIdHash> output = DeserializeGaiaIdHashVector(temp);
+  EXPECT_THAT(output, Eq(vec));
+
+  // Normal data.
+  vec.push_back(GaiaIdHash::FromGaiaId("first"));
+  vec.push_back(GaiaIdHash::FromGaiaId("second"));
+  vec.push_back(GaiaIdHash::FromGaiaId("third"));
+
+  temp = SerializeGaiaIdHashVector(vec);
+  output = DeserializeGaiaIdHashVector(temp);
+  EXPECT_THAT(output, Eq(vec));
+}
+
 TEST_F(LoginDatabaseTest, UpdateIncompleteCredentials) {
   std::vector<std::unique_ptr<PasswordForm>> result;
   // Verify the database is empty.
@@ -1337,6 +1359,7 @@ TEST_F(LoginDatabaseTest, UpdateLogin) {
   form.federation_origin =
       url::Origin::Create(GURL("https://accounts.google.com/"));
   form.skip_zero_click = true;
+  form.moving_blocked_for_list.push_back(GaiaIdHash::FromGaiaId("gaia_id"));
 
   PasswordStoreChangeList changes = db().UpdateLogin(form);
   EXPECT_EQ(UpdateChangeForForm(form, /*passwordchanged=*/true), changes);
@@ -1369,34 +1392,36 @@ TEST_F(LoginDatabaseTest, RemoveWrongForm) {
   EXPECT_FALSE(db().RemoveLogin(form, /*changes=*/nullptr));
 }
 
-TEST_F(LoginDatabaseTest, ReportMetricsTest) {
+namespace {
+
+void AddMetricsTestData(LoginDatabase* db) {
   PasswordForm password_form;
   password_form.origin = GURL("http://example.com");
   password_form.username_value = ASCIIToUTF16("test1@gmail.com");
   password_form.password_value = ASCIIToUTF16("test");
   password_form.signon_realm = "http://example.com/";
   password_form.times_used = 0;
-  EXPECT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
+  EXPECT_EQ(AddChangeForForm(password_form), db->AddLogin(password_form));
 
   password_form.username_value = ASCIIToUTF16("test2@gmail.com");
   password_form.times_used = 1;
-  EXPECT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
+  EXPECT_EQ(AddChangeForForm(password_form), db->AddLogin(password_form));
 
   password_form.origin = GURL("http://second.example.com");
   password_form.signon_realm = "http://second.example.com";
   password_form.times_used = 3;
-  EXPECT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
+  EXPECT_EQ(AddChangeForForm(password_form), db->AddLogin(password_form));
 
   password_form.username_value = ASCIIToUTF16("test3@gmail.com");
   password_form.type = PasswordForm::Type::kGenerated;
   password_form.times_used = 2;
-  EXPECT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
+  EXPECT_EQ(AddChangeForForm(password_form), db->AddLogin(password_form));
 
   password_form.origin = GURL("ftp://third.example.com/");
   password_form.signon_realm = "ftp://third.example.com/";
   password_form.times_used = 4;
   password_form.scheme = PasswordForm::Scheme::kOther;
-  EXPECT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
+  EXPECT_EQ(AddChangeForForm(password_form), db->AddLogin(password_form));
 
   password_form.origin = GURL("http://fourth.example.com/");
   password_form.signon_realm = "http://fourth.example.com/";
@@ -1404,54 +1429,52 @@ TEST_F(LoginDatabaseTest, ReportMetricsTest) {
   password_form.username_value = ASCIIToUTF16("");
   password_form.times_used = 10;
   password_form.scheme = PasswordForm::Scheme::kHtml;
-  EXPECT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
+  EXPECT_EQ(AddChangeForForm(password_form), db->AddLogin(password_form));
 
   password_form.origin = GURL("https://fifth.example.com/");
   password_form.signon_realm = "https://fifth.example.com/";
   password_form.password_value = ASCIIToUTF16("");
   password_form.blacklisted_by_user = true;
-  EXPECT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
+  EXPECT_EQ(AddChangeForForm(password_form), db->AddLogin(password_form));
 
   password_form.origin = GURL("https://sixth.example.com/");
   password_form.signon_realm = "https://sixth.example.com/";
   password_form.username_value = ASCIIToUTF16("my_username");
   password_form.password_value = ASCIIToUTF16("my_password");
   password_form.blacklisted_by_user = false;
-  EXPECT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
+  EXPECT_EQ(AddChangeForForm(password_form), db->AddLogin(password_form));
 
   password_form.origin = GURL();
   password_form.signon_realm = "android://hash@com.example.android/";
   password_form.username_value = ASCIIToUTF16("JohnDoe");
   password_form.password_value = ASCIIToUTF16("my_password");
   password_form.blacklisted_by_user = false;
-  EXPECT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
+  EXPECT_EQ(AddChangeForForm(password_form), db->AddLogin(password_form));
 
   password_form.username_value = ASCIIToUTF16("JaneDoe");
-  EXPECT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
+  EXPECT_EQ(AddChangeForForm(password_form), db->AddLogin(password_form));
 
   password_form.origin = GURL("http://rsolomakhin.github.io/autofill/");
   password_form.signon_realm = "http://rsolomakhin.github.io/";
   password_form.blacklisted_by_user = true;
-  EXPECT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
+  EXPECT_EQ(AddChangeForForm(password_form), db->AddLogin(password_form));
 
   password_form.origin = GURL("https://rsolomakhin.github.io/autofill/");
   password_form.signon_realm = "https://rsolomakhin.github.io/";
   password_form.blacklisted_by_user = true;
-  EXPECT_EQ(AddChangeForForm(password_form), db().AddLogin(password_form));
+  EXPECT_EQ(AddChangeForForm(password_form), db->AddLogin(password_form));
 
   password_form.origin = GURL("http://rsolomakhin.github.io/autofill/123");
   password_form.signon_realm = "http://rsolomakhin.github.io/";
   password_form.blacklisted_by_user = true;
-  EXPECT_EQ(AddChangeForForm(password_form),
-            db().AddBlacklistedLoginForTesting(password_form));
+  EXPECT_EQ(AddChangeForForm(password_form), db->AddLogin(password_form));
 
   password_form.origin = GURL("https://rsolomakhin.github.io/autofill/1234");
   password_form.signon_realm = "https://rsolomakhin.github.io/";
   password_form.blacklisted_by_user = true;
-  EXPECT_EQ(AddChangeForForm(password_form),
-            db().AddBlacklistedLoginForTesting(password_form));
+  EXPECT_EQ(AddChangeForForm(password_form), db->AddLogin(password_form));
 
-  StatisticsTable& stats_table = db().stats_table();
+  StatisticsTable& stats_table = db->stats_table();
   InteractionsStats stats;
   stats.origin_domain = GURL("https://example.com");
   stats.username_value = base::ASCIIToUTF16("user1");
@@ -1467,9 +1490,26 @@ TEST_F(LoginDatabaseTest, ReportMetricsTest) {
   stats.origin_domain = GURL("https://foo.com");
   stats.dismissal_count = 10;
   EXPECT_TRUE(stats_table.AddRow(stats));
+}
+
+}  // namespace
+
+TEST_F(LoginDatabaseTest, ReportMetricsTest) {
+  AddMetricsTestData(&db());
+
+  // Note: We also create and populate an account DB here and instruct it to
+  // report metrics, even though all the checks below only test the profile DB.
+  // This is to make sure that the account DB doesn't write to any of the same
+  // histograms.
+  base::FilePath account_db_file =
+      temp_dir_.GetPath().AppendASCII("TestAccountStoreDatabase");
+  LoginDatabase account_db(account_db_file, IsAccountStore(true));
+  ASSERT_TRUE(account_db.Init());
+  AddMetricsTestData(&account_db);
 
   base::HistogramTester histogram_tester;
   db().ReportMetrics("", false, BulkCheckDone(false));
+  account_db.ReportMetrics("", false, BulkCheckDone(false));
 
   histogram_tester.ExpectUniqueSample(
       "PasswordManager.AccountsPerSiteHiRes.AutoGenerated."
@@ -1561,6 +1601,121 @@ TEST_F(LoginDatabaseTest, ReportMetricsTest) {
   histogram_tester.ExpectUniqueSample(
       "PasswordManager.BubbleSuppression.AccountsInStatisticsTable", 4, 1);
 #endif  // !defined(OS_IOS) && !defined(OS_ANDROID)
+}
+
+// This test is mostly a copy of ReportMetricsTest, but covering the account
+// store instead of the profile store. Some metrics are not recorded for the
+// account store (e.g. BubbleSuppression ones) so these are missing here; all
+// the metrics that *are* covered have ".AccountStore" in their names.
+TEST_F(LoginDatabaseTest, ReportAccountStoreMetricsTest) {
+  // Note: We also populate the profile DB here and instruct it to report
+  // metrics, even though all the checks below only test the account DB. This is
+  // to make sure that the profile DB doesn't write to any of the same
+  // histograms.
+  AddMetricsTestData(&db());
+
+  base::FilePath account_db_file =
+      temp_dir_.GetPath().AppendASCII("TestAccountStoreDatabase");
+  LoginDatabase account_db(account_db_file, IsAccountStore(true));
+  ASSERT_TRUE(account_db.Init());
+  AddMetricsTestData(&account_db);
+
+  base::HistogramTester histogram_tester;
+  db().ReportMetrics("", false, BulkCheckDone(false));
+  account_db.ReportMetrics("", false, BulkCheckDone(false));
+
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.AccountStore.AccountsPerSiteHiRes.AutoGenerated."
+      "WithoutCustomPassphrase",
+      1, 2);
+
+  histogram_tester.ExpectBucketCount(
+      "PasswordManager.AccountStore.AccountsPerSiteHiRes.UserCreated."
+      "WithoutCustomPassphrase",
+      1, 3);
+  histogram_tester.ExpectBucketCount(
+      "PasswordManager.AccountStore.AccountsPerSiteHiRes.UserCreated."
+      "WithoutCustomPassphrase",
+      2, 2);
+
+  histogram_tester.ExpectBucketCount(
+      "PasswordManager.AccountStore.AccountsPerSiteHiRes.Overall."
+      "WithoutCustomPassphrase",
+      1, 5);
+  histogram_tester.ExpectBucketCount(
+      "PasswordManager.AccountStore.AccountsPerSiteHiRes.Overall."
+      "WithoutCustomPassphrase",
+      2, 2);
+
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.AccountStore.TotalAccountsHiRes.ByType.AutoGenerated."
+      "WithoutCustomPassphrase",
+      2, 1);
+
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.AccountStore.TotalAccountsHiRes.ByType.UserCreated."
+      "WithoutCustomPassphrase",
+      7, 1);
+
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.AccountStore.TotalAccountsHiRes.ByType.Overall."
+      "WithoutCustomPassphrase",
+      9, 1);
+
+#if 0
+  // TODO(crbug.com/1063852): Add recording code for the scheme-based metrics.
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.AccountStore.TotalAccountsHiRes.WithScheme.Android", 2,
+      1);
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.AccountStore.TotalAccountsHiRes.WithScheme.Ftp", 1, 1);
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.AccountStore.TotalAccountsHiRes.WithScheme.Http", 5, 1);
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.AccountStore.TotalAccountsHiRes.WithScheme.Https", 1, 1);
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.AccountStore.TotalAccountsHiRes.WithScheme.Other", 0, 1);
+#endif
+
+  histogram_tester.ExpectBucketCount(
+      "PasswordManager.AccountStore.TimesPasswordUsed.AutoGenerated."
+      "WithoutCustomPassphrase",
+      2, 1);
+  histogram_tester.ExpectBucketCount(
+      "PasswordManager.AccountStore.TimesPasswordUsed.AutoGenerated."
+      "WithoutCustomPassphrase",
+      4, 1);
+
+  histogram_tester.ExpectBucketCount(
+      "PasswordManager.AccountStore.TimesPasswordUsed.UserCreated."
+      "WithoutCustomPassphrase",
+      0, 1);
+  histogram_tester.ExpectBucketCount(
+      "PasswordManager.AccountStore.TimesPasswordUsed.UserCreated."
+      "WithoutCustomPassphrase",
+      1, 1);
+  histogram_tester.ExpectBucketCount(
+      "PasswordManager.AccountStore.TimesPasswordUsed.UserCreated."
+      "WithoutCustomPassphrase",
+      3, 1);
+
+  histogram_tester.ExpectBucketCount(
+      "PasswordManager.AccountStore.TimesPasswordUsed.Overall."
+      "WithoutCustomPassphrase",
+      0, 1);
+  histogram_tester.ExpectBucketCount(
+      "PasswordManager.AccountStore.TimesPasswordUsed.Overall."
+      "WithoutCustomPassphrase",
+      1, 1);
+  histogram_tester.ExpectBucketCount(
+      "PasswordManager.AccountStore.TimesPasswordUsed.Overall."
+      "WithoutCustomPassphrase",
+      2, 1);
+  // The bucket for 3 and 4 is the same. Thus we expect two samples here.
+  histogram_tester.ExpectBucketCount(
+      "PasswordManager.AccountStore.TimesPasswordUsed.Overall."
+      "WithoutCustomPassphrase",
+      3, 2);
 }
 
 TEST_F(LoginDatabaseTest, DuplicatesMetrics_NoDuplicates) {
@@ -2431,6 +2586,77 @@ TEST_F(LoginDatabaseTest, GetLoginsByPassword) {
   // Check if there are exactly two forms with the duplicated_password.
   EXPECT_TRUE(db().GetLoginsByPassword(duplicated_password, &forms));
   EXPECT_THAT(forms, UnorderedElementsAre(Pointee(form1), Pointee(form3)));
+}
+
+// Test encrypted passwords are present in add change lists.
+TEST_F(LoginDatabaseTest, EncryptedPasswordAdd) {
+  PasswordForm form;
+  form.origin = GURL("http://0.com");
+  form.signon_realm = "http://www.example.com/";
+  form.action = GURL("http://www.example.com/action");
+  form.password_element = base::ASCIIToUTF16("pwd");
+  form.password_value = base::ASCIIToUTF16("example");
+  password_manager::PasswordStoreChangeList changes = db().AddLogin(form);
+  ASSERT_EQ(1u, changes.size());
+  ASSERT_FALSE(changes[0].form().encrypted_password.empty());
+}
+
+// Test encrypted passwords are present in add change lists, when the password
+// is already in the DB.
+TEST_F(LoginDatabaseTest, EncryptedPasswordAddWithReplaceSemantics) {
+  PasswordForm form;
+  form.origin = GURL("http://0.com");
+  form.signon_realm = "http://www.example.com/";
+  form.action = GURL("http://www.example.com/action");
+  form.password_element = base::ASCIIToUTF16("pwd");
+  form.password_value = base::ASCIIToUTF16("example");
+
+  ignore_result(db().AddLogin(form));
+
+  form.password_value = base::ASCIIToUTF16("secret");
+
+  password_manager::PasswordStoreChangeList changes = db().AddLogin(form);
+  ASSERT_EQ(2u, changes.size());
+  ASSERT_EQ(password_manager::PasswordStoreChange::Type::ADD,
+            changes[1].type());
+  ASSERT_FALSE(changes[1].form().encrypted_password.empty());
+}
+
+// Test encrypted passwords are present in update change lists.
+TEST_F(LoginDatabaseTest, EncryptedPasswordUpdate) {
+  PasswordForm form;
+  form.origin = GURL("http://0.com");
+  form.signon_realm = "http://www.example.com/";
+  form.action = GURL("http://www.example.com/action");
+  form.password_element = base::ASCIIToUTF16("pwd");
+  form.password_value = base::ASCIIToUTF16("example");
+
+  ignore_result(db().AddLogin(form));
+
+  form.password_value = base::ASCIIToUTF16("secret");
+
+  password_manager::PasswordStoreChangeList changes = db().UpdateLogin(form);
+  ASSERT_EQ(1u, changes.size());
+  ASSERT_FALSE(changes[0].form().encrypted_password.empty());
+}
+
+// Test encrypted passwords are present when retrieving from DB.
+TEST_F(LoginDatabaseTest, GetLoginsEncryptedPassword) {
+  PasswordForm form;
+  form.origin = GURL("http://0.com");
+  form.signon_realm = "http://www.example.com/";
+  form.action = GURL("http://www.example.com/action");
+  form.password_element = base::ASCIIToUTF16("pwd");
+  form.password_value = base::ASCIIToUTF16("example");
+  password_manager::PasswordStoreChangeList changes = db().AddLogin(form);
+  ASSERT_EQ(1u, changes.size());
+  ASSERT_FALSE(changes[0].form().encrypted_password.empty());
+
+  std::vector<std::unique_ptr<PasswordForm>> forms;
+  EXPECT_TRUE(db().GetLogins(PasswordStore::FormDigest(form), &forms));
+
+  ASSERT_EQ(1U, forms.size());
+  ASSERT_FALSE(forms[0]->encrypted_password.empty());
 }
 
 }  // namespace password_manager

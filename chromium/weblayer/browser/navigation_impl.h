@@ -6,6 +6,7 @@
 #define WEBLAYER_BROWSER_NAVIGATION_IMPL_H_
 
 #include <memory>
+
 #include "base/macros.h"
 #include "base/optional.h"
 #include "build/build_config.h"
@@ -38,6 +39,12 @@ class NavigationImpl : public Navigation {
     safe_to_set_request_headers_ = value;
   }
 
+  void set_safe_to_set_user_agent(bool value) {
+    safe_to_set_user_agent_ = value;
+  }
+
+  void set_was_stopped() { was_stopped_ = true; }
+
   void SetParamsToLoadWhenSafe(
       std::unique_ptr<content::NavigationController::LoadURLParams> params);
   std::unique_ptr<content::NavigationController::LoadURLParams>
@@ -47,35 +54,21 @@ class NavigationImpl : public Navigation {
   void SetJavaNavigation(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& java_navigation);
-  int GetState(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj) {
-    return static_cast<int>(GetState());
-  }
-  base::android::ScopedJavaLocalRef<jstring> GetUri(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj);
-  base::android::ScopedJavaLocalRef<jobjectArray> GetRedirectChain(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jobject>& obj);
-  int GetHttpStatusCode(JNIEnv* env,
-                        const base::android::JavaParamRef<jobject>& obj) {
-    return GetHttpStatusCode();
-  }
-  bool IsSameDocument(JNIEnv* env,
-                      const base::android::JavaParamRef<jobject>& obj) {
-    return IsSameDocument();
-  }
-  bool IsErrorPage(JNIEnv* env,
-                   const base::android::JavaParamRef<jobject>& obj) {
-    return IsErrorPage();
-  }
-  int GetLoadError(JNIEnv* env,
-                   const base::android::JavaParamRef<jobject>& obj) {
-    return static_cast<int>(GetLoadError());
-  }
+  int GetState(JNIEnv* env) { return static_cast<int>(GetState()); }
+  base::android::ScopedJavaLocalRef<jstring> GetUri(JNIEnv* env);
+  base::android::ScopedJavaLocalRef<jobjectArray> GetRedirectChain(JNIEnv* env);
+  int GetHttpStatusCode(JNIEnv* env) { return GetHttpStatusCode(); }
+  bool IsSameDocument(JNIEnv* env) { return IsSameDocument(); }
+  bool IsErrorPage(JNIEnv* env) { return IsErrorPage(); }
+  bool IsDownload(JNIEnv* env) { return IsDownload(); }
+  bool WasStopCalled(JNIEnv* env) { return WasStopCalled(); }
+  int GetLoadError(JNIEnv* env) { return static_cast<int>(GetLoadError()); }
   jboolean SetRequestHeader(JNIEnv* env,
-                            const base::android::JavaParamRef<jobject>& obj,
                             const base::android::JavaParamRef<jstring>& name,
                             const base::android::JavaParamRef<jstring>& value);
+  jboolean SetUserAgentString(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jstring>& value);
 
   base::android::ScopedJavaGlobalRef<jobject> java_navigation() {
     return java_navigation_;
@@ -90,9 +83,12 @@ class NavigationImpl : public Navigation {
   int GetHttpStatusCode() override;
   bool IsSameDocument() override;
   bool IsErrorPage() override;
+  bool IsDownload() override;
+  bool WasStopCalled() override;
   LoadError GetLoadError() override;
   void SetRequestHeader(const std::string& name,
                         const std::string& value) override;
+  void SetUserAgentString(const std::string& value) override;
 
   content::NavigationHandle* navigation_handle_;
 
@@ -102,6 +98,12 @@ class NavigationImpl : public Navigation {
 
   // Whether SetRequestHeader() is allowed at this time.
   bool safe_to_set_request_headers_ = false;
+
+  // Whether SetUserAgentString() is allowed at this time.
+  bool safe_to_set_user_agent_ = false;
+
+  // Whether NavigationController::Stop() was called for this navigation.
+  bool was_stopped_ = false;
 
 #if defined(OS_ANDROID)
   base::android::ScopedJavaGlobalRef<jobject> java_navigation_;

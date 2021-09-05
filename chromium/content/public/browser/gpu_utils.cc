@@ -92,7 +92,7 @@ const gpu::GpuPreferences GetGpuPreferencesFromCommandLine() {
       command_line->HasSwitch(switches::kDisableOopRasterization);
 
   gpu_preferences.enable_oop_rasterization_ddl =
-      command_line->HasSwitch(switches::kEnableOopRasterizationDDL);
+      base::FeatureList::IsEnabled(features::kOopRasterizationDDL);
   gpu_preferences.enforce_vulkan_protected_memory =
       command_line->HasSwitch(switches::kEnforceVulkanProtectedMemory);
   gpu_preferences.disable_vulkan_fallback_to_gl_for_testing =
@@ -134,5 +134,18 @@ void StopGpuProcess(base::OnceClosure callback) {
 gpu::GpuChannelEstablishFactory* GetGpuChannelEstablishFactory() {
   return BrowserMainLoop::GetInstance()->gpu_channel_establish_factory();
 }
+
+#if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
+void DumpGpuProfilingData(base::OnceClosure callback) {
+  content::GpuProcessHost::CallOnIO(
+      content::GPU_PROCESS_KIND_SANDBOXED, false /* force_create */,
+      base::BindOnce(
+          [](base::OnceClosure callback, content::GpuProcessHost* host) {
+            host->gpu_service()->WriteClangProfilingProfile(
+                std::move(callback));
+          },
+          std::move(callback)));
+}
+#endif  // BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
 
 }  // namespace content

@@ -4,6 +4,7 @@
 
 #include "third_party/blink/renderer/core/frame/navigator_ua_data.h"
 
+#include "base/single_thread_task_runner.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_ua_data_values.h"
 #include "third_party/blink/renderer/core/page/page.h"
@@ -18,11 +19,20 @@ NavigatorUAData::NavigatorUAData(ExecutionContext* context)
   empty_brand_set_.push_back(dict);
 }
 
-void NavigatorUAData::AddBrand(const String& brand, const String& version) {
+void NavigatorUAData::AddBrandVersion(const String& brand,
+                                      const String& version) {
   NavigatorUABrandVersion* dict = NavigatorUABrandVersion::Create();
   dict->setBrand(brand);
   dict->setVersion(version);
   brand_set_.push_back(dict);
+}
+
+void NavigatorUAData::SetBrandVersionList(
+    const UserAgentBrandList& brand_version_list) {
+  for (const auto& brand_version : brand_version_list) {
+    AddBrandVersion(String::FromUTF8(brand_version.brand),
+                    String::FromUTF8(brand_version.major_version));
+  }
 }
 
 void NavigatorUAData::SetMobile(bool mobile) {
@@ -53,7 +63,7 @@ bool NavigatorUAData::mobile() const {
   return false;
 }
 
-const HeapVector<Member<NavigatorUABrandVersion>>& NavigatorUAData::uaList()
+const HeapVector<Member<NavigatorUABrandVersion>>& NavigatorUAData::brands()
     const {
   if (GetExecutionContext()) {
     return brand_set_;
@@ -66,6 +76,8 @@ ScriptPromise NavigatorUAData::getHighEntropyValues(
     Vector<String>& hints) const {
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
+  auto* executionContext =
+      ExecutionContext::From(script_state);  // GetExecutionContext();
   UADataValues* values = MakeGarbageCollected<UADataValues>();
   for (const String& hint : hints) {
     if (hint == "platform") {
@@ -80,7 +92,15 @@ ScriptPromise NavigatorUAData::getHighEntropyValues(
       values->setUaFullVersion(ua_full_version_);
     }
   }
-  resolver->Resolve(values);
+
+  DCHECK(executionContext);
+  executionContext->GetTaskRunner(TaskType::kPermission)
+      ->PostTask(
+          FROM_HERE,
+          WTF::Bind([](ScriptPromiseResolver* resolver,
+                       UADataValues* values) { resolver->Resolve(values); },
+                    WrapPersistent(resolver), WrapPersistent(values)));
+
   return promise;
 }
 

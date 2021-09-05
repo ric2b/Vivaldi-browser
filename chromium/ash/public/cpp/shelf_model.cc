@@ -9,6 +9,7 @@
 
 #include "ash/public/cpp/shelf_item_delegate.h"
 #include "ash/public/cpp/shelf_model_observer.h"
+#include "ash/public/cpp/shelf_types.h"
 
 namespace ash {
 
@@ -78,8 +79,9 @@ void ShelfModel::PinAppWithID(const std::string& app_id) {
 
 bool ShelfModel::IsAppPinned(const std::string& app_id) {
   const int index = ItemIndexByID(ShelfID(app_id));
-  return index >= 0 && (items_[index].type == TYPE_PINNED_APP ||
-                        items_[index].type == TYPE_BROWSER_SHORTCUT);
+  if (index < 0)
+    return false;
+  return IsPinnedShelfItemType(items_[index].type);
 }
 
 void ShelfModel::UnpinAppWithID(const std::string& app_id) {
@@ -228,6 +230,16 @@ void ShelfModel::SetActiveShelfID(const ShelfID& shelf_id) {
 void ShelfModel::OnItemStatusChanged(const ShelfID& id) {
   for (auto& observer : observers_)
     observer.ShelfItemStatusChanged(id);
+}
+
+void ShelfModel::OnItemRippedOff() {
+  for (auto& observer : observers_)
+    observer.ShelfItemRippedOff();
+}
+
+void ShelfModel::OnItemReturnedFromRipOff(int index) {
+  for (auto& observer : observers_)
+    observer.ShelfItemReturnedFromRipOff(index);
 }
 
 void ShelfModel::RemoveNotificationRecord(const std::string& notification_id) {

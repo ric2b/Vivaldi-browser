@@ -155,9 +155,6 @@ class MEDIA_EXPORT CdmAdapter : public ContentDecryptionModule,
   cdm::FileIO* CreateFileIO(cdm::FileIOClient* client) override;
   void RequestStorageId(uint32_t version) override;
 
-  // cdm::Host_11 specific implementation.
-  cdm::CdmProxy* RequestCdmProxy(cdm::CdmProxyClient* client) override;
-
  private:
   CdmAdapter(const std::string& key_system,
              const url::Origin& security_origin,
@@ -258,8 +255,6 @@ class MEDIA_EXPORT CdmAdapter : public ContentDecryptionModule,
   // Tracks CDM file IO related states.
   int last_read_file_size_kb_ = 0;
   bool file_size_uma_reported_ = false;
-
-  bool cdm_proxy_created_ = false;
 
   // Used to keep track of promises while the CDM is processing the request.
   CdmPromiseAdapter cdm_promise_adapter_;

@@ -6,7 +6,6 @@
 
 #import <UIKit/UIKit.h>
 
-#include "base/logging.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/task/post_task.h"
@@ -108,16 +107,16 @@ void TestWebClient::PrepareErrorPage(
     base::OnceCallback<void(NSString*)> callback) {
   net::CertStatus cert_status = info.has_value() ? info.value().cert_status : 0;
   std::move(callback).Run(base::SysUTF8ToNSString(testing::GetErrorText(
-      web_state, url, base::SysNSStringToUTF8(error.domain), error.code,
-      is_post, is_off_the_record, cert_status)));
+      web_state, url, error, is_post, is_off_the_record, cert_status)));
 }
 
 UIView* TestWebClient::GetWindowedContainer() {
   return UIApplication.sharedApplication.keyWindow.rootViewController.view;
 }
 
-UserAgentType TestWebClient::GetDefaultUserAgent(UIView* web_view,
-                                                 const GURL& url) {
+UserAgentType TestWebClient::GetDefaultUserAgent(
+    id<UITraitEnvironment> web_view,
+    const GURL& url) {
   return default_user_agent_;
 }
 

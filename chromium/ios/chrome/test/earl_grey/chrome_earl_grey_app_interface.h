@@ -10,6 +10,7 @@
 
 #import "components/content_settings/core/common/content_settings.h"
 #import "components/sync/base/model_type.h"
+#include "third_party/metrics_proto/user_demographics.pb.h"
 
 @class ElementSelector;
 @class NamedGuide;
@@ -23,6 +24,10 @@
 // returning. Returns nil on success, or else an NSError indicating why the
 // operation failed.
 + (NSError*)clearBrowsingHistory;
+
+// Returns the number of entries in the history database. Returns -1 if there
+// was an error.
++ (NSInteger)getBrowsingHistoryEntryCount;
 
 // Clears browsing cache. Returns nil on success, or else an NSError indicating
 // the operation failed.
@@ -103,7 +108,11 @@
 + (void)openNewTab;
 
 // Simulates opening http://www.example.com/ from another application.
-+ (void)simulateExternalAppURLOpening;
+// Returns the opened URL.
++ (NSURL*)simulateExternalAppURLOpening;
+
+// Simulates opening the add account sign-in flow from the web.
++ (void)simulateAddAccountFromWeb;
 
 // Closes current tab.
 + (void)closeCurrentTab;
@@ -305,11 +314,14 @@
 // Triggers a sync cycle for a |type|.
 + (void)triggerSyncCycleForType:(syncer::ModelType)type;
 
-// Injects user demographics into the fake sync server. The year is the
-// un-noised birth year, and the gender corresponds to the options in
-// UserDemographicsProto::Gender..
-+ (void)addUserDemographicsToSyncServerWithBirthYear:(int)birthYear
-                                              gender:(int)gender;
+// Injects user demographics into the fake sync server. |rawBirthYear| is the
+// true birth year, pre-noise, and the gender corresponds to the proto enum
+// UserDemographicsProto::Gender.
++ (void)
+    addUserDemographicsToSyncServerWithBirthYear:(int)rawBirthYear
+                                          gender:
+                                              (metrics::UserDemographicsProto::
+                                                   Gender)gender;
 
 // Clears the autofill profile for the given |GUID|.
 + (void)clearAutofillProfileWithGUID:(NSString*)GUID;
@@ -340,6 +352,10 @@
 + (NSError*)verifyNumberOfSyncEntitiesWithType:(NSUInteger)type
                                           name:(NSString*)name
                                          count:(NSUInteger)count;
+
+// Adds a bookmark with a sync passphrase. The sync server will need the sync
+// passphrase to start.
++ (void)addBookmarkWithSyncPassphrase:(NSString*)syncPassphrase;
 
 #pragma mark - JavaScript Utilities (EG2)
 

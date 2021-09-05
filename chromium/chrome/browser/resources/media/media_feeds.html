@@ -8,7 +8,9 @@
   <script src="chrome://resources/js/promise_resolver.js"></script>
   <script src="chrome://resources/mojo/mojo/public/mojom/base/big_buffer.mojom-lite.js"></script>
   <script src="chrome://resources/mojo/mojo/public/mojom/base/string16.mojom-lite.js"></script>
+  <script src="chrome://resources/mojo/mojo/public/mojom/base/unguessable_token.mojom-lite.js"></script>
   <script src="chrome://resources/mojo/mojo/public/mojom/base/time.mojom-lite.js"></script>
+  <script src="chrome://resources/mojo/url/mojom/origin.mojom-lite.js"></script>
   <script src="chrome://resources/mojo/url/mojom/url.mojom-lite.js"></script>
   <script src="ui/gfx/geometry/mojom/geometry.mojom-lite.js"></script>
   <script src="services/media_session/public/mojom/media_session.mojom-lite.js"></script>
@@ -83,6 +85,20 @@
 <body>
   <h1>Media Feeds</h1>
   <button id="copy-all-to-clipboard">Copy all to clipboard</button>
+  <table>
+    <thead>
+      <tr id="config-table-header">
+        <th>
+          Setting Name
+        </th>
+        <th>
+          Setting Value
+        </th>
+      </tr>
+    </thead>
+    <tbody id="config-table-body">
+    </tbody>
+  </table>
   <table id="feeds-table">
     <thead>
       <tr id="feed-table-header">
@@ -104,14 +120,17 @@
         <th sort-key="userStatus">
           User Status
         </th>
+        <th sort-key="userIdentifier">
+          User ID
+        </th>
         <th sort-key="lastFetchResult">
           Last Fetch Result
         </th>
         <th sort-key="fetchFailedCount">
           Fetch Failed Count
         </th>
-        <th sort-key="cacheExpiryTime">
-          Cache Expiry Time
+        <th sort-key="lastFetchTimeNotCacheHit">
+          Last Fetch Time (not cache hit)
         </th>
         <th sort-key="lastFetchItemCount">
           Last Fetch Item Count
@@ -122,8 +141,18 @@
         <th sort-key="lastFetchContentTypes">
           Last Fetch Content Types
         </th>
+        <th sort-key="lastDisplayTime">
+          Last Display Time
+        </th>
+        <th sort-key="resetReason">
+          Reset Reason
+        </th>
+        <th data-key="associatedOrigins">
+          Associated Origins
+        </th>
         <th data-key="logos">
           Logos
+        </th>
         <th data-key="actions">
           Actions
         </th>
@@ -195,6 +224,9 @@
           </th>
           <th sort-key="safeSearchResult">
             Safe Search Result
+          </th>
+          <th sort-key="duration">
+            Duration (secs)
           </th>
         </tr>
       </thead>

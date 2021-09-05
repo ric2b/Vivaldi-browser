@@ -227,6 +227,18 @@ void USER_MANAGER_EXPORT SetOfflineSigninLimit(const AccountId& account_id,
 base::TimeDelta USER_MANAGER_EXPORT
 GetOfflineSigninLimit(const AccountId& account_id);
 
+void USER_MANAGER_EXPORT SetIsEnterpriseManaged(const AccountId& account_id,
+                                                bool is_enterprise_managed);
+
+bool USER_MANAGER_EXPORT GetIsEnterpriseManaged(const AccountId& account_id);
+
+void USER_MANAGER_EXPORT
+SetUserLastInputMethod(const AccountId& account_id,
+                       const std::string& input_method);
+
+bool USER_MANAGER_EXPORT GetUserLastInputMethod(const AccountId& account_id,
+                                                std::string* input_method);
+
 // Removes all user preferences associated with |account_id|.
 // Not exported as code should not be calling this outside this component
 void RemovePrefs(const AccountId& account_id);

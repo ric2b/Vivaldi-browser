@@ -77,6 +77,7 @@ cast_test_group("cast_tests") {
     "//chromecast/crypto:cast_crypto_unittests",
     "//chromecast/device/bluetooth:cast_bluetooth_unittests",
     "//chromecast/media:cast_media_unittests",
+    "//chromecast/metrics:cast_metrics_unittest",
     "//chromecast/net:cast_net_unittests",
     "//chromecast/system/reboot:cast_reboot_unittests",
     "//content/test:content_unittests",
@@ -128,7 +129,11 @@ cast_test_group("cast_tests") {
       test_name = "cast_audio_backend_unittests"
 
       # --test-launcher-jobs=1 => so mixer service receiver can bind.
-      args = [ "--test-launcher-jobs=1" ]
+      args = [
+        "--test-launcher-jobs=1",
+        "--mixer-service-endpoint=/tmp/cast_audio_backend_unittest-mixer",
+        "--mixer-service-port=12855",
+      ]
     }
     filters += [ cast_audio_backend_unittests_filter ]
   }
@@ -165,7 +170,7 @@ cast_test_group("cast_tests") {
         "--no-sandbox",
         "--enable-local-file-accesses",
         "--test-launcher-jobs=1",
-        "--enable-hardware-overlays=\"\"",
+        "--enable-hardware-overlays=",
       ]
 
       gtest_excludes = []
@@ -407,7 +412,10 @@ cast_test_group_list("cast_test_lists") {
   test_groups = [ ":cast_tests" ]
 
   if (chromecast_branding != "public") {
-    test_groups += [ "//chromecast/internal:internal_cast_tests" ]
+    test_groups += [
+      "//chromecast/internal:internal_cast_tests",
+      "//chromecast/internal/iot_services:iot_tests",
+    ]
   }
 }
 
@@ -481,7 +489,7 @@ cast_executable("cast_shell") {
     ":cast_shell_lib",
     ":chromecast_locales_pak",
     "//chromecast/app",
-    "//content/public/app:both",
+    "//content/public/app",
   ]
 }
 

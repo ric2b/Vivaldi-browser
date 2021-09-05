@@ -21,7 +21,6 @@
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/prerender/prerender_contents.h"
 #include "chrome/browser/tab_contents/tab_util.h"
-#include "chrome/browser/ui/login/login_tab_helper.h"
 #include "chrome/common/chrome_features.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/password_manager/core/browser/browser_save_password_progress_logger.h"
@@ -89,16 +88,6 @@ LoginHandler::LoginModelData::LoginModelData(
   DCHECK(model);
 }
 
-LoginHandler::LoginHandler(const net::AuthChallengeInfo& auth_info,
-                           content::WebContents* web_contents,
-                           LoginAuthRequiredCallback auth_required_callback)
-    : WebContentsObserver(web_contents),
-      auth_info_(auth_info),
-      auth_required_callback_(std::move(auth_required_callback)),
-      prompt_started_(false) {
-  DCHECK(web_contents);
-}
-
 LoginHandler::~LoginHandler() {
   password_manager::HttpAuthManager* http_auth_manager =
       GetHttpAuthManagerForLogin();
@@ -113,49 +102,30 @@ LoginHandler::~LoginHandler() {
   }
 }
 
-void LoginHandler::Start(
+void LoginHandler::StartMainFrame(
     const content::GlobalRequestID& request_id,
-    bool is_main_frame,
+    const GURL& request_url,
+    scoped_refptr<net::HttpResponseHeaders> response_headers,
+    base::OnceCallback<void(const content::GlobalRequestID& request_id)>
+        extension_cancellation_callback) {
+  extension_main_frame_cancellation_callback_ =
+      std::move(extension_cancellation_callback);
+  StartInternal(request_id, true /* is_main_frame */, request_url,
+                response_headers);
+}
+
+void LoginHandler::StartSubresource(
+    const content::GlobalRequestID& request_id,
     const GURL& request_url,
     scoped_refptr<net::HttpResponseHeaders> response_headers) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK(web_contents());
-  DCHECK(!WasAuthHandled());
-
-  // Create the LoginTabHelper so that it can observe the interstitial
-  // committing and show the prompt when it commits.
-  LoginTabHelper::CreateForWebContents(web_contents());
-
-#if BUILDFLAG(ENABLE_EXTENSIONS)
-  // If the WebRequest API wants to take a shot at intercepting this, we can
-  // return immediately. |continuation| will eventually be invoked if the
-  // request isn't cancelled.
-    auto* api = extensions::BrowserContextKeyedAPIFactory<
-        extensions::WebRequestAPI>::Get(web_contents()->GetBrowserContext());
-    auto continuation =
-        base::BindOnce(&LoginHandler::MaybeSetUpLoginPromptBeforeCommit,
-                       weak_factory_.GetWeakPtr(), request_url, is_main_frame);
-    if (api->MaybeProxyAuthRequest(web_contents()->GetBrowserContext(),
-                                   auth_info_, std::move(response_headers),
-                                   request_id, is_main_frame,
-                                   std::move(continuation))) {
-      return;
-    }
-#endif
-
-    // To avoid reentrancy problems, this function must not call
-    // |auth_required_callback_| synchronously. Defer
-    // MaybeSetUpLoginPromptBeforeCommit by an event loop iteration.
-    base::PostTask(
-        FROM_HERE, {BrowserThread::UI},
-        base::BindOnce(&LoginHandler::MaybeSetUpLoginPromptBeforeCommit,
-                       weak_factory_.GetWeakPtr(), request_url, is_main_frame,
-                       base::nullopt, false /* should_cancel */));
+  StartInternal(request_id, false /* is_main_frame */, request_url,
+                response_headers);
 }
 
 void LoginHandler::ShowLoginPromptAfterCommit(const GURL& request_url) {
   // The request may have been handled while the WebRequest API was processing.
-  if (!web_contents() || !web_contents()->GetDelegate() || WasAuthHandled()) {
+  if (!web_contents() || !web_contents()->GetDelegate() ||
+      web_contents()->IsBeingDestroyed() || WasAuthHandled()) {
     CancelAuth();
     return;
   }
@@ -287,6 +257,53 @@ void LoginHandler::Observe(int type,
     DCHECK(type == chrome::NOTIFICATION_AUTH_CANCELLED);
     CancelAuth();
   }
+}
+
+LoginHandler::LoginHandler(const net::AuthChallengeInfo& auth_info,
+                           content::WebContents* web_contents,
+                           LoginAuthRequiredCallback auth_required_callback)
+    : WebContentsObserver(web_contents),
+      auth_info_(auth_info),
+      auth_required_callback_(std::move(auth_required_callback)),
+      prompt_started_(false) {
+  DCHECK(web_contents);
+}
+
+void LoginHandler::StartInternal(
+    const content::GlobalRequestID& request_id,
+    bool is_main_frame,
+    const GURL& request_url,
+    scoped_refptr<net::HttpResponseHeaders> response_headers) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK(web_contents());
+  DCHECK(!WasAuthHandled());
+
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  // If the WebRequest API wants to take a shot at intercepting this, we can
+  // return immediately. |continuation| will eventually be invoked if the
+  // request isn't cancelled.
+  auto* api =
+      extensions::BrowserContextKeyedAPIFactory<extensions::WebRequestAPI>::Get(
+          web_contents()->GetBrowserContext());
+  auto continuation = base::BindOnce(
+      &LoginHandler::MaybeSetUpLoginPromptBeforeCommit,
+      weak_factory_.GetWeakPtr(), request_url, request_id, is_main_frame);
+  if (api->MaybeProxyAuthRequest(web_contents()->GetBrowserContext(),
+                                 auth_info_, std::move(response_headers),
+                                 request_id, is_main_frame,
+                                 std::move(continuation))) {
+    return;
+  }
+#endif
+
+  // To avoid reentrancy problems, this function must not call
+  // |auth_required_callback_| synchronously. Defer
+  // MaybeSetUpLoginPromptBeforeCommit by an event loop iteration.
+  base::PostTask(
+      FROM_HERE, {BrowserThread::UI},
+      base::BindOnce(&LoginHandler::MaybeSetUpLoginPromptBeforeCommit,
+                     weak_factory_.GetWeakPtr(), request_url, request_id,
+                     is_main_frame, base::nullopt, false /* should_cancel */));
 }
 
 void LoginHandler::NotifyAuthNeeded() {
@@ -442,14 +459,19 @@ void LoginHandler::GetDialogStrings(const GURL& request_url,
 
 void LoginHandler::MaybeSetUpLoginPromptBeforeCommit(
     const GURL& request_url,
+    const content::GlobalRequestID& request_id,
     bool is_request_for_main_frame,
     const base::Optional<net::AuthCredentials>& credentials,
-    bool should_cancel) {
+    bool cancelled_by_extension) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   // The request may have been handled while the WebRequest API was processing.
   if (!web_contents() || !web_contents()->GetDelegate() || WasAuthHandled() ||
-      should_cancel) {
+      cancelled_by_extension) {
+    if (cancelled_by_extension && is_request_for_main_frame &&
+        !extension_main_frame_cancellation_callback_.is_null()) {
+      std::move(extension_main_frame_cancellation_callback_).Run(request_id);
+    }
     CancelAuth();
     return;
   }
@@ -564,21 +586,4 @@ void LoginHandler::BuildViewAndNotify(
   // WeakPtr before NotifyAuthNeeded.
   if (guard)
     NotifyAuthNeeded();
-}
-
-// ----------------------------------------------------------------------------
-// Public API
-std::unique_ptr<content::LoginDelegate> CreateLoginHandler(
-    const net::AuthChallengeInfo& auth_info,
-    content::WebContents* web_contents,
-    const content::GlobalRequestID& request_id,
-    bool is_request_for_main_frame,
-    const GURL& url,
-    scoped_refptr<net::HttpResponseHeaders> response_headers,
-    LoginAuthRequiredCallback auth_required_callback) {
-  std::unique_ptr<LoginHandler> handler = LoginHandler::Create(
-      auth_info, web_contents, std::move(auth_required_callback));
-  handler->Start(request_id, is_request_for_main_frame, url,
-                 std::move(response_headers));
-  return handler;
 }

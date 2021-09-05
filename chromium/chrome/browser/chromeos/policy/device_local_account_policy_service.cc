@@ -9,10 +9,10 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
-#include "base/logging.h"
 #include "base/optional.h"
 #include "base/path_service.h"
 #include "base/sequenced_task_runner.h"
@@ -79,12 +79,7 @@ std::unique_ptr<CloudPolicyClient> CreateClient(
 
   std::unique_ptr<CloudPolicyClient> client =
       std::make_unique<CloudPolicyClient>(
-          std::string() /* machine_id */, std::string() /* machine_model */,
-          std::string() /* brand_code */,
-          std::string() /* ethernet_mac_address */,
-          std::string() /* dock_mac_address */,
-          std::string() /* manufacture_date */, device_management_service,
-          system_url_loader_factory, nullptr /* signing_service */,
+          device_management_service, system_url_loader_factory,
           base::BindRepeating(&GetDeviceDMToken, device_settings_service));
   std::vector<std::string> user_affiliation_ids(
       policy_data->user_affiliation_ids().begin(),
@@ -436,8 +431,8 @@ void DeviceLocalAccountPolicyService::UpdateAccountListIfNonePending() {
 void DeviceLocalAccountPolicyService::UpdateAccountList() {
   chromeos::CrosSettingsProvider::TrustedStatus status =
       cros_settings_->PrepareTrustedValues(
-          base::Bind(&DeviceLocalAccountPolicyService::UpdateAccountList,
-                     weak_factory_.GetWeakPtr()));
+          base::BindOnce(&DeviceLocalAccountPolicyService::UpdateAccountList,
+                         weak_factory_.GetWeakPtr()));
   switch (status) {
     case chromeos::CrosSettingsProvider::TRUSTED:
       waiting_for_cros_settings_ = false;
@@ -564,10 +559,9 @@ void DeviceLocalAccountPolicyService::DeleteBrokers(PolicyBrokerMap* map) {
     if (extension_loader->IsCacheRunning()) {
       DCHECK(!IsExtensionCacheDirectoryBusy(it->second->account_id()));
       busy_extension_cache_directories_.insert(it->second->account_id());
-      extension_loader->StopCache(base::Bind(
+      extension_loader->StopCache(base::BindOnce(
           &DeviceLocalAccountPolicyService::OnObsoleteExtensionCacheShutdown,
-          weak_factory_.GetWeakPtr(),
-          it->second->account_id()));
+          weak_factory_.GetWeakPtr(), it->second->account_id()));
     }
 
     delete it->second;

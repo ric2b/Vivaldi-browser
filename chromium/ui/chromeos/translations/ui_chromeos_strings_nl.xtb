@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">Duits toetsenbord</translation>
 <translation id="1972984168337863910">Feedbackvensters voor bestanden uitvouwen</translation>
 <translation id="1984603991036629094">Armeens fonetisch toetsenbord</translation>
+<translation id="1995337122023280937">Naar bestandslocatie</translation>
 <translation id="2001796770603320721">Beheren in Drive</translation>
 <translation id="2009067268969781306">Tijdens het formatteren van een schijf worden alle opgeslagen gegevens verwijderd. Deze actie kan niet ongedaan worden gemaakt.</translation>
 <translation id="2028997212275086731">RAR-archief</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">Google Drive kan niet worden bereikt. <ph name="BEGIN_LINK" />Log uit<ph name="END_LINK" /> en log weer in.</translation>
 <translation id="2649120831653069427">Regenboogvis</translation>
 <translation id="2661146741306740526">16x9</translation>
+<translation id="2664412712123763093">Bestandslocatie</translation>
 <translation id="2672394958563893062">Er is een fout opgetreden. Klik om opnieuw te starten vanaf het begin.</translation>
 <translation id="2676946222714718093">Wordt afgespeeld op</translation>
 <translation id="2735698359135166290">Standaardtoetsenbord voor Roemeens</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" /> fouten.</translation>
 <translation id="3519867315646775981">Transliteratie (shalom ← שלום)</translation>
 <translation id="3522708245912499433">Portugees</translation>
+<translation id="3524311639100184459">Let op: Deze bestanden zijn tijdelijk en kunnen automatisch worden verwijderd om schijfruimte vrij te maken.  <ph name="BEGIN_LINK" />Meer informatie<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">Map</translation>
 <translation id="3549797760399244642">Ga naar drive.google.com...</translation>
 <translation id="357479282490346887">Litouws</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">Kiwi</translation>
 <translation id="3966388904776714213">Audiospeler</translation>
 <translation id="4002066346123236978">Titel</translation>
+<translation id="4065397611279318371">Als je bestanden wilt openen met <ph name="APP_NAME" />-apps, moet je ze eerst verplaatsen naar de map <ph name="SHARED_DIRECTORY_LABEL" />.</translation>
 <translation id="4070370845051020638">Invoermethode voor Kantonees</translation>
 <translation id="4072248638558688893">Tamil toetsenbord (fonetisch)</translation>
 <translation id="4124935795427217608">Eenhoorn</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">Automatisch bewerken</translation>
 <translation id="4881695831933465202">Openen</translation>
 <translation id="4886021172213954916">Tamil toetsenbord (Typewriter)</translation>
+<translation id="4892969127351273348">Kan niet openen met <ph name="APP_NAME" /></translation>
 <translation id="4905417359854579806">Klaar om back-up van <ph name="FILE_COUNT" /> te maken</translation>
 <translation id="4924638091161556692">Bewerkt</translation>
 <translation id="4935975195727477204">Bloem</translation>
@@ -501,6 +506,7 @@
 <translation id="6806699711453372963">Delen met Linux beheren</translation>
 <translation id="6808193438228982088">Vos</translation>
 <translation id="6820687829547641339">Tot gzip gecomprimeerd tar-archief</translation>
+<translation id="6823166707458800069">Er wordt automatisch online een back-up gemaakt van alle bestanden die in deze map zijn opgeslagen.</translation>
 <translation id="6825883775269213504">Russisch</translation>
 <translation id="6827236167376090743">Deze video wordt eindeloos afgespeeld.</translation>
 <translation id="6847101934483209767"><ph name="ENTRY_NAME" /> is uit selectie verwijderd.</translation>
@@ -557,6 +563,7 @@
 <translation id="7417705661718309329">Google-kaart</translation>
 <translation id="7419631653042041064">Catalaans toetsenbord</translation>
 <translation id="7434823369735508263">Brits Dvorak-toetsenbord</translation>
+<translation id="7447678886297481665">Bestanden in deze map zijn alleen-lezen. Sommige activiteiten worden niet ondersteund.</translation>
 <translation id="7460898608667578234">Oekraïens</translation>
 <translation id="7474889694310679759">Canadees-Engels toetsenbord</translation>
 <translation id="7489215562877293245"><ph name="FILE_COUNT" /> gevonden

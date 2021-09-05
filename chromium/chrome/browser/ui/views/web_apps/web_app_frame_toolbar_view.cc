@@ -41,7 +41,6 @@
 #include "chrome/browser/ui/views/web_apps/web_app_origin_text.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
-#include "chrome/common/chrome_features.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
 #include "components/content_settings/core/common/features.h"
 #include "components/vector_icons/vector_icons.h"
@@ -75,10 +74,6 @@
 #include "ui/views/widget/widget_observer.h"
 #include "ui/views/window/custom_frame_view.h"
 #include "ui/views/window/hit_test_utils.h"
-
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/ui/views/frame/terminal_system_app_menu_button_chromeos.h"
-#endif
 
 namespace {
 
@@ -526,6 +521,7 @@ class WebAppFrameToolbarView::ToolbarButtonContainer
   }
 
   // ContentSettingImageView::Delegate:
+  bool ShouldHideContentSettingImage() override { return false; }
   content::WebContents* GetContentSettingWebContents() override {
     return browser_view_->GetActiveWebContents();
   }
@@ -682,19 +678,8 @@ WebAppFrameToolbarView::ToolbarButtonContainer::ToolbarButtonContainer(
   }
 
   if (app_controller->HasTitlebarMenuButton()) {
-// TODO(crbug.com/998900): Create AppControllerUi class to contain this logic.
-#if defined(OS_CHROMEOS)
-    if (app_controller->UseTitlebarTerminalSystemAppMenu()) {
-      web_app_menu_button_ = AddChildView(
-          std::make_unique<TerminalSystemAppMenuButton>(browser_view_));
-    } else {
-      web_app_menu_button_ =
-          AddChildView(std::make_unique<WebAppMenuButton>(browser_view_));
-    }
-#else
     web_app_menu_button_ =
         AddChildView(std::make_unique<WebAppMenuButton>(browser_view_));
-#endif
     web_app_menu_button_->SetID(VIEW_ID_APP_MENU);
     const bool is_browser_focus_mode =
         browser_view_->browser()->is_focus_mode();
@@ -751,8 +736,7 @@ WebAppFrameToolbarView::WebAppFrameToolbarView(views::Widget* widget,
 
   const auto* app_controller = browser_view_->browser()->app_controller();
 
-  if (base::FeatureList::IsEnabled(features::kDesktopMinimalUI) &&
-      app_controller->HasMinimalUiButtons()) {
+  if (app_controller->HasMinimalUiButtons()) {
     left_container_ = AddChildView(
         std::make_unique<NavigationButtonContainer>(browser_view_));
     left_container_->SetProperty(

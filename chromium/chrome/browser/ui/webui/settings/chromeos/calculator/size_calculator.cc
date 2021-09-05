@@ -10,14 +10,8 @@
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/values.h"
-#include "chrome/browser/browsing_data/browsing_data_appcache_helper.h"
-#include "chrome/browser/browsing_data/browsing_data_cache_storage_helper.h"
-#include "chrome/browser/browsing_data/browsing_data_cookie_helper.h"
-#include "chrome/browser/browsing_data/browsing_data_database_helper.h"
-#include "chrome/browser/browsing_data/browsing_data_file_system_helper.h"
+#include "chrome/browser/browsing_data/browsing_data_file_system_util.h"
 #include "chrome/browser/browsing_data/browsing_data_flash_lso_helper.h"
-#include "chrome/browser/browsing_data/browsing_data_indexed_db_helper.h"
-#include "chrome/browser/browsing_data/browsing_data_service_worker_helper.h"
 #include "chrome/browser/chromeos/crostini/crostini_features.h"
 #include "chrome/browser/chromeos/file_manager/path_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -26,8 +20,15 @@
 #include "components/arc/arc_service_manager.h"
 #include "components/arc/session/arc_bridge_service.h"
 #include "components/arc/storage_manager/arc_storage_manager.h"
+#include "components/browsing_data/content/appcache_helper.h"
+#include "components/browsing_data/content/cache_storage_helper.h"
 #include "components/browsing_data/content/conditional_cache_counting_helper.h"
+#include "components/browsing_data/content/cookie_helper.h"
+#include "components/browsing_data/content/database_helper.h"
+#include "components/browsing_data/content/file_system_helper.h"
+#include "components/browsing_data/content/indexed_db_helper.h"
 #include "components/browsing_data/content/local_storage_helper.h"
+#include "components/browsing_data/content/service_worker_helper.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/storage_partition.h"
 
@@ -91,11 +92,11 @@ void SizeStatCalculator::PerformCalculation() {
   int64_t* available_size = new int64_t(0);
   base::ThreadPool::PostTaskAndReply(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::Bind(&GetSizeStatBlocking, my_files_path, total_size,
-                 available_size),
-      base::Bind(&SizeStatCalculator::OnGetSizeStat,
-                 weak_ptr_factory_.GetWeakPtr(), base::Owned(total_size),
-                 base::Owned(available_size)));
+      base::BindOnce(&GetSizeStatBlocking, my_files_path, total_size,
+                     available_size),
+      base::BindOnce(&SizeStatCalculator::OnGetSizeStat,
+                     weak_ptr_factory_.GetWeakPtr(), base::Owned(total_size),
+                     base::Owned(available_size)));
 }
 
 void SizeStatCalculator::OnGetSizeStat(int64_t* total_bytes,
@@ -170,22 +171,25 @@ void BrowsingDataSizeCalculator::PerformCalculation() {
         content::BrowserContext::GetDefaultStoragePartition(profile_);
     site_data_size_collector_ = std::make_unique<SiteDataSizeCollector>(
         storage_partition->GetPath(),
-        new BrowsingDataCookieHelper(storage_partition),
-        new BrowsingDataDatabaseHelper(profile_),
+        new browsing_data::CookieHelper(storage_partition,
+                                        base::NullCallback()),
+        new browsing_data::DatabaseHelper(profile_),
         new browsing_data::LocalStorageHelper(profile_),
-        new BrowsingDataAppCacheHelper(storage_partition->GetAppCacheService()),
-        new BrowsingDataIndexedDBHelper(storage_partition),
-        BrowsingDataFileSystemHelper::Create(
-            storage_partition->GetFileSystemContext()),
-        new BrowsingDataServiceWorkerHelper(
+        new browsing_data::AppCacheHelper(
+            storage_partition->GetAppCacheService()),
+        new browsing_data::IndexedDBHelper(storage_partition),
+        browsing_data::FileSystemHelper::Create(
+            storage_partition->GetFileSystemContext(),
+            browsing_data_file_system_util::GetAdditionalFileSystemTypes()),
+        new browsing_data::ServiceWorkerHelper(
             storage_partition->GetServiceWorkerContext()),
-        new BrowsingDataCacheStorageHelper(
+        new browsing_data::CacheStorageHelper(
             storage_partition->GetCacheStorageContext()),
         BrowsingDataFlashLSOHelper::Create(profile_));
   }
   site_data_size_collector_->Fetch(
-      base::Bind(&BrowsingDataSizeCalculator::OnGetBrowsingDataSize,
-                 weak_ptr_factory_.GetWeakPtr(), /*is_site_data=*/true));
+      base::BindOnce(&BrowsingDataSizeCalculator::OnGetBrowsingDataSize,
+                     weak_ptr_factory_.GetWeakPtr(), /*is_site_data=*/true));
 }
 
 void BrowsingDataSizeCalculator::OnGetCacheSize(bool is_upper_limit,

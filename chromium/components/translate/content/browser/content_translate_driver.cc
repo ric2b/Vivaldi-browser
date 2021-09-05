@@ -9,9 +9,10 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/check.h"
 #include "base/feature_list.h"
 #include "base/location.h"
-#include "base/logging.h"
+#include "base/notreached.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/supports_user_data.h"
@@ -258,11 +259,15 @@ void ContentTranslateDriver::DidFinishNavigation(
       (google_util::IsGoogleDomainUrl(initiator_origin->GetURL(),
                                       google_util::DISALLOW_SUBDOMAIN,
                                       google_util::ALLOW_NON_STANDARD_PORTS) ||
-       base::FeatureList::IsEnabled(kAutoHrefTranslateAllOrigins));
+       IsAutoHrefTranslateAllOriginsEnabled());
 
   translate_manager_->GetLanguageState().DidNavigate(
       navigation_handle->IsSameDocument(), navigation_handle->IsInMainFrame(),
       reload, navigation_handle->GetHrefTranslate(), navigation_from_google);
+}
+
+bool ContentTranslateDriver::IsAutoHrefTranslateAllOriginsEnabled() const {
+  return base::FeatureList::IsEnabled(kAutoHrefTranslateAllOrigins);
 }
 
 void ContentTranslateDriver::OnPageAway(int page_seq_no) {

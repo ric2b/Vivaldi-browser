@@ -5,6 +5,7 @@
 <translation id="1011903154582639569">ایک کلید تلاش کریں، پھر ٹائپ کرنے کیلئے لفٹ کریں</translation>
 <translation id="1012173283529841972">فہرست آئٹم</translation>
 <translation id="1013742170491673792">srched</translation>
+<translation id="1014370462248694370">دو انگلیوں سے دائیں طرف سوائپ کریں</translation>
 <translation id="1022586497894531524">‏کیا آپ ChromeVox Next کے صوتی تاثرات کو پہلی بار استعمال کر رہے ہیں؟ یہ فوری ٹیوٹوریل ChromeVox Next کی شروعات کرنے کے لوازمات کی وضاحت کرتا ہے۔</translation>
 <translation id="1025074108959230262">اسٹکی وضع کو غیر فعال کر دیا گیا</translation>
 <translation id="1031961866430398710">پھر</translation>
@@ -18,6 +19,7 @@
 <translation id="1088402100970133699">کوئی پچھلا فہرست آئٹم نہیں ہے</translation>
 <translation id="1114836634143403764">تجویز</translation>
 <translation id="1120743664840974483">{"ا": "اونٹ"، "ب": "بکری"، "پ": "پنکھا"، "ت": "تختی"، "ٹ": "ٹماٹر"، "ث": "ثمر"، "ج": "جہاز"، "چ": "چابی"، "ح": "حقہ"، "خ": "خرگوش"، "د": "دوات"، "ڈ": "ڈھول"، "ذ": "ذخیرہ"، "ر": "ریل"، "ڑ": "ڑے"، "ز": "زاویہ"، "ژ": "ژالہ"، "س": "سانپ"، "ش": "شیر"، "ص": "صندوق"، "ض": "ضعیف"، "ط": "طوطا"، "ظ": "ظروف"، "ع": "عینک"، "غ": "غبارہ"، "ف": "فوارہ"، "ق": "قینچی"، "ک": "کتاب"، "گ": "گائے"، "ل": "لٹو"، "م": "مور"، "ن": "ناک"، "و": "وزن"، "ہ": "ہما"، "ھ": "ھاتھی"، "ی": "یکہ"، "ے": "یاقوت"}</translation>
+<translation id="1120938014254001895">دو انگلیوں سے اوپر کی طرف سوائپ کریں</translation>
 <translation id="1126928665165112660">ترچھا نہیں ہے</translation>
 <translation id="113582498867142724"><ph name="NUM" /> آئٹمز کے ساتھ <ph name="TAG" /> مجموعہ</translation>
 <translation id="1161762950103988776">جمپ</translation>
@@ -49,6 +51,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="1291286136605998134">ٹوگل بٹن</translation>
 <translation id="1299774449519412690">ہلکا آسمانی نیلا</translation>
 <translation id="1303806948938513162">‏ChromeVox مینوز میں داخل ہونے کے لیے 4 انگلیوں سے تھپتھپائیں</translation>
+<translation id="1325363694295259631"><ph name="NAME" />، مینو آئٹم ریڈیو بٹن کو غیر منتخب کیا گیا ہے</translation>
 <translation id="1325946044405407859">زردی مائل بھورا</translation>
 <translation id="1331702245475014624"><ph name="INDEX" /> از <ph name="TOTAL" /></translation>
 <translation id="1334095593597963605">حرف اور لفظ کی ایکو</translation>
@@ -69,6 +72,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="146450394670219700">گرافکس آبجیکٹ</translation>
 <translation id="1480046233931937785">کریڈٹس</translation>
 <translation id="1487494366197411587">‏Chromebook پر، تلاش کریں کلید بالکل بائیں Shift کلید کے اوپر ہوتی ہے۔</translation>
+<translation id="1498498210836053409">ٹیکسٹ میں ترمیم کرتے وقت چپکنے والی وضع کو آف کریں (اسمارٹ چپکنے والی وضع)</translation>
 <translation id="1499041187027566160">والیوم بڑھائیں</translation>
 <translation id="1502086903961450562">پچھلی گرافک</translation>
 <translation id="1506187449813838456">پچ بڑھائیں</translation>
@@ -104,6 +108,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="1727806147743597030">ftr</translation>
 <translation id="174268867904053074">اگلا گرافک</translation>
 <translation id="1756785467854861272">گہرا میجنٹا</translation>
+<translation id="1765245556747822181">ایک انگلی سے اوپر کی طرف سوائپ کریں</translation>
 <translation id="1771761307086386028">دائیں اسکرول کریں</translation>
 <translation id="1781173782405573156">آگے جانے کی کلید</translation>
 <translation id="1787176709638001873">پاس ورڈ میں ترمیم کا متن</translation>
@@ -132,6 +137,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="2010555995361223825">‏ChromeVox مینوز</translation>
 <translation id="203030071582665758">سطح 4 کی کوئی پچھلی ہیڈنگ نہیں ہے</translation>
 <translation id="2045055672832940894">کوئی پچھلا کنٹرول نہیں ہے</translation>
+<translation id="2045606329038304310">فارم فیلڈ کا کنٹرول</translation>
 <translation id="2063539687800151747">کتبہ</translation>
 <translation id="2086961585857038472">اگلا لفظ</translation>
 <translation id="2087981446621639008">dscrplst dtl</translation>
@@ -158,6 +164,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="225732394367814946">اسپیچ کا ریٹ بڑھائیں</translation>
 <translation id="2267538686624070261">ہجے کی غلطی کو نظر انداز کرنا</translation>
 <translation id="2267945578749931355">اگلا حرف</translation>
+<translation id="2278490101488436824">تین انگلیوں سے بائیں طرف سوائپ کریں</translation>
 <translation id="2305942658236913680">کوئی اگلی سرخی نہیں ہے</translation>
 <translation id="2311237334957139798">گرینولیریٹی میں گزشتہ پر جائیں</translation>
 <translation id="2314393392395134769">سب اسکرپٹ نہیں ہے</translation>
@@ -166,6 +173,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="2347456970887948350">ایک لنک</translation>
 <translation id="2381733276052567791">ٹوگل کر کے اسپیچ کو آن یا آف کریں</translation>
 <translation id="2390264819538553347">آگے جانے کیلئے، انٹر کو دبائیں؛ واپس جانے کیلئے، بیک اسپیس کو دبائیں۔</translation>
+<translation id="2398579267367951220">‏صفحے میں تلاش کرنے کے لئے ٹائپ کریں۔ نتیجے تک جانے کے لیے enter دبائیں، نتائج براؤز کرنے کے لئے اوپر یا نیچے تیر والے بٹن دبائیں، اپنی تلاش کو تبدیل کرنے کے لئے ٹائپنگ جاری رکھیں، یا منسوخ کرنے کے لئے escape دبائیں۔</translation>
 <translation id="240709722712693803">نیلا وائلیٹ</translation>
 <translation id="2416512023405990736">ایک غیر نشان زد چیک باکس</translation>
 <translation id="2417569100218200841">مواد کی معلومات</translation>
@@ -230,12 +238,14 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="2867808975387772810">کتابیات</translation>
 <translation id="2873259058405069099">ٹیبل کے شروع میں جائیں</translation>
 <translation id="287383510823843610">گہرا نارنجی</translation>
+<translation id="2879867157561757640">تین انگلیوں سے نیچے کی طرف سوائپ کریں</translation>
 <translation id="288178314850623291">‏مخصوص اقسام کے عناصر پر جانے کیلئے جمپ کمانڈز استعمال کریں۔ سرخیوں کے درمیان تیزی سے آگے منتقل کرنے کیلئے، تلاش کریں + H دبائیں یا تیزی سے پیچھے جانے کیلئے، تلاش کریں + Shift + H کو دبائیں۔</translation>
 <translation id="2885764457467528513">{COUNT,plural, =1{منٹ}other{منٹ}}</translation>
 <translation id="2894654529758326923">معلومات</translation>
 <translation id="2899328121302785497">{COUNT,plural, =1{بایاں درمیانی قوسین}other{# بائیں درمیانی قوسین}}</translation>
 <translation id="2909584066358367921">کوئی اگلا بٹن نہیں ہے</translation>
 <translation id="2911433807131383493">‏ChromeVox ٹیوٹوریل کھولیں</translation>
+<translation id="2912405967290226587">تین انگلیوں سے دائیں طرف سوائپ کریں</translation>
 <translation id="2937799153569150791">اگلی سطح 3 کی کوئی ہیڈنگ نہیں ہے</translation>
 <translation id="2942710183375260152">گہرا سلیٹی نیلا</translation>
 <translation id="2943596527105977722">گہرا گولڈن راڈ</translation>
@@ -243,6 +253,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="2968634799764242930">سمندری سبز</translation>
 <translation id="296951647852255825">{COUNT,plural, =1{ٹیب}other{# ٹیبز}}</translation>
 <translation id="2972205263822847197">ٹول ٹپ</translation>
+<translation id="297825089465017871">دو انگلیوں سے بائیں طرف سوائپ کریں</translation>
 <translation id="2998131015536248178">پچھلا حرف</translation>
 <translation id="2999559350546931576">پچ کم کریں</translation>
 <translation id="3014130421870723208">@ والے 8 ڈاٹ</translation>
@@ -252,6 +263,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="3046838483509668188">‏ChromeVox اختیارات</translation>
 <translation id="3060756054951570867"><ph name="TITLE" /> مینو کھولا گیا</translation>
 <translation id="3060880924447482063">آئٹم کے لحاظ سے حرکت کرنے کے لیے بائیں یا دائیں سوائپ کریں</translation>
+<translation id="3070245424257836917">تین انگلیوں سے اوپر کی طرف سوائپ کریں</translation>
 <translation id="3078345202707391975">اگلی سطح 2 کی سرخی</translation>
 <translation id="3078740164268491126">ٹیبل</translation>
 <translation id="3082249673510793544">پیچھے سکرول کریں</translation>
@@ -433,6 +445,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="4391478986194775161">cntntinfo</translation>
 <translation id="4402014469255336455">گہرا آسمانی نیلا</translation>
 <translation id="4432457053224379116">انڈین سرخ</translation>
+<translation id="4437615272777527928">مینوز میں تلاش کے لیے ٹائپ کریں۔ ایک نتیجے سے دوسرے نتیجے پر جانے کیلئے اوپر اور نیچے کے تیروں کا استعمال کریں۔ ٹیکسٹ کیرٹ کو ایڈجسٹ اور مینوز کے درمیان کرسر کو حرکت دینے کے لیے دائیں اور بائیں والے تیروں کا استعمال کریں۔</translation>
 <translation id="4457472090507035117">موجودہ آواز منتخب کریں:</translation>
 <translation id="4476183483923481720">نئی لکیر</translation>
 <translation id="4479068155583208887">آگ کی اینٹ نما</translation>
@@ -457,6 +470,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="4677535310137735442">اگلے کالم پر جائیں</translation>
 <translation id="4688873778442829762">grd</translation>
 <translation id="4693675773662933727">پچھلا نمایاں مقام</translation>
+<translation id="4710166929009737753">ایک انگلی سے دائیں طرف سوائپ کریں</translation>
 <translation id="4712898966495541134">انتخاب کا اختتام سیٹ کریں</translation>
 <translation id="4740661827607246557">مدد سے متعلق کمانڈز</translation>
 <translation id="4755857887974653209">‏ChromeVox کو غیر فعال کریں</translation>
@@ -501,6 +515,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="4994420463726586413">بیٹری کا موجودہ اسٹیٹس پڑھیں</translation>
 <translation id="4997282455736854877"><ph name="NAME" />، ریڈیو بٹن منتخب کر لیا گیا</translation>
 <translation id="5011664330025416377">‏فعال کرنے کیلئے Search+Space دبائیں</translation>
+<translation id="5012724933919010465"><ph name="NAME" />،مینو آئٹم ریڈیو بٹن منتخب کیا گیا ہے</translation>
 <translation id="5020651427400641814">اسپیچ لاگنگ کو فعال کریں</translation>
 <translation id="5041394372352067729">بریل ڈسپلے کو صفحہ کے اوپر لے جائیں</translation>
 <translation id="5042770794184672516">اسپیچ کا والیوم بڑھائیں</translation>
@@ -707,9 +722,11 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="6793101435925451627">lstbx</translation>
 <translation id="6815255864998354418">لیمن شفون</translation>
 <translation id="6816066673340002913">ہلکا گولڈن راڈ</translation>
+<translation id="6826226459053491773">دو انگلیوں سے نیچے کی طرف سوائپ کریں</translation>
 <translation id="6833103209700200188">فوٹر</translation>
 <translation id="6837853484260746864">ایک آواز کا انتخاب کریں:</translation>
 <translation id="6858047746862060282">تمہید</translation>
+<translation id="6859876496651143278">ایک انگلی سے بائیں طرف سوائپ کریں</translation>
 <translation id="6865519907510167493">غلط ہجے</translation>
 <translation id="6894148351896207544">موجودہ وقت اور تاریخ بولیں</translation>
 <translation id="6896758677409633944">کاپی کریں</translation>
@@ -906,6 +923,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="8428603554127842284">سطح <ph name="DEPTH" /></translation>
 <translation id="8430049249787218991">mnubr</translation>
 <translation id="8446884382197647889">مزید جانیں</translation>
+<translation id="8448196839635577295">‏کوئی موجودہ ChromeVox فوکس نہیں۔ آئٹمز تلاش کرنے کے لیے دریافت کریں پر ٹچ کریں۔</translation>
 <translation id="8455868257606149352">زیادہ سے زیادہ <ph name="X" /></translation>
 <translation id="84575901236241018">رسائی کلید ہے، <ph name="KEY" /></translation>
 <translation id="8463645336674919227">گرامر کی غلطی کو چھوڑنا</translation>
@@ -991,6 +1009,7 @@ Chrome براؤزر مینو کھولنے کیلئے، Alt+F دبائیں۔</tra
 <translation id="923331726185079994">‏ChromeVox کو اپ ڈیٹ کر دیا گیا</translation>
 <translation id="93384979447910801">گہرا سمندری سبز</translation>
 <translation id="948171205378458592">اسپیچ کا ریٹ گھٹائیں</translation>
+<translation id="958854023026327378">ایک انگلی سے نیچے کی طرف سوائپ کریں</translation>
 <translation id="962913030769097253">سطح 1 کی اگلی سرخی</translation>
 <translation id="966588271015727539">بلوٹوتھ بریل ڈسپلے منتخب کریں</translation>
 <translation id="973955474346881951">اسٹیکی وضع فعال/غیر فعال کریں</translation>

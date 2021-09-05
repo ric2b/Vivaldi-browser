@@ -19,9 +19,10 @@ import {
   Facing,
   Resolution,      // eslint-disable-line no-unused-vars
   ResolutionList,  // eslint-disable-line no-unused-vars
+  ViewName,
 } from '../type.js';
 import * as util from '../util.js';
-import {View, ViewName} from './view.js';
+import {View} from './view.js';
 
 /* eslint-disable no-unused-vars */
 
@@ -110,6 +111,10 @@ export class MasterSettings extends BaseSettings {
    * @private
    */
   openFeedback() {
+    // Prevent setting view overlapping preview when sending app window feedback
+    // screenshot b/155938542.
+    this.leave();
+
     const data = {
       'categoryTag': 'chromeos-camera-app',
       'requestFeedback': true,

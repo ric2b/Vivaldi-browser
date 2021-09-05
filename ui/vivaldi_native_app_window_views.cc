@@ -16,6 +16,7 @@
 #include "chrome/browser/app_mode/app_mode_utils.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/lifetime/browser_shutdown.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window_state.h"
@@ -41,6 +42,7 @@
 #include "extensions/common/draggable_region.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "third_party/skia/include/core/SkRegion.h"
+#include "ui/devtools/devtools_connector.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/gfx/image/image_family.h"
 #include "ui/views/controls/webview/webview.h"
@@ -242,7 +244,8 @@ void VivaldiNativeAppWindowViews::InitializeDefaultWindow(
   for (std::map<ui::Accelerator, int>::const_iterator iter =
        accelerator_table.begin();
        iter != accelerator_table.end(); ++iter) {
-    if (is_kiosk_app_mode && !chrome::IsCommandAllowedInAppMode(iter->second))
+    if (is_kiosk_app_mode &&
+        !chrome::IsCommandAllowedInAppMode(iter->second, false))
       continue;
 
     focus_manager->RegisterAccelerator(
@@ -684,7 +687,8 @@ void VivaldiNativeAppWindowViews::HandleKeyboardCode(ui::KeyboardCode code) {
       vivaldi::ui_tools::GetActiveWebViewGuest(this);
   if (current_webviewguest) {
     content::NativeWebKeyboardEvent synth_event(
-        blink::WebInputEvent::kRawKeyDown, blink::WebInputEvent::kNoModifiers,
+        blink::WebInputEvent::Type::kRawKeyDown,
+        blink::WebInputEvent::kNoModifiers,
         ui::EventTimeForNow());
     synth_event.windows_key_code = code;
     current_webviewguest->web_contents()->GetDelegate()
@@ -712,7 +716,7 @@ void VivaldiNativeAppWindowViews::OnWidgetActivationChanged(
   window_->OnNativeWindowChanged();
   window_->OnNativeWindowActivationChanged(active);
   Browser* browser = window_->browser();
-  if (!active) {
+  if (!active && browser) {
     BrowserList::NotifyBrowserNoLongerActive(browser);
   }
 }

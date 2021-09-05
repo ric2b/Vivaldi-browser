@@ -4,6 +4,11 @@
 
 #include "chrome/browser/ui/views/select_file_dialog_extension.h"
 
+#include <map>
+#include <memory>
+#include <string>
+#include <utility>
+
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/location.h"
@@ -59,6 +64,11 @@ const int kFileManagerWidth = 972;  // pixels
 const int kFileManagerHeight = 640;  // pixels
 const int kFileManagerMinimumWidth = 640;  // pixels
 const int kFileManagerMinimumHeight = 240;  // pixels
+
+// Specific color for File Picker (Files app).
+// TODO(crbug/1072904): Get these colors from ui::NativeTheme.
+constexpr SkColor kFilePickerActiveTitleColor = gfx::kGoogleGrey200;
+constexpr SkColor kFilePickerInactiveTitleColor = gfx::kGoogleGrey200;
 
 // Holds references to file manager dialogs that have callbacks pending
 // to their listeners.
@@ -400,15 +410,16 @@ void SelectFileDialogExtension::SelectFileWithFileManagerParams(
           default_path.BaseName().value(), file_types, file_type_index,
           default_extension, show_android_picker_apps);
 
-  ExtensionDialog::InitParams dialog_params(kFileManagerWidth,
-                                            kFileManagerHeight);
+  ExtensionDialog::InitParams dialog_params(
+      {kFileManagerWidth, kFileManagerHeight});
   dialog_params.is_modal = (owner_window != nullptr);
-  dialog_params.min_width = kFileManagerMinimumWidth;
-  dialog_params.min_height = kFileManagerMinimumHeight;
+  dialog_params.min_size = {kFileManagerMinimumWidth,
+                            kFileManagerMinimumHeight};
   dialog_params.title = file_manager::util::GetSelectFileDialogTitle(type);
 #if defined(OS_CHROMEOS)
   if (base::FeatureList::IsEnabled(chromeos::features::kFilesNG)) {
-    dialog_params.title_color = gfx::kGoogleGrey300;
+    dialog_params.title_color = kFilePickerActiveTitleColor;
+    dialog_params.title_inactive_color = kFilePickerInactiveTitleColor;
   }
 #endif
 

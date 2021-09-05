@@ -30,8 +30,10 @@ namespace browser_switcher {
 namespace {
 
 // How long to wait after |BrowserSwitcherService| is created before initiating
-// the sitelist fetch.
-const base::TimeDelta kFetchSitelistDelay = base::TimeDelta::FromSeconds(60);
+// the sitelist fetch. Non-zero values are used for testing.
+//
+// TODO(nicolaso): get rid of this.
+const base::TimeDelta kFetchSitelistDelay = base::TimeDelta();
 
 // How long to wait after a fetch to re-fetch the sitelist to keep it fresh.
 const base::TimeDelta kRefreshSitelistDelay = base::TimeDelta::FromMinutes(30);
@@ -141,6 +143,7 @@ void XmlDownloader::FetchXml() {
     request->url = source.url;
     request->load_flags = net::LOAD_BYPASS_CACHE | net::LOAD_DISABLE_CACHE;
     request->credentials_mode = network::mojom::CredentialsMode::kInclude;
+    request->priority = net::IDLE;
     source.url_loader = network::SimpleURLLoader::Create(std::move(request),
                                                          traffic_annotation);
     source.url_loader->SetRetryOptions(
@@ -239,6 +242,11 @@ void BrowserSwitcherService::Init() {
   StartDownload(fetch_delay());
 }
 
+void BrowserSwitcherService::OnAllRulesetsLoadedForTesting(
+    base::OnceCallback<void()> cb) {
+  all_rulesets_loaded_callback_for_testing_ = std::move(cb);
+}
+
 void BrowserSwitcherService::StartDownload(base::TimeDelta delay) {
   // This destroys the previous XmlDownloader, which cancels any scheduled
   // refresh operations.
@@ -319,6 +327,8 @@ void BrowserSwitcherService::LoadRulesFromPrefs() {
 
 void BrowserSwitcherService::OnAllRulesetsParsed() {
   callback_list_.Notify(this);
+  if (all_rulesets_loaded_callback_for_testing_)
+    std::move(all_rulesets_loaded_callback_for_testing_).Run();
 }
 
 std::unique_ptr<BrowserSwitcherService::CallbackSubscription>

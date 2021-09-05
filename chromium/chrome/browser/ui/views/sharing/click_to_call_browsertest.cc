@@ -10,7 +10,6 @@
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/test/bind_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
@@ -36,6 +35,7 @@
 #include "components/sync/driver/profile_sync_service.h"
 #include "components/sync/driver/sync_driver_switches.h"
 #include "components/ukm/test_ukm_recorder.h"
+#include "content/public/test/browser_test.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/events/base_event_utils.h"
@@ -83,6 +83,17 @@ class BaseClickToCallBrowserTest : public SharingBrowserTest {
   std::string HistogramName(const char* suffix) {
     return base::StrCat({"Sharing.ClickToCall", suffix});
   }
+
+  base::HistogramTester::CountsMap GetTotalHistogramCounts(
+      const base::HistogramTester& histograms) {
+    base::HistogramTester::CountsMap counts =
+        histograms.GetTotalCountsForPrefix(HistogramName(""));
+    // PhoneNumberPrecompileTime will be logged 15 seconds after startup but
+    // we want to ignore it in these browser tests as we don't know if the
+    // test takes more or less time than that.
+    counts.erase(HistogramName("PhoneNumberPrecompileTime"));
+    return counts;
+  }
 };
 
 // Browser tests for the Click To Call feature.
@@ -116,7 +127,7 @@ IN_PROC_BROWSER_TEST_F(ClickToCallBrowserTest,
 
   menu->ExecuteCommand(IDC_CONTENT_CONTEXT_SHARING_CLICK_TO_CALL_SINGLE_DEVICE,
                        0);
-  CheckLastReceiver(devices[0]->guid());
+  CheckLastReceiver(*devices[0]);
   CheckLastSharingMessageSent(GetUnescapedURLContent(GURL(kTelUrl)));
 }
 
@@ -137,7 +148,7 @@ IN_PROC_BROWSER_TEST_F(ClickToCallBrowserTest, ContextMenu_NoDevicesAvailable) {
 
 IN_PROC_BROWSER_TEST_F(ClickToCallBrowserTest,
                        ContextMenu_DevicesAvailable_SyncTurnedOff) {
-  if (base::FeatureList::IsEnabled(kSharingDeriveVapidKey) &&
+  if (base::FeatureList::IsEnabled(kSharingSendViaSync) &&
       base::FeatureList::IsEnabled(switches::kSyncDeviceInfoInTransportMode)) {
     // Turning off sync will have no effect when Click to Call is available on
     // sign-in.
@@ -189,7 +200,7 @@ IN_PROC_BROWSER_TEST_F(ClickToCallBrowserTest,
               sub_menu_model->GetCommandIdAt(device_id));
     sub_menu_model->ActivatedAt(device_id);
 
-    CheckLastReceiver(device->guid());
+    CheckLastReceiver(*device);
     CheckLastSharingMessageSent(GetUnescapedURLContent(GURL(kTelUrl)));
     device_id++;
   }
@@ -222,7 +233,7 @@ IN_PROC_BROWSER_TEST_F(ClickToCallBrowserTest,
               sub_menu_model->GetCommandIdAt(device_id));
     sub_menu_model->ActivatedAt(device_id);
 
-    CheckLastReceiver(device->guid());
+    CheckLastReceiver(*device);
     base::Optional<std::string> expected_number =
         ExtractPhoneNumberForClickToCall(GetProfile(0), kTextWithPhoneNumber);
     ASSERT_TRUE(expected_number.has_value());
@@ -239,29 +250,25 @@ IN_PROC_BROWSER_TEST_F(ClickToCallBrowserTest, ContextMenu_TelLink_Histograms) {
   // Trigger a context menu for a link with 8 digits and 9 characters.
   std::unique_ptr<TestRenderViewContextMenu> menu = InitContextMenu(
       GURL("tel:1234-5678"), kLinkText, kTextWithoutPhoneNumber);
-  // RegexVariantResult is logged on a thread pool.
-  base::ThreadPoolInstance::Get()->FlushForTesting();
 
   base::HistogramTester::CountsMap expected_counts = {
       {HistogramName("DevicesToShow"), 1},
       {HistogramName("DevicesToShow.ContextMenu"), 1},
   };
 
-  EXPECT_THAT(histograms.GetTotalCountsForPrefix(HistogramName("")),
+  EXPECT_THAT(GetTotalHistogramCounts(histograms),
               testing::ContainerEq(expected_counts));
 
   // Send the number to the device in the context menu.
   menu->ExecuteCommand(IDC_CONTENT_CONTEXT_SHARING_CLICK_TO_CALL_SINGLE_DEVICE,
                        0);
-  // RegexVariantResult is logged on a thread pool.
-  base::ThreadPoolInstance::Get()->FlushForTesting();
 
   expected_counts.insert({
       {HistogramName("SelectedDeviceIndex"), 1},
       {HistogramName("SelectedDeviceIndex.ContextMenu"), 1},
   });
 
-  EXPECT_THAT(histograms.GetTotalCountsForPrefix(HistogramName("")),
+  EXPECT_THAT(GetTotalHistogramCounts(histograms),
               testing::ContainerEq(expected_counts));
 }
 
@@ -274,30 +281,25 @@ IN_PROC_BROWSER_TEST_F(ClickToCallBrowserTest,
   // Trigger a context menu for a selection with 8 digits and 9 characters.
   std::unique_ptr<TestRenderViewContextMenu> menu =
       InitContextMenu(GURL(kNonTelUrl), kLinkText, "1234-5678");
-  // RegexVariantResult is logged on a thread pool.
-  base::ThreadPoolInstance::Get()->FlushForTesting();
 
   base::HistogramTester::CountsMap expected_counts = {
       {HistogramName("DevicesToShow"), 1},
       {HistogramName("DevicesToShow.ContextMenu"), 1},
-      {HistogramName("ContextMenuPhoneNumberParsingDelay"), 1},
   };
 
-  EXPECT_THAT(histograms.GetTotalCountsForPrefix(HistogramName("")),
+  EXPECT_THAT(GetTotalHistogramCounts(histograms),
               testing::ContainerEq(expected_counts));
 
   // Send the number to the device in the context menu.
   menu->ExecuteCommand(IDC_CONTENT_CONTEXT_SHARING_CLICK_TO_CALL_SINGLE_DEVICE,
                        0);
-  // RegexVariantResult is logged on a thread pool.
-  base::ThreadPoolInstance::Get()->FlushForTesting();
 
   expected_counts.insert({
       {HistogramName("SelectedDeviceIndex"), 1},
       {HistogramName("SelectedDeviceIndex.ContextMenu"), 1},
   });
 
-  EXPECT_THAT(histograms.GetTotalCountsForPrefix(HistogramName("")),
+  EXPECT_THAT(GetTotalHistogramCounts(histograms),
               testing::ContainerEq(expected_counts));
 }
 
@@ -417,7 +419,7 @@ IN_PROC_BROWSER_TEST_F(ClickToCallBrowserTest, LeftClick_ChooseDevice) {
   // Choose first device.
   dialog->ButtonPressed(dialog->dialog_buttons_[0], event);
 
-  CheckLastReceiver(devices[0]->guid());
+  CheckLastReceiver(*devices[0]);
   // Defined in tel.html
   CheckLastSharingMessageSent("0123456789");
 }

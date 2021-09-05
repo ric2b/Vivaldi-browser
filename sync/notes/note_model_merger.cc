@@ -5,7 +5,6 @@
 #include "sync/notes/note_model_merger.h"
 
 #include <algorithm>
-#include <set>
 #include <string>
 #include <utility>
 
@@ -125,7 +124,7 @@ bool NodeSemanticsMatch(const vivaldi::NoteNode* local_node,
 void CheckNoDuplicatesInRemoteGUIDs(
     const UpdatesPerParentId& updates_per_parent_id) {
 #if DCHECK_IS_ON()
-  std::set<std::string> known_guids;
+  std::unordered_map<std::string, std::string> guid_to_sync_id;
 
   for (const auto& parent_id_and_updates : updates_per_parent_id) {
     for (const UpdateResponseData& update : parent_id_and_updates.second) {
@@ -138,8 +137,11 @@ void CheckNoDuplicatesInRemoteGUIDs(
       const std::string& guid_in_specifics =
           update.entity.specifics.notes().guid();
 
-      bool success = known_guids.insert(guid_in_specifics).second;
-      DCHECK(success);
+      auto it_and_success =
+          guid_to_sync_id.emplace(guid_in_specifics, update.entity.id);
+      DCHECK(it_and_success.second)
+          << " for new sync ID " << update.entity.id << " and original sync ID "
+          << it_and_success.first->second;
     }
   }
 #endif  // DCHECK_IS_ON()
@@ -239,10 +241,10 @@ NoteModelMerger::RemoteTreeNode NoteModelMerger::RemoteTreeNode::BuildTree(
   RemoteTreeNode node;
   node.update_ = std::move(update);
 
+  // Only folders may have descendants (ignore them otherwise). Treat
+  // permanent nodes as folders explicitly.
   if (!node.update_.entity.is_folder &&
       node.update_.entity.server_defined_unique_tag.empty()) {
-    // Only folders may have descendants (ignore them otherwise). Treat
-    // permanent nodes as folders explicitly.
     return node;
   }
 

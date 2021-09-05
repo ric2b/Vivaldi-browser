@@ -16,8 +16,8 @@ cr.define('settings', function() {
   /* #export */ let ResolverOption;
 
   /**
-   * Contains the possible string values for the secure DNS mode. This should be
-   * kept in sync with the modes in chrome/browser/net/dns_util.h.
+   * Contains the possible string values for the secure DNS mode. This must be
+   * kept in sync with the mode names in chrome/browser/net/secure_dns_config.h.
    * @enum {string}
    */
   /* #export */ const SecureDnsMode = {
@@ -28,7 +28,7 @@ cr.define('settings', function() {
 
   /**
    * Contains the possible management modes. This should be kept in sync with
-   * the management modes in chrome/browser/net/dns_util.h.
+   * the management modes in chrome/browser/net/secure_dns_config.h.
    * @enum {number}
    */
   /* #export */ const SecureDnsUiManagementMode = {
@@ -73,14 +73,15 @@ cr.define('settings', function() {
     getSecureDnsSetting() {}
 
     /**
-     * Returns the first valid URL template, if they are all valid.
+     * Returns the URL templates, if they are all valid.
      * @param {string} entry
-     * @return {!Promise<string>}
+     * @return {!Promise<!Array<string>>}
      */
-    validateCustomDnsEntry(entry) {}
+    parseCustomDnsEntry(entry) {}
 
     /**
-     * Returns whether a test query to the secure DNS template succeeded.
+     * Returns True if a test query to the secure DNS template succeeded
+     * or was cancelled.
      * @param {string} template
      * @return {!Promise<boolean>}
      */
@@ -134,8 +135,8 @@ cr.define('settings', function() {
     }
 
     /** @override */
-    validateCustomDnsEntry(entry) {
-      return cr.sendWithPromise('validateCustomDnsEntry', entry);
+    parseCustomDnsEntry(entry) {
+      return cr.sendWithPromise('parseCustomDnsEntry', entry);
     }
 
     /** @override */

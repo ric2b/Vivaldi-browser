@@ -80,6 +80,14 @@ enum SearchResultType {
   ZERO_STATE_FILE,
   // A result from the Drive QuickAccess provider.
   DRIVE_QUICK_ACCESS,
+  // A result from the Assistant provider.
+  ASSISTANT,
+  // An OsSettingsResult.
+  OS_SETTINGS,
+  // A Plugin VM App Result.
+  PLUGIN_VM_APP,
+  // LaCrOS binary.
+  LACROS,
   // Boundary is always last.
   SEARCH_RESULT_TYPE_BOUNDARY
 };

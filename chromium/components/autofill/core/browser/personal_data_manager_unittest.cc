@@ -49,6 +49,7 @@
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_features.h"
+#include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/autofill/core/common/autofill_prefs.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/autofill/core/common/form_data.h"
@@ -1131,6 +1132,57 @@ TEST_F(PersonalDataManagerTest, AddUpdateRemoveCreditCards) {
 
   personal_data_->AddFullServerCreditCard(duplicate_server_card);
 
+  ExpectSameElements(cards, personal_data_->GetCreditCards());
+}
+
+TEST_F(PersonalDataManagerTest, DoNotAddGoogleIssuedCreditCardExpOff) {
+  base::test::ScopedFeatureList scoped_features;
+  scoped_features.InitAndDisableFeature(
+      features::kAutofillEnableGoogleIssuedCard);
+  EnableWalletCardImport();
+  // Set up the credit cards.
+  CreditCard credit_card0 = test::GetMaskedServerCard();
+  credit_card0.set_card_issuer(CreditCard::Issuer::ISSUER_UNKNOWN);
+  CreditCard credit_card1 = test::GetMaskedServerCardAmex();
+  credit_card1.set_card_issuer(CreditCard::Issuer::GOOGLE);
+  // Add the above cards to server_cards.
+  std::vector<CreditCard> server_cards;
+  server_cards.push_back(credit_card0);
+  server_cards.push_back(credit_card1);
+  SetServerCards(server_cards);
+
+  personal_data_->Refresh();
+  WaitForOnPersonalDataChanged();
+
+  std::vector<CreditCard*> cards;
+  // Since the flag is off, only the card with ISSUER_UNKNOWN should be
+  // returned.
+  cards.push_back(&credit_card0);
+  ExpectSameElements(cards, personal_data_->GetCreditCards());
+}
+
+TEST_F(PersonalDataManagerTest, AddGoogleIssuedCreditCard) {
+  base::test::ScopedFeatureList scoped_features;
+  scoped_features.InitAndEnableFeature(
+      features::kAutofillEnableGoogleIssuedCard);
+  EnableWalletCardImport();
+  // Set up the credit cards.
+  CreditCard credit_card0 = test::GetMaskedServerCard();
+  credit_card0.set_card_issuer(CreditCard::Issuer::ISSUER_UNKNOWN);
+  CreditCard credit_card1 = test::GetMaskedServerCardAmex();
+  credit_card1.set_card_issuer(CreditCard::Issuer::GOOGLE);
+  // Add the above cards to server_cards.
+  std::vector<CreditCard> server_cards;
+  server_cards.push_back(credit_card0);
+  server_cards.push_back(credit_card1);
+  SetServerCards(server_cards);
+
+  personal_data_->Refresh();
+  WaitForOnPersonalDataChanged();
+
+  std::vector<CreditCard*> cards;
+  cards.push_back(&credit_card0);
+  cards.push_back(&credit_card1);
   ExpectSameElements(cards, personal_data_->GetCreditCards());
 }
 
@@ -6779,7 +6831,8 @@ TEST_F(PersonalDataManagerTest, ExcludeServerSideCards) {
 #endif  // !defined(OS_ANDROID)
 
 // Sync Transport mode is only for Win, Mac, and Linux.
-#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
+#if defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS)) || \
+    defined(OS_LINUX)
 TEST_F(PersonalDataManagerTest, ServerCardsShowInTransportMode) {
   // Set up PersonalDataManager in transport mode.
   ResetPersonalDataManager(USER_MODE_NORMAL,
@@ -6841,7 +6894,8 @@ TEST_F(PersonalDataManagerTest, ServerCardsShowInTransportMode_NeedOptIn) {
   EXPECT_EQ(1U, personal_data_->GetLocalCreditCards().size());
   EXPECT_EQ(2U, personal_data_->GetServerCreditCards().size());
 }
-#endif  // defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
+#endif  // defined(OS_WIN) || (defined(OS_MACOSX) && !defined(OS_IOS)) ||
+        // defined(OS_LINUX)
 
 // Tests that all the non settings origins of autofill profiles are cleared but
 // that the settings origins are untouched.
@@ -7528,6 +7582,9 @@ TEST_F(PersonalDataManagerTest, OnAccountsCookieDeletedByUserAction) {
       prefs_->GetDictionary(prefs::kAutofillSyncTransportOptIn)->DictEmpty());
 }
 
+// On mobile, no dedicated opt-in is required for WalletSyncTransport - the
+// user is always considered opted-in and thus this test doesn't make sense.
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
 TEST_F(PersonalDataManagerMigrationTest,
        MigrateUserOptedInWalletSyncTransportIfNeeded) {
   ASSERT_EQ(
@@ -7546,8 +7603,9 @@ TEST_F(PersonalDataManagerMigrationTest,
   EXPECT_TRUE(::autofill::prefs::IsUserOptedInWalletSyncTransport(
       prefs_.get(), sync_service_.GetAuthenticatedAccountInfo().account_id));
 }
+#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
 
-#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+#if !defined(OS_ANDROID) && !defined(OS_IOS) && !defined(OS_CHROMEOS)
 TEST_F(PersonalDataManagerTest, ShouldShowCardsFromAccountOption) {
   // The method should return false if one of these is not respected:
   //   * The sync_service is not null
@@ -7660,7 +7718,7 @@ TEST_F(PersonalDataManagerTest, ShouldShowCardsFromAccountOption) {
     histogram_tester.ExpectTotalCount(kHistogramName, 0);
   }
 }
-#else  // !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+#else   // !defined(OS_ANDROID) && !defined(OS_IOS) && !defined(OS_CHROMEOS)
 TEST_F(PersonalDataManagerTest, ShouldShowCardsFromAccountOption) {
   // The method should return false if one of these is not respected:
   //   * The sync_service is not null
@@ -7734,7 +7792,7 @@ TEST_F(PersonalDataManagerTest, ShouldShowCardsFromAccountOption) {
   personal_data_->SetSyncServiceForTest(nullptr);
   EXPECT_FALSE(personal_data_->ShouldShowCardsFromAccountOption());
 }
-#endif
+#endif  // !defined(OS_ANDROID) && !defined(OS_IOS) && !defined(OS_CHROMEOS)
 
 TEST_F(PersonalDataManagerTest, GetSyncSigninState) {
   // Make a non-primary account available with both a refresh token and cookie
@@ -7819,6 +7877,9 @@ TEST_F(PersonalDataManagerTest, GetSyncSigninState) {
   }
 }
 
+// On mobile, no dedicated opt-in is required for WalletSyncTransport - the
+// user is always considered opted-in and thus this test doesn't make sense.
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
 TEST_F(PersonalDataManagerTest, OnUserAcceptedUpstreamOffer) {
   ///////////////////////////////////////////////////////////
   // kSignedInAndWalletSyncTransportEnabled
@@ -7838,7 +7899,7 @@ TEST_F(PersonalDataManagerTest, OnUserAcceptedUpstreamOffer) {
 
   // Account wallet storage only makes sense together with support for
   // unconsented primary accounts, i.e. on Win/Mac/Linux.
-#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_CHROMEOS)
   {
     base::test::ScopedFeatureList scoped_features;
     scoped_features.InitAndEnableFeature(
@@ -7882,7 +7943,7 @@ TEST_F(PersonalDataManagerTest, OnUserAcceptedUpstreamOffer) {
   prefs::ClearSyncTransportOptIns(prefs_.get());
   ASSERT_FALSE(prefs::IsUserOptedInWalletSyncTransport(prefs_.get(),
                                                        active_info.account_id));
-#endif  // !defined(OS_CHROMEOS) && !defined(OS_ANDROID) && !defined(OS_IOS)
+#endif  // !defined(OS_CHROMEOS)
 
   ///////////////////////////////////////////////////////////
   // kSignedOut
@@ -7915,6 +7976,7 @@ TEST_F(PersonalDataManagerTest, OnUserAcceptedUpstreamOffer) {
         prefs_.get(), active_info.account_id));
   }
 }
+#endif  // !defined(OS_ANDROID) && !defined(OS_IOS)
 
 namespace {
 

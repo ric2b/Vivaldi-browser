@@ -11,22 +11,19 @@
 #include "base/command_line.h"
 #include "base/debug/debugger.h"
 #include "build/build_config.h"
-#include "components/web_cache/renderer/web_cache_impl.h"
+#include "content/common/unique_name_helper.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/renderer/render_frame.h"
-#include "content/public/renderer/render_thread.h"
-#include "content/public/renderer/render_view.h"
-#include "content/public/test/web_test_support.h"
+#include "content/renderer/loader/web_worker_fetch_context_impl.h"
 #include "content/shell/common/shell_switches.h"
 #include "content/shell/common/web_test/web_test_switches.h"
-#include "content/shell/renderer/shell_render_view_observer.h"
+#include "content/shell/renderer/shell_render_frame_observer.h"
 #include "content/shell/renderer/web_test/blink_test_helpers.h"
-#include "content/shell/renderer/web_test/blink_test_runner.h"
 #include "content/shell/renderer/web_test/test_websocket_handshake_throttle_provider.h"
-#include "content/shell/renderer/web_test/web_test_render_frame_observer.h"
+#include "content/shell/renderer/web_test/web_frame_test_proxy.h"
 #include "content/shell/renderer/web_test/web_test_render_thread_observer.h"
-#include "content/shell/test_runner/web_frame_test_proxy.h"
+#include "content/shell/renderer/web_test/web_view_test_proxy.h"
+#include "content/shell/renderer/web_test/web_widget_test_proxy.h"
 #include "media/base/audio_latency.h"
 #include "media/base/mime_util.h"
 #include "media/media_buildflags.h"
@@ -36,12 +33,12 @@
 #include "third_party/blink/public/web/modules/mediastream/web_media_stream_renderer_factory.h"
 #include "third_party/blink/public/web/web_plugin_params.h"
 #include "third_party/blink/public/web/web_testing_support.h"
-#include "third_party/blink/public/web/web_view.h"
 #include "ui/gfx/icc_profile.h"
 #include "v8/include/v8.h"
 
 #if defined(OS_WIN)
 #include "third_party/blink/public/web/win/web_font_rendering.h"
+#include "third_party/skia/include/core/SkFontMgr.h"
 #include "third_party/skia/include/ports/SkTypeface_win.h"
 #endif
 
@@ -49,25 +46,52 @@
 #include "skia/ext/test_fonts.h"
 #endif
 
-using blink::WebAudioDevice;
-using blink::WebFrame;
-using blink::WebLocalFrame;
-using blink::WebPlugin;
-using blink::WebPluginParams;
-using blink::WebThemeEngine;
-
 namespace content {
 
+namespace {
+
+RenderViewImpl* CreateWebViewTestProxy(CompositorDependencies* compositor_deps,
+                                       const mojom::CreateViewParams& params) {
+  return new WebViewTestProxy(
+      compositor_deps, params,
+      WebTestRenderThreadObserver::GetInstance()->test_interfaces());
+}
+
+std::unique_ptr<RenderWidget> CreateWebWidgetTestProxy(
+    int32_t routing_id,
+    CompositorDependencies* compositor_deps,
+    bool hidden,
+    bool never_composited,
+    mojo::PendingReceiver<mojom::Widget> widget_receiver) {
+  return std::make_unique<WebWidgetTestProxy>(routing_id, compositor_deps,
+                                              /*hidden=*/true, never_composited,
+                                              std::move(widget_receiver));
+}
+
+RenderFrameImpl* CreateWebFrameTestProxy(RenderFrameImpl::CreateParams params) {
+  return new WebFrameTestProxy(std::move(params));
+}
+
+}  // namespace
+
 WebTestContentRendererClient::WebTestContentRendererClient() {
-  EnableWebTestProxyCreation();
-  SetWorkerRewriteURLFunction(RewriteWebTestsURL);
+  // Web tests subclass these types, so we inject factory methods to replace
+  // the creation of the production type with the subclasses.
+  RenderViewImpl::InstallCreateHook(CreateWebViewTestProxy);
+  RenderFrameImpl::InstallCreateHook(CreateWebFrameTestProxy);
+  // For RenderWidgets, web tests only subclass the ones attached to frames.
+  RenderWidget::InstallCreateForFrameHook(CreateWebWidgetTestProxy);
+
+  UniqueNameHelper::PreserveStableUniqueNameForTesting();
+  WebWorkerFetchContextImpl::InstallRewriteURLFunction(RewriteWebTestsURL);
 }
 
 WebTestContentRendererClient::~WebTestContentRendererClient() = default;
 
 void WebTestContentRendererClient::RenderThreadStarted() {
   ShellContentRendererClient::RenderThreadStarted();
-  shell_observer_ = std::make_unique<WebTestRenderThreadObserver>();
+
+  render_thread_observer_ = std::make_unique<WebTestRenderThreadObserver>();
 
 #if defined(OS_FUCHSIA) || defined(OS_MACOSX)
   // On these platforms, fonts are set up in the renderer process. Other
@@ -91,14 +115,11 @@ void WebTestContentRendererClient::RenderThreadStarted() {
 
 void WebTestContentRendererClient::RenderFrameCreated(
     RenderFrame* render_frame) {
-  new WebTestRenderFrameObserver(render_frame);
-}
-
-void WebTestContentRendererClient::RenderViewCreated(RenderView* render_view) {
-  new ShellRenderViewObserver(render_view);
-
-  BlinkTestRunner* test_runner = BlinkTestRunner::Get(render_view);
-  test_runner->Reset(false /* for_new_test */);
+  // Intentionally doesn't call the base class, as we only use web test
+  // observers.
+  // TODO(danakj): The ShellRenderFrameObserver is doing stuff only for
+  // browser tests. If we only create that for browser tests then this
+  // override is not needed.
 }
 
 std::unique_ptr<content::WebSocketHandshakeThrottleProvider>
@@ -109,6 +130,11 @@ WebTestContentRendererClient::CreateWebSocketHandshakeThrottleProvider() {
 void WebTestContentRendererClient::DidInitializeWorkerContextOnWorkerThread(
     v8::Local<v8::Context> context) {
   blink::WebTestingSupport::InjectInternalsObject(context);
+
+  // Intentionally doesn't call the base class to avoid injecting twice.
+  // TODO(danakj): The ShellRenderFrameObserver is doing stuff only for
+  // browser tests. If we only create that for browser tests then we don't
+  // need to avoid the base class.
 }
 
 void WebTestContentRendererClient::

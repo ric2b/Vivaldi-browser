@@ -73,11 +73,6 @@ class CastWebContentsImpl : public CastWebContents,
                                const std::vector<std::string>& origins,
                                base::StringPiece script) override;
   void RemoveBeforeLoadJavaScript(base::StringPiece id) override;
-  // TODO(crbug.com/803242): Deprecated and will be shortly removed.
-  void PostMessageToMainFrame(
-      const std::string& target_origin,
-      const std::string& data,
-      std::vector<mojo::ScopedMessagePipeHandle> channels) override;
   void PostMessageToMainFrame(
       const std::string& target_origin,
       const std::string& data,
@@ -87,6 +82,7 @@ class CastWebContentsImpl : public CastWebContents,
       base::OnceCallback<void(base::Value)> callback) override;
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
+  void SetEnabledForRemoteDebugging(bool enabled) override;
   bool is_websql_enabled() override;
   bool is_mixer_audio_enabled() override;
   bool can_bind_interfaces() override;
@@ -170,7 +166,7 @@ class CastWebContentsImpl : public CastWebContents,
   base::WeakPtr<Delegate> delegate_;
   PageState page_state_;
   PageState last_state_;
-  const bool enabled_for_dev_;
+  bool enabled_for_dev_;
   content::mojom::RendererType renderer_type_;
   const bool handle_inner_contents_;
   BackgroundColor view_background_color_;

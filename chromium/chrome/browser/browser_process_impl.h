@@ -15,7 +15,6 @@
 #include <memory>
 #include <string>
 
-#include "base/debug/stack_trace.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/sequence_checker.h"
@@ -170,8 +169,6 @@ class BrowserProcessImpl : public BrowserProcess,
       std::unique_ptr<BackgroundModeManager> manager) override;
   StatusTray* status_tray() override;
   safe_browsing::SafeBrowsingService* safe_browsing_service() override;
-  safe_browsing::ClientSideDetectionService* safe_browsing_detection_service()
-      override;
   subresource_filter::RulesetService* subresource_filter_ruleset_service()
       override;
   optimization_guide::OptimizationGuideService* optimization_guide_service()
@@ -380,10 +377,6 @@ class BrowserProcessImpl : public BrowserProcess,
 #endif
 
   std::unique_ptr<BrowserProcessPlatformPart> platform_part_;
-
-  // TODO(eroman): Remove this when done debugging 113031. This tracks
-  // the callstack which released the final module reference count.
-  base::debug::StackTrace release_last_reference_callstack_;
 
   // Lazily initialized.
   std::unique_ptr<WebRtcLogUploader> webrtc_log_uploader_;

@@ -4,11 +4,10 @@
 
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
-<link rel="import" href="chrome://resources/cr_elements/chromeos/cr_lottie/cr_lottie.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_lottie/cr_lottie.html">
 <dom-module id="assistant-voice-match">
   <template>
-    <link rel="stylesheet" href="../login/oobe_dialog_host.css">
-    <link rel="stylesheet" href="../login/oobe_flex_layout.css">
+    <style include="oobe-dialog-host"></style>
     <link rel="stylesheet" href="assistant_shared_styles.css">
     <link rel="stylesheet" href="assistant_voice_match.css">
     <oobe-dialog id="voice-match-dialog" role="dialog" has-buttons hide-shadow
@@ -45,22 +44,22 @@
             </div>
             <div id="voice-match-entries">
               <voice-match-entry id="voice-entry-0">
-                <div class="entry-content">
+                <div slot="entry-content">
                   [[i18nDynamic(locale, 'assistantVoiceMatchInstruction0')]]
                 </div>
               </voice-match-entry>
               <voice-match-entry id="voice-entry-1">
-                <div class="entry-content">
+                <div slot="entry-content">
                   [[i18nDynamic(locale, 'assistantVoiceMatchInstruction1')]]
                 </div>
               </voice-match-entry>
               <voice-match-entry id="voice-entry-2">
-                <div class="entry-content">
+                <div slot="entry-content">
                   [[i18nDynamic(locale, 'assistantVoiceMatchInstruction2')]]
                 </div>
               </voice-match-entry>
               <voice-match-entry id="voice-entry-3">
-                <div class="entry-content">
+                <div slot="entry-content">
                   [[i18nDynamic(locale, 'assistantVoiceMatchInstruction3')]]
                 </div>
               </voice-match-entry>

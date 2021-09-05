@@ -57,38 +57,37 @@ VivaldiBrowserMainExtraParts::~VivaldiBrowserMainExtraParts() {}
 // Overridden from ChromeBrowserMainExtraParts:
 void VivaldiBrowserMainExtraParts::PostEarlyInitialization() {
   stats_reporter_ = vivaldi::StatsReporter::CreateInstance();
-  // base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (vivaldi::IsVivaldiRunning()) {
-// Options to be set when Vivaldi is running, but not during unit tests
+  if (!vivaldi::IsVivaldiRunning()) {
+    return;
+  }
 #if defined(OS_LINUX) || defined(OS_MACOSX)
-    base::FilePath messaging(
-      // Hardcoded from chromium/chrome/common/chrome_paths.cc
+  base::FilePath messaging(
+    // Hardcoded from chromium/chrome/common/chrome_paths.cc
 #if defined(OS_MACOSX)
-      FILE_PATH_LITERAL("/Library/Google/Chrome/NativeMessagingHosts")
+    FILE_PATH_LITERAL("/Library/Google/Chrome/NativeMessagingHosts")
 #else   // OS_MACOSX
-      FILE_PATH_LITERAL("/etc/opt/chrome/native-messaging-hosts")
+    FILE_PATH_LITERAL("/etc/opt/chrome/native-messaging-hosts")
 #endif  // OS_MACOSX
-    );
-    base::PathService::Override(chrome::DIR_NATIVE_MESSAGING, messaging);
+  );
+  base::PathService::Override(chrome::DIR_NATIVE_MESSAGING, messaging);
 #endif
 #if defined(OS_LINUX)
-    {
-      base::FilePath cur;
-      std::unique_ptr<base::Environment> env(base::Environment::Create());
-      cur = base::nix::GetXDGDirectory(
-          env.get(), base::nix::kXdgConfigHomeEnvVar, base::nix:: kDotConfigDir);
-      cur = cur.Append("google-chrome");
-      cur = cur.Append(FILE_PATH_LITERAL("PepperFlash"));
-      cur = cur.Append(FILE_PATH_LITERAL("latest-component-updated-flash"));
+  {
+    base::FilePath cur;
+    std::unique_ptr<base::Environment> env(base::Environment::Create());
+    cur = base::nix::GetXDGDirectory(
+        env.get(), base::nix::kXdgConfigHomeEnvVar, base::nix:: kDotConfigDir);
+    cur = cur.Append("google-chrome");
+    cur = cur.Append(FILE_PATH_LITERAL("PepperFlash"));
+    cur = cur.Append(FILE_PATH_LITERAL("latest-component-updated-flash"));
 
-      base::PathService::Override(chrome::FILE_COMPONENT_FLASH_HINT, cur);
-    }
-    base::FilePath pepper(
-        FILE_PATH_LITERAL("/usr/lib/adobe-flashplugin/libpepflashplayer.so"));
-    base::PathService::Override(chrome::FILE_PEPPER_FLASH_SYSTEM_PLUGIN,
-                                pepper);
-#endif
+    base::PathService::Override(chrome::FILE_COMPONENT_FLASH_HINT, cur);
   }
+  base::FilePath pepper(
+      FILE_PATH_LITERAL("/usr/lib/adobe-flashplugin/libpepflashplayer.so"));
+  base::PathService::Override(chrome::FILE_PEPPER_FLASH_SYSTEM_PLUGIN,
+                              pepper);
+#endif
 }
 
 void VivaldiBrowserMainExtraParts::

@@ -16,12 +16,7 @@ namespace calendar {
 CreateCalendarResult::CreateCalendarResult() {}
 
 CalendarRow::CalendarRow()
-    : orderindex_(0),
-      hidden_(0),
-      active_(0),
-      iconindex_(0),
-      type_(0),
-      interval_(0) {}
+    : orderindex_(0), hidden_(0), active_(0), iconindex_(0) {}
 
 CalendarRow::~CalendarRow() {}
 
@@ -29,16 +24,12 @@ CalendarRow::CalendarRow(CalendarID id,
                          AccountID account_id,
                          base::string16 name,
                          base::string16 description,
-                         GURL url,
                          std::string ctag,
                          int orderindex,
                          std::string color,
                          bool hidden,
                          bool active,
                          int iconindex,
-                         base::string16 username,
-                         int type,
-                         int interval,
                          base::Time last_checked,
                          std::string timezone,
                          base::Time created,
@@ -46,16 +37,12 @@ CalendarRow::CalendarRow(CalendarID id,
     : account_id_(account_id),
       name_(name),
       description_(description),
-      url_(url),
       ctag_(ctag),
       orderindex_(orderindex),
       color_(color),
       hidden_(hidden),
       active_(active),
       iconindex_(iconindex),
-      username_(username),
-      type_(type),
-      interval_(interval),
       last_checked_(last_checked),
       timezone_(timezone),
       created_(created),
@@ -66,15 +53,11 @@ void CalendarRow::Swap(CalendarRow* other) {
   std::swap(account_id_, other->account_id_);
   std::swap(name_, other->name_);
   std::swap(description_, other->description_);
-  std::swap(url_, other->url_);
   std::swap(orderindex_, other->orderindex_);
   std::swap(color_, other->color_);
   std::swap(hidden_, other->hidden_);
   std::swap(active_, other->active_);
   std::swap(iconindex_, other->iconindex_);
-  std::swap(username_, other->username_);
-  std::swap(type_, other->type_);
-  std::swap(interval_, other->interval_);
   std::swap(last_checked_, other->last_checked_);
   std::swap(timezone_, other->timezone_);
 }
@@ -84,16 +67,12 @@ CalendarRow::CalendarRow(const CalendarRow& other)
       account_id_(other.account_id_),
       name_(other.name_),
       description_(other.description_),
-      url_(other.url_),
       ctag_(other.ctag_),
       orderindex_(other.orderindex_),
       color_(other.color_),
       hidden_(other.hidden_),
       active_(other.active_),
       iconindex_(other.iconindex_),
-      username_(other.username_),
-      type_(other.type_),
-      interval_(other.interval_),
       last_checked_(other.last_checked_),
       timezone_(other.timezone_),
       created_(other.created_),
@@ -109,16 +88,12 @@ Calendar::Calendar(const Calendar& calendar)
       account_id(calendar.account_id),
       name(calendar.name),
       description(calendar.description),
-      url(calendar.url),
       ctag(calendar.ctag),
       orderindex(calendar.orderindex),
       color(calendar.color),
       hidden(calendar.hidden),
       active(calendar.active),
       iconindex(calendar.iconindex),
-      username(calendar.username),
-      type(calendar.type),
-      interval(calendar.interval),
       last_checked(calendar.last_checked),
       timezone(calendar.timezone),
       updateFields(calendar.updateFields) {}

@@ -44,7 +44,6 @@
 #include "chrome/browser/chromeos/boot_times_recorder.h"
 #include "chrome/browser/chromeos/child_accounts/child_policy_observer.h"
 #include "chrome/browser/chromeos/first_run/first_run.h"
-#include "chrome/browser/chromeos/first_run/goodies_displayer.h"
 #include "chrome/browser/chromeos/logging.h"
 #include "chrome/browser/chromeos/login/auth/chrome_cryptohome_authenticator.h"
 #include "chrome/browser/chromeos/login/chrome_restart_request.h"
@@ -378,6 +377,14 @@ void PersistChallengeResponseKeys(const UserContext& user_context) {
           user_context.GetChallengeResponseKeys()));
 }
 
+// Returns true if the user is new, or if the user was already present on the
+// device and the profile was re-created. This can happen e.g. in ext4 migration
+// in wipe mode.
+bool IsNewProfile(Profile* profile) {
+  return user_manager::UserManager::Get()->IsCurrentUserNew() ||
+         profile->IsNewProfile();
+}
+
 }  // namespace
 
 UserSessionManagerDelegate::~UserSessionManagerDelegate() {}
@@ -414,7 +421,6 @@ void UserSessionManager::OverrideHomedir() {
 void UserSessionManager::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(prefs::kRLZBrand, std::string());
   registry->RegisterBooleanPref(prefs::kRLZDisabled, false);
-  registry->RegisterBooleanPref(prefs::kCanShowOobeGoodiesPage, true);
 }
 
 // static
@@ -751,6 +757,16 @@ bool UserSessionManager::RespectLocalePreference(
       prefs->GetString(prefs::kApplicationLocaleBackup);
 
   pref_locale = pref_app_locale;
+
+  // In Demo Mode, each sessions uses a new empty User Profile, so we need to
+  // rely on the local state set in the browser process.
+  if (chromeos::DemoSession::IsDeviceInDemoMode() && pref_app_locale.empty()) {
+    const std::string local_state_locale =
+        g_browser_process->local_state()->GetString(
+            language::prefs::kApplicationLocale);
+    pref_locale = local_state_locale;
+  }
+
   if (pref_locale.empty())
     pref_locale = pref_bkup_locale;
 
@@ -1235,8 +1251,7 @@ void UserSessionManager::InitProfilePreferences(
   // Set initial prefs if the user is new, or if the user was already present on
   // the device and the profile was re-created. This can happen e.g. in ext4
   // migration in wipe mode.
-  const bool is_new_profile =
-      user_manager->IsCurrentUserNew() || profile->IsNewProfile();
+  const bool is_new_profile = IsNewProfile(profile);
   if (is_new_profile) {
     SetFirstLoginPrefs(profile, user_context.GetPublicSessionLocale(),
                        user_context.GetPublicSessionInputMethod());
@@ -1282,109 +1297,92 @@ void UserSessionManager::InitProfilePreferences(
       DCHECK(!gaia_id.empty());
     }
 
-    bool should_use_legacy_flow = false;
-    if (!identity_manager
-             ->FindExtendedAccountInfoForAccountWithRefreshTokenByGaiaId(
-                 gaia_id)
-             .has_value() &&
-        user_context.GetRefreshToken().empty()) {
-      // Edge case: |AccountManager| is enabled but neither |IdentityManager|
-      // nor |user_context| has the refresh token. This means that an existing
-      // user has switched on Account Manager for the first time and has not
-      // undergone the migration flow yet. This migration will be done shorty
-      // in-session.
-      // TODO(https://crbug.com/987955): Remove this.
-      should_use_legacy_flow = true;
+    // We need to set the Primary Account. This is handled by
+    // |IdentityManager|, which enforces the invariant that only an account
+    // previously known to |IdentityManager| can be set as the Primary
+    // Account. |IdentityManager| gets its knowledge of accounts from
+    // |AccountManager| and hence, before we set the Primary Account, we need
+    // to make sure that:
+    // 1. The account is present in |AccountManager|, and
+    // 2. |IdentityManager| has been notified about it.
+
+    AccountManager* account_manager =
+        g_browser_process->platform_part()
+            ->GetAccountManagerFactory()
+            ->GetAccountManager(profile->GetPath().value());
+
+    // |AccountManager| MUST have been fully initialized at this point (via
+    // |UserSessionManager::InitializeAccountManager|), otherwise we cannot
+    // guarantee that |IdentityManager| will have this account in Step (2).
+    // Reason: |AccountManager::UpsertAccount| is an async API that can
+    // technically take an arbitrarily long amount of time to complete and
+    // notify |AccountManager|'s observers. However, if |AccountManager| has
+    // been fully initialized, |AccountManager::UpsertAccount| and the
+    // associated notifications happen synchronously. We are relying on that
+    // (undocumented) behaviour here.
+    // TODO(sinhak): This is a leaky abstraction. Explore if
+    // |UserSessionManager::InitProfilePreferences| can handle an asynchronous
+    // callback and continue.
+    DCHECK(account_manager->IsInitialized());
+
+    const AccountManager::AccountKey account_key{
+        gaia_id, account_manager::AccountType::ACCOUNT_TYPE_GAIA};
+
+    // 1. Make sure that the account is present in |AccountManager|.
+    if (!user_context.GetRefreshToken().empty()) {
+      // |AccountManager::UpsertAccount| is idempotent. We can safely call it
+      // without checking for re-auth cases.
+      // We MUST NOT revoke old Device Account tokens (|revoke_old_token| =
+      // |false|), otherwise Gaia will revoke all tokens associated to this
+      // user's device id, including |refresh_token_| and the user will be
+      // stuck performing an online auth with Gaia at every login. See
+      // https://crbug.com/952570 and https://crbug.com/865189 for context.
+      account_manager->UpsertAccount(account_key,
+                                     user->GetDisplayEmail() /* raw_email */,
+                                     user_context.GetRefreshToken());
+    } else if (!account_manager->IsTokenAvailable(account_key)) {
+      // When |user_context| does not contain a refresh token and account is not
+      // present in the AccountManager it means the migration to the
+      // AccountManager didn't happen.
+      // Set account with dummy token to let IdentitManager know that account
+      // exists and we can safely configure the primary account at the step 2.
+      // The real token will be set later during the migration.
+      account_manager->UpsertAccount(account_key,
+                                     user->GetDisplayEmail() /* raw_email */,
+                                     AccountManager::kInvalidToken);
     }
-    base::UmaHistogramBoolean(
-        "AccountManager.LegacySetPrimaryAccountAndUpdateAccountInfo",
-        should_use_legacy_flow);
+    DCHECK(account_manager->IsTokenAvailable(account_key));
 
-    if (!should_use_legacy_flow) {
-      // We need to set the Primary Account. This is handled by
-      // |IdentityManager|, which enforces the invariant that only an account
-      // previously known to |IdentityManager| can be set as the Primary
-      // Account. |IdentityManager| gets its knowledge of accounts from
-      // |AccountManager| and hence, before we set the Primary Account, we need
-      // to make sure that:
-      // 1. The account is present in |AccountManager|, and
-      // 2. |IdentityManager| has been notified about it.
+    // 2. Make sure that IdentityManager has been notified about it.
+    base::Optional<AccountInfo> account_info =
+        identity_manager
+            ->FindExtendedAccountInfoForAccountWithRefreshTokenByGaiaId(
+                gaia_id);
 
-      AccountManager* account_manager =
-          g_browser_process->platform_part()
-              ->GetAccountManagerFactory()
-              ->GetAccountManager(profile->GetPath().value());
-
-      // |AccountManager| MUST have been fully initialized at this point (via
-      // |UserSessionManager::InitializeAccountManager|), otherwise we cannot
-      // guarantee that |IdentityManager| will have this account in Step (2).
-      // Reason: |AccountManager::UpsertAccount| is an async API that can
-      // technically take an arbitrarily long amount of time to complete and
-      // notify |AccountManager|'s observers. However, if |AccountManager| has
-      // been fully initialized, |AccountManager::UpsertAccount| and the
-      // associated notifications happen synchronously. We are relying on that
-      // (undocumented) behaviour here.
-      // TODO(sinhak): This is a leaky abstraction. Explore if
-      // |UserSessionManager::InitProfilePreferences| can handle an asynchronous
-      // callback and continue.
-      DCHECK(account_manager->IsInitialized());
-
-      // 1. Make sure that the account is present in |AccountManager|.
-      if (!user_context.GetRefreshToken().empty()) {
-        // |AccountManager::UpsertAccount| is idempotent. We can safely call it
-        // without checking for re-auth cases.
-        // We MUST NOT revoke old Device Account tokens (|revoke_old_token| =
-        // |false|), otherwise Gaia will revoke all tokens associated to this
-        // user's device id, including |refresh_token_| and the user will be
-        // stuck performing an online auth with Gaia at every login. See
-        // https://crbug.com/952570 and https://crbug.com/865189 for context.
-        account_manager->UpsertAccount(
-            AccountManager::AccountKey{
-                gaia_id, account_manager::AccountType::ACCOUNT_TYPE_GAIA},
-            user->GetDisplayEmail() /* raw_email */,
-            user_context.GetRefreshToken());
+    DCHECK(account_info.has_value());
+    if (features::IsSplitSettingsSyncEnabled()) {
+      // In theory this should only be done for new profiles. However, if user
+      // profile prefs failed to save or the prefs are corrupted by a crash then
+      // the IdentityManager will start up without a primary account. See test
+      // CrashRestoreComplexTest.RestoreSessionForThreeUsers.
+      if (!identity_manager->HasPrimaryAccount(ConsentLevel::kNotRequired)) {
+        // Set the account without recording browser sync consent.
+        identity_manager->GetPrimaryAccountMutator()
+            ->SetUnconsentedPrimaryAccount(account_info->account_id);
       }
-      // else: If |user_context| does not contain a refresh token, then we are
-      // restoring an existing Profile, in which case the account will be
-      // already present in |AccountManager|.
-
-      // 2. Make sure that IdentityManager has been notified about it.
-      base::Optional<AccountInfo> account_info =
-          identity_manager
-              ->FindExtendedAccountInfoForAccountWithRefreshTokenByGaiaId(
-                  gaia_id);
-      DCHECK(account_info.has_value());
-      if (features::IsSplitSyncConsentEnabled()) {
-        if (is_new_profile) {
-          if (!identity_manager->HasPrimaryAccount(ConsentLevel::kSync)) {
-            // Set the account without recording browser sync consent.
-            identity_manager->GetPrimaryAccountMutator()
-                ->SetUnconsentedPrimaryAccount(account_info->account_id);
-          }
-        }
-        CHECK(identity_manager->HasPrimaryAccount(ConsentLevel::kNotRequired));
-        CHECK_EQ(
-            identity_manager->GetPrimaryAccountInfo(ConsentLevel::kNotRequired)
-                .gaia,
-            gaia_id);
-      } else {
-        // Set a primary account here because the profile might have been
-        // created with the feature SplitSyncConsent enabled. Then the
-        // profile might only have an unconsented primary account.
-        identity_manager->GetPrimaryAccountMutator()->SetPrimaryAccount(
-            account_info->account_id);
-        CHECK(identity_manager->HasPrimaryAccount(ConsentLevel::kSync));
-        CHECK_EQ(identity_manager->GetPrimaryAccountInfo().gaia, gaia_id);
-      }
+      CHECK(identity_manager->HasPrimaryAccount(ConsentLevel::kNotRequired));
+      CHECK_EQ(
+          identity_manager->GetPrimaryAccountInfo(ConsentLevel::kNotRequired)
+              .gaia,
+          gaia_id);
     } else {
-      // Make sure that the google service username is properly set (we do this
-      // on every sign in, not just the first login, to deal with existing
-      // profiles that might not have it set yet).
-      // TODO(https://crbug.com/987955): Check the UMA stat and remove it when
-      // all users have been migrated to Account Manager.
-      identity_manager->GetPrimaryAccountMutator()
-          ->DeprecatedSetPrimaryAccountAndUpdateAccountInfo(
-              gaia_id, user_context.GetAccountId().GetUserEmail());
+      // Set a primary account here because the profile might have been
+      // created with the feature SplitSettingsSync enabled. Then the
+      // profile might only have an unconsented primary account.
+      identity_manager->GetPrimaryAccountMutator()->SetPrimaryAccount(
+          account_info->account_id);
+      CHECK(identity_manager->HasPrimaryAccount(ConsentLevel::kSync));
+      CHECK_EQ(identity_manager->GetPrimaryAccountInfo().gaia, gaia_id);
     }
 
     CoreAccountId account_id =
@@ -1428,7 +1426,10 @@ void UserSessionManager::InitProfilePreferences(
 void UserSessionManager::UserProfileInitialized(Profile* profile,
                                                 bool is_incognito_profile,
                                                 const AccountId& account_id) {
-  os_sync_util::MigrateOsSyncPreferences(profile->GetPrefs());
+  // Only migrate sync prefs for existing users because new users are given
+  // the choice to turn on OS sync in OOBE.
+  if (!IsNewProfile(profile))
+    os_sync_util::MigrateOsSyncPreferences(profile->GetPrefs());
 
   // http://crbug/866790: After Supervised Users are deprecated, remove this.
   if (ash::features::IsSupervisedUserDeprecationNoticeEnabled()) {
@@ -1525,7 +1526,7 @@ void UserSessionManager::UserProfileInitialized(Profile* profile,
           content::BrowserContext::GetDefaultStoragePartition(profile),
           transfer_auth_cookies_on_first_login,
           transfer_saml_auth_cookies_on_subsequent_login,
-          base::Bind(
+          base::BindOnce(
               &UserSessionManager::CompleteProfileCreateAfterAuthTransfer,
               AsWeakPtr(), profile));
     } else {
@@ -1676,9 +1677,6 @@ void UserSessionManager::InitializeBrowser(Profile* profile) {
 
   // Only allow Quirks downloads after login is finished.
   quirks::QuirksManager::Get()->OnLoginCompleted();
-
-  // If needed, create browser observer to display first run OOBE Goodies page.
-  first_run::GoodiesDisplayer::Init();
 
   if (chromeos::features::IsSplitSyncConsentEnabled() &&
       ProfileSyncServiceFactory::IsSyncAllowed(profile)) {
@@ -2275,7 +2273,6 @@ void UserSessionManager::Shutdown() {
   turn_sync_on_helper_.reset();
   token_handle_fetcher_.reset();
   token_handle_util_.reset();
-  first_run::GoodiesDisplayer::Delete();
   always_on_vpn_manager_.reset();
   u2f_notification_.reset();
   release_notes_notification_.reset();
@@ -2318,8 +2315,10 @@ void UserSessionManager::MaybeShowReleaseNotesNotification(Profile* profile) {
   if (!release_notes_notification_) {
     release_notes_notification_ =
         std::make_unique<ReleaseNotesNotification>(profile);
-    if (chrome::GetChannel() == version_info::Channel::STABLE)
+    if (chrome::GetChannel() == version_info::Channel::STABLE ||
+        chrome::GetChannel() == version_info::Channel::BETA) {
       release_notes_notification_->MaybeShowReleaseNotes();
+    }
   }
 }
 

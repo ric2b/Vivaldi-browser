@@ -13,6 +13,7 @@
 #include "base/files/file_util.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/no_destructor.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -401,8 +402,6 @@ void TestingProfile::Init() {
     key_ = std::make_unique<TestingProfileKey>(this, profile_path_);
   }
 
-  BrowserContext::Initialize(this, profile_path_);
-
 #if defined(OS_ANDROID)
   signin::DisableInteractionWithSystemAccounts();
 #endif
@@ -752,26 +751,68 @@ bool TestingProfile::IsOffTheRecord() const {
   return original_profile_;
 }
 
-void TestingProfile::SetOffTheRecordProfile(std::unique_ptr<Profile> profile) {
-  DCHECK(!IsOffTheRecord());
-  if (profile)
-    DCHECK_EQ(this, profile->GetOriginalProfile());
-  incognito_profile_ = std::move(profile);
+const Profile::OTRProfileID& TestingProfile::GetOTRProfileID() const {
+  // TODO(https://crbug.com//1033903): Remove this variable and add support for
+  // non-primary OTRs.
+  static base::NoDestructor<Profile::OTRProfileID> incognito_profile_id(
+      Profile::OTRProfileID::PrimaryID());
+  DCHECK(IsOffTheRecord());
+
+  return *incognito_profile_id;
 }
 
-Profile* TestingProfile::GetOffTheRecordProfile() {
+void TestingProfile::SetOffTheRecordProfile(
+    std::unique_ptr<Profile> otr_profile) {
+  // TODO(https://crbug.com//1033903): Add support for non-primary OTRs.
+  DCHECK(!IsOffTheRecord());
+  if (otr_profile)
+    DCHECK_EQ(this, otr_profile->GetOriginalProfile());
+  incognito_profile_ = std::move(otr_profile);
+}
+
+Profile* TestingProfile::GetOffTheRecordProfile(
+    const OTRProfileID& otr_profile_id) {
+  // TODO(https://crbug.com//1033903): Add support for non-primary OTRs.
+  DCHECK(otr_profile_id == OTRProfileID::PrimaryID());
   if (IsOffTheRecord())
     return this;
-  if (!incognito_profile_)
-    TestingProfile::Builder().BuildIncognito(this);
+  if (!incognito_profile_) {
+    TestingProfile::Builder builder;
+    if (IsGuestSession())
+      builder.SetGuestSession();
+    builder.BuildIncognito(this);
+  }
   return incognito_profile_.get();
 }
 
-void TestingProfile::DestroyOffTheRecordProfile() {
+std::vector<Profile*> TestingProfile::GetAllOffTheRecordProfiles() {
+  // TODO(https://crbug.com//1033903): Add support for non-primary OTRs.
+  std::vector<Profile*> otr_profiles;
+
+  if (incognito_profile_)
+    otr_profiles.push_back(incognito_profile_.get());
+
+  return otr_profiles;
+}
+
+void TestingProfile::DestroyOffTheRecordProfile(Profile* otr_profile) {
+  // TODO(https://crbug.com//1033903): Add support for non-primary OTRs.
   incognito_profile_.reset();
 }
 
-bool TestingProfile::HasOffTheRecordProfile() {
+void TestingProfile::DestroyOffTheRecordProfile() {
+  DestroyOffTheRecordProfile(incognito_profile_.get());
+}
+
+bool TestingProfile::HasOffTheRecordProfile(
+    const OTRProfileID& otr_profile_id) {
+  // TODO(https://crbug.com//1033903): Add support for non-primary OTRs.
+  DCHECK(otr_profile_id == OTRProfileID::PrimaryID());
+  return incognito_profile_.get() != nullptr;
+}
+
+bool TestingProfile::HasAnyOffTheRecordProfile() {
+  // TODO(https://crbug.com//1033903): Add support for non-primary OTRs.
   return incognito_profile_.get() != nullptr;
 }
 
@@ -809,11 +850,6 @@ bool TestingProfile::IsChild() const {
 
 bool TestingProfile::IsLegacySupervised() const {
   return IsSupervised() && !IsChild();
-}
-
-bool TestingProfile::IsIndependentOffTheRecordProfile() {
-  return !GetOriginalProfile()->HasOffTheRecordProfile() ||
-         GetOriginalProfile()->GetOffTheRecordProfile() != this;
 }
 
 bool TestingProfile::AllowsBrowserWindows() const {
@@ -1103,31 +1139,13 @@ Profile::ExitType TestingProfile::GetLastSessionExitType() {
   return last_session_exited_cleanly_ ? EXIT_NORMAL : EXIT_CRASHED;
 }
 
-void TestingProfile::SetNetworkContext(
-    std::unique_ptr<network::mojom::NetworkContext> network_context) {
-  DCHECK(!network_context_);
-  network_context_ = std::move(network_context);
-}
-
-mojo::Remote<network::mojom::NetworkContext>
-TestingProfile::CreateNetworkContext(
+void TestingProfile::ConfigureNetworkContextParams(
     bool in_memory,
-    const base::FilePath& relative_partition_path) {
-  if (network_context_) {
-    mojo::Remote<network::mojom::NetworkContext> network_context_remote;
-    network_context_receivers_.Add(
-        network_context_.get(),
-        network_context_remote.BindNewPipeAndPassReceiver());
-    return network_context_remote;
-  }
-  mojo::Remote<network::mojom::NetworkContext> network_context;
-  network::mojom::NetworkContextParamsPtr context_params =
-      network::mojom::NetworkContextParams::New();
-  context_params->user_agent = GetUserAgent();
-  context_params->accept_language = "en-us,en";
-  content::GetNetworkService()->CreateNetworkContext(
-      network_context.BindNewPipeAndPassReceiver(), std::move(context_params));
-  return network_context;
+    const base::FilePath& relative_partition_path,
+    network::mojom::NetworkContextParams* network_context_params,
+    network::mojom::CertVerifierCreationParams* cert_verifier_creation_params) {
+  network_context_params->user_agent = GetUserAgent();
+  network_context_params->accept_language = "en-us,en";
 }
 
 TestingProfile::Builder::Builder()

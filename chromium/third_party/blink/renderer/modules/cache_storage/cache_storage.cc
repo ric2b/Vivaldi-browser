@@ -14,11 +14,11 @@
 #include "third_party/blink/public/platform/web_content_settings_client.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_multi_cache_query_options.h"
-#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/fetch/request.h"
 #include "third_party/blink/renderer/core/fetch/response.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/modules/cache_storage/cache_storage_blob_client_list.h"
@@ -63,25 +63,19 @@ namespace blink {
 namespace {
 
 bool IsCacheStorageAllowed(ScriptState* script_state) {
+  if (!script_state->ContextIsValid())
+    return false;
+
   ExecutionContext* context = ExecutionContext::From(script_state);
 
-  if (auto* document = Document::DynamicFrom(context)) {
-    LocalFrame* frame = document->GetFrame();
-    if (!frame)
-      return false;
-    if (auto* settings_client = frame->GetContentSettingsClient()) {
-      // This triggers a sync IPC.
-      return settings_client->AllowCacheStorage();
-    }
-    return true;
-  }
+  WebContentSettingsClient* settings_client = nullptr;
+  if (auto* window = DynamicTo<LocalDOMWindow>(context))
+    settings_client = window->GetFrame()->GetContentSettingsClient();
+  else
+    settings_client = To<WorkerGlobalScope>(context)->ContentSettingsClient();
 
-  WebContentSettingsClient* content_settings_client =
-      To<WorkerGlobalScope>(context)->ContentSettingsClient();
-  if (!content_settings_client)
-    return true;
   // This triggers a sync IPC.
-  return content_settings_client->AllowCacheStorage();
+  return settings_client ? settings_client->AllowCacheStorage() : true;
 }
 
 }  // namespace
@@ -102,9 +96,11 @@ ScriptPromise CacheStorage::open(ScriptState* script_state,
     return promise;
   }
 
+  MaybeInit();
+
   // The context may be destroyed and the mojo connection unbound. However the
   // object may live on, reject any requests after the context is destroyed.
-  if (!cache_storage_remote_) {
+  if (!cache_storage_remote_.is_bound()) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kInvalidStateError));
     return promise;
@@ -175,9 +171,11 @@ ScriptPromise CacheStorage::has(ScriptState* script_state,
     return promise;
   }
 
+  MaybeInit();
+
   // The context may be destroyed and the mojo connection unbound. However the
   // object may live on, reject any requests after the context is destroyed.
-  if (!cache_storage_remote_) {
+  if (!cache_storage_remote_.is_bound()) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kInvalidStateError));
     return promise;
@@ -235,9 +233,11 @@ ScriptPromise CacheStorage::Delete(ScriptState* script_state,
     return promise;
   }
 
+  MaybeInit();
+
   // The context may be destroyed and the mojo connection unbound. However the
   // object may live on, reject any requests after the context is destroyed.
-  if (!cache_storage_remote_) {
+  if (!cache_storage_remote_.is_bound()) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kInvalidStateError));
     return promise;
@@ -295,9 +295,11 @@ ScriptPromise CacheStorage::keys(ScriptState* script_state) {
     return promise;
   }
 
+  MaybeInit();
+
   // The context may be destroyed and the mojo connection unbound. However the
   // object may live on, reject any requests after the context is destroyed.
-  if (!cache_storage_remote_) {
+  if (!cache_storage_remote_.is_bound()) {
     resolver->Reject(MakeGarbageCollected<DOMException>(
         DOMExceptionCode::kInvalidStateError));
     return promise;
@@ -372,16 +374,18 @@ ScriptPromise CacheStorage::MatchImpl(ScriptState* script_state,
     return promise;
   }
 
-  // The context may be destroyed and the mojo connection unbound. However the
-  // object may live on, reject any requests after the context is destroyed.
-  if (!cache_storage_remote_) {
-    resolver->Reject(MakeGarbageCollected<DOMException>(
-        DOMExceptionCode::kInvalidStateError));
+  if (request->method() != http_names::kGET && !options->ignoreMethod()) {
+    resolver->Resolve();
     return promise;
   }
 
-  if (request->method() != http_names::kGET && !options->ignoreMethod()) {
-    resolver->Resolve();
+  MaybeInit();
+
+  // The context may be destroyed and the mojo connection unbound. However the
+  // object may live on, reject any requests after the context is destroyed.
+  if (!cache_storage_remote_.is_bound()) {
+    resolver->Reject(MakeGarbageCollected<DOMException>(
+        DOMExceptionCode::kInvalidStateError));
     return promise;
   }
 
@@ -457,9 +461,10 @@ ScriptPromise CacheStorage::MatchImpl(ScriptState* script_state,
 
 CacheStorage::CacheStorage(ExecutionContext* context,
                            GlobalFetch::ScopedFetcher* fetcher)
-    : ExecutionContextLifecycleObserver(context),
+    : ExecutionContextClient(context),
       scoped_fetcher_(fetcher),
       blob_client_list_(MakeGarbageCollected<CacheStorageBlobClientList>()),
+      cache_storage_remote_(context),
       ever_used_(false) {
   // See https://bit.ly/2S0zRAS for task types.
   scoped_refptr<base::SingleThreadTaskRunner> task_runner =
@@ -471,14 +476,13 @@ CacheStorage::CacheStorage(ExecutionContext* context,
     mojo::PendingRemote<mojom::blink::CacheStorage> info =
         service_worker->TakeCacheStorage();
     if (info) {
-      cache_storage_remote_ = mojo::Remote<mojom::blink::CacheStorage>(
-          std::move(info), task_runner);
+      cache_storage_remote_.reset();
+      cache_storage_remote_.Bind(std::move(info), task_runner);
       return;
     }
   }
 
-  context->GetBrowserInterfaceBroker().GetInterface(
-      cache_storage_remote_.BindNewPipeAndPassReceiver(task_runner));
+  // Otherwise wait for MaybeInit() to bind a new mojo connection.
 }
 
 CacheStorage::~CacheStorage() = default;
@@ -497,8 +501,9 @@ bool CacheStorage::HasPendingActivity() const {
 void CacheStorage::Trace(Visitor* visitor) {
   visitor->Trace(scoped_fetcher_);
   visitor->Trace(blob_client_list_);
+  visitor->Trace(cache_storage_remote_);
   ScriptWrappable::Trace(visitor);
-  ExecutionContextLifecycleObserver::Trace(visitor);
+  ExecutionContextClient::Trace(visitor);
 }
 
 bool CacheStorage::IsAllowed(ScriptState* script_state) {
@@ -509,8 +514,19 @@ bool CacheStorage::IsAllowed(ScriptState* script_state) {
   return allowed_.value();
 }
 
-void CacheStorage::ContextDestroyed() {
-  cache_storage_remote_.reset();
+void CacheStorage::MaybeInit() {
+  if (cache_storage_remote_.is_bound())
+    return;
+
+  auto* context = GetExecutionContext();
+  if (!context || context->IsContextDestroyed())
+    return;
+
+  scoped_refptr<base::SingleThreadTaskRunner> task_runner =
+      context->GetTaskRunner(blink::TaskType::kMiscPlatformAPI);
+
+  context->GetBrowserInterfaceBroker().GetInterface(
+      cache_storage_remote_.BindNewPipeAndPassReceiver(task_runner));
 }
 
 }  // namespace blink

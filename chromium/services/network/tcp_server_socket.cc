@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/memory/ptr_util.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/optional.h"
@@ -123,8 +123,8 @@ void TCPServerSocket::ProcessNextAccept() {
     return;
   int result =
       socket_->Accept(&accepted_socket_,
-                      base::BindRepeating(&TCPServerSocket::OnAcceptCompleted,
-                                          base::Unretained(this)),
+                      base::BindOnce(&TCPServerSocket::OnAcceptCompleted,
+                                     base::Unretained(this)),
                       &accepted_address_);
   if (result == net::ERR_IO_PENDING)
     return;

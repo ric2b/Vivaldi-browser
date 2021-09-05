@@ -4,8 +4,8 @@
 
 #include "base/bind.h"
 #include "base/callback_forward.h"
+#include "base/check_op.h"
 #include "base/feature_list.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/sequence_checker.h"
@@ -96,8 +96,9 @@ class NetworkConnectionTrackerBrowserTest : public InProcessBrowserTest {
           network_service_test.BindNewPipeAndPassReceiver());
       base::RunLoop run_loop;
       network_service_test->SimulateNetworkChange(
-          type, base::Bind([](base::RunLoop* run_loop) { run_loop->Quit(); },
-                           base::Unretained(&run_loop)));
+          type,
+          base::BindOnce([](base::RunLoop* run_loop) { run_loop->Quit(); },
+                         base::Unretained(&run_loop)));
       run_loop.Run();
       return;
     }

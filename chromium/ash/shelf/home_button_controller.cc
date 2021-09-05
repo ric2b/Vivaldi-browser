@@ -5,8 +5,9 @@
 #include "ash/shelf/home_button_controller.h"
 
 #include "ash/app_list/app_list_controller_impl.h"
-#include "ash/assistant/assistant_controller.h"
+#include "ash/assistant/model/assistant_ui_model.h"
 #include "ash/home_screen/home_screen_controller.h"
+#include "ash/public/cpp/assistant/controller/assistant_ui_controller.h"
 #include "ash/root_window_controller.h"
 #include "ash/shelf/assistant_overlay.h"
 #include "ash/shelf/home_button.h"
@@ -15,7 +16,7 @@
 #include "ash/shell_state.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/bind.h"
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
@@ -50,7 +51,7 @@ HomeButtonController::HomeButtonController(HomeButton* button)
   Shell* shell = Shell::Get();
   shell->app_list_controller()->AddObserver(this);
   shell->tablet_mode_controller()->AddObserver(this);
-  shell->assistant_controller()->ui_controller()->AddModelObserver(this);
+  AssistantUiController::Get()->AddModelObserver(this);
   AssistantState::Get()->AddObserver(this);
 }
 
@@ -59,8 +60,8 @@ HomeButtonController::~HomeButtonController() {
 
   // AppListController and TabletModeController are destroyed early when Shell
   // is being destroyed, so they may not exist.
-  if (shell->assistant_controller())
-    shell->assistant_controller()->ui_controller()->RemoveModelObserver(this);
+  if (AssistantUiController::Get())
+    AssistantUiController::Get()->RemoveModelObserver(this);
   if (shell->app_list_controller())
     shell->app_list_controller()->RemoveObserver(this);
   if (shell->tablet_mode_controller())
@@ -106,7 +107,7 @@ bool HomeButtonController::MaybeHandleGestureEvent(ui::GestureEvent* event) {
       event->SetHandled();
       Shell::Get()->shell_state()->SetRootWindowForNewWindows(
           button_->GetWidget()->GetNativeWindow()->GetRootWindow());
-      Shell::Get()->assistant_controller()->ui_controller()->ShowUi(
+      AssistantUiController::Get()->ShowUi(
           AssistantEntryPoint::kLongPressLauncher);
       return true;
     case ui::ET_GESTURE_LONG_TAP:
@@ -128,16 +129,14 @@ bool HomeButtonController::MaybeHandleGestureEvent(ui::GestureEvent* event) {
 
 bool HomeButtonController::IsAssistantAvailable() {
   AssistantStateBase* state = AssistantState::Get();
-  return state->allowed_state() == mojom::AssistantAllowedState::ALLOWED &&
+  return state->allowed_state() ==
+             chromeos::assistant::AssistantAllowedState::ALLOWED &&
          state->settings_enabled().value_or(false);
 }
 
 bool HomeButtonController::IsAssistantVisible() {
-  return Shell::Get()
-             ->assistant_controller()
-             ->ui_controller()
-             ->model()
-             ->visibility() == AssistantVisibility::kVisible;
+  return AssistantUiController::Get()->GetModel()->visibility() ==
+         AssistantVisibility::kVisible;
 }
 
 void HomeButtonController::OnAppListVisibilityWillChange(bool shown,
@@ -155,7 +154,7 @@ void HomeButtonController::OnTabletModeStarted() {
 }
 
 void HomeButtonController::OnAssistantFeatureAllowedChanged(
-    mojom::AssistantAllowedState state) {
+    chromeos::assistant::AssistantAllowedState state) {
   button_->OnAssistantAvailabilityChanged();
 }
 

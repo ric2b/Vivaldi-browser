@@ -82,8 +82,6 @@ _NEGATIVE_FILTER = [
     'ChromeDriverTest.testAlertOnNewWindow',
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=2532
     'ChromeDriverPageLoadTimeoutTest.testRefreshWithPageLoadTimeout',
-    # testFocus is failing
-    'JavaScriptTests.testFocus',
 ]
 
 
@@ -310,7 +308,7 @@ class ChromeDriverBaseTest(unittest.TestCase):
       server_url = _CHROMEDRIVER_SERVER_URL
 
     if (not _ANDROID_PACKAGE_KEY and 'debugger_address' not in kwargs and
-          '_MINIDUMP_PATH' in globals()):
+          '_MINIDUMP_PATH' in globals() and _MINIDUMP_PATH):
       # Environment required for minidump not supported on Android
       # minidumpPath will fail parsing if debugger_address is set
       if 'experimental_options' in kwargs:
@@ -4271,7 +4269,6 @@ class JavaScriptTests(ChromeDriverBaseTestWithWebServer):
     self._driver.Load(self.GetFileUrl('is_option_element_toggleable_test.html'))
     self.checkTestResult()
 
-  def testFocus(self):
     self._driver.Load(self.GetFileUrl('focus_test.html'))
     self.checkTestResult()
 
@@ -4400,15 +4397,34 @@ if __name__ == '__main__':
 
   all_tests_suite = unittest.defaultTestLoader.loadTestsFromModule(
       sys.modules[__name__])
-  tests = unittest_util.FilterTestSuite(all_tests_suite, options.filter)
+  test_suite = unittest_util.FilterTestSuite(all_tests_suite, options.filter)
+  test_suites = [test_suite]
+
   ChromeDriverBaseTestWithWebServer.GlobalSetUp()
+
   runner = unittest.TextTestRunner(
       stream=sys.stdout, descriptions=False, verbosity=2)
-  result = runner.run(tests)
+  result = runner.run(test_suite)
+  results = [result]
+
+  num_failed = len(result.failures) + len(result.errors)
+  # Limit fail tests to 10 to avoid real bug causing many tests to fail
+  # Only enable retry for automated bot test
+  if (num_failed > 0 and num_failed <= 10
+      and options.test_type == 'integration'):
+    retry_test_suite = unittest.TestSuite()
+    for f in result.failures:
+      retry_test_suite.addTest(f[0])
+    for e in result.errors:
+      retry_test_suite.addTest(e[0])
+    test_suites.append(retry_test_suite)
+    print '\nRetrying failed tests\n'
+    retry_result = runner.run(retry_test_suite)
+    results.append(retry_result)
+
   ChromeDriverBaseTestWithWebServer.GlobalTearDown()
 
   if options.isolated_script_test_output:
-    util.WriteResultToJSONFile(tests, result,
+    util.WriteResultToJSONFile(test_suites, results,
                                options.isolated_script_test_output)
-
-  sys.exit(len(result.failures) + len(result.errors))
+  sys.exit(len(results[-1].failures) + len(results[-1].errors))

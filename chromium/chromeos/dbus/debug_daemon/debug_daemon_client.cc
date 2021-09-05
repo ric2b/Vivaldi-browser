@@ -30,6 +30,8 @@
 #include "base/task/thread_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_config.h"
+#include "chromeos/dbus/cryptohome/cryptohome_client.h"
+#include "chromeos/dbus/cryptohome/rpc.pb.h"
 #include "chromeos/dbus/pipe_reader.h"
 #include "dbus/bus.h"
 #include "dbus/message.h"
@@ -232,7 +234,8 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
 
-  void GetScrubbedBigLogs(GetLogsCallback callback) override {
+  void GetScrubbedBigLogs(const cryptohome::AccountIdentifier& id,
+                          GetLogsCallback callback) override {
     // The PipeReaderWrapper is a self-deleting object; we don't have to worry
     // about ownership or lifetime. We need to create a new one for each Big
     // Logs requests in order to queue these requests. One request can take a
@@ -245,6 +248,7 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
                                  debugd::kGetBigFeedbackLogs);
     dbus::MessageWriter writer(&method_call);
     writer.AppendFileDescriptor(pipe_write_end.get());
+    writer.AppendString(id.account_id());
 
     DVLOG(1) << "Requesting big feedback logs";
     debugdaemon_proxy_->CallMethod(
@@ -252,6 +256,20 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
         base::BindOnce(&DebugDaemonClientImpl::OnBigFeedbackLogsResponse,
                        weak_ptr_factory_.GetWeakPtr(),
                        pipe_reader->AsWeakPtr()));
+  }
+
+  void BackupArcBugReport(const std::string& userhash,
+                          VoidDBusMethodCallback callback) override {
+    dbus::MethodCall method_call(debugd::kDebugdInterface,
+                                 debugd::kBackupArcBugReport);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendString(userhash);
+
+    DVLOG(1) << "Backing up ARC bug report";
+    debugdaemon_proxy_->CallMethod(
+        &method_call, kBigLogsDBusTimeoutMS,
+        base::BindOnce(&DebugDaemonClientImpl::OnVoidMethod,
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
 
   void GetAllLogs(GetLogsCallback callback) override {
@@ -520,15 +538,18 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
   }
 
   void StartPluginVmDispatcher(const std::string& owner_id,
+                               const std::string& lang,
                                PluginVmDispatcherCallback callback) override {
     dbus::MethodCall method_call(debugd::kDebugdInterface,
                                  debugd::kStartVmPluginDispatcher);
     dbus::MessageWriter writer(&method_call);
     writer.AppendString(owner_id);
-    debugdaemon_proxy_->CallMethod(
+    writer.AppendString(lang);
+    debugdaemon_proxy_->CallMethodWithErrorResponse(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
         base::BindOnce(&DebugDaemonClientImpl::OnStartPluginVmDispatcher,
-                       weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+                       weak_ptr_factory_.GetWeakPtr(), std::move(callback),
+                       owner_id));
   }
 
   void StopPluginVmDispatcher(PluginVmDispatcherCallback callback) override {
@@ -862,7 +883,34 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
   }
 
   void OnStartPluginVmDispatcher(PluginVmDispatcherCallback callback,
-                                 dbus::Response* response) {
+                                 std::string owner_id,
+                                 dbus::Response* response,
+                                 dbus::ErrorResponse* error) {
+    if (error) {
+      // Older versions of Chrome OS do not handle the |lang| arg, call again
+      // with just |owner_id| for now.
+      // TODO(crbug.com/1072082): Remove once new CrOS code is in Beta.
+      if (error->GetErrorName() == DBUS_ERROR_INVALID_ARGS &&
+          !owner_id.empty()) {
+        LOG(ERROR) << "Failed to start dispatcher due to invalid arguments in "
+                      "DBus call, retrying without language argument";
+        dbus::MethodCall method_call(debugd::kDebugdInterface,
+                                     debugd::kStartVmPluginDispatcher);
+        dbus::MessageWriter writer(&method_call);
+        writer.AppendString(owner_id);
+        debugdaemon_proxy_->CallMethodWithErrorResponse(
+            &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+            base::BindOnce(&DebugDaemonClientImpl::OnStartPluginVmDispatcher,
+                           weak_ptr_factory_.GetWeakPtr(), std::move(callback),
+                           std::string()));
+        return;
+      }
+      LOG(ERROR) << "Failed to start dispatcher, DBus error "
+                 << error->GetErrorName();
+      std::move(callback).Run(false);
+      return;
+    }
+
     bool result = false;
     if (response) {
       dbus::MessageReader reader(response);

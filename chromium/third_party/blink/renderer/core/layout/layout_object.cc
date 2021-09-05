@@ -197,7 +197,7 @@ void* LayoutObject::operator new(size_t sz) {
 
 void LayoutObject::operator delete(void* ptr) {
   DCHECK(IsMainThread());
-  base::PartitionFree(ptr);
+  WTF::Partitions::LayoutPartition()->Free(ptr);
 }
 
 LayoutObject* LayoutObject::CreateObject(Element* element,
@@ -242,20 +242,26 @@ LayoutObject* LayoutObject::CreateObject(Element* element,
     case EDisplay::kFlowRoot:
     case EDisplay::kInlineBlock:
     case EDisplay::kListItem:
-    case EDisplay::kMath:
-    case EDisplay::kInlineMath:
       return LayoutObjectFactory::CreateBlockFlow(*element, style, legacy);
     case EDisplay::kTable:
     case EDisplay::kInlineTable:
+      UseCounter::Count(element->GetDocument(),
+                        WebFeature::kLegacyLayoutByTable);
       return new LayoutTable(element);
     case EDisplay::kTableRowGroup:
     case EDisplay::kTableHeaderGroup:
     case EDisplay::kTableFooterGroup:
+      UseCounter::Count(element->GetDocument(),
+                        WebFeature::kLegacyLayoutByTable);
       return new LayoutTableSection(element);
     case EDisplay::kTableRow:
+      UseCounter::Count(element->GetDocument(),
+                        WebFeature::kLegacyLayoutByTable);
       return new LayoutTableRow(element);
     case EDisplay::kTableColumnGroup:
     case EDisplay::kTableColumn:
+      UseCounter::Count(element->GetDocument(),
+                        WebFeature::kLegacyLayoutByTable);
       return new LayoutTableCol(element);
     case EDisplay::kTableCell:
       return LayoutObjectFactory::CreateTableCell(*element, style, legacy);
@@ -268,8 +274,13 @@ LayoutObject* LayoutObject::CreateObject(Element* element,
         return LayoutObjectFactory::CreateBlockForLineClamp(*element, style,
                                                             legacy);
       }
-      if (style.IsDeprecatedFlexboxUsingFlexLayout())
+      if (style.IsDeprecatedFlexboxUsingFlexLayout()) {
+        UseCounter::Count(element->GetDocument(),
+                          WebFeature::kLegacyLayoutByFlexBox);
         return new LayoutFlexibleBox(element);
+      }
+      UseCounter::Count(element->GetDocument(),
+                        WebFeature::kLegacyLayoutByDeprecatedFlexBox);
       return new LayoutDeprecatedFlexibleBox(element);
     case EDisplay::kFlex:
     case EDisplay::kInlineFlex:
@@ -278,7 +289,10 @@ LayoutObject* LayoutObject::CreateObject(Element* element,
     case EDisplay::kGrid:
     case EDisplay::kInlineGrid:
       UseCounter::Count(element->GetDocument(), WebFeature::kCSSGridLayout);
-      return new LayoutGrid(element);
+      return LayoutObjectFactory::CreateGrid(*element, style, legacy);
+    case EDisplay::kMath:
+    case EDisplay::kInlineMath:
+      return LayoutObjectFactory::CreateMath(*element, style, legacy);
     case EDisplay::kLayoutCustom:
     case EDisplay::kInlineLayoutCustom:
       DCHECK(RuntimeEnabledFeatures::LayoutNGEnabled());
@@ -332,6 +346,14 @@ bool LayoutObject::IsHR() const {
   return IsA<HTMLHRElement>(GetNode());
 }
 
+bool LayoutObject::IsStyleGenerated() const {
+  if (const auto* layout_text_fragment = ToLayoutTextFragmentOrNull(this))
+    return !layout_text_fragment->AssociatedTextNode();
+
+  const Node* node = GetNode();
+  return !node || node->IsPseudoElement();
+}
+
 void LayoutObject::SetIsInsideFlowThreadIncludingDescendants(
     bool inside_flow_thread) {
   LayoutObject* next;
@@ -354,9 +376,9 @@ bool LayoutObject::RequiresAnonymousTableWrappers(
   // CSS 2.1 Tables: 17.2.1 Anonymous table objects
   // http://www.w3.org/TR/CSS21/tables.html#anonymous-boxes
   if (new_child->IsLayoutTableCol()) {
-    const LayoutTableCol* new_table_column = ToLayoutTableCol(new_child);
     bool is_column_in_column_group =
-        new_table_column->IsTableColumn() && IsLayoutTableCol();
+        new_child->StyleRef().Display() == EDisplay::kTableColumn &&
+        IsLayoutTableCol();
     return !IsTable() && !is_column_in_column_group;
   }
   if (new_child->IsTableCaption())
@@ -378,7 +400,9 @@ void LayoutObject::AssertClearedPaintInvalidationFlags() const {
     return;
   // NG text objects are exempt, as pre-paint walking doesn't visit those with
   // no paint effects (only white-space, for instance).
-  if (IsText() && IsLayoutNGObject())
+  if ((IsText() && IsLayoutNGObject()) ||
+      // and culled inline boxes too.
+      (IsInLayoutNGInlineFormattingContext() && IsLayoutInline()))
     return;
   ShowLayoutTreeForThis();
   NOTREACHED();
@@ -429,6 +453,19 @@ void LayoutObject::RemoveChild(LayoutObject* old_child) {
     return;
 
   children->RemoveChildNode(this, old_child);
+}
+
+void LayoutObject::NotifyPriorityScrollAnchorStatusChanged() {
+  if (!Parent())
+    return;
+  for (auto* layer = Parent()->EnclosingLayer(); layer;
+       layer = layer->Parent()) {
+    if (PaintLayerScrollableArea* scrollable_area =
+            layer->GetScrollableArea()) {
+      DCHECK(scrollable_area->GetScrollAnchor());
+      scrollable_area->GetScrollAnchor()->ClearSelf();
+    }
+  }
 }
 
 void LayoutObject::RegisterSubtreeChangeListenerOnDescendants(bool value) {
@@ -526,7 +563,10 @@ bool LayoutObject::IsRenderedLegendInternal() const {
   const auto* parent = Parent();
   if (RuntimeEnabledFeatures::LayoutNGFieldsetEnabled()) {
     // If there is a rendered legend, it will be found inside the anonymous
-    // fieldset wrapper.
+    // fieldset wrapper. If the anonymous fieldset wrapper is a multi-column,
+    // the rendered legend will be found inside the multi-column flow thread.
+    if (parent->IsLayoutFlowThread())
+      parent = parent->Parent();
     if (parent->IsAnonymous() && parent->Parent()->IsLayoutNGFieldset())
       parent = parent->Parent();
   }
@@ -818,6 +858,15 @@ LayoutBlockFlow* LayoutObject::RootInlineFormattingContext() const {
   return nullptr;
 }
 
+LayoutBlockFlow* LayoutObject::FragmentItemsContainer() const {
+  DCHECK(IsInline());
+  for (LayoutObject* parent = Parent(); parent; parent = parent->Parent()) {
+    if (auto* block_flow = DynamicTo<LayoutBlockFlow>(parent))
+      return block_flow;
+  }
+  return nullptr;
+}
+
 LayoutBlockFlow* LayoutObject::ContainingNGBlockFlow() const {
   DCHECK(IsInline());
   if (!RuntimeEnabledFeatures::LayoutNGEnabled())
@@ -931,20 +980,6 @@ static inline bool ObjectIsRelayoutBoundary(const LayoutObject* object) {
   if (!style->Width().IsFixed() || !style->Height().IsFixed())
     return false;
 
-  if (object->IsTextControl())
-    return true;
-
-  if (is_svg_root)
-    return true;
-
-  if (!object->HasOverflowClip())
-    return false;
-
-  // Scrollbar parts can be removed during layout. Avoid the complexity of
-  // having to deal with that.
-  if (object->IsLayoutCustomScrollbarPart())
-    return false;
-
   if (const LayoutBox* layout_box = ToLayoutBoxOrNull(object)) {
     // In general we can't relayout a flex item independently of its container;
     // not only is the result incorrect due to the override size that's set, it
@@ -960,6 +995,20 @@ static inline bool ObjectIsRelayoutBoundary(const LayoutObject* object) {
             .HasOutOfFlowPositionedDescendants())
       return false;
   }
+
+  if (object->IsTextControl())
+    return true;
+
+  if (is_svg_root)
+    return true;
+
+  if (!object->HasOverflowClip())
+    return false;
+
+  // Scrollbar parts can be removed during layout. Avoid the complexity of
+  // having to deal with that.
+  if (object->IsLayoutCustomScrollbarPart())
+    return false;
 
   // Inside multicol it's generally problematic to allow relayout roots. The
   // multicol container itself may be scheduled for relayout as well (due to
@@ -1162,6 +1211,8 @@ void LayoutObject::CheckBlockPositionedObjectsNeedLayout() {
 void LayoutObject::SetIntrinsicLogicalWidthsDirty(
     MarkingBehavior mark_parents) {
   bitfields_.SetIntrinsicLogicalWidthsDirty(true);
+  bitfields_.SetIntrinsicLogicalWidthsDependsOnPercentageBlockSize(true);
+  bitfields_.SetIntrinsicLogicalWidthsChildDependsOnPercentageBlockSize(true);
   if (mark_parents == kMarkContainerChain &&
       (IsText() || !StyleRef().HasOutOfFlowPosition()))
     InvalidateContainerIntrinsicLogicalWidths();
@@ -1171,9 +1222,18 @@ void LayoutObject::ClearIntrinsicLogicalWidthsDirty() {
   bitfields_.SetIntrinsicLogicalWidthsDirty(false);
 }
 
+bool LayoutObject::IsFontFallbackValid() const {
+  return StyleRef().GetFont().IsFallbackValid() &&
+         FirstLineStyle()->GetFont().IsFallbackValid();
+}
+
 void LayoutObject::InvalidateSubtreeLayoutForFontUpdates() {
-  SetNeedsLayoutAndIntrinsicWidthsRecalcAndFullPaintInvalidation(
-      layout_invalidation_reason::kFontsChanged);
+  if (!RuntimeEnabledFeatures::
+          CSSReducedFontLoadingLayoutInvalidationsEnabled() ||
+      !IsFontFallbackValid()) {
+    SetNeedsLayoutAndIntrinsicWidthsRecalcAndFullPaintInvalidation(
+        layout_invalidation_reason::kFontsChanged);
+  }
   for (LayoutObject* child = SlowFirstChild(); child;
        child = child->NextSibling()) {
     child->InvalidateSubtreeLayoutForFontUpdates();
@@ -1319,13 +1379,14 @@ LayoutBlock* LayoutObject::FindNonAnonymousContainingBlock(
 bool LayoutObject::ComputeIsFixedContainer(const ComputedStyle* style) const {
   if (!style)
     return false;
+  bool is_document_element = IsDocumentElement();
   // https://www.w3.org/TR/filter-effects-1/#FilterProperty
-  if (style->HasFilter() && !IsDocumentElement())
+  if (!is_document_element && style->HasNonInitialFilter())
     return true;
   // Backdrop-filter creates a containing block for fixed and absolute
   // positioned elements:
   // https://drafts.fxtf.org/filter-effects-2/#backdrop-filter-operation
-  if (style->HasBackdropFilter() && !IsDocumentElement())
+  if (!is_document_element && style->HasNonInitialBackdropFilter())
     return true;
   // The LayoutView is always a container of fixed positioned descendants. In
   // addition, SVG foreignObjects become such containers, so that descendants
@@ -1344,6 +1405,18 @@ bool LayoutObject::ComputeIsFixedContainer(const ComputedStyle* style) const {
   if (ShouldApplyPaintContainment(*style) ||
       ShouldApplyLayoutContainment(*style))
     return true;
+
+  // We intend to change behavior to set containing block based on computed
+  // rather than used style of transform-style. HasTransformRelatedProperty
+  // above will return true if the *used* value of transform-style is
+  // preserve-3d, so to estimate compat we need to count if the line below is
+  // reached.
+  if (style->TransformStyle3D() == ETransformStyle3D::kPreserve3d) {
+    UseCounter::Count(
+        GetDocument(),
+        WebFeature::kTransformStyleContainingBlockComputedUsedMismatch);
+  }
+
   return false;
 }
 
@@ -1973,11 +2046,12 @@ StyleDifference LayoutObject::AdjustStyleDifference(
         StyleRef().HasBackgroundRelatedColorReferencingCurrentColor() ||
         // Skip any text nodes that do not contain text boxes. Whitespace cannot
         // be skipped or we will miss invalidating decorations (e.g.,
-        // underlines).
+        // underlines). MathML elements are not skipped either as some of them
+        // do special painting (e.g. fraction bar).
         (IsText() && !IsBR() && ToLayoutText(this)->HasInlineFragments()) ||
         (IsSVG() && StyleRef().SvgStyle().IsFillColorCurrentColor()) ||
         (IsSVG() && StyleRef().SvgStyle().IsStrokeColorCurrentColor()) ||
-        IsListMarker() || IsDetailsMarker())
+        IsListMarker() || IsDetailsMarker() || IsMathML())
       diff.SetNeedsPaintInvalidation();
   }
 
@@ -2457,6 +2531,15 @@ static void ClearAncestorScrollAnchors(LayoutObject* layout_object) {
 
 void LayoutObject::StyleDidChange(StyleDifference diff,
                                   const ComputedStyle* old_style) {
+  if (style_->TransformStyle3D() == ETransformStyle3D::kPreserve3d) {
+    if (style_->HasNonInitialBackdropFilter() || style_->HasBlendMode() ||
+        !style_->HasAutoClip() || style_->ClipPath() ||
+        style_->HasIsolation() || style_->HasMask()) {
+      UseCounter::Count(GetDocument(),
+                        WebFeature::kAdditionalGroupingPropertiesForCompat);
+    }
+  }
+
   // First assume the outline will be affected. It may be updated when we know
   // it's not affected.
   bool has_outline = style_->HasOutline();
@@ -3540,9 +3623,12 @@ const ComputedStyle* LayoutObject::FirstLineStyleWithoutFallback() const {
       // it's based on first_line_block's style. We need to get the uncached
       // first line style based on this object's style and cache the result in
       // it.
-      return StyleRef().AddCachedPseudoElementStyle(
-          first_line_block->GetUncachedPseudoElementStyle(
-              PseudoElementStyleRequest(kPseudoIdFirstLine), Style()));
+      if (scoped_refptr<ComputedStyle> first_line_style =
+              first_line_block->GetUncachedPseudoElementStyle(
+                  PseudoElementStyleRequest(kPseudoIdFirstLine), Style())) {
+        return StyleRef().AddCachedPseudoElementStyle(
+            std::move(first_line_style));
+      }
     }
   } else if (!IsAnonymous() && IsLayoutInline() &&
              !GetNode()->IsFirstLetterPseudoElement()) {
@@ -3554,9 +3640,12 @@ const ComputedStyle* LayoutObject::FirstLineStyleWithoutFallback() const {
             Parent()->FirstLineStyleWithoutFallback()) {
       // A first-line style is in effect. Get uncached first line style based on
       // parent_first_line_style and cache the result in this object's style.
-      return StyleRef().AddCachedPseudoElementStyle(
-          GetUncachedPseudoElementStyle(kPseudoIdFirstLineInherited,
-                                        parent_first_line_style));
+      if (scoped_refptr<ComputedStyle> first_line_style =
+              GetUncachedPseudoElementStyle(kPseudoIdFirstLineInherited,
+                                            parent_first_line_style)) {
+        return StyleRef().AddCachedPseudoElementStyle(
+            std::move(first_line_style));
+      }
     }
   }
   return nullptr;

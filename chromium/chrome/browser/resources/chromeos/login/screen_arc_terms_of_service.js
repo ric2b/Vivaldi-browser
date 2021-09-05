@@ -10,8 +10,8 @@ login.createScreen('ArcTermsOfServiceScreen', 'arc-tos', function() {
   return {
     EXTERNAL_API: [
       'setMetricsMode', 'setBackupAndRestoreMode', 'setLocationServicesMode',
-      'loadPlayStoreToS', 'setArcManaged', 'hideSkipButton', 'setupForDemoMode',
-      'clearDemoMode', 'setTosForTesting', 'setTosHostNameForTesting'
+      'loadPlayStoreToS', 'setArcManaged', 'setupForDemoMode', 'clearDemoMode',
+      'setTosForTesting'
     ],
 
     /** @override */
@@ -23,6 +23,10 @@ login.createScreen('ArcTermsOfServiceScreen', 'arc-tos', function() {
       /* The hostname of the url where the terms of service will be fetched.
        * Overwritten by tests to load terms of service from local test server.*/
       this.termsOfServiceHostName_ = 'https://play.google.com';
+      if (loadTimeData.valueExists('arcTosHostNameForTesting')) {
+        this.setTosHostNameForTesting_(
+            loadTimeData.getString('arcTosHostNameForTesting'));
+      }
     },
 
     /** Initial UI State for screen */
@@ -146,13 +150,6 @@ login.createScreen('ArcTermsOfServiceScreen', 'arc-tos', function() {
     },
 
     /**
-     * Hides the "Skip" button in the ToS screen.
-     * TODO(lgcheng@, crbug/1059048) remove this external API and related
-     * skip code.
-     */
-    hideSkipButton() {},
-
-    /**
      * Loads Play Store ToS in case country code has been changed or previous
      * attempt failed.
      * @param {string} countryCode Country code based on current timezone.
@@ -222,8 +219,9 @@ login.createScreen('ArcTermsOfServiceScreen', 'arc-tos', function() {
      * Sets Play Store hostname url used to fetch terms of service for testing.
      * @param {string} hostname hostname used to fetch terms of service.
      */
-    setTosHostNameForTesting(hostname) {
+    setTosHostNameForTesting_(hostname) {
       this.termsOfServiceHostName_ = hostname;
+      this.reloadsLeftForTesting_ = 1;
 
       // Enable loading content script 'playstore.js' when fetching ToS from
       // the test server.
@@ -293,6 +291,11 @@ login.createScreen('ArcTermsOfServiceScreen', 'arc-tos', function() {
      * Reloads Play Store ToS.
      */
     reloadPlayStoreToS() {
+      if (this.reloadsLeftForTesting_ !== undefined) {
+        if (this.reloadsLeftForTesting_ <= 0)
+          return;
+        --this.reloadsLeftForTesting_;
+      }
       this.termsError = false;
       this.usingOfflineTerms_ = false;
       var termsView = this.getElement_('arcTosView');

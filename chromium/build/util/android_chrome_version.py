@@ -52,7 +52,7 @@ _PACKAGE_NAMES = {
 
 We choose 5 because it won't conflict with values in _PACKAGE_NAMES.
 """
-_NEXT_BUILD_VERSION_CODE_DIFF = 100050
+_NEXT_BUILD_VERSION_CODE_DIFF = 50
 
 """List of version numbers to be created for each build configuration.
 Tuple format:

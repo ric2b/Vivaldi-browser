@@ -2,15 +2,7 @@
 
 #include "browser/vivaldi_default_bookmarks.h"
 
-#if defined(OS_ANDROID)
-#include "base/android/apk_assets.h"
-#endif
 #include "base/bind.h"
-#include "base/files/file_path.h"
-#include "base/files/file_util.h"
-#include "base/guid.h"
-#include "base/json/json_reader.h"
-#include "base/path_service.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/values.h"
@@ -22,6 +14,7 @@
 #include "ui/base/models/tree_node_iterator.h"
 
 #include "components/bookmarks/vivaldi_bookmark_kit.h"
+#include "components/bookmarks/vivaldi_partners.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
 namespace vivaldi_default_bookmarks {
@@ -31,6 +24,9 @@ bool g_bookmark_update_actve = false;
 using bookmarks::BookmarkModel;
 using bookmarks::BookmarkNode;
 
+using vivaldi_partners::PartnerDetails;
+using vivaldi_partners::PartnerDatabase;
+
 namespace {
 
 // This will enable code that, on an update, will remove any installed partner
@@ -38,64 +34,28 @@ namespace {
 // we do not want this functionality.
 constexpr bool kAllowPartnerRemoval = false;
 
-#if defined(OS_ANDROID)
-const char kAssetsDir[] = "assets/default-bookmarks/";
-#else
-#if !defined(OS_MACOSX)
-const base::FilePath::CharType kResources[] = FILE_PATH_LITERAL("resources");
-#endif
-const base::FilePath::CharType kVivaldi[] = FILE_PATH_LITERAL("vivaldi");
-const base::FilePath::CharType kDefBookmarks[] =
-    FILE_PATH_LITERAL("default-bookmarks");
-#endif  // !OS_ANDROID
+// If this is true, older locale-specific partner GUIDs will be updated to newer
+// locale-independent ones. This is false for now to avoid suprises when syncing
+// between profiles using newer version of Vivaldi and older one that knows only
+// about locale-based partners.
+constexpr bool kUpdateLocaleBasedPartners = false;
 
 const char kFallbackLocaleFile[] = "en-US.json";
-const char kPartnerDBFile[] = "partners.json";
-const char kPartnerLocaleMapFile[] = "partners-locale-map.json";
-
-const char kFoldersKey[] = "folders";
-const char kGuidKey[] = "guid";
-const char kSpeeddialKey[] = "speeddial";
 
 const char kChildrenKey[] = "children";
 const char kNameKey[] = "name";
 const char kDescriptionKey[] = "description";
 const char kNicknameKey[] = "nickname";
-const char kPartnerKey[] = "partner";
-const char kThumbNailKey[] = "thumbnail";
 const char kTitleKey[] = "title";
 const char kURLKey[] = "url";
 const char kVersionKey[] = "version";
 
-const char kPartnerThumbnailUrlPrefix[] = "/resources/";
-
-struct PartnerDetails {
-  std::string name;
-  std::string title;
-  std::string guid;
-  bool speeddial = false;
-  std::vector<std::string> old_partner_ids;
-};
-
-struct PartnerDatabase {
-
-  PartnerDetails* FindDetailsByName(base::StringPiece name) {
-    auto i = name_index.find(name);
-    if (i == name_index.end())
-      return nullptr;
-    return &details[i->second];
-  }
-
-  std::vector<PartnerDetails> details;
-
-  // Map partner details name to its index in the details array.
-  std::map<base::StringPiece, size_t> name_index;
-};
+const char kBookmarksFolderName[] = "Bookmarks";
 
 struct DefaultBookmarkItem {
   std::string title;
   std::string nickname;
-  std::string partner_id;
+  std::string guid;
   std::string thumbnail;
   std::string description;
   GURL url;
@@ -104,11 +64,11 @@ struct DefaultBookmarkItem {
 };
 
 struct DefaultBookmarkTree {
-  PartnerDatabase partner_db;
+  std::unique_ptr<PartnerDatabase> partner_db;
   bool valid = false;
   std::string version;
   std::vector<DefaultBookmarkItem> top_items;
-  std::set<std::string> partner_ids;
+  size_t item_count = 0;
 };
 
 class BookmarkUpdater {
@@ -125,17 +85,28 @@ class BookmarkUpdater {
   BookmarkUpdater(const DefaultBookmarkTree* default_bookmark_tree,
                   BookmarkModel* model);
 
-  void SetDeletedPartners(const base::Value* deleted_partners);
+  void SetDeletedPartners(PrefService* prefs);
 
   void RunCleanUpdate();
 
   const Stats& stats() const { return stats_; }
 
+  const PartnerDatabase* partner_db() const {
+    return default_bookmark_tree_->partner_db.get();
+  }
+
  private:
-  void CleanUpdateRecursively(
+  void UpdateRecursively(
       const std::vector<DefaultBookmarkItem>& default_items,
       const BookmarkNode* parent_node);
+
   void FindExistingPartners(const BookmarkNode* top_node);
+
+  // Find existing bookmark node and update it or add a new one. Return null
+  // if item's children should be skipped.
+  const BookmarkNode* UpdateOrAdd(
+      const DefaultBookmarkItem& default_item,
+      const BookmarkNode* parent_node);
   void UpdatePartnerNode(const DefaultBookmarkItem& item,
                          const BookmarkNode* node);
   const BookmarkNode* AddPartnerNode(const DefaultBookmarkItem& item,
@@ -143,252 +114,94 @@ class BookmarkUpdater {
 
   const DefaultBookmarkTree* default_bookmark_tree_;
   BookmarkModel* model_;
-  base::flat_set<std::string> deleted_partner_ids_;
+  base::flat_set<std::string> deleted_partner_guids_;
 
-  // For named partners map its old locale-based partner id to the guid.
-  base::flat_map<base::StringPiece, base::StringPiece> locale_id_guid_map_;
   std::map<std::string, const BookmarkNode*> guid_node_map_;
   std::map<std::string, const BookmarkNode*> existing_partner_bookmarks_;
   Stats stats_;
 };
 
-bool HasPartnerThumbnailPrefix(base::StringPiece url) {
-  return url.starts_with(kPartnerThumbnailUrlPrefix);
-}
+struct DefaultBookmarkParser {
+  void ParseJson(base::Value default_bookmarks_value);
+  void ParseBookmarkList(int level,
+                         base::Value* value_list,
+                         std::vector<DefaultBookmarkItem>* default_items,
+                         bool inside_bookmarks_folder);
 
-bool IsValidPartnerName(base::StringPiece name) {
-  if (name.empty())
-    return false;
+  DefaultBookmarkTree tree;
 
-  // The name must use only latin letters, digits and underscores and must not
-  // start with a digit.
-  for (size_t i = 0; i < name.size(); ++i) {
-    char c = name[i];
-    if (base::IsAsciiAlpha(c) || c == '_')
-      continue;
-    if (i > 0 && base::IsAsciiDigit(c))
-      continue;
-    return false;
-  }
+  // The set of partner folders and bookmarks outside Bokmarks folder that are
+  // used by a particular bookmark file.
+  std::set<const PartnerDetails*> used_details;
 
-  return true;
-}
+  // The set of partner bookmarks inside Bokmarks folder that are used by a
+  // particular bookmark file.
+  std::set<const PartnerDetails*> used_details2;
+};
 
-bool ParsePartnerDatabaseDetailsList(base::Value* list_value,
-                                     PartnerDatabase* db) {
-  DCHECK(list_value->is_list());
-  auto list = list_value->GetList();
-  for (size_t i = 0; i < list.size(); ++i) {
-    auto error = [&](base::StringPiece message) -> bool {
-      LOG(ERROR) << "Partner database JSON error: bad format of " << kFoldersKey
-                 << "[" << i << "] - " << message;
-      return false;
-    };
-    base::Value& dict = list[i];
-    if (!dict.is_dict())
-      return error("entry is not an object");
-    PartnerDetails details;
-    for (auto property_key_value : dict.DictItems()) {
-      const std::string& property = property_key_value.first;
-      base::Value& v = property_key_value.second;
-      if (property == kNameKey) {
-        if (!v.is_string())
-          return error(property + " is not a string");
-        details.name = std::move(v.GetString());
-        if (!IsValidPartnerName(details.name))
-          return error(property + " is not a valid partner name - " +
-                       details.name);
-      } else if (property == kTitleKey) {
-        if (!v.is_string())
-          return error(property + " is not a string");
-        details.title = std::move(v.GetString());
-      } else if (property == kGuidKey) {
-        if (!v.is_string())
-          return error(property + " is not a string");
-        details.guid = std::move(v.GetString());
-        if (!base::IsValidGUID(details.guid))
-          return error(property + " is not a valid GUID - " + details.guid);
-      } else if (property == kSpeeddialKey) {
-        if (!v.is_bool())
-          return error(property + " is not a boolean");
-        details.speeddial = v.GetBool();
-      } else {
-        return error("unknown property '" + property + "'");
-      }
-    }
-    if (details.name.empty())
-      return error(std::string("missing ") + kNameKey + " property");
-    if (details.title.empty()) {
-      details.title = details.name;
-    }
-    if (details.guid.empty())
-      return error(std::string("missing ") + kGuidKey + " property");
-    db->details.push_back(std::move(details));
-  }
-  return true;
-}
-
-bool ParsePartnerDatabaseJson(base::Value root,
-                              base::Value partners_locale_value,
-                              PartnerDatabase* db) {
-  auto error = [](base::StringPiece message) -> bool {
-    LOG(ERROR) << "Partner database JSON error: " << message;
-    return false;
-  };
-  if (!root.is_dict())
-    return error("partner db json is not an object");
-
-  base::Value* folders_value = root.FindListKey(kFoldersKey);
-  if (!folders_value)
-    return error(std::string("missing ") + kFoldersKey + " key");
-
-  db->details.reserve(folders_value->GetList().size());
-  if (!ParsePartnerDatabaseDetailsList(folders_value, db))
-    return false;
-
-  // Establish index now that we no longer mutate details and check
-  // for unique values.
-  std::set<base::StringPiece> guid_set;
-  for (size_t i = 0; i < db->details.size(); ++i) {
-    const PartnerDetails& details = db->details[i];
-    if (!db->name_index.emplace(details.name, i).second)
-      return error(std::string("duplicated partner name - ") + details.name);
-    if (!guid_set.emplace(details.guid).second)
-      return error(std::string("duplicated GUID - ") + details.guid);
-  }
-
-  if (!partners_locale_value.is_dict())
-    return error("partner local map json is not an object");
-  for (auto name_key_value : partners_locale_value.DictItems()) {
-    const std::string& name = name_key_value.first;
-    PartnerDetails* details = db->FindDetailsByName(name);
-    if (!details)
-      return error(std::string("'") + name + "' from " + kPartnerLocaleMapFile +
-                   " is not defined in " + kGuidKey);
-    base::Value& locale_dict = name_key_value.second;
-    if (!locale_dict.is_dict())
-      return error(std::string(kPartnerLocaleMapFile) + "." + name +
-                   " is not a dictionary");
-    std::vector<std::string>& partner_ids = details->old_partner_ids;
-    partner_ids.resize(locale_dict.DictSize());
-    for (auto locale_key_value : locale_dict.DictItems()) {
-      const std::string& partner_id = locale_key_value.first;
-      if (!base::IsValidGUID(partner_id))
-        return error(std::string("Partner id in ") +
-                     std::string(kPartnerLocaleMapFile) + "." + name +
-                     " is not a valid GUID - " + partner_id);
-      base::Value& partner_id_value = locale_key_value.second;
-      if (!partner_id_value.is_string())
-        return error(std::string(kPartnerLocaleMapFile) + "." + name + "." +
-                     partner_id + " is not a string");
-      const std::string& locale = partner_id_value.GetString();
-      bool valid_locale = false;
-      if (locale.size() >= 2) {
-        if (base::IsAsciiLower(locale[0]) && base::IsAsciiLower(locale[1])) {
-          if (locale.size() == 2) {
-            valid_locale = true;
-          } else if (locale.size() == 5) {
-            valid_locale = (locale[2] == '-' && base::IsAsciiUpper(locale[3]) &&
-                            base::IsAsciiUpper(locale[4]));
-          }
-        }
-      }
-      if (!valid_locale)
-        return error(std::string("The value of ") + kPartnerLocaleMapFile + "." + partner_id +
-                     " is not a valid locale name - " + locale);
-      partner_ids.push_back(std::move(partner_id));
-    }
-  }
-  return true;
-}
-
-void ParseDefaultJsonBookmarkList(
+void DefaultBookmarkParser::ParseBookmarkList(
     int level,
     base::Value* value_list,
     std::vector<DefaultBookmarkItem>* default_items,
-    DefaultBookmarkTree* tree) {
+    bool inside_bookmarks_folder) {
   if (!value_list->is_list()) {
-    tree->valid = false;
+    tree.valid = false;
     LOG(ERROR) << kChildrenKey << " is not an array.";
     return;
   }
   if (level > 5) {
-    tree->valid = false;
+    tree.valid = false;
     LOG(ERROR) << "too deaply nested default bookmarks";
     return;
   }
 
   for (base::Value& dict : value_list->GetList()) {
     if (!dict.is_dict()) {
-      tree->valid = false;
+      tree.valid = false;
       LOG(ERROR) << "a child of " << kChildrenKey << " is not a dictionary";
       continue;
     }
 
-    // The flag becomes false on unrecoverable errors.
-    bool skip_node = false;
     DefaultBookmarkItem item;
 
-    base::Value* children = dict.FindKey(kChildrenKey);
-    if (children) {
+    const PartnerDetails* details = nullptr;
+    if (std::string* value = dict.FindStringKey(kNameKey)) {
+      details = tree.partner_db->FindDetailsByName(*value);
+    }
+    if (!details) {
+      tree.valid = false;
+      LOG(ERROR) << "bookmark node with missing or unknown name";
+      continue;
+    }
+    if (base::Value* children = dict.FindKey(kChildrenKey)) {
       // Folder
-      const PartnerDetails* details = nullptr;
-      if (std::string* value = dict.FindStringKey(kNameKey)) {
-        details = tree->partner_db.FindDetailsByName(*value);
+      item.guid = details->guid;
+      item.title = details->title;
+      item.speeddial = details->speeddial;
+      if (!used_details.insert(details).second) {
+        tree.valid = false;
+        LOG(ERROR) << "duplicated folder " << details->name;
       }
-      if (!details) {
-        tree->valid = false;
-        skip_node = true;
-        LOG(ERROR) << "bookmark folder with missing or unknown name";
-      } else {
-        item.partner_id = details->guid;
-        item.title = details->title;
-        item.speeddial = details->speeddial;
-      }
-      ParseDefaultJsonBookmarkList(level + 1, children, &item.children, tree);
+      bool bookmarks_folder =
+          (level == 0 && details->name == kBookmarksFolderName);
+      ParseBookmarkList(level + 1, children, &item.children,
+                        inside_bookmarks_folder || bookmarks_folder);
     } else {
       // Bookmark URL
       if (level == 0) {
+        tree.valid = false;
         LOG(ERROR) << "top-level bookmark " << item.title << "is not a folder";
-        tree->valid = false;
       }
       if (std::string* value = dict.FindStringKey(kTitleKey)) {
         item.title = std::move(*value);
       }
       if (item.title.empty()) {
-        // Node must have a title.
-        skip_node = true;
-        tree->valid = false;
+        tree.valid = false;
         LOG(ERROR) << "bookmark without title";
       }
 
       if (std::string* value = dict.FindStringKey(kNicknameKey)) {
         item.nickname = std::move(*value);
-      }
-
-      if (std::string* value = dict.FindStringKey(kPartnerKey)) {
-        item.partner_id = std::move(*value);
-      }
-      if (item.partner_id.empty()) {
-        tree->valid = false;
-        LOG(ERROR) << "no partner id for bookmark " << item.title;
-      } else if (!base::IsValidGUID(item.partner_id)) {
-        tree->valid = false;
-        LOG(ERROR) << "the partner for bookmark " << item.title
-                   << " is not a valid GUID: " << item.partner_id;
-      }
-
-      if (std::string* value = dict.FindStringKey(kThumbNailKey)) {
-        if (!value->empty()) {
-          if (HasPartnerThumbnailPrefix(*value)) {
-            item.thumbnail = std::move(*value);
-          } else {
-            tree->valid = false;
-            LOG(ERROR) << "bookmark " << item.title << " thumbnail URL "
-                       << *value << " does not starts with "
-                       << kPartnerThumbnailUrlPrefix;
-          }
-        }
       }
 
       if (std::string* value = dict.FindStringKey(kDescriptionKey)) {
@@ -401,178 +214,100 @@ void ParseDefaultJsonBookmarkList(
           if (url.is_valid()) {
             item.url = std::move(url);
           } else {
-            tree->valid = false;
+            tree.valid = false;
             LOG(ERROR) << kURLKey << " for bookmark " << item.title
                        << " is not a valid URL: " << *value;
           }
         }
       } else {
-        skip_node = true;
+        tree.valid = false;
         LOG(ERROR) << "bookmark " << item.title << " without " << kURLKey;
-        tree->valid = false;
       }
+
+      if (inside_bookmarks_folder) {
+        if (!used_details2.insert(details).second) {
+          tree.valid = false;
+          LOG(ERROR) << "bookmark is defined twice inside bookmarks folder - "
+                     << item.title;
+        }
+        item.guid = details->guid2;
+      } else {
+        if (!used_details.insert(details).second) {
+          tree.valid = false;
+          LOG(ERROR) << "bookmark is defined twice - " << item.title;
+        }
+        item.guid = details->guid;
+      }
+
+      item.thumbnail = details->thumbnail;
     }
 
-    if (!item.partner_id.empty()) {
-      auto inserted = tree->partner_ids.insert(item.partner_id);
-      if (!inserted.second) {
-        tree->valid = false;
-        LOG(ERROR) << "the partner for bookmark " << item.title
-                    << " is duplicated: " << item.partner_id;
-      }
-    }
-
-    if (!skip_node) {
-      default_items->push_back(std::move(item));
-    }
+    default_items->push_back(std::move(item));
+    tree.item_count++;
   }
 }
 
-DefaultBookmarkTree ParseDefaultBookmarkJson(
-    base::Value partner_db_value,
-    base::Value partners_locale_value,
-    base::Value default_bookmarks_value) {
-  DefaultBookmarkTree tree;
-  do {
-    if (!ParsePartnerDatabaseJson(std::move(partner_db_value),
-                                  std::move(partners_locale_value),
-                                  &tree.partner_db))
-      break;
-
-    if (!default_bookmarks_value.is_dict()) {
-      LOG(ERROR) << "default bookmark json is not an object";
-      break;
-    }
-    std::string* version = default_bookmarks_value.FindStringKey(kVersionKey);
-    if (!version || version->empty()) {
-      LOG(ERROR) << "no " << kVersionKey << " in json";
-      break;
-    }
-    tree.version = std::move(*version);
-
-    base::Value* bookmark_list = default_bookmarks_value.FindKey(kChildrenKey);
-    if (!bookmark_list) {
-      LOG(ERROR) << "no " << kChildrenKey << " array.";
-      break;
-    }
-
-    tree.valid = true;
-    ParseDefaultJsonBookmarkList(0, bookmark_list, &tree.top_items, &tree);
-  } while (false);
-
-  return tree;
-}
-
-struct AssetReadState {
-#if defined(OS_ANDROID)
-  std::string path;
-#else
-  base::FilePath asset_dir;
-  base::FilePath path;
-#endif  // OS_ANDROID
-  bool not_found = false;
-};
-
-base::Optional<base::Value> ReadJsonAsset(AssetReadState* state,
-                                          base::StringPiece name) {
-  state->not_found = false;
-  base::StringPiece json_text;
-#if defined(OS_ANDROID)
-  state->path = kAssetsDir;
-  state->path.append(name.data(), name.length());
-
-  base::MemoryMappedFile::Region region;
-  int json_fd = base::android::OpenApkAsset(state->path, &region);
-  if (json_fd < 0) {
-    state->not_found = true;
-    return base::nullopt;
+void DefaultBookmarkParser::ParseJson(base::Value default_bookmarks_value) {
+  if (!default_bookmarks_value.is_dict()) {
+    LOG(ERROR) << "default bookmark json is not an object";
+    return;
   }
-  base::MemoryMappedFile mapped_file;
-  if (!mapped_file.Initialize(base::File(json_fd), region)) {
-    LOG(ERROR) << "failed to initialize memory mapping for " << state->path;
-    return base::nullopt;
+  std::string* version = default_bookmarks_value.FindStringKey(kVersionKey);
+  if (!version || version->empty()) {
+    LOG(ERROR) << "no " << kVersionKey << " in json";
+    return;
   }
-  json_text = base::StringPiece(reinterpret_cast<char*>(mapped_file.data()),
-                                mapped_file.length());
-#else
-  if (state->asset_dir.empty()) {
-    base::PathService::Get(base::DIR_ASSETS, &state->asset_dir);
-#if !defined(OS_MACOSX)
-    state->asset_dir = state->asset_dir.Append(kResources);
-#endif  // if !defined(OS_MACOSX)
-    state->asset_dir = state->asset_dir.Append(kVivaldi).Append(kDefBookmarks);
-  }
-  state->path = state->asset_dir.AppendASCII(name);
-  if (!base::PathExists(state->path)) {
-    state->not_found = true;
-    return base::nullopt;
-  }
-  std::string json_buffer;
-  if (!base::ReadFileToString(state->path, &json_buffer)) {
-    LOG(ERROR) << "failed to read " << state->path;
-    return base::nullopt;
-  }
-  json_text = base::StringPiece(json_buffer);
-#endif  //  OS_ANDROID
+  tree.version = std::move(*version);
 
-  return base::JSONReader::Read(json_text);
+  base::Value* bookmark_list = default_bookmarks_value.FindKey(kChildrenKey);
+  if (!bookmark_list) {
+    LOG(ERROR) << "no " << kChildrenKey << " array.";
+    return;
+  }
+
+  tree.valid = true;
+  ParseBookmarkList(0, bookmark_list, &tree.top_items, false);
 }
 
 DefaultBookmarkTree ReadDefaultBookmarks(std::string locale) {
-  AssetReadState state;
-  base::Optional<base::Value> partner_db_value =
-      ReadJsonAsset(&state, kPartnerDBFile);
-  if (!partner_db_value && state.not_found) {
-    LOG(ERROR) << "missing partner DB file " << state.path;
-  }
 
-  // TODO(igor@vivaldi.com): Read this only if we are going to update bookmarks.
-  // This will be actual when the partner database will be expanded to cover
-  // all bookmarks, not only bookmark folders.
-  base::Optional<base::Value> partners_locale_value =
-      ReadJsonAsset(&state, kPartnerLocaleMapFile);
-  if (!partners_locale_value && state.not_found) {
-    LOG(ERROR) << "missing partner locale file " << state.path;
-  }
+  std::unique_ptr<PartnerDatabase> partner_db = PartnerDatabase::Read();
 
+  vivaldi_partners::AssetReader reader;
   base::Optional<base::Value> default_bookmarks_value =
-      ReadJsonAsset(&state, locale + ".json");
+      reader.ReadJson(locale + ".json");
   if (!default_bookmarks_value) {
-    if (state.not_found) {
-      LOG(WARNING) << "missing default bookmarks file " << state.path;
-      default_bookmarks_value = ReadJsonAsset(&state, kFallbackLocaleFile);
+    if (reader.is_not_found()) {
+      LOG(WARNING) << "missing default bookmarks file " << reader.GetPath();
+      default_bookmarks_value = reader.ReadJson(kFallbackLocaleFile);
       if (!default_bookmarks_value) {
-        LOG(ERROR) << "missing fallback bookmark file " << state.path;
+        if (reader.is_not_found()) {
+          LOG(ERROR) << "missing fallback bookmark file " << reader.GetPath();
+        }
       }
     }
   }
 
-  if (!partner_db_value || !partners_locale_value || !default_bookmarks_value) {
-    return DefaultBookmarkTree();
+  if (partner_db && default_bookmarks_value) {
+    DefaultBookmarkParser bookmark_parser;
+    bookmark_parser.tree.partner_db = std::move(partner_db);
+    bookmark_parser.ParseJson(std::move(*default_bookmarks_value));
+    if (bookmark_parser.tree.valid) {
+      return std::move(bookmark_parser.tree);
+    }
   }
-
-  return ParseDefaultBookmarkJson(std::move(*partner_db_value),
-                                  std::move(*partners_locale_value),
-                                  std::move(*default_bookmarks_value));
+  return DefaultBookmarkTree();
 }
 
 BookmarkUpdater::BookmarkUpdater(
     const DefaultBookmarkTree* default_bookmark_tree,
     BookmarkModel* model)
     : default_bookmark_tree_(default_bookmark_tree), model_(model) {
-  std::vector<std::pair<base::StringPiece, base::StringPiece>>
-      locale_id_guid_list;
-  for (const PartnerDetails& details :
-       default_bookmark_tree_->partner_db.details) {
-    for (const std::string& locale_id : details.old_partner_ids) {
-      locale_id_guid_list.emplace_back(locale_id, details.guid);
-    }
-  }
-  locale_id_guid_map_ = base::flat_map<base::StringPiece, base::StringPiece>(
-      std::move(locale_id_guid_list));
 }
 
-void BookmarkUpdater::SetDeletedPartners(const base::Value* deleted_partners) {
+void BookmarkUpdater::SetDeletedPartners(PrefService* prefs) {
+  const base::Value* deleted_partners =
+      prefs->GetList(vivaldiprefs::kBookmarksDeletedPartners);
   if (!deleted_partners->is_list()) {
     LOG(ERROR) << vivaldiprefs::kBookmarksDeletedPartners
                << " is no a list value";
@@ -581,23 +316,35 @@ void BookmarkUpdater::SetDeletedPartners(const base::Value* deleted_partners) {
 
   std::vector<std::string> ids;
   ids.reserve(deleted_partners->GetList().size());
+  bool has_locale_based_ids = false;
   for (const base::Value& value : deleted_partners->GetList()) {
     if (!value.is_string()) {
       LOG(ERROR) << vivaldiprefs::kBookmarksDeletedPartners
                  << " contains non-string entry";
       continue;
     }
-    const std::string& partner_id = value.GetString();
-    auto i = locale_id_guid_map_.find(partner_id);
-    if (i != locale_id_guid_map_.end()) {
-      // This is an old locale-based id for a named partner. Push its GUID.
-      ids.push_back(i->second.as_string());
-    } else {
-      ids.push_back(partner_id);
+    std::string guid = value.GetString();
+    if (partner_db()->MapLocaleIdToGUID(guid)) {
+      has_locale_based_ids = true;
     }
+    ids.push_back(std::move(guid));
+  }
+  if (has_locale_based_ids && kUpdateLocaleBasedPartners) {
+    base::Value new_list(base::Value::Type::LIST);
+    for (const std::string& guid : ids) {
+      new_list.Append(base::Value(guid));
+    }
+    prefs->Set(vivaldiprefs::kBookmarksDeletedPartners, new_list);
   }
 
-  deleted_partner_ids_ = base::flat_set<std::string>(std::move(ids));
+  deleted_partner_guids_ = base::flat_set<std::string>(std::move(ids));
+}
+
+void AddBookmarkGuids(const std::vector<DefaultBookmarkItem>& default_items,std::vector<std::string>* guids) {
+   for (const DefaultBookmarkItem& item : default_items) {
+     guids->push_back(item.guid);
+     AddBookmarkGuids(item.children, guids);
+   }
 }
 
 void BookmarkUpdater::RunCleanUpdate() {
@@ -607,17 +354,20 @@ void BookmarkUpdater::RunCleanUpdate() {
   FindExistingPartners(model_->bookmark_bar_node());
   FindExistingPartners(model_->trash_node());
 
-  CleanUpdateRecursively(default_bookmark_tree_->top_items,
-                         model_->bookmark_bar_node());
+  UpdateRecursively(default_bookmark_tree_->top_items,
+                    model_->bookmark_bar_node());
 
   if (kAllowPartnerRemoval) {
+    std::vector<std::string> defined_guid_vector;
+    AddBookmarkGuids(default_bookmark_tree_->top_items, &defined_guid_vector);
+    base::flat_set<std::string> defined_guid_set(
+        std::move(defined_guid_vector));
     // A range loop cannot be used as we remove elements from the map not to
     // keep pointers to deleted nodes.
     for (auto i = existing_partner_bookmarks_.begin();
          i != existing_partner_bookmarks_.end();) {
       const std::string& partner_id = i->first;
-      auto found = default_bookmark_tree_->partner_ids.find(partner_id);
-      if (found == default_bookmark_tree_->partner_ids.end()) {
+      if (!defined_guid_set.contains(partner_id)) {
         const BookmarkNode* node = i->second;
         if (!model_->is_permanent_node(node)) {
           VLOG(2) << "Removing non-existing partner title=" << node->GetTitle()
@@ -639,87 +389,110 @@ void BookmarkUpdater::FindExistingPartners(const BookmarkNode* top_node) {
   ui::TreeNodeIterator<const BookmarkNode> iterator(top_node);
   while (iterator.has_next()) {
     const BookmarkNode* node = iterator.Next();
-    auto inserted_guid = guid_node_map_.emplace(node->guid(), node);
+    std::string guid = node->guid();
+
+    // If the guid was for a former locale-specific partner id, adjust it to
+    // locale-independent one as guid_node_map_ is used to check for presence of
+    // nodes that lost its partner status due to changes by the user.
+    partner_db()->MapLocaleIdToGUID(guid);
+    auto inserted_guid = guid_node_map_.emplace(std::move(guid), node);
     if (!inserted_guid.second) {
-      // TODO(igor@vavaldi.com): Chromium in debug builds isists that all GUIDs
-      // are unique. Find out if they absolutely rules them out and do not
-      // bother with this check.
-      LOG(ERROR) << "Duplicated GUID " << node->guid();
-      DCHECK(false);
-      continue;
+      // This happens after sync mixed older locale-based partners from several
+      // locales.
+      VLOG(1) << "Duplicated GUID node_guid=" << node->guid()
+              << " adjusted_guid=" << guid;
     }
+
     std::string partner_id = vivaldi_bookmark_kit::GetPartner(node);
     if (partner_id.empty())
       continue;
-    auto guid = locale_id_guid_map_.find(partner_id);
-    if (guid != locale_id_guid_map_.end()) {
-      partner_id = guid->second.as_string();
+    if (partner_db()->MapLocaleIdToGUID(partner_id)) {
+      VLOG(2) << "Old locale-based partner id "
+              << vivaldi_bookmark_kit::GetPartner(node) << " "
+              << node->GetTitle();
     }
-    if (!existing_partner_bookmarks_.emplace(partner_id, node).second) {
-      LOG(WARNING) << "Duplicated partner " << partner_id;
+    auto inserted =
+        existing_partner_bookmarks_.emplace(std::move(partner_id), node);
+    if (!inserted.second) {
+      // As with guid, this is a normal situation after a sync accross profiles
+      // with older locale-specific partner ids from different locales. Ignore
+      // the second copy.
+      //
+      // TODO(igor@vivaldi.com): Consider merging all such duplicated partner
+      // nodes into one.
+      VLOG(1) << "Duplicated partner partner_id=" << partner_id;
     }
   }
 }
 
-void BookmarkUpdater::CleanUpdateRecursively(
+void BookmarkUpdater::UpdateRecursively(
     const std::vector<DefaultBookmarkItem>& default_items,
     const BookmarkNode* parent_node) {
   for (const DefaultBookmarkItem& item : default_items) {
-    const BookmarkNode* recursion_parent;
-    auto iter = existing_partner_bookmarks_.find(item.partner_id);
-    if (iter != existing_partner_bookmarks_.end()) {
-      const BookmarkNode* node = iter->second;
-      // The partner still exists in bookmarks.
-      UpdatePartnerNode(item, node);
-      recursion_parent = node;
-    } else {
-      // The partner item did not match a corresponding node in the tree. For
-      // leaf items we check if the corresponding node was deleted. If so,
-      // we skip it. If not, we create a node for it.
-      //
-      // For folder items we also need to deal with their children as a folder
-      // may have loosen its partner status after the user editted it without
-      // affecting the partner status of children. If we have a match by guid,
-      // this should be the folder. Otherwise to deal with older locale-specific
-      // partners we check if any of folder's child items exists in the bookmark
-      // tree. If we find such item, we guess that its parent was the original
-      // partner folder and update children there.
-      const BookmarkNode* guessed_old_folder = nullptr;
-      auto iter = guid_node_map_.find(item.partner_id);
-      if (iter != guid_node_map_.end()) {
-        // Exact match by GUID.
-        guessed_old_folder = iter->second;
-        VLOG(1) << "Guessed parent by GUID match, title="
-                << guessed_old_folder->GetTitle()
-                << " guid=" << guessed_old_folder->guid();
-      }
-      if (!guessed_old_folder) {
-        for (const DefaultBookmarkItem& child_item : item.children) {
-          auto iter = existing_partner_bookmarks_.find(child_item.partner_id);
-          if (iter != existing_partner_bookmarks_.end()) {
-            guessed_old_folder = iter->second->parent();
-            VLOG(1) << "Guessed parent from a child, title="
-                    << guessed_old_folder->GetTitle()
-                    << " guid=" << guessed_old_folder->guid();
-            break;
-          }
-        }
-      }
-
-      if (guessed_old_folder) {
-        recursion_parent = guessed_old_folder;
-      } else if (deleted_partner_ids_.contains(item.partner_id)) {
-        VLOG(2) << "Skipping deleted partner name=" << item.title
-                << " partner_id=" << item.partner_id;
-        continue;
-      } else {
-        recursion_parent = AddPartnerNode(item, parent_node);
-      }
-    }
-    if (!item.children.empty()) {
-      CleanUpdateRecursively(item.children, recursion_parent);
+    const BookmarkNode* node = UpdateOrAdd(item, parent_node);
+    if (node && !item.children.empty()) {
+      UpdateRecursively(item.children, node);
     }
   }
+}
+
+const BookmarkNode* BookmarkUpdater::UpdateOrAdd(
+    const DefaultBookmarkItem& item,
+    const BookmarkNode* parent_node) {
+  auto iter = existing_partner_bookmarks_.find(item.guid);
+  if (iter != existing_partner_bookmarks_.end()) {
+    const BookmarkNode* node = iter->second;
+    // The partner still exists in bookmarks.
+    UpdatePartnerNode(item, node);
+    return node;
+  }
+
+  iter = guid_node_map_.find(item.guid);
+  if (iter != guid_node_map_.end()) {
+    // The node was a partner. Do not touch the node, but still return it. If
+    // the item is a folder, we want to update its children in case the user
+    // renamed the folder that lead to a loss of its partner status.
+    //
+    // Note that normally a former partner should be also on the deleted partner
+    // list, but we cannot rely on that. A sync against an older version of
+    // Vivaldi that does not sync the deleted bookmarks list can bring a former
+    // partner that is not on the local delete list.
+    const BookmarkNode* node = iter->second;
+    VLOG_IF(1, !item.children.empty())
+        << "Found former partner folder by GUID match, title="
+        << node->GetTitle() << " guid=" << node->guid();
+    VLOG_IF(2, item.children.empty())
+        << "Skipping former partner bookmark, title=" << node->GetTitle()
+        << " guid=" << node->guid();
+    return node;
+  }
+
+  // The partner item did not match a corresponding node in the tree. We check
+  // if the if the corresponding node was deleted. If so, we skip it. If not,
+  // we create a node for the item.
+  //
+  // But first for folders we need to deal with a corner case of an older
+  // locale-specific folder with a randomly generated GUID. We check if any of
+  // folder's child items exists in the bookmark tree. If we find such item,
+  // we guess that its parent was the original partner folder and update
+  // children there.
+  for (const DefaultBookmarkItem& child_item : item.children) {
+    auto iter = existing_partner_bookmarks_.find(child_item.guid);
+    if (iter != existing_partner_bookmarks_.end()) {
+      const BookmarkNode* node = iter->second->parent();
+      VLOG(1) << "Guessed a folder from a child, title=" << node->GetTitle()
+              << " guid=" << node->guid();
+      return node;
+    }
+  }
+
+  if (deleted_partner_guids_.contains(item.guid)) {
+    VLOG(2) << "Skipping deleted partner name=" << item.title
+            << " guid=" << item.guid;
+    return nullptr;
+  }
+
+  return AddPartnerNode(item, parent_node);
 }
 
 const BookmarkNode* BookmarkUpdater::AddPartnerNode(
@@ -727,7 +500,7 @@ const BookmarkNode* BookmarkUpdater::AddPartnerNode(
     const BookmarkNode* parent_node) {
   vivaldi_bookmark_kit::CustomMetaInfo custom_meta;
   custom_meta.SetNickname(item.nickname);
-  custom_meta.SetPartner(item.partner_id);
+  custom_meta.SetPartner(item.guid);
   custom_meta.SetThumbnail(item.thumbnail);
   custom_meta.SetDescription(item.description);
   custom_meta.SetSpeeddial(item.speeddial);
@@ -736,15 +509,14 @@ const BookmarkNode* BookmarkUpdater::AddPartnerNode(
   size_t index = parent_node->children().size();
   const BookmarkNode* node;
   if (item.url.is_empty()) {
-    VLOG(2) << "Adding folder " << item.title
-            << " guid=" << item.partner_id;
+    VLOG(2) << "Adding folder " << item.title << " guid=" << item.guid;
     node = model_->AddFolder(parent_node, index, title, custom_meta.map(),
-                             item.partner_id);
+                             item.guid);
     stats_.added_folders++;
   } else {
-    VLOG(2) << "Adding url " << item.title << " guid=" << item.partner_id;
+    VLOG(2) << "Adding url " << item.title << " guid=" << item.guid;
     node = model_->AddURL(parent_node, index, title, item.url,
-                          custom_meta.map(), base::nullopt, item.partner_id);
+                          custom_meta.map(), base::nullopt, item.guid);
     stats_.added_urls++;
   }
   return node;
@@ -780,9 +552,11 @@ void BookmarkUpdater::UpdatePartnerNode(const DefaultBookmarkItem& item,
     custom_meta.SetMap(*old_meta_info);
   }
 
-  // Make sure the node uses the stable partner guid, not one of older
-  // locale-specific partner ids.
-  custom_meta.SetPartner(item.partner_id);
+  if (kUpdateLocaleBasedPartners) {
+    // Make sure the node uses locale-independent partner guid, not one of older
+    // locale-specific partner ids.
+    custom_meta.SetPartner(item.guid);
+  }
 
   // If nick is taken by other node do nothing. But ensure that it is cleared
   // if the nick in defaults is empty.
@@ -793,7 +567,8 @@ void BookmarkUpdater::UpdatePartnerNode(const DefaultBookmarkItem& item,
   // We do not clear the partner status when the user selects a custom
   // thumbnail or uses a page snapshot as a thumbnail. So update the
   // thumbnail only if still points to the partner image.
-  if (HasPartnerThumbnailPrefix(::vivaldi_bookmark_kit::GetThumbnail(node))) {
+  if (vivaldi_partners::HasPartnerThumbnailPrefix(
+          ::vivaldi_bookmark_kit::GetThumbnail(node))) {
     custom_meta.SetThumbnail(item.thumbnail);
   }
   custom_meta.SetDescription(item.description);
@@ -857,14 +632,13 @@ void UpdatePartnersInModel(Profile* profile,
     }
 
     BookmarkUpdater upgrader(&default_tree, model);
-    upgrader.SetDeletedPartners(
-        prefs->GetList(vivaldiprefs::kBookmarksDeletedPartners));
+    upgrader.SetDeletedPartners(prefs);
     upgrader.RunCleanUpdate();
 
     const BookmarkUpdater::Stats& stats = upgrader.stats();
     int changed = stats.added_folders + stats.added_urls +
                   stats.updated_folders + stats.updated_urls + stats.removed;
-    int skipped = static_cast<int>(default_tree.partner_ids.size()) - changed -
+    int skipped = static_cast<int>(default_tree.item_count) - changed -
                   stats.failed_updates;
     LOG(INFO) << " added_folders=" << stats.added_folders
               << " added_urls=" << stats.added_urls

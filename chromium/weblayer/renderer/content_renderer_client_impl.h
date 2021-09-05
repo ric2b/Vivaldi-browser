@@ -17,6 +17,7 @@ class LocalInterfaceProvider;
 }  // namespace service_manager
 
 namespace weblayer {
+class WebLayerRenderThreadObserver;
 
 class ContentRendererClientImpl : public content::ContentRendererClient {
  public:
@@ -28,7 +29,8 @@ class ContentRendererClientImpl : public content::ContentRendererClient {
   void RenderFrameCreated(content::RenderFrame* render_frame) override;
   bool HasErrorPage(int http_status_code) override;
   bool ShouldSuppressErrorPage(content::RenderFrame* render_frame,
-                               const GURL& url) override;
+                               const GURL& url,
+                               int error_code) override;
   void PrepareErrorPage(content::RenderFrame* render_frame,
                         const blink::WebURLError& error,
                         const std::string& http_method,
@@ -46,6 +48,8 @@ class ContentRendererClientImpl : public content::ContentRendererClient {
       local_interface_provider_;
   std::unique_ptr<SpellCheck> spellcheck_;
 #endif
+
+  std::unique_ptr<WebLayerRenderThreadObserver> weblayer_observer_;
 
   scoped_refptr<blink::ThreadSafeBrowserInterfaceBrokerProxy>
       browser_interface_broker_;

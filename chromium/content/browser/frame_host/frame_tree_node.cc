@@ -21,6 +21,7 @@
 #include "content/browser/frame_host/navigation_controller_impl.h"
 #include "content/browser/frame_host/navigation_request.h"
 #include "content/browser/frame_host/navigator.h"
+#include "content/browser/frame_host/navigator_delegate.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/common/frame_messages.h"
@@ -29,7 +30,8 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/navigation_policy.h"
-#include "third_party/blink/public/common/frame/sandbox_flags.h"
+#include "services/network/public/cpp/web_sandbox_flags.h"
+#include "services/network/public/mojom/web_sandbox_flags.mojom-shared.h"
 #include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom.h"
 
@@ -95,23 +97,30 @@ FrameTreeNode* FrameTreeNode::GloballyFindByID(int frame_tree_node_id) {
   return it == nodes->end() ? nullptr : it->second;
 }
 
+// static
+FrameTreeNode* FrameTreeNode::From(RenderFrameHost* rfh) {
+  if (!rfh)
+    return nullptr;
+  return static_cast<RenderFrameHostImpl*>(rfh)->frame_tree_node();
+}
+
 FrameTreeNode::FrameTreeNode(
     FrameTree* frame_tree,
     Navigator* navigator,
-    FrameTreeNode* parent,
-    blink::WebTreeScopeType scope,
+    RenderFrameHostImpl* parent,
+    blink::mojom::TreeScopeType scope,
     const std::string& name,
     const std::string& unique_name,
     bool is_created_by_script,
     const base::UnguessableToken& devtools_frame_token,
     const blink::mojom::FrameOwnerProperties& frame_owner_properties,
-    blink::FrameOwnerElementType owner_type)
+    blink::mojom::FrameOwnerElementType owner_type)
     : frame_tree_(frame_tree),
       navigator_(navigator),
       render_manager_(this, frame_tree->manager_delegate()),
       frame_tree_node_id_(next_frame_tree_node_id_++),
       parent_(parent),
-      depth_(parent ? parent->depth_ + 1 : 0u),
+      depth_(parent ? parent->frame_tree_node()->depth_ + 1 : 0u),
       opener_(nullptr),
       original_opener_(nullptr),
       has_committed_real_load_(false),
@@ -134,7 +143,7 @@ FrameTreeNode::FrameTreeNode(
       devtools_frame_token_(devtools_frame_token),
       frame_owner_properties_(frame_owner_properties),
       was_discarded_(false),
-      blame_context_(frame_tree_node_id_, parent) {
+      blame_context_(frame_tree_node_id_, FrameTreeNode::From(parent)) {
   std::pair<FrameTreeNodeIdMap::iterator, bool> result =
       g_frame_tree_node_id_map.Get().insert(
           std::make_pair(frame_tree_node_id_, this));
@@ -231,7 +240,7 @@ void FrameTreeNode::ResetForNavigation() {
 
   // Clear any CSP-set sandbox flags, and the declared feature policy for the
   // frame.
-  UpdateFramePolicyHeaders(blink::mojom::WebSandboxFlags::kNone, {});
+  UpdateFramePolicyHeaders(network::mojom::WebSandboxFlags::kNone, {});
 
   // This frame has had its user activation bits cleared in the renderer
   // before arriving here. We just need to clear them here and in the other
@@ -371,7 +380,8 @@ void FrameTreeNode::SetPendingFramePolicy(blink::FramePolicy frame_policy) {
 
   if (parent()) {
     // Subframes should always inherit their parent's sandbox flags.
-    pending_frame_policy_.sandbox_flags |= parent()->active_sandbox_flags();
+    pending_frame_policy_.sandbox_flags |=
+        parent()->frame_tree_node()->active_sandbox_flags();
     // This is only applied on subframes; container policy and required document
     // policy are not mutable on main frame.
     pending_frame_policy_.container_policy = frame_policy.container_policy;
@@ -579,11 +589,11 @@ void FrameTreeNode::BeforeUnloadCanceled() {
 }
 
 bool FrameTreeNode::NotifyUserActivation() {
-  for (FrameTreeNode* node = this; node; node = node->parent()) {
-    if (!node->user_activation_state_.HasBeenActive() &&
-        node->current_frame_host())
-      node->current_frame_host()->DidReceiveFirstUserActivation();
-    node->user_activation_state_.Activate();
+  for (RenderFrameHostImpl* rfh = current_frame_host(); rfh;
+       rfh = rfh->GetParent()) {
+    if (!rfh->frame_tree_node()->user_activation_state_.HasBeenActive())
+      rfh->DidReceiveFirstUserActivation();
+    rfh->frame_tree_node()->user_activation_state_.Activate();
   }
   replication_state_.has_received_user_gesture = true;
 
@@ -687,7 +697,7 @@ FrameTreeNode* FrameTreeNode::GetSibling(int relative_offset) const {
 }
 
 void FrameTreeNode::UpdateFramePolicyHeaders(
-    blink::mojom::WebSandboxFlags sandbox_flags,
+    network::mojom::WebSandboxFlags sandbox_flags,
     const blink::ParsedFeaturePolicy& parsed_header) {
   bool changed = false;
   if (replication_state_.feature_policy_header != parsed_header) {
@@ -696,7 +706,7 @@ void FrameTreeNode::UpdateFramePolicyHeaders(
   }
   // TODO(iclelland): Kill the renderer if sandbox flags is not a subset of the
   // currently effective sandbox flags from the frame. https://crbug.com/740556
-  blink::mojom::WebSandboxFlags updated_flags =
+  network::mojom::WebSandboxFlags updated_flags =
       sandbox_flags | effective_frame_policy().sandbox_flags;
   if (replication_state_.active_sandbox_flags != updated_flags) {
     replication_state_.active_sandbox_flags = updated_flags;
@@ -737,22 +747,6 @@ void FrameTreeNode::SetOpenerFeaturePolicyState(
   DCHECK(IsMainFrame());
   if (base::FeatureList::IsEnabled(features::kFeaturePolicyForSandbox)) {
     replication_state_.opener_feature_state = feature_state;
-  }
-}
-
-const base::Optional<base::UnguessableToken>& FrameTreeNode::GetEmbeddingToken()
-    const {
-  return embedding_token_;
-}
-
-void FrameTreeNode::SetEmbeddingToken(
-    const base::Optional<base::UnguessableToken>& embedding_token) {
-  embedding_token_ = embedding_token;
-  if (embedding_token_.has_value()) {
-    // Propagate a non-null embedding token to the parent. Parents will
-    // invalidate their own tokens if a previously remote frame becomes local to
-    // them.
-    render_manager_.SetEmbeddingToken(embedding_token.value());
   }
 }
 

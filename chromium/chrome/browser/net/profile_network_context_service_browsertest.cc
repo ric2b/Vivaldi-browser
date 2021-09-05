@@ -35,10 +35,12 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/policy/core/common/policy_map.h"
 #include "components/policy/policy_constants.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_features.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/simple_url_loader_test_helper.h"
 #include "mojo/public/cpp/system/data_pipe_utils.h"
 #include "net/base/features.h"
@@ -54,21 +56,6 @@
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
-
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/policy/login_policy_test_base.h"
-#include "chrome/browser/chromeos/policy/user_policy_test_helper.h"
-#include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "components/policy/policy_constants.h"
-#include "net/base/features.h"
-#endif  // defined(OS_CHROMEOS)
-
-#if BUILDFLAG(BUILTIN_CERT_VERIFIER_FEATURE_SUPPORTED)
-#include "chrome/browser/policy/policy_test_utils.h"
-#include "components/policy/core/common/policy_map.h"
-#include "components/policy/policy_constants.h"
-#include "net/base/features.h"
-#endif
 
 // Most tests for this class are in NetworkContextConfigurationBrowserTest.
 class ProfileNetworkContextServiceBrowsertest : public InProcessBrowserTest {
@@ -134,10 +121,12 @@ IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceBrowsertest,
   ProfileNetworkContextService* profile_network_context_service =
       ProfileNetworkContextServiceFactory::GetForContext(browser()->profile());
   base::FilePath empty_relative_partition_path;
-  network::mojom::NetworkContextParamsPtr network_context_params_ptr =
-      profile_network_context_service->CreateNetworkContextParams(
-          /*in_memory=*/false, empty_relative_partition_path);
-  EXPECT_EQ(0, network_context_params_ptr->http_cache_max_size);
+  network::mojom::NetworkContextParams network_context_params;
+  network::mojom::CertVerifierCreationParams cert_verifier_creation_params;
+  profile_network_context_service->ConfigureNetworkContextParams(
+      /*in_memory=*/false, empty_relative_partition_path,
+      &network_context_params, &cert_verifier_creation_params);
+  EXPECT_EQ(0, network_context_params.http_cache_max_size);
 }
 
 IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceBrowsertest, BrotliEnabled) {
@@ -442,149 +431,15 @@ IN_PROC_BROWSER_TEST_F(ProfileNetworkContextServiceDiskCacheBrowsertest,
   ProfileNetworkContextService* profile_network_context_service =
       ProfileNetworkContextServiceFactory::GetForContext(browser()->profile());
   base::FilePath empty_relative_partition_path;
-  network::mojom::NetworkContextParamsPtr network_context_params_ptr =
-      profile_network_context_service->CreateNetworkContextParams(
-          /*in_memory=*/false, empty_relative_partition_path);
-  EXPECT_EQ(kCacheSize, network_context_params_ptr->http_cache_max_size);
+  network::mojom::NetworkContextParams network_context_params;
+  network::mojom::CertVerifierCreationParams cert_verifier_creation_params;
+  profile_network_context_service->ConfigureNetworkContextParams(
+      /*in_memory=*/false, empty_relative_partition_path,
+      &network_context_params, &cert_verifier_creation_params);
+  EXPECT_EQ(kCacheSize, network_context_params.http_cache_max_size);
 }
 
-#if defined(OS_CHROMEOS)
-// Base class for verifying which certificate verifier is being used on Chrome
-// OS depending on feature state and policies.
-class ProfileNetworkContextServiceCertVerifierBrowsertestBase
-    : public policy::LoginPolicyTestBase {
- public:
-  ProfileNetworkContextServiceCertVerifierBrowsertestBase() = default;
-  ~ProfileNetworkContextServiceCertVerifierBrowsertestBase() override = default;
-
- protected:
-  void SetPolicyValue(base::StringPiece policy_key, base::Value value) {
-    policy_values_.SetKey(policy_key, std::move(value));
-    user_policy_helper()->SetPolicy(policy_values_,
-                                    base::Value(base::Value::Type::DICTIONARY));
-  }
-
-  bool IsSigninProfileUsingBuiltinCertVerifier() {
-    Profile* const profile = chromeos::ProfileHelper::GetSigninProfile();
-    ProfileNetworkContextService* const service =
-        ProfileNetworkContextServiceFactory::GetForContext(profile);
-    return service->using_builtin_cert_verifier();
-  }
-
-  bool IsActiveProfileUsingBuiltinCertVerifier() {
-    Profile* const profile = GetProfileForActiveUser();
-    ProfileNetworkContextService* const service =
-        ProfileNetworkContextServiceFactory::GetForContext(profile);
-    return service->using_builtin_cert_verifier();
-  }
-
-  base::test::ScopedFeatureList scoped_feature_list_;
-
- private:
-  base::Value policy_values_{base::Value::Type::DICTIONARY};
-
-  DISALLOW_COPY_AND_ASSIGN(
-      ProfileNetworkContextServiceCertVerifierBrowsertestBase);
-};
-
-// When using this class, the built-in certificate verifier has been enabled
-// using the UseBuiltinCertVerifier feature.
-class ProfileNetworkContextServiceCertVerifierBuiltinEnabledBrowsertest
-    : public ProfileNetworkContextServiceCertVerifierBrowsertestBase {
- public:
-  ProfileNetworkContextServiceCertVerifierBuiltinEnabledBrowsertest() = default;
-  ~ProfileNetworkContextServiceCertVerifierBuiltinEnabledBrowsertest()
-      override = default;
-
-  void SetUpInProcessBrowserTestFixture() override {
-    scoped_feature_list_.InitAndEnableFeature(
-        net::features::kCertVerifierBuiltinFeature);
-    ProfileNetworkContextServiceCertVerifierBrowsertestBase::
-        SetUpInProcessBrowserTestFixture();
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(
-      ProfileNetworkContextServiceCertVerifierBuiltinEnabledBrowsertest);
-};
-
-// If the built-in cert verifier is enabled and no policy is present, it should
-// be enabled on the sign-in screen and in the user profile.
-IN_PROC_BROWSER_TEST_F(
-    ProfileNetworkContextServiceCertVerifierBuiltinEnabledBrowsertest,
-    TurnedOnByFeature) {
-  SkipToLoginScreen();
-  EXPECT_TRUE(IsSigninProfileUsingBuiltinCertVerifier());
-
-  LogIn(kAccountId, kAccountPassword, kEmptyServices);
-
-  EXPECT_TRUE(IsActiveProfileUsingBuiltinCertVerifier());
-}
-
-// If the built-in cert verifier is enabled, but user policy says to disable it,
-// it should be disabled in the user profile.
-IN_PROC_BROWSER_TEST_F(
-    ProfileNetworkContextServiceCertVerifierBuiltinEnabledBrowsertest,
-    TurnedOffByLegacyPolicy) {
-  SkipToLoginScreen();
-
-  SetPolicyValue(policy::key::kBuiltinCertificateVerifierEnabled,
-                 base::Value(false));
-  LogIn(kAccountId, kAccountPassword, kEmptyServices);
-
-  EXPECT_FALSE(IsActiveProfileUsingBuiltinCertVerifier());
-}
-
-// When using this class, the built-in certificate verifier has been disabled
-// using the UseBuiltinCertVerifier feature.
-class ProfileNetworkContextServiceCertVerifierBuiltinDisabledBrowsertest
-    : public ProfileNetworkContextServiceCertVerifierBrowsertestBase {
- public:
-  ProfileNetworkContextServiceCertVerifierBuiltinDisabledBrowsertest() =
-      default;
-  ~ProfileNetworkContextServiceCertVerifierBuiltinDisabledBrowsertest()
-      override = default;
-
-  void SetUpInProcessBrowserTestFixture() override {
-    scoped_feature_list_.InitAndDisableFeature(
-        net::features::kCertVerifierBuiltinFeature);
-    ProfileNetworkContextServiceCertVerifierBrowsertestBase::
-        SetUpInProcessBrowserTestFixture();
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(
-      ProfileNetworkContextServiceCertVerifierBuiltinDisabledBrowsertest);
-};
-
-// If the built-in cert verifier feature is disabled, it should be disabled in
-// user profiles but enabled in the sign-in profile.
-IN_PROC_BROWSER_TEST_F(
-    ProfileNetworkContextServiceCertVerifierBuiltinDisabledBrowsertest,
-    TurnedOffByFeature) {
-  SkipToLoginScreen();
-  EXPECT_TRUE(IsSigninProfileUsingBuiltinCertVerifier());
-
-  LogIn(kAccountId, kAccountPassword, kEmptyServices);
-
-  EXPECT_FALSE(IsActiveProfileUsingBuiltinCertVerifier());
-}
-
-// If the built-in cert verifier feature is disabled, but policy force-enables
-// it for a profile, it should be enabled in the profile.
-IN_PROC_BROWSER_TEST_F(
-    ProfileNetworkContextServiceCertVerifierBuiltinDisabledBrowsertest,
-    TurnedOffByFeatureOverrideByPolicy) {
-  SkipToLoginScreen();
-  EXPECT_TRUE(IsSigninProfileUsingBuiltinCertVerifier());
-
-  SetPolicyValue(policy::key::kBuiltinCertificateVerifierEnabled,
-                 base::Value(true));
-  LogIn(kAccountId, kAccountPassword, kEmptyServices);
-
-  EXPECT_TRUE(IsActiveProfileUsingBuiltinCertVerifier());
-}
-#elif BUILDFLAG(BUILTIN_CERT_VERIFIER_FEATURE_SUPPORTED)
+#if BUILDFLAG(BUILTIN_CERT_VERIFIER_FEATURE_SUPPORTED)
 class ProfileNetworkContextServiceCertVerifierBuiltinFeaturePolicyTest
     : public policy::PolicyTest,
       public testing::WithParamInterface<bool> {
@@ -606,14 +461,19 @@ IN_PROC_BROWSER_TEST_P(
   ProfileNetworkContextService* profile_network_context_service =
       ProfileNetworkContextServiceFactory::GetForContext(browser()->profile());
   base::FilePath empty_relative_partition_path;
-  network::mojom::NetworkContextParamsPtr network_context_params_ptr =
-      profile_network_context_service->CreateNetworkContextParams(
-          /*in_memory=*/false, empty_relative_partition_path);
-  EXPECT_EQ(
-      GetParam()
-          ? network::mojom::NetworkContextParams::CertVerifierImpl::kBuiltin
-          : network::mojom::NetworkContextParams::CertVerifierImpl::kSystem,
-      network_context_params_ptr->use_builtin_cert_verifier);
+  {
+    network::mojom::NetworkContextParams network_context_params;
+    network::mojom::CertVerifierCreationParams cert_verifier_creation_params;
+    profile_network_context_service->ConfigureNetworkContextParams(
+        /*in_memory=*/false, empty_relative_partition_path,
+        &network_context_params, &cert_verifier_creation_params);
+
+    EXPECT_EQ(GetParam() ? network::mojom::CertVerifierCreationParams::
+                               CertVerifierImpl::kBuiltin
+                         : network::mojom::CertVerifierCreationParams::
+                               CertVerifierImpl::kSystem,
+              cert_verifier_creation_params.use_builtin_cert_verifier);
+  }
 
 #if BUILDFLAG(BUILTIN_CERT_VERIFIER_POLICY_SUPPORTED)
   // If the BuiltinCertificateVerifierEnabled policy is set it should override
@@ -623,29 +483,39 @@ IN_PROC_BROWSER_TEST_P(
             std::make_unique<base::Value>(true));
   UpdateProviderPolicy(policies);
 
-  network_context_params_ptr =
-      profile_network_context_service->CreateNetworkContextParams(
-          /*in_memory=*/false, empty_relative_partition_path);
-  EXPECT_EQ(network::mojom::NetworkContextParams::CertVerifierImpl::kBuiltin,
-            network_context_params_ptr->use_builtin_cert_verifier);
+  {
+    network::mojom::NetworkContextParams network_context_params;
+    network::mojom::CertVerifierCreationParams cert_verifier_creation_params;
+    profile_network_context_service->ConfigureNetworkContextParams(
+        /*in_memory=*/false, empty_relative_partition_path,
+        &network_context_params, &cert_verifier_creation_params);
+    EXPECT_EQ(
+        network::mojom::CertVerifierCreationParams::CertVerifierImpl::kBuiltin,
+        cert_verifier_creation_params.use_builtin_cert_verifier);
+  }
 
   SetPolicy(&policies, policy::key::kBuiltinCertificateVerifierEnabled,
             std::make_unique<base::Value>(false));
   UpdateProviderPolicy(policies);
 
-  network_context_params_ptr =
-      profile_network_context_service->CreateNetworkContextParams(
-          /*in_memory=*/false, empty_relative_partition_path);
-  EXPECT_EQ(network::mojom::NetworkContextParams::CertVerifierImpl::kSystem,
-            network_context_params_ptr->use_builtin_cert_verifier);
-#endif
+  {
+    network::mojom::NetworkContextParams network_context_params;
+    network::mojom::CertVerifierCreationParams cert_verifier_creation_params;
+    profile_network_context_service->ConfigureNetworkContextParams(
+        /*in_memory=*/false, empty_relative_partition_path,
+        &network_context_params, &cert_verifier_creation_params);
+    EXPECT_EQ(
+        network::mojom::CertVerifierCreationParams::CertVerifierImpl::kSystem,
+        cert_verifier_creation_params.use_builtin_cert_verifier);
+  }
+#endif  // BUILDFLAG(BUILTIN_CERT_VERIFIER_POLICY_SUPPORTED)
 }
 
 INSTANTIATE_TEST_SUITE_P(
     All,
     ProfileNetworkContextServiceCertVerifierBuiltinFeaturePolicyTest,
     ::testing::Bool());
-#endif
+#endif  // BUILDFLAG(BUILTIN_CERT_VERIFIER_FEATURE_SUPPORTED)
 
 enum class CorsTestMode {
   kWithCorsMitigationListPolicy,

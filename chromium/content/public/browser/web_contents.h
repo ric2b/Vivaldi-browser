@@ -36,7 +36,6 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/data_decoder/public/mojom/web_bundler.mojom.h"
 #include "services/metrics/public/cpp/ukm_source_id.h"
-#include "third_party/blink/public/common/frame/sandbox_flags.h"
 #include "third_party/blink/public/mojom/frame/find_in_page.mojom-forward.h"
 #include "third_party/blink/public/mojom/input/pointer_lock_result.mojom.h"
 #include "third_party/blink/public/mojom/loader/pause_subresource_loading_handle.mojom-forward.h"
@@ -81,7 +80,6 @@ namespace content {
 
 class BrowserContext;
 class BrowserPluginGuestDelegate;
-class InterstitialPage;
 class RenderFrameHost;
 class RenderViewHost;
 class RenderWidgetHost;
@@ -216,7 +214,7 @@ class WebContents : public PageNavigator,
     } desired_renderer_state;
 
     // Sandboxing flags set on the new WebContents.
-    blink::mojom::WebSandboxFlags starting_sandbox_flags;
+    network::mojom::WebSandboxFlags starting_sandbox_flags;
 
     // Value used to set the last time the WebContents was made active, this is
     // the value that'll be returned by GetLastActiveTime(). If this is left
@@ -388,11 +386,24 @@ class WebContents : public PageNavigator,
   virtual WebUI* GetWebUI() = 0;
   virtual WebUI* GetCommittedWebUI() = 0;
 
-  // Allows overriding the user agent used for NavigationEntries it owns.
-  // |override_in_new_tabs| is set when we are overriding user agent for new
-  // tabs.
+  // Sets the user-agent that may be used for navigations in this WebContents.
+  // The user-agent is *only* used when
+  // NavigationEntry::SetIsOverridingUserAgent(true) is used (the value of
+  // is-overriding-user-agent may be specified in LoadURLParams). If
+  // |override_in_new_tabs| is true, and the first navigation in the tab is
+  // renderer initiated, then is-overriding-user-agent is set to true for the
+  // NavigationEntry. See SetRendererInitiatedUserAgentOverrideOption() for
+  // details on how renderer initiated navigations are configured.
   virtual void SetUserAgentOverride(const blink::UserAgentOverride& ua_override,
                                     bool override_in_new_tabs) = 0;
+
+  // Configures the value of is-overriding-user-agent for renderer initiated
+  // navigations. The default is UA_OVERRIDE_INHERIT. This value does not apply
+  // to the first renderer initiated navigation if the tab has no navigations.
+  // See SetUserAgentOverride() for details on that.
+  virtual void SetRendererInitiatedUserAgentOverrideOption(
+      NavigationController::UserAgentOverrideOption option) = 0;
+
   virtual const blink::UserAgentOverride& GetUserAgentOverride() = 0;
 
   // Set the accessibility mode so that accessibility events are forwarded
@@ -620,6 +631,11 @@ class WebContents : public PageNavigator,
   // GetOuterWebContents instead.
   virtual bool IsInnerWebContentsForGuest() = 0;
 
+  // Returns whether this WebContents is a portal. This returns true even when
+  // this WebContents is not attached to its portal host's WebContents tree.
+  // This value may change over time due to portal activation and adoption.
+  virtual bool IsPortal() = 0;
+
   // Returns the outer WebContents frame, the same frame that this WebContents
   // was attached in AttachToOuterWebContentsFrame().
   virtual RenderFrameHost* GetOuterWebContentsFrame() = 0;
@@ -658,19 +674,6 @@ class WebContents : public PageNavigator,
   // Sends the current preferences to all renderer processes for the current
   // page.
   virtual void SyncRendererPrefs() = 0;
-
-  // Notifies WebContents that an attempt has been made to read the cookies in
-  // |cookie_list|.
-  virtual void OnCookiesRead(const GURL& url,
-                             const GURL& first_party_url,
-                             const net::CookieList& cookie_list,
-                             bool blocked_by_policy) = 0;
-
-  // Notifies WebContents that an attempt has been made to set |cookie|.
-  virtual void OnCookieChange(const GURL& url,
-                              const GURL& first_party_url,
-                              const net::CanonicalCookie& cookie,
-                              bool blocked_by_policy) = 0;
 
   // Commands ------------------------------------------------------------------
 
@@ -778,14 +781,6 @@ class WebContents : public PageNavigator,
 
   // Various other systems need to know about our interstitials.
   virtual bool ShowingInterstitialPage() = 0;
-
-  // Returns the currently visible interstitial, nullptr if no interstitial is
-  // visible. Note: This returns nullptr from the time the interstitial page has
-  // Show() called on it until the interstitial content is ready and the
-  // interstitial is displayed.
-  //
-  // Compare to InterstitialPage::GetInterstitialPage.
-  virtual InterstitialPage* GetInterstitialPage() = 0;
 
   // Misc state & callbacks ----------------------------------------------------
 
@@ -1087,9 +1082,6 @@ class WebContents : public PageNavigator,
   // WebContents. This can be used to determine if a AudioOutputStream was
   // created from a renderer that originated from this WebContents.
   virtual base::UnguessableToken GetAudioGroupId() = 0;
-
-  // The source ID of the last committed navigation.
-  virtual ukm::SourceId GetLastCommittedSourceId() = 0;
 
   // Returns the raw list of favicon candidates as reported to observers via
   // WebContentsObserver::DidUpdateFaviconURL() since the last navigation start.

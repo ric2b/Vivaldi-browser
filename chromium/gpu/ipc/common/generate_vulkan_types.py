@@ -11,7 +11,9 @@ import re
 import subprocess
 import sys
 
-_VULKAN_HEADER_FILE = "third_party/vulkan/include/vulkan/vulkan_core.h"
+# TODO(penghuang): use vulkan registry instead of parsing the vulkan header
+# file.
+_VULKAN_HEADER_FILE = "third_party/vulkan_headers/include/vulkan/vulkan_core.h"
 
 _STRUCTS = [
   "VkExtensionProperties",
@@ -167,7 +169,7 @@ def ParseStruct(line, header_file):
     array_len = None
     if '[' in field_name:
       assert ']' in field_name
-      field_name, array_len = field_name.rstrip(']').split('[')
+      field_name, array_len = field_name.rstrip(']').rsplit('[', 1)
       assert array_len.isdigit() or array_len in _defines
     fields.append((field_name, field_type, array_len))
   assert name not in _structs, "struct '%s' has been defined." % name
@@ -520,20 +522,15 @@ def GenerateTypemapFile(typemap_file):
 # gpu/ipc/common/generate_vulkan_types.py
 # DO NOT EDIT!
 
-mojom = "//gpu/ipc/common/vulkan_types.mojom"
-public_headers = [ "//gpu/ipc/common/vulkan_types.h" ]
-traits_headers = [ "//gpu/ipc/common/vulkan_types_mojom_traits.h" ]
-sources = [
-  "//gpu/ipc/common/vulkan_types_mojom_traits.cc",
-]
-public_deps = [
-  "//gpu/ipc/common:vulkan_types",
-]
-type_mappings = [
-""")
+generated_vulkan_type_mappings = [""")
   for t in _generated_types:
-    typemap_file.write("  \"gpu.mojom.%s=::%s\",\n" % (t, t))
-  typemap_file.write("]\n")
+    typemap_file.write(
+"""
+  {
+    mojom = "gpu.mojom.%s"
+    cpp = "::%s"
+  },""" % (t, t))
+  typemap_file.write("\n]\n")
 
 
 def main(argv):
@@ -586,7 +583,7 @@ def main(argv):
   traits_source_file.close()
   ClangFormat(traits_source_file.name)
 
-  typemap_file_name = "vulkan_types.typemap"
+  typemap_file_name = "generated_vulkan_type_mappings.gni"
   typemap_file = open(
       os.path.join(output_dir, typemap_file_name), 'wb')
   GenerateTypemapFile(typemap_file)

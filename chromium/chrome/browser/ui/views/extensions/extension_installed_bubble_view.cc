@@ -189,10 +189,9 @@ ExtensionInstalledBubbleView::ExtensionInstalledBubbleView(
       model_(std::move(model)),
       icon_(model_->MakeIconOfSize(kMaxIconSize)) {
   chrome::RecordDialogCreation(chrome::DialogIdentifier::EXTENSION_INSTALLED);
-  DialogDelegate::SetButtons(ui::DIALOG_BUTTON_NONE);
+  SetButtons(ui::DIALOG_BUTTON_NONE);
   if (model_->show_sign_in_promo()) {
-    DialogDelegate::SetFootnoteView(
-        CreateSigninPromoView(browser->profile(), this));
+    SetFootnoteView(CreateSigninPromoView(browser->profile(), this));
   }
 }
 
@@ -267,7 +266,6 @@ void ExtensionInstalledBubbleView::Init() {
         l10n_util::GetStringUTF16(IDS_EXTENSION_INSTALLED_MANAGE_SHORTCUTS)));
     manage_shortcut->set_callback(base::BindRepeating(
         &ExtensionInstalledBubbleView::LinkClicked, base::Unretained(this)));
-    manage_shortcut->SetUnderline(false);
   }
 
   if (model_->show_how_to_manage()) {

@@ -28,17 +28,23 @@ class WebExternalWidgetImpl : public WebExternalWidget,
   ~WebExternalWidgetImpl() override;
 
   // WebWidget overrides:
-  void SetCompositorHosts(cc::LayerTreeHost*, cc::AnimationHost*) override;
+  cc::LayerTreeHost* InitializeCompositing(
+      cc::TaskGraphRunner* task_graph_runner,
+      const cc::LayerTreeSettings& settings,
+      std::unique_ptr<cc::UkmRecorderFactory> ukm_recorder_factory) override;
   void SetCompositorVisible(bool visible) override;
-  void UpdateVisualState() override;
-  void WillBeginCompositorFrame() override;
-  WebHitTestResult HitTestResultAt(const gfx::Point&) override;
+  void Close(scoped_refptr<base::SingleThreadTaskRunner> cleanup_runner,
+             base::OnceCallback<void()> cleanup_task) override;
+  WebHitTestResult HitTestResultAt(const gfx::PointF&) override;
   WebURL GetURLForDebugTrace() override;
   WebSize Size() override;
   void Resize(const WebSize& size) override;
   WebInputEventResult HandleInputEvent(
       const WebCoalescedInputEvent& coalesced_event) override;
   WebInputEventResult DispatchBufferedTouchEvents() override;
+  scheduler::WebRenderWidgetSchedulingState* RendererWidgetSchedulingState()
+      override;
+  void SetCursor(const ui::Cursor& cursor) override;
 
   // WebExternalWidget overrides:
   void SetRootLayer(scoped_refptr<cc::Layer>) override;
@@ -49,6 +55,9 @@ class WebExternalWidgetImpl : public WebExternalWidget,
   void RecordTimeToFirstActivePaint(base::TimeDelta duration) override;
   void UpdateLifecycle(WebLifecycleUpdate requested_update,
                        DocumentUpdateReason reason) override {}
+  void RequestNewLayerTreeFrameSink(
+      LayerTreeFrameSinkCallback callback) override;
+  void DidCommitAndDrawCompositorFrame() override;
 
  private:
   WebExternalWidgetClient* const client_;

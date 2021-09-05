@@ -18,6 +18,7 @@
 #include "components/sync/base/model_type.h"
 #include "components/sync/driver/profile_sync_service.h"
 #include "components/sync/driver/sync_driver_switches.h"
+#include "content/public/test/browser_test.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/sync/test/integration/os_sync_test.h"
@@ -85,36 +86,13 @@ class SingleClientStandaloneTransportSyncTest : public SyncTest {
   DISALLOW_COPY_AND_ASSIGN(SingleClientStandaloneTransportSyncTest);
 };
 
-#if defined(OS_CHROMEOS) || defined(OS_ANDROID)
-IN_PROC_BROWSER_TEST_F(SingleClientStandaloneTransportSyncTest,
-                       StartsSyncFeatureOnSignin) {
-  // On platforms where Sync starts automatically (in practice, Android and
-  // ChromeOS), IsFirstSetupComplete gets set automatically, and so the full
-  // Sync feature will start upon sign-in to a primary account.
-  ASSERT_TRUE(browser_defaults::kSyncAutoStarts);
-
-  ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
-
-  // Signing in (without explicitly setting up Sync) should trigger starting the
-  // Sync machinery. Because IsFirstSetupComplete gets set automatically, this
-  // will actually start the full Sync feature, not just the transport.
-  ASSERT_TRUE(GetClient(0)->SignInPrimaryAccount());
-  EXPECT_EQ(syncer::SyncService::TransportState::INITIALIZING,
-            GetSyncService(0)->GetTransportState());
-
-  EXPECT_TRUE(GetClient(0)->AwaitSyncTransportActive());
-
-  EXPECT_EQ(syncer::SyncService::TransportState::ACTIVE,
-            GetSyncService(0)->GetTransportState());
-
-  ASSERT_TRUE(GetSyncService(0)->GetUserSettings()->IsFirstSetupComplete());
-
-  EXPECT_TRUE(GetSyncService(0)->IsSyncFeatureEnabled());
-  EXPECT_TRUE(GetSyncService(0)->IsSyncFeatureActive());
-}
-#else
 IN_PROC_BROWSER_TEST_F(SingleClientStandaloneTransportSyncTest,
                        StartsSyncTransportOnSignin) {
+#if defined(OS_CHROMEOS)
+  // On Chrome OS before SplitSettingSync, sync auto-starts on sign-in.
+  if (!chromeos::features::IsSplitSettingsSyncEnabled())
+    return;
+#endif
   ASSERT_TRUE(SetupClients()) << "SetupClients() failed.";
 
   // Signing in (without explicitly setting up Sync) should trigger starting the
@@ -148,7 +126,6 @@ IN_PROC_BROWSER_TEST_F(SingleClientStandaloneTransportSyncTest,
                          AllowedTypesInStandaloneTransportMode());
   EXPECT_TRUE(bad_types.Empty()) << syncer::ModelTypeSetToString(bad_types);
 }
-#endif  // defined(OS_CHROMEOS) || defined(OS_ANDROID)
 
 IN_PROC_BROWSER_TEST_F(SingleClientStandaloneTransportSyncTest,
                        SwitchesBetweenTransportAndFeature) {

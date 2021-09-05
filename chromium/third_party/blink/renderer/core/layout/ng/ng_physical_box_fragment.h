@@ -144,6 +144,9 @@ class CORE_EXPORT NGPhysicalBoxFragment final
   unsigned BorderEdges() const { return border_edge_; }
   NGPixelSnappedPhysicalBoxStrut BorderWidths() const;
 
+  // Return true if this is the first fragment generated from a node.
+  bool IsFirstForNode() const { return is_first_for_node_; }
+
 #if DCHECK_IS_ON()
   void CheckSameForSimplifiedLayout(const NGPhysicalBoxFragment&,
                                     bool check_same_block_size) const;
@@ -159,9 +162,10 @@ class CORE_EXPORT NGPhysicalBoxFragment final
   const NGPhysicalBoxStrut* ComputeBordersAddress() const {
     DCHECK(has_borders_ || has_padding_);
     const NGFragmentItems* items = ComputeItemsAddress();
-    if (has_fragment_items_)
-      ++items;
-    return reinterpret_cast<const NGPhysicalBoxStrut*>(items);
+    if (!has_fragment_items_)
+      return reinterpret_cast<const NGPhysicalBoxStrut*>(items);
+    return reinterpret_cast<const NGPhysicalBoxStrut*>(
+        reinterpret_cast<const uint8_t*>(items) + items->ByteSize());
   }
 
   const NGPhysicalBoxStrut* ComputePaddingAddress() const {

@@ -8,7 +8,12 @@
 #include "base/scoped_observer.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/bookmarks/common/bookmark_pref_names.h"
+#import "components/prefs/ios/pref_observer_bridge.h"
+#include "components/prefs/pref_change_registrar.h"
+#include "components/prefs/pref_service.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
+#include "ios/chrome/browser/policy/policy_features.h"
 #include "ios/chrome/browser/ui/bookmarks/bookmark_model_bridge_observer.h"
 #import "ios/chrome/browser/ui/ntp/ntp_util.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_consumer.h"
@@ -26,9 +31,10 @@
 #error "This file requires ARC support."
 #endif
 
-@interface ToolbarMediator ()<BookmarkModelBridgeObserver,
-                              CRWWebStateObserver,
-                              WebStateListObserving>
+@interface ToolbarMediator () <BookmarkModelBridgeObserver,
+                               CRWWebStateObserver,
+                               PrefObserverDelegate,
+                               WebStateListObserving>
 
 // The current web state associated with the toolbar.
 @property(nonatomic, assign) web::WebState* webState;
@@ -43,6 +49,10 @@
   std::unique_ptr<WebStateListObserverBridge> _webStateListObserver;
   // Bridge to register for bookmark changes.
   std::unique_ptr<bookmarks::BookmarkModelBridge> _bookmarkModelBridge;
+  // Pref observer to track changes to prefs.
+  std::unique_ptr<PrefObserverBridge> _prefObserverBridge;
+  // Registrar for pref changes notifications.
+  std::unique_ptr<PrefChangeRegistrar> _prefChangeRegistrar;
 }
 
 - (instancetype)init {
@@ -79,6 +89,8 @@
     _webState = nullptr;
   }
   _bookmarkModelBridge.reset();
+  _prefChangeRegistrar.reset();
+  _prefObserverBridge.reset();
 }
 
 #pragma mark - CRWWebStateObserver
@@ -228,7 +240,18 @@
   }
 }
 
-#pragma mark - Helper methods
+- (void)setPrefService:(PrefService*)prefService {
+  _prefService = prefService;
+  _prefChangeRegistrar = std::make_unique<PrefChangeRegistrar>();
+  _prefChangeRegistrar->Init(prefService);
+  _prefObserverBridge.reset(new PrefObserverBridge(self));
+  _prefObserverBridge->ObserveChangesForPreference(
+      bookmarks::prefs::kEditBookmarksEnabled, _prefChangeRegistrar.get());
+
+  [self.consumer setBookmarkEnabled:[self isEditBookmarksEnabled]];
+}
+
+#pragma mark - Update helper methods
 
 // Updates the consumer to match the current WebState.
 - (void)updateConsumer {
@@ -275,6 +298,16 @@
   [self.consumer setShareMenuEnabled:shareMenuEnabled];
 }
 
+#pragma mark - Other private methods
+
+// Returns YES if user is allowed to edit any bookmarks.
+- (BOOL)isEditBookmarksEnabled {
+  if (IsEditBookmarksIOSEnabled())
+    return self.prefService->GetBoolean(
+        bookmarks::prefs::kEditBookmarksEnabled);
+  return YES;
+}
+
 #pragma mark - BookmarkModelBridgeObserver
 
 // If an added or removed bookmark is the same as the current url, update the
@@ -306,6 +339,13 @@
 - (void)bookmarkNodeDeleted:(const bookmarks::BookmarkNode*)node
                  fromFolder:(const bookmarks::BookmarkNode*)folder {
   // No-op -- required by BookmarkModelBridgeObserver but not used.
+}
+
+#pragma mark - PrefObserverDelegate
+
+- (void)onPreferenceChanged:(const std::string&)preferenceName {
+  if (preferenceName == bookmarks::prefs::kEditBookmarksEnabled)
+    [self.consumer setBookmarkEnabled:[self isEditBookmarksEnabled]];
 }
 
 @end

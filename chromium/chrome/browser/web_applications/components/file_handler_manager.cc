@@ -141,8 +141,10 @@ void FileHandlerManager::ForceEnableFileHandlingOriginTrial(
 
 void FileHandlerManager::DisableForceEnabledFileHandlingOriginTrial(
     const AppId& app_id) {
-  double pref_expiry_time = GetDoubleWebAppPref(
-      profile()->GetPrefs(), app_id, kFileHandlingOriginTrialExpiryTime);
+  double pref_expiry_time =
+      GetDoubleWebAppPref(profile()->GetPrefs(), app_id,
+                          kFileHandlingOriginTrialExpiryTime)
+          .value_or(0);
   if (pref_expiry_time == kMaxOriginTrialExpiryTime) {
     UpdateFileHandlersForOriginTrialExpiryTime(app_id, base::Time());
   }
@@ -157,10 +159,12 @@ const apps::FileHandlers* FileHandlerManager::GetEnabledFileHandlers(
 }
 
 bool FileHandlerManager::IsFileHandlingAPIAvailable(const AppId& app_id) {
+  double pref_expiry_time =
+      GetDoubleWebAppPref(profile()->GetPrefs(), app_id,
+                          kFileHandlingOriginTrialExpiryTime)
+          .value_or(0);
   return base::FeatureList::IsEnabled(blink::features::kFileHandlingAPI) ||
-         base::Time::FromDoubleT(GetDoubleWebAppPref(
-             profile()->GetPrefs(), app_id,
-             kFileHandlingOriginTrialExpiryTime)) >= base::Time::Now();
+         base::Time::FromDoubleT(pref_expiry_time) >= base::Time::Now();
 }
 
 bool FileHandlerManager::AreFileHandlersEnabled(const AppId& app_id) const {
@@ -276,7 +280,8 @@ const base::Optional<GURL> FileHandlerManager::GetMatchingFileHandlerURL(
 bool FileHandlerManager::IsFileHandlingForceEnabled(const AppId& app_id) {
   double pref_expiry_time =
       GetDoubleWebAppPref(profile()->GetPrefs(), app_id,
-                          kFileHandlingOriginTrialExpiryTime);
+                          kFileHandlingOriginTrialExpiryTime)
+          .value_or(0);
   return pref_expiry_time == kMaxOriginTrialExpiryTime;
 }
 

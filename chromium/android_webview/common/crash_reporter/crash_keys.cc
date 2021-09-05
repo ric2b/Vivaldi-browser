@@ -17,9 +17,12 @@ const char kAndroidSdkInt[] = "android-sdk-int";
 
 const char kSupportLibraryWebkitVersion[] = "androidx-webkit-version";
 
+extern const char kWeblayerWebViewCompatMode[] =
+    "WEBLAYER_WEB_VIEW_COMPAT_MODE";
+
 // clang-format off
-const char* const kWebViewCrashKeyWhiteList[] = {
-    "AW_WHITELISTED_DEBUG_KEY",
+const char* const kWebViewCrashKeyAllowList[] = {
+    "AW_ALLOWED_DEBUG_KEY",
     kAppPackageName,
     kAppPackageVersionCode,
     kAndroidSdkInt,
@@ -69,6 +72,9 @@ const char* const kWebViewCrashKeyWhiteList[] = {
     "variations__7",
     "variations__8",
     "num-experiments",
+
+    kWeblayerWebViewCompatMode,
+
     nullptr};
 // clang-format on
 

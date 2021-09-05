@@ -8,14 +8,19 @@
 #include "base/metrics/user_metrics.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/bookmarks/common/bookmark_pref_names.h"
+#include "components/bookmarks/managed/managed_bookmark_service.h"
+#include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "ios/chrome/browser/bookmarks/bookmarks_utils.h"
+#import "ios/chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/favicon/favicon_loader.h"
 #include "ios/chrome/browser/favicon/ios_chrome_favicon_loader_factory.h"
 #import "ios/chrome/browser/main/browser.h"
 #import "ios/chrome/browser/metrics/new_tab_page_uma.h"
+#include "ios/chrome/browser/policy/policy_features.h"
 #import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
 #import "ios/chrome/browser/ui/alert_coordinator/alert_coordinator.h"
 #import "ios/chrome/browser/ui/authentication/cells/signin_promo_view_configurator.h"
@@ -629,7 +634,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
                                                       editedNodes:nodes
                                                      allowsCancel:YES
                                                    selectedFolder:selectedFolder
-                                                       dispatcher:self.handler];
+                                                          browser:self.browser];
   self.folderSelector.delegate = self;
   UINavigationController* navController = [[BookmarkNavigationController alloc]
       initWithRootViewController:self.folderSelector];
@@ -1177,8 +1182,15 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 - (BOOL)allowsNewFolder {
   // When the current root node has been removed remotely (becomes NULL),
   // or when displaying search results, creating new folder is forbidden.
+  // The root folder displayed by the table view must also be editable to allow
+  // creation of new folders. Note that Bookmarks Bar, Mobile Bookmarks, and
+  // Other Bookmarks return as "editable" since the user can edit the contents
+  // of those folders. Editing bookmarks must also be allowed.
   return self.sharedState.tableViewDisplayedRootNode != NULL &&
-         !self.sharedState.currentlyShowingSearchResults;
+         !self.sharedState.currentlyShowingSearchResults &&
+         [self isEditBookmarksEnabled] &&
+         [self
+             isNodeEditableByUser:self.sharedState.tableViewDisplayedRootNode];
 }
 
 - (int)topMostVisibleIndexPathRow {
@@ -1218,6 +1230,27 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 - (BOOL)isUrlOrFolder:(const BookmarkNode*)node {
   return node->type() == BookmarkNode::URL ||
          node->type() == BookmarkNode::FOLDER;
+}
+
+// Returns YES if the given node can be edited by user.
+- (BOOL)isNodeEditableByUser:(const BookmarkNode*)node {
+  // Note that CanBeEditedByUser() below returns true for Bookmarks Bar, Mobile
+  // Bookmarks, and Other Bookmarks since the user can add, delete, and edit
+  // items within those folders. CanBeEditedByUser() returns false for the
+  // managed_node and all nodes that are descendants of managed_node.
+  bookmarks::ManagedBookmarkService* managedBookmarkService =
+      ManagedBookmarkServiceFactory::GetForBrowserState(self.browserState);
+  return managedBookmarkService
+             ? managedBookmarkService->CanBeEditedByUser(node)
+             : YES;
+}
+
+// Returns YES if user is allowed to edit any bookmarks.
+- (BOOL)isEditBookmarksEnabled {
+  if (IsEditBookmarksIOSEnabled())
+    return self.browserState->GetPrefs()->GetBoolean(
+        bookmarks::prefs::kEditBookmarksEnabled);
+  return YES;
 }
 
 // Returns the bookmark node associated with |indexPath|.
@@ -1420,6 +1453,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 
   self.actionSheetCoordinator = [[ActionSheetCoordinator alloc]
       initWithBaseViewController:self
+                         browser:_browser
                            title:nil
                          message:nil
                    barButtonItem:self.moreButton];
@@ -1518,7 +1552,13 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
                                       target:self
                                       action:@selector(trailingButtonClicked)];
   editButton.accessibilityIdentifier = kBookmarkHomeTrailingButtonIdentifier;
-  editButton.enabled = [self hasBookmarksOrFolders];
+  // The edit button is only enabled if the displayed root folder is editable
+  // and has items. Note that Bookmarks Bar, Mobile Bookmarks, and Other
+  // Bookmarks return as "editable" since their contents can be edited. Editing
+  // bookmarks must also be allowed.
+  editButton.enabled =
+      [self isEditBookmarksEnabled] && [self hasBookmarksOrFolders] &&
+      [self isNodeEditableByUser:self.sharedState.tableViewDisplayedRootNode];
 
   [self setToolbarItems:@[ newFolderButton, spaceButton, editButton ]
                animated:NO];
@@ -1575,7 +1615,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
      forMultipleBookmarkURLs:(const std::set<const BookmarkNode*>)nodes {
   __weak BookmarkHomeViewController* weakSelf = self;
   coordinator.alertController.view.accessibilityIdentifier =
-      @"bookmark_context_menu";
+      kBookmarkHomeContextMenuIdentifier;
 
   [coordinator
       addItemWithTitle:l10n_util::GetNSString(
@@ -1614,7 +1654,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   __weak BookmarkHomeViewController* weakSelf = self;
   std::string urlString = node->url().possibly_invalid_spec();
   coordinator.alertController.view.accessibilityIdentifier =
-      @"bookmark_context_menu";
+      kBookmarkHomeContextMenuIdentifier;
 
   [coordinator addItemWithTitle:l10n_util::GetNSString(
                                     IDS_IOS_BOOKMARK_CONTEXT_MENU_EDIT)
@@ -1622,6 +1662,13 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
                            [weakSelf editNode:node];
                          }
                           style:UIAlertActionStyleDefault];
+  // Disable the edit menu option if the node is not editable by user, or if
+  // editing bookmarks is not allowed.
+  if (![self isEditBookmarksEnabled] || ![self isNodeEditableByUser:node]) {
+    // TODO(crbug.com/1070830): Modify AlertCoordinator to allow disabled
+    // actions.
+    coordinator.alertController.actions[0].enabled = NO;
+  }
 
   [coordinator
       addItemWithTitle:l10n_util::GetNSString(
@@ -1659,7 +1706,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
      forSingleBookmarkFolder:(const BookmarkNode*)node {
   __weak BookmarkHomeViewController* weakSelf = self;
   coordinator.alertController.view.accessibilityIdentifier =
-      @"bookmark_context_menu";
+      kBookmarkHomeContextMenuIdentifier;
 
   [coordinator addItemWithTitle:l10n_util::GetNSString(
                                     IDS_IOS_BOOKMARK_CONTEXT_MENU_EDIT_FOLDER)
@@ -1676,6 +1723,14 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
                            [weakSelf moveNodes:nodes];
                          }
                           style:UIAlertActionStyleDefault];
+  // Disable the edit and move menu options if the folder is not editable by
+  // user, or if editing bookmarks is not allowed.
+  if (![self isEditBookmarksEnabled] || ![self isNodeEditableByUser:node]) {
+    // TODO(crbug.com/1070830): Modify AlertCoordinator to allow disabled
+    // actions.
+    coordinator.alertController.actions[0].enabled = NO;
+    coordinator.alertController.actions[1].enabled = NO;
+  }
 
   [coordinator addItemWithTitle:l10n_util::GetNSString(IDS_CANCEL)
                          action:nil
@@ -1687,7 +1742,7 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
         (const std::set<const bookmarks::BookmarkNode*>)nodes {
   __weak BookmarkHomeViewController* weakSelf = self;
   coordinator.alertController.view.accessibilityIdentifier =
-      @"bookmark_context_menu";
+      kBookmarkHomeContextMenuIdentifier;
 
   [coordinator addItemWithTitle:l10n_util::GetNSString(
                                     IDS_IOS_BOOKMARK_CONTEXT_MENU_MOVE)
@@ -1736,14 +1791,15 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
   }
 
   const BookmarkNode* node = [self nodeAtIndexPath:indexPath];
-  // Disable the long press gesture if it is a permanent node (not an URL or
-  // Folder).
-  if (!node || ![self isUrlOrFolder:node]) {
+  // Disable the long press gesture if it is a permanent node, which includes
+  // Bookmarks Bar, Mobile Bookmarks, Other Bookmarks, and Managed Bookmarks.
+  // Permanent nodes do not include descendants of Managed Bookmarks.
+  if (!node || node->is_permanent_node())
     return;
-  }
 
   self.actionSheetCoordinator = [[ActionSheetCoordinator alloc]
       initWithBaseViewController:self
+                         browser:_browser
                            title:nil
                          message:nil
                             rect:CGRectMake(touchPoint.x, touchPoint.y, 1, 1)
@@ -1860,10 +1916,6 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
 
 - (BOOL)tableView:(UITableView*)tableView
     canEditRowAtIndexPath:(NSIndexPath*)indexPath {
-  // Filtered results are always a URL and editable.
-  if (self.sharedState.currentlyShowingSearchResults) {
-    return YES;
-  }
   TableViewItem* item =
       [self.sharedState.tableViewModel itemAtIndexPath:indexPath];
   if (item.type != BookmarkHomeItemTypeBookmark) {
@@ -1878,12 +1930,14 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
     return NO;
   }
 
-  // Enable the swipe-to-delete gesture and reordering control for nodes of
-  // type URL or Folder, but not the permanent ones.
+  // Enable the swipe-to-delete gesture and reordering control for editable
+  // nodes of type URL or Folder, but not the permanent ones. Only enable
+  // swipe-to-delete if editing bookmarks is allowed.
   BookmarkHomeNodeItem* nodeItem =
       base::mac::ObjCCastStrict<BookmarkHomeNodeItem>(item);
   const BookmarkNode* node = nodeItem.bookmarkNode;
-  return [self isUrlOrFolder:node];
+  return [self isEditBookmarksEnabled] && [self isUrlOrFolder:node] &&
+         [self isNodeEditableByUser:node];
 }
 
 - (void)tableView:(UITableView*)tableView
@@ -1962,8 +2016,15 @@ std::vector<GURL> GetUrlsToOpen(const std::vector<const BookmarkNode*>& nodes) {
     DCHECK(node);
     // If table is in edit mode, record all the nodes added to edit set.
     if (self.sharedState.currentlyInEditMode) {
-      self.sharedState.editNodes.insert(node);
-      [self handleSelectEditNodes:self.sharedState.editNodes];
+      if ([self isNodeEditableByUser:node]) {
+        // Only add nodes that are editable to the edit set.
+        self.sharedState.editNodes.insert(node);
+        [self handleSelectEditNodes:self.sharedState.editNodes];
+        return;
+      }
+      // If the selected row is not editable, do not add it to the edit set.
+      // Simply deselect the row.
+      [tableView deselectRowAtIndexPath:indexPath animated:YES];
       return;
     }
     [self.sharedState.editingFolderCell stopEdit];

@@ -8,11 +8,10 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "fuchsia/runners/cast/cast_component.h"
 
-namespace {
-const char kAgentComponentUrl[] =
-    "fuchsia-pkg://fuchsia.com/cast_agent#meta/cast_agent.cmx";
-}  // namespace
+constexpr char FakeApplicationConfigManager::kFakeAgentUrl[] =
+    "fuchsia-pkg://fuchsia.com/fake_agent#meta/fake_agent.cmx";
 
 // static
 chromium::cast::ApplicationConfig FakeApplicationConfigManager::CreateConfig(
@@ -22,7 +21,7 @@ chromium::cast::ApplicationConfig FakeApplicationConfigManager::CreateConfig(
   app_config.set_id(id);
   app_config.set_display_name("Dummy test app");
   app_config.set_web_url(url.spec());
-  app_config.set_agent_url(kAgentComponentUrl);
+  app_config.set_agent_url(kFakeAgentUrl);
 
   // Add a PROTECTED_MEDIA_IDENTIFIER permission. This is consistent with the
   // real ApplicationConfigManager.
@@ -54,6 +53,6 @@ void FakeApplicationConfigManager::GetConfig(std::string id,
     return;
   }
 
-  callback(std::move(std::move(id_to_config_[id])));
+  callback(std::move(id_to_config_[id]));
   id_to_config_.erase(id);
 }

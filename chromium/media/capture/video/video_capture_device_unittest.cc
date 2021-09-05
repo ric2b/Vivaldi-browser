@@ -69,8 +69,9 @@
 #define MAYBE_UsingRealWebcam_CaptureWithSize UsingRealWebcam_CaptureWithSize
 #define MAYBE_UsingRealWebcam_CheckPhotoCallbackRelease \
   UsingRealWebcam_CheckPhotoCallbackRelease
-#elif defined(OS_WIN)
-// TODO(crbug.com/893494): Fails on win: error: Value of: device_descriptor.
+#elif defined(OS_WIN) || defined(OS_FUCHSIA)
+// Windows test bots don't have camera.
+// On Fuchsia the tests run under emulator that doesn't support camera.
 #define MAYBE_UsingRealWebcam_AllocateBadSize \
   DISABLED_UsingRealWebcam_AllocateBadSize
 #define MAYBE_UsingRealWebcam_CaptureMjpeg DISABLED_UsingRealWebcam_CaptureMjpeg
@@ -97,7 +98,9 @@
 #define MAYBE_UsingRealWebcam_CaptureMjpeg UsingRealWebcam_CaptureMjpeg
 #define MAYBE_UsingRealWebcam_TakePhoto UsingRealWebcam_TakePhoto
 #define MAYBE_UsingRealWebcam_GetPhotoState UsingRealWebcam_GetPhotoState
-#define MAYBE_UsingRealWebcam_CaptureWithSize UsingRealWebcam_CaptureWithSize
+// Flaky crash: https://crbug.com/1069608
+#define MAYBE_UsingRealWebcam_CaptureWithSize \
+  DISABLED_UsingRealWebcam_CaptureWithSize
 #define MAYBE_UsingRealWebcam_CheckPhotoCallbackRelease \
   UsingRealWebcam_CheckPhotoCallbackRelease
 #elif defined(OS_LINUX)
@@ -219,6 +222,18 @@ class MockImageCaptureClient
   mojom::PhotoStatePtr state_;
 };
 
+base::test::SingleThreadTaskEnvironment::MainThreadType kMainThreadType =
+#if defined(OS_MACOSX)
+    // Video capture code on MacOSX must run on a CFRunLoop enabled thread
+    // for interaction with AVFoundation.
+    base::test::SingleThreadTaskEnvironment::MainThreadType::UI;
+#elif defined(OS_FUCHSIA)
+    // FIDL APIs on Fuchsia requires IO thread.
+    base::test::SingleThreadTaskEnvironment::MainThreadType::IO;
+#else
+    base::test::SingleThreadTaskEnvironment::MainThreadType::DEFAULT;
+#endif
+
 }  // namespace
 
 class VideoCaptureDeviceTest
@@ -247,13 +262,7 @@ class VideoCaptureDeviceTest
   typedef VideoCaptureDevice::Client Client;
 
   VideoCaptureDeviceTest()
-      :
-#if defined(OS_MACOSX)
-        // Video capture code on MacOSX must run on a CFRunLoop enabled thread
-        // for interaction with AVFoundation.
-        task_environment_(
-            base::test::SingleThreadTaskEnvironment::MainThreadType::UI),
-#endif
+      : task_environment_(kMainThreadType),
         device_descriptors_(new VideoCaptureDeviceDescriptors()),
         main_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()),
         video_capture_client_(CreateDeviceClient()),
@@ -466,8 +475,9 @@ class VideoCaptureDeviceTest
   std::unique_ptr<VideoCaptureDeviceFactory> video_capture_device_factory_;
 };
 
+// Causes a flaky crash on Chrome OS. https://crbug.com/1069608
 // Cause hangs on Windows Debug. http://crbug.com/417824
-#if defined(OS_WIN) && !defined(NDEBUG)
+#if defined(OS_CHROMEOS) || (defined(OS_WIN) && !defined(NDEBUG))
 #define MAYBE_OpenInvalidDevice DISABLED_OpenInvalidDevice
 #else
 #define MAYBE_OpenInvalidDevice OpenInvalidDevice

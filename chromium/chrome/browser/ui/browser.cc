@@ -42,7 +42,7 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/mixed_content_settings_tab_helper.h"
 #include "chrome/browser/content_settings/sound_content_setting_observer.h"
-#include "chrome/browser/content_settings/tab_specific_content_settings.h"
+#include "chrome/browser/content_settings/tab_specific_content_settings_delegate.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry.h"
 #include "chrome/browser/custom_handlers/protocol_handler_registry_factory.h"
 #include "chrome/browser/custom_handlers/register_protocol_handler_permission_request.h"
@@ -163,6 +163,7 @@
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/captive_portal/core/buildflags.h"
+#include "components/content_settings/browser/tab_specific_content_settings.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/favicon/content/content_favicon_driver.h"
 #include "components/find_in_page/find_tab_helper.h"
@@ -192,7 +193,6 @@
 #include "components/zoom/zoom_controller.h"
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/file_select_listener.h"
-#include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/invalidate_type.h"
 #include "content/public/browser/keyboard_event_processing_result.h"
 #include "content/public/browser/navigation_controller.h"
@@ -650,11 +650,9 @@ Browser::~Browser() {
   // because the ProfileManager needs to be able to destroy all profiles when
   // it is destroyed. See crbug.com/527035
   //
-  // A profile created with Profile::CreateOffTheRecordProfile() should not be
-  // destroyed directly by Browser (e.g. for offscreen tabs,
-  // https://crbug.com/664351).
-  if (profile_->IsOffTheRecord() &&
-      !profile_->IsIndependentOffTheRecordProfile() &&
+  // Non-primary OffTheRecord profiles should not be destroyed directly by
+  // Browser (e.g. for offscreen tabs, https://crbug.com/664351).
+  if (profile_->IsPrimaryOTRProfile() &&
       !BrowserList::IsIncognitoSessionInUse(profile_) &&
       !profile_->GetOriginalProfile()->IsSystemProfile()) {
     if (profile_->IsGuestSession()) {
@@ -939,6 +937,17 @@ void Browser::OnWindowClosing() {
   if (!ShouldCloseWindow())
     return;
 
+  if (is_vivaldi()) {
+    // We need to get rid of all tabs in our ui as soon as possible because all
+    // are killed off. This might not be fast enough if the thread showing the
+    // Vivaldi browser ui is busy with other things, but it should be alot
+    // better than without.
+    VivaldiBrowserWindow* vivaldi_browser_window =
+        static_cast<VivaldiBrowserWindow*>(window());
+    if (vivaldi_browser_window) {
+      vivaldi_browser_window->AllTabsClosed(session_id().id());
+    }
+  }
   // Application should shutdown on last window close if the user is explicitly
   // trying to quit, or if there is nothing keeping the browser alive (such as
   // AppController on the Mac, or BackgroundContentsService for background
@@ -1038,11 +1047,6 @@ Browser::DownloadCloseType Browser::OkToCloseWithInProgressDownloads(
 ////////////////////////////////////////////////////////////////////////////////
 // Browser, Tab adding/showing functions:
 
-void Browser::WindowFullscreenStateWillChange() {
-  exclusive_access_manager_->fullscreen_controller()
-      ->WindowFullscreenStateWillChange();
-}
-
 void Browser::WindowFullscreenStateChanged() {
   exclusive_access_manager_->fullscreen_controller()
       ->WindowFullscreenStateChanged();
@@ -1122,17 +1126,13 @@ void Browser::MoveTabsToExistingWindow(const std::vector<int> tab_indices,
   size_t existing_browser_count = existing_browsers_for_menu_list_.size();
   if (static_cast<size_t>(browser_index) < existing_browser_count &&
       existing_browsers_for_menu_list_[browser_index]) {
-    chrome::MoveToExistingWindow(
+    chrome::MoveTabsToExistingWindow(
         this, existing_browsers_for_menu_list_[browser_index].get(),
         tab_indices);
   }
 }
 
 bool Browser::ShouldDisplayFavicon(content::WebContents* web_contents) const {
-  // No favicon on interstitials.
-  if (web_contents->ShowingInterstitialPage())
-    return false;
-
   // Suppress the icon for the new-tab page, even if a navigation to it is
   // not committed yet. Note that we're looking at the visible URL, so
   // navigations from NTP generally don't hit this case and still show an icon.
@@ -1500,13 +1500,14 @@ bool Browser::ShouldAllowRunningInsecureContent(
   MixedContentSettingsTabHelper* mixed_content_settings =
       MixedContentSettingsTabHelper::FromWebContents(web_contents);
   DCHECK(mixed_content_settings);
-  bool allowed = mixed_content_settings->is_running_insecure_content_allowed();
+  bool allowed = mixed_content_settings->IsRunningInsecureContentAllowed();
   if (!allowed && !origin.host().empty()) {
     // Note: this is a browser-side-translation of the call to
     // DidBlockContentType from inside
     // ContentSettingsObserver::allowRunningInsecureContent.
-    TabSpecificContentSettings* tab_settings =
-        TabSpecificContentSettings::FromWebContents(web_contents);
+    content_settings::TabSpecificContentSettings* tab_settings =
+        content_settings::TabSpecificContentSettings::FromWebContents(
+            web_contents);
     DCHECK(tab_settings);
     tab_settings->OnContentBlocked(ContentSettingsType::MIXEDSCRIPT);
   }
@@ -1718,6 +1719,7 @@ void Browser::VisibleSecurityStateChanged(WebContents* source) {
 
 void Browser::AddNewContents(WebContents* source,
                              std::unique_ptr<WebContents> new_contents,
+                             const GURL& target_url,
                              WindowOpenDisposition disposition,
                              const gfx::Rect& initial_rect,
                              bool user_gesture,
@@ -1738,8 +1740,8 @@ void Browser::AddNewContents(WebContents* source,
   if (source && ConsiderForPopupBlocking(disposition))
     PopupTracker::CreateForWebContents(new_contents.get(), source, disposition);
 
-  chrome::AddWebContents(this, source, std::move(new_contents), disposition,
-                         initial_rect);
+  chrome::AddWebContents(this, source, std::move(new_contents), target_url,
+                         disposition, initial_rect);
 }
 
 void Browser::ActivateContents(WebContents* contents) {
@@ -1962,6 +1964,12 @@ content::ColorChooser* Browser::OpenColorChooser(
   return chrome::ShowColorChooser(web_contents, initial_color);
 }
 
+std::unique_ptr<content::EyeDropper> Browser::OpenEyeDropper(
+    content::RenderFrameHost* frame,
+    content::EyeDropperListener* listener) {
+  return window()->OpenEyeDropper(frame, listener);
+}
+
 void Browser::RunFileChooser(
     content::RenderFrameHost* render_frame_host,
     std::unique_ptr<content::FileSelectListener> listener,
@@ -2034,11 +2042,11 @@ void Browser::RegisterProtocolHandler(WebContents* web_contents,
   if (registry->SilentlyHandleRegisterHandlerRequest(handler))
     return;
 
-  TabSpecificContentSettings* tab_content_settings =
-      TabSpecificContentSettings::FromWebContents(web_contents);
+  auto* tab_content_settings_delegate =
+      chrome::TabSpecificContentSettingsDelegate::FromWebContents(web_contents);
   if (!user_gesture && window_) {
-    tab_content_settings->set_pending_protocol_handler(handler);
-    tab_content_settings->set_previous_protocol_handler(
+    tab_content_settings_delegate->set_pending_protocol_handler(handler);
+    tab_content_settings_delegate->set_previous_protocol_handler(
         registry->GetHandlerFor(handler.protocol()));
     if (window_->GetLocationBar()) {
     window_->GetLocationBar()->UpdateContentSettingsIcons();
@@ -2049,7 +2057,7 @@ void Browser::RegisterProtocolHandler(WebContents* web_contents,
   // Make sure content-setting icon is turned off in case the page does
   // ungestured and gestured RPH calls.
   if (window_) {
-    tab_content_settings->ClearPendingProtocolHandler();
+    tab_content_settings_delegate->ClearPendingProtocolHandler();
     window_->GetLocationBar()->UpdateContentSettingsIcons();
   }
 
@@ -2170,8 +2178,9 @@ void Browser::RequestPpapiBrokerPermission(
     return;
   }
 
-  TabSpecificContentSettings* tab_content_settings =
-      TabSpecificContentSettings::FromWebContents(web_contents);
+  content_settings::TabSpecificContentSettings* tab_content_settings =
+      content_settings::TabSpecificContentSettings::FromWebContents(
+          web_contents);
 
   HostContentSettingsMap* content_settings =
       HostContentSettingsMapFactory::GetForProfile(profile);
@@ -2696,10 +2705,15 @@ void Browser::ProcessPendingUIUpdates() {
           TabChangeType::kAll);
     }
 
-    // Update the bookmark bar. It may happen that the tab is crashed, and if
-    // so, the bookmark bar should be hidden.
-    if (flags & content::INVALIDATE_TYPE_TAB)
+    // Update the bookmark bar and PWA install icon. It may happen that the tab
+    // is crashed, and if so, the bookmark bar and PWA install icon should be
+    // hidden.
+    if (flags & content::INVALIDATE_TYPE_TAB) {
       UpdateBookmarkBarState(BOOKMARK_BAR_STATE_CHANGE_TAB_STATE);
+      // TODO(crbug.com/1062235): Ideally, we should simply ask the state to
+      // update, and doing that in an appropriate and efficient manner.
+      window()->UpdatePageActionIcon(PageActionIconType::kPwaInstall);
+    }
 
     // We don't need to process INVALIDATE_STATE, since that's not visible.
   }
@@ -2968,7 +2982,7 @@ bool Browser::PopupBrowserSupportsWindowFeature(WindowFeature feature,
   }
 }
 
-bool Browser::LegacyAppBrowserSupportsWindowFeature(
+bool Browser::AppPopupBrowserSupportsWindowFeature(
     WindowFeature feature,
     bool check_can_support) const {
   bool fullscreen = ShouldHideUIForFullscreen();
@@ -2982,8 +2996,8 @@ bool Browser::LegacyAppBrowserSupportsWindowFeature(
   }
 }
 
-bool Browser::WebAppBrowserSupportsWindowFeature(WindowFeature feature,
-                                                 bool check_can_support) const {
+bool Browser::AppBrowserSupportsWindowFeature(WindowFeature feature,
+                                              bool check_can_support) const {
   DCHECK(app_controller_);
   bool fullscreen = ShouldHideUIForFullscreen();
   switch (feature) {
@@ -3035,16 +3049,15 @@ bool Browser::SupportsWindowFeatureImpl(WindowFeature feature,
     case TYPE_NORMAL:
       return NormalBrowserSupportsWindowFeature(feature, check_can_support);
     case TYPE_POPUP:
-    case TYPE_APP_POPUP:
       return PopupBrowserSupportsWindowFeature(feature, check_can_support);
     case TYPE_APP:
-      // TODO(crbug.com/992834): Change to TYPE_WEB_APP.
       if (app_controller_)
-        return WebAppBrowserSupportsWindowFeature(feature, check_can_support);
-      // TODO(crbug.com/992834): Change to TYPE_LEGACY_APP.
-      return LegacyAppBrowserSupportsWindowFeature(feature, check_can_support);
+        return AppBrowserSupportsWindowFeature(feature, check_can_support);
+      // TODO(crbug.com/992834): Change legacy apps to TYPE_APP_POPUP.
+      return AppPopupBrowserSupportsWindowFeature(feature, check_can_support);
     case TYPE_DEVTOOLS:
-      return LegacyAppBrowserSupportsWindowFeature(feature, check_can_support);
+    case TYPE_APP_POPUP:
+      return AppPopupBrowserSupportsWindowFeature(feature, check_can_support);
 #if defined(OS_CHROMEOS)
     case TYPE_CUSTOM_TAB:
       return CustomTabBrowserSupportsWindowFeature(feature);

@@ -36,7 +36,6 @@ aggregate_vector_icons("views_vector_icons") {
     "launch.icon",
     "linux_high_density.icon",
     "linux_low_density.icon",
-    "linux_shutdown.icon",
     "menu_check.icon",
     "menu_drop_arrow.icon",
     "menu_radio_empty.icon",
@@ -648,10 +647,6 @@ jumbo_component("views") {
   }
 
   if (use_x11) {
-    configs += [
-      "//build/config/linux:x11",
-      "//build/config/linux:xrandr",
-    ]
     deps += [
       "//ui/events/devices",
       "//ui/events/devices/x11",
@@ -755,26 +750,21 @@ jumbo_component("views") {
         "widget/desktop_aura/desktop_screen_position_client.cc",
         "widget/desktop_aura/desktop_window_tree_host.cc",
       ]
-      public_deps += [ "//ui/base/mojom:cursor_type" ]
+      public_deps += [ "//ui/base/cursor/mojom:cursor_type" ]
       if (use_x11) {
-        deps += [ "//ui/platform_window/x11" ]
+        public_deps += [
+          "//ui/base/x",
+          "//ui/platform_window/x11",
+        ]
         public += [
           "widget/desktop_aura/desktop_drag_drop_client_aurax11.h",
           "widget/desktop_aura/desktop_screen_x11.h",
           "widget/desktop_aura/desktop_window_tree_host_x11.h",
-          "widget/desktop_aura/x11_desktop_window_move_client.h",
-          "widget/desktop_aura/x11_move_loop.h",
-          "widget/desktop_aura/x11_move_loop_delegate.h",
-          "widget/desktop_aura/x11_topmost_window_finder.h",
-          "widget/desktop_aura/x11_whole_screen_move_loop.h",
         ]
         sources += [
           "widget/desktop_aura/desktop_drag_drop_client_aurax11.cc",
           "widget/desktop_aura/desktop_screen_x11.cc",
           "widget/desktop_aura/desktop_window_tree_host_x11.cc",
-          "widget/desktop_aura/x11_desktop_window_move_client.cc",
-          "widget/desktop_aura/x11_topmost_window_finder.cc",
-          "widget/desktop_aura/x11_whole_screen_move_loop.cc",
         ]
       } else if (is_win) {
         public += [ "widget/desktop_aura/desktop_window_tree_host_win.h" ]
@@ -788,6 +778,7 @@ jumbo_component("views") {
         ]
         deps += [ "//ui/events:dom_keyboard_layout" ]
       } else if (use_ozone) {
+        public += [ "widget/desktop_aura/desktop_screen_ozone.h" ]
         sources += [
           "widget/desktop_aura/desktop_drag_drop_client_ozone.cc",
           "widget/desktop_aura/desktop_drag_drop_client_ozone.h",
@@ -808,9 +799,14 @@ jumbo_component("views") {
         ]
       }
       if (is_linux || is_fuchsia) {
-        public += [ "widget/desktop_aura/desktop_window_tree_host_platform.h" ]
-        sources +=
-            [ "widget/desktop_aura/desktop_window_tree_host_platform.cc" ]
+        public += [
+          "widget/desktop_aura/desktop_window_tree_host_platform.h",
+          "widget/desktop_aura/window_move_client_platform.h",
+        ]
+        sources += [
+          "widget/desktop_aura/desktop_window_tree_host_platform.cc",
+          "widget/desktop_aura/window_move_client_platform.cc",
+        ]
         deps += [ "//ui/platform_window/extensions" ]
       }
       if (use_atk) {
@@ -855,6 +851,10 @@ jumbo_component("views") {
 
   if (is_fuchsia) {
     sources += [ "controls/menu/menu_config_fuchsia.cc" ]
+  }
+
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
   }
 }
 
@@ -917,8 +917,6 @@ jumbo_source_set("test_support") {
     "test/test_views_delegate.h",
     "test/test_widget_observer.cc",
     "test/test_widget_observer.h",
-    "test/views_interactive_ui_test_base.cc",
-    "test/views_interactive_ui_test_base.h",
     "test/views_test_base.cc",
     "test/views_test_base.h",
     "test/views_test_helper.cc",
@@ -927,8 +925,6 @@ jumbo_source_set("test_support") {
     "test/widget_test.h",
     "test/widget_test_api.cc",
     "test/widget_test_api.h",
-    "test/x11_property_change_waiter.cc",
-    "test/x11_property_change_waiter.h",
     "view_test_api.h",
     "views_test_suite.cc",
     "views_test_suite.h",
@@ -1022,12 +1018,6 @@ jumbo_source_set("test_support") {
   }
   if (ozone_platform_x11) {
     deps += [ "//ui/base/x" ]
-  }
-  if (use_ozone || !use_x11) {
-    sources -= [
-      "test/x11_property_change_waiter.cc",
-      "test/x11_property_change_waiter.h",
-    ]
   }
 }
 
@@ -1173,6 +1163,8 @@ test("views_unittests") {
       "//third_party/wtl",
     ]
 
+    deps += [ "//ui/base:data_exchange" ]
+
     libs = [
       "imm32.lib",
       "oleacc.lib",
@@ -1181,6 +1173,8 @@ test("views_unittests") {
     ]
 
     sources += [
+      "accessibility/test_list_grid_view.cc",
+      "accessibility/test_list_grid_view.h",
       "accessibility/view_ax_platform_node_delegate_win_unittest.cc",
       "win/pen_event_processor_unittest.cc",
     ]
@@ -1240,7 +1234,7 @@ test("views_unittests") {
       "//ui/accessibility:test_support",
       "//ui/aura",
       "//ui/aura:test_support",
-      "//ui/base/mojom:cursor_type",
+      "//ui/base/cursor/mojom:cursor_type",
       "//ui/touch_selection",
       "//ui/wm",
       "//ui/wm/public",
@@ -1257,10 +1251,6 @@ test("views_unittests") {
     }
 
     if (use_x11) {
-      configs += [
-        "//build/config/linux:x11",
-        "//build/config/linux:xext",
-      ]
       deps += [
         "//ui/events/devices",
         "//ui/events/platform/x11",
@@ -1280,6 +1270,7 @@ test("views_unittests") {
           "widget/desktop_aura/desktop_screen_x11_unittest.cc",
           "widget/desktop_aura/desktop_window_tree_host_x11_unittest.cc",
         ]
+        deps += [ "//ui/base/x:test_support" ]
       }
       if (is_linux || is_fuchsia) {
         sources += [
@@ -1303,6 +1294,10 @@ test("views_unittests") {
     sources +=
         [ "accessibility/view_ax_platform_node_delegate_auralinux_unittest.cc" ]
     configs += [ "//build/config/linux/atk" ]
+  }
+
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
   }
 }
 
@@ -1372,7 +1367,11 @@ source_set("views_interactive_ui_tests") {
       "widget/desktop_aura/desktop_window_tree_host_x11_interactive_uitest.cc",
       "widget/desktop_aura/x11_topmost_window_finder_interactive_uitest.cc",
     ]
-    deps += [ "//ui/events/platform/x11:x11" ]
+    deps += [
+      "//ui/base/x:test_support",
+      "//ui/events/platform/x11:x11",
+      "//ui/platform_window/x11",
+    ]
   }
 
   if (is_chromeos) {

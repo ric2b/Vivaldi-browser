@@ -63,6 +63,7 @@
 #include "chrome/browser/ui/webui/theme_source.h"
 #include "chrome/browser/upgrade_detector/upgrade_detector.h"
 #include "chrome/browser/web_applications/components/externally_installed_web_app_prefs.h"
+#include "chrome/browser/web_applications/components/web_app_shortcuts_menu.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/crash_keys.h"
@@ -136,6 +137,27 @@ const char* const kMigratedExtensionIds[] = {
     "boadgeojelhgndaghljhdicfkmllpafd",  // Google Cast
     "dliochdbjfkdbacpmhlcpmleaejidimm"   // Google Cast (Beta)
 };
+
+void ReportExtensionDisabledRemotely(bool is_currently_enabled,
+                                     ExtensionUpdateCheckDataKey reason) {
+  // Report that the extension is newly disabled due to malware.
+  if (is_currently_enabled)
+    base::UmaHistogramEnumeration("Extensions.ExtensionDisabledRemotely",
+                                  reason);
+
+  // Report that the extension has added a new disable reason.
+  base::UmaHistogramEnumeration("Extensions.ExtensionAddDisabledRemotelyReason",
+                                reason);
+}
+
+void ReportNoUpdateCheckKeys() {
+  base::UmaHistogramEnumeration("Extensions.ExtensionDisabledRemotely",
+                                ExtensionUpdateCheckDataKey::kNoKey);
+}
+
+void ReportReenableExtensionFromMalware() {
+  base::UmaHistogramCounts100("Extensions.ExtensionReenabledRemotely", 1);
+}
 
 }  // namespace
 
@@ -691,7 +713,7 @@ void ExtensionService::ReloadExtensionWithQuietFailure(
 
 bool ExtensionService::UninstallExtension(
     // "transient" because the process of uninstalling may cause the reference
-    // to become invalid. Instead, use |extenson->id()|.
+    // to become invalid. Instead, use |extension->id()|.
     const std::string& transient_extension_id,
     UninstallReason reason,
     base::string16* error) {
@@ -760,7 +782,11 @@ bool ExtensionService::UninstallExtension(
                                                          reason);
 
   delayed_installs_.Remove(extension->id());
-
+  if (extension->from_bookmark() &&
+      web_app::ShouldRegisterShortcutsMenuWithOs()) {
+    web_app::UnregisterShortcutsMenuWithOs(extension->id(),
+                                           profile_->GetPath());
+  }
   extension_prefs_->OnExtensionUninstalled(
       extension->id(), extension->location(), external_uninstall);
 
@@ -784,6 +810,55 @@ void ExtensionService::UninstallExtensionOnFileThread(
 bool ExtensionService::IsExtensionEnabled(
     const std::string& extension_id) const {
   return extension_registrar_.IsExtensionEnabled(extension_id);
+}
+
+void ExtensionService::PerformActionBasedOnOmahaAttributes(
+    const std::string& extension_id,
+    const base::Value& attributes) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  const base::Value* malware_value = attributes.FindKey("_malware");
+  if (malware_value == nullptr || !malware_value->GetBool()) {
+    ReportNoUpdateCheckKeys();
+    // Omaha attributes may have previously have the "_malware" key.
+    MaybeEnableRemotelyDisabledExtension(extension_id);
+    return;
+  }
+
+  if (extension_prefs_->HasDisableReason(
+          extension_id, disable_reason::DISABLE_REMOTELY_FOR_MALWARE)) {
+    // The extension is already disabled. No work needs to be done.
+    return;
+  }
+
+  ReportExtensionDisabledRemotely(
+      extension_registrar_.IsExtensionEnabled(extension_id),
+      ExtensionUpdateCheckDataKey::kMalware);
+
+  // Add the extension to the blacklisted extensions set.
+  UpdateBlacklistedExtensions({extension_id},
+                              registry_->blacklisted_extensions().GetIDs());
+  extension_prefs_->AddDisableReason(
+      extension_id, disable_reason::DISABLE_REMOTELY_FOR_MALWARE);
+  // Show an error for the newly blacklisted extension.
+  error_controller_->ShowErrorIfNeeded();
+}
+
+void ExtensionService::MaybeEnableRemotelyDisabledExtension(
+    const std::string& extension_id) {
+  CHECK(BrowserThread::CurrentlyOn(BrowserThread::UI));
+  int disable_reasons = extension_prefs_->GetDisableReasons(extension_id);
+  if ((disable_reasons & disable_reason::DISABLE_REMOTELY_FOR_MALWARE) == 0)
+    return;
+
+  extension_prefs_->RemoveDisableReason(
+      extension_id, disable_reason::DISABLE_REMOTELY_FOR_MALWARE);
+
+  ExtensionIdSet unchanged = registry_->blacklisted_extensions().GetIDs();
+  DCHECK(base::Contains(unchanged, extension_id));
+  unchanged.erase(extension_id);
+  // Remove the extension from the blacklist.
+  UpdateBlacklistedExtensions({}, unchanged);
+  ReportReenableExtensionFromMalware();
 }
 
 void ExtensionService::EnableExtension(const std::string& extension_id) {
@@ -2093,6 +2168,15 @@ void ExtensionService::ManageBlacklist(
   ExtensionIdSet greylist;
   ExtensionIdSet unchanged;
   for (const auto& it : state_map) {
+    // If it was previously disabled remotely for malware, do not remove from
+    // the blacklisted_extensions set. The disable reason should be removed
+    // first before updating its blacklist state.
+    if (extension_prefs_->HasDisableReason(
+            it.first, disable_reason::DISABLE_REMOTELY_FOR_MALWARE)) {
+      unchanged.insert(it.first);
+      continue;
+    }
+
     switch (it.second) {
       case NOT_BLACKLISTED:
         break;

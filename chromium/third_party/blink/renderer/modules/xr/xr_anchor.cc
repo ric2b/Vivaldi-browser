@@ -7,25 +7,39 @@
 #include "third_party/blink/renderer/modules/xr/xr_object_space.h"
 #include "third_party/blink/renderer/modules/xr/xr_session.h"
 #include "third_party/blink/renderer/modules/xr/xr_system.h"
+#include "third_party/blink/renderer/platform/bindings/exception_state.h"
+
+namespace {
+
+constexpr char kAnchorAlreadyDeleted[] =
+    "Unable to access anchor properties, the anchor was already deleted.";
+
+}
 
 namespace blink {
 
 XRAnchor::XRAnchor(uint64_t id,
                    XRSession* session,
                    const device::mojom::blink::XRAnchorData& anchor_data)
-    : id_(id), session_(session) {
-  // No need for else - if pose is not present, the default-constructed unique
-  // ptr is fine.
-  if (anchor_data.pose) {
-    SetMojoFromAnchor(
-        mojo::ConvertTo<blink::TransformationMatrix>(anchor_data.pose));
+    : id_(id), is_deleted_(false), session_(session) {
+  // No need for else - if mojo_from_anchor is not present, the
+  // default-constructed unique ptr is fine. It would signify that the anchor
+  // exists and is tracked by the underlying system, but its current location is
+  // unknown.
+  if (anchor_data.mojo_from_anchor) {
+    SetMojoFromAnchor(mojo::ConvertTo<blink::TransformationMatrix>(
+        anchor_data.mojo_from_anchor));
   }
 }
 
 void XRAnchor::Update(const device::mojom::blink::XRAnchorData& anchor_data) {
-  if (anchor_data.pose) {
-    SetMojoFromAnchor(
-        mojo::ConvertTo<blink::TransformationMatrix>(anchor_data.pose));
+  if (is_deleted_) {
+    return;
+  }
+
+  if (anchor_data.mojo_from_anchor) {
+    SetMojoFromAnchor(mojo::ConvertTo<blink::TransformationMatrix>(
+        anchor_data.mojo_from_anchor));
   } else {
     mojo_from_anchor_ = nullptr;
   }
@@ -35,8 +49,12 @@ uint64_t XRAnchor::id() const {
   return id_;
 }
 
-XRSpace* XRAnchor::anchorSpace() const {
-  DCHECK(mojo_from_anchor_);
+XRSpace* XRAnchor::anchorSpace(ExceptionState& exception_state) const {
+  if (is_deleted_) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      kAnchorAlreadyDeleted);
+    return nullptr;
+  }
 
   if (!anchor_space_) {
     anchor_space_ =
@@ -54,8 +72,14 @@ base::Optional<TransformationMatrix> XRAnchor::MojoFromObject() const {
   return *mojo_from_anchor_;
 }
 
-void XRAnchor::detach() {
-  session_->xr()->xrEnvironmentProviderRemote()->DetachAnchor(id_);
+void XRAnchor::Delete() {
+  if (!is_deleted_) {
+    session_->xr()->xrEnvironmentProviderRemote()->DetachAnchor(id_);
+    mojo_from_anchor_ = nullptr;
+    anchor_space_ = nullptr;
+  }
+
+  is_deleted_ = true;
 }
 
 void XRAnchor::SetMojoFromAnchor(const TransformationMatrix& mojo_from_anchor) {

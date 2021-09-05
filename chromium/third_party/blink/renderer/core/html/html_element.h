@@ -107,16 +107,18 @@ class CORE_EXPORT HTMLElement : public Element {
   bool HasDirectionAuto() const;
   TextDirection DirectionalityIfhasDirAutoAttribute(bool& is_auto) const;
 
+  virtual bool IsHTMLBodyElement() const { return false; }
+  virtual bool IsHTMLFrameSetElement() const { return false; }
+  virtual bool IsHTMLPortalElement() const { return false; }
   virtual bool IsHTMLUnknownElement() const { return false; }
   virtual bool IsPluginElement() const { return false; }
-  virtual bool IsHTMLPortalElement() const { return false; }
 
   // https://html.spec.whatwg.org/C/#category-label
   virtual bool IsLabelable() const;
   // |labels| IDL attribute implementation for IsLabelable()==true elements.
   LabelsNodeList* labels();
 
-  // http://www.whatwg.org/specs/web-apps/current-work/multipage/elements.html#interactive-content
+  // https://html.spec.whatwg.org/C/#interactive-content
   virtual bool IsInteractiveContent() const;
   void DefaultEventHandler(Event&) override;
 

@@ -9,8 +9,6 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 
-#include "app/vivaldi_apptools.h"
-
 namespace performance_manager {
 
 TabHelperFrameNodeSource::TabHelperFrameNodeSource()
@@ -33,11 +31,8 @@ FrameNodeImpl* TabHelperFrameNodeSource::GetFrameNode(
   PerformanceManagerTabHelper* performance_manager_tab_helper =
       PerformanceManagerTabHelper::FromWebContents(
           content::WebContents::FromRenderFrameHost(render_frame_host));
-  // NOTE(igor@vivaldi.com): the helper is null when we capture a thumbnail
-  // using a temporary WebContents.
-  if (::vivaldi::IsVivaldiRunning() && !performance_manager_tab_helper)
+  if (!performance_manager_tab_helper)
     return nullptr;
-  DCHECK(performance_manager_tab_helper);
 
   return performance_manager_tab_helper->GetFrameNode(render_frame_host);
 }

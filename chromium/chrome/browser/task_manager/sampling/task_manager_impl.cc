@@ -234,10 +234,6 @@ const base::string16& TaskManagerImpl::GetTitle(TaskId task_id) const {
   return GetTaskByTaskId(task_id)->title();
 }
 
-const std::string& TaskManagerImpl::GetTaskNameForRappor(TaskId task_id) const {
-  return GetTaskByTaskId(task_id)->rappor_sample_name();
-}
-
 base::string16 TaskManagerImpl::GetProfileName(TaskId task_id) const {
   return GetTaskByTaskId(task_id)->GetProfileName();
 }
@@ -298,11 +294,13 @@ bool TaskManagerImpl::GetV8Memory(TaskId task_id,
                                   int64_t* allocated,
                                   int64_t* used) const {
   const Task* task = GetTaskByTaskId(task_id);
-  if (!task->ReportsV8Memory())
+  const int64_t allocated_memory = task->GetV8MemoryAllocated();
+  const int64_t used_memory = task->GetV8MemoryUsed();
+  if (allocated_memory == -1 || used_memory == -1)
     return false;
 
-  *allocated = task->GetV8MemoryAllocated();
-  *used = task->GetV8MemoryUsed();
+  *allocated = allocated_memory;
+  *used = used_memory;
 
   return true;
 }
@@ -595,8 +593,8 @@ void TaskManagerImpl::OnReceivedMemoryDump(
 void TaskManagerImpl::Refresh() {
   if (IsResourceRefreshEnabled(REFRESH_TYPE_GPU_MEMORY)) {
     content::GpuDataManager::GetInstance()->RequestVideoMemoryUsageStatsUpdate(
-        base::Bind(&TaskManagerImpl::OnVideoMemoryUsageStatsUpdate,
-                   weak_ptr_factory_.GetWeakPtr()));
+        base::BindOnce(&TaskManagerImpl::OnVideoMemoryUsageStatsUpdate,
+                       weak_ptr_factory_.GetWeakPtr()));
   }
 
   if (IsResourceRefreshEnabled(REFRESH_TYPE_MEMORY_FOOTPRINT) &&

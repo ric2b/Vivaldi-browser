@@ -167,14 +167,15 @@ TEST(ChromeSigninURLLoaderThrottleTest, Intercept) {
 
   auto response_head = network::mojom::URLResponseHead::New();
   response_head->headers = base::MakeRefCounted<net::HttpResponseHeaders>("");
-  response_head->headers->AddHeader("X-Response-1: Foo");
-  response_head->headers->AddHeader("X-Response-2: Bar");
+  response_head->headers->SetHeader("X-Response-1", "Foo");
+  response_head->headers->SetHeader("X-Response-2", "Bar");
 
   std::vector<std::string> request_headers_to_remove;
   net::HttpRequestHeaders modified_request_headers;
-  throttle->WillRedirectRequest(&redirect_info, *response_head, &defer,
-                                &request_headers_to_remove,
-                                &modified_request_headers);
+  net::HttpRequestHeaders modified_cors_exempt_request_headers;
+  throttle->WillRedirectRequest(
+      &redirect_info, *response_head, &defer, &request_headers_to_remove,
+      &modified_request_headers, &modified_cors_exempt_request_headers);
 
   EXPECT_FALSE(defer);
 
@@ -184,6 +185,8 @@ TEST(ChromeSigninURLLoaderThrottleTest, Intercept) {
   EXPECT_THAT(request_headers_to_remove, ElementsAre("X-Request-2"));
   EXPECT_TRUE(modified_request_headers.GetHeader("X-Request-3", &value));
   EXPECT_EQ("Baz", value);
+
+  EXPECT_TRUE(modified_cors_exempt_request_headers.IsEmpty());
 
   testing::Mock::VerifyAndClearExpectations(delegate);
 
@@ -211,8 +214,8 @@ TEST(ChromeSigninURLLoaderThrottleTest, Intercept) {
 
   response_head = network::mojom::URLResponseHead::New();
   response_head->headers = base::MakeRefCounted<net::HttpResponseHeaders>("");
-  response_head->headers->AddHeader("X-Response-3: Foo");
-  response_head->headers->AddHeader("X-Response-4: Bar");
+  response_head->headers->SetHeader("X-Response-3", "Foo");
+  response_head->headers->SetHeader("X-Response-4", "Bar");
 
   throttle->WillProcessResponse(kTestRedirectURL, response_head.get(), &defer);
 
@@ -262,12 +265,14 @@ TEST(ChromeSigninURLLoaderThrottleTest, InterceptSubFrame) {
 
   std::vector<std::string> request_headers_to_remove;
   net::HttpRequestHeaders modified_request_headers;
-  throttle->WillRedirectRequest(&redirect_info, *response_head, &defer,
-                                &request_headers_to_remove,
-                                &modified_request_headers);
+  net::HttpRequestHeaders modified_cors_exempt_request_headers;
+  throttle->WillRedirectRequest(
+      &redirect_info, *response_head, &defer, &request_headers_to_remove,
+      &modified_request_headers, &modified_cors_exempt_request_headers);
   EXPECT_FALSE(defer);
   EXPECT_TRUE(request_headers_to_remove.empty());
   EXPECT_TRUE(modified_request_headers.IsEmpty());
+  EXPECT_TRUE(modified_cors_exempt_request_headers.IsEmpty());
 
   throttle->WillProcessResponse(GURL("https://youtube.com"),
                                 response_head.get(), &defer);

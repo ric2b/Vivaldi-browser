@@ -90,6 +90,7 @@
 <translation id="1947424002851288782">لوحة المفاتيح الألمانية</translation>
 <translation id="1972984168337863910">توسيع لوحات تعليقات الملفات</translation>
 <translation id="1984603991036629094">لوحة المفاتيح الأرمينية الصوتية</translation>
+<translation id="1995337122023280937">الانتقال إلى موقع الملف</translation>
 <translation id="2001796770603320721">‏الإدارة في Drive</translation>
 <translation id="2009067268969781306">سيؤدي تنسيق محرك أقراص إلى حذف جميع البيانات المخزّنة عليه. لا يمكن التراجع عن هذا الإجراء.</translation>
 <translation id="2028997212275086731">‏أرشيف RAR</translation>
@@ -141,6 +142,7 @@
 <translation id="2638942478653899953">‏تعذر الوصول إلى Google Drive. يُرجى <ph name="BEGIN_LINK" />الخروج<ph name="END_LINK" /> ثم تسجيل الدخول مرة أخرى.</translation>
 <translation id="2649120831653069427">أسماك رينبو فيش</translation>
 <translation id="2661146741306740526">16x9</translation>
+<translation id="2664412712123763093">موقع الملف</translation>
 <translation id="2672394958563893062">حدث خطأ. انقر لإعادة التشغيل من البداية.</translation>
 <translation id="2676946222714718093">التشغيل بواسطة</translation>
 <translation id="2735698359135166290">لوحة المفاتيح الرومانية القياسية</translation>
@@ -211,6 +213,7 @@
 <translation id="3495304270784461826"><ph name="COUNT" /> من الأخطاء.</translation>
 <translation id="3519867315646775981">التحويل الصوتي (שלום ← شالوم)</translation>
 <translation id="3522708245912499433">البرتغالية</translation>
+<translation id="3524311639100184459">تنبيه: هذه الملفات مؤقتة وقد يتم حذفها تلقائيًا لتوفير مساحة على القرص.  <ph name="BEGIN_LINK" />مزيد من المعلومات<ph name="END_LINK" /></translation>
 <translation id="3527085408025491307">المجلد</translation>
 <translation id="3549797760399244642">‏جارٍالانتقال إلى drive.google.com...</translation>
 <translation id="357479282490346887">الليتوانية</translation>
@@ -257,6 +260,7 @@
 <translation id="3958548648197196644">كيوي</translation>
 <translation id="3966388904776714213">‏مشغل Audio player</translation>
 <translation id="4002066346123236978">العنوان</translation>
+<translation id="4065397611279318371">لفتح الملفات باستخدام تطبيقات <ph name="APP_NAME" />، يُرجى نقلها أولاً إلى مجلد <ph name="SHARED_DIRECTORY_LABEL" />.</translation>
 <translation id="4070370845051020638">أسلوب الإدخال باللغة الكانتونية</translation>
 <translation id="4072248638558688893">لوحة المفاتيح التاميلية (صوتية)</translation>
 <translation id="4124935795427217608">أحادي القرن</translation>
@@ -326,6 +330,7 @@
 <translation id="4880520557730313061">إصلاح تلقائي</translation>
 <translation id="4881695831933465202">فتح</translation>
 <translation id="4886021172213954916">‏لوحة المفاتيح التاميلية (Typewriter)</translation>
+<translation id="4892969127351273348">يتعذَّر الفتح باستخدام <ph name="APP_NAME" /></translation>
 <translation id="4905417359854579806">جاهز للاحتفاظ بنسخة احتياطية من <ph name="FILE_COUNT" /></translation>
 <translation id="4924638091161556692">تم الإصلاح</translation>
 <translation id="4935975195727477204">زهرة غازانيا</translation>
@@ -500,6 +505,7 @@
 <translation id="6806699711453372963">‏إدارة المشاركة في Linux</translation>
 <translation id="6808193438228982088">ثعلب</translation>
 <translation id="6820687829547641339">‏أرشيف tar مضغوط ببرنامج Gzip</translation>
+<translation id="6823166707458800069">يتم الاحتفاظ بنسخة احتياطية من جميع الملفات المحفوظة في هذا المجلد تلقائيًا على الإنترنت.</translation>
 <translation id="6825883775269213504">الروسية</translation>
 <translation id="6827236167376090743">سيستمر تشغيل هذا الفيديو إلى نهاية الفيلم.</translation>
 <translation id="6847101934483209767">تمت إزالة <ph name="ENTRY_NAME" /> من الاختيار.</translation>
@@ -556,6 +562,7 @@
 <translation id="7417705661718309329">‏خريطة Google</translation>
 <translation id="7419631653042041064">لوحة المفاتيح الكتالانية</translation>
 <translation id="7434823369735508263">‏لوحة المفاتيح البريطانية Dvorak</translation>
+<translation id="7447678886297481665">إنّ الملفات في هذا المجلد للقراءة فقط. وبعض النشاطات غير متاحة فيها.</translation>
 <translation id="7460898608667578234">الأوكرانية</translation>
 <translation id="7474889694310679759">لوحة المفاتيح الكندية الإنجليزية</translation>
 <translation id="7489215562877293245">‏تم العثور على <ph name="FILE_COUNT" />

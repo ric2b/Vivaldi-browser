@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/android/rules.gni")
+import("//chrome/android/features/android_library_factory_tmpl.gni")
 
 android_library("java") {
   sources = [
@@ -13,36 +14,69 @@ android_library("java") {
     "java/src/org/chromium/chrome/browser/download/DownloadFileProvider.java",
     "java/src/org/chromium/chrome/browser/download/DownloadFilter.java",
     "java/src/org/chromium/chrome/browser/download/DownloadInfo.java",
+    "java/src/org/chromium/chrome/browser/download/DownloadLocationCustomView.java",
+    "java/src/org/chromium/chrome/browser/download/DownloadLocationDialogBridge.java",
     "java/src/org/chromium/chrome/browser/download/DownloadManagerBridge.java",
     "java/src/org/chromium/chrome/browser/download/DownloadStartupUtils.java",
     "java/src/org/chromium/chrome/browser/download/DownloadStatus.java",
     "java/src/org/chromium/chrome/browser/download/MediaStoreHelper.java",
     "java/src/org/chromium/chrome/browser/download/MimeUtils.java",
-    "java/src/org/chromium/chrome/browser/download/UriUtils.java",
+    "java/src/org/chromium/chrome/browser/download/StringUtils.java",
+    "java/src/org/chromium/chrome/browser/download/home/DownloadManagerCoordinator.java",
+    "java/src/org/chromium/chrome/browser/download/home/DownloadManagerUiConfig.java",
+    "java/src/org/chromium/chrome/browser/download/home/FaviconProvider.java",
+    "java/src/org/chromium/chrome/browser/download/home/JustNowProvider.java",
+    "java/src/org/chromium/chrome/browser/download/home/LegacyDownloadProvider.java",
+    "java/src/org/chromium/chrome/browser/download/settings/DownloadDirectoryAdapter.java",
+    "java/src/org/chromium/chrome/browser/download/settings/DownloadLocationPreference.java",
+    "java/src/org/chromium/chrome/browser/download/settings/DownloadLocationPreferenceAdapter.java",
+    "java/src/org/chromium/chrome/browser/download/settings/DownloadLocationPreferenceDialog.java",
+    "java/src/org/chromium/chrome/browser/download/settings/DownloadSettings.java",
   ]
 
   deps = [
+    ":java_resources",
     "//base:base_java",
     "//base:jni_java",
+    "//chrome/browser/flags:java",
+    "//chrome/browser/offline_pages/android:java",
+    "//chrome/browser/preferences:java",
+    "//chrome/browser/ui/messages/android:java",
     "//chrome/browser/util:java",
+    "//components/browser_ui/modaldialog/android:java",
+    "//components/browser_ui/settings/android:java",
+    "//components/browser_ui/util/android:java",
+    "//components/browser_ui/widget/android:java",
     "//components/download/internal/common:internal_java",
     "//components/download/public/common:public_java",
     "//components/embedder_support/android:util_java",
+    "//components/feature_engagement:feature_engagement_java",
     "//components/feed/core/shared_prefs:feed_shared_prefs",
     "//components/offline_items_collection/core:core_java",
     "//content/public/android:content_java",
     "//third_party/android_deps:androidx_core_core_java",
+    "//third_party/android_deps:com_google_android_material_material_java",
+    "//ui/android:ui_java",
   ]
 
+  srcjar_deps = [ "//chrome:download_enum_javagen" ]
+
   annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
+}
+
+android_library_factory("factory_java") {
+  deps = [ ":java" ]
+  sources = [ "java/src/org/chromium/chrome/browser/download/home/DownloadManagerCoordinatorFactory.java" ]
 }
 
 generate_jni("jni_headers") {
   sources = [
     "java/src/org/chromium/chrome/browser/download/DownloadInfo.java",
+    "java/src/org/chromium/chrome/browser/download/DownloadLocationDialogBridge.java",
     "java/src/org/chromium/chrome/browser/download/DownloadManagerBridge.java",
     "java/src/org/chromium/chrome/browser/download/DownloadStartupUtils.java",
     "java/src/org/chromium/chrome/browser/download/MimeUtils.java",
+    "java/src/org/chromium/chrome/browser/download/StringUtils.java",
   ]
 }
 
@@ -52,6 +86,7 @@ android_library("download_java_tests") {
   sources = [
     "javatests/src/org/chromium/chrome/browser/download/DownloadFileProviderTest.java",
     "javatests/src/org/chromium/chrome/browser/download/MimeUtilsTest.java",
+    "javatests/src/org/chromium/chrome/browser/download/StringUtilsTest.java",
   ]
 
   deps = [
@@ -59,6 +94,8 @@ android_library("download_java_tests") {
     "//base:base_java",
     "//base:base_java_test_support",
     "//chrome/test/android:chrome_java_test_support",
+    "//components/offline_items_collection/core:core_java",
+    "//third_party/android_support_test_runner:runner_java",
     "//third_party/junit",
     "//third_party/mockito:mockito_java",
   ]
@@ -66,6 +103,17 @@ android_library("download_java_tests") {
 
 android_resources("java_resources") {
   sources = [
+    "java/res/color/tint_on_blue_bg.xml",
+    "java/res/drawable-hdpi/ic_refresh_white_24dp.png",
+    "java/res/drawable-hdpi/ic_refresh_white_36dp.png",
+    "java/res/drawable-mdpi/ic_refresh_white_24dp.png",
+    "java/res/drawable-mdpi/ic_refresh_white_36dp.png",
+    "java/res/drawable-xhdpi/ic_refresh_white_24dp.png",
+    "java/res/drawable-xhdpi/ic_refresh_white_36dp.png",
+    "java/res/drawable-xxhdpi/ic_refresh_white_24dp.png",
+    "java/res/drawable-xxhdpi/ic_refresh_white_36dp.png",
+    "java/res/drawable-xxxhdpi/ic_refresh_white_24dp.png",
+    "java/res/drawable-xxxhdpi/ic_refresh_white_36dp.png",
     "java/res/drawable/async_image_view_unavailable.xml",
     "java/res/drawable/async_image_view_waiting.xml",
     "java/res/drawable/circular_progress_bar_background_large.xml",
@@ -109,9 +157,12 @@ android_resources("java_resources") {
     "java/res/layout/download_storage_summary.xml",
     "java/res/layout/downloads_empty_view.xml",
     "java/res/menu/download_manager_menu.xml",
+    "java/res/values-night-v17/colors.xml",
     "java/res/values-v17/attrs.xml",
+    "java/res/values-v17/colors.xml",
     "java/res/values-v17/ids.xml",
     "java/res/values-v17/styles.xml",
+    "java/res/xml/download_preferences.xml",
   ]
   deps = [
     "//chrome/browser/ui/android/strings:ui_strings_grd",
@@ -121,5 +172,5 @@ android_resources("java_resources") {
     "//components/browser_ui/widget/android:java_resources",
     "//ui/android:ui_java_resources",
   ]
-  custom_package = "org.chromium.chrome.download"
+  custom_package = "org.chromium.chrome.browser.download"
 }

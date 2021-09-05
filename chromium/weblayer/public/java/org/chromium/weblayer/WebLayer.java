@@ -12,7 +12,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.RemoteException;
-import android.support.v4.app.Fragment;
 import android.util.AndroidRuntimeException;
 import android.util.Log;
 import android.util.Pair;
@@ -20,23 +19,25 @@ import android.webkit.ValueCallback;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.fragment.app.Fragment;
 
 import org.chromium.weblayer_private.interfaces.APICallException;
 import org.chromium.weblayer_private.interfaces.BrowserFragmentArgs;
 import org.chromium.weblayer_private.interfaces.IBrowserFragment;
 import org.chromium.weblayer_private.interfaces.IProfile;
 import org.chromium.weblayer_private.interfaces.IRemoteFragmentClient;
+import org.chromium.weblayer_private.interfaces.ISiteSettingsFragment;
 import org.chromium.weblayer_private.interfaces.IWebLayer;
 import org.chromium.weblayer_private.interfaces.IWebLayerClient;
 import org.chromium.weblayer_private.interfaces.IWebLayerFactory;
 import org.chromium.weblayer_private.interfaces.ObjectWrapper;
 import org.chromium.weblayer_private.interfaces.StrictModeWorkaround;
 
-import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
 
 /**
  * WebLayer is responsible for initializing state necessary to use any of the classes in web layer.
@@ -62,7 +63,7 @@ public class WebLayer {
     @NonNull
     private final IWebLayer mImpl;
 
-    private static ClassLoader sWebViewCompatClassLoader;
+    private static Callable<ClassLoader> sWebViewCompatClassLoaderGetter;
 
     /** The result of calling {@link #initializeWebViewCompatibilityMode}. */
     public enum WebViewCompatibilityResult {
@@ -97,15 +98,6 @@ public class WebLayer {
         }
     }
 
-    /** Deprecated. Use initializeWebViewCompatibilityMode(Context) instead. */
-    public static void initializeWebViewCompatibilityMode(@NonNull Context appContext,
-            @NonNull File baseDir, @NonNull Callback<WebViewCompatibilityResult> callback) {
-        WebViewCompatibilityResult result = initializeWebViewCompatibilityMode(appContext);
-        if (callback != null) {
-            callback.onResult(result);
-        }
-    }
-
     /**
      * Performs initialization needed to run WebView and WebLayer in the same process.
      *
@@ -114,7 +106,7 @@ public class WebLayer {
     public static WebViewCompatibilityResult initializeWebViewCompatibilityMode(
             @NonNull Context appContext) {
         ThreadCheck.ensureOnUiThread();
-        if (sWebViewCompatClassLoader != null) {
+        if (sWebViewCompatClassLoaderGetter != null) {
             throw new AndroidRuntimeException(
                     "initializeWebViewCompatibilityMode() has already been called.");
         }
@@ -124,10 +116,9 @@ public class WebLayer {
                     + "loaded.");
         }
         try {
-            Pair<ClassLoader, WebLayer.WebViewCompatibilityResult> result =
-                    WebViewCompatibilityHelper.initialize(
-                            appContext, getOrCreateRemoteContext(appContext));
-            sWebViewCompatClassLoader = result.first;
+            Pair<Callable<ClassLoader>, WebLayer.WebViewCompatibilityResult> result =
+                    WebViewCompatibilityHelper.initialize(appContext);
+            sWebViewCompatClassLoaderGetter = result.first;
             return result.second;
         } catch (Exception e) {
             Log.e(TAG, "Unable to initialize WebView compatibility", e);
@@ -271,24 +262,26 @@ public class WebLayer {
             int majorVersion = -1;
             String version = "<unavailable>";
             try {
-                if (sWebViewCompatClassLoader != null) {
-                    remoteClassLoader = sWebViewCompatClassLoader;
+                if (sWebViewCompatClassLoaderGetter != null) {
+                    remoteClassLoader = sWebViewCompatClassLoaderGetter.call();
                 }
                 if (remoteClassLoader == null) {
                     remoteClassLoader = getOrCreateRemoteContext(appContext).getClassLoader();
                 }
                 Class factoryClass = remoteClassLoader.loadClass(
                         "org.chromium.weblayer_private.WebLayerFactoryImpl");
+                // NOTE: the 20 comes from the previous scheme of incrementing versioning. It must
+                // remain at 20 for Chrome version 79.
+                // TODO(https://crbug.com/1031830): change 20 to -1 when 83 goes to stable.
                 mFactory = IWebLayerFactory.Stub.asInterface(
                         (IBinder) factoryClass
                                 .getMethod("create", String.class, int.class, int.class)
                                 .invoke(null, WebLayerClientVersionConstants.PRODUCT_VERSION,
-                                        WebLayerClientVersionConstants.PRODUCT_MAJOR_VERSION, -1));
+                                        WebLayerClientVersionConstants.PRODUCT_MAJOR_VERSION, 20));
                 available = mFactory.isClientSupported();
                 majorVersion = mFactory.getImplementationMajorVersion();
                 version = mFactory.getImplementationVersion();
-            } catch (PackageManager.NameNotFoundException | ReflectiveOperationException
-                    | RemoteException e) {
+            } catch (Exception e) {
                 Log.e(TAG, "Unable to create WebLayerFactory", e);
             }
             mAvailable = available;
@@ -447,6 +440,25 @@ public class WebLayer {
     }
 
     /**
+     * Returns the user agent string used by WebLayer.
+     *
+     * @return The user-agent string.
+     *
+     * @since 84.
+     */
+    public String getUserAgentString() {
+        ThreadCheck.ensureOnUiThread();
+        if (getSupportedMajorVersionInternal() < 84) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            return mImpl.getUserAgentString();
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
+    /**
      * To enable or disable DevTools remote debugging.
      */
     public void setRemoteDebuggingEnabled(boolean enabled) {
@@ -514,6 +526,31 @@ public class WebLayer {
     }
 
     /**
+     * Provide WebLayer with a set of active external experiment IDs.
+     *
+     * These experiment IDs are to be incorporated into metrics collection performed by WebLayer
+     * to aid in interpretation of data and elimination of confounding factors.
+     *
+     * This method may be called multiple times to update experient IDs if they change.
+     *
+     * @param experimentIds An array of integer active experiment IDs relevant to WebLayer.
+     *
+     * @since 84
+     */
+    public void registerExternalExperimentIDs(
+            @NonNull String trialName, @NonNull int[] experimentIds) {
+        ThreadCheck.ensureOnUiThread();
+        if (getSupportedMajorVersionInternal() < 84) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            mImpl.registerExternalExperimentIDs(trialName, experimentIds);
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
+    /**
      * Returns remote counterpart for the BrowserFragment: an {@link IBrowserFragment}.
      */
     /* package */ IBrowserFragment connectFragment(
@@ -526,8 +563,31 @@ public class WebLayer {
         }
     }
 
+    /**
+     * Returns the remote counterpart of the SiteSettingsFragment.
+     */
+    /* package */ ISiteSettingsFragment connectSiteSettingsFragment(
+            IRemoteFragmentClient remoteFragmentClient, Bundle fragmentArgs) {
+        if (getSupportedMajorVersionInternal() < 84) {
+            throw new UnsupportedOperationException();
+        }
+        try {
+            return mImpl.createSiteSettingsFragmentImpl(
+                    remoteFragmentClient, ObjectWrapper.wrap(fragmentArgs));
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
     /* package */ static IWebLayer getIWebLayer(Context appContext) {
         return getWebLayerLoader(appContext).getIWebLayer(appContext);
+    }
+
+    /**
+     * Forces setting the cached remote context.
+     */
+    static void setRemoteContext(Context remoteContext) {
+        sRemoteContext = remoteContext;
     }
 
     /**
@@ -606,7 +666,7 @@ public class WebLayer {
             // Intent objects need to be created in the client library so they can refer to the
             // broadcast receiver that will handle them. The broadcast receiver needs to be in the
             // client library because it's referenced in the manifest.
-            return new Intent(WebLayer.getAppContext(), DownloadBroadcastReceiver.class);
+            return new Intent(WebLayer.getAppContext(), BroadcastReceiver.class);
         }
     }
 }

@@ -23,6 +23,7 @@ import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityNodeProvider;
 
+import org.hamcrest.Matchers;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -32,16 +33,11 @@ import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.base.test.util.UrlUtils;
-import org.chromium.content_public.browser.WebContents;
-import org.chromium.content_public.browser.WebContentsObserver;
-import org.chromium.content_public.browser.test.InterstitialPageDelegateAndroid;
-import org.chromium.content_public.browser.test.util.Criteria;
 import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_shell_apk.ContentShellActivityTestRule;
 
 import java.lang.reflect.Method;
-import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 
 /**
@@ -78,44 +74,6 @@ public class WebContentsAccessibilityTest {
     @Rule
     public ContentShellActivityTestRule mActivityTestRule = new ContentShellActivityTestRule();
 
-    private static class TestWebContentsObserver extends WebContentsObserver {
-        private boolean mInterstitialShowing;
-
-        public TestWebContentsObserver(WebContents webContents) {
-            super(webContents);
-        }
-
-        public boolean isInterstitialShowing() throws ExecutionException {
-            return TestThreadUtils
-                    .runOnUiThreadBlocking(new Callable<Boolean>() {
-                        @Override
-                        public Boolean call() {
-                            return mInterstitialShowing;
-                        }
-                    })
-                    .booleanValue();
-        }
-
-        @Override
-        public void didAttachInterstitialPage() {
-            mInterstitialShowing = true;
-        }
-
-        @Override
-        public void didDetachInterstitialPage() {
-            mInterstitialShowing = false;
-        }
-    }
-
-    private void waitForInterstitial(final boolean shouldBeShown) {
-        CriteriaHelper.pollUiThread(Criteria.equals(shouldBeShown, new Callable<Boolean>() {
-            @Override
-            public Boolean call() {
-                return mActivityTestRule.getWebContents().isShowingInterstitialPage();
-            }
-        }));
-    }
-
     /*
      * Enable accessibility and wait until WebContentsAccessibility.getAccessibilityNodeProvider()
      * returns something not null.
@@ -125,12 +83,8 @@ public class WebContentsAccessibilityTest {
         wcax.setState(true);
         wcax.setAccessibilityEnabledForTesting();
 
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return wcax.getAccessibilityNodeProvider() != null;
-            }
-        });
+        CriteriaHelper.pollUiThread(
+                () -> Assert.assertNotNull(wcax.getAccessibilityNodeProvider()));
 
         return wcax.getAccessibilityNodeProvider();
     }
@@ -186,12 +140,10 @@ public class WebContentsAccessibilityTest {
      */
     private int waitForNodeMatching(
             AccessibilityNodeProvider provider, AccessibilityNodeInfoMatcher matcher) {
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                return View.NO_ID != findNodeMatching(provider, View.NO_ID, matcher);
-            }
-        });
+        CriteriaHelper.pollUiThread(
+                ()
+                        -> Assert.assertNotEquals(
+                                View.NO_ID, findNodeMatching(provider, View.NO_ID, matcher)));
 
         int virtualViewId = TestThreadUtils.runOnUiThreadBlockingNoException(
                 () -> findNodeMatching(provider, View.NO_ID, matcher));
@@ -852,18 +804,16 @@ public class WebContentsAccessibilityTest {
 
         // The data needed for text character locations loads asynchronously. Block until
         // it successfully returns the character bounds.
-        CriteriaHelper.pollUiThread(new Criteria() {
-            @Override
-            public boolean isSatisfied() {
-                AccessibilityNodeInfo textNode =
-                        provider.createAccessibilityNodeInfo(textNodeVirtualViewId);
-                provider.addExtraDataToAccessibilityNodeInfo(textNodeVirtualViewId, textNode,
-                        EXTRA_DATA_TEXT_CHARACTER_LOCATION_KEY, arguments);
-                Bundle extras = textNode.getExtras();
-                RectF[] result =
-                        (RectF[]) extras.getParcelableArray(EXTRA_DATA_TEXT_CHARACTER_LOCATION_KEY);
-                return result.length == 4 && !result[0].equals(result[1]);
-            }
+        CriteriaHelper.pollUiThread(() -> {
+            AccessibilityNodeInfo textNode =
+                    provider.createAccessibilityNodeInfo(textNodeVirtualViewId);
+            provider.addExtraDataToAccessibilityNodeInfo(textNodeVirtualViewId, textNode,
+                    EXTRA_DATA_TEXT_CHARACTER_LOCATION_KEY, arguments);
+            Bundle textNodeExtras = textNode.getExtras();
+            RectF[] textNodeResults = (RectF[]) textNodeExtras.getParcelableArray(
+                    EXTRA_DATA_TEXT_CHARACTER_LOCATION_KEY);
+            Assert.assertThat(textNodeResults, Matchers.arrayWithSize(4));
+            Assert.assertNotEquals(textNodeResults[0], textNodeResults[1]);
         });
 
         // The final result should be the separate bounding box of all four characters.
@@ -894,52 +844,6 @@ public class WebContentsAccessibilityTest {
         Assert.assertTrue(result[0].left < result[1].left);
         Assert.assertTrue(result[1].left < result[2].left);
         Assert.assertTrue(result[2].left < result[3].left);
-    }
-
-    /*
-     * Run this Test under asan to check if the references to the native
-     * WebContentsAccessibility had been cleared after the native
-     * WebContentsAccessibility is destroyed.
-     */
-    @Test
-    @MediumTest
-    public void testReferencesWithInterstitialPage() throws ExecutionException {
-        final String url =
-                UrlUtils.encodeHtmlDataUri("<html><head></head><body>test</body></html>");
-        mActivityTestRule.launchContentShellWithUrl(url);
-        mActivityTestRule.waitForActiveShellToBeDoneLoading();
-        enableAccessibilityAndWaitForNodeProvider();
-        final String htmlContent = "<html>"
-                + "<head>"
-                + "</head>"
-                + "<body>"
-                + "  <h1>This is a interstitial page</h1>"
-                + "</body>"
-                + "</html>";
-        final InterstitialPageDelegateAndroid delegate =
-                new InterstitialPageDelegateAndroid(htmlContent);
-        WebContentsAccessibilityTest.TestWebContentsObserver observer =
-                TestThreadUtils.runOnUiThreadBlocking(
-                        new Callable<WebContentsAccessibilityTest.TestWebContentsObserver>() {
-                            @Override
-                            public WebContentsAccessibilityTest.TestWebContentsObserver call() {
-                                delegate.showInterstitialPage(
-                                        url, mActivityTestRule.getWebContents());
-                                return new WebContentsAccessibilityTest.TestWebContentsObserver(
-                                        mActivityTestRule.getWebContents());
-                            }
-                        });
-
-        waitForInterstitial(true);
-        Assert.assertTrue("WebContentsObserver not notified of interstitial showing",
-                observer.isInterstitialShowing());
-        TestThreadUtils.runOnUiThreadBlocking(new Runnable() {
-            @Override
-            public void run() {
-                // Test passes if destory doesn't crash.
-                mActivityTestRule.getWebContents().destroy();
-            }
-        });
     }
 
     /**

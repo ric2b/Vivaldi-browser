@@ -37,6 +37,7 @@
 #include "base/optional.h"
 #include "build/build_config.h"
 #include "cc/layers/picture_layer.h"
+#include "third_party/blink/public/mojom/frame/intrinsic_sizing_info.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/web/web_autofill_client.h"
 #include "third_party/blink/public/web/web_element.h"
@@ -194,10 +195,12 @@ void WebFrameWidgetImpl::Trace(Visitor* visitor) {
 
 // WebWidget ------------------------------------------------------------------
 
-void WebFrameWidgetImpl::Close() {
+void WebFrameWidgetImpl::Close(
+    scoped_refptr<base::SingleThreadTaskRunner> cleanup_runner,
+    base::OnceCallback<void()> cleanup_task) {
   GetPage()->WillCloseAnimationHost(LocalRootImpl()->GetFrame()->View());
 
-  WebFrameWidgetBase::Close();
+  WebFrameWidgetBase::Close(std::move(cleanup_runner), std::move(cleanup_task));
 
   self_keep_alive_.Clear();
 }
@@ -310,8 +313,9 @@ void WebFrameWidgetImpl::BeginMainFrame(base::TimeTicks last_frame_time) {
     GetPage()->GetValidationMessageClient().LayoutOverlay();
 }
 
-void WebFrameWidgetImpl::DidBeginFrame() {
+void WebFrameWidgetImpl::DidBeginMainFrame() {
   DCHECK(LocalRootImpl()->GetFrame());
+  WebFrameWidgetBase::DidBeginMainFrame();
   PageWidgetDelegate::DidBeginFrame(*LocalRootImpl()->GetFrame());
 }
 
@@ -393,6 +397,7 @@ void WebFrameWidgetImpl::UpdateLifecycle(WebLifecycleUpdate requested_update,
       LocalRootImpl()->GetFrame()->GetDocument()->Lifecycle());
   PageWidgetDelegate::UpdateLifecycle(*GetPage(), *LocalRootImpl()->GetFrame(),
                                       requested_update, reason);
+  View()->UpdatePagePopup();
 }
 
 void WebFrameWidgetImpl::ThemeChanged() {
@@ -402,7 +407,7 @@ void WebFrameWidgetImpl::ThemeChanged() {
   view->InvalidateRect(damaged_rect);
 }
 
-WebHitTestResult WebFrameWidgetImpl::HitTestResultAt(const gfx::Point& point) {
+WebHitTestResult WebFrameWidgetImpl::HitTestResultAt(const gfx::PointF& point) {
   return CoreHitTestResultAt(point);
 }
 
@@ -474,25 +479,25 @@ WebInputEventResult WebFrameWidgetImpl::HandleInputEvent(
     HTMLPlugInElement* target = mouse_capture_element_;
 
     // Not all platforms call mouseCaptureLost() directly.
-    if (input_event.GetType() == WebInputEvent::kMouseUp)
+    if (input_event.GetType() == WebInputEvent::Type::kMouseUp)
       MouseCaptureLost();
 
     AtomicString event_type;
     switch (input_event.GetType()) {
-      case WebInputEvent::kMouseEnter:
+      case WebInputEvent::Type::kMouseEnter:
         event_type = event_type_names::kMouseover;
         break;
-      case WebInputEvent::kMouseMove:
+      case WebInputEvent::Type::kMouseMove:
         event_type = event_type_names::kMousemove;
         break;
-      case WebInputEvent::kMouseLeave:
+      case WebInputEvent::Type::kMouseLeave:
         event_type = event_type_names::kMouseout;
         break;
-      case WebInputEvent::kMouseDown:
+      case WebInputEvent::Type::kMouseDown:
         event_type = event_type_names::kMousedown;
         LocalFrame::NotifyUserActivation(target->GetDocument().GetFrame());
         break;
-      case WebInputEvent::kMouseUp:
+      case WebInputEvent::Type::kMouseUp:
         event_type = event_type_names::kMouseup;
         break;
       default:
@@ -523,11 +528,6 @@ void WebFrameWidgetImpl::SetCursorVisibilityState(bool is_visible) {
   GetPage()->SetIsCursorVisible(is_visible);
 }
 
-void WebFrameWidgetImpl::OnFallbackCursorModeToggled(bool is_on) {
-  // TODO(crbug.com/944575) Should support oopif.
-  NOTREACHED();
-}
-
 void WebFrameWidgetImpl::DidDetachLocalFrameTree() {}
 
 WebInputMethodController*
@@ -554,13 +554,9 @@ bool WebFrameWidgetImpl::ScrollFocusedEditableElementIntoView() {
 }
 
 void WebFrameWidgetImpl::IntrinsicSizingInfoChanged(
-    const IntrinsicSizingInfo& sizing_info) {
-  WebIntrinsicSizingInfo web_sizing_info;
-  web_sizing_info.size = sizing_info.size;
-  web_sizing_info.aspect_ratio = sizing_info.aspect_ratio;
-  web_sizing_info.has_width = sizing_info.has_width;
-  web_sizing_info.has_height = sizing_info.has_height;
-  Client()->IntrinsicSizingInfoChanged(web_sizing_info);
+    mojom::blink::IntrinsicSizingInfoPtr sizing_info) {
+  GetAssociatedFrameWidgetHost()->IntrinsicSizingInfoChanged(
+      std::move(sizing_info));
 }
 
 void WebFrameWidgetImpl::MouseCaptureLost() {
@@ -646,21 +642,22 @@ void WebFrameWidgetImpl::SetRemoteViewportIntersection(
       intersection_state);
 }
 
-void WebFrameWidgetImpl::SetIsInert(bool inert) {
+void WebFrameWidgetImpl::SetIsInertForSubFrame(bool inert) {
   DCHECK(LocalRootImpl()->Parent());
   DCHECK(LocalRootImpl()->Parent()->IsWebRemoteFrame());
   LocalRootImpl()->GetFrame()->SetIsInert(inert);
 }
 
-void WebFrameWidgetImpl::SetInheritedEffectiveTouchAction(
+void WebFrameWidgetImpl::SetInheritedEffectiveTouchActionForSubFrame(
     TouchAction touch_action) {
   DCHECK(LocalRootImpl()->Parent());
   DCHECK(LocalRootImpl()->Parent()->IsWebRemoteFrame());
   LocalRootImpl()->GetFrame()->SetInheritedEffectiveTouchAction(touch_action);
 }
 
-void WebFrameWidgetImpl::UpdateRenderThrottlingStatus(bool is_throttled,
-                                                      bool subtree_throttled) {
+void WebFrameWidgetImpl::UpdateRenderThrottlingStatusForSubFrame(
+    bool is_throttled,
+    bool subtree_throttled) {
   DCHECK(LocalRootImpl()->Parent());
   DCHECK(LocalRootImpl()->Parent()->IsWebRemoteFrame());
   LocalRootImpl()->GetFrameView()->UpdateRenderThrottlingStatus(
@@ -745,12 +742,10 @@ void WebFrameWidgetImpl::MouseContextMenu(const WebMouseEvent& event) {
   WebMouseEvent transformed_event =
       TransformWebMouseEvent(LocalRootImpl()->GetFrameView(), event);
   transformed_event.menu_source_type = kMenuSourceMouse;
-  IntPoint position_in_root_frame =
-      FlooredIntPoint(transformed_event.PositionInRootFrame());
 
   // Find the right target frame. See issue 1186900.
-  HitTestResult result =
-      HitTestResultForRootFramePos(PhysicalOffset(position_in_root_frame));
+  HitTestResult result = HitTestResultForRootFramePos(
+      FloatPoint(transformed_event.PositionInRootFrame()));
   Frame* target_frame;
   if (result.InnerNodeOrImageMapImage())
     target_frame = result.InnerNodeOrImageMapImage()->GetDocument().GetFrame();
@@ -805,12 +800,12 @@ WebInputEventResult WebFrameWidgetImpl::HandleGestureEvent(
 
   WebViewImpl* view_impl = View();
   switch (event.GetType()) {
-    case WebInputEvent::kGestureScrollBegin:
-    case WebInputEvent::kGestureScrollEnd:
-    case WebInputEvent::kGestureScrollUpdate:
-    case WebInputEvent::kGestureTap:
-    case WebInputEvent::kGestureTapUnconfirmed:
-    case WebInputEvent::kGestureTapDown:
+    case WebInputEvent::Type::kGestureScrollBegin:
+    case WebInputEvent::Type::kGestureScrollEnd:
+    case WebInputEvent::Type::kGestureScrollUpdate:
+    case WebInputEvent::Type::kGestureTap:
+    case WebInputEvent::Type::kGestureTapUnconfirmed:
+    case WebInputEvent::Type::kGestureTapDown:
       // Touch pinch zoom and scroll on the page (outside of a popup) must hide
       // the popup. In case of a touch scroll or pinch zoom, this function is
       // called with GestureTapDown rather than a GSB/GSU/GSE or GPB/GPU/GPE.
@@ -822,10 +817,10 @@ WebInputEventResult WebFrameWidgetImpl::HandleGestureEvent(
       // case to do so.
       View()->CancelPagePopup();
       break;
-    case WebInputEvent::kGestureTapCancel:
-    case WebInputEvent::kGestureShowPress:
+    case WebInputEvent::Type::kGestureTapCancel:
+    case WebInputEvent::Type::kGestureShowPress:
       break;
-    case WebInputEvent::kGestureDoubleTap:
+    case WebInputEvent::Type::kGestureDoubleTap:
       if (GetPage()->GetChromeClient().DoubleTapToZoomEnabled() &&
           view_impl->MinimumPageScaleFactor() !=
               view_impl->MaximumPageScaleFactor()) {
@@ -834,22 +829,21 @@ WebInputEventResult WebFrameWidgetImpl::HandleGestureEvent(
             TransformWebGestureEvent(frame->View(), event);
         IntPoint pos_in_local_frame_root =
             FlooredIntPoint(scaled_event.PositionInRootFrame());
-        WebRect block_bounds =
-            ComputeBlockBound(pos_in_local_frame_root, false);
+        auto block_bounds =
+            gfx::Rect(ComputeBlockBound(pos_in_local_frame_root, false));
 
         // This sends the tap point and bounds to the main frame renderer via
         // the browser, where their coordinates will be transformed into the
         // main frame's coordinate space.
-        Client()->AnimateDoubleTapZoomInMainFrame(pos_in_local_frame_root,
-                                                  block_bounds);
+        GetAssociatedFrameWidgetHost()->AnimateDoubleTapZoomInMainFrame(
+            pos_in_local_frame_root, block_bounds);
       }
       event_result = WebInputEventResult::kHandledSystem;
       Client()->DidHandleGestureEvent(event, event_cancelled);
       return event_result;
-      break;
-    case WebInputEvent::kGestureTwoFingerTap:
-    case WebInputEvent::kGestureLongPress:
-    case WebInputEvent::kGestureLongTap:
+    case WebInputEvent::Type::kGestureTwoFingerTap:
+    case WebInputEvent::Type::kGestureLongPress:
+    case WebInputEvent::Type::kGestureLongTap:
       GetPage()->GetContextMenuController().ClearContextMenu();
       maybe_context_menu_scope.emplace();
       break;
@@ -873,9 +867,9 @@ LocalFrameView* WebFrameWidgetImpl::GetLocalFrameViewForAnimationScrolling() {
 
 WebInputEventResult WebFrameWidgetImpl::HandleKeyEvent(
     const WebKeyboardEvent& event) {
-  DCHECK((event.GetType() == WebInputEvent::kRawKeyDown) ||
-         (event.GetType() == WebInputEvent::kKeyDown) ||
-         (event.GetType() == WebInputEvent::kKeyUp));
+  DCHECK((event.GetType() == WebInputEvent::Type::kRawKeyDown) ||
+         (event.GetType() == WebInputEvent::Type::kKeyDown) ||
+         (event.GetType() == WebInputEvent::Type::kKeyUp));
 
   // Please refer to the comments explaining the m_suppressNextKeypressEvent
   // member.
@@ -890,7 +884,7 @@ WebInputEventResult WebFrameWidgetImpl::HandleKeyEvent(
   scoped_refptr<WebPagePopupImpl> page_popup = View()->GetPagePopup();
   if (page_popup) {
     page_popup->HandleKeyEvent(event);
-    if (event.GetType() == WebInputEvent::kRawKeyDown) {
+    if (event.GetType() == WebInputEvent::Type::kRawKeyDown) {
       suppress_next_keypress_event_ = true;
     }
     return WebInputEventResult::kHandledSystem;
@@ -902,7 +896,7 @@ WebInputEventResult WebFrameWidgetImpl::HandleKeyEvent(
 
   WebInputEventResult result = frame->GetEventHandler().KeyEvent(event);
   if (result != WebInputEventResult::kNotHandled) {
-    if (WebInputEvent::kRawKeyDown == event.GetType()) {
+    if (WebInputEvent::Type::kRawKeyDown == event.GetType()) {
       // Suppress the next keypress event unless the focused node is a plugin
       // node.  (Flash needs these keypress events to handle non-US keyboards.)
       Element* element = FocusedElement();
@@ -916,12 +910,12 @@ WebInputEventResult WebFrameWidgetImpl::HandleKeyEvent(
 #if !defined(OS_MACOSX)
   const WebInputEvent::Type kContextMenuKeyTriggeringEventType =
 #if defined(OS_WIN)
-      WebInputEvent::kKeyUp;
+      WebInputEvent::Type::kKeyUp;
 #else
-      WebInputEvent::kRawKeyDown;
+      WebInputEvent::Type::kRawKeyDown;
 #endif
   const WebInputEvent::Type kShiftF10TriggeringEventType =
-      WebInputEvent::kRawKeyDown;
+      WebInputEvent::Type::kRawKeyDown;
 
   bool is_unmodified_menu_key =
       !(event.GetModifiers() & WebInputEvent::kInputModifiers) &&
@@ -942,7 +936,7 @@ WebInputEventResult WebFrameWidgetImpl::HandleKeyEvent(
 
 WebInputEventResult WebFrameWidgetImpl::HandleCharEvent(
     const WebKeyboardEvent& event) {
-  DCHECK_EQ(event.GetType(), WebInputEvent::kChar);
+  DCHECK_EQ(event.GetType(), WebInputEvent::Type::kChar);
 
   // Please refer to the comments explaining the m_suppressNextKeypressEvent
   // member.  The m_suppressNextKeypressEvent is set if the KeyDown is
@@ -1031,23 +1025,24 @@ void WebFrameWidgetImpl::SetRootLayer(scoped_refptr<cc::Layer> layer) {
 }
 
 HitTestResult WebFrameWidgetImpl::CoreHitTestResultAt(
-    const gfx::Point& point_in_viewport) {
+    const gfx::PointF& point_in_viewport) {
   DocumentLifecycle::AllowThrottlingScope throttling_scope(
       LocalRootImpl()->GetFrame()->GetDocument()->Lifecycle());
   LocalFrameView* view = LocalRootImpl()->GetFrameView();
-  PhysicalOffset point_in_root_frame(
-      view->ViewportToFrame(IntPoint(point_in_viewport)));
+  FloatPoint point_in_root_frame(
+      view->ViewportToFrame(FloatPoint(point_in_viewport)));
   return HitTestResultForRootFramePos(point_in_root_frame);
 }
 
 void WebFrameWidgetImpl::ZoomToFindInPageRect(
     const WebRect& rect_in_root_frame) {
-  Client()->ZoomToFindInPageRectInMainFrame(rect_in_root_frame);
+  GetAssociatedFrameWidgetHost()->ZoomToFindInPageRectInMainFrame(
+      gfx::Rect(rect_in_root_frame));
 }
 
 HitTestResult WebFrameWidgetImpl::HitTestResultForRootFramePos(
-    const PhysicalOffset& pos_in_root_frame) {
-  PhysicalOffset doc_point =
+    const FloatPoint& pos_in_root_frame) {
+  FloatPoint doc_point =
       LocalRootImpl()->GetFrame()->View()->ConvertFromRootFrame(
           pos_in_root_frame);
   HitTestLocation location(doc_point);

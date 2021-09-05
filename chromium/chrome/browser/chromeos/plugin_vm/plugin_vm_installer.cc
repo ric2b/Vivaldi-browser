@@ -17,7 +17,9 @@
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_drive_image_download_service.h"
+#include "chrome/browser/chromeos/plugin_vm/plugin_vm_license_checker.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_manager.h"
+#include "chrome/browser/chromeos/plugin_vm/plugin_vm_manager_factory.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_metrics_util.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_pref_names.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
@@ -86,6 +88,7 @@ void PluginVmInstaller::Start() {
     InstallFailed(FailureReason::OPERATION_IN_PROGRESS);
     return;
   }
+
   // Defensive check preventing any download attempts when PluginVm is
   // not allowed to run (this might happen in rare cases if PluginVm has
   // been disabled but the installer icon is still visible).
@@ -96,16 +99,7 @@ void PluginVmInstaller::Start() {
     return;
   }
 
-  state_ = State::kInstalling;
-  installing_state_ = InstallingState::kCheckingDiskSpace;
-  progress_ = 0;
-
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock()},
-      base::BindOnce(&base::SysInfo::AmountOfFreeDiskSpace,
-                     base::FilePath(kHomeDirectory)),
-      base::BindOnce(&PluginVmInstaller::OnAvailableDiskSpace,
-                     weak_ptr_factory_.GetWeakPtr()));
+  CheckLicense();
 }
 
 void PluginVmInstaller::Continue() {
@@ -131,6 +125,7 @@ void PluginVmInstaller::Cancel() {
     case InstallingState::kPausedLowDiskSpace:
       CancelFinished();
       return;
+    case InstallingState::kCheckingLicense:
     case InstallingState::kCheckingDiskSpace:
     case InstallingState::kCheckingForExistingVm:
     case InstallingState::kDownloadingDlc:
@@ -146,6 +141,51 @@ void PluginVmInstaller::Cancel() {
     default:
       NOTREACHED();
   }
+}
+
+void PluginVmInstaller::CheckLicense() {
+  state_ = State::kInstalling;
+  installing_state_ = InstallingState::kCheckingLicense;
+
+  // If the server has provided a license key, responsibility of validating is
+  // passed to the Plugin VM application.
+  if (!plugin_vm::GetPluginVmLicenseKey().empty()) {
+    OnLicenseChecked(true);
+    return;
+  }
+  license_checker_ = std::make_unique<PluginVmLicenseChecker>(profile_);
+  license_checker_->CheckLicense(base::BindOnce(
+      &PluginVmInstaller::OnLicenseChecked, weak_ptr_factory_.GetWeakPtr()));
+}
+
+void PluginVmInstaller::OnLicenseChecked(bool license_is_valid) {
+  if (state_ == State::kCancelling) {
+    CancelFinished();
+    return;
+  }
+
+  if (!license_is_valid) {
+    LOG(ERROR) << "Install of a PluginVm image couldn't be started as"
+               << " there is not a valid license associated with the user.";
+    InstallFailed(FailureReason::INVALID_LICENSE);
+    return;
+  }
+
+  if (observer_)
+    observer_->OnLicenseChecked();
+  CheckDiskSpace();
+}
+
+void PluginVmInstaller::CheckDiskSpace() {
+  installing_state_ = InstallingState::kCheckingDiskSpace;
+  progress_ = 0;
+
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()},
+      base::BindOnce(&base::SysInfo::AmountOfFreeDiskSpace,
+                     base::FilePath(kHomeDirectory)),
+      base::BindOnce(&PluginVmInstaller::OnAvailableDiskSpace,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void PluginVmInstaller::OnAvailableDiskSpace(int64_t bytes) {
@@ -217,7 +257,7 @@ void PluginVmInstaller::StartDlcDownload() {
   }
 
   chromeos::DlcserviceClient::Get()->Install(
-      GetPluginVmDlcModuleList(),
+      "pita",
       base::BindOnce(&PluginVmInstaller::OnDlcDownloadCompleted,
                      weak_ptr_factory_.GetWeakPtr()),
       base::BindRepeating(&PluginVmInstaller::OnDlcDownloadProgressUpdated,
@@ -272,8 +312,7 @@ void PluginVmInstaller::OnDlcDownloadProgressUpdated(double progress) {
 }
 
 void PluginVmInstaller::OnDlcDownloadCompleted(
-    const std::string& err,
-    const dlcservice::DlcModuleList& dlc_module_list) {
+    const chromeos::DlcserviceClient::InstallResult& install_result) {
   DCHECK_EQ(installing_state_, InstallingState::kDownloadingDlc);
   if (state_ == State::kCancelling) {
     CancelFinished();
@@ -281,12 +320,12 @@ void PluginVmInstaller::OnDlcDownloadCompleted(
   }
 
   // If success, continue to the next state.
-  if (err == dlcservice::kErrorNone) {
+  if (install_result.error == dlcservice::kErrorNone) {
     RecordPluginVmDlcUseResultHistogram(PluginVmDlcUseResult::kDlcSuccess);
     if (observer_)
       observer_->OnDlcDownloadCompleted();
 
-    PluginVmManager::GetForProfile(profile_)->UpdateVmState(
+    PluginVmManagerFactory::GetForProfile(profile_)->UpdateVmState(
         base::BindOnce(&PluginVmInstaller::OnUpdateVmState,
                        weak_ptr_factory_.GetWeakPtr()),
         base::BindOnce(&PluginVmInstaller::OnUpdateVmStateFailed,
@@ -298,26 +337,26 @@ void PluginVmInstaller::OnDlcDownloadCompleted(
   PluginVmDlcUseResult result = PluginVmDlcUseResult::kInternalDlcError;
   FailureReason reason = FailureReason::DLC_INTERNAL;
 
-  if (err == dlcservice::kErrorInvalidDlc) {
+  if (install_result.error == dlcservice::kErrorInvalidDlc) {
     LOG(ERROR) << "PluginVM DLC is not supported, need to enable PluginVM DLC.";
     result = PluginVmDlcUseResult::kInvalidDlcError;
     reason = FailureReason::DLC_UNSUPPORTED;
-  } else if (err == dlcservice::kErrorBusy) {
+  } else if (install_result.error == dlcservice::kErrorBusy) {
     LOG(ERROR)
         << "PluginVM DLC is not able to be downloaded as dlcservice is busy.";
     result = PluginVmDlcUseResult::kBusyDlcError;
     reason = FailureReason::DLC_BUSY;
-  } else if (err == dlcservice::kErrorNeedReboot) {
+  } else if (install_result.error == dlcservice::kErrorNeedReboot) {
     LOG(ERROR)
         << "Device has pending update and needs a reboot to use PluginVM DLC.";
     result = PluginVmDlcUseResult::kNeedRebootDlcError;
     reason = FailureReason::DLC_NEED_REBOOT;
-  } else if (err == dlcservice::kErrorAllocation) {
+  } else if (install_result.error == dlcservice::kErrorAllocation) {
     LOG(ERROR) << "Device needs to free space to use PluginVM DLC.";
     result = PluginVmDlcUseResult::kNeedSpaceDlcError;
     reason = FailureReason::DLC_NEED_SPACE;
   } else {
-    LOG(ERROR) << "Failed to download PluginVM DLC: " << err;
+    LOG(ERROR) << "Failed to download PluginVM DLC: " << install_result.error;
   }
 
   RecordPluginVmDlcUseResultHistogram(result);
@@ -759,6 +798,8 @@ std::string PluginVmInstaller::GetInstallingStateName(InstallingState state) {
       return "kDownloadingImage";
     case InstallingState::kImporting:
       return "kImporting";
+    case InstallingState::kCheckingLicense:
+      return "kCheckingLicense";
   }
 }
 

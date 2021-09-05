@@ -33,6 +33,7 @@
 #include "sync/vivaldi_invalidation_service.h"
 #include "sync/vivaldi_profile_sync_service.h"
 #include "sync/vivaldi_profile_sync_service_factory.h"
+#include "sync/vivaldi_sync_ui_helper.h"
 
 using vivaldi::VivaldiProfileSyncService;
 using vivaldi::VivaldiProfileSyncServiceFactory;
@@ -41,65 +42,29 @@ namespace extensions {
 
 namespace {
 
-vivaldi::sync::SyncerError ToVivaldiSyncerError(
-    syncer::SyncerError syncer_error) {
-  switch (syncer_error.value()) {
-    case syncer::SyncerError::UNSET:
-      return vivaldi::sync::SyncerError::SYNCER_ERROR_UNSET;
-    case syncer::SyncerError::CANNOT_DO_WORK:
-      return vivaldi::sync::SyncerError::SYNCER_ERROR_CANNOT_DO_WORK;
-    case syncer::SyncerError::NETWORK_CONNECTION_UNAVAILABLE:
-      return vivaldi::sync::SyncerError::
-          SYNCER_ERROR_NETWORK_CONNECTION_UNAVAILABLE;
-    case syncer::SyncerError::NETWORK_IO_ERROR:
-      return vivaldi::sync::SyncerError::SYNCER_ERROR_NETWORK_IO_ERROR;
-    case syncer::SyncerError::SYNC_SERVER_ERROR:
-      return vivaldi::sync::SyncerError::SYNCER_ERROR_SYNC_SERVER_ERROR;
-    case syncer::SyncerError::SYNC_AUTH_ERROR:
-      return vivaldi::sync::SyncerError::SYNCER_ERROR_SYNC_AUTH_ERROR;
-    case syncer::SyncerError::SERVER_RETURN_INVALID_CREDENTIAL:
-      return vivaldi::sync::SyncerError::
-          SYNCER_ERROR_SERVER_RETURN_INVALID_CREDENTIAL;
-    case syncer::SyncerError::SERVER_RETURN_UNKNOWN_ERROR:
-      return vivaldi::sync::SyncerError::
-          SYNCER_ERROR_SERVER_RETURN_UNKNOWN_ERROR;
-    case syncer::SyncerError::SERVER_RETURN_THROTTLED:
-      return vivaldi::sync::SyncerError::SYNCER_ERROR_SERVER_RETURN_THROTTLED;
-    case syncer::SyncerError::SERVER_RETURN_TRANSIENT_ERROR:
-      return vivaldi::sync::SyncerError::
-          SYNCER_ERROR_SERVER_RETURN_TRANSIENT_ERROR;
-    case syncer::SyncerError::SERVER_RETURN_MIGRATION_DONE:
-      return vivaldi::sync::SyncerError::
-          SYNCER_ERROR_SERVER_RETURN_MIGRATION_DONE;
-    case syncer::SyncerError::SERVER_RETURN_CLEAR_PENDING:
-      return vivaldi::sync::SyncerError::
-          SYNCER_ERROR_SERVER_RETURN_CLEAR_PENDING;
-    case syncer::SyncerError::SERVER_RETURN_NOT_MY_BIRTHDAY:
-      return vivaldi::sync::SyncerError::
-          SYNCER_ERROR_SERVER_RETURN_NOT_MY_BIRTHDAY;
-    case syncer::SyncerError::SERVER_RETURN_CONFLICT:
-      return vivaldi::sync::SyncerError::SYNCER_ERROR_SERVER_RETURN_CONFLICT;
-    case syncer::SyncerError::SERVER_RESPONSE_VALIDATION_FAILED:
-      return vivaldi::sync::SyncerError::
-          SYNCER_ERROR_SERVER_RESPONSE_VALIDATION_FAILED;
-    case syncer::SyncerError::SERVER_RETURN_DISABLED_BY_ADMIN:
-      return vivaldi::sync::SyncerError::
-          SYNCER_ERROR_SERVER_RETURN_DISABLED_BY_ADMIN;
-    case syncer::SyncerError::SERVER_RETURN_USER_ROLLBACK:
-      return vivaldi::sync::SyncerError::
-          SYNCER_ERROR_SERVER_RETURN_USER_ROLLBACK;
-    case syncer::SyncerError::SERVER_RETURN_PARTIAL_FAILURE:
-      return vivaldi::sync::SyncerError::
-          SYNCER_ERROR_SERVER_RETURN_PARTIAL_FAILURE;
-    case syncer::SyncerError::SERVER_RETURN_CLIENT_DATA_OBSOLETE:
-      return vivaldi::sync::SyncerError::
-          SYNCER_ERROR_SERVER_RETURN_CLIENT_DATA_OBSOLETE;
-    case syncer::SyncerError::DATATYPE_TRIGGERED_RETRY:
-      return vivaldi::sync::SyncerError::SYNCER_ERROR_DATATYPE_TRIGGERED_RETRY;
-    case syncer::SyncerError::SERVER_MORE_TO_DOWNLOAD:
-      return vivaldi::sync::SyncerError::SYNCER_ERROR_SERVER_MORE_TO_DOWNLOAD;
-    case syncer::SyncerError::SYNCER_OK:
-      return vivaldi::sync::SyncerError::SYNCER_ERROR_SYNCER_OK;
+vivaldi::sync::CycleStatus ToVivaldiCycleStatus(
+    ::vivaldi::VivaldiSyncUIHelper::CycleStatus cycle_status) {
+  switch (cycle_status) {
+    case ::vivaldi::VivaldiSyncUIHelper::NOT_SYNCED:
+      return vivaldi::sync::CycleStatus::CYCLE_STATUS_NOT_SYNCED;
+    case ::vivaldi::VivaldiSyncUIHelper::SUCCESS:
+      return vivaldi::sync::CycleStatus::CYCLE_STATUS_SUCCESS;
+    case ::vivaldi::VivaldiSyncUIHelper::IN_PROGRESS:
+      return vivaldi::sync::CycleStatus::CYCLE_STATUS_IN_PROGRESS;
+    case ::vivaldi::VivaldiSyncUIHelper::AUTH_ERROR:
+      return vivaldi::sync::CycleStatus::CYCLE_STATUS_AUTH_ERROR;
+    case ::vivaldi::VivaldiSyncUIHelper::SERVER_ERROR:
+      return vivaldi::sync::CycleStatus::CYCLE_STATUS_SERVER_ERROR;
+    case ::vivaldi::VivaldiSyncUIHelper::NETWORK_ERROR:
+      return vivaldi::sync::CycleStatus::CYCLE_STATUS_NETWORK_ERROR;
+    case ::vivaldi::VivaldiSyncUIHelper::CLIENT_ERROR:
+      return vivaldi::sync::CycleStatus::CYCLE_STATUS_CLIENT_ERROR;
+    case ::vivaldi::VivaldiSyncUIHelper::CONFLICT:
+      return vivaldi::sync::CycleStatus::CYCLE_STATUS_CONFLICT;
+    case ::vivaldi::VivaldiSyncUIHelper::THROTTLED:
+      return vivaldi::sync::CycleStatus::CYCLE_STATUS_THROTTLED;
+    case ::vivaldi::VivaldiSyncUIHelper::OTHER_ERROR:
+      return vivaldi::sync::CycleStatus::CYCLE_STATUS_OTHER_ERROR;
   }
 }
 
@@ -164,6 +129,9 @@ vivaldi::sync::ProtocolErrorType ToVivaldiSyncProtocolErrorType(
     case syncer::CLIENT_DATA_OBSOLETE:
       return vivaldi::sync::ProtocolErrorType::
           PROTOCOL_ERROR_TYPE_CLIENT_DATA_OBSOLETE;
+    case syncer::ENCRYPTION_OBSOLETE:
+      return vivaldi::sync::ProtocolErrorType::
+          PROTOCOL_ERROR_TYPE_ENCRYPTION_OBSOLETE;
     case syncer::UNKNOWN_ERROR:
       return vivaldi::sync::ProtocolErrorType::PROTOCOL_ERROR_TYPE_UNKNOWN;
   }
@@ -232,36 +200,30 @@ base::Optional<syncer::UserSelectableType> FromVivaldiSyncDataType(
   }
 }
 
-vivaldi::sync::CycleData GetLastCycleData(syncer::SyncService* sync_service) {
+vivaldi::sync::CycleData GetLastCycleData(Profile* profile) {
+  VivaldiProfileSyncService* sync_manager =
+      VivaldiProfileSyncServiceFactory::GetForProfileVivaldi(profile);
   vivaldi::sync::CycleData cycle_data;
   cycle_data.is_ready = true;
 
-  if (!sync_service) {
-    cycle_data.has_synced = false;
-    cycle_data.last_sync_time = 0;
-    cycle_data.last_commit_result =
-        vivaldi::sync::SyncerError::SYNCER_ERROR_UNSET;
-    cycle_data.last_download_updates_result =
-        vivaldi::sync::SyncerError::SYNCER_ERROR_UNSET;
+  if (!sync_manager) {
+    cycle_data.cycle_start_time = 0;
+    cycle_data.download_updates_status =
+        vivaldi::sync::CycleStatus::CYCLE_STATUS_NOT_SYNCED;
+    cycle_data.commit_status =
+        vivaldi::sync::CycleStatus::CYCLE_STATUS_NOT_SYNCED;
     return cycle_data;
   }
 
-  syncer::SyncCycleSnapshot cycle_snapshot =
-      sync_service->GetLastCycleSnapshotForDebugging();
+  ::vivaldi::VivaldiSyncUIHelper::CycleData helper_cycle_data =
+      sync_manager->ui_helper()->GetCycleData();
 
-  cycle_data.last_sync_time = cycle_snapshot.sync_start_time().ToJsTime();
-  cycle_data.last_commit_result =
-      ToVivaldiSyncerError(cycle_snapshot.model_neutral_state().commit_result);
-  cycle_data.last_download_updates_result = ToVivaldiSyncerError(
-      cycle_snapshot.model_neutral_state().last_download_updates_result);
-  cycle_data.has_remaining_local_changes =
-      cycle_snapshot.has_remaining_local_changes();
-  cycle_data.has_synced = cycle_snapshot.is_initialized();
-
-  syncer::SyncStatus status;
-  sync_service->QueryDetailedSyncStatusForDebugging(&status);
-
-  cycle_data.next_retry_time = status.retry_time.ToJsTime();
+  cycle_data.cycle_start_time = helper_cycle_data.cycle_start_time.ToJsTime();
+  cycle_data.download_updates_status =
+      ToVivaldiCycleStatus(helper_cycle_data.download_updates_status);
+  cycle_data.commit_status =
+      ToVivaldiCycleStatus(helper_cycle_data.commit_status);
+  cycle_data.next_retry_time = helper_cycle_data.next_retry_time.ToJsTime();
 
   return cycle_data;
 }
@@ -358,7 +320,9 @@ vivaldi::sync::EngineData GetEngineData(Profile* profile) {
         // both in our UI
         data_type == syncer::UserSelectableType::kTabs ||
         // Chromium only supports reading lists on iOS.
-        data_type == syncer::UserSelectableType::kReadingList) {
+        data_type == syncer::UserSelectableType::kReadingList ||
+        // Wifi configuration is only used in ChromeOS.
+        data_type == syncer::UserSelectableType::kWifiConfigurations) {
       continue;
     }
 
@@ -392,7 +356,7 @@ void SyncEventRouter::OnStateChanged(syncer::SyncService* sync) {
 void SyncEventRouter::OnSyncCycleCompleted(syncer::SyncService* sync) {
   ::vivaldi::BroadcastEvent(
       vivaldi::sync::OnCycleCompleted::kEventName,
-      vivaldi::sync::OnCycleCompleted::Create(GetLastCycleData(sync)),
+      vivaldi::sync::OnCycleCompleted::Create(GetLastCycleData(profile_)),
       profile_);
 }
 
@@ -442,7 +406,7 @@ void SyncAPI::SyncSetupComplete() {
 ExtensionFunction::ResponseAction SyncStartFunction::Run() {
   VivaldiProfileSyncService* sync_manager =
       VivaldiProfileSyncServiceFactory::GetForProfileVivaldi(
-          Profile::FromBrowserContext(context_));
+          Profile::FromBrowserContext(browser_context()));
 
   if (!sync_manager)
     return RespondNow(NoArguments());
@@ -455,7 +419,7 @@ ExtensionFunction::ResponseAction SyncStartFunction::Run() {
 ExtensionFunction::ResponseAction SyncStopFunction::Run() {
   VivaldiProfileSyncService* sync_manager =
       VivaldiProfileSyncServiceFactory::GetForProfileVivaldi(
-          Profile::FromBrowserContext(context_));
+          Profile::FromBrowserContext(browser_context()));
 
   if (!sync_manager)
     return RespondNow(NoArguments());
@@ -472,7 +436,7 @@ ExtensionFunction::ResponseAction SyncSetEncryptionPasswordFunction::Run() {
 
   VivaldiProfileSyncService* sync_manager =
       VivaldiProfileSyncServiceFactory::GetForProfileVivaldi(
-          Profile::FromBrowserContext(context_));
+          Profile::FromBrowserContext(browser_context()));
   if (!sync_manager)
     return RespondNow(Error("Sync manager is unavailable"));
 
@@ -500,8 +464,7 @@ ExtensionFunction::ResponseAction SyncGetDefaultSessionNameFunction::Run() {
           .get(),
       FROM_HERE, base::BindOnce(&syncer::GetPersonalizableDeviceNameBlocking),
       base::BindOnce(
-          &SyncGetDefaultSessionNameFunction::OnGetDefaultSessionName,
-                 this));
+          &SyncGetDefaultSessionNameFunction::OnGetDefaultSessionName, this));
   return RespondLater();
 }
 
@@ -519,12 +482,12 @@ ExtensionFunction::ResponseAction SyncSetTypesFunction::Run() {
 
   VivaldiProfileSyncService* sync_manager =
       VivaldiProfileSyncServiceFactory::GetForProfileVivaldi(
-          Profile::FromBrowserContext(context_));
+          Profile::FromBrowserContext(browser_context()));
   if (!sync_manager)
     return RespondNow(Error("Sync manager is unavailable"));
 
   SyncAPI::GetFactoryInstance()
-      ->Get(Profile::FromBrowserContext(context_))
+      ->Get(Profile::FromBrowserContext(browser_context()))
       ->StartSyncSetup(sync_manager);
 
   syncer::UserSelectableTypeSet chosen_types;
@@ -545,23 +508,19 @@ ExtensionFunction::ResponseAction SyncSetTypesFunction::Run() {
 
 ExtensionFunction::ResponseAction SyncGetEngineStateFunction::Run() {
   return RespondNow(ArgumentList(vivaldi::sync::GetEngineState::Results::Create(
-      GetEngineData(Profile::FromBrowserContext(context_)))));
+      GetEngineData(Profile::FromBrowserContext(browser_context())))));
 }
 
 ExtensionFunction::ResponseAction SyncGetLastCycleStateFunction::Run() {
-  VivaldiProfileSyncService* sync_manager =
-      VivaldiProfileSyncServiceFactory::GetForProfileVivaldi(
-          Profile::FromBrowserContext(context_));
-
   return RespondNow(
       ArgumentList(vivaldi::sync::GetLastCycleState::Results::Create(
-          GetLastCycleData(sync_manager))));
+          GetLastCycleData(Profile::FromBrowserContext(browser_context())))));
 }
 
 ExtensionFunction::ResponseAction SyncClearDataFunction::Run() {
   VivaldiProfileSyncService* sync_manager =
       VivaldiProfileSyncServiceFactory::GetForProfileVivaldi(
-          Profile::FromBrowserContext(context_));
+          Profile::FromBrowserContext(browser_context()));
   if (!sync_manager)
     return RespondNow(Error("Sync manager is unavailable"));
 
@@ -573,14 +532,14 @@ ExtensionFunction::ResponseAction SyncClearDataFunction::Run() {
 ExtensionFunction::ResponseAction SyncSetupCompleteFunction::Run() {
   VivaldiProfileSyncService* sync_manager =
       VivaldiProfileSyncServiceFactory::GetForProfileVivaldi(
-          Profile::FromBrowserContext(context_));
+          Profile::FromBrowserContext(browser_context()));
   if (!sync_manager)
     return RespondNow(Error("Sync manager is unavailable"));
 
   sync_manager->GetUserSettings()->SetFirstSetupComplete(
       syncer::SyncFirstSetupCompleteSource::BASIC_FLOW);
   SyncAPI::GetFactoryInstance()
-      ->Get(Profile::FromBrowserContext(context_))
+      ->Get(Profile::FromBrowserContext(browser_context()))
       ->SyncSetupComplete();
 
   return RespondNow(NoArguments());
@@ -595,7 +554,7 @@ SyncUpdateNotificationClientStatusFunction::Run() {
 
   VivaldiProfileSyncService* sync_manager =
       VivaldiProfileSyncServiceFactory::GetForProfileVivaldi(
-          Profile::FromBrowserContext(context_));
+          Profile::FromBrowserContext(browser_context()));
   if (!sync_manager)
     return RespondNow(Error("Sync manager is unavailable"));
 
@@ -610,7 +569,7 @@ SyncUpdateNotificationClientStatusFunction::Run() {
   // compensate for potentially missed notifications.
   if (state == syncer::INVALIDATIONS_ENABLED) {
     syncer::TopicInvalidationMap invalidations;
-    for (const auto model_type: syncer::ProtocolTypes()) {
+    for (const auto model_type : syncer::ProtocolTypes()) {
       syncer::Topic topic;
       syncer::RealModelTypeToNotificationType(model_type, &topic);
       invalidations.Insert(syncer::Invalidation::InitUnknownVersion(topic));
@@ -629,7 +588,7 @@ ExtensionFunction::ResponseAction SyncNotificationReceivedFunction::Run() {
 
   VivaldiProfileSyncService* sync_manager =
       VivaldiProfileSyncServiceFactory::GetForProfileVivaldi(
-          Profile::FromBrowserContext(context_));
+          Profile::FromBrowserContext(browser_context()));
   if (!sync_manager)
     return RespondNow(Error("Sync manager is unavailable"));
 
@@ -640,8 +599,7 @@ ExtensionFunction::ResponseAction SyncNotificationReceivedFunction::Run() {
     base::StringToInt64(params->version, &version);
     syncer::TopicInvalidationMap invalidations;
     invalidations.Insert(syncer::Invalidation::Init(
-        syncer::Topic(params->notification_type),
-        version, ""));
+        syncer::Topic(params->notification_type), version, ""));
     sync_manager->invalidation_service()->PerformInvalidation(invalidations);
   }
 

@@ -10,9 +10,10 @@
 #include "base/macros.h"
 #include "base/no_destructor.h"
 #include "build/build_config.h"
-#include "chrome/services/soda/soda_service_impl.h"
 #include "components/paint_preview/buildflags/buildflags.h"
 #include "components/safe_browsing/buildflags.h"
+#include "components/services/language_detection/language_detection_service_impl.h"
+#include "components/services/language_detection/public/mojom/language_detection.mojom.h"
 #include "components/services/patch/file_patcher_impl.h"
 #include "components/services/patch/public/mojom/file_patcher.mojom.h"
 #include "components/services/unzip/public/mojom/unzipper.mojom.h"
@@ -20,7 +21,6 @@
 #include "content/public/common/content_features.h"
 #include "content/public/utility/utility_thread.h"
 #include "extensions/buildflags/buildflags.h"
-#include "media/mojo/mojom/soda_service.mojom.h"
 #include "mojo/public/cpp/bindings/service_factory.h"
 #include "printing/buildflags/buildflags.h"
 
@@ -34,12 +34,12 @@
 
 #if !defined(OS_ANDROID)
 #include "chrome/common/importer/profile_import.mojom.h"
-#include "chrome/services/qrcode_generator/public/mojom/qrcode_generator.mojom.h"  // nogncheck
-#include "chrome/services/qrcode_generator/qrcode_generator_service_impl.h"  // nogncheck
 #include "chrome/services/sharing/public/mojom/sharing.mojom.h"
 #include "chrome/services/sharing/sharing_impl.h"
+#include "chrome/services/speech/speech_recognition_service_impl.h"
 #include "chrome/utility/importer/profile_import_impl.h"
 #include "components/mirroring/service/mirroring_service.h"
+#include "media/mojo/mojom/speech_recognition_service.mojom.h"
 #include "services/proxy_resolver/proxy_resolver_factory_impl.h"  // nogncheck
 #include "services/proxy_resolver/public/mojom/proxy_resolver.mojom.h"
 #endif  // !defined(OS_ANDROID)
@@ -52,6 +52,9 @@
 #if BUILDFLAG(FULL_SAFE_BROWSING) || defined(OS_CHROMEOS)
 #include "chrome/services/file_util/file_util_service.h"  // nogncheck
 #endif
+
+#include "chrome/services/qrcode_generator/public/mojom/qrcode_generator.mojom.h"  // nogncheck
+#include "chrome/services/qrcode_generator/qrcode_generator_service_impl.h"  // nogncheck
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/services/removable_storage_writer/public/mojom/removable_storage_writer.mojom.h"
@@ -97,8 +100,18 @@ auto RunUnzipper(mojo::PendingReceiver<unzip::mojom::Unzipper> receiver) {
   return std::make_unique<unzip::UnzipperImpl>(std::move(receiver));
 }
 
-auto RunSodaService(mojo::PendingReceiver<media::mojom::SodaService> receiver) {
-  return std::make_unique<soda::SodaServiceImpl>(std::move(receiver));
+auto RunLanguageDetectionService(
+    mojo::PendingReceiver<language_detection::mojom::LanguageDetectionService>
+        receiver) {
+  return std::make_unique<language_detection::LanguageDetectionServiceImpl>(
+      std::move(receiver));
+}
+
+auto RunQRCodeGeneratorService(
+    mojo::PendingReceiver<qrcode_generator::mojom::QRCodeGeneratorService>
+        receiver) {
+  return std::make_unique<qrcode_generator::QRCodeGeneratorServiceImpl>(
+      std::move(receiver));
 }
 
 #if defined(OS_WIN)
@@ -126,13 +139,6 @@ auto RunProfileImporter(
   return std::make_unique<ProfileImportImpl>(std::move(receiver));
 }
 
-auto RunQRCodeGeneratorService(
-    mojo::PendingReceiver<qrcode_generator::mojom::QRCodeGeneratorService>
-        receiver) {
-  return std::make_unique<qrcode_generator::QRCodeGeneratorServiceImpl>(
-      std::move(receiver));
-}
-
 auto RunMirroringService(
     mojo::PendingReceiver<mirroring::mojom::MirroringService> receiver) {
   return std::make_unique<mirroring::MirroringService>(
@@ -141,6 +147,12 @@ auto RunMirroringService(
 
 auto RunSharing(mojo::PendingReceiver<sharing::mojom::Sharing> receiver) {
   return std::make_unique<sharing::SharingImpl>(std::move(receiver));
+}
+
+auto RunSpeechRecognitionService(
+    mojo::PendingReceiver<media::mojom::SpeechRecognitionService> receiver) {
+  return std::make_unique<speech::SpeechRecognitionServiceImpl>(
+      std::move(receiver));
 }
 #endif  // !defined(OS_ANDROID)
 
@@ -235,14 +247,15 @@ mojo::ServiceFactory* GetMainThreadServiceFactory() {
   // clang-format off
   static base::NoDestructor<mojo::ServiceFactory> factory {
     RunFilePatcher,
-    RunSodaService,
     RunUnzipper,
+    RunLanguageDetectionService,
+    RunQRCodeGeneratorService,
 
 #if !defined(OS_ANDROID)
     RunProfileImporter,
-    RunQRCodeGeneratorService,
     RunMirroringService,
     RunSharing,
+    RunSpeechRecognitionService,
 #endif
 
 #if defined(OS_WIN)

@@ -26,18 +26,25 @@ class CrosNetworkConfigTestHelper {
  public:
   // Default constructor for unit tests.
   CrosNetworkConfigTestHelper();
+
+  // Constructor for when a ManagedNetworkConfigurationHandler must be
+  // separately initialized via Initialize(ManagedNetworkConfigurationHandler*).
+  explicit CrosNetworkConfigTestHelper(bool initialize);
+
   ~CrosNetworkConfigTestHelper();
 
   NetworkStateTestHelper& network_state_helper() {
     return *network_state_helper_;
   }
 
+  NetworkDeviceHandler* network_device_handler() {
+    return network_device_handler_.get();
+  }
+
   void Initialize(
       ManagedNetworkConfigurationHandler* network_configuration_handler);
 
  protected:
-  // For use by child classes.
-  CrosNetworkConfigTestHelper(bool initialize);
   std::unique_ptr<NetworkStateTestHelper> network_state_helper_;
   std::unique_ptr<NetworkDeviceHandler> network_device_handler_;
   std::unique_ptr<CrosNetworkConfig> cros_network_config_impl_;

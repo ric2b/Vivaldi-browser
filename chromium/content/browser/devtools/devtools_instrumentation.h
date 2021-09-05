@@ -18,6 +18,7 @@
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom-forward.h"
+#include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-forward.h"
 
 class GURL;
 
@@ -25,10 +26,15 @@ namespace base {
 class UnguessableToken;
 }
 
+namespace blink {
+struct UserAgentMetadata;
+}
+
 namespace net {
 class SSLInfo;
 class X509Certificate;
 struct CookieWithStatus;
+struct QuicTransportError;
 }  // namespace net
 
 namespace download {
@@ -53,6 +59,14 @@ namespace devtools_instrumentation {
 void ApplyNetworkRequestOverrides(FrameTreeNode* frame_tree_node,
                                   mojom::BeginNavigationParams* begin_params,
                                   bool* report_raw_headers);
+
+// Returns true if devtools want |*override_out| to be used.
+// (A true return and |*override_out| being nullopt means no user agent client
+//  hints should be sent; a false return means devtools doesn't want to affect
+//  the behavior).
+bool ApplyUserAgentMetadataOverrides(
+    FrameTreeNode* frame_tree_node,
+    base::Optional<blink::UserAgentMetadata>* override_out);
 
 bool WillCreateURLLoaderFactory(
     RenderFrameHostImpl* rfh,
@@ -158,10 +172,19 @@ void PortalAttached(RenderFrameHostImpl* render_frame_host_impl);
 void PortalDetached(RenderFrameHostImpl* render_frame_host_impl);
 void PortalActivated(RenderFrameHostImpl* render_frame_host_impl);
 
-void ReportSameSiteCookieIssue(RenderFrameHostImpl* render_frame_host_impl,
-                               const net::CookieWithStatus& excluded_cookie,
-                               const GURL& url,
-                               const GURL& site_for_cookies);
+void ReportSameSiteCookieIssue(
+    RenderFrameHostImpl* render_frame_host_impl,
+    const net::CookieWithStatus& excluded_cookie,
+    const GURL& url,
+    const net::SiteForCookies& site_for_cookies,
+    blink::mojom::SameSiteCookieOperation operation,
+    const base::Optional<std::string>& devtools_request_id);
+
+void OnQuicTransportHandshakeFailed(
+    RenderFrameHostImpl* frame_host,
+    const GURL& url,
+    const base::Optional<net::QuicTransportError>& error);
+
 }  // namespace devtools_instrumentation
 
 }  // namespace content

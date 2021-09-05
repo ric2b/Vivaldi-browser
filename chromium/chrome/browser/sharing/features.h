@@ -11,9 +11,6 @@
 // Feature flag to enable QR Code Generator (currently desktop-only).
 extern const base::Feature kSharingQRCodeGenerator;
 
-// Feature flag to enable deriving VAPID key from Sync.
-extern const base::Feature kSharingDeriveVapidKey;
-
 // Feature flag for configuring device expiration.
 extern const base::Feature kSharingDeviceExpiration;
 
@@ -56,5 +53,8 @@ extern const base::FeatureParam<int> kSharingMessageBridgeTimeoutSeconds;
 
 // Feature flag for sending sharing message via Sync.
 extern const base::Feature kSharingSendViaSync;
+
+// Feature flag for prefer sending sharing message using VAPID.
+extern const base::Feature kSharingPreferVapid;
 
 #endif  // CHROME_BROWSER_SHARING_FEATURES_H_

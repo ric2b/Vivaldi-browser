@@ -16,6 +16,7 @@ specific_include_rules = {
    "+ash/public",
    "+ash/assistant/ui/assistant_ui_constants.h",
    "+ash/assistant/ui/main_stage/assistant_ui_element_view.h",
+   "+ui/message_center/message_center.h",
   ],
   # AshShellInit supports classic (non-mash) mode so allow ash/ includes.
   "ash_shell_init\.cc": [
@@ -24,6 +25,12 @@ specific_include_rules = {
   # SetupWidgetInitParamsForContainer accesses ash::Shell.
   "ash_util\.cc": [
     "+ash/shell.h",
+  ],
+  "assistant_timers_browsertest\.cc": [
+    "+ash/shelf",
+    "+ash/shell.h",
+    "+ash/system",
+    "+ui/message_center",
   ],
   # https://crbug.com/756054
   "chrome_accessibility_delegate.*": [

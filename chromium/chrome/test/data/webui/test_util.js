@@ -4,6 +4,7 @@
 
 // clang-format off
 // #import {afterNextRender, beforeNextRender, flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+// #import {assertEquals} from './chai_assert.js';
 // clang-format on
 
 cr.define('test_util', function() {
@@ -18,14 +19,14 @@ cr.define('test_util', function() {
   /* #export */ function whenAttributeIs(
       target, attributeName, attributeValue) {
     function isDone() {
-      return target.getAttribute(attributeName) == attributeValue;
+      return target.getAttribute(attributeName) === attributeValue;
     }
 
     return isDone() ? Promise.resolve() : new Promise(function(resolve) {
       new MutationObserver(function(mutations, observer) {
         for (const mutation of mutations) {
           assertEquals('attributes', mutation.type);
-          if (mutation.attributeName == attributeName && isDone()) {
+          if (mutation.attributeName === attributeName && isDone()) {
             observer.disconnect();
             resolve();
             return;

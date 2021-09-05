@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+GEN('#include "content/public/test/browser_test.h"');
+
 /**
  * TestFixture for SUID Sandbox testing.
  * @extends {testing.Test}
@@ -114,7 +116,7 @@ TEST_F('GPUSandboxStatusUITest', 'DISABLED_testGPUSandboxEnabled', function() {
         let gpuno = addedNode.innerText.match(gpunostring);
         if (gpuyes || gpuno) {
           expectEquals(null, gpuno);
-          expectTrue(gpuyes && (gpuyes[0] == gpuyesstring));
+          expectTrue(gpuyes && (gpuyes[0] === gpuyesstring));
           testDone();
         }
       }

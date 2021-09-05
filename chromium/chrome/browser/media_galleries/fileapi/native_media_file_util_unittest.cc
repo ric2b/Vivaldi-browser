@@ -110,9 +110,8 @@ void PopulateDirectoryWithTestCases(const base::FilePath& dir,
     if (test_cases[i].is_directory) {
       ASSERT_TRUE(base::CreateDirectory(path));
     } else {
-      ASSERT_TRUE(test_cases[i].content != nullptr);
-      int len = strlen(test_cases[i].content);
-      ASSERT_EQ(len, base::WriteFile(path, test_cases[i].content, len));
+      ASSERT_TRUE(test_cases[i].content);
+      ASSERT_TRUE(base::WriteFile(path, test_cases[i].content));
     }
   }
 }
@@ -212,10 +211,10 @@ TEST_F(NativeMediaFileUtilTest, DirectoryExistsAndFileExistsFiltering) {
         base::StringPrintf("DirectoryExistsAndFileExistsFiltering %" PRIuS, i);
     if (kFilteringTestCases[i].is_directory) {
       operation_runner()->DirectoryExists(
-          url, base::Bind(&ExpectEqHelper, test_name, expectation));
+          url, base::BindOnce(&ExpectEqHelper, test_name, expectation));
     } else {
       operation_runner()->FileExists(
-          url, base::Bind(&ExpectEqHelper, test_name, expectation));
+          url, base::BindOnce(&ExpectEqHelper, test_name, expectation));
     }
     content::RunAllTasksUntilIdle();
   }
@@ -259,7 +258,7 @@ TEST_F(NativeMediaFileUtilTest, CreateDirectoryFiltering) {
                                             : base::File::FILE_ERROR_SECURITY;
         operation_runner()->CreateDirectory(
             url, false, false,
-            base::Bind(&ExpectEqHelper, test_name, expectation));
+            base::BindOnce(&ExpectEqHelper, test_name, expectation));
       }
       content::RunAllTasksUntilIdle();
     }
@@ -299,7 +298,7 @@ TEST_F(NativeMediaFileUtilTest, CopySourceFiltering) {
           url, dest_url, storage::FileSystemOperation::OPTION_NONE,
           storage::FileSystemOperation::ERROR_BEHAVIOR_ABORT,
           storage::FileSystemOperationRunner::CopyProgressCallback(),
-          base::Bind(&ExpectEqHelper, test_name, expectation));
+          base::BindOnce(&ExpectEqHelper, test_name, expectation));
       content::RunAllTasksUntilIdle();
     }
   }
@@ -322,8 +321,7 @@ TEST_F(NativeMediaFileUtilTest, CopyDestFiltering) {
     base::FilePath src_path = root_path().AppendASCII("foo.jpg");
     FileSystemURL src_url = CreateURL(FPL("foo.jpg"));
     static const char kDummyData[] = "dummy";
-    ASSERT_EQ(static_cast<int>(strlen(kDummyData)),
-              base::WriteFile(src_path, kDummyData, strlen(kDummyData)));
+    ASSERT_TRUE(base::WriteFile(src_path, kDummyData));
 
     for (size_t i = 0; i < base::size(kFilteringTestCases); ++i) {
       if (loop_count == 0 && kFilteringTestCases[i].is_directory) {
@@ -363,7 +361,7 @@ TEST_F(NativeMediaFileUtilTest, CopyDestFiltering) {
           src_url, url, storage::FileSystemOperation::OPTION_NONE,
           storage::FileSystemOperation::ERROR_BEHAVIOR_ABORT,
           storage::FileSystemOperationRunner::CopyProgressCallback(),
-          base::Bind(&ExpectEqHelper, test_name, expectation));
+          base::BindOnce(&ExpectEqHelper, test_name, expectation));
       content::RunAllTasksUntilIdle();
     }
   }
@@ -400,7 +398,7 @@ TEST_F(NativeMediaFileUtilTest, MoveSourceFiltering) {
       }
       operation_runner()->Move(
           url, dest_url, storage::FileSystemOperation::OPTION_NONE,
-          base::Bind(&ExpectEqHelper, test_name, expectation));
+          base::BindOnce(&ExpectEqHelper, test_name, expectation));
       content::RunAllTasksUntilIdle();
     }
   }
@@ -430,8 +428,7 @@ TEST_F(NativeMediaFileUtilTest, MoveDestFiltering) {
       base::FilePath src_path = root_path().AppendASCII("foo.jpg");
       FileSystemURL src_url = CreateURL(FPL("foo.jpg"));
       static const char kDummyData[] = "dummy";
-      ASSERT_EQ(static_cast<int>(strlen(kDummyData)),
-                base::WriteFile(src_path, kDummyData, strlen(kDummyData)));
+      ASSERT_TRUE(base::WriteFile(src_path, kDummyData));
 
       FileSystemURL root_url = CreateURL(FPL(""));
       FileSystemURL url = CreateURL(kFilteringTestCases[i].path);
@@ -463,7 +460,7 @@ TEST_F(NativeMediaFileUtilTest, MoveDestFiltering) {
       }
       operation_runner()->Move(
           src_url, url, storage::FileSystemOperation::OPTION_NONE,
-          base::Bind(&ExpectEqHelper, test_name, expectation));
+          base::BindOnce(&ExpectEqHelper, test_name, expectation));
       content::RunAllTasksUntilIdle();
     }
   }
@@ -489,8 +486,8 @@ TEST_F(NativeMediaFileUtilTest, GetMetadataFiltering) {
       }
       operation_runner()->GetMetadata(
           url, storage::FileSystemOperation::GET_METADATA_FIELD_IS_DIRECTORY,
-          base::Bind(&ExpectMetadataEqHelper, test_name, expectation,
-                     kFilteringTestCases[i].is_directory));
+          base::BindOnce(&ExpectMetadataEqHelper, test_name, expectation,
+                         kFilteringTestCases[i].is_directory));
       content::RunAllTasksUntilIdle();
     }
   }
@@ -517,7 +514,7 @@ TEST_F(NativeMediaFileUtilTest, RemoveFileFiltering) {
         expectation = base::File::FILE_ERROR_NOT_A_FILE;
       }
       operation_runner()->RemoveFile(
-          url, base::Bind(&ExpectEqHelper, test_name, expectation));
+          url, base::BindOnce(&ExpectEqHelper, test_name, expectation));
       content::RunAllTasksUntilIdle();
     }
   }
@@ -548,7 +545,7 @@ TEST_F(NativeMediaFileUtilTest, CreateSnapshot) {
       expected_error = base::File::FILE_ERROR_SECURITY;
     error = base::File::FILE_ERROR_FAILED;
     operation_runner()->CreateSnapshotFile(
-        url, base::Bind(CreateSnapshotCallback, &error));
+        url, base::BindOnce(CreateSnapshotCallback, &error));
     content::RunAllTasksUntilIdle();
     ASSERT_EQ(expected_error, error);
   }

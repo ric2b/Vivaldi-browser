@@ -12,6 +12,7 @@
 #include "components/autofill/core/browser/logging/log_router.h"
 #include "components/password_manager/content/browser/password_manager_log_router_factory.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/browser_test.h"
 
 class PasswordManagerInternalsWebUIBrowserTest : public WebUIBrowserTest {
  public:
@@ -163,9 +164,10 @@ IN_PROC_BROWSER_TEST_F(PasswordManagerInternalsWebUIBrowserTest,
 IN_PROC_BROWSER_TEST_F(PasswordManagerInternalsWebUIBrowserTest,
                        IncognitoMessage) {
   Browser* incognito = CreateIncognitoBrowser();
+  EXPECT_TRUE(incognito->profile()->IsOffTheRecord());
   autofill::LogRouter* log_router =
       password_manager::PasswordManagerLogRouterFactory::GetForBrowserContext(
-          incognito->profile()->GetOffTheRecordProfile());
+          incognito->profile());
   EXPECT_FALSE(log_router);  // There should be no log_router for Incognito.
   OpenInternalsPageWithBrowser(incognito, WindowOpenDisposition::CURRENT_TAB);
   SetWebUIInstance(

@@ -20,6 +20,7 @@
 #include "build/buildflag.h"
 #include "chrome/browser/chrome_browser_main.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
+#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/arc/session/arc_service_launcher.h"
 #include "chrome/browser/chromeos/arc/session/arc_session_manager.h"
 #include "chrome/browser/chromeos/arc/test/test_arc_session_manager.h"
@@ -61,6 +62,7 @@
 #include "components/arc/arc_util.h"
 #include "components/arc/session/arc_session_runner.h"
 #include "components/arc/test/fake_arc_session.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
 #include "net/dns/mock_host_resolver.h"
@@ -547,6 +549,9 @@ class OobeEndToEndTestSetupMixin : public InProcessBrowserTestMixin {
       // Prevent encryption migration screen from showing up after user login
       // with ARC available.
       command_line->AppendSwitch(switches::kDisableEncryptionMigration);
+      command_line->AppendSwitchASCII(
+          switches::kArcTosHostForTests,
+          arc_tos_server_->GetURL("/arc-tos").spec());
     }
   }
 
@@ -580,12 +585,6 @@ class OobeEndToEndTestSetupMixin : public InProcessBrowserTestMixin {
               base::BindRepeating(arc::FakeArcSession::Create)));
       EXPECT_TRUE(arc::ExpandPropertyFilesForTesting(
           arc::ArcSessionManager::Get(), arc_temp_dir_.GetPath()));
-
-      if (arc_tos_server_) {
-        test::OobeJS().Evaluate(base::StringPrintf(
-            "login.ArcTermsOfServiceScreen.setTosHostNameForTesting('%s');",
-            arc_tos_server_->GetURL("/arc-tos").spec().c_str()));
-      }
     }
   }
   void TearDownInProcessBrowserTestFixture() override {
@@ -820,7 +819,12 @@ void OobeZeroTouchInteractiveUITest::ZeroTouchEndToEnd() {
 
   test::WaitForEnrollmentScreen();
   enrollment_ui_.WaitForStep(test::ui::kEnrollmentStepSuccess);
+  auto login_screen_waiter =
+      std::make_unique<content::WindowedNotificationObserver>(
+          chrome::NOTIFICATION_LOGIN_OR_LOCK_WEBUI_VISIBLE,
+          content::NotificationService::AllSources());
   enrollment_ui_.LeaveSuccessScreen();
+  login_screen_waiter->Wait();
 
   PerformSessionSignInSteps(get_auth_token_observer);
 

@@ -256,9 +256,9 @@ void PipelineIntegrationTestBase::OnError(PipelineStatus status) {
     std::move(on_error_closure_).Run();
 }
 
-void PipelineIntegrationTestBase::SetWrapRendererCB(
-    WrapRendererCB wrap_renderer_cb) {
-  wrap_renderer_cb_ = std::move(wrap_renderer_cb);
+void PipelineIntegrationTestBase::SetCreateRendererCB(
+    CreateRendererCB create_renderer_cb) {
+  create_renderer_cb_ = std::move(create_renderer_cb);
 }
 
 PipelineStatus PipelineIntegrationTestBase::StartInternal(
@@ -496,7 +496,20 @@ void Dummy_TranscribeAudio(scoped_refptr<media::AudioBuffer> buffer) {}
 }  // namespace
 
 std::unique_ptr<Renderer> PipelineIntegrationTestBase::CreateRenderer(
-    base::Optional<RendererFactoryType> /* factory_type */) {
+    base::Optional<RendererFactoryType> factory_type) {
+  if (create_renderer_cb_)
+    return create_renderer_cb_.Run(factory_type);
+
+  return CreateDefaultRenderer(factory_type);
+}
+
+std::unique_ptr<Renderer> PipelineIntegrationTestBase::CreateDefaultRenderer(
+    base::Optional<RendererFactoryType> factory_type) {
+  if (factory_type && *factory_type != RendererFactoryType::kDefault) {
+    DVLOG(1) << __func__ << ": factory_type not supported";
+    return nullptr;
+  }
+
   // Simulate a 60Hz rendering sink.
   video_sink_.reset(new NullVideoSink(
       clockless_playback_, base::TimeDelta::FromSecondsD(1.0 / 60),
@@ -572,8 +585,7 @@ std::unique_ptr<Renderer> PipelineIntegrationTestBase::CreateRenderer(
   if (clockless_playback_)
     renderer_impl->EnableClocklessVideoPlaybackForTesting();
 
-  return wrap_renderer_cb_ ? wrap_renderer_cb_.Run(std::move(renderer_impl))
-                           : std::move(renderer_impl);
+  return renderer_impl;
 }
 
 void PipelineIntegrationTestBase::OnVideoFramePaint(

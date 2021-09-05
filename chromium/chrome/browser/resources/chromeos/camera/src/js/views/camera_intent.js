@@ -65,7 +65,7 @@ export class CameraIntent extends Camera {
       startSaveVideo: async () => {
         return await VideoSaver.createForIntent(intent);
       },
-      finishSaveVideo: async (video, savedName) => {
+      finishSaveVideo: async (video) => {
         this.videoResultFile_ = await video.endWrite();
       },
     });
@@ -120,10 +120,10 @@ export class CameraIntent extends Camera {
   /**
    * @override
    */
-  async doSaveVideo_(result, name) {
+  async doSaveVideo_(result) {
     this.videoResult_ = result;
     try {
-      await this.resultSaver_.finishSaveVideo(result.videoSaver, name);
+      await this.resultSaver_.finishSaveVideo(result.videoSaver);
     } catch (e) {
       toast.show('error_msg_save_file_failed');
       throw e;
@@ -133,12 +133,12 @@ export class CameraIntent extends Camera {
   /**
    * @override
    */
-  beginTake_() {
+  beginTake_(shutterType) {
     // TODO(inker): Clean unused photo result blob properly.
     this.photoResult_ = null;
     this.videoResult_ = null;
 
-    const take = super.beginTake_();
+    const take = super.beginTake_(shutterType);
     if (take === null) {
       return null;
     }
@@ -161,7 +161,8 @@ export class CameraIntent extends Camera {
           metrics.Type.CAPTURE, this.facingMode_, result.duration || 0,
           result.resolution,
           confirmed ? metrics.IntentResultType.CONFIRMED :
-                      metrics.IntentResultType.CANCELED);
+                      metrics.IntentResultType.CANCELED,
+          this.shutterType_);
       if (confirmed) {
         await this.intent_.finish();
         window.close();

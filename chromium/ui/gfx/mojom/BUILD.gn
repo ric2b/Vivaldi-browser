@@ -29,43 +29,185 @@ mojom("mojom") {
     "//ui/gfx/geometry/mojom",
   ]
 
-  buffer_types_shared_cpp_typemap = {
-    types = [
-      {
-        mojom = "gfx.mojom.BufferFormat"
-        cpp = "::gfx::BufferFormat"
-      },
-      {
-        mojom = "gfx.mojom.BufferUsage"
-        cpp = "::gfx::BufferUsage"
-      },
-      {
-        mojom = "gfx.mojom.BufferUsageAndFormat"
-        cpp = "::gfx::BufferUsageAndFormat"
-      },
-      {
-        mojom = "gfx.mojom.GpuMemoryBufferHandle"
-        cpp = "::gfx::GpuMemoryBufferHandle"
-        move_only = true
-        nullable_is_same_type = true
-      },
-      {
-        mojom = "gfx.mojom.GpuMemoryBufferId"
-        cpp = "::gfx::GpuMemoryBufferId"
-        copyable_pass_by_value = true
-      },
-      {
-        mojom = "gfx.mojom.GpuMemoryBufferType"
-        cpp = "::gfx::GpuMemoryBufferType"
-      },
-    ]
+  shared_cpp_typemaps = [
+    {
+      types = [
+        {
+          mojom = "gfx.mojom.BufferFormat"
+          cpp = "::gfx::BufferFormat"
+        },
+        {
+          mojom = "gfx.mojom.BufferUsage"
+          cpp = "::gfx::BufferUsage"
+        },
+        {
+          mojom = "gfx.mojom.BufferUsageAndFormat"
+          cpp = "::gfx::BufferUsageAndFormat"
+        },
+        {
+          mojom = "gfx.mojom.GpuMemoryBufferHandle"
+          cpp = "::gfx::GpuMemoryBufferHandle"
+          move_only = true
+          nullable_is_same_type = true
+        },
+        {
+          mojom = "gfx.mojom.GpuMemoryBufferId"
+          cpp = "::gfx::GpuMemoryBufferId"
+          copyable_pass_by_value = true
+        },
+        {
+          mojom = "gfx.mojom.GpuMemoryBufferType"
+          cpp = "::gfx::GpuMemoryBufferType"
+        },
+      ]
 
-    traits_headers = [ "buffer_types_mojom_traits.h" ]
-    traits_public_deps = [ ":shared_mojom_traits" ]
-  }
+      traits_headers = [ "buffer_types_mojom_traits.h" ]
+      traits_public_deps = [ ":shared_mojom_traits" ]
+    },
+    {
+      types = [
+        {
+          mojom = "gfx.mojom.ColorSpace"
+          cpp = "::gfx::ColorSpace"
+        },
+      ]
+      traits_headers = [ "color_space_mojom_traits.h" ]
+      traits_public_deps = [ ":color_space_mojom_support" ]
+    },
+    {
+      types = [
+        {
+          mojom = "gfx.mojom.GpuFenceHandle"
+          cpp = "::gfx::GpuFenceHandle"
+        },
+      ]
+      traits_headers = [ "gpu_fence_handle_mojom_traits.h" ]
+      traits_public_deps = [ ":shared_mojom_traits" ]
+    },
+    {
+      types = [
+        {
+          mojom = "gfx.mojom.Transform"
+          cpp = "::gfx::Transform"
+        },
+      ]
+      traits_headers = [ "transform_mojom_traits.h" ]
+      traits_public_deps = [ "//ui/gfx" ]
+    },
+  ]
 
-  cpp_typemaps = [ buffer_types_shared_cpp_typemap ]
-  blink_cpp_typemaps = [ buffer_types_shared_cpp_typemap ]
+  cpp_typemaps = [
+    {
+      types = [
+        {
+          mojom = "gfx.mojom.AcceleratedWidget"
+          cpp = "::gfx::AcceleratedWidget"
+          copyable_pass_by_value = true
+        },
+      ]
+      traits_headers = [ "accelerated_widget_mojom_traits.h" ]
+      traits_public_deps = [ "//ui/gfx" ]
+    },
+    {
+      types = [
+        {
+          mojom = "gfx.mojom.CALayerParams"
+          cpp = "::gfx::CALayerParams"
+        },
+      ]
+      traits_sources = [ "ca_layer_params_mojom_traits.cc" ]
+      traits_headers = [ "ca_layer_params_mojom_traits.h" ]
+      traits_public_deps = [ "//ui/gfx" ]
+    },
+    {
+      types = [
+        {
+          mojom = "gfx.mojom.DisplayColorSpaces"
+          cpp = "::gfx::DisplayColorSpaces"
+        },
+      ]
+      traits_sources = [ "display_color_spaces_mojom_traits.cc" ]
+      traits_headers = [ "display_color_spaces_mojom_traits.h" ]
+      traits_public_deps = [ "//ui/gfx" ]
+    },
+    {
+      types = [
+        {
+          mojom = "gfx.mojom.Hinting"
+          cpp = "::gfx::FontRenderParams::Hinting"
+        },
+        {
+          mojom = "gfx.mojom.SubpixelRendering"
+          cpp = "::gfx::FontRenderParams::SubpixelRendering"
+        },
+      ]
+      traits_headers = [ "font_render_params_mojom_traits.h" ]
+      traits_public_deps = [ "//ui/gfx" ]
+    },
+    {
+      types = [
+        {
+          mojom = "gfx.mojom.OverlayTransform"
+          cpp = "::gfx::OverlayTransform"
+        },
+      ]
+      traits_headers = [ "overlay_transform_mojom_traits.h" ]
+      traits_public_deps = [ "//ui/gfx" ]
+    },
+    {
+      types = [
+        {
+          mojom = "gfx.mojom.PresentationFeedback"
+          cpp = "::gfx::PresentationFeedback"
+        },
+      ]
+      traits_headers = [ "presentation_feedback_mojom_traits.h" ]
+      traits_public_deps = [ "//ui/gfx" ]
+    },
+    {
+      types = [
+        {
+          mojom = "gfx.mojom.RRectF"
+          cpp = "::gfx::RRectF"
+        },
+      ]
+      traits_headers = [ "rrect_f_mojom_traits.h" ]
+      traits_public_deps = [ "//ui/gfx/geometry/mojom:mojom_traits" ]
+    },
+    {
+      types = [
+        {
+          mojom = "gfx.mojom.SelectionBound"
+          cpp = "::gfx::SelectionBound"
+        },
+      ]
+      traits_headers = [ "selection_bound_mojom_traits.h" ]
+      traits_public_deps = [ "//ui/gfx/geometry/mojom:mojom_traits" ]
+    },
+    {
+      types = [
+        {
+          mojom = "gfx.mojom.SwapResult"
+          cpp = "::gfx::SwapResult"
+        },
+      ]
+      traits_headers = [ "swap_result_mojom_traits.h" ]
+      traits_public_deps = [ "//ui/gfx" ]
+    },
+    {
+      types = [
+        {
+          mojom = "gfx.mojom.SwapTimings"
+          cpp = "::gfx::SwapTimings"
+        },
+      ]
+      traits_headers = [ "swap_timings_mojom_traits.h" ]
+      traits_public_deps = [ "//ui/gfx" ]
+    },
+  ]
+
+  cpp_typemaps += shared_cpp_typemaps
+  blink_cpp_typemaps = shared_cpp_typemaps
 }
 
 mojom("native_handle_types") {
@@ -136,6 +278,8 @@ component("shared_mojom_traits") {
   sources = [
     "buffer_types_mojom_traits.cc",
     "buffer_types_mojom_traits.h",
+    "gpu_fence_handle_mojom_traits.cc",
+    "gpu_fence_handle_mojom_traits.h",
   ]
   public_deps = [
     ":mojom_shared",

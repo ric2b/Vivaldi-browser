@@ -10,6 +10,7 @@
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/core/common/test_task_environment.h"
 #include "components/safe_browsing/core/features.h"
 #include "components/safe_browsing/core/verdict_cache_manager.h"
@@ -55,7 +56,8 @@ class RealTimeUrlLookupServiceTest : public PlatformTest {
     content_setting_map_ = new HostContentSettingsMap(
         &test_pref_service_, false /* is_off_the_record */,
         false /* store_last_modified */,
-        false /* migrate_requesting_and_top_level_origin_settings */);
+        false /* migrate_requesting_and_top_level_origin_settings */,
+        false /* restore_session */);
     cache_manager_ = std::make_unique<VerdictCacheManager>(
         nullptr, content_setting_map_.get());
 
@@ -63,7 +65,9 @@ class RealTimeUrlLookupServiceTest : public PlatformTest {
     rt_service_ = std::make_unique<RealTimeUrlLookupService>(
         test_shared_loader_factory_, cache_manager_.get(),
         identity_test_env_->identity_manager(), &test_sync_service_,
-        &test_pref_service_, /* is_off_the_record */ false);
+        &test_pref_service_, ChromeUserPopulation::NOT_MANAGED,
+        /*is_under_advanced_protection=*/true,
+        /*is_off_the_record=*/false);
   }
 
   void TearDown() override {
@@ -206,6 +210,12 @@ TEST_F(RealTimeUrlLookupServiceTest, TestFillRequestProto) {
     EXPECT_EQ(RTLookupRequest::NAVIGATION, result->lookup_type());
     EXPECT_EQ(ChromeUserPopulation::SAFE_BROWSING,
               result->population().user_population());
+    EXPECT_TRUE(result->population().is_history_sync_enabled());
+    EXPECT_EQ(ChromeUserPopulation::NOT_MANAGED,
+              result->population().profile_management_status());
+#if BUILDFLAG(FULL_SAFE_BROWSING)
+    EXPECT_TRUE(result->population().is_under_advanced_protection());
+#endif
   }
 }
 
@@ -563,7 +573,7 @@ TEST_F(RealTimeUrlLookupServiceTest, TestStartLookup_ResponseIsAlreadyCached) {
                             response_callback.Get());
 
   // |request_callback| should not be called.
-  EXPECT_CALL(request_callback, Run(_)).Times(0);
+  EXPECT_CALL(request_callback, Run(_, _)).Times(0);
   EXPECT_CALL(response_callback, Run(/* is_rt_lookup_successful */ true, _));
 
   task_environment_->RunUntilIdle();
@@ -588,10 +598,12 @@ TEST_F(RealTimeUrlLookupServiceTest,
 
   base::MockCallback<RTLookupResponseCallback> response_callback;
   rt_service()->StartLookup(
-      url, base::BindOnce([](std::unique_ptr<RTLookupRequest> request) {
-        // Check token is attached.
-        EXPECT_EQ("access_token_string", request->scoped_oauth_token());
-      }),
+      url,
+      base::BindOnce(
+          [](std::unique_ptr<RTLookupRequest> request, std::string token) {
+            // Check token is attached.
+            EXPECT_EQ("access_token_string", token);
+          }),
       response_callback.Get());
 
   EXPECT_CALL(response_callback, Run(/* is_rt_lookup_successful */ true, _));
@@ -620,10 +632,12 @@ TEST_F(RealTimeUrlLookupServiceTest, TestStartLookup_NoTokenWhenNotSignedIn) {
 
   base::MockCallback<RTLookupResponseCallback> response_callback;
   rt_service()->StartLookup(
-      url, base::BindOnce([](std::unique_ptr<RTLookupRequest> request) {
-        // Check the token field is empty.
-        EXPECT_FALSE(request->has_scoped_oauth_token());
-      }),
+      url,
+      base::BindOnce(
+          [](std::unique_ptr<RTLookupRequest> request, std::string token) {
+            // Check the token field is empty.
+            EXPECT_EQ("", token);
+          }),
       response_callback.Get());
 
   EXPECT_CALL(response_callback, Run(/* is_rt_lookup_successful */ true, _));
@@ -648,10 +662,12 @@ TEST_F(RealTimeUrlLookupServiceTest,
 
   base::MockCallback<RTLookupResponseCallback> response_callback;
   rt_service()->StartLookup(
-      url, base::BindOnce([](std::unique_ptr<RTLookupRequest> request) {
-        // Check the token field is empty.
-        EXPECT_FALSE(request->has_scoped_oauth_token());
-      }),
+      url,
+      base::BindOnce(
+          [](std::unique_ptr<RTLookupRequest> request, std::string token) {
+            // Check the token field is empty.
+            EXPECT_EQ("", token);
+          }),
       response_callback.Get());
 
   EXPECT_CALL(response_callback, Run(/* is_rt_lookup_successful */ true, _));

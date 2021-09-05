@@ -1,38 +1,14 @@
-<link rel="import" href="chrome://resources/html/polymer.html">
-
-<link rel="import" href="about_page_browser_proxy.html">
-<link rel="import" href="../i18n_setup.html">
-<link rel="import" href="../icons.html">
-<link rel="import" href="../lifetime_browser_proxy.html">
-<link rel="import" href="../prefs/prefs.html">
-<link rel="import" href="../router.html">
-<link rel="import" href="../settings_page/settings_section.html">
-<link rel="import" href="../settings_page_css.html">
-<link rel="import" href="../settings_shared_css.html">
-<link rel="import" href="chrome://resources/cr_elements/cr_button/cr_button.html">
-<link rel="import" href="chrome://resources/cr_elements/cr_icon_button/cr_icon_button.html">
-<link rel="import" href="chrome://resources/cr_elements/cr_link_row/cr_link_row.html">
-<link rel="import" href="chrome://resources/cr_elements/icons.html">
-<link rel="import" href="chrome://resources/html/assert.html">
-<link rel="import" href="chrome://resources/html/i18n_behavior.html">
-<link rel="import" href="chrome://resources/html/parse_html_subset.html">
-<link rel="import" href="chrome://resources/html/web_ui_listener_behavior.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
-
-<dom-module id="settings-about-page">
-  <template>
-    <style include="settings-shared settings-page-styles">
+    <style include="cr-shared-style settings-shared settings-page-styles iron-flex">
       :host {
         --about-page-image-space: 10px;
       }
 
-      .info-section {
-        margin-bottom: 12px;
+      .info-sections {
+        padding: var(--cr-section-vertical-padding) var(--cr-section-padding);
       }
 
-      .padded {
-        padding-bottom: 10px;
-        padding-top: 10px;
+      .info-section {
+        margin-bottom: 12px;
       }
 
       .product-title {
@@ -60,22 +36,12 @@
         fill: var(--settings-error-color);
       }
 
-      .settings-box .start {
-        overflow-x: auto;
-      }
-
       cr-button {
         white-space: nowrap;
       }
-
-<if expr="_google_chrome and is_macosx">
-      #promoteUpdater[disabled] {
-        @apply --cr-secondary-text;
-      }
-</if>
     </style>
     <settings-section page-title="$i18n{aboutPageTitle}" section="about">
-      <div class="settings-box two-line first">
+      <div class="cr-row two-line first">
         <img id="product-logo" on-click="onProductLogoTap_"
             srcset="chrome://theme/current-channel-logo@1x 1x,
                     chrome://theme/current-channel-logo@2x 2x"
@@ -83,7 +49,7 @@
             role="presentation">
         <h1 class="product-title">$i18n{aboutProductTitle}</h1>
       </div>
-      <div class="settings-box two-line">
+      <div class="cr-row two-line">
         <!-- TODO(dpapad): Investigate why vulcanize does not handle well
           a new line after "getThrobberSrcIfUpdating_(", causes incorrect
           src URL -->
@@ -99,7 +65,7 @@
           </iron-icon>
         </div>
 </if>
-        <div class="start padded">
+        <div class="flex cr-padded-text">
 <if expr="not chromeos">
           <div id="updateStatusMessage" hidden="[[!showUpdateStatus_]]">
             <div
@@ -139,11 +105,11 @@
       </div>
 <if expr="_google_chrome and is_macosx">
       <template is="dom-if" if="[[!promoteUpdaterStatus_.hidden]]">
-        <div id="promoteUpdater" class="settings-box"
-            disabled$="[[promoteUpdaterStatus_.disabled]]"
+        <div id="promoteUpdater"
+            class$="cr-row [[getPromoteUpdaterClass_(promoteUpdaterStatus_.disabled)]]"
             actionable$="[[promoteUpdaterStatus_.actionable]]"
             on-click="onPromoteUpdaterTap_">
-          <div class="start">
+          <div class="flex">
             [[promoteUpdaterStatus_.text]]
             <a href="https://support.google.com/chrome/answer/95414"
                 target="_blank" id="updaterLearnMore"
@@ -172,7 +138,7 @@
     </settings-section>
 
     <settings-section>
-      <div class="settings-box padded block first">
+      <div class="info-sections">
         <div class="info-section">
           <div class="secondary">$i18n{aboutProductTitle}</div>
           <div class="secondary">$i18n{aboutProductCopyright}</div>
@@ -182,10 +148,9 @@
           <div class="secondary">$i18nRaw{aboutProductLicense}</div>
         </div>
 <if expr="_google_chrome">
-        <div class="secondary">$i18nRaw{aboutProductTos}</div>
+        <div class="secondary">
+          <a href="$i18n{aboutTermsURL}">$i18n{aboutProductTos}</a>
+        </div>
 </if>
       </div>
     </settings-section>
-  </template>
-  <script src="about_page.js"></script>
-</dom-module>

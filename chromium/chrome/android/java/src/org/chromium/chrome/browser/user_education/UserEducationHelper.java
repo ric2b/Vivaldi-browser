@@ -5,6 +5,7 @@
 package org.chromium.chrome.browser.user_education;
 
 import android.app.Activity;
+import android.os.Handler;
 import android.view.View;
 
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
@@ -38,8 +39,11 @@ import org.chromium.ui.widget.ViewRectProvider;
  */
 public class UserEducationHelper {
     private final Activity mActivity;
-    public UserEducationHelper(Activity activity) {
+    private final Handler mHandler;
+
+    public UserEducationHelper(Activity activity, Handler handler) {
         mActivity = activity;
+        mHandler = handler;
     }
 
     /**
@@ -49,7 +53,10 @@ public class UserEducationHelper {
      * should.
      */
     public void requestShowIPH(IPHCommand iphCommand) {
-        Profile profile = Profile.getLastUsedProfile();
+        // TODO (https://crbug.com/1048632): Use the current profile (i.e., regular profile or
+        // incognito profile) instead of always using regular profile. Currently always original
+        // profile is used not to start popping IPH messages as soon as opening an incognito tab.
+        Profile profile = Profile.getLastUsedRegularProfile();
         final Tracker tracker = TrackerFactory.getTrackerForProfile(profile);
         tracker.addOnInitializedCallback(success -> showIPH(tracker, iphCommand));
     }
@@ -73,13 +80,14 @@ public class UserEducationHelper {
                 new TextBubble(mActivity, anchorView, contentString, accessibilityString, true,
                         rectProvider, AccessibilityUtil.isAccessibilityEnabled());
         textBubble.setDismissOnTouchInteraction(iphCommand.dismissOnTouch);
-        textBubble.addOnDismissListener(() -> anchorView.getHandler().postDelayed(() -> {
+        textBubble.addOnDismissListener(() -> mHandler.postDelayed(() -> {
             tracker.dismissed(featureName);
             iphCommand.onDismissCallback.run();
             if (iphCommand.shouldHighlight) {
                 ViewHighlighter.turnOffHighlight(anchorView);
             }
         }, ViewHighlighter.IPH_MIN_DELAY_BETWEEN_TWO_HIGHLIGHTS));
+        textBubble.setAutoDismissTimeout(iphCommand.autoDismissTimeout);
 
         if (iphCommand.shouldHighlight) {
             ViewHighlighter.turnOnHighlight(anchorView, iphCommand.circleHighlight);

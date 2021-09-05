@@ -18,7 +18,7 @@
 #include "components/autofill_assistant/browser/controller.h"
 #include "components/autofill_assistant/browser/device_context.h"
 #include "components/autofill_assistant/browser/service.h"
-#include "components/autofill_assistant/browser/website_login_fetcher.h"
+#include "components/autofill_assistant/browser/website_login_manager.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_user_data.h"
 
@@ -97,14 +97,14 @@ class ClientAndroid : public Client,
   // Overrides Client
   void AttachUI() override;
   void DestroyUI() override;
-  std::string GetApiKey() const override;
-  std::string GetAccountEmailAddress() const override;
+  version_info::Channel GetChannel() const override;
+  std::string GetEmailAddressForAccessTokenAccount() const override;
+  std::string GetChromeSignedInEmailAddress() const override;
   AccessTokenFetcher* GetAccessTokenFetcher() override;
   autofill::PersonalDataManager* GetPersonalDataManager() const override;
   password_manager::PasswordManagerClient* GetPasswordManagerClient()
       const override;
-  WebsiteLoginFetcher* GetWebsiteLoginFetcher() const override;
-  std::string GetServerUrl() const override;
+  WebsiteLoginManager* GetWebsiteLoginManager() const override;
   std::string GetLocale() const override;
   std::string GetCountryCode() const override;
   DeviceContext GetDeviceContext() const override;
@@ -148,7 +148,7 @@ class ClientAndroid : public Client,
 
   base::android::ScopedJavaGlobalRef<jobject> java_object_;
   std::unique_ptr<Controller> controller_;
-  mutable std::unique_ptr<WebsiteLoginFetcher> website_login_fetcher_;
+  mutable std::unique_ptr<WebsiteLoginManager> website_login_manager_;
 
   // True if Start() was called. This turns on the tracking of dropouts.
   bool started_ = false;
@@ -157,7 +157,6 @@ class ClientAndroid : public Client,
 
   base::OnceCallback<void(bool, const std::string&)>
       fetch_access_token_callback_;
-  std::string server_url_;
 
   base::WeakPtrFactory<ClientAndroid> weak_ptr_factory_{this};
 

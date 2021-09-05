@@ -9,7 +9,9 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/files/file.h"
 #include "base/files/file_path.h"
+#include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/smb_client/smb_errors.h"
 #include "chrome/browser/chromeos/smb_client/smb_url.h"
@@ -30,6 +32,8 @@ class SmbFsShare : public smbfs::SmbFsHost::Delegate {
   using MountOptions = smbfs::SmbFsMounter::MountOptions;
   using MountCallback = base::OnceCallback<void(SmbMountResult)>;
   using UnmountCallback = base::OnceCallback<void(chromeos::MountError)>;
+  using RemoveCredentialsCallback = base::OnceCallback<void(bool)>;
+  using DeleteRecursivelyCallback = base::OnceCallback<void(base::File::Error)>;
   using MounterCreationCallback =
       base::RepeatingCallback<std::unique_ptr<smbfs::SmbFsMounter>(
           const std::string& share_path,
@@ -62,6 +66,13 @@ class SmbFsShare : public smbfs::SmbFsHost::Delegate {
   // (currently 5 seconds).
   void AllowCredentialsRequest();
 
+  // Request that any credentials saved by smbfs are deleted.
+  void RemoveSavedCredentials(RemoveCredentialsCallback callback);
+
+  // Recursively delete |path| by making a Mojo request to smbfs.
+  void DeleteRecursively(const base::FilePath& path,
+                         DeleteRecursivelyCallback callback);
+
   // Returns whether the filesystem is mounted and accessible via mount_path().
   bool IsMounted() const { return bool(host_); }
 
@@ -85,6 +96,18 @@ class SmbFsShare : public smbfs::SmbFsHost::Delegate {
   void OnUnmountDone(SmbFsShare::UnmountCallback callback,
                      chromeos::MountError result);
 
+  // Callback for smb_dialog::SmbCredentialsDialog::Show().
+  void OnSmbCredentialsDialogShowDone(RequestCredentialsCallback callback,
+                                      bool canceled,
+                                      const std::string& username,
+                                      const std::string& password);
+
+  // Callback for smbfs::SmbFsHost::RemoveSavedCredentials().
+  void OnRemoveSavedCredentialsDone(bool success);
+
+  // Callback for smbfs::SmbFsHost::DeleteRecursively().
+  void OnDeleteRecursivelyDone(base::File::Error error);
+
   // smbfs::SmbFsHost::Delegate overrides:
   void OnDisconnected() override;
   void RequestCredentials(RequestCredentialsCallback callback) override;
@@ -95,6 +118,8 @@ class SmbFsShare : public smbfs::SmbFsHost::Delegate {
   MountOptions options_;
   const std::string mount_id_;
   bool unmount_pending_ = false;
+  RemoveCredentialsCallback remove_credentials_callback_;
+  DeleteRecursivelyCallback delete_recursively_callback_;
 
   MounterCreationCallback mounter_creation_callback_for_test_;
   std::unique_ptr<smbfs::SmbFsMounter> mounter_;
@@ -102,6 +127,8 @@ class SmbFsShare : public smbfs::SmbFsHost::Delegate {
 
   base::TimeTicks allow_credential_request_expiry_;
   bool allow_credential_request_ = false;
+
+  base::WeakPtrFactory<SmbFsShare> weak_factory_{this};
 };
 
 }  // namespace smb_client

@@ -7,6 +7,7 @@
 #include "third_party/blink/renderer/core/css/css_inherited_value.h"
 #include "third_party/blink/renderer/core/css/css_initial_value.h"
 #include "third_party/blink/renderer/core/css/css_pending_substitution_value.h"
+#include "third_party/blink/renderer/core/css/css_revert_value.h"
 #include "third_party/blink/renderer/core/css/css_unicode_range_value.h"
 #include "third_party/blink/renderer/core/css/css_unset_value.h"
 #include "third_party/blink/renderer/core/css/css_variable_reference_value.h"
@@ -45,6 +46,8 @@ const CSSValue* MaybeConsumeCSSWideKeyword(CSSParserTokenRange& range) {
     value = CSSInheritedValue::Create();
   if (id == CSSValueID::kUnset)
     value = cssvalue::CSSUnsetValue::Create();
+  if (RuntimeEnabledFeatures::CSSRevertEnabled() && id == CSSValueID::kRevert)
+    value = cssvalue::CSSRevertValue::Create();
 
   if (value)
     range = local_range;
@@ -76,8 +79,7 @@ bool CSSPropertyParser::ParseValue(
   bool parse_success;
   if (rule_type == StyleRule::kViewport) {
     parse_success =
-        (RuntimeEnabledFeatures::CSSViewportEnabled() ||
-         IsUASheetBehavior(context->Mode())) &&
+        IsUASheetBehavior(context->Mode()) &&
         parser.ParseViewportDescriptor(resolved_property, important);
   } else if (rule_type == StyleRule::kFontFace) {
     parse_success = parser.ParseFontFaceDescriptor(resolved_property);
@@ -120,7 +122,7 @@ bool CSSPropertyParser::ParseValueStart(CSSPropertyID unresolved_property,
   CSSParserTokenRange original_range = range_;
   CSSPropertyID property_id = resolveCSSPropertyID(unresolved_property);
   const CSSProperty& property = CSSProperty::Get(property_id);
-  // If a CSSPropertyID is only a known descriptor (@fontface, @viewport), not a
+  // If a CSSPropertyID is only a known descriptor (@fontface, @property), not a
   // style property, it will not be a valid declaration.
   if (!property.IsProperty())
     return false;
@@ -331,8 +333,7 @@ static CSSValue* ConsumeSingleViewportDescriptor(
 
 bool CSSPropertyParser::ParseViewportDescriptor(CSSPropertyID prop_id,
                                                 bool important) {
-  DCHECK(RuntimeEnabledFeatures::CSSViewportEnabled() ||
-         IsUASheetBehavior(context_->Mode()));
+  DCHECK(IsUASheetBehavior(context_->Mode()));
 
   switch (prop_id) {
     case CSSPropertyID::kWidth: {

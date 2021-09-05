@@ -18,7 +18,7 @@ import "ui/gfx/mojom/transform.mojom";
 //
 
 // Note on terminology: unless otherwise noted, all poses passed across mojo are
-// expressed in device space, aka mojo space.
+// expressed in device space, aka mojo space, aka world space.
 
 // TODO(https://crbug.com/966099): Use EnableIf to only define values on
 // platforms that have implementations.
@@ -56,9 +56,10 @@ enum XRSessionFeature {
   REF_SPACE_BOUNDED_FLOOR = 4,
   REF_SPACE_UNBOUNDED = 5,
 
-  // Experimental or not-yet-standardized feature names.
   DOM_OVERLAY = 6,
   HIT_TEST = 7,
+  LIGHT_ESTIMATION = 8, // Experimental feature.
+  ANCHORS = 9,  // Experimental feature.
 };
 
 // These values are persisted to logs. Entries should not be renumbered and
@@ -376,7 +377,9 @@ struct XRPlaneData {
   // Pose of the plane's center. Defines new coordinate space.
   // Y axis of the coordinate space describes plane's normal, the rotation of
   // X and Z around the Y axis is arbitrary.
-  Pose pose;
+  // Null if the device does not know where the plane is located in the world
+  // space (tracking loss), but the tracking can still be recovered.
+  Pose? mojo_from_plane;
 
   // Vertices of 2D convex polygon approximating the plane.
   array<XRPlanePointData> polygon;
@@ -405,8 +408,10 @@ struct XRAnchorData {
   // Unique (within a session) identifier of the anchor.
   uint64 id;
 
-  // Pose of the anchor.
-  Pose pose;
+  // Pose of the anchor. Null if the device does not know where the anchor is
+  // located in the world space (tracking loss), but the tracking can still be
+  // recovered.
+  Pose? mojo_from_anchor;
 };
 
 // Struct containing information about all tracked & updated anchors in a given
@@ -603,15 +608,38 @@ struct XRFrameData {
   XRHitTestSubscriptionResultsData? hit_test_subscription_results;
 };
 
+// Used primarily in logging to indicate why a session was rejecting to aid
+// developer debuggability. To this end, rather than re-using an existing enum
+// value, if it doesn't match your error case, a new value should be added.
+// Note that this is converted to a console log, and thus the numbers can still
+// be re-arranged as needed (e.g. if a value should be removed).
 enum RequestSessionError {
-  ORIGIN_NOT_SECURE = 1,
-  EXISTING_IMMERSIVE_SESSION = 2,
-  INVALID_CLIENT = 3,
-  USER_DENIED_CONSENT = 4,
-  NO_RUNTIME_FOUND = 5,
-  UNKNOWN_RUNTIME_ERROR = 6,
-  RUNTIME_INSTALL_FAILURE = 7,
-  UNKNOWN_FAILURE = 8,
+  // Indicates that another session is already using the hardware that a new
+  // session would need exclusive control over.
+  EXISTING_IMMERSIVE_SESSION = 1,
+  // Used to indicate that something happened to the connection between either
+  // renderer and browser or browser and device processes, and thus a session
+  // could not be brokered.
+  INVALID_CLIENT = 2,
+  // The user denied consent for one or more required features in the session
+  // configuration (or the mode).
+  USER_DENIED_CONSENT = 3,
+  // No runtime was present which supported both the requested mode and all
+  // required features.
+  NO_RUNTIME_FOUND = 4,
+  // The runtime could not successfully create a session.
+  UNKNOWN_RUNTIME_ERROR = 5,
+  // The runtime requires additional installation which could not be completed.
+  RUNTIME_INSTALL_FAILURE = 6,
+  // While processing/creating a session the "best fit" runtime changed (either
+  // a better runtime was added or the only supported runtime was removed).
+  RUNTIMES_CHANGED = 7,
+  // Something prevented the session from entering fullscreen, which was
+  // required by part of the session configuration.
+  FULLSCREEN_ERROR = 8,
+  // We are unable to determine why the request failed. This should be used very
+  // sparingly, (e.g. Crashes, destructors, etc.)
+  UNKNOWN_FAILURE = 9,
 };
 
 struct RequestSessionSuccess {
@@ -745,8 +773,10 @@ interface XREnvironmentIntegrationProvider {
   // Issues a request to create an anchor attached to a session.
   // |result| will contain status code of the request. |anchor_id| will be valid
   // only if the |result| is SUCCESS.
-  CreateAnchor(Pose anchor_pose) => (CreateAnchorResult result,
-                                     uint64 anchor_id);
+  CreateAnchor(
+    XRNativeOriginInformation native_origin_information,
+    Pose native_origin_from_anchor)
+      => (CreateAnchorResult result, uint64 anchor_id);
   // TODO(https://crbug.com/657632): Switch anchor_id to nullable integer once
   // that's available. This will allow us to remove CreateAnchorResult if we're
   // not interested in obtaining detailed error information from the device.
@@ -754,7 +784,7 @@ interface XREnvironmentIntegrationProvider {
   // Issues a request to create an anchor attached to a plane.
   // |result| will contain status code of the request. |anchor_id| will be valid
   // only if the |result| is SUCCESS.
-  CreatePlaneAnchor(Pose anchor_pose, uint64 plane_id) =>
+  CreatePlaneAnchor(Pose plane_from_anchor, uint64 plane_id) =>
     (CreateAnchorResult result, uint64 anchor_id);
   // TODO(https://crbug.com/657632): Ditto - make anchor_id a nullable integer..
 

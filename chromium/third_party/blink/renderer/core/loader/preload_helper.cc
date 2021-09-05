@@ -122,7 +122,7 @@ KURL GetBestFitImageURL(const Document& document,
                         const String& image_srcset,
                         const String& image_sizes) {
   float source_size = SizesAttributeParser(media_values, image_sizes,
-                                           document.ToExecutionContext())
+                                           document.GetExecutionContext())
                           .length();
   ImageCandidate candidate = BestFitSourceForImageAttributes(
       media_values->DevicePixelRatio(), source_size, href, image_srcset);
@@ -280,7 +280,7 @@ Resource* PreloadHelper::PreloadIfNeeded(
     if (!media_values)
       media_values = CreateMediaValues(document, viewport_description);
     if (!MediaMatches(params.media, media_values,
-                      document.ToExecutionContext()))
+                      document.GetExecutionContext()))
       return nullptr;
   }
 
@@ -328,6 +328,8 @@ Resource* PreloadHelper::PreloadIfNeeded(
   }
 
   const String& integrity_attr = params.integrity;
+  // A corresponding check for the preload-scanner code path is in
+  // TokenPreloadScanner::StartTagScanner::CreatePreloadRequest().
   // TODO(crbug.com/981419): Honor the integrity attribute value for all
   // supported preload destinations, not just the destinations that support SRI
   // in the first place.
@@ -338,7 +340,7 @@ Resource* PreloadHelper::PreloadIfNeeded(
       SubresourceIntegrity::ParseIntegrityAttribute(
           integrity_attr,
           SubresourceIntegrityHelper::GetFeatures(
-              document.ToExecutionContext()),
+              document.GetExecutionContext()),
           metadata_set);
       link_fetch_params.SetIntegrityMetadata(metadata_set);
       link_fetch_params.MutableResourceRequest().SetFetchIntegrity(
@@ -393,9 +395,9 @@ void PreloadHelper::ModulePreloadIfNeeded(
   // settings object." [spec text]
   // |document| is the node document here, and its context document is the
   // relevant settings object.
-  Document* context_document = document.ContextDocument();
+  LocalDOMWindow* window = To<LocalDOMWindow>(document.GetExecutionContext());
   Modulator* modulator =
-      Modulator::From(ToScriptStateForMainWorld(context_document->GetFrame()));
+      Modulator::From(ToScriptStateForMainWorld(window->GetFrame()));
   DCHECK(modulator);
   if (!modulator)
     return;
@@ -444,7 +446,7 @@ void PreloadHelper::ModulePreloadIfNeeded(
     MediaValues* media_values =
         CreateMediaValues(document, viewport_description);
     if (!MediaMatches(params.media, media_values,
-                      document.ToExecutionContext()))
+                      document.GetExecutionContext()))
       return;
   }
 
@@ -462,11 +464,11 @@ void PreloadHelper::ModulePreloadIfNeeded(
   IntegrityMetadataSet integrity_metadata;
   if (!params.integrity.IsEmpty()) {
     SubresourceIntegrity::IntegrityFeatures integrity_features =
-        SubresourceIntegrityHelper::GetFeatures(document.ToExecutionContext());
+        SubresourceIntegrityHelper::GetFeatures(document.GetExecutionContext());
     SubresourceIntegrity::ReportInfo report_info;
     SubresourceIntegrity::ParseIntegrityAttribute(
         params.integrity, integrity_features, integrity_metadata, &report_info);
-    SubresourceIntegrityHelper::DoReport(*document.ToExecutionContext(),
+    SubresourceIntegrityHelper::DoReport(*document.GetExecutionContext(),
                                          report_info);
   }
 
@@ -490,7 +492,7 @@ void PreloadHelper::ModulePreloadIfNeeded(
   // destination, options, settings object, "client", and with the top-level
   // module fetch flag set. Wait until algorithm asynchronously completes with
   // result." [spec text]
-  modulator->FetchSingle(request, context_document->Fetcher(),
+  modulator->FetchSingle(request, window->Fetcher(),
                          ModuleGraphLevel::kDependentModuleFetch,
                          ModuleScriptCustomFetchType::kNone, client);
 
@@ -515,17 +517,14 @@ Resource* PreloadHelper::PrefetchIfNeeded(const LinkLoadParameters& params,
 
     ResourceRequest resource_request(params.href);
 
-    if (base::FeatureList::IsEnabled(
-            network::features::kPrefetchMainResourceNetworkIsolationKey)) {
-      if (EqualIgnoringASCIICase(params.as, "document"))
-        resource_request.SetPrefetchMaybeForTopLevelNavigation(true);
+    if (EqualIgnoringASCIICase(params.as, "document"))
+      resource_request.SetPrefetchMaybeForTopLevelNavigation(true);
 
-      // If this request was originally a preload header on a prefetch response,
-      // it may have a recursive prefetch token, used by the browser process to
-      // ensure this request is cached correctly.
-      resource_request.SetRecursivePrefetchToken(
-          params.recursive_prefetch_token);
-    }
+    // This request could have originally been a preload header on a prefetch
+    // response, that was promoted to a prefetch request by LoadLinksFromHeader.
+    // In that case, it may have a recursive prefetch token used by the browser
+    // process to ensure this request is cached correctly. Propagate it.
+    resource_request.SetRecursivePrefetchToken(params.recursive_prefetch_token);
 
     resource_request.SetReferrerPolicy(params.referrer_policy);
     resource_request.SetFetchImportanceMode(

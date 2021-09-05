@@ -2,10 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'chrome://new-tab-page/fakebox.js';
-
-import {BrowserProxy} from 'chrome://new-tab-page/browser_proxy.js';
-import {down} from 'chrome://resources/polymer/v3_0/iron-test-helpers/mock-interactions.js';
+import {BrowserProxy} from 'chrome://new-tab-page/new_tab_page.js';
 import {assertNotStyle, assertStyle, createTestProxy, NONE_ANIMATION} from 'chrome://test/new_tab_page/test_support.js';
 import {eventToPromise} from 'chrome://test/test_util.m.js';
 
@@ -88,7 +85,7 @@ suite('NewTabPageFakeboxTest', () => {
 
   test('on mouse down focuses omnibox', async () => {
     // Act.
-    down(fakebox.$.input);
+    fakebox.$.input.dispatchEvent(new PointerEvent('pointerdown'));
 
     // Assert.
     await testProxy.handler.whenCalled('focusOmnibox');

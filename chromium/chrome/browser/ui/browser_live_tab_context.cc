@@ -143,7 +143,7 @@ sessions::LiveTab* BrowserLiveTabContext::AddRestoredTab(
     bool pin,
     bool from_last_session,
     const sessions::PlatformSpecificTabData* tab_platform_data,
-    const std::string& user_agent_override,
+    const sessions::SerializedUserAgentOverride& user_agent_override,
     const std::string& ext_data) {
   SessionStorageNamespace* storage_namespace =
       tab_platform_data
@@ -209,7 +209,7 @@ sessions::LiveTab* BrowserLiveTabContext::ReplaceRestoredTab(
     bool from_last_session,
     const std::string& extension_app_id,
     const sessions::PlatformSpecificTabData* tab_platform_data,
-    const std::string& user_agent_override,
+    const sessions::SerializedUserAgentOverride& user_agent_override,
     const std::string& ext_data) {
   SessionStorageNamespace* storage_namespace =
       tab_platform_data

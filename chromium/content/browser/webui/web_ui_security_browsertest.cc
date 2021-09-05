@@ -8,6 +8,7 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/frame_host/frame_tree_node.h"
@@ -18,7 +19,9 @@
 #include "content/public/browser/web_ui_controller.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/bindings_policy.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_paths.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
@@ -448,16 +451,15 @@ IN_PROC_BROWSER_TEST_F(WebUISecurityTest,
       "})();";
   {
     GURL untrusted_url(GetChromeUntrustedUIURL("test-host/script.js"));
-    auto console_delegate = std::make_unique<ConsoleObserverDelegate>(
-        shell()->web_contents(),
+    WebContentsConsoleObserver console_observer(shell()->web_contents());
+    console_observer.SetPattern(
         "Fetch API cannot load " + untrusted_url.spec() +
-            ". URL scheme must be \"http\" or \"https\" for CORS request.");
-    shell()->web_contents()->SetDelegate(console_delegate.get());
+        ". URL scheme must be \"http\" or \"https\" for CORS request.");
 
     EXPECT_EQ("Failed to fetch",
               EvalJs(shell(), JsReplace(kFetchRequestScript, untrusted_url),
                      EXECUTE_SCRIPT_DEFAULT_OPTIONS, 1 /* world_id */));
-    console_delegate->Wait();
+    console_observer.Wait();
   }
 }
 
@@ -487,18 +489,17 @@ IN_PROC_BROWSER_TEST_F(WebUISecurityTest, DisallowXHRRequestToChromeUntrusted) {
     GURL untrusted_url(GetChromeUntrustedUIURL("test-host/script.js"));
     const std::string host = web_url.GetOrigin().spec();
 
-    auto console_delegate = std::make_unique<ConsoleObserverDelegate>(
-        shell()->web_contents(),
+    WebContentsConsoleObserver console_observer(shell()->web_contents());
+    console_observer.SetPattern(
         "Access to XMLHttpRequest at '" + untrusted_url.spec() +
-            "' from origin '" + host.substr(0, host.length() - 1) +
-            "' has been blocked by CORS policy: Cross origin requests are only "
-            "supported for protocol schemes: http, data, chrome, https.");
+        "' from origin '" + host.substr(0, host.length() - 1) +
+        "' has been blocked by CORS policy: Cross origin requests are only "
+        "supported for protocol schemes: http, data, chrome, https.");
 
-    shell()->web_contents()->SetDelegate(console_delegate.get());
     EXPECT_EQ("Request failed",
               EvalJs(shell(), JsReplace(kXHRRequest, untrusted_url),
                      EXECUTE_SCRIPT_DEFAULT_OPTIONS, 1 /* world_id */));
-    console_delegate->Wait();
+    console_observer.Wait();
   }
 }
 
@@ -533,6 +534,47 @@ IN_PROC_BROWSER_TEST_F(WebUISecurityTest,
     EXPECT_EQ("Load failed",
               EvalJs(shell(), JsReplace(kLoadResourceScript, untrusted_url),
                      EXECUTE_SCRIPT_DEFAULT_OPTIONS, 1 /* world_id */));
+  }
+}
+
+class WebUISecurityTestWithWebUIReportOnlyTrustedTypesEnabled
+    : public WebUISecurityTest {
+ public:
+  WebUISecurityTestWithWebUIReportOnlyTrustedTypesEnabled() {
+    feature_list_.InitAndEnableFeature(features::kWebUIReportOnlyTrustedTypes);
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+// Verify Report-Only Trusted Types won't block assignment to a dangerous sink,
+// but logs warning
+IN_PROC_BROWSER_TEST_F(WebUISecurityTestWithWebUIReportOnlyTrustedTypesEnabled,
+                       DoNotBlockSinkAssignmentOnReportOnlyTrustedTypes) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL test_url(GetWebUIURL("web-ui/title1.html"));
+
+  EXPECT_TRUE(NavigateToURL(shell(), test_url));
+
+  const char kDangerousSinkUse[] =
+      "(() => {"
+      "  try {"
+      "    document.body.innerHTML = 1;"
+      "    return 'Assignment succeeded';"
+      "  } catch(e) {"
+      "    throw 'Assignment should have succeeded';"
+      "  }"
+      "})();";
+  {
+    WebContentsConsoleObserver console_observer(shell()->web_contents());
+    console_observer.SetPattern(
+        "[Report Only] This document requires 'TrustedHTML' assignment.");
+
+    EXPECT_EQ("Assignment succeeded",
+              EvalJs(shell(), kDangerousSinkUse, EXECUTE_SCRIPT_DEFAULT_OPTIONS,
+                     1 /* world_id */));
+    console_observer.Wait();
   }
 }
 

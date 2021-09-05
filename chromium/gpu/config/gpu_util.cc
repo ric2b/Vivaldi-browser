@@ -18,6 +18,7 @@
 
 #include "base/base_paths.h"
 #include "base/command_line.h"
+#include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
@@ -37,7 +38,7 @@
 #include "gpu/config/gpu_preferences.h"
 #include "gpu/config/gpu_switches.h"
 #include "gpu/vulkan/buildflags.h"
-#include "third_party/vulkan/include/vulkan/vulkan.h"
+#include "third_party/vulkan_headers/include/vulkan/vulkan.h"
 #include "ui/gfx/extension_set.h"
 #include "ui/gl/buildflags.h"
 #include "ui/gl/gl_switches.h"
@@ -55,7 +56,7 @@ namespace gpu {
 namespace {
 
 #if defined(OS_WIN)
-// These values are persisted to logs. Entries should not be renumbered and
+// These values are persistent to logs. Entries should not be renumbered and
 // numeric values should never be reused.
 // This should match enum D3D11FeatureLevel in
 //  \tools\metrics\histograms\enums.xml
@@ -537,7 +538,14 @@ GpuFeatureInfo ComputeGpuFeatureInfo(const GPUInfo& gpu_info,
     std::string use_gl = command_line->GetSwitchValueASCII(switches::kUseGL);
     if (use_gl == gl::kGLImplementationSwiftShaderName)
       use_swift_shader = true;
-    else if (use_gl == gl::kGLImplementationSwiftShaderForWebGLName)
+    else if (use_gl == gl::kGLImplementationANGLEName) {
+      if (command_line->HasSwitch(switches::kUseANGLE)) {
+        std::string use_angle =
+            command_line->GetSwitchValueASCII(switches::kUseANGLE);
+        if (use_angle == gl::kANGLEImplementationSwiftShaderName)
+          use_swift_shader = true;
+      }
+    } else if (use_gl == gl::kGLImplementationSwiftShaderForWebGLName)
       return ComputeGpuFeatureInfoForSwiftShader();
     else if (use_gl == gl::kGLImplementationDisabledName)
       return ComputeGpuFeatureInfoWithNoGpu();
@@ -688,6 +696,8 @@ void SetKeysForCrashLogging(const GPUInfo& gpu_info) {
   crash_keys::gpu_driver_version.Set(active_gpu.driver_version);
   crash_keys::gpu_pixel_shader_version.Set(gpu_info.pixel_shader_version);
   crash_keys::gpu_vertex_shader_version.Set(gpu_info.vertex_shader_version);
+  crash_keys::gpu_generation_intel.Set(
+      base::StringPrintf("%d", GetIntelGpuGeneration(gpu_info)));
 #if defined(OS_MACOSX)
   crash_keys::gpu_gl_version.Set(gpu_info.gl_version);
 #elif defined(OS_POSIX)
@@ -798,36 +808,36 @@ IntelGpuSeriesType GetIntelGpuSeriesType(uint32_t vendor_id,
   // and we don't want to expose an extra bit other than the already recorded
   // vendor_id and device_id.
   if (vendor_id == 0x8086) {  // Intel
-    // We only identify Intel 6th gen or newer.
-    // The device id can be referred to in the following locations:
-    // https://en.wikipedia.org/wiki/List_of_Intel_graphics_processing_units
-    // and the heade files in Mesa sources:
-    // include/pci_ids/i965_pci_ids.h
+    // The device IDs of Intel GPU are based on following Mesa source files:
+    // include/pci_ids/i965_pci_ids.h and iris_pci_ids.h
     uint32_t masked_device_id = device_id & 0xFF00;
     switch (masked_device_id) {
-      case 0x0100:
-        switch (device_id & 0xFFF0) {
-          case 0x0100:
-          case 0x0110:
-          case 0x0120:
-            return IntelGpuSeriesType::kSandybridge;
-          case 0x0150:
-            if (device_id == 0x0155 || device_id == 0x0157)
-              return IntelGpuSeriesType::kBaytrail;
-            if (device_id == 0x0152 || device_id == 0x015A
-                || device_id == 0x0156)
-              return IntelGpuSeriesType::kIvybridge;
-            break;
-          case 0x0160:
-            return IntelGpuSeriesType::kIvybridge;
-          default:
-            break;
-        }
+      case 0x2900:
+        return IntelGpuSeriesType::kBroadwater;
+      case 0x2A00:
+        if (device_id == 0x2A02 || device_id == 0x2A12)
+          return IntelGpuSeriesType::kBroadwater;
+        if (device_id == 0x2A42)
+          return IntelGpuSeriesType::kEaglelake;
         break;
+      case 0x2E00:
+        return IntelGpuSeriesType::kEaglelake;
+      case 0x0000:
+        return IntelGpuSeriesType::kIronlake;
+      case 0x0100:
+        if (device_id == 0x0152 || device_id == 0x0156 || device_id == 0x015A ||
+            device_id == 0x0162 || device_id == 0x0166 || device_id == 0x016A)
+          return IntelGpuSeriesType::kIvybridge;
+        if (device_id == 0x0155 || device_id == 0x0157)
+          return IntelGpuSeriesType::kBaytrail;
+        return IntelGpuSeriesType::kSandybridge;
       case 0x0F00:
         return IntelGpuSeriesType::kBaytrail;
-      case 0x0400:
       case 0x0A00:
+        if (device_id == 0x0A84)
+          return IntelGpuSeriesType::kApollolake;
+        return IntelGpuSeriesType::kHaswell;
+      case 0x0400:
       case 0x0C00:
       case 0x0D00:
         return IntelGpuSeriesType::kHaswell;
@@ -841,6 +851,8 @@ IntelGpuSeriesType GetIntelGpuSeriesType(uint32_t vendor_id,
         return IntelGpuSeriesType::kCannonlake;
       case 0x1900:
         return IntelGpuSeriesType::kSkylake;
+      case 0x1A00:
+        return IntelGpuSeriesType::kApollolake;
       case 0x3100:
         return IntelGpuSeriesType::kGeminilake;
       case 0x5900:
@@ -860,6 +872,12 @@ IntelGpuSeriesType GetIntelGpuSeriesType(uint32_t vendor_id,
         return IntelGpuSeriesType::kCometlake;
       case 0x8A00:
         return IntelGpuSeriesType::kIcelake;
+      case 0x4500:
+        return IntelGpuSeriesType::kElkhartlake;
+      case 0x4E00:
+        return IntelGpuSeriesType::kJasperlake;
+      case 0x9A00:
+        return IntelGpuSeriesType::kTigerlake;
       default:
         break;
     }
@@ -871,6 +889,11 @@ std::string GetIntelGpuGeneration(uint32_t vendor_id, uint32_t device_id) {
   if (vendor_id == 0x8086) {
     IntelGpuSeriesType gpu_series = GetIntelGpuSeriesType(vendor_id, device_id);
     switch (gpu_series) {
+      case IntelGpuSeriesType::kBroadwater:
+      case IntelGpuSeriesType::kEaglelake:
+        return "4";
+      case IntelGpuSeriesType::kIronlake:
+        return "5";
       case IntelGpuSeriesType::kSandybridge:
         return "6";
       case IntelGpuSeriesType::kBaytrail:
@@ -891,7 +914,11 @@ std::string GetIntelGpuGeneration(uint32_t vendor_id, uint32_t device_id) {
       case IntelGpuSeriesType::kCannonlake:
         return "10";
       case IntelGpuSeriesType::kIcelake:
+      case IntelGpuSeriesType::kElkhartlake:
+      case IntelGpuSeriesType::kJasperlake:
         return "11";
+      case IntelGpuSeriesType::kTigerlake:
+        return "12";
       default:
         break;
     }
@@ -996,18 +1023,18 @@ std::string VulkanVersionToString(uint32_t vulkan_version) {
 #endif  // OS_WIN
 
 VulkanVersion ConvertToHistogramVulkanVersion(uint32_t vulkan_version) {
-  switch (vulkan_version) {
-    case 0:
-      return VulkanVersion::kVulkanVersionUnknown;
-    case VK_MAKE_VERSION(1, 0, 0):
-      return VulkanVersion::kVulkanVersion_1_0_0;
-    case VK_MAKE_VERSION(1, 1, 0):
-      return VulkanVersion::kVulkanVersion_1_1_0;
-    case VK_MAKE_VERSION(1, 2, 0):
-      return VulkanVersion::kVulkanVersion_1_2_0;
-    default:
-      NOTREACHED();
-      return VulkanVersion::kVulkanVersionUnknown;
+  if (vulkan_version < VK_MAKE_VERSION(1, 0, 0))
+    return VulkanVersion::kVulkanVersionUnknown;
+  else if (vulkan_version < VK_MAKE_VERSION(1, 1, 0))
+    return VulkanVersion::kVulkanVersion_1_0_0;
+  else if (vulkan_version < VK_MAKE_VERSION(1, 2, 0))
+    return VulkanVersion::kVulkanVersion_1_1_0;
+  else if (vulkan_version < VK_MAKE_VERSION(1, 3, 0))
+    return VulkanVersion::kVulkanVersion_1_2_0;
+  else {
+    // Need to add 1.3.0+ to enum VulkanVersion.
+    NOTREACHED();
+    return VulkanVersion::kVulkanVersion_1_2_0;
   }
 }
 

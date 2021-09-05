@@ -43,7 +43,6 @@
 #include "third_party/blink/public/mojom/input/pointer_lock_result.mojom-forward.h"
 #include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/public/platform/web_drag_operation.h"
-#include "third_party/blink/public/platform/web_intrinsic_sizing_info.h"
 #include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_screen_info.h"
 #include "third_party/blink/public/platform/web_touch_action.h"
@@ -83,10 +82,6 @@ class WebWidgetClient {
   // a synchronous composite.
   virtual void ScheduleAnimation() {}
 
-  // A notification callback for when the intrinsic sizing of the
-  // widget changed. This is only called for SVG within a remote frame.
-  virtual void IntrinsicSizingInfoChanged(const WebIntrinsicSizingInfo&) {}
-
   // Called immediately following the first compositor-driven (frame-generating)
   // layout that happened after an interesting document lifecyle change (see
   // WebMeaningfulLayout for details.)
@@ -94,10 +89,6 @@ class WebWidgetClient {
 
   // Called when the cursor for the widget changes.
   virtual void DidChangeCursor(const ui::Cursor&) {}
-
-  virtual void AutoscrollStart(const gfx::PointF&) {}
-  virtual void AutoscrollFling(const gfx::Vector2dF& velocity) {}
-  virtual void AutoscrollEnd() {}
 
   // Called to show the widget according to the given policy.
   virtual void Show(WebNavigationPolicy) {}
@@ -173,9 +164,6 @@ class WebWidgetClient {
   // Called to update if pointerrawupdate events should be sent.
   virtual void SetHasPointerRawUpdateEventHandlers(bool) {}
 
-  // Called to update if touch events should be sent.
-  virtual void SetHasTouchEventHandlers(bool) {}
-
   // Called to update whether low latency input mode is enabled or not.
   virtual void SetNeedsLowLatencyInput(bool) {}
 
@@ -224,20 +212,6 @@ class WebWidgetClient {
                              const SkBitmap& drag_image,
                              const gfx::Point& drag_image_offset) {}
 
-  // Double tap zooms a rect in the main-frame renderer.
-  virtual void AnimateDoubleTapZoomInMainFrame(const gfx::Point& point,
-                                               const blink::WebRect& bounds) {}
-
-  // Find in page zooms a rect in the main-frame renderer.
-  virtual void ZoomToFindInPageRectInMainFrame(const blink::WebRect& rect) {}
-
-  // Used to call platform API for FallbackCursorMode.
-  virtual void FallbackCursorModeLockCursor(bool left,
-                                            bool right,
-                                            bool up,
-                                            bool down) {}
-  virtual void FallbackCursorModeSetCursorVisibility(bool visible) {}
-
   // Sets the current page scale factor and minimum / maximum limits. Both
   // limits are initially 1 (no page scale allowed).
   virtual void SetPageScaleStateAndLimits(float page_scale_factor,
@@ -255,22 +229,56 @@ class WebWidgetClient {
   virtual void RequestDecode(const cc::PaintImage& image,
                              base::OnceCallback<void(bool)> callback) {}
 
+  using LayerTreeFrameSinkCallback = base::OnceCallback<void(
+      std::unique_ptr<cc::LayerTreeFrameSink>,
+      std::unique_ptr<cc::RenderFrameMetadataObserver>)>;
+
+  // Requests a LayerTreeFrameSink to submit CompositorFrames to.
+  virtual void RequestNewLayerTreeFrameSink(
+      LayerTreeFrameSinkCallback callback) {}
 
   virtual viz::FrameSinkId GetFrameSinkId() {
     NOTREACHED();
     return viz::FrameSinkId();
   }
 
-  // Add a presentation callback. |callback| should be called when
-  // |frame_token| has been completely displayed by the compositor.
-  // |callback| should be run on the main thread.
-  virtual void AddPresentationCallback(
-      uint32_t frame_token,
-      base::OnceCallback<void(base::TimeTicks)> callback) {}
+  // Notification that the LayerTreeHost started or stopped deferring main frame
+  // updates.
+  virtual void OnDeferMainFrameUpdatesChanged(bool defer) {}
+
+  // Notification that the LayerTreeHost started or stopped deferring commits.
+  virtual void OnDeferCommitsChanged(bool defer) {}
+
+  // For more information on the sequence of when these callbacks are made
+  // consult cc/trees/layer_tree_host_client.h.
+
+  // Indicates that the compositor is about to begin a frame. This is primarily
+  // to signal to flow control mechanisms that a frame is beginning, not to
+  // perform actual painting work.
+  virtual void WillBeginMainFrame() {}
+
+  // Notification that the BeginMainFrame completed, was committed into the
+  // compositor (thread) and submitted to the display compositor.
+  virtual void DidCommitAndDrawCompositorFrame() {}
+
+  // Notification that page scale animation was changed.
+  virtual void DidCompletePageScaleAnimation() {}
+
+  // Notification that the output of a BeginMainFrame was committed to the
+  // compositor (thread), though would not be submitted to the display
+  // compositor yet (see DidCommitAndDrawCompositorFrame()).
+  virtual void DidCommitCompositorFrame(base::TimeTicks commit_start_time) {}
+
+  // Notifies that the layer tree host has completed a call to
+  // RequestMainFrameUpdate in response to a BeginMainFrame.
+  virtual void DidBeginMainFrame() {}
 
   // Record the time it took for the first paint after the widget transitioned
   // from background inactive to active.
   virtual void RecordTimeToFirstActivePaint(base::TimeDelta duration) {}
+
+  // Returns a scale of the device emulator from the widget.
+  virtual float GetEmulatorScale() const { return 1.0f; }
 };
 
 }  // namespace blink

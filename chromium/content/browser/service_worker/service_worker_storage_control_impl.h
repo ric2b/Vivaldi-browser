@@ -45,6 +45,9 @@ class CONTENT_EXPORT ServiceWorkerStorageControlImpl
   void FindRegistrationForId(int64_t registration_id,
                              const GURL& origin,
                              FindRegistrationForIdCallback callback) override;
+  void GetRegistrationsForOrigin(
+      const GURL& origin,
+      GetRegistrationsForOriginCallback callback) override;
   void StoreRegistration(
       storage::mojom::ServiceWorkerRegistrationDataPtr registration,
       std::vector<storage::mojom::ServiceWorkerResourceRecordPtr> resources,
@@ -52,11 +55,73 @@ class CONTENT_EXPORT ServiceWorkerStorageControlImpl
   void DeleteRegistration(int64_t registration_id,
                           const GURL& origin,
                           DeleteRegistrationCallback callback) override;
+  void UpdateToActiveState(int64_t registration_id,
+                           const GURL& origin,
+                           UpdateToActiveStateCallback callback) override;
+  void UpdateLastUpdateCheckTime(
+      int64_t registration_id,
+      const GURL& origin,
+      base::Time last_update_check_time,
+      UpdateLastUpdateCheckTimeCallback callback) override;
+  void UpdateNavigationPreloadEnabled(
+      int64_t registration_id,
+      const GURL& origin,
+      bool enable,
+      UpdateNavigationPreloadEnabledCallback callback) override;
+  void UpdateNavigationPreloadHeader(
+      int64_t registration_id,
+      const GURL& origin,
+      const std::string& value,
+      UpdateNavigationPreloadHeaderCallback callback) override;
+  void GetNewRegistrationId(GetNewRegistrationIdCallback callback) override;
+  void GetNewVersionId(GetNewVersionIdCallback callback) override;
   void GetNewResourceId(GetNewResourceIdCallback callback) override;
+  void CreateResourceReader(
+      int64_t resource_id,
+      mojo::PendingReceiver<storage::mojom::ServiceWorkerResourceReader> reader)
+      override;
   void CreateResourceWriter(
       int64_t resource_id,
       mojo::PendingReceiver<storage::mojom::ServiceWorkerResourceWriter> writer)
       override;
+  void CreateResourceMetadataWriter(
+      int64_t resource_id,
+      mojo::PendingReceiver<storage::mojom::ServiceWorkerResourceMetadataWriter>
+          writer) override;
+  void GetUserData(int64_t registration_id,
+                   const std::vector<std::string>& keys,
+                   GetUserDataCallback callback) override;
+  void StoreUserData(
+      int64_t registration_id,
+      const GURL& origin,
+      std::vector<storage::mojom::ServiceWorkerUserDataPtr> user_data,
+      StoreUserDataCallback callback) override;
+  void ClearUserData(int64_t registration_id,
+                     const std::vector<std::string>& keys,
+                     ClearUserDataCallback callback) override;
+  void GetUserDataByKeyPrefix(int64_t registration_id,
+                              const std::string& key_prefix,
+                              GetUserDataByKeyPrefixCallback callback) override;
+  void GetUserKeysAndDataByKeyPrefix(
+      int64_t registration_id,
+      const std::string& key_prefix,
+      GetUserKeysAndDataByKeyPrefixCallback callback) override;
+  void ClearUserDataByKeyPrefixes(
+      int64_t registration_id,
+      const std::vector<std::string>& key_prefixes,
+      ClearUserDataByKeyPrefixesCallback callback) override;
+  void GetUserDataForAllRegistrations(
+      const std::string& key,
+      GetUserDataForAllRegistrationsCallback callback) override;
+  void GetUserDataForAllRegistrationsByKeyPrefix(
+      const std::string& key_prefix,
+      GetUserDataForAllRegistrationsByKeyPrefixCallback callback) override;
+  void ClearUserDataForAllRegistrationsByKeyPrefix(
+      const std::string& key_prefix,
+      ClearUserDataForAllRegistrationsByKeyPrefixCallback callback) override;
+  void ApplyPolicyUpdates(
+      const std::vector<storage::mojom::LocalStoragePolicyUpdatePtr>
+          policy_updates) override;
 
   const std::unique_ptr<ServiceWorkerStorage> storage_;
 };

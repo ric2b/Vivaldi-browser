@@ -6,7 +6,12 @@
 
 #include "base/strings/string_number_conversions.h"
 #include "base/task/post_task.h"
+#include "chrome/browser/file_util_service.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
+#include "chrome/browser/safe_browsing/cloud_content_scanning/deep_scanning_utils.h"
+#include "chrome/common/safe_browsing/archive_analyzer_results.h"
+#include "chrome/services/file_util/public/cpp/sandboxed_rar_analyzer.h"
+#include "chrome/services/file_util/public/cpp/sandboxed_zip_analyzer.h"
 #include "crypto/secure_hash.h"
 #include "crypto/sha2.h"
 
@@ -86,12 +91,16 @@ GetFileDataBlocking(const base::FilePath& path) {
 
 }  // namespace
 
-FileSourceRequest::FileSourceRequest(base::FilePath path,
+FileSourceRequest::FileSourceRequest(bool block_unsupported_types,
+                                     base::FilePath path,
+                                     base::FilePath file_name,
                                      BinaryUploadService::Callback callback)
     : Request(std::move(callback)),
       has_cached_result_(false),
-      path_(std::move(path)) {
-  set_filename(path_.BaseName().AsUTF8Unsafe());
+      block_unsupported_types_(block_unsupported_types),
+      path_(std::move(path)),
+      file_name_(std::move(file_name)) {
+  set_filename(file_name_.AsUTF8Unsafe());
 }
 
 FileSourceRequest::~FileSourceRequest() = default;
@@ -113,10 +122,76 @@ void FileSourceRequest::OnGotFileData(
     DataCallback callback,
     std::pair<BinaryUploadService::Result, Data> result_and_data) {
   set_digest(result_and_data.second.hash);
+
+  if (result_and_data.first != BinaryUploadService::Result::SUCCESS) {
+    CacheResultAndData(result_and_data.first,
+                       std::move(result_and_data.second));
+    std::move(callback).Run(cached_result_, cached_data_);
+    return;
+  }
+
+  if (deep_scanning_request().has_dlp_scan_request() &&
+      !FileTypeSupportedForDlp(file_name_)) {
+    // Abort the request early if settings say to block unsupported types or if
+    // there was no malware request to be done, otherwise proceed with the
+    // malware request only.
+    if (block_unsupported_types_ ||
+        !deep_scanning_request().has_malware_scan_request()) {
+      CacheResultAndData(BinaryUploadService::Result::UNSUPPORTED_FILE_TYPE,
+                         std::move(result_and_data.second));
+      std::move(callback).Run(cached_result_, cached_data_);
+      return;
+    } else {
+      clear_dlp_scan_request();
+    }
+  }
+
+  base::FilePath::StringType ext(file_name_.FinalExtension());
+  std::transform(ext.begin(), ext.end(), ext.begin(), tolower);
+  if (ext == FILE_PATH_LITERAL(".zip")) {
+    auto analyzer = base::MakeRefCounted<SandboxedZipAnalyzer>(
+        path_,
+        base::BindOnce(&FileSourceRequest::OnCheckedForEncryption,
+                       weakptr_factory_.GetWeakPtr(), std::move(callback),
+                       std::move(result_and_data.second)),
+        LaunchFileUtilService());
+    analyzer->Start();
+  } else if (ext == FILE_PATH_LITERAL(".rar")) {
+    auto analyzer = base::MakeRefCounted<SandboxedRarAnalyzer>(
+        path_,
+        base::BindOnce(&FileSourceRequest::OnCheckedForEncryption,
+                       weakptr_factory_.GetWeakPtr(), std::move(callback),
+                       std::move(result_and_data.second)),
+        LaunchFileUtilService());
+    analyzer->Start();
+  } else {
+    CacheResultAndData(BinaryUploadService::Result::SUCCESS,
+                       std::move(result_and_data.second));
+    std::move(callback).Run(cached_result_, cached_data_);
+  }
+}
+
+void FileSourceRequest::OnCheckedForEncryption(
+    DataCallback callback,
+    Data data,
+    const ArchiveAnalyzerResults& analyzer_result) {
+  bool encrypted =
+      std::any_of(analyzer_result.archived_binary.begin(),
+                  analyzer_result.archived_binary.end(),
+                  [](const auto& binary) { return binary.is_encrypted(); });
+
+  BinaryUploadService::Result result =
+      encrypted ? BinaryUploadService::Result::FILE_ENCRYPTED
+                : BinaryUploadService::Result::SUCCESS;
+  CacheResultAndData(result, std::move(data));
+  std::move(callback).Run(cached_result_, cached_data_);
+}
+
+void FileSourceRequest::CacheResultAndData(BinaryUploadService::Result result,
+                                           Data data) {
   has_cached_result_ = true;
-  cached_result_ = result_and_data.first;
-  cached_data_ = result_and_data.second;
-  std::move(callback).Run(result_and_data.first, result_and_data.second);
+  cached_result_ = result;
+  cached_data_ = std::move(data);
 }
 
 }  // namespace safe_browsing

@@ -56,7 +56,6 @@ class VivaldiProfileSyncService : public syncer::ProfileSyncService {
           debug_info_listener,
       const std::string& birthday,
       const std::string& bag_of_chips,
-      const std::string& last_keystore_key,
       bool success) override;
 
   void OnClearDataComplete(scoped_refptr<net::HttpResponseHeaders> headers);

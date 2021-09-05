@@ -6,13 +6,13 @@
 
 #include <vector>
 
+#include "base/check.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
-#include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/user_metrics.h"
+#include "base/notreached.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/ui/signin_view_controller.h"
 #include "chrome/browser/ui/webui/signin/signin_email_confirmation_ui.h"
 #include "chrome/common/url_constants.h"
 #include "content/public/browser/host_zoom_map.h"
@@ -64,14 +64,12 @@ class SigninEmailConfirmationDialog::DialogWebContentsObserver
 };
 
 SigninEmailConfirmationDialog::SigninEmailConfirmationDialog(
-    SigninViewController* signin_view_controller,
     content::WebContents* contents,
     Profile* profile,
     const std::string& last_email,
     const std::string& new_email,
     Callback callback)
-    : signin_view_controller_(signin_view_controller),
-      web_contents_(contents),
+    : web_contents_(contents),
       profile_(profile),
       last_email_(last_email),
       new_email_(new_email),
@@ -82,7 +80,6 @@ SigninEmailConfirmationDialog::~SigninEmailConfirmationDialog() {}
 // static
 SigninEmailConfirmationDialog*
 SigninEmailConfirmationDialog::AskForConfirmation(
-    SigninViewController* signin_view_controller,
     content::WebContents* contents,
     Profile* profile,
     const std::string& last_email,
@@ -91,8 +88,7 @@ SigninEmailConfirmationDialog::AskForConfirmation(
   base::RecordAction(base::UserMetricsAction("Signin_Show_ImportDataPrompt"));
   // ShowDialog() will take care of ownership.
   SigninEmailConfirmationDialog* dialog = new SigninEmailConfirmationDialog(
-      signin_view_controller, contents, profile, last_email, email,
-      std::move(callback));
+      contents, profile, last_email, email, std::move(callback));
   dialog->ShowDialog();
   return dialog;
 }
@@ -204,10 +200,7 @@ void SigninEmailConfirmationDialog::OnDialogClosed(
     action = CLOSE;
   }
 
-  if (signin_view_controller_) {
-    signin_view_controller_->ResetModalSigninDelegate();
-    signin_view_controller_ = nullptr;
-  }
+  NotifyModalSigninClosed();
 
   if (callback_)
     std::move(callback_).Run(action);

@@ -25,6 +25,10 @@ const GURL& FakeScriptExecutorDelegate::GetDeeplinkURL() {
   return current_url_;
 }
 
+const GURL& FakeScriptExecutorDelegate::GetScriptURL() {
+  return current_url_;
+}
+
 Service* FakeScriptExecutorDelegate::GetService() {
   return service_;
 }
@@ -42,7 +46,7 @@ FakeScriptExecutorDelegate::GetPersonalDataManager() {
   return nullptr;
 }
 
-WebsiteLoginFetcher* FakeScriptExecutorDelegate::GetWebsiteLoginFetcher() {
+WebsiteLoginManager* FakeScriptExecutorDelegate::GetWebsiteLoginManager() {
   return nullptr;
 }
 
@@ -50,7 +54,7 @@ content::WebContents* FakeScriptExecutorDelegate::GetWebContents() {
   return nullptr;
 }
 
-std::string FakeScriptExecutorDelegate::GetAccountEmailAddress() {
+std::string FakeScriptExecutorDelegate::GetEmailAddressForAccessTokenAccount() {
   return std::string();
 }
 
@@ -122,6 +126,11 @@ void FakeScriptExecutorDelegate::WriteUserData(
   std::move(write_callback).Run(payment_request_info_.get(), &field_change);
 }
 
+void FakeScriptExecutorDelegate::WriteUserModel(
+    base::OnceCallback<void(UserModel*)> write_callback) {
+  std::move(write_callback).Run(user_model_);
+}
+
 void FakeScriptExecutorDelegate::SetViewportMode(ViewportMode mode) {
   viewport_mode_ = mode;
 }
@@ -161,11 +170,11 @@ void FakeScriptExecutorDelegate::RequireUI() {
   require_ui_ = true;
 }
 
-void FakeScriptExecutorDelegate::AddListener(Listener* listener) {
+void FakeScriptExecutorDelegate::AddListener(NavigationListener* listener) {
   listeners_.insert(listener);
 }
 
-void FakeScriptExecutorDelegate::RemoveListener(Listener* listener) {
+void FakeScriptExecutorDelegate::RemoveListener(NavigationListener* listener) {
   listeners_.erase(listener);
 }
 

@@ -53,7 +53,8 @@ import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.IntentHandler.IntentHandlerDelegate;
 import org.chromium.chrome.browser.IntentHandler.TabOpenType;
-import org.chromium.chrome.browser.appmenu.AppMenuPropertiesDelegateImpl;
+import org.chromium.chrome.browser.app.appmenu.AppMenuPropertiesDelegateImpl;
+import org.chromium.chrome.browser.app.flags.ChromeCachedFlags;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
 import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.bookmarks.BookmarkUtils;
@@ -73,7 +74,6 @@ import org.chromium.chrome.browser.dependency_injection.ChromeActivityComponent;
 import org.chromium.chrome.browser.dependency_injection.ModuleFactoryOverrides;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.dom_distiller.DomDistillerUIUtils;
-import org.chromium.chrome.browser.dom_distiller.ReaderModeManager;
 import org.chromium.chrome.browser.download.DownloadManagerService;
 import org.chromium.chrome.browser.download.DownloadUtils;
 import org.chromium.chrome.browser.download.items.OfflineContentAggregatorNotificationBridgeUiFactory;
@@ -110,13 +110,16 @@ import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper;
 import org.chromium.chrome.browser.omaha.UpdateMenuItemHelper.MenuButtonState;
 import org.chromium.chrome.browser.omaha.notification.UpdateNotificationController;
 import org.chromium.chrome.browser.omaha.notification.UpdateNotificationControllerFactory;
-import org.chromium.chrome.browser.page_info.PageInfoController;
+import org.chromium.chrome.browser.page_info.ChromePageInfoControllerDelegate;
+import org.chromium.chrome.browser.page_info.ChromePermissionParamsListBuilderDelegate;
+import org.chromium.chrome.browser.paint_preview.PaintPreviewInitializer;
 import org.chromium.chrome.browser.partnercustomizations.PartnerBrowserCustomizations;
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.PrefServiceBridge;
 import org.chromium.chrome.browser.printing.TabPrinter;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.SettingsLauncher;
+import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.share.ShareDelegateImpl;
 import org.chromium.chrome.browser.sync.ProfileSyncService;
@@ -134,6 +137,7 @@ import org.chromium.chrome.browser.tabmodel.EmptyTabModel;
 import org.chromium.chrome.browser.tabmodel.TabCreatorManager;
 import org.chromium.chrome.browser.tabmodel.TabModel;
 import org.chromium.chrome.browser.tabmodel.TabModelSelector;
+import org.chromium.chrome.browser.tabmodel.TabModelSelectorProfileSupplier;
 import org.chromium.chrome.browser.tabmodel.TabModelSelectorTabObserver;
 import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.browser.toolbar.ControlContainer;
@@ -163,6 +167,7 @@ import org.chromium.components.browser_ui.widget.MenuOrKeyboardActionController;
 import org.chromium.components.browser_ui.widget.textbubble.TextBubble;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.Tracker;
+import org.chromium.components.page_info.PageInfoController;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.browser.SelectionPopupController;
 import org.chromium.content_public.browser.WebContents;
@@ -211,14 +216,13 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
      */
     static final int NO_TOOLBAR_LAYOUT = -1;
 
-    /**
-     * Timeout in ms for reading PartnerBrowserCustomizations provider.
-     */
-    private static final int PARTNER_BROWSER_CUSTOMIZATIONS_TIMEOUT_MS = 10000;
-
     private C mComponent;
 
     protected ObservableSupplierImpl<TabModelSelector> mTabModelSelectorSupplier =
+            new ObservableSupplierImpl<>();
+    protected ObservableSupplier<Profile> mTabModelProfileSupplier =
+            new TabModelSelectorProfileSupplier(mTabModelSelectorSupplier);
+    protected ObservableSupplierImpl<BookmarkBridge> mBookmarkBridgeSupplier =
             new ObservableSupplierImpl<>();
     private TabModelSelector mTabModelSelector;
     private TabModelSelectorTabObserver mTabModelSelectorTabObserver;
@@ -259,7 +263,6 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
             new ObservableSupplierImpl<>();
     private InsetObserverView mInsetObserverView;
     private ContextualSearchManager mContextualSearchManager;
-    protected ReaderModeManager mReaderModeManager;
     private SnackbarManager mSnackbarManager;
 
     private UpdateNotificationController mUpdateNotificationController;
@@ -327,6 +330,13 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         // onPreInflationStartup event.
         mComponent = createComponent();
 
+        // There's no corresponding call to removeObserver() for this addObserver() because
+        // mTabModelProfileSupplier has the same lifecycle as this activity.
+        mTabModelProfileSupplier.addObserver((profile) -> {
+            BookmarkBridge oldBridge = mBookmarkBridgeSupplier.get();
+            if (oldBridge != null) oldBridge.destroy();
+            mBookmarkBridgeSupplier.set(profile == null ? null : new BookmarkBridge(profile));
+        });
         // Make sure the root coordinator is created prior to calling super to ensure all the
         // activity lifecycle events are called.
         mRootUiCoordinator = createRootUiCoordinator();
@@ -360,8 +370,8 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         // to the RootUiCoordinator, passing the activity is an easy way to get access to a
         // number of objects that will ultimately be owned by the RootUiCoordinator. This is not
         // a recommended pattern.
-        return new RootUiCoordinator(
-                this, null, getShareDelegateSupplier(), getActivityTabProvider());
+        return new RootUiCoordinator(this, null, getShareDelegateSupplier(),
+                getActivityTabProvider(), mTabModelProfileSupplier, mBookmarkBridgeSupplier);
     }
 
     private C createComponent() {
@@ -458,6 +468,9 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
 
     @Override
     protected void initializeStartupMetrics() {
+        // Initialize the activity session tracker as early as possible so that
+        // it can start background tasks.
+        ChromeActivitySessionTracker.getInstance();
         mActivityTabStartupMetricsTracker =
                 new ActivityTabStartupMetricsTracker(mTabModelSelectorSupplier);
     }
@@ -606,7 +619,7 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         mIncognitoTabCreator = tabCreators.second;
 
         OfflinePageUtils.observeTabModelSelector(this, mTabModelSelector);
-        NewTabPageUma.monitorNTPCreation(mTabModelSelector);
+        PaintPreviewInitializer.observeTabModelSelector(this, mTabModelSelector);
 
         if (mTabModelSelectorTabObserver != null) mTabModelSelectorTabObserver.destroy();
 
@@ -688,7 +701,7 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
     public AppMenuPropertiesDelegate createAppMenuPropertiesDelegate() {
         return new AppMenuPropertiesDelegateImpl(this, getActivityTabProvider(),
                 getMultiWindowModeStateDispatcher(), getTabModelSelector(), getToolbarManager(),
-                getWindow().getDecorView(), null, getToolbarManager().getBookmarkBridgeSupplier());
+                getWindow().getDecorView(), null, mBookmarkBridgeSupplier);
     }
 
     /**
@@ -753,10 +766,6 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
             mContextualSearchManager = new ContextualSearchManager(this, this);
         }
 
-        if (ReaderModeManager.isEnabled(this)) {
-            mReaderModeManager = new ReaderModeManager(getTabModelSelector(), this);
-        }
-
         TraceEvent.end("ChromeActivity:CompositorInitialization");
     }
 
@@ -787,29 +796,47 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         return getActivityTab() == null || !getActivityTab().isLoading();
     }
 
+    private void onActivityShown() {
+        maybeRemoveWindowBackground();
+
+        Tab tab = getActivityTab();
+        if (tab != null) {
+            if (tab.isHidden()) {
+                tab.show(TabSelectionType.FROM_USER);
+            } else {
+                // The visible Tab's renderer process may have died after the activity was
+                // paused. Ensure that it's restored appropriately.
+                tab.loadIfNeeded();
+            }
+        }
+        VrModuleProvider.getDelegate().onActivityShown(this);
+    }
+
+    private void onActivityHidden() {
+        VrModuleProvider.getDelegate().onActivityHidden(this);
+
+        Tab tab = getActivityTab();
+        if (mTabModelSelector != null && !mTabModelSelector.isReparentingInProgress()
+                && tab != null) {
+            tab.hide(TabHidingType.ACTIVITY_HIDDEN);
+        }
+    }
+
+    private boolean useWindowFocusForVisibility() {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.Q;
+    }
+
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
 
-        maybeRemoveWindowBackground();
-
-        Tab tab = getActivityTab();
-        if (hasFocus) {
-            if (tab != null) {
-                if (tab.isHidden()) {
-                    tab.show(TabSelectionType.FROM_USER);
-                } else {
-                    // The visible Tab's renderer process may have died after the activity was
-                    // paused. Ensure that it's restored appropriately.
-                    tab.loadIfNeeded();
+        if (useWindowFocusForVisibility()) {
+            if (hasFocus) {
+                onActivityShown();
+            } else {
+                if (ApplicationStatus.getStateForActivity(this) == ActivityState.STOPPED) {
+                    onActivityHidden();
                 }
-            }
-            VrModuleProvider.getDelegate().onActivityShown(this);
-        } else {
-            boolean stopped = ApplicationStatus.getStateForActivity(this) == ActivityState.STOPPED;
-            if (stopped) {
-                VrModuleProvider.getDelegate().onActivityHidden(this);
-                if (tab != null) tab.hide(TabHidingType.ACTIVITY_HIDDEN);
             }
         }
 
@@ -937,11 +964,6 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         // Vivaldi - reset default search engine.
         if (ChromeApplication.isVivaldi())
             SearchEngineIconHandler.get().restoreDSE();
-        Tab tab = getActivityTab();
-        if (!hasWindowFocus()) {
-            VrModuleProvider.getDelegate().onActivityHidden(this);
-            if (tab != null) tab.hide(TabHidingType.ACTIVITY_HIDDEN);
-        }
 
         if (GSAState.getInstance(this).isGsaAvailable() && !SysUtils.isLowEndDevice()) {
             GSAAccountChangeListener.getInstance().disconnect();
@@ -1055,6 +1077,11 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
             }
 
             recordDisplayDimensions();
+            int playServicesVersion = ChromeVersionInfo.getPlayServicesApkVersionNumber(this);
+            RecordHistogram.recordBooleanHistogram(
+                    "Android.PlayServices.Installed", playServicesVersion > 0);
+            RecordHistogram.recordSparseHistogram(
+                    "Android.PlayServices.Version", playServicesVersion);
         });
 
         DeferredStartupHandler.getInstance().addDeferredTask(() -> {
@@ -1098,15 +1125,19 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
 
     @Override
     public void onStart() {
-        if (AsyncTabParamsManager.hasParamsWithTabToReparent()) {
+        // Sometimes mCompositorViewHolder is null, see crbug.com/1057613.
+        if (AsyncTabParamsManager.hasParamsWithTabToReparent() && mCompositorViewHolder != null) {
             mCompositorViewHolder.prepareForTabReparenting();
         }
         super.onStart();
 
+        if (!useWindowFocusForVisibility()) {
+            onActivityShown();
+        }
+
         if (mPartnerBrowserRefreshNeeded) {
             mPartnerBrowserRefreshNeeded = false;
-            PartnerBrowserCustomizations.getInstance().initializeAsync(
-                    getApplicationContext(), PARTNER_BROWSER_CUSTOMIZATIONS_TIMEOUT_MS);
+            PartnerBrowserCustomizations.getInstance().initializeAsync(getApplicationContext());
             PartnerBrowserCustomizations.getInstance().setOnInitializeAsyncFinished(() -> {
                 if (PartnerBrowserCustomizations.isIncognitoDisabled()) {
                     terminateIncognitoSession();
@@ -1133,6 +1164,12 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
     @Override
     public void onStop() {
         super.onStop();
+
+        if (useWindowFocusForVisibility()) {
+            if (!hasWindowFocus()) onActivityHidden();
+        } else {
+            onActivityHidden();
+        }
 
         // We want to refresh partner browser provider every onStart().
         mPartnerBrowserRefreshNeeded = true;
@@ -1198,10 +1235,6 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         // Vivaldi - reset default search engine.
         if (ChromeApplication.isVivaldi())
             SearchEngineIconHandler.get().restoreDSE();
-        if (mReaderModeManager != null) {
-            mReaderModeManager.destroy();
-            mReaderModeManager = null;
-        }
 
         if (mContextualSearchManager != null) {
             mContextualSearchManager.destroy();
@@ -1251,6 +1284,12 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         }
 
         UpdateMenuItemHelper.getInstance().unregisterObserver(mUpdateStateChangedListener);
+
+        if (mBookmarkBridgeSupplier != null) {
+            BookmarkBridge bookmarkBridge = mBookmarkBridgeSupplier.get();
+            if (bookmarkBridge != null) bookmarkBridge.destroy();
+            mBookmarkBridgeSupplier = null;
+        }
 
         mActivityTabProvider.destroy();
 
@@ -1443,7 +1482,8 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         }
 
         // Defense in depth against the UI being erroneously enabled.
-        if (!getToolbarManager().getBookmarkBridge().isEditBookmarksEnabled()) {
+        BookmarkBridge bridge = mBookmarkBridgeSupplier.get();
+        if (bridge == null || !bridge.isEditBookmarksEnabled()) {
             assert false;
             return;
         }
@@ -1452,7 +1492,7 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         // edited. If the current URL is only bookmarked by managed bookmarks, this will return
         // INVALID_ID, so the code below will fall back on adding a new bookmark instead.
         // TODO(bauerb): This does not take partner bookmarks into account.
-        final long bookmarkId = BookmarkBridge.getUserBookmarkIdForTab(tabToBookmark);
+        final long bookmarkId = bridge.getUserBookmarkIdForTab(tabToBookmark);
 
         final BookmarkModel bookmarkModel = new BookmarkModel();
 
@@ -1639,14 +1679,6 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
     }
 
     /**
-     * @return The {@code ReaderModeManager} or {@code null} if none;
-     */
-    @VisibleForTesting
-    public ReaderModeManager getReaderModeManager() {
-        return mReaderModeManager;
-    }
-
-    /**
      * Create a full-screen manager to be used by this activity.
      * Note: This may be called before native code is initialized.
      * @return A {@link ChromeFullscreenManager} instance that's been created.
@@ -1741,8 +1773,8 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
     }
 
     @Override
-    public void onConfigurationChanged(Configuration newConfig) {
-        super.onConfigurationChanged(newConfig);
+    public void performOnConfigurationChanged(Configuration newConfig) {
+        super.performOnConfigurationChanged(newConfig);
 
         // We only handle VR UI mode and UI mode night changes. Any other changes should follow the
         // default behavior of recreating the activity. Note that if UI mode night changes, with or
@@ -1927,7 +1959,8 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
         }
 
         if (id == R.id.preferences_id) {
-            SettingsLauncher.getInstance().launchSettingsPage(this);
+            SettingsLauncher settingsLauncher = new SettingsLauncherImpl();
+            settingsLauncher.launchSettingsActivity(this);
             RecordUserAction.record("MobileMenuSettings");
         }
 
@@ -1984,10 +2017,14 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
                 RecordUserAction.record("MobileMenuReload");
             }
         } else if (id == R.id.info_menu_id) {
-            PageInfoController.show(this, currentTab.getWebContents(), null,
+            WebContents webContents = currentTab.getWebContents();
+            PageInfoController.show(this, webContents, null,
                     PageInfoController.OpenedFromSource.MENU,
-                    /*offlinePageLoadUrlDelegate=*/
-                    new OfflinePageUtils.TabOfflinePageLoadUrlDelegate(currentTab));
+                    new ChromePageInfoControllerDelegate(this, webContents,
+                            this::getModalDialogManager,
+                            /*offlinePageLoadUrlDelegate=*/
+                            new OfflinePageUtils.TabOfflinePageLoadUrlDelegate(currentTab)),
+                    new ChromePermissionParamsListBuilderDelegate());
         } else if (id == R.id.translate_id) {
             RecordUserAction.record("MobileMenuTranslate");
             Tracker tracker = TrackerFactory.getTrackerForProfile(
@@ -2336,5 +2373,11 @@ public abstract class ChromeActivity<C extends ChromeActivityComponent>
             mNightModeReparentingController.onNightModeStateChanged();
         }
         super.onNightModeStateChanged();
+    }
+
+    @VisibleForTesting
+    @Nullable
+    public BookmarkBridge getBookmarkBridgeForTesting() {
+        return mBookmarkBridgeSupplier.get();
     }
 }

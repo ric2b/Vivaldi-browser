@@ -9,6 +9,8 @@
 
 @class ASCredentialServiceIdentifier;
 @class ASCredentialProviderExtensionContext;
+@protocol CredentialStore;
+@class ReauthenticationHandler;
 @class UIViewController;
 
 // This feature presents a list of credentials for the user to choose.
@@ -19,9 +21,11 @@
 // can be nil.
 - (instancetype)
     initWithBaseViewController:(UIViewController*)baseViewController
+               credentialStore:(id<CredentialStore>)credentialStore
                        context:(ASCredentialProviderExtensionContext*)context
             serviceIdentifiers:
                 (NSArray<ASCredentialServiceIdentifier*>*)serviceIdentifiers
+       reauthenticationHandler:(ReauthenticationHandler*)reauthenticationHandler
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;

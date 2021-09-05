@@ -25,6 +25,7 @@
 #include "build/build_config.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/network_service_client.h"
+#include "content/browser/service_sandbox_type.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
@@ -263,7 +264,6 @@ network::mojom::NetworkService* GetNetworkService() {
           ServiceProcessHost::Launch(
               std::move(receiver),
               ServiceProcessHost::Options()
-                  .WithSandboxType(service_manager::SandboxType::kNetwork)
                   .WithDisplayName(base::UTF8ToUTF16("Network Service"))
                   .Pass());
         }
@@ -292,7 +292,7 @@ network::mojom::NetworkService* GetNetworkService() {
       (*g_network_service_remote)
           ->SetClient(std::move(client_remote), CreateNetworkServiceParams());
       g_network_service_is_responding = false;
-      g_network_service_remote->QueryVersion(base::BindRepeating(
+      g_network_service_remote->QueryVersion(base::BindOnce(
           [](base::Time start_time, uint32_t) {
             g_network_service_is_responding = true;
             base::TimeDelta delta = base::Time::Now() - start_time;
@@ -409,22 +409,6 @@ network::NetworkConnectionTracker* GetNetworkConnectionTracker() {
 
 void GetNetworkConnectionTrackerFromUIThread(
     base::OnceCallback<void(network::NetworkConnectionTracker*)> callback) {
-  // TODO(fdoray): Investigate why this is needed. The IO thread is supposed to
-  // be initialized by the time the UI thread starts running tasks.
-  //
-  // GetNetworkConnectionTracker() will call CreateNetworkServiceOnIO(). Here it
-  // makes sure the IO thread is running when CreateNetworkServiceOnIO() is
-  // called.
-  if (!content::BrowserThread::IsThreadInitialized(
-          content::BrowserThread::IO)) {
-    // IO thread is not yet initialized. Try again in the next message pump.
-    bool task_posted = base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::BindOnce(&GetNetworkConnectionTrackerFromUIThread,
-                                  std::move(callback)));
-    DCHECK(task_posted);
-    return;
-  }
-
   base::PostTaskAndReplyWithResult(
       FROM_HERE, {BrowserThread::UI, base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&GetNetworkConnectionTracker), std::move(callback));
@@ -488,7 +472,7 @@ base::TimeDelta GetTimeSinceLastNetworkServiceCrash() {
 void PingNetworkService(base::OnceClosure closure) {
   GetNetworkService();
   // Unfortunately, QueryVersion requires a RepeatingCallback.
-  g_network_service_remote->QueryVersion(base::BindRepeating(
+  g_network_service_remote->QueryVersion(base::BindOnce(
       [](base::OnceClosure closure, uint32_t) {
         if (closure)
           std::move(closure).Run();

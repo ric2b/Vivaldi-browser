@@ -3,13 +3,15 @@
 #include "ui/vivaldi_location_bar.h"
 
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/content_settings/tab_specific_content_settings.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/passwords/manage_passwords_icon_view.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "components/content_settings/browser/tab_specific_content_settings.h"
 #include "extensions/api/tabs/tabs_private_api.h"
+
+using content_settings::TabSpecificContentSettings;
 
 VivaldiLocationBar::VivaldiLocationBar() {
 }

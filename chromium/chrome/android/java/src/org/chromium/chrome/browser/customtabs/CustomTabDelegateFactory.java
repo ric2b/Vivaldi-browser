@@ -10,7 +10,6 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ResolveInfo;
-import android.os.Build;
 import android.text.TextUtils;
 
 import androidx.annotation.Nullable;
@@ -44,23 +43,25 @@ import org.chromium.chrome.browser.tab.TabStateBrowserControlsVisibilityDelegate
 import org.chromium.chrome.browser.tab.TabWebContentsDelegateAndroid;
 import org.chromium.chrome.browser.tab_activity_glue.ActivityTabWebContentsDelegateAndroid;
 import org.chromium.chrome.browser.tabmodel.TabModel;
+import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.tabmodel.document.AsyncTabCreationParams;
 import org.chromium.chrome.browser.tabmodel.document.TabDelegate;
+import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.chrome.browser.webapps.WebDisplayMode;
 import org.chromium.chrome.browser.webapps.WebappActivity;
 import org.chromium.chrome.browser.webapps.WebappExtras;
-import org.chromium.chrome.browser.webapps.WebappInfo;
+import org.chromium.chrome.browser.webapps.WebappIntentUtils;
 import org.chromium.chrome.browser.webapps.WebappLauncherActivity;
 import org.chromium.components.browser_ui.util.BrowserControlsVisibilityDelegate;
 import org.chromium.components.browser_ui.util.ComposedBrowserControlsVisibilityDelegate;
 import org.chromium.components.embedder_support.delegate.WebContentsDelegateAndroid;
 import org.chromium.components.embedder_support.util.UrlUtilities;
+import org.chromium.components.external_intents.ExternalNavigationDelegate.StartActivityIfNeededResult;
 import org.chromium.components.external_intents.ExternalNavigationHandler;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.content_public.common.BrowserControlsState;
 import org.chromium.content_public.common.ResourceRequestBody;
 import org.chromium.ui.mojom.WindowOpenDisposition;
-import org.chromium.webapk.lib.client.WebApkNavigationClient;
 
 import javax.inject.Inject;
 
@@ -100,13 +101,13 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
         }
 
         @Override
-        public void startActivity(Intent intent, boolean proxy) {
-            super.startActivity(intent, proxy);
+        public void didStartActivity(Intent intent) {
             mHasActivityStarted = true;
         }
 
         @Override
-        public boolean startActivityIfNeeded(Intent intent, boolean proxy) {
+        public @StartActivityIfNeededResult int maybeHandleStartActivityIfNeeded(
+                Intent intent, boolean proxy) {
             // Note: This method will not be called if shouldDisableExternalIntentRequestsForUrl()
             // returns false.
 
@@ -119,32 +120,32 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
                             && isPackageSpecializedHandler(mClientPackageName, intent)) {
                         intent.setPackage(mClientPackageName);
                     } else if (!isExternalProtocol) {
-                        return false;
+                        return StartActivityIfNeededResult.HANDLED_WITHOUT_ACTIVITY_START;
                     }
                 }
 
                 if (proxy) {
                     dispatchAuthenticatedIntent(intent);
                     mHasActivityStarted = true;
-                    return true;
+                    return StartActivityIfNeededResult.HANDLED_WITH_ACTIVITY_START;
                 } else {
                     // If android fails to find a handler, handle it ourselves.
                     Context context = getAvailableContext();
                     if (context instanceof Activity
                             && ((Activity) context).startActivityIfNeeded(intent, -1)) {
                         mHasActivityStarted = true;
-                        return true;
+                        return StartActivityIfNeededResult.HANDLED_WITH_ACTIVITY_START;
                     }
                 }
-                return false;
+                return StartActivityIfNeededResult.HANDLED_WITHOUT_ACTIVITY_START;
             } catch (SecurityException e) {
                 // https://crbug.com/808494: Handle the URL in Chrome if dispatching to another
                 // application fails with a SecurityException. This happens due to malformed
                 // manifests in another app.
-                return false;
+                return StartActivityIfNeededResult.HANDLED_WITHOUT_ACTIVITY_START;
             } catch (RuntimeException e) {
                 IntentUtils.logTransactionTooLargeOrRethrow(e, intent);
-                return false;
+                return StartActivityIfNeededResult.HANDLED_WITHOUT_ACTIVITY_START;
             }
         }
 
@@ -252,28 +253,19 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
 
         private void bringActivityToForegroundWebapp() {
             WebappActivity webappActivity = (WebappActivity) mActivity;
+            BrowserServicesIntentDataProvider intentDataProvider =
+                    webappActivity.getIntentDataProvider();
 
             // Create an Intent that will be fired toward the WebappLauncherActivity, which in turn
-            // will fire an Intent to launch the correct WebappActivity or WebApkActivity. On L+
-            // this could probably be changed to call AppTask.moveToFront(), but for backwards
-            // compatibility we relaunch it the hard way.
-            String startUrl = webappActivity.getWebappInfo().url();
+            // will fire an Intent to launch the correct WebappActivity. On L+ this could probably
+            // be changed to call AppTask.moveToFront(), but for backwards compatibility we relaunch
+            // it the hard way.
+            String startUrl = intentDataProvider.getUrlToLoad();
 
-            WebappInfo webappInfo = webappActivity.getWebappInfo();
-            if (webappInfo.isForWebApk()) {
+            if (intentDataProvider.isWebApkActivity()) {
                 Intent activateIntent = null;
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    activateIntent = new Intent(ACTION_ACTIVATE_WEBAPK);
-                    activateIntent.setPackage(
-                            ContextUtils.getApplicationContext().getPackageName());
-                } else {
-                    // For WebAPKs with new-style splash screen we cannot activate the WebAPK by
-                    // sending an intent because that would relaunch the WebAPK.
-                    assert !webappInfo.isSplashProvidedByWebApk();
-
-                    activateIntent = WebApkNavigationClient.createLaunchWebApkIntent(
-                            webappInfo.webApkPackageName(), startUrl, false /* forceNavigation */);
-                }
+                activateIntent = new Intent(ACTION_ACTIVATE_WEBAPK);
+                activateIntent.setPackage(ContextUtils.getApplicationContext().getPackageName());
                 IntentUtils.safeStartActivity(mActivity, activateIntent);
                 return;
             }
@@ -281,7 +273,7 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
             Intent intent = new Intent();
             intent.setAction(WebappLauncherActivity.ACTION_START_WEBAPP);
             intent.setPackage(mActivity.getPackageName());
-            webappInfo.setWebappIntentExtras(intent);
+            WebappIntentUtils.copyWebappLaunchIntentExtras(mActivity.getIntent(), intent);
 
             intent.putExtra(ShortcutHelper.EXTRA_MAC, ShortcutHelper.getEncodedMac(startUrl));
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
@@ -460,16 +452,23 @@ public class CustomTabDelegateFactory implements TabDelegateFactory {
         int contextMenuMode = getContextMenuMode(mActivityType);
         Supplier<ShareDelegate> shareDelegateSupplier =
                 mActivity == null ? null : mActivity.getShareDelegateSupplier();
-        if (EphemeralTabCoordinator.isSupported() && mActivity != null
-                && mActivity.getBottomSheetController() != null) {
+        if (EphemeralTabCoordinator.isSupported() && mActivity != null) {
             mEphemeralTabCoordinator = new EphemeralTabCoordinator(mActivity,
                     mActivity.getWindowAndroid(), mActivity.getWindow().getDecorView(),
                     mActivity.getActivityTabProvider(), mActivity::getCurrentTabCreator,
-                    mActivity.getBottomSheetController(), () -> false);
+                    mActivity::getBottomSheetController, () -> false);
         }
-        return new ChromeContextMenuPopulator(
-                new TabContextMenuItemDelegate(tab, () -> mEphemeralTabCoordinator),
+        TabModelSelector tabModelSelector =
+                mActivity != null ? mActivity.getTabModelSelector() : null;
+        return new ChromeContextMenuPopulator(new TabContextMenuItemDelegate(tab, tabModelSelector,
+                                                      () -> mEphemeralTabCoordinator),
                 shareDelegateSupplier, contextMenuMode, ExternalAuthUtils.getInstance());
+    }
+
+    @Override
+    public NativePage createNativePage(String url, NativePage candidatePage, Tab tab) {
+        // Custom tab does not create native pages.
+        return null;
     }
 
     /**

@@ -39,6 +39,7 @@
 #include "absl/flags/internal/commandlineflag.h"
 #include "absl/flags/internal/flag.h"
 #include "absl/flags/internal/parse.h"
+#include "absl/flags/internal/private_handle_accessor.h"
 #include "absl/flags/internal/program_name.h"
 #include "absl/flags/internal/registry.h"
 #include "absl/flags/internal/usage.h"
@@ -65,6 +66,22 @@ ABSL_CONST_INIT bool fromenv_needs_processing
     ABSL_GUARDED_BY(processing_checks_guard) = false;
 ABSL_CONST_INIT bool tryfromenv_needs_processing
     ABSL_GUARDED_BY(processing_checks_guard) = false;
+
+ABSL_CONST_INIT absl::Mutex specified_flags_guard(absl::kConstInit);
+ABSL_CONST_INIT std::vector<const CommandLineFlag*>* specified_flags
+    ABSL_GUARDED_BY(specified_flags_guard) = nullptr;
+
+struct SpecifiedFlagsCompare {
+  bool operator()(const CommandLineFlag* a, const CommandLineFlag* b) const {
+    return a->Name() < b->Name();
+  }
+  bool operator()(const CommandLineFlag* a, absl::string_view b) const {
+    return a->Name() < b;
+  }
+  bool operator()(absl::string_view a, const CommandLineFlag* b) const {
+    return a < b->Name();
+  }
+};
 
 }  // namespace
 }  // namespace flags_internal
@@ -298,7 +315,8 @@ void CheckDefaultValuesParsingRoundtrip() {
     ABSL_FLAGS_INTERNAL_BUILTIN_TYPES(IGNORE_TYPE)
 #undef IGNORE_TYPE
 
-    flag->CheckDefaultValueParsingRoundtrip();
+    flags_internal::PrivateHandleAccessor::CheckDefaultValueParsingRoundtrip(
+        *flag);
   });
 #endif
 }
@@ -575,6 +593,17 @@ bool CanIgnoreUndefinedFlag(absl::string_view flag_name) {
 
 // --------------------------------------------------------------------
 
+bool WasPresentOnCommandLine(absl::string_view flag_name) {
+  absl::MutexLock l(&specified_flags_guard);
+  ABSL_INTERNAL_CHECK(specified_flags != nullptr,
+                      "ParseCommandLine is not invoked yet");
+
+  return std::binary_search(specified_flags->begin(), specified_flags->end(),
+                            flag_name, SpecifiedFlagsCompare{});
+}
+
+// --------------------------------------------------------------------
+
 std::vector<char*> ParseCommandLineImpl(int argc, char* argv[],
                                         ArgvListAction arg_list_act,
                                         UsageFlagsAction usage_flag_act,
@@ -604,6 +633,13 @@ std::vector<char*> ParseCommandLineImpl(int argc, char* argv[],
     flags_internal::SetProgramInvocationName(argv[0]);
   }
   output_args.push_back(argv[0]);
+
+  absl::MutexLock l(&specified_flags_guard);
+  if (specified_flags == nullptr) {
+    specified_flags = new std::vector<const CommandLineFlag*>;
+  } else {
+    specified_flags->clear();
+  }
 
   // Iterate through the list of the input arguments. First level are arguments
   // originated from argc/argv. Following levels are arguments originated from
@@ -696,9 +732,12 @@ std::vector<char*> ParseCommandLineImpl(int argc, char* argv[],
     if (flag->IsRetired()) continue;
 
     std::string error;
-    if (!flag->ParseFrom(value, SET_FLAGS_VALUE, kCommandLine, &error)) {
+    if (!flags_internal::PrivateHandleAccessor::ParseFrom(
+            flag, value, SET_FLAGS_VALUE, kCommandLine, &error)) {
       flags_internal::ReportUsageError(error, true);
       success = false;
+    } else {
+      specified_flags->push_back(flag);
     }
   }
 
@@ -750,6 +789,10 @@ std::vector<char*> ParseCommandLineImpl(int argc, char* argv[],
     }
   }
 
+  // Trim and sort the vector.
+  specified_flags->shrink_to_fit();
+  std::sort(specified_flags->begin(), specified_flags->end(),
+            SpecifiedFlagsCompare{});
   return output_args;
 }
 

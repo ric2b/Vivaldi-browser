@@ -20,8 +20,9 @@
 #include "chrome/common/pref_names.h"
 #include "components/datasource/vivaldi_data_source_api.h"
 #include "components/search_engines/template_url.h"
-#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/render_view_host.h"
+#include "content/public/browser/render_widget_host.h"
+#include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/guest_view/mime_handler_view/mime_handler_view_guest.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
@@ -272,6 +273,11 @@ void VivaldiAddPageItems(SimpleMenuModel* menu,
     DCHECK_GE(index, 0);
     menu->InsertItemWithStringIdAt(++index, IDC_VIV_COPY_PAGE_ADDRESS,
                                    IDS_VIV_COPY_PAGE_ADDRESS);
+  } else if (IsVivaldiWebPanel(web_contents)) {
+    // Casting is only available from tab-contents.
+    int index = menu->GetIndexOfCommandId(IDC_ROUTE_MEDIA);
+    DCHECK_GE(index, 0);
+    menu->RemoveItemAt(index);
   }
 }
 
@@ -382,9 +388,8 @@ bool IsVivaldiCommandIdEnabled(const SimpleMenuModel& menu,
       }
 
       std::vector<base::string16> types;
-      bool ignore;
       ui::Clipboard::GetForCurrentThread()->ReadAvailableTypes(
-          ui::ClipboardBuffer::kCopyPaste, &types, &ignore);
+          ui::ClipboardBuffer::kCopyPaste, &types);
       *enabled = !types.empty();
       break;
     }

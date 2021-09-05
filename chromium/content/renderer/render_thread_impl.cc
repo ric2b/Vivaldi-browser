@@ -61,7 +61,6 @@
 #include "content/child/thread_safe_sender.h"
 #include "content/common/buildflags.h"
 #include "content/common/content_constants_internal.h"
-#include "content/common/frame.mojom.h"
 #include "content/common/frame_messages.h"
 #include "content/common/render_frame_metadata.mojom.h"
 #include "content/common/view_messages.h"
@@ -185,6 +184,10 @@
 #include <malloc/malloc.h>
 #else
 #include <malloc.h>
+#endif
+
+#if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
+#include "base/test/clang_profiling.h"
 #endif
 
 using base::ThreadRestrictions;
@@ -667,6 +670,9 @@ void RenderThreadImpl::Init() {
 // but the system default is true.
 #if defined(OS_MACOSX)
   is_elastic_overscroll_enabled_ = true;
+#elif defined(OS_WIN)
+  is_elastic_overscroll_enabled_ =
+      base::FeatureList::IsEnabled(features::kElasticOverscrollWin);
 #else
   is_elastic_overscroll_enabled_ = false;
 #endif
@@ -916,8 +922,8 @@ IPC::SyncMessageFilter* RenderThreadImpl::GetSyncMessageFilter() {
 
 void RenderThreadImpl::AddRoute(int32_t routing_id, IPC::Listener* listener) {
   ChildThreadImpl::GetRouter()->AddRoute(routing_id, listener);
-  auto it = pending_frame_creates_.find(routing_id);
-  if (it == pending_frame_creates_.end())
+  auto it = pending_frames_.find(routing_id);
+  if (it == pending_frames_.end())
     return;
 
   RenderFrameImpl* frame = RenderFrameImpl::FromRoutingID(routing_id);
@@ -933,25 +939,22 @@ void RenderThreadImpl::AddRoute(int32_t routing_id, IPC::Listener* listener) {
       frame->GetTaskRunner(
           blink::TaskType::kInternalNavigationAssociatedUnfreezable));
 
-  scoped_refptr<PendingFrameCreate> create(it->second);
-  frame->BindFrame(it->second->TakeFrameReceiver());
-  pending_frame_creates_.erase(it);
+  frame->BindFrame(std::move(it->second));
+  pending_frames_.erase(it);
 }
 
 void RenderThreadImpl::RemoveRoute(int32_t routing_id) {
   ChildThreadImpl::GetRouter()->RemoveRoute(routing_id);
   unfreezable_message_filter_->RemoveListenerUnfreezableTaskRunner(routing_id);
   GetChannel()->RemoveListenerTaskRunner(routing_id);
+  pending_frames_.erase(routing_id);
 }
 
 void RenderThreadImpl::RegisterPendingFrameCreate(
     int routing_id,
     mojo::PendingReceiver<mojom::Frame> frame_receiver) {
-  std::pair<PendingFrameCreateMap::iterator, bool> result =
-      pending_frame_creates_.insert(std::make_pair(
-          routing_id, base::MakeRefCounted<PendingFrameCreate>(
-                          routing_id, std::move(frame_receiver))));
-  CHECK(result.second) << "Inserting a duplicate item.";
+  auto pair = pending_frames_.emplace(routing_id, std::move(frame_receiver));
+  CHECK(pair.second) << "Inserting a duplicate item.";
 }
 
 mojom::RendererHost* RenderThreadImpl::GetRendererHost() {
@@ -1126,9 +1129,10 @@ int RenderThreadImpl::PostTaskToAllWebWorkers(base::RepeatingClosure closure) {
 }
 
 bool RenderThreadImpl::ResolveProxy(const GURL& url, std::string* proxy_list) {
-  bool result = false;
-  Send(new ViewHostMsg_ResolveProxy(url, &result, proxy_list));
-  return result;
+  base::Optional<std::string> result;
+  GetRendererHost()->ResolveProxy(url, &result);
+  *proxy_list = result.value_or(std::string());
+  return result.has_value();
 }
 
 media::GpuVideoAcceleratorFactories* RenderThreadImpl::GetGpuFactories() {
@@ -1406,9 +1410,8 @@ RenderThreadImpl::GetCompositorMainThreadTaskRunner() {
   return main_thread_compositor_task_runner_;
 }
 
-scoped_refptr<base::SingleThreadTaskRunner>
-RenderThreadImpl::GetCompositorImplThreadTaskRunner() {
-  return compositor_task_runner_;
+bool RenderThreadImpl::IsSingleThreaded() {
+  return !compositor_task_runner_;
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
@@ -1531,6 +1534,16 @@ void RenderThreadImpl::EnableV8LowMemoryMode() {
   if (!low_memory_mode_controller_)
     low_memory_mode_controller_.reset(new LowMemoryModeController());
 }
+
+#if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
+void RenderThreadImpl::WriteClangProfilingProfile(
+    WriteClangProfilingProfileCallback callback) {
+  // This will write the profiling profile to the file that has been opened and
+  // passed to this renderer by the browser.
+  base::WriteClangProfilingProfile();
+  std::move(callback).Run();
+}
+#endif
 
 bool RenderThreadImpl::GetRendererMemoryMetrics(
     RendererMemoryMetrics* memory_metrics) const {
@@ -1727,9 +1740,10 @@ void RenderThreadImpl::RequestNewLayerTreeFrameSink(
     const GURL& url,
     LayerTreeFrameSinkCallback callback,
     const char* client_name) {
+  const bool for_web_tests = blink::WebTestMode();
   // Misconfigured bots (eg. crbug.com/780757) could run web tests on a
   // machine where gpu compositing doesn't work. Don't crash in that case.
-  if (web_test_mode() && is_gpu_compositing_disabled_) {
+  if (for_web_tests && is_gpu_compositing_disabled_) {
     LOG(FATAL) << "Web tests require gpu compositing, but it is disabled.";
     return;
   }
@@ -1753,7 +1767,7 @@ void RenderThreadImpl::RequestNewLayerTreeFrameSink(
       *base::CommandLine::ForCurrentProcess();
   cc::mojo_embedder::AsyncLayerTreeFrameSink::InitParams params;
   params.compositor_task_runner = compositor_task_runner_;
-  if (web_test_mode() && !compositor_task_runner_) {
+  if (for_web_tests && !compositor_task_runner_) {
     // The frame sink provider expects a compositor task runner, but we might
     // not have that if we're running web tests in single threaded mode.
     // Set it to be our thread's task runner instead.
@@ -1782,7 +1796,7 @@ void RenderThreadImpl::RequestNewLayerTreeFrameSink(
       compositor_frame_sink_client.InitWithNewPipeAndPassReceiver();
 
   if (is_gpu_compositing_disabled_) {
-    DCHECK(!web_test_mode());
+    DCHECK(!for_web_tests);
     frame_sink_provider_->CreateForWidget(
         render_widget->routing_id(), std::move(compositor_frame_sink_receiver),
         std::move(compositor_frame_sink_client));
@@ -1940,8 +1954,8 @@ void RenderThreadImpl::CreateFrame(mojom::CreateFrameParamsPtr params) {
       params->routing_id, std::move(interface_provider),
       std::move(browser_interface_broker), params->previous_routing_id,
       params->opener_routing_id, params->parent_routing_id,
-      params->previous_sibling_routing_id, params->devtools_frame_token,
-      params->replication_state, compositor_deps,
+      params->previous_sibling_routing_id, params->frame_token,
+      params->devtools_frame_token, params->replication_state, compositor_deps,
       std::move(params->widget_params),
       std::move(params->frame_owner_properties),
       params->has_committed_real_load);
@@ -1953,11 +1967,12 @@ void RenderThreadImpl::CreateFrameProxy(
     int32_t opener_routing_id,
     int32_t parent_routing_id,
     const FrameReplicationState& replicated_state,
+    const base::UnguessableToken& frame_token,
     const base::UnguessableToken& devtools_frame_token) {
   RenderFrameProxy::CreateFrameProxy(
       routing_id, render_view_routing_id,
       RenderFrameImpl::ResolveWebFrame(opener_routing_id), parent_routing_id,
-      replicated_state, devtools_frame_token);
+      replicated_state, frame_token, devtools_frame_token);
 }
 
 void RenderThreadImpl::OnNetworkConnectionChanged(
@@ -2247,19 +2262,6 @@ void RenderThreadImpl::ReleaseFreeMemory() {
     SkGraphics::PurgeAllCaches();
     blink::WebMemoryPressureListener::OnPurgeMemory();
   }
-}
-
-RenderThreadImpl::PendingFrameCreate::PendingFrameCreate(
-    int routing_id,
-    mojo::PendingReceiver<mojom::Frame> frame_receiver)
-    : routing_id_(routing_id), frame_receiver_(std::move(frame_receiver)) {}
-
-RenderThreadImpl::PendingFrameCreate::~PendingFrameCreate() = default;
-
-void RenderThreadImpl::PendingFrameCreate::OnConnectionError() {
-  size_t erased =
-      RenderThreadImpl::current()->pending_frame_creates_.erase(routing_id_);
-  DCHECK_EQ(1u, erased);
 }
 
 void RenderThreadImpl::OnSyncMemoryPressure(

@@ -48,6 +48,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/image/image_skia.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/crostini/crostini_terminal.h"
@@ -89,6 +90,7 @@ namespace {
 constexpr gfx::Rect TERMINAL_DEFAULT_BOUNDS(gfx::Point(64, 64),
                                             gfx::Size(652, 484));
 constexpr gfx::Size TERMINAL_SETTINGS_DEFAULT_SIZE(768, 512);
+constexpr gfx::Size HELP_DEFAULT_SIZE(960, 600);
 }  // namespace
 
 // static
@@ -124,15 +126,20 @@ bool AppBrowserController::IsForWebAppBrowser(const Browser* browser) {
 }
 
 // static
-base::string16 AppBrowserController::FormatUrlOrigin(const GURL& url) {
-  return url_formatter::FormatUrl(
-      url.GetOrigin(),
-      url_formatter::kFormatUrlOmitUsernamePassword |
-          url_formatter::kFormatUrlOmitHTTPS |
-          url_formatter::kFormatUrlOmitHTTP |
-          url_formatter::kFormatUrlOmitTrailingSlashOnBareHostname |
-          url_formatter::kFormatUrlOmitTrivialSubdomains,
-      net::UnescapeRule::SPACES, nullptr, nullptr, nullptr);
+bool AppBrowserController::IsForWebAppBrowser(const Browser* browser,
+                                              const AppId& app_id) {
+  return IsForWebAppBrowser(browser) && browser->app_controller()->HasAppId() &&
+         browser->app_controller()->GetAppId() == app_id;
+}
+
+// static
+base::string16 AppBrowserController::FormatUrlOrigin(
+    const GURL& url,
+    url_formatter::FormatUrlTypes format_types) {
+  auto origin = url::Origin::Create(url);
+  return url_formatter::FormatUrl(origin.opaque() ? url : origin.GetURL(),
+                                  format_types, net::UnescapeRule::SPACES,
+                                  nullptr, nullptr, nullptr);
 }
 
 const ui::ThemeProvider* AppBrowserController::GetThemeProvider() const {
@@ -249,16 +256,8 @@ bool AppBrowserController::has_tab_strip() const {
 }
 
 bool AppBrowserController::HasTitlebarMenuButton() const {
-  // Show titlebar toolbar for Terminal System App, but not other system apps.
-  // TODO(crbug.com/1061822): Generalise this as a SystemWebApp capability.
-  if (is_for_system_web_app())
-    return system_app_type_ == web_app::SystemAppType::TERMINAL &&
-           // SWA terminal has a setting window, which has browser type "app
-           // popup". We don't want it to have the toolbar.
-           !browser_->is_type_app_popup();
-
-  // Show for all other apps.
-  return true;
+  // Hide for system apps.
+  return !is_for_system_web_app();
 }
 
 bool AppBrowserController::HasTitlebarAppOriginText() const {
@@ -270,17 +269,6 @@ bool AppBrowserController::HasTitlebarContentSettings() const {
   // Do not show content settings for System Apps.
   return !is_for_system_web_app();
 }
-
-#if defined(OS_CHROMEOS)
-bool AppBrowserController::UseTitlebarTerminalSystemAppMenu() const {
-  // Use the Terminal System App Menu for Terminal System App only.
-  // TODO(crbug.com/846546): Generalise this as a SystemWebApp capability.
-  if (is_for_system_web_app())
-    return system_app_type_ == web_app::SystemAppType::TERMINAL;
-
-  return false;
-}
-#endif
 
 bool AppBrowserController::IsInstalled() const {
   return false;
@@ -329,6 +317,12 @@ gfx::Rect AppBrowserController::GetDefaultBounds() const {
       return bounds;
     }
     return TERMINAL_DEFAULT_BOUNDS;
+  } else if (system_app_type_ == SystemAppType::HELP) {
+    // Help app is centered.
+    gfx::Rect bounds =
+        display::Screen::GetScreen()->GetDisplayForNewWindows().work_area();
+    bounds.ClampToCenteredSize(HELP_DEFAULT_SIZE);
+    return bounds;
   }
   return gfx::Rect();
 }
@@ -431,6 +425,7 @@ void AppBrowserController::OnTabStripModelChanged(
     // WebContents should be null when the last tab is closed.
     DCHECK_EQ(web_contents() == nullptr, tab_strip_model->empty());
   }
+  UpdateCustomTabBarVisibility(/*animate=*/false);
 }
 
 CustomThemeSupplier* AppBrowserController::GetThemeSupplier() const {

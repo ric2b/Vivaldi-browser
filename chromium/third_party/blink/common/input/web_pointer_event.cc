@@ -4,6 +4,9 @@
 
 #include "third_party/blink/public/common/input/web_pointer_event.h"
 
+#include "base/check_op.h"
+#include "base/notreached.h"
+
 namespace blink {
 
 namespace {
@@ -11,15 +14,15 @@ namespace {
 WebInputEvent::Type PointerEventTypeForTouchPointState(
     WebTouchPoint::State state) {
   switch (state) {
-    case WebTouchPoint::kStateReleased:
+    case WebTouchPoint::State::kStateReleased:
       return WebInputEvent::Type::kPointerUp;
-    case WebTouchPoint::kStateCancelled:
+    case WebTouchPoint::State::kStateCancelled:
       return WebInputEvent::Type::kPointerCancel;
-    case WebTouchPoint::kStatePressed:
+    case WebTouchPoint::State::kStatePressed:
       return WebInputEvent::Type::kPointerDown;
-    case WebTouchPoint::kStateMoved:
+    case WebTouchPoint::State::kStateMoved:
       return WebInputEvent::Type::kPointerMove;
-    case WebTouchPoint::kStateStationary:
+    case WebTouchPoint::State::kStateStationary:
     default:
       NOTREACHED();
       return WebInputEvent::Type::kUndefined;
@@ -49,8 +52,8 @@ WebPointerEvent::WebPointerEvent(const WebTouchEvent& touch_event,
   // WebTouchPoint attributes
   rotation_angle = touch_point.rotation_angle;
   // TODO(crbug.com/816504): Touch point button is not set at this point yet.
-  button = (GetType() == WebInputEvent::kPointerDown ||
-            GetType() == WebInputEvent::kPointerUp)
+  button = (GetType() == WebInputEvent::Type::kPointerDown ||
+            GetType() == WebInputEvent::Type::kPointerUp)
                ? WebPointerProperties::Button::kLeft
                : WebPointerProperties::Button::kNoButton;
 }
@@ -62,14 +65,38 @@ WebPointerEvent::WebPointerEvent(WebInputEvent::Type type,
       hovering(true),
       width(std::numeric_limits<float>::quiet_NaN()),
       height(std::numeric_limits<float>::quiet_NaN()) {
-  DCHECK_GE(type, WebInputEvent::kPointerTypeFirst);
-  DCHECK_LE(type, WebInputEvent::kPointerTypeLast);
+  DCHECK_GE(type, WebInputEvent::Type::kPointerTypeFirst);
+  DCHECK_LE(type, WebInputEvent::Type::kPointerTypeLast);
   SetFrameScale(mouse_event.FrameScale());
   SetFrameTranslate(mouse_event.FrameTranslate());
 }
 
 std::unique_ptr<WebInputEvent> WebPointerEvent::Clone() const {
   return std::make_unique<WebPointerEvent>(*this);
+}
+
+bool WebPointerEvent::CanCoalesce(const WebInputEvent& event) const {
+  if (!IsPointerEventType(event.GetType()))
+    return false;
+  const WebPointerEvent& pointer_event =
+      static_cast<const WebPointerEvent&>(event);
+  return (GetType() == WebInputEvent::Type::kPointerMove ||
+          GetType() == WebInputEvent::Type::kPointerRawUpdate) &&
+         GetType() == event.GetType() &&
+         GetModifiers() == event.GetModifiers() && id == pointer_event.id &&
+         pointer_type == pointer_event.pointer_type;
+}
+
+void WebPointerEvent::Coalesce(const WebInputEvent& event) {
+  DCHECK(CanCoalesce(event));
+  const WebPointerEvent& pointer_event =
+      static_cast<const WebPointerEvent&>(event);
+  // Accumulate movement deltas.
+  int x = movement_x;
+  int y = movement_y;
+  *this = pointer_event;
+  movement_x += x;
+  movement_y += y;
 }
 
 WebPointerEvent WebPointerEvent::CreatePointerCausesUaActionEvent(

@@ -31,6 +31,7 @@
 #include "components/autofill/core/common/mojom/autofill_types.mojom.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/autofill/core/common/password_form_fill_data.h"
+#include "components/autofill/core/common/renderer_id.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/safe_browsing/buildflags.h"
 #include "content/public/renderer/render_frame.h"
@@ -367,13 +368,16 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
 
     PasswordAndMetadata password2;
     password2.password = password2_;
-    fill_data_.additional_logins[username2_] = password2;
+    password2.username = username2_;
+    fill_data_.additional_logins.push_back(std::move(password2));
     PasswordAndMetadata password3;
     password3.password = password3_;
-    fill_data_.additional_logins[username3_] = password3;
+    password3.username = username3_;
+    fill_data_.additional_logins.push_back(std::move(password3));
     PasswordAndMetadata password4;
     password3.password = password4_;
-    fill_data_.additional_logins[username4_] = password4;
+    password4.username = username4_;
+    fill_data_.additional_logins.push_back(std::move(password4));
 
     // We need to set the origin so it matches the frame URL and the action so
     // it matches the form action, otherwise we won't autocomplete.
@@ -445,15 +449,16 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
   void UpdateRendererIDs() {
     fill_data_.has_renderer_ids = true;
     if (!username_element_.IsNull()) {
-      fill_data_.username_field.unique_renderer_id =
-          username_element_.UniqueRendererFormControlId();
+      fill_data_.username_field.unique_renderer_id = autofill::FieldRendererId(
+          username_element_.UniqueRendererFormControlId());
     }
     ASSERT_FALSE(password_element_.IsNull());
-    fill_data_.password_field.unique_renderer_id =
-        password_element_.UniqueRendererFormControlId();
+    fill_data_.password_field.unique_renderer_id = autofill::FieldRendererId(
+        password_element_.UniqueRendererFormControlId());
     WebFormElement form = password_element_.Form();
-    fill_data_.form_renderer_id = form.IsNull() ? FormData::kNotSetRendererId
-                                                : form.UniqueRendererFormId();
+    fill_data_.form_renderer_id =
+        form.IsNull() ? autofill::FormRendererId()
+                      : autofill::FormRendererId(form.UniqueRendererFormId());
   }
 
   void UpdateUsernameAndPasswordElements() {
@@ -665,18 +670,18 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
         << "Some expected masks are missed in FormData";
   }
 
-  uint32_t GetFormUniqueRendererId(const WebString& form_id) {
+  autofill::FormRendererId GetFormUniqueRendererId(const WebString& form_id) {
     WebLocalFrame* frame = GetMainFrame();
     if (!frame)
-      return FormData::kNotSetRendererId;
+      return autofill::FormRendererId();
     WebFormElement web_form =
         frame->GetDocument().GetElementById(form_id).To<WebFormElement>();
-    return web_form.UniqueRendererFormId();
+    return autofill::FormRendererId(web_form.UniqueRendererFormId());
   }
 
   void ExpectFormDataWithUsernameAndPasswordsAndEvent(
       const autofill::FormData& form_data,
-      uint32_t form_renderer_id,
+      autofill::FormRendererId form_renderer_id,
       const std::string& username_value,
       const std::string& password_value,
       const std::string& new_password_value,
@@ -689,7 +694,7 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
   }
 
   void ExpectFormSubmittedWithUsernameAndPasswords(
-      uint32_t form_rendere_id,
+      autofill::FormRendererId form_renderer_id,
       const std::string& username_value,
       const std::string& password_value,
       const std::string& new_password_value) {
@@ -697,13 +702,13 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
     ASSERT_TRUE(fake_driver_.called_password_form_submitted());
     ASSERT_TRUE(static_cast<bool>(fake_driver_.form_data_submitted()));
     ExpectFormDataWithUsernameAndPasswordsAndEvent(
-        *(fake_driver_.form_data_submitted()), form_rendere_id, username_value,
+        *(fake_driver_.form_data_submitted()), form_renderer_id, username_value,
         password_value, new_password_value,
         SubmissionIndicatorEvent::HTML_FORM_SUBMISSION);
   }
 
   void ExpectSameDocumentNavigationWithUsernameAndPasswords(
-      uint32_t form_rendere_id,
+      autofill::FormRendererId form_renderer_id,
       const std::string& username_value,
       const std::string& password_value,
       const std::string& new_password_value,
@@ -712,7 +717,7 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
     ASSERT_TRUE(fake_driver_.called_same_document_navigation());
     ASSERT_TRUE(static_cast<bool>(fake_driver_.form_data_maybe_submitted()));
     ExpectFormDataWithUsernameAndPasswordsAndEvent(
-        *(fake_driver_.form_data_maybe_submitted()), form_rendere_id,
+        *(fake_driver_.form_data_maybe_submitted()), form_renderer_id,
         username_value, password_value, new_password_value, event);
   }
 
@@ -771,7 +776,7 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
   }
 
   void ClearField(FormFieldData* field) {
-    field->unique_renderer_id = std::numeric_limits<uint32_t>::max();
+    field->unique_renderer_id = autofill::FieldRendererId();
     field->value.clear();
   }
 
@@ -944,12 +949,13 @@ TEST_F(PasswordAutofillAgentTest, NoFillingOnSignupForm_NoMetrics) {
   ASSERT_FALSE(element.IsNull());
   username_element_ = element.To<WebInputElement>();
 
-  fill_data_.username_field.unique_renderer_id = FormData::kNotSetRendererId;
-  fill_data_.password_field.unique_renderer_id = FormData::kNotSetRendererId;
+  fill_data_.username_field.unique_renderer_id = autofill::FieldRendererId();
+  fill_data_.password_field.unique_renderer_id = autofill::FieldRendererId();
 
   WebFormElement form_element =
       document.GetElementById("LoginTestForm").To<WebFormElement>();
-  fill_data_.form_renderer_id = form_element.UniqueRendererFormId();
+  fill_data_.form_renderer_id =
+      autofill::FormRendererId(form_element.UniqueRendererFormId());
 
   SimulateOnFillPasswordForm(fill_data_);
   histogram_tester_.ExpectTotalCount(
@@ -1100,31 +1106,30 @@ TEST_F(PasswordAutofillAgentTest, WaitUsername) {
 }
 
 TEST_F(PasswordAutofillAgentTest, IsWebElementVisibleTest) {
-  blink::WebVector<WebFormElement> forms1, forms2, forms3;
-  blink::WebVector<blink::WebFormControlElement> web_control_elements;
   blink::WebLocalFrame* frame;
 
   LoadHTML(kVisibleFormWithNoUsernameHTML);
   frame = GetMainFrame();
-  frame->GetDocument().Forms(forms1);
-  ASSERT_EQ(1u, forms1.size());
-  forms1[0].GetFormControlElements(web_control_elements);
+  blink::WebVector<WebFormElement> forms = frame->GetDocument().Forms();
+  ASSERT_EQ(1u, forms.size());
+  blink::WebVector<blink::WebFormControlElement> web_control_elements =
+      forms[0].GetFormControlElements();
   ASSERT_EQ(1u, web_control_elements.size());
   EXPECT_TRUE(form_util::IsWebElementVisible(web_control_elements[0]));
 
   LoadHTML(kNonVisibleFormHTML);
   frame = GetMainFrame();
-  frame->GetDocument().Forms(forms2);
-  ASSERT_EQ(1u, forms2.size());
-  forms2[0].GetFormControlElements(web_control_elements);
+  forms = frame->GetDocument().Forms();
+  ASSERT_EQ(1u, forms.size());
+  web_control_elements = forms[0].GetFormControlElements();
   ASSERT_EQ(1u, web_control_elements.size());
   EXPECT_FALSE(form_util::IsWebElementVisible(web_control_elements[0]));
 
   LoadHTML(kNonDisplayedFormHTML);
   frame = GetMainFrame();
-  frame->GetDocument().Forms(forms3);
-  ASSERT_EQ(1u, forms3.size());
-  forms3[0].GetFormControlElements(web_control_elements);
+  forms = frame->GetDocument().Forms();
+  ASSERT_EQ(1u, forms.size());
+  web_control_elements = forms[0].GetFormControlElements();
   ASSERT_EQ(1u, web_control_elements.size());
   EXPECT_FALSE(form_util::IsWebElementVisible(web_control_elements[0]));
 }
@@ -1792,12 +1797,13 @@ TEST_F(PasswordAutofillAgentTest, DontTryToShowTouchToFillSignUpForm) {
   ASSERT_FALSE(element.IsNull());
   username_element_ = element.To<WebInputElement>();
 
-  fill_data_.username_field.unique_renderer_id = FormData::kNotSetRendererId;
-  fill_data_.password_field.unique_renderer_id = FormData::kNotSetRendererId;
+  fill_data_.username_field.unique_renderer_id = autofill::FieldRendererId();
+  fill_data_.password_field.unique_renderer_id = autofill::FieldRendererId();
 
   WebFormElement form_element =
       document.GetElementById("LoginTestForm").To<WebFormElement>();
-  fill_data_.form_renderer_id = form_element.UniqueRendererFormId();
+  fill_data_.form_renderer_id =
+      autofill::FormRendererId(form_element.UniqueRendererFormId());
 
   SimulateOnFillPasswordForm(fill_data_);
 
@@ -2232,11 +2238,11 @@ TEST_F(PasswordAutofillAgentTest, RememberFieldPropertiesOnSubmit) {
 
   std::map<base::string16, FieldPropertiesMask> expected_properties_masks;
   expected_properties_masks[ASCIIToUTF16("random_field")] =
-      FieldPropertiesFlags::HAD_FOCUS;
+      FieldPropertiesFlags::kHadFocus;
   expected_properties_masks[ASCIIToUTF16("username")] =
-      FieldPropertiesFlags::USER_TYPED | FieldPropertiesFlags::HAD_FOCUS;
+      FieldPropertiesFlags::kUserTyped | FieldPropertiesFlags::kHadFocus;
   expected_properties_masks[ASCIIToUTF16("password")] =
-      FieldPropertiesFlags::USER_TYPED | FieldPropertiesFlags::HAD_FOCUS;
+      FieldPropertiesFlags::kUserTyped | FieldPropertiesFlags::kHadFocus;
 
   ExpectFieldPropertiesMasks(PasswordFormSubmitted, expected_properties_masks,
                              SubmissionIndicatorEvent::HTML_FORM_SUBMISSION);
@@ -2276,9 +2282,9 @@ TEST_F(PasswordAutofillAgentTest, FixEmptyFieldPropertiesOnSubmit) {
 
   std::map<base::string16, FieldPropertiesMask> expected_properties_masks;
   expected_properties_masks[ASCIIToUTF16("new_username")] =
-      FieldPropertiesFlags::AUTOFILLED_ON_PAGELOAD;
+      FieldPropertiesFlags::kAutofilledOnPageLoad;
   expected_properties_masks[ASCIIToUTF16("new_password")] =
-      FieldPropertiesFlags::AUTOFILLED_ON_PAGELOAD;
+      FieldPropertiesFlags::kAutofilledOnPageLoad;
 
   ExpectFieldPropertiesMasks(PasswordFormSubmitted, expected_properties_masks,
                              SubmissionIndicatorEvent::HTML_FORM_SUBMISSION);
@@ -2303,9 +2309,9 @@ TEST_F(PasswordAutofillAgentTest,
 
   std::map<base::string16, FieldPropertiesMask> expected_properties_masks;
   expected_properties_masks[ASCIIToUTF16("username")] =
-      FieldPropertiesFlags::USER_TYPED | FieldPropertiesFlags::HAD_FOCUS;
+      FieldPropertiesFlags::kUserTyped | FieldPropertiesFlags::kHadFocus;
   expected_properties_masks[ASCIIToUTF16("password")] =
-      FieldPropertiesFlags::USER_TYPED | FieldPropertiesFlags::HAD_FOCUS;
+      FieldPropertiesFlags::kUserTyped | FieldPropertiesFlags::kHadFocus;
 
   ExpectFieldPropertiesMasks(PasswordFormSameDocumentNavigation,
                              expected_properties_masks,
@@ -2333,9 +2339,9 @@ TEST_F(PasswordAutofillAgentTest,
 
   std::map<base::string16, FieldPropertiesMask> expected_properties_masks;
   expected_properties_masks[ASCIIToUTF16("username")] =
-      FieldPropertiesFlags::USER_TYPED | FieldPropertiesFlags::HAD_FOCUS;
+      FieldPropertiesFlags::kUserTyped | FieldPropertiesFlags::kHadFocus;
   expected_properties_masks[ASCIIToUTF16("password")] =
-      FieldPropertiesFlags::USER_TYPED | FieldPropertiesFlags::HAD_FOCUS;
+      FieldPropertiesFlags::kUserTyped | FieldPropertiesFlags::kHadFocus;
 
   ExpectFieldPropertiesMasks(PasswordFormSameDocumentNavigation,
                              expected_properties_masks,
@@ -2783,7 +2789,7 @@ TEST_F(PasswordAutofillAgentTest, NoForm_PromptForAJAXSubmitWithoutNavigation) {
   FireAjaxSucceeded();
 
   ExpectSameDocumentNavigationWithUsernameAndPasswords(
-      FormData::kNotSetRendererId, "Bob", "mypassword", "",
+      autofill::FormRendererId(), "Bob", "mypassword", "",
       SubmissionIndicatorEvent::XHR_SUCCEEDED);
 }
 
@@ -2807,7 +2813,7 @@ TEST_F(PasswordAutofillAgentTest,
   base::RunLoop().RunUntilIdle();
 
   ExpectSameDocumentNavigationWithUsernameAndPasswords(
-      FormData::kNotSetRendererId, "Bob", "mypassword", "",
+      autofill::FormRendererId(), "Bob", "mypassword", "",
       SubmissionIndicatorEvent::DOM_MUTATION_AFTER_XHR);
 }
 
@@ -2842,7 +2848,7 @@ TEST_F(PasswordAutofillAgentTest,
        PromptForAJAXSubmitAfterDeletingParentElement) {
   LoadHTML(kDivWrappedFormHTML);
   UpdateUsernameAndPasswordElements();
-  uint32_t renderer_id = GetFormUniqueRendererId("form");
+  autofill::FormRendererId renderer_id = GetFormUniqueRendererId("form");
 
   SimulateUsernameTyping("Bob");
   SimulatePasswordTyping("mypassword");
@@ -3174,8 +3180,7 @@ TEST_F(PasswordAutofillAgentTest,
 
     // Get the username and password form input elelments.
     blink::WebDocument document = GetMainFrame()->GetDocument();
-    blink::WebVector<WebFormElement> forms;
-    document.Forms(forms);
+    blink::WebVector<WebFormElement> forms = document.Forms();
     WebFormElement form_element = forms[0];
     std::vector<blink::WebFormControlElement> control_elements =
         form_util::ExtractAutofillableElementsInForm(form_element);
@@ -3276,7 +3281,7 @@ TEST_F(PasswordAutofillAgentTest,
     FireAjaxSucceeded();
 
     ExpectSameDocumentNavigationWithUsernameAndPasswords(
-        FormData::kNotSetRendererId, "Alice", "mypassword", "",
+        autofill::FormRendererId(), "Alice", "mypassword", "",
         SubmissionIndicatorEvent::XHR_SUCCEEDED);
   }
 }
@@ -3302,22 +3307,14 @@ TEST_F(PasswordAutofillAgentTest,
   base::RunLoop().RunUntilIdle();
 
   ExpectSameDocumentNavigationWithUsernameAndPasswords(
-      FormData::kNotSetRendererId, "Alice", "mypassword", "",
+      autofill::FormRendererId(), "Alice", "mypassword", "",
       SubmissionIndicatorEvent::DOM_MUTATION_AFTER_XHR);
 }
 
 // Tests that password manager sees both autofill assisted and user entered
 // data on saving that is triggered by form submission.
-// Disabled on Win due to https://crbug.com/835865.
-#if defined(OS_WIN)
-#define MAYBE_UsernameChangedAfterPasswordInput_FormSubmitted \
-  DISABLED_UsernameChangedAfterPasswordInput_FormSubmitted
-#else
-#define MAYBE_UsernameChangedAfterPasswordInput_FormSubmitted \
-  UsernameChangedAfterPasswordInput_FormSubmitted
-#endif
 TEST_F(PasswordAutofillAgentTest,
-       MAYBE_UsernameChangedAfterPasswordInput_FormSubmitted) {
+       UsernameChangedAfterPasswordInput_FormSubmitted) {
   for (auto change_source :
        {FieldChangeSource::USER, FieldChangeSource::AUTOFILL,
         FieldChangeSource::USER_AUTOFILL}) {
@@ -3448,7 +3445,8 @@ TEST_F(PasswordAutofillAgentTest,
        SameDocumentNavigationSubmissionUsernameIsEmpty) {
   username_element_.SetValue(WebString());
   SimulatePasswordTyping("random");
-  uint32_t renderer_id = GetFormUniqueRendererId("LoginTestForm");
+  autofill::FormRendererId renderer_id =
+      GetFormUniqueRendererId("LoginTestForm");
 
   // Simulate that JavaScript removes the submitted form from DOM. That means
   // that a submission was successful.
@@ -3695,8 +3693,8 @@ TEST_F(PasswordAutofillAgentTest, PSLMatchedPasswordIsNotAutofill) {
   psl_credentials.password = ASCIIToUTF16("pslpassword");
   // Non-empty realm means PSL matched credentials.
   psl_credentials.realm = "example.com";
-  fill_data_.additional_logins[ASCIIToUTF16("prefilledusername")] =
-      psl_credentials;
+  psl_credentials.username = ASCIIToUTF16("prefilledusername");
+  fill_data_.additional_logins.push_back(std::move(psl_credentials));
 
   // Simulate the browser sending back the login info, it triggers the
   // autocomplete.

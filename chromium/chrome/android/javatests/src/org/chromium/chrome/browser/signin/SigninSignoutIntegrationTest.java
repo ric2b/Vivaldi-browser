@@ -37,6 +37,7 @@ import org.chromium.chrome.browser.bookmarks.BookmarkModel;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.profiles.ProfileAccountManagementMetrics;
+import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
 import org.chromium.chrome.browser.sync.settings.AccountManagementFragment;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -45,6 +46,7 @@ import org.chromium.chrome.test.util.BookmarkTestUtil;
 import org.chromium.chrome.test.util.browser.signin.SigninTestUtil;
 import org.chromium.components.signin.ChromeSigninController;
 import org.chromium.components.signin.GAIAServiceType;
+import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.test.util.DisableAnimationsTestRule;
@@ -57,6 +59,10 @@ import org.chromium.ui.test.util.DisableAnimationsTestRule;
 public class SigninSignoutIntegrationTest {
     @Rule
     public final DisableAnimationsTestRule mNoAnimationsRule = new DisableAnimationsTestRule();
+
+    @Rule
+    public final SettingsActivityTestRule<AccountManagementFragment> mSettingsActivityTestRule =
+            new SettingsActivityTestRule<>(AccountManagementFragment.class);
 
     @Rule
     public final JniMocker mocker = new JniMocker();
@@ -79,7 +85,7 @@ public class SigninSignoutIntegrationTest {
     public void setUp() {
         initMocks(this);
         mocker.mock(SigninUtilsJni.TEST_HOOKS, mSigninUtilsNativeMock);
-        SigninTestUtil.setUpAuthForTest();
+        SigninTestUtil.setUpAuthForTesting();
         mActivityTestRule.startMainActivityOnBlankPage();
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> { mSigninManager = IdentityServicesProvider.get().getSigninManager(); });
@@ -89,7 +95,7 @@ public class SigninSignoutIntegrationTest {
     @After
     public void tearDown() {
         mSigninManager.removeSignInStateObserver(mSignInStateObserverMock);
-        SigninTestUtil.tearDownAuthForTest();
+        SigninTestUtil.tearDownAuthForTesting();
     }
 
     @Test
@@ -108,7 +114,9 @@ public class SigninSignoutIntegrationTest {
         assertSignedIn();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertEquals(account.name,
-                    mSigninManager.getIdentityManager().getPrimaryAccountInfo().getEmail());
+                    mSigninManager.getIdentityManager()
+                            .getPrimaryAccountInfo(ConsentLevel.SYNC)
+                            .getEmail());
         });
     }
 
@@ -116,7 +124,7 @@ public class SigninSignoutIntegrationTest {
     @LargeTest
     public void testSignOut() {
         signIn();
-        mActivityTestRule.startSettingsActivity(AccountManagementFragment.class.getName());
+        mSettingsActivityTestRule.startSettingsActivity();
         onView(withText(R.string.sign_out_and_turn_off_sync)).perform(click());
         onView(withText(R.string.continue_button)).inRoot(isDialog()).perform(click());
         assertSignedOut();
@@ -133,7 +141,7 @@ public class SigninSignoutIntegrationTest {
     @LargeTest
     public void testSignOutDismissedByPressingBack() {
         signIn();
-        mActivityTestRule.startSettingsActivity(AccountManagementFragment.class.getName());
+        mSettingsActivityTestRule.startSettingsActivity();
         onView(withText(R.string.sign_out_and_turn_off_sync)).perform(click());
         onView(isRoot()).perform(pressBack());
         verify(mSignInStateObserverMock, never()).onSignedOut();
@@ -150,7 +158,7 @@ public class SigninSignoutIntegrationTest {
     @LargeTest
     public void testSignOutCancelled() {
         signIn();
-        mActivityTestRule.startSettingsActivity(AccountManagementFragment.class.getName());
+        mSettingsActivityTestRule.startSettingsActivity();
         onView(withText(R.string.sign_out_and_turn_off_sync)).perform(click());
         onView(withText(R.string.cancel)).inRoot(isDialog()).perform(click());
         verify(mSignInStateObserverMock, never()).onSignedOut();
@@ -168,7 +176,7 @@ public class SigninSignoutIntegrationTest {
     public void testSignOutNonManagedAccountWithDataWiped() {
         signIn();
         addOneTestBookmark();
-        mActivityTestRule.startSettingsActivity(AccountManagementFragment.class.getName());
+        mSettingsActivityTestRule.startSettingsActivity();
         onView(withText(R.string.sign_out_and_turn_off_sync)).perform(click());
         onView(withId(R.id.remove_local_data)).perform(click());
         onView(withText(R.string.continue_button)).inRoot(isDialog()).perform(click());
@@ -183,7 +191,7 @@ public class SigninSignoutIntegrationTest {
     public void testSignOutNonManagedAccountWithoutWipingData() {
         signIn();
         addOneTestBookmark();
-        mActivityTestRule.startSettingsActivity(AccountManagementFragment.class.getName());
+        mSettingsActivityTestRule.startSettingsActivity();
         onView(withText(R.string.sign_out_and_turn_off_sync)).perform(click());
         onView(withText(R.string.continue_button)).inRoot(isDialog()).perform(click());
         assertSignedOut();
@@ -226,7 +234,8 @@ public class SigninSignoutIntegrationTest {
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertFalse("Account should be signed out!",
                     mSigninManager.getIdentityManager().hasPrimaryAccount());
-            Assert.assertNull(mSigninManager.getIdentityManager().getPrimaryAccountInfo());
+            Assert.assertNull(
+                    mSigninManager.getIdentityManager().getPrimaryAccountInfo(ConsentLevel.SYNC));
         });
     }
 }

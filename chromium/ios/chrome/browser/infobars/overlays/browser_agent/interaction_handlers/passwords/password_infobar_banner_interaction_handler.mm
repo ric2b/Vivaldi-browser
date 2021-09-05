@@ -4,7 +4,7 @@
 
 #import "ios/chrome/browser/infobars/overlays/browser_agent/interaction_handlers/passwords/password_infobar_banner_interaction_handler.h"
 
-#include "base/logging.h"
+#include "base/check.h"
 #include "ios/chrome/browser/infobars/infobar_ios.h"
 #import "ios/chrome/browser/infobars/overlays/infobar_overlay_request_cancel_handler.h"
 #import "ios/chrome/browser/infobars/overlays/infobar_overlay_request_inserter.h"
@@ -45,8 +45,15 @@ void PasswordInfobarBannerInteractionHandler::MainButtonTapped(
 void PasswordInfobarBannerInteractionHandler::ShowModalButtonTapped(
     InfoBarIOS* infobar,
     web::WebState* web_state) {
-  InfobarOverlayRequestInserter::FromWebState(web_state)->AddOverlayRequest(
-      infobar, InfobarOverlayType::kModal);
+  InsertParams params(infobar);
+  params.infobar = infobar;
+  params.overlay_type = InfobarOverlayType::kModal;
+  params.insertion_index = OverlayRequestQueue::FromWebState(
+                               web_state, OverlayModality::kInfobarModal)
+                               ->size();
+  params.source = InfobarOverlayInsertionSource::kBanner;
+  InfobarOverlayRequestInserter::FromWebState(web_state)->InsertOverlayRequest(
+      params);
 }
 
 void PasswordInfobarBannerInteractionHandler::BannerDismissedByUser(

@@ -59,7 +59,6 @@ public final class ResourceLoadingTest {
     }
 
     private int getIdentifier(String name) {
-        return mRemoteContext.getResources().getIdentifier(
-                name, null, mRemoteContext.getPackageName());
+        return ResourceUtil.getIdentifier(mRemoteContext, name);
     }
 }

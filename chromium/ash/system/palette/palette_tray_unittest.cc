@@ -7,7 +7,7 @@
 #include <memory>
 #include <string>
 
-#include "ash/assistant/assistant_controller.h"
+#include "ash/assistant/assistant_controller_impl.h"
 #include "ash/assistant/test/test_assistant_client.h"
 #include "ash/assistant/test/test_assistant_service.h"
 #include "ash/assistant/util/assistant_util.h"
@@ -340,8 +340,9 @@ TEST_F(PaletteTrayTestWithAssistant, MetalayerToolActivatesHighlighter) {
   ui::ScopedAnimationDurationScaleMode animation_duration_mode(
       ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
   assistant_state()->NotifyFeatureAllowed(
-      mojom::AssistantAllowedState::ALLOWED);
-  assistant_state()->NotifyStatusChanged(mojom::AssistantState::READY);
+      chromeos::assistant::AssistantAllowedState::ALLOWED);
+  assistant_state()->NotifyStatusChanged(
+      chromeos::assistant::AssistantStatus::READY);
   prefs()->SetBoolean(chromeos::assistant::prefs::kAssistantEnabled, true);
   prefs()->SetBoolean(chromeos::assistant::prefs::kAssistantContextEnabled,
                       true);
@@ -420,7 +421,8 @@ TEST_F(PaletteTrayTestWithAssistant, MetalayerToolActivatesHighlighter) {
 TEST_F(PaletteTrayTestWithAssistant, StylusBarrelButtonActivatesHighlighter) {
   ui::ScopedAnimationDurationScaleMode animation_duration_mode(
       ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
-  assistant_state()->NotifyStatusChanged(mojom::AssistantState::NOT_READY);
+  assistant_state()->NotifyStatusChanged(
+      chromeos::assistant::AssistantStatus::NOT_READY);
   prefs()->SetBoolean(chromeos::assistant::prefs::kAssistantEnabled, false);
   prefs()->SetBoolean(chromeos::assistant::prefs::kAssistantContextEnabled,
                       false);
@@ -456,7 +458,8 @@ TEST_F(PaletteTrayTestWithAssistant, StylusBarrelButtonActivatesHighlighter) {
                              false /* no highlighter on press */);
 
   // Once the service is ready, the button should start working.
-  assistant_state()->NotifyStatusChanged(mojom::AssistantState::READY);
+  assistant_state()->NotifyStatusChanged(
+      chromeos::assistant::AssistantStatus::READY);
 
   // Press and drag with no button, still no highlighter.
   WaitDragAndAssertMetalayer("all enabled, no button ", origin, ui::EF_NONE,

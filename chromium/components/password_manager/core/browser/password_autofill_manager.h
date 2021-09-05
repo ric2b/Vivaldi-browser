@@ -94,6 +94,10 @@ class PasswordAutofillManager : public autofill::AutofillPopupDelegate {
   // Called when main frame navigates. Not called for in-page navigations.
   void DidNavigateMainFrame();
 
+  // Called if no suggestions were found. Assumed to be mutually exclusive with
+  // |OnAddPasswordFillData|.
+  void OnNoCredentialsFound();
+
   // A public version of FillSuggestion(), only for use in tests.
   bool FillSuggestionForTest(const base::string16& username);
 
@@ -170,8 +174,8 @@ class PasswordAutofillManager : public autofill::AutofillPopupDelegate {
   void OnUnlockItemAccepted(autofill::PopupItemId unlock_item);
 
   // If reauth failed, resets the suggestions to show the |unlock_item| again.
-  // Otherwise, unlocks the account store and either triggers generation or
-  // filling based on the |unlock_item| that was clicked.
+  // Otherwise, triggers either generation or filling based on the |unlock_item|
+  // that was clicked.
   void OnUnlockReauthCompleted(
       autofill::PopupItemId unlock_item,
       PasswordManagerClient::ReauthSucceeded reauth_succeeded);

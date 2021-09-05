@@ -137,6 +137,7 @@ void UpdateVivaldiContentBlockingRuleSourceWithLoadedSource(
       rule_source.unsafe_adblock_metadata.version;
   result->last_update = rule_source.last_update.ToJsTime();
   result->next_fetch = rule_source.next_fetch.ToJsTime();
+  result->is_fetching = rule_source.is_fetching;
   result->last_fetch_result =
       ToVivaldiContentBlockingFetchResult(rule_source.last_fetch_result);
   result->rules_info.valid_rules = rule_source.rules_info.valid_rules;
@@ -165,6 +166,17 @@ vivaldi::content_blocking::RuleSource ToVivaldiContentBlockingRuleSource(
   return result;
 }
 
+void RecordBLockedUrls(
+    const adblock_filter::BlockedUrlsReporterTabHelper::BlockedUrlInfoMap&
+        blocked_urls,
+    std::vector<vivaldi::content_blocking::BlockedUrlsInfo>*
+        blocked_urls_info) {
+  for (const auto& blocked_url : blocked_urls) {
+    blocked_urls_info->emplace_back();
+    blocked_urls_info->back().url = blocked_url.first;
+    blocked_urls_info->back().blocked_count = blocked_url.second.blocked_count;
+  }
+}
 }  // namespace
 
 ContentBlockingEventRouter::ContentBlockingEventRouter(
@@ -224,11 +236,11 @@ void ContentBlockingEventRouter::OnKnownSourceDisabled(
       browser_context_);
 }
 
-void ContentBlockingEventRouter::OnRulesFetchComplete(
+void ContentBlockingEventRouter::OnRulesSourceUpdated(
     const adblock_filter::RuleSource& rule_source) {
   ::vivaldi::BroadcastEvent(
-      vivaldi::content_blocking::OnRulesFetchComplete::kEventName,
-      vivaldi::content_blocking::OnRulesFetchComplete::Create(
+      vivaldi::content_blocking::OnRulesSourceUpdated::kEventName,
+      vivaldi::content_blocking::OnRulesSourceUpdated::Create(
           ToVivaldiContentBlockingRuleSource(rule_source)),
       browser_context_);
 }
@@ -302,7 +314,8 @@ void ContentBlockingAPI::Shutdown() {
 
 ExtensionFunction::ResponseAction AdBlockFunction::Run() {
   adblock_filter::RuleService* rules_service =
-      adblock_filter::RuleServiceFactory::GetForBrowserContext(context_);
+      adblock_filter::RuleServiceFactory::GetForBrowserContext(
+          browser_context());
 
   if (!rules_service->IsLoaded()) {
     rules_service->AddObserver(this);
@@ -605,8 +618,9 @@ ContentBlockingGetAllExceptionListsFunction::RunWithService(
   return ArgumentList(Results::Create(result));
 }
 
-ExtensionFunction::ResponseAction
-ContentBlockingGetBlockedUrlsInfoFunction::Run() {
+ExtensionFunction::ResponseValue
+ContentBlockingGetBlockedUrlsInfoFunction::RunWithService(
+    adblock_filter::RuleService* rules_service) {
   using vivaldi::content_blocking::GetBlockedUrlsInfo::Params;
   namespace Results = vivaldi::content_blocking::GetBlockedUrlsInfo::Results;
   std::unique_ptr<Params> params(Params::Create(*args_));
@@ -630,25 +644,87 @@ ContentBlockingGetBlockedUrlsInfoFunction::Run() {
 
       const adblock_filter::BlockedUrlsReporterTabHelper::TabBlockedUrlInfo&
           tab_blocked_urls_info = tab_helper->GetBlockedUrlsInfo(group);
-      if (tab_blocked_urls_info.blocked_urls.empty())
+      if (tab_blocked_urls_info.blocked_trackers.empty() &&
+          tab_blocked_urls_info.blocked_urls.empty()) {
         continue;
-
+      }
       tab_blocked_urls_infos.emplace_back();
       tab_blocked_urls_infos.back().tab_id =
           ExtensionTabUtil::GetTabId(web_contents);
       tab_blocked_urls_infos.back().total_blocked_count =
           tab_blocked_urls_info.total_count;
-      for (const auto& blocked_urls_info : tab_blocked_urls_info.blocked_urls) {
-        tab_blocked_urls_infos.back().blocked_urls_info.emplace_back();
-        tab_blocked_urls_infos.back().blocked_urls_info.back().url =
-            blocked_urls_info.first;
-        tab_blocked_urls_infos.back().blocked_urls_info.back().blocked_count =
-            blocked_urls_info.second.blocked_count;
+
+      for (const auto& blocked_tracker :
+           tab_blocked_urls_info.blocked_trackers) {
+        auto* source_to_info_map =
+            rules_service->GetBlockerUrlsReporter()->GetTrackerInfo(
+                group, blocked_tracker.first);
+        if (!source_to_info_map) {
+          // The information forthis tracker went away since the blocking was
+          // recorded. Just record the blocked urls as not part of a known
+          // tracker
+          RecordBLockedUrls(blocked_tracker.second.blocked_urls,
+                            &tab_blocked_urls_infos.back().blocked_urls_info);
+          continue;
+        }
+
+        tab_blocked_urls_infos.back().blocked_trackers_info.emplace_back();
+        auto& blocked_tracker_info =
+            tab_blocked_urls_infos.back().blocked_trackers_info.back();
+        blocked_tracker_info.domain = blocked_tracker.first;
+        blocked_tracker_info.blocked_count =
+            blocked_tracker.second.blocked_count;
+        RecordBLockedUrls(blocked_tracker.second.blocked_urls,
+                          &blocked_tracker_info.blocked_urls);
+        for (const auto& source_to_info : *source_to_info_map) {
+          blocked_tracker_info.tracker_info.emplace_back();
+          blocked_tracker_info.tracker_info.back().source_id =
+              source_to_info.first;
+          blocked_tracker_info.tracker_info.back().info.reset(
+              new base::Value(source_to_info.second.Clone()));
+        }
       }
+
+      RecordBLockedUrls(tab_blocked_urls_info.blocked_urls,
+                        &tab_blocked_urls_infos.back().blocked_urls_info);
     }
   }
 
-  return RespondNow(ArgumentList(Results::Create(tab_blocked_urls_infos)));
+  return ArgumentList(Results::Create(tab_blocked_urls_infos));
+}
+
+ExtensionFunction::ResponseValue
+ContentBlockingGetBlockedDomainCountersFunction::RunWithService(
+    adblock_filter::RuleService* rules_service) {
+  namespace Results =
+      vivaldi::content_blocking::GetBlockedDomainCounters::Results;
+  Results::Counters blocked_domain_counters;
+  for (const auto& blocked_domain :
+       rules_service->GetBlockerUrlsReporter()
+           ->GetBlockedDomains()[static_cast<size_t>(
+               adblock_filter::RuleGroup::kTrackingRules)]) {
+    blocked_domain_counters.tracking.emplace_back();
+    blocked_domain_counters.tracking.back().domain = blocked_domain.first;
+    blocked_domain_counters.tracking.back().blocked_count =
+        blocked_domain.second;
+  }
+  for (const auto& blocked_domain :
+       rules_service->GetBlockerUrlsReporter()
+           ->GetBlockedDomains()[static_cast<size_t>(
+               adblock_filter::RuleGroup::kAdBlockingRules)]) {
+    blocked_domain_counters.ad_blocking.emplace_back();
+    blocked_domain_counters.ad_blocking.back().domain = blocked_domain.first;
+    blocked_domain_counters.ad_blocking.back().blocked_count =
+        blocked_domain.second;
+  }
+  return ArgumentList(Results::Create(blocked_domain_counters));
+}
+
+ExtensionFunction::ResponseValue
+ContentBlockingClearBlockedDomainCountersFunction::RunWithService(
+    adblock_filter::RuleService* rules_service) {
+  rules_service->GetBlockerUrlsReporter()->ClearBlockedDomains();
+  return NoArguments();
 }
 
 ExtensionFunction::ResponseValue

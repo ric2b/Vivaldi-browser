@@ -36,6 +36,7 @@
 #include "base/optional.h"
 #include "base/unguessable_token.h"
 #include "services/network/public/mojom/referrer_policy.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/feature_policy/policy_disposition.mojom-blink-forward.h"
@@ -155,8 +156,8 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
 
   ContentSecurityPolicy* GetContentSecurityPolicy() const;
 
-  mojom::blink::WebSandboxFlags GetSandboxFlags() const;
-  bool IsSandboxed(mojom::blink::WebSandboxFlags mask) const;
+  network::mojom::blink::WebSandboxFlags GetSandboxFlags() const;
+  bool IsSandboxed(network::mojom::blink::WebSandboxFlags mask) const;
 
   // Returns the content security policy to be used based on the current
   // JavaScript world we are in.
@@ -171,7 +172,6 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
   virtual const KURL& BaseURL() const = 0;
   virtual KURL CompleteURL(const String& url) const = 0;
   virtual void DisableEval(const String& error_message) = 0;
-  virtual LocalDOMWindow* ExecutingWindow() const { return nullptr; }
   virtual String UserAgent() const = 0;
 
   virtual HttpsState GetHttpsState() const = 0;
@@ -191,10 +191,7 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
   virtual const SecurityContext& GetSecurityContext() const = 0;
 
   // https://tc39.github.io/ecma262/#sec-agent-clusters
-  // TODO(dtapuska): Remove this virtual once all execution_contexts
-  // always have an agent. Worklets currently override this because
-  // they don't have agents.
-  virtual const base::UnguessableToken& GetAgentClusterID() const;
+  const base::UnguessableToken& GetAgentClusterID() const;
 
   bool IsSameAgentCluster(const base::UnguessableToken&) const;
 
@@ -221,6 +218,7 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
                          bool discard_duplicates = false) {
     AddConsoleMessageImpl(message, discard_duplicates);
   }
+  virtual void AddInspectorIssue(mojom::blink::InspectorIssueInfoPtr) = 0;
 
   bool IsContextPaused() const;
   bool IsContextDestroyed() const { return is_context_destroyed_; }
@@ -303,14 +301,7 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
   bool IsFeatureEnabled(
       mojom::blink::FeaturePolicyFeature,
       ReportOptions report_on_failure = ReportOptions::kDoNotReport,
-      const String& message = g_empty_string,
-      const String& source_file = g_empty_string) const;
-  bool IsFeatureEnabled(
-      mojom::blink::FeaturePolicyFeature,
-      PolicyValue threshold_value,
-      ReportOptions report_on_failure = ReportOptions::kDoNotReport,
-      const String& message = g_empty_string,
-      const String& source_file = g_empty_string) const;
+      const String& message = g_empty_string) const;
   bool IsFeatureEnabled(
       mojom::blink::DocumentPolicyFeature,
       ReportOptions report_option = ReportOptions::kDoNotReport,
@@ -332,8 +323,7 @@ class CORE_EXPORT ExecutionContext : public Supplementable<ExecutionContext>,
   virtual void ReportFeaturePolicyViolation(
       mojom::blink::FeaturePolicyFeature,
       mojom::blink::PolicyDisposition,
-      const String& message = g_empty_string,
-      const String& source_file = g_empty_string) const {}
+      const String& message = g_empty_string) const {}
   virtual void ReportDocumentPolicyViolation(
       mojom::blink::DocumentPolicyFeature,
       mojom::blink::PolicyDisposition,

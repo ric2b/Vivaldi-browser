@@ -8,31 +8,63 @@ import("//build/config/ios/rules.gni")
 group("resources") {
   deps = [
     ":consent_illustration",
+    ":default_world_favicon",
     ":empty_credentials_illustration",
-    ":stale_credentials_illustration",
+    ":info_icon",
+    ":password_hide_icon",
+    ":password_reveal_icon",
   ]
 }
 
 imageset("consent_illustration") {
   sources = [
     "consent_illustration.imageset/Contents.json",
-    "consent_illustration.imageset/illustration_dark.png",
-    "consent_illustration.imageset/illustration_light.png",
+    "consent_illustration.imageset/illustration_dark@2x.png",
+    "consent_illustration.imageset/illustration_dark@3x.png",
+    "consent_illustration.imageset/illustration_light@2x.png",
+    "consent_illustration.imageset/illustration_light@3x.png",
   ]
 }
 
 imageset("empty_credentials_illustration") {
   sources = [
     "empty_credentials_illustration.imageset/Contents.json",
-    "empty_credentials_illustration.imageset/illustration_dark.png",
-    "empty_credentials_illustration.imageset/illustration_light.png",
+    "empty_credentials_illustration.imageset/illustration_dark@2x.png",
+    "empty_credentials_illustration.imageset/illustration_dark@3x.png",
+    "empty_credentials_illustration.imageset/illustration_light@2x.png",
+    "empty_credentials_illustration.imageset/illustration_light@3x.png",
   ]
 }
 
-imageset("stale_credentials_illustration") {
+imageset("password_reveal_icon") {
   sources = [
-    "stale_credentials_illustration.imageset/Contents.json",
-    "stale_credentials_illustration.imageset/illustration_dark.png",
-    "stale_credentials_illustration.imageset/illustration_light.png",
+    "password_reveal_icon.imageset/Contents.json",
+    "password_reveal_icon.imageset/password_reveal_icon@2x.png",
+    "password_reveal_icon.imageset/password_reveal_icon@3x.png",
+  ]
+}
+
+imageset("password_hide_icon") {
+  sources = [
+    "password_hide_icon.imageset/Contents.json",
+    "password_hide_icon.imageset/password_hide_icon@2x.png",
+    "password_hide_icon.imageset/password_hide_icon@3x.png",
+  ]
+}
+
+imageset("default_world_favicon") {
+  sources = [
+    "default_world_favicon.imageset/Contents.json",
+    "default_world_favicon.imageset/default_world_favicon.png",
+    "default_world_favicon.imageset/default_world_favicon@2x.png",
+    "default_world_favicon.imageset/default_world_favicon@3x.png",
+  ]
+}
+
+imageset("info_icon") {
+  sources = [
+    "info_icon.imageset/Contents.json",
+    "info_icon.imageset/info_icon@2x.png",
+    "info_icon.imageset/info_icon@3x.png",
   ]
 }

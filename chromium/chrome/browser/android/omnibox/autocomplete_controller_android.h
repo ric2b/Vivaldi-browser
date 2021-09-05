@@ -42,7 +42,8 @@ class AutocompleteControllerAndroid : public AutocompleteController::Observer,
              bool prevent_inline_autocomplete,
              bool prefer_keyword,
              bool allow_exact_keyword_match,
-             bool want_asynchronous_matches);
+             bool want_asynchronous_matches,
+             const base::android::JavaRef<jstring>& j_query_tile_id);
   base::android::ScopedJavaLocalRef<jobject> Classify(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
@@ -74,7 +75,7 @@ class AutocompleteControllerAndroid : public AutocompleteController::Observer,
                         const base::android::JavaParamRef<jobject>& obj,
                         jint selected_index,
                         jint hash_code);
-  base::android::ScopedJavaLocalRef<jstring>
+  base::android::ScopedJavaLocalRef<jobject>
   UpdateMatchDestinationURLWithQueryFormulationTime(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
@@ -123,6 +124,12 @@ class AutocompleteControllerAndroid : public AutocompleteController::Observer,
 
   base::android::ScopedJavaLocalRef<jobject> BuildOmniboxSuggestion(
       JNIEnv* env, const AutocompleteMatch& match);
+
+  // Construct Java Group Headers map from supplied HeadersMap.
+  void PopulateOmniboxGroupHeaders(
+      JNIEnv* env,
+      base::android::ScopedJavaLocalRef<jobject> j_autocomplete_result,
+      const SearchSuggestionParser::HeadersMap& header_map);
 
   // A helper method for fetching the top synchronous autocomplete result.
   // The |prevent_inline_autocomplete| flag is passed to the AutocompleteInput

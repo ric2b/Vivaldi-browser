@@ -47,6 +47,7 @@ source_set("authentication") {
     "//ios/chrome/browser/metrics",
     "//ios/chrome/browser/signin",
     "//ios/chrome/browser/sync",
+    "//ios/chrome/browser/ui:feature_flags",
     "//ios/chrome/browser/ui/alert_coordinator",
     "//ios/chrome/browser/ui/authentication/cells",
     "//ios/chrome/browser/ui/collection_view/cells",
@@ -65,7 +66,10 @@ source_set("authentication") {
     "//ui/base",
     "//ui/gfx",
   ]
-  public_deps = [ "//ios/chrome/browser/ui/collection_view" ]
+  public_deps = [
+    "//ios/chrome/browser/ui/authentication/signin:constants",
+    "//ios/chrome/browser/ui/collection_view",
+  ]
   if (is_chrome_branded) {
     deps += [ "resources:signin_promo_logo_chrome_color" ]
   } else {

@@ -11,12 +11,14 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/check_op.h"
 #include "base/location.h"
-#include "base/logging.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/histogram_macros_local.h"
+#include "base/notreached.h"
 #include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -40,7 +42,6 @@
 #include "net/nqe/weighted_observation.h"
 #include "net/url_request/url_request.h"
 #include "net/url_request/url_request_context.h"
-#include "net/url_request/url_request_status.h"
 #include "url/gurl.h"
 
 #if defined(OS_ANDROID)
@@ -703,28 +704,29 @@ void NetworkQualityEstimator::RecordMetricsOnMainFrameRequest() const {
   if (estimated_quality_at_last_main_frame_.http_rtt() !=
       nqe::internal::InvalidRTT()) {
     // Add the 50th percentile value.
-    UMA_HISTOGRAM_TIMES("NQE.MainFrame.RTT.Percentile50",
-                        estimated_quality_at_last_main_frame_.http_rtt());
+    LOCAL_HISTOGRAM_TIMES("NQE.MainFrame.RTT.Percentile50",
+                          estimated_quality_at_last_main_frame_.http_rtt());
   }
 
   if (estimated_quality_at_last_main_frame_.transport_rtt() !=
       nqe::internal::InvalidRTT()) {
     // Add the 50th percentile value.
-    UMA_HISTOGRAM_TIMES("NQE.MainFrame.TransportRTT.Percentile50",
-                        estimated_quality_at_last_main_frame_.transport_rtt());
+    LOCAL_HISTOGRAM_TIMES(
+        "NQE.MainFrame.TransportRTT.Percentile50",
+        estimated_quality_at_last_main_frame_.transport_rtt());
   }
 
   if (estimated_quality_at_last_main_frame_.downstream_throughput_kbps() !=
       nqe::internal::INVALID_RTT_THROUGHPUT) {
     // Add the 50th percentile value.
-    UMA_HISTOGRAM_COUNTS_1M(
+    LOCAL_HISTOGRAM_COUNTS_1000000(
         "NQE.MainFrame.Kbps.Percentile50",
         estimated_quality_at_last_main_frame_.downstream_throughput_kbps());
   }
 
-  UMA_HISTOGRAM_ENUMERATION("NQE.MainFrame.EffectiveConnectionType",
-                            effective_connection_type_at_last_main_frame_,
-                            EFFECTIVE_CONNECTION_TYPE_LAST);
+  LOCAL_HISTOGRAM_ENUMERATION("NQE.MainFrame.EffectiveConnectionType",
+                              effective_connection_type_at_last_main_frame_,
+                              EFFECTIVE_CONNECTION_TYPE_LAST);
 }
 
 bool NetworkQualityEstimator::ShouldComputeNetworkQueueingDelay() const {
@@ -929,21 +931,6 @@ NetworkQualityEstimator::GetCappedECTBasedOnSignalStrength() const {
 
   if (effective_connection_type_ == EFFECTIVE_CONNECTION_TYPE_UNKNOWN ||
       effective_connection_type_ == EFFECTIVE_CONNECTION_TYPE_OFFLINE) {
-    return effective_connection_type_;
-  }
-
-  if (current_network_id_.type == NetworkChangeNotifier::CONNECTION_WIFI) {
-    // The maximum signal strength level is 4.
-    UMA_HISTOGRAM_EXACT_LINEAR("NQE.WifiSignalStrength.AtECTComputation",
-                               current_network_id_.signal_strength, 4);
-  } else if (current_network_id_.type == NetworkChangeNotifier::CONNECTION_2G ||
-             current_network_id_.type == NetworkChangeNotifier::CONNECTION_3G ||
-             current_network_id_.type == NetworkChangeNotifier::CONNECTION_4G) {
-    // The maximum signal strength level is 4.
-    UMA_HISTOGRAM_EXACT_LINEAR("NQE.CellularSignalStrength.AtECTComputation",
-                               current_network_id_.signal_strength, 4);
-  } else {
-    NOTREACHED();
     return effective_connection_type_;
   }
 
@@ -1459,8 +1446,9 @@ void NetworkQualityEstimator::AddAndNotifyObserversOfThroughput(
   ++new_throughput_observations_since_last_ect_computation_;
   http_downstream_throughput_kbps_observations_.AddObservation(observation);
 
-  UMA_HISTOGRAM_ENUMERATION("NQE.Kbps.ObservationSource", observation.source(),
-                            NETWORK_QUALITY_OBSERVATION_SOURCE_MAX);
+  LOCAL_HISTOGRAM_ENUMERATION("NQE.Kbps.ObservationSource",
+                              observation.source(),
+                              NETWORK_QUALITY_OBSERVATION_SOURCE_MAX);
 
   // Maybe recompute the effective connection type since a new throughput
   // observation is available.
@@ -1774,7 +1762,9 @@ void NetworkQualityEstimator::OnPeerToPeerConnectionsCountChange(
     DCHECK(p2p_connections_count_active_timestamp_);
     base::TimeDelta duration = tick_clock_->NowTicks() -
                                p2p_connections_count_active_timestamp_.value();
-    UMA_HISTOGRAM_LONG_TIMES("NQE.PeerToPeerConnectionsDuration", duration);
+    LOCAL_HISTOGRAM_CUSTOM_TIMES("NQE.PeerToPeerConnectionsDuration", duration,
+                                 base::TimeDelta::FromMilliseconds(1),
+                                 base::TimeDelta::FromHours(1), 50);
     p2p_connections_count_active_timestamp_ = base::nullopt;
   }
 

@@ -4,12 +4,16 @@
 
 #include "pdf/pdfium/pdfium_engine.h"
 
+#include "base/test/scoped_feature_list.h"
+#include "base/test/task_environment.h"
 #include "pdf/document_layout.h"
 #include "pdf/document_metadata.h"
+#include "pdf/pdf_features.h"
 #include "pdf/pdfium/pdfium_page.h"
 #include "pdf/pdfium/pdfium_test_base.h"
 #include "pdf/test/test_client.h"
 #include "pdf/test/test_utils.h"
+#include "ppapi/c/ppb_input_event.h"
 #include "ppapi/cpp/size.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -18,9 +22,11 @@ namespace chrome_pdf {
 namespace {
 
 using ::testing::InSequence;
+using ::testing::Invoke;
 using ::testing::IsEmpty;
 using ::testing::NiceMock;
 using ::testing::Return;
+using ::testing::StrictMock;
 
 MATCHER_P2(LayoutWithSize, width, height, "") {
   return arg.size() == pp::Size(width, height);
@@ -222,4 +228,549 @@ TEST_F(PDFiumEngineTest, GetBadPdfVersion) {
 }
 
 }  // namespace
+
+class PDFiumEngineTabbingTest : public PDFiumTestBase {
+ public:
+  PDFiumEngineTabbingTest() = default;
+  ~PDFiumEngineTabbingTest() override = default;
+  PDFiumEngineTabbingTest(const PDFiumEngineTabbingTest&) = delete;
+  PDFiumEngineTabbingTest& operator=(const PDFiumEngineTabbingTest&) = delete;
+
+  bool HandleTabEvent(PDFiumEngine* engine, uint32_t modifiers) {
+    return engine->HandleTabEvent(modifiers);
+  }
+
+  PDFiumEngine::FocusElementType GetFocusedElementType(PDFiumEngine* engine) {
+    return engine->focus_item_type_;
+  }
+
+  int GetLastFocusedPage(PDFiumEngine* engine) {
+    return engine->last_focused_page_;
+  }
+
+  PDFiumEngine::FocusElementType GetLastFocusedElementType(
+      PDFiumEngine* engine) {
+    return engine->last_focused_item_type_;
+  }
+
+  int GetLastFocusedAnnotationIndex(PDFiumEngine* engine) {
+    return engine->last_focused_annot_index_;
+  }
+
+  bool IsInFormTextArea(PDFiumEngine* engine) {
+    return engine->in_form_text_area_;
+  }
+
+  size_t GetSelectionSize(PDFiumEngine* engine) {
+    return engine->selection_.size();
+  }
+
+  const std::string& GetLinkUnderCursor(PDFiumEngine* engine) {
+    return engine->link_under_cursor_;
+  }
+
+ protected:
+  base::test::TaskEnvironment task_environment_{
+      base::test::TaskEnvironment::TimeSource::MOCK_TIME};
+};
+
+TEST_F(PDFiumEngineTabbingTest, LinkUnderCursorTest) {
+  /*
+   * Document structure
+   * Document
+   * ++ Page 1
+   * ++++ Widget annotation
+   * ++++ Widget annotation
+   * ++++ Highlight annotation
+   * ++++ Link annotation
+   */
+  // Enable feature flag.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      chrome_pdf::features::kTabAcrossPDFAnnotations);
+
+  TestClient client;
+  std::unique_ptr<PDFiumEngine> engine =
+      InitializeEngine(&client, FILE_PATH_LITERAL("annots.pdf"));
+  ASSERT_TRUE(engine);
+
+  // Initial value of link under cursor.
+  EXPECT_EQ("", GetLinkUnderCursor(engine.get()));
+
+  // Tab through non-link annotations and validate link under cursor.
+  for (int i = 0; i < 4; i++) {
+    ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+    EXPECT_EQ("", GetLinkUnderCursor(engine.get()));
+  }
+
+  // Tab to Link annotation.
+  ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+  EXPECT_EQ("https://www.google.com/", GetLinkUnderCursor(engine.get()));
+
+  // Tab to previous annotation.
+  ASSERT_TRUE(HandleTabEvent(engine.get(), PP_INPUTEVENT_MODIFIER_SHIFTKEY));
+  EXPECT_EQ("", GetLinkUnderCursor(engine.get()));
+}
+
+TEST_F(PDFiumEngineTabbingTest, TabbingSupportedAnnots) {
+  /*
+   * Document structure
+   * Document
+   * ++ Page 1
+   * ++++ Widget annotation
+   * ++++ Widget annotation
+   * ++++ Highlight annotation
+   * ++++ Link annotation
+   */
+
+  // Enable feature flag.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      chrome_pdf::features::kTabAcrossPDFAnnotations);
+
+  TestClient client;
+  std::unique_ptr<PDFiumEngine> engine =
+      InitializeEngine(&client, FILE_PATH_LITERAL("annots.pdf"));
+  ASSERT_TRUE(engine);
+
+  ASSERT_EQ(1, engine->GetNumberOfPages());
+
+  ASSERT_EQ(PDFiumEngine::FocusElementType::kNone,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(-1, GetLastFocusedPage(engine.get()));
+
+  ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kDocument,
+            GetFocusedElementType(engine.get()));
+
+  ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kPage,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(0, GetLastFocusedPage(engine.get()));
+
+  ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kPage,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(0, GetLastFocusedPage(engine.get()));
+
+  ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kPage,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(0, GetLastFocusedPage(engine.get()));
+
+  ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kPage,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(0, GetLastFocusedPage(engine.get()));
+
+  ASSERT_FALSE(HandleTabEvent(engine.get(), 0));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kNone,
+            GetFocusedElementType(engine.get()));
+}
+
+TEST_F(PDFiumEngineTabbingTest, TabbingForwardTest) {
+  /*
+   * Document structure
+   * Document
+   * ++ Page 1
+   * ++++ Annotation
+   * ++++ Annotation
+   * ++ Page 2
+   * ++++ Annotation
+   */
+  TestClient client;
+  std::unique_ptr<PDFiumEngine> engine = InitializeEngine(
+      &client, FILE_PATH_LITERAL("annotation_form_fields.pdf"));
+  ASSERT_TRUE(engine);
+
+  ASSERT_EQ(2, engine->GetNumberOfPages());
+
+  ASSERT_EQ(PDFiumEngine::FocusElementType::kNone,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(-1, GetLastFocusedPage(engine.get()));
+
+  ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kDocument,
+            GetFocusedElementType(engine.get()));
+
+  ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kPage,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(0, GetLastFocusedPage(engine.get()));
+
+  ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kPage,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(0, GetLastFocusedPage(engine.get()));
+
+  ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kPage,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(1, GetLastFocusedPage(engine.get()));
+
+  ASSERT_FALSE(HandleTabEvent(engine.get(), 0));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kNone,
+            GetFocusedElementType(engine.get()));
+}
+
+TEST_F(PDFiumEngineTabbingTest, TabbingBackwardTest) {
+  /*
+   * Document structure
+   * Document
+   * ++ Page 1
+   * ++++ Annotation
+   * ++++ Annotation
+   * ++ Page 2
+   * ++++ Annotation
+   */
+  TestClient client;
+  std::unique_ptr<PDFiumEngine> engine = InitializeEngine(
+      &client, FILE_PATH_LITERAL("annotation_form_fields.pdf"));
+  ASSERT_TRUE(engine);
+
+  ASSERT_EQ(2, engine->GetNumberOfPages());
+
+  ASSERT_EQ(PDFiumEngine::FocusElementType::kNone,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(-1, GetLastFocusedPage(engine.get()));
+
+  ASSERT_TRUE(HandleTabEvent(engine.get(), PP_INPUTEVENT_MODIFIER_SHIFTKEY));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kPage,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(1, GetLastFocusedPage(engine.get()));
+
+  ASSERT_TRUE(HandleTabEvent(engine.get(), PP_INPUTEVENT_MODIFIER_SHIFTKEY));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kPage,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(0, GetLastFocusedPage(engine.get()));
+
+  ASSERT_TRUE(HandleTabEvent(engine.get(), PP_INPUTEVENT_MODIFIER_SHIFTKEY));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kPage,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(0, GetLastFocusedPage(engine.get()));
+
+  ASSERT_TRUE(HandleTabEvent(engine.get(), PP_INPUTEVENT_MODIFIER_SHIFTKEY));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kDocument,
+            GetFocusedElementType(engine.get()));
+
+  ASSERT_FALSE(HandleTabEvent(engine.get(), PP_INPUTEVENT_MODIFIER_SHIFTKEY));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kNone,
+            GetFocusedElementType(engine.get()));
+}
+
+TEST_F(PDFiumEngineTabbingTest, TabbingWithModifiers) {
+  /*
+   * Document structure
+   * Document
+   * ++ Page 1
+   * ++++ Annotation
+   * ++++ Annotation
+   * ++ Page 2
+   * ++++ Annotation
+   */
+  TestClient client;
+  std::unique_ptr<PDFiumEngine> engine = InitializeEngine(
+      &client, FILE_PATH_LITERAL("annotation_form_fields.pdf"));
+  ASSERT_TRUE(engine);
+
+  ASSERT_EQ(2, engine->GetNumberOfPages());
+
+  ASSERT_EQ(PDFiumEngine::FocusElementType::kNone,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(-1, GetLastFocusedPage(engine.get()));
+
+  // Tabbing with ctrl modifier.
+  ASSERT_FALSE(HandleTabEvent(engine.get(), PP_INPUTEVENT_MODIFIER_CONTROLKEY));
+  // Tabbing with alt modifier.
+  ASSERT_FALSE(HandleTabEvent(engine.get(), PP_INPUTEVENT_MODIFIER_ALTKEY));
+
+  // Tab to bring document into focus.
+  ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kDocument,
+            GetFocusedElementType(engine.get()));
+
+  // Tabbing with ctrl modifier.
+  ASSERT_FALSE(HandleTabEvent(engine.get(), PP_INPUTEVENT_MODIFIER_CONTROLKEY));
+  // Tabbing with alt modifier.
+  ASSERT_FALSE(HandleTabEvent(engine.get(), PP_INPUTEVENT_MODIFIER_ALTKEY));
+
+  // Tab to bring first page into focus.
+  ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kPage,
+            GetFocusedElementType(engine.get()));
+
+  // Tabbing with ctrl modifier.
+  ASSERT_FALSE(HandleTabEvent(engine.get(), PP_INPUTEVENT_MODIFIER_CONTROLKEY));
+  // Tabbing with alt modifier.
+  ASSERT_FALSE(HandleTabEvent(engine.get(), PP_INPUTEVENT_MODIFIER_ALTKEY));
+}
+
+TEST_F(PDFiumEngineTabbingTest, NoFocusableItemTabbingTest) {
+  /*
+   * Document structure
+   * Document
+   * ++ Page 1
+   * ++ Page 2
+   */
+  TestClient client;
+  std::unique_ptr<PDFiumEngine> engine =
+      InitializeEngine(&client, FILE_PATH_LITERAL("hello_world2.pdf"));
+  ASSERT_TRUE(engine);
+
+  ASSERT_EQ(2, engine->GetNumberOfPages());
+
+  ASSERT_EQ(PDFiumEngine::FocusElementType::kNone,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(-1, GetLastFocusedPage(engine.get()));
+
+  // Tabbing forward.
+  ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kDocument,
+            GetFocusedElementType(engine.get()));
+
+  ASSERT_FALSE(HandleTabEvent(engine.get(), 0));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kNone,
+            GetFocusedElementType(engine.get()));
+
+  // Tabbing backward.
+  ASSERT_TRUE(HandleTabEvent(engine.get(), PP_INPUTEVENT_MODIFIER_SHIFTKEY));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kDocument,
+            GetFocusedElementType(engine.get()));
+
+  ASSERT_FALSE(HandleTabEvent(engine.get(), PP_INPUTEVENT_MODIFIER_SHIFTKEY));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kNone,
+            GetFocusedElementType(engine.get()));
+}
+
+TEST_F(PDFiumEngineTabbingTest, RestoringDocumentFocusTest) {
+  /*
+   * Document structure
+   * Document
+   * ++ Page 1
+   * ++++ Annotation
+   * ++++ Annotation
+   * ++ Page 2
+   * ++++ Annotation
+   */
+  TestClient client;
+  std::unique_ptr<PDFiumEngine> engine = InitializeEngine(
+      &client, FILE_PATH_LITERAL("annotation_form_fields.pdf"));
+  ASSERT_TRUE(engine);
+
+  ASSERT_EQ(2, engine->GetNumberOfPages());
+
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kNone,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(-1, GetLastFocusedPage(engine.get()));
+
+  // Tabbing to bring the document into focus.
+  ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kDocument,
+            GetFocusedElementType(engine.get()));
+
+  engine->UpdateFocus(/*has_focus=*/false);
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kNone,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kDocument,
+            GetLastFocusedElementType(engine.get()));
+  EXPECT_EQ(-1, GetLastFocusedAnnotationIndex(engine.get()));
+
+  engine->UpdateFocus(/*has_focus=*/true);
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kDocument,
+            GetFocusedElementType(engine.get()));
+}
+
+TEST_F(PDFiumEngineTabbingTest, RestoringAnnotFocusTest) {
+  /*
+   * Document structure
+   * Document
+   * ++ Page 1
+   * ++++ Annotation
+   * ++++ Annotation
+   * ++ Page 2
+   * ++++ Annotation
+   */
+  TestClient client;
+  std::unique_ptr<PDFiumEngine> engine = InitializeEngine(
+      &client, FILE_PATH_LITERAL("annotation_form_fields.pdf"));
+  ASSERT_TRUE(engine);
+
+  ASSERT_EQ(2, engine->GetNumberOfPages());
+
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kNone,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(-1, GetLastFocusedPage(engine.get()));
+
+  // Tabbing to bring last annotation of page 0 into focus.
+  ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+  ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+  ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+
+  engine->UpdateFocus(/*has_focus=*/false);
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kPage,
+            GetLastFocusedElementType(engine.get()));
+  EXPECT_EQ(0, GetLastFocusedPage(engine.get()));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kPage,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(0, GetLastFocusedAnnotationIndex(engine.get()));
+
+  engine->UpdateFocus(/*has_focus=*/true);
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kPage,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(0, GetLastFocusedPage(engine.get()));
+
+  // Tabbing now should bring the second page's annotation to focus.
+  ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kPage,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(1, GetLastFocusedPage(engine.get()));
+}
+
+TEST_F(PDFiumEngineTabbingTest, VerifyFormFieldStatesOnTabbing) {
+  /*
+   * Document structure
+   * Document
+   * ++ Page 1
+   * ++++ Annotation (Text Field)
+   * ++++ Annotation (Radio Button)
+   */
+  TestClient client;
+  std::unique_ptr<PDFiumEngine> engine =
+      InitializeEngine(&client, FILE_PATH_LITERAL("annots.pdf"));
+  ASSERT_TRUE(engine);
+  ASSERT_EQ(1, engine->GetNumberOfPages());
+
+  ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kDocument,
+            GetFocusedElementType(engine.get()));
+
+  // Bring focus to the text field.
+  ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kPage,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(0, GetLastFocusedPage(engine.get()));
+  EXPECT_TRUE(IsInFormTextArea(engine.get()));
+  EXPECT_TRUE(engine->CanEditText());
+
+  // Bring focus to the button.
+  ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kPage,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(0, GetLastFocusedPage(engine.get()));
+  EXPECT_FALSE(IsInFormTextArea(engine.get()));
+  EXPECT_FALSE(engine->CanEditText());
+}
+
+TEST_F(PDFiumEngineTabbingTest, ClearSelectionOnFocusInFormTextArea) {
+  TestClient client;
+  std::unique_ptr<PDFiumEngine> engine =
+      InitializeEngine(&client, FILE_PATH_LITERAL("form_text_fields.pdf"));
+  ASSERT_TRUE(engine);
+  ASSERT_EQ(1, engine->GetNumberOfPages());
+
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kNone,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(-1, GetLastFocusedPage(engine.get()));
+
+  // Select all text.
+  engine->SelectAll();
+  EXPECT_EQ(1u, GetSelectionSize(engine.get()));
+
+  // Tab to bring focus to a form text area annotation.
+  ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+  ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kPage,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(0, GetLastFocusedPage(engine.get()));
+  EXPECT_EQ(0u, GetSelectionSize(engine.get()));
+}
+
+TEST_F(PDFiumEngineTabbingTest, RetainSelectionOnFocusNotInFormTextArea) {
+  TestClient client;
+  std::unique_ptr<PDFiumEngine> engine =
+      InitializeEngine(&client, FILE_PATH_LITERAL("annots.pdf"));
+  ASSERT_TRUE(engine);
+  ASSERT_EQ(1, engine->GetNumberOfPages());
+
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kNone,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(-1, GetLastFocusedPage(engine.get()));
+
+  // Select all text.
+  engine->SelectAll();
+  EXPECT_EQ(1u, GetSelectionSize(engine.get()));
+
+  // Tab to bring focus to a non form text area annotation (Button).
+  ASSERT_TRUE(HandleTabEvent(engine.get(), PP_INPUTEVENT_MODIFIER_SHIFTKEY));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kPage,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(0, GetLastFocusedPage(engine.get()));
+  EXPECT_EQ(1u, GetSelectionSize(engine.get()));
+}
+
+class ScrollingTestClient : public TestClient {
+ public:
+  ScrollingTestClient() = default;
+  ~ScrollingTestClient() override = default;
+  ScrollingTestClient(const ScrollingTestClient&) = delete;
+  ScrollingTestClient& operator=(const ScrollingTestClient&) = delete;
+
+  // Mock PDFEngine::Client methods.
+  MOCK_METHOD1(ScrollToX, void(int));
+  MOCK_METHOD2(ScrollToY, void(int, bool));
+};
+
+TEST_F(PDFiumEngineTabbingTest, MaintainViewportWhenFocusIsUpdated) {
+  StrictMock<ScrollingTestClient> client;
+  std::unique_ptr<PDFiumEngine> engine = InitializeEngine(
+      &client, FILE_PATH_LITERAL("annotation_form_fields.pdf"));
+  ASSERT_TRUE(engine);
+  ASSERT_EQ(2, engine->GetNumberOfPages());
+  engine->PluginSizeUpdated(pp::Size(60, 40));
+
+  {
+    InSequence sequence;
+    static constexpr PP_Point kScrollValue = {510, 478};
+    EXPECT_CALL(client, ScrollToY(kScrollValue.y, false))
+        .WillOnce(Invoke(
+            [&engine]() { engine->ScrolledToYPosition(kScrollValue.y); }));
+    EXPECT_CALL(client, ScrollToX(kScrollValue.x)).WillOnce(Invoke([&engine]() {
+      engine->ScrolledToXPosition(kScrollValue.x);
+    }));
+  }
+
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kNone,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(-1, GetLastFocusedPage(engine.get()));
+
+  // Tabbing to bring the document into focus.
+  ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kDocument,
+            GetFocusedElementType(engine.get()));
+
+  // Tab to an annotation.
+  ASSERT_TRUE(HandleTabEvent(engine.get(), 0));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kPage,
+            GetFocusedElementType(engine.get()));
+
+  // Scroll focused annotation out of viewport.
+  static constexpr PP_Point kScrollPosition = {242, 746};
+  engine->ScrolledToXPosition(kScrollPosition.x);
+  engine->ScrolledToYPosition(kScrollPosition.y);
+
+  engine->UpdateFocus(/*has_focus=*/false);
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kPage,
+            GetLastFocusedElementType(engine.get()));
+  EXPECT_EQ(0, GetLastFocusedPage(engine.get()));
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kPage,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(1, GetLastFocusedAnnotationIndex(engine.get()));
+
+  // Restore focus, we shouldn't have any calls to scroll viewport.
+  engine->UpdateFocus(/*has_focus=*/true);
+  EXPECT_EQ(PDFiumEngine::FocusElementType::kPage,
+            GetFocusedElementType(engine.get()));
+  EXPECT_EQ(0, GetLastFocusedPage(engine.get()));
+}
+
 }  // namespace chrome_pdf

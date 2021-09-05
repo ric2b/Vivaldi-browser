@@ -14,7 +14,7 @@ update_template_instance("//chrome:packed_resources") {
 }
 
 if (!is_android) {
-  update_template_instance("//chrome/browser:browser") {
+  update_target("//chrome/browser:browser") {
     public_deps += [
       "//vivaldi/extensions/api:apis",
       "//vivaldi/extensions/helper",
@@ -40,7 +40,7 @@ if (!is_android) {
   }
 }
 
-update_template_instance("//chrome/browser/ui:ui") {
+update_target("//chrome/browser/ui:ui") {
   public_deps += [
     "//components/sessions:sessions",
     "//vivaldi/extensions/api:apis",

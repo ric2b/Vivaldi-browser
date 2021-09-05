@@ -2,14 +2,19 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <memory>
+#include <tuple>
+#include <vector>
+
 #include "ash/shelf/hotseat_widget.h"
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/app_list/test/app_list_test_helper.h"
-#include "ash/assistant/assistant_controller.h"
+#include "ash/assistant/assistant_controller_impl.h"
 #include "ash/focus_cycler.h"
 #include "ash/home_screen/drag_window_from_shelf_controller_test_api.h"
 #include "ash/home_screen/home_screen_controller.h"
 #include "ash/public/cpp/ash_features.h"
+#include "ash/public/cpp/assistant/controller/assistant_ui_controller.h"
 #include "ash/public/cpp/test/assistant_test_api.h"
 #include "ash/public/cpp/test/shell_test_api.h"
 #include "ash/shelf/home_button.h"
@@ -92,9 +97,9 @@ class HotseatWidgetTest
     if (is_assistant_enabled_) {
       assistant_test_api_->SetAssistantEnabled(true);
       assistant_test_api_->GetAssistantState()->NotifyFeatureAllowed(
-          mojom::AssistantAllowedState::ALLOWED);
+          chromeos::assistant::AssistantAllowedState::ALLOWED);
       assistant_test_api_->GetAssistantState()->NotifyStatusChanged(
-          mojom::AssistantState::READY);
+          chromeos::assistant::AssistantStatus::READY);
 
       assistant_test_api_->WaitUntilIdle();
     }
@@ -114,7 +119,7 @@ class HotseatWidgetTest
     // directly; otherwise, simulate the long press on the home button,
     if (!navigation_buttons_shown_in_tablet_mode_ &&
         Shell::Get()->tablet_mode_controller()->InTabletMode()) {
-      Shell::Get()->assistant_controller()->ui_controller()->ShowUi(
+      AssistantUiController::Get()->ShowUi(
           chromeos::assistant::mojom::AssistantEntryPoint::kLongPressLauncher);
       return;
     }
@@ -1663,7 +1668,7 @@ TEST_P(HotseatWidgetTest, FailingOverviewDragResultsInExtendedHotseat) {
   // overview.
   const int extended_hotseat_distance_from_top_of_shelf =
       ShelfConfig::Get()->hotseat_bottom_padding() +
-      ShelfConfig::Get()->hotseat_size();
+      GetPrimaryShelf()->hotseat_widget()->GetHotseatSize();
   UpdateScroll(-extended_hotseat_distance_from_top_of_shelf - 30);
   EndScroll(/*is_fling=*/false, 0.f);
 

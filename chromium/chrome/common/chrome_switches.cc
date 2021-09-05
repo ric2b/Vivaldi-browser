@@ -292,11 +292,6 @@ const char kEnableExtensionActivityLogTesting[] =
 // (internally adds lEnableGpuPlugin to the command line).
 const char kEnableNaCl[]                    = "enable-nacl";
 
-// Enables tracing for each navigation. It will attempt to trace each navigation
-// for 10s, until the buffer is full, or until the next navigation.
-// It only works if a URL was provided by --trace-upload-url.
-const char kEnableNavigationTracing[] = "enable-navigation-tracing";
-
 // Enables the network-related benchmarking extensions.
 const char kEnableNetBenchmarking[]         = "enable-net-benchmarking";
 
@@ -442,18 +437,6 @@ const char kOnTheFlyMhtmlHashComputation[] =
 
 // Launches URL in new browser window.
 const char kOpenInNewWindow[]               = "new-window";
-
-// Contains a list of feature names for which origin trial experiments should
-// be disabled. Names should be separated by "|" characters.
-const char kOriginTrialDisabledFeatures[] = "origin-trial-disabled-features";
-
-// Contains a list of token signatures for which origin trial experiments should
-// be disabled. Tokens should be separated by "|" characters.
-const char kOriginTrialDisabledTokens[] = "origin-trial-disabled-tokens";
-
-// Comma-separated list of keys which will override the default public keys for
-// checking origin trial tokens.
-const char kOriginTrialPublicKey[] = "origin-trial-public-key";
 
 // Packages an extension to a .crx installable file from a given directory.
 const char kPackExtension[]                 = "pack-extension";

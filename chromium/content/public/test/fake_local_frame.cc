@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "content/public/test/fake_local_frame.h"
+
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "third_party/blink/public/mojom/frame/media_player_action.mojom.h"
 
@@ -43,6 +44,8 @@ void FakeLocalFrame::AddInspectorIssue(
 
 void FakeLocalFrame::CheckCompleted() {}
 
+void FakeLocalFrame::StopLoading() {}
+
 void FakeLocalFrame::Collapse(bool collapsed) {}
 
 void FakeLocalFrame::EnableViewSourceMode() {}
@@ -74,6 +77,10 @@ void FakeLocalFrame::MediaPlayerActionAt(
     const gfx::Point& location,
     blink::mojom::MediaPlayerActionPtr action) {}
 
+void FakeLocalFrame::AdvanceFocusInFrame(
+    blink::mojom::FocusType focus_type,
+    const base::Optional<base::UnguessableToken>& source_frame_token) {}
+
 void FakeLocalFrame::AdvanceFocusInForm(blink::mojom::FocusType focus_type) {}
 
 void FakeLocalFrame::ReportContentSecurityPolicyViolation(
@@ -81,6 +88,22 @@ void FakeLocalFrame::ReportContentSecurityPolicyViolation(
 
 void FakeLocalFrame::DidUpdateFramePolicy(
     const blink::FramePolicy& frame_policy) {}
+
+void FakeLocalFrame::OnScreensChange() {}
+
+void FakeLocalFrame::PostMessageEvent(
+    const base::Optional<base::UnguessableToken>& source_frame_token,
+    const base::string16& source_origin,
+    const base::string16& target_origin,
+    blink::TransferableMessage message) {}
+
+#if defined(OS_MACOSX)
+void FakeLocalFrame::GetCharacterIndexAtPoint(const gfx::Point& point) {}
+void FakeLocalFrame::GetFirstRectForRange(const gfx::Range& range) {}
+#endif
+
+void FakeLocalFrame::BindReportingObserver(
+    mojo::PendingReceiver<blink::mojom::ReportingObserver> receiver) {}
 
 void FakeLocalFrame::BindFrameHostReceiver(
     mojo::ScopedInterfaceEndpointHandle handle) {

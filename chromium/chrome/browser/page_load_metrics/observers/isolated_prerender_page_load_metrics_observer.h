@@ -59,6 +59,10 @@ class IsolatedPrerenderPageLoadMetricsObserver
   // that this can be done in an event notification.
   void GetPrefetchMetrics();
 
+  // Records the corresponding UKM events.
+  void RecordPrefetchProxyEvent();
+  void RecordAfterSRPEvent();
+
   // page_load_metrics::PageLoadMetricsObserver:
   ObservePolicy OnStart(content::NavigationHandle* navigation_handle,
                         const GURL& currently_committed_url,
@@ -106,12 +110,14 @@ class IsolatedPrerenderPageLoadMetricsObserver
   // didn't get a response from the CookieManager before recording metrics.
   base::Optional<bool> mainframe_had_cookies_;
 
-  // Metrics related to Isolated Prerender prefetching, for plumbing into UKM.
-  scoped_refptr<IsolatedPrerenderTabHelper::PrefetchMetrics> prefetch_metrics_;
+  // Metrics related to Isolated Prerender prefetching on a SRP, for plumbing
+  // into UKM.
+  scoped_refptr<IsolatedPrerenderTabHelper::PrefetchMetrics> srp_metrics_;
 
-  // How the Isolated Prerender Interceptor acted on a page. Not set if it did
-  // nothing.
-  base::Optional<IsolatedPrerenderTabHelper::PrefetchUsage> prefetch_usage_;
+  // Metrics for the page load after a Google SRP where NavigationPredictor
+  // passed parsed SRP links to the TabHelper. Not set if that isn't true.
+  base::Optional<IsolatedPrerenderTabHelper::AfterSRPMetrics>
+      after_srp_metrics_;
 
   // Task tracker for calls for the history service.
   base::CancelableTaskTracker task_tracker_;

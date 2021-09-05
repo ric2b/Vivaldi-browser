@@ -50,6 +50,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/source_location.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/weak_identifier_map.h"
+#include "third_party/blink/renderer/core/feature_policy/policy_helper.h"
 #include "third_party/blink/renderer/core/frame/dactyloscoper.h"
 #include "third_party/blink/renderer/core/frame/frame_types.h"
 #include "third_party/blink/renderer/core/frame/use_counter_helper.h"
@@ -70,7 +71,6 @@
 #include "third_party/blink/renderer/platform/weborigin/referrer.h"
 #include "third_party/blink/renderer/platform/wtf/hash_set.h"
 #include "third_party/blink/renderer/platform/wtf/shared_buffer.h"
-
 namespace base {
 class TickClock;
 }
@@ -290,10 +290,13 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
     application_cache_host_ = host;
   }
 
-  void SetLoadingJavaScriptUrl() { loading_url_as_javascript_ = true; }
+  void SetCommitReason(CommitReason reason) { commit_reason_ = reason; }
 
   bool HadTransientActivation() const { return had_transient_activation_; }
 
+  // Whether the navigation originated from the browser process. Note: history
+  // navigation is always considered to be browser initiated, even if the
+  // navigation was started using the history API in the renderer.
   bool IsBrowserInitiated() const { return is_browser_initiated_; }
 
   bool IsSameOriginNavigation() const { return is_same_origin_navigation_; }
@@ -323,6 +326,11 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   }
 
   bool NavigationScrollAllowed() const { return navigation_scroll_allowed_; }
+
+  // We want to make sure that the largest content is painted before the "LCP
+  // limit", so that we get a good LCP value. This returns the remaining time to
+  // the LCP limit. See crbug.com/1065508 for details.
+  base::TimeDelta RemainingTimeToLCPLimit() const;
 
  protected:
   Vector<KURL> redirect_chain_;
@@ -419,6 +427,11 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   // prefetched signed exchanges for matching requests.
   void InitializePrefetchedSignedExchangeManager();
 
+  bool IsJavaScriptURLOrXSLTCommit() const {
+    return commit_reason_ == CommitReason::kJavascriptUrl ||
+           commit_reason_ == CommitReason::kXSLT;
+  }
+
   // These fields are copied from WebNavigationParams, see there for definition.
   KURL url_;
   AtomicString http_method_;
@@ -481,14 +494,15 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   std::unique_ptr<WebServiceWorkerNetworkProvider>
       service_worker_network_provider_;
 
-  bool was_blocked_by_document_policy_;
   DocumentPolicy::ParsedDocumentPolicy document_policy_;
+  bool was_blocked_by_document_policy_;
+  Vector<PolicyParserMessageBuffer::Message> document_policy_parsing_messages_;
 
-  Member<ContentSecurityPolicy> content_security_policy_;
+  const Member<ContentSecurityPolicy> content_security_policy_;
+  const bool was_blocked_by_csp_;
+
   ClientHintsPreferences client_hints_preferences_;
   InitialScrollState initial_scroll_state_;
-
-  bool was_blocked_by_csp_;
 
   enum State { kNotStarted, kProvisional, kCommitted, kSentDidFinishLoad };
   State state_;
@@ -522,7 +536,7 @@ class CORE_EXPORT DocumentLoader : public GarbageCollected<DocumentLoader>,
   bool loading_mhtml_archive_ = false;
   bool loading_srcdoc_ = false;
   bool loading_url_as_empty_document_ = false;
-  bool loading_url_as_javascript_ = false;
+  CommitReason commit_reason_ = CommitReason::kRegular;
   uint64_t main_resource_identifier_ = 0;
   scoped_refptr<ResourceTimingInfo> navigation_timing_info_;
   bool report_timing_info_to_parent_ = false;

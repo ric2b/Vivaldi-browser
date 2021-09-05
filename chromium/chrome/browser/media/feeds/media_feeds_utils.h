@@ -7,24 +7,28 @@
 
 #include <vector>
 
-namespace media_session {
-struct MediaImage;
-}  // namespace media_session
+#include "chrome/browser/media/feeds/media_feeds_store.mojom-forward.h"
+
+// Conversions between mojo MediaFeed structures and their protobuf equivalents,
+// including mojo MediaImage <-> proto Image. We don't use mojo struct traits
+// for these because we want to use the mojo structs throughout the C++
+// codebase.
 
 namespace media_feeds {
 
 class Image;
 class ImageSet;
 
-void MediaImageToProto(Image* proto, const media_session::MediaImage& image);
+void MediaImageToProto(Image* proto,
+                       const media_feeds::mojom::MediaImagePtr& image);
 
 ImageSet MediaImagesToProto(
-    const std::vector<media_session::MediaImage>& images,
+    const std::vector<media_feeds::mojom::MediaImagePtr>& images,
     int max_number);
 
-media_session::MediaImage ProtoToMediaImage(const Image& proto);
+media_feeds::mojom::MediaImagePtr ProtoToMediaImage(const Image& proto);
 
-std::vector<media_session::MediaImage> ProtoToMediaImages(
+std::vector<media_feeds::mojom::MediaImagePtr> ProtoToMediaImages(
     const ImageSet& image_set,
     unsigned max_number);
 

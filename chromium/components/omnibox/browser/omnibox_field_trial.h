@@ -422,6 +422,19 @@ bool RichAutocompletionTwoLineOmnibox();
 bool RichAutocompletionShowTitles();
 bool RichAutocompletionAutocompleteNonPrefix();
 
+// On Device Head Suggestions feature and its helper functions.
+bool IsOnDeviceHeadSuggestEnabledForIncognito();
+bool IsOnDeviceHeadSuggestEnabledForNonIncognito();
+bool IsOnDeviceHeadSuggestEnabledForAnyMode();
+// Functions can be used in both non-incognito and incognito.
+std::string OnDeviceHeadModelLocaleConstraint(bool is_incognito);
+int OnDeviceHeadSuggestMaxScoreForNonUrlInput(bool is_incognito,
+                                              const int default_score);
+int OnDeviceSearchProviderDefaultLoaderTimeoutMs(bool is_incognito);
+int OnDeviceHeadSuggestDelaySuggestRequestMs(bool is_incognito);
+// Function only works in non-incognito when server suggestions are available.
+std::string OnDeviceHeadSuggestDemoteMode();
+
 // ---------------------------------------------------------
 // Clipboard URL suggestions:
 
@@ -459,9 +472,6 @@ extern const char kKeywordScoreForSufficientlyCompleteMatchRule[];
 extern const char kHQPAllowDupMatchesForScoringRule[];
 extern const char kEmphasizeTitlesRule[];
 
-// Parameter name used by the Omnibox match capping experiment.
-extern const char kOmniboxMaxURLMatchesParam[];
-
 // Parameter names used by the HUP new scoring experiments.
 extern const char kHUPNewScoringTypedCountRelevanceCapParam[];
 extern const char kHUPNewScoringTypedCountHalfLifeTimeParam[];
@@ -481,15 +491,20 @@ extern const char kHQPExperimentalScoringTopicalityThresholdParam[];
 extern const char kMaxNumHQPUrlsIndexedAtStartupOnLowEndDevicesParam[];
 extern const char kMaxNumHQPUrlsIndexedAtStartupOnNonLowEndDevicesParam[];
 
-// Parameter names used by UI experiments.
-extern const char kUIMaxAutocompleteMatchesParam[];
+// Parameter names used by num suggestion experiments.
+extern const char kMaxZeroSuggestMatchesParam[];
+extern const char kOmniboxMaxURLMatchesParam[];
 extern const char kUIMaxAutocompleteMatchesByProviderParam[];
+extern const char kUIMaxAutocompleteMatchesParam[];
 
 // Parameter names used by on device head provider.
-extern const char kOnDeviceHeadSuggestIncognitoServeMode[];
-extern const char kOnDeviceHeadSuggestDelaySuggestRequestMs[];
+// These four parameters are shared by both non-incognito and incognito.
+extern const char kOnDeviceHeadModelLocaleConstraint[];
 extern const char kOnDeviceHeadSuggestMaxScoreForNonUrlInput[];
-extern const char kOnDeviceHeadSuggestMaxScoreForNonUrlInputIncognito[];
+extern const char kOnDeviceHeadSuggestDelaySuggestRequestMs[];
+extern const char kOnDeviceSearchProviderDefaultLoaderTimeoutMs[];
+// This parameter is for non-incognito which are only useful when server
+// suggestions are available.
 extern const char kOnDeviceHeadSuggestDemoteMode[];
 
 // The amount of time to wait before sending a new suggest request after the
@@ -502,6 +517,10 @@ extern const char kRichAutocompletionAutocompleteTitlesParam[];
 extern const char kRichAutocompletionTwoLineOmniboxParam[];
 extern const char kRichAutocompletionShowTitlesParam[];
 extern const char kRichAutocompletionAutocompleteNonPrefix[];
+
+// Parameter names used by image search experiment that shows thumbnail in front
+// of the Omnibox clipboard image search suggestion.
+extern const char kImageSearchSuggestionThumbnail[];
 
 namespace internal {
 // The bundled omnibox experiment comes with a set of parameters

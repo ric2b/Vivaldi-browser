@@ -15,17 +15,12 @@
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "chrome/browser/chromeos/crostini/crostini_disk.h"
 #include "chrome/browser/chromeos/crostini/crostini_installer_ui_delegate.h"
 #include "chrome/browser/chromeos/crostini/crostini_types.mojom.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "ui/base/text/bytes_formatting.h"
-
-namespace {
-std::string FormatBytes(const int64_t value) {
-  return base::UTF16ToUTF8(ui::FormatBytes(value));
-}
-}  // namespace
 
 namespace chromeos {
 
@@ -70,7 +65,9 @@ void CrostiniInstallerPageHandler::CancelBeforeStart() {
 }
 
 void CrostiniInstallerPageHandler::Close() {
-  std::move(close_dialog_callback_).Run();
+  if (close_dialog_callback_) {
+    std::move(close_dialog_callback_).Run();
+  }
 }
 
 void CrostiniInstallerPageHandler::OnProgressUpdate(
@@ -98,17 +95,26 @@ void CrostiniInstallerPageHandler::RequestAmountOfFreeDiskSpace() {
 }
 
 void CrostiniInstallerPageHandler::OnAmountOfFreeDiskSpace(int64_t free_bytes) {
-  std::vector<int64_t> values = crostini::GetTicksForDiskSize(
-      crostini::CrostiniInstallerUIDelegate::kMinimumFreeDiskSpace, free_bytes);
+  int64_t max_bytes = free_bytes - crostini::disk::kDiskHeadroomBytes;
 
-  std::vector<crostini::mojom::DiskSliderTickPtr> ticks;
-  for (const auto& val : values) {
-    std::string formatted_val = FormatBytes(val);
-    ticks.emplace_back(crostini::mojom::DiskSliderTick::New(val, formatted_val,
-                                                            formatted_val));
+  if (max_bytes < crostini::disk::kMinimumDiskSizeBytes) {
+    page_->OnAmountOfFreeDiskSpace({}, 0, false);
+    return;
   }
-  // TODO(crbug/1043837): Pick a better default than always the minimum.
-  page_->OnAmountOfFreeDiskSpace(std::move(ticks), 0);
+
+  int64_t default_size = crostini::disk::kRecommendedDiskSizeBytes;
+  if (default_size > max_bytes) {
+    // Let's adjust to the mid-point.
+    default_size = (max_bytes + crostini::disk::kMinimumDiskSizeBytes) / 2;
+  }
+
+  int default_index = 0;
+  std::vector<crostini::mojom::DiskSliderTickPtr> ticks =
+      crostini::disk::GetTicks(crostini::disk::kMinimumDiskSizeBytes,
+                               default_size, max_bytes, &default_index);
+  page_->OnAmountOfFreeDiskSpace(
+      std::move(ticks), default_index,
+      max_bytes < crostini::disk::kRecommendedDiskSizeBytes);
 }
 
 }  // namespace chromeos

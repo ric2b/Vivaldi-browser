@@ -6,15 +6,17 @@
 
 #include <utility>
 
-#include "base/logging.h"
+#include "base/check_op.h"
 #include "components/performance_manager/graph/frame_node_impl.h"
 #include "components/performance_manager/graph/graph_impl.h"
 #include "components/performance_manager/graph/page_node_impl.h"
 
 namespace performance_manager {
 
-ProcessNodeImpl::ProcessNodeImpl(RenderProcessHostProxy render_process_proxy)
-    : render_process_host_proxy_(std::move(render_process_proxy)) {
+ProcessNodeImpl::ProcessNodeImpl(content::ProcessType process_type,
+                                 RenderProcessHostProxy render_process_proxy)
+    : process_type_(process_type),
+      render_process_host_proxy_(std::move(render_process_proxy)) {
   DETACH_FROM_SEQUENCE(sequence_checker_);
 }
 
@@ -142,6 +144,11 @@ void ProcessNodeImpl::SetProcessImpl(base::Process process,
   process_.SetAndNotify(this, std::move(process));
 }
 
+content::ProcessType ProcessNodeImpl::GetProcessType() const {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  return process_type();
+}
+
 base::ProcessId ProcessNodeImpl::GetProcessId() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return process_id();
@@ -162,13 +169,14 @@ base::Optional<int32_t> ProcessNodeImpl::GetExitStatus() const {
   return exit_status();
 }
 
-void ProcessNodeImpl::VisitFrameNodes(const FrameNodeVisitor& visitor) const {
+bool ProcessNodeImpl::VisitFrameNodes(const FrameNodeVisitor& visitor) const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   for (auto* frame_impl : frame_nodes()) {
     const FrameNode* frame = frame_impl;
     if (!visitor.Run(frame))
-      return;
+      return false;
   }
+  return true;
 }
 
 base::flat_set<const FrameNode*> ProcessNodeImpl::GetFrameNodes() const {

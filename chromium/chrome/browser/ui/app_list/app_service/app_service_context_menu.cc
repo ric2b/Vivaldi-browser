@@ -15,6 +15,7 @@
 #include "chrome/browser/chromeos/crostini/crostini_terminal.h"
 #include "chrome/browser/chromeos/crostini/crostini_util.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_manager.h"
+#include "chrome/browser/chromeos/plugin_vm/plugin_vm_manager_factory.h"
 #include "chrome/browser/chromeos/plugin_vm/plugin_vm_util.h"
 #include "chrome/browser/extensions/context_menu_matcher.h"
 #include "chrome/browser/extensions/menu_manager.h"
@@ -113,23 +114,23 @@ void AppServiceContextMenu::ExecuteCommand(int command_id, int event_flags) {
       break;
 
     case ash::APP_CONTEXT_MENU_NEW_WINDOW:
-      controller()->CreateNewWindow(profile(), false);
+      controller()->CreateNewWindow(/*incognito=*/false);
       break;
 
     case ash::APP_CONTEXT_MENU_NEW_INCOGNITO_WINDOW:
-      controller()->CreateNewWindow(profile(), true);
+      controller()->CreateNewWindow(/*incognito=*/true);
       break;
 
-    case ash::STOP_APP:
+    case ash::SHUTDOWN_GUEST_OS:
       if (app_id() == crostini::GetTerminalId()) {
         crostini::CrostiniManager::GetForProfile(profile())->StopVm(
             crostini::kCrostiniDefaultVmName, base::DoNothing());
       } else if (app_id() == plugin_vm::kPluginVmAppId) {
-        plugin_vm::PluginVmManager::GetForProfile(profile())->StopPluginVm(
-            plugin_vm::kPluginVmName, /*force=*/false);
+        plugin_vm::PluginVmManagerFactory::GetForProfile(profile())
+            ->StopPluginVm(plugin_vm::kPluginVmName, /*force=*/false);
       } else {
         LOG(ERROR) << "App " << app_id()
-                   << " should not have a stop app command.";
+                   << " should not have a shutdown guest OS command.";
       }
       break;
 
@@ -177,10 +178,10 @@ bool AppServiceContextMenu::IsCommandIdChecked(int command_id) const {
           return command_id == ash::USE_LAUNCH_TYPE_TABBED_WINDOW;
         }
 
-        web_app::DisplayMode effective_display_mode =
-            provider->registrar().GetAppEffectiveDisplayMode(app_id());
-        return effective_display_mode != web_app::DisplayMode::kUndefined &&
-               effective_display_mode ==
+        web_app::DisplayMode user_display_mode =
+            provider->registrar().GetAppUserDisplayMode(app_id());
+        return user_display_mode != web_app::DisplayMode::kUndefined &&
+               user_display_mode ==
                    ConvertUseLaunchTypeCommandToDisplayMode(command_id);
       }
       return AppContextMenu::IsCommandIdChecked(command_id);
@@ -204,6 +205,8 @@ bool AppServiceContextMenu::IsCommandIdChecked(int command_id) const {
       FALLTHROUGH;
     case apps::mojom::AppType::kBuiltIn:
       FALLTHROUGH;
+    case apps::mojom::AppType::kPluginVm:
+      FALLTHROUGH;
     default:
       return AppContextMenu::IsCommandIdChecked(command_id);
   }
@@ -223,12 +226,9 @@ void AppServiceContextMenu::OnGetMenuModel(
   auto menu_model = std::make_unique<ui::SimpleMenuModel>(this);
   submenu_ = std::make_unique<ui::SimpleMenuModel>(this);
   size_t index = 0;
-  // Unretained is safe here because PopulateNewItemFromMojoMenuItems should
-  // call GetVectorIcon synchronously.
   if (apps::PopulateNewItemFromMojoMenuItems(
           menu_items->items, menu_model.get(), submenu_.get(),
-          base::BindOnce(&AppServiceContextMenu::GetMenuItemVectorIcon,
-                         base::Unretained(this)))) {
+          base::BindOnce(&AppServiceContextMenu::GetMenuItemVectorIcon))) {
     index = 1;
   }
 
@@ -279,9 +279,8 @@ void AppServiceContextMenu::BuildExtensionAppShortcutsMenu(
 
 void AppServiceContextMenu::ShowAppInfo() {
   if (app_type_ == apps::mojom::AppType::kArc) {
-    chrome::ShowAppManagementPage(profile(), app_id());
-    base::UmaHistogramEnumeration(
-        kAppManagementEntryPointsHistogramName,
+    chrome::ShowAppManagementPage(
+        profile(), app_id(),
         AppManagementEntryPoint::kAppListContextMenuAppInfoArc);
     return;
   }
@@ -321,6 +320,8 @@ void AppServiceContextMenu::SetLaunchType(int command_id) {
     case apps::mojom::AppType::kCrostini:
       FALLTHROUGH;
     case apps::mojom::AppType::kBuiltIn:
+      FALLTHROUGH;
+    case apps::mojom::AppType::kPluginVm:
       FALLTHROUGH;
     default:
       return;

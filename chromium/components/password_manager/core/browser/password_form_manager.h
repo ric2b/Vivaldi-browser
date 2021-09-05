@@ -16,7 +16,8 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/autofill/core/common/form_data.h"
-#include "components/autofill/core/common/signatures_util.h"
+#include "components/autofill/core/common/renderer_id.h"
+#include "components/autofill/core/common/signatures.h"
 #include "components/password_manager/core/browser/form_fetcher.h"
 #include "components/password_manager/core/browser/form_parsing/form_parser.h"
 #include "components/password_manager/core/browser/form_parsing/password_field_prediction.h"
@@ -73,7 +74,7 @@ class PasswordFormManager : public PasswordFormManagerForUI,
   // Returns whether the form identified by |form_renderer_id| and |driver|
   // is managed by this password form manager. Don't call this on iOS.
   bool DoesManageAccordingToRendererId(
-      uint32_t form_renderer_id,
+      autofill::FormRendererId form_renderer_id,
       const PasswordManagerDriver* driver) const;
 
   // Check that |submitted_form_| is equal to |form| from the user point of
@@ -128,9 +129,10 @@ class PasswordFormManager : public PasswordFormManagerForUI,
 
   // Sends the request to prefill the generated password or pops up an
   // additional UI in case of possible override.
-  void OnGeneratedPasswordAccepted(autofill::FormData form_data,
-                                   uint32_t generation_element_id,
-                                   const base::string16& password);
+  void OnGeneratedPasswordAccepted(
+      autofill::FormData form_data,
+      autofill::FieldRendererId generation_element_id,
+      const base::string16& password);
 
   // PasswordFormManagerForUI:
   const GURL& GetOrigin() const override;
@@ -142,7 +144,10 @@ class PasswordFormManager : public PasswordFormManagerForUI,
   metrics_util::CredentialSourceType GetCredentialSource() const override;
   PasswordFormMetricsRecorder* GetMetricsRecorder() override;
   base::span<const InteractionsStats> GetInteractionsStats() const override;
+  base::span<const CompromisedCredentials> GetCompromisedCredentials()
+      const override;
   bool IsBlacklisted() const override;
+  bool IsMovableToAccountStore() const override;
 
   void Save() override;
   void Update(const autofill::PasswordForm& credentials_to_update) override;
@@ -155,6 +160,7 @@ class PasswordFormManager : public PasswordFormManagerForUI,
   void PermanentlyBlacklist() override;
   void OnPasswordsRevealed() override;
   void MoveCredentialsToAccountStore() override;
+  void BlockMovingCredentialsToAccountStore() override;
 
   bool IsNewLogin() const;
   FormFetcher* GetFormFetcher();

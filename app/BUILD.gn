@@ -129,6 +129,8 @@ if (is_android) {
         locale = "fr-rCA"
       } else if (locale == "zh-HK") {
         locale = "zh-rHK"
+      } else if (locale == "sr-Latn") {
+        locale = "b+sr+Latn"
       }
       outputs += [ "values-$locale/vivaldi_android_strings.xml" ]
     }

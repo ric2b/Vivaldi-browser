@@ -28,10 +28,10 @@
 #import "ios/chrome/browser/ui/authentication/resized_avatar_cache.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/ui/commands/show_signin_command.h"
 #import "ios/chrome/browser/ui/icons/chrome_icon.h"
 #import "ios/chrome/browser/ui/settings/google_services/accounts_table_view_controller_constants.h"
 #import "ios/chrome/browser/ui/settings/sync/utils/sync_util.h"
-#import "ios/chrome/browser/ui/signin_interaction/signin_interaction_coordinator.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_detail_text_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_link_header_footer_item.h"
 #import "ios/chrome/browser/ui/table_view/cells/table_view_text_header_footer_item.h"
@@ -52,6 +52,9 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+using signin_metrics::AccessPoint;
+using signin_metrics::PromoAction;
 
 namespace {
 
@@ -105,11 +108,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
   NSDictionary<NSString*, TableViewItem*>* _identityMap;
 }
 
-// The SigninInteractionCoordinator that presents Sign In UI for the Accounts
-// Settings page.
-@property(nonatomic, strong)
-    SigninInteractionCoordinator* signinInteractionCoordinator;
-
 // Stops observing browser state services. This is required during the shutdown
 // phase to avoid observing services for a browser state that is being killed.
 - (void)stopBrowserStateServiceObservers;
@@ -119,7 +117,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
 @implementation AccountsTableViewController
 
 @synthesize dispatcher = _dispatcher;
-@synthesize signinInteractionCoordinator = _signinInteractionCoordinator;
 
 - (instancetype)initWithBrowser:(Browser*)browser
       closeSettingsOnAddAccount:(BOOL)closeSettingsOnAddAccount {
@@ -163,7 +160,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
 }
 
 - (void)settingsWillBeDismissed {
-  [self.signinInteractionCoordinator cancel];
   [_alertCoordinator stop];
   [self stopBrowserStateServiceObservers];
 }
@@ -209,12 +205,22 @@ typedef NS_ENUM(NSInteger, ItemType) {
       forSectionWithIdentifier:SectionIdentifierAccounts];
   signin::IdentityManager* identityManager =
       IdentityManagerFactory::GetForBrowserState(_browser->GetBrowserState());
+
+  NSString* authenticatedEmail = [authenticatedIdentity userEmail];
   for (const auto& account : identityManager->GetAccountsWithRefreshTokens()) {
     ChromeIdentity* identity = ios::GetChromeBrowserProvider()
                                    ->GetChromeIdentityService()
                                    ->GetIdentityWithGaiaID(account.gaia);
+    // TODO(crbug.com/1081274): This re-ordering will be redundant once we
+    // apply ordering changes to the account reconciler.
     TableViewItem* item = [self accountItem:identity];
-    [model addItem:item toSectionWithIdentifier:SectionIdentifierAccounts];
+    if ([identity.userEmail isEqual:authenticatedEmail]) {
+      [model insertItem:item
+          inSectionWithIdentifier:SectionIdentifierAccounts
+                          atIndex:0];
+    } else {
+      [model addItem:item toSectionWithIdentifier:SectionIdentifierAccounts];
+    }
 
     [mutableIdentityMap setObject:item forKey:identity.gaiaID];
   }
@@ -350,7 +356,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
           base::mac::ObjCCastStrict<TableViewAccountItem>(
               [self.tableViewModel itemAtIndexPath:indexPath]);
       DCHECK(item.chromeIdentity);
-      [self showAccountDetails:item.chromeIdentity];
+      UIView* itemView =
+          [[tableView cellForRowAtIndexPath:indexPath] contentView];
+      [self showAccountDetails:item.chromeIdentity itemView:itemView];
       break;
     }
     case ItemTypeAddAccount: {
@@ -397,25 +405,19 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (void)showAddAccount {
   if ([_alertCoordinator isVisible])
     return;
-
-  if (!self.signinInteractionCoordinator) {
-    self.signinInteractionCoordinator =
-        [[SigninInteractionCoordinator alloc] initWithBrowser:_browser];
-  }
-
-  // |_authenticationOperationInProgress| is reset when the signin operation is
-  // completed.
   _authenticationOperationInProgress = YES;
-  __weak AccountsTableViewController* weakSelf = self;
-  [self.signinInteractionCoordinator
-      addAccountWithAccessPoint:signin_metrics::AccessPoint::
-                                    ACCESS_POINT_SETTINGS
-                    promoAction:signin_metrics::PromoAction::
-                                    PROMO_ACTION_NO_SIGNIN_PROMO
-       presentingViewController:self.navigationController
-                     completion:^(BOOL success) {
-                       [weakSelf handleDidAddAccount:success];
-                     }];
+
+  __weak __typeof(self) weakSelf = self;
+  ShowSigninCommand* command = [[ShowSigninCommand alloc]
+      initWithOperation:AUTHENTICATION_OPERATION_ADD_ACCOUNT
+               identity:nil
+            accessPoint:AccessPoint::ACCESS_POINT_SETTINGS
+            promoAction:PromoAction::PROMO_ACTION_NO_SIGNIN_PROMO
+               callback:^(BOOL success) {
+                 [weakSelf handleDidAddAccount:success];
+               }];
+  DCHECK(self.dispatcher);
+  [self.dispatcher showSignin:command baseViewController:self];
 }
 
 - (void)handleDidAddAccount:(BOOL)success {
@@ -425,13 +427,48 @@ typedef NS_ENUM(NSInteger, ItemType) {
   }
 }
 
-- (void)showAccountDetails:(ChromeIdentity*)identity {
+- (void)showAccountDetails:(ChromeIdentity*)identity
+                  itemView:(UIView*)itemView {
   if ([_alertCoordinator isVisible])
     return;
-  _dimissAccountDetailsViewControllerBlock =
-      ios::GetChromeBrowserProvider()
-          ->GetChromeIdentityService()
-          ->PresentAccountDetailsController(identity, self, /*animated=*/YES);
+  if (base::FeatureList::IsEnabled(kEnableMyGoogle)) {
+    _alertCoordinator = [[ActionSheetCoordinator alloc]
+        initWithBaseViewController:self
+                           browser:_browser
+                             title:nil
+                           message:identity.userEmail
+                              rect:itemView.frame
+                              view:itemView];
+
+    [_alertCoordinator
+        addItemWithTitle:l10n_util::GetNSString(
+                             IDS_IOS_MANAGE_YOUR_GOOGLE_ACCOUNT_TITLE)
+                  action:^{
+                    _dimissAccountDetailsViewControllerBlock =
+                        ios::GetChromeBrowserProvider()
+                            ->GetChromeIdentityService()
+                            ->PresentAccountDetailsController(identity, self,
+                                                              /*animated=*/YES);
+                  }
+                   style:UIAlertActionStyleDefault];
+    [_alertCoordinator addItemWithTitle:l10n_util::GetNSString(
+                                            IDS_IOS_REMOVE_GOOGLE_ACCOUNT_TITLE)
+                                 action:^{
+                                   // TODO(crbug.com/1043080): Use Identity API
+                                   // to remove account.
+                                 }
+                                  style:UIAlertActionStyleDestructive];
+
+    [_alertCoordinator addItemWithTitle:l10n_util::GetNSString(IDS_CANCEL)
+                                 action:nil
+                                  style:UIAlertActionStyleCancel];
+    [_alertCoordinator start];
+  } else {
+    _dimissAccountDetailsViewControllerBlock =
+        ios::GetChromeBrowserProvider()
+            ->GetChromeIdentityService()
+            ->PresentAccountDetailsController(identity, self, /*animated=*/YES);
+  }
 }
 
 - (void)showSignOutWithClearData:(BOOL)forceClearData
@@ -456,6 +493,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
   _alertCoordinator =
       [[ActionSheetCoordinator alloc] initWithBaseViewController:self
+                                                         browser:_browser
                                                            title:nil
                                                          message:alertMessage
                                                             rect:itemView.frame
@@ -502,6 +540,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
   _alertCoordinator =
       [[AlertCoordinator alloc] initWithBaseViewController:self
+                                                   browser:_browser
                                                      title:title
                                                    message:message];
 
@@ -566,7 +605,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
     return;
   }
   _isBeingDismissed = YES;
-  [self.signinInteractionCoordinator cancelAndDismiss];
   [_alertCoordinator stop];
   [self.navigationController popToViewController:self animated:NO];
   [base::mac::ObjCCastStrict<SettingsNavigationController>(

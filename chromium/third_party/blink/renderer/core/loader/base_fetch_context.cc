@@ -47,8 +47,10 @@ base::Optional<ResourceRequestBlockedReason> BaseFetchContext::CanRequest(
   return blocked_reason;
 }
 
-bool BaseFetchContext::CalculateIfAdSubresource(const ResourceRequest& request,
-                                                ResourceType type) {
+bool BaseFetchContext::CalculateIfAdSubresource(
+    const ResourceRequest& request,
+    ResourceType type,
+    const FetchInitiatorInfo& initiator_info) {
   // A base class should override this is they have more signals than just the
   // SubresourceFilter.
   SubresourceFilter* filter = GetSubresourceFilter();
@@ -90,18 +92,21 @@ void BaseFetchContext::PrintAccessDeniedMessage(const KURL& url) const {
 base::Optional<ResourceRequestBlockedReason>
 BaseFetchContext::CheckCSPForRequest(
     mojom::RequestContextType request_context,
+    network::mojom::RequestDestination request_destination,
     const KURL& url,
     const ResourceLoaderOptions& options,
     ReportingDisposition reporting_disposition,
     ResourceRequest::RedirectStatus redirect_status) const {
   return CheckCSPForRequestInternal(
-      request_context, url, options, reporting_disposition, redirect_status,
+      request_context, request_destination, url, options, reporting_disposition,
+      redirect_status,
       ContentSecurityPolicy::CheckHeaderType::kCheckReportOnly);
 }
 
 base::Optional<ResourceRequestBlockedReason>
 BaseFetchContext::CheckCSPForRequestInternal(
     mojom::RequestContextType request_context,
+    network::mojom::RequestDestination request_destination,
     const KURL& url,
     const ResourceLoaderOptions& options,
     ReportingDisposition reporting_disposition,
@@ -114,10 +119,11 @@ BaseFetchContext::CheckCSPForRequestInternal(
   }
 
   const ContentSecurityPolicy* csp = GetContentSecurityPolicy();
-  if (csp && !csp->AllowRequest(
-                 request_context, url, options.content_security_policy_nonce,
-                 options.integrity_metadata, options.parser_disposition,
-                 redirect_status, reporting_disposition, check_header_type)) {
+  if (csp && !csp->AllowRequest(request_context, request_destination, url,
+                                options.content_security_policy_nonce,
+                                options.integrity_metadata,
+                                options.parser_disposition, redirect_status,
+                                reporting_disposition, check_header_type)) {
     return ResourceRequestBlockedReason::kCSP;
   }
   return base::nullopt;
@@ -187,12 +193,15 @@ BaseFetchContext::CanRequestInternal(
 
   mojom::RequestContextType request_context =
       resource_request.GetRequestContext();
+  network::mojom::RequestDestination request_destination =
+      resource_request.GetRequestDestination();
 
   // We check the 'report-only' headers before upgrading the request (in
   // populateResourceRequest). We check the enforced headers here to ensure we
   // block things we ought to block.
   if (CheckCSPForRequestInternal(
-          request_context, url, options, reporting_disposition, redirect_status,
+          request_context, request_destination, url, options,
+          reporting_disposition, redirect_status,
           ContentSecurityPolicy::CheckHeaderType::kCheckEnforce) ==
       ResourceRequestBlockedReason::kCSP) {
     return ResourceRequestBlockedReason::kCSP;
@@ -233,10 +242,11 @@ BaseFetchContext::CanRequestInternal(
   // Check for mixed content. We do this second-to-last so that when folks block
   // mixed content via CSP, they don't get a mixed content warning, but a CSP
   // warning instead.
-  if (ShouldBlockFetchByMixedContentCheck(request_context,
-                                          resource_request.GetRedirectStatus(),
-                                          url, reporting_disposition))
+  if (ShouldBlockFetchByMixedContentCheck(
+          request_context, resource_request.GetRedirectStatus(), url,
+          reporting_disposition, resource_request.GetDevToolsId())) {
     return ResourceRequestBlockedReason::kMixedContent;
+  }
 
   if (url.PotentiallyDanglingMarkup() && url.ProtocolIsInHTTPFamily()) {
     CountDeprecation(WebFeature::kCanRequestURLHTTPContainingNewline);

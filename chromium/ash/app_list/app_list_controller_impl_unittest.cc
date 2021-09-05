@@ -27,6 +27,7 @@
 #include "ash/public/cpp/presentation_time_recorder.h"
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/shelf_types.h"
+#include "ash/public/cpp/system_tray_test_api.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_layout_manager.h"
@@ -34,7 +35,6 @@
 #include "ash/shelf/shelf_view_test_api.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
-#include "ash/system/unified/unified_system_tray_test_api.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
@@ -97,7 +97,7 @@ aura::Window* GetVirtualKeyboardWindow() {
 }
 
 AppsGridView* GetAppsGridView() {
-  return GetContentsView()->GetAppsContainerView()->apps_grid_view();
+  return GetContentsView()->apps_container_view()->apps_grid_view();
 }
 
 void ShowAppListNow() {
@@ -452,7 +452,7 @@ TEST_F(AppListControllerImplTest, CloseNotificationWithAppListShown) {
       1u, message_center::MessageCenter::Get()->GetPopupNotifications().size());
 
   // Calculate the drag start point and end point.
-  UnifiedSystemTrayTestApi test_api(GetPrimaryUnifiedSystemTray());
+  SystemTrayTestApi test_api;
   message_center::MessagePopupView* popup_view =
       test_api.GetPopupViewForNotificationID(notification_id);
   ASSERT_TRUE(popup_view);
@@ -747,7 +747,7 @@ TEST_P(HotseatAppListControllerImplTest, GetItemBoundsForWindow) {
   AppsGridView* apps_grid_view = GetAppListView()
                                      ->app_list_main_view()
                                      ->contents_view()
-                                     ->GetAppsContainerView()
+                                     ->apps_container_view()
                                      ->apps_grid_view();
   auto apps_grid_test_api =
       std::make_unique<test::AppsGridViewTestApi>(apps_grid_view);
@@ -1085,15 +1085,6 @@ TEST_F(AppListControllerImplMetricsTest, LogSingleResultListClick) {
                                        4, 1);
 }
 
-TEST_F(AppListControllerImplMetricsTest, LogSingleTileListClick) {
-  histogram_tester_.ExpectTotalCount(kAppListTileLaunchIndexAndQueryLength, 0);
-  SetSearchText(controller_, "aaaa");
-  controller_->LogResultLaunchHistogram(SearchResultLaunchLocation::kTileList,
-                                        4);
-  histogram_tester_.ExpectUniqueSample(kAppListTileLaunchIndexAndQueryLength,
-                                       32, 1);
-}
-
 TEST_F(AppListControllerImplMetricsTest, LogOneClickInEveryBucket) {
   histogram_tester_.ExpectTotalCount(kAppListResultLaunchIndexAndQueryLength,
                                      0);
@@ -1115,16 +1106,6 @@ TEST_F(AppListControllerImplMetricsTest, LogOneClickInEveryBucket) {
           7 * query_length + click_index, 1);
     }
   }
-}
-
-TEST_F(AppListControllerImplMetricsTest, LogManyClicksInOneBucket) {
-  histogram_tester_.ExpectTotalCount(kAppListTileLaunchIndexAndQueryLength, 0);
-  SetSearchText(controller_, "aaaa");
-  for (int i = 0; i < 50; ++i)
-    controller_->LogResultLaunchHistogram(SearchResultLaunchLocation::kTileList,
-                                          4);
-  histogram_tester_.ExpectUniqueSample(kAppListTileLaunchIndexAndQueryLength,
-                                       32, 50);
 }
 
 // One edge case may do harm to the presentation metrics reporter for tablet

@@ -33,11 +33,11 @@
 
 #include <memory>
 #include "cc/paint/paint_canvas.h"
+#include "third_party/blink/public/mojom/frame/tree_scope_type.mojom-shared.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-shared.h"
 #include "third_party/blink/public/platform/web_common.h"
 #include "third_party/blink/public/web/web_frame_load_type.h"
 #include "third_party/blink/public/web/web_node.h"
-#include "third_party/blink/public/web/web_tree_scope_type.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -49,9 +49,6 @@ class WebLocalFrame;
 class WebRemoteFrame;
 class WebSecurityOrigin;
 class WebView;
-namespace mojom {
-enum class WebSandboxFlags;
-}
 
 // Frames may be rendered in process ('local') or out of process ('remote').
 // A remote frame is always cross-site; a local frame may be either same-site or
@@ -147,9 +144,6 @@ class BLINK_EXPORT WebFrame {
 
   // Navigation ----------------------------------------------------------
 
-  // Stops any pending loads on the frame and its children.
-  virtual void StopLoading() = 0;
-
   // Will return true if between didStartLoading and didStopLoading
   // notifications.
   virtual bool IsLoading() const;
@@ -160,12 +154,17 @@ class BLINK_EXPORT WebFrame {
   // the given node is not a frame, iframe or if the frame is empty.
   static WebFrame* FromFrameOwnerElement(const WebNode&);
 
+  // This identifier represents the stable identifier between a
+  // LocalFrame  <--> RenderFrameHostImpl or a
+  // RemoteFrame <--> RenderFrameProxyHost in the browser process.
+  const base::UnguessableToken& GetFrameToken() const { return frame_token_; }
+
 #if INSIDE_BLINK
   // TODO(mustaq): Should be named FromCoreFrame instead.
   static WebFrame* FromFrame(Frame*);
   static Frame* ToCoreFrame(const WebFrame&);
 
-  bool InShadowTree() const { return scope_ == WebTreeScopeType::kShadow; }
+  bool InShadowTree() const { return scope_ == mojom::TreeScopeType::kShadow; }
 
   static void TraceFrames(Visitor*, const WebFrame*);
 
@@ -174,7 +173,8 @@ class BLINK_EXPORT WebFrame {
 #endif
 
  protected:
-  explicit WebFrame(WebTreeScopeType);
+  explicit WebFrame(mojom::TreeScopeType,
+                    const base::UnguessableToken& frame_token);
   virtual ~WebFrame();
 
   // Sets the parent WITHOUT fulling adding it to the frame tree.
@@ -201,7 +201,13 @@ class BLINK_EXPORT WebFrame {
   // Removes the given child from this frame.
   void RemoveChild(WebFrame*);
 
-  const WebTreeScopeType scope_;
+  const mojom::TreeScopeType scope_;
+
+  // See blink::Frame::frame_token_ for comments.
+  // TODO(dtapuska): Remove the need for this variable. This is stored here
+  // because a WebRemote's core frame is created inside the bowels of the Swap
+  // call.
+  const base::UnguessableToken frame_token_;
 
   WebFrame* parent_;
   WebFrame* previous_sibling_;

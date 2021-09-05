@@ -56,9 +56,6 @@ class AXTreeSourceArc : public ui::AXTreeSource<AccessibilityInfoDataWrapper*,
   void NotifyGetTextLocationDataResult(const ui::AXActionData& data,
                                        const base::Optional<gfx::Rect>& rect);
 
-  // Update Chrome's accessibility focused node by id.
-  void UpdateAccessibilityFocusLocation(int32_t id);
-
   // Invalidates the tree serializer.
   void InvalidateTree();
 
@@ -110,9 +107,8 @@ class AXTreeSourceArc : public ui::AXTreeSource<AccessibilityInfoDataWrapper*,
 
   // Builds a mapping from index in |nodes| to whether ignored state should be
   // applied to the node in chrome accessibility.
-  // Assuming that |nodes[0]| is a root of the tree.
   void BuildImportanceTable(
-      const std::vector<mojom::AccessibilityNodeInfoDataPtr>& nodes,
+      mojom::AccessibilityEventData* event_data,
       const std::map<int32_t, int32_t>& node_id_to_nodes_index,
       std::vector<bool>& out_node) const;
 
@@ -125,6 +121,9 @@ class AXTreeSourceArc : public ui::AXTreeSource<AccessibilityInfoDataWrapper*,
   // Find the most top-left focusable node under the given node.
   AccessibilityInfoDataWrapper* FindFirstFocusableNode(
       AccessibilityInfoDataWrapper* info_data) const;
+
+  AccessibilityInfoDataWrapper* GetSelectedNodeInfoFromAdapterView(
+      mojom::AccessibilityEventData* event_data) const;
 
   void UpdateAXNameCache(AccessibilityInfoDataWrapper* focused_node,
                          const std::vector<std::string>& event_text);
@@ -166,27 +165,22 @@ class AXTreeSourceArc : public ui::AXTreeSource<AccessibilityInfoDataWrapper*,
   base::Optional<int32_t> window_id_;
   base::Optional<int32_t> android_focused_id_;
 
-  // Cache of ChromeVox accessibility focus.
-  base::Optional<int32_t> chrome_focused_id_;
-  base::Optional<gfx::Rect> chrome_focused_bounds_;
-
   bool is_notification_;
   bool is_input_method_window_;
 
   std::map<int32_t, std::string> cached_names_;
   std::map<int32_t, ax::mojom::Role> cached_roles_;
 
+  // Mapping from Chrome node ID to its cached computed bounds.
+  // This simplifies bounds calculations.
+  std::map<int32_t, gfx::Rect> computed_bounds_;
+
+  // Mapping from Chrome node ID to the previous computed name for live region.
+  std::map<int32_t, std::string> previous_live_region_name_;
+
   // A delegate that handles accessibility actions on behalf of this tree. The
   // delegate is valid during the lifetime of this tree.
   const Delegate* const delegate_;
-  std::string package_name_;
-
-  // Mapping from AccessibilityInfoDataWrapper ID to its cached computed bounds.
-  // This simplifies bounds calculations.
-  std::map<int32_t, gfx::Rect> cached_computed_bounds_;
-
-  // Cache from node id to computed name for live region.
-  std::map<int32_t, std::string> live_region_name_cache_;
 
   DISALLOW_COPY_AND_ASSIGN(AXTreeSourceArc);
 };

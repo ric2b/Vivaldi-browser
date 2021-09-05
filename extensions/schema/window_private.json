@@ -333,6 +333,18 @@
             "name": "statusText"
           }
         ]
+      },
+      {
+        "name": "onCloseAllTabsDone",
+        "type": "function",
+        "description": "",
+        "parameters": [
+          {
+            "type": "integer",
+            "name": "windowId",
+            "description": "Id of the Vivaldi window where the tabstrip is empty."
+          }
+        ]
       }
     ]
   }

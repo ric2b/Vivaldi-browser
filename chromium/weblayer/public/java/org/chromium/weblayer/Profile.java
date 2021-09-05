@@ -213,6 +213,47 @@ public class Profile {
         return mCookieManager;
     }
 
+    /**
+     * Allows the embedder to set a boolean value for a specific setting, see {@link SettingType}
+     * for more details and the possible options.
+     *
+     * @param type See {@link SettingType}.
+     * @param value The value to set for the setting.
+     *
+     * @since 84
+     */
+    public void setBooleanSetting(@SettingType int type, boolean value) {
+        ThreadCheck.ensureOnUiThread();
+        if (WebLayer.getSupportedMajorVersionInternal() < 84) {
+            throw new UnsupportedOperationException();
+        }
+
+        try {
+            mImpl.setBooleanSetting(type, value);
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
+    /**
+     * Returns the current value for the given setting type, see {@link SettingType} for more
+     * details and the possible options.
+     *
+     * @since 84
+     */
+    public boolean getBooleanSetting(@SettingType int type) {
+        ThreadCheck.ensureOnUiThread();
+        if (WebLayer.getSupportedMajorVersionInternal() < 84) {
+            throw new UnsupportedOperationException();
+        }
+
+        try {
+            return mImpl.getBooleanSetting(type);
+        } catch (RemoteException e) {
+            throw new APICallException(e);
+        }
+    }
+
     static final class DownloadCallbackClientImpl extends IDownloadCallbackClient.Stub {
         private final DownloadCallback mCallback;
 
@@ -284,7 +325,7 @@ public class Profile {
             // Intent objects need to be created in the client library so they can refer to the
             // broadcast receiver that will handle them. The broadcast receiver needs to be in the
             // client library because it's referenced in the manifest.
-            return new Intent(WebLayer.getAppContext(), DownloadBroadcastReceiver.class);
+            return new Intent(WebLayer.getAppContext(), BroadcastReceiver.class);
         }
     }
 }

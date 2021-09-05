@@ -31,7 +31,7 @@ WebAppMigrationManager::WebAppMigrationManager(
     AbstractWebAppDatabaseFactory* database_factory,
     WebAppIconManager* web_app_icon_manager)
     : bookmark_app_registrar_(profile),
-      bookmark_app_registry_controller_(profile),
+      bookmark_app_registry_controller_(profile, &bookmark_app_registrar_),
       bookmark_app_icon_manager_(profile),
       bookmark_app_file_handler_manager_(profile),
       database_factory_(database_factory),
@@ -114,9 +114,11 @@ void WebAppMigrationManager::OnBookmarkAppIconsRead(
     MigrateNextBookmarkAppIcons();
     return;
   }
-
+  // TODO(https://crbug.com/1069316): Support jump lists migration here: Convert
+  // old extension's representation to new web app representation (project BMO).
   web_app_icon_manager_->WriteData(
       app_id, std::move(icon_bitmaps),
+      std::vector<std::map<SquareSizePx, SkBitmap>>(),
       base::BindOnce(&WebAppMigrationManager::OnWebAppIconsWritten,
                      weak_ptr_factory_.GetWeakPtr()));
 }
@@ -166,6 +168,12 @@ void WebAppMigrationManager::MigrateBookmarkAppInstallSource(
 bool WebAppMigrationManager::CanMigrateBookmarkApp(const AppId& app_id) const {
   if (!bookmark_app_registrar_.IsInstalled(app_id))
     return false;
+
+  // SystemWebAppManager will re-install these.
+  if (bookmark_app_registrar_.HasExternalAppWithInstallSource(
+          app_id, ExternalInstallSource::kSystemInstalled)) {
+    return false;
+  }
 
   GURL launch_url = bookmark_app_registrar_.GetAppLaunchURL(app_id);
   return GenerateAppIdFromURL(launch_url) == app_id;

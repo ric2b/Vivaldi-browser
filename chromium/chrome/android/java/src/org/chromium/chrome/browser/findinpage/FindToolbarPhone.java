@@ -40,7 +40,7 @@ public class FindToolbarPhone extends FindToolbar {
                 SharedPreferencesManager.getInstance().readBoolean(
                         VivaldiPreferences.SHOW_TAB_STRIP, true)
                         ? (int) getResources().getDimension(
-                                  R.dimen.tab_strip_height_phone_with_tabs)
+                                  R.dimen.tab_strip_height)
                         : 0);
 
         super.handleActivate();

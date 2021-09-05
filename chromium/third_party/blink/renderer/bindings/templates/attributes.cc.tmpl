@@ -71,10 +71,6 @@ const v8::FunctionCallbackInfo<v8::Value>& info
 
   {% if attribute.cached_attribute_validation_method %}
   // [CachedAttribute]
-  {% if cpp_class == 'History' and attribute.camel_case_name == 'State' %}
-  V8PrivateProperty::Symbol property_symbol =
-      V8PrivateProperty::GetHistoryStateSymbol(info.GetIsolate());
-  {% else %}
   {% if not attribute.private_property_is_shared_between_getter_and_setter %}
   static const V8PrivateProperty::SymbolKey kPrivateProperty{{attribute.camel_case_name}};
 
@@ -82,7 +78,6 @@ const v8::FunctionCallbackInfo<v8::Value>& info
   V8PrivateProperty::Symbol property_symbol =
       V8PrivateProperty::GetSymbol(info.GetIsolate(),
           kPrivateProperty{{attribute.camel_case_name}});
-  {% endif %}
   if (!static_cast<const {{cpp_class}}*>(impl)->{{attribute.cached_attribute_validation_method}}()) {
     v8::Local<v8::Value> v8_value;
     if (property_symbol.GetOrUndefined(holder).ToLocal(&v8_value) && !v8_value->IsUndefined()) {
@@ -562,9 +557,10 @@ void {{v8_class_or_partial}}::{{attribute.camel_case_name}}AttributeSetterCallba
 
 {% set property_attribute = 'static_cast<v8::PropertyAttribute>(%s)' %
                             ' | '.join(attribute.property_attributes) %}
-{% set cached_property_key = 'V8PrivateProperty::k' +
+{% set cached_property_key = 'V8PrivateProperty::CachedAccessor::' +
     (attribute.cached_accessor_name if attribute.is_cached_accessor
-     else 'NoCachedAccessor') %}
+     else 'kNone') %}
+{% set cached_property_key = 'static_cast<unsigned>(%s)' % cached_property_key %}
 {% set holder_check = 'V8DOMConfiguration::kDoNotCheckHolder'
     if attribute.is_lenient_this or attribute.has_promise_type
     else 'V8DOMConfiguration::kCheckHolder' %}

@@ -34,6 +34,7 @@
 #include "components/arc/arc_util.h"
 #include "components/arc/test/connection_holder_util.h"
 #include "components/arc/test/fake_app_instance.h"
+#include "content/public/test/browser_test.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -168,7 +169,7 @@ class ApkWebAppInstallerBrowserTest
         provider_->registrar().GetAppShortName(web_app_id);
   }
 
-  void OnWebAppWillBeUninstalled(const web_app::AppId& web_app_id) override {
+  void OnWebAppUninstalled(const web_app::AppId& web_app_id) override {
     uninstalled_web_app_id_ = web_app_id;
   }
 

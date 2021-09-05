@@ -853,6 +853,11 @@ Image::SizeAvailability SVGImage::DataChanged(bool all_data_received) {
           default_settings.GetDefaultFontSize());
       page->GetSettings().SetDefaultFixedFontSize(
           default_settings.GetDefaultFixedFontSize());
+
+      // Also copy the preferred-color-scheme to ensure a responsiveness to
+      // dark/light color schemes.
+      page->GetSettings().SetPreferredColorScheme(
+          default_settings.GetPreferredColorScheme());
     }
   }
 
@@ -862,13 +867,14 @@ Image::SizeAvailability SVGImage::DataChanged(bool all_data_received) {
     DCHECK(!frame_client_);
     frame_client_ = MakeGarbageCollected<SVGImageLocalFrameClient>(this);
     frame = MakeGarbageCollected<LocalFrame>(frame_client_, *page, nullptr,
+                                             base::UnguessableToken::Create(),
                                              nullptr, nullptr);
     frame->SetView(MakeGarbageCollected<LocalFrameView>(*frame));
     frame->Init();
   }
 
   FrameLoader& loader = frame->Loader();
-  loader.ForceSandboxFlags(mojom::blink::WebSandboxFlags::kAll);
+  loader.ForceSandboxFlags(network::mojom::blink::WebSandboxFlags::kAll);
 
   // SVG Images will always synthesize a viewBox, if it's not available, and
   // thus never see scrollbars.

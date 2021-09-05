@@ -144,7 +144,7 @@ CustomElementDefinition* CustomElementRegistry::DefineInternal(
 
   // Step 7. customized built-in elements definition
   // element interface extends option checks
-  if (options->hasExtends()) {
+  if (!options->extends().IsNull()) {
     // 7.1. If element interface is valid custom element name, throw exception
     const AtomicString& extends = AtomicString(options->extends());
     if (ThrowIfValidName(AtomicString(options->extends()), exception_state))
@@ -355,10 +355,8 @@ void CustomElementRegistry::upgrade(Node* root) {
   CollectUpgradeCandidateInNode(*root, candidates);
 
   // 2. For each candidate of candidates, try to upgrade candidate.
-  for (auto& candidate : candidates) {
-    CustomElement::TryToUpgrade(*candidate,
-                                true /* upgrade_invisible_elements */);
-  }
+  for (auto& candidate : candidates)
+    CustomElement::TryToUpgrade(*candidate);
 }
 
 }  // namespace blink

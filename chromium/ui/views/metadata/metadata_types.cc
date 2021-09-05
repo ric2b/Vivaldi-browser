@@ -6,6 +6,8 @@
 
 #include <utility>
 
+#include "base/check_op.h"
+#include "base/notreached.h"
 #include "base/strings/string_util.h"
 #include "ui/views/metadata/type_conversion.h"
 

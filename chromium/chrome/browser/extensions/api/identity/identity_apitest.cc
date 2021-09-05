@@ -13,7 +13,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
-#include "base/test/scoped_feature_list.h"
+#include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "build/buildflag.h"
@@ -57,6 +57,7 @@
 #include "components/signin/public/identity_manager/identity_test_utils.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_source.h"
+#include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/api_test_utils.h"
 #include "extensions/common/extension_builder.h"
@@ -70,7 +71,11 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/login/users/mock_user_manager.h"
+#include "chrome/browser/chromeos/net/network_portal_detector_test_impl.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
+#include "chromeos/network/network_handler.h"
+#include "chromeos/network/network_state.h"
+#include "chromeos/network/network_state_handler.h"
 #include "chromeos/tpm/stub_install_attributes.h"
 #include "components/user_manager/scoped_user_manager.h"
 #endif
@@ -88,6 +93,27 @@ namespace utils = extension_function_test_utils;
 
 static const char kAccessToken[] = "auth_token";
 static const char kExtensionId[] = "ext_id";
+
+#if defined(OS_CHROMEOS)
+void InitNetwork() {
+  const chromeos::NetworkState* default_network =
+      chromeos::NetworkHandler::Get()
+          ->network_state_handler()
+          ->DefaultNetwork();
+
+  auto* portal_detector = new chromeos::NetworkPortalDetectorTestImpl();
+  portal_detector->SetDefaultNetworkForTesting(default_network->guid());
+
+  chromeos::NetworkPortalDetector::CaptivePortalState online_state;
+  online_state.status =
+      chromeos::NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_ONLINE;
+  online_state.response_code = 204;
+  portal_detector->SetDetectionResultsForTesting(default_network->guid(),
+                                                 online_state);
+
+  chromeos::network_portal_detector::InitializeForTesting(portal_detector);
+}
+#endif
 
 // Asynchronous function runner allows tests to manipulate the browser window
 // after the call happens.
@@ -287,6 +313,7 @@ class FakeGetAuthTokenFunction : public IdentityGetAuthTokenFunction {
         auto_login_access_token_(true),
         login_ui_result_(true),
         scope_ui_result_(true),
+        scope_ui_async_(false),
         scope_ui_failure_(GaiaWebAuthFlow::WINDOW_CLOSED),
         login_ui_shown_(false),
         scope_ui_shown_(false) {}
@@ -308,6 +335,14 @@ class FakeGetAuthTokenFunction : public IdentityGetAuthTokenFunction {
   void push_mint_token_result(TestOAuth2MintTokenFlow::ResultType result_type) {
     push_mint_token_flow(
         std::make_unique<TestOAuth2MintTokenFlow>(result_type, this));
+  }
+
+  // Sets scope UI to not complete immediately. Call
+  // CompleteOAuthApprovalDialog() or CompleteRemoteConsentDialog() after
+  // |on_scope_ui_shown| is invoked to unblock execution.
+  void set_scope_ui_async(base::OnceClosure on_scope_ui_shown) {
+    scope_ui_async_ = true;
+    on_scope_ui_shown_ = std::move(on_scope_ui_shown);
   }
 
   void set_scope_ui_failure(GaiaWebAuthFlow::Failure failure) {
@@ -416,7 +451,13 @@ class FakeGetAuthTokenFunction : public IdentityGetAuthTokenFunction {
 
   void ShowOAuthApprovalDialog(const IssueAdviceInfo& issue_advice) override {
     scope_ui_shown_ = true;
+    if (!scope_ui_async_)
+      CompleteOAuthApprovalDialog();
+    else
+      std::move(on_scope_ui_shown_).Run();
+  }
 
+  void CompleteOAuthApprovalDialog() {
     if (scope_ui_result_) {
       OnGaiaFlowCompleted(kAccessToken, "3600");
     } else if (scope_ui_failure_ == GaiaWebAuthFlow::SERVICE_AUTH_ERROR) {
@@ -430,6 +471,13 @@ class FakeGetAuthTokenFunction : public IdentityGetAuthTokenFunction {
   void ShowRemoteConsentDialog(
       const RemoteConsentResolutionData& resolution_data) override {
     scope_ui_shown_ = true;
+    if (!scope_ui_async_)
+      CompleteRemoteConsentDialog();
+    else
+      std::move(on_scope_ui_shown_).Run();
+  }
+
+  void CompleteRemoteConsentDialog() {
     if (scope_ui_result_) {
       OnGaiaRemoteConsentFlowApproved("fake_consent_result",
                                       remote_consent_gaia_id_);
@@ -457,6 +505,8 @@ class FakeGetAuthTokenFunction : public IdentityGetAuthTokenFunction {
   bool auto_login_access_token_;
   bool login_ui_result_;
   bool scope_ui_result_;
+  bool scope_ui_async_;
+  base::OnceClosure on_scope_ui_shown_;
   GaiaWebAuthFlow::Failure scope_ui_failure_;
   GoogleServiceAuthError scope_ui_service_error_;
   std::string scope_ui_oauth_error_;
@@ -500,12 +550,19 @@ class IdentityTestWithSignin : public AsyncExtensionBrowserTest {
   void SetUpOnMainThread() override {
     AsyncExtensionBrowserTest::SetUpOnMainThread();
 
+#if defined(OS_CHROMEOS)
+    // Fake the network online state so that Gaia requests can come through.
+    InitNetwork();
+#endif
+
     identity_test_env_profile_adaptor_ =
         std::make_unique<IdentityTestEnvironmentProfileAdaptor>(profile());
 
     // This test requires these callbacks to be fired on account
     // update/removal.
     identity_test_env()->EnableRemovalOfExtendedAccountInfo();
+
+    identity_test_env()->SetTestURLLoaderFactory(&test_url_loader_factory_);
   }
 
   void TearDownOnMainThread() override {
@@ -611,11 +668,7 @@ class IdentityGetAccountsFunctionTest : public IdentityTestWithSignin {
 };
 
 IN_PROC_BROWSER_TEST_F(IdentityGetAccountsFunctionTest, AllAccountsOn) {
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
   EXPECT_FALSE(id_api()->AreExtensionsRestrictedToPrimaryAccount());
-#else
-  EXPECT_TRUE(id_api()->AreExtensionsRestrictedToPrimaryAccount());
-#endif
 }
 
 IN_PROC_BROWSER_TEST_F(IdentityGetAccountsFunctionTest, NoneSignedIn) {
@@ -673,7 +726,6 @@ class IdentityGetProfileUserInfoFunctionTest : public IdentityTestWithSignin {
     return api::identity::ProfileUserInfo::FromValue(*value);
   }
 
- private:
   scoped_refptr<const Extension> CreateExtensionWithEmailPermission() {
     return ExtensionBuilder("Test").AddPermission("identity.email").Build();
   }
@@ -695,6 +747,16 @@ IN_PROC_BROWSER_TEST_F(IdentityGetProfileUserInfoFunctionTest, SignedIn) {
 }
 
 IN_PROC_BROWSER_TEST_F(IdentityGetProfileUserInfoFunctionTest,
+                       SignedInUnconsented) {
+  identity_test_env()->MakeUnconsentedPrimaryAccountAvailable(
+      "test@example.com");
+  std::unique_ptr<api::identity::ProfileUserInfo> info =
+      RunGetProfileUserInfoWithEmail();
+  EXPECT_TRUE(info->email.empty());
+  EXPECT_TRUE(info->id.empty());
+}
+
+IN_PROC_BROWSER_TEST_F(IdentityGetProfileUserInfoFunctionTest,
                        NotSignedInNoEmail) {
   std::unique_ptr<api::identity::ProfileUserInfo> info =
       RunGetProfileUserInfo();
@@ -711,14 +773,72 @@ IN_PROC_BROWSER_TEST_F(IdentityGetProfileUserInfoFunctionTest,
   EXPECT_TRUE(info->id.empty());
 }
 
+class IdentityGetProfileUserInfoFunctionTestWithAccountStatusParam
+    : public IdentityGetProfileUserInfoFunctionTest,
+      public ::testing::WithParamInterface<std::string> {
+ protected:
+  std::unique_ptr<api::identity::ProfileUserInfo>
+  RunGetProfileUserInfoWithAccountStatus() {
+    scoped_refptr<IdentityGetProfileUserInfoFunction> func(
+        new IdentityGetProfileUserInfoFunction);
+    func->set_extension(CreateExtensionWithEmailPermission());
+    std::string args = base::StringPrintf(R"([{"accountStatus": "%s"}])",
+                                          account_status().c_str());
+    std::unique_ptr<base::Value> value(
+        utils::RunFunctionAndReturnSingleResult(func.get(), args, browser()));
+    return api::identity::ProfileUserInfo::FromValue(*value);
+  }
+
+  std::string account_status() { return GetParam(); }
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    IdentityGetProfileUserInfoFunctionTestWithAccountStatusParam,
+    ::testing::Values("SYNC", "ANY"));
+
+IN_PROC_BROWSER_TEST_P(
+    IdentityGetProfileUserInfoFunctionTestWithAccountStatusParam,
+    NotSignedIn) {
+  std::unique_ptr<api::identity::ProfileUserInfo> info =
+      RunGetProfileUserInfoWithAccountStatus();
+  EXPECT_TRUE(info->email.empty());
+  EXPECT_TRUE(info->id.empty());
+}
+
+IN_PROC_BROWSER_TEST_P(
+    IdentityGetProfileUserInfoFunctionTestWithAccountStatusParam,
+    SignedIn) {
+  SignIn("test@example.com");
+  std::unique_ptr<api::identity::ProfileUserInfo> info =
+      RunGetProfileUserInfoWithAccountStatus();
+  EXPECT_EQ("test@example.com", info->email);
+  EXPECT_EQ("gaia_id_for_test_example.com", info->id);
+}
+
+IN_PROC_BROWSER_TEST_P(
+    IdentityGetProfileUserInfoFunctionTestWithAccountStatusParam,
+    SignedInUnconsented) {
+  identity_test_env()->MakeUnconsentedPrimaryAccountAvailable(
+      "test@example.com");
+  std::unique_ptr<api::identity::ProfileUserInfo> info =
+      RunGetProfileUserInfoWithAccountStatus();
+  // The unconsented (Sync off) primary account is returned conditionally,
+  // depending on the accountStatus parameter.
+  if (account_status() == "ANY") {
+    EXPECT_EQ("test@example.com", info->email);
+    EXPECT_EQ("gaia_id_for_test_example.com", info->id);
+  } else {
+    // accountStatus is SYNC or unspecified.
+    EXPECT_TRUE(info->email.empty());
+    EXPECT_TRUE(info->id.empty());
+  }
+}
+
 class GetAuthTokenFunctionTest
     : public IdentityTestWithSignin,
       public signin::IdentityManager::DiagnosticsObserver {
  public:
-  GetAuthTokenFunctionTest() {
-    scoped_feature_list_.InitAndEnableFeature(switches::kOAuthRemoteConsent);
-  }
-
   std::string IssueLoginAccessTokenForAccount(const CoreAccountId& account_id) {
     std::string access_token = "access_token-" + account_id.ToString();
     identity_test_env()
@@ -769,6 +889,10 @@ class GetAuthTokenFunctionTest
     oauth_scopes_ = std::set<std::string>(oauth2_info.scopes.begin(),
                                           oauth2_info.scopes.end());
     return ext;
+  }
+
+  CoreAccountInfo GetPrimaryAccountInfo() {
+    return identity_test_env()->identity_manager()->GetPrimaryAccountInfo();
   }
 
   CoreAccountId GetPrimaryAccountId() {
@@ -828,8 +952,6 @@ class GetAuthTokenFunctionTest
 
   std::string extension_id_;
   std::set<std::string> oauth_scopes_;
-
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, NoClientId) {
@@ -1642,9 +1764,8 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, LoginInvalidatesTokenCache) {
   EXPECT_EQ(IdentityTokenCacheValue::CACHE_STATUS_NOTFOUND,
             GetCachedToken(CoreAccountId()).status());
 }
+#endif
 
-// ChromeOS supports primary accounts only. So the test isn't applicable on that
-// platform.
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
                        IssueAdviceInvalidatesGaiaIdCache) {
   SignIn("primary@example.com");
@@ -1670,8 +1791,6 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
   EXPECT_FALSE(GetCachedGaiaId().has_value());
 }
 
-// ChromeOS supports primary accounts only. So the test isn't applicable on that
-// platform.
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
                        IssueAdviceFailureInvalidatesGaiaIdCache) {
   SignIn("primary@example.com");
@@ -1696,7 +1815,6 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
   EXPECT_TRUE(func->scope_ui_shown());
   EXPECT_FALSE(GetCachedGaiaId().has_value());
 }
-#endif
 
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, ComponentWithChromeClientId) {
   scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
@@ -1893,10 +2011,6 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
 
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
                        MultiSecondaryUserManuallyIssueToken) {
-  // This test is only relevant if extensions see all accounts.
-  if (id_api()->AreExtensionsRestrictedToPrimaryAccount())
-    return;
-
   SignIn("primary@example.com");
   CoreAccountId secondary_account_id =
       identity_test_env()
@@ -1909,11 +2023,22 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
   func->set_auto_login_access_token(false);
   func->push_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_SUCCESS);
 
+  const char kFunctionParams[] =
+      "[{\"account\": { \"id\": \"gaia_id_for_secondary_example.com\" } }]";
+
+  if (id_api()->AreExtensionsRestrictedToPrimaryAccount()) {
+    // Fail if extensions are restricted to the primary account.
+    std::string error = utils::RunFunctionAndReturnError(
+        func.get(), kFunctionParams, browser());
+    EXPECT_EQ(std::string(errors::kUserNonPrimary), error);
+    EXPECT_FALSE(func->login_ui_shown());
+    EXPECT_FALSE(func->scope_ui_shown());
+    return;
+  }
+
   base::RunLoop run_loop;
   on_access_token_requested_ = run_loop.QuitClosure();
-  RunFunctionAsync(
-      func.get(),
-      "[{\"account\": { \"id\": \"gaia_id_for_secondary_example.com\" } }]");
+  RunFunctionAsync(func.get(), kFunctionParams);
   run_loop.Run();
 
   std::string secondary_account_access_token =
@@ -1942,7 +2067,11 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
   std::string error = utils::RunFunctionAndReturnError(
       func.get(), "[{\"account\": { \"id\": \"unknown@example.com\" } }]",
       browser());
-  EXPECT_EQ(std::string(errors::kUserNotSignedIn), error);
+  std::string expected_error;
+  if (id_api()->AreExtensionsRestrictedToPrimaryAccount())
+    EXPECT_EQ(errors::kUserNonPrimary, error);
+  else
+    EXPECT_EQ(errors::kUserNotSignedIn, error);
 }
 
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
@@ -2015,10 +2144,6 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
 // getAuthToken() call for the same extension.
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
                        MultiSecondaryInteractiveRemoteConsent) {
-  // This test is only relevant if extensions see all accounts.
-  if (id_api()->AreExtensionsRestrictedToPrimaryAccount())
-    return;
-
   CoreAccountId primary_account_id = SignIn("primary@example.com");
   AccountInfo secondary_account =
       identity_test_env()->MakeAccountAvailable("secondary@example.com");
@@ -2044,6 +2169,12 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
     // the account that has been returned in result of the remote consent.
     std::string primary_account_access_token =
         IssueLoginAccessTokenForAccount(primary_account_id);
+
+    if (id_api()->AreExtensionsRestrictedToPrimaryAccount()) {
+      EXPECT_EQ(std::string(errors::kUserNonPrimary), WaitForError(func.get()));
+      return;
+    }
+
     std::string secondary_account_access_token =
         IssueLoginAccessTokenForAccount(secondary_account.account_id);
 
@@ -2076,6 +2207,128 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
   }
 }
 
+// Tests two concurrent remote consent flows. Both of them should succeed.
+// The second flow starts while the first one is blocked on an interactive mint
+// token flow. This is a regression test for https://crbug.com/1091423.
+IN_PROC_BROWSER_TEST_F(
+    GetAuthTokenFunctionTest,
+    RemoteConsentMultipleActiveRequests_BlockedOnInteractive) {
+  SignIn("primary@example.com");
+  CoreAccountInfo account = GetPrimaryAccountInfo();
+  const extensions::Extension* extension = CreateExtension(CLIENT_ID | SCOPES);
+
+  scoped_refptr<FakeGetAuthTokenFunction> func1(new FakeGetAuthTokenFunction());
+  func1->set_extension(extension);
+  func1->push_mint_token_result(
+      TestOAuth2MintTokenFlow::REMOTE_CONSENT_SUCCESS);
+  func1->push_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_SUCCESS);
+  func1->set_remote_consent_gaia_id(account.gaia);
+  base::RunLoop scope_ui_shown_loop;
+  func1->set_scope_ui_async(scope_ui_shown_loop.QuitClosure());
+
+  scoped_refptr<FakeGetAuthTokenFunction> func2(new FakeGetAuthTokenFunction());
+  func2->set_extension(extension);
+  func2->push_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_SUCCESS);
+  func2->set_remote_consent_gaia_id(account.gaia);
+
+  AsyncFunctionRunner func1_runner;
+  func1_runner.RunFunctionAsync(func1.get(), "[{\"interactive\": true}]",
+                                browser()->profile());
+
+  AsyncFunctionRunner func2_runner;
+  func2_runner.RunFunctionAsync(func2.get(), "[{\"interactive\": true}]",
+                                browser()->profile());
+
+  // Allows func2 to put a task in the queue.
+  base::RunLoop().RunUntilIdle();
+
+  scope_ui_shown_loop.Run();
+  func1->CompleteRemoteConsentDialog();
+
+  std::unique_ptr<base::Value> value1(
+      func1_runner.WaitForSingleResult(func1.get()));
+  ASSERT_NE(value1, nullptr);
+  EXPECT_EQ(base::Value(kAccessToken), *value1);
+
+  std::unique_ptr<base::Value> value2(
+      func2_runner.WaitForSingleResult(func2.get()));
+  ASSERT_NE(value2, nullptr);
+  EXPECT_EQ(base::Value(kAccessToken), *value2);
+
+  // Only one consent ui should be shown.
+  int total_scope_ui_shown = func1->scope_ui_shown() + func2->scope_ui_shown();
+  EXPECT_EQ(1, total_scope_ui_shown);
+
+  EXPECT_EQ(IdentityTokenCacheValue::CACHE_STATUS_TOKEN,
+            GetCachedToken(account.account_id).status());
+}
+
+// Tests two concurrent remote consent flows. Both of them should succeed.
+// The second flow starts while the first one is blocked on a non-interactive
+// mint token flow. This is a regression test for https://crbug.com/1091423.
+IN_PROC_BROWSER_TEST_F(
+    GetAuthTokenFunctionTest,
+    RemoteConsentMultipleActiveRequests_BlockedOnNoninteractive) {
+  SignIn("primary@example.com");
+  CoreAccountInfo account = GetPrimaryAccountInfo();
+  const extensions::Extension* extension = CreateExtension(CLIENT_ID | SCOPES);
+
+  scoped_refptr<FakeGetAuthTokenFunction> func1(new FakeGetAuthTokenFunction());
+  func1->set_extension(extension);
+  func1->push_mint_token_result(
+      TestOAuth2MintTokenFlow::REMOTE_CONSENT_SUCCESS);
+  func1->push_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_SUCCESS);
+  func1->set_remote_consent_gaia_id(account.gaia);
+  func1->set_auto_login_access_token(false);
+
+  scoped_refptr<FakeGetAuthTokenFunction> func2(new FakeGetAuthTokenFunction());
+  func2->set_extension(extension);
+  func2->push_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_SUCCESS);
+  func2->set_remote_consent_gaia_id(account.gaia);
+  base::RunLoop scope_ui_shown_loop;
+  func2->set_scope_ui_async(scope_ui_shown_loop.QuitClosure());
+
+  base::RunLoop access_token_run_loop;
+  on_access_token_requested_ = access_token_run_loop.QuitClosure();
+  AsyncFunctionRunner func1_runner;
+  func1_runner.RunFunctionAsync(func1.get(), "[{\"interactive\": true}]",
+                                browser()->profile());
+
+  AsyncFunctionRunner func2_runner;
+  func2_runner.RunFunctionAsync(func2.get(), "[{\"interactive\": true}]",
+                                browser()->profile());
+
+  // Allows func2 to put a task in the queue.
+  base::RunLoop().RunUntilIdle();
+
+  access_token_run_loop.Run();
+  // Let subsequent requests pass automatically.
+  func1->set_auto_login_access_token(true);
+  IssueLoginAccessTokenForAccount(account.account_id);
+
+  scope_ui_shown_loop.Run();
+  func2->CompleteRemoteConsentDialog();
+
+  std::unique_ptr<base::Value> value1(
+      func1_runner.WaitForSingleResult(func1.get()));
+  ASSERT_NE(value1, nullptr);
+  EXPECT_EQ(base::Value(kAccessToken), *value1);
+
+  std::unique_ptr<base::Value> value2(
+      func2_runner.WaitForSingleResult(func2.get()));
+  ASSERT_NE(value2, nullptr);
+  EXPECT_EQ(base::Value(kAccessToken), *value2);
+
+  // Only one consent ui should be shown.
+  int total_scope_ui_shown = func1->scope_ui_shown() + func2->scope_ui_shown();
+  EXPECT_EQ(1, total_scope_ui_shown);
+
+  EXPECT_EQ(IdentityTokenCacheValue::CACHE_STATUS_TOKEN,
+            GetCachedToken(account.account_id).status());
+}
+
+// The signin flow is simply not used on ChromeOS.
+#if !defined(OS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
                        MultiSecondaryInteractiveInvalidToken) {
   // Setup a secondary account with no valid refresh token, and try to get a
@@ -2100,7 +2353,7 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
     // Fail if extensions are restricted to the primary account.
     std::string error = utils::RunFunctionAndReturnError(
         func.get(), kFunctionParams, browser());
-    EXPECT_EQ(std::string(errors::kUserNotSignedIn), error);
+    EXPECT_EQ(std::string(errors::kUserNonPrimary), error);
     EXPECT_FALSE(func->login_ui_shown());
     EXPECT_FALSE(func->scope_ui_shown());
   } else {
@@ -2115,6 +2368,7 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
     EXPECT_TRUE(func->scope_ui_shown());
   }
 }
+#endif
 
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, ScopesDefault) {
   SignIn("primary@example.com");
@@ -2445,7 +2699,7 @@ IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTest,
 }
 
 IN_PROC_BROWSER_TEST_F(LaunchWebAuthFlowFunctionTest,
-                       DISABLED_InteractiveSecondNavigationSuccess) {
+                       InteractiveSecondNavigationSuccess) {
   net::EmbeddedTestServer https_server(net::EmbeddedTestServer::TYPE_HTTPS);
   https_server.ServeFilesFromSourceDirectory(
       "chrome/test/data/extensions/api_test/identity");

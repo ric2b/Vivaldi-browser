@@ -64,6 +64,7 @@ import org.chromium.components.browser_ui.settings.ManagedPreferencesUtils;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.signin.AccountManagerFacadeProvider;
 import org.chromium.components.signin.base.CoreAccountInfo;
+import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.components.signin.metrics.SignoutReason;
 import org.chromium.components.sync.AndroidSyncSettings;
@@ -374,7 +375,7 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
             UmaSessionStats.changeMetricsReportingConsent((boolean) newValue);
         } else if (PREF_URL_KEYED_ANONYMIZED_DATA.equals(key)) {
             UnifiedConsentServiceBridge.setUrlKeyedAnonymizedDataCollectionEnabled(
-                    (boolean) newValue);
+                    Profile.getLastUsedRegularProfile(), (boolean) newValue);
         } else if (PREF_AUTOFILL_ASSISTANT.equals(key)) {
             setAutofillAssistantSwitchValue((boolean) newValue);
         }
@@ -483,9 +484,10 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
 
         if (mCurrentSyncError == SyncError.AUTH_ERROR) {
             AccountManagerFacadeProvider.getInstance().updateCredentials(
-                    CoreAccountInfo.getAndroidAccountFrom(IdentityServicesProvider.get()
-                                                                  .getIdentityManager()
-                                                                  .getPrimaryAccountInfo()),
+                    CoreAccountInfo.getAndroidAccountFrom(
+                            IdentityServicesProvider.get()
+                                    .getIdentityManager()
+                                    .getPrimaryAccountInfo(ConsentLevel.SYNC)),
                     getActivity(), null);
             return;
         }
@@ -501,7 +503,8 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
 
         if (mCurrentSyncError == SyncError.OTHER_ERRORS) {
             final Account account = CoreAccountInfo.getAndroidAccountFrom(
-                    IdentityServicesProvider.get().getIdentityManager().getPrimaryAccountInfo());
+                    IdentityServicesProvider.get().getIdentityManager().getPrimaryAccountInfo(
+                            ConsentLevel.SYNC));
             // TODO(https://crbug.com/873116): Pass the correct reason for the signout.
             IdentityServicesProvider.get().getSigninManager().signOut(
                     SignoutReason.USER_CLICKED_SIGNOUT_SETTINGS,
@@ -520,7 +523,8 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
         if (mCurrentSyncError == SyncError.TRUSTED_VAULT_KEY_REQUIRED_FOR_EVERYTHING
                 || mCurrentSyncError == SyncError.TRUSTED_VAULT_KEY_REQUIRED_FOR_PASSWORDS) {
             CoreAccountInfo primaryAccountInfo =
-                    IdentityServicesProvider.get().getIdentityManager().getPrimaryAccountInfo();
+                    IdentityServicesProvider.get().getIdentityManager().getPrimaryAccountInfo(
+                            ConsentLevel.SYNC);
             if (primaryAccountInfo != null) {
                 SyncSettingsUtils.openTrustedVaultKeyRetrievalDialog(
                         this, primaryAccountInfo, REQUEST_CODE_TRUSTED_VAULT_KEY_RETRIEVAL);
@@ -547,7 +551,8 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
         mUsageAndCrashReporting.setChecked(
                 mPrivacyPrefManager.isUsageAndCrashReportingPermittedByUser());
         mUrlKeyedAnonymizedData.setChecked(
-                UnifiedConsentServiceBridge.isUrlKeyedAnonymizedDataCollectionEnabled());
+                UnifiedConsentServiceBridge.isUrlKeyedAnonymizedDataCollectionEnabled(
+                        Profile.getLastUsedRegularProfile()));
 
         if (mAutofillAssistant != null) {
             mAutofillAssistant.setChecked(isAutofillAssistantSwitchOn());
@@ -653,7 +658,8 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
                 return PrivacyPreferencesManager.getInstance().isMetricsReportingManaged();
             }
             if (PREF_URL_KEYED_ANONYMIZED_DATA.equals(key)) {
-                return UnifiedConsentServiceBridge.isUrlKeyedAnonymizedDataCollectionManaged();
+                return UnifiedConsentServiceBridge.isUrlKeyedAnonymizedDataCollectionManaged(
+                        Profile.getLastUsedRegularProfile());
             }
             return false;
         };
@@ -677,7 +683,8 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
         RecordUserAction.record("Signin_Signin_ConfirmAdvancedSyncSettings");
         ProfileSyncService.get().setFirstSetupComplete(
                 SyncFirstSetupCompleteSource.ADVANCED_FLOW_CONFIRM);
-        UnifiedConsentServiceBridge.recordSyncSetupDataTypesHistogram();
+        UnifiedConsentServiceBridge.recordSyncSetupDataTypesHistogram(
+                Profile.getLastUsedRegularProfile());
         // Settings will be applied when mSyncSetupInProgressHandle is released in onDestroy.
         getActivity().finish();
     }

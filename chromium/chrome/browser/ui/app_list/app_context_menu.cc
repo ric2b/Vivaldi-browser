@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/app_list/app_context_menu.h"
 
 #include "ash/public/cpp/shelf_model.h"
+#include "chrome/app/vector_icons/vector_icons.h"
 #include "chrome/browser/ui/app_list/app_context_menu_delegate.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
 #include "chrome/grit/generated_resources.h"
@@ -67,19 +68,18 @@ void AppContextMenu::ExecuteCommand(int command_id, int event_flags) {
   }
 }
 
-const gfx::VectorIcon* AppContextMenu::GetVectorIconForCommandId(
-    int command_id) const {
+ui::ImageModel AppContextMenu::GetIconForCommandId(int command_id) const {
   DCHECK_EQ(command_id, ash::TOGGLE_PIN);
   const gfx::VectorIcon& icon =
       GetMenuItemVectorIcon(command_id, controller_->IsAppPinned(app_id_)
                                             ? IDS_APP_LIST_CONTEXT_MENU_UNPIN
                                             : IDS_APP_LIST_CONTEXT_MENU_PIN);
-  return &icon;
+  return ui::ImageModel::FromVectorIcon(icon);
 }
 
-const gfx::VectorIcon& AppContextMenu::GetMenuItemVectorIcon(
-    int command_id,
-    int string_id) const {
+// static
+const gfx::VectorIcon& AppContextMenu::GetMenuItemVectorIcon(int command_id,
+                                                             int string_id) {
   switch (command_id) {
     case ash::LAUNCH_NEW:
       if (string_id == IDS_APP_LIST_CONTEXT_MENU_NEW_WINDOW)
@@ -116,10 +116,8 @@ const gfx::VectorIcon& AppContextMenu::GetMenuItemVectorIcon(
       NOTREACHED() << "NOTIFICATION_CONTAINER does not have an icon, and it is "
                       "added to the model by NotificationMenuController.";
       return gfx::kNoneIcon;
-    case ash::STOP_APP:
-      if (string_id == IDS_CROSTINI_SHUT_DOWN_LINUX_MENU_ITEM)
-        return views::kLinuxShutdownIcon;
-      return gfx::kNoneIcon;
+    case ash::SHUTDOWN_GUEST_OS:
+      return kShutdownGuestOsIcon;
     default:
       NOTREACHED();
       return gfx::kNoneIcon;
@@ -156,7 +154,8 @@ void AppContextMenu::AddContextMenuOption(ui::SimpleMenuModel* menu_model,
 
   const gfx::VectorIcon& icon = GetMenuItemVectorIcon(command_id, string_id);
   if (!icon.is_empty()) {
-    menu_model->AddItemWithStringIdAndIcon(command_id, string_id, icon);
+    menu_model->AddItemWithStringIdAndIcon(
+        command_id, string_id, ui::ImageModel::FromVectorIcon(icon));
     return;
   }
   // Check items use default icons.

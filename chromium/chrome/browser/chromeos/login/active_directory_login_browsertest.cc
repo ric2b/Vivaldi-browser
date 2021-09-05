@@ -20,6 +20,7 @@
 #include "components/user_manager/user_names.h"
 #include "content/public/browser/network_service_instance.h"
 #include "content/public/common/network_service_util.h"
+#include "content/public/test/browser_test.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/bindings/sync_call_restrictions.h"
 #include "services/network/public/mojom/network_service_test.mojom.h"
@@ -101,13 +102,7 @@ class ActiveDirectoryLoginAutocompleteTest : public ActiveDirectoryLoginTest {
 }  // namespace
 
 // Test successful Active Directory login.
-// TODO(https://crbug.com/1034481) Flaky on MSAN bots.
-#if defined(MEMORY_SANITIZER)
-#define MAYBE_LoginSuccess DISABLED_LoginSuccess
-#else
-#define MAYBE_LoginSuccess LoginSuccess
-#endif
-IN_PROC_BROWSER_TEST_F(ActiveDirectoryLoginTest, MAYBE_LoginSuccess) {
+IN_PROC_BROWSER_TEST_F(ActiveDirectoryLoginTest, LoginSuccess) {
   OobeBaseTest::WaitForSigninScreen();
   ASSERT_TRUE(InstallAttributes::Get()->IsActiveDirectoryManaged());
   ad_login_.TestNoError();
@@ -119,13 +114,7 @@ IN_PROC_BROWSER_TEST_F(ActiveDirectoryLoginTest, MAYBE_LoginSuccess) {
 
 // Tests that the Kerberos SSO environment variables are set correctly after
 // an Active Directory log in.
-// TODO(https://crbug.com/1034481) Flaky on MSAN bots.
-#if defined(MEMORY_SANITIZER)
-#define MAYBE_KerberosVarsCopied DISABLED_KerberosVarsCopied
-#else
-#define MAYBE_KerberosVarsCopied KerberosVarsCopied
-#endif
-IN_PROC_BROWSER_TEST_F(ActiveDirectoryLoginTest, MAYBE_KerberosVarsCopied) {
+IN_PROC_BROWSER_TEST_F(ActiveDirectoryLoginTest, KerberosVarsCopied) {
   OobeBaseTest::WaitForSigninScreen();
   ad_login_.TestNoError();
   ad_login_.TestDomainHidden();
@@ -256,14 +245,7 @@ IN_PROC_BROWSER_TEST_F(ActiveDirectoryLoginTest,
 }
 
 // Tests that autocomplete works. Submits username without domain.
-// TODO(1031545): Flaky under MSAN.
-#if defined(MEMORY_SANITIZER)
-#define MAYBE_LoginSuccess DISABLED_LoginSuccess
-#else
-#define MAYBE_LoginSuccess LoginSuccess
-#endif
-IN_PROC_BROWSER_TEST_F(ActiveDirectoryLoginAutocompleteTest,
-                       MAYBE_LoginSuccess) {
+IN_PROC_BROWSER_TEST_F(ActiveDirectoryLoginAutocompleteTest, LoginSuccess) {
   OobeBaseTest::WaitForSigninScreen();
   ASSERT_TRUE(InstallAttributes::Get()->IsActiveDirectoryManaged());
   ad_login_.TestNoError();

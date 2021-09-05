@@ -53,6 +53,9 @@ struct App {
   OptionalBool show_in_search;
   OptionalBool show_in_management;
 
+  // Whether the app icon should add the notification badging.
+  OptionalBool has_badge;
+
   // Paused apps cannot be launched, and any running apps that become paused
   // will be stopped. This is independent of whether or not the app is ready to
   // be launched (defined by the Readiness field).
@@ -88,6 +91,8 @@ enum AppType {
   kExtension,  // Extension-backed app.
   kWeb,        // Web app.
   kMacNative,  // Native Mac app.
+  kPluginVm,   // Plugin VM app.
+  kLacros,     // Lacros app.
 };
 
 // Whether an app is ready to launch, i.e. installed.
@@ -177,7 +182,8 @@ enum LaunchSource {
   kFromAppListQueryContextMenu = 4, // Query-dependent results; context menu.
   kFromAppListRecommendation = 5,   // Query-less recommendations (smaller
                                     // icons).
-  kFromParentalControls = 6,        // Parental Controls Settings Section.
+  kFromParentalControls = 6,        // Parental Controls Settings Section and
+                                    // Per App time notification.
   kFromShelf = 7,                   // Shelf.
   kFromFileManager = 8,             // FileManager.
   kFromLink = 9,                    // Left-licking on links in the browser.
@@ -188,6 +194,7 @@ enum LaunchSource {
   kFromMenu = 14,                   // Menu.
   kFromInstalledNotification = 15,  // Installed notification
   kFromTest = 16,                   // Test
+  kFromArc = 17,                    // Arc.
 };
 
 enum TriState {
@@ -286,6 +293,7 @@ struct IntentFilter {
 struct Intent {
   string? scheme; // URL scheme. e.g. https.
   string? host;   // URL host. e.g. www.google.com.
+  string? port;   // URL host. e.g. 8080.
   string? path;   // URL path. e.g. /abc.
 };
 

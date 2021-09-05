@@ -7,6 +7,7 @@
 #include "base/feature_list.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
+#include "base/task_runner_util.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/media/history/media_history_keyed_service_factory.h"
 #include "chrome/browser/media/history/media_history_store.h"
@@ -27,9 +28,17 @@ namespace media_history {
 // history.
 class MediaHistoryKeyedService::StoreHolder {
  public:
-  explicit StoreHolder(Profile* profile,
-                       std::unique_ptr<MediaHistoryStore> local)
-      : profile_(profile), local_(std::move(local)) {}
+  StoreHolder(Profile* profile,
+              scoped_refptr<base::UpdateableSequencedTaskRunner> db_task_runner,
+              const bool should_reset)
+      : profile_(profile),
+        local_(new MediaHistoryStore(profile, db_task_runner)),
+        db_task_runner_(db_task_runner) {
+    local_->db_task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&MediaHistoryStore::Initialize,
+                                  base::RetainedRef(local_), should_reset));
+  }
+
   explicit StoreHolder(Profile* profile, MediaHistoryKeyedService* remote)
       : profile_(profile), remote_(remote) {}
 
@@ -57,9 +66,17 @@ class MediaHistoryKeyedService::StoreHolder {
     return nullptr;
   }
 
+  void Shutdown() {
+    if (!local_)
+      return;
+
+    local_->SetCancelled();
+  }
+
  private:
   Profile* profile_;
-  std::unique_ptr<MediaHistoryStore> local_;
+  scoped_refptr<MediaHistoryStore> local_;
+  scoped_refptr<base::UpdateableSequencedTaskRunner> db_task_runner_;
   MediaHistoryKeyedService* remote_ = nullptr;
 };
 
@@ -82,9 +99,8 @@ MediaHistoryKeyedService::MediaHistoryKeyedService(Profile* profile)
         {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
          base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 
-    store_ = std::make_unique<StoreHolder>(
-        profile_, std::make_unique<MediaHistoryStore>(
-                      profile_, std::move(db_task_runner)));
+    store_ = std::make_unique<StoreHolder>(profile_, std::move(db_task_runner),
+                                           /* should_reset=*/false);
   }
 }
 
@@ -104,6 +120,8 @@ void MediaHistoryKeyedService::Shutdown() {
       profile_, ServiceAccessType::IMPLICIT_ACCESS);
   if (history)
     history->RemoveObserver(this);
+
+  store_->Shutdown();
 }
 
 void MediaHistoryKeyedService::OnURLsDeleted(
@@ -115,8 +133,15 @@ void MediaHistoryKeyedService::OnURLsDeleted(
     return;
 
   if (deletion_info.IsAllHistory()) {
-    // Destroy the old database and create a new one.
-    store->EraseDatabaseAndCreateNew();
+    // Stop the old database and destroy the DB.
+    scoped_refptr<base::UpdateableSequencedTaskRunner> db_task_runner =
+        store->db_task_runner_;
+    store->SetCancelled();
+    store_.reset();
+
+    // Create a new internal store.
+    store_ = std::make_unique<StoreHolder>(profile_, std::move(db_task_runner),
+                                           /* should_reset= */ true);
     return;
   }
 
@@ -132,14 +157,19 @@ void MediaHistoryKeyedService::OnURLsDeleted(
     const auto& origin_count =
         deletion_info.deleted_urls_origin_map().find(origin.GetURL());
 
-    if (origin_count->second.first > 0)
+    if (origin_count == deletion_info.deleted_urls_origin_map().end() ||
+        origin_count->second.first > 0) {
       continue;
+    }
 
     deleted_origins.insert(origin);
   }
 
-  if (!deleted_origins.empty())
-    store->DeleteAllOriginData(deleted_origins);
+  if (!deleted_origins.empty()) {
+    store->db_task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&MediaHistoryStore::DeleteAllOriginData,
+                                  store, deleted_origins));
+  }
 
   // Build a set of all urls in |deleted_rows| that do not have their origin in
   // |deleted_origins|.
@@ -153,31 +183,48 @@ void MediaHistoryKeyedService::OnURLsDeleted(
     deleted_urls.insert(row.url());
   }
 
-  if (!deleted_urls.empty())
-    store->DeleteAllURLData(deleted_urls);
+  if (!deleted_urls.empty()) {
+    store->db_task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&MediaHistoryStore::DeleteAllURLData, store,
+                                  deleted_urls));
+  }
 }
 
 void MediaHistoryKeyedService::SavePlayback(
     const content::MediaPlayerWatchTime& watch_time) {
-  if (auto* store = store_->GetForWrite())
-    store->SavePlayback(watch_time);
+  if (auto* store = store_->GetForWrite()) {
+    store->db_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&MediaHistoryStore::SavePlayback, store, watch_time));
+  }
 }
 
 void MediaHistoryKeyedService::GetMediaHistoryStats(
     base::OnceCallback<void(mojom::MediaHistoryStatsPtr)> callback) {
-  store_->GetForRead()->GetMediaHistoryStats(std::move(callback));
+  base::PostTaskAndReplyWithResult(
+      store_->GetForRead()->db_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&MediaHistoryStore::GetMediaHistoryStats,
+                     store_->GetForRead()),
+      std::move(callback));
 }
 
 void MediaHistoryKeyedService::GetOriginRowsForDebug(
     base::OnceCallback<void(std::vector<mojom::MediaHistoryOriginRowPtr>)>
         callback) {
-  store_->GetForRead()->GetOriginRowsForDebug(std::move(callback));
+  base::PostTaskAndReplyWithResult(
+      store_->GetForRead()->db_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&MediaHistoryStore::GetOriginRowsForDebug,
+                     store_->GetForRead()),
+      std::move(callback));
 }
 
 void MediaHistoryKeyedService::GetMediaHistoryPlaybackRowsForDebug(
     base::OnceCallback<void(std::vector<mojom::MediaHistoryPlaybackRowPtr>)>
         callback) {
-  store_->GetForRead()->GetMediaHistoryPlaybackRowsForDebug(
+  base::PostTaskAndReplyWithResult(
+      store_->GetForRead()->db_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&MediaHistoryStore::GetMediaHistoryPlaybackRowsForDebug,
+                     store_->GetForRead()),
       std::move(callback));
 }
 
@@ -186,8 +233,11 @@ void MediaHistoryKeyedService::GetPlaybackSessions(
     base::Optional<GetPlaybackSessionsFilter> filter,
     base::OnceCallback<
         void(std::vector<mojom::MediaHistoryPlaybackSessionRowPtr>)> callback) {
-  store_->GetForRead()->GetPlaybackSessions(num_sessions, filter,
-                                            std::move(callback));
+  base::PostTaskAndReplyWithResult(
+      store_->GetForRead()->db_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&MediaHistoryStore::GetPlaybackSessions,
+                     store_->GetForRead(), num_sessions, std::move(filter)),
+      std::move(callback));
 }
 
 void MediaHistoryKeyedService::SavePlaybackSession(
@@ -195,40 +245,61 @@ void MediaHistoryKeyedService::SavePlaybackSession(
     const media_session::MediaMetadata& metadata,
     const base::Optional<media_session::MediaPosition>& position,
     const std::vector<media_session::MediaImage>& artwork) {
-  if (auto* store = store_->GetForWrite())
-    store->SavePlaybackSession(url, metadata, position, artwork);
+  if (auto* store = store_->GetForWrite()) {
+    store->db_task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&MediaHistoryStore::SavePlaybackSession,
+                                  store, url, metadata, position, artwork));
+  }
 }
 
 void MediaHistoryKeyedService::GetItemsForMediaFeedForDebug(
     const int64_t feed_id,
     base::OnceCallback<void(std::vector<media_feeds::mojom::MediaFeedItemPtr>)>
         callback) {
-  store_->GetForRead()->GetItemsForMediaFeedForDebug(feed_id,
-                                                     std::move(callback));
+  base::PostTaskAndReplyWithResult(
+      store_->GetForRead()->db_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&MediaHistoryStore::GetItemsForMediaFeedForDebug,
+                     store_->GetForRead(), feed_id),
+      std::move(callback));
 }
 
+MediaHistoryKeyedService::MediaFeedFetchResult::MediaFeedFetchResult() =
+    default;
+
+MediaHistoryKeyedService::MediaFeedFetchResult::~MediaFeedFetchResult() =
+    default;
+
+MediaHistoryKeyedService::MediaFeedFetchResult::MediaFeedFetchResult(
+    MediaFeedFetchResult&& t) = default;
+
 void MediaHistoryKeyedService::StoreMediaFeedFetchResult(
-    const int64_t feed_id,
-    std::vector<media_feeds::mojom::MediaFeedItemPtr> items,
-    const media_feeds::mojom::FetchResult result,
-    const base::Time& expiry_time,
-    const std::vector<media_session::MediaImage>& logos,
-    const std::string& display_name) {
+    MediaFeedFetchResult result,
+    base::OnceClosure callback) {
   if (auto* store = store_->GetForWrite()) {
-    store->StoreMediaFeedFetchResult(feed_id, std::move(items), result,
-                                     expiry_time, logos, display_name);
+    store->db_task_runner_->PostTaskAndReply(
+        FROM_HERE,
+        base::BindOnce(&MediaHistoryStore::StoreMediaFeedFetchResult, store,
+                       std::move(result)),
+        std::move(callback));
   }
 }
 
 void MediaHistoryKeyedService::GetURLsInTableForTest(
     const std::string& table,
     base::OnceCallback<void(std::set<GURL>)> callback) {
-  store_->GetForRead()->GetURLsInTableForTest(table, std::move(callback));
+  base::PostTaskAndReplyWithResult(
+      store_->GetForRead()->db_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&MediaHistoryStore::GetURLsInTableForTest,
+                     store_->GetForRead(), table),
+      std::move(callback));
 }
 
 void MediaHistoryKeyedService::DiscoverMediaFeed(const GURL& url) {
-  if (auto* store = store_->GetForWrite())
-    store->DiscoverMediaFeed(url);
+  if (auto* store = store_->GetForWrite()) {
+    store->db_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&MediaHistoryStore::DiscoverMediaFeed, store, url));
+  }
 }
 
 MediaHistoryKeyedService::PendingSafeSearchCheck::PendingSafeSearchCheck(
@@ -240,24 +311,162 @@ MediaHistoryKeyedService::PendingSafeSearchCheck::~PendingSafeSearchCheck() =
 
 void MediaHistoryKeyedService::GetPendingSafeSearchCheckMediaFeedItems(
     base::OnceCallback<void(PendingSafeSearchCheckList)> callback) {
-  store_->GetForRead()->GetPendingSafeSearchCheckMediaFeedItems(
+  base::PostTaskAndReplyWithResult(
+      store_->GetForRead()->db_task_runner_.get(), FROM_HERE,
+      base::BindOnce(
+          &MediaHistoryStore::GetPendingSafeSearchCheckMediaFeedItems,
+          store_->GetForRead()),
       std::move(callback));
 }
 
 void MediaHistoryKeyedService::StoreMediaFeedItemSafeSearchResults(
     std::map<int64_t, media_feeds::mojom::SafeSearchResult> results) {
-  if (auto* store = store_->GetForWrite())
-    store->StoreMediaFeedItemSafeSearchResults(results);
+  if (auto* store = store_->GetForWrite()) {
+    store->db_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&MediaHistoryStore::StoreMediaFeedItemSafeSearchResults,
+                       store, results));
+  }
 }
 
 void MediaHistoryKeyedService::PostTaskToDBForTest(base::OnceClosure callback) {
-  store_->GetForRead()->PostTaskToDBForTest(std::move(callback));
+  store_->GetForRead()->db_task_runner_->PostTaskAndReply(
+      FROM_HERE, base::DoNothing(), std::move(callback));
 }
 
-void MediaHistoryKeyedService::GetMediaFeedsForDebug(
+MediaHistoryKeyedService::GetMediaFeedsRequest
+MediaHistoryKeyedService::GetMediaFeedsRequest::CreateTopFeedsForFetch(
+    unsigned limit,
+    base::TimeDelta audio_video_watchtime_min) {
+  GetMediaFeedsRequest request;
+  request.type = Type::kTopFeedsForFetch;
+  request.limit = limit;
+  request.audio_video_watchtime_min = audio_video_watchtime_min;
+  return request;
+}
+
+MediaHistoryKeyedService::GetMediaFeedsRequest
+MediaHistoryKeyedService::GetMediaFeedsRequest::CreateTopFeedsForDisplay(
+    unsigned limit,
+    base::TimeDelta audio_video_watchtime_min,
+    int fetched_items_min,
+    bool fetched_items_min_should_be_safe) {
+  GetMediaFeedsRequest request;
+  request.type = Type::kTopFeedsForDisplay;
+  request.limit = limit;
+  request.audio_video_watchtime_min = audio_video_watchtime_min;
+  request.fetched_items_min = fetched_items_min;
+  request.fetched_items_min_should_be_safe = fetched_items_min_should_be_safe;
+  return request;
+}
+
+MediaHistoryKeyedService::GetMediaFeedsRequest::GetMediaFeedsRequest() =
+    default;
+
+MediaHistoryKeyedService::GetMediaFeedsRequest::GetMediaFeedsRequest(
+    const GetMediaFeedsRequest& t) = default;
+
+void MediaHistoryKeyedService::GetMediaFeeds(
+    const GetMediaFeedsRequest& request,
     base::OnceCallback<void(std::vector<media_feeds::mojom::MediaFeedPtr>)>
         callback) {
-  store_->GetForRead()->GetMediaFeedsForDebug(std::move(callback));
+  base::PostTaskAndReplyWithResult(
+      store_->GetForRead()->db_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&MediaHistoryStore::GetMediaFeeds, store_->GetForRead(),
+                     request),
+      std::move(callback));
+}
+
+void MediaHistoryKeyedService::UpdateMediaFeedDisplayTime(
+    const int64_t feed_id) {
+  if (auto* store = store_->GetForWrite()) {
+    store->db_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&MediaHistoryStore::UpdateMediaFeedDisplayTime, store,
+                       feed_id));
+  }
+}
+
+void MediaHistoryKeyedService::IncrementMediaFeedItemsShownCount(
+    const std::set<int64_t> feed_item_ids) {
+  if (auto* store = store_->GetForWrite()) {
+    store->db_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&MediaHistoryStore::IncrementMediaFeedItemsShownCount,
+                       base::RetainedRef(store), feed_item_ids));
+  }
+}
+
+void MediaHistoryKeyedService::MarkMediaFeedItemAsClicked(
+    const int64_t& feed_item_id) {
+  if (auto* store = store_->GetForWrite()) {
+    store->db_task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&MediaHistoryStore::MarkMediaFeedItemAsClicked,
+                       base::RetainedRef(store), feed_item_id));
+  }
+}
+
+void MediaHistoryKeyedService::ResetMediaFeed(
+    const url::Origin& origin,
+    media_feeds::mojom::ResetReason reason,
+    const bool include_subdomains) {
+  CHECK_NE(media_feeds::mojom::ResetReason::kNone, reason);
+
+  if (auto* store = store_->GetForDelete()) {
+    store->db_task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&MediaHistoryStore::ResetMediaFeed, store,
+                                  origin, reason, include_subdomains));
+  }
+}
+
+void MediaHistoryKeyedService::ResetMediaFeedDueToCacheClearing(
+    const base::Time& start_time,
+    const base::Time& end_time,
+    CacheClearingFilter filter,
+    base::OnceClosure callback) {
+  if (auto* store = store_->GetForDelete()) {
+    store->db_task_runner_->PostTaskAndReply(
+        FROM_HERE,
+        base::BindOnce(&MediaHistoryStore::ResetMediaFeedDueToCacheClearing,
+                       store, start_time, end_time, std::move(filter)),
+        std::move(callback));
+  } else {
+    std::move(callback).Run();
+  }
+}
+
+void MediaHistoryKeyedService::DeleteMediaFeed(const int64_t feed_id,
+                                               base::OnceClosure callback) {
+  if (auto* store = store_->GetForDelete()) {
+    store->db_task_runner_->PostTaskAndReply(
+        FROM_HERE,
+        base::BindOnce(&MediaHistoryStore::DeleteMediaFeed, store, feed_id),
+        std::move(callback));
+  }
+}
+
+MediaHistoryKeyedService::MediaFeedFetchDetails::MediaFeedFetchDetails() =
+    default;
+
+MediaHistoryKeyedService::MediaFeedFetchDetails::~MediaFeedFetchDetails() =
+    default;
+
+MediaHistoryKeyedService::MediaFeedFetchDetails::MediaFeedFetchDetails(
+    MediaFeedFetchDetails&& t) = default;
+
+MediaHistoryKeyedService::MediaFeedFetchDetails&
+MediaHistoryKeyedService::MediaFeedFetchDetails::operator=(
+    const MediaHistoryKeyedService::MediaFeedFetchDetails&) = default;
+
+void MediaHistoryKeyedService::GetMediaFeedFetchDetails(
+    const int64_t feed_id,
+    GetMediaFeedFetchDetailsCallback callback) {
+  base::PostTaskAndReplyWithResult(
+      store_->GetForRead()->db_task_runner_.get(), FROM_HERE,
+      base::BindOnce(&MediaHistoryStore::GetMediaFeedFetchDetails,
+                     store_->GetForRead(), feed_id),
+      std::move(callback));
 }
 
 }  // namespace media_history

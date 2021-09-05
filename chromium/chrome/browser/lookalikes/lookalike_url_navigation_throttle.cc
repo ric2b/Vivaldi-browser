@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
@@ -25,7 +26,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/reputation/safety_tips_config.h"
 #include "chrome/common/chrome_features.h"
-#include "components/lookalikes/lookalike_url_util.h"
+#include "components/lookalikes/core/lookalike_url_util.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
 #include "components/ukm/content/source_url_recorder.h"
 #include "components/url_formatter/spoof_checks/top_domains/top500_domains.h"
@@ -310,8 +311,11 @@ ThrottleCheckResult LookalikeUrlNavigationThrottle::PerformChecks(
   ukm::SourceId source_id = ukm::ConvertToSourceId(
       navigation_handle()->GetNavigationId(), ukm::SourceIdType::NAVIGATION_ID);
 
-  if (!GetMatchingDomain(navigated_domain, engaged_sites, &matched_domain,
-                         &match_type)) {
+  auto* config = GetSafetyTipsRemoteConfigProto();
+  const LookalikeTargetAllowlistChecker in_target_allowlist =
+      base::BindRepeating(&IsTargetUrlAllowlistedBySafetyTipsComponent, config);
+  if (!GetMatchingDomain(navigated_domain, engaged_sites, in_target_allowlist,
+                         &matched_domain, &match_type)) {
     return content::NavigationThrottle::PROCEED;
   }
   DCHECK(!matched_domain.empty());

@@ -34,6 +34,8 @@
 #include "ui/gfx/favicon_size.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/layout/flex_layout.h"
+#include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
 
 using views::Widget;
@@ -84,7 +86,7 @@ class FakeTabController : public TabController {
   void OnMouseEventInTab(views::View* source,
                          const ui::MouseEvent& event) override {}
   void UpdateHoverCard(Tab* tab) override {}
-  bool ShowDomainInHoverCard(const Tab* tab) const override { return true; }
+  bool ShowDomainInHoverCards() const override { return true; }
   bool HoverCardIsShowingForTab(Tab* tab) override { return false; }
   int GetBackgroundOffset() const override { return 0; }
   bool ShouldPaintAsActiveFrame() const override { return true; }
@@ -353,13 +355,21 @@ class AlertIndicatorTest : public ChromeViewsTestBase {
     controller_ = new FakeBaseTabStripController;
     tab_strip_ = new TabStrip(std::unique_ptr<TabStripController>(controller_));
     controller_->set_tab_strip(tab_strip_);
+
     // The tab strip must be added to the view hierarchy for it to create the
     // buttons.
-    parent_.AddChildView(tab_strip_);
-    parent_.set_owned_by_client();
+    auto parent = std::make_unique<views::View>();
+    views::FlexLayout* layout_manager =
+        parent->SetLayoutManager(std::make_unique<views::FlexLayout>());
+    layout_manager->SetOrientation(views::LayoutOrientation::kHorizontal)
+        .SetDefault(
+            views::kFlexBehaviorKey,
+            views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
+                                     views::MaximumFlexSizeRule::kUnbounded));
+    parent->AddChildView(tab_strip_);
 
     widget_ = CreateTestWidget();
-    widget_->SetContentsView(&parent_);
+    widget_->SetContentsView(parent.release());
   }
 
   void TearDown() override {
@@ -385,8 +395,6 @@ class AlertIndicatorTest : public ChromeViewsTestBase {
 
   // Owned by TabStrip.
   FakeBaseTabStripController* controller_ = nullptr;
-  // Owns |tab_strip_|.
-  views::View parent_;
   TabStrip* tab_strip_ = nullptr;
   std::unique_ptr<views::Widget> widget_;
 

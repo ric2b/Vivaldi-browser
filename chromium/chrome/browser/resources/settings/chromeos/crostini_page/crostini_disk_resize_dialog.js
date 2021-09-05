@@ -55,6 +55,12 @@ Polymer({
       type: Number,
     },
 
+    /** @private */
+    isLowSpaceAvailable_: {
+      type: Boolean,
+      value: false,
+    },
+
     /** @private {!DisplayState} */
     displayState_: {
       type: String,
@@ -99,8 +105,10 @@ Polymer({
    * current state once the call completes.
    */
   loadDiskInfo_() {
+    // TODO(davidmunro): No magic 'termina' string.
+    const vmName = 'termina';
     settings.CrostiniBrowserProxyImpl.getInstance()
-        .getCrostiniDiskInfo('termina')  // TODO(davidmunro): No magic string.
+        .getCrostiniDiskInfo(vmName, /*requestFullInfo=*/ true)
         .then(
             diskInfo => {
               if (!diskInfo.succeeded) {
@@ -115,6 +123,7 @@ Polymer({
                 this.minDiskSize_ = diskInfo.ticks[0].label;
                 this.maxDiskSize_ =
                     diskInfo.ticks[diskInfo.ticks.length - 1].label;
+                this.isLowSpaceAvailable_ = diskInfo.isLowSpaceAvailable;
               }
             },
             reason => {
@@ -145,6 +154,7 @@ Polymer({
             succeeded => {
               if (succeeded) {
                 this.resizeState_ = ResizeState.DONE;
+                this.$.diskResizeDialog.close();
               } else {
                 this.resizeState_ = ResizeState.ERROR;
               }

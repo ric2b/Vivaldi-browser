@@ -260,8 +260,11 @@ void SavePackage::InternalInit() {
 
   download::RecordSavePackageEvent(download::SAVE_PACKAGE_STARTED);
 
+  // TODO(crbug.com/1061899): The code here should take an explicit reference
+  // to the corresponding frame instead of using the current main frame.
   ukm_source_id_ = static_cast<WebContentsImpl*>(web_contents())
-                       ->GetUkmSourceIdForLastCommittedSource();
+                       ->GetMainFrame()
+                       ->GetPageUkmSourceId();
   ukm_download_id_ = download::GetUniqueDownloadId();
   download::DownloadUkmHelper::RecordDownloadStarted(
       ukm_download_id_, ukm_source_id_, download::DownloadContent::TEXT,
@@ -1135,24 +1138,17 @@ void SavePackage::OnSavableResourceLinksResponse(
     EnqueueSavableResource(container_frame_tree_node_id, u, referrer);
   }
   for (const SavableSubframe& subframe : subframes) {
-    FrameTreeNode* subframe_tree_node =
-        sender->frame_tree_node()->frame_tree()->FindByRoutingID(
-            sender->GetProcess()->GetID(), subframe.routing_id);
+    RenderFrameHostImpl* rfh_subframe = sender->FindAndVerifyChild(
+        subframe.routing_id,
+        bad_message::DWNLD_INVALID_SAVABLE_RESOURCE_LINKS_RESPONSE);
 
-    if (!subframe_tree_node) {
+    if (!rfh_subframe) {
       // crbug.com/541354 - Raciness when saving a dynamically changing page.
-      continue;
-    }
-    if (subframe_tree_node->parent() != sender->frame_tree_node()) {
-      // Only reachable if the renderer has a bug or has been compromised.
-      ReceivedBadMessage(
-          sender->GetProcess(),
-          bad_message::DWNLD_INVALID_SAVABLE_RESOURCE_LINKS_RESPONSE);
       continue;
     }
 
     EnqueueFrame(container_frame_tree_node_id,
-                 subframe_tree_node->frame_tree_node_id(),
+                 rfh_subframe->frame_tree_node()->frame_tree_node_id(),
                  subframe.original_url);
   }
 

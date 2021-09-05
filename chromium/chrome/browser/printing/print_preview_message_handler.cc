@@ -44,6 +44,8 @@ namespace printing {
 
 namespace {
 
+// TODO(https://crbug.com/1008939): Remove this once all preview UI messages
+// are moved to print_preview_ui.cc.
 void StopWorker(int document_cookie) {
   if (document_cookie <= 0)
     return;
@@ -265,17 +267,6 @@ void PrintPreviewMessageHandler::OnMetafileReadyForPrinting(
   }
 }
 
-void PrintPreviewMessageHandler::OnPrintPreviewFailed(
-    int document_cookie,
-    const PrintHostMsg_PreviewIds& ids) {
-  StopWorker(document_cookie);
-
-  PrintPreviewUI* print_preview_ui = GetPrintPreviewUI(ids.ui_id);
-  if (!print_preview_ui)
-    return;
-  print_preview_ui->OnPrintPreviewFailed(ids.request_id);
-}
-
 void PrintPreviewMessageHandler::OnDidGetDefaultPageLayout(
     const PageSizeMargins& page_layout_in_points,
     const gfx::Rect& printable_area_in_points,
@@ -311,15 +302,6 @@ void PrintPreviewMessageHandler::OnInvalidPrinterSettings(
   if (!print_preview_ui)
     return;
   print_preview_ui->OnInvalidPrinterSettings(ids.request_id);
-}
-
-void PrintPreviewMessageHandler::OnSetOptionsFromDocument(
-    const PrintHostMsg_SetOptionsFromDocument_Params& params,
-    const PrintHostMsg_PreviewIds& ids) {
-  PrintPreviewUI* print_preview_ui = GetPrintPreviewUI(ids.ui_id);
-  if (!print_preview_ui)
-    return;
-  print_preview_ui->OnSetOptionsFromDocument(params, ids.request_id);
 }
 
 void PrintPreviewMessageHandler::NotifyUIPreviewPageReady(
@@ -527,16 +509,12 @@ bool PrintPreviewMessageHandler::OnMessageReceived(
     IPC_MESSAGE_HANDLER(PrintHostMsg_DidStartPreview, OnDidStartPreview)
     IPC_MESSAGE_HANDLER(PrintHostMsg_DidPrepareDocumentForPreview,
                         OnDidPrepareForDocumentToPdf)
-    IPC_MESSAGE_HANDLER(PrintHostMsg_PrintPreviewFailed,
-                        OnPrintPreviewFailed)
     IPC_MESSAGE_HANDLER(PrintHostMsg_DidGetDefaultPageLayout,
                         OnDidGetDefaultPageLayout)
     IPC_MESSAGE_HANDLER(PrintHostMsg_PrintPreviewCancelled,
                         OnPrintPreviewCancelled)
     IPC_MESSAGE_HANDLER(PrintHostMsg_PrintPreviewInvalidPrinterSettings,
                         OnInvalidPrinterSettings)
-    IPC_MESSAGE_HANDLER(PrintHostMsg_SetOptionsFromDocument,
-                        OnSetOptionsFromDocument)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;

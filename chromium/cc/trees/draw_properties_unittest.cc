@@ -3571,8 +3571,8 @@ class LCDTextTest : public DrawPropertiesTestBase,
 
   void SetUp() override {
     root_ = root_layer();
-    child_ = AddLayer<LayerImpl>();
-    grand_child_ = AddLayer<LayerImpl>();
+    child_ = AddLayer<PictureLayerImpl>();
+    grand_child_ = AddLayer<PictureLayerImpl>();
     SetElementIdsForTesting();
 
     root_->SetContentsOpaque(true);
@@ -3593,23 +3593,36 @@ class LCDTextTest : public DrawPropertiesTestBase,
     CopyProperties(child_, grand_child_);
   }
 
+  void CheckCanUseLCDText(LCDTextDisallowedReason expected_disallowed_reason,
+                          PictureLayerImpl* layer = nullptr) {
+    if (layers_always_allowed_lcd_text_)
+      expected_disallowed_reason = LCDTextDisallowedReason::kNone;
+    else if (!can_use_lcd_text_)
+      expected_disallowed_reason = LCDTextDisallowedReason::kSetting;
+
+    if (layer) {
+      EXPECT_EQ(expected_disallowed_reason,
+                layer->ComputeLCDTextDisallowedReasonForTesting());
+    } else {
+      EXPECT_EQ(expected_disallowed_reason,
+                child_->ComputeLCDTextDisallowedReasonForTesting());
+      EXPECT_EQ(expected_disallowed_reason,
+                grand_child_->ComputeLCDTextDisallowedReasonForTesting());
+    }
+  }
+
   bool can_use_lcd_text_;
   bool layers_always_allowed_lcd_text_;
 
   LayerImpl* root_ = nullptr;
-  LayerImpl* child_ = nullptr;
-  LayerImpl* grand_child_ = nullptr;
+  PictureLayerImpl* child_ = nullptr;
+  PictureLayerImpl* grand_child_ = nullptr;
 };
 
 TEST_P(LCDTextTest, CanUseLCDText) {
-  bool expect_lcd_text = can_use_lcd_text_ || layers_always_allowed_lcd_text_;
-  bool expect_not_lcd_text = layers_always_allowed_lcd_text_;
-
   // Case 1: Identity transform.
   UpdateActiveTreeDrawProperties();
-  EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
-  EXPECT_EQ(expect_lcd_text, child_->CanUseLCDText());
-  EXPECT_EQ(expect_lcd_text, grand_child_->CanUseLCDText());
+  CheckCanUseLCDText(LCDTextDisallowedReason::kNone);
 
   // Case 2: Integral translation.
   gfx::Transform integral_translation;
@@ -3617,124 +3630,105 @@ TEST_P(LCDTextTest, CanUseLCDText) {
   SetTransform(child_, integral_translation);
 
   UpdateActiveTreeDrawProperties();
-  EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
-  EXPECT_EQ(expect_lcd_text, child_->CanUseLCDText());
-  EXPECT_EQ(expect_lcd_text, grand_child_->CanUseLCDText());
+  CheckCanUseLCDText(LCDTextDisallowedReason::kNone);
 
   // Case 3: Non-integral translation.
   gfx::Transform non_integral_translation;
   non_integral_translation.Translate(1.5, 2.5);
   SetTransform(child_, non_integral_translation);
   UpdateActiveTreeDrawProperties();
-  EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
-  EXPECT_EQ(expect_not_lcd_text, child_->CanUseLCDText());
-  EXPECT_EQ(expect_not_lcd_text, grand_child_->CanUseLCDText());
+  CheckCanUseLCDText(LCDTextDisallowedReason::kNonIntegralTranslation);
 
   // Case 4: Rotation.
   gfx::Transform rotation;
   rotation.Rotate(10.0);
   SetTransform(child_, rotation);
   UpdateActiveTreeDrawProperties();
-  EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
-  EXPECT_EQ(expect_not_lcd_text, child_->CanUseLCDText());
-  EXPECT_EQ(expect_not_lcd_text, grand_child_->CanUseLCDText());
+  CheckCanUseLCDText(LCDTextDisallowedReason::kNonIntegralTranslation);
 
   // Case 5: Scale.
   gfx::Transform scale;
   scale.Scale(2.0, 2.0);
   SetTransform(child_, scale);
   UpdateActiveTreeDrawProperties();
-  EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
-  EXPECT_EQ(expect_not_lcd_text, child_->CanUseLCDText());
-  EXPECT_EQ(expect_not_lcd_text, grand_child_->CanUseLCDText());
+  CheckCanUseLCDText(LCDTextDisallowedReason::kNonIntegralTranslation);
 
   // Case 6: Skew.
   gfx::Transform skew;
   skew.Skew(10.0, 0.0);
   SetTransform(child_, skew);
   UpdateActiveTreeDrawProperties();
-  EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
-  EXPECT_EQ(expect_not_lcd_text, child_->CanUseLCDText());
-  EXPECT_EQ(expect_not_lcd_text, grand_child_->CanUseLCDText());
+  CheckCanUseLCDText(LCDTextDisallowedReason::kNonIntegralTranslation);
 
-  // Case 7: Translucent.
+  // Case 7: Translucent: LCD-text is allowed.
   SetTransform(child_, gfx::Transform());
   SetOpacity(child_, 0.5f);
   UpdateActiveTreeDrawProperties();
-  EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
-  EXPECT_EQ(expect_not_lcd_text, child_->CanUseLCDText());
-  EXPECT_EQ(expect_not_lcd_text, grand_child_->CanUseLCDText());
+  CheckCanUseLCDText(LCDTextDisallowedReason::kNone);
 
   // Case 8: Sanity check: restore transform and opacity.
   SetTransform(child_, gfx::Transform());
   SetOpacity(child_, 1.f);
   UpdateActiveTreeDrawProperties();
-  EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
-  EXPECT_EQ(expect_lcd_text, child_->CanUseLCDText());
-  EXPECT_EQ(expect_lcd_text, grand_child_->CanUseLCDText());
+  CheckCanUseLCDText(LCDTextDisallowedReason::kNone);
 
-  // Case 9: Non-opaque content.
+  // Case 9a: Non-opaque content and opaque background.
   child_->SetContentsOpaque(false);
+  child_->SetBackgroundColor(SK_ColorGREEN);
   UpdateActiveTreeDrawProperties();
-  EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
-  EXPECT_EQ(expect_not_lcd_text, child_->CanUseLCDText());
-  EXPECT_EQ(expect_lcd_text, grand_child_->CanUseLCDText());
+  CheckCanUseLCDText(LCDTextDisallowedReason::kContentsNotOpaque, child_);
+  CheckCanUseLCDText(LCDTextDisallowedReason::kNone, grand_child_);
+
+  // Case 9b: Non-opaque content and non-opaque background.
+  child_->SetBackgroundColor(SkColorSetARGB(128, 255, 255, 255));
+  UpdateActiveTreeDrawProperties();
+  CheckCanUseLCDText(LCDTextDisallowedReason::kBackgroundColorNotOpaque,
+                     child_);
+  CheckCanUseLCDText(LCDTextDisallowedReason::kNone, grand_child_);
 
   // Case 10: Sanity check: restore content opaqueness.
   child_->SetContentsOpaque(true);
   UpdateActiveTreeDrawProperties();
-  EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
-  EXPECT_EQ(expect_lcd_text, child_->CanUseLCDText());
-  EXPECT_EQ(expect_lcd_text, grand_child_->CanUseLCDText());
+  CheckCanUseLCDText(LCDTextDisallowedReason::kNone);
 
   // Case 11: will-change: transform
   child_->SetHasWillChangeTransformHint(true);
   UpdateActiveTreeDrawProperties();
-  EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
-  EXPECT_EQ(expect_not_lcd_text, child_->CanUseLCDText());
-  EXPECT_EQ(expect_lcd_text, grand_child_->CanUseLCDText());
+  CheckCanUseLCDText(LCDTextDisallowedReason::kWillChangeTransform, child_);
+  // TODO(wangxianzhu): Is this correct?
+  CheckCanUseLCDText(LCDTextDisallowedReason::kNone, grand_child_);
 }
 
 TEST_P(LCDTextTest, CanUseLCDTextWithAnimation) {
-  bool expect_lcd_text = can_use_lcd_text_ || layers_always_allowed_lcd_text_;
-  bool expect_not_lcd_text = layers_always_allowed_lcd_text_;
-
   // Sanity check: Make sure can_use_lcd_text_ is set on each node.
   UpdateActiveTreeDrawProperties();
-  EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
-  EXPECT_EQ(expect_lcd_text, child_->CanUseLCDText());
-  EXPECT_EQ(expect_lcd_text, grand_child_->CanUseLCDText());
+  CheckCanUseLCDText(LCDTextDisallowedReason::kNone);
 
   // Add opacity animation.
-  SetOpacity(child_, 0.9f);
-  AddOpacityTransitionToElementWithAnimation(child_->element_id(), timeline(),
-                                             10.0, 0.9f, 0.1f, false);
+  gfx::Transform non_integral_translation;
+  non_integral_translation.Translate(1.5, 2.5);
+  SetTransform(child_, non_integral_translation);
+  AddAnimatedTransformToElementWithAnimation(child_->element_id(), timeline(),
+                                             10.0, 12, 34);
   UpdateActiveTreeDrawProperties();
   // Text LCD should be adjusted while animation is active.
-  EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
-  EXPECT_EQ(expect_not_lcd_text, child_->CanUseLCDText());
-  EXPECT_EQ(expect_not_lcd_text, grand_child_->CanUseLCDText());
+  CheckCanUseLCDText(LCDTextDisallowedReason::kNonIntegralTranslation);
 }
 
 TEST_P(LCDTextTest, CanUseLCDTextWithAnimationContentsOpaque) {
-  bool expect_lcd_text = can_use_lcd_text_ || layers_always_allowed_lcd_text_;
-  bool expect_not_lcd_text = layers_always_allowed_lcd_text_;
-
   // Sanity check: Make sure can_use_lcd_text_ is set on each node.
   UpdateActiveTreeDrawProperties();
-  EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
-  EXPECT_EQ(expect_lcd_text, child_->CanUseLCDText());
-  EXPECT_EQ(expect_lcd_text, grand_child_->CanUseLCDText());
+  CheckCanUseLCDText(LCDTextDisallowedReason::kNone);
 
   // Mark contents non-opaque within the first animation frame.
   child_->SetContentsOpaque(false);
+  child_->SetBackgroundColor(SK_ColorWHITE);
   AddOpacityTransitionToElementWithAnimation(child_->element_id(), timeline(),
                                              10.0, 0.9f, 0.1f, false);
   UpdateActiveTreeDrawProperties();
   // LCD text should be disabled for non-opaque layers even during animations.
-  EXPECT_EQ(expect_lcd_text, root_->CanUseLCDText());
-  EXPECT_EQ(expect_not_lcd_text, child_->CanUseLCDText());
-  EXPECT_EQ(expect_lcd_text, grand_child_->CanUseLCDText());
+  CheckCanUseLCDText(LCDTextDisallowedReason::kContentsNotOpaque, child_);
+  CheckCanUseLCDText(LCDTextDisallowedReason::kNone, grand_child_);
 }
 
 INSTANTIATE_TEST_SUITE_P(DrawPropertiesTest,
@@ -4481,10 +4475,13 @@ TEST_F(DrawPropertiesTest,
 
 TEST_F(DrawPropertiesTest, TransformAnimationUpdatesBackfaceVisibility) {
   LayerImpl* root = root_layer();
+  root->SetDrawsContent(true);
   LayerImpl* back_facing = AddLayer<LayerImpl>();
+  back_facing->SetDrawsContent(true);
   LayerImpl* render_surface1 = AddLayer<LayerImpl>();
+  render_surface1->SetDrawsContent(true);
   LayerImpl* render_surface2 = AddLayer<LayerImpl>();
-
+  render_surface2->SetDrawsContent(true);
   gfx::Transform rotate_about_y;
   rotate_about_y.RotateAboutYAxis(180.0);
 
@@ -4519,7 +4516,11 @@ TEST_F(DrawPropertiesTest, TransformAnimationUpdatesBackfaceVisibility) {
   UpdateActiveTreeDrawProperties();
 
   EXPECT_TRUE(GetEffectNode(render_surface1)->hidden_by_backface_visibility);
+  EXPECT_EQ(gfx::Rect(), render_surface1->visible_layer_rect());
   EXPECT_TRUE(GetEffectNode(render_surface2)->hidden_by_backface_visibility);
+  EXPECT_EQ(gfx::Rect(), render_surface2->visible_layer_rect());
+
+  EXPECT_EQ(1u, GetRenderSurfaceList().size());
 
   root->layer_tree_impl()->SetTransformMutated(back_facing->element_id(),
                                                gfx::Transform());
@@ -4527,13 +4528,24 @@ TEST_F(DrawPropertiesTest, TransformAnimationUpdatesBackfaceVisibility) {
                                                rotate_about_y);
   UpdateActiveTreeDrawProperties();
   EXPECT_FALSE(GetEffectNode(render_surface1)->hidden_by_backface_visibility);
+  EXPECT_EQ(gfx::Rect(0, 0, 30, 30), render_surface1->visible_layer_rect());
   EXPECT_TRUE(GetEffectNode(render_surface2)->hidden_by_backface_visibility);
+  EXPECT_EQ(gfx::Rect(), render_surface2->visible_layer_rect());
+
+  EXPECT_EQ(2u, GetRenderSurfaceList().size());
 
   root->layer_tree_impl()->SetTransformMutated(render_surface1->element_id(),
                                                rotate_about_y);
   UpdateActiveTreeDrawProperties();
   EXPECT_TRUE(GetEffectNode(render_surface1)->hidden_by_backface_visibility);
+  // Draw properties are only updated for visible layers, so this remains the
+  // cached value from last time. The expectation is commented out because
+  // this result is not required.
+  //  EXPECT_EQ(gfx::Rect(0, 0, 30, 30), render_surface1->visible_layer_rect());
   EXPECT_TRUE(GetEffectNode(render_surface2)->hidden_by_backface_visibility);
+  EXPECT_EQ(gfx::Rect(), render_surface2->visible_layer_rect());
+
+  EXPECT_EQ(1u, GetRenderSurfaceList().size());
 }
 
 TEST_F(DrawPropertiesTest, ScrollChildAndScrollParentDifferentTargets) {
@@ -6616,7 +6628,6 @@ TEST_F(DrawPropertiesTestWithLayerTree, SkippingLayerImpl) {
   // A double sided render surface with backface visible should not be skipped
   ImplOf(grandchild)->set_visible_layer_rect(gfx::Rect());
   child->SetForceRenderSurfaceForTesting(true);
-  child->SetDoubleSided(true);
   child->SetTransform(rotate_back_and_translate);
   CommitAndActivate();
   EXPECT_EQ(gfx::Rect(10, 10), ImplOf(grandchild)->visible_layer_rect());
@@ -6817,12 +6828,10 @@ TEST_F(DrawPropertiesTestWithLayerTree, SkippingLayer) {
   child->SetBounds(gfx::Size(10, 10));
 
   gfx::Transform rotate;
-  child->SetDoubleSided(false);
   rotate.RotateAboutXAxis(180.f);
   child->SetTransform(rotate);
   CommitAndActivate();
   EXPECT_EQ(gfx::Rect(0, 0), ImplOf(child)->visible_layer_rect());
-  child->SetDoubleSided(true);
   child->SetTransform(gfx::Transform());
 
   child->SetOpacity(0.f);

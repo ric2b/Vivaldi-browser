@@ -413,124 +413,26 @@ bool AddAclToPath(const base::FilePath& path,
   return AddAclToPath(path, converted_trustees, access_mask, ace_flags);
 }
 
-// Migrates consent for the collection of usage statistics from the binaries to
-// Chrome when migrating multi-install Chrome to single-install.
-void AddMigrateUsageStatsWorkItems(const InstallerState& installer_state,
-                                   WorkItemList* install_list) {
-  // This operation only applies to modes that once supported multi-install.
-  if (install_static::InstallDetails::Get().supported_multi_install())
-    return;
-
-  // Bail out if an existing multi-install Chrome is not being migrated to
-  // single-install.
-  if (!installer_state.is_migrating_to_single())
-    return;
-
-  // Nothing to do if the binaries aren't actually installed.
-  if (!AreBinariesInstalled(installer_state))
-    return;
-
-  // Delete any stale value in Chrome's ClientStateMedium key. A new value, if
-  // found, will be written to the ClientState key below.
-  if (installer_state.system_install()) {
-    install_list->AddDeleteRegValueWorkItem(
-        installer_state.root_key(),
-        install_static::GetClientStateMediumKeyPath(), KEY_WOW64_64KEY,
-        google_update::kRegUsageStatsField);
-  }
-
-  google_update::Tristate consent =
-      GoogleUpdateSettings::GetCollectStatsConsentForBinaries();
-  if (consent == google_update::TRISTATE_NONE) {
-    VLOG(1) << "No consent value found to migrate to single-install.";
-    // Delete any stale value in Chrome's ClientState key.
-    install_list->AddDeleteRegValueWorkItem(
-        installer_state.root_key(), install_static::GetClientStateKeyPath(),
-        KEY_WOW64_64KEY, google_update::kRegUsageStatsField);
-    return;
-  }
-
-  VLOG(1) << "Migrating usage stats consent from multi- to single-install.";
-
-  // Write consent to Chrome's ClientState key.
-  install_list->AddSetRegValueWorkItem(
-      installer_state.root_key(), install_static::GetClientStateKeyPath(),
-      KEY_WOW64_32KEY, google_update::kRegUsageStatsField,
-      static_cast<DWORD>(consent), true);
-}
-
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 // Adds work items to register the Elevation Service with Windows. Only for
 // system level installs.
 void AddElevationServiceWorkItems(const base::FilePath& elevation_service_path,
                                   WorkItemList* list) {
   DCHECK(::IsUserAnAdmin());
-  const HKEY root = HKEY_LOCAL_MACHINE;
 
   if (elevation_service_path.empty()) {
     LOG(DFATAL) << "The path to elevation_service.exe is invalid.";
     return;
   }
 
-  const base::string16 clsid_reg_path = GetElevationServiceClsidRegistryPath();
-  const base::string16 appid_reg_path = GetElevationServiceAppidRegistryPath();
-  const base::string16 iid_reg_path = GetElevationServiceIidRegistryPath();
-  const base::string16 typelib_reg_path =
-      GetElevationServiceTypeLibRegistryPath();
-
-  // Delete any old registrations first, taking into account 32-bit -> 64-bit or
-  // 64-bit -> 32-bit migration.
-  for (const auto& reg_path :
-       {clsid_reg_path, appid_reg_path, iid_reg_path, typelib_reg_path}) {
-    for (const auto& key_flag : {KEY_WOW64_32KEY, KEY_WOW64_64KEY})
-      list->AddDeleteRegKeyWorkItem(root, reg_path, key_flag);
-  }
-
-  list->AddWorkItem(new InstallServiceWorkItem(
+  WorkItem* install_service_work_item = new InstallServiceWorkItem(
       install_static::GetElevationServiceName(),
       install_static::GetElevationServiceDisplayName(),
-      base::CommandLine(elevation_service_path)));
-
-  list->AddCreateRegKeyWorkItem(root, clsid_reg_path, WorkItem::kWow64Default);
-  list->AddSetRegValueWorkItem(root, clsid_reg_path, WorkItem::kWow64Default,
-                               L"AppID", GetElevationServiceGuid(L""), true);
-  list->AddCreateRegKeyWorkItem(root, appid_reg_path, WorkItem::kWow64Default);
-  list->AddSetRegValueWorkItem(root, appid_reg_path, WorkItem::kWow64Default,
-                               L"LocalService",
-                               install_static::GetElevationServiceName(), true);
-
-  // Registering the Ole Automation marshaler with the CLSID
-  // {00020424-0000-0000-C000-000000000046} as the proxy/stub for the IElevator
-  // interface.
-  list->AddCreateRegKeyWorkItem(root, iid_reg_path, WorkItem::kWow64Default);
-  list->AddCreateRegKeyWorkItem(root, iid_reg_path + L"\\ProxyStubClsid32",
-                                WorkItem::kWow64Default);
-  list->AddSetRegValueWorkItem(root, iid_reg_path + L"\\ProxyStubClsid32",
-                               WorkItem::kWow64Default, L"",
-                               L"{00020424-0000-0000-C000-000000000046}", true);
-  list->AddCreateRegKeyWorkItem(root, iid_reg_path + L"\\TypeLib",
-                                WorkItem::kWow64Default);
-  list->AddSetRegValueWorkItem(root, iid_reg_path + L"\\TypeLib",
-                               WorkItem::kWow64Default, L"",
-                               GetElevationServiceIid(L""), true);
-
-  // The TypeLib registration for the Ole Automation marshaler.
-  list->AddCreateRegKeyWorkItem(root, typelib_reg_path,
-                                WorkItem::kWow64Default);
-  list->AddCreateRegKeyWorkItem(root, typelib_reg_path + L"\\1.0",
-                                WorkItem::kWow64Default);
-  list->AddCreateRegKeyWorkItem(root, typelib_reg_path + L"\\1.0\\0",
-                                WorkItem::kWow64Default);
-  list->AddCreateRegKeyWorkItem(root, typelib_reg_path + L"\\1.0\\0\\win32",
-                                WorkItem::kWow64Default);
-  list->AddSetRegValueWorkItem(root, typelib_reg_path + L"\\1.0\\0\\win32",
-                               WorkItem::kWow64Default, L"",
-                               elevation_service_path.value(), true);
-  list->AddCreateRegKeyWorkItem(root, typelib_reg_path + L"\\1.0\\0\\win64",
-                                WorkItem::kWow64Default);
-  list->AddSetRegValueWorkItem(root, typelib_reg_path + L"\\1.0\\0\\win64",
-                               WorkItem::kWow64Default, L"",
-                               elevation_service_path.value(), true);
+      base::CommandLine(elevation_service_path),
+      install_static::GetClientStateKeyPath(),
+      install_static::GetElevatorClsid(), install_static::GetElevatorIid());
+  install_service_work_item->set_best_effort(true);
+  list->AddWorkItem(install_service_work_item);
 }
 
 // Adds work items to add or remove the "store-dmtoken" command to Chrome's
@@ -1028,9 +930,6 @@ void AddInstallWorkItems(const InstallationState& original_state,
 
   InstallUtil::AddUpdateDowngradeVersionItem(
       installer_state.root_key(), current_version, new_version, install_list);
-
-  // Migrate usagestats back to Chrome.
-  AddMigrateUsageStatsWorkItems(installer_state, install_list);
 
   AddUpdateBrandCodeWorkItem(installer_state, install_list);
 

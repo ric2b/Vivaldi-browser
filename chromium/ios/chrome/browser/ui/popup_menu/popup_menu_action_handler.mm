@@ -5,10 +5,11 @@
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_action_handler.h"
 
 #include "base/bind.h"
+#include "base/check.h"
 #include "base/feature_list.h"
-#include "base/logging.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
+#include "base/notreached.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/open_from_clipboard/clipboard_recent_content.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
@@ -22,6 +23,7 @@
 #import "ios/chrome/browser/ui/popup_menu/public/cells/popup_menu_item.h"
 #import "ios/chrome/browser/ui/popup_menu/public/popup_menu_table_view_controller.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
+#import "ios/chrome/browser/window_activities/window_activity_helpers.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -121,11 +123,10 @@ using base::UserMetricsAction;
     case PopupMenuActionViewSource:
       [self.dispatcher viewSource];
       break;
-    case PopupMenuActionOpenNewWindow:
-      [self.dispatcher openNewWindow];
-      break;
 #endif  // !defined(NDEBUG)
-
+    case PopupMenuActionOpenNewWindow:
+      [self.dispatcher openNewWindowWithActivity:ActivityToOpenNewTab(false)];
+      break;
     case PopupMenuActionBookmarks:
       RecordAction(UserMetricsAction("MobileMenuAllBookmarks"));
       [self.dispatcher showBookmarksManager];

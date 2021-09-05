@@ -377,10 +377,8 @@ void GuestViewBase::SetSize(const SetSizeParams& params) {
         rwhv->DisableAutoResize(new_size);
       changed_due_to_auto_resize = true;
     } else {
-      // Autosize was already disabled.
-      if (guest_host_) {
-        guest_host_->SizeContents(new_size);
-      }
+      // Autosize was already disabled. The RenderWidgetHostView is responsible
+      // for the GuestView's size.
     }
 
     UpdateGuestSize(new_size, changed_due_to_auto_resize);

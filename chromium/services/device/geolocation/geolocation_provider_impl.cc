@@ -9,11 +9,12 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/check.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
-#include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
+#include "base/notreached.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_tick_clock.h"
@@ -170,7 +171,11 @@ void GeolocationProviderImpl::OnClientsChanged() {
                           base::Unretained(this));
   } else {
     if (!IsRunning()) {
-      Start();
+      base::Thread::Options options;
+#if defined(OS_MACOSX)
+      options.message_pump_type = base::MessagePumpType::NS_RUNLOOP;
+#endif
+      StartWithOptions(options);
       if (user_did_opt_into_location_services_)
         InformProvidersPermissionGranted();
     }

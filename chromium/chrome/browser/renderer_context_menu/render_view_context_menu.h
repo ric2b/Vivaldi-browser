@@ -208,6 +208,7 @@ class RenderViewContextMenu : public RenderViewContextMenuBase {
   bool IsPasteEnabled() const;
   bool IsPasteAndMatchStyleEnabled() const;
   bool IsPrintPreviewEnabled() const;
+  bool IsQRCodeGeneratorEnabled() const;
   bool IsRouteMediaEnabled() const;
   bool IsOpenLinkOTREnabled() const;
 

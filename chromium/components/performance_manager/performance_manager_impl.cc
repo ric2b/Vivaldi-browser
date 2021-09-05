@@ -8,13 +8,16 @@
 #include <memory>
 #include <utility>
 
+#include "base/bind.h"
+#include "base/check_op.h"
 #include "base/containers/flat_set.h"
-#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/notreached.h"
 #include "base/task/lazy_thread_pool_task_runner.h"
 #include "base/task/post_task.h"
 #include "base/task/task_traits.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "components/performance_manager/graph/frame_node_impl.h"
 #include "components/performance_manager/graph/page_node_impl.h"
 #include "components/performance_manager/graph/process_node_impl.h"
@@ -32,10 +35,14 @@ namespace {
 PerformanceManagerImpl* g_performance_manager = nullptr;
 
 // The performance manager TaskRunner. Thread-safe.
+//
+// NOTE: This task runner has to block shutdown as some of the tasks posted to
+// it should be guaranteed to run before shutdown (e.g. removing some entries
+// from the site data store).
 base::LazyThreadPoolSequencedTaskRunner g_performance_manager_task_runner =
     LAZY_THREAD_POOL_SEQUENCED_TASK_RUNNER_INITIALIZER(
         base::TaskTraits(base::TaskPriority::USER_VISIBLE,
-                         base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN,
+                         base::TaskShutdownBehavior::BLOCK_SHUTDOWN,
                          base::MayBlock()));
 
 // Indicates if a task posted to |g_performance_manager_task_runner| will have
@@ -56,6 +63,8 @@ PerformanceManagerImpl::~PerformanceManagerImpl() {
   // TODO(https://crbug.com/966840): Move this to a TearDown function.
   graph_.TearDown();
   g_performance_manager = nullptr;
+  if (on_destroyed_callback_)
+    std::move(on_destroyed_callback_).Run();
 }
 
 // static
@@ -134,9 +143,10 @@ std::unique_ptr<PageNodeImpl> PerformanceManagerImpl::CreatePageNode(
 
 // static
 std::unique_ptr<ProcessNodeImpl> PerformanceManagerImpl::CreateProcessNode(
+    content::ProcessType process_type,
     RenderProcessHostProxy proxy) {
   return CreateNodeImpl<ProcessNodeImpl>(
-      base::OnceCallback<void(ProcessNodeImpl*)>(), proxy);
+      base::OnceCallback<void(ProcessNodeImpl*)>(), process_type, proxy);
 }
 
 // static
@@ -171,6 +181,27 @@ void PerformanceManagerImpl::BatchDeleteNodes(
 // static
 bool PerformanceManagerImpl::OnPMTaskRunnerForTesting() {
   return GetTaskRunner()->RunsTasksInCurrentSequence();
+}
+
+// static
+void PerformanceManagerImpl::SetOnDestroyedCallbackForTesting(
+    base::OnceClosure callback) {
+  // Bind the callback in one that can be called on the PM sequence (it also
+  // binds the main thread, and bounces a task back to that thread).
+  scoped_refptr<base::SequencedTaskRunner> main_thread =
+      base::SequencedTaskRunnerHandle::Get();
+  base::OnceClosure pm_callback = base::BindOnce(
+      [](scoped_refptr<base::SequencedTaskRunner> main_thread,
+         base::OnceClosure callback) {
+        main_thread->PostTask(FROM_HERE, std::move(callback));
+      },
+      main_thread, std::move(callback));
+
+  // Pass the callback to the PM.
+  GetTaskRunner()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&PerformanceManagerImpl::SetOnDestroyedCallbackImpl,
+                     std::move(pm_callback)));
 }
 
 PerformanceManagerImpl::PerformanceManagerImpl() {
@@ -320,6 +351,15 @@ void PerformanceManagerImpl::RunCallbackWithGraph(
 
   if (g_performance_manager)
     std::move(graph_callback).Run(&g_performance_manager->graph_);
+}
+
+// static
+void PerformanceManagerImpl::SetOnDestroyedCallbackImpl(
+    base::OnceClosure callback) {
+  DCHECK(GetTaskRunner()->RunsTasksInCurrentSequence());
+
+  if (g_performance_manager)
+    g_performance_manager->on_destroyed_callback_ = std::move(callback);
 }
 
 }  // namespace performance_manager

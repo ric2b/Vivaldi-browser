@@ -51,11 +51,11 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.IdentityServicesProvider;
 import org.chromium.chrome.browser.widget.DateDividedAdapter;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
+import org.chromium.chrome.test.util.browser.RecyclerViewTestUtils;
 import org.chromium.chrome.test.util.browser.signin.SigninTestUtil;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableItemView;
 import org.chromium.components.browser_ui.widget.selectable_list.SelectableItemViewHolder;
-import org.chromium.components.signin.ChromeSigninController;
 import org.chromium.components.signin.metrics.SigninAccessPoint;
 import org.chromium.components.signin.metrics.SignoutReason;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
@@ -66,6 +66,7 @@ import org.chromium.ui.base.PageTransition;
 import org.chromium.ui.test.util.UiRestriction;
 
 import java.util.Date;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -94,7 +95,7 @@ public class HistoryActivityTest {
         // Account not signed in by default. The clear browsing data header, one date view, and two
         // history item views should be shown, but the info header should not. We enforce a default
         // state because the number of headers shown depends on the signed-in state.
-        SigninTestUtil.setUpAuthForTest();
+        SigninTestUtil.setUpAuthForTesting();
 
         mHistoryProvider = new StubbedHistoryProvider();
 
@@ -115,7 +116,7 @@ public class HistoryActivityTest {
 
     @After
     public void tearDown() {
-        SigninTestUtil.tearDownAuthForTest();
+        SigninTestUtil.tearDownAuthForTesting();
     }
 
     private void launchHistoryActivity() {
@@ -174,48 +175,38 @@ public class HistoryActivityTest {
     @Test
     @SmallTest
     public void testPrivacyDisclaimers_SignedOut() {
-        ChromeSigninController signinController = ChromeSigninController.get();
-        signinController.setSignedInAccountName(null);
+        // The user is signed out by default.
         Assert.assertEquals(1, mAdapter.getFirstGroupForTests().size());
     }
 
     @Test
     @SmallTest
     public void testPrivacyDisclaimers_SignedIn() {
-        ChromeSigninController signinController = ChromeSigninController.get();
-        signinController.setSignedInAccountName("test@gmail.com");
+        SigninTestUtil.addAndSignInTestAccount();
 
         setHasOtherFormsOfBrowsingData(false);
 
         Assert.assertEquals(1, mAdapter.getFirstGroupForTests().size());
-
-        signinController.setSignedInAccountName(null);
     }
 
     @Test
     @SmallTest
     public void testPrivacyDisclaimers_SignedInSynced() {
-        ChromeSigninController signinController = ChromeSigninController.get();
-        signinController.setSignedInAccountName("test@gmail.com");
+        SigninTestUtil.addAndSignInTestAccount();
 
         setHasOtherFormsOfBrowsingData(false);
 
         Assert.assertEquals(1, mAdapter.getFirstGroupForTests().size());
-
-        signinController.setSignedInAccountName(null);
     }
 
     @Test
     @SmallTest
     public void testPrivacyDisclaimers_SignedInSyncedAndOtherForms() {
-        ChromeSigninController signinController = ChromeSigninController.get();
-        signinController.setSignedInAccountName("test@gmail.com");
+        SigninTestUtil.addAndSignInTestAccount();
 
         setHasOtherFormsOfBrowsingData(true);
 
         Assert.assertEquals(2, mAdapter.getFirstGroupForTests().size());
-
-        signinController.setSignedInAccountName(null);
     }
 
     @Test
@@ -393,15 +384,13 @@ public class HistoryActivityTest {
         final MenuItem infoMenuItem = toolbar.getItemById(R.id.info_menu_id);
 
         // Not signed in
-        ChromeSigninController signinController = ChromeSigninController.get();
-        signinController.setSignedInAccountName(null);
         Assert.assertFalse(infoMenuItem.isVisible());
         DateDividedAdapter.ItemGroup headerGroup = mAdapter.getFirstGroupForTests();
         Assert.assertTrue(mAdapter.hasListHeader());
         Assert.assertEquals(1, headerGroup.size());
 
         // Signed in but not synced and history has items. The info button should be hidden.
-        signinController.setSignedInAccountName("test@gmail.com");
+        SigninTestUtil.addAndSignInTestAccount();
         setHasOtherFormsOfBrowsingData(false);
         TestThreadUtils.runOnUiThreadBlocking(() -> toolbar.onSignInStateChange());
         Assert.assertFalse(infoMenuItem.isVisible());
@@ -425,8 +414,29 @@ public class HistoryActivityTest {
         headerGroup = mAdapter.getFirstGroupForTests();
         Assert.assertTrue(mAdapter.hasListHeader());
         Assert.assertEquals(2, headerGroup.size());
+    }
 
-        signinController.setSignedInAccountName(null);
+    @Test
+    @SmallTest
+    public void testInfoIcon_OtherFormsOfBrowsingData() throws ExecutionException {
+        final HistoryManagerToolbar toolbar = mHistoryManager.getToolbarForTests();
+        final MenuItem infoMenuItem = toolbar.getItemById(R.id.info_menu_id);
+        setHasOtherFormsOfBrowsingData(true);
+        Assert.assertTrue("Info icon should be visible.", infoMenuItem.isVisible());
+
+        // Hide disclaimers to simulate setup for https://crbug.com/1071468.
+        TestThreadUtils.runOnUiThreadBlocking(() -> mHistoryManager.onMenuItemClick(infoMenuItem));
+        Assert.assertFalse("Privacy disclaimers should be hidden.",
+                mHistoryManager.shouldShowInfoHeaderIfAvailable());
+
+        // Simulate call indicating there are not other forms of browsing data.
+        setHasOtherFormsOfBrowsingData(false);
+        RecyclerViewTestUtils.waitForStableRecyclerView(mRecyclerView);
+        Assert.assertFalse("Info menu item should be hidden.", infoMenuItem.isVisible());
+
+        // Simulate call indicating there are other forms of browsing data.
+        setHasOtherFormsOfBrowsingData(true);
+        Assert.assertTrue("Info menu item should bre visible.", infoMenuItem.isVisible());
     }
 
     @Test
@@ -437,8 +447,7 @@ public class HistoryActivityTest {
 
         // Sign in and set has other forms of browsing data to true.
         int callCount = mTestObserver.onSelectionCallback.getCallCount();
-        ChromeSigninController signinController = ChromeSigninController.get();
-        signinController.setSignedInAccountName("test@gmail.com");
+        SigninTestUtil.addAndSignInTestAccount();
         setHasOtherFormsOfBrowsingData(true);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             toolbar.onSignInStateChange();
@@ -461,8 +470,6 @@ public class HistoryActivityTest {
         // The first group should be the history item group from SetUp()
         Assert.assertFalse(mAdapter.hasListHeader());
         Assert.assertEquals(3, firstGroup.size());
-
-        signinController.setSignedInAccountName(null);
     }
 
     @Test
@@ -471,8 +478,6 @@ public class HistoryActivityTest {
         Assert.assertTrue(mAdapter.hasListHeader());
 
         // Not sign in and set clear browsing data button to invisible
-        ChromeSigninController signinController = ChromeSigninController.get();
-        signinController.setSignedInAccountName(null);
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             mAdapter.setClearBrowsingDataButtonVisibilityForTest(false);
             mAdapter.setPrivacyDisclaimer();

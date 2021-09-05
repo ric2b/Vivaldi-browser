@@ -7,8 +7,10 @@
 
 #include <dawn/dawn_proc_table.h>
 #include <dawn/webgpu.h>
+#include <memory>
 
 #include "base/callback_helpers.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/util/type_safety/pass_key.h"
 #include "build/build_config.h"
 #include "components/viz/common/resources/resource_format.h"
@@ -27,6 +29,14 @@ class SkPromiseImageTexture;
 namespace gl {
 class GLImage;
 }
+
+namespace gfx {
+class NativePixmap;
+}  // namespace gfx
+
+namespace media {
+class VASurface;
+}  // namespace media
 
 namespace gpu {
 class TextureBase;
@@ -128,6 +138,9 @@ class SharedImageRepresentationFactoryRef : public SharedImageRepresentation {
     return backing()->ProduceLegacyMailbox(mailbox_manager);
   }
   bool PresentSwapChain() { return backing()->PresentSwapChain(); }
+  void RegisterImageFactory(SharedImageFactory* factory) {
+    backing()->RegisterImageFactory(factory);
+  }
 };
 
 class GPU_GLES2_EXPORT SharedImageRepresentationGLTextureBase
@@ -372,6 +385,66 @@ class GPU_GLES2_EXPORT SharedImageRepresentationOverlay
   // TODO(penghuang): Refactor it to not depend on GL.
   // Get the backing as GLImage for GLSurface::ScheduleOverlayPlane.
   virtual gl::GLImage* GetGLImage() = 0;
+};
+
+// An interface that allows a SharedImageBacking to hold a reference to VA-API
+// surface without depending on //media/gpu/vaapi targets.
+class VaapiDependencies {
+ public:
+  virtual ~VaapiDependencies() = default;
+  virtual const media::VASurface* GetVaSurface() const = 0;
+  virtual bool SyncSurface() = 0;
+};
+
+// Interface that allows a SharedImageBacking to create VaapiDependencies from a
+// NativePixmap without depending on //media/gpu/vaapi targets.
+class VaapiDependenciesFactory {
+ public:
+  virtual ~VaapiDependenciesFactory() = default;
+  // Returns a VaapiDependencies or nullptr on failure.
+  virtual std::unique_ptr<VaapiDependencies> CreateVaapiDependencies(
+      scoped_refptr<gfx::NativePixmap> pixmap) = 0;
+};
+
+// Representation of a SharedImageBacking as a VA-API surface.
+// This representation is currently only supported by SharedImageBackingOzone.
+//
+// Synchronized access is currently not required in this representation because:
+//
+// For reads:
+// We will be using this for the destination of decoding work, so no read access
+// synchronization is needed from the point of view of the VA-API.
+//
+// For writes:
+// Because of the design of the current video pipeline, we don't start the
+// decoding work until we're sure that the destination buffer is not being used
+// by the rest of the pipeline. However, we still need to keep track of write
+// accesses so that other representations can synchronize with the decoder.
+class GPU_GLES2_EXPORT SharedImageRepresentationVaapi
+    : public SharedImageRepresentation {
+ public:
+  class GPU_GLES2_EXPORT ScopedWriteAccess
+      : public ScopedAccessBase<SharedImageRepresentationVaapi> {
+   public:
+    ScopedWriteAccess(util::PassKey<SharedImageRepresentationVaapi> pass_key,
+                      SharedImageRepresentationVaapi* representation);
+
+    ~ScopedWriteAccess();
+
+    const media::VASurface* va_surface();
+  };
+  SharedImageRepresentationVaapi(SharedImageManager* manager,
+                                 SharedImageBacking* backing,
+                                 MemoryTypeTracker* tracker,
+                                 VaapiDependencies* vaapi_dependency);
+  ~SharedImageRepresentationVaapi() override;
+
+  std::unique_ptr<ScopedWriteAccess> BeginScopedWriteAccess();
+
+ private:
+  VaapiDependencies* vaapi_deps_;
+  virtual void EndAccess() = 0;
+  virtual void BeginAccess() = 0;
 };
 
 }  // namespace gpu

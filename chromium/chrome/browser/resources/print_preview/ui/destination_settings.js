@@ -7,7 +7,12 @@ import 'chrome://resources/cr_elements/hidden_style_css.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
 import '../data/user_manager.js';
 import './destination_dialog.js';
+// <if expr="not chromeos">
 import './destination_select.js';
+// </if>
+// <if expr="chromeos">
+import './destination_select_cros.js';
+// </if>
 import './print_preview_shared_css.js';
 import './print_preview_vars_css.js';
 import './throbber_css.js';
@@ -20,7 +25,7 @@ import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
 import {WebUIListenerBehavior} from 'chrome://resources/js/web_ui_listener_behavior.m.js';
 import {beforeNextRender, html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {CloudPrintInterface} from '../cloud_print_interface.js';
+import {CloudPrintInterfaceImpl} from '../cloud_print_interface_impl.js';
 import {createDestinationKey, createRecentDestinationKey, Destination, DestinationOrigin, makeRecentDestination, RecentDestination} from '../data/destination.js';
 import {DestinationErrorType, DestinationStore} from '../data/destination_store.js';
 import {InvitationStore} from '../data/invitation_store.js';
@@ -52,12 +57,6 @@ Polymer({
   ],
 
   properties: {
-    /** @type {CloudPrintInterface} */
-    cloudPrintInterface: {
-      type: Object,
-      observer: 'onCloudPrintInterfaceSet_',
-    },
-
     dark: Boolean,
 
     /** @type {?Destination} */
@@ -96,7 +95,10 @@ Polymer({
     },
 
     /** @private {boolean} */
-    cloudPrintDisabled_: Boolean,
+    cloudPrintDisabled_: {
+      type: Boolean,
+      value: true,
+    },
 
     /** @private {?DestinationStore} */
     destinationStore_: {
@@ -143,15 +145,9 @@ Polymer({
     pdfPrinterDisabled_: Boolean,
 
     /** @private */
-    shouldHideSpinner_: {
+    loaded_: {
       type: Boolean,
-      computed: 'computeShouldHideSpinner_(destinationState, destination)',
-    },
-
-    /** @private {string} */
-    statusText_: {
-      type: String,
-      computed: 'computeStatusText_(destination)',
+      computed: 'computeLoaded_(destinationState, destination)',
     },
 
     /** @private {!Array<string>} */
@@ -205,26 +201,19 @@ Polymer({
   },
 
   /** @private */
-  onCloudPrintInterfaceSet_() {
-    const cloudPrintInterface = assert(this.cloudPrintInterface);
-    this.destinationStore_.setCloudPrintInterface(cloudPrintInterface);
-    this.invitationStore_.setCloudPrintInterface(cloudPrintInterface);
-  },
-
-  /** @private */
-  updateDriveDestinationReady_() {
+  updateDriveDestination_() {
     const key = createDestinationKey(
         Destination.GooglePromotedId.DOCS, DestinationOrigin.COOKIES,
         this.activeUser_);
-    this.driveDestinationReady_ =
-        !!this.destinationStore_.getDestinationByKey(key);
+    this.driveDestinationKey_ =
+        this.destinationStore_.getDestinationByKey(key) ? key : '';
   },
 
   /** @private */
   onActiveUserChanged_() {
     this.destinationStore_.startLoadCookieDestination(
         Destination.GooglePromotedId.DOCS);
-    this.updateDriveDestinationReady_();
+    this.updateDriveDestination_();
     const recentDestinations = this.getSettingValue('recentDestinations');
     recentDestinations.forEach(destination => {
       if (destination.origin === DestinationOrigin.COOKIES &&
@@ -293,6 +282,12 @@ Polymer({
   init(
       defaultPrinter, pdfPrinterDisabled, serializedDefaultDestinationRulesStr,
       userAccounts, syncAvailable) {
+    const cloudPrintInterface = CloudPrintInterfaceImpl.getInstance();
+    if (cloudPrintInterface.isConfigured()) {
+      this.cloudPrintDisabled_ = false;
+      this.destinationStore_.setCloudPrintInterface(cloudPrintInterface);
+      this.invitationStore_.setCloudPrintInterface(cloudPrintInterface);
+    }
     this.pdfPrinterDisabled_ = pdfPrinterDisabled;
     this.$.userManager.initUserAccounts(userAccounts, syncAvailable);
     this.destinationStore_.init(
@@ -437,7 +432,7 @@ Polymer({
     });
 
     this.displayedDestinations_ = updatedDestinations;
-    this.updateDriveDestinationReady_();
+    this.updateDriveDestination_();
   },
 
   /**
@@ -451,27 +446,12 @@ Polymer({
   },
 
   /** @private */
-  computeShouldHideSpinner_() {
+  computeLoaded_() {
     return this.destinationState === DestinationState.ERROR ||
         this.destinationState === DestinationState.UPDATED ||
         (this.destinationState === DestinationState.SET && !!this.destination &&
          (!!this.destination.capabilities ||
           this.destination.id === Destination.GooglePromotedId.SAVE_AS_PDF));
-  },
-
-  /**
-   * @return {string} The connection status text to display.
-   * @private
-   */
-  computeStatusText_() {
-    // |destination| can be either undefined, or null here.
-    if (!this.destination) {
-      return '';
-    }
-
-    return this.destination.shouldShowInvalidCertificateError ?
-        this.i18n('noLongerSupportedFragment') :
-        this.destination.connectionStatusText;
   },
 
   // <if expr="chromeos">
@@ -511,7 +491,7 @@ Polymer({
    */
   onAccountChange_(e) {
     this.$.userManager.updateActiveUser(e.detail, true);
-    this.updateDriveDestinationReady_();
+    this.updateDriveDestination_();
   },
 
   /** @private */

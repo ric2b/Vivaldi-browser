@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/run_loop.h"
+#include "build/build_config.h"
 #include "chrome/browser/geolocation/geolocation_permission_context_delegate.h"
 #include "chrome/browser/permissions/permission_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -16,6 +17,7 @@
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/common/url_constants.h"
+#include "content/public/test/browser_test.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 
 namespace {
@@ -116,8 +118,17 @@ IN_PROC_BROWSER_TEST_F(PermissionManagerBrowserTest,
   // browser explicitly.
 }
 
+// Disable the test as it's flaky on Win7 dbg.
+// crbug.com/1068190
+#if defined(OS_WIN) && !defined(NDEBUG)
+#define MAYBE_ServiceWorkerPermissionAfterRendererCrash \
+  DISABLED_ServiceWorkerPermissionAfterRendererCrash
+#else
+#define MAYBE_ServiceWorkerPermissionAfterRendererCrash \
+  ServiceWorkerPermissionAfterRendererCrash
+#endif
 IN_PROC_BROWSER_TEST_F(PermissionManagerBrowserTest,
-                       ServiceWorkerPermissionAfterRendererCrash) {
+                       MAYBE_ServiceWorkerPermissionAfterRendererCrash) {
   content::ScopedAllowRendererCrashes scoped_allow_renderer_crashes_;
 
   content::WindowedNotificationObserver crash_observer(

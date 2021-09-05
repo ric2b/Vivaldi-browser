@@ -14,6 +14,7 @@
 #include "chrome/browser/extensions/api/declarative_net_request/dnr_test_base.h"
 #include "chrome/browser/extensions/chrome_test_extension_loader.h"
 #include "chrome/browser/extensions/extension_util.h"
+#include "components/version_info/channel.h"
 #include "extensions/browser/api/declarative_net_request/composite_matcher.h"
 #include "extensions/browser/api/declarative_net_request/request_action.h"
 #include "extensions/browser/api/declarative_net_request/ruleset_matcher.h"
@@ -27,10 +28,12 @@
 #include "extensions/common/api/declarative_net_request.h"
 #include "extensions/common/api/declarative_net_request/constants.h"
 #include "extensions/common/api/declarative_net_request/test_utils.h"
+#include "extensions/common/features/feature_channel.h"
 #include "extensions/common/file_util.h"
 #include "extensions/common/manifest_handlers/background_info.h"
 #include "extensions/common/url_pattern.h"
 #include "net/http/http_util.h"
+#include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -41,8 +44,6 @@ namespace declarative_net_request {
 namespace dnr_api = api::declarative_net_request;
 
 namespace {
-
-constexpr char kJSONRulesFilename[] = "rules_file.json";
 
 class RulesetManagerTest : public DNRTestBase {
  public:
@@ -72,7 +73,9 @@ class RulesetManagerTest : public DNRTestBase {
                            ? ConfigFlag::kConfig_HasBackgroundScript
                            : ConfigFlag::kConfig_None;
 
-    TestRulesetInfo info = {kJSONRulesFilename, std::move(*ToListValue(rules))};
+    constexpr char kRulesetID[] = "id";
+    constexpr char kJSONRulesFilename[] = "rules_file.json";
+    TestRulesetInfo info(kRulesetID, kJSONRulesFilename, *ToListValue(rules));
     WriteManifestAndRuleset(extension_dir, info, host_permissions, flags);
 
     last_loaded_extension_ =
@@ -169,7 +172,7 @@ TEST_P(RulesetManagerTest, MultipleRulesets) {
            ((*request.dnr_actions)[0] ==
             CreateRequestActionForTesting(
                 RequestActionType::BLOCK, rule_id, kDefaultPriority,
-                dnr_api::SOURCE_TYPE_MANIFEST, extension_id));
+                kMinValidStaticRulesetID, extension_id));
   };
 
   for (int mask = 0; mask < 4; mask++) {
@@ -248,7 +251,7 @@ TEST_P(RulesetManagerTest, IncognitoRequests) {
   ASSERT_EQ(1u, request_info.dnr_actions->size());
   EXPECT_EQ(CreateRequestActionForTesting(
                 RequestActionType::BLOCK, *rule_one.id, kDefaultPriority,
-                dnr_api::SOURCE_TYPE_MANIFEST, last_loaded_extension()->id()),
+                kMinValidStaticRulesetID, last_loaded_extension()->id()),
             (*request_info.dnr_actions)[0]);
   request_info.dnr_actions.reset();
 
@@ -262,7 +265,7 @@ TEST_P(RulesetManagerTest, IncognitoRequests) {
   ASSERT_EQ(1u, request_info.dnr_actions->size());
   EXPECT_EQ(CreateRequestActionForTesting(
                 RequestActionType::BLOCK, *rule_one.id, kDefaultPriority,
-                dnr_api::SOURCE_TYPE_MANIFEST, last_loaded_extension()->id()),
+                kMinValidStaticRulesetID, last_loaded_extension()->id()),
             (*request_info.dnr_actions)[0]);
   request_info.dnr_actions.reset();
 
@@ -270,7 +273,7 @@ TEST_P(RulesetManagerTest, IncognitoRequests) {
   ASSERT_EQ(1u, request_info.dnr_actions->size());
   EXPECT_EQ(CreateRequestActionForTesting(
                 RequestActionType::BLOCK, *rule_one.id, kDefaultPriority,
-                dnr_api::SOURCE_TYPE_MANIFEST, last_loaded_extension()->id()),
+                kMinValidStaticRulesetID, last_loaded_extension()->id()),
             (*request_info.dnr_actions)[0]);
   request_info.dnr_actions.reset();
 }
@@ -315,7 +318,7 @@ TEST_P(RulesetManagerTest, TotalEvaluationTimeHistogram) {
     ASSERT_EQ(1u, example_com_request.dnr_actions->size());
     EXPECT_EQ(CreateRequestActionForTesting(
                   RequestActionType::BLOCK, *rule.id, kDefaultPriority,
-                  dnr_api::SOURCE_TYPE_MANIFEST, last_loaded_extension()->id()),
+                  kMinValidStaticRulesetID, last_loaded_extension()->id()),
               (*example_com_request.dnr_actions)[0]);
 
     tester.ExpectTotalCount(kHistogramName, 1);
@@ -350,7 +353,7 @@ TEST_P(RulesetManagerTest, Redirect) {
   const char* kExampleURL = "http://example.com";
   RequestAction expected_redirect_action = CreateRequestActionForTesting(
       RequestActionType::REDIRECT, *rule.id, *rule.priority,
-      dnr_api::SOURCE_TYPE_MANIFEST, last_loaded_extension()->id());
+      kMinValidStaticRulesetID, last_loaded_extension()->id());
   expected_redirect_action.redirect_url = GURL("http://google.com");
   WebRequestInfo request_1(GetRequestParamsForURL(kExampleURL, base::nullopt));
   manager()->EvaluateRequest(request_1, is_incognito_context);
@@ -424,7 +427,7 @@ TEST_P(RulesetManagerTest, ExtensionScheme) {
   ASSERT_EQ(1u, request_1.dnr_actions->size());
   EXPECT_EQ(CreateRequestActionForTesting(
                 RequestActionType::BLOCK, kMinValidID, kDefaultPriority,
-                dnr_api::SOURCE_TYPE_MANIFEST, extension_1->id()),
+                kMinValidStaticRulesetID, extension_1->id()),
             (*request_1.dnr_actions)[0]);
 
   // Ensure that the background page for |extension_1| won't be blocked or
@@ -453,77 +456,135 @@ TEST_P(RulesetManagerTest, ExtensionScheme) {
   EXPECT_TRUE(request_4.dnr_actions->empty());
 }
 
-// Test that headers to be removed in removeHeaders rules are attributed to the
-// correct extension.
-TEST_P(RulesetManagerTest, RemoveHeaders) {
+// Test that the correct modifyHeaders actions are returned for each extension.
+TEST_P(RulesetManagerTest, ModifyHeaders) {
+  // TODO(crbug.com/947591): Remove the channel override once implementation of
+  // modifyHeaders action is complete.
+  ScopedCurrentChannel channel(::version_info::Channel::UNKNOWN);
+
   const Extension* extension_1 = nullptr;
   const Extension* extension_2 = nullptr;
-  // Add an extension with a background page which removes the "cookie" and
-  // "setCookie" headers.
+
+  // Add an extension which removes the "header1" and "header2" headers.
   {
     std::unique_ptr<CompositeMatcher> matcher;
     TestRule rule = CreateGenericRule();
     rule.condition->url_filter = std::string("*");
-    rule.action->type = std::string("removeHeaders");
-    rule.action->remove_headers_list =
-        std::vector<std::string>({"cookie", "setCookie"});
+    rule.action->type = std::string("modifyHeaders");
+    rule.action->request_headers =
+        std::vector<TestHeaderInfo>({TestHeaderInfo("header1", "remove"),
+                                     TestHeaderInfo("header2", "remove")});
 
-    ASSERT_NO_FATAL_FAILURE(
-        CreateMatcherForRules({rule}, "test extension", &matcher));
+    ASSERT_NO_FATAL_FAILURE(CreateMatcherForRules(
+        {rule}, "test extension", &matcher, {URLPattern::kAllUrlsPattern}));
     extension_1 = last_loaded_extension();
     manager()->AddRuleset(extension_1->id(), std::move(matcher));
   }
 
-  // Add another extension with a background page which removes the "cookie" and
-  // "referer" headers.
+  // Add another extension which removes the "header1" and "header3" headers.
   {
     std::unique_ptr<CompositeMatcher> matcher;
     TestRule rule = CreateGenericRule();
     rule.condition->url_filter = std::string("*");
-    rule.action->type = std::string("removeHeaders");
-    rule.action->remove_headers_list =
-        std::vector<std::string>({"cookie", "referer"});
+    rule.action->type = std::string("modifyHeaders");
+    rule.action->request_headers =
+        std::vector<TestHeaderInfo>({TestHeaderInfo("header1", "remove")});
+    rule.action->response_headers =
+        std::vector<TestHeaderInfo>({TestHeaderInfo("header3", "remove")});
 
-    ASSERT_NO_FATAL_FAILURE(
-        CreateMatcherForRules({rule}, "test extension 2", &matcher));
+    ASSERT_NO_FATAL_FAILURE(CreateMatcherForRules(
+        {rule}, "test extension 2", &matcher, {URLPattern::kAllUrlsPattern}));
     extension_2 = last_loaded_extension();
     manager()->AddRuleset(extension_2->id(), std::move(matcher));
   }
 
-  EXPECT_EQ(2u, manager()->GetMatcherCountForTest());
+  ASSERT_EQ(2u, manager()->GetMatcherCountForTest());
 
-  // Create a request with the "cookie" and "referer" request headers, and the
-  // "set-cookie" response header.
-  WebRequestInfo request_1(GetRequestParamsForURLWithHeaders(
-      "http://example.com", std::vector<std::string>({"cookie", "referer"})));
-  request_1.response_headers = base::MakeRefCounted<net::HttpResponseHeaders>(
-      net::HttpUtil::AssembleRawHeaders("HTTP/1.1 200 OK\r\n"
-                                        "Content-Type: text/plain; UTF-8\r\n"
-                                        "Set-Cookie: custom/value\r\n"));
+  WebRequestInfo request(GetRequestParamsForURL("http://example.com"));
 
   const std::vector<RequestAction>& actual_actions =
-      manager()->EvaluateRequest(request_1, false /*is_incognito_context*/);
-  ASSERT_EQ(2u, actual_actions.size());
+      manager()->EvaluateRequest(request, false /*is_incognito_context*/);
 
-  // Removal of the cookie header should be attributed to |extension_2| because
-  // it was installed later than |extension_1| and thus has more priority.
+  // Create the expected RequestAction for |extension_2|.
   RequestAction expected_action_1 = CreateRequestActionForTesting(
-      RequestActionType::REMOVE_HEADERS, kMinValidID, kDefaultPriority,
-      dnr_api::SOURCE_TYPE_MANIFEST, extension_2->id());
-  expected_action_1.request_headers_to_remove.push_back(
-      net::HttpRequestHeaders::kCookie);
+      RequestActionType::MODIFY_HEADERS, kMinValidID, kDefaultPriority,
+      kMinValidStaticRulesetID, extension_2->id());
+  expected_action_1.request_headers_to_modify = {
+      RequestAction::HeaderInfo("header1", dnr_api::HEADER_OPERATION_REMOVE)};
+  expected_action_1.response_headers_to_modify = {
+      RequestAction::HeaderInfo("header3", dnr_api::HEADER_OPERATION_REMOVE)};
 
-  // Removal of the referer header should be attributed to |extension_2|.
-  expected_action_1.request_headers_to_remove.push_back(
-      net::HttpRequestHeaders::kReferer);
-
+  // Create the expected RequestAction for |extension_1|.
   RequestAction expected_action_2 = CreateRequestActionForTesting(
-      RequestActionType::REMOVE_HEADERS, kMinValidID, kDefaultPriority,
-      dnr_api::SOURCE_TYPE_MANIFEST, extension_1->id());
-  expected_action_2.response_headers_to_remove.push_back("set-cookie");
+      RequestActionType::MODIFY_HEADERS, kMinValidID, kDefaultPriority,
+      kMinValidStaticRulesetID, extension_1->id());
+  expected_action_2.request_headers_to_modify = {
+      RequestAction::HeaderInfo("header1", dnr_api::HEADER_OPERATION_REMOVE),
+      RequestAction::HeaderInfo("header2", dnr_api::HEADER_OPERATION_REMOVE)};
 
-  EXPECT_EQ(expected_action_1, actual_actions[0]);
-  EXPECT_EQ(expected_action_2, actual_actions[1]);
+  // Verify that the list of actions is sorted in descending order of extension
+  // priority.
+  EXPECT_THAT(actual_actions,
+              ::testing::ElementsAre(
+                  ::testing::Eq(::testing::ByRef(expected_action_1)),
+                  ::testing::Eq(::testing::ByRef(expected_action_2))));
+}
+
+// Test that an extension's modify header rules are applied on a request only if
+// it has host permissions for the request.
+TEST_P(RulesetManagerTest, ModifyHeaders_HostPermissions) {
+  // TODO(crbug.com/947591): Remove the channel override once implementation of
+  // modifyHeaders action is complete.
+  ScopedCurrentChannel channel(::version_info::Channel::UNKNOWN);
+
+  // Add an extension which removes the "header1" header with host permissions
+  // for example.com.
+  std::unique_ptr<CompositeMatcher> matcher;
+  TestRule rule = CreateGenericRule();
+  rule.condition->url_filter = std::string("*");
+  rule.action->type = std::string("modifyHeaders");
+  rule.action->request_headers =
+      std::vector<TestHeaderInfo>({TestHeaderInfo("header1", "remove")});
+
+  ASSERT_NO_FATAL_FAILURE(CreateMatcherForRules(
+      {rule}, "test extension", &matcher, {"*://example.com/*"}));
+  const Extension* extension = last_loaded_extension();
+  manager()->AddRuleset(extension->id(), std::move(matcher));
+
+  ASSERT_EQ(1u, manager()->GetMatcherCountForTest());
+
+  {
+    WebRequestInfo request(GetRequestParamsForURL("http://example.com"));
+    const std::vector<RequestAction>& actual_actions =
+        manager()->EvaluateRequest(request, false /*is_incognito_context*/);
+
+    RequestAction expected_action = CreateRequestActionForTesting(
+        RequestActionType::MODIFY_HEADERS, kMinValidID, kDefaultPriority,
+        kMinValidStaticRulesetID, extension->id());
+    expected_action.request_headers_to_modify = {
+        RequestAction::HeaderInfo("header1", dnr_api::HEADER_OPERATION_REMOVE)};
+
+    EXPECT_THAT(actual_actions, ::testing::ElementsAre(::testing::Eq(
+                                    ::testing::ByRef(expected_action))));
+  }
+
+  {
+    WebRequestInfo request(GetRequestParamsForURL("http://nopermissions.com"));
+    const std::vector<RequestAction>& actual_actions =
+        manager()->EvaluateRequest(request, false /*is_incognito_context*/);
+    EXPECT_TRUE(actual_actions.empty());
+  }
+
+  {
+    // Has access to url but no access to initiator, so no actions should be
+    // returned.
+    WebRequestInfo request(GetRequestParamsForURL(
+        "http://example.com",
+        url::Origin::Create(GURL("http://nopermissions.com"))));
+    const std::vector<RequestAction>& actual_actions =
+        manager()->EvaluateRequest(request, false /*is_incognito_context*/);
+    EXPECT_TRUE(actual_actions.empty());
+  }
 }
 
 TEST_P(RulesetManagerTest, HostPermissionForInitiator) {
@@ -610,7 +671,7 @@ TEST_P(RulesetManagerTest, HostPermissionForInitiator) {
     for (const auto& test : cases) {
       RequestAction redirect_action = CreateRequestActionForTesting(
           RequestActionType::REDIRECT, kMinValidID, kMinValidPriority,
-          dnr_api::SOURCE_TYPE_MANIFEST, redirect_extension_id);
+          kMinValidStaticRulesetID, redirect_extension_id);
       redirect_action.redirect_url = GURL("https://foo.com/");
 
       verify_test_case(
@@ -627,7 +688,7 @@ TEST_P(RulesetManagerTest, HostPermissionForInitiator) {
     for (const auto& test : cases) {
       RequestAction block_action = CreateRequestActionForTesting(
           RequestActionType::BLOCK, kMinValidID, kDefaultPriority,
-          dnr_api::SOURCE_TYPE_MANIFEST, blocking_extension_id);
+          kMinValidStaticRulesetID, blocking_extension_id);
 
       verify_test_case(
           test.url, test.initiator,

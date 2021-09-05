@@ -12,8 +12,6 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.EditText;
 
-import androidx.preference.PreferenceFragmentCompat;
-
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
@@ -31,9 +29,10 @@ import org.chromium.chrome.browser.homepage.HomepageManager;
 import org.chromium.chrome.browser.homepage.settings.HomepageEditor;
 import org.chromium.chrome.browser.homepage.settings.HomepageSettings;
 import org.chromium.chrome.browser.settings.SettingsActivity;
-import org.chromium.chrome.browser.tabmodel.EmptyTabModelObserver;
+import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
 import org.chromium.chrome.browser.tabmodel.TabList;
 import org.chromium.chrome.browser.tabmodel.TabModel;
+import org.chromium.chrome.browser.tabmodel.TabModelObserver;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.partnercustomizations.TestPartnerBrowserCustomizationsProvider;
 import org.chromium.chrome.test.util.ChromeTabUtils;
@@ -56,6 +55,12 @@ public class PartnerHomepageIntegrationTest {
     @Rule
     public BasePartnerBrowserCustomizationIntegrationTestRule mActivityTestRule =
             new BasePartnerBrowserCustomizationIntegrationTestRule();
+    @Rule
+    public SettingsActivityTestRule<HomepageSettings> mHomepageSettingsTestRule =
+            new SettingsActivityTestRule<>(HomepageSettings.class);
+    @Rule
+    public SettingsActivityTestRule<HomepageEditor> mHomepageEditorTestRule =
+            new SettingsActivityTestRule<>(HomepageEditor.class);
 
     private static final String TEST_PAGE = "/chrome/test/data/android/about.html";
 
@@ -150,7 +155,7 @@ public class PartnerHomepageIntegrationTest {
     public void testPreferenceCustomUriFixup() {
         // Change home page custom URI on hompage edit screen.
         final SettingsActivity editHomepagePreferenceActivity =
-                mActivityTestRule.startSettingsActivity(HomepageEditor.class.getName());
+                mHomepageEditorTestRule.startSettingsActivity();
         TestThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             // TODO(crbug.com/635567): Fix this properly.
@@ -198,13 +203,12 @@ public class PartnerHomepageIntegrationTest {
     public void testCloseAllTabs() {
         final CallbackHelper tabClosed = new CallbackHelper();
         final TabModel tabModel = mActivityTestRule.getActivity().getCurrentTabModel();
-        mActivityTestRule.getActivity().getCurrentTabModel().addObserver(
-                new EmptyTabModelObserver() {
-                    @Override
-                    public void didCloseTab(int tabId, boolean incognito) {
-                        if (tabModel.getCount() == 0) tabClosed.notifyCalled();
-                    }
-                });
+        mActivityTestRule.getActivity().getCurrentTabModel().addObserver(new TabModelObserver() {
+            @Override
+            public void didCloseTab(int tabId, boolean incognito) {
+                if (tabModel.getCount() == 0) tabClosed.notifyCalled();
+            }
+        });
         InstrumentationRegistry.getInstrumentation().runOnMainSync(new Runnable() {
             @Override
             public void run() {
@@ -239,10 +243,8 @@ public class PartnerHomepageIntegrationTest {
     private void toggleHomepageSwitchPreference(boolean expected) {
         // Launch preference activity with Homepage settings fragment.
         SettingsActivity homepagePreferenceActivity =
-                mActivityTestRule.startSettingsActivity(HomepageSettings.class.getName());
-        PreferenceFragmentCompat fragment =
-                (PreferenceFragmentCompat) homepagePreferenceActivity.getSupportFragmentManager()
-                        .findFragmentById(android.R.id.content);
+                mHomepageSettingsTestRule.startSettingsActivity();
+        HomepageSettings fragment = mHomepageSettingsTestRule.getFragment();
         ChromeSwitchPreference preference = (ChromeSwitchPreference) fragment.findPreference(
                 HomepageSettings.PREF_HOMEPAGE_SWITCH);
         Assert.assertNotNull(preference);

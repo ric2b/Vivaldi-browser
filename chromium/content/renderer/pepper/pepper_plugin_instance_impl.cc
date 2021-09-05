@@ -91,14 +91,15 @@
 #include "ppapi/thunk/enter.h"
 #include "ppapi/thunk/ppb_buffer_api.h"
 #include "printing/buildflags/buildflags.h"
+#include "printing/mojom/print.mojom.h"
 #include "skia/ext/platform_canvas.h"
+#include "third_party/blink/public/common/input/web_coalesced_input_event.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/common/input/web_pointer_event.h"
 #include "third_party/blink/public/common/input/web_touch_event.h"
 #include "third_party/blink/public/platform/url_conversion.h"
-#include "third_party/blink/public/platform/web_coalesced_input_event.h"
 #include "third_party/blink/public/platform/web_float_rect.h"
 #include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
@@ -328,8 +329,8 @@ std::unique_ptr<const char* []> StringVectorToArgArray(
 // for things like screen brightness and volume control.
 bool IsReservedSystemInputEvent(const blink::WebInputEvent& event) {
 #if defined(OS_CHROMEOS)
-  if (event.GetType() != WebInputEvent::kKeyDown &&
-      event.GetType() != WebInputEvent::kKeyUp)
+  if (event.GetType() != WebInputEvent::Type::kKeyDown &&
+      event.GetType() != WebInputEvent::Type::kKeyUp)
     return false;
   const blink::WebKeyboardEvent& key_event =
       static_cast<const blink::WebKeyboardEvent&>(event);
@@ -386,6 +387,13 @@ void PrintPDFOutput(PP_Resource print_output,
 
   metafile->InitFromData(mapper);
 #endif  // BUILDFLAG(ENABLE_PRINTING)
+}
+
+constexpr char kChromePrint[] = "chrome://print/";
+
+bool IsPrintPreviewUrl(const GURL& document_url) {
+  return url::Origin::Create(document_url.GetOrigin()) ==
+         url::Origin::Create(GURL(kChromePrint));
 }
 
 }  // namespace
@@ -1109,7 +1117,7 @@ bool PepperPluginInstanceImpl::HandleInputEvent(
     return false;
 
   if (!has_been_clicked_ && is_flash_plugin_ &&
-      event.GetType() == blink::WebInputEvent::kMouseDown &&
+      event.GetType() == blink::WebInputEvent::Type::kMouseDown &&
       (event.GetModifiers() & blink::WebInputEvent::kLeftButtonDown)) {
     has_been_clicked_ = true;
   }
@@ -2013,16 +2021,17 @@ bool PepperPluginInstanceImpl::GetPrintPresetOptionsFromDocument(
   preset_options->is_scaling_disabled = PP_ToBool(options.is_scaling_disabled);
   switch (options.duplex) {
     case PP_PRIVATEDUPLEXMODE_SIMPLEX:
-      preset_options->duplex_mode = blink::kWebSimplex;
+      preset_options->duplex_mode = printing::mojom::DuplexMode::kSimplex;
       break;
     case PP_PRIVATEDUPLEXMODE_SHORT_EDGE:
-      preset_options->duplex_mode = blink::kWebShortEdge;
+      preset_options->duplex_mode = printing::mojom::DuplexMode::kShortEdge;
       break;
     case PP_PRIVATEDUPLEXMODE_LONG_EDGE:
-      preset_options->duplex_mode = blink::kWebLongEdge;
+      preset_options->duplex_mode = printing::mojom::DuplexMode::kLongEdge;
       break;
     default:
-      preset_options->duplex_mode = blink::kWebUnknownDuplexMode;
+      preset_options->duplex_mode =
+          printing::mojom::DuplexMode::kUnknownDuplexMode;
       break;
   }
   preset_options->copies = options.copies;
@@ -2229,6 +2238,12 @@ void PepperPluginInstanceImpl::OnHiddenForPlaceholder(bool hidden) {
   UpdateLayer(false /* device_changed */);
 }
 
+bool PepperPluginInstanceImpl::SupportsKeyboardFocus() {
+  // Only PDF plugin supports keyboard focus. PDF plugin shouldn't be focusable
+  // if it's embedded in Print Preview.
+  return LoadPdfInterface() && !IsPrintPreviewUrl(document_url_);
+}
+
 void PepperPluginInstanceImpl::AddPluginObject(PluginObject* plugin_object) {
   DCHECK(live_plugin_objects_.find(plugin_object) ==
          live_plugin_objects_.end());
@@ -2279,8 +2294,9 @@ void PepperPluginInstanceImpl::SimulateInputEvent(
       CreateSimulatedWebInputEvents(
           input_event, view_data_.rect.point.x + view_data_.rect.size.width / 2,
           view_data_.rect.point.y + view_data_.rect.size.height / 2);
-  for (auto it = events.begin(); it != events.end(); ++it) {
-    widget->HandleInputEvent(blink::WebCoalescedInputEvent(*it->get()));
+  for (auto& event : events) {
+    widget->HandleInputEvent(
+        blink::WebCoalescedInputEvent(std::move(event), ui::LatencyInfo()));
   }
   if (input_event.event_type == PP_INPUTEVENT_TYPE_TOUCHSTART ||
       input_event.event_type == PP_INPUTEVENT_TYPE_TOUCHMOVE ||

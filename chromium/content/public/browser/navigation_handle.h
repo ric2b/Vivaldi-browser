@@ -12,12 +12,13 @@
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/reload_type.h"
 #include "content/public/browser/restore_type.h"
+#include "content/public/common/impression.h"
 #include "content/public/common/referrer.h"
 #include "content/public/common/transferrable_url_loader.mojom.h"
 #include "net/base/auth.h"
 #include "net/base/ip_endpoint.h"
+#include "net/base/isolation_info.h"
 #include "net/base/net_errors.h"
-#include "net/base/network_isolation_key.h"
 #include "net/dns/public/resolve_error_info.h"
 #include "net/http/http_response_info.h"
 #include "services/network/public/cpp/resource_request_body.h"
@@ -122,6 +123,14 @@ class CONTENT_EXPORT NavigationHandle {
   // The time the input leading to the navigation started. Will not be
   // set if unknown.
   virtual base::TimeTicks NavigationInputStart() = 0;
+
+  // The time the first HTTP request is sent.
+  // See comments on |NavigationRequest::first_request_start_| for details.
+  virtual base::TimeTicks FirstRequestStart() = 0;
+
+  // The time the headers of the first HTTP response is received.
+  // See comments on |NavigationRequest::first_response_start_| for details.
+  virtual base::TimeTicks FirstResponseStart() = 0;
 
   // Whether or not the navigation was started within a context menu.
   virtual bool WasStartedFromContextMenu() = 0;
@@ -263,6 +272,15 @@ class CONTENT_EXPORT NavigationHandle {
   virtual void SetRequestHeader(const std::string& header_name,
                                 const std::string& header_value) = 0;
 
+  // Set a request's header that is exempt from CORS checks. This is only
+  // honored if the NetworkContext was configured to allow any cors exempt
+  // header (see
+  // |NetworkContext::mojom::allow_any_cors_exempt_header_for_browser|) or
+  // if |header_name| is specified in
+  // |NetworkContextParams::cors_exempt_header_list|.
+  virtual void SetCorsExemptRequestHeader(const std::string& header_name,
+                                          const std::string& header_value) = 0;
+
   // Returns the response headers for the request, or nullptr if there aren't
   // any response headers or they have not been received yet. The response
   // headers may change during the navigation (e.g. after encountering a server
@@ -289,11 +307,11 @@ class CONTENT_EXPORT NavigationHandle {
   // Returns host resolution error info associated with the request.
   virtual net::ResolveErrorInfo GetResolveErrorInfo() = 0;
 
-  // Gets the NetworkIsolationKey associated with the navigation. Updated as
+  // Gets the net::IsolationInfo associated with the navigation. Updated as
   // redirects are followed. When one of the origins used to construct the
-  // NetworkIsolationKey is opaque, the returned NetworkIsolationKey will not be
-  // consistent between calls.
-  virtual net::NetworkIsolationKey GetNetworkIsolationKey() = 0;
+  // IsolationInfo is opaque, the returned IsolationInfo will not be consistent
+  // between calls.
+  virtual net::IsolationInfo GetIsolationInfo() = 0;
 
   // Returns the ID of the URLRequest associated with this navigation. Can only
   // be called from NavigationThrottle::WillProcessResponse and
@@ -332,6 +350,17 @@ class CONTENT_EXPORT NavigationHandle {
   // initiated from a link that had that attribute set.
   virtual const std::string& GetHrefTranslate() = 0;
 
+  // Returns, if available, the impression associated with the link clicked to
+  // initiate this navigation. The impression is available for the entire
+  // lifetime of the navigation.
+  virtual const base::Optional<Impression>& GetImpression() = 0;
+
+  // Returns the routing id associated with the frame that initiated the
+  // navigation. This can contain a null routing id if the navigation was not
+  // associated with a frame, or may return a valid routing id to a frame that
+  // no longer exists because it was deleted before the navigation began.
+  virtual const GlobalFrameRoutingId& GetInitiatorRoutingId() = 0;
+
   // Returns, if available, the origin of the document that has initiated the
   // navigation for this NavigationHandle.
   virtual const base::Optional<url::Origin>& GetInitiatorOrigin() = 0;
@@ -362,6 +391,11 @@ class CONTENT_EXPORT NavigationHandle {
   // effect.
   virtual void ForceEnableOriginTrials(
       const std::vector<std::string>& trials) = 0;
+
+  // Store whether or not we're overriding the user agent. This may only be
+  // called from DidStartNavigation().
+  virtual void SetIsOverridingUserAgent(bool override_ua) = 0;
+  virtual bool GetIsOverridingUserAgent() = 0;
 
   // Testing methods ----------------------------------------------------------
   //

@@ -88,6 +88,13 @@ class SafeBrowsingUrlCheckerImpl : public mojom::SafeBrowsingUrlChecker,
       bool enhanced_protection_enabled,
       base::WeakPtr<RealTimeUrlLookupService> url_lookup_service_on_ui);
 
+  // Constructor that takes only a ResourceType and a UrlCheckerDelegate,
+  // omitting other arguments that never have non-default values on iOS.
+  SafeBrowsingUrlCheckerImpl(
+      ResourceType resource_type,
+      scoped_refptr<UrlCheckerDelegate> url_checker_delegate,
+      const base::RepeatingCallback<web::WebState*()>& web_state_getter);
+
   ~SafeBrowsingUrlCheckerImpl() override;
 
   // mojom::SafeBrowsingUrlChecker implementation.
@@ -99,9 +106,9 @@ class SafeBrowsingUrlCheckerImpl : public mojom::SafeBrowsingUrlChecker,
 
   // NOTE: |callback| could be run synchronously before this method returns. Be
   // careful if |callback| could destroy this object.
-  void CheckUrl(const GURL& url,
-                const std::string& method,
-                NativeCheckUrlCallback callback);
+  virtual void CheckUrl(const GURL& url,
+                        const std::string& method,
+                        NativeCheckUrlCallback callback);
 
  private:
   class Notifier {
@@ -175,7 +182,8 @@ class SafeBrowsingUrlCheckerImpl : public mojom::SafeBrowsingUrlChecker,
       scoped_refptr<SafeBrowsingDatabaseManager> database_manager);
 
   // Called when the |request| from the real-time lookup service is sent.
-  void OnRTLookupRequest(std::unique_ptr<RTLookupRequest> request);
+  void OnRTLookupRequest(std::unique_ptr<RTLookupRequest> request,
+                         std::string oauth_token);
 
   // Called when the |response| from the real-time lookup service is received.
   // |is_rt_lookup_successful| is true if the response code is OK and the
@@ -219,7 +227,12 @@ class SafeBrowsingUrlCheckerImpl : public mojom::SafeBrowsingUrlChecker,
   const int load_flags_;
   const ResourceType resource_type_;
   const bool has_user_gesture_;
+  // TODO(crbug.com/1069047): |web_state_getter| is only used on iOS, and
+  // |web_contents_getter| is used on all other platforms.  This class should
+  // be refactored to use only the common functionality can be shared across
+  // platforms.
   base::RepeatingCallback<content::WebContents*()> web_contents_getter_;
+  base::RepeatingCallback<web::WebState*()> web_state_getter_;
   scoped_refptr<UrlCheckerDelegate> url_checker_delegate_;
   scoped_refptr<SafeBrowsingDatabaseManager> database_manager_;
 

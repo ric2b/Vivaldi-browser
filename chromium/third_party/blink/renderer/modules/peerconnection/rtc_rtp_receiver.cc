@@ -13,6 +13,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_rtp_decoding_parameters.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_rtp_header_extension_capability.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_rtc_rtp_header_extension_parameters.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/streams/readable_stream.h"
 #include "third_party/blink/renderer/core/streams/writable_stream.h"
@@ -88,31 +89,20 @@ void RTCRtpReceiver::setPlayoutDelayHint(base::Optional<double> hint,
   receiver_->SetJitterBufferMinimumDelay(playout_delay_hint_);
 }
 
-double RTCRtpReceiver::playoutDelayHint(bool& is_null) {
-  is_null = !playout_delay_hint_.has_value();
-  return playout_delay_hint_.value_or(0.0);
-}
-
-void RTCRtpReceiver::setPlayoutDelayHint(double value,
-                                         bool is_null,
-                                         ExceptionState& exception_state) {
-  base::Optional<double> hint =
-      is_null ? base::nullopt : base::Optional<double>(value);
-  if (hint && *hint < 0.0) {
-    exception_state.ThrowTypeError("playoutDelayHint can't be negative");
-    return;
+HeapVector<Member<RTCRtpSynchronizationSource>>
+RTCRtpReceiver::getSynchronizationSources(ScriptState* script_state,
+                                          ExceptionState& exception_state) {
+  if (!script_state->ContextIsValid()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "Window is detached");
+    return HeapVector<Member<RTCRtpSynchronizationSource>>();
   }
 
-  playout_delay_hint_ = hint;
-  receiver_->SetJitterBufferMinimumDelay(playout_delay_hint_);
-}
-
-HeapVector<Member<RTCRtpSynchronizationSource>>
-RTCRtpReceiver::getSynchronizationSources() {
   UpdateSourcesIfNeeded();
 
-  Document* document = Document::From(pc_->GetExecutionContext());
-  DocumentLoadTiming& time_converter = document->Loader()->GetTiming();
+  LocalDOMWindow* window = LocalDOMWindow::From(script_state);
+  DocumentLoadTiming& time_converter =
+      window->GetFrame()->Loader().GetDocumentLoader()->GetTiming();
 
   HeapVector<Member<RTCRtpSynchronizationSource>> synchronization_sources;
   for (const auto& web_source : web_sources_) {
@@ -139,11 +129,19 @@ RTCRtpReceiver::getSynchronizationSources() {
 }
 
 HeapVector<Member<RTCRtpContributingSource>>
-RTCRtpReceiver::getContributingSources() {
+RTCRtpReceiver::getContributingSources(ScriptState* script_state,
+                                       ExceptionState& exception_state) {
+  if (!script_state->ContextIsValid()) {
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "Window is detached");
+    return HeapVector<Member<RTCRtpContributingSource>>();
+  }
+
   UpdateSourcesIfNeeded();
 
-  Document* document = Document::From(pc_->GetExecutionContext());
-  DocumentLoadTiming& time_converter = document->Loader()->GetTiming();
+  LocalDOMWindow* window = LocalDOMWindow::From(script_state);
+  DocumentLoadTiming& time_converter =
+      window->GetFrame()->Loader().GetDocumentLoader()->GetTiming();
 
   HeapVector<Member<RTCRtpContributingSource>> contributing_sources;
   for (const auto& web_source : web_sources_) {
@@ -175,6 +173,15 @@ ScriptPromise RTCRtpReceiver::getStats(ScriptState* script_state) {
       WTF::Bind(WebRTCStatsReportCallbackResolver, WrapPersistent(resolver)),
       GetExposedGroupIds(script_state));
   return promise;
+}
+
+RTCInsertableStreams* RTCRtpReceiver::createEncodedStreams(
+    ScriptState* script_state,
+    ExceptionState& exception_state) {
+  if (track_->kind() == "audio")
+    return createEncodedAudioStreams(script_state, exception_state);
+  DCHECK_EQ(track_->kind(), "video");
+  return createEncodedVideoStreams(script_state, exception_state);
 }
 
 RTCInsertableStreams* RTCRtpReceiver::createEncodedAudioStreams(

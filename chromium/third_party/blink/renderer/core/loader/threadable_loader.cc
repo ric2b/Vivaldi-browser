@@ -45,6 +45,7 @@
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/frame/frame_console.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/web_feature.h"
@@ -230,7 +231,7 @@ ThreadableLoader::ThreadableLoader(
   }
 }
 
-void ThreadableLoader::Start(const ResourceRequest& request) {
+void ThreadableLoader::Start(ResourceRequest request) {
   original_security_origin_ = security_origin_ = request.RequestorOrigin();
   // Setting an outgoing referer is only supported in the async code path.
   DCHECK(async_ ||
@@ -277,16 +278,13 @@ void ThreadableLoader::Start(const ResourceRequest& request) {
   request_headers_ = request.HttpHeaderFields();
   report_upload_progress_ = request.ReportUploadProgress();
 
-  ResourceRequest new_request;
-  new_request.CopyFrom(request);
-
   // Set the service worker mode to none if "bypass for network" in DevTools is
   // enabled.
   bool should_bypass_service_worker = false;
   probe::ShouldBypassServiceWorker(execution_context_,
                                    &should_bypass_service_worker);
   if (should_bypass_service_worker)
-    new_request.SetSkipServiceWorker(true);
+    request.SetSkipServiceWorker(true);
 
   // Process the CORS protocol inside the ThreadableLoader for the
   // following cases:
@@ -311,15 +309,16 @@ void ThreadableLoader::Start(const ResourceRequest& request) {
   const bool is_controlled_by_service_worker =
       resource_fetcher_->IsControlledByServiceWorker() ==
       blink::mojom::ControllerServiceWorkerMode::kControlled;
-  if (!async_ || new_request.GetSkipServiceWorker() ||
+  if (!async_ || request.GetSkipServiceWorker() ||
       !SchemeRegistry::ShouldTreatURLSchemeAsAllowingServiceWorkers(
-          new_request.Url().Protocol()) ||
+          request.Url().Protocol()) ||
       !is_controlled_by_service_worker) {
-    DispatchInitialRequest(new_request);
+    DispatchInitialRequest(request);
     return;
   }
 
-  if (cors::IsCorsEnabledRequestMode(request.GetMode())) {
+  if (!out_of_blink_cors_ &&
+      cors::IsCorsEnabledRequestMode(request.GetMode())) {
     // Save the request to fallback_request_for_service_worker to use when the
     // service worker doesn't handle (call respondWith()) a CORS enabled
     // request.
@@ -328,7 +327,7 @@ void ThreadableLoader::Start(const ResourceRequest& request) {
     fallback_request_for_service_worker_.SetSkipServiceWorker(true);
   }
 
-  LoadRequest(new_request, resource_loader_options_);
+  LoadRequest(request, resource_loader_options_);
 }
 
 void ThreadableLoader::DispatchInitialRequest(ResourceRequest& request) {
@@ -633,9 +632,7 @@ bool ThreadableLoader::RedirectReceived(
 
     probe::DidReceiveCorsRedirectResponse(
         execution_context_, resource->InspectorId(),
-        GetDocument() && GetDocument()->GetFrame()
-            ? GetDocument()->GetFrame()->Loader().GetDocumentLoader()
-            : nullptr,
+        GetFrame() ? GetFrame()->Loader().GetDocumentLoader() : nullptr,
         redirect_response_to_pass, resource);
 
     if (auto error_status = cors::CheckRedirectLocation(
@@ -777,7 +774,7 @@ void ThreadableLoader::HandlePreflightResponse(
 void ThreadableLoader::ReportResponseReceived(
     uint64_t identifier,
     const ResourceResponse& response) {
-  LocalFrame* frame = GetDocument() ? GetDocument()->GetFrame() : nullptr;
+  LocalFrame* frame = GetFrame();
   if (!frame)
     return;
   DocumentLoader* loader = frame->Loader().GetDocumentLoader();
@@ -1069,8 +1066,9 @@ const SecurityOrigin* ThreadableLoader::GetSecurityOrigin() const {
                                 .GetSecurityOrigin();
 }
 
-Document* ThreadableLoader::GetDocument() const {
-  return Document::DynamicFrom(execution_context_.Get());
+LocalFrame* ThreadableLoader::GetFrame() const {
+  auto* window = DynamicTo<LocalDOMWindow>(execution_context_.Get());
+  return window ? window->GetFrame() : nullptr;
 }
 
 void ThreadableLoader::Trace(Visitor* visitor) {

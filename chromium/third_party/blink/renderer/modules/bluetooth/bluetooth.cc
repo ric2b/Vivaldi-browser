@@ -18,11 +18,11 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_bluetooth_advertising_event_init.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_bluetooth_le_scan_options.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_request_device_options.h"
-#include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/dom_exception.h"
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/frame.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/modules/bluetooth/bluetooth_advertising_event.h"
@@ -255,8 +255,7 @@ ScriptPromise Bluetooth::requestDevice(ScriptState* script_state,
 
   // If the algorithm is not allowed to show a popup, reject promise with a
   // SecurityError and abort these steps.
-  auto& doc = *Document::From(context);
-  auto* frame = doc.GetFrame();
+  auto* frame = To<LocalDOMWindow>(context)->GetFrame();
   if (!frame) {
     exception_state.ThrowTypeError(kInactiveDocumentError);
     return ScriptPromise();
@@ -327,20 +326,20 @@ static void ConvertRequestLEScanOptions(
 void Bluetooth::RequestScanningCallback(
     ScriptPromiseResolver* resolver,
     mojo::ReceiverId id,
-    mojom::blink::RequestScanningStartResultPtr result) {
+    mojom::blink::WebBluetoothRequestLEScanOptionsPtr options,
+    mojom::blink::WebBluetoothResult result) {
   if (!resolver->GetExecutionContext() ||
       resolver->GetExecutionContext()->IsContextDestroyed()) {
     return;
   }
 
-  if (result->is_error_result()) {
-    resolver->Reject(
-        BluetoothError::CreateDOMException(result->get_error_result()));
+  if (result != mojom::blink::WebBluetoothResult::SUCCESS) {
+    resolver->Reject(BluetoothError::CreateDOMException(result));
     return;
   }
 
-  auto* scan = MakeGarbageCollected<BluetoothLEScan>(
-      id, this, std::move(result->get_options()));
+  auto* scan =
+      MakeGarbageCollected<BluetoothLEScan>(id, this, std::move(options));
   resolver->Resolve(scan);
 }
 
@@ -367,8 +366,7 @@ ScriptPromise Bluetooth::requestLEScan(ScriptState* script_state,
 
   // If the algorithm is not allowed to show a popup, reject promise with a
   // SecurityError and abort these steps.
-  auto& doc = *Document::From(context);
-  auto* frame = doc.GetFrame();
+  auto* frame = To<LocalDOMWindow>(context)->GetFrame();
   if (!frame) {
     exception_state.ThrowTypeError(kInactiveDocumentError);
     return ScriptPromise();
@@ -391,55 +389,59 @@ ScriptPromise Bluetooth::requestLEScan(ScriptState* script_state,
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
 
-  mojo::PendingAssociatedRemote<mojom::blink::WebBluetoothScanClient> client;
+  mojo::PendingAssociatedRemote<mojom::blink::WebBluetoothAdvertisementClient>
+      client;
   // See https://bit.ly/2S0zRAS for task types.
   mojo::ReceiverId id =
-      client_receivers_.Add(this, client.InitWithNewEndpointAndPassReceiver(),
+      client_receivers_.Add(client.InitWithNewEndpointAndPassReceiver(),
                             context->GetTaskRunner(TaskType::kMiscPlatformAPI));
 
+  auto scan_options_copy = scan_options->Clone();
   service_->RequestScanningStart(
       std::move(client), std::move(scan_options),
       WTF::Bind(&Bluetooth::RequestScanningCallback, WrapPersistent(this),
-                WrapPersistent(resolver), id));
+                WrapPersistent(resolver), id, std::move(scan_options_copy)));
 
   return promise;
 }
 
-void Bluetooth::ScanEvent(mojom::blink::WebBluetoothScanResultPtr result) {
+void Bluetooth::AdvertisingEvent(
+    mojom::blink::WebBluetoothAdvertisingEventPtr advertising_event) {
   ExecutionContext* context =
       ExecutionContextLifecycleObserver::GetExecutionContext();
   DCHECK(context);
 
-  BluetoothDevice* bluetooth_device =
-      GetBluetoothDeviceRepresentingDevice(std::move(result->device), context);
+  BluetoothDevice* bluetooth_device = GetBluetoothDeviceRepresentingDevice(
+      std::move(advertising_event->device), context);
 
   HeapVector<blink::StringOrUnsignedLong> uuids;
-  for (const String& uuid : result->uuids) {
+  for (const String& uuid : advertising_event->uuids) {
     StringOrUnsignedLong value;
     value.SetString(uuid);
     uuids.push_back(value);
   }
 
   auto* manufacturer_data = MakeGarbageCollected<BluetoothManufacturerDataMap>(
-      result->manufacturer_data);
-  auto* service_data =
-      MakeGarbageCollected<BluetoothServiceDataMap>(result->service_data);
+      advertising_event->manufacturer_data);
+  auto* service_data = MakeGarbageCollected<BluetoothServiceDataMap>(
+      advertising_event->service_data);
 
   base::Optional<int8_t> rssi;
-  if (result->rssi_is_set)
-    rssi = result->rssi;
+  if (advertising_event->rssi_is_set)
+    rssi = advertising_event->rssi;
 
   base::Optional<int8_t> tx_power;
-  if (result->tx_power_is_set)
-    tx_power = result->tx_power;
+  if (advertising_event->tx_power_is_set)
+    tx_power = advertising_event->tx_power;
 
   base::Optional<uint16_t> appearance;
-  if (result->appearance_is_set)
-    appearance = result->appearance;
+  if (advertising_event->appearance_is_set)
+    appearance = advertising_event->appearance;
 
   auto* event = MakeGarbageCollected<BluetoothAdvertisingEvent>(
-      event_type_names::kAdvertisementreceived, bluetooth_device, result->name,
-      uuids, appearance, tx_power, rssi, manufacturer_data, service_data);
+      event_type_names::kAdvertisementreceived, bluetooth_device,
+      advertising_event->name, uuids, appearance, tx_power, rssi,
+      manufacturer_data, service_data);
   DispatchEvent(*event);
 }
 
@@ -463,12 +465,10 @@ ExecutionContext* Bluetooth::GetExecutionContext() const {
   return ExecutionContextLifecycleObserver::GetExecutionContext();
 }
 
-void Bluetooth::ContextDestroyed() {
-  client_receivers_.Clear();
-}
-
 void Bluetooth::Trace(Visitor* visitor) {
   visitor->Trace(device_instance_map_);
+  visitor->Trace(client_receivers_);
+  visitor->Trace(service_);
   EventTargetWithInlineData::Trace(visitor);
   ExecutionContextLifecycleObserver::Trace(visitor);
   PageVisibilityObserver::Trace(visitor);
@@ -476,7 +476,10 @@ void Bluetooth::Trace(Visitor* visitor) {
 
 Bluetooth::Bluetooth(ExecutionContext* context)
     : ExecutionContextLifecycleObserver(context),
-      PageVisibilityObserver(Document::From(context)->GetPage()) {}
+      PageVisibilityObserver(
+          To<LocalDOMWindow>(context)->GetFrame()->GetPage()),
+      client_receivers_(this, context),
+      service_(context) {}
 
 Bluetooth::~Bluetooth() {
   DCHECK(client_receivers_.empty());
@@ -497,7 +500,7 @@ BluetoothDevice* Bluetooth::GetBluetoothDeviceRepresentingDevice(
 }
 
 void Bluetooth::EnsureServiceConnection(ExecutionContext* context) {
-  if (!service_) {
+  if (!service_.is_bound()) {
     // See https://bit.ly/2S0zRAS for task types.
     auto task_runner = context->GetTaskRunner(TaskType::kMiscPlatformAPI);
     context->GetBrowserInterfaceBroker().GetInterface(

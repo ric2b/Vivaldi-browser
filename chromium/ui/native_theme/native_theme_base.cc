@@ -7,8 +7,9 @@
 #include <limits>
 #include <memory>
 
+#include "base/check.h"
 #include "base/command_line.h"
-#include "base/logging.h"
+#include "base/notreached.h"
 #include "base/numerics/ranges.h"
 #include "build/build_config.h"
 #include "cc/paint/paint_flags.h"
@@ -43,7 +44,7 @@ const int kSliderThumbHeight = 21;
 constexpr SkColor kThumbActiveColor[2] = {SkColorSetRGB(0xF4, 0xF4, 0xF4),
                                           gfx::kPlaceholderColor};
 constexpr SkColor kThumbInactiveColor[2] = {SkColorSetRGB(0xEA, 0xEA, 0xEA),
-                                            gfx::kPlaceholderColor};
+                                            SK_ColorWHITE};
 constexpr SkColor kTrackColor[2] = {SkColorSetRGB(0xD3, 0xD3, 0xD3),
                                     gfx::kPlaceholderColor};
 constexpr SkColor kSliderTrackBackgroundColor[2] = {

@@ -35,12 +35,16 @@ class BuildConfigGenerator extends DefaultTask {
     // Some libraries are hosted in Chromium's //third_party directory. This is a mapping between
     // them so they can be used instead of android_deps pulling in its own copy.
     private static final def EXISTING_LIBS = [
+        'com_ibm_icu_icu4j': '//third_party/icu4j:icu4j_java',
+        'com_almworks_sqlite4java_sqlite4java': '//third_party/sqlite4java:sqlite4java_java',
+        'com_google_android_apps_common_testing_accessibility_framework_accessibility_test_framework':
+            '//third_party/accessibility_test_framework:accessibility_test_framework_java',
         'junit_junit': '//third_party/junit:junit',
+        'org_bouncycastle_bcprov_jdk15on': '//third_party/bouncycastle:bouncycastle_java',
         'org_hamcrest_hamcrest_core': '//third_party/hamcrest:hamcrest_core_java',
         'org_hamcrest_hamcrest_integration': '//third_party/hamcrest:hamcrest_integration_java',
         'org_hamcrest_hamcrest_library': '//third_party/hamcrest:hamcrest_library_java',
     ]
-
 
     /**
      * Directory where the artifacts will be downloaded and where files will be generated.
@@ -158,7 +162,7 @@ class BuildConfigGenerator extends DefaultTask {
         }
 
         depGraph.dependencies.values().sort(dependencyComparator).each { dependency ->
-            if (excludeDependency(dependency, onlyPlayServices)) {
+            if (excludeDependency(dependency, onlyPlayServices) || !dependency.generateTarget) {
                 return
             }
             def depsStr = ""
@@ -192,11 +196,11 @@ class BuildConfigGenerator extends DefaultTask {
                   output_name = "${dependency.id}"
                 """.stripIndent())
                 if (dependency.supportsAndroid) {
-                  sb.append("  supports_android = true\n")
+                    sb.append("  supports_android = true\n")
                 } else {
-                  // No point in enabling asserts third-party prebuilts.
-                  // Also required to break a dependency cycle for errorprone.
-                  sb.append("  enable_bytecode_rewriter = false\n")
+                    // No point in enabling asserts third-party prebuilts.
+                    // Also required to break a dependency cycle for errorprone.
+                    sb.append("  enable_bytecode_rewriter = false\n")
                 }
             } else if (dependency.extension == 'aar') {
                 sb.append("""\
@@ -230,6 +234,13 @@ class BuildConfigGenerator extends DefaultTask {
         if (isPlayServicesTarget(targetName)) {
             return targetName.replaceFirst("com_", "").replaceFirst("android_gms_", "")
         }
+        // To avoid stale depfile issues, rename this. (due to recently removed
+        // alias from lite to javalite and the recently added alias from
+        // javalite to lite, causing a dep cycle because stale depfiles).
+        // Todo(mheikal): remove this after crbug.com/1093059 .
+        if (targetName.equals("com_google_protobuf_protobuf_lite")) {
+          return "com_google_protobuf_protobuf_lite_cr1"
+        }
         return targetName
     }
 
@@ -252,10 +263,17 @@ class BuildConfigGenerator extends DefaultTask {
             }
         }
         if (dependencyId.startsWith('androidx_') ||
-            dependencyId.startsWith('com_android_support_') ||
-            dependencyId.startsWith('android_arch_') ||
-            dependencyId.startsWith('com_android_tools_build_jetifier')) {
-          sb.append('  skip_jetify  = true\n')
+                dependencyId.startsWith('com_android_support_') ||
+                dependencyId.startsWith('android_arch_') ||
+                dependencyId.startsWith('com_android_tools_build_jetifier')) {
+            sb.append('  skip_jetify  = true\n')
+        }
+        if (dependencyId.startsWith('org_robolectric')) {
+            // Skip platform checks since it depends on
+            // accessibility_test_framework_java which requires_android.
+            sb.append('  bypass_platform_checks = true\n')
+            // This saves build time as robolectric 4.3.1 already uses androidx.
+            sb.append('  skip_jetify  = true\n')
         }
         switch(dependencyId) {
             case 'androidx_annotation_annotation':
@@ -277,9 +295,7 @@ class BuildConfigGenerator extends DefaultTask {
                 break
             case 'androidx_media_media':
             case 'androidx_versionedparcelable_versionedparcelable':
-            case 'com_android_support_support_compat':
             case 'com_android_support_support_media_compat':
-            case 'com_android_support_versionedparcelable':
                 sb.append('\n')
                 sb.append('  # Target has AIDL, but we do not support it yet: http://crbug.com/644439\n')
                 sb.append('  ignore_aidl = true\n')
@@ -329,14 +345,45 @@ class BuildConfigGenerator extends DefaultTask {
                 sb.append('  # https://crbug.com/989505\n')
                 sb.append('  jar_excluded_patterns = ["META-INF/proguard/*"]\n')
                 break
+            case 'com_android_support_support_compat':
+                sb.append('\n')
+                sb.append('  # Target has AIDL, but we do not support it yet: http://crbug.com/644439\n')
+                sb.append('  ignore_aidl = true\n')
+                sb.append('  ignore_manifest = true\n')
+                // Necessary to not have duplicate classes after jetification.
+                // They can be removed when we no longer jetify targets
+                // that depend on com_android_support_support_compat.
+                sb.append("""\
+                |  jar_excluded_patterns = [
+                |    "android/support/v4/graphics/drawable/IconCompatParcelizer.class",
+                |    "android/support/v4/os/ResultReceiver*",
+                |    "androidx/core/graphics/drawable/IconCompatParcelizer.class",
+                |    "androidx/core/internal/package-info.class",
+                |    "android/support/v4/app/INotificationSideChannel*",
+                |    "android/support/v4/os/IResultReceiver*",
+                |  ]
+                |
+                |""".stripMargin())
+                break
             case 'com_android_support_transition':
                 // Not specified in the POM, compileOnly dependency not supposed to be used unless
                 // the library is present: b/70887421
                 sb.append('  deps += [":com_android_support_support_fragment_java"]\n')
                 break
-            case 'com_google_android_gms_play_services_basement':
-                // Deprecated deps jar but still needed by play services basement.
-                sb.append('  input_jars_paths=["\\$android_sdk/optional/org.apache.http.legacy.jar"]\n')
+            case 'com_android_support_versionedparcelable':
+                sb.append('\n')
+                sb.append('  # Target has AIDL, but we do not support it yet: http://crbug.com/644439\n')
+                sb.append('  ignore_aidl = true\n')
+                // Necessary to not have identical classes after jetification.
+                // They can be removed when we no longer jetify targets
+                // that depend on com_android_support_versionedparcelable.
+                sb.append("""\
+                |  jar_excluded_patterns = [
+                |    "android/support/v4/graphics/drawable/IconCompat.class",
+                |    "androidx/*",
+                |  ]
+                |
+                |""".stripMargin())
                 break
             case 'com_google_ar_core':
                 // Target .aar file contains .so libraries that need to be extracted,
@@ -377,6 +424,10 @@ class BuildConfigGenerator extends DefaultTask {
                 // Replace broad library -keep rules with a more limited set in
                 // chrome/android/java/proguard.flags instead.
                 sb.append('  ignore_proguard_configs = true\n')
+                break
+            case 'com_google_android_gms_play_services_basement':
+                // Deprecated deps jar but still needed by play services basement.
+                sb.append('  input_jars_paths=["\\$android_sdk/optional/org.apache.http.legacy.jar"]\n')
                 break
             case 'com_google_android_gms_play_services_maps':
                 sb.append('  # Ignore the dependency to org.apache.http.legacy. See crbug.com/1084879.\n')

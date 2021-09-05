@@ -12,6 +12,8 @@ import os.path
 
 from . import commands, parts
 
+from signing_util import vivaldi_modify_plists
+
 _CF_BUNDLE_EXE = 'CFBundleExecutable'
 _CF_BUNDLE_ID = 'CFBundleIdentifier'
 _ENT_APP_ID = 'com.apple.application-identifier'
@@ -185,6 +187,11 @@ def customize_distribution(paths, dist, config):
         commands.move_file(
             os.path.join(macos_dir, base_config.app_product),
             os.path.join(macos_dir, config.app_product))
+
+    if hasattr(config, "vivaldi_release_kind"):
+      vivaldi_modify_plists(paths, dist, config)
+      _process_entitlements(paths, dist, config)
+      return
 
     _modify_plists(paths, dist, config)
     _process_entitlements(paths, dist, config)

@@ -26,19 +26,33 @@ struct CrostiniDiskInfo {
   ~CrostiniDiskInfo();
   bool can_resize{};
   bool is_user_chosen_size{};
+  bool is_low_space_available{};
   int default_index{};
   std::vector<crostini::mojom::DiskSliderTickPtr> ticks;
 };
 
 namespace disk {
+
+constexpr int64_t kGiB = 1024 * 1024 * 1024;
+constexpr int64_t kDiskHeadroomBytes = 1 * kGiB;
+constexpr int64_t kMinimumDiskSizeBytes = 2 * kGiB;
+constexpr int64_t kRecommendedDiskSizeBytes = 5 * kGiB;
+
+// The size of the download for the VM image.
+// As of 2020-01-10 the Termina files.zip is ~90MiB and the squashfs container
+// is ~330MiB.
+constexpr int64_t kDownloadSizeBytes = 450ll * 1024 * 1024;  // 450 MiB
+
 using OnceDiskInfoCallback =
     base::OnceCallback<void(std::unique_ptr<CrostiniDiskInfo> info)>;
 
 // Constructs a CrostiniDiskInfo for the requested vm under the given profile
-// then calls callback with it once done.
+// then calls callback with it once done. |full_info| requests extra disk info
+// that is only available from a running VM.
 void GetDiskInfo(OnceDiskInfoCallback callback,
                  Profile* profile,
-                 std::string vm_name);
+                 std::string vm_name,
+                 bool full_info);
 
 // Callback for OnAmountOfFreeDiskSpace which passes off to the next step in the
 // chain. Not intended to be called directly unless you're crostini_disk or
@@ -48,9 +62,20 @@ void OnAmountOfFreeDiskSpace(OnceDiskInfoCallback callback,
                              std::string vm_name,
                              int64_t free_space);
 
+// Combined callback for EnsureConciergeRunning or EnsureVmRunning which passes
+// off to the next step in the chain. For getting full disk info, the VM must be
+// running. Otherwise it is sufficient for Concierge to be running, but not
+// necessarily the VM.Not intended to be called directly unless you're
+// crostini_disk or tests.
+void OnCrostiniSufficientlyRunning(OnceDiskInfoCallback callback,
+                                   Profile* profile,
+                                   std::string vm_name,
+                                   int64_t free_space,
+                                   CrostiniResult result);
+
 // Callback for EnsureVmRunning which passes off to the next step in the chain.
 // Not intended to be called directly unless you're crostini_disk or tests.
-void OnVMRunning(OnceDiskInfoCallback callback,
+void OnVMRunning(base::OnceCallback<void(bool)> callback,
                  Profile* profile,
                  std::string vm_name,
                  int64_t free_space,
@@ -69,7 +94,6 @@ void OnListVmDisks(
 // matches the current value and will write the index of that value to
 // out_default_index.
 std::vector<crostini::mojom::DiskSliderTickPtr> GetTicks(
-    const vm_tools::concierge::VmDiskInfo& info,
     int64_t min,
     int64_t current,
     int64_t max,

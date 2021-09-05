@@ -14,8 +14,8 @@
 #include "base/base_switches.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/check_op.h"
 #include "base/command_line.h"
-#include "base/logging.h"
 #include "base/no_destructor.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
@@ -25,6 +25,7 @@
 #include "components/autofill/core/common/autofill_payments_features.h"
 #include "components/autofill/core/common/autofill_switches.h"
 #include "components/autofill/ios/browser/autofill_switches.h"
+#include "components/content_settings/core/common/features.h"
 #include "components/dom_distiller/core/dom_distiller_switches.h"
 #include "components/feature_engagement/public/feature_constants.h"
 #include "components/feature_engagement/public/feature_list.h"
@@ -54,11 +55,10 @@
 #include "ios/chrome/browser/chrome_switches.h"
 #include "ios/chrome/browser/crash_report/breadcrumbs/features.h"
 #include "ios/chrome/browser/drag_and_drop/drag_and_drop_flag.h"
-#include "ios/chrome/browser/find_in_page/features.h"
 #include "ios/chrome/browser/flags/ios_chrome_flag_descriptions.h"
 #include "ios/chrome/browser/passwords/password_manager_features.h"
+#include "ios/chrome/browser/policy/policy_features.h"
 #include "ios/chrome/browser/system_flags.h"
-#import "ios/chrome/browser/ui/dialogs/dialog_features.h"
 #import "ios/chrome/browser/ui/download/features.h"
 #import "ios/chrome/browser/ui/fullscreen/fullscreen_features.h"
 #import "ios/chrome/browser/ui/infobars/infobar_feature.h"
@@ -119,71 +119,89 @@ const FeatureEntry::Choice kAutofillIOSDelayBetweenFieldsChoices[] = {
     {"1000", autofill::switches::kAutofillIOSDelayBetweenFields, "1000"},
 };
 
-const FeatureEntry::FeatureParam kOmniboxOnDeviceHeadSuggestAlwaysServe[] = {
-    {OmniboxFieldTrial::kOnDeviceHeadSuggestIncognitoServeMode,
-     "always-serve"}};
-const FeatureEntry::FeatureParam kOmniboxOnDeviceHeadSuggestIncognitoOnly[] = {
-    {OmniboxFieldTrial::kOnDeviceHeadSuggestIncognitoServeMode,
-     "incognito-only"}};
-const FeatureEntry::FeatureParam kOmniboxOnDeviceHeadSuggestRelevance1000[] = {
-    {OmniboxFieldTrial::kOnDeviceHeadSuggestMaxScoreForNonUrlInput, "1000"},
-    {OmniboxFieldTrial::kOnDeviceHeadSuggestDemoteMode, "decrease-relevances"}};
-const FeatureEntry::FeatureParam
-    kOmniboxOnDeviceHeadSuggestIncognitoOnlyRelevance1000[] = {
-        {OmniboxFieldTrial::kOnDeviceHeadSuggestIncognitoServeMode,
-         "incognito-only"},
-        {OmniboxFieldTrial::kOnDeviceHeadSuggestMaxScoreForNonUrlInput,
-         "1000"}};
-const FeatureEntry::FeatureParam kOmniboxOnDeviceHeadSuggestDelay200Ms[] = {
-    {OmniboxFieldTrial::kOnDeviceHeadSuggestDelaySuggestRequestMs, "200"}};
-const FeatureEntry::FeatureParam kOmniboxOnDeviceHeadSuggestDelay350Ms[] = {
-    {OmniboxFieldTrial::kOnDeviceHeadSuggestDelaySuggestRequestMs, "350"}};
-const FeatureEntry::FeatureParam
-    kOmniboxOnDeviceHeadSuggestDelay200MsAndRelevance1000[] = {
-        {OmniboxFieldTrial::kOnDeviceHeadSuggestDelaySuggestRequestMs, "200"},
-        {OmniboxFieldTrial::kOnDeviceHeadSuggestMaxScoreForNonUrlInput, "1000"},
-        {OmniboxFieldTrial::kOnDeviceHeadSuggestDemoteMode,
-         "decrease-relevances"}};
-const FeatureEntry::FeatureParam
-    kOmniboxOnDeviceHeadSuggestDelay350MsAndRelevance1000[] = {
-        {OmniboxFieldTrial::kOnDeviceHeadSuggestDelaySuggestRequestMs, "350"},
-        {OmniboxFieldTrial::kOnDeviceHeadSuggestMaxScoreForNonUrlInput, "1000"},
-        {OmniboxFieldTrial::kOnDeviceHeadSuggestDemoteMode,
-         "decrease-relevances"}};
+const FeatureEntry::FeatureVariation
+    kOmniboxOnDeviceHeadSuggestIncognitoExperimentVariations[] = {{
+        "relevance-1000",
+        (FeatureEntry::FeatureParam[]){
+            {OmniboxFieldTrial::kOnDeviceHeadSuggestMaxScoreForNonUrlInput,
+             "1000"}},
+        1,
+        nullptr,
+    }};
 
 const FeatureEntry::FeatureVariation
-    kOmniboxOnDeviceHeadSuggestExperimentVariations[] = {
-        {"both-normal-and-incognito", kOmniboxOnDeviceHeadSuggestAlwaysServe,
-         base::size(kOmniboxOnDeviceHeadSuggestAlwaysServe), nullptr},
-        {"incognito-only", kOmniboxOnDeviceHeadSuggestIncognitoOnly,
-         base::size(kOmniboxOnDeviceHeadSuggestIncognitoOnly), nullptr},
-        {"relevance-1000", kOmniboxOnDeviceHeadSuggestRelevance1000,
-         base::size(kOmniboxOnDeviceHeadSuggestRelevance1000), nullptr},
-        {"incognito-only-relevance-1000",
-         kOmniboxOnDeviceHeadSuggestIncognitoOnlyRelevance1000,
-         base::size(kOmniboxOnDeviceHeadSuggestIncognitoOnlyRelevance1000),
-         nullptr},
-        {"request-delay-200ms", kOmniboxOnDeviceHeadSuggestDelay200Ms,
-         base::size(kOmniboxOnDeviceHeadSuggestDelay200Ms), nullptr},
-        {"request-delay-350ms", kOmniboxOnDeviceHeadSuggestDelay350Ms,
-         base::size(kOmniboxOnDeviceHeadSuggestDelay350Ms), nullptr},
-        {"delay-200ms-relevance-1000",
-         kOmniboxOnDeviceHeadSuggestDelay200MsAndRelevance1000,
-         base::size(kOmniboxOnDeviceHeadSuggestDelay200MsAndRelevance1000),
-         nullptr},
-        {"delay-350ms-relevance-1000",
-         kOmniboxOnDeviceHeadSuggestDelay350MsAndRelevance1000,
-         base::size(kOmniboxOnDeviceHeadSuggestDelay350MsAndRelevance1000),
-         nullptr}};
+    kOmniboxOnDeviceHeadSuggestNonIncognitoExperimentVariations[] = {
+        {
+            "relevance-1000",
+            (FeatureEntry::FeatureParam[]){
+                {OmniboxFieldTrial::kOnDeviceHeadSuggestMaxScoreForNonUrlInput,
+                 "1000"},
+                {OmniboxFieldTrial::kOnDeviceHeadSuggestDemoteMode,
+                 "decrease-relevances"}},
+            2,
+            nullptr,
+        },
+        {
+            "request-delay-100ms",
+            (FeatureEntry::FeatureParam[]){
+                {OmniboxFieldTrial::kOnDeviceHeadSuggestDelaySuggestRequestMs,
+                 "100"}},
+            1,
+            nullptr,
+        },
+        {
+            "delay-100ms-relevance-1000",
+            (FeatureEntry::FeatureParam[]){
+                {OmniboxFieldTrial::kOnDeviceHeadSuggestDelaySuggestRequestMs,
+                 "100"},
+                {OmniboxFieldTrial::kOnDeviceHeadSuggestMaxScoreForNonUrlInput,
+                 "1000"},
+                {OmniboxFieldTrial::kOnDeviceHeadSuggestDemoteMode,
+                 "decrease-relevances"}},
+            3,
+            nullptr,
+        },
+        {
+            "request-delay-200ms",
+            (FeatureEntry::FeatureParam[]){
+                {OmniboxFieldTrial::kOnDeviceHeadSuggestDelaySuggestRequestMs,
+                 "200"}},
+            1,
+            nullptr,
+        },
+        {
+            "delay-200ms-relevance-1000",
+            (FeatureEntry::FeatureParam[]){
+                {OmniboxFieldTrial::kOnDeviceHeadSuggestDelaySuggestRequestMs,
+                 "200"},
+                {OmniboxFieldTrial::kOnDeviceHeadSuggestMaxScoreForNonUrlInput,
+                 "1000"},
+                {OmniboxFieldTrial::kOnDeviceHeadSuggestDemoteMode,
+                 "decrease-relevances"}},
+            3,
+            nullptr,
+        }};
 
 const FeatureEntry::FeatureParam kOmniboxNTPZPSRemote[] = {
     {"ZeroSuggestVariant:1:*", "RemoteNoUrl"},
     {"ZeroSuggestVariant:7:*", "RemoteNoUrl"},
     {"ZeroSuggestVariant:8:*", "RemoteNoUrl"}};
+const FeatureEntry::FeatureParam kOmniboxNTPZPSLocal[] = {
+    {"ZeroSuggestVariant:1:*", "Local"},
+    {"ZeroSuggestVariant:7:*", "Local"},
+    {"ZeroSuggestVariant:8:*", "Local"}};
+const FeatureEntry::FeatureParam kOmniboxNTPZPSRemoteLocal[] = {
+    {"ZeroSuggestVariant:1:*", "RemoteNoUrl,Local"},
+    {"ZeroSuggestVariant:7:*", "RemoteNoUrl,Local"},
+    {"ZeroSuggestVariant:8:*", "RemoteNoUrl,Local"}};
 
 const FeatureEntry::FeatureVariation kOmniboxOnFocusSuggestionsVariations[] = {
+    {"ZPS on NTP: Local History", kOmniboxNTPZPSLocal,
+     base::size(kOmniboxNTPZPSLocal), nullptr /* variation_id */},
     {"ZPS on NTP: Remote History", kOmniboxNTPZPSRemote,
-     base::size(kOmniboxNTPZPSRemote), "t3316653" /* variation_id */},
+     base::size(kOmniboxNTPZPSRemote), "t3316728" /* variation_id */},
+    {"ZPS on NTP: Remote History, Local History", kOmniboxNTPZPSRemoteLocal,
+     base::size(kOmniboxNTPZPSRemoteLocal), "t3316728" /* variation_id */},
 };
 
 const FeatureEntry::FeatureParam kOmniboxUIMaxAutocompleteMatches3[] = {
@@ -276,11 +294,6 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
     {"drag_and_drop", flag_descriptions::kDragAndDropName,
      flag_descriptions::kDragAndDropDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kDragAndDrop)},
-    {"ignores-viewport-scale-limits",
-     flag_descriptions::kIgnoresViewportScaleLimitsName,
-     flag_descriptions::kIgnoresViewportScaleLimitsDescription,
-     flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(web::features::kIgnoresViewportScaleLimits)},
     {"enable-autofill-credit-card-upload",
      flag_descriptions::kAutofillCreditCardUploadName,
      flag_descriptions::kAutofillCreditCardUploadDescription, flags_ui::kOsIos,
@@ -369,14 +382,22 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
     {"toolbar-container", flag_descriptions::kToolbarContainerName,
      flag_descriptions::kToolbarContainerDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(toolbar_container::kToolbarContainerEnabled)},
-    {"omnibox-on-device-head-suggestions",
-     flag_descriptions::kOmniboxOnDeviceHeadSuggestionsName,
-     flag_descriptions::kOmniboxOnDeviceHeadSuggestionsDescription,
+    {"omnibox-on-device-head-suggestions-incognito",
+     flag_descriptions::kOmniboxOnDeviceHeadSuggestionsIncognitoName,
+     flag_descriptions::kOmniboxOnDeviceHeadSuggestionsIncognitoDescription,
      flags_ui::kOsIos,
      FEATURE_WITH_PARAMS_VALUE_TYPE(
-         omnibox::kOnDeviceHeadProvider,
-         kOmniboxOnDeviceHeadSuggestExperimentVariations,
-         "OmniboxOnDeviceHeadSuggestIOS")},
+         omnibox::kOnDeviceHeadProviderIncognito,
+         kOmniboxOnDeviceHeadSuggestIncognitoExperimentVariations,
+         "OmniboxOnDeviceHeadSuggestIncognitoIOS")},
+    {"omnibox-on-device-head-suggestions-non-incognito",
+     flag_descriptions::kOmniboxOnDeviceHeadSuggestionsNonIncognitoName,
+     flag_descriptions::kOmniboxOnDeviceHeadSuggestionsNonIncognitoDescription,
+     flags_ui::kOsIos,
+     FEATURE_WITH_PARAMS_VALUE_TYPE(
+         omnibox::kOnDeviceHeadProviderNonIncognito,
+         kOmniboxOnDeviceHeadSuggestNonIncognitoExperimentVariations,
+         "OmniboxOnDeviceHeadSuggestNonIncognitoIOS")},
     {"omnibox-on-focus-suggestions",
      flag_descriptions::kOmniboxOnFocusSuggestionsName,
      flag_descriptions::kOmniboxOnFocusSuggestionsDescription, flags_ui::kOsIos,
@@ -391,15 +412,9 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
          omnibox::kUIExperimentMaxAutocompleteMatches,
          kOmniboxUIMaxAutocompleteMatchesVariations,
          "OmniboxUIMaxAutocompleteVariations")},
-    {"non-modal-dialogs", flag_descriptions::kNonModalDialogsName,
-     flag_descriptions::kNonModalDialogsDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(dialogs::kNonModalDialogs)},
     {"infobar-ui-reboot", flag_descriptions::kInfobarUIRebootName,
      flag_descriptions::kInfobarUIRebootDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kIOSInfobarUIReboot)},
-    {"find-in-page-iframe", flag_descriptions::kFindInPageiFrameName,
-     flag_descriptions::kFindInPageiFrameDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(kFindInPageiFrame)},
     {"enable-clipboard-provider-image-suggestions",
      flag_descriptions::kEnableClipboardProviderImageSuggestionsName,
      flag_descriptions::kEnableClipboardProviderImageSuggestionsDescription,
@@ -419,12 +434,6 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
     {"send-uma-cellular", flag_descriptions::kSendUmaOverAnyNetwork,
      flag_descriptions::kSendUmaOverAnyNetworkDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kUmaCellular)},
-    {"autofill-no-local-save-on-upload-success",
-     flag_descriptions::kAutofillNoLocalSaveOnUploadSuccessName,
-     flag_descriptions::kAutofillNoLocalSaveOnUploadSuccessDescription,
-     flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(
-         autofill::features::kAutofillNoLocalSaveOnUploadSuccess)},
     {"autofill-no-local-save-on-unmask-success",
      flag_descriptions::kAutofillNoLocalSaveOnUnmaskSuccessName,
      flag_descriptions::kAutofillNoLocalSaveOnUnmaskSuccessDescription,
@@ -438,10 +447,6 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
      flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(
          omnibox::kOmniboxPreserveDefaultMatchAgainstAsyncUpdate)},
-    {"enable-send-tab-to-self-broadcast",
-     flag_descriptions::kSendTabToSelfBroadcastName,
-     flag_descriptions::kSendTabToSelfBroadcastDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(send_tab_to_self::kSendTabToSelfBroadcast)},
     {"autofill-use-mobile-label-disambiguation",
      flag_descriptions::kAutofillUseMobileLabelDisambiguationName,
      flag_descriptions::kAutofillUseMobileLabelDisambiguationDescription,
@@ -545,9 +550,10 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
     {"reload-sad-tab", flag_descriptions::kReloadSadTabName,
      flag_descriptions::kReloadSadTabDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(web::kReloadSadTab)},
-    {"page-info-chrome-guard", flag_descriptions::kPageInfoChromeGuardName,
-     flag_descriptions::kPageInfoChromeGuardDescription, flags_ui::kOsIos,
-     FEATURE_VALUE_TYPE(kPageInfoChromeGuard)},
+    {"improved-cookie-controls",
+     flag_descriptions::kImprovedCookieControlsDescription,
+     flag_descriptions::kImprovedCookieControlsDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(content_settings::kImprovedCookieControls)},
     {"page-info-refactoring", flag_descriptions::kPageInfoRefactoringName,
      flag_descriptions::kPageInfoRefactoringDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kPageInfoRefactoring)},
@@ -590,11 +596,65 @@ const flags_ui::FeatureEntry kFeatureEntries[] = {
     {"qr-code-generation", flag_descriptions::kQRCodeGenerationName,
      flag_descriptions::kQRCodeGenerationDescription, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kQRCodeGeneration)},
+    {"autofill-enable-surfacing-server-card-nickname",
+     flag_descriptions::kAutofillEnableSurfacingServerCardNicknameName,
+     flag_descriptions::kAutofillEnableSurfacingServerCardNicknameDescription,
+     flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(
+         autofill::features::kAutofillEnableSurfacingServerCardNickname)},
+    {"managed-bookmarks-ios", flag_descriptions::kManagedBookmarksIOSName,
+     flag_descriptions::kManagedBookmarksIOSDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kManagedBookmarksIOS)},
+    {"enable-autofill-cache-server-card-info",
+     flag_descriptions::kEnableAutofillCacheServerCardInfoName,
+     flag_descriptions::kEnableAutofillCacheServerCardInfoDescription,
+     flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(autofill::features::kAutofillCacheServerCardInfo)},
     {"infobar-ui-reboot-only-ios13",
      flag_descriptions::kInfobarUIRebootOnlyiOS13Name,
      flag_descriptions::kInfobarUIRebootOnlyiOS13Description, flags_ui::kOsIos,
      FEATURE_VALUE_TYPE(kInfobarUIRebootOnlyiOS13)},
+    {"edit-bookmarks-ios", flag_descriptions::kEditBookmarksIOSName,
+     flag_descriptions::kEditBookmarksIOSDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kEditBookmarksIOS)},
+    {"url-blocklist-ios", flag_descriptions::kURLBlocklistIOSName,
+     flag_descriptions::kURLBlocklistIOSDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kURLBlocklistIOS)},
+#if defined(__IPHONE_13_4)
+    {"pointer-support", flag_descriptions::kPointerSupportName,
+     flag_descriptions::kPointerSupportDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kPointerSupport)},
+#endif  // defined(__IPHONE_13_4)
+    {"autofill-enable-google-issued-card",
+     flag_descriptions::kAutofillEnableGoogleIssuedCardName,
+     flag_descriptions::kAutofillEnableGoogleIssuedCardDescription,
+     flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(autofill::features::kAutofillEnableGoogleIssuedCard)},
+    {"enable-mygoogle", flag_descriptions::kEnableMyGoogleName,
+     flag_descriptions::kEnableMyGoogleDescription, flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(kEnableMyGoogle)},
+    {"autofill-enable-card-nickname-management",
+     flag_descriptions::kAutofillEnableCardNicknameManagementName,
+     flag_descriptions::kAutofillEnableCardNicknameManagementDescription,
+     flags_ui::kOsIos,
+     FEATURE_VALUE_TYPE(
+         autofill::features::kAutofillEnableCardNicknameManagement)},
+    {"messages-block-popup-infobars",
+     flag_descriptions::kBlockPopupInfobarMessagesUIName,
+     flag_descriptions::kBlockPopupInfobarMessagesUIDescription,
+     flags_ui::kOsIos, FEATURE_VALUE_TYPE(kBlockPopupInfobarMessagesUI)},
 };
+
+bool SkipConditionalFeatureEntry(const flags_ui::FeatureEntry& entry) {
+  return false;
+}
+
+flags_ui::FlagsState& GetGlobalFlagsState() {
+  static base::NoDestructor<flags_ui::FlagsState> flags_state(kFeatureEntries,
+                                                              nullptr);
+  return *flags_state;
+}
+}  // namespace
 
 // Add all switches from experimental flags to |command_line|.
 void AppendSwitchesFromExperimentalSettings(base::CommandLine* command_line) {
@@ -662,20 +722,8 @@ void AppendSwitchesFromExperimentalSettings(base::CommandLine* command_line) {
       defaults, command_line);
 }
 
-bool SkipConditionalFeatureEntry(const flags_ui::FeatureEntry& entry) {
-  return false;
-}
-
-flags_ui::FlagsState& GetGlobalFlagsState() {
-  static base::NoDestructor<flags_ui::FlagsState> flags_state(kFeatureEntries,
-                                                              nullptr);
-  return *flags_state;
-}
-}  // namespace
-
 void ConvertFlagsToSwitches(flags_ui::FlagsStorage* flags_storage,
                             base::CommandLine* command_line) {
-  AppendSwitchesFromExperimentalSettings(command_line);
   GetGlobalFlagsState().ConvertFlagsToSwitches(
       flags_storage, command_line, flags_ui::kAddSentinels,
       switches::kEnableFeatures, switches::kDisableFeatures);

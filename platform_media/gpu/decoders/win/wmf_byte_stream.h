@@ -36,7 +36,7 @@ class WMFByteStream : public WMFByteStream_UnknownBase {
   ~WMFByteStream() override;
 
   void Initialize(scoped_refptr<base::SingleThreadTaskRunner> main_task_runner,
-                  ipc_data_source::Reader source_reader,
+                  ipc_data_source::Buffer source_buffer,
                   bool is_streaming,
                   int64_t stream_length);
 
@@ -68,7 +68,9 @@ class WMFByteStream : public WMFByteStream_UnknownBase {
 
  private:
   scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
-  ipc_data_source::Reader source_reader_;
+
+  // source_buffer_ is null when we are waiting for the media data reply.
+  ipc_data_source::Buffer source_buffer_;
   int64_t stream_length_ = -1;
   bool is_streaming_ = false;
   int64_t stream_position_ = 0;

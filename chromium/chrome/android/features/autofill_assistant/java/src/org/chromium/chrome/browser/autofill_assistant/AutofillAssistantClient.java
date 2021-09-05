@@ -313,7 +313,7 @@ class AutofillAssistantClient {
 
     /** Returns the e-mail address that corresponds to the access token or an empty string. */
     @CalledByNative
-    private String getAccountEmailAddress() {
+    private String getEmailAddressForAccessTokenAccount() {
         return mAccount != null ? mAccount.name : "";
     }
 
@@ -323,6 +323,7 @@ class AutofillAssistantClient {
      * the LocationManager together with the Geocoder.
      */
     @CalledByNative
+    @Nullable
     private String getCountryCode() {
         TelephonyManager telephonyManager =
                 (TelephonyManager) ContextUtils.getApplicationContext().getSystemService(

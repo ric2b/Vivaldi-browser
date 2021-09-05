@@ -30,7 +30,9 @@
 #include <utility>
 
 #include "cc/input/snap_selection_strategy.h"
+#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/mojom/feature_policy/policy_disposition.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/public/platform/web_screen_info.h"
@@ -60,6 +62,9 @@
 #include "third_party/blink/renderer/core/dom/scripted_idle_task_controller.h"
 #include "third_party/blink/renderer/core/editing/editor.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
+#include "third_party/blink/renderer/core/editing/ime/input_method_controller.h"
+#include "third_party/blink/renderer/core/editing/spellcheck/spell_checker.h"
+#include "third_party/blink/renderer/core/editing/suggestion/text_suggestion_controller.h"
 #include "third_party/blink/renderer/core/events/hash_change_event.h"
 #include "third_party/blink/renderer/core/events/message_event.h"
 #include "third_party/blink/renderer/core/events/pop_state_event.h"
@@ -68,16 +73,19 @@
 #include "third_party/blink/renderer/core/execution_context/window_agent.h"
 #include "third_party/blink/renderer/core/frame/bar_prop.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
+#include "third_party/blink/renderer/core/frame/document_policy_violation_report_body.h"
 #include "third_party/blink/renderer/core/frame/dom_visual_viewport.h"
 #include "third_party/blink/renderer/core/frame/event_handler_registry.h"
 #include "third_party/blink/renderer/core/frame/external.h"
+#include "third_party/blink/renderer/core/frame/feature_policy_violation_report_body.h"
 #include "third_party/blink/renderer/core/frame/frame_console.h"
 #include "third_party/blink/renderer/core/frame/history.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/navigator.h"
-#include "third_party/blink/renderer/core/frame/sandbox_flags.h"
+#include "third_party/blink/renderer/core/frame/report.h"
+#include "third_party/blink/renderer/core/frame/reporting_context.h"
 #include "third_party/blink/renderer/core/frame/screen.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/viewport_data.h"
@@ -226,7 +234,12 @@ LocalDOMWindow::LocalDOMWindow(LocalFrame& frame)
       unused_preloads_timer_(frame.GetTaskRunner(TaskType::kInternalDefault),
                              this,
                              &LocalDOMWindow::WarnUnusedPreloads),
-      should_print_when_finished_loading_(false) {}
+      should_print_when_finished_loading_(false),
+      input_method_controller_(
+          MakeGarbageCollected<InputMethodController>(*this, frame)),
+      spell_checker_(MakeGarbageCollected<SpellChecker>(*this)),
+      text_suggestion_controller_(
+          MakeGarbageCollected<TextSuggestionController>(*this)) {}
 
 void LocalDOMWindow::ClearDocument() {
   if (!document_)
@@ -254,18 +267,18 @@ TrustedTypePolicyFactory* LocalDOMWindow::trustedTypes() const {
   return trusted_types_.Get();
 }
 
-Document* LocalDOMWindow::CreateDocument(const DocumentInit& init,
-                                         bool force_xhtml) {
-  Document* document = nullptr;
-  if (force_xhtml) {
-    // This is a hack for XSLTProcessor. See
-    // XSLTProcessor::createDocumentFromSource().
-    document = MakeGarbageCollected<Document>(init);
-  } else {
-    document = DOMImplementation::createDocument(init);
-  }
-
-  return document;
+bool LocalDOMWindow::IsCrossSiteSubframe() const {
+  if (!GetFrame())
+    return false;
+  // It'd be nice to avoid the url::Origin temporaries, but that would require
+  // exposing the net internal helper.
+  // TODO: If the helper gets exposed, we could do this without any new
+  // allocations using StringUTF8Adaptor.
+  auto* top_origin =
+      GetFrame()->Tree().Top().GetSecurityContext()->GetSecurityOrigin();
+  return !net::registry_controlled_domains::SameDomainOrHost(
+      top_origin->ToUrlOrigin(), GetSecurityOrigin()->ToUrlOrigin(),
+      net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
 }
 
 LocalDOMWindow* LocalDOMWindow::From(const ScriptState* script_state) {
@@ -303,11 +316,13 @@ void LocalDOMWindow::DisableEval(const String& error_message) {
 }
 
 String LocalDOMWindow::UserAgent() const {
-  return document()->UserAgent();
+  return GetFrame() ? GetFrame()->Loader().UserAgent() : String();
 }
 
 HttpsState LocalDOMWindow::GetHttpsState() const {
-  return document()->GetHttpsState();
+  // TODO(https://crbug.com/880986): Implement Document's HTTPS state in more
+  // spec-conformant way.
+  return CalculateHttpsState(GetSecurityOrigin());
 }
 
 ResourceFetcher* LocalDOMWindow::Fetcher() const {
@@ -350,7 +365,7 @@ network::mojom::ReferrerPolicy LocalDOMWindow::GetReferrerPolicy() const {
 }
 
 CoreProbeSink* LocalDOMWindow::GetProbeSink() {
-  return document()->GetProbeSink();
+  return probe::ToCoreProbeSink(GetFrame());
 }
 
 BrowserInterfaceBrokerProxy& LocalDOMWindow::GetBrowserInterfaceBroker() {
@@ -370,21 +385,61 @@ FrameOrWorkerScheduler* LocalDOMWindow::GetScheduler() {
 
 scoped_refptr<base::SingleThreadTaskRunner> LocalDOMWindow::GetTaskRunner(
     TaskType type) {
-  return document()->GetTaskRunner(type);
+  if (GetFrame())
+    return GetFrame()->GetTaskRunner(type);
+  // In most cases, the ExecutionContext will get us to a relevant Frame. In
+  // some cases, though, there isn't a good candidate (most commonly when either
+  // the passed-in document or the ExecutionContext used to be attached to a
+  // Frame but has since been detached).
+  return Thread::Current()->GetTaskRunner();
 }
 
 void LocalDOMWindow::CountPotentialFeaturePolicyViolation(
     mojom::blink::FeaturePolicyFeature feature) const {
-  document()->CountPotentialFeaturePolicyViolation(feature);
+  wtf_size_t index = static_cast<wtf_size_t>(feature);
+  if (potentially_violated_features_.size() == 0) {
+    potentially_violated_features_.resize(
+        static_cast<wtf_size_t>(mojom::blink::FeaturePolicyFeature::kMaxValue) +
+        1);
+  } else if (potentially_violated_features_[index]) {
+    return;
+  }
+  potentially_violated_features_[index] = true;
+  UMA_HISTOGRAM_ENUMERATION("Blink.UseCounter.FeaturePolicy.PotentialViolation",
+                            feature);
 }
 
 void LocalDOMWindow::ReportFeaturePolicyViolation(
     mojom::blink::FeaturePolicyFeature feature,
     mojom::blink::PolicyDisposition disposition,
-    const String& message,
-    const String& source_file) const {
-  document()->ReportFeaturePolicyViolation(feature, disposition, message,
-                                           source_file);
+    const String& message) const {
+  if (!RuntimeEnabledFeatures::FeaturePolicyReportingEnabled(this))
+    return;
+  if (!GetFrame())
+    return;
+
+  // Construct the feature policy violation report.
+  const String& feature_name = GetNameForFeature(feature);
+  const String& disp_str =
+      (disposition == mojom::blink::PolicyDisposition::kReport ? "report"
+                                                               : "enforce");
+
+  FeaturePolicyViolationReportBody* body =
+      MakeGarbageCollected<FeaturePolicyViolationReportBody>(feature_name,
+                                                             message, disp_str);
+
+  Report* report = MakeGarbageCollected<Report>(
+      ReportType::kFeaturePolicyViolation, Url().GetString(), body);
+
+  // Send the feature policy violation report to any ReportingObservers.
+  ReportingContext::From(this)->QueueReport(report);
+
+  // TODO(iclelland): Report something different in report-only mode
+  if (disposition == mojom::blink::PolicyDisposition::kEnforce) {
+    GetFrame()->Console().AddMessage(MakeGarbageCollected<ConsoleMessage>(
+        mojom::blink::ConsoleMessageSource::kViolation,
+        mojom::blink::ConsoleMessageLevel::kError, body->message()));
+  }
 }
 
 void LocalDOMWindow::ReportDocumentPolicyViolation(
@@ -392,8 +447,46 @@ void LocalDOMWindow::ReportDocumentPolicyViolation(
     mojom::blink::PolicyDisposition disposition,
     const String& message,
     const String& source_file) const {
-  document()->ReportDocumentPolicyViolation(feature, disposition, message,
-                                            source_file);
+  if (!GetFrame())
+    return;
+
+  // Construct the document policy violation report.
+  const String& feature_name =
+      GetDocumentPolicyFeatureInfoMap().at(feature).feature_name.c_str();
+  bool is_report_only = disposition == mojom::blink::PolicyDisposition::kReport;
+  const String& disp_str = is_report_only ? "report" : "enforce";
+  const DocumentPolicy* relevant_document_policy =
+      is_report_only ? GetSecurityContext().GetReportOnlyDocumentPolicy()
+                     : GetSecurityContext().GetDocumentPolicy();
+
+  DocumentPolicyViolationReportBody* body =
+      MakeGarbageCollected<DocumentPolicyViolationReportBody>(
+          feature_name, message, disp_str, source_file);
+
+  Report* report = MakeGarbageCollected<Report>(
+      ReportType::kDocumentPolicyViolation, Url().GetString(), body);
+
+  // Send the document policy violation report to any ReportingObservers.
+  const base::Optional<std::string> endpoint =
+      relevant_document_policy->GetFeatureEndpoint(feature);
+
+  if (is_report_only) {
+    UMA_HISTOGRAM_ENUMERATION("Blink.UseCounter.DocumentPolicy.ReportOnly",
+                              feature);
+  } else {
+    UMA_HISTOGRAM_ENUMERATION("Blink.UseCounter.DocumentPolicy.Enforced",
+                              feature);
+  }
+
+  ReportingContext::From(this)->QueueReport(
+      report, endpoint ? Vector<String>{endpoint->c_str()} : Vector<String>{});
+
+  // TODO(iclelland): Report something different in report-only mode
+  if (!is_report_only) {
+    GetFrame()->Console().AddMessage(MakeGarbageCollected<ConsoleMessage>(
+        mojom::blink::ConsoleMessageSource::kViolation,
+        mojom::blink::ConsoleMessageLevel::kError, body->message()));
+  }
 }
 
 static void RunAddConsoleMessageTask(mojom::ConsoleMessageSource source,
@@ -443,6 +536,13 @@ void LocalDOMWindow::AddConsoleMessageImpl(ConsoleMessage* console_message,
   GetFrame()->Console().AddMessage(console_message, discard_duplicates);
 }
 
+void LocalDOMWindow::AddInspectorIssue(
+    mojom::blink::InspectorIssueInfoPtr info) {
+  if (GetFrame()) {
+    GetFrame()->AddInspectorIssue(std::move(info));
+  }
+}
+
 void LocalDOMWindow::CountUse(mojom::WebFeature feature) {
   if (!GetFrame())
     return;
@@ -454,13 +554,12 @@ void LocalDOMWindow::CountDeprecation(mojom::WebFeature feature) {
   document()->CountDeprecation(feature);
 }
 
-Document* LocalDOMWindow::InstallNewDocument(const DocumentInit& init,
-                                             bool force_xhtml) {
+Document* LocalDOMWindow::InstallNewDocument(const DocumentInit& init) {
   DCHECK_EQ(init.GetFrame(), GetFrame());
 
   ClearDocument();
 
-  document_ = CreateDocument(init, force_xhtml);
+  document_ = DOMImplementation::createDocument(init);
   document_->Initialize();
 
   // The CSP delegate doesn't have access to all of the state it needs until
@@ -757,8 +856,7 @@ FrameConsole* LocalDOMWindow::GetFrameConsole() const {
 }
 
 ApplicationCache* LocalDOMWindow::applicationCache() const {
-  DCHECK(RuntimeEnabledFeatures::AppCacheEnabled(
-      document()->ToExecutionContext()));
+  DCHECK(RuntimeEnabledFeatures::AppCacheEnabled(this));
   if (!IsCurrentlyDisplayedInFrame())
     return nullptr;
   if (!isSecureContext()) {
@@ -784,15 +882,14 @@ void LocalDOMWindow::SchedulePostMessage(
   // is problematic; consider imposing a limit or other restriction if this
   // surfaces often as a problem (see crbug.com/587012).
   std::unique_ptr<SourceLocation> location =
-      SourceLocation::Capture(source->ToExecutionContext());
+      SourceLocation::Capture(source->GetExecutionContext());
   document_->GetTaskRunner(TaskType::kPostedMessage)
       ->PostTask(FROM_HERE,
                  WTF::Bind(&LocalDOMWindow::DispatchPostMessage,
                            WrapPersistent(this), WrapPersistent(event),
                            std::move(target), std::move(location),
-                           source->ToExecutionContext()->GetAgentClusterID()));
-  probe::AsyncTaskScheduled(document()->ToExecutionContext(), "postMessage",
-                            event->async_task_id());
+                           source->GetExecutionContext()->GetAgentClusterID()));
+  probe::AsyncTaskScheduled(this, "postMessage", event->async_task_id());
 }
 
 void LocalDOMWindow::DispatchPostMessage(
@@ -800,12 +897,11 @@ void LocalDOMWindow::DispatchPostMessage(
     scoped_refptr<const SecurityOrigin> intended_target_origin,
     std::unique_ptr<SourceLocation> location,
     const base::UnguessableToken& source_agent_cluster_id) {
-  probe::AsyncTask async_task(document()->ToExecutionContext(),
-                              event->async_task_id());
+  probe::AsyncTask async_task(this, event->async_task_id());
   if (!IsCurrentlyDisplayedInFrame())
     return;
 
-  event->EntangleMessagePorts(document()->ToExecutionContext());
+  event->EntangleMessagePorts(this);
 
   DispatchMessageEventWithOriginCheck(intended_target_origin.get(), event,
                                       std::move(location),
@@ -858,8 +954,7 @@ void LocalDOMWindow::DispatchMessageEventWithOriginCheck(
     }
   }
   if (event->IsLockedToAgentCluster()) {
-    if (!document()->ToExecutionContext()->IsSameAgentCluster(
-            source_agent_cluster_id)) {
+    if (!IsSameAgentCluster(source_agent_cluster_id)) {
       UseCounter::Count(
           document(),
           WebFeature::kMessageEventSharedArrayBufferDifferentAgentCluster);
@@ -935,7 +1030,8 @@ void LocalDOMWindow::alert(ScriptState* script_state, const String& message) {
   if (!GetFrame())
     return;
 
-  if (document()->IsSandboxed(mojom::blink::WebSandboxFlags::kModals)) {
+  if (document()->IsSandboxed(
+          network::mojom::blink::WebSandboxFlags::kModals)) {
     UseCounter::Count(document(), WebFeature::kDialogInSandboxedContext);
     GetFrameConsole()->AddMessage(MakeGarbageCollected<ConsoleMessage>(
         mojom::ConsoleMessageSource::kSecurity,
@@ -968,7 +1064,8 @@ bool LocalDOMWindow::confirm(ScriptState* script_state, const String& message) {
   if (!GetFrame())
     return false;
 
-  if (document()->IsSandboxed(mojom::blink::WebSandboxFlags::kModals)) {
+  if (document()->IsSandboxed(
+          network::mojom::blink::WebSandboxFlags::kModals)) {
     UseCounter::Count(document(), WebFeature::kDialogInSandboxedContext);
     GetFrameConsole()->AddMessage(MakeGarbageCollected<ConsoleMessage>(
         mojom::ConsoleMessageSource::kSecurity,
@@ -1003,7 +1100,8 @@ String LocalDOMWindow::prompt(ScriptState* script_state,
   if (!GetFrame())
     return String();
 
-  if (document()->IsSandboxed(mojom::blink::WebSandboxFlags::kModals)) {
+  if (document()->IsSandboxed(
+          network::mojom::blink::WebSandboxFlags::kModals)) {
     UseCounter::Count(document(), WebFeature::kDialogInSandboxedContext);
     GetFrameConsole()->AddMessage(MakeGarbageCollected<ConsoleMessage>(
         mojom::ConsoleMessageSource::kSecurity,
@@ -1854,6 +1952,9 @@ void LocalDOMWindow::Trace(Visitor* visitor) {
   visitor->Trace(visualViewport_);
   visitor->Trace(event_listener_observers_);
   visitor->Trace(trusted_types_);
+  visitor->Trace(input_method_controller_);
+  visitor->Trace(spell_checker_);
+  visitor->Trace(text_suggestion_controller_);
   DOMWindow::Trace(visitor);
   ExecutionContext::Trace(visitor);
   Supplementable<LocalDOMWindow>::Trace(visitor);
