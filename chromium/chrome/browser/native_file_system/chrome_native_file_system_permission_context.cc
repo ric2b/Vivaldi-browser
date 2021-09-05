@@ -9,9 +9,11 @@
 
 #include "base/base_paths.h"
 #include "base/bind.h"
+#include "base/files/file_path.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/path_service.h"
 #include "base/task/thread_pool.h"
+#include "base/util/values/values_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -33,6 +35,9 @@
 namespace {
 
 using HandleType = content::NativeFileSystemPermissionContext::HandleType;
+
+// Dictionary key for the FILE_SYSTEM_LAST_PICKED_DIRECTORY website setting.
+const char kLastPickedDirectoryKey[] = "default-path";
 
 void ShowNativeFileSystemRestrictedDirectoryDialogOnUIThread(
     content::GlobalFrameRoutingId frame_id,
@@ -323,8 +328,7 @@ ChromeNativeFileSystemPermissionContext::GetWriteGuardContentSetting(
     const url::Origin& origin) {
   return content_settings()->GetContentSetting(
       origin.GetURL(), origin.GetURL(),
-      ContentSettingsType::FILE_SYSTEM_WRITE_GUARD,
-      /*provider_id=*/std::string());
+      ContentSettingsType::FILE_SYSTEM_WRITE_GUARD);
 }
 
 ContentSetting
@@ -332,8 +336,7 @@ ChromeNativeFileSystemPermissionContext::GetReadGuardContentSetting(
     const url::Origin& origin) {
   return content_settings()->GetContentSetting(
       origin.GetURL(), origin.GetURL(),
-      ContentSettingsType::FILE_SYSTEM_READ_GUARD,
-      /*provider_id=*/std::string());
+      ContentSettingsType::FILE_SYSTEM_READ_GUARD);
 }
 
 bool ChromeNativeFileSystemPermissionContext::CanObtainReadPermission(
@@ -350,25 +353,29 @@ bool ChromeNativeFileSystemPermissionContext::CanObtainWritePermission(
 
 void ChromeNativeFileSystemPermissionContext::ConfirmSensitiveDirectoryAccess(
     const url::Origin& origin,
-    const std::vector<base::FilePath>& paths,
+    PathType path_type,
+    const base::FilePath& path,
     HandleType handle_type,
     content::GlobalFrameRoutingId frame_id,
-
     base::OnceCallback<void(SensitiveDirectoryResult)> callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  if (paths.empty()) {
+
+  // TODO(https://crbug.com/1009970): Figure out what external paths should be
+  // blocked. We could resolve the external path to a local path, and check for
+  // blocked directories based on that, but that doesn't work well. Instead we
+  // should have a separate Chrome OS only code path to block for example the
+  // root of certain external file systems.
+  if (path_type == PathType::kExternal) {
     std::move(callback).Run(SensitiveDirectoryResult::kAllowed);
     return;
   }
-  // It is enough to only verify access to the first path, as multiple
-  // file selection is only supported if all files are in the same
-  // directory.
+
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::BindOnce(&ShouldBlockAccessToPath, paths[0], handle_type),
+      base::BindOnce(&ShouldBlockAccessToPath, path, handle_type),
       base::BindOnce(&ChromeNativeFileSystemPermissionContext::
                          DidConfirmSensitiveDirectoryAccess,
-                     GetWeakPtr(), origin, paths, handle_type, frame_id,
+                     GetWeakPtr(), origin, path, handle_type, frame_id,
                      std::move(callback)));
 }
 
@@ -398,7 +405,7 @@ void ChromeNativeFileSystemPermissionContext::PerformAfterWriteChecks(
 void ChromeNativeFileSystemPermissionContext::
     DidConfirmSensitiveDirectoryAccess(
         const url::Origin& origin,
-        const std::vector<base::FilePath>& paths,
+        const base::FilePath& path,
         HandleType handle_type,
         content::GlobalFrameRoutingId frame_id,
         base::OnceCallback<void(SensitiveDirectoryResult)> callback,
@@ -415,7 +422,7 @@ void ChromeNativeFileSystemPermissionContext::
   content::GetUIThreadTaskRunner({})->PostTask(
       FROM_HERE,
       base::BindOnce(&ShowNativeFileSystemRestrictedDirectoryDialogOnUIThread,
-                     frame_id, origin, paths[0], handle_type,
+                     frame_id, origin, path, handle_type,
                      std::move(result_callback)));
 }
 
@@ -429,4 +436,35 @@ bool ChromeNativeFileSystemPermissionContext::OriginHasWriteAccess(
     const url::Origin& origin) {
   NOTREACHED();
   return false;
+}
+
+void ChromeNativeFileSystemPermissionContext::SetLastPickedDirectory(
+    const url::Origin& origin,
+    const base::FilePath& path) {
+  base::Value dict(base::Value::Type::DICTIONARY);
+  dict.SetKey(kLastPickedDirectoryKey, util::FilePathToValue(path));
+
+  content_settings_->SetWebsiteSettingDefaultScope(
+      origin.GetURL(), origin.GetURL(),
+      ContentSettingsType::FILE_SYSTEM_LAST_PICKED_DIRECTORY,
+      base::Value::ToUniquePtrValue(std::move(dict)));
+}
+
+base::FilePath ChromeNativeFileSystemPermissionContext::GetLastPickedDirectory(
+    const url::Origin& origin) {
+  std::unique_ptr<base::Value> value = content_settings()->GetWebsiteSetting(
+      origin.GetURL(), origin.GetURL(),
+      ContentSettingsType::FILE_SYSTEM_LAST_PICKED_DIRECTORY, /*info=*/nullptr);
+  if (!value)
+    return base::FilePath();
+
+  return util::ValueToFilePath(value->FindKey(kLastPickedDirectoryKey))
+      .value_or(base::FilePath());
+}
+
+base::FilePath ChromeNativeFileSystemPermissionContext::GetDefaultDirectory() {
+  base::FilePath default_path;
+  // On failure, |default_path| will remain empty.
+  base::PathService::Get(chrome::DIR_USER_DOCUMENTS, &default_path);
+  return default_path;
 }

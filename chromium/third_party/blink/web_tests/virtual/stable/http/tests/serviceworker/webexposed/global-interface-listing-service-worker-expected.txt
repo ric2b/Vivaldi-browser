@@ -49,11 +49,6 @@ interface BackgroundFetchUpdateUIEvent : BackgroundFetchEvent
     attribute @@toStringTag
     method constructor
     method updateUI
-interface BarcodeDetector
-    static method getSupportedFormats
-    attribute @@toStringTag
-    method constructor
-    method detect
 interface Blob
     attribute @@toStringTag
     getter size
@@ -2749,6 +2744,7 @@ interface WritableStreamDefaultWriter
     method constructor
     method releaseLock
     method write
+[NAMESPACES]
 [GLOBAL OBJECT]
     attribute console
     attribute globalThis

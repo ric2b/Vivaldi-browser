@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/containers/flat_map.h"
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
@@ -26,6 +26,7 @@
 #include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "base/values.h"
+#include "build/chromeos_buildflags.h"
 #include "components/ukm/content/source_url_recorder.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -84,12 +85,14 @@
 #include "net/base/auth.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_util.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
+#include "services/network/public/mojom/fetch_api.mojom-shared.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chromeos/login/login_state/login_state.h"
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 using content::BrowserThread;
 using extension_web_request_api_helpers::ExtraInfoSpec;
@@ -410,7 +413,7 @@ bool ShouldHideEvent(content::BrowserContext* browser_context,
 
 // Returns true if we're in a Public Session and restrictions are enabled.
 bool ArePublicSessionRestrictionsEnabled() {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   if (chromeos::LoginState::IsInitialized()) {
     return chromeos::LoginState::Get()->ArePublicSessionRestrictionsEnabled();
   }
@@ -688,7 +691,7 @@ bool WebRequestAPI::MaybeProxyURLLoaderFactory(
     int render_process_id,
     URLLoaderFactoryType type,
     base::Optional<int64_t> navigation_id,
-    base::UkmSourceId ukm_source_id,
+    ukm::SourceIdObj ukm_source_id,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
     mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
         header_client) {
@@ -797,10 +800,10 @@ void WebRequestAPI::ProxyWebSocket(
           frame->GetProcess()->GetBrowserContext());
 
   auto* web_contents = content::WebContents::FromRenderFrameHost(frame);
-  const base::UkmSourceId ukm_source_id =
-      web_contents ? base::UkmSourceId::FromInt64(
+  const ukm::SourceIdObj ukm_source_id =
+      web_contents ? ukm::SourceIdObj::FromInt64(
                          ukm::GetSourceIdForWebContentsDocument(web_contents))
-                   : base::kInvalidUkmSourceId;
+                   : ukm::kInvalidSourceIdObj;
   WebRequestProxyingWebSocket::StartProxying(
       std::move(factory), url, site_for_cookies, user_agent,
       std::move(handshake_client), has_extra_headers,
@@ -1854,7 +1857,7 @@ bool ExtensionWebRequestEventRouter::HasAnyExtraHeadersListenerImpl(
 
 bool ExtensionWebRequestEventRouter::IsPageLoad(
     const WebRequestInfo& request) const {
-  return request.type == blink::mojom::ResourceType::kMainFrame;
+  return request.web_request_type == WebRequestResourceType::MAIN_FRAME;
 }
 
 void ExtensionWebRequestEventRouter::NotifyPageLoad() {
@@ -1953,7 +1956,7 @@ void ExtensionWebRequestEventRouter::GetMatchingListenersImpl(
               request->url, request->frame_data.tab_id, crosses_incognito,
               WebRequestPermissions::
                   REQUIRE_HOST_PERMISSION_FOR_URL_AND_INITIATOR,
-              request->initiator, request->type);
+              request->initiator, request->web_request_type);
 
       if (access != PermissionsData::PageAccess::kAllowed) {
         if (access == PermissionsData::PageAccess::kWithheld) {

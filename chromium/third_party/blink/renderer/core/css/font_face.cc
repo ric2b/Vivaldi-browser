@@ -30,6 +30,7 @@
 
 #include "third_party/blink/renderer/core/css/font_face.h"
 
+#include "base/metrics/histogram_macros.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/string_or_array_buffer_or_array_buffer_view.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_font_face_descriptors.h"
@@ -65,7 +66,6 @@
 #include "third_party/blink/renderer/platform/font_family_names.h"
 #include "third_party/blink/renderer/platform/fonts/font_metrics_override.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
-#include "third_party/blink/renderer/platform/instrumentation/histogram.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/shared_buffer.h"
@@ -154,7 +154,7 @@ FontFace* FontFace::Create(ExecutionContext* context,
   FontFace* font_face =
       MakeGarbageCollected<FontFace>(context, family, descriptors);
   font_face->InitCSSFontFace(static_cast<const unsigned char*>(source->Data()),
-                             source->ByteLengthAsSizeT());
+                             source->ByteLength());
   return font_face;
 }
 
@@ -166,7 +166,7 @@ FontFace* FontFace::Create(ExecutionContext* context,
       MakeGarbageCollected<FontFace>(context, family, descriptors);
   font_face->InitCSSFontFace(
       static_cast<const unsigned char*>(source->BaseAddress()),
-      source->byteLengthAsSizeT());
+      source->byteLength());
   return font_face;
 }
 
@@ -209,6 +209,8 @@ FontFace* FontFace::Create(Document* document,
                                       AtRuleDescriptorID::LineGapOverride) &&
       font_face->SetPropertyFromStyle(properties,
                                       AtRuleDescriptorID::AdvanceOverride) &&
+      font_face->SetPropertyFromStyle(
+          properties, AtRuleDescriptorID::AdvanceProportionalOverride) &&
       font_face->GetFontSelectionCapabilities().IsValid() &&
       !font_face->family().IsEmpty()) {
     font_face->InitCSSFontFace(document->GetExecutionContext(), *src);
@@ -422,6 +424,9 @@ bool FontFace::SetPropertyValue(const CSSValue* value,
       break;
     case AtRuleDescriptorID::AdvanceOverride:
       advance_override_ = value;
+      break;
+    case AtRuleDescriptorID::AdvanceProportionalOverride:
+      advance_proportional_override_ = ConvertFontMetricOverrideValue(value);
       break;
     default:
       NOTREACHED();
@@ -831,10 +836,8 @@ void FontFace::InitCSSFontFace(ExecutionContext* context, const CSSValue& src) {
   }
 
   if (display_) {
-    DEFINE_THREAD_SAFE_STATIC_LOCAL(
-        EnumerationHistogram, font_display_histogram,
-        ("WebFont.FontDisplayValue", kFontDisplayEnumMax));
-    font_display_histogram.Count(CSSValueToFontDisplay(display_.Get()));
+    UMA_HISTOGRAM_ENUMERATION("WebFont.FontDisplayValue",
+                              CSSValueToFontDisplay(display_.Get()));
   }
 }
 
@@ -868,6 +871,7 @@ void FontFace::Trace(Visitor* visitor) const {
   visitor->Trace(descent_override_);
   visitor->Trace(line_gap_override_);
   visitor->Trace(advance_override_);
+  visitor->Trace(advance_proportional_override_);
   visitor->Trace(error_);
   visitor->Trace(loaded_property_);
   visitor->Trace(css_font_face_);
@@ -912,6 +916,11 @@ FontMetricsOverride FontFace::GetFontMetricsOverride() const {
   if (advance_override_) {
     result.advance_override =
         To<CSSPrimitiveValue>(*advance_override_).GetFloatValue();
+  }
+  if (advance_proportional_override_) {
+    result.advance_proportional_override =
+        To<CSSPrimitiveValue>(*advance_proportional_override_).GetFloatValue() /
+        100;
   }
   return result;
 }

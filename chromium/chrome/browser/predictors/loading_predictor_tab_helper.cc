@@ -14,11 +14,11 @@
 #include "chrome/browser/predictors/loading_predictor_factory.h"
 #include "chrome/browser/predictors/predictors_enums.h"
 #include "chrome/browser/predictors/predictors_features.h"
-#include "chrome/browser/prerender/prerender_manager_factory.h"
+#include "chrome/browser/prefetch/no_state_prefetch/prerender_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/no_state_prefetch/browser/prerender_manager.h"
 #include "components/optimization_guide/optimization_guide_decider.h"
 #include "components/optimization_guide/proto/hints.pb.h"
-#include "components/prerender/browser/prerender_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
@@ -173,7 +173,7 @@ void LoadingPredictorTabHelper::DidStartNavigation(
   has_local_preconnect_predictions_for_current_navigation_ =
       predictor_->OnNavigationStarted(navigation_id);
   if (has_local_preconnect_predictions_for_current_navigation_ &&
-      !features::ShouldAlwaysPrefetchUsingOptimizationGuidePredictions()) {
+      !features::ShouldAlwaysRetrieveOptimizationGuidePredictions()) {
     return;
   }
 

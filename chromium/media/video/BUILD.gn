@@ -154,3 +154,13 @@ fuzzer_test("media_h264_parser_fuzzer") {
     "//ui/gfx/geometry",
   ]
 }
+
+if (proprietary_codecs && enable_platform_hevc) {
+  fuzzer_test("media_h265_parser_fuzzer") {
+    sources = [ "h265_parser_fuzzertest.cc" ]
+    deps = [
+      "//base",
+      "//media",
+    ]
+  }
+}

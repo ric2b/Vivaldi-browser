@@ -205,11 +205,11 @@ class FileManagerUI {
 
     /**
      * Ripple effect of sort button.
-     * @type {!FilesToggleRipple}
+     * @type {!FilesToggleRippleElement}
      * @const
      */
     this.sortButtonToggleRipple =
-        /** @type {!FilesToggleRipple} */ (
+        /** @type {!FilesToggleRippleElement} */ (
             queryRequiredElement('files-toggle-ripple', this.sortButton));
 
     /**
@@ -222,11 +222,11 @@ class FileManagerUI {
 
     /**
      * Ripple effect of gear button.
-     * @type {!FilesToggleRipple}
+     * @type {!FilesToggleRippleElement}
      * @const
      */
     this.gearButtonToggleRipple =
-        /** @type {!FilesToggleRipple} */ (
+        /** @type {!FilesToggleRippleElement} */ (
             queryRequiredElement('files-toggle-ripple', this.gearButton));
 
     /**
@@ -321,7 +321,7 @@ class FileManagerUI {
     this.shareMenuButton =
         util.queryDecoratedElement('#share-menu-button', cr.ui.MultiMenuButton);
     const shareMenuButtonToggleRipple =
-        /** @type {!FilesToggleRipple} */ (
+        /** @type {!FilesToggleRippleElement} */ (
             queryRequiredElement('files-toggle-ripple', this.shareMenuButton));
     this.shareMenuButton.addEventListener('menushow', () => {
       shareMenuButtonToggleRipple.activated = true;
@@ -439,7 +439,8 @@ class FileManagerUI {
   initAdditionalUI(table, grid, volumeManager) {
     // List container.
     this.listContainer = new ListContainer(
-        queryRequiredElement('#list-container', this.element), table, grid);
+        queryRequiredElement('#list-container', this.element), table, grid,
+        this.dialogType_);
 
     // Location line.
     this.locationLine = new LocationLine(

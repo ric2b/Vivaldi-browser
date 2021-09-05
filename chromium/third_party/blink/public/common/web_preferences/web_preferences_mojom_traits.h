@@ -9,7 +9,6 @@
 #include "mojo/public/cpp/bindings/struct_traits.h"
 #include "net/nqe/effective_connection_type.h"
 #include "third_party/blink/public/common/common_export.h"
-#include "third_party/blink/public/common/css/preferred_color_scheme.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "third_party/blink/public/mojom/webpreferences/web_preferences.mojom.h"
 #include "ui/base/pointer/pointer_device.h"
@@ -29,56 +28,6 @@ struct BLINK_COMMON_EXPORT EnumTraits<blink::mojom::HoverType, ui::HoverType> {
   static blink::mojom::HoverType ToMojom(ui::HoverType type);
 
   static bool FromMojom(blink::mojom::HoverType input, ui::HoverType* out);
-};
-
-template <>
-struct BLINK_COMMON_EXPORT EnumTraits<blink::mojom::PreferredColorScheme,
-                                      blink::PreferredColorScheme> {
-  static blink::mojom::PreferredColorScheme ToMojom(
-      blink::PreferredColorScheme scheme);
-
-  static bool FromMojom(blink::mojom::PreferredColorScheme input,
-                        blink::PreferredColorScheme* out);
-};
-
-template <>
-struct BLINK_COMMON_EXPORT EnumTraits<blink::mojom::EditingBehavior,
-                                      blink::web_pref::EditingBehaviorType> {
-  static blink::mojom::EditingBehavior ToMojom(
-      blink::web_pref::EditingBehaviorType behavior);
-
-  static bool FromMojom(blink::mojom::EditingBehavior input,
-                        blink::web_pref::EditingBehaviorType* out);
-};
-
-template <>
-struct BLINK_COMMON_EXPORT EnumTraits<blink::mojom::ImageAnimationPolicy,
-                                      blink::web_pref::ImageAnimationPolicy> {
-  static blink::mojom::ImageAnimationPolicy ToMojom(
-      blink::web_pref::ImageAnimationPolicy policy);
-
-  static bool FromMojom(blink::mojom::ImageAnimationPolicy input,
-                        blink::web_pref::ImageAnimationPolicy* out);
-};
-
-template <>
-struct BLINK_COMMON_EXPORT
-    EnumTraits<blink::mojom::ViewportStyle, blink::web_pref::ViewportStyle> {
-  static blink::mojom::ViewportStyle ToMojom(
-      blink::web_pref::ViewportStyle style);
-
-  static bool FromMojom(blink::mojom::ViewportStyle input,
-                        blink::web_pref::ViewportStyle* out);
-};
-
-template <>
-struct BLINK_COMMON_EXPORT
-    EnumTraits<blink::mojom::AutoplayPolicy, blink::web_pref::AutoplayPolicy> {
-  static blink::mojom::AutoplayPolicy ToMojom(
-      blink::web_pref::AutoplayPolicy policy);
-
-  static bool FromMojom(blink::mojom::AutoplayPolicy input,
-                        blink::web_pref::AutoplayPolicy* out);
 };
 
 template <>
@@ -383,6 +332,11 @@ struct BLINK_COMMON_EXPORT StructTraits<blink::mojom::WebPreferencesDataView,
     return r.enable_scroll_animator;
   }
 
+  static bool threaded_scrolling_enabled(
+      const blink::web_pref::WebPreferences& r) {
+    return r.threaded_scrolling_enabled;
+  }
+
   static bool prefers_reduced_motion(const blink::web_pref::WebPreferences& r) {
     return r.prefers_reduced_motion;
   }
@@ -432,12 +386,17 @@ struct BLINK_COMMON_EXPORT StructTraits<blink::mojom::WebPreferencesDataView,
     return r.sync_xhr_in_documents_enabled;
   }
 
+  static bool target_blank_implies_no_opener_enabled_will_be_removed(
+      const blink::web_pref::WebPreferences& r) {
+    return r.target_blank_implies_no_opener_enabled_will_be_removed;
+  }
+
   static uint32_t number_of_cpu_cores(
       const blink::web_pref::WebPreferences& r) {
     return r.number_of_cpu_cores;
   }
 
-  static blink::web_pref::EditingBehaviorType editing_behavior(
+  static blink::mojom::EditingBehavior editing_behavior(
       const blink::web_pref::WebPreferences& r) {
     return r.editing_behavior;
   }
@@ -460,7 +419,7 @@ struct BLINK_COMMON_EXPORT StructTraits<blink::mojom::WebPreferencesDataView,
     return r.shrinks_viewport_contents_to_fit;
   }
 
-  static blink::web_pref::ViewportStyle viewport_style(
+  static blink::mojom::ViewportStyle viewport_style(
       const blink::web_pref::WebPreferences& r) {
     return r.viewport_style;
   }
@@ -512,7 +471,7 @@ struct BLINK_COMMON_EXPORT StructTraits<blink::mojom::WebPreferencesDataView,
     return r.accelerated_video_decode_enabled;
   }
 
-  static blink::web_pref::ImageAnimationPolicy animation_policy(
+  static blink::mojom::ImageAnimationPolicy animation_policy(
       const blink::web_pref::WebPreferences& r) {
     return r.animation_policy;
   }
@@ -719,11 +678,6 @@ struct BLINK_COMMON_EXPORT StructTraits<blink::mojom::WebPreferencesDataView,
       const blink::web_pref::WebPreferences& r) {
     return r.disable_accelerated_small_canvases;
   }
-
-  static bool reenable_web_components_v0(
-      const blink::web_pref::WebPreferences& r) {
-    return r.reenable_web_components_v0;
-  }
 #endif
 
   static bool force_dark_mode_enabled(
@@ -758,14 +712,19 @@ struct BLINK_COMMON_EXPORT StructTraits<blink::mojom::WebPreferencesDataView,
     return r.do_not_update_selection_on_mutating_selection_range;
   }
 
-  static blink::web_pref::AutoplayPolicy autoplay_policy(
+  static blink::mojom::AutoplayPolicy autoplay_policy(
       const blink::web_pref::WebPreferences& r) {
     return r.autoplay_policy;
   }
 
-  static blink::PreferredColorScheme preferred_color_scheme(
+  static blink::mojom::PreferredColorScheme preferred_color_scheme(
       const blink::web_pref::WebPreferences& r) {
     return r.preferred_color_scheme;
+  }
+
+  static blink::mojom::PreferredContrast preferred_contrast(
+      const blink::web_pref::WebPreferences& r) {
+    return r.preferred_contrast;
   }
 
   static net::EffectiveConnectionType low_priority_iframes_threshold(

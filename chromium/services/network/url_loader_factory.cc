@@ -26,6 +26,7 @@
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/resource_scheduler/resource_scheduler_client.h"
+#include "services/network/trust_tokens/local_trust_token_operation_delegate_impl.h"
 #include "services/network/trust_tokens/trust_token_request_helper_factory.h"
 #include "services/network/url_loader.h"
 #include "url/gurl.h"
@@ -81,8 +82,8 @@ URLLoaderFactory::URLLoaderFactory(
   DCHECK_NE(mojom::kInvalidProcessId, params_->process_id);
   DCHECK(!params_->factory_override);
   // Only non-navigation IsolationInfos should be bound to URLLoaderFactories.
-  DCHECK_EQ(net::IsolationInfo::RedirectMode::kUpdateNothing,
-            params_->isolation_info.redirect_mode());
+  DCHECK_EQ(net::IsolationInfo::RequestType::kOther,
+            params_->isolation_info.request_type());
   DCHECK(!params_->automatically_assign_isolation_info ||
          params_->isolation_info.IsEmpty());
 
@@ -220,6 +221,11 @@ void URLLoaderFactory::CreateLoaderAndStart(
     trust_token_factory = std::make_unique<TrustTokenRequestHelperFactory>(
         context_->trust_token_store(),
         context_->network_service()->trust_token_key_commitments(),
+        // It's safe to use Unretained because |context_| is guaranteed to
+        // outlive the URLLoader that will own this
+        // TrustTokenRequestHelperFactory.
+        base::BindRepeating(&NetworkContext::client,
+                            base::Unretained(context_)),
         // It's safe to use Unretained here because
         // NetworkContext::CookieManager outlives the URLLoaders associated with
         // the NetworkContext.

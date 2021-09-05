@@ -22,6 +22,7 @@
 #include "chrome/browser/ui/thumbnails/thumbnail_capture_driver.h"
 #include "chrome/browser/ui/thumbnails/thumbnail_readiness_tracker.h"
 #include "chrome/browser/ui/thumbnails/thumbnail_scheduler.h"
+#include "chrome/browser/ui/thumbnails/thumbnail_scheduler_impl.h"
 #include "components/history/core/common/thumbnail_score.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
@@ -85,27 +86,6 @@ class ScopedThumbnailCapture {
   bool captured_ = false;
 };
 
-// A scheduler that immediately captures any tab that wants it without
-// restrictions.
-class ImmediateThumbnailScheduler : public ThumbnailScheduler {
- public:
-  ImmediateThumbnailScheduler() = default;
-  ~ImmediateThumbnailScheduler() override = default;
-
-  // ThumbnailScheduler:
-  void AddTab(TabCapturer* tab) override {}
-  void RemoveTab(TabCapturer* tab) override {}
-
-  void SetTabCapturePriority(TabCapturer* tab,
-                             TabCapturePriority priority) override {
-    DCHECK(tab);
-    if (priority == TabCapturePriority::kNone)
-      tab->SetCapturePermittedByScheduler(false);
-    else
-      tab->SetCapturePermittedByScheduler(true);
-  }
-};
-
 }  // anonymous namespace
 
 // ThumbnailTabHelper::CaptureType ---------------------------------------
@@ -143,7 +123,10 @@ class ThumbnailTabHelper::TabStateTracker
   // none.
   content::RenderWidgetHostView* GetView() {
     auto* const contents = web_contents();
-    return contents ? contents->GetRenderViewHost()->GetWidget()->GetView()
+    return contents ? contents->GetMainFrame()
+                          ->GetRenderViewHost()
+                          ->GetWidget()
+                          ->GetView()
                     : nullptr;
   }
 
@@ -184,7 +167,7 @@ class ThumbnailTabHelper::TabStateTracker
 
     visible_ = new_visible;
     capture_driver_.UpdatePageVisibility(visible_);
-    if (!visible_ && page_readiness_ == PageReadiness::kReadyForFinalCapture)
+    if (!visible_ && page_readiness_ != PageReadiness::kNotReady)
       thumbnail_tab_helper_->CaptureThumbnailOnTabHidden();
   }
 
@@ -245,7 +228,7 @@ void ThumbnailTabHelper::RecordCaptureType(CaptureType type) {
 
 // static
 ThumbnailScheduler& ThumbnailTabHelper::GetScheduler() {
-  static base::NoDestructor<ImmediateThumbnailScheduler> instance;
+  static base::NoDestructor<ThumbnailSchedulerImpl> instance;
   return *instance.get();
 }
 

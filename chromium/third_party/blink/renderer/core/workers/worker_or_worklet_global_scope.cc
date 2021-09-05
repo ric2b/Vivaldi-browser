@@ -8,6 +8,7 @@
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/loader/content_security_notifier.mojom-blink.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-blink.h"
 #include "third_party/blink/public/platform/task_type.h"
@@ -315,6 +316,7 @@ ResourceFetcher* WorkerOrWorkletGlobalScope::CreateFetcherInternal(
         content_security_policy, resource_timing_notifier);
     ResourceFetcherInit init(properties, worker_fetch_context,
                              GetTaskRunner(TaskType::kNetworking),
+                             GetTaskRunner(TaskType::kNetworkingUnfreezable),
                              MakeGarbageCollected<LoaderFactoryForWorker>(
                                  *this, web_worker_fetch_context_),
                              this);
@@ -348,10 +350,11 @@ ResourceFetcher* WorkerOrWorkletGlobalScope::CreateFetcherInternal(
     fetcher = MakeGarbageCollected<ResourceFetcher>(
         ResourceFetcherInit(properties, &FetchContext::NullInstance(),
                             GetTaskRunner(TaskType::kNetworking),
+                            GetTaskRunner(TaskType::kNetworkingUnfreezable),
                             nullptr /* loader_factory */, this));
   }
   if (IsContextPaused())
-    fetcher->SetDefersLoading(true);
+    fetcher->SetDefersLoading(WebURLLoader::DeferType::kDeferred);
   resource_fetchers_.insert(fetcher);
   return fetcher;
 }
@@ -469,7 +472,7 @@ void WorkerOrWorkletGlobalScope::FetchModuleScript(
     const KURL& module_url_record,
     const FetchClientSettingsObjectSnapshot& fetch_client_settings_object,
     WorkerResourceTimingNotifier& resource_timing_notifier,
-    mojom::RequestContextType context_type,
+    mojom::blink::RequestContextType context_type,
     network::mojom::RequestDestination destination,
     network::mojom::CredentialsMode credentials_mode,
     ModuleScriptCustomFetchType custom_fetch_type,
@@ -511,7 +514,7 @@ void WorkerOrWorkletGlobalScope::FetchModuleScript(
 }
 
 void WorkerOrWorkletGlobalScope::SetDefersLoadingForResourceFetchers(
-    bool defers) {
+    WebURLLoader::DeferType defers) {
   for (ResourceFetcher* resource_fetcher : resource_fetchers_)
     resource_fetcher->SetDefersLoading(defers);
 }
@@ -524,11 +527,6 @@ int WorkerOrWorkletGlobalScope::GetOutstandingThrottledLimit() const {
   // is overridden, then this method should also be overridden with a
   // more meaningful value.
   return 2;
-}
-
-CrossVariantMojoRemote<mojom::ResourceLoadInfoNotifierInterfaceBase>
-WorkerOrWorkletGlobalScope::CloneResourceLoadInfoNotifier() {
-  return web_worker_fetch_context_->CloneResourceLoadInfoNotifier();
 }
 
 void WorkerOrWorkletGlobalScope::Trace(Visitor* visitor) const {

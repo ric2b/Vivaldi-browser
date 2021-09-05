@@ -669,10 +669,11 @@ TEST_F(AXTreeSourceArcTest, OnViewSelectedEvent) {
   SetProperty(item, AXBooleanProperty::IMPORTANCE, true);
   SetProperty(item, AXBooleanProperty::VISIBLE_TO_USER, true);
 
-  // A selected event from Slider is kValueChanged.
+  // A selected event from Slider is kAriaAttributeChanged.
   event->source_id = slider->id;
   CallNotifyAccessibilityEvent(event.get());
-  EXPECT_EQ(1, GetDispatchedEventCount(ax::mojom::Event::kValueChanged));
+  EXPECT_EQ(1,
+            GetDispatchedEventCount(ax::mojom::Event::kAriaAttributeChanged));
 
   // A selected event from a collection. In Android, these event properties are
   // populated by AdapterView.
@@ -712,6 +713,8 @@ TEST_F(AXTreeSourceArcTest, OnViewSelectedEvent) {
 }
 
 TEST_F(AXTreeSourceArcTest, OnWindowStateChangedEvent) {
+  set_full_focus_mode(true);
+
   auto event = AXEventData::New();
   event->task_id = 1;
 
@@ -804,6 +807,8 @@ TEST_F(AXTreeSourceArcTest, OnWindowStateChangedEvent) {
 }
 
 TEST_F(AXTreeSourceArcTest, OnFocusEvent) {
+  set_full_focus_mode(true);
+
   auto event = AXEventData::New();
   event->task_id = 1;
   event->event_type = AXEventType::VIEW_FOCUSED;
@@ -857,7 +862,6 @@ TEST_F(AXTreeSourceArcTest, OnFocusEvent) {
 
   // VIEW_ACCESSIBILITY_FOCUSED event also updates the focus in screen reader
   // mode.
-  set_full_focus_mode(true);
   SetProperty(node1, AXBooleanProperty::ACCESSIBILITY_FOCUSED, false);
   SetProperty(node2, AXBooleanProperty::ACCESSIBILITY_FOCUSED, true);
   event->event_type = AXEventType::VIEW_ACCESSIBILITY_FOCUSED;
@@ -1231,11 +1235,13 @@ TEST_F(AXTreeSourceArcTest, StateDescriptionChangedEvent) {
   SetProperty(event.get(), AXEventIntListProperty::CONTENT_CHANGE_TYPES,
               content_change_types);
   CallNotifyAccessibilityEvent(event.get());
-  EXPECT_EQ(ax::mojom::Event::kValueChanged, last_dispatched_event_type());
+  EXPECT_EQ(ax::mojom::Event::kAriaAttributeChanged,
+            last_dispatched_event_type());
 
   event->event_type = AXEventType::WINDOW_CONTENT_CHANGED;
   CallNotifyAccessibilityEvent(event.get());
-  EXPECT_EQ(ax::mojom::Event::kValueChanged, last_dispatched_event_type());
+  EXPECT_EQ(ax::mojom::Event::kAriaAttributeChanged,
+            last_dispatched_event_type());
 
   // State description changed event from non range widget.
   event->node_data.push_back(AXNodeInfoData::New());

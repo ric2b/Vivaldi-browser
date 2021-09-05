@@ -20,6 +20,17 @@
 
 namespace device {
 
+namespace {
+
+void OnPortOpened(mojom::SerialPortManager::OpenPortCallback callback,
+                  const scoped_refptr<base::TaskRunner>& task_runner,
+                  mojo::PendingRemote<mojom::SerialPort> port) {
+  task_runner->PostTask(FROM_HERE,
+                        base::BindOnce(std::move(callback), std::move(port)));
+}
+
+}  // namespace
+
 SerialPortManagerImpl::SerialPortManagerImpl(
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner)
@@ -75,11 +86,13 @@ void SerialPortManagerImpl::GetDevices(GetDevicesCallback callback) {
   std::move(callback).Run(std::move(devices));
 }
 
-void SerialPortManagerImpl::GetPort(
+void SerialPortManagerImpl::OpenPort(
     const base::UnguessableToken& token,
     bool use_alternate_path,
-    mojo::PendingReceiver<mojom::SerialPort> receiver,
-    mojo::PendingRemote<mojom::SerialPortConnectionWatcher> watcher) {
+    device::mojom::SerialConnectionOptionsPtr options,
+    mojo::PendingRemote<mojom::SerialPortClient> client,
+    mojo::PendingRemote<mojom::SerialPortConnectionWatcher> watcher,
+    OpenPortCallback callback) {
   if (!enumerator_) {
     enumerator_ = SerialDeviceEnumerator::Create(ui_task_runner_);
     observed_enumerator_.Add(enumerator_.get());
@@ -89,20 +102,36 @@ void SerialPortManagerImpl::GetPort(
   if (path) {
     io_task_runner_->PostTask(
         FROM_HERE,
-        base::BindOnce(&SerialPortImpl::Create, *path, std::move(receiver),
-                       std::move(watcher), ui_task_runner_));
+        base::BindOnce(&SerialPortImpl::Open, *path, std::move(options),
+                       std::move(client), std::move(watcher), ui_task_runner_,
+                       base::BindOnce(&OnPortOpened, std::move(callback),
+                                      base::SequencedTaskRunnerHandle::Get())));
     return;
   }
 
-  DCHECK(bluetooth_enumerator_);
-  base::Optional<std::string> address =
-      bluetooth_enumerator_->GetAddressFromToken(token);
-  if (address) {
-    ui_task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(&BluetoothSerialPortImpl::Create,
-                                  bluetooth_enumerator_->GetAdapter(), *address,
-                                  std::move(receiver), std::move(watcher)));
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableBluetoothSerialPortProfileInSerialApi)) {
+    if (!bluetooth_enumerator_) {
+      bluetooth_enumerator_ =
+          std::make_unique<BluetoothSerialDeviceEnumerator>();
+      observed_enumerator_.Add(bluetooth_enumerator_.get());
+    }
+    base::Optional<std::string> address =
+        bluetooth_enumerator_->GetAddressFromToken(token);
+    if (address) {
+      ui_task_runner_->PostTask(
+          FROM_HERE,
+          base::BindOnce(
+              &BluetoothSerialPortImpl::Open,
+              bluetooth_enumerator_->GetAdapter(), *address, std::move(options),
+              std::move(client), std::move(watcher),
+              base::BindOnce(&OnPortOpened, std::move(callback),
+                             base::SequencedTaskRunnerHandle::Get())));
+      return;
+    }
   }
+
+  std::move(callback).Run(mojo::NullRemote());
 }
 
 void SerialPortManagerImpl::OnPortAdded(const mojom::SerialPortInfo& port) {

@@ -43,14 +43,6 @@ class UmaPageLoadMetricsObserverTest
   void SetUp() override {
     page_load_metrics::PageLoadMetricsObserverContentTestHarness::SetUp();
     page_load_metrics::LargestContentfulPaintHandler::SetTestMode(true);
-
-    base::PowerMonitor::Initialize(
-        std::make_unique<base::PowerMonitorTestSource>());
-  }
-
-  void TearDown() override {
-    base::PowerMonitor::ShutdownForTesting();
-    page_load_metrics::PageLoadMetricsObserverContentTestHarness::TearDown();
   }
 
   void OnCpuTimingUpdate(RenderFrameHost* render_frame_host,
@@ -71,11 +63,11 @@ class UmaPageLoadMetricsObserverTest
 
     // Experimental values
     tester()->histogram_tester().ExpectTotalCount(
-        internal::kHistogramExperimentalLargestContentfulPaint, 0);
+        internal::kDeprecatedHistogramLargestContentfulPaint, 0);
     tester()->histogram_tester().ExpectTotalCount(
         internal::kHistogramExperimentalLargestContentfulPaintContentType, 0);
     tester()->histogram_tester().ExpectTotalCount(
-        internal::kHistogramExperimentalLargestContentfulPaintMainFrame, 0);
+        internal::kDeprecatedHistogramLargestContentfulPaintMainFrame, 0);
     tester()->histogram_tester().ExpectTotalCount(
         internal::
             kHistogramExperimentalLargestContentfulPaintMainFrameContentType,
@@ -93,7 +85,7 @@ class UmaPageLoadMetricsObserverTest
 
     // Experimental values
     EXPECT_THAT(tester()->histogram_tester().GetAllSamples(
-                    internal::kHistogramExperimentalLargestContentfulPaint),
+                    internal::kDeprecatedHistogramLargestContentfulPaint),
                 testing::ElementsAre(base::Bucket(value, 1)));
     EXPECT_THAT(
         tester()->histogram_tester().GetAllSamples(
@@ -115,7 +107,7 @@ class UmaPageLoadMetricsObserverTest
     // Experimental values
     EXPECT_THAT(
         tester()->histogram_tester().GetAllSamples(
-            internal::kHistogramExperimentalLargestContentfulPaintMainFrame),
+            internal::kDeprecatedHistogramLargestContentfulPaintMainFrame),
         testing::ElementsAre(base::Bucket(value, 1)));
     EXPECT_THAT(
         tester()->histogram_tester().GetAllSamples(
@@ -143,7 +135,7 @@ class UmaPageLoadMetricsObserverTest
         tester()
             ->histogram_tester()
             .GetAllSamples(
-                internal::kHistogramExperimentalLargestContentfulPaintMainFrame)
+                internal::kDeprecatedHistogramLargestContentfulPaintMainFrame)
             .empty());
     EXPECT_TRUE(
         tester()

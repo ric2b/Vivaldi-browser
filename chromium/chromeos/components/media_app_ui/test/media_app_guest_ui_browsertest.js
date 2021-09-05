@@ -41,9 +41,20 @@ GUEST_TEST('GuestHasLang', () => {
   assertEquals(document.documentElement.lang, 'en-US');
 });
 
+GUEST_TEST('GuestLoadsLoadTimeData', () => {
+  // Check `LoadTimeData` exists.
+  chai.assert.isTrue(loadTimeData !== undefined);
+  // Check data loaded into `LoadTimeData` by "strings.js" via
+  // `source->UseStringsJs()` exists.
+  assertEquals(loadTimeData.getValue('appLocale'), 'en-US');
+});
+
 // Test can load files with CSP restrictions. We expect `error` to be called
 // as these tests are loading resources that don't exist. Note: we can't violate
 // CSP in tests or Js Errors will cause test failures.
+// TODO(crbug/1148090): PDF loading tests should also appear here, they are
+// currently in media_app_integration_browsertest.cc due to 'wasm-eval' JS
+// errors.
 GUEST_TEST('GuestCanLoadWithCspRestrictions', async () => {
   // Can load images served from chrome-untrusted://media-app/.
   const image = new Image();
@@ -65,4 +76,10 @@ GUEST_TEST('GuestCanLoadWithCspRestrictions', async () => {
       /** @type {!HTMLVideoElement} */ (document.createElement('video'));
   videoBlob.src = 'blob:chrome-untrusted://media-app/my-fake-blob-hash';
   await test_util.eventToPromise('error', videoBlob);
+});
+
+GUEST_TEST('GuestStartsWithDefaultFileList', async () => {
+  chai.assert.isDefined(window.customLaunchData);
+  chai.assert.isDefined(window.customLaunchData.files);
+  chai.assert.isTrue(window.customLaunchData.files.length === 0);
 });

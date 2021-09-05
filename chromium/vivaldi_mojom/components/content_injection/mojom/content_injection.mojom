@@ -1,0 +1,75 @@
+// Copyright (c) 2020 Vivaldi Technologies AS. All rights reserved
+
+module content_injection.mojom;
+
+import "url/mojom/url.mojom";
+
+enum ItemType {
+  kJS,
+  kCSS,
+};
+
+enum ItemRunTime {
+  kDocumentStart,
+  kDocumentEnd,
+  kDocumentIdle,
+};
+
+enum StylesheetOrigin {
+  kUser,
+  kAuthor,
+};
+
+struct InjectionItemMetadata {
+  ItemType type;
+  ItemRunTime run_time;
+
+  // Only for CSS injections
+  StylesheetOrigin stylesheet_origin;
+
+  // Only for JS injections
+  int32 javascript_world_id;
+};
+
+struct DynamicInjectionItem {
+  InjectionItemMetadata metadata;
+  string content;
+};
+
+struct EnabledStaticInjection {
+  string key;
+  array<string> placeholder_replacements;
+};
+
+struct InjectionsForFrame {
+  array<EnabledStaticInjection> static_injections;
+  array<DynamicInjectionItem> dynamic_injections;
+};
+
+// This structures mirrors the WebIsolatedWorldInfo structure from blink and
+// lets us pass in the same sort of info that an extension would.
+struct JavascriptWorldInfo {
+  string stable_id;
+  string name;
+  url.mojom.Url host_url;
+  string csp;
+};
+
+struct JavascriptWorldRegistration {
+  int32 world_id;
+  JavascriptWorldInfo world_info;
+};
+
+interface Manager {
+  OnStaticContentUpdated(handle<shared_buffer> static_content);
+  RegisterJavascriptWorldInfos(array<JavascriptWorldRegistration> registrations);
+};
+
+interface FrameHandler{
+  EnableStaticInjection(EnabledStaticInjection injection) => (bool result);
+  DisableStaticInjection(string key) => (bool result);
+};
+
+interface FrameInjectionHelper {
+  GetInjections(url.mojom.Url url) => (InjectionsForFrame injections);
+};

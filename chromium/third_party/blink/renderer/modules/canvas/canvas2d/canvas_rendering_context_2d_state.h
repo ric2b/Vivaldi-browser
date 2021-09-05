@@ -11,7 +11,7 @@
 #include "third_party/blink/renderer/platform/fonts/font_selector_client.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_filter.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_flags.h"
-#include "third_party/blink/renderer/platform/transforms/affine_transform.h"
+#include "third_party/blink/renderer/platform/transforms/transformation_matrix.h"
 #include "third_party/blink/renderer/platform/wtf/math_extras.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
@@ -60,10 +60,10 @@ class CanvasRenderingContext2DState final
   void SetLineDashOffset(double);
   double LineDashOffset() const { return line_dash_offset_; }
 
-  // setTransform returns true iff transform is invertible;
-  void SetTransform(const AffineTransform&);
+  void SetTransform(const TransformationMatrix&);
   void ResetTransform();
-  AffineTransform Transform() const { return transform_; }
+  TransformationMatrix GetTransform() const { return transform_; }
+  AffineTransform GetAffineTransform() const;
   bool IsTransformInvertible() const { return is_transform_invertible_; }
 
   void ClipPath(const SkPath&, AntiAliasingMode);
@@ -129,6 +129,26 @@ class CanvasRenderingContext2DState final
 
   void SetTextBaseline(TextBaseline baseline) { text_baseline_ = baseline; }
   TextBaseline GetTextBaseline() const { return text_baseline_; }
+
+  void SetTextLetterSpacing(float letter_space, FontSelector* selector);
+  float GetTextLetterSpacing() const { return letter_spacing_; }
+
+  void SetTextWordSpacing(float word_space, FontSelector* selector);
+  float GetTextWordSpacing() const { return word_spacing_; }
+
+  void SetTextRendering(TextRenderingMode text_rendering,
+                        FontSelector* selector);
+  TextRenderingMode GetTextRendering() const { return text_rendering_mode_; }
+
+  void SetFontKerning(FontDescription::Kerning font_kerning,
+                      FontSelector* selector);
+  FontDescription::Kerning GetFontKerning() const { return font_kerning_; }
+
+  void SetFontVariantCaps(FontDescription::FontVariantCaps font_kerning,
+                          FontSelector* selector);
+  FontDescription::FontVariantCaps GetFontVariantCaps() const {
+    return font_variant_caps_;
+  }
 
   void SetLineWidth(double line_width) {
     stroke_flags_.setStrokeWidth(clampTo<float>(line_width));
@@ -227,7 +247,7 @@ class CanvasRenderingContext2DState final
   mutable sk_sp<PaintFilter> shadow_and_foreground_image_filter_;
 
   double global_alpha_;
-  AffineTransform transform_;
+  TransformationMatrix transform_;
   Vector<double> line_dash_;
   double line_dash_offset_;
 
@@ -241,8 +261,14 @@ class CanvasRenderingContext2DState final
 
   // Text state.
   TextAlign text_align_;
-  TextBaseline text_baseline_;
-  Direction direction_;
+  TextBaseline text_baseline_{kAlphabeticTextBaseline};
+  Direction direction_{kDirectionInherit};
+  float letter_spacing_{0};
+  float word_spacing_{0};
+  TextRenderingMode text_rendering_mode_{TextRenderingMode::kAutoTextRendering};
+  FontDescription::Kerning font_kerning_{FontDescription::kAutoKerning};
+  FontDescription::FontVariantCaps font_variant_caps_{
+      FontDescription::kCapsNormal};
 
   bool realized_font_ : 1;
   bool is_transform_invertible_ : 1;

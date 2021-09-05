@@ -30,7 +30,6 @@ class ASH_EXPORT UnifiedMediaControlsController
    public:
     virtual ~Delegate() = default;
     virtual void ShowMediaControls() = 0;
-    virtual void HideMediaControls() = 0;
     virtual void OnMediaControlsViewClicked() = 0;
   };
 
@@ -70,7 +69,19 @@ class ASH_EXPORT UnifiedMediaControlsController
   }
 
  private:
-  void HideControls();
+  // Update view with pending data if necessary. Called when
+  // |freeze_session_timer| is fired.
+  void UpdateSession();
+
+  // Update artwork in media controls view.
+  void UpdateArtwork(const SkBitmap& bitmap, bool should_start_hide_timer);
+
+  // Reset all pending data to empty.
+  void ResetPendingData();
+
+  bool ShouldShowMediaControls() const;
+
+  void MaybeShowMediaControlsOrEmptyState();
 
   // Weak ptr, owned by view hierarchy.
   UnifiedMediaControlsView* media_controls_ = nullptr;
@@ -86,7 +97,7 @@ class ASH_EXPORT UnifiedMediaControlsController
   mojo::Receiver<media_session::mojom::MediaControllerImageObserver>
       artwork_observer_receiver_{this};
 
-  std::unique_ptr<base::OneShotTimer> hide_controls_timer_ =
+  std::unique_ptr<base::OneShotTimer> freeze_session_timer_ =
       std::make_unique<base::OneShotTimer>();
 
   std::unique_ptr<base::OneShotTimer> hide_artwork_timer_ =
@@ -94,7 +105,20 @@ class ASH_EXPORT UnifiedMediaControlsController
 
   base::Optional<base::UnguessableToken> media_session_id_;
 
+  media_session::mojom::MediaSessionInfoPtr session_info_;
+
+  media_session::MediaMetadata session_metadata_;
+
   base::flat_set<media_session::mojom::MediaSessionAction> enabled_actions_;
+
+  // Pending data to update when |freeze_session_tmier_| fired.
+  base::Optional<base::UnguessableToken> pending_session_id_;
+  base::Optional<media_session::mojom::MediaSessionInfoPtr>
+      pending_session_info_;
+  base::Optional<media_session::MediaMetadata> pending_metadata_;
+  base::Optional<base::flat_set<media_session::mojom::MediaSessionAction>>
+      pending_enabled_actions_;
+  base::Optional<SkBitmap> pending_artwork_;
 };
 
 }  // namespace ash

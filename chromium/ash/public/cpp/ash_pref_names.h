@@ -18,6 +18,8 @@ ASH_PUBLIC_EXPORT extern const char kAccessibilitySpokenFeedbackEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityHighContrastEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityScreenMagnifierCenterFocus[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityScreenMagnifierEnabled[];
+ASH_PUBLIC_EXPORT extern const char
+    kAccessibilityScreenMagnifierFocusFollowingEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityScreenMagnifierScale[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityVirtualKeyboardEnabled[];
 ASH_PUBLIC_EXPORT extern const char kAccessibilityVirtualKeyboardFeatures[];
@@ -58,6 +60,7 @@ ASH_PUBLIC_EXPORT extern const char kShouldAlwaysShowAccessibilityMenu[];
 ASH_PUBLIC_EXPORT extern const char kContextualTooltips[];
 
 ASH_PUBLIC_EXPORT extern const char kDesksNamesList[];
+ASH_PUBLIC_EXPORT extern const char kDesksActiveDesk[];
 
 ASH_PUBLIC_EXPORT extern const char kDockedMagnifierEnabled[];
 ASH_PUBLIC_EXPORT extern const char kDockedMagnifierScale[];
@@ -83,6 +86,8 @@ ASH_PUBLIC_EXPORT extern const char kDisplayTouchAssociations[];
 ASH_PUBLIC_EXPORT extern const char kDisplayTouchPortAssociations[];
 ASH_PUBLIC_EXPORT extern const char kExternalDisplayMirrorInfo[];
 ASH_PUBLIC_EXPORT extern const char kSecondaryDisplays[];
+
+ASH_PUBLIC_EXPORT extern const char kFullscreenAlertEnabled[];
 
 ASH_PUBLIC_EXPORT extern const char kGestureEducationNotificationShown[];
 
@@ -211,8 +216,6 @@ ASH_PUBLIC_EXPORT extern const char kDarkModeEnabled[];
 ASH_PUBLIC_EXPORT extern const char kColorModeThemed[];
 
 ASH_PUBLIC_EXPORT extern const char kAppNotificationBadgingEnabled[];
-
-ASH_PUBLIC_EXPORT extern const char kReverseGestureNotificationCount[];
 
 ASH_PUBLIC_EXPORT extern const char kGlobalMediaControlsPinned[];
 

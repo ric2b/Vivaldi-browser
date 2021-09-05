@@ -171,11 +171,6 @@ class UnifiedSystemTrayView::SystemTrayContainer : public views::View {
   views::BoxLayout* const layout_manager_;
 };
 
-// static
-SkColor UnifiedSystemTrayView::GetFocusRingColor() {
-  return ShelfConfig::Get()->shelf_focus_border_color();
-}
-
 UnifiedSystemTrayView::UnifiedSystemTrayView(
     UnifiedSystemTrayController* controller,
     bool initially_expanded)
@@ -289,12 +284,12 @@ void UnifiedSystemTrayView::AddMediaControlsView(views::View* media_controls) {
 
 void UnifiedSystemTrayView::ShowMediaControls() {
   media_controls_container_->SetShouldShowMediaControls(true);
-  PreferredSizeChanged();
-}
 
-void UnifiedSystemTrayView::HideMediaControls() {
-  media_controls_container_->SetShouldShowMediaControls(false);
-  PreferredSizeChanged();
+  if (detailed_view_container_->GetVisible())
+    return;
+
+  if (media_controls_container_->MaybeShowMediaControls())
+    PreferredSizeChanged();
 }
 
 void UnifiedSystemTrayView::SetDetailedView(views::View* detailed_view) {
@@ -312,6 +307,8 @@ void UnifiedSystemTrayView::SetDetailedView(views::View* detailed_view) {
 void UnifiedSystemTrayView::ResetDetailedView() {
   detailed_view_container_->RemoveAllChildViews(true /* delete_children */);
   detailed_view_container_->SetVisible(false);
+  if (media_controls_container_)
+    media_controls_container_->MaybeShowMediaControls();
   system_tray_container_->SetVisible(true);
   sliders_container_->UpdateOpacity();
   PreferredSizeChanged();

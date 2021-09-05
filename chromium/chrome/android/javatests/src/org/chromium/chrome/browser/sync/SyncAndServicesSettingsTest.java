@@ -22,6 +22,7 @@ import org.junit.Test;
 import org.junit.rules.RuleChain;
 import org.junit.runner.RunWith;
 
+import org.chromium.base.test.util.ApplicationTestUtils;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
@@ -35,7 +36,6 @@ import org.chromium.chrome.browser.settings.SettingsLauncher;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.sync.settings.SyncAndServicesSettings;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.chrome.test.util.ApplicationTestUtils;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
@@ -63,7 +63,7 @@ public class SyncAndServicesSettingsTest {
     @LargeTest
     @Feature({"Sync", "Preferences"})
     public void testSyncSwitch() {
-        mSyncTestRule.setUpAccountAndSignInForTesting();
+        mSyncTestRule.setUpAccountAndEnableSyncForTesting();
         SyncTestUtil.waitForSyncActive();
         SyncAndServicesSettings fragment = startSyncAndServicesPreferences();
         final ChromeSwitchPreference syncSwitch = getSyncSwitch(fragment);
@@ -85,7 +85,7 @@ public class SyncAndServicesSettingsTest {
     @LargeTest
     @Feature({"Sync", "Preferences"})
     public void testOpeningSettingsDoesntEnableSync() {
-        mSyncTestRule.setUpAccountAndSignInForTesting();
+        mSyncTestRule.setUpAccountAndEnableSyncForTesting();
         mSyncTestRule.stopSync();
         SyncAndServicesSettings fragment = startSyncAndServicesPreferences();
         closeFragment(fragment);
@@ -99,7 +99,7 @@ public class SyncAndServicesSettingsTest {
     @LargeTest
     @Feature({"Sync", "Preferences"})
     public void testOpeningSettingsDoesntStartEngine() {
-        mSyncTestRule.setUpAccountAndSignInForTesting();
+        mSyncTestRule.setUpAccountAndEnableSyncForTesting();
         mSyncTestRule.stopSync();
         startSyncAndServicesPreferences();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
@@ -111,7 +111,7 @@ public class SyncAndServicesSettingsTest {
     @LargeTest
     @Feature({"Sync", "Preferences"})
     public void testDefaultControlStatesWithSyncOffThenOn() {
-        mSyncTestRule.setUpAccountAndSignInForTesting();
+        mSyncTestRule.setUpAccountAndEnableSyncForTesting();
         mSyncTestRule.stopSync();
         SyncAndServicesSettings fragment = startSyncAndServicesPreferences();
         assertSyncOffState(fragment);
@@ -124,7 +124,7 @@ public class SyncAndServicesSettingsTest {
     @LargeTest
     @Feature({"Sync", "Preferences"})
     public void testDefaultControlStatesWithSyncOnThenOff() {
-        mSyncTestRule.setUpAccountAndSignInForTesting();
+        mSyncTestRule.setUpAccountAndEnableSyncForTesting();
         SyncTestUtil.waitForSyncActive();
         SyncAndServicesSettings fragment = startSyncAndServicesPreferences();
         assertSyncOnState(fragment);
@@ -137,7 +137,7 @@ public class SyncAndServicesSettingsTest {
     @Feature({"Sync", "Preferences"})
     @DisabledTest(message = "https://crbug.com/991135")
     public void testSyncSwitchClearsServerAutofillCreditCards() {
-        mSyncTestRule.setUpAccountAndSignInForTesting();
+        mSyncTestRule.setUpAccountAndEnableSyncForTesting();
         mSyncTestRule.setPaymentsIntegrationEnabled(true);
 
         Assert.assertFalse(
@@ -250,14 +250,20 @@ public class SyncAndServicesSettingsTest {
     /**
      * Test: if the onboarding was never shown, the AA chrome preference should not exist.
      *
-     * Note: presence of the {@link SyncAndServicesSettings.PREF_AUTOFILL_ASSISTANT}
-     * shared preference indicates whether onboarding was shown or not.
+     * Note:
+     * - Presence of the {@link GoogleServicesSettings.PREF_AUTOFILL_ASSISTANT}
+     *   shared preference indicates whether onboarding was shown or not.
+     * - There's a separate settings screen added if either AUTOFILL_ASSISTANT_PROACTIVE_HELP or
+     *   OMNIBOX_ASSISTANT_VOICE_SEARCH is enabled.
      */
     @Test
     @LargeTest
     @Feature({"Sync"})
     @EnableFeatures(ChromeFeatureList.AUTOFILL_ASSISTANT)
-    public void testAutofillAssistantNoPreferenceIfOnboardingNeverShown() {
+    @DisableFeatures({ChromeFeatureList.AUTOFILL_ASSISTANT_PROACTIVE_HELP,
+            ChromeFeatureList.OMNIBOX_ASSISTANT_VOICE_SEARCH})
+    public void
+    testAutofillAssistantNoPreferenceIfOnboardingNeverShown() {
         final SyncAndServicesSettings syncPrefs = startSyncAndServicesPreferences();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
             Assert.assertNull(
@@ -268,14 +274,20 @@ public class SyncAndServicesSettingsTest {
     /**
      * Test: if the onboarding was shown at least once, the AA chrome preference should also exist.
      *
-     * Note: presence of the {@link SyncAndServicesSettings.PREF_AUTOFILL_ASSISTANT}
-     * shared preference indicates whether onboarding was shown or not.
+     * Note:
+     * - Presence of the {@link GoogleServicesSettings.PREF_AUTOFILL_ASSISTANT}
+     *   shared preference indicates whether onboarding was shown or not.
+     * - There's a separate settings screen added if either AUTOFILL_ASSISTANT_PROACTIVE_HELP or
+     *   OMNIBOX_ASSISTANT_VOICE_SEARCH is enabled.
      */
     @Test
     @LargeTest
     @Feature({"Sync"})
     @EnableFeatures(ChromeFeatureList.AUTOFILL_ASSISTANT)
-    public void testAutofillAssistantPreferenceShownIfOnboardingShown() {
+    @DisableFeatures({ChromeFeatureList.AUTOFILL_ASSISTANT_PROACTIVE_HELP,
+            ChromeFeatureList.OMNIBOX_ASSISTANT_VOICE_SEARCH})
+    public void
+    testAutofillAssistantPreferenceShownIfOnboardingShown() {
         setAutofillAssistantSwitchValue(true);
         final SyncAndServicesSettings syncPrefs = startSyncAndServicesPreferences();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
@@ -290,8 +302,11 @@ public class SyncAndServicesSettingsTest {
     @Test
     @LargeTest
     @Feature({"Sync"})
-    @DisableFeatures(ChromeFeatureList.AUTOFILL_ASSISTANT)
-    public void testAutofillAssistantNoPreferenceIfFeatureDisabled() {
+    @DisableFeatures({ChromeFeatureList.AUTOFILL_ASSISTANT,
+            ChromeFeatureList.AUTOFILL_ASSISTANT_PROACTIVE_HELP,
+            ChromeFeatureList.OMNIBOX_ASSISTANT_VOICE_SEARCH})
+    public void
+    testAutofillAssistantNoPreferenceIfFeatureDisabled() {
         setAutofillAssistantSwitchValue(true);
         final SyncAndServicesSettings syncPrefs = startSyncAndServicesPreferences();
         TestThreadUtils.runOnUiThreadBlocking(() -> {
@@ -307,7 +322,10 @@ public class SyncAndServicesSettingsTest {
     @LargeTest
     @Feature({"Sync"})
     @EnableFeatures(ChromeFeatureList.AUTOFILL_ASSISTANT)
-    public void testAutofillAssistantSwitchOn() {
+    @DisableFeatures({ChromeFeatureList.AUTOFILL_ASSISTANT_PROACTIVE_HELP,
+            ChromeFeatureList.OMNIBOX_ASSISTANT_VOICE_SEARCH})
+    public void
+    testAutofillAssistantSwitchOn() {
         TestThreadUtils.runOnUiThreadBlocking(() -> { setAutofillAssistantSwitchValue(true); });
         final SyncAndServicesSettings syncAndServicesSettings = startSyncAndServicesPreferences();
 
@@ -328,7 +346,10 @@ public class SyncAndServicesSettingsTest {
     @LargeTest
     @Feature({"Sync"})
     @EnableFeatures(ChromeFeatureList.AUTOFILL_ASSISTANT)
-    public void testAutofillAssistantSwitchOff() {
+    @DisableFeatures({ChromeFeatureList.AUTOFILL_ASSISTANT_PROACTIVE_HELP,
+            ChromeFeatureList.OMNIBOX_ASSISTANT_VOICE_SEARCH})
+    public void
+    testAutofillAssistantSwitchOff() {
         TestThreadUtils.runOnUiThreadBlocking(() -> { setAutofillAssistantSwitchValue(false); });
         final SyncAndServicesSettings syncAndServicesSettings = startSyncAndServicesPreferences();
 
@@ -342,23 +363,91 @@ public class SyncAndServicesSettingsTest {
 
     @Test
     @LargeTest
-    @Feature({"Preference"})
-    @EnableFeatures(ChromeFeatureList.SAFE_BROWSING_SECURITY_SECTION_UI)
-    public void testSafeBrowsingSecuritySectionUiFlagOn() {
+    @Feature({"Sync"})
+    @EnableFeatures(ChromeFeatureList.AUTOFILL_ASSISTANT_PROACTIVE_HELP)
+    @DisableFeatures(ChromeFeatureList.OMNIBOX_ASSISTANT_VOICE_SEARCH)
+    public void testAutofillAssistantSubsection_ProactiveHelp() {
         final SyncAndServicesSettings syncAndServicesSettings = startSyncAndServicesPreferences();
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            Assert.assertNull("Safe Browsing should be null when security section is enabled.",
+            Assert.assertNull(syncAndServicesSettings.findPreference(
+                    SyncAndServicesSettings.PREF_AUTOFILL_ASSISTANT));
+
+            Assert.assertTrue(
+                    syncAndServicesSettings
+                            .findPreference(
+                                    SyncAndServicesSettings.PREF_AUTOFILL_ASSISTANT_SUBSECTION)
+                            .isVisible());
+        });
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"AssistantVoiceSearch"})
+    @EnableFeatures(ChromeFeatureList.OMNIBOX_ASSISTANT_VOICE_SEARCH)
+    @DisableFeatures(ChromeFeatureList.AUTOFILL_ASSISTANT_PROACTIVE_HELP)
+    public void testAutofillAssistantSubsection_AssistantVoiceSeach() {
+        final SyncAndServicesSettings syncAndServicesSettings = startSyncAndServicesPreferences();
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Assert.assertNull(syncAndServicesSettings.findPreference(
+                    SyncAndServicesSettings.PREF_AUTOFILL_ASSISTANT));
+
+            Assert.assertTrue(
+                    syncAndServicesSettings
+                            .findPreference(
+                                    SyncAndServicesSettings.PREF_AUTOFILL_ASSISTANT_SUBSECTION)
+                            .isVisible());
+        });
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"Preference"})
+    @EnableFeatures(ChromeFeatureList.SAFE_BROWSING_SECTION_UI)
+    public void testSafeBrowsingSafeBrowsingSectionUiFlagOn() {
+        final SyncAndServicesSettings syncAndServicesSettings = startSyncAndServicesPreferences();
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Assert.assertNull("Safe Browsing should be null when Safe Browsing section is enabled.",
                     syncAndServicesSettings.findPreference(
                             SyncAndServicesSettings.PREF_SAFE_BROWSING));
             Assert.assertNull(
-                    "Password leak detection should be null when security section is enabled.",
+                    "Password leak detection should be null when Safe Browsing section is enabled.",
                     syncAndServicesSettings.findPreference(
                             SyncAndServicesSettings.PREF_PASSWORD_LEAK_DETECTION));
             Assert.assertNull(
-                    "Safe Browsing scout should be null when security section is enabled.",
+                    "Safe Browsing scout should be null when Safe Browsing section is enabled.",
                     syncAndServicesSettings.findPreference(
                             SyncAndServicesSettings.PREF_SAFE_BROWSING_SCOUT_REPORTING));
+        });
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"Preference"})
+    @DisableFeatures(ChromeFeatureList.METRICS_SETTINGS_ANDROID)
+    public void testMetricsSettingsHiddenFlagOff() {
+        final SyncAndServicesSettings syncAndServicesSettings = startSyncAndServicesPreferences();
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Assert.assertNull("Metrics settings should be null when the flag is off.",
+                    syncAndServicesSettings.findPreference(
+                            SyncAndServicesSettings.PREF_METRICS_SETTINGS));
+        });
+    }
+
+    @Test
+    @LargeTest
+    @Feature({"Preference"})
+    @EnableFeatures(ChromeFeatureList.METRICS_SETTINGS_ANDROID)
+    public void testMetricsSettingsShownFlagOn() {
+        final SyncAndServicesSettings syncAndServicesSettings = startSyncAndServicesPreferences();
+
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Assert.assertNotNull("Metrics settings should exist when the flag is on.",
+                    syncAndServicesSettings.findPreference(
+                            SyncAndServicesSettings.PREF_METRICS_SETTINGS));
         });
     }
 

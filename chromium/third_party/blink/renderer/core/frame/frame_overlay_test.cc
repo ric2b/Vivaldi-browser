@@ -20,6 +20,7 @@
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_layer.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_recorder.h"
+#include "third_party/blink/renderer/platform/graphics/paint/paint_canvas.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_controller.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_controller_test.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_record_builder.h"
@@ -61,9 +62,9 @@ class FrameOverlayTest : public testing::Test, public PaintTestConfigurations {
 
   FrameOverlayTest() {
     helper_.Initialize(nullptr, nullptr, nullptr);
-    GetWebView()->MainFrameWidget()->Resize(
-        WebSize(kViewportWidth, kViewportHeight));
-    GetWebView()->MainFrameWidget()->UpdateAllLifecyclePhases(
+    GetWebView()->MainFrameViewWidget()->Resize(
+        gfx::Size(kViewportWidth, kViewportHeight));
+    GetWebView()->MainFrameViewWidget()->UpdateAllLifecyclePhases(
         DocumentUpdateReason::kTest);
   }
 
@@ -103,8 +104,8 @@ TEST_P(FrameOverlayTest, AcceleratedCompositing) {
               onDrawRect(SkRect::MakeWH(kViewportWidth, kViewportHeight),
                          Property(&SkPaint::getColor, SK_ColorYELLOW)));
 
+  PaintRecordBuilder builder;
   if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
-    PaintRecordBuilder builder;
     frame_overlay->Paint(builder.Context());
     builder.EndRecording()->Playback(&canvas);
   } else {
@@ -112,9 +113,13 @@ TEST_P(FrameOverlayTest, AcceleratedCompositing) {
     EXPECT_FALSE(graphics_layer->IsHitTestable());
     EXPECT_EQ(PropertyTreeState::Root(),
               graphics_layer->GetPropertyTreeState());
-    graphics_layer->Paint();
-    graphics_layer->CapturePaintRecord()->Playback(&canvas);
+    Vector<PreCompositedLayerInfo> pre_composited_layers;
+    graphics_layer->PaintRecursively(builder.Context(), pre_composited_layers);
+    ASSERT_EQ(1u, pre_composited_layers.size());
     graphics_layer->GetPaintController().FinishCycle();
+    SkiaPaintCanvas(&canvas).drawPicture(
+        graphics_layer->GetPaintController().GetPaintArtifact().GetPaintRecord(
+            PropertyTreeState::Root()));
   }
 }
 
@@ -123,7 +128,7 @@ TEST_P(FrameOverlayTest, DeviceEmulationScale) {
   params.scale = 1.5;
   params.view_size = gfx::Size(800, 600);
   GetWebView()->EnableDeviceEmulation(params);
-  GetWebView()->MainFrameWidget()->UpdateAllLifecyclePhases(
+  GetWebView()->MainFrameViewWidget()->UpdateAllLifecyclePhases(
       DocumentUpdateReason::kTest);
 
   std::unique_ptr<FrameOverlay> frame_overlay = CreateSolidYellowOverlay();
@@ -154,18 +159,18 @@ TEST_P(FrameOverlayTest, DeviceEmulationScale) {
             state, nullptr, IntRect(0, 0, 800, 600))));
   };
 
+  PaintController paint_controller(PaintController::kTransient);
+  GraphicsContext context(paint_controller);
   if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled()) {
-    auto paint_controller =
-        std::make_unique<PaintController>(PaintController::kTransient);
-    GraphicsContext context(*paint_controller);
     frame_overlay->Paint(context);
-    paint_controller->CommitNewDisplayItems();
-    check_paint_results(*paint_controller);
+    paint_controller.CommitNewDisplayItems();
+    check_paint_results(paint_controller);
   } else {
     auto* graphics_layer = frame_overlay->GetGraphicsLayer();
     EXPECT_FALSE(graphics_layer->IsHitTestable());
     EXPECT_EQ(state, graphics_layer->GetPropertyTreeState());
-    graphics_layer->Paint();
+    Vector<PreCompositedLayerInfo> pre_composited_layers;
+    graphics_layer->PaintRecursively(context, pre_composited_layers);
     check_paint_results(graphics_layer->GetPaintController());
     graphics_layer->GetPaintController().FinishCycle();
   }

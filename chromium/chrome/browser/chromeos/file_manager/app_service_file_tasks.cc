@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/strings/string_util.h"
@@ -51,7 +51,7 @@ TaskType GetTaskType(apps::mojom::AppType app_type) {
     case apps::mojom::AppType::kCrostini:
     case apps::mojom::AppType::kBuiltIn:
     case apps::mojom::AppType::kExtension:
-    case apps::mojom::AppType::kMacNative:
+    case apps::mojom::AppType::kMacOs:
     case apps::mojom::AppType::kPluginVm:
     case apps::mojom::AppType::kLacros:
     case apps::mojom::AppType::kRemote:

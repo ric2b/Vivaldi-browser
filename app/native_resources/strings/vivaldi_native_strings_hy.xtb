@@ -9,8 +9,10 @@
 <translation id="1411638389238344450">Ուղարկել հղումը փոստով</translation>
 <translation id="1454726940098520109">Այլևս չպահանջել հաստատում</translation>
 <translation id="1462666970065907900">Դուք իրո՞ք ցանկանում եք փակել այս պատուհանը։</translation>
+<translation id="1526344461589023948">Ներբեռնված թարմացումը պահպանելիս տեղի ունեցավ սխալ։ Խնդրում ենք ստուգել համակարգչի սկավառակում բավարար ծավալի առկայությունն ու փորձել նորից։</translation>
 <translation id="1657174850639146440">Հրեշ 9</translation>
 <translation id="1676595396635191120">Նոր գաղտնի պատուհան</translation>
+<translation id="1702758681952953055">Եթե սխալը չի վերանում, խնդրում ենք հաղորդել դրա մասին՝ ներառելով հետևյալ մանրամասները.</translation>
 <translation id="1728549374069268714">Փակցնել ու բացել</translation>
 <translation id="1756026472674246267">Բացել հղումը նոր ներդիրում</translation>
 <translation id="1759842336958782510">Chrome</translation>
@@ -20,6 +22,7 @@
 <translation id="1924750141060565109">Բնապատկեր 15</translation>
 <translation id="19598411548897379">Ընդհանուր</translation>
 <translation id="2079036669923635404">Սեղմեք այստեղ՝ Vivaldi-ն <ph name="VERSION" /> տարբերակով թարմացնելու համար։</translation>
+<translation id="2141974047387702305">Թարմացման ֆայլերը ներբեռնելիս տեղի ունեցավ սխալ։ Խնդրում ենք ստուգել Ձեր ինտերնետի միացումն ու փորձել նորից։</translation>
 <translation id="2441056087170876076">Հրեշ 2</translation>
 <translation id="2444387452209867610">Տեղադրել նոթ</translation>
 <translation id="2486841023299517366">Գազան 4</translation>
@@ -45,6 +48,7 @@
 <translation id="3542768452570884558">Բացել հղումը նոր պատուհանում</translation>
 <translation id="3588820906588687999">Բացել պատկերը նոր ներդիրում</translation>
 <translation id="3601066750251199488">Հրեշ 3</translation>
+<translation id="3708982624815781692">Ներբեռնումը չեղարկվել է։</translation>
 <translation id="3732157130969736834">Հղումը հավելել էջանիշերին</translation>
 <translation id="3732388226447288666">Գազան 2</translation>
 <translation id="3732439195215136813">Գազան 5</translation>
@@ -81,11 +85,13 @@
 <translation id="5594602170491763400">Հրեշ 5</translation>
 <translation id="5615637589913244581">Opera 15+ (Բետա)</translation>
 <translation id="5648110075441906505">Բացել պատկերը նոր պատուհանում</translation>
+<translation id="5656371807944747581">Թարմացման սխալ։</translation>
 <translation id="5716238312826274098">Ծանուցումների անջատում</translation>
 <translation id="5770433027661640693">Բնապատկեր 10</translation>
 <translation id="5857090052475505287">Նոր պանակ</translation>
 <translation id="588258955323874662">Լիաէկրան ռեժիմ</translation>
 <translation id="5916080360077521750">Ցավոք՝ Ձեր Chrome-ի կարգավորումները հասանելի չեն, քանի դեռ այդ բրաուզերն աշխատում է։ Այդ կարգավորումները Vivaldi ներկրելու համար պահպանեք Ձեր գործն ու փակեք Chrome-ի բոլոր պատուհանները։ Հետո սեղմեք «Շարունակել»։</translation>
+<translation id="6040143037577758943">Փակել</translation>
 <translation id="6229528619562190452">Սեղմեք այստեղ՝ Vivaldi-ն թարմացնելու համար։</translation>
 <translation id="6234173136417926046">Պատկերն օգտագործել որպես սկզբնական էջի ֆոն</translation>
 <translation id="630690498669249215">Opera-ի էջանիշերի ֆայլ</translation>
@@ -102,9 +108,11 @@
 <translation id="7111492742514999492">Բնապատկեր 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi-ն ստեղծվել է՝ օգտագործելով <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> բաց կոդով նախագիծն ու այլ <ph name="BEGIN_LINK_OSS" />բաց կոդով ծրագրեր<ph name="END_LINK_OSS" />։</translation>
+<translation id="7581266044164103589">Չհաջողվեց գործարկել թարմացման տեղակայիչը։ Խնդրում ենք ստուգել համակարգչի հիշողության կամ սկավառակի մեջ բավարար ծավալի առկայությունն ու փորձել նորից։</translation>
 <translation id="7715497554424665066">Ա&amp;նտեսել թարմացումը</translation>
 <translation id="7724603315864178912">Կտրել</translation>
 <translation id="7793738202466490491">Ավելացնել որպես օրացույցի իրադարձություն</translation>
+<translation id="7848222781052558334">Չհաջողվեց ստուգել ներբեռնված ֆայլերի թվային ստորագրությունը։</translation>
 <translation id="7865983598101744945">Հաստատեք ելքը</translation>
 <translation id="7957213167373139414">Իմ օրացույցը</translation>
 <translation id="8027581147000338959">Բացել նոր պատուհանում</translation>

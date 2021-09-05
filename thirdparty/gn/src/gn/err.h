@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "gn/label.h"
 #include "gn/location.h"
 #include "gn/token.h"
 
@@ -66,6 +67,10 @@ class Err {
   void AppendRange(const LocationRange& range) { ranges_.push_back(range); }
   const RangeList& ranges() const { return ranges_; }
 
+  void set_toolchain_label(const Label& toolchain_label) {
+    toolchain_label_ = toolchain_label;
+  }
+
   void AppendSubErr(const Err& err);
 
   void PrintToStdout() const;
@@ -87,6 +92,7 @@ class Err {
 
   bool has_error_;
   Location location_;
+  Label toolchain_label_;
 
   std::vector<LocationRange> ranges_;
 

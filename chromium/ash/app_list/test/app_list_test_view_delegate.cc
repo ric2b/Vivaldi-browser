@@ -139,11 +139,6 @@ void AppListTestViewDelegate::ShowWallpaperContextMenu(
   ++show_wallpaper_context_menu_count_;
 }
 
-bool AppListTestViewDelegate::ProcessHomeLauncherGesture(
-    ui::GestureEvent* event) {
-  return false;
-}
-
 bool AppListTestViewDelegate::CanProcessEventsOnApplistViews() {
   return true;
 }
@@ -152,10 +147,6 @@ bool AppListTestViewDelegate::ShouldDismissImmediately() {
   return false;
 }
 
-void AppListTestViewDelegate::GetNavigableContentsFactory(
-    mojo::PendingReceiver<content::mojom::NavigableContentsFactory> receiver) {
-  fake_navigable_contents_factory_.BindReceiver(std::move(receiver));
-}
 int AppListTestViewDelegate::GetTargetYForAppListHide(
     aura::Window* root_window) {
   return 0;

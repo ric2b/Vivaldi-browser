@@ -17,7 +17,6 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_gpu_texture_copy_view.h"
 #include "third_party/blink/renderer/core/imagebitmap/image_bitmap.h"
 #include "third_party/blink/renderer/core/typed_arrays/dom_array_buffer.h"
-#include "third_party/blink/renderer/modules/webgpu/client_validation.h"
 #include "third_party/blink/renderer/modules/webgpu/dawn_conversions.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_buffer.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_command_buffer.h"
@@ -181,7 +180,7 @@ void GPUQueue::writeBuffer(GPUBuffer* buffer,
                            const MaybeShared<DOMArrayBufferView>& data,
                            uint64_t data_byte_offset,
                            ExceptionState& exception_state) {
-  WriteBufferImpl(buffer, buffer_offset, data->byteLengthAsSizeT(),
+  WriteBufferImpl(buffer, buffer_offset, data->byteLength(),
                   data->BaseAddressMaybeShared(), data->TypeSize(),
                   data_byte_offset, {}, exception_state);
 }
@@ -192,7 +191,7 @@ void GPUQueue::writeBuffer(GPUBuffer* buffer,
                            uint64_t data_byte_offset,
                            uint64_t byte_size,
                            ExceptionState& exception_state) {
-  WriteBufferImpl(buffer, buffer_offset, data->byteLengthAsSizeT(),
+  WriteBufferImpl(buffer, buffer_offset, data->byteLength(),
                   data->BaseAddressMaybeShared(), data->TypeSize(),
                   data_byte_offset, byte_size, exception_state);
 }
@@ -202,7 +201,7 @@ void GPUQueue::writeBuffer(GPUBuffer* buffer,
                            const DOMArrayBufferBase* data,
                            uint64_t data_byte_offset,
                            ExceptionState& exception_state) {
-  WriteBufferImpl(buffer, buffer_offset, data->ByteLengthAsSizeT(),
+  WriteBufferImpl(buffer, buffer_offset, data->ByteLength(),
                   data->DataMaybeShared(), 1, data_byte_offset, {},
                   exception_state);
 }
@@ -213,7 +212,7 @@ void GPUQueue::writeBuffer(GPUBuffer* buffer,
                            uint64_t data_byte_offset,
                            uint64_t byte_size,
                            ExceptionState& exception_state) {
-  WriteBufferImpl(buffer, buffer_offset, data->ByteLengthAsSizeT(),
+  WriteBufferImpl(buffer, buffer_offset, data->ByteLength(),
                   data->DataMaybeShared(), 1, data_byte_offset, byte_size,
                   exception_state);
 }
@@ -283,7 +282,7 @@ void GPUQueue::writeTexture(
     UnsignedLongEnforceRangeSequenceOrGPUExtent3DDict& write_size,
     ExceptionState& exception_state) {
   WriteTextureImpl(destination, data->BaseAddressMaybeShared(),
-                   data->byteLengthAsSizeT(), data_layout, write_size,
+                   data->byteLength(), data_layout, write_size,
                    exception_state);
 }
 
@@ -293,9 +292,8 @@ void GPUQueue::writeTexture(
     GPUTextureDataLayout* data_layout,
     UnsignedLongEnforceRangeSequenceOrGPUExtent3DDict& write_size,
     ExceptionState& exception_state) {
-  WriteTextureImpl(destination, data->DataMaybeShared(),
-                   data->ByteLengthAsSizeT(), data_layout, write_size,
-                   exception_state);
+  WriteTextureImpl(destination, data->DataMaybeShared(), data->ByteLength(),
+                   data_layout, write_size, exception_state);
 }
 
 void GPUQueue::WriteTextureImpl(
@@ -305,14 +303,18 @@ void GPUQueue::WriteTextureImpl(
     GPUTextureDataLayout* data_layout,
     UnsignedLongEnforceRangeSequenceOrGPUExtent3DDict& write_size,
     ExceptionState& exception_state) {
-  if (!ValidateCopySize(write_size, exception_state) ||
-      !ValidateTextureCopyView(destination, exception_state)) {
-    return;
-  }
-
-  WGPUTextureCopyView dawn_destination = AsDawnType(destination, device_);
-  WGPUTextureDataLayout dawn_data_layout = AsDawnType(data_layout);
   WGPUExtent3D dawn_write_size = AsDawnType(&write_size);
+  WGPUTextureCopyView dawn_destination = AsDawnType(destination, device_);
+
+  WGPUTextureDataLayout dawn_data_layout = {};
+  {
+    const char* error =
+        ValidateTextureDataLayout(data_layout, &dawn_data_layout);
+    if (error) {
+      device_->InjectError(WGPUErrorType_Validation, error);
+      return;
+    }
+  }
 
   GetProcs().queueWriteTexture(GetHandle(), &dawn_destination, data, data_size,
                                &dawn_data_layout, &dawn_write_size);
@@ -327,13 +329,6 @@ void GPUQueue::copyImageBitmapToTexture(
     ExceptionState& exception_state) {
   if (!source->imageBitmap()) {
     exception_state.ThrowTypeError("No valid imageBitmap");
-    return;
-  }
-
-  // TODO(shaobo.yan@intel.com): only the same color format texture copy allowed
-  // now. Need to Explore compatible texture format copy.
-  if (!ValidateCopySize(copy_size, exception_state) ||
-      !ValidateTextureCopyView(destination, exception_state)) {
     return;
   }
 

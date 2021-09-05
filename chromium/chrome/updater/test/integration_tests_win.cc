@@ -6,23 +6,21 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
-#include "base/process/launch.h"
-#include "base/process/process.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
+#include "base/version.h"
 #include "base/win/registry.h"
 #include "chrome/updater/constants.h"
+#include "chrome/updater/test/integration_tests.h"
 #include "chrome/updater/updater_version.h"
 #include "chrome/updater/util.h"
 #include "chrome/updater/win/constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace updater {
-
 namespace test {
-
 namespace {
 
 base::FilePath GetInstallerPath() {
@@ -30,25 +28,6 @@ base::FilePath GetInstallerPath() {
   if (!base::PathService::Get(base::FILE_EXE, &test_executable))
     return base::FilePath();
   return test_executable.DirName().AppendASCII("UpdaterSetup.exe");
-}
-
-bool Run(base::CommandLine command_line, int* exit_code) {
-  auto process = base::LaunchProcess(command_line, {});
-  if (!process.IsValid())
-    return false;
-  if (!process.WaitForExitWithTimeout(base::TimeDelta::FromSeconds(60),
-                                      exit_code))
-    return false;
-  base::WaitableEvent sleep(base::WaitableEvent::ResetPolicy::MANUAL,
-                            base::WaitableEvent::InitialState::NOT_SIGNALED);
-  // The process will exit before it is done uninstalling: sleep for five
-  // seconds to allow uninstall to complete.
-  base::ThreadPool::PostDelayedTask(
-      FROM_HERE, {base::MayBlock()},
-      base::BindOnce(&base::WaitableEvent::Signal, base::Unretained(&sleep)),
-      base::TimeDelta::FromSeconds(5));
-  sleep.Wait();
-  return true;
 }
 
 base::FilePath GetProductPath() {
@@ -60,8 +39,14 @@ base::FilePath GetProductPath() {
       .AppendASCII(UPDATER_VERSION_STRING);
 }
 
-base::FilePath GetExecutablePath() {
+}  // namespace
+
+base::FilePath GetInstalledExecutablePath() {
   return GetProductPath().AppendASCII("updater.exe");
+}
+
+base::FilePath GetFakeUpdaterInstallFolderPath(const base::Version& version) {
+  return GetProductPath().AppendASCII(version.GetString());
 }
 
 base::FilePath GetDataDirPath() {
@@ -71,8 +56,6 @@ base::FilePath GetDataDirPath() {
   return app_data_dir.AppendASCII(COMPANY_SHORTNAME_STRING)
       .AppendASCII(PRODUCT_FULLNAME_STRING);
 }
-
-}  // namespace
 
 void Clean() {
   // TODO(crbug.com/1062288): Delete the Client / ClientState registry keys.
@@ -109,7 +92,7 @@ void EnterTestMode() {
                            L"http://localhost:8367"),
             ERROR_SUCCESS);
   ASSERT_EQ(key.WriteValue(base::UTF8ToUTF16(kDevOverrideKeyUseCUP).c_str(),
-                           static_cast<DWORD>(0)),
+                           DWORD{0}),
             ERROR_SUCCESS);
 }
 
@@ -125,6 +108,14 @@ void ExpectInstalled() {
   EXPECT_TRUE(base::PathExists(GetProductPath()));
 }
 
+void ExpectCandidateUninstalled() {
+  // TODO(crbug.com/1062288): Assert there are no side-by-side COM interfaces.
+  // TODO(crbug.com/1062288): Assert there are no Wake tasks.
+
+  // Files must not exist on the file system.
+  EXPECT_FALSE(base::PathExists(GetProductPath()));
+}
+
 void ExpectActive() {
   // TODO(crbug.com/1062288): Assert that COM interfaces point to this version.
 
@@ -132,32 +123,33 @@ void ExpectActive() {
   EXPECT_TRUE(base::PathExists(GetProductPath()));
 }
 
-void RunWake(int expected_exit_code) {
-  const base::FilePath path = GetExecutablePath();
+void Install() {
+  const base::FilePath path = GetInstallerPath();
   ASSERT_FALSE(path.empty());
   base::CommandLine command_line(path);
-  command_line.AppendSwitch(kWakeSwitch);
+  command_line.AppendSwitch(kInstallSwitch);
   int exit_code = -1;
   ASSERT_TRUE(Run(command_line, &exit_code));
-  EXPECT_EQ(exit_code, expected_exit_code);
-}
-
-void Install() {
-  int exit_code = -1;
-  ASSERT_TRUE(Run(base::CommandLine(GetInstallerPath()), &exit_code));
   EXPECT_EQ(0, exit_code);
 }
 
 void Uninstall() {
-  base::FilePath path = GetExecutablePath();
+  // Note: updater.exe --uninstall is run from the build dir, not the install
+  // dir, because it is useful for tests to be able to run it to clean the
+  // system even if installation has failed or the installed binaries have
+  // already been removed.
+  base::FilePath path = GetInstallerPath().DirName().AppendASCII("updater.exe");
   ASSERT_FALSE(path.empty());
   base::CommandLine command_line(path);
   command_line.AppendSwitch("uninstall");
   int exit_code = -1;
   ASSERT_TRUE(Run(command_line, &exit_code));
   EXPECT_EQ(0, exit_code);
+
+  // Uninstallation involves a race with the uninstall.cmd script and the
+  // process exit. Sleep to allow the script to complete its work.
+  SleepFor(5);
 }
 
 }  // namespace test
-
 }  // namespace updater

@@ -20,6 +20,7 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.incognito.IncognitoUtils;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.vivaldi.browser.common.VivaldiIntentHandler;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -37,6 +38,9 @@ public class LauncherShortcutActivity extends Activity {
 
     private static String sLabelForTesting;
 
+    /** Vivaldi */
+    public static final String ACTION_SCAN_QR_CODE = "vivaldi.shortcut.action.SCAN_QR_CODE";
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -44,6 +48,8 @@ public class LauncherShortcutActivity extends Activity {
         String intentAction = getIntent().getAction();
 
         // Exit early if the original intent action isn't for opening a new tab.
+        // Vivaldi
+        if (!intentAction.equals(ACTION_SCAN_QR_CODE))
         if (!intentAction.equals(ACTION_OPEN_NEW_TAB)
                 && !intentAction.equals(ACTION_OPEN_NEW_INCOGNITO_TAB)) {
             finish();
@@ -147,6 +153,10 @@ public class LauncherShortcutActivity extends Activity {
         Intent newIntent = IntentHandler.createTrustedOpenNewTabIntent(context,
                 launcherShortcutIntentAction.equals(ACTION_OPEN_NEW_INCOGNITO_TAB));
         newIntent.putExtra(IntentHandler.EXTRA_INVOKED_FROM_SHORTCUT, true);
+
+        // Vivaldi
+        newIntent.putExtra(VivaldiIntentHandler.EXTRA_SCAN_QR_CODE,
+                launcherShortcutIntentAction.equals(ACTION_SCAN_QR_CODE));
 
         return newIntent;
     }

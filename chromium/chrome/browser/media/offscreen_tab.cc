@@ -50,7 +50,7 @@ constexpr base::TimeDelta kPollInterval = base::TimeDelta::FromSeconds(1);
 // capture functionality. The WebContents native view, although attached to the
 // window tree, does not become visible on-screen (until it is properly made
 // visible by the user, for example by switching to the tab).
-class OffscreenTab::WindowAdoptionAgent : protected aura::WindowObserver {
+class OffscreenTab::WindowAdoptionAgent final : protected aura::WindowObserver {
  public:
   explicit WindowAdoptionAgent(aura::Window* content_window)
       : content_window_(content_window) {
@@ -131,7 +131,7 @@ class OffscreenTab::WindowAdoptionAgent : protected aura::WindowObserver {
 OffscreenTab::OffscreenTab(Owner* owner, content::BrowserContext* context)
     : owner_(owner),
       otr_profile_(Profile::FromBrowserContext(context)->GetOffTheRecordProfile(
-          Profile::OTRProfileID::CreateUnique("Media::OffscreenTab"))),
+          Profile::OTRProfileID::CreateUniqueForMediaRouter())),
       content_capture_was_detected_(false),
       navigation_policy_(
           std::make_unique<media_router::DefaultNavigationPolicy>()) {
@@ -297,11 +297,6 @@ bool OffscreenTab::IsWebContentsCreationOverridden(
   return true;
 }
 
-bool OffscreenTab::EmbedsFullscreenWidget() {
-  // OffscreenTab will manage fullscreen widgets.
-  return true;
-}
-
 void OffscreenTab::EnterFullscreenModeForTab(
     content::RenderFrameHost* requesting_frame,
     const blink::mojom::FullscreenOptions& options) {
@@ -355,16 +350,6 @@ bool OffscreenTab::CheckMediaAccessPermission(
             content::WebContents::FromRenderFrameHost(render_frame_host));
   return type == blink::mojom::MediaStreamType::GUM_TAB_AUDIO_CAPTURE ||
          type == blink::mojom::MediaStreamType::GUM_TAB_VIDEO_CAPTURE;
-}
-
-void OffscreenTab::DidShowFullscreenWidget() {
-  if (!offscreen_tab_web_contents_->IsBeingCaptured() ||
-      offscreen_tab_web_contents_->GetPreferredSize().IsEmpty())
-    return;  // Do nothing, since no preferred size is specified.
-  content::RenderWidgetHostView* const current_fs_view =
-      offscreen_tab_web_contents_->GetFullscreenRenderWidgetHostView();
-  if (current_fs_view)
-    current_fs_view->SetSize(offscreen_tab_web_contents_->GetPreferredSize());
 }
 
 void OffscreenTab::DidStartNavigation(

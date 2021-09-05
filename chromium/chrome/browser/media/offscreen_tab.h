@@ -43,9 +43,9 @@ class BrowserContext;
 //   3. Automatically, when the associated profile is destroyed.
 //
 // This class operates exclusively on the UI thread and so is not thread-safe.
-class OffscreenTab : public ProfileObserver,
-                     protected content::WebContentsDelegate,
-                     protected content::WebContentsObserver {
+class OffscreenTab final : public ProfileObserver,
+                           protected content::WebContentsDelegate,
+                           protected content::WebContentsObserver {
  public:
   class Owner {
    public:
@@ -108,7 +108,6 @@ class OffscreenTab : public ProfileObserver,
       const GURL& opener_url,
       const std::string& frame_name,
       const GURL& target_url) final;
-  bool EmbedsFullscreenWidget() final;
   void EnterFullscreenModeForTab(
       content::RenderFrameHost* requesting_frame,
       const blink::mojom::FullscreenOptions& options) final;
@@ -125,7 +124,6 @@ class OffscreenTab : public ProfileObserver,
                                   blink::mojom::MediaStreamType type) final;
 
   // content::WebContentsObserver overrides
-  void DidShowFullscreenWidget() final;
   void DidStartNavigation(content::NavigationHandle* navigation_handle) final;
 
   bool in_fullscreen_mode() const { return !non_fullscreen_size_.IsEmpty(); }

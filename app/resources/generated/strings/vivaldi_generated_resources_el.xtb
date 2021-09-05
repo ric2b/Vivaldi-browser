@@ -19,7 +19,6 @@
 <translation id="1221825588892235038">Μόνο επιλογή</translation>
 <translation id="1244303850296295656">Σφάλμα επέκτασης</translation>
 <translation id="125220115284141797">Προεπιλογή</translation>
-<translation id="1274977772557788323">Ρυθμίσεις αποθήκευσης του Adobe Flash Player</translation>
 <translation id="1297175357211070620">Προορισμός</translation>
 <translation id="1303101771013849280">Αρχείο Σελιδοδεικτών HTML</translation>
 <translation id="1380436189840894976">Έξοδος από την κατάσταση ανώνυμης περιήγησης;</translation>
@@ -74,7 +73,6 @@
 <translation id="2218515861914035131">Επικόλληση ως απλό κείμενο</translation>
 <translation id="2249605167705922988">π.χ. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Να επιτρέπονται τα αναγνωριστικά για προστατευμένο περιεχόμενο (μπορεί να απαιτείται επανεκκίνηση του υπολογιστή)</translation>
-<translation id="2263497240924215535">(Απενεργοποιημένη)</translation>
 <translation id="2277255602909579701">Όλα τα cookie και τα δεδομένα ιστοτόπων</translation>
 <translation id="2280486287150724112">Δεξιό περιθώριο</translation>
 <translation id="2282146716419988068">Διαδικασία GPU</translation>
@@ -125,7 +123,6 @@
 <translation id="3013291976881901233">Συσκευές MIDI</translation>
 <translation id="3021678814754966447">&amp;Προβολή Πηγαίου Κώδικα Πλαισίου</translation>
 <translation id="3036546437875325427">Ενεργοποίηση Flash</translation>
-<translation id="3038675903128704560">Να μην επιτρέπεται σε κανέναν ιστότοπο η χρήση προσθήκης για απόκτηση πρόσβασης στον υπολογιστή σας</translation>
 <translation id="3046910703532196514">Ιστοσελίδα, Πλήρης</translation>
 <translation id="3067198360141518313">Εκτέλεση αυτής της Προσθήκης</translation>
 <translation id="3080207940057008665">Κάποιο άλλο πρόγραμμα στον υπολογιστή σας πρόσθεσε ένα θέμα, το οποίο ενδέχεται να αλλάξει τον τρόπο λειτουργίας του Vivaldi.</translation>
@@ -155,12 +152,10 @@
 <translation id="3378572629723696641">Αυτή η επέκταση ενδεχομένως να είναι κατεστραμμένη.</translation>
 <translation id="3387614642886316601">Χρήση βελτιωμένου ορθογραφικού ελέγχου</translation>
 <translation id="3432227430032737297">Κατάργηση όλων όσων εμφανίζονται</translation>
-<translation id="3440761377721825626">Να γίνεται ερώτηση κάθε φορά που ένας ιστότοπος επιθυμεί να χρησιμοποιήσει μια προσθήκη, για να αποκτήσει πρόσβαση στον υπολογιστή σας</translation>
 <translation id="345693547134384690">Άνοιγμα ε&amp;ικόνας σε νέα καρτέλα</translation>
 <translation id="3494769164076977169">Να γίνεται ερώτηση όταν ένας ιστότοπος προσπαθεί να κατεβάσει αυτόματα αρχεία μετά το πρώτο αρχείο (συνιστάται)</translation>
 <translation id="3505030558724226696">Ανάκληση πρόσβασης στη συσκευή</translation>
 <translation id="3511307672085573050">Αντιγραφή διεύθυνσης συν&amp;δέσμου</translation>
-<translation id="3523642406908660543">Να γίνεται ερώτηση κάθε φορά που ένας ιστότοπος επιθυμεί να χρησιμοποιήσει μια προσθήκη για να αποκτήσει πρόσβαση στον υπολογιστή σας (συνιστάται)</translation>
 <translation id="354068948465830244">Μπορεί να διαβάζει και να αλλάζει τα δεδομένα ιστοτόπου</translation>
 <translation id="3560034655160545939">&amp;Ορθογραφικός έλεγχος</translation>
 <translation id="3574917942258583917">Θέλετε να εξέλθετε από την κατάσταση ανώνυμης περιήγησης;</translation>
@@ -219,7 +214,6 @@
 <translation id="4423376891418188461">Επαναφορά Ρυθμίσεων</translation>
 <translation id="4434045419905280838">Αναδυόμενα παράθυρα και ανακατευθύνσεις</translation>
 <translation id="4478664379124702289">Αποθήκευση Συν&amp;δέσμου Ως...</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535">Δεν είναι δυνατή η μετάδοση <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Μετάβαση σε <ph name="URL" /></translation>
 <translation id="4595560905247879544">Οι εφαρμογές και οι επεκτάσεις μπορούν να τροποποιηθούν μόνο από τον διαχειριστή(<ph name="CUSTODIAN_NAME" />).</translation>
@@ -300,7 +294,6 @@
 <translation id="583281660410589416">Άγνωστο</translation>
 <translation id="5860491529813859533">Ενεργοποίηση</translation>
 <translation id="5867841422488265304">Αναζητήστε ή πληκτρ. μια διεύθ. ιστού</translation>
-<translation id="5908769186679515905">Αποκλεισμός ιστοτόπων από την εκτέλεση Flash</translation>
 <translation id="5910363049092958439">Απο&amp;θήκευση Εικόνας Ως...</translation>
 <translation id="5956585768868398362">Είναι αυτή η σελίδα αναζήτησης που περιμένατε;</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> μέγιστη τιμή)</translation>
@@ -373,7 +366,6 @@
 <translation id="7287143125007575591">Δεν επιτρέπεται η πρόσβαση.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Εμφάνιση &amp;στοιχείων ελέγχου</translation>
-<translation id="7311079019872751559">Πρόσβαση σε προσθήκη εκτός περιβάλλοντος δοκιμών</translation>
 <translation id="7385854874724088939">Παρουσιάστηκε σφάλμα κατά την προσπάθεια εκτύπωσης.  Ελέγξτε τον εκτυπωτή σας και προσπαθήστε ξανά.</translation>
 <translation id="7412226954991670867">Μνήμη GPU</translation>
 <translation id="7421925624202799674">&amp;Προβολή Πηγαίου Κώδικα Σελίδας</translation>

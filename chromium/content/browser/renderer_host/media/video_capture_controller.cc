@@ -69,6 +69,11 @@ void LogVideoFrameDrop(media::VideoCaptureFrameDropReason reason,
       UMA_HISTOGRAM_ENUMERATION("Media.VideoCapture.FrameDrop.DisplayCapture",
                                 reason, kEnumCount);
       break;
+    case blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE_THIS_TAB:
+      UMA_HISTOGRAM_ENUMERATION(
+          "Media.VideoCapture.FrameDrop.DisplayCaptureCurrentTab", reason,
+          kEnumCount);
+      break;
     default:
       // Do nothing
       return;
@@ -102,6 +107,11 @@ void LogMaxConsecutiveVideoFrameDropCountExceeded(
       UMA_HISTOGRAM_ENUMERATION(
           "Media.VideoCapture.MaxFrameDropExceeded.DisplayCapture", reason,
           kEnumCount);
+      break;
+    case blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE_THIS_TAB:
+      UMA_HISTOGRAM_ENUMERATION(
+          "Media.VideoCapture.MaxFrameDropExceeded.DisplayCaptureCurrentTab",
+          reason, kEnumCount);
       break;
     default:
       // Do nothing
@@ -333,6 +343,8 @@ void VideoCaptureController::AddClient(
   // client.
   if (state_ != blink::VIDEO_CAPTURE_STATE_ERROR) {
     controller_clients_.push_back(std::move(client));
+    base::UmaHistogramCounts100("Media.VideoCapture.NumberOfClients",
+                                controller_clients_.size());
   }
 }
 

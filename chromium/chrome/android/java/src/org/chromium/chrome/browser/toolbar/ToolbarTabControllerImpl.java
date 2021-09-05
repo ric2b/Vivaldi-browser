@@ -4,18 +4,16 @@
 
 package org.chromium.chrome.browser.toolbar;
 
-import android.text.TextUtils;
-
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
-import org.chromium.chrome.browser.homepage.HomepageManager;
-import org.chromium.chrome.browser.ntp.NewTabPage;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.toolbar.bottom.BottomControlsCoordinator;
 import org.chromium.components.embedder_support.util.UrlConstants;
+import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.Tracker;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -30,6 +28,7 @@ public class ToolbarTabControllerImpl implements ToolbarTabController {
     private final Supplier<Boolean> mOverrideHomePageSupplier;
     private final Supplier<Profile> mProfileSupplier;
     private final Supplier<BottomControlsCoordinator> mBottomControlsCoordinatorSupplier;
+    private final Supplier<String> mHomepageUrlSupplier;
     private final Runnable mOnSuccessRunnable;
 
     /**
@@ -38,6 +37,7 @@ public class ToolbarTabControllerImpl implements ToolbarTabController {
      * @param overrideHomePageSupplier Supplier that returns true if it overrides the default
      *         homepage behavior.
      * @param profileSupplier Supplier for the current profile.
+     * @param homepageUrlSupplier Supplier for the homepage URL.
      * @param onSuccessRunnable Runnable that is invoked when the active tab is asked to perform the
      *         corresponding ToolbarTabController action; it is not invoked if the tab cannot
      *         perform the action or for openHompage.
@@ -45,11 +45,12 @@ public class ToolbarTabControllerImpl implements ToolbarTabController {
     public ToolbarTabControllerImpl(Supplier<Tab> tabSupplier,
             Supplier<Boolean> overrideHomePageSupplier, Supplier<Profile> profileSupplier,
             Supplier<BottomControlsCoordinator> bottomControlsCoordinatorSupplier,
-            Runnable onSuccessRunnable) {
+            Supplier<String> homepageUrlSupplier, Runnable onSuccessRunnable) {
         mTabSupplier = tabSupplier;
         mOverrideHomePageSupplier = overrideHomePageSupplier;
         mProfileSupplier = profileSupplier;
         mBottomControlsCoordinatorSupplier = bottomControlsCoordinatorSupplier;
+        mHomepageUrlSupplier = homepageUrlSupplier;
         mOnSuccessRunnable = onSuccessRunnable;
     }
 
@@ -98,17 +99,26 @@ public class ToolbarTabControllerImpl implements ToolbarTabController {
     @Override
     public void openHomepage() {
         RecordUserAction.record("Home");
-        if (mOverrideHomePageSupplier.get()) return;
+        if (mOverrideHomePageSupplier.get()) {
+            if (ChromeFeatureList.isEnabled(ChromeFeatureList.TOOLBAR_IPH_ANDROID)) {
+                // While some other element is handling the routing of this click event, something
+                // still needs to notify the event. This approach allows consolidation of events for
+                // the home button.
+                Profile profile = mProfileSupplier.get();
+                if (profile != null) {
+                    TrackerFactory.getTrackerForProfile(profile).notifyEvent(
+                            EventConstants.HOMEPAGE_BUTTON_CLICKED);
+                }
+            }
+            return;
+        }
         Tab currentTab = mTabSupplier.get();
         if (currentTab == null) return;
-        String homePageUrl = HomepageManager.getHomepageUri();
-        if (TextUtils.isEmpty(homePageUrl)) {
-            homePageUrl = UrlConstants.NTP_URL;
-        }
+        String homePageUrl = mHomepageUrlSupplier.get();
 
         // Note(david@vivaldi.com): Migrate legacy NTP URLs (chrome://newtab) to the newer format
         // (chrome-native://newtab)
-        if (NewTabPage.isNTPUrl(homePageUrl)) homePageUrl = UrlConstants.NTP_URL;
+        if (UrlUtilities.isNTPUrl(homePageUrl)) homePageUrl = UrlConstants.NTP_URL;
 
         boolean is_chrome_internal =
                 homePageUrl.startsWith(ContentUrlConstants.ABOUT_URL_SHORT_PREFIX)
@@ -130,7 +140,7 @@ public class ToolbarTabControllerImpl implements ToolbarTabController {
         Tracker tracker = TrackerFactory.getTrackerForProfile(mProfileSupplier.get());
         tracker.notifyEvent(EventConstants.HOMEPAGE_BUTTON_CLICKED);
 
-        if (NewTabPage.isNTPUrl(homepageUrl)) {
+        if (UrlUtilities.isNTPUrl(homepageUrl)) {
             tracker.notifyEvent(EventConstants.NTP_HOME_BUTTON_CLICKED);
         }
     }

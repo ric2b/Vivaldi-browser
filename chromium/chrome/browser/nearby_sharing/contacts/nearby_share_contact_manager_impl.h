@@ -35,8 +35,9 @@ class PrefService;
 // certificates accordingly. This implementation persists a hash of the last
 // uploaded contact data, and after every contacts download, a subsequent upload
 // request is made if we detect that the contact list or allowlist has changed
-// since the last successful upload.
-
+// since the last successful upload. We also schedule periodic contact uploads
+// just in case the server removed the record.
+//
 // In addition to supporting on-demand contact downloads, this implementation
 // periodically checks in with the Nearby Share server to see if the user's
 // contact list has changed since the last upload.
@@ -47,7 +48,8 @@ class NearbyShareContactManagerImpl : public NearbyShareContactManager {
     static std::unique_ptr<NearbyShareContactManager> Create(
         PrefService* pref_service,
         NearbyShareClientFactory* http_client_factory,
-        NearbyShareLocalDeviceDataManager* local_device_data_manager);
+        NearbyShareLocalDeviceDataManager* local_device_data_manager,
+        const std::string& profile_user_name);
     static void SetFactoryForTesting(Factory* test_factory);
 
    protected:
@@ -55,7 +57,8 @@ class NearbyShareContactManagerImpl : public NearbyShareContactManager {
     virtual std::unique_ptr<NearbyShareContactManager> CreateInstance(
         PrefService* pref_service,
         NearbyShareClientFactory* http_client_factory,
-        NearbyShareLocalDeviceDataManager* local_device_data_manager) = 0;
+        NearbyShareLocalDeviceDataManager* local_device_data_manager,
+        const std::string& profile_user_name) = 0;
 
    private:
     static Factory* test_factory_;
@@ -67,7 +70,8 @@ class NearbyShareContactManagerImpl : public NearbyShareContactManager {
   NearbyShareContactManagerImpl(
       PrefService* pref_service,
       NearbyShareClientFactory* http_client_factory,
-      NearbyShareLocalDeviceDataManager* local_device_data_manager);
+      NearbyShareLocalDeviceDataManager* local_device_data_manager,
+      const std::string& profile_user_name);
 
   // NearbyShareContactsManager:
   void DownloadContacts() override;
@@ -84,20 +88,26 @@ class NearbyShareContactManagerImpl : public NearbyShareContactManager {
           observer) override;
 
   std::set<std::string> GetAllowedContacts() const;
+  void OnPeriodicContactsUploadRequested();
   void OnContactsDownloadRequested();
   void OnContactsDownloadSuccess(
-      std::vector<nearbyshare::proto::ContactRecord> contacts);
+      std::vector<nearbyshare::proto::ContactRecord> contacts,
+      uint32_t num_unreachable_contacts_filtered_out);
   void OnContactsDownloadFailure();
-  void OnContactsUploadFinished(const std::string& contact_upload_hash,
+  void OnContactsUploadFinished(bool did_contacts_change_since_last_upload,
+                                const std::string& contact_upload_hash,
                                 bool success);
   bool SetAllowlist(const std::set<std::string>& new_allowlist);
   void NotifyMojoObserverContactsDownloaded(
       const std::set<std::string>& allowed_contact_ids,
-      const std::vector<nearbyshare::proto::ContactRecord>& contacts);
+      const std::vector<nearbyshare::proto::ContactRecord>& contacts,
+      uint32_t num_unreachable_contacts_filtered_out);
 
   PrefService* pref_service_ = nullptr;
   NearbyShareClientFactory* http_client_factory_ = nullptr;
   NearbyShareLocalDeviceDataManager* local_device_data_manager_ = nullptr;
+  std::string profile_user_name_;
+  std::unique_ptr<NearbyShareScheduler> periodic_contact_upload_scheduler_;
   std::unique_ptr<NearbyShareScheduler> contact_download_and_upload_scheduler_;
   std::unique_ptr<NearbyShareContactDownloader> contact_downloader_;
   mojo::RemoteSet<nearby_share::mojom::DownloadContactsObserver> observers_set_;

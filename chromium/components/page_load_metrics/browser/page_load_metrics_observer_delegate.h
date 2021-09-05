@@ -17,6 +17,10 @@ namespace content {
 class WebContents;
 }  // namespace content
 
+namespace blink {
+struct MobileFriendliness;
+}  // namespace blink
+
 namespace page_load_metrics {
 
 namespace mojom {
@@ -25,6 +29,7 @@ class FrameMetadata;
 
 struct UserInitiatedInfo;
 struct PageRenderData;
+struct NormalizedCLSData;
 
 // This class tracks global state for the page load that should be accessible
 // from any PageLoadMetricsObserver.
@@ -117,8 +122,10 @@ class PageLoadMetricsObserverDelegate {
   // such as subframe intersections is initialized to defaults.
   virtual const mojom::FrameMetadata& GetSubframeMetadata() const = 0;
   virtual const PageRenderData& GetPageRenderData() const = 0;
+  virtual const NormalizedCLSData& GetNormalizedCLSData() const = 0;
   // InputTiming data accumulated across all frames.
   virtual const mojom::InputTiming& GetPageInputTiming() const = 0;
+  virtual const blink::MobileFriendliness& GetMobileFriendliness() const = 0;
   virtual const PageRenderData& GetMainFrameRenderData() const = 0;
   virtual const ui::ScopedVisibilityTracker& GetVisibilityTracker() const = 0;
   virtual const ResourceTracker& GetResourceTracker() const = 0;
@@ -127,7 +134,8 @@ class PageLoadMetricsObserverDelegate {
   virtual const LargestContentfulPaintHandler&
   GetLargestContentfulPaintHandler() const = 0;
   // Returns a LargestContentfulPaintHandler for the experimental version of
-  // LCP.
+  // LCP. Note that currently this 'experimental version' is the version that is
+  // being deprecated.
   virtual const LargestContentfulPaintHandler&
   GetExperimentalLargestContentfulPaintHandler() const = 0;
 

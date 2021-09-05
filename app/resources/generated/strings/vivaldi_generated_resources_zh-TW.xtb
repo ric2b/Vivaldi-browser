@@ -19,7 +19,6 @@
 <translation id="1221825588892235038">僅限選取的內容</translation>
 <translation id="1244303850296295656">延伸套件錯誤</translation>
 <translation id="125220115284141797">預設</translation>
-<translation id="1274977772557788323">Adobe Flash Player 儲存設定</translation>
 <translation id="1297175357211070620">印表機</translation>
 <translation id="1303101771013849280">HTML 書籤檔案</translation>
 <translation id="1380436189840894976">無論如何都要離開無痕模式嗎？</translation>
@@ -74,7 +73,6 @@
 <translation id="2218515861914035131">以純文字貼上</translation>
 <translation id="2249605167705922988">例如：1-5、8、11-13</translation>
 <translation id="225240747099314620">允許受保護內容的標識符（可能需要重新啟動）</translation>
-<translation id="2263497240924215535">（已停用）</translation>
 <translation id="2277255602909579701">全部 Cookie 和網站資料</translation>
 <translation id="2280486287150724112">右邊界</translation>
 <translation id="2282146716419988068">GPU 處理程式</translation>
@@ -125,7 +123,6 @@
 <translation id="3013291976881901233">MIDI 裝置</translation>
 <translation id="3021678814754966447">檢視頁框原始碼(&amp;V)</translation>
 <translation id="3036546437875325427">啟用 Flash</translation>
-<translation id="3038675903128704560">不允許任何網站使用外掛程式存取你的電腦</translation>
 <translation id="3046910703532196514">網頁，完整內容</translation>
 <translation id="3067198360141518313">執行這個外掛程式</translation>
 <translation id="3080207940057008665">電腦中其他程式所新增的主題可能會變更 Vivaldi 的運作方式。</translation>
@@ -154,12 +151,10 @@
 <translation id="3378572629723696641">這個延伸套件可能已損毀。</translation>
 <translation id="3387614642886316601">使用進階拼字檢查</translation>
 <translation id="3432227430032737297">將顯示的項目全部移除</translation>
-<translation id="3440761377721825626">當網站要使用外掛程式存取您的電腦時，必須先詢問您</translation>
 <translation id="345693547134384690">在新分頁開啟圖片(&amp;I)</translation>
 <translation id="3494769164076977169">在網站已下載第一個檔案，並且嘗試自動下載更多檔案時先詢問我 (建議使用)</translation>
 <translation id="3505030558724226696">撤銷裝置存取權限</translation>
 <translation id="3511307672085573050">複製連結網址(&amp;E)</translation>
-<translation id="3523642406908660543">在網站要使用外掛程式存取您的電腦時，必須先詢問您 (建議使用)</translation>
 <translation id="354068948465830244">可讀取及更改網站資料</translation>
 <translation id="3560034655160545939">拼字檢查(&amp;S)</translation>
 <translation id="3574917942258583917">確定要結束無痕模式嗎？</translation>
@@ -218,7 +213,6 @@
 <translation id="4423376891418188461">復原設定</translation>
 <translation id="4434045419905280838">彈出式視窗與重新導向</translation>
 <translation id="4478664379124702289">另存連結(&amp;K)...</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535">無法投放 <ph name="HOST_NAME" />。</translation>
 <translation id="4593021220803146968">前往 <ph name="URL" /> (&amp;G)</translation>
 <translation id="4595560905247879544">只有管理員 (<ph name="CUSTODIAN_NAME" />) 可以修改應用程式和延伸套件。</translation>
@@ -299,7 +293,6 @@
 <translation id="583281660410589416">未知</translation>
 <translation id="5860491529813859533">開啟</translation>
 <translation id="5867841422488265304">搜尋或輸入網址</translation>
-<translation id="5908769186679515905">禁止網站執行 Flash</translation>
 <translation id="5910363049092958439">另存圖片(&amp;V)...</translation>
 <translation id="5956585768868398362">這是您想要的搜尋頁嗎？</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> 個 (最多 <ph name="NUM_KILOBYTES_LIVE" /> 個)</translation>
@@ -372,7 +365,6 @@
 <translation id="7287143125007575591">存取遭拒。</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">顯示控制介面(&amp;C)</translation>
-<translation id="7311079019872751559">無沙箱防護的外掛程式存取行為</translation>
 <translation id="7385854874724088939">準備列印時出現錯誤，請檢查您的印表機，然後再試一次。</translation>
 <translation id="7412226954991670867">GPU 記憶體</translation>
 <translation id="7421925624202799674">檢視網頁原始碼(&amp;V)</translation>

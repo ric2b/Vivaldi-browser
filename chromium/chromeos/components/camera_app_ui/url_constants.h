@@ -9,7 +9,9 @@ namespace chromeos {
 
 extern const char kChromeUICameraAppHost[];
 extern const char kChromeUICameraAppMainURL[];
+extern const char kChromeUICameraAppScopeURL[];
 extern const char kChromeUICameraAppURL[];
+extern const char kChromeUIUntrustedCameraAppURL[];
 
 }  // namespace chromeos
 

@@ -7,7 +7,7 @@
 #include <stdint.h>
 #include <utility>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/single_thread_task_runner.h"
 #include "base/trace_event/trace_event.h"
@@ -298,6 +298,11 @@ void MediaStreamRemoteVideoSource::RemoteVideoSourceDelegate::OnFrame(
   // immediately.
   if (!render_immediately)
     video_frame->metadata()->reference_time = render_time;
+
+  if (incoming_frame.max_composition_delay_in_frames()) {
+    video_frame->metadata()->maximum_composition_delay_in_frames =
+        *incoming_frame.max_composition_delay_in_frames();
+  }
 
   video_frame->metadata()->decode_end_time = current_time;
 

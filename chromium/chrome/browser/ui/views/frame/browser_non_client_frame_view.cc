@@ -19,7 +19,6 @@
 #include "chrome/browser/ui/views/frame/tab_strip_region_view.h"
 #include "chrome/browser/ui/views/web_apps/web_app_frame_toolbar_view.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/grit/theme_resources.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/hit_test.h"
@@ -142,7 +141,9 @@ bool BrowserNonClientFrameView::EverHasVisibleBackgroundTabShapes() const {
 }
 
 bool BrowserNonClientFrameView::CanDrawStrokes() const {
-  return true;
+  // Web apps should not draw strokes if they don't have a tab strip.
+  return !browser_view_->browser()->app_controller() ||
+         browser_view_->browser()->app_controller()->has_tab_strip();
 }
 
 SkColor BrowserNonClientFrameView::GetCaptionColor(

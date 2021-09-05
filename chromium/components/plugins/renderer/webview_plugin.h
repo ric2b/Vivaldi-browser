@@ -15,6 +15,7 @@
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-forward.h"
 #include "third_party/blink/public/mojom/page/widget.mojom.h"
+#include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url_response.h"
 #include "third_party/blink/public/web/blink.h"
@@ -202,10 +203,22 @@ class WebViewPlugin : public blink::WebPlugin,
                                 const gfx::Rect& focus_rect,
                                 base::i18n::TextDirection focus_dir,
                                 bool is_anchor_first) override {}
+    void CreateFrameSink(
+        mojo::PendingReceiver<viz::mojom::CompositorFrameSink>
+            compositor_frame_sink_receiver,
+        mojo::PendingRemote<viz::mojom::CompositorFrameSinkClient>) override {}
+    void RegisterRenderFrameMetadataObserver(
+        mojo::PendingReceiver<cc::mojom::RenderFrameMetadataObserverClient>
+            render_frame_metadata_observer_client_receiver,
+        mojo::PendingRemote<cc::mojom::RenderFrameMetadataObserver>
+            render_frame_metadata_observer) override {}
 
    private:
     WebViewPlugin* plugin_;
     blink::WebNavigationControl* frame_ = nullptr;
+
+    std::unique_ptr<blink::scheduler::WebAgentGroupScheduler>
+        agent_group_scheduler_;
 
     // Owned by us, deleted via |close()|.
     blink::WebView* web_view_;

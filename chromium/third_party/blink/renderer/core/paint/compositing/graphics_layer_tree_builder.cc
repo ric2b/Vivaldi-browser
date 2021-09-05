@@ -124,22 +124,23 @@ void GraphicsLayerTreeBuilder::RebuildRecursive(
     }
   }
 
-  if (layer.GetLayoutObject().IsLayoutEmbeddedContent()) {
+  if (auto* embedded =
+          DynamicTo<LayoutEmbeddedContent>(layer.GetLayoutObject())) {
     DCHECK(this_layer_children.IsEmpty());
     PaintLayerCompositor* inner_compositor =
-        PaintLayerCompositor::FrameContentsCompositor(
-            ToLayoutEmbeddedContent(layer.GetLayoutObject()));
+        PaintLayerCompositor::FrameContentsCompositor(*embedded);
     if (inner_compositor) {
-      // If the embedded frame is render-throttled, it might not be compositing
-      // clean at this point. In that case, we still need to connect its
-      // existing root graphics layer, so we need to query the stale compositing
-      // state.
-      DisableCompositingQueryAsserts disabler;
-      if (inner_compositor->InCompositingMode()) {
-        if (GraphicsLayer* inner_root_layer =
-                inner_compositor->RootGraphicsLayer()) {
-          layer_vector_for_children->push_back(inner_root_layer);
-        }
+      if (GraphicsLayer* inner_root_graphics_layer =
+              inner_compositor->RootGraphicsLayer()) {
+        // If inner_root_graphics_layer is non-null, then either the inner frame
+        // is up-to-date and in compositing mode; or the inner frame is
+        // throttled and we're using its pre-existing root graphics layer.
+        DCHECK(inner_compositor->RootLayer()
+                   ->GetLayoutObject()
+                   .GetFrameView()
+                   ->ShouldThrottleRendering() ||
+               inner_compositor->InCompositingMode());
+        layer_vector_for_children->push_back(inner_root_graphics_layer);
       }
       inner_compositor->ClearRootLayerAttachmentDirty();
     }

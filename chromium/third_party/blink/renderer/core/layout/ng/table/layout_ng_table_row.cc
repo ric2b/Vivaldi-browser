@@ -16,10 +16,12 @@ LayoutNGTableRow::LayoutNGTableRow(Element* element)
     : LayoutNGMixin<LayoutBlock>(element) {}
 
 bool LayoutNGTableRow::IsEmpty() const {
+  NOT_DESTROYED();
   return !FirstChild();
 }
 
 LayoutNGTable* LayoutNGTableRow::Table() const {
+  NOT_DESTROYED();
   if (LayoutObject* section = Parent()) {
     if (LayoutObject* table = section->Parent())
       return To<LayoutNGTable>(table);
@@ -29,6 +31,7 @@ LayoutNGTable* LayoutNGTableRow::Table() const {
 
 void LayoutNGTableRow::AddChild(LayoutObject* child,
                                 LayoutObject* before_child) {
+  NOT_DESTROYED();
   if (LayoutNGTable* table = Table())
     table->TableGridStructureChanged();
 
@@ -77,6 +80,7 @@ void LayoutNGTableRow::AddChild(LayoutObject* child,
 }
 
 void LayoutNGTableRow::RemoveChild(LayoutObject* child) {
+  NOT_DESTROYED();
   if (LayoutNGTable* table = Table())
     table->TableGridStructureChanged();
   LayoutNGMixin<LayoutBlock>::RemoveChild(child);
@@ -84,20 +88,42 @@ void LayoutNGTableRow::RemoveChild(LayoutObject* child) {
 
 void LayoutNGTableRow::StyleDidChange(StyleDifference diff,
                                       const ComputedStyle* old_style) {
+  NOT_DESTROYED();
   if (LayoutNGTable* table = Table()) {
-    if (NGTableBorders::HasBorder(old_style) ||
-        NGTableBorders::HasBorder(Style()))
+    if ((old_style && !old_style->BorderVisuallyEqual(StyleRef())) ||
+        (diff.TextDecorationOrColorChanged() &&
+         StyleRef().HasBorderColorReferencingCurrentColor())) {
       table->GridBordersChanged();
+    }
   }
   LayoutNGMixin<LayoutBlock>::StyleDidChange(diff, old_style);
 }
 
 LayoutBox* LayoutNGTableRow::CreateAnonymousBoxWithSameTypeAs(
     const LayoutObject* parent) const {
+  NOT_DESTROYED();
   return LayoutObjectFactory::CreateAnonymousTableRowWithParent(*parent);
 }
 
+// This is necessary because TableRow paints beyond border box if it contains
+// rowspanned cells.
+void LayoutNGTableRow::AddVisualOverflowFromBlockChildren() {
+  NOT_DESTROYED();
+  LayoutBlock::AddVisualOverflowFromBlockChildren();
+  for (LayoutBox* child = FirstChildBox(); child;
+       child = child->NextSiblingBox()) {
+    DCHECK(child->IsTableCell());
+    // Cells that do not span rows do not contribute to excess overflow.
+    if (To<LayoutNGTableCell>(child)->ComputedRowSpan() == 1)
+      continue;
+    LayoutRect child_visual_overflow_rect =
+        child->VisualOverflowRectForPropagation();
+    AddSelfVisualOverflow(child_visual_overflow_rect);
+  }
+}
+
 unsigned LayoutNGTableRow::RowIndex() const {
+  NOT_DESTROYED();
   unsigned index = 0;
   for (LayoutObject* child = Parent()->SlowFirstChild(); child;
        child = child->NextSibling()) {
@@ -110,26 +136,32 @@ unsigned LayoutNGTableRow::RowIndex() const {
 }
 
 LayoutNGTableCell* LayoutNGTableRow::LastCell() const {
+  NOT_DESTROYED();
   return To<LayoutNGTableCell>(LastChild());
 }
 
 LayoutNGTableSectionInterface* LayoutNGTableRow::SectionInterface() const {
+  NOT_DESTROYED();
   return To<LayoutNGTableSection>(Parent());
 }
 
 LayoutNGTableRowInterface* LayoutNGTableRow::PreviousRowInterface() const {
+  NOT_DESTROYED();
   return ToInterface<LayoutNGTableRowInterface>(PreviousSibling());
 }
 
 LayoutNGTableRowInterface* LayoutNGTableRow::NextRowInterface() const {
+  NOT_DESTROYED();
   return ToInterface<LayoutNGTableRowInterface>(NextSibling());
 }
 
 LayoutNGTableCellInterface* LayoutNGTableRow::FirstCellInterface() const {
+  NOT_DESTROYED();
   return ToInterface<LayoutNGTableCellInterface>(FirstChild());
 }
 
 LayoutNGTableCellInterface* LayoutNGTableRow::LastCellInterface() const {
+  NOT_DESTROYED();
   return ToInterface<LayoutNGTableCellInterface>(LastChild());
 }
 

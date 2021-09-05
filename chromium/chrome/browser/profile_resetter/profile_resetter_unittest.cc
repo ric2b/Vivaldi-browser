@@ -17,7 +17,7 @@
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_path_override.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -495,10 +495,10 @@ TEST_F(ProfileResetterTest, ResetContentSettings) {
     }
     if (info->IsSettingValid(site_setting)) {
       host_content_settings_map->SetContentSettingDefaultScope(
-          url, url, content_type, std::string(), site_setting);
+          url, url, content_type, site_setting);
       ContentSettingsForOneType host_settings;
-      host_content_settings_map->GetSettingsForOneType(
-          content_type, std::string(), &host_settings);
+      host_content_settings_map->GetSettingsForOneType(content_type,
+                                                       &host_settings);
       EXPECT_EQ(2U, host_settings.size());
     }
   }
@@ -516,12 +516,12 @@ TEST_F(ProfileResetterTest, ResetContentSettings) {
     EXPECT_TRUE(default_settings.count(content_type));
     EXPECT_EQ(default_settings[content_type], default_setting);
     ContentSetting site_setting = host_content_settings_map->GetContentSetting(
-        GURL("example.org"), GURL(), content_type, std::string());
+        GURL("example.org"), GURL(), content_type);
     EXPECT_EQ(default_setting, site_setting);
 
     ContentSettingsForOneType host_settings;
-    host_content_settings_map->GetSettingsForOneType(
-        content_type, std::string(), &host_settings);
+    host_content_settings_map->GetSettingsForOneType(content_type,
+                                                     &host_settings);
     EXPECT_EQ(1U, host_settings.size());
   }
 }

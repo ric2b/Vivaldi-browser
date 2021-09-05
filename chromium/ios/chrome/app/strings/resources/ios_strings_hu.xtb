@@ -18,7 +18,9 @@
 <translation id="1112015203684611006">A nyomtatás sikertelen.</translation>
 <translation id="1125564390852150847">Új lap létrehozása.</translation>
 <translation id="1145536944570833626">Meglévő adatok törlése.</translation>
+<translation id="1147031633655575115">Bejelentkezve mint <ph name="USER" /></translation>
 <translation id="1154690515305205900">A kiemelt szöveghez nem lehet linket létrehozni.</translation>
+<translation id="1157749421655780457">Helyadatok engedélyezése</translation>
 <translation id="1165039591588034296">Hiba</translation>
 <translation id="1172898394251786223">Következő mező</translation>
 <translation id="1176932207622159128">A kép nem menthető</translation>
@@ -53,6 +55,7 @@
 <translation id="1449835205994625556">Jelszó elrejtése</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> elem</translation>
 <translation id="1491277525950327607">A beállítás módosításához koppintson duplán</translation>
+<translation id="1492417797159476138">Már elmentette ezt a felhasználónevet ehhez a webhelyhez</translation>
 <translation id="1509486075633541495">Bejelentkezés a webhelyre</translation>
 <translation id="1509960214886564027">Számos webhelyen nem működnek a funkciók</translation>
 <translation id="152234381334907219">Soha nem került mentésre</translation>
@@ -111,7 +114,7 @@
 <translation id="2139867232736819575">Vágólapra másolt szöveg keresése</translation>
 <translation id="2149973817440762519">Könyvjelző szerkesztése</translation>
 <translation id="2175927920773552910">QR-kód</translation>
-<translation id="2198757192731523470">A Google felhasználhatja az Ön előzményeit a Keresés, a hirdetések és más Google-szolgáltatások személyre szabására.</translation>
+<translation id="2198757192731523470">A Google felhasználhatja az Ön előzményeit a Kereső, a hirdetések és más Google-szolgáltatások személyre szabására.</translation>
 <translation id="2218443599109088993">Kicsinyítés</translation>
 <translation id="2230173723195178503">A weboldal betöltött</translation>
 <translation id="2239626343334228536">Böngészési adatok törlése…</translation>
@@ -222,7 +225,7 @@ Inkognitó módban a webhelyek nem használhatnak cookie-kat arra, hogy megfigye
 <translation id="3371831930909698441">Rendelkezésre áll fordítás. A beállítások a képernyő alsó részén találhatók.</translation>
 <translation id="3393920035788932672">Pop-up megengedett</translation>
 <translation id="3399930248910934354">Chrome-beállítások megnyitása</translation>
-<translation id="3425644765244388016">Egyedi kártyanév</translation>
+<translation id="3425644765244388016">Egyéni kártyanév</translation>
 <translation id="3433057996795775706">A jelszó eltávolításával nem törli fiókját a következő domainről: <ph name="WEBSITE" />. Ha szeretné megőrizni fiókja biztonságát, módosítsa a(z) <ph name="WEBSITE" /> domainen használt jelszavát.</translation>
 <translation id="3443810440409579745">Sikerült a lap fogadása.</translation>
 <translation id="3445288400492335833"><ph name="MINUTES" /> perc</translation>
@@ -266,6 +269,7 @@ Hajtsa végre az alábbi lépéseket:</translation>
 <translation id="385051799172605136">Vissza</translation>
 <translation id="3892144330757387737">Itt láthatja majd az előzményeit</translation>
 <translation id="3897092660631435901">Menü</translation>
+<translation id="3913386780052199712">Bejelentkezve: Chrome</translation>
 <translation id="3915450441834151894">Webhelyadatok</translation>
 <translation id="3922310737605261887">Másolt szöveg keresése</translation>
 <translation id="3928666092801078803">Adataim egyesítése</translation>
@@ -340,6 +344,7 @@ Adatai az összetett szinkronizálási jelszavával vannak titkosítva. Írja be
 <translation id="4751645464639803239">Új inkognitó lap</translation>
 <translation id="4758977202923349869">Igazítsa a hitelkártyát ehhez a kerethez</translation>
 <translation id="4775879719735953715">Alapértelmezett böngésző</translation>
+<translation id="4778644898150334464">Másik jelszó használata</translation>
 <translation id="4802417911091824046">Az összetett jelszavas titkosítás nem tartalmazza a Google Payben megadott fizetési módokat és címeket.
 
 A beállítás módosításához <ph name="BEGIN_LINK" />állítsa vissza a szinkronizálást<ph name="END_LINK" /></translation>
@@ -372,6 +377,7 @@ A beállítás módosításához <ph name="BEGIN_LINK" />állítsa vissza a szin
 <translation id="5059136629401106827">OK</translation>
 <translation id="5062321486222145940">Google Drive telepítése</translation>
 <translation id="5083464117946352670">A fájlméret ismeretlen.</translation>
+<translation id="5090832849094901128">A jelszó eltávolításával nem törli fiókját a következő domainről: <ph name="WEBSITE" />.</translation>
 <translation id="5094827893301452931">A Tweet kész.</translation>
 <translation id="5118764316110575523">Ki</translation>
 <translation id="5127805178023152808">Szinkronizálás kikapcsolva</translation>
@@ -511,6 +517,9 @@ A webhelyek nem használhatnak cookie-kat arra, hogy megfigyeljék más webhelye
 <translation id="6476800141292307438">Az oldal lefordítása <ph name="LANGUAGE" /> nyelvre. A képernyő alján láthatók a rendelkezésre álló lehetőségek.</translation>
 <translation id="648164694371393720">Hitelesítési hiba</translation>
 <translation id="6482629121755362506"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> elem törölve</translation>
+<translation id="6497772452874122664">Ha megbízik a(z) <ph name="TIME" /> webhelyben, használhatja másik webhelyhez mentett jelszavát.
+
+Próbáljon minden webhelyen egyedi jelszót használni.</translation>
 <translation id="651505212789431520">Megszakítja a szinkronizálást? A szinkronizálás bármikor bekapcsolható a Beállításokban.</translation>
 <translation id="6561262006871132942">Nagyítás</translation>
 <translation id="6585618849026997638">A fontos oldalakra könyvjelző felvételével térhet vissza a későbbiekben.</translation>
@@ -590,6 +599,7 @@ A webhelyek nem használhatnak cookie-kat arra, hogy megfigyeljék más webhelye
 <translation id="739941347996872055">Előző lap</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7409985198648820906"><ph name="UNREAD_COUNT" /> olvasatlan cikk.</translation>
+<translation id="7412027924265291969">Tovább</translation>
 <translation id="7425346204213733349">Könyvjelzői, előzményei, jelszavai és más beállításai a továbbiakban már nem lesznek szinkronizálva Google-fiókjával. Meglévő adatait azonban továbbra is tárolni fogja a fiók.</translation>
 <translation id="7435356471928173109">A rendszergazda kikapcsolta</translation>
 <translation id="7454057999980797137">Állam/megye</translation>
@@ -600,6 +610,7 @@ A webhelyek nem használhatnak cookie-kat arra, hogy megfigyeljék más webhelye
 <translation id="7472734401283673885">Vállalat neve</translation>
 <translation id="7473891865547856676">Nem, köszönöm</translation>
 <translation id="7481312909269577407">Előre</translation>
+<translation id="7483467499335917849">A helyadatok használata</translation>
 <translation id="750493650310597496">0 kiválasztva</translation>
 <translation id="7514365320538308">Letöltés</translation>
 <translation id="7537586195939242955">Sajnos jelenleg nem lehet létrehozni a kupont a Passbookban.</translation>
@@ -733,6 +744,7 @@ A webhelyek használhatnak cookie-kat arra, hogy megfigyeljék más webhelyekre 
 <translation id="9094033019050270033">Jelszó frissítése</translation>
 <translation id="9100610230175265781">Összetett jelszó szükséges</translation>
 <translation id="9107664647686727385">Nyilvánosságra került jelszavak keresése</translation>
+<translation id="9137526406337347448">Google Services</translation>
 <translation id="9148126808321036104">Jelentkezzen be újra</translation>
 <translation id="9152539721251340337">QR-kód létrehozása</translation>
 <translation id="9157836665414082580">Párbeszédablakok elrejtése</translation>

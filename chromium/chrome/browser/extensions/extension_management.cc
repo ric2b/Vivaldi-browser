@@ -7,9 +7,9 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
-#include "base/metrics/histogram_macros.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_split.h"
@@ -26,7 +26,6 @@
 #include "chrome/browser/extensions/standard_management_policy_provider.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
 #include "components/crx_file/id_util.h"
@@ -333,6 +332,15 @@ const std::string ExtensionManagement::BlockedInstallMessage(
   return default_settings_->blocked_install_message;
 }
 
+ExtensionIdSet ExtensionManagement::GetForcePinnedList() const {
+  ExtensionIdSet force_pinned_list;
+  for (const auto& entry : settings_by_id_) {
+    if (entry.second->toolbar_pin == ToolbarPinMode::kForcePinned)
+      force_pinned_list.insert(entry.first);
+  }
+  return force_pinned_list;
+}
+
 bool ExtensionManagement::CheckMinimumVersion(
     const Extension* extension,
     std::string* required_version) const {
@@ -529,6 +537,11 @@ void ExtensionManagement::Refresh() {
           }
         }
       }
+    }
+    size_t force_pinned_count = GetForcePinnedList().size();
+    if (force_pinned_count > 0) {
+      base::UmaHistogramCounts100("Extensions.ForceToolbarPinnedCount",
+                                  force_pinned_count);
     }
   }
 }

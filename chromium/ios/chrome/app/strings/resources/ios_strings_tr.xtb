@@ -18,7 +18,9 @@
 <translation id="1112015203684611006">Yazdırılamadı.</translation>
 <translation id="1125564390852150847">Yeni sekme oluştur.</translation>
 <translation id="1145536944570833626">Mevcut verileri silin.</translation>
+<translation id="1147031633655575115"><ph name="USER" /> olarak oturum açıldı</translation>
 <translation id="1154690515305205900">Vurgulanan metne bağlantı oluşturulamadı.</translation>
+<translation id="1157749421655780457">Konum erişimine izin ver...</translation>
 <translation id="1165039591588034296">Hata</translation>
 <translation id="1172898394251786223">Sonraki alan</translation>
 <translation id="1176932207622159128">Görüntü Kaydedilemiyor</translation>
@@ -53,8 +55,9 @@
 <translation id="1449835205994625556">Şifreyi Gizle</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> öğe</translation>
 <translation id="1491277525950327607">Ayarı açıp kapatmak için iki kez dokunun</translation>
+<translation id="1492417797159476138">Bu site için bu kullanıcı adını zaten kaydettiniz</translation>
 <translation id="1509486075633541495">Web sitesinde oturum açın</translation>
-<translation id="1509960214886564027">Birçok sitedeki özellikler bozulabilir</translation>
+<translation id="1509960214886564027">Birçok sitedeki özellikler çalışmayabilir</translation>
 <translation id="152234381334907219">Hiç Kaydedilmeyenler</translation>
 <translation id="1523341279170789507">Tüm Çerezlere İzin Ver</translation>
 <translation id="1535268707340844072">Geçerli ayarlarınız bazı sitelerin bozulmasına neden olabilir. Çerezlerin tüm siteler için nasıl yönetileceğini <ph name="BEGIN_LINK" />Çerez Ayarları<ph name="END_LINK" /> sayfasından öğrenebilirsiniz.</translation>
@@ -266,6 +269,7 @@ Aşağıdaki adımları uygulayın:</translation>
 <translation id="385051799172605136">Geri</translation>
 <translation id="3892144330757387737">Geçmişiniz burada gösterilir</translation>
 <translation id="3897092660631435901">Menü</translation>
+<translation id="3913386780052199712">Chrome'da oturum açıldı</translation>
 <translation id="3915450441834151894">Site Bilgileri</translation>
 <translation id="3922310737605261887">Kopyalanan Metni Ara</translation>
 <translation id="3928666092801078803">Verilerimi birleştir</translation>
@@ -340,6 +344,7 @@ Verileriniz senkronizasyon parolanızla şifrelendi. Senkronizasyonu başlatmak 
 <translation id="4751645464639803239">Yeni Gizli Sekme</translation>
 <translation id="4758977202923349869">Kredi Kartını bu çerçeveye yerleştirin</translation>
 <translation id="4775879719735953715">Varsayılan Tarayıcı</translation>
+<translation id="4778644898150334464">Başka şifre kullan</translation>
 <translation id="4802417911091824046">Parolayla şifreleme, Google Pay'deki adresleri ve ödeme yöntemlerini kapsamaz.
 
 Bu ayarı değiştirmek için <ph name="BEGIN_LINK" />senkronizasyonu sıfırlayın<ph name="END_LINK" /></translation>
@@ -372,6 +377,7 @@ Bu ayarı değiştirmek için <ph name="BEGIN_LINK" />senkronizasyonu sıfırlay
 <translation id="5059136629401106827">Tamam</translation>
 <translation id="5062321486222145940">Google Drive'ı yükle</translation>
 <translation id="5083464117946352670">Dosya boyutu belirlenemiyor.</translation>
+<translation id="5090832849094901128">Bu şifre kaldırıldığında <ph name="WEBSITE" /> üzerindeki hesabınız silinmez.</translation>
 <translation id="5094827893301452931">Tweet tamamlandı.</translation>
 <translation id="5118764316110575523">Kapalı</translation>
 <translation id="5127805178023152808">Senkronizasyon kapalı</translation>
@@ -511,6 +517,9 @@ Siteler, örneğin reklamları kişiselleştirmek amacıyla farklı sitelerde ta
 <translation id="6476800141292307438">Sayfa <ph name="LANGUAGE" /> diline çevriliyor. Seçenekler ekranın alt kısmına yakın bir yerde bulunur.</translation>
 <translation id="648164694371393720">Kimlik Doğrulama Hatası</translation>
 <translation id="6482629121755362506"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> öğe silindi</translation>
+<translation id="6497772452874122664"><ph name="TIME" /> sitesine güveniyorsanız başka bir site için kaydedilmiş şifreyi kullanabilirsiniz.
+
+Her site için benzersiz bir şifre kullanmaya çalışın.</translation>
 <translation id="651505212789431520">Senkronizasyon iptal edilsin mi? Senkronizasyonu istediğiniz zaman Ayarlar'dan açabilirsiniz.</translation>
 <translation id="6561262006871132942">Yakınlaştır</translation>
 <translation id="6585618849026997638">Önemli gördüğünüz sayfalara yer işareti koyarak geri dönebilirsiniz.</translation>
@@ -590,6 +599,7 @@ Siteler, örneğin reklamları kişiselleştirmek amacıyla farklı sitelerde ta
 <translation id="739941347996872055">Önceki Sekme</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7409985198648820906">Okunmamış <ph name="UNREAD_COUNT" /> makale.</translation>
+<translation id="7412027924265291969">Devam</translation>
 <translation id="7425346204213733349">Yer işaretleri, geçmiş, şifreler ve diğer ayarlarınızda yaptığınız değişiklikler artık Google Hesabınız ile senkronize edilmeyecek. Ancak, mevcut verileriniz Google Hesabınızda saklanmaya devam edecek.</translation>
 <translation id="7435356471928173109">Yöneticiniz tarafından kapatıldı</translation>
 <translation id="7454057999980797137">Eyalet / İlçe</translation>
@@ -600,6 +610,7 @@ Siteler, örneğin reklamları kişiselleştirmek amacıyla farklı sitelerde ta
 <translation id="7472734401283673885">Şirket Adı</translation>
 <translation id="7473891865547856676">Hayır, Teşekkürler</translation>
 <translation id="7481312909269577407">İleri</translation>
+<translation id="7483467499335917849">Geçerli Konumunuzu Kullanma</translation>
 <translation id="750493650310597496">0 yer işareti seçildi</translation>
 <translation id="7514365320538308">İndir</translation>
 <translation id="7537586195939242955">Maalesef Pass'iniz şu anda Passbook'a yüklenemiyor.</translation>
@@ -642,7 +653,7 @@ Hesabınız <ph name="HOSTED_DOMAIN" /> tarafından yönetildiği için oturumun
 Siteler, örneğin reklamları kişiselleştirmek amacıyla farklı sitelerde tarama etkinliğinizi görmek için çerezler kullanabilir.</translation>
 <translation id="7971521879845308059">Pop-up'ları Engelle</translation>
 <translation id="7982789257301363584">Ağ</translation>
-<translation id="7993619969781047893">Bazı sitelerdeki özellikler bozulabilir</translation>
+<translation id="7993619969781047893">Bazı sitelerdeki özellikler çalışmayabilir</translation>
 <translation id="800361585186029508">Girilen URL'leri Google Chrome'da açar.</translation>
 <translation id="8007420562015504427">Gizli Arama</translation>
 <translation id="802154636333426148">İndirilemedi</translation>
@@ -710,7 +721,7 @@ Siteler, örneğin reklamları kişiselleştirmek amacıyla farklı sitelerde ta
 <translation id="8756969031206844760">Şifre güncellensin mi?</translation>
 <translation id="8775144690796719618">Geçersiz URL</translation>
 <translation id="8803639129939845298">Güvenli</translation>
-<translation id="8820817407110198400">Favoriler</translation>
+<translation id="8820817407110198400">Yer işaretleri</translation>
 <translation id="8840513115188359703">Google Hesaplarınızdaki oturumlarınız kapatılmaz.</translation>
 <translation id="8870413625673593573">Son Kapatılan</translation>
 <translation id="8881801611828450202">Bu Resmi <ph name="SEARCH_ENGINE" /> Üzerinde Ara</translation>
@@ -733,6 +744,7 @@ Siteler, örneğin reklamları kişiselleştirmek amacıyla farklı sitelerde ta
 <translation id="9094033019050270033">Şifreyi güncelle</translation>
 <translation id="9100610230175265781">Parola gerekli</translation>
 <translation id="9107664647686727385">Güvenliği ihlal edilmiş şifreleri kontrol edin</translation>
+<translation id="9137526406337347448">Google Hizmetleri</translation>
 <translation id="9148126808321036104">Tekrar oturum açın</translation>
 <translation id="9152539721251340337">QR Kodu oluşturma</translation>
 <translation id="9157836665414082580">İletişim Kutularını Gizle</translation>

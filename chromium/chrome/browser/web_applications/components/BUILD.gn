@@ -71,6 +71,8 @@ source_set("components") {
     "web_app_url_loader.h",
     "web_app_utils.cc",
     "web_app_utils.h",
+    "web_application_info.cc",
+    "web_application_info.h",
 
     # TODO(nigeltao): move these two files from
     # //chrome/browser/web_applications/components to a stand-alone
@@ -88,7 +90,7 @@ source_set("components") {
     sources += [ "web_app_shortcut_chromeos.cc" ]
   }
 
-  if (is_desktop_linux) {
+  if (is_linux) {
     # Desktop linux, doesn't count ChromeOS.
     sources += [
       "web_app_file_handler_registration_linux.cc",
@@ -110,7 +112,8 @@ source_set("components") {
   if (is_win) {
     sources += [
       "web_app_file_handler_registration_win.cc",
-      "web_app_file_handler_registration_win.h",
+      "web_app_handler_registration_utils_win.cc",
+      "web_app_handler_registration_utils_win.h",
       "web_app_run_on_os_login_win.cc",
       "web_app_shortcut_win.cc",
       "web_app_shortcut_win.h",
@@ -135,13 +138,13 @@ source_set("components") {
     # chrome/browser/engagement: gn parts (like mojo_bindings) to fix this.
     #
     # TODO(crbug.com/1039736): Refactor AppBannerManager to remove this dep.
-    "//chrome/browser/engagement:mojo_bindings",
     "//chrome/browser/web_applications:web_app_group",
     "//chrome/common",
     "//components/crx_file",
     "//components/keyed_service/content",
     "//components/pref_registry",
     "//components/services/app_service/public/mojom",
+    "//components/site_engagement/core/mojom:mojo_bindings",
     "//components/user_manager:user_manager",
     "//content/public/browser",
     "//extensions/common:common_constants",
@@ -161,6 +164,7 @@ source_set("unit_tests") {
   sources = [
     "file_handler_manager_unittest.cc",
     "install_finalizer_unittest.cc",
+    "os_integration_manager_unittest.cc",
     "pending_app_manager_unittest.cc",
     "web_app_constants_unittest.cc",
     "web_app_data_retriever_unittest.cc",
@@ -176,6 +180,7 @@ source_set("unit_tests") {
   if (is_win) {
     sources += [
       "web_app_file_handler_registration_win_unittest.cc",
+      "web_app_handler_registration_utils_win_unittest.cc",
       "web_app_run_on_os_login_win_unittest.cc",
     ]
   }
@@ -187,7 +192,7 @@ source_set("unit_tests") {
     ]
   }
 
-  if (is_desktop_linux) {
+  if (is_linux) {
     # Desktop linux, doesn't count ChromeOS.
     sources += [
       "web_app_file_handler_registration_linux_unittest.cc",
@@ -224,7 +229,7 @@ source_set("browser_tests") {
 
   sources = [ "web_app_url_loader_browsertest.cc" ]
 
-  if (is_desktop_linux) {
+  if (is_linux) {
     sources += [ "web_app_file_handler_registration_linux_browsertest.cc" ]
   }
 

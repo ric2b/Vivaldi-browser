@@ -11,6 +11,7 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_result.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_length_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
+#include "third_party/blink/renderer/core/layout/ng/table/layout_ng_table.h"
 #include "third_party/blink/renderer/core/layout/ng/table/layout_ng_table_cell.h"
 #include "third_party/blink/renderer/core/layout/ng/table/layout_ng_table_column.h"
 #include "third_party/blink/renderer/core/layout/ng/table/layout_ng_table_column_visitor.h"
@@ -23,10 +24,55 @@ namespace blink {
 
 namespace {
 
+// Applies cell/wide cell constraints to columns.
+// Guarantees columns min/max widths have non-empty values.
+void ApplyCellConstraintsToColumnConstraints(
+    const NGTableTypes::CellInlineConstraints& cell_constraints,
+    LayoutUnit inline_border_spacing,
+    bool is_fixed_layout,
+    NGTableTypes::ColspanCells* colspan_cell_constraints,
+    NGTableTypes::Columns* column_constraints) {
+  column_constraints->data.resize(cell_constraints.size());
+  // Distribute cell constraints to column constraints.
+  for (wtf_size_t i = 0; i < cell_constraints.size(); ++i) {
+    column_constraints->data[i].Encompass(cell_constraints[i]);
+  }
+
+  // Wide cell constraints are sorted by span length/starting column.
+  auto colspan_cell_less_than = [](const NGTableTypes::ColspanCell& lhs,
+                                   const NGTableTypes::ColspanCell& rhs) {
+    if (lhs.span == rhs.span)
+      return lhs.start_column < rhs.start_column;
+    return lhs.span < rhs.span;
+  };
+  std::stable_sort(colspan_cell_constraints->begin(),
+                   colspan_cell_constraints->end(), colspan_cell_less_than);
+
+  NGTableAlgorithmHelpers::DistributeColspanCellsToColumns(
+      *colspan_cell_constraints, inline_border_spacing, is_fixed_layout,
+      column_constraints);
+
+  // Clamp column percentages. Standard: "100% minus the sum of the intrinsic
+  // percentage width of all prior columns in the table."
+  float total_percentage = 0;
+  for (NGTableTypes::Column& column : column_constraints->data) {
+    if (column.percent) {
+      if (*column.percent + total_percentage > 100.0) {
+        column.percent = 100 - total_percentage;
+      }
+      total_percentage += *column.percent;
+    }
+    // A column may have no min/max inline-sizes if there are no cells in this
+    // column. E.g. a cell has a large colspan which no other cell belongs to.
+    column.min_inline_size = column.min_inline_size.value_or(LayoutUnit());
+    column.max_inline_size = column.max_inline_size.value_or(LayoutUnit());
+  }
+}
+
 NGTableTypes::Row ComputeMinimumRowBlockSize(
     const NGBlockNode& row,
     const LayoutUnit cell_percentage_inline_size,
-    const bool is_restricted_block_size_table,
+    const bool is_table_block_size_specified,
     const NGTableTypes::ColumnLocations& column_locations,
     const NGTableBorders& table_borders,
     wtf_size_t row_index,
@@ -37,65 +83,53 @@ NGTableTypes::Row ComputeMinimumRowBlockSize(
     NGColspanCellTabulator* colspan_cell_tabulator) {
   const WritingDirectionMode table_writing_direction =
       row.Style().GetWritingDirection();
+  const bool has_collapsed_borders = table_borders.IsCollapsed();
 
   auto CreateCellConstraintSpace = [&column_locations, &table_writing_direction,
-                                    &is_restricted_block_size_table,
+                                    &is_table_block_size_specified,
+                                    &has_collapsed_borders,
                                     &cell_percentage_inline_size](
                                        const NGBlockNode& cell,
                                        wtf_size_t start_column_index,
                                        const NGBoxStrut& cell_borders) {
-    wtf_size_t start_column = start_column_index;
-    wtf_size_t end_column = std::min(start_column + cell.TableCellColspan() - 1,
-                                     column_locations.size() - 1);
-    LayoutUnit cell_inline_size = column_locations[end_column].offset +
-                                  column_locations[end_column].size -
-                                  column_locations[start_column].offset;
-    // TODO(crbug.com/736072): Support orthogonal table cells.
-    // See http://wpt.live/css/css-writing-modes/table-cell-001.html
-    NGConstraintSpaceBuilder builder(table_writing_direction.GetWritingMode(),
-                                     cell.Style().GetWritingMode(),
-                                     /* is_new_fc */ true);
-    builder.SetTextDirection(cell.Style().Direction());
-    builder.SetTableCellBorders(cell_borders);
-    if (!IsParallelWritingMode(table_writing_direction.GetWritingMode(),
-                               cell.Style().GetWritingMode())) {
-      PhysicalSize icb_size = cell.InitialContainingBlockSize();
-      builder.SetOrthogonalFallbackInlineSize(
-          IsHorizontalWritingMode(table_writing_direction.GetWritingMode())
-              ? icb_size.height
-              : icb_size.width);
+    const wtf_size_t start_column = start_column_index;
+    const wtf_size_t end_column =
+        std::min(start_column + cell.TableCellColspan() - 1,
+                 column_locations.size() - 1);
+    const LayoutUnit cell_inline_size = column_locations[end_column].offset +
+                                        column_locations[end_column].size -
+                                        column_locations[start_column].offset;
 
-      builder.SetIsShrinkToFit(cell.Style().LogicalWidth().IsAuto());
-    }
-
-    builder.SetAvailableSize(LogicalSize(cell_inline_size, kIndefiniteSize));
-    // Standard:
-    // https://www.w3.org/TR/css-tables-3/#computing-the-table-height "the
-    // computed height (if definite, percentages being considered 0px)"
-    LogicalSize percentage_resolution_size(cell_percentage_inline_size,
-                                           kIndefiniteSize);
-    builder.SetPercentageResolutionSize(percentage_resolution_size);
-    builder.SetReplacedPercentageResolutionSize(percentage_resolution_size);
-    builder.SetIsFixedInlineSize(true);
-    builder.SetIsTableCell(true, /* is_legacy_table_cell */ false);
-    builder.SetIsRestrictedBlockSizeTableCell(is_restricted_block_size_table);
-    builder.SetNeedsBaseline(true);
-    builder.SetCacheSlot(NGCacheSlot::kMeasure);
-    return builder.ToConstraintSpace();
+    // Typically we want these values to match the "layout" pass as close as
+    // possible. The one exception is "is_hidden_for_paint". This is set to
+    // true if a cell should be hidden within a collapsed column. If this is
+    // the case, the size is almost certainly different causing a second layout.
+    return NGTableAlgorithmUtils::CreateTableCellConstraintSpace(
+        table_writing_direction, cell, cell_borders,
+        {cell_inline_size, kIndefiniteSize}, cell_percentage_inline_size,
+        /* alignment_baseline */ base::nullopt, start_column,
+        /* is_fixed_block_size_indefinite */ false,
+        is_table_block_size_specified,
+        /* is_hidden_for_paint */ false, has_collapsed_borders,
+        NGCacheSlot::kMeasure);
   };
 
-  base::Optional<LayoutUnit> max_baseline;
-  LayoutUnit max_descent;
-  LayoutUnit row_block_size;
+  // TODO(layout-ng) Scrollbars should be frozen when computing row sizes.
+  // This cannot be done today, because fragments with frozen scrollbars
+  // will be cached. Needs to be fixed in NG framework.
+
+  LayoutUnit max_cell_block_size;
   base::Optional<float> row_percent;
   bool is_constrained = false;
-  bool baseline_depends_on_percentage_block_size_descendant = false;
+  bool is_empty = true;
   bool has_rowspan_start = false;
   wtf_size_t start_cell_index = cell_block_constraints->size();
+  NGRowBaselineTabulator row_baseline_tabulator;
 
   // Gather block sizes of all cells.
   for (NGBlockNode cell = To<NGBlockNode>(row.FirstChild()); cell;
        cell = To<NGBlockNode>(cell.NextSibling())) {
+    is_empty = false;
     colspan_cell_tabulator->FindNextFreeColumn();
     const ComputedStyle& cell_style = cell.Style();
     const NGBoxStrut cell_borders = table_borders.CellBorder(
@@ -106,33 +140,26 @@ NGTableTypes::Row ComputeMinimumRowBlockSize(
     scoped_refptr<const NGLayoutResult> layout_result =
         cell.Layout(cell_constraint_space);
     const NGBoxFragment fragment(
-        table_writing_direction.GetWritingMode(),
-        table_writing_direction.Direction(),
+        table_writing_direction,
         To<NGPhysicalBoxFragment>(layout_result->PhysicalFragment()));
     bool is_parallel =
         IsParallelWritingMode(table_writing_direction.GetWritingMode(),
                               cell.Style().GetWritingMode());
-    LayoutUnit baseline;
-    // https://www.w3.org/TR/css-tables-3/#row-layout "If there is no such
-    // line box or table-row, the baseline is the bottom of content edge of
-    // the cell box."
-    // Only baseline-aligned cells contribute to row baseline.
-    if (is_parallel &&
-        NGTableAlgorithmUtils::IsBaseline(cell_style.VerticalAlign())) {
-      if (layout_result->HasDescendantThatDependsOnPercentageBlockSize())
-        baseline_depends_on_percentage_block_size_descendant = true;
-      baseline = fragment.FirstBaselineOrSynthesize();
-      max_baseline = std::max(max_baseline.value_or(LayoutUnit()), baseline);
-    }
 
     const wtf_size_t rowspan = cell.TableCellRowspan();
     NGTableTypes::CellBlockConstraint cell_block_constraint =
         NGTableTypes::CreateCellBlockConstraint(
-            cell, fragment.BlockSize(), baseline, cell_borders, row_index,
-            colspan_cell_tabulator->CurrentColumn(), rowspan);
+            cell, fragment.BlockSize(), fragment.FirstBaselineOrSynthesize(),
+            cell_borders, row_index, colspan_cell_tabulator->CurrentColumn(),
+            rowspan);
     colspan_cell_tabulator->ProcessCell(cell);
     cell_block_constraints->push_back(cell_block_constraint);
     is_constrained |= cell_block_constraint.is_constrained && rowspan == 1;
+    row_baseline_tabulator.ProcessCell(
+        fragment, cell_block_constraint.min_block_size,
+        NGTableAlgorithmUtils::IsBaseline(cell_style.VerticalAlign()),
+        is_parallel,
+        layout_result->HasDescendantThatDependsOnPercentageBlockSize());
 
     // Compute cell's css block size.
     base::Optional<LayoutUnit> cell_css_block_size;
@@ -167,24 +194,16 @@ NGTableTypes::Row ComputeMinimumRowBlockSize(
         row_percent = std::max(row_percent.value_or(0), *cell_css_percent);
       // Cell's block layout ignores CSS block size properties. Row must use it
       // to compute it's minimum block size.
-      if (cell_css_block_size)
-        row_block_size = std::max(row_block_size, *cell_css_block_size);
-      if (NGTableAlgorithmUtils::IsBaseline(
-              cell_block_constraint.vertical_align)) {
-        max_descent = std::max(max_descent,
-                               cell_block_constraint.min_block_size - baseline);
-        row_block_size = std::max(
-            row_block_size, max_baseline.value_or(LayoutUnit()) + max_descent);
-      } else {
-        row_block_size =
-            std::max(row_block_size, cell_block_constraint.min_block_size);
-      }
+      max_cell_block_size =
+          std::max({max_cell_block_size, cell_block_constraint.min_block_size,
+                    cell_css_block_size.value_or(LayoutUnit())});
     } else {
       has_rowspan_start = true;
       rowspan_cells->push_back(NGTableTypes::CreateRowspanCell(
           row_index, rowspan, &cell_block_constraint, cell_css_block_size));
     }
   }
+
   // Apply row's CSS block size.
   const Length& row_specified_block_length = row.Style().LogicalHeight();
   if (row_specified_block_length.IsPercent()) {
@@ -193,18 +212,24 @@ NGTableTypes::Row ComputeMinimumRowBlockSize(
         std::max(row_percent.value_or(0), row_specified_block_length.Percent());
   } else if (row_specified_block_length.IsFixed()) {
     is_constrained = true;
-    row_block_size = std::max(LayoutUnit(row_specified_block_length.Value()),
-                              row_block_size);
+    max_cell_block_size = std::max(
+        LayoutUnit(row_specified_block_length.Value()), max_cell_block_size);
   }
+
+  const LayoutUnit row_block_size =
+      row_baseline_tabulator.ComputeRowBlockSize(max_cell_block_size);
+  const LayoutUnit row_baseline =
+      row_baseline_tabulator.ComputeBaseline(row_block_size);
 
   return NGTableTypes::Row{
       row_block_size,
-      max_baseline.value_or(row_block_size),
+      row_baseline,
       row_percent,
       start_cell_index,
       cell_block_constraints->size() - start_cell_index,
       is_constrained,
-      baseline_depends_on_percentage_block_size_descendant,
+      row_baseline_tabulator
+          .ComputeBaselineDependsOnPercentageBlockDescendant(),
       has_rowspan_start,
       /* is_collapsed */ is_section_collapsed ||
           row.Style().Visibility() == EVisibility::kCollapse};
@@ -223,7 +248,7 @@ class ColumnConstraintsBuilder {
                             ? colgroup_constraint_->max_inline_size
                             : base::nullopt);
     for (wtf_size_t i = 0; i < span; ++i)
-      column_constraints_->push_back(col_constraint);
+      column_constraints_->data.push_back(col_constraint);
     column.GetLayoutBox()->ClearNeedsLayout();
   }
 
@@ -239,7 +264,7 @@ class ColumnConstraintsBuilder {
                      bool has_children) {
     if (!has_children) {
       for (wtf_size_t i = 0; i < span; ++i)
-        column_constraints_->push_back(*colgroup_constraint_);
+        column_constraints_->data.push_back(*colgroup_constraint_);
     }
     colgroup_constraint_.reset();
     colgroup.GetLayoutBox()->ClearNeedsLayout();
@@ -258,9 +283,8 @@ class ColumnConstraintsBuilder {
   base::Optional<NGTableTypes::Column> colgroup_constraint_;
 };
 
-}  // namespace
-
-void NGTableAlgorithmUtils::ComputeColumnInlineConstraints(
+// Computes constraints specified on column elements.
+void ComputeColumnElementConstraints(
     const Vector<NGBlockNode>& columns,
     bool is_fixed_layout,
     NGTableTypes::Columns* column_constraints) {
@@ -270,7 +294,7 @@ void NGTableAlgorithmUtils::ComputeColumnInlineConstraints(
   VisitLayoutNGTableColumn(columns, UINT_MAX, &constraints_builder);
 }
 
-void NGTableAlgorithmUtils::ComputeSectionInlineConstraints(
+void ComputeSectionInlineConstraints(
     const NGBlockNode& section,
     bool is_fixed_layout,
     bool is_first_section,
@@ -335,10 +359,107 @@ void NGTableAlgorithmUtils::ComputeSectionInlineConstraints(
   }
 }
 
+}  // namespace
+
+// static
+NGConstraintSpace NGTableAlgorithmUtils::CreateTableCellConstraintSpace(
+    const WritingDirectionMode table_writing_direction,
+    const NGBlockNode cell,
+    const NGBoxStrut& cell_borders,
+    LogicalSize cell_size,
+    LayoutUnit percentage_inline_size,
+    base::Optional<LayoutUnit> alignment_baseline,
+    wtf_size_t column_index,
+    bool is_fixed_block_size_indefinite,
+    bool is_table_block_size_specified,
+    bool is_hidden_for_paint,
+    bool has_collapsed_borders,
+    NGCacheSlot cache_slot) {
+  const auto& cell_style = cell.Style();
+  const auto table_writing_mode = table_writing_direction.GetWritingMode();
+  NGConstraintSpaceBuilder builder(table_writing_mode,
+                                   cell_style.GetWritingDirection(),
+                                   /* is_new_fc */ true);
+  builder.SetIsTableCell(true, /* is_legacy_table_cell */ false);
+
+  if (!IsParallelWritingMode(table_writing_mode, cell_style.GetWritingMode())) {
+    const PhysicalSize icb_size = cell.InitialContainingBlockSize();
+    builder.SetOrthogonalFallbackInlineSize(
+        table_writing_direction.IsHorizontal() ? icb_size.height
+                                               : icb_size.width);
+    builder.SetIsShrinkToFit(cell.Style().LogicalWidth().IsAuto());
+  }
+
+  builder.SetAvailableSize(cell_size);
+  builder.SetIsFixedInlineSize(true);
+  if (cell_size.block_size != kIndefiniteSize) {
+    builder.SetIsFixedBlockSize(true);
+    builder.SetIsFixedBlockSizeIndefinite(is_fixed_block_size_indefinite);
+  }
+
+  // Standard:
+  // https://www.w3.org/TR/css-tables-3/#computing-the-table-height "the
+  // computed height (if definite, percentages being considered 0px)"
+  builder.SetPercentageResolutionSize(
+      {percentage_inline_size, kIndefiniteSize});
+
+  builder.SetTableCellBorders(cell_borders);
+  builder.SetTableCellAlignmentBaseline(alignment_baseline);
+  builder.SetTableCellColumnIndex(column_index);
+  builder.SetIsRestrictedBlockSizeTableCell(is_table_block_size_specified);
+  builder.SetIsTableCellHiddenForPaint(is_hidden_for_paint);
+  builder.SetIsTableCellWithCollapsedBorders(has_collapsed_borders);
+  builder.SetHideTableCellIfEmpty(
+      !has_collapsed_borders && cell_style.EmptyCells() == EEmptyCells::kHide);
+  builder.SetNeedsBaseline(true);
+  builder.SetCacheSlot(cache_slot);
+
+  return builder.ToConstraintSpace();
+}
+
+scoped_refptr<NGTableTypes::Columns>
+NGTableAlgorithmUtils::ComputeColumnConstraints(
+    const NGBlockNode& table,
+    const NGTableGroupedChildren& grouped_children,
+    const NGTableBorders& table_borders,
+    const NGBoxStrut& border_padding) {
+  bool is_fixed_layout = table.Style().IsFixedTableLayout();
+  WritingMode table_writing_mode = table.Style().GetWritingMode();
+  LogicalSize border_spacing = table.Style().TableBorderSpacing();
+
+  NGTableTypes::CellInlineConstraints cell_inline_constraints;
+  NGTableTypes::ColspanCells colspan_cell_constraints;
+
+  scoped_refptr<NGTableTypes::Columns> column_constraints =
+      base::MakeRefCounted<NGTableTypes::Columns>();
+  ComputeColumnElementConstraints(grouped_children.columns, is_fixed_layout,
+                                  column_constraints.get());
+
+  // Collect section constraints
+  bool is_first_section = true;
+  wtf_size_t row_index = 0;
+  wtf_size_t section_index = 0;
+  for (const NGBlockNode& section : grouped_children) {
+    if (!section.IsEmptyTableSection()) {
+      ComputeSectionInlineConstraints(
+          section, is_fixed_layout, is_first_section, table_writing_mode,
+          table_borders, section_index, &row_index, &cell_inline_constraints,
+          &colspan_cell_constraints);
+      is_first_section = false;
+    }
+    section_index++;
+  }
+  ApplyCellConstraintsToColumnConstraints(
+      cell_inline_constraints, border_spacing.inline_size, is_fixed_layout,
+      &colspan_cell_constraints, column_constraints.get());
+
+  return column_constraints;
+}
+
 void NGTableAlgorithmUtils::ComputeSectionMinimumRowBlockSizes(
     const NGBlockNode& section,
     const LayoutUnit cell_percentage_inline_size,
-    const bool is_restricted_block_size_table,
+    const bool is_table_block_size_restricted,
     const NGTableTypes::ColumnLocations& column_locations,
     const NGTableBorders& table_borders,
     const LayoutUnit block_border_spacing,
@@ -359,7 +480,7 @@ void NGTableAlgorithmUtils::ComputeSectionMinimumRowBlockSizes(
        row = To<NGBlockNode>(row.NextSibling())) {
     colspan_cell_tabulator.StartRow();
     NGTableTypes::Row row_constraint = ComputeMinimumRowBlockSize(
-        row, cell_percentage_inline_size, is_restricted_block_size_table,
+        row, cell_percentage_inline_size, is_table_block_size_restricted,
         column_locations, table_borders, current_row++, section_index,
         /* is_section_collapsed */ section.Style().Visibility() ==
             EVisibility::kCollapse,
@@ -441,6 +562,64 @@ void NGColspanCellTabulator::ProcessCell(const NGBlockNode& cell) {
   if (rowspan > 1)
     colspanned_cells_.emplace_back(current_column_, colspan, rowspan);
   current_column_ += colspan;
+}
+
+void NGRowBaselineTabulator::ProcessCell(
+    const NGBoxFragment& fragment,
+    const LayoutUnit cell_min_block_size,
+    const bool is_baseline_aligned,
+    const bool is_parallel,
+    const bool descendant_depends_on_percentage_block_size) {
+  if (is_parallel && is_baseline_aligned) {
+    max_cell_baseline_depends_on_percentage_block_descendant_ |=
+        descendant_depends_on_percentage_block_size;
+    const LayoutUnit cell_baseline = fragment.FirstBaselineOrSynthesize();
+    max_cell_ascent_ =
+        std::max(max_cell_ascent_.value_or(LayoutUnit::Min()), cell_baseline);
+    max_cell_descent_ = std::max(max_cell_descent_.value_or(LayoutUnit::Min()),
+                                 cell_min_block_size - cell_baseline);
+  }
+
+  // https://www.w3.org/TR/css-tables-3/#row-layout "If there is no such
+  // line box or table-row, the baseline is the bottom of content edge of
+  // the cell box."
+  if (!max_cell_ascent_) {
+    fallback_cell_depends_on_percentage_block_descendant_ |=
+        descendant_depends_on_percentage_block_size;
+    const LayoutUnit cell_block_end_border_padding =
+        fragment.Padding().block_end + fragment.Borders().block_end;
+    fallback_cell_descent_ =
+        std::min(fallback_cell_descent_.value_or(LayoutUnit::Max()),
+                 cell_block_end_border_padding);
+  }
+}
+
+LayoutUnit NGRowBaselineTabulator::ComputeRowBlockSize(
+    const LayoutUnit max_cell_block_size) {
+  if (max_cell_ascent_) {
+    return std::max(max_cell_block_size,
+                    *max_cell_ascent_ + *max_cell_descent_);
+  }
+  return max_cell_block_size;
+}
+
+LayoutUnit NGRowBaselineTabulator::ComputeBaseline(
+    const LayoutUnit row_block_size) {
+  if (max_cell_ascent_)
+    return *max_cell_ascent_;
+  if (fallback_cell_descent_)
+    return (row_block_size - *fallback_cell_descent_).ClampNegativeToZero();
+  // Empty row's baseline is top.
+  return LayoutUnit();
+}
+
+bool NGRowBaselineTabulator::
+    ComputeBaselineDependsOnPercentageBlockDescendant() {
+  if (max_cell_ascent_)
+    return max_cell_baseline_depends_on_percentage_block_descendant_;
+  if (fallback_cell_descent_)
+    return fallback_cell_depends_on_percentage_block_descendant_;
+  return false;
 }
 
 }  // namespace blink

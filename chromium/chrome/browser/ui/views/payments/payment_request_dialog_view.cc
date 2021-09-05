@@ -96,7 +96,7 @@ void PaymentRequestDialogView::OnDialogClosed() {
   }
   RemoveChildViewT(view_stack_);
   controller_map_.clear();
-  request_->UserCancelled();
+  request_->OnUserCancelled();
 }
 
 bool PaymentRequestDialogView::ShouldShowCloseButton() const {
@@ -198,7 +198,7 @@ void PaymentRequestDialogView::RetryDialog() {
         BackNavigationType::kOneStep,
         /*on_edited=*/
         base::BindOnce(&PaymentRequestState::SetSelectedShippingProfile,
-                       request_->state()->AsWeakPtr(), profile),
+                       request_->state(), profile),
         /*on_added=*/
         base::OnceCallback<void(const autofill::AutofillProfile&)>(), profile);
   }
@@ -210,7 +210,7 @@ void PaymentRequestDialogView::RetryDialog() {
         BackNavigationType::kOneStep,
         /*on_edited=*/
         base::BindOnce(&PaymentRequestState::SetSelectedContactProfile,
-                       request_->state()->AsWeakPtr(), profile),
+                       request_->state(), profile),
         /*on_added=*/
         base::OnceCallback<void(const autofill::AutofillProfile&)>(), profile);
   }
@@ -386,7 +386,6 @@ void PaymentRequestDialogView::ShowCvcUnmaskPrompt(
 
 void PaymentRequestDialogView::ShowCreditCardEditor(
     BackNavigationType back_navigation_type,
-    int next_ui_tag,
     base::OnceClosure on_edited,
     base::OnceCallback<void(const autofill::CreditCard&)> on_added,
     autofill::CreditCard* credit_card) {
@@ -397,7 +396,7 @@ void PaymentRequestDialogView::ShowCreditCardEditor(
       CreateViewAndInstallController(
           std::make_unique<CreditCardEditorViewController>(
               request_->spec(), request_->state(),
-              weak_ptr_factory_.GetWeakPtr(), back_navigation_type, next_ui_tag,
+              weak_ptr_factory_.GetWeakPtr(), back_navigation_type,
               std::move(on_edited), std::move(on_added), credit_card,
               request_->IsOffTheRecord()),
           &controller_map_),

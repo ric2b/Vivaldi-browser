@@ -17,6 +17,7 @@
 #include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "components/autofill/core/common/password_form_fill_data.h"
+#include "components/autofill/core/common/password_generation_util.h"
 #include "components/autofill/core/common/renderer_id.h"
 #include "components/autofill/core/common/signatures.h"
 #include "components/password_manager/core/browser/credential_cache.h"
@@ -24,7 +25,6 @@
 #include "components/password_manager/core/browser/form_submission_observer.h"
 #include "components/password_manager/core/browser/leak_detection/leak_detection_check_factory.h"
 #include "components/password_manager/core/browser/leak_detection_delegate.h"
-#include "components/password_manager/core/browser/password_form_forward.h"
 #include "components/password_manager/core/browser/password_manager_interface.h"
 #include "components/password_manager/core/browser/password_manager_metrics_recorder.h"
 #include "components/password_manager/core/browser/possible_username_data.h"
@@ -52,20 +52,8 @@ class PasswordManagerDriver;
 class PasswordFormManagerForUI;
 class PasswordFormManager;
 class PasswordManagerMetricsRecorder;
+struct PasswordForm;
 struct PossibleUsernameData;
-
-// Define the modes of collaboration between Password Manager and Autofill
-// Assistant (who handles form submissions, whether to show prompts or not).
-enum class AutofillAssistantMode {
-  // Autofill Assistant UI is not being shown. Password Manager operates in the
-  // regular
-  // mode - it handles submissions and shows prompts.
-  kUINotShown = 0,
-  // Autofill Assistant UI is being shown. The password manager
-  // is basically off - it does not handle submissions and therefore does not
-  // show prompts. The script does all the work instead.
-  kUIShown
-};
 
 // Per-tab password manager. Handles creation and management of UI elements,
 // receiving password form data from the renderer and managing the password
@@ -135,13 +123,12 @@ class PasswordManager : public PasswordManagerInterface {
   void OnPasswordNoLongerGenerated(PasswordManagerDriver* driver,
                                    const autofill::FormData& form_data);
 
-  // Update the generation element and whether generation was triggered
-  // manually.
-  void SetGenerationElementAndReasonForForm(
+  // Update the `generation_element` and `type` for `form_data`.
+  void SetGenerationElementAndTypeForForm(
       PasswordManagerDriver* driver,
       const autofill::FormData& form_data,
       autofill::FieldRendererId generation_element,
-      bool is_manually_triggered);
+      autofill::password_generation::PasswordGenerationType type);
 
   // Called upon navigation to persist the state from |CredentialCache|
   // used to decide when to record
@@ -219,12 +206,15 @@ class PasswordManager : public PasswordManagerInterface {
   // Notifies that Credential Management API function store() is called.
   void NotifyStorePasswordCalled();
 
-  // Sets the Autofill Assistant mode to disable prompts while |mode=kRunning|.
-  // A script finish will clear pending credentials in all form managers.
-  void SetAutofillAssistantMode(AutofillAssistantMode mode);
+  // Resets pending credentials.
+  void ResetPendingCredentials();
 
-  // Returns the currently set autofill-assistant mode.
-  AutofillAssistantMode GetAutofillAssistantMode() const;
+  // Notification that password form was cleared by the website.
+  void OnPasswordFormCleared(PasswordManagerDriver* driver,
+                             const autofill::FormData& form_data);
+
+  // Returns true if a form manager is processing a password update.
+  bool IsFormManagerPendingPasswordUpdate() const;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(
@@ -326,9 +316,6 @@ class PasswordManager : public PasswordManagerInterface {
   // Returns the timeout for the disabling Password Manager's prompts.
   base::TimeDelta GetTimeoutForDisablingPrompts();
 
-  // Resets |autofill_assistant_mode_| to the default.
-  void ResetAutofillAssistantMode();
-
 #if defined(OS_IOS)
   // Even though the formal submission might not happen, the manager
   // could still be provisionally saved on user input or have autofilled data,
@@ -390,11 +377,6 @@ class PasswordManager : public PasswordManagerInterface {
   LeakDetectionDelegate leak_delegate_;
 
   base::Optional<PossibleUsernameData> possible_username_;
-
-  // By default Autofill Assistant is not running. Password Manager handles
-  // submissions and shows prompts.
-  AutofillAssistantMode autofill_assistant_mode_ =
-      AutofillAssistantMode::kUINotShown;
 
   DISALLOW_COPY_AND_ASSIGN(PasswordManager);
 };

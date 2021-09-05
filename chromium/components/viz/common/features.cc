@@ -10,6 +10,7 @@
 #include "components/viz/common/switches.h"
 #include "components/viz/common/viz_utils.h"
 #include "gpu/config/gpu_finch_features.h"
+#include "gpu/config/gpu_switches.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/build_info.h"
@@ -21,14 +22,15 @@ const base::Feature kForcePreferredIntervalForVideo{
     "ForcePreferredIntervalForVideo", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Use the SkiaRenderer.
+const base::Feature kUseSkiaRenderer {
+  "UseSkiaRenderer",
 #if defined(OS_WIN) || \
     (defined(OS_LINUX) && !(defined(OS_CHROMEOS) || BUILDFLAG(IS_CHROMECAST)))
-const base::Feature kUseSkiaRenderer{"UseSkiaRenderer",
-                                     base::FEATURE_ENABLED_BY_DEFAULT};
+      base::FEATURE_ENABLED_BY_DEFAULT
 #else
-const base::Feature kUseSkiaRenderer{"UseSkiaRenderer",
-                                     base::FEATURE_DISABLED_BY_DEFAULT};
+      base::FEATURE_DISABLED_BY_DEFAULT
 #endif
+};
 
 // Kill-switch to disable de-jelly, even if flags/properties indicate it should
 // be enabled.
@@ -38,9 +40,20 @@ const base::Feature kDisableDeJelly{"DisableDeJelly",
 #if defined(OS_ANDROID)
 // When wide color gamut content from the web is encountered, promote our
 // display to wide color gamut if supported.
-const base::Feature kDynamicColorGamut{"DynamicColorGamut",
+  // Vivaldi - Note(nagamani@vivaldi.com) TODO: Remove Vivaldi changes if the feature
+  // is already disabled  by Chromium
+  #if defined(VIVALDI_BUILD)
+    const base::Feature kDynamicColorGamut{"DynamicColorGamut",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
+  #else
+    const base::Feature kDynamicColorGamut{"DynamicColorGamut",
                                        base::FEATURE_ENABLED_BY_DEFAULT};
+  #endif
 #endif
+
+// Uses glClear to composite solid color quads whenever possible.
+const base::Feature kFastSolidColorDraw{"FastSolidColorDraw",
+                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Viz for WebView architecture.
 const base::Feature kVizForWebView{"VizForWebView",
@@ -51,13 +64,14 @@ const base::Feature kVizForWebView{"VizForWebView",
 const base::Feature kVizFrameSubmissionForWebView{
     "VizFrameSubmissionForWebView", base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kUsePreferredIntervalForVideo{
+  "UsePreferredIntervalForVideo",
 #if defined(OS_ANDROID)
-const base::Feature kUsePreferredIntervalForVideo{
-    "UsePreferredIntervalForVideo", base::FEATURE_DISABLED_BY_DEFAULT};
+      base::FEATURE_DISABLED_BY_DEFAULT
 #else
-const base::Feature kUsePreferredIntervalForVideo{
-    "UsePreferredIntervalForVideo", base::FEATURE_ENABLED_BY_DEFAULT};
+      base::FEATURE_ENABLED_BY_DEFAULT
 #endif
+};
 
 // Whether we should use the real buffers corresponding to overlay candidates in
 // order to do a pageflip test rather than allocating test buffers.
@@ -107,8 +121,17 @@ bool IsUsingSkiaRenderer() {
   if (IsUsingVizForWebView())
     return true;
 
+#if BUILDFLAG(IS_ASH)
+  // TODO(https://crbug.com/1145180): SkiaRenderer isn't supported on Chrome
+  // OS boards that still use the legacy video decoder.
+  auto* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(
+          switches::kPlatformDisallowsChromeOSDirectVideoDecoder))
+    return false;
+#endif
+
   return base::FeatureList::IsEnabled(kUseSkiaRenderer) ||
-         base::FeatureList::IsEnabled(kVulkan);
+         features::IsUsingVulkan();
 }
 
 #if defined(OS_ANDROID)
@@ -122,12 +145,17 @@ bool IsDynamicColorGamutEnabled() {
 }
 #endif
 
+bool IsUsingFastPathForSolidColorQuad() {
+  return base::FeatureList::IsEnabled(kFastSolidColorDraw);
+}
+
 bool IsUsingVizForWebView() {
   // Viz for WebView requires shared images to be enabled.
   if (!base::FeatureList::IsEnabled(kEnableSharedImageForWebview))
     return false;
 
-  return base::FeatureList::IsEnabled(kVizForWebView);
+  return base::FeatureList::IsEnabled(kVizForWebView) ||
+         features::IsUsingVulkan();
 }
 
 bool IsUsingVizFrameSubmissionForWebView() {

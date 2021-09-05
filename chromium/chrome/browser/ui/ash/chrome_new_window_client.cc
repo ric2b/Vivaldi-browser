@@ -122,7 +122,7 @@ constexpr std::pair<arc::mojom::ChromePage, const char*> kOSSettingsMapping[] =
      {ChromePage::HELP, chromeos::settings::mojom::kAboutChromeOsSectionPath},
      {ChromePage::INTERNET, chromeos::settings::mojom::kNetworkSectionPath},
      {ChromePage::KERBEROSACCOUNTS,
-      chromeos::settings::mojom::kKerberosSubpagePath},
+      chromeos::settings::mojom::kKerberosAccountsSubpagePath},
      {ChromePage::KEYBOARDOVERLAY,
       chromeos::settings::mojom::kKeyboardSubpagePath},
      {ChromePage::KNOWNNETWORKS,
@@ -174,7 +174,10 @@ constexpr std::pair<arc::mojom::ChromePage, const char*> kOSSettingsMapping[] =
       chromeos::settings::mojom::kSwitchAccessOptionsSubpagePath},
      {ChromePage::TETHERSETTINGS,
       chromeos::settings::mojom::kMobileDataNetworksSubpagePath},
-     {ChromePage::WIFI, chromeos::settings::mojom::kWifiNetworksSubpagePath}};
+     {ChromePage::WIFI, chromeos::settings::mojom::kWifiNetworksSubpagePath},
+     {ChromePage::KERBEROS, chromeos::settings::mojom::kKerberosSectionPath},
+     {ChromePage::KERBEROSACCOUNTSV2,
+      chromeos::settings::mojom::kKerberosAccountsV2SubpagePath}};
 
 constexpr std::pair<arc::mojom::ChromePage, const char*>
     kBrowserSettingsMapping[] = {
@@ -196,8 +199,8 @@ constexpr std::pair<arc::mojom::ChromePage, const char*>
 
 constexpr std::pair<arc::mojom::ChromePage, const char*> kAboutPagesMapping[] =
     {{ChromePage::ABOUTBLANK, url::kAboutBlankURL},
-     {ChromePage::ABOUTDOWNLOADS, "about:downloads"},
-     {ChromePage::ABOUTHISTORY, "about:history"}};
+     {ChromePage::ABOUTDOWNLOADS, "chrome://downloads/"},
+     {ChromePage::ABOUTHISTORY, "chrome://history/"}};
 
 constexpr arc::mojom::ChromePage kDeprecatedPages[] = {
     ChromePage::DEPRECATED_DOWNLOADEDCONTENT,
@@ -574,7 +577,7 @@ void ChromeNewWindowClient::OpenArcCustomTab(
   // |custom_tab_browser| will be destroyed when its tab strip becomes empty,
   // either due to the user opening the custom tab page in a tabbed browser or
   // because of the CustomTabSessionImpl object getting destroyed.
-  auto* custom_tab_browser = new Browser(Browser::CreateParams(
+  auto* custom_tab_browser = Browser::Create(Browser::CreateParams(
       Browser::TYPE_CUSTOM_TAB, profile, /* user_gesture= */ true));
 
   custom_tab_browser->tab_strip_model()->AppendWebContents(

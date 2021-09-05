@@ -1043,11 +1043,12 @@ void ApplyStyleCommand::ApplyInlineStyleToNodeRange(
     DCHECK(run_end);
     next = NodeTraversal::NextSkippingChildren(*run_end);
 
-    Node* past_end_node = NodeTraversal::NextSkippingChildren(*run_end);
-    if (!ShouldApplyInlineStyleToRun(style, run_start, past_end_node))
+    Node* past_run_end_node = NodeTraversal::NextSkippingChildren(*run_end);
+    if (!ShouldApplyInlineStyleToRun(style, run_start, past_run_end_node))
       continue;
 
-    runs.push_back(InlineRunToApplyStyle(run_start, run_end, past_end_node));
+    runs.push_back(
+        InlineRunToApplyStyle(run_start, run_end, past_run_end_node));
   }
 
   for (auto& run : runs) {
@@ -1337,18 +1338,19 @@ void ApplyStyleCommand::ApplyInlineStyleToPushDown(
                                                 EditingStyle::kOverrideValues);
   }
 
+  const auto* layout_object = node->GetLayoutObject();
   // Since addInlineStyleIfNeeded can't add styles to block-flow layout objects,
   // add style attribute instead.
   // FIXME: applyInlineStyleToRange should be used here instead.
-  if ((node->GetLayoutObject()->IsLayoutBlockFlow() || node->hasChildren()) &&
+  if ((layout_object->IsLayoutBlockFlow() || node->hasChildren()) &&
       html_element) {
     SetNodeAttribute(html_element, html_names::kStyleAttr,
                      AtomicString(new_inline_style->Style()->AsText()));
     return;
   }
 
-  if (node->GetLayoutObject()->IsText() &&
-      ToLayoutText(node->GetLayoutObject())->IsAllCollapsibleWhitespace())
+  if (layout_object->IsText() &&
+      To<LayoutText>(layout_object)->IsAllCollapsibleWhitespace())
     return;
 
   // We can't wrap node with the styled element here because new styled element
@@ -1500,13 +1502,13 @@ void ApplyStyleCommand::RemoveInlineStyle(EditingStyle* style,
 
   Node* node = start.AnchorNode();
   while (node) {
-    Node* next = nullptr;
+    Node* next_to_process = nullptr;
     if (EditingIgnoresContent(*node)) {
       DCHECK(node == end.AnchorNode() || !node->contains(end.AnchorNode()))
           << node << " " << end;
-      next = NodeTraversal::NextSkippingChildren(*node);
+      next_to_process = NodeTraversal::NextSkippingChildren(*node);
     } else {
-      next = NodeTraversal::Next(*node);
+      next_to_process = NodeTraversal::Next(*node);
     }
     auto* elem = DynamicTo<HTMLElement>(node);
     if (elem && ElementFullySelected(*elem, start, end)) {
@@ -1555,7 +1557,7 @@ void ApplyStyleCommand::RemoveInlineStyle(EditingStyle* style,
     }
     if (node == end.AnchorNode())
       break;
-    node = next;
+    node = next_to_process;
   }
 
   UpdateStartEnd(EphemeralRange(s, e));

@@ -164,8 +164,7 @@ void ChromeExtensionCookies::IOData::UpdateNetworkCookieSettings() {
 void ChromeExtensionCookies::OnContentSettingChanged(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
-    ContentSettingsType content_type,
-    const std::string& resource_identifier) {
+    ContentSettingsType content_type) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (!io_data_)  // null after shutdown.
     return;
@@ -177,7 +176,7 @@ void ChromeExtensionCookies::OnContentSettingChanged(
 
   ContentSettingsForOneType settings;
   HostContentSettingsMapFactory::GetForProfile(profile_)->GetSettingsForOneType(
-      ContentSettingsType::COOKIES, std::string(), &settings);
+      ContentSettingsType::COOKIES, &settings);
 
   // Safe since |io_data_| is non-null so no IOData deletion is queued.
   content::GetIOThreadTaskRunner({})->PostTask(

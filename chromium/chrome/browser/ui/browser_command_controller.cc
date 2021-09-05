@@ -38,6 +38,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/chrome_pages.h"
+#include "chrome/browser/ui/commander/commander.h"
 #include "chrome/browser/ui/page_info/page_info_dialog.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -179,8 +180,8 @@ BrowserCommandController::BrowserCommandController(Browser* browser)
 #endif
   pref_signin_allowed_.Init(
       prefs::kSigninAllowed, profile()->GetOriginalProfile()->GetPrefs(),
-      base::Bind(&BrowserCommandController::OnSigninAllowedPrefChange,
-                 base::Unretained(this)));
+      base::BindRepeating(&BrowserCommandController::OnSigninAllowedPrefChange,
+                          base::Unretained(this)));
 
   InitCommandState();
 
@@ -388,6 +389,9 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       break;
     case IDC_TAB_SEARCH:
       ShowTabSearch(browser_);
+      break;
+    case IDC_TAB_SEARCH_CLOSE:
+      CloseTabSearch(browser_);
       break;
 
       // Window management commands
@@ -638,19 +642,23 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
           browser_, false /* force_shortcut_app */);
       break;
     case IDC_DEV_TOOLS:
-      ToggleDevToolsWindow(browser_, DevToolsToggleAction::Show());
+      ToggleDevToolsWindow(browser_, DevToolsToggleAction::Show(),
+                           DevToolsOpenedByAction::kMainMenuOrMainShortcut);
       break;
     case IDC_DEV_TOOLS_CONSOLE:
-      ToggleDevToolsWindow(browser_, DevToolsToggleAction::ShowConsolePanel());
+      ToggleDevToolsWindow(browser_, DevToolsToggleAction::ShowConsolePanel(),
+                           DevToolsOpenedByAction::kConsoleShortcut);
       break;
     case IDC_DEV_TOOLS_DEVICES:
       InspectUI::InspectDevices(browser_);
       break;
     case IDC_DEV_TOOLS_INSPECT:
-      ToggleDevToolsWindow(browser_, DevToolsToggleAction::Inspect());
+      ToggleDevToolsWindow(browser_, DevToolsToggleAction::Inspect(),
+                           DevToolsOpenedByAction::kInspectorModeShortcut);
       break;
     case IDC_DEV_TOOLS_TOGGLE:
-      ToggleDevToolsWindow(browser_, DevToolsToggleAction::Toggle());
+      ToggleDevToolsWindow(browser_, DevToolsToggleAction::Toggle(),
+                           DevToolsOpenedByAction::kToggleShortcut);
       break;
     case IDC_TASK_MANAGER:
       OpenTaskManager(browser_);
@@ -729,6 +737,9 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       break;
     case IDC_SHOW_BETA_FORUM:
       ShowBetaForum(browser_);
+      break;
+    case IDC_TOGGLE_COMMANDER:
+      ToggleCommander(browser_);
       break;
 #if !defined(OS_CHROMEOS)
     case IDC_SHOW_SIGNIN:
@@ -971,26 +982,32 @@ void BrowserCommandController::InitCommandState() {
   command_updater_.UpdateCommandEnabled(IDC_ZOOM_MINUS, true);
 
   // Show various bits of UI
-  const bool guest_session =
-      profile()->IsGuestSession() || profile()->IsSystemProfile();
   DCHECK(!profile()->IsSystemProfile())
       << "Ought to never have browser for the system profile.";
   const bool normal_window = browser_->is_type_normal();
   UpdateOpenFileState(&command_updater_);
   UpdateCommandsForDevTools();
   command_updater_.UpdateCommandEnabled(IDC_TASK_MANAGER, CanOpenTaskManager());
-  command_updater_.UpdateCommandEnabled(IDC_SHOW_HISTORY, !guest_session);
+  command_updater_.UpdateCommandEnabled(
+      IDC_SHOW_HISTORY,
+      (!profile()->IsGuestSession() && !profile()->IsSystemProfile()));
   command_updater_.UpdateCommandEnabled(IDC_SHOW_DOWNLOADS, true);
   command_updater_.UpdateCommandEnabled(IDC_HELP_MENU, true);
   command_updater_.UpdateCommandEnabled(IDC_HELP_PAGE_VIA_KEYBOARD, true);
   command_updater_.UpdateCommandEnabled(IDC_HELP_PAGE_VIA_MENU, true);
   command_updater_.UpdateCommandEnabled(IDC_SHOW_BETA_FORUM, true);
-  command_updater_.UpdateCommandEnabled(IDC_BOOKMARKS_MENU, !guest_session);
   command_updater_.UpdateCommandEnabled(
-      IDC_RECENT_TABS_MENU, !guest_session && !profile()->IsOffTheRecord());
+      IDC_BOOKMARKS_MENU,
+      (!profile()->IsGuestSession() && !profile()->IsSystemProfile() &&
+       !profile()->IsEphemeralGuestProfile()));
+  command_updater_.UpdateCommandEnabled(
+      IDC_RECENT_TABS_MENU,
+      (!profile()->IsGuestSession() && !profile()->IsSystemProfile() &&
+       !profile()->IsIncognitoProfile()));
   command_updater_.UpdateCommandEnabled(
       IDC_CLEAR_BROWSING_DATA,
-      !guest_session && !profile()->IsIncognitoProfile());
+      (!profile()->IsGuestSession() && !profile()->IsSystemProfile() &&
+       !profile()->IsIncognitoProfile()));
 #if defined(OS_CHROMEOS)
   command_updater_.UpdateCommandEnabled(IDC_TAKE_SCREENSHOT, true);
   // Chrome OS uses the system tray menu to handle multi-profiles. Avatar menu
@@ -1005,7 +1022,8 @@ void BrowserCommandController::InitCommandState() {
       IDC_SHOW_SAVE_LOCAL_CARD_SIGN_IN_PROMO_IF_APPLICABLE, true);
   command_updater_.UpdateCommandEnabled(IDC_CLOSE_SIGN_IN_PROMO, true);
   command_updater_.UpdateCommandEnabled(IDC_CARET_BROWSING_TOGGLE, true);
-
+  command_updater_.UpdateCommandEnabled(IDC_TOGGLE_COMMANDER,
+                                        commander::IsEnabled());
   UpdateShowSyncState(true);
 
   // Navigation commands
@@ -1058,10 +1076,13 @@ void BrowserCommandController::InitCommandState() {
   command_updater_.UpdateCommandEnabled(IDC_WINDOW_CLOSE_OTHER_TABS,
                                         normal_window);
 
-  command_updater_.UpdateCommandEnabled(
-      IDC_TAB_SEARCH, base::FeatureList::IsEnabled(features::kTabSearch) &&
-                          browser_->is_type_normal() &&
-                          !browser_->profile()->IsIncognitoProfile());
+  const bool enable_tab_search_commands =
+      base::FeatureList::IsEnabled(features::kTabSearch) &&
+      browser_->is_type_normal();
+  command_updater_.UpdateCommandEnabled(IDC_TAB_SEARCH,
+                                        enable_tab_search_commands);
+  command_updater_.UpdateCommandEnabled(IDC_TAB_SEARCH_CLOSE,
+                                        enable_tab_search_commands);
 
   // Initialize other commands whose state changes based on various conditions.
   UpdateCommandsForFullscreenMode();
@@ -1078,22 +1099,23 @@ void BrowserCommandController::InitCommandState() {
 void BrowserCommandController::UpdateSharedCommandsForIncognitoAvailability(
     CommandUpdater* command_updater,
     Profile* profile) {
-  const bool guest_session = profile->IsGuestSession();
-  // TODO(mlerman): Make GetAvailability account for profile->IsGuestSession().
   IncognitoModePrefs::Availability incognito_availability =
       IncognitoModePrefs::GetAvailability(profile->GetPrefs());
   command_updater->UpdateCommandEnabled(
       IDC_NEW_WINDOW, incognito_availability != IncognitoModePrefs::FORCED);
   command_updater->UpdateCommandEnabled(
       IDC_NEW_INCOGNITO_WINDOW,
-      incognito_availability != IncognitoModePrefs::DISABLED && !guest_session);
+      incognito_availability != IncognitoModePrefs::DISABLED &&
+          !profile->IsGuestSession() && !profile->IsEphemeralGuestProfile());
 
   const bool forced_incognito =
-      incognito_availability == IncognitoModePrefs::FORCED ||
-      guest_session;  // Guest always runs in Incognito mode.
+      incognito_availability == IncognitoModePrefs::FORCED;
+  const bool is_guest =
+      profile->IsGuestSession() || profile->IsEphemeralGuestProfile();
+
   command_updater->UpdateCommandEnabled(
       IDC_SHOW_BOOKMARK_MANAGER,
-      browser_defaults::bookmarks_enabled && !forced_incognito);
+      browser_defaults::bookmarks_enabled && !forced_incognito && !is_guest);
   extensions::ExtensionService* extension_service =
       extensions::ExtensionSystem::Get(profile)->extension_service();
   const bool enable_extensions =
@@ -1103,13 +1125,16 @@ void BrowserCommandController::UpdateSharedCommandsForIncognitoAvailability(
 
   // Bookmark manager and settings page/subpages are forced to open in normal
   // mode. For this reason we disable these commands when incognito is forced.
-  command_updater->UpdateCommandEnabled(IDC_MANAGE_EXTENSIONS,
-                                        enable_extensions && !forced_incognito);
+  command_updater->UpdateCommandEnabled(
+      IDC_MANAGE_EXTENSIONS,
+      enable_extensions && !forced_incognito && !is_guest);
 
-  command_updater->UpdateCommandEnabled(IDC_IMPORT_SETTINGS, !forced_incognito);
+  command_updater->UpdateCommandEnabled(IDC_IMPORT_SETTINGS,
+                                        !forced_incognito && !is_guest);
   command_updater->UpdateCommandEnabled(IDC_OPTIONS,
-                                        !forced_incognito || guest_session);
-  command_updater->UpdateCommandEnabled(IDC_SHOW_SIGNIN, !forced_incognito);
+                                        !forced_incognito || is_guest);
+  command_updater->UpdateCommandEnabled(IDC_SHOW_SIGNIN,
+                                        !forced_incognito && !is_guest);
 }
 
 void BrowserCommandController::UpdateCommandsForIncognitoAvailability() {
@@ -1254,6 +1279,7 @@ void BrowserCommandController::UpdateCommandsForBookmarkBar() {
   command_updater_.UpdateCommandEnabled(
       IDC_SHOW_BOOKMARK_BAR, browser_defaults::bookmarks_enabled &&
                                  !profile()->IsGuestSession() &&
+                                 !profile()->IsEphemeralGuestProfile() &&
                                  !profile()->IsSystemProfile() &&
                                  !profile()->GetPrefs()->IsManagedPreference(
                                      bookmarks::prefs::kShowBookmarkBar) &&

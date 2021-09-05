@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/token.h"
+#include "components/page_actions/page_actions_service.h"
 #include "components/sessions/core/session_id.h"
 #include "components/sessions/core/sessions_export.h"
 #include "components/tab_groups/tab_group_id.h"
@@ -17,7 +18,7 @@ class SessionCommand;
 struct SessionTab;
 struct SessionWindow;
 struct SessionTabGroup;
-}
+}  // namespace sessions
 
 using sessions::SessionCommand;
 
@@ -35,6 +36,21 @@ SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreateSetWindowExtDataCommand(
     SessionID window_id,
     const std::string& ext_data);
 
+// Creates a SessionCommand that records the override of a page action script
+// for a specific tab
+SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreatePageActionOverrideCommand(
+    SessionID::id_type command_id,
+    SessionID tab_id,
+    const std::string& script_path,
+    bool is_enabled_override);
+
+// Creates a SessionCommand that records the removal of an override of a page
+// action script for a specific tab
+SESSIONS_EXPORT std::unique_ptr<SessionCommand>
+CreateRemovePageActionOverrideCommand(SessionID::id_type command_id,
+                                      SessionID tab_id,
+                                      const std::string& script_path);
+
 // Extracts a SessionCommand as previously created by
 // CreateSetExtDataCommand into the tab id and ext data.
 SESSIONS_EXPORT bool RestoreSetExtDataCommand(const SessionCommand& command,
@@ -47,6 +63,20 @@ SESSIONS_EXPORT bool RestoreSetWindowExtDataCommand(
     const SessionCommand& command,
     SessionID* window_id,
     std::string* ext_data);
+
+// Extracts a SessionCommand as previously created by
+// CreatePageActionOverrideCommand into the tab id and page action script
+// override data
+SESSIONS_EXPORT bool RestorePageActionOverrideCommand(
+    const SessionCommand& command,
+    SessionID* tab_id,
+    std::string* script_path,
+    bool* is_enabled_override);
+
+SESSIONS_EXPORT bool RestoreRemovePageActionOverrideCommand(
+    const SessionCommand& command,
+    SessionID* tab_id,
+    std::string* script_path);
 
 }  // namespace vivaldi
 
@@ -63,11 +93,11 @@ using TokenToSessionTabGroup =
 // used to reconstruct the current/previous session state.
 // It is up to the caller to delete the returned SessionCommand* object.
 SESSIONS_EXPORT bool VivaldiCreateTabsAndWindows(
-  const std::vector<std::unique_ptr<sessions::SessionCommand>>& data,
-  IdToSessionTab* tabs,
-  TokenToSessionTabGroup* tab_groups,
-  IdToSessionWindow* windows,
-  SessionID* active_window_id);
+    const std::vector<std::unique_ptr<sessions::SessionCommand>>& data,
+    IdToSessionTab* tabs,
+    TokenToSessionTabGroup* tab_groups,
+    IdToSessionWindow* windows,
+    SessionID* active_window_id);
 
 SESSIONS_EXPORT std::unique_ptr<SessionCommand>
 CreateSetSelectedTabInWindowCommand(const SessionID& window_id, int index);
@@ -80,6 +110,14 @@ SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreateSetExtDataCommand(
     const SessionID& tab_id,
     const std::string& ext_data);
 
+SESSIONS_EXPORT std::unique_ptr<SessionCommand> CreatePageActionOverrideCommand(
+    const SessionID& tab_id,
+    const std::string& script_path,
+    bool is_enabled_override);
+
+SESSIONS_EXPORT std::unique_ptr<SessionCommand>
+CreateRemovePageActionOverrideCommand(const SessionID& tab_id,
+                                      const std::string& script_path);
 }  // namespace sessions
 
 #endif  // COMPONENTS_SESSIONS_VIVALDI_SESSION_SERVICE_COMMANDS_H_

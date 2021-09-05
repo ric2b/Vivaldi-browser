@@ -7,6 +7,7 @@
 
 #include "third_party/blink/renderer/core/layout/geometry/logical_rect.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_item.h"
+#include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_item_result.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_physical_text_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_result.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
@@ -50,6 +51,20 @@ struct NGLogicalLineItem {
         bidi_level(bidi_level) {}
   // Create an in-flow text fragment.
   NGLogicalLineItem(const NGInlineItem& inline_item,
+                    NGInlineItemResult& item_result,
+                    const NGTextOffset& text_offset,
+                    LayoutUnit block_offset,
+                    LayoutUnit inline_size,
+                    LayoutUnit text_height,
+                    UBiDiLevel bidi_level)
+      : inline_item(&inline_item),
+        shape_result(std::move(item_result.shape_result)),
+        text_offset(text_offset),
+        rect(LayoutUnit(), block_offset, LayoutUnit(), text_height),
+        inline_size(inline_size),
+        bidi_level(bidi_level),
+        has_only_trailing_spaces(item_result.has_only_trailing_spaces) {}
+  NGLogicalLineItem(const NGInlineItem& inline_item,
                     scoped_refptr<const ShapeResultView> shape_result,
                     const NGTextOffset& text_offset,
                     LayoutUnit block_offset,
@@ -91,7 +106,7 @@ struct NGLogicalLineItem {
                     LogicalOffset offset,
                     LayoutUnit inline_size,
                     UBiDiLevel bidi_level)
-      : fragment(std::move(fragment)),
+      : text_fragment(std::move(fragment)),
         rect(offset, LogicalSize()),
         inline_size(inline_size),
         bidi_level(bidi_level) {}
@@ -99,7 +114,7 @@ struct NGLogicalLineItem {
                     LayoutUnit block_offset,
                     LayoutUnit inline_size,
                     UBiDiLevel bidi_level)
-      : fragment(std::move(fragment)),
+      : text_fragment(std::move(fragment)),
         rect(LayoutUnit(), block_offset, LayoutUnit(), LayoutUnit()),
         inline_size(inline_size),
         bidi_level(bidi_level) {}
@@ -125,11 +140,11 @@ struct NGLogicalLineItem {
     return layout_result && layout_result->PhysicalFragment().IsInlineBox();
   }
   bool HasInFlowFragment() const {
-    return fragment || inline_item ||
+    return text_fragment || inline_item ||
            (layout_result && !layout_result->PhysicalFragment().IsFloating());
   }
   bool HasInFlowOrFloatingFragment() const {
-    return fragment || inline_item || layout_result;
+    return text_fragment || inline_item || layout_result;
   }
   bool HasOutOfFlowFragment() const { return out_of_flow_positioned_box; }
   bool HasFragment() const {
@@ -166,7 +181,7 @@ struct NGLogicalLineItem {
   const NGPhysicalFragment* PhysicalFragment() const {
     if (layout_result)
       return &layout_result->PhysicalFragment();
-    return fragment.get();
+    return text_fragment.get();
   }
   const LayoutObject* GetLayoutObject() const;
   LayoutObject* GetMutableLayoutObject() const;
@@ -184,7 +199,7 @@ struct NGLogicalLineItem {
   }
 
   scoped_refptr<const NGLayoutResult> layout_result;
-  scoped_refptr<const NGPhysicalTextFragment> fragment;
+  scoped_refptr<const NGPhysicalTextFragment> text_fragment;
 
   // Data to create a text fragment from.
   const NGInlineItem* inline_item = nullptr;
@@ -215,6 +230,9 @@ struct NGLogicalLineItem {
   UBiDiLevel bidi_level = 0xff;
   // The current text direction for OOF positioned items.
   TextDirection container_direction = TextDirection::kLtr;
+  // When an item contains only trailing spaces, the original bidi level needs
+  // to be ignored, and just use paragraph direction (UAX#9 L1)
+  bool has_only_trailing_spaces = false;
 
   bool is_hidden_for_paint = false;
 };

@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/callback.h"
+#include "components/enterprise/browser/reporting/report_type.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/version_info/channel.h"
 
@@ -33,6 +34,7 @@ class BrowserReportGenerator {
     virtual void GenerateBuildStateInfo(
         enterprise_management::BrowserReport* report) = 0;
     virtual void GenerateProfileInfo(
+        ReportType report_type,
         enterprise_management::BrowserReport* report) = 0;
     virtual void GeneratePluginsIfNeeded(
         ReportCallback callback,
@@ -48,7 +50,7 @@ class BrowserReportGenerator {
   // - browser_version, channel, executable_path
   // - user profiles: id, name, is_full_report (always be false).
   // - plugins: name, version, filename, description.
-  void Generate(ReportCallback callback);
+  void Generate(ReportType report_type, ReportCallback callback);
 
  private:
   std::unique_ptr<Delegate> delegate_;

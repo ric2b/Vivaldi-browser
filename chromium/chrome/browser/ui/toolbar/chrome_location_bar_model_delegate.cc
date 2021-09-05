@@ -11,7 +11,6 @@
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
 #include "chrome/browser/autocomplete/chrome_autocomplete_scheme_classifier.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/search/ntp_features.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
@@ -24,6 +23,7 @@
 #include "components/omnibox/browser/omnibox_prefs.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
+#include "components/search/ntp_features.h"
 #include "components/security_interstitials/content/security_interstitial_tab_helper.h"
 #include "components/security_state/core/security_state.h"
 #include "content/public/browser/navigation_controller.h"
@@ -78,7 +78,6 @@ bool ChromeLocationBarModelDelegate::GetURL(GURL* url) const {
 }
 
 bool ChromeLocationBarModelDelegate::ShouldPreventElision() {
-  RecordElisionConfig();
   if (GetElisionConfig() != ELISION_CONFIG_DEFAULT) {
     return true;
   }
@@ -249,18 +248,6 @@ ChromeLocationBarModelDelegate::GetElisionConfig() const {
   }
 #endif
   return ELISION_CONFIG_DEFAULT;
-}
-
-void ChromeLocationBarModelDelegate::RecordElisionConfig() {
-  Profile* const profile = GetProfile();
-  // Only record metrics once for this object, and only record if the profile
-  // has already been created to avoid false logging of the default config.
-  if (elision_config_recorded_ || !profile) {
-    return;
-  }
-  UMA_HISTOGRAM_ENUMERATION("Omnibox.ElisionConfig", GetElisionConfig(),
-                            ELISION_CONFIG_MAX);
-  elision_config_recorded_ = true;
 }
 
 AutocompleteClassifier*

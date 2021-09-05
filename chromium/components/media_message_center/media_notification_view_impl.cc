@@ -24,6 +24,7 @@
 #include "ui/message_center/public/cpp/message_center_constants.h"
 #include "ui/message_center/views/notification_header_view.h"
 #include "ui/views/controls/button/image_button_factory.h"
+#include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/style/typography.h"
 #include "ui/views/view_class_properties.h"
@@ -54,6 +55,22 @@ constexpr gfx::Insets kIconMediaNotificationHeaderInsets =
 constexpr gfx::Size kMediaNotificationButtonRowSize =
     gfx::Size(124, kMediaButtonSize.height());
 constexpr gfx::Size kPipButtonSeparatorViewSize = gfx::Size(20, 24);
+
+// Dimensions for CrOS.
+constexpr int kCrOSTitleLineHeight = 20;
+constexpr int kCrOSArtistLineHeight = 16;
+constexpr int kCrOSMediaButtonRowSeparator = 8;
+constexpr int kCrOSHeaderRowSeparator = 16;
+constexpr gfx::Size kCrOSMediaButtonSize = gfx::Size(32, 32);
+constexpr gfx::Insets kCrOSMediaTitleArtistInsets = gfx::Insets(0, 8, 12, 0);
+constexpr gfx::Size kCrOSMediaNotificationButtonRowSize =
+    gfx::Size(124, kCrOSMediaButtonSize.height());
+constexpr gfx::Size kCrOSPipButtonSeparatorViewSize = gfx::Size(1, 20);
+constexpr gfx::Insets kCrOSHeaderRowInsets = gfx::Insets(16, 16, 0, 16);
+constexpr gfx::Insets kCrOSMainRowInsetsWithArtwork =
+    gfx::Insets(12, 8, 16, 111);
+constexpr gfx::Insets kCrOSMainRowInsetsWithoutArtwork =
+    gfx::Insets(12, 8, 16, 16);
 
 void RecordMetadataHistogram(MediaNotificationViewImpl::Metadata metadata) {
   UMA_HISTOGRAM_ENUMERATION(MediaNotificationViewImpl::kMetadataHistogramName,
@@ -112,37 +129,22 @@ MediaNotificationViewImpl::MediaNotificationViewImpl(
     const base::string16& default_app_name,
     int notification_width,
     bool should_show_icon,
-    BackgroundStyle background_style)
+    base::Optional<NotificationTheme> theme)
     : container_(container),
       item_(std::move(item)),
       default_app_name_(default_app_name),
-      notification_width_(notification_width) {
+      notification_width_(notification_width),
+      theme_(theme),
+      is_cros_(theme.has_value()) {
   DCHECK(container_);
 
   SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(), 0));
 
-  auto header_row =
-      std::make_unique<message_center::NotificationHeaderView>(this);
-
-  if (header_row_controls_view) {
-    header_row_controls_view_ =
-        header_row->AddChildView(std::move(header_row_controls_view));
-  }
-
-  header_row->SetAppName(default_app_name_);
-
-  if (should_show_icon) {
-    header_row->ClearAppIcon();
-    header_row->SetProperty(views::kMarginsKey,
-                            kIconMediaNotificationHeaderInsets);
-  } else {
-    header_row->SetAppIconVisible(false);
-    header_row->SetProperty(views::kMarginsKey,
-                            kIconlessMediaNotificationHeaderInsets);
-  }
-
-  header_row_ = AddChildView(std::move(header_row));
+  if (is_cros_)
+    CreateCrOSHeaderRow(std::move(header_row_controls_view));
+  else
+    CreateHeaderRow(std::move(header_row_controls_view), should_show_icon);
 
   // |main_row_| holds the main content of the notification.
   auto main_row = std::make_unique<views::View>();
@@ -152,8 +154,8 @@ MediaNotificationViewImpl::MediaNotificationViewImpl(
   auto title_artist_row = std::make_unique<views::View>();
   title_artist_row_layout_ =
       title_artist_row->SetLayoutManager(std::make_unique<views::BoxLayout>(
-          views::BoxLayout::Orientation::kVertical, kMediaTitleArtistInsets,
-          0));
+          views::BoxLayout::Orientation::kVertical,
+          is_cros_ ? kCrOSMediaTitleArtistInsets : kMediaTitleArtistInsets, 0));
   title_artist_row_layout_->set_main_axis_alignment(
       views::BoxLayout::MainAxisAlignment::kCenter);
   title_artist_row_layout_->set_cross_axis_alignment(
@@ -166,14 +168,16 @@ MediaNotificationViewImpl::MediaNotificationViewImpl(
   const gfx::FontList& base_font_list = views::Label::GetDefaultFontList();
   title_label->SetFontList(base_font_list.Derive(
       0, gfx::Font::FontStyle::NORMAL, gfx::Font::Weight::MEDIUM));
-  title_label->SetLineHeight(kTitleArtistLineHeight);
+  title_label->SetLineHeight(is_cros_ ? kCrOSTitleLineHeight
+                                      : kTitleArtistLineHeight);
   title_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   title_label_ = title_artist_row_->AddChildView(std::move(title_label));
 
   auto artist_label = std::make_unique<views::Label>(
       base::string16(), views::style::CONTEXT_LABEL,
       views::style::STYLE_PRIMARY);
-  artist_label->SetLineHeight(kTitleArtistLineHeight);
+  artist_label->SetLineHeight(is_cros_ ? kCrOSArtistLineHeight
+                                       : kTitleArtistLineHeight);
   artist_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   artist_label_ = title_artist_row_->AddChildView(std::move(artist_label));
 
@@ -182,10 +186,11 @@ MediaNotificationViewImpl::MediaNotificationViewImpl(
   auto* button_row_layout =
       button_row->SetLayoutManager(std::make_unique<views::BoxLayout>(
           views::BoxLayout::Orientation::kHorizontal, gfx::Insets(),
-          kMediaButtonRowSeparator));
+          is_cros_ ? kCrOSMediaButtonRowSeparator : kMediaButtonRowSeparator));
   button_row_layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kCenter);
-  button_row->SetPreferredSize(kMediaNotificationButtonRowSize);
+  button_row->SetPreferredSize(is_cros_ ? kCrOSMediaNotificationButtonRowSize
+                                        : kMediaNotificationButtonRowSize);
   button_row_ = main_row_->AddChildView(std::move(button_row));
 
   auto playback_button_container = std::make_unique<views::View>();
@@ -193,7 +198,8 @@ MediaNotificationViewImpl::MediaNotificationViewImpl(
       playback_button_container->SetLayoutManager(
           std::make_unique<views::BoxLayout>(
               views::BoxLayout::Orientation::kHorizontal, gfx::Insets(),
-              kMediaButtonRowSeparator));
+              is_cros_ ? kCrOSMediaButtonRowSeparator
+                       : kMediaButtonRowSeparator));
   playback_button_container_layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kCenter);
   // Media playback controls should always be presented left-to-right,
@@ -212,15 +218,20 @@ MediaNotificationViewImpl::MediaNotificationViewImpl(
           IDS_MEDIA_MESSAGE_CENTER_MEDIA_NOTIFICATION_ACTION_SEEK_BACKWARD));
 
   // |play_pause_button_| toggles playback.
-  auto play_pause_button = views::CreateVectorToggleImageButton(this);
+  auto play_pause_button =
+      views::CreateVectorToggleImageButton(views::Button::PressedCallback());
+  play_pause_button->SetCallback(
+      base::BindRepeating(&MediaNotificationViewImpl::ButtonPressed,
+                          base::Unretained(this), play_pause_button.get()));
   play_pause_button->set_tag(static_cast<int>(MediaSessionAction::kPlay));
-  play_pause_button->SetPreferredSize(kMediaButtonSize);
+  play_pause_button->SetPreferredSize(is_cros_ ? kCrOSMediaButtonSize
+                                               : kMediaButtonSize);
   play_pause_button->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
   play_pause_button->SetTooltipText(l10n_util::GetStringUTF16(
       IDS_MEDIA_MESSAGE_CENTER_MEDIA_NOTIFICATION_ACTION_PLAY));
   play_pause_button->SetToggledTooltipText(l10n_util::GetStringUTF16(
       IDS_MEDIA_MESSAGE_CENTER_MEDIA_NOTIFICATION_ACTION_PAUSE));
-  play_pause_button->EnableCanvasFlippingForRTLUI(false);
+  play_pause_button->SetFlipCanvasOnPaintForRTLUI(false);
   play_pause_button_ =
       playback_button_container_->AddChildView(std::move(play_pause_button));
 
@@ -242,33 +253,44 @@ MediaNotificationViewImpl::MediaNotificationViewImpl(
       views::BoxLayout::MainAxisAlignment::kCenter);
   pip_button_separator_view_layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kCenter);
-  pip_button_separator_view->SetPreferredSize(kPipButtonSeparatorViewSize);
+  pip_button_separator_view->SetPreferredSize(
+      is_cros_ ? kCrOSPipButtonSeparatorViewSize : kPipButtonSeparatorViewSize);
 
   auto pip_button_separator_stroke = std::make_unique<views::View>();
   pip_button_separator_stroke->SetPreferredSize(
-      gfx::Size(1, kPipButtonSeparatorViewSize.height()));
+      gfx::Size(1, is_cros_ ? kCrOSPipButtonSeparatorViewSize.height()
+                            : kPipButtonSeparatorViewSize.height()));
 
   pip_button_separator_view->AddChildView(
       std::move(pip_button_separator_stroke));
   pip_button_separator_view_ =
       button_row_->AddChildView(std::move(pip_button_separator_view));
 
-  auto picture_in_picture_button = views::CreateVectorToggleImageButton(this);
+  auto picture_in_picture_button =
+      views::CreateVectorToggleImageButton(views::Button::PressedCallback());
+  picture_in_picture_button->SetCallback(base::BindRepeating(
+      &MediaNotificationViewImpl::ButtonPressed, base::Unretained(this),
+      picture_in_picture_button.get()));
   picture_in_picture_button->set_tag(
       static_cast<int>(MediaSessionAction::kEnterPictureInPicture));
-  picture_in_picture_button->SetPreferredSize(kMediaButtonSize);
+  picture_in_picture_button->SetPreferredSize(is_cros_ ? kCrOSMediaButtonSize
+                                                       : kMediaButtonSize);
   picture_in_picture_button->SetFocusBehavior(
       views::View::FocusBehavior::ALWAYS);
   picture_in_picture_button->SetTooltipText(l10n_util::GetStringUTF16(
       IDS_MEDIA_MESSAGE_CENTER_MEDIA_NOTIFICATION_ACTION_ENTER_PIP));
   picture_in_picture_button->SetToggledTooltipText(l10n_util::GetStringUTF16(
       IDS_MEDIA_MESSAGE_CENTER_MEDIA_NOTIFICATION_ACTION_EXIT_PIP));
-  picture_in_picture_button->EnableCanvasFlippingForRTLUI(false);
+  picture_in_picture_button->SetFlipCanvasOnPaintForRTLUI(false);
   picture_in_picture_button_ =
       button_row_->AddChildView(std::move(picture_in_picture_button));
 
-  if (background_style == BackgroundStyle::kAshStyle) {
+  // Use ash style background if we do have a theme.
+  if (is_cros_) {
     SetBackground(std::make_unique<MediaNotificationBackgroundAshImpl>());
+
+    for (views::View* button : GetButtons())
+      views::InstallCircleHighlightPathGenerator(button);
   } else {
     SetBackground(std::make_unique<MediaNotificationBackgroundImpl>(
         message_center::kNotificationCornerRadius,
@@ -321,7 +343,8 @@ void MediaNotificationViewImpl::SetForcedExpandedState(
     forced_expanded_state_ = base::nullopt;
   }
 
-  header_row_->SetExpandButtonEnabled(IsExpandable());
+  if (header_row_)
+    header_row_->SetExpandButtonEnabled(IsExpandable());
   UpdateViewForExpandedState();
 }
 
@@ -335,25 +358,6 @@ void MediaNotificationViewImpl::GetAccessibleNodeData(
 
   if (!accessible_name_.empty())
     node_data->SetName(accessible_name_);
-}
-
-void MediaNotificationViewImpl::ButtonPressed(views::Button* sender,
-                                              const ui::Event& event) {
-  if (sender == header_row_) {
-    SetExpanded(!expanded_);
-    container_->OnHeaderClicked();
-    return;
-  }
-
-  if (sender->parent() == button_row_ ||
-      sender->parent() == playback_button_container_) {
-    if (item_) {
-      item_->OnMediaSessionActionButtonPressed(GetActionFromButtonTag(*sender));
-    }
-    return;
-  }
-
-  NOTREACHED();
 }
 
 void MediaNotificationViewImpl::UpdateWithMediaSessionInfo(
@@ -388,12 +392,18 @@ void MediaNotificationViewImpl::UpdateWithMediaSessionInfo(
 
 void MediaNotificationViewImpl::UpdateWithMediaMetadata(
     const media_session::MediaMetadata& metadata) {
-  header_row_->SetAppName(metadata.source_title.empty()
-                              ? default_app_name_
-                              : metadata.source_title);
+  auto& app_name =
+      metadata.source_title.empty() ? default_app_name_ : metadata.source_title;
+
+  if (header_row_) {
+    header_row_->SetAppName(app_name);
+    header_row_->SetSummaryText(metadata.album);
+  } else {
+    cros_header_label_->SetText(app_name);
+  }
+
   title_label_->SetText(metadata.title);
   artist_label_->SetText(metadata.artist);
-  header_row_->SetSummaryText(metadata.album);
 
   accessible_name_ = GetAccessibleNameFromMetadata(metadata);
 
@@ -431,7 +441,8 @@ void MediaNotificationViewImpl::UpdateWithMediaActions(
     const base::flat_set<media_session::mojom::MediaSessionAction>& actions) {
   enabled_actions_ = actions;
 
-  header_row_->SetExpandButtonEnabled(IsExpandable());
+  if (header_row_)
+    header_row_->SetExpandButtonEnabled(IsExpandable());
   UpdateViewForExpandedState();
 
   PreferredSizeChanged();
@@ -466,6 +477,9 @@ void MediaNotificationViewImpl::UpdateWithFavicon(const gfx::ImageSkia& icon) {
 
 void MediaNotificationViewImpl::UpdateWithVectorIcon(
     const gfx::VectorIcon& vector_icon) {
+  if (!header_row_)
+    return;
+
   vector_header_icon_ = &vector_icon;
   const SkColor foreground =
       GetMediaNotificationBackground()->GetForegroundColor(*this);
@@ -492,7 +506,8 @@ views::Button* MediaNotificationViewImpl::GetHeaderRowForTesting() const {
 }
 
 base::string16 MediaNotificationViewImpl::GetSourceTitleForTesting() const {
-  return header_row_->app_name_for_testing();
+  return header_row_ ? header_row_->app_name_for_testing()  // IN-TEST
+                     : cros_header_label_->GetText();
 }
 
 void MediaNotificationViewImpl::UpdateActionButtonsVisibility() {
@@ -537,7 +552,18 @@ void MediaNotificationViewImpl::UpdateViewForExpandedState() {
   // Adjust the layout of the |main_row_| based on the expanded state. If the
   // notification is expanded then the buttons should be below the title/artist
   // information. If it is collapsed then the buttons will be to the right.
-  if (expanded) {
+  if (is_cros_) {
+    static_cast<views::BoxLayout*>(button_row_->GetLayoutManager())
+        ->set_main_axis_alignment(views::BoxLayout::MainAxisAlignment::kStart);
+
+    main_row_
+        ->SetLayoutManager(std::make_unique<views::BoxLayout>(
+            views::BoxLayout::Orientation::kVertical,
+            has_artwork_ ? kCrOSMainRowInsetsWithArtwork
+                         : kCrOSMainRowInsetsWithoutArtwork,
+            0))
+        ->SetDefaultFlex(1);
+  } else if (expanded) {
     static_cast<views::BoxLayout*>(button_row_->GetLayoutManager())
         ->set_main_axis_alignment(views::BoxLayout::MainAxisAlignment::kStart);
 
@@ -573,7 +599,8 @@ void MediaNotificationViewImpl::UpdateViewForExpandedState() {
     SchedulePaint();
   }
 
-  header_row_->SetExpanded(expanded);
+  if (header_row_)
+    header_row_->SetExpanded(expanded);
   container_->OnExpanded(expanded);
 
   UpdateActionButtonsVisibility();
@@ -582,14 +609,78 @@ void MediaNotificationViewImpl::UpdateViewForExpandedState() {
 void MediaNotificationViewImpl::CreateMediaButton(
     MediaSessionAction action,
     const base::string16& accessible_name) {
-  auto button = views::CreateVectorImageButton(this);
+  auto button =
+      views::CreateVectorImageButton(views::Button::PressedCallback());
+  button->SetCallback(
+      base::BindRepeating(&MediaNotificationViewImpl::ButtonPressed,
+                          base::Unretained(this), button.get()));
   button->set_tag(static_cast<int>(action));
-  button->SetPreferredSize(kMediaButtonSize);
+  button->SetPreferredSize(is_cros_ ? kCrOSMediaButtonSize : kMediaButtonSize);
   button->SetAccessibleName(accessible_name);
   button->SetTooltipText(accessible_name);
   button->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
-  button->EnableCanvasFlippingForRTLUI(false);
+  button->SetFlipCanvasOnPaintForRTLUI(false);
   playback_button_container_->AddChildView(std::move(button));
+}
+
+void MediaNotificationViewImpl::CreateHeaderRow(
+    std::unique_ptr<views::View> header_row_controls_view,
+    bool should_show_icon) {
+  auto header_row = std::make_unique<message_center::NotificationHeaderView>(
+      base::BindRepeating(
+          [](MediaNotificationViewImpl* view) {
+            view->SetExpanded(!view->expanded_);
+            view->container_->OnHeaderClicked();
+          },
+          base::Unretained(this)));
+
+  if (header_row_controls_view) {
+    header_row_controls_view_ =
+        header_row->AddChildView(std::move(header_row_controls_view));
+  }
+
+  header_row->SetAppName(default_app_name_);
+
+  if (should_show_icon) {
+    header_row->ClearAppIcon();
+    header_row->SetProperty(views::kMarginsKey,
+                            kIconMediaNotificationHeaderInsets);
+  } else {
+    header_row->SetAppIconVisible(false);
+    header_row->SetProperty(views::kMarginsKey,
+                            kIconlessMediaNotificationHeaderInsets);
+  }
+
+  header_row_ = AddChildView(std::move(header_row));
+}
+
+void MediaNotificationViewImpl::CreateCrOSHeaderRow(
+    std::unique_ptr<views::View> header_row_controls_view) {
+  auto cros_header_row = std::make_unique<views::View>();
+  auto* header_row_layout =
+      cros_header_row->SetLayoutManager(std::make_unique<views::BoxLayout>(
+          views::BoxLayout::Orientation::kHorizontal, kCrOSHeaderRowInsets,
+          kCrOSHeaderRowSeparator));
+
+  auto header_label = std::make_unique<views::Label>(
+      default_app_name_, views::style::CONTEXT_LABEL,
+      views::style::STYLE_PRIMARY);
+  const gfx::FontList& base_font_list = views::Label::GetDefaultFontList();
+  header_label->SetFontList(base_font_list.Derive(
+      0, gfx::Font::FontStyle::NORMAL, gfx::Font::Weight::MEDIUM));
+  header_label->SetLineHeight(kCrOSTitleLineHeight);
+  header_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  header_label->SetAutoColorReadabilityEnabled(false);
+
+  cros_header_label_ = cros_header_row->AddChildView(std::move(header_label));
+  header_row_layout->SetFlexForView(cros_header_label_, 1);
+
+  if (header_row_controls_view) {
+    header_row_controls_view_ =
+        cros_header_row->AddChildView(std::move(header_row_controls_view));
+  }
+
+  AddChildView(std::move(cros_header_row));
 }
 
 MediaNotificationBackground*
@@ -624,43 +715,61 @@ void MediaNotificationViewImpl::UpdateForegroundColor() {
       GetMediaNotificationBackground()->GetBackgroundColor(*this);
   const SkColor foreground =
       GetMediaNotificationBackground()->GetForegroundColor(*this);
-  const SkColor separator_color = SkColorSetA(foreground, 0x1F);
-  const SkColor disabled_icon_color =
-      SkColorSetA(foreground, gfx::kDisabledControlAlpha);
 
-  title_label_->SetEnabledColor(foreground);
-  artist_label_->SetEnabledColor(foreground);
-  header_row_->SetAccentColor(foreground);
-  if (vector_header_icon_) {
+  NotificationTheme theme;
+  if (theme_.has_value()) {
+    theme = *theme_;
+  } else {
+    theme.primary_text_color = foreground;
+    theme.secondary_text_color = foreground;
+    theme.enabled_icon_color = foreground;
+    theme.disabled_icon_color =
+        SkColorSetA(foreground, gfx::kDisabledControlAlpha);
+    theme.separator_color = SkColorSetA(foreground, 0x1F);
+  }
+
+  title_label_->SetEnabledColor(theme.primary_text_color);
+  artist_label_->SetEnabledColor(theme.secondary_text_color);
+
+  if (header_row_) {
+    header_row_->SetAccentColor(theme.primary_text_color);
+    header_row_->SetBackgroundColor(background);
+  } else {
+    cros_header_label_->SetEnabledColor(theme.primary_text_color);
+  }
+
+  if (vector_header_icon_ && header_row_) {
     header_row_->SetAppIcon(gfx::CreateVectorIcon(
-        *vector_header_icon_, message_center::kSmallImageSizeMD, foreground));
+        *vector_header_icon_, message_center::kSmallImageSizeMD,
+        theme.enabled_icon_color));
   }
 
   title_label_->SetBackgroundColor(background);
   artist_label_->SetBackgroundColor(background);
-  header_row_->SetBackgroundColor(background);
 
   pip_button_separator_view_->children().front()->SetBackground(
-      views::CreateSolidBackground(separator_color));
+      views::CreateSolidBackground(theme.separator_color));
 
   // Update play/pause button images.
   views::SetImageFromVectorIconWithColor(
       play_pause_button_,
       *GetVectorIconForMediaAction(MediaSessionAction::kPlay),
-      kMediaButtonIconSize, foreground);
+      kMediaButtonIconSize, theme.enabled_icon_color);
   views::SetToggledImageFromVectorIconWithColor(
       play_pause_button_,
       *GetVectorIconForMediaAction(MediaSessionAction::kPause),
-      kMediaButtonIconSize, foreground, disabled_icon_color);
+      kMediaButtonIconSize, theme.enabled_icon_color,
+      theme.disabled_icon_color);
 
   views::SetImageFromVectorIconWithColor(
       picture_in_picture_button_,
       *GetVectorIconForMediaAction(MediaSessionAction::kEnterPictureInPicture),
-      kMediaButtonIconSize, foreground);
+      kMediaButtonIconSize, theme.enabled_icon_color);
   views::SetToggledImageFromVectorIconWithColor(
       picture_in_picture_button_,
       *GetVectorIconForMediaAction(MediaSessionAction::kExitPictureInPicture),
-      kMediaButtonIconSize, foreground, disabled_icon_color);
+      kMediaButtonIconSize, theme.enabled_icon_color,
+      theme.disabled_icon_color);
 
   // Update action buttons.
   for (views::View* child : playback_button_container_->children()) {
@@ -672,12 +781,17 @@ void MediaNotificationViewImpl::UpdateForegroundColor() {
 
     views::SetImageFromVectorIconWithColor(
         button, *GetVectorIconForMediaAction(GetActionFromButtonTag(*button)),
-        kMediaButtonIconSize, foreground);
+        kMediaButtonIconSize, theme.enabled_icon_color);
 
     button->SchedulePaint();
   }
 
-  container_->OnColorsChanged(foreground, background);
+  container_->OnColorsChanged(theme.enabled_icon_color, background);
+}
+
+void MediaNotificationViewImpl::ButtonPressed(views::Button* button) {
+  if (item_)
+    item_->OnMediaSessionActionButtonPressed(GetActionFromButtonTag(*button));
 }
 
 std::vector<views::View*> MediaNotificationViewImpl::GetButtons() {
@@ -696,4 +810,5 @@ std::vector<views::View*> MediaNotificationViewImpl::GetButtons() {
       buttons.end());
   return buttons;
 }
+
 }  // namespace media_message_center

@@ -10,9 +10,9 @@
 #include "base/stl_util.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
-#include "chrome/browser/prerender/chrome_prerender_contents_delegate.h"
+#include "chrome/browser/prefetch/no_state_prefetch/chrome_prerender_contents_delegate.h"
 #include "chrome/browser/profiles/profile.h"
-#include "components/prerender/browser/prerender_contents.h"
+#include "components/no_state_prefetch/browser/prerender_contents.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 

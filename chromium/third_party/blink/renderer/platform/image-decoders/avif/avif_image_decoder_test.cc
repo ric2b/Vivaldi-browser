@@ -127,7 +127,7 @@ StaticColorCheckParam kTestParams[] = {
      ImageDecoder::kLosslessFormat,
      ImageDecoder::kAlphaNotPremultiplied,
      ColorBehavior::Tag(),
-     1,
+     3,
      {
          {gfx::Point(0, 0), SkColorSetARGB(0, 255, 0, 0)},
          {gfx::Point(1, 1), SkColorSetARGB(128, 255, 0, 0)},
@@ -211,7 +211,7 @@ StaticColorCheckParam kTestParams[] = {
      ImageDecoder::kLosslessFormat,
      ImageDecoder::kAlphaPremultiplied,
      ColorBehavior::TransformToSRGB(),
-     1,
+     3,
      {
          {gfx::Point(0, 0), SkColorSetARGB(0, 0, 0, 0)},
          {gfx::Point(1, 1), SkColorSetARGB(128, 255, 0, 0)},
@@ -628,29 +628,33 @@ void TestYUVRed(const char* file_name,
 
 TEST(AnimatedAVIFTests, ValidImages) {
   TestByteByByteDecode(&CreateAVIFDecoder,
-                       "/images/resources/avif/star-8bpc.avifs", 5u,
+                       "/images/resources/avif/star-animated-8bpc.avif", 5u,
                        kAnimationLoopInfinite);
+  TestByteByByteDecode(
+      &CreateAVIFDecoder,
+      "/images/resources/avif/star-animated-8bpc-with-alpha.avif", 5u,
+      kAnimationLoopInfinite);
   TestByteByByteDecode(&CreateAVIFDecoder,
-                       "/images/resources/avif/star-8bpc-with-alpha.avifs", 5u,
+                       "/images/resources/avif/star-animated-10bpc.avif", 5u,
                        kAnimationLoopInfinite);
+  TestByteByByteDecode(
+      &CreateAVIFDecoder,
+      "/images/resources/avif/star-animated-10bpc-with-alpha.avif", 5u,
+      kAnimationLoopInfinite);
   TestByteByByteDecode(&CreateAVIFDecoder,
-                       "/images/resources/avif/star-10bpc.avifs", 5u,
+                       "/images/resources/avif/star-animated-12bpc.avif", 5u,
                        kAnimationLoopInfinite);
-  TestByteByByteDecode(&CreateAVIFDecoder,
-                       "/images/resources/avif/star-10bpc-with-alpha.avifs", 5u,
-                       kAnimationLoopInfinite);
-  TestByteByByteDecode(&CreateAVIFDecoder,
-                       "/images/resources/avif/star-12bpc.avifs", 5u,
-                       kAnimationLoopInfinite);
-  TestByteByByteDecode(&CreateAVIFDecoder,
-                       "/images/resources/avif/star-12bpc-with-alpha.avifs", 5u,
-                       kAnimationLoopInfinite);
-  // TODO(ryoh): Add avifs with EditListBox.
+  TestByteByByteDecode(
+      &CreateAVIFDecoder,
+      "/images/resources/avif/star-animated-12bpc-with-alpha.avif", 5u,
+      kAnimationLoopInfinite);
+  // TODO(ryoh): Add animated avif files with EditListBox.
 }
 
 TEST(AnimatedAVIFTests, HasMultipleSubImages) {
   std::unique_ptr<ImageDecoder> decoder = CreateAVIFDecoder();
-  decoder->SetData(ReadFile("/images/resources/avif/star-8bpc.avifs"), true);
+  decoder->SetData(ReadFile("/images/resources/avif/star-animated-8bpc.avif"),
+                   true);
   EXPECT_TRUE(decoder->ImageHasBothStillAndAnimatedSubImages());
 }
 

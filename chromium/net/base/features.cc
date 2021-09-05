@@ -17,6 +17,16 @@ const base::Feature kAcceptLanguageHeader{"AcceptLanguageHeader",
 const base::Feature kCapReferrerToOriginOnCrossOrigin{
     "CapReferrerToOriginOnCrossOrigin", base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kDnsTransactionDynamicTimeouts{
+    "DnsTransactionDynamicTimeouts", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::FeatureParam<double> kDnsTransactionTimeoutMultiplier{
+    &kDnsTransactionDynamicTimeouts, "DnsTransactionTimeoutMultiplier", 7.5};
+
+const base::FeatureParam<base::TimeDelta> kDnsMinTransactionTimeout{
+    &kDnsTransactionDynamicTimeouts, "DnsMinTransactionTimeout",
+    base::TimeDelta::FromSeconds(12)};
+
 const base::Feature kDnsHttpssvc{"DnsHttpssvc",
                                  base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -82,6 +92,10 @@ const base::Feature kPartitionExpectCTStateByNetworkIsolationKey{
     "PartitionExpectCTStateByNetworkIsolationKey",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kPartitionNelAndReportingByNetworkIsolationKey{
+    "PartitionNelAndReportingByNetworkIsolationKey",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kExpectCTPruning{"ExpectCTPruning",
                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
@@ -120,22 +134,6 @@ const base::Feature kShortLaxAllowUnsafeThreshold{
 
 const base::Feature kSameSiteDefaultChecksMethodRigorously{
     "SameSiteDefaultChecksMethodRigorously", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kRecentHttpSameSiteAccessGrantsLegacyCookieSemantics{
-    "RecentHttpSameSiteAccessGrantsLegacyCookieSemantics",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-const base::FeatureParam<int>
-    kRecentHttpSameSiteAccessGrantsLegacyCookieSemanticsMilliseconds{
-        &kRecentHttpSameSiteAccessGrantsLegacyCookieSemantics,
-        "RecentHttpSameSiteAccessGrantsLegacyCookieSemanticsMilliseconds", 0};
-
-const base::Feature kRecentCreationTimeGrantsLegacyCookieSemantics{
-    "RecentCreationTimeGrantsLegacyCookieSemantics",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-const base::FeatureParam<int>
-    kRecentCreationTimeGrantsLegacyCookieSemanticsMilliseconds{
-        &kRecentCreationTimeGrantsLegacyCookieSemantics,
-        "RecentCreationTimeGrantsLegacyCookieSemanticsMilliseconds", 0};
 
 #if BUILDFLAG(BUILTIN_CERT_VERIFIER_FEATURE_SUPPORTED)
 const base::Feature kCertVerifierBuiltinFeature{

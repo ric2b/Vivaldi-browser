@@ -14,7 +14,7 @@
 
 namespace extensions {
 
-bool IsEventTypeHandledByAXEventGenerator(ax::mojom::Event event_type) {
+bool ShouldIgnoreAXEvent(ax::mojom::Event event_type) {
   // Important note: if you are getting here as a result of a compilation error
   // while adding or removing enum values from ax::mojom::Event, please ensure
   // you keep that enum in sync with EventType in
@@ -31,13 +31,11 @@ bool IsEventTypeHandledByAXEventGenerator(ax::mojom::Event event_type) {
     case ax::mojom::Event::kDocumentSelectionChanged:
     case ax::mojom::Event::kDocumentTitleChanged:
     case ax::mojom::Event::kExpandedChanged:
-    case ax::mojom::Event::kInvalidStatusChanged:
     case ax::mojom::Event::kLoadComplete:
     case ax::mojom::Event::kLoadStart:
     case ax::mojom::Event::kRowCollapsed:
     case ax::mojom::Event::kRowCountChanged:
     case ax::mojom::Event::kRowExpanded:
-    case ax::mojom::Event::kScrollPositionChanged:
     case ax::mojom::Event::kSelectedChildrenChanged:
       return true;
 
@@ -63,7 +61,6 @@ bool IsEventTypeHandledByAXEventGenerator(ax::mojom::Event event_type) {
     case ax::mojom::Event::kMediaStartedPlaying:
     case ax::mojom::Event::kMediaStoppedPlaying:
     case ax::mojom::Event::kMenuEnd:
-    case ax::mojom::Event::kMenuListItemSelected:
     case ax::mojom::Event::kMenuListValueChanged:
     case ax::mojom::Event::kMenuPopupEnd:
     case ax::mojom::Event::kMenuPopupStart:
@@ -74,6 +71,7 @@ bool IsEventTypeHandledByAXEventGenerator(ax::mojom::Event event_type) {
     case ax::mojom::Event::kMousePressed:
     case ax::mojom::Event::kMouseReleased:
     case ax::mojom::Event::kScrolledToAnchor:
+    case ax::mojom::Event::kScrollPositionChanged:
     case ax::mojom::Event::kSelection:
     case ax::mojom::Event::kSelectionAdd:
     case ax::mojom::Event::kSelectionRemove:
@@ -119,6 +117,7 @@ bool ShouldIgnoreGeneratedEvent(ui::AXEventGenerator::Event event_type) {
     case ui::AXEventGenerator::Event::DOCUMENT_SELECTION_CHANGED:
     case ui::AXEventGenerator::Event::DOCUMENT_TITLE_CHANGED:
     case ui::AXEventGenerator::Event::DROPEFFECT_CHANGED:
+    case ui::AXEventGenerator::Event::EDITABLE_TEXT_CHANGED:
     case ui::AXEventGenerator::Event::ENABLED_CHANGED:
     case ui::AXEventGenerator::Event::EXPANDED:
     case ui::AXEventGenerator::Event::FOCUS_CHANGED:
@@ -147,6 +146,7 @@ bool ShouldIgnoreGeneratedEvent(ui::AXEventGenerator::Event event_type) {
     case ui::AXEventGenerator::Event::NAME_CHANGED:
     case ui::AXEventGenerator::Event::OBJECT_ATTRIBUTE_CHANGED:
     case ui::AXEventGenerator::Event::OTHER_ATTRIBUTE_CHANGED:
+    case ui::AXEventGenerator::Event::PARENT_CHANGED:
     case ui::AXEventGenerator::Event::PLACEHOLDER_CHANGED:
     case ui::AXEventGenerator::Event::PORTAL_ACTIVATED:
     case ui::AXEventGenerator::Event::POSITION_IN_SET_CHANGED:
@@ -159,20 +159,23 @@ bool ShouldIgnoreGeneratedEvent(ui::AXEventGenerator::Event event_type) {
     case ui::AXEventGenerator::Event::SCROLL_VERTICAL_POSITION_CHANGED:
     case ui::AXEventGenerator::Event::SELECTED_CHANGED:
     case ui::AXEventGenerator::Event::SELECTED_CHILDREN_CHANGED:
+    case ui::AXEventGenerator::Event::SELECTED_VALUE_CHANGED:
     case ui::AXEventGenerator::Event::SET_SIZE_CHANGED:
     case ui::AXEventGenerator::Event::SORT_CHANGED:
     case ui::AXEventGenerator::Event::STATE_CHANGED:
     case ui::AXEventGenerator::Event::SUBTREE_CREATED:
     case ui::AXEventGenerator::Event::TEXT_ATTRIBUTE_CHANGED:
-    case ui::AXEventGenerator::Event::VALUE_CHANGED:
-    case ui::AXEventGenerator::Event::VALUE_MAX_CHANGED:
-    case ui::AXEventGenerator::Event::VALUE_MIN_CHANGED:
-    case ui::AXEventGenerator::Event::VALUE_STEP_CHANGED:
+    case ui::AXEventGenerator::Event::VALUE_IN_TEXT_FIELD_CHANGED:
+    case ui::AXEventGenerator::Event::RANGE_VALUE_CHANGED:
+    case ui::AXEventGenerator::Event::RANGE_VALUE_MAX_CHANGED:
+    case ui::AXEventGenerator::Event::RANGE_VALUE_MIN_CHANGED:
+    case ui::AXEventGenerator::Event::RANGE_VALUE_STEP_CHANGED:
       return false;
 
       // These enum values can be ignored and should not be mapped.
     case ui::AXEventGenerator::Event::ATK_TEXT_OBJECT_ATTRIBUTE_CHANGED:
     case ui::AXEventGenerator::Event::WIN_IACCESSIBLE_STATE_CHANGED:
+    case ui::AXEventGenerator::Event::SELECTION_IN_TEXT_FIELD_CHANGED:
       return true;
   }
 

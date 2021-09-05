@@ -17,7 +17,7 @@
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/window_animation_types.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
@@ -216,7 +216,6 @@ ChromeLauncherController::ChromeLauncherController(Profile* profile,
 
   if (chrome::SettingsWindowManager::UseDeprecatedSettingsWindow(profile)) {
     settings_window_observer_ = std::make_unique<SettingsWindowObserver>();
-    discover_window_observer_ = std::make_unique<DiscoverWindowObserver>();
   }
 
   if (!profile) {

@@ -367,7 +367,7 @@ Example
 
   action("myscript") {
     # Pass the generated output dir to the script.
-    args = [ "-o", rebase_path(target_gen_dir, root_build_dir) ]"
+    args = [ "-o", rebase_path(target_gen_dir, root_build_dir) ]
   }
 )";
 
@@ -392,7 +392,7 @@ Example
 
   action("myscript") {
     # Pass the output dir to the script.
-    args = [ "-o", rebase_path(target_out_dir, root_build_dir) ]"
+    args = [ "-o", rebase_path(target_out_dir, root_build_dir) ]
   }
 )";
 
@@ -1064,7 +1064,7 @@ const char kDepfile_Help[] =
   The .d file should go in the target output directory. If you have more than
   one source file that the script is being run over, you can use the output
   file expansions described in "gn help action_foreach" to name the .d file
-  according to the input."
+  according to the input.
 
   The format is that of a Makefile and all paths must be relative to the root
   build directory. Only one output may be listed and it must match the first

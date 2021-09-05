@@ -18,20 +18,23 @@
 #include "chrome/browser/extensions/activity_log/activity_log_task_runner.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/test_extension_system.h"
-#include "chrome/browser/prerender/prerender_manager_factory.h"
-#include "chrome/browser/prerender/prerender_test_utils.h"
+#include "chrome/browser/prefetch/no_state_prefetch/prerender_manager_factory.h"
+#include "chrome/browser/prefetch/no_state_prefetch/prerender_test_utils.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/prerender/browser/prerender_handle.h"
-#include "components/prerender/browser/prerender_manager.h"
+#include "components/no_state_prefetch/browser/prerender_handle.h"
+#include "components/no_state_prefetch/browser/prerender_manager.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_task_environment.h"
+#include "content/public/test/mock_render_process_host.h"
 #include "extensions/browser/extension_registry.h"
+#include "extensions/browser/renderer_startup_helper.h"
 #include "extensions/browser/uninstall_reason.h"
 #include "extensions/common/dom_action_types.h"
 #include "extensions/common/extension_builder.h"
+#include "mojo/public/cpp/bindings/associated_receiver_set.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace {
@@ -55,6 +58,31 @@ const char* const kUrlApiCalls[] = {
 
 namespace extensions {
 
+// Class that implements the binding of a new Renderer mojom interface and
+// can receive callbacks on it for testing validation.
+class InterceptingRendererStartupHelper : public RendererStartupHelper,
+                                          public mojom::Renderer {
+ public:
+  explicit InterceptingRendererStartupHelper(
+      content::BrowserContext* browser_context)
+      : RendererStartupHelper(browser_context) {}
+
+ protected:
+  mojo::PendingAssociatedRemote<mojom::Renderer> BindNewRendererRemote(
+      content::RenderProcessHost* process) override {
+    mojo::AssociatedRemote<mojom::Renderer> remote;
+    receivers_.Add(this, remote.BindNewEndpointAndPassDedicatedReceiver());
+    return remote.Unbind();
+  }
+
+ private:
+  // mojom::Renderer implementation:
+  void ActivateExtension(const std::string& extension_id) override {}
+  void SetActivityLoggingEnabled(bool enabled) override {}
+
+  mojo::AssociatedReceiverSet<mojom::Renderer> receivers_;
+};
+
 class ActivityLogTest : public ChromeRenderViewHostTestHarness {
  protected:
   virtual bool enable_activity_logging_switch() const { return true; }
@@ -74,7 +102,22 @@ class ActivityLogTest : public ChromeRenderViewHostTestHarness {
     extension_service_ = static_cast<TestExtensionSystem*>(
         ExtensionSystem::Get(profile()))->CreateExtensionService
             (&command_line, base::FilePath(), false);
+
+    RendererStartupHelperFactory::GetForBrowserContext(profile())
+        ->OnRenderProcessHostCreated(
+            static_cast<content::RenderProcessHost*>(process()));
+
     base::RunLoop().RunUntilIdle();
+  }
+
+  static std::unique_ptr<KeyedService> BuildFakeRendererStartupHelper(
+      content::BrowserContext* context) {
+    return std::make_unique<InterceptingRendererStartupHelper>(context);
+  }
+
+  TestingProfile::TestingFactories GetTestingFactories() const override {
+    return {{RendererStartupHelperFactory::GetInstance(),
+             base::BindRepeating(&BuildFakeRendererStartupHelper)}};
   }
 
   void TearDown() override {
@@ -241,9 +284,6 @@ TEST_F(ActivityLogTest, LogPrerender) {
   ASSERT_TRUE(GetDatabaseEnabled());
   GURL url("http://www.google.com");
 
-  prerender::test_utils::RestorePrerenderMode restore_prerender_mode;
-  prerender::PrerenderManager::SetMode(
-      prerender::PrerenderManager::PRERENDER_MODE_NOSTATE_PREFETCH);
   prerender::PrerenderManager* prerender_manager =
       prerender::PrerenderManagerFactory::GetForBrowserContext(profile());
 

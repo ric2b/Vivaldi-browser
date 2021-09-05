@@ -9,7 +9,6 @@
 #include "platform_media/renderer/decoders/ipc_demuxer.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "media/base/container_names.h"

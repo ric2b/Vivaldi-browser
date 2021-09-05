@@ -5,8 +5,10 @@
 package org.chromium.weblayer_private;
 
 import android.os.RemoteException;
+import android.os.SystemClock;
 import android.webkit.WebResourceResponse;
 
+import org.chromium.base.TimeUtilsJni;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
@@ -27,6 +29,10 @@ public final class NavigationControllerImpl extends INavigationController.Stub {
     private final TabImpl mTab;
     private long mNativeNavigationController;
     private INavigationControllerClient mNavigationControllerClient;
+
+    // Conversion between native TimeTicks and SystemClock.uptimeMillis().
+    private long mNativeTickOffsetUs;
+    private boolean mNativeTickOffsetUsComputed;
 
     public NavigationControllerImpl(TabImpl tab, INavigationControllerClient client) {
         mTab = tab;
@@ -215,9 +221,41 @@ public final class NavigationControllerImpl extends INavigationController.Stub {
     }
 
     @CalledByNative
+    private void onFirstContentfulPaint2(
+            long navigationStartTick, long firstContentfulPaintDurationMs) throws RemoteException {
+        if (WebLayerFactoryImpl.getClientMajorVersion() < 88) return;
+
+        mNavigationControllerClient.onFirstContentfulPaint2(
+                (navigationStartTick - getNativeTickOffsetUs()) / 1000,
+                firstContentfulPaintDurationMs);
+    }
+
+    @CalledByNative
+    private void onLargestContentfulPaint(long navigationStartTick,
+            long largestContentfulPaintDurationMs) throws RemoteException {
+        if (WebLayerFactoryImpl.getClientMajorVersion() < 88) return;
+
+        mNavigationControllerClient.onLargestContentfulPaint(
+                (navigationStartTick - getNativeTickOffsetUs()) / 1000,
+                largestContentfulPaintDurationMs);
+    }
+
+    @CalledByNative
     private void onOldPageNoLongerRendered(String uri) throws RemoteException {
         if (WebLayerFactoryImpl.getClientMajorVersion() < 85) return;
         mNavigationControllerClient.onOldPageNoLongerRendered(uri);
+    }
+
+    private long getNativeTickOffsetUs() {
+        // See logic in CustomTabsConnection.java that this was based on.
+        if (!mNativeTickOffsetUsComputed) {
+            // Compute offset from time ticks to uptimeMillis.
+            mNativeTickOffsetUsComputed = true;
+            long nativeNowUs = TimeUtilsJni.get().getTimeTicksNowUs();
+            long javaNowUs = SystemClock.uptimeMillis() * 1000;
+            mNativeTickOffsetUs = nativeNowUs - javaNowUs;
+        }
+        return mNativeTickOffsetUs;
     }
 
     private static final class NavigateParamsImpl extends INavigateParams.Stub {

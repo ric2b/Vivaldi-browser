@@ -93,9 +93,10 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
   // changed.
   virtual void TextChanged(const LayoutObject*) = 0;
   virtual void DocumentTitleChanged() = 0;
-  // Called when a node has just been attached, so we can make sure we have the
-  // right subclass of AXObject.
+  // Called when a layout tree for a node has just been attached, so we can make
+  // sure we have the right subclass of AXObject.
   virtual void UpdateCacheAfterNodeIsAttached(Node*) = 0;
+  // A DOM node was inserted , but does not necessarily have a layout tree.
   virtual void DidInsertChildrenOfNode(Node*) = 0;
 
   // Returns true if the AXObjectCache cares about this attribute
@@ -118,6 +119,10 @@ class CORE_EXPORT AXObjectCache : public GarbageCollected<AXObjectCache> {
   virtual void HandleClicked(Node*) = 0;
   virtual void HandleValidationMessageVisibilityChanged(
       const Node* form_control) = 0;
+  virtual void HandleEventListenerAdded(const Node& node,
+                                        const AtomicString& event_type) = 0;
+  virtual void HandleEventListenerRemoved(const Node& node,
+                                          const AtomicString& event_type) = 0;
 
   // Handle any notifications which arrived while layout was dirty.
   virtual void ProcessDeferredAccessibilityEvents(Document&) = 0;

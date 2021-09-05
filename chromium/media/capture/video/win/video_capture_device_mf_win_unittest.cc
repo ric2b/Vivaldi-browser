@@ -11,9 +11,10 @@
 #include <cmath>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/test/task_environment.h"
 #include "base/win/windows_version.h"
+#include "media/base/win/mf_helpers.h"
 #include "media/capture/video/win/sink_filter_win.h"
 #include "media/capture/video/win/video_capture_device_factory_win.h"
 #include "media/capture/video/win/video_capture_device_mf_win.h"
@@ -44,6 +45,8 @@ constexpr long kVideoProcAmpMinBase = -50;
 constexpr long kVideoProcAmpMaxBase = 50;
 constexpr long kVideoProcAmpStep = 1;
 
+constexpr uint32_t kMFSampleBufferLength = 1;
+
 class MockClient : public VideoCaptureDevice::Client {
  public:
   void OnIncomingCapturedData(const uint8_t* data,
@@ -65,7 +68,6 @@ class MockClient : public VideoCaptureDevice::Client {
 
   void OnIncomingCapturedExternalBuffer(
       gfx::GpuMemoryBufferHandle handle,
-      std::unique_ptr<Buffer::ScopedAccessPermission> read_access_permission,
       const VideoCaptureFormat& format,
       const gfx::ColorSpace& color_space,
       base::TimeTicks reference_time,
@@ -268,7 +270,7 @@ class MockAMVideoProcAmp final : public MockInterface<IAMVideoProcAmp> {
   ~MockAMVideoProcAmp() override = default;
 };
 
-class MockMFMediaSource : public MockInterface<IMFMediaSource> {
+class MockMFMediaSource : public MockInterface<IMFMediaSourceEx> {
  public:
   // IUnknown
   IFACEMETHODIMP QueryInterface(REFIID riid, void** object) override {
@@ -278,6 +280,10 @@ class MockMFMediaSource : public MockInterface<IMFMediaSource> {
     }
     if (riid == __uuidof(IAMVideoProcAmp)) {
       *object = AddReference(new MockAMVideoProcAmp);
+      return S_OK;
+    }
+    if (riid == __uuidof(IMFMediaSource)) {
+      *object = AddReference(static_cast<IMFMediaSource*>(this));
       return S_OK;
     }
     return MockInterface::QueryInterface(riid, object);
@@ -316,6 +322,15 @@ class MockMFMediaSource : public MockInterface<IMFMediaSource> {
   IFACEMETHODIMP Stop(void) override { return E_NOTIMPL; }
   IFACEMETHODIMP Pause(void) override { return E_NOTIMPL; }
   IFACEMETHODIMP Shutdown(void) override { return E_NOTIMPL; }
+  // IMFMediaSourceEx
+  IFACEMETHODIMP GetSourceAttributes(IMFAttributes** attributes) {
+    return E_NOTIMPL;
+  }
+  IFACEMETHODIMP GetStreamAttributes(DWORD stream_id,
+                                     IMFAttributes** attributes) {
+    return E_NOTIMPL;
+  }
+  IFACEMETHODIMP SetD3DManager(IUnknown* manager) { return S_OK; }
 
  private:
   ~MockMFMediaSource() override = default;
@@ -1229,6 +1244,24 @@ TEST_F(VideoCaptureDeviceMFWinTest, StartPreviewOnAllocateAndStart) {
   device_->StopAndDeAllocate();
 }
 
+// Expects device's |camera_rotation_| to be populated after first OnSample().
+TEST_F(VideoCaptureDeviceMFWinTest, PopulateCameraRotationOnSample) {
+  if (ShouldSkipTest())
+    return;
+
+  PrepareMFDeviceWithOneVideoStream(MFVideoFormat_MJPG);
+
+  EXPECT_CALL(*(engine_.Get()), OnStartPreview());
+  EXPECT_CALL(*client_, OnStarted());
+
+  device_->AllocateAndStart(VideoCaptureParams(), std::move(client_));
+  // Create a valid IMFSample to use with the callback.
+  Microsoft::WRL::ComPtr<IMFSample> test_sample =
+      CreateEmptySampleWithBuffer(kMFSampleBufferLength, 0);
+  capture_preview_sink_->sample_callback->OnSample(test_sample.Get());
+  EXPECT_TRUE(device_->camera_rotation().has_value());
+}
+
 // Expects OnError() to be called on an errored IMFMediaEvent
 TEST_F(VideoCaptureDeviceMFWinTest, CallClientOnErrorMediaEvent) {
   if (ShouldSkipTest())
@@ -1710,6 +1743,45 @@ TEST_F(VideoCaptureDeviceMFWinTestWithDXGI, SimpleInit) {
   // The purpose of this test is to ensure that the capture engine is correctly
   // initialized with a MF DXGI device manager.
   // All required logic for this test is in SetUp().
+}
+
+TEST_F(VideoCaptureDeviceMFWinTestWithDXGI, EnsureNV12SinkSubtype) {
+  if (ShouldSkipTest())
+    return;
+
+  // Ensures that the stream which is added to the preview sink has a media type
+  // with a subtype of NV12
+  const GUID expected_subtype = MFVideoFormat_NV12;
+  PrepareMFDeviceWithOneVideoStream(expected_subtype);
+
+  EXPECT_CALL(*(engine_.Get()), OnStartPreview());
+  EXPECT_CALL(*client_, OnStarted());
+
+  EXPECT_CALL(*(capture_source_.get()), DoSetCurrentDeviceMediaType(0, _))
+      .WillOnce(Invoke(
+          [expected_subtype](DWORD stream_index, IMFMediaType* media_type) {
+            GUID source_video_media_subtype;
+            media_type->GetGUID(MF_MT_SUBTYPE, &source_video_media_subtype);
+            EXPECT_EQ(source_video_media_subtype, expected_subtype);
+            return S_OK;
+          }));
+
+  EXPECT_CALL(*(capture_preview_sink_.get()), DoAddStream(0, _, _, _))
+      .WillOnce(Invoke([expected_subtype](DWORD stream_index,
+                                          IMFMediaType* media_type,
+                                          IMFAttributes* attributes,
+                                          DWORD* sink_stream_index) {
+        GUID sink_video_media_subtype;
+        media_type->GetGUID(MF_MT_SUBTYPE, &sink_video_media_subtype);
+        EXPECT_EQ(sink_video_media_subtype, expected_subtype);
+        return S_OK;
+      }));
+
+  VideoCaptureFormat format(gfx::Size(640, 480), 30, media::PIXEL_FORMAT_NV12);
+  VideoCaptureParams video_capture_params;
+  video_capture_params.requested_format = format;
+  device_->AllocateAndStart(video_capture_params, std::move(client_));
+  capture_preview_sink_->sample_callback->OnSample(nullptr);
 }
 
 }  // namespace media

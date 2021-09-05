@@ -68,6 +68,7 @@ All changes to this list should go through Blink's feature review process: http:
     animation-iteration-count
     animation-name
     animation-play-state
+    animation-timeline
     animation-timing-function
     appearance
     aspect-ratio
@@ -260,6 +261,7 @@ All changes to this list should go through Blink's feature review process: http:
     outline-width
     overflow-anchor
     overflow-block
+    overflow-clip-margin
     overflow-inline
     overflow-wrap
     overflow-x
@@ -314,6 +316,7 @@ All changes to this list should go through Blink's feature review process: http:
     scroll-snap-stop
     scroll-snap-type
     scrollbar-gutter
+    scrollbar-width
     shape-image-threshold
     shape-margin
     shape-outside
@@ -421,6 +424,7 @@ All changes to this list should go through Blink's feature review process: http:
         animation-iteration-count
         animation-name
         animation-play-state
+        animation-timeline
         animation-timing-function
     background
         background-attachment

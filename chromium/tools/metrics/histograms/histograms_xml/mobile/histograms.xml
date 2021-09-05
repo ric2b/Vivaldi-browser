@@ -22,9 +22,26 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histograms>
 
 <variants name="MobileFreInflationSpeedComparison">
-  <variant name=".FasterThanInflation"/>
-  <variant name=".SlowerThanInflation"/>
+  <variant name=".FasterThanInflation"
+      summary="This histogram reports just those timings that were faster
+               than inflation."/>
+  <variant name=".SlowerThanInflation"
+      summary="This histogram reports just those timings that were slower
+               than inflation."/>
 </variants>
+
+<histogram name="Mobile.AppMenu.SimilarSelection"
+    enum="AppMenuSimilarSelectionType" expires_after="M95">
+  <owner>gangwu@chromium.org</owner>
+  <owner>twellington@chromium.org</owner>
+  <summary>
+    Android: This metrics is recorded when users made similar selections on app
+    menu within a period of time. ex. a user selected downloading the current
+    page. After 5 seconds, the user opened the app menu again and selected
+    download manager. In this case, we would consider that Download and Download
+    Manager are similar selections.
+  </summary>
+</histogram>
 
 <histogram name="Mobile.AppMenu.TimeToTakeAction.Abandoned" units="ms"
     expires_after="M93">
@@ -505,6 +522,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="MobileDownload.Background"
     enum="MobileDownloadBackgroundDownloadEvent" expires_after="2020-10-11">
+  <obsolete>
+    Removed 2020-10.
+  </obsolete>
   <owner>hnakashima@chromium.org</owner>
   <owner>hanxi@chromium.org</owner>
   <owner>yfriedman@chromium.org</owner>
@@ -576,8 +596,22 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="MobileDownload.Location.Dialog.Suggestion.Events"
+    enum="DownloadLocationSuggestionEvent" expires_after="2021-05-02">
+  <owner>xingliu@chromium.org</owner>
+  <owner>clank-downloads@google.com</owner>
+  <summary>Records the download location suggestion event.</summary>
+</histogram>
+
+<histogram name="MobileDownload.Location.Dialog.SuggestionSelected"
+    enum="BooleanSelected" expires_after="2021-03-01">
+  <owner>xingliu@chromium.org</owner>
+  <owner>clank-downloads@google.com</owner>
+  <summary>Records the download location suggestion choice.</summary>
+</histogram>
+
 <histogram name="MobileDownload.Location.Dialog.Type"
-    enum="DownloadLocationDialogType" expires_after="2021-03-01">
+    enum="DownloadLocationDialogType" expires_after="2021-05-02">
   <owner>xingliu@chromium.org</owner>
   <owner>clank-downloads@google.com</owner>
   <summary>
@@ -587,7 +621,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileDownload.Location.DirectoryType"
-    enum="DownloadLocationDirectoryType" expires_after="2021-03-01">
+    enum="DownloadLocationDirectoryType" expires_after="2021-05-02">
   <owner>xingliu@chromium.org</owner>
   <owner>dtrainor@chromium.org</owner>
   <owner>qinmin@chromium.org</owner>
@@ -599,14 +633,14 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileDownload.Location.Download.DirectoryType"
-    enum="DownloadLocationDirectoryType" expires_after="2021-03-01">
+    enum="DownloadLocationDirectoryType" expires_after="2021-05-02">
   <owner>xingliu@chromium.org</owner>
   <owner>clank-downloads@google.com</owner>
   <summary>Records the directory type when download is completed.</summary>
 </histogram>
 
 <histogram name="MobileDownload.Location.Setting.DirectoryType"
-    enum="DownloadLocationDirectoryType" expires_after="2021-03-01">
+    enum="DownloadLocationDirectoryType" expires_after="2021-05-02">
   <owner>xingliu@chromium.org</owner>
   <owner>clank-downloads@google.com</owner>
   <summary>
@@ -637,8 +671,28 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram
+    name="MobileFre.CctTos.EnterprisePolicyCheckSpeed2{MobileFreInflationSpeedComparison}"
+    units="ms" expires_after="2021-07-31">
+  <owner>skym@chromium.org</owner>
+  <owner>wenyufu@chromium.org</owner>
+  <summary>
+    Android: Records the time it takes from ToS fragment attached to the
+    activity to the enterprise policy check completing. This check is often
+    skipped when its result becomes irrelevant.
+    {MobileFreInflationSpeedComparison}
+  </summary>
+  <token key="MobileFreInflationSpeedComparison"
+      variants="MobileFreInflationSpeedComparison"/>
+</histogram>
+
+<histogram
     name="MobileFre.CctTos.EnterprisePolicyCheckSpeed{MobileFreInflationSpeedComparison}"
     units="ms" expires_after="2021-07-31">
+  <obsolete>
+    Deprecated and replaced with MobileFre.CctTos.EnterprisePolicyCheckSpeed2.*.
+    as of 11/2020. The starting time of this metrics is changed to when the
+    fragment attached to the FirstRunActivity.
+  </obsolete>
   <owner>skym@chromium.org</owner>
   <owner>wenyufu@chromium.org</owner>
   <summary>
@@ -652,8 +706,27 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram
+    name="MobileFre.CctTos.IsDeviceOwnedCheckSpeed2{MobileFreInflationSpeedComparison}"
+    units="ms" expires_after="2021-07-31">
+  <owner>skym@chromium.org</owner>
+  <owner>wenyufu@chromium.org</owner>
+  <summary>
+    Android: Records the time it takes from ToS fragment attached to the
+    activity to the device ownership check completing.
+    {MobileFreInflationSpeedComparison}
+  </summary>
+  <token key="MobileFreInflationSpeedComparison"
+      variants="MobileFreInflationSpeedComparison"/>
+</histogram>
+
+<histogram
     name="MobileFre.CctTos.IsDeviceOwnedCheckSpeed{MobileFreInflationSpeedComparison}"
     units="ms" expires_after="2021-07-31">
+  <obsolete>
+    Deprecated and replaced with MobileFre.CctTos.IsDeviceOwnedCheckSpeed2.*. as
+    of 11/2020. The starting time of this metrics is changed to when the
+    fragment attached to the FirstRunActivity.
+  </obsolete>
   <owner>skym@chromium.org</owner>
   <owner>wenyufu@chromium.org</owner>
   <summary>
@@ -708,8 +781,46 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram
+    name="MobileFre.Lightweight.EnterprisePolicyCheckSpeed{MobileFreInflationSpeedComparison}"
+    units="ms" expires_after="2021-07-31">
+  <owner>skym@chromium.org</owner>
+  <owner>wenyufu@chromium.org</owner>
+  <summary>
+    Android: Records the time it takes from Lightweight FRE launch to the
+    enterprise policy check completing. This check is often skipped when its
+    result becomes irrelevant. {MobileFreInflationSpeedComparison}
+  </summary>
+  <token key="MobileFreInflationSpeedComparison"
+      variants="MobileFreInflationSpeedComparison"/>
+</histogram>
+
+<histogram
+    name="MobileFre.Lightweight.IsDeviceOwnedCheckSpeed{MobileFreInflationSpeedComparison}"
+    units="ms" expires_after="2021-07-31">
+  <owner>skym@chromium.org</owner>
+  <owner>wenyufu@chromium.org</owner>
+  <summary>
+    Android: Records the time it takes from from Lightweight FRE launch to the
+    device ownership check completing. This check is often skipped when its
+    result becomes irrelevant. {MobileFreInflationSpeedComparison}
+  </summary>
+  <token key="MobileFreInflationSpeedComparison"
+      variants="MobileFreInflationSpeedComparison"/>
+</histogram>
+
+<histogram name="MobileFre.Lightweight.LoadingDuration" units="ms"
+    expires_after="2021-07-31">
+  <owner>skym@chromium.org</owner>
+  <owner>wenyufu@chromium.org</owner>
+  <summary>
+    Android: Records how long it takes waiting from the dialog for Lightweight
+    FRE created to content fully loaded - either ToS is shown or FRE is skipped.
+  </summary>
+</histogram>
+
 <histogram name="MobileFre.Progress" enum="MobileFreProgress"
-    expires_after="2021-02-14">
+    expires_after="2021-04-18">
   <owner>bsazonov@chromium.org</owner>
   <owner>msarda@chromium.org</owner>
   <owner>droger@chromium.org</owner>
@@ -808,7 +919,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileIntent.FirstPartyToInternalScheme" enum="Boolean"
-    expires_after="2021-01-01">
+    expires_after="2021-04-11">
   <owner>peconn@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -832,7 +943,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileOmnibox.LongPressPasteAge" units="ms"
-    expires_after="2021-02-14">
+    expires_after="2021-04-18">
   <owner>gangwu@chromium.org</owner>
   <owner>jdonnelly@chromium.org</owner>
   <summary>
@@ -855,7 +966,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileOmnibox.PressedClipboardSuggestionAge" units="ms"
-    expires_after="2021-02-14">
+    expires_after="2021-04-18">
   <owner>jdonnelly@chromium.org</owner>
   <owner>mpearson@chromium.org</owner>
   <summary>
@@ -935,7 +1046,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileStartup.DailyLaunchCount" units="units"
-    expires_after="2021-03-01">
+    expires_after="2021-05-02">
   <owner>tedchoc@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>
@@ -968,7 +1079,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileStartup.IntentToCreationTime" units="ms"
-    expires_after="2021-03-01">
+    expires_after="2021-05-02">
   <owner>tedchoc@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <owner>yfriedman@chromium.org</owner>
@@ -980,7 +1091,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="MobileStartup.LaunchType" enum="LaunchType"
-    expires_after="2021-03-01">
+    expires_after="2021-05-02">
   <owner>tedchoc@chromium.org</owner>
   <owner>twellington@chromium.org</owner>
   <summary>

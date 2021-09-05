@@ -43,10 +43,10 @@ const char kSwitchIdeValueVs2019[] = "vs2019";
 const char kSwitchIdeValueWinSdk[] = "winsdk";
 const char kSwitchIdeValueXcode[] = "xcode";
 const char kSwitchIdeValueJson[] = "json";
+const char kSwitchIdeRootTarget[] = "ide-root-target";
 const char kSwitchNinjaExecutable[] = "ninja-executable";
 const char kSwitchNinjaExtraArgs[] = "ninja-extra-args";
 const char kSwitchNoDeps[] = "no-deps";
-const char kSwitchRootTarget[] = "root-target";
 const char kSwitchSln[] = "sln";
 const char kSwitchXcodeProject[] = "xcode-project";
 const char kSwitchXcodeBuildSystem[] = "xcode-build-system";
@@ -242,7 +242,7 @@ bool RunIdeWriter(const std::string& ide,
   } else if (ide == kSwitchIdeValueXcode) {
     XcodeWriter::Options options = {
         command_line->GetSwitchValueASCII(kSwitchXcodeProject),
-        command_line->GetSwitchValueASCII(kSwitchRootTarget),
+        command_line->GetSwitchValueASCII(kSwitchIdeRootTarget),
         command_line->GetSwitchValueASCII(kSwitchNinjaExecutable),
         command_line->GetSwitchValueASCII(kSwitchFilters),
         XcodeBuildSystem::kLegacy,
@@ -275,8 +275,8 @@ bool RunIdeWriter(const std::string& ide,
     return res;
   } else if (ide == kSwitchIdeValueQtCreator) {
     std::string root_target;
-    if (command_line->HasSwitch(kSwitchRootTarget))
-      root_target = command_line->GetSwitchValueASCII(kSwitchRootTarget);
+    if (command_line->HasSwitch(kSwitchIdeRootTarget))
+      root_target = command_line->GetSwitchValueASCII(kSwitchIdeRootTarget);
     bool res = QtCreatorWriter::RunAndWriteFile(build_settings, builder, err,
                                                 root_target);
     if (res && !quiet) {
@@ -435,13 +435,13 @@ Xcode Flags
       This string is passed without any quoting to the ninja invocation
       command-line. Can be used to configure ninja flags, like "-j".
 
-  --root-target=<target_name>
+  --ide-root-target=<target_name>
       Name of the target corresponding to "All" target in Xcode. If unset,
       "All" invokes ninja without any target and builds everything.
 
 QtCreator Flags
 
-  --root-target=<target_name>
+  --ide-root-target=<target_name>
       Name of the root target for which the QtCreator project will be generated
       to contain files of it and its dependencies. If unset, the whole build
       graph will be emitted.

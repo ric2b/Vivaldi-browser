@@ -24,6 +24,9 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.BaseSwitches;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.CriteriaNotSatisfiedException;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.UrlUtils;
@@ -34,12 +37,9 @@ import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
-import org.chromium.chrome.test.util.ApplicationTestUtils;
+import org.chromium.chrome.test.util.ChromeApplicationTestUtils;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.browser.contextmenu.RevampedContextMenuUtils;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
-import org.chromium.content_public.browser.test.util.CriteriaNotSatisfiedException;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -314,7 +314,8 @@ public class TabsOpenedFromExternalAppTest {
     @Feature({"Navigation"})
     public void testReferrerPolicyHttpsReferrerPolicyOrigin() {
         String url = mTestServer.getURL("/chrome/test/data/android/about.html");
-        launchAndVerifyReferrerWithPolicy(url, mActivityTestRule, ReferrerPolicy.ORIGIN,
+        mActivityTestRule.startMainActivityOnBlankPage();
+        loadUrlAndVerifyReferrerWithPolicy(url, mActivityTestRule, ReferrerPolicy.ORIGIN,
                 HTTPS_REFERRER_WITH_PATH, HTTPS_REFERRER);
     }
 
@@ -327,7 +328,8 @@ public class TabsOpenedFromExternalAppTest {
     @Feature({"Navigation"})
     public void testReferrerPolicyHttpsReferrerPolicyOriginWhenCrossOrigin() {
         String url = mTestServer.getURL("/chrome/test/data/android/about.html");
-        launchAndVerifyReferrerWithPolicy(url, mActivityTestRule,
+        mActivityTestRule.startMainActivityOnBlankPage();
+        loadUrlAndVerifyReferrerWithPolicy(url, mActivityTestRule,
                 ReferrerPolicy.ORIGIN_WHEN_CROSS_ORIGIN, HTTPS_REFERRER_WITH_PATH, HTTPS_REFERRER);
     }
 
@@ -339,7 +341,8 @@ public class TabsOpenedFromExternalAppTest {
     @Feature({"Navigation"})
     public void testReferrerPolicyHttpsReferrerPolicyStrictOrigin() {
         String url = mTestServer.getURL("/chrome/test/data/android/about.html");
-        launchAndVerifyReferrerWithPolicy(
+        mActivityTestRule.startMainActivityOnBlankPage();
+        loadUrlAndVerifyReferrerWithPolicy(
                 url, mActivityTestRule, ReferrerPolicy.STRICT_ORIGIN, HTTPS_REFERRER, "");
     }
 
@@ -348,9 +351,8 @@ public class TabsOpenedFromExternalAppTest {
      * adds a {@link Referrer} with given policy and checks whether it matches the expected
      * referrer after loaded.
      */
-    static void launchAndVerifyReferrerWithPolicy(String url, ChromeActivityTestRule testRule,
+    static void loadUrlAndVerifyReferrerWithPolicy(String url, ChromeActivityTestRule testRule,
             int policy, String referrer, String expectedReferrer) {
-        testRule.startMainActivityOnBlankPage();
         Bundle extras = new Bundle();
         extras.putParcelable(Intent.EXTRA_REFERRER, Uri.parse(referrer));
         extras.putInt(IntentHandler.EXTRA_REFERRER_POLICY, policy);
@@ -708,7 +710,7 @@ public class TabsOpenedFromExternalAppTest {
                     mActivityTestRule.getActivity().getTabModelSelector().getTotalTabCount(),
                     Matchers.is(1));
         });
-        ApplicationTestUtils.assertWaitForPageScaleFactorMatch(
+        ChromeApplicationTestUtils.assertWaitForPageScaleFactorMatch(
                 mActivityTestRule.getActivity(), 0.5f);
 
         // Open context menu and select the "open in new tab" option.

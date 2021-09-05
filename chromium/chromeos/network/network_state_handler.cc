@@ -45,8 +45,8 @@ constexpr char kReasonTether[] = "Tether Change";
 
 bool ConnectionStateChanged(const NetworkState* network,
                             const std::string& prev_connection_state,
-                            bool prev_is_captive_portal) {
-  if (network->is_captive_portal() != prev_is_captive_portal)
+                            NetworkState::PortalState prev_portal_state) {
+  if (network->portal_state() != prev_portal_state)
     return true;
   std::string connection_state = network->connection_state();
   bool prev_idle = prev_connection_state.empty() ||
@@ -339,6 +339,9 @@ void NetworkStateHandler::SetTetherScanState(bool is_scanning) {
   if (was_scanning && !is_scanning) {
     // If a scan was in progress but has completed, notify observers.
     NotifyScanCompleted(tether_device_state);
+  } else if (!was_scanning && is_scanning) {
+    // If a scan was started, notify observers.
+    NotifyScanStarted(tether_device_state);
   }
 }
 
@@ -510,8 +513,7 @@ void NetworkStateHandler::SetNetworkChromePortalDetected(
     return;
   bool was_captive_portal = network->IsCaptivePortal();
   network->is_chrome_captive_portal_ = portal_detected;
-  // Only notify a connection state change if IsCaptivePortal() changed, i.e.
-  // is_chrome_captive_portal_ != (shill) is_captive_portal_.
+  // Only notify a connection state change if IsCaptivePortal() changed.
   if (was_captive_portal == network->IsCaptivePortal())
     return;
   network_list_sorted_ = false;
@@ -933,9 +935,8 @@ void NetworkStateHandler::SetTetherNetworkStateConnectionState(
   tether_network_state->SetConnectionState(connection_state);
   network_list_sorted_ = false;
 
-  DCHECK(!tether_network_state->is_captive_portal());
   if (ConnectionStateChanged(tether_network_state, prev_connection_state,
-                             false /* prev_is_captive_portal */)) {
+                             tether_network_state->portal_state())) {
     NET_LOG(EVENT) << "Changing connection state for Tether network with GUID "
                    << guid << ". Old state: " << prev_connection_state << ", "
                    << "New state: " << connection_state;
@@ -1109,38 +1110,6 @@ void NetworkStateHandler::SetCheckPortalList(
     const std::string& check_portal_list) {
   NET_LOG(EVENT) << "SetCheckPortalList: " << check_portal_list;
   shill_property_handler_->SetCheckPortalList(check_portal_list);
-}
-
-void NetworkStateHandler::SetCaptivePortalProviderForHexSsid(
-    const std::string& hex_ssid,
-    const std::string& provider_id,
-    const std::string& provider_name) {
-  NET_LOG(EVENT) << "SetCaptivePortalProviderForHexSsid: " << hex_ssid
-                 << " -> (" << provider_id << ", " << provider_name << ")";
-  // NetworkState hex SSIDs are always uppercase.
-  std::string hex_ssid_uc = hex_ssid;
-  transform(hex_ssid_uc.begin(), hex_ssid_uc.end(), hex_ssid_uc.begin(),
-            toupper);
-  if (provider_id.empty()) {
-    hex_ssid_to_captive_portal_provider_map_.erase(hex_ssid_uc);
-  } else {
-    NetworkState::CaptivePortalProviderInfo provider_info;
-    provider_info.id = provider_id;
-    provider_info.name = provider_name;
-    hex_ssid_to_captive_portal_provider_map_[hex_ssid_uc] =
-        std::move(provider_info);
-  }
-  // When a new entry is added or removed from the map, check all networks
-  // for a matching hex SSID and update the provider info. (This should occur
-  // infrequently). New networks will be updated when added.
-  for (auto& managed : network_list_) {
-    NetworkState* network = managed->AsNetworkState();
-    if (network->GetHexSsid() == hex_ssid_uc) {
-      NET_LOG(EVENT) << "Setting captive portal provider for network: "
-                     << NetworkId(network) << " = " << provider_id;
-      network->SetCaptivePortalProvider(provider_id, provider_name);
-    }
-  }
 }
 
 void NetworkStateHandler::SetWakeOnLanEnabled(bool enabled) {
@@ -1356,7 +1325,7 @@ void NetworkStateHandler::UpdateNetworkStateProperties(
   DCHECK(network);
   bool network_property_updated = false;
   std::string prev_connection_state = network->connection_state();
-  bool prev_is_captive_portal = network->is_captive_portal();
+  NetworkState::PortalState prev_portal_state = network->portal_state();
   bool metered = false;
   for (const auto iter : properties.DictItems()) {
     if (network->PropertyChanged(iter.first, iter.second))
@@ -1372,7 +1341,6 @@ void NetworkStateHandler::UpdateNetworkStateProperties(
   network_property_updated |= network->InitialPropertiesReceived(properties);
 
   UpdateGuid(network);
-  UpdateCaptivePortalProvider(network);
   if (network->Matches(NetworkTypePattern::Cellular()))
     UpdateCellularStateFromDevice(network);
 
@@ -1382,7 +1350,7 @@ void NetworkStateHandler::UpdateNetworkStateProperties(
   if (network_property_updated || network->update_requested()) {
     // Signal connection state changed after all properties have been updated.
     if (ConnectionStateChanged(network, prev_connection_state,
-                               prev_is_captive_portal)) {
+                               prev_portal_state)) {
       // Also notifies that the default network changed if this is the default.
       OnNetworkConnectionStateChanged(network);
     } else if (network->path() == default_network_path_ &&
@@ -1411,7 +1379,7 @@ void NetworkStateHandler::UpdateNetworkServiceProperty(
     return;
   }
   std::string prev_connection_state = network->connection_state();
-  bool prev_is_captive_portal = network->is_captive_portal();
+  NetworkState::PortalState prev_portal_state = network->portal_state();
   std::string prev_profile_path = network->profile_path();
   changed |= network->PropertyChanged(key, value);
   changed |= UpdateBlockedByPolicy(network);
@@ -1429,7 +1397,7 @@ void NetworkStateHandler::UpdateNetworkServiceProperty(
   if (key == shill::kStateProperty || key == shill::kVisibleProperty) {
     network_list_sorted_ = false;
     if (ConnectionStateChanged(network, prev_connection_state,
-                               prev_is_captive_portal)) {
+                               prev_portal_state)) {
       notify_connection_state = true;
       notify_active = true;
       if (notify_default)
@@ -1797,19 +1765,6 @@ void NetworkStateHandler::UpdateGuid(NetworkState* network) {
   network->SetGuid(guid);
 }
 
-void NetworkStateHandler::UpdateCaptivePortalProvider(NetworkState* network) {
-  auto portal_iter =
-      hex_ssid_to_captive_portal_provider_map_.find(network->GetHexSsid());
-  if (portal_iter == hex_ssid_to_captive_portal_provider_map_.end()) {
-    network->SetCaptivePortalProvider("", "");
-    return;
-  }
-  NET_LOG(EVENT) << "Setting captive portal provider for network: "
-                 << NetworkId(network) << " = " << portal_iter->second.id;
-  network->SetCaptivePortalProvider(portal_iter->second.id,
-                                    portal_iter->second.name);
-}
-
 void NetworkStateHandler::UpdateCellularStateFromDevice(NetworkState* network) {
   const DeviceState* device = GetDeviceState(network->device_path());
   if (!device)
@@ -1946,8 +1901,10 @@ void NetworkStateHandler::OnNetworkConnectionStateChanged(
 bool NetworkStateHandler::VerifyDefaultNetworkConnectionStateChange(
     NetworkState* network) {
   DCHECK(network->path() == default_network_path_);
-  if (network->IsConnectedState())
+  if (network->IsConnectedState() ||
+      NetworkState::StateIsPortalled(network->connection_state())) {
     return true;
+  }
   if (network->IsConnectingState()) {
     // Wait until the network is actually connected to notify that the default
     // network changed.
@@ -1992,6 +1949,24 @@ void NetworkStateHandler::NotifyDefaultNetworkChanged(
   notifying_network_observers_ = true;
   for (auto& observer : observers_)
     observer.DefaultNetworkChanged(default_network);
+
+  if (default_network &&
+      (default_network->portal_state() != default_network_portal_state_ ||
+       default_network->proxy_config() != default_network_proxy_config_)) {
+    default_network_portal_state_ = default_network->portal_state();
+    default_network_proxy_config_ = default_network->proxy_config().Clone();
+    for (auto& observer : observers_) {
+      observer.PortalStateChanged(default_network,
+                                  default_network_portal_state_);
+    }
+  } else if (!default_network && (default_network_portal_state_ !=
+                                      NetworkState::PortalState::kUnknown ||
+                                  !default_network_proxy_config_.is_none())) {
+    default_network_portal_state_ = NetworkState::PortalState::kUnknown;
+    default_network_proxy_config_ = base::Value();
+    for (auto& observer : observers_)
+      observer.PortalStateChanged(nullptr, NetworkState::PortalState::kUnknown);
+  }
   notifying_network_observers_ = false;
 }
 
@@ -2059,6 +2034,13 @@ void NetworkStateHandler::NotifyScanCompleted(const DeviceState* device) {
   NET_LOG(EVENT) << "NOTIFY: ScanCompleted for: " << device->path();
   for (auto& observer : observers_)
     observer.ScanCompleted(device);
+}
+
+void NetworkStateHandler::NotifyScanStarted(const DeviceState* device) {
+  SCOPED_NET_LOG_IF_SLOW();
+  NET_LOG(EVENT) << "NOTIFY: ScanStarted for: " << device->path();
+  for (auto& observer : observers_)
+    observer.ScanStarted(device);
 }
 
 void NetworkStateHandler::LogPropertyUpdated(const ManagedState* state,

@@ -13,10 +13,9 @@
 #include "base/strings/string16.h"
 #include "chromeos/services/multidevice_setup/public/mojom/multidevice_setup.mojom-forward.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
-#include "services/content/public/mojom/navigable_contents_factory.mojom-forward.h"
 #include "services/device/public/mojom/bluetooth_system.mojom-forward.h"
 #include "services/device/public/mojom/fingerprint.mojom-forward.h"
-#include "services/media_session/public/mojom/media_session_service.mojom-forward.h"
+#include "services/media_session/public/cpp/media_session_service.h"
 #include "ui/gfx/native_widget_types.h"
 
 namespace aura {
@@ -98,11 +97,6 @@ class ASH_EXPORT ShellDelegate {
   virtual void BindFingerprint(
       mojo::PendingReceiver<device::mojom::Fingerprint> receiver) {}
 
-  // Binds a NavigableContentsFactory receiver for the current active user.
-  virtual void BindNavigableContentsFactory(
-      mojo::PendingReceiver<content::mojom::NavigableContentsFactory>
-          receiver) = 0;
-
   // Binds a MultiDeviceSetup receiver for the primary profile.
   virtual void BindMultiDeviceSetup(
       mojo::PendingReceiver<
@@ -110,7 +104,7 @@ class ASH_EXPORT ShellDelegate {
 
   // Returns an interface to the Media Session service, or null if not
   // available.
-  virtual media_session::mojom::MediaSessionService* GetMediaSessionService();
+  virtual media_session::MediaSessionService* GetMediaSessionService();
 
   virtual void OpenKeyboardShortcutHelpPage() const {}
 };

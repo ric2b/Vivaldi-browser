@@ -108,6 +108,21 @@ PhoneStatusModel::BatterySaverState GetBatterySaverStateFromProto(
   }
 }
 
+NotificationAccessManager::AccessStatus ComputeNotificationAccessState(
+    const proto::PhoneProperties& phone_properties) {
+  // If the user has a Work Profile active, notification access is not allowed
+  // by Android. See https://crbug.com/1155151.
+  if (phone_properties.profile_type() == proto::ProfileType::WORK_PROFILE)
+    return NotificationAccessManager::AccessStatus::kProhibited;
+
+  if (phone_properties.notification_access_state() ==
+      proto::NotificationAccessState::ACCESS_GRANTED) {
+    return NotificationAccessManager::AccessStatus::kAccessGranted;
+  }
+
+  return NotificationAccessManager::AccessStatus::kAvailableButNotGranted;
+}
+
 base::Optional<Notification> ProcessNotificationProto(
     const proto::Notification& proto) {
   // Only process notifications that are messaging apps with inline-replies.
@@ -141,8 +156,7 @@ base::Optional<Notification> ProcessNotificationProto(
           base::UTF8ToUTF16(proto.origin_app().visible_name()),
           proto.origin_app().package_name(),
           CreateImageFromSerializedIcon(proto.origin_app().icon())),
-      base::Time::FromDeltaSinceWindowsEpoch(
-          base::TimeDelta::FromMilliseconds(proto.epoch_time_millis())),
+      base::Time::FromJsTime(proto.epoch_time_millis()),
       GetNotificationImportanceFromProto(proto.importance()), actions_it->id(),
       title, text_content, shared_image, contact_image);
 }
@@ -188,6 +202,7 @@ PhoneStatusProcessor::PhoneStatusProcessor(
 
   message_receiver_->AddObserver(this);
   feature_status_provider_->AddObserver(this);
+  multidevice_setup_client_->AddObserver(this);
 
   MaybeSetPhoneModelName(multidevice_setup_client_->GetHostStatus().second);
 }
@@ -195,6 +210,7 @@ PhoneStatusProcessor::PhoneStatusProcessor(
 PhoneStatusProcessor::~PhoneStatusProcessor() {
   message_receiver_->RemoveObserver(this);
   feature_status_provider_->RemoveObserver(this);
+  multidevice_setup_client_->RemoveObserver(this);
 }
 
 void PhoneStatusProcessor::SetReceivedNotifications(
@@ -215,11 +231,11 @@ void PhoneStatusProcessor::SetReceivedPhoneStatusModelStates(
 
   do_not_disturb_controller_->SetDoNotDisturbStateInternal(
       phone_properties.notification_mode() ==
-      proto::NotificationMode::DO_NOT_DISTURB_ON);
+          proto::NotificationMode::DO_NOT_DISTURB_ON,
+      phone_properties.profile_type() != proto::ProfileType::WORK_PROFILE);
 
-  notification_access_manager_->SetHasAccessBeenGrantedInternal(
-      phone_properties.notification_access_state() ==
-      proto::NotificationAccessState::ACCESS_GRANTED);
+  notification_access_manager_->SetAccessStatusInternal(
+      ComputeNotificationAccessState(phone_properties));
 
   find_my_device_controller_->SetIsPhoneRingingInternal(
       phone_properties.ring_status() == proto::FindMyDeviceRingStatus::RINGING);
@@ -255,11 +271,14 @@ void PhoneStatusProcessor::OnPhoneStatusUpdateReceived(
   SetReceivedNotifications(phone_status_update.updated_notifications());
   SetReceivedPhoneStatusModelStates(phone_status_update.properties());
 
-  base::flat_set<int64_t> removed_notification_ids;
-  for (auto& id : phone_status_update.removed_notification_ids()) {
-    removed_notification_ids.emplace(id);
+  if (!phone_status_update.removed_notification_ids().empty()) {
+    base::flat_set<int64_t> removed_notification_ids;
+    for (auto& id : phone_status_update.removed_notification_ids()) {
+      removed_notification_ids.emplace(id);
+    }
+    notification_manager_->RemoveNotificationsInternal(
+        removed_notification_ids);
   }
-  notification_manager_->RemoveNotificationsInternal(removed_notification_ids);
 }
 
 void PhoneStatusProcessor::OnHostStatusChanged(

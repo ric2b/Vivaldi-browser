@@ -9,8 +9,8 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/json/json_writer.h"
 #include "base/location.h"
 #include "base/metrics/histogram_functions.h"
@@ -537,13 +537,11 @@ GURL StartPageTokenRequest::GetURLInternal() const {
 
 FilesListRequest::FilesListRequest(RequestSender* sender,
                                    const DriveApiUrlGenerator& url_generator,
-                                   const FileListCallback& callback)
-    : DriveApiDataRequest<FileList>(sender, callback),
+                                   FileListCallback callback)
+    : DriveApiDataRequest<FileList>(sender, std::move(callback)),
       url_generator_(url_generator),
       max_results_(100),
-      corpora_(FilesListCorpora::DEFAULT) {
-  DCHECK(!callback.is_null());
-}
+      corpora_(FilesListCorpora::DEFAULT) {}
 
 FilesListRequest::~FilesListRequest() {}
 
@@ -554,12 +552,9 @@ GURL FilesListRequest::GetURLInternal() const {
 
 //======================== FilesListNextPageRequest =========================
 
-FilesListNextPageRequest::FilesListNextPageRequest(
-    RequestSender* sender,
-    const FileListCallback& callback)
-    : DriveApiDataRequest<FileList>(sender, callback) {
-  DCHECK(!callback.is_null());
-}
+FilesListNextPageRequest::FilesListNextPageRequest(RequestSender* sender,
+                                                   FileListCallback callback)
+    : DriveApiDataRequest<FileList>(sender, std::move(callback)) {}
 
 FilesListNextPageRequest::~FilesListNextPageRequest() {
 }

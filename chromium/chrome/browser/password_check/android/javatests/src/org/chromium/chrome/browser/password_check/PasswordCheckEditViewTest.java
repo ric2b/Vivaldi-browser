@@ -10,10 +10,12 @@ import static androidx.test.espresso.Espresso.onView;
 import static androidx.test.espresso.action.ViewActions.click;
 import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isEnabled;
+import static androidx.test.espresso.matcher.ViewMatchers.isFocusable;
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 
 import static junit.framework.Assert.assertTrue;
 
+import static org.hamcrest.CoreMatchers.allOf;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.CoreMatchers.not;
@@ -22,9 +24,9 @@ import static org.junit.Assert.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 
+import static org.chromium.base.test.util.CriteriaHelper.pollUiThread;
 import static org.chromium.chrome.browser.password_check.PasswordCheckEditFragmentView.EXTRA_COMPROMISED_CREDENTIAL;
 import static org.chromium.chrome.browser.password_check.PasswordCheckEditFragmentView.EXTRA_NEW_PASSWORD;
-import static org.chromium.content_public.browser.test.util.CriteriaHelper.pollUiThread;
 import static org.chromium.content_public.browser.test.util.TestThreadUtils.runOnUiThreadBlocking;
 
 import android.os.Bundle;
@@ -53,6 +55,7 @@ import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.password_manager.settings.ReauthenticationManager;
 import org.chromium.chrome.browser.settings.SettingsActivityTestRule;
+import org.chromium.chrome.browser.settings.SettingsLauncher;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.url.GURL;
@@ -87,6 +90,8 @@ public class PasswordCheckEditViewTest {
 
     @Mock
     private PasswordCheck mPasswordCheck;
+    @Mock
+    private SettingsLauncher mMockSettingsLauncher;
 
     @Before
     public void setUp() throws InterruptedException {
@@ -95,7 +100,8 @@ public class PasswordCheckEditViewTest {
         setUpUiLaunchedFromSettings();
 
         pollUiThread(() -> mPasswordCheckEditView != null);
-        mPasswordCheckEditView.setCheckProvider(PasswordCheckFactory::getOrCreate);
+        mPasswordCheckEditView.setCheckProvider(
+                () -> PasswordCheckFactory.getOrCreate(mMockSettingsLauncher));
     }
 
     @Test
@@ -119,6 +125,14 @@ public class PasswordCheckEditViewTest {
         assertNotNull(password.getText().toString());
         assertThat(password.getText().toString(), equalTo(ANA.getPassword()));
         assertTrue((password.getInputType() & TYPE_TEXT_VARIATION_VISIBLE_PASSWORD) != 0);
+    }
+
+    @Test
+    @MediumTest
+    public void testSiteAndUsernameDisabled() {
+        onView(withId(R.id.site_edit)).check(matches(allOf(not(isEnabled()), not(isFocusable()))));
+        onView(withId(R.id.username_edit))
+                .check(matches(allOf(not(isEnabled()), not(isFocusable()))));
     }
 
     @Test

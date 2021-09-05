@@ -10,7 +10,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/common/web_application_info.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -101,8 +101,7 @@ class PeriodicBackgroundSyncPermissionContextTest
     ASSERT_TRUE(host_content_settings_map);
     host_content_settings_map->SetContentSettingDefaultScope(
         /* primary_url= */ url, /* secondary_url= */ url,
-        ContentSettingsType::BACKGROUND_SYNC,
-        /* resource_identifier= */ std::string(), setting);
+        ContentSettingsType::BACKGROUND_SYNC, setting);
   }
 
   void InstallPwa(const GURL& url) { permission_context_->InstallPwa(url); }

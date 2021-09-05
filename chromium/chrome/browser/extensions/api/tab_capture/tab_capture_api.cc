@@ -285,7 +285,8 @@ ExtensionFunction::ResponseAction TabCaptureCaptureFunction::Run() {
   // chrome/renderer/resources/extensions/tab_capture_custom_bindings.js
   std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue());
   result->MergeDictionary(params->options.ToValue().get());
-  return RespondNow(OneArgument(std::move(result)));
+  return RespondNow(
+      OneArgument(base::Value::FromUniquePtrValue(std::move(result))));
 }
 
 ExtensionFunction::ResponseAction TabCaptureGetCapturedTabsFunction::Run() {
@@ -293,7 +294,8 @@ ExtensionFunction::ResponseAction TabCaptureGetCapturedTabsFunction::Run() {
   std::unique_ptr<base::ListValue> list(new base::ListValue());
   if (registry)
     registry->GetCapturedTabs(extension()->id(), list.get());
-  return RespondNow(OneArgument(std::move(list)));
+  return RespondNow(
+      OneArgument(base::Value::FromUniquePtrValue(std::move(list))));
 }
 
 ExtensionFunction::ResponseAction TabCaptureCaptureOffscreenTabFunction::Run() {
@@ -353,7 +355,8 @@ ExtensionFunction::ResponseAction TabCaptureCaptureOffscreenTabFunction::Run() {
   // the custom JS bindings in the extension's render process to complete the
   // request.  See the comment at end of TabCaptureCaptureFunction::RunSync()
   // for more details.
-  return RespondNow(OneArgument(params->options.ToValue()));
+  return RespondNow(
+      OneArgument(base::Value::FromUniquePtrValue(params->options.ToValue())));
 }
 
 // static
@@ -479,7 +482,7 @@ ExtensionFunction::ResponseAction TabCaptureGetMediaStreamIdFunction::Run() {
     return RespondNow(Error(kCapturingSameTab));
   }
 
-  return RespondNow(OneArgument(std::make_unique<base::Value>(device_id)));
+  return RespondNow(OneArgument(base::Value(device_id)));
 }
 
 }  // namespace extensions

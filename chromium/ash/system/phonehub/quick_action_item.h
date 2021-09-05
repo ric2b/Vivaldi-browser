@@ -7,7 +7,6 @@
 
 #include "ash/ash_export.h"
 #include "ash/system/unified/feature_pod_button.h"
-#include "ui/views/controls/button/button.h"
 
 namespace views {
 class Label;
@@ -16,7 +15,7 @@ class Label;
 namespace ash {
 
 // A toggle button with labels used in the quick action view.
-class QuickActionItem : public views::View, public views::ButtonListener {
+class ASH_EXPORT QuickActionItem : public views::View {
  public:
   class Delegate {
    public:
@@ -43,6 +42,12 @@ class QuickActionItem : public views::View, public views::ButtonListener {
   // Set the text of sub-label shown below the label.
   void SetSubLabel(const base::string16& sub_label);
 
+  // Set the color of sub-label shown below the label.
+  void SetSubLabelColor(SkColor color);
+
+  // Set the icon button to be either |icon_on_| or |icon_off_|.
+  void SetIcon(bool is_on);
+
   // Set the tooltip text of the icon button.
   void SetIconTooltip(const base::string16& text);
 
@@ -58,9 +63,6 @@ class QuickActionItem : public views::View, public views::ButtonListener {
   // clicked and the labels are greyed out.
   void SetEnabled(bool enabled);
 
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
   // views::View:
   bool HasFocus() const override;
   void RequestFocus() override;
@@ -69,14 +71,15 @@ class QuickActionItem : public views::View, public views::ButtonListener {
   FeaturePodIconButton* icon_button() const { return icon_button_; }
 
  private:
-  Delegate* delegate_ = nullptr;
-
   // Owned by views hierarchy.
   FeaturePodIconButton* icon_button_ = nullptr;
   const gfx::VectorIcon& icon_on_;
   const gfx::VectorIcon& icon_off_;
   views::Label* label_ = nullptr;
   views::Label* sub_label_ = nullptr;
+
+  // Enabled color of the sub label.
+  SkColor sub_label_color_;
 };
 
 }  // namespace ash

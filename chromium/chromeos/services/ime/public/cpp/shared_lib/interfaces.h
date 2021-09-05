@@ -71,6 +71,9 @@ typedef void (*SimpleDownloadCallback)(int status_code, const char* file_path);
 // A function pointer of a sequenced task.
 typedef void (*ImeSequencedTask)(int task_id);
 
+// A logger function pointer from chrome.
+typedef void (*ChromeLoggerFunc)(int severity, const char* message);
+
 // Based on RequestPriority defined at
 // https://cs.chromium.org/chromium/src/net/base/request_priority.h?rcl=f9c935b73381772d508eebba1e216c437139d475
 enum DownloadPriority {
@@ -206,6 +209,7 @@ class ImeClientDelegate {
 // This class is implemented in the shared library and processes messages from
 // clients of the IME service. The shared library will exposes its create
 // function to the IME service.
+// DEPRECATED: Will be removed soon.
 class ImeEngineMainEntry {
  protected:
   virtual ~ImeEngineMainEntry() = default;
@@ -245,6 +249,15 @@ class ImeEngineMainEntry {
 //
 // Returns an instance of ImeEngineMainEntry from the IME shared library.
 typedef ImeEngineMainEntry* (*ImeMainEntryCreateFn)(ImeCrosPlatform*);
+
+// For use when bridging logs logged in IME shared library to Chrome logging.
+typedef void (*ImeEngineLoggerSetterFn)(ChromeLoggerFunc);
+
+typedef void (*ImeDecoderInitOnceFn)(ImeCrosPlatform*);
+typedef bool (*ImeDecoderSupportsFn)(const char*);
+typedef bool (*ImeDecoderActivateImeFn)(const char*, ImeClientDelegate*);
+typedef void (*ImeDecoderProcessFn)(const uint8_t*, size_t);
+typedef void (*ImeDecoderCloseFn)();
 
 // Defined name of ImeMainEntryCreateFn exported from shared library.
 #define IME_MAIN_ENTRY_CREATE_FN_NAME "CreateImeMainEntry"

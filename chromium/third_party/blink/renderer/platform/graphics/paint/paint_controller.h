@@ -29,7 +29,17 @@
 
 namespace blink {
 
-static constexpr wtf_size_t kInitialDisplayItemListCapacityBytes = 512;
+enum class PaintBenchmarkMode {
+  kNormal,
+  kForceRasterInvalidationAndConvert,
+  kForcePaintArtifactCompositorUpdate,
+  kForcePaint,
+  // The above modes don't additionally invalidate paintings, i.e. during
+  // repeated benchmarking, the PaintController is fully cached.
+  kPartialInvalidation,
+  kSubsequenceCachingDisabled,
+  kCachingDisabled,
+};
 
 // FrameFirstPaint stores first-paint, text or image painted for the
 // corresponding frame. They are never reset to false. First-paint is defined in
@@ -71,10 +81,6 @@ class PLATFORM_EXPORT PaintController {
   Usage GetUsage() const { return usage_; }
 #endif
 
-  // For pre-PaintAfterPaint only.
-  void InvalidateAll();
-  bool CacheIsAllInvalid() const;
-
   // These methods are called during painting.
 
   // Provide a new set of paint chunk properties to apply to recorded display
@@ -83,46 +89,35 @@ class PLATFORM_EXPORT PaintController {
   void UpdateCurrentPaintChunkProperties(const PaintChunk::Id*,
                                          const PropertyTreeStateOrAlias&);
   const PropertyTreeStateOrAlias& CurrentPaintChunkProperties() const {
-    return new_paint_chunks_.CurrentPaintChunkProperties();
+    return paint_chunker_.CurrentPaintChunkProperties();
   }
   // See PaintChunker for documentation of the following methods.
-  wtf_size_t NumNewChunks() const { return new_paint_chunks_.size(); }
-  void SetForceNewChunk(bool force) {
-    new_paint_chunks_.SetForceNewChunk(force);
+  void SetWillForceNewChunk(bool force) {
+    paint_chunker_.SetWillForceNewChunk(force);
   }
-  bool WillForceNewChunk() const {
-    return new_paint_chunks_.WillForceNewChunk();
+  bool WillForceNewChunk() const { return paint_chunker_.WillForceNewChunk(); }
+
+  void EnsureChunk();
+
+  void RecordHitTestData(const DisplayItemClient&,
+                         const IntRect&,
+                         TouchAction,
+                         bool);
+
+  void RecordScrollHitTestData(
+      const DisplayItemClient&,
+      DisplayItem::Type,
+      const TransformPaintPropertyNode* scroll_translation,
+      const IntRect&);
+  void SetPossibleBackgroundColor(const DisplayItemClient&,
+                                  Color,
+                                  uint64_t area);
+
+  wtf_size_t NumNewChunks() const {
+    return new_paint_artifact_->PaintChunks().size();
   }
   const IntRect& LastChunkBounds() const {
-    return new_paint_chunks_.LastChunk().bounds;
-  }
-
-  void EnsureChunk() { new_paint_chunks_.EnsureChunk(); }
-  void RecordHitTestData(const DisplayItemClient& client,
-                         const IntRect& rect,
-                         TouchAction touch_action) {
-    if (rect.IsEmpty())
-      return;
-    PaintChunk::Id id(client, DisplayItem::kHitTest, current_fragment_);
-    CheckDuplicatePaintChunkId(id);
-    new_paint_chunks_.AddHitTestDataToCurrentChunk(id, rect, touch_action);
-  }
-  void RecordScrollHitTestData(
-      const DisplayItemClient& client,
-      DisplayItem::Type type,
-      const TransformPaintPropertyNode* scroll_translation,
-      const IntRect& rect) {
-    PaintChunk::Id id(client, type, current_fragment_);
-    CheckDuplicatePaintChunkId(id);
-    new_paint_chunks_.CreateScrollHitTestChunk(id, scroll_translation, rect);
-  }
-
-  void SetPossibleBackgroundColor(const DisplayItemClient& client,
-                                  Color color,
-                                  uint64_t area) {
-    PaintChunk::Id id = {client, DisplayItem::kBoxDecorationBackground,
-                         current_fragment_};
-    new_paint_chunks_.ProcessBackgroundColorCandidate(id, color, area);
+    return new_paint_artifact_->PaintChunks().back().bounds;
   }
 
   template <typename DisplayItemClass, typename... Args>
@@ -136,10 +131,10 @@ class PLATFORM_EXPORT PaintController {
                   "DisplayItem subclass alignment is not a factor of "
                   "kDisplayItemAlignment.");
 
-    EnsureNewDisplayItemListInitialCapacity();
     DisplayItemClass& display_item =
-        new_display_item_list_.AllocateAndConstruct<DisplayItemClass>(
-            std::forward<Args>(args)...);
+        new_paint_artifact_->GetDisplayItemList()
+            .AllocateAndConstruct<DisplayItemClass>(
+                std::forward<Args>(args)...);
     display_item.SetFragment(current_fragment_);
     ProcessNewItem(display_item);
   }
@@ -187,29 +182,17 @@ class PLATFORM_EXPORT PaintController {
   // there FinishCycle() at the same time to ensure consistent caching status.
   void FinishCycle();
 
-  // |FinishCycle| clears the property tree changed state but only does this for
-  // non-transient controllers. Until CompositeAfterPaint, the root paint
-  // controller is transient with and this function provides a hook for clearing
-  // the property tree changed state after paint.
-  // TODO(pdr): Remove this when CompositeAfterPaint ships.
-  void ClearPropertyTreeChangedStateTo(const PropertyTreeStateOrAlias&);
-
-  // Returns the approximate memory usage, excluding memory likely to be
-  // shared with the embedder after copying to WebPaintController.
-  // Should only be called after a full document life cycle update.
+  // Returns the approximate memory usage owned by this PaintController.
   size_t ApproximateUnsharedMemoryUsage() const;
 
   // Get the artifact generated after the last commit.
   const PaintArtifact& GetPaintArtifact() const {
-#if DCHECK_IS_ON()
-    DCHECK(new_display_item_list_.IsEmpty());
-    DCHECK(new_paint_chunks_.IsInInitialState());
-    DCHECK(current_paint_artifact_);
-#endif
+    CheckNoNewPaint();
     return *current_paint_artifact_;
   }
   scoped_refptr<const PaintArtifact> GetPaintArtifactShared() const {
-    return base::WrapRefCounted(&GetPaintArtifact());
+    CheckNoNewPaint();
+    return current_paint_artifact_;
   }
   const DisplayItemList& GetDisplayItemList() const {
     return GetPaintArtifact().GetDisplayItemList();
@@ -218,19 +201,42 @@ class PLATFORM_EXPORT PaintController {
     return GetPaintArtifact().PaintChunks();
   }
 
-  // For micro benchmarks of record time.
-  static void SetSubsequenceCachingDisabledForBenchmark();
-  static void SetPartialInvalidationForBenchmark();
-  static bool ShouldForcePaintForBenchmark();
-  static void ClearFlagsForBenchmark();
+  scoped_refptr<const PaintArtifact> GetNewPaintArtifactShared() const {
+    DCHECK(new_paint_artifact_);
+    return new_paint_artifact_;
+  }
+  wtf_size_t NewPaintChunkCount() const {
+    DCHECK(new_paint_artifact_);
+    return new_paint_artifact_->PaintChunks().size();
+  }
+
+  class ScopedBenchmarkMode {
+    STACK_ALLOCATED();
+
+   public:
+    ScopedBenchmarkMode(PaintController& paint_controller,
+                        PaintBenchmarkMode mode)
+        : paint_controller_(paint_controller) {
+      // Nesting is not allowed.
+      DCHECK_EQ(PaintBenchmarkMode::kNormal, paint_controller_.benchmark_mode_);
+      paint_controller.SetBenchmarkMode(mode);
+    }
+    ~ScopedBenchmarkMode() {
+      paint_controller_.SetBenchmarkMode(PaintBenchmarkMode::kNormal);
+    }
+
+   private:
+    PaintController& paint_controller_;
+  };
+
+  PaintBenchmarkMode GetBenchmarkMode() const { return benchmark_mode_; }
+  bool ShouldForcePaintForBenchmark() {
+    return benchmark_mode_ >= PaintBenchmarkMode::kForcePaint;
+  }
 
   void SetFirstPainted();
   void SetTextPainted();
   void SetImagePainted();
-
-  // Returns DisplayItemList added using CreateAndAppend() since beginning or
-  // the last CommitNewDisplayItems(). Use with care.
-  DisplayItemList& NewDisplayItemList() { return new_display_item_list_; }
 
 #if DCHECK_IS_ON()
   void ShowCompactDebugData() const;
@@ -257,6 +263,7 @@ class PLATFORM_EXPORT PaintController {
  private:
   friend class PaintControllerTestBase;
   friend class PaintControllerPaintTestBase;
+  friend class GraphicsLayer;  // Temporary for ClientCacheIsValid().
 
   // True if all display items associated with the client are validly cached.
   // However, the current algorithm allows the following situations even if
@@ -270,26 +277,14 @@ class PLATFORM_EXPORT PaintController {
   //    display item will be removed. This doesn't affect performance.
   bool ClientCacheIsValid(const DisplayItemClient&) const;
 
-  void InvalidateAllForTesting() { InvalidateAllInternal(); }
-  void InvalidateAllInternal();
-
-  void EnsureNewDisplayItemListInitialCapacity() {
-    if (new_display_item_list_.IsEmpty()) {
-      // TODO(wangxianzhu): Consider revisiting this heuristic.
-      new_display_item_list_ = DisplayItemList(
-          current_paint_artifact_->GetDisplayItemList().IsEmpty()
-              ? kInitialDisplayItemListCapacityBytes
-              : current_paint_artifact_->GetDisplayItemList()
-                    .UsedCapacityInBytes());
-    }
-  }
+  void InvalidateAllForTesting();
 
   // Set new item state (cache skipping, etc) for the last new display item.
   void ProcessNewItem(DisplayItem&);
 
-  void DidAppendItem(DisplayItem&);
+  void CheckNewItem(DisplayItem&);
   DisplayItem& MoveItemFromCurrentListToNewList(wtf_size_t);
-  void DidAppendChunk();
+  void CheckNewChunk();
 
   struct IdAsHashKey {
     IdAsHashKey() = default;
@@ -383,15 +378,31 @@ class PLATFORM_EXPORT PaintController {
 
   void UpdateUMACounts();
 
+  void SetBenchmarkMode(PaintBenchmarkMode);
+  bool ShouldInvalidateDisplayItemForBenchmark();
+  bool ShouldInvalidateSubsequenceForBenchmark();
+
+  void CheckNoNewPaint() const {
+#if DCHECK_IS_ON()
+    DCHECK(!new_paint_artifact_ || new_paint_artifact_->IsEmpty());
+    DCHECK(paint_chunker_.IsInInitialState());
+    DCHECK(current_paint_artifact_);
+#endif
+  }
+
   Usage usage_;
 
   // The last paint artifact after CommitNewDisplayItems().
   // It includes paint chunks as well as display items.
+  // It's initially empty and is never null if usage is kMultiplePaints.
+  // Otherwise it's null before CommitNewDisplayItems().
   scoped_refptr<PaintArtifact> current_paint_artifact_;
 
   // Data being used to build the next paint artifact.
-  DisplayItemList new_display_item_list_;
-  PaintChunker new_paint_chunks_;
+  // It's never null and if usage is kMultiplePaints. Otherwise it's null after
+  // CommitNewDisplayItems().
+  scoped_refptr<PaintArtifact> new_paint_artifact_;
+  PaintChunker paint_chunker_;
 
   bool cache_is_all_invalid_ = true;
   bool committed_ = false;
@@ -452,6 +463,10 @@ class PLATFORM_EXPORT PaintController {
 
   wtf_size_t current_fragment_ = 0;
 
+  PaintBenchmarkMode benchmark_mode_ = PaintBenchmarkMode::kNormal;
+  int partial_invalidation_display_item_count_ = 0;
+  int partial_invalidation_subsequence_count_ = 0;
+
   // Accumulated counts for UMA metrics. Updated by UpdateUMACounts() and
   // UpdateUMACountsOnFullyCached(), and reported as UMA metrics and reset by
   // ReportUMACounts(). The accumulation is mainly for pre-CompositeAfterPaint
@@ -462,7 +477,11 @@ class PLATFORM_EXPORT PaintController {
   static size_t sum_num_subsequences_;
   static size_t sum_num_cached_subsequences_;
 
-  class DisplayItemListAsJSON;
+  // For testing, to disable ReportUMACounts(), to prevent the above sums from
+  // being cleared.
+  static bool disable_uma_reporting_;
+
+  class PaintArtifactAsJSON;
 
   DISALLOW_COPY_AND_ASSIGN(PaintController);
 };

@@ -2,18 +2,25 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import './edu_coexistence_css.js';
+import './edu_coexistence_template.js';
+import './edu_coexistence_button.js';
+import './edu_coexistence_error.js';
+import './edu_coexistence_offline.js';
 import './edu_coexistence_ui.js';
 import 'chrome://resources/cr_elements/cr_view_manager/cr_view_manager.m.js';
 
 import {assert} from 'chrome://resources/js/assert.m.js';
 import {WebUIListenerBehavior} from 'chrome://resources/js/web_ui_listener_behavior.m.js';
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {EduCoexistenceBrowserProxyImpl} from './edu_coexistence_browser_proxy.js';
 
-
-// import {EduAccountLoginBrowserProxyImpl} from './browser_proxy.js';
-// import {EduCoexistenceFlowResult, EduLoginErrorType, EduLoginParams,
-// ParentAccount} from './edu_login_util.js';
-//
+/** @enum {string} */
+export const Screens = {
+  ONLINE_FLOW: 'edu-coexistence-ui',
+  ERROR: 'edu-coexistence-error',
+  OFFLINE: 'edu-coexistence-offline',
+};
 
 Polymer({
   is: 'edu-coexistence-app',
@@ -31,22 +38,68 @@ Polymer({
       type: Boolean,
       value: false,
     },
+
+    /**
+     * Specifies what the current screen is.
+     * @private {Screens}
+     */
+    currentScreen_: {type: Screens, value: Screens.ONLINE_FLOW},
   },
 
-  /** @override */
-  created() {},
+  listeners: {
+    'go-error': 'onError_',
+  },
 
-  onEduAccountAdded_(data) {
-    // TODO(danan): show the final "Account added" screen".
+  /**
+   * Displays the error screen.
+   * @private
+   */
+  onError_() {
+    this.switchToScreen_(Screens.ERROR);
+  },
+
+  /**
+   * Switches to the specified screen.
+   * @private
+   * @param {Screens} screen
+   */
+  switchToScreen_(screen) {
+    if (this.currentScreen_ === screen) {
+      return;
+    }
+    this.currentScreen_ = screen;
+    /** @type {CrViewManagerElement} */ (this.$.viewManager)
+        .switchView(this.currentScreen_);
+  },
+
+  /**
+   * @param {boolean} isOnline Whether or not the browser is online.
+   * @private
+   */
+  setInitialScreen_(isOnline) {
+    this.currentScreen_ = isOnline ? Screens.ONLINE_FLOW : Screens.OFFLINE;
+    /** @type {CrViewManagerElement} */ (this.$.viewManager)
+        .switchView(this.currentScreen_);
   },
 
   /** @override */
   ready() {
-    this.addWebUIListener(
-        'edu-account-added', data => this.onEduAccountAdded_(data));
+    this.addWebUIListener('show-error-screen', () => {
+      this.onError_();
+    });
 
-    /** @type {CrViewManagerElement} */ (this.$.viewManager)
-        .switchView('edu-coexistence-ui');
+    window.addEventListener('online', () => {
+      if (this.currentScreen_ !== Screens.ERROR) {
+        this.switchToScreen_(Screens.ONLINE_FLOW);
+      }
+    });
+
+    window.addEventListener('offline', () => {
+      if (this.currentScreen_ !== Screens.ERROR) {
+        this.switchToScreen_(Screens.OFFLINE);
+      }
+    });
+    this.setInitialScreen_(navigator.onLine);
   },
 
 });

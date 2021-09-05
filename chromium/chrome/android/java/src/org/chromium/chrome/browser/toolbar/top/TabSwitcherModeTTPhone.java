@@ -12,8 +12,10 @@ import android.graphics.Color;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewStub;
+
 import androidx.annotation.Nullable;
 import androidx.appcompat.content.res.AppCompatResources;
+
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.device.DeviceClassManager;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -27,6 +29,7 @@ import org.chromium.chrome.browser.toolbar.TabCountProvider;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.browser_ui.widget.animation.CancelAwareAnimatorListener;
 import org.chromium.components.browser_ui.widget.animation.Interpolators;
+import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter;
 import org.chromium.ui.util.ColorUtils;
 import org.chromium.ui.widget.OptimizedFrameLayout;
 
@@ -243,11 +246,10 @@ public class TabSwitcherModeTTPhone extends OptimizedFrameLayout
         updatePrimaryColorAndTint();
     }
 
-    /** Called when incognito tab count changes. */
-    void onIncognitoTabsCountChanged(int incognitoTabsCount) {
-        boolean shouldShowNewTabVariation = incognitoTabsCount == 0;
-        if (shouldShowNewTabVariation == mShouldShowNewTabVariation) return;
-        mShouldShowNewTabVariation = shouldShowNewTabVariation;
+    /** Called when incognito tab existence changes. */
+    void onIncognitoTabsExistenceChanged(boolean doesExist) {
+        if (!doesExist == mShouldShowNewTabVariation) return;
+        mShouldShowNewTabVariation = !doesExist;
 
         // TODO(crbug.com/1012014): Address the empty top toolbar issue when adaptive toolbar and
         // new tab variation are both on.
@@ -255,6 +257,18 @@ public class TabSwitcherModeTTPhone extends OptimizedFrameLayout
         assert mIncognitoToggleTabLayout != null;
         mIncognitoToggleTabLayout.setVisibility(mShouldShowNewTabVariation ? GONE : VISIBLE);
         updateNewTabButtonVisibility();
+    }
+
+    /**
+     * @param highlight If the new tab button should be highlighted.
+     */
+    void setNewTabButtonHighlight(boolean highlight) {
+        if (mNewTabImageButton == null) return;
+        if (highlight) {
+            ViewHighlighter.turnOnCircularHighlight(mNewTabImageButton);
+        } else {
+            ViewHighlighter.turnOffHighlight(mNewTabImageButton);
+        }
     }
 
     private void updateNewTabButtonVisibility() {

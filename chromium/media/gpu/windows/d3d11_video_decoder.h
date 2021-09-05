@@ -82,6 +82,7 @@ class MEDIA_GPU_EXPORT D3D11VideoDecoder : public VideoDecoder,
 
   // D3D11VideoDecoderClient implementation.
   D3D11PictureBuffer* GetPicture() override;
+  void UpdateTimestamp(D3D11PictureBuffer* picture_buffer) override;
   bool OutputResult(const CodecPicture* picture,
                     D3D11PictureBuffer* picture_buffer) override;
   void SetDecoderCB(const SetAcceleratorDecoderCB&) override;
@@ -143,10 +144,10 @@ class MEDIA_GPU_EXPORT D3D11VideoDecoder : public VideoDecoder,
   void CreatePictureBuffers();
 
   // Create a D3D11VideoDecoder, if possible, based on the current config.
-  // TODO(liberato): we use a tuple only because ErrorOr<ComD3D111VideoDecoder>
+  // TODO(liberato): we use a tuple only because StatusOr<ComD3D111VideoDecoder>
   // doesn't work.  Something about base::Optional trying to convert to void*,
   // but the conversion is ambiguous.
-  ErrorOr<std::tuple<ComD3D11VideoDecoder>> CreateD3D11Decoder();
+  StatusOr<std::tuple<ComD3D11VideoDecoder>> CreateD3D11Decoder();
 
   enum class NotSupportedReason {
     kVideoIsSupported = 0,

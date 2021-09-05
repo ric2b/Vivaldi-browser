@@ -23,16 +23,20 @@ class PlayerCompositorDelegateAndroid : public PlayerCompositorDelegate {
       PaintPreviewBaseService* paint_preview_service,
       const base::android::JavaParamRef<jstring>& j_url_spec,
       const base::android::JavaParamRef<jstring>& j_directory_key,
-      const base::android::JavaParamRef<jobject>& j_compositor_error_callback);
+      const base::android::JavaParamRef<jobject>& j_compositor_error_callback,
+      jboolean j_is_low_mem);
 
   void OnCompositorReady(
       CompositorStatus compositor_status,
       mojom::PaintPreviewBeginCompositeResponsePtr composite_response) override;
 
+  void OnMemoryPressure(base::MemoryPressureListener::MemoryPressureLevel
+                            memory_pressure_level) override;
+
   // Called from Java when there is a request for a new bitmap. When the bitmap
   // is ready, it will be passed to j_bitmap_callback. In case of any failure,
   // j_error_callback will be called.
-  void RequestBitmap(
+  jint RequestBitmap(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& j_frame_guid,
       const base::android::JavaParamRef<jobject>& j_bitmap_callback,
@@ -42,6 +46,10 @@ class PlayerCompositorDelegateAndroid : public PlayerCompositorDelegate {
       jint j_clip_y,
       jint j_clip_width,
       jint j_clip_height);
+
+  jboolean CancelBitmapRequest(JNIEnv* env, jint j_request_id);
+
+  void CancelAllBitmapRequests(JNIEnv* env);
 
   // Called from Java on touch event on a frame.
   base::android::ScopedJavaLocalRef<jstring> OnClick(

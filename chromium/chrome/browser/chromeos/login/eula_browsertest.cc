@@ -14,7 +14,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/post_task.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/login/test/dialog_window_waiter.h"
@@ -91,7 +91,7 @@ class WebContentsLoadFinishedWaiter : public content::WebContentsObserver {
 };
 
 // Helper invoked by GuestViewManager::ForEachGuest to collect WebContents of
-// Webview named as |web_view_name,|.
+// Webview named as `web_view_name`.
 bool AddNamedWebContentsToSet(std::set<content::WebContents*>* frame_set,
                               const std::string& web_view_name,
                               content::WebContents* web_contents) {
@@ -147,21 +147,13 @@ class EulaTest : public OobeBaseTest {
     }
   }
 
-  // Returns an Oobe JSChecker that sends 'click' events instead of 'tap'
-  // events when interacting with UI elements.
-  test::JSChecker NonPolymerOobeJS() {
-    test::JSChecker js = test::OobeJS();
-    js.set_polymer_ui(false);
-    return js;
-  }
-
   base::OnceClosure SetCollectStatsConsentClosure(bool consented) {
     return base::BindOnce(
         base::IgnoreResult(&GoogleUpdateSettings::SetCollectStatsConsent),
         consented);
   }
 
-  // Calls |GoogleUpdateSettings::SetCollectStatsConsent| asynchronously on its
+  // Calls `GoogleUpdateSettings::SetCollectStatsConsent` asynchronously on its
   // task runner. Blocks until task is executed.
   void SetGoogleCollectStatsConsent(bool consented) {
     base::RunLoop runloop;
@@ -171,13 +163,13 @@ class EulaTest : public OobeBaseTest {
     runloop.Run();
   }
 
-  // Calls |GoogleUpdateSettings::GetCollectStatsConsent| asynchronously on its
+  // Calls `GoogleUpdateSettings::GetCollectStatsConsent` asynchronously on its
   // task runner. Blocks until task is executed and returns the result.
   bool GetGoogleCollectStatsConsent() {
     bool consented = false;
 
     // Callback runs after GetCollectStatsConsent is executed. Sets the local
-    // variable |consented| to the result of GetCollectStatsConsent.
+    // variable `consented` to the result of GetCollectStatsConsent.
     auto on_get_collect_stats_consent_callback =
         [](base::OnceClosure quit_closure, bool* consented_out,
            bool consented_result) {
@@ -263,8 +255,8 @@ IN_PROC_BROWSER_TEST_F(EulaTest, EnableUsageStats) {
       StatsReportingController::Get()->AddObserver(runloop.QuitClosure());
 
   // Enable and disable usageStats that to see that metrics are recorded.
-  NonPolymerOobeJS().TapOnPath(kUsageStats);
-  NonPolymerOobeJS().TapOnPath(kUsageStats);
+  test::OobeJS().TapOnPath(kUsageStats);
+  test::OobeJS().TapOnPath(kUsageStats);
   // Advance to the next screen for changes to take effect.
   test::OobeJS().TapOnPath(kAcceptEulaButton);
 
@@ -313,7 +305,7 @@ IN_PROC_BROWSER_TEST_F(EulaTest, DisableUsageStats) {
 
   // Click on the toggle to disable stats collection and advance to the next
   // screen for changes to take effect.
-  NonPolymerOobeJS().TapOnPath(kUsageStats);
+  test::OobeJS().TapOnPath(kUsageStats);
   test::OobeJS().TapOnPath(kAcceptEulaButton);
 
   // Wait for StartReportingController update.
@@ -369,7 +361,7 @@ IN_PROC_BROWSER_TEST_F(EulaTest, AdditionalToS) {
       .CreateWaiter(test::GetOobeElementPath(kAdditionalTermsDialog) + ".open")
       ->Wait();
 
-  NonPolymerOobeJS().TapOnPath(kAdditionalTermsClose);
+  test::OobeJS().TapOnPath(kAdditionalTermsClose);
 
   test::OobeJS()
       .CreateWaiter(test::GetOobeElementPath(kAdditionalTermsDialog) +

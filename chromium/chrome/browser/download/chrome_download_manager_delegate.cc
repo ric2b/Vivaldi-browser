@@ -9,8 +9,8 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -100,6 +100,7 @@
 #include "chrome/browser/download/android/download_utils.h"
 #include "chrome/browser/download/android/mixed_content_download_infobar_delegate.h"
 #include "chrome/browser/infobars/infobar_service.h"
+#include "net/http/http_content_disposition.h"
 #else
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -694,8 +695,12 @@ bool ChromeDownloadManagerDelegate::InterceptDownloadIfApplicable(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   // For background service downloads we don't want offline pages backend to
   // intercept the download. |is_transient| flag is used to determine whether
-  // the download corresponds to background service.
+  // the download corresponds to background service. Additionally we don't want
+  // offline pages backend to intercept html files explicitly marked as
+  // attachments.
   if (!is_transient &&
+      !net::HttpContentDisposition(content_disposition, std::string())
+           .is_attachment() &&
       offline_pages::OfflinePageUtils::CanDownloadAsOfflinePage(url,
                                                                 mime_type)) {
     offline_pages::OfflinePageUtils::ScheduleDownload(
@@ -928,6 +933,32 @@ void ChromeDownloadManagerDelegate::RequestConfirmation(
 #if defined(OS_ANDROID)
   content::WebContents* web_contents =
       content::DownloadItemUtils::GetWebContents(download);
+
+  // Vivaldi - External download manager support
+  if (vivaldi::IsVivaldiRunning()) {
+    if (web_contents == nullptr) {
+      callback.Run(DownloadConfirmationResult::CONTINUE_WITHOUT_CONFIRMATION,
+                   suggested_path, base::nullopt);
+      return;
+    }
+    bool shownWithExternalDownloadManager = false;
+    if (download_dialog_bridge_) {
+      gfx::NativeWindow native_window = web_contents->GetTopLevelNativeWindow();
+      shownWithExternalDownloadManager = DownloadWithExternalDownloadManager(
+        native_window, DownloadLocationDialogType::DEFAULT, suggested_path, download,
+        base::BindOnce(&OnDownloadDialogClosed, callback));
+      if (shownWithExternalDownloadManager) {
+        callback.Run(DownloadConfirmationResult::CANCELED, base::FilePath(), base::nullopt);
+        return;
+      }
+    }
+    if (reason == DownloadConfirmationReason::NONE) {
+      callback.Run(DownloadConfirmationResult::CONTINUE_WITHOUT_CONFIRMATION,
+                   suggested_path, base::nullopt );
+      return;
+    }
+  }
+
   if (base::FeatureList::IsEnabled(features::kDownloadsLocationChange)) {
     if (reason == DownloadConfirmationReason::SAVE_AS) {
       // If this is a 'Save As' download, just run without confirmation.
@@ -968,7 +999,9 @@ void ChromeDownloadManagerDelegate::RequestConfirmation(
       }
 
       if (!ShouldShowDownloadLaterDialog() &&
-          !download_prefs_->PromptForDownload() && web_contents) {
+          !download_prefs_->PromptForDownload() && web_contents
+          // Vivaldi - External download manager support
+          && InfoBarService::FromWebContents(web_contents)) {
         android::ChromeDuplicateDownloadInfoBarDelegate::Create(
             InfoBarService::FromWebContents(web_contents), download,
             suggested_path, callback);
@@ -1041,7 +1074,8 @@ void ChromeDownloadManagerDelegate::RequestConfirmation(
         return;
 
       case DownloadConfirmationReason::TARGET_CONFLICT:
-        if (web_contents) {
+        // Vivaldi - External download manager support
+        if (web_contents && InfoBarService::FromWebContents(web_contents)) {
           android::ChromeDuplicateDownloadInfoBarDelegate::Create(
               InfoBarService::FromWebContents(web_contents), download,
               suggested_path, callback);
@@ -1253,6 +1287,8 @@ void ChromeDownloadManagerDelegate::GetFileMimeType(
 void ChromeDownloadManagerDelegate::CheckClientDownloadDone(
     uint32_t download_id,
     safe_browsing::DownloadCheckResult result) {
+  if (!download_manager_)
+    return;
   DownloadItem* item = download_manager_->GetDownload(download_id);
   if (!item || (item->GetState() != DownloadItem::IN_PROGRESS &&
                 item->GetDangerType() !=
@@ -1438,8 +1474,9 @@ void ChromeDownloadManagerDelegate::OnDownloadTargetDetermined(
   if (target_info->result == download::DOWNLOAD_INTERRUPT_REASON_NONE &&
       (mcs == download::DownloadItem::MixedContentStatus::BLOCK ||
        mcs == download::DownloadItem::MixedContentStatus::WARN)) {
-    auto* infobar_service = InfoBarService::FromWebContents(
-        content::DownloadItemUtils::GetWebContents(item));
+    auto* web_contents = content::DownloadItemUtils::GetWebContents(item);
+    auto* infobar_service =
+        web_contents ? InfoBarService::FromWebContents(web_contents) : nullptr;
     if (infobar_service) {
       // There is always an infobar service except when running in a unit test,
       // and those tests assume no infobar is shown.
@@ -1558,6 +1595,23 @@ void ChromeDownloadManagerDelegate::CheckDownloadAllowed(
     bool content_initiated,
     content::CheckDownloadAllowedCallback check_download_allowed_cb) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS) || \
+    defined(OS_MAC)
+  // Don't download pdf if it is a file URL, as that might cause an infinite
+  // download loop if Chrome is not the system pdf viewer.
+  if (url.SchemeIsFile() && download_prefs_->ShouldOpenPdfInSystemReader()) {
+    base::FilePath path;
+    net::FileURLToFilePath(url, &path);
+    base::FilePath::StringType extension = path.Extension();
+    if (!extension.empty() && base::FilePath::CompareEqualIgnoreCase(
+                                  extension, FILE_PATH_LITERAL(".pdf"))) {
+      base::ThreadTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE,
+          base::BindOnce(std::move(check_download_allowed_cb), false));
+      return;
+    }
+  }
+#endif
   CanDownloadCallback cb = base::BindOnce(
       &ChromeDownloadManagerDelegate::OnCheckDownloadAllowedComplete,
       weak_ptr_factory_.GetWeakPtr(), std::move(check_download_allowed_cb));
@@ -1625,3 +1679,18 @@ void ChromeDownloadManagerDelegate::ConnectToQuarantineService(
   mojo::MakeSelfOwnedReceiver(std::make_unique<quarantine::QuarantineImpl>(),
                               std::move(receiver));
 }
+
+// Vivaldi - External download manager support
+#if defined(OS_ANDROID)
+bool ChromeDownloadManagerDelegate::DownloadWithExternalDownloadManager(
+    gfx::NativeWindow native_window,
+    DownloadLocationDialogType dialog_type,
+    const base::FilePath& suggested_path,
+    download::DownloadItem* download,
+    DownloadDialogBridge::DialogCallback callback) {
+  DCHECK(download_dialog_bridge_);
+  return download_dialog_bridge_->DownloadWithExternalDownloadManager(native_window,
+                                      dialog_type, suggested_path, download,
+                                      std::move(callback));
+}
+#endif  // defined(OS_ANDROID)

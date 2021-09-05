@@ -94,8 +94,8 @@ import java.util.List;
 @CommandLineFlags.
 Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "disable-features=IPH_FeedHeaderMenu"})
 @Features.EnableFeatures(ChromeFeatureList.INTEREST_FEED_CONTENT_SUGGESTIONS)
-@Features.
-DisableFeatures({ChromeFeatureList.REPORT_FEED_USER_ACTIONS, ChromeFeatureList.QUERY_TILES})
+@Features.DisableFeatures({ChromeFeatureList.REPORT_FEED_USER_ACTIONS,
+        ChromeFeatureList.QUERY_TILES, ChromeFeatureList.ENHANCED_PROTECTION_PROMO_CARD})
 public class FeedNewTabPageTest {
     private static final int ARTICLE_SECTION_HEADER_POSITION = 1;
     private static final int SIGNIN_PROMO_POSITION = 2;
@@ -193,6 +193,7 @@ public class FeedNewTabPageTest {
     @MediumTest
     @Feature({"FeedNewTabPage"})
     @Features.DisableFeatures(ChromeFeatureList.INTEREST_FEED_V2)
+    @DisabledTest(message = "Flaky -- crbug.com/1136923")
     public void testSignInPromo() {
         openNewTabPage();
         SignInPromo.SigninObserver signinObserver = mNtp.getCoordinatorForTesting()

@@ -127,11 +127,8 @@ TrustStatus IsTrustDictionaryTrustedForPolicy(
     }
 
     // kSecPolicyOid is guaranteed to be present in the policy dictionary.
-    //
-    // TODO(mattm): remove the CFCastStrict below once Chromium builds against
-    // the 10.11 SDK.
     CFStringRef policy_oid = base::mac::GetValueFromDictionary<CFStringRef>(
-        policy_dict, base::mac::CFCastStrict<CFStringRef>(kSecPolicyOid));
+        policy_dict, kSecPolicyOid);
 
     if (!CFEqual(policy_oid, target_policy_oid))
       return TrustStatus::UNSPECIFIED;
@@ -519,6 +516,12 @@ class TrustStoreMac::TrustCache {
     return TrustStatus::UNSPECIFIED;
   }
 
+  // Initializes the cache, if it isn't already initialized.
+  void InitializeTrustCache() {
+    base::AutoLock lock(cache_lock_);
+    MaybeInitializeCache();
+  }
+
  private:
   // (Re-)Initialize the cache if necessary. Must be called after acquiring
   // |cache_lock_| and before accessing any of the |*_domain_cache_| members.
@@ -553,11 +556,14 @@ class TrustStoreMac::TrustCache {
   DISALLOW_COPY_AND_ASSIGN(TrustCache);
 };
 
-TrustStoreMac::TrustStoreMac(CFTypeRef policy_oid)
-    : trust_cache_(std::make_unique<TrustCache>(
-          base::mac::CFCastStrict<CFStringRef>(policy_oid))) {}
+TrustStoreMac::TrustStoreMac(CFStringRef policy_oid)
+    : trust_cache_(std::make_unique<TrustCache>(policy_oid)) {}
 
 TrustStoreMac::~TrustStoreMac() = default;
+
+void TrustStoreMac::InitializeTrustCache() const {
+  trust_cache_->InitializeTrustCache();
+}
 
 bool TrustStoreMac::IsKnownRoot(const ParsedCertificate* cert) const {
   return trust_cache_->IsKnownRoot(cert);

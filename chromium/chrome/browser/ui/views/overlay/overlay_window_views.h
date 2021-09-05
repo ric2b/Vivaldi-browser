@@ -9,7 +9,6 @@
 
 #include "base/timer/timer.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/views/controls/button/button.h"
 #include "ui/views/widget/widget.h"
 
 #if defined(OS_CHROMEOS)
@@ -25,12 +24,13 @@ class PlaybackImageButton;
 class ResizeHandleButton;
 class SkipAdLabelButton;
 class TrackImageButton;
+
+class Button;
 }  // namespace views
 
 // The Chrome desktop implementation of OverlayWindow. This will only be
 // implemented in views, which will support all desktop platforms.
 class OverlayWindowViews : public content::OverlayWindow,
-                           public views::ButtonListener,
                            public views::Widget {
  public:
   static std::unique_ptr<content::OverlayWindow> Create(
@@ -69,9 +69,6 @@ class OverlayWindowViews : public content::OverlayWindow,
   void OnKeyEvent(ui::KeyEvent* event) override;
   void OnMouseEvent(ui::MouseEvent* event) override;
   void OnGestureEvent(ui::GestureEvent* event) override;
-
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
   // Gets the bounds of the controls.
   gfx::Rect GetBackToTabControlsBounds();
@@ -257,11 +254,11 @@ class OverlayWindowViews : public content::OverlayWindow,
   bool show_progress_view_ = false;
 
   void CreateVivaldiVideoControls();
+  void HandleVivaldiMuteButton();
   void UpdateVivaldiControlsVisibility(bool is_visible);
   void UpdateVivaldiControlsBounds(int primary_control_y, int margin);
   void CreateVivaldiVideoObserver();
   void HandleVivaldiKeyboardEvents(ui::KeyEvent* event);
-  void HandleVivaldiButtonPressed(views::Button* sender);
   void HandleVivaldiGestureEvent(ui::GestureEvent* event);
 
   std::unique_ptr<vivaldi::VideoPIPController> video_pip_controller_;

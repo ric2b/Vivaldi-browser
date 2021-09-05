@@ -7,6 +7,7 @@
 #include "base/check.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "base/process/process_metrics.h"
+#include "base/ranges/algorithm.h"
 #include "base/system/sys_info.h"
 #include "base/test/gtest_util.h"
 #include "base/test/test_shared_memory_util.h"
@@ -250,11 +251,10 @@ void CheckReadOnlyMapProtection(void* addr) {
   ASSERT_TRUE(base::debug::ReadProcMaps(&proc_maps));
   std::vector<base::debug::MappedMemoryRegion> regions;
   ASSERT_TRUE(base::debug::ParseProcMaps(proc_maps, &regions));
-  auto it =
-      std::find_if(regions.begin(), regions.end(),
-                   [addr](const base::debug::MappedMemoryRegion& region) {
-                     return region.start == reinterpret_cast<uintptr_t>(addr);
-                   });
+  auto it = ranges::find_if(
+      regions, [addr](const base::debug::MappedMemoryRegion& region) {
+        return region.start == reinterpret_cast<uintptr_t>(addr);
+      });
   ASSERT_TRUE(it != regions.end());
   // PROT_READ may imply PROT_EXEC on some architectures, so just check that
   // permissions don't contain PROT_WRITE bit.
@@ -285,8 +285,8 @@ bool TryToRestoreWritablePermissions(void* addr, size_t len) {
   return VirtualProtect(addr, len, PAGE_READWRITE, &old_protection);
 #elif defined(OS_FUCHSIA)
   zx_status_t status =
-      zx::vmar::root_self()->protect(reinterpret_cast<uintptr_t>(addr), len,
-                                     ZX_VM_PERM_READ | ZX_VM_PERM_WRITE);
+      zx::vmar::root_self()->protect2(ZX_VM_PERM_READ | ZX_VM_PERM_WRITE,
+                                      reinterpret_cast<uintptr_t>(addr), len);
   return status == ZX_OK;
 #else
   return false;

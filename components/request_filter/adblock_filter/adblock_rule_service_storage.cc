@@ -323,10 +323,10 @@ void DoLoad(const base::FilePath& path,
 }
 
 base::Value SerializeCounters(const std::map<std::string, int>& counters) {
-  std::vector<std::pair<std::string, std::unique_ptr<base::Value>>> buffer;
+  std::vector<std::pair<std::string, base::Value>> buffer;
   for (const auto& counter : counters) {
     buffer.emplace_back(counter.first,
-                        std::make_unique<base::Value>(counter.second));
+                        counter.second);
   }
   return base::Value(base::Value::DictStorage(std::move(buffer)));
 }

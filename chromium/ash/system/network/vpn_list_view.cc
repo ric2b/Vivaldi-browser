@@ -103,7 +103,7 @@ bool IsVpnConfigAllowed() {
 }
 
 // A list entry that represents a VPN provider.
-class VPNListProviderEntry : public views::ButtonListener, public views::View {
+class VPNListProviderEntry : public views::View {
  public:
   // Currently the |enabled| flag will be always true for VPN providers other
   // than the built-in VPNs.
@@ -122,8 +122,11 @@ class VPNListProviderEntry : public views::ButtonListener, public views::View {
 
     // Add the VPN label.
     views::Label* label = TrayPopupUtils::CreateDefaultLabel();
-    TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::SUB_HEADER);
-    style.SetupLabel(label);
+    auto* color_provider = AshColorProvider::Get();
+    label->SetEnabledColor(color_provider->GetContentLayerColor(
+        AshColorProvider::ContentLayerType::kTextColorPrimary));
+    TrayPopupUtils::SetLabelFontList(label,
+                                     TrayPopupUtils::FontStyle::kSubHeader);
     label->SetText(base::ASCIIToUTF16(name));
     tri_view->AddView(TriView::Container::CENTER, label);
 
@@ -134,7 +137,7 @@ class VPNListProviderEntry : public views::ButtonListener, public views::View {
     }
 
     // Add the VPN add button.
-    const SkColor image_color = AshColorProvider::Get()->GetContentLayerColor(
+    const SkColor image_color = color_provider->GetContentLayerColor(
         AshColorProvider::ContentLayerType::kIconColorProminent);
 
     const gfx::ImageSkia enabled_icon =
@@ -144,7 +147,9 @@ class VPNListProviderEntry : public views::ButtonListener, public views::View {
                               AshColorProvider::GetDisabledColor(image_color));
 
     SystemMenuButton* add_vpn_button = new SystemMenuButton(
-        this, enabled_icon, disabled_icon, button_accessible_name_id);
+        base::BindRepeating(&VPNListProviderEntry::AddVpnButtonPressed,
+                            base::Unretained(this)),
+        enabled_icon, disabled_icon, button_accessible_name_id);
 
     // 'Add VPN' is disabled in the login screen since user configured
     // device-wide VPNs are unsupported.
@@ -158,9 +163,21 @@ class VPNListProviderEntry : public views::ButtonListener, public views::View {
   // views::View:
   const char* GetClassName() const override { return "VPNListProviderEntry"; }
 
- protected:
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override {
+ private:
+  views::ImageView* GetPolicyIndicatorIcon() {
+    views::ImageView* policy_indicator_icon =
+        TrayPopupUtils::CreateMainImageView();
+    policy_indicator_icon->SetImage(gfx::CreateVectorIcon(
+        kSystemMenuBusinessIcon,
+        AshColorProvider::Get()->GetContentLayerColor(
+            AshColorProvider::ContentLayerType::kIconColorPrimary)));
+    policy_indicator_icon->SetAccessibleName(l10n_util::GetStringFUTF16(
+        IDS_ASH_ACCESSIBILITY_FEATURE_MANAGED,
+        l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_VPN_BUILT_IN_PROVIDER)));
+    return policy_indicator_icon;
+  }
+
+  void AddVpnButtonPressed() {
     // If the user clicks on a provider entry, request that the "add network"
     // dialog for this provider be shown.
     if (vpn_provider_->type == VpnType::kExtension) {
@@ -178,20 +195,6 @@ class VPNListProviderEntry : public views::ButtonListener, public views::View {
       Shell::Get()->system_tray_model()->client()->ShowNetworkCreate(
           ::onc::network_type::kVPN);
     }
-  }
-
- private:
-  views::ImageView* GetPolicyIndicatorIcon() {
-    views::ImageView* policy_indicator_icon =
-        TrayPopupUtils::CreateMainImageView();
-    policy_indicator_icon->SetImage(gfx::CreateVectorIcon(
-        kSystemMenuBusinessIcon,
-        AshColorProvider::Get()->GetContentLayerColor(
-            AshColorProvider::ContentLayerType::kIconColorPrimary)));
-    policy_indicator_icon->SetAccessibleName(l10n_util::GetStringFUTF16(
-        IDS_ASH_ACCESSIBILITY_FEATURE_MANAGED,
-        l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_VPN_BUILT_IN_PROVIDER)));
-    return policy_indicator_icon;
   }
 
   VpnProviderPtr vpn_provider_;
@@ -213,9 +216,6 @@ class VPNListNetworkEntry : public HoverHighlightView,
 
   // network_icon::AnimationObserver:
   void NetworkIconChanged() override;
-
-  // views::ButtonListener:
-  void ButtonPressed(Button* sender, const ui::Event& event) override;
 
   // views::View:
   const char* GetClassName() const override { return "VPNListNetworkEntry"; }
@@ -255,17 +255,6 @@ void VPNListNetworkEntry::NetworkIconChanged() {
                             weak_ptr_factory_.GetWeakPtr()));
 }
 
-void VPNListNetworkEntry::ButtonPressed(Button* sender,
-                                        const ui::Event& event) {
-  if (sender != disconnect_button_) {
-    HoverHighlightView::ButtonPressed(sender, event);
-    return;
-  }
-
-  // TODO(stevenjb): Replace with mojo API. https://crbug.com/862420.
-  chromeos::NetworkConnect::Get()->DisconnectFromNetworkId(guid_);
-}
-
 void VPNListNetworkEntry::OnGetNetworkState(NetworkStatePropertiesPtr result) {
   UpdateFromNetworkState(result.get());
 }
@@ -293,7 +282,11 @@ void VPNListNetworkEntry::UpdateFromNetworkState(
     owner_->SetupConnectedScrollListItem(this);
     if (IsVpnConfigAllowed()) {
       disconnect_button_ = TrayPopupUtils::CreateTrayPopupButton(
-          this, l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_VPN_DISCONNECT));
+          // TODO(stevenjb): Replace with mojo API. https://crbug.com/862420.
+          base::BindRepeating(
+              &chromeos::NetworkConnect::DisconnectFromNetworkId,
+              base::Unretained(chromeos::NetworkConnect::Get()), guid_),
+          l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_VPN_DISCONNECT));
       disconnect_button_->SetAccessibleName(l10n_util::GetStringFUTF16(
           IDS_ASH_STATUS_TRAY_NETWORK_DISCONNECT_BUTTON_A11Y_LABEL, label));
       AddRightView(disconnect_button_);

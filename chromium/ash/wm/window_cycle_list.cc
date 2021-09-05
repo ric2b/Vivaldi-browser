@@ -153,18 +153,18 @@ class WindowCycleItemView : public WindowMiniView {
 
   void OnGestureEvent(ui::GestureEvent* event) override {
     switch (event->type()) {
-      case ui::ET_GESTURE_TAP:
-      case ui::ET_GESTURE_DOUBLE_TAP:
       case ui::ET_GESTURE_TAP_DOWN:
-      case ui::ET_GESTURE_TAP_UNCONFIRMED:
-      case ui::ET_GESTURE_LONG_PRESS:
+      case ui::ET_GESTURE_SHOW_PRESS:
       case ui::ET_GESTURE_LONG_TAP:
-      case ui::ET_GESTURE_TWO_FINGER_TAP: {
-        WindowCycleController* controller =
-            Shell::Get()->window_cycle_controller();
-        controller->SetFocusedWindow(source_window());
+      case ui::ET_GESTURE_TAP:
+        Shell::Get()->window_cycle_controller()->SetFocusedWindow(
+            source_window());
+        event->SetHandled();
         break;
-      }
+      case ui::ET_GESTURE_END:
+        Shell::Get()->window_cycle_controller()->CompleteCycling();
+        event->SetHandled();
+        break;
       default:
         break;
     }
@@ -357,8 +357,12 @@ class WindowCycleView : public views::WidgetDelegateView,
     if (target_it != window_view_map_.end())
       target_it->second->UpdateBorderState(/*show=*/true);
 
-    if (GetWidget() && target_window_)
-      window_view_map_[target_window_]->RequestFocus();
+    if (target_window_) {
+      if (GetWidget())
+        window_view_map_[target_window_]->RequestFocus();
+      else
+        SetInitiallyFocusedView(window_view_map_[target_window_]);
+    }
   }
 
   void HandleWindowDestruction(aura::Window* destroying_window,
@@ -469,10 +473,6 @@ class WindowCycleView : public views::WidgetDelegateView,
   }
 
   aura::Window* GetTargetWindow() { return target_window_; }
-
-  View* GetInitiallyFocusedView() override {
-    return window_view_map_[target_window_];
-  }
 
   const views::View::Views& GetPreviewViewsForTesting() const {
     return mirror_container_->children();

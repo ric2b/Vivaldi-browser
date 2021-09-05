@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// eslint-disable-next-line no-unused-vars
+import {AppWindow} from './app_window.js';
 import {
   BackgroundOps,  // eslint-disable-line no-unused-vars
+  createFakeBackgroundOps,
   ForegroundOps,  // eslint-disable-line no-unused-vars
 } from './background_ops.js';
 import {browserProxy} from './browser_proxy/browser_proxy.js';
@@ -18,11 +21,11 @@ import * as error from './error.js';
 import {GalleryButton} from './gallerybutton.js';
 import * as metrics from './metrics.js';
 import * as filesystem from './models/file_system.js';
+import {notifyCameraResourceReady} from './mojo/device_operator.js';
 import * as nav from './nav.js';
-import {PerfEvent} from './perf.js';
 import * as state from './state.js';
 import * as tooltip from './tooltip.js';
-import {Mode, ViewName} from './type.js';
+import {Mode, PerfEvent, ViewName} from './type.js';
 import * as util from './util.js';
 import {Camera} from './views/camera.js';
 import {CameraIntent} from './views/camera_intent.js';
@@ -33,7 +36,17 @@ import {
   ResolutionSettings,
 } from './views/settings.js';
 import {View} from './views/view.js';
-import {Warning} from './views/warning.js';
+import {Warning, WarningType} from './views/warning.js';
+import {WaitableEvent} from './waitable_event.js';
+import {windowController} from './window_controller/window_controller.js';
+
+/**
+ * The app window instance which is used for communication with Tast tests. For
+ * non-test sessions or test sessions but using the legacy communication
+ * solution (chrome.runtime), it should be null.
+ * @type {?AppWindow}
+ */
+const appWindow = window['appWindow'];
 
 /**
  * Creates the Camera App main object.
@@ -99,6 +112,14 @@ export class App {
 
     document.body.addEventListener('keydown', this.onKeyPressed_.bind(this));
 
+    // Disable the zoom in-out gesture which is triggered by wheel and pinch on
+    // trackpad.
+    document.body.addEventListener('wheel', (event) => {
+      if (event.ctrlKey) {
+        event.preventDefault();
+      }
+    }, {passive: false, capture: true});
+
     document.title = browserProxy.getI18nMessage('name');
     util.setupI18nElements(document.body);
     this.setupToggles_();
@@ -124,6 +145,7 @@ export class App {
 
     nav.open(ViewName.SPLASH);
     this.backgroundOps_.bindForegroundOps(this);
+    this.backgroundOps_.bindAppWindow(appWindow);
   }
 
   /**
@@ -189,50 +211,67 @@ export class App {
    * @return {!Promise}
    */
   async start() {
-    await this.cameraView_.initialize();
-
+    document.documentElement.dir = browserProxy.getTextDirection();
     try {
       await filesystem.initialize();
-
-      const promptMigrate = async () => {
-        // Prompt to migrate pictures if needed.
-        const message = browserProxy.getI18nMessage('migrate_pictures_msg');
-        const acked = await nav.open(
-            ViewName.MESSAGE_DIALOG, {message, cancellable: false});
-        if (!acked) {
-          throw new Error('no-migrate');
-        }
-      };
-      // Migrate pictures might take some time. Since it won't affect other
-      // camera functions, we don't await here to avoid harming UX.
-      filesystem.checkMigration(promptMigrate).then((ackMigrate) => {
-        metrics.sendLaunchEvent({ackMigrate});
-      });
-
-      const externalDir = filesystem.getExternalDirectory();
-      assert(externalDir !== null);
-      this.galleryButton_.initialize(externalDir);
+      const cameraDir = filesystem.getCameraDirectory();
+      assert(cameraDir !== null);
+      this.galleryButton_.initialize(cameraDir);
     } catch (error) {
       console.error(error);
-      if (error && error.message === 'no-migrate') {
-        window.close();
-        return;
-      }
-      nav.open(ViewName.WARNING, 'filesystem-failure');
+      nav.open(ViewName.WARNING, WarningType.FILESYSTEM_FAILURE);
     }
 
     const showWindow = (async () => {
       await browserProxy.fitWindow();
-      browserProxy.showWindow();
+      windowController.enable();
       this.backgroundOps_.notifyActivation();
-    })();
-    const startCamera = (async () => {
-      const isSuccess = await this.cameraView_.start();
-      nav.close(ViewName.SPLASH);
-      nav.open(ViewName.CAMERA);
-      this.backgroundOps_.getPerfLogger().stopLaunch({hasError: !isSuccess});
+      // For intent only requiring open camera with specific mode without
+      // returning the capture result, called onIntentHandled() right
+      // after app successfully launched.
+      const intent = this.backgroundOps_.getIntent();
+      if (intent !== null && !intent.shouldHandleResult) {
+        intent.finish();
+      }
     })();
 
+    const cameraResourceInitialized = new WaitableEvent();
+    const exploitUsage = async () => {
+      if (cameraResourceInitialized.isSignaled()) {
+        await this.resume();
+      } else {
+        // CCA must get camera usage for completing its initialization when
+        // first launched.
+        await this.cameraView_.initialize();
+        notifyCameraResourceReady();
+        cameraResourceInitialized.signal();
+      }
+    };
+    const releaseUsage = async () => {
+      assert(cameraResourceInitialized.isSignaled());
+      await this.suspend();
+    };
+    await browserProxy.initCameraUsageMonitor(exploitUsage, releaseUsage);
+
+    const startCamera = (async () => {
+      await cameraResourceInitialized.wait();
+      const isSuccess = await this.cameraView_.start();
+
+      nav.close(ViewName.SPLASH);
+      nav.open(ViewName.CAMERA);
+      await browserProxy.setLaunchingFromWindowCreationStartTime(async () => {
+        const windowCreationTime = window['windowCreationTime'];
+        this.backgroundOps_.getPerfLogger().start(
+            PerfEvent.LAUNCHING_FROM_WINDOW_CREATION, windowCreationTime);
+      });
+      this.backgroundOps_.getPerfLogger().stop(
+          PerfEvent.LAUNCHING_FROM_WINDOW_CREATION, {hasError: !isSuccess});
+      if (appWindow !== null) {
+        appWindow.onAppLaunched();
+      }
+    })();
+
+    metrics.sendLaunchEvent({ackMigrate: false});
     return Promise.all([showWindow, startCamera]);
   }
 
@@ -253,8 +292,9 @@ export class App {
   async suspend() {
     state.set(state.State.SUSPEND, true);
     await this.cameraView_.start();
-    browserProxy.hideWindow();
+    windowController.disable();
     this.backgroundOps_.notifySuspension();
+    nav.open(ViewName.WARNING, WarningType.CAMERA_BEING_USED);
   }
 
   /**
@@ -262,8 +302,9 @@ export class App {
    */
   resume() {
     state.set(state.State.SUSPEND, false);
-    browserProxy.showWindow();
+    windowController.enable();
     this.backgroundOps_.notifyActivation();
+    nav.close(ViewName.WARNING, WarningType.CAMERA_BEING_USED);
   }
 }
 
@@ -280,11 +321,31 @@ let instance = null;
   if (instance !== null) {
     return;
   }
-  const bgOps = browserProxy.getBackgroundOps();
+
+  let bgOps;
+  if (window['backgroundOps'] !== undefined) {
+    bgOps = window['backgroundOps'];
+  } else {
+    // TODO(crbug.com/980846): Refactor after migrating to SWA since there is no
+    // background page for SWA.
+    bgOps = createFakeBackgroundOps();
+  }
+
+  browserProxy.setupUnloadListener(() => {
+    const intent = bgOps.getIntent();
+    if (intent !== null && !intent.done) {
+      // TODO(crbug.com/1125997): Move the task to ServiceWorker once it is
+      // supported on SWA.
+      intent.cancel();
+    }
+    if (appWindow !== null) {
+      appWindow.notifyClosed();
+    }
+  });
 
   const testErrorCallback = bgOps.getTestingErrorCallback();
   metrics.initMetrics();
-  if (testErrorCallback !== null) {
+  if (testErrorCallback !== null || appWindow !== null) {
     metrics.setMetricsEnabled(false);
   }
 
@@ -294,8 +355,22 @@ let instance = null;
   const perfLogger = bgOps.getPerfLogger();
 
   // Setup listener for performance events.
-  perfLogger.addListener((event, duration, extras) => {
-    metrics.sendPerfEvent({event, duration, extras});
+  perfLogger.addListener(({event, duration, perfInfo}) => {
+    metrics.sendPerfEvent({event, duration, perfInfo});
+
+    // Setup for console perf logger.
+    if (state.get(state.State.PRINT_PERFORMANCE_LOGS)) {
+      // eslint-disable-next-line no-console
+      console.log(
+          '%c%s %s ms %s', 'color: #4E4F97; font-weight: bold;',
+          event.padEnd(40), duration.toFixed(0).padStart(4),
+          JSON.stringify(perfInfo));
+    }
+
+    // Setup for Tast tests logger.
+    if (appWindow !== null) {
+      appWindow.reportPerf({event, duration, perfInfo});
+    }
   });
   const states = Object.values(PerfEvent);
   states.push(state.State.TAKING);
@@ -318,17 +393,6 @@ let instance = null;
         perfLogger.stop(event, extras);
       }
     });
-  });
-
-  // Setup for console perf logger.
-  perfLogger.addListener((event, duration, extras) => {
-    if (state.get(state.State.PRINT_PERFORMANCE_LOGS)) {
-      // eslint-disable-next-line no-console
-      console.log(
-          '%c%s %s ms %s', 'color: #4E4F97; font-weight: bold;',
-          event.padEnd(40), duration.toFixed(0).padStart(4),
-          JSON.stringify(extras));
-    }
   });
 
   instance = new App(

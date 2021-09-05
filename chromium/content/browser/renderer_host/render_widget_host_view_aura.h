@@ -21,6 +21,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "cc/layers/deadline_policy.h"
 #include "components/viz/common/frame_sinks/begin_frame_args.h"
 #include "components/viz/common/frame_sinks/begin_frame_source.h"
@@ -226,13 +227,13 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   ukm::SourceId GetClientSourceForMetrics() const override;
   bool ShouldDoLearning() override;
 
-#if defined(OS_WIN) || defined(OS_CHROMEOS)
+#if defined(OS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
   bool SetCompositionFromExistingText(
       const gfx::Range& range,
       const std::vector<ui::ImeTextSpan>& ui_ime_text_spans) override;
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   gfx::Range GetAutocorrectRange() const override;
   gfx::Rect GetAutocorrectCharacterBounds() const override;
   bool SetAutocorrectRange(const base::string16& autocorrect_text,
@@ -377,6 +378,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   // RenderWidgetHostViewBase:
   void UpdateBackgroundColor() override;
   bool HasFallbackSurface() const override;
+  base::Optional<DisplayFeature> GetDisplayFeature() override;
+  void SetDisplayFeatureForTesting(
+      const DisplayFeature* display_feature) override;
 
  private:
   friend class DelegatedFrameHostClientAura;
@@ -711,6 +715,11 @@ class CONTENT_EXPORT RenderWidgetHostViewAura
   bool double_tap_to_zoom_enabled_ = false;
 
   Visibility visibility_ = Visibility::HIDDEN;
+
+  // Represents a feature of the physical display whose offset and mask_length
+  // are expressed in DIPs relative to the view. See display_feature.h for more
+  // details.
+  base::Optional<DisplayFeature> display_feature_;
 
   base::WeakPtrFactory<RenderWidgetHostViewAura> weak_ptr_factory_{this};
 

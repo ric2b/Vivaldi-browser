@@ -16,7 +16,6 @@
 #include "content/common/fetch/fetch_request_type_converters.h"
 #include "content/common/service_worker/service_worker_loader_helpers.h"
 #include "content/common/service_worker/service_worker_utils.h"
-#include "content/renderer/loader/web_url_request_util.h"
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/renderer_blink_platform_impl.h"
 #include "content/renderer/service_worker/controller_service_worker_connector.h"
@@ -203,8 +202,8 @@ void ServiceWorkerSubresourceLoader::StartRequest(
       TRACE_EVENT_FLAG_FLOW_OUT, "url", resource_request.url.spec());
   TransitionToStatus(Status::kStarted);
 
-  DCHECK(!controller_connector_observer_.IsObservingSources());
-  controller_connector_observer_.Add(controller_connector_.get());
+  DCHECK(!controller_connector_observation_.IsObserving());
+  controller_connector_observation_.Observe(controller_connector_.get());
   fetch_request_restarted_ = false;
 
   // |service_worker_start_time| becomes web-exposed
@@ -361,11 +360,11 @@ void ServiceWorkerSubresourceLoader::OnConnectionClosed() {
 
 void ServiceWorkerSubresourceLoader::SettleFetchEventDispatch(
     base::Optional<blink::ServiceWorkerStatusCode> status) {
-  if (!controller_connector_observer_.IsObservingSources()) {
+  if (!controller_connector_observation_.IsObserving()) {
     // Already settled.
     return;
   }
-  controller_connector_observer_.RemoveAll();
+  controller_connector_observation_.RemoveObservation();
 
   if (status) {
     blink::ServiceWorkerStatusCode value = status.value();
@@ -754,13 +753,6 @@ void ServiceWorkerSubresourceLoader::OnSideDataReadingComplete(
 
   if (metadata.has_value())
     url_loader_client_->OnReceiveCachedMetadata(std::move(metadata.value()));
-
-  DCHECK(data_pipe.is_valid());
-
-  base::TimeDelta delay =
-      base::TimeTicks::Now() - response_head_->response_start;
-  UMA_HISTOGRAM_TIMES(
-      "ServiceWorker.SubresourceNotifyStartLoadingResponseBodyDelay", delay);
 
   DCHECK(data_pipe.is_valid());
   CommitResponseBody(std::move(data_pipe));

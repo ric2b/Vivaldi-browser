@@ -20,7 +20,6 @@
 #include "ui/events/ozone/evdev/device_event_dispatcher_evdev.h"
 #include "ui/events/ozone/evdev/event_device_info.h"
 #include "ui/events/ozone/evdev/event_device_util.h"
-#include "ui/events/ozone/evdev/keyboard_util_evdev.h"
 #include "ui/events/ozone/evdev/libgestures_glue/gesture_property_provider.h"
 #include "ui/events/ozone/evdev/libgestures_glue/gesture_timer_provider.h"
 #include "ui/gfx/geometry/point_f.h"
@@ -39,6 +38,8 @@ GestureInterpreterDeviceClass GestureDeviceClass(Evdev* evdev) {
   switch (evdev->info.evdev_class) {
     case EvdevClassMouse:
       return GESTURES_DEVCLASS_MOUSE;
+    case EvdevClassPointingStick:
+      return GESTURES_DEVCLASS_POINTING_STICK;
     case EvdevClassMultitouchMouse:
       return GESTURES_DEVCLASS_MULTITOUCH_MOUSE;
     case EvdevClassTouchpad:
@@ -145,6 +146,8 @@ void GestureInterpreterLibevdevCros::OnLibEvdevCrosOpen(
       GestureHardwareProperties(evdev, device_properties_.get());
   GestureInterpreterDeviceClass devclass = GestureDeviceClass(evdev);
   is_mouse_ = property_provider_->IsDeviceIdOfType(id_, DT_MOUSE);
+  is_pointing_stick_ =
+      property_provider_->IsDeviceIdOfType(id_, DT_POINTING_STICK);
 
   // Create & initialize GestureInterpreter.
   DCHECK(!interpreter_);
@@ -520,7 +523,7 @@ void GestureInterpreterLibevdevCros::DispatchMouseButton(unsigned int button,
   if (!SetMouseButtonState(button, down))
     return;  // No change.
 
-  bool allow_remap = is_mouse_;
+  bool allow_remap = is_mouse_ || is_pointing_stick_;
   dispatcher_->DispatchMouseButtonEvent(MouseButtonEventParams(
       id_, EF_NONE, cursor_->GetLocation(), button, down, allow_remap,
       PointerDetails(EventPointerType::kMouse), StimeToTimeTicks(time)));

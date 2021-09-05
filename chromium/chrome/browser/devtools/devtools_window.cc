@@ -13,6 +13,7 @@
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
 #include "base/macros.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/time/time.h"
@@ -68,7 +69,7 @@
 #include "net/base/escape.h"
 #include "third_party/blink/public/common/input/web_gesture_event.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
-#include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
+#include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/blink/public/public_buildflags.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/events/keycodes/dom/keycode_converter.h"
@@ -332,7 +333,7 @@ bool DevToolsEventForwarder::ForwardEvent(
   event_data.SetIntKey("keyCode", key_code);
   event_data.SetIntKey("modifiers", modifiers);
   devtools_window_->bindings_->CallClientMethod(
-      "DevToolsAPI", "keyEventUnhandled", event_data);
+      "DevToolsAPI", "keyEventUnhandled", std::move(event_data));
   return true;
 }
 
@@ -641,19 +642,18 @@ void DevToolsWindow::OpenDevToolsWindowForFrame(
 }
 
 // static
-void DevToolsWindow::ToggleDevToolsWindow(
-    Browser* browser,
-    const DevToolsToggleAction& action) {
+void DevToolsWindow::ToggleDevToolsWindow(Browser* browser,
+                                          const DevToolsToggleAction& action,
+                                          DevToolsOpenedByAction opened_by) {
   if (action.type() == DevToolsToggleAction::kToggle &&
       browser->is_type_devtools()) {
     browser->tab_strip_model()->CloseAllTabs();
     return;
   }
 
-  ToggleDevToolsWindow(
-      browser->tab_strip_model()->GetActiveWebContents(),
-      action.type() == DevToolsToggleAction::kInspect,
-      action, "");
+  ToggleDevToolsWindow(browser->tab_strip_model()->GetActiveWebContents(),
+                       action.type() == DevToolsToggleAction::kInspect, action,
+                       "", opened_by);
 }
 
 // static
@@ -717,7 +717,8 @@ void DevToolsWindow::ToggleDevToolsWindow(
     content::WebContents* inspected_web_contents,
     bool force_open,
     const DevToolsToggleAction& action,
-    const std::string& settings) {
+    const std::string& settings,
+    DevToolsOpenedByAction opened_by) {
   scoped_refptr<DevToolsAgentHost> agent(
       DevToolsAgentHost::GetOrCreateFor(inspected_web_contents));
   DevToolsWindow* window = FindDevToolsWindow(agent.get());
@@ -750,6 +751,8 @@ void DevToolsWindow::ToggleDevToolsWindow(
       return;
     window->bindings_->AttachTo(agent.get());
     do_open = true;
+    if (opened_by != DevToolsOpenedByAction::kUnknown)
+      LogDevToolsOpenedByAction(opened_by);
   }
 
   // Update toolbar to reflect DevTools changes.
@@ -778,9 +781,16 @@ void DevToolsWindow::InspectElement(
   // TODO(loislo): we should initiate DevTools window opening from within
   // renderer. Otherwise, we still can hit a race condition here.
   OpenDevToolsWindow(web_contents, DevToolsToggleAction::ShowElementsPanel());
+  LogDevToolsOpenedByAction(DevToolsOpenedByAction::kContextMenuInspect);
   DevToolsWindow* window = FindDevToolsWindow(agent.get());
   if (window && should_measure_time)
     window->inspect_element_start_time_ = start_time;
+}
+
+// static
+void DevToolsWindow::LogDevToolsOpenedByAction(
+    DevToolsOpenedByAction opened_by) {
+  base::UmaHistogramEnumeration("DevTools.OpenedByAction", opened_by);
 }
 
 // static
@@ -1010,9 +1020,7 @@ bool DevToolsWindow::HasFiredBeforeUnloadEventForDevToolsBrowser(
   // beforeunload.
   if (browser->tab_strip_model()->empty())
     return true;
-  WebContents* contents =
-      browser->tab_strip_model()->GetWebContentsAt(0);
-  DevToolsWindow* window = AsDevToolsWindow(contents);
+  DevToolsWindow* window = AsDevToolsWindow(browser);
   if (!window)
     return false;
   return window->intercepted_page_beforeunload_;
@@ -1268,21 +1276,35 @@ DevToolsWindow* DevToolsWindow::AsDevToolsWindow(
   return nullptr;
 }
 
+// static
+DevToolsWindow* DevToolsWindow::AsDevToolsWindow(Browser* browser) {
+  DCHECK(browser->is_type_devtools());
+  if (browser->tab_strip_model()->empty())
+    return nullptr;
+  WebContents* contents = browser->tab_strip_model()->GetWebContentsAt(0);
+  return AsDevToolsWindow(contents);
+}
+
 WebContents* DevToolsWindow::OpenURLFromTab(
     WebContents* source,
     const content::OpenURLParams& params) {
   DCHECK(source == main_web_contents_);
   if (!params.url.SchemeIs(content::kChromeDevToolsScheme)) {
-    WebContents* inspected_web_contents = GetInspectedWebContents();
-    if (!inspected_web_contents)
-      return nullptr;
-    content::OpenURLParams modified = params;
-    modified.referrer = content::Referrer();
-    return inspected_web_contents->OpenURL(modified);
+    return OpenURLFromInspectedTab(params);
   }
   main_web_contents_->GetController().Reload(content::ReloadType::NORMAL,
                                              false);
   return main_web_contents_;
+}
+
+WebContents* DevToolsWindow::OpenURLFromInspectedTab(
+    const content::OpenURLParams& params) {
+  WebContents* inspected_web_contents = GetInspectedWebContents();
+  if (!inspected_web_contents)
+    return nullptr;
+  content::OpenURLParams modified = params;
+  modified.referrer = content::Referrer();
+  return inspected_web_contents->OpenURL(modified);
 }
 
 void DevToolsWindow::ActivateContents(WebContents* contents) {
@@ -1538,7 +1560,7 @@ void DevToolsWindow::OpenInNewTab(const std::string& url) {
   int child_id = content::ChildProcessHost::kInvalidUniqueID;
   if (inspected_web_contents) {
     content::RenderViewHost* render_view_host =
-        inspected_web_contents->GetRenderViewHost();
+        inspected_web_contents->GetMainFrame()->GetRenderViewHost();
     if (render_view_host)
       child_id = render_view_host->GetProcess()->GetID();
   }
@@ -1588,7 +1610,8 @@ void DevToolsWindow::ColorPickedInEyeDropper(int r, int g, int b, int a) {
   color.SetInteger("g", g);
   color.SetInteger("b", b);
   color.SetInteger("a", a);
-  bindings_->CallClientMethod("DevToolsAPI", "eyeDropperPickedColor", color);
+  bindings_->CallClientMethod("DevToolsAPI", "eyeDropperPickedColor",
+                              std::move(color));
 }
 
 void DevToolsWindow::InspectedContentsClosing() {
@@ -1707,7 +1730,8 @@ void DevToolsWindow::CreateDevToolsBrowser() {
     wp_prefs->SetKey(kDevToolsApp, std::move(dev_tools_defaults));
   }
 
-  browser_ = new Browser(Browser::CreateParams::CreateForDevTools(profile_));
+  browser_ =
+      Browser::Create(Browser::CreateParams::CreateForDevTools(profile_));
   browser_->tab_strip_model()->AddWebContents(
       OwnedMainWebContents::TakeWebContents(
           std::move(owned_main_web_contents_)),

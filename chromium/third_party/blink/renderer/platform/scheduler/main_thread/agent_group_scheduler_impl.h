@@ -20,8 +20,7 @@ class MainThreadTaskQueue;
 
 // AgentGroupScheduler implementation which schedules per-AgentSchedulingGroup
 // tasks.
-class PLATFORM_EXPORT AgentGroupSchedulerImpl
-    : public blink::AgentGroupScheduler {
+class PLATFORM_EXPORT AgentGroupSchedulerImpl : public AgentGroupScheduler {
  public:
   explicit AgentGroupSchedulerImpl(
       MainThreadSchedulerImpl& main_thread_scheduler);
@@ -29,12 +28,15 @@ class PLATFORM_EXPORT AgentGroupSchedulerImpl
   AgentGroupSchedulerImpl& operator=(const AgentGroupSchedulerImpl&) = delete;
   ~AgentGroupSchedulerImpl() override;
 
+  std::unique_ptr<PageScheduler> CreatePageScheduler(
+      PageScheduler::Delegate*) override;
   scoped_refptr<base::SingleThreadTaskRunner> DefaultTaskRunner() override {
     return default_task_runner_;
   }
   MainThreadSchedulerImpl& GetMainThreadScheduler() {
     return main_thread_scheduler_;
   }
+  AgentGroupScheduler& AsAgentGroupScheduler() override;
 
  private:
   scoped_refptr<MainThreadTaskQueue> default_task_queue_;

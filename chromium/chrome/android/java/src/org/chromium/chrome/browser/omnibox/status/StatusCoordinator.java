@@ -14,6 +14,7 @@ import androidx.annotation.VisibleForTesting;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
+import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
 import org.chromium.chrome.browser.omnibox.UrlBar.UrlTextChangeListener;
 import org.chromium.chrome.browser.omnibox.UrlBarEditingTextStateProvider;
 import org.chromium.chrome.browser.page_info.ChromePageInfoControllerDelegate;
@@ -21,7 +22,6 @@ import org.chromium.chrome.browser.page_info.ChromePermissionParamsListBuilderDe
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.chrome.browser.tabmodel.IncognitoStateProvider;
-import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
 import org.chromium.components.page_info.PageInfoController;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.modaldialog.ModalDialogManager;
@@ -43,7 +43,7 @@ public class StatusCoordinator implements View.OnClickListener, UrlTextChangeLis
     private final PropertyModel mModel;
     private final boolean mIsTablet;
     private Supplier<ModalDialogManager> mModalDialogManagerSupplier;
-    private ToolbarDataProvider mToolbarDataProvider;
+    private LocationBarDataProvider mLocationBarDataProvider;
     private boolean mUrlHasFocus;
 
     /**
@@ -88,12 +88,12 @@ public class StatusCoordinator implements View.OnClickListener, UrlTextChangeLis
     /**
      * Provides data and state for the toolbar component.
      *
-     * @param toolbarDataProvider The data provider.
+     * @param locationBarDataProvider The data provider.
      */
-    public void setToolbarDataProvider(ToolbarDataProvider toolbarDataProvider) {
-        mToolbarDataProvider = toolbarDataProvider;
-        mMediator.setToolbarCommonPropertiesModel(mToolbarDataProvider);
-        mStatusView.setToolbarCommonPropertiesModel(mToolbarDataProvider);
+    public void setLocationBarDataProvider(LocationBarDataProvider locationBarDataProvider) {
+        mLocationBarDataProvider = locationBarDataProvider;
+        mMediator.setLocationBarDataProvider(mLocationBarDataProvider);
+        mStatusView.setLocationBarDataProvider(mLocationBarDataProvider);
         // Update status immediately after receiving the data provider to avoid initial presence
         // glitch on tablet devices. This glitch would be typically seen upon launch of app, right
         // before the landing page is presented to the user.
@@ -163,10 +163,11 @@ public class StatusCoordinator implements View.OnClickListener, UrlTextChangeLis
 
     /** Updates the security icon displayed in the LocationBar. */
     public void updateStatusIcon() {
-        mMediator.setSecurityIconResource(mToolbarDataProvider.getSecurityIconResource(mIsTablet));
-        mMediator.setSecurityIconTint(mToolbarDataProvider.getSecurityIconColorStateList());
+        mMediator.setSecurityIconResource(
+                mLocationBarDataProvider.getSecurityIconResource(mIsTablet));
+        mMediator.setSecurityIconTint(mLocationBarDataProvider.getSecurityIconColorStateList());
         mMediator.setSecurityIconDescription(
-                mToolbarDataProvider.getSecurityIconContentDescriptionResourceId());
+                mLocationBarDataProvider.getSecurityIconContentDescriptionResourceId());
 
         // TODO(ender): drop these during final cleanup round.
         updateVerboseStatusVisibility();
@@ -209,24 +210,28 @@ public class StatusCoordinator implements View.OnClickListener, UrlTextChangeLis
      * omnibox.
      */
     private void updateVerboseStatusVisibility() {
-        // TODO(ender): turn around logic for ToolbarDataProvider to offer
+        // TODO(ender): turn around logic for LocationBarDataProvider to offer
         // notifications rather than polling for these attributes.
-        mMediator.setPageSecurityLevel(mToolbarDataProvider.getSecurityLevel());
-        mMediator.setPageIsOffline(mToolbarDataProvider.isOfflinePage());
-        mMediator.setPageIsPreview(mToolbarDataProvider.isPreview());
-        mMediator.setPageIsPaintPreview(mToolbarDataProvider.isPaintPreview());
+        mMediator.setPageSecurityLevel(mLocationBarDataProvider.getSecurityLevel());
+        mMediator.setPageIsOffline(mLocationBarDataProvider.isOfflinePage());
+        mMediator.setPageIsPreview(mLocationBarDataProvider.isPreview());
+        mMediator.setPageIsPaintPreview(mLocationBarDataProvider.isPaintPreview());
     }
 
     @Override
     public void onClick(View view) {
         if (mUrlHasFocus) return;
 
-        if (!mToolbarDataProvider.hasTab()
-                || mToolbarDataProvider.getTab().getWebContents() == null) {
+        // If isInOverviewAndShowingOmnibox is true, getTab isn't correct for PageInfo; if it's not
+        // null, it reflects a web page that the user isn't currently looking at.
+        // TODO(https://crbug.com/1150289): Add a particular page icon for start surface.
+        if (!mLocationBarDataProvider.hasTab()
+                || mLocationBarDataProvider.getTab().getWebContents() == null
+                || mLocationBarDataProvider.isInOverviewAndShowingOmnibox()) {
             return;
         }
 
-        Tab tab = mToolbarDataProvider.getTab();
+        Tab tab = mLocationBarDataProvider.getTab();
         WebContents webContents = tab.getWebContents();
         Activity activity = TabUtils.getActivity(tab);
         PageInfoController.show(activity, webContents, null,

@@ -69,10 +69,10 @@ NGConstraintSpace NGConstraintSpace::CreateFromLayoutObject(
   }
 
   const ComputedStyle& style = block.StyleRef();
-  auto writing_mode = style.GetWritingMode();
+  const auto writing_mode = style.GetWritingMode();
   bool parallel_containing_block = IsParallelWritingMode(
       cb ? cb->StyleRef().GetWritingMode() : writing_mode, writing_mode);
-  NGConstraintSpaceBuilder builder(writing_mode, writing_mode,
+  NGConstraintSpaceBuilder builder(writing_mode, style.GetWritingDirection(),
                                    /* is_new_fc */ true,
                                    !parallel_containing_block);
 
@@ -98,6 +98,10 @@ NGConstraintSpace NGConstraintSpace::CreateFromLayoutObject(
         !cell_style.LogicalHeight().IsAuto() ||
         !table_style.LogicalHeight().IsAuto());
     const LayoutBlock& cell_block = To<LayoutBlock>(*cell.ToLayoutObject());
+    if (RuntimeEnabledFeatures::TableCellNewPercentsEnabled() && fixed_block) {
+      fixed_block_is_definite = cell_block.HasDefiniteLogicalHeight() ||
+                                !table_style.LogicalHeight().IsAuto();
+    }
     builder.SetTableCellBorders(
         {cell_block.BorderStart(), cell_block.BorderEnd(),
          cell_block.BorderBefore(), cell_block.BorderAfter()});
@@ -107,6 +111,9 @@ NGConstraintSpace NGConstraintSpace::CreateFromLayoutObject(
     builder.SetHideTableCellIfEmpty(
         cell_style.EmptyCells() == EEmptyCells::kHide &&
         table_style.BorderCollapse() == EBorderCollapse::kSeparate);
+    builder.SetIsTableCellWithCollapsedBorders(
+        cell_block.Parent()->Parent()->Parent()->StyleRef().BorderCollapse() ==
+        EBorderCollapse::kCollapse);
   }
 
   if (block.IsAtomicInlineLevel() || block.IsFlexItem() || block.IsGridItem() ||
@@ -121,7 +128,6 @@ NGConstraintSpace NGConstraintSpace::CreateFromLayoutObject(
   builder.SetIsShrinkToFit(
       style.LogicalWidth().IsAuto() &&
       block.SizesLogicalWidthToFitContent(style.LogicalWidth()));
-  builder.SetTextDirection(style.Direction());
   return builder.ToConstraintSpace();
 }
 

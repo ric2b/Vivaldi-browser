@@ -70,8 +70,6 @@ class SVGResources {
                             const ComputedStyle&);
   static void ClearMarkers(SVGElement&, const ComputedStyle*);
 
-  void LayoutIfNeeded();
-
   static bool SupportsMarkers(const SVGElement&);
 
   // Ordinary resources
@@ -119,8 +117,6 @@ class SVGResources {
   // Methods operating on all cached resources
   void ResourceDestroyed(LayoutSVGResourceContainer*);
   void ClearReferencesTo(LayoutSVGResourceContainer*);
-
-  static bool DifferenceNeedsLayout(const SVGResources*, const SVGResources*);
 
 #if DCHECK_IS_ON()
   void Dump(const LayoutObject*);
@@ -228,7 +224,7 @@ class SVGElementResourceClient final
                               const QualifiedName& attribute) override;
 
   void UpdateFilterData(CompositorFilterOperations&);
-  bool ClearFilterData();
+  void InvalidateFilterData();
   void MarkFilterDataDirty();
 
   void Trace(Visitor*) const override;
@@ -237,6 +233,25 @@ class SVGElementResourceClient final
   Member<SVGElement> element_;
   Member<FilterData> filter_data_;
   bool filter_data_dirty_;
+};
+
+// Helper class for handling invalidation of resources (generally after the
+// reference box of a LayoutObject may have changed).
+class SVGResourceInvalidator {
+  STACK_ALLOCATED();
+
+ public:
+  explicit SVGResourceInvalidator(LayoutObject& object);
+
+  // Invalidate any associated clip-path/mask/filter.
+  void InvalidateEffects();
+
+  // Invalidate any associated paints (fill/stroke).
+  void InvalidatePaints();
+
+ private:
+  const SVGResources* resources_;
+  LayoutObject& object_;
 };
 
 }  // namespace blink

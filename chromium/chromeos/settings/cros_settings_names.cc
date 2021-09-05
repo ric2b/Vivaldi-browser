@@ -44,6 +44,7 @@ const char kAccountsPrefDeviceLocalAccountAutoLoginBailoutEnabled[] =
     "cros.accounts.deviceLocalAccountAutoLoginBailoutEnabled";
 const char kAccountsPrefDeviceLocalAccountPromptForNetworkWhenOffline[] =
     "cros.accounts.deviceLocalAccountPromptForNetworkWhenOffline";
+// TODO(crbug.com/866790): Check it is not used anymore and remove it.
 const char kAccountsPrefSupervisedUsersEnabled[] =
     "cros.accounts.supervisedUsersEnabled";
 const char kAccountsPrefTransferSAMLCookies[] =
@@ -482,6 +483,8 @@ const char kSystemProxySettingsKeySystemServicesUsername[] =
     "system_services_username";
 const char kSystemProxySettingsKeySystemServicesPassword[] =
     "system_services_password";
+const char kSystemProxySettingsKeyAuthSchemes[] =
+    "policy_credentials_auth_schemes";
 
 // An enum pref that indicates whether adb sideloading is allowed on this device
 const char kDeviceCrostiniArcAdbSideloadingAllowed[] =

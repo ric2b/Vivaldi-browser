@@ -772,7 +772,7 @@ IN_PROC_BROWSER_TEST_F(NavigationRequestBrowserTest, VerifySameDocument) {
   }
   {
     NavigationHandleObserver observer(shell()->web_contents(), about_blank_url);
-    NavigateFrameToURL(root->child_at(0), about_blank_url);
+    EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(0), about_blank_url));
 
     EXPECT_TRUE(observer.has_committed());
     EXPECT_FALSE(observer.is_error());
@@ -1445,9 +1445,13 @@ IN_PROC_BROWSER_TEST_F(NavigationRequestBrowserTest,
       navigation_b.GetNavigationHandle()->GetStartingSiteInstance();
   EXPECT_EQ(shell()->web_contents()->GetMainFrame()->GetSiteInstance(),
             starting_site_instance);
-  // Because of the sad tab, this is actually the b.com SiteInstance, which
-  // commits immediately after starting the navigation and has a process.
-  EXPECT_EQ(GURL("http://b.com"), starting_site_instance->GetSiteURL());
+  if (ShouldSkipEarlyCommitPendingForCrashedFrame()) {
+    EXPECT_EQ(GURL("http://a.com"), starting_site_instance->GetSiteURL());
+  } else {
+    // Because of the sad tab, this is actually the b.com SiteInstance, which
+    // commits immediately after starting the navigation and has a process.
+    EXPECT_EQ(GURL("http://b.com"), starting_site_instance->GetSiteURL());
+  }
   EXPECT_TRUE(starting_site_instance->HasProcess());
 
   // In https://crbug.com/949977, we used the a.com SiteInstance here and didn't
@@ -2395,7 +2399,7 @@ IN_PROC_BROWSER_TEST_F(NavigationRequestBrowserTest,
   {
     base::HistogramTester histograms;
     GURL url(embedded_test_server()->GetURL("b.com", "/title3.html"));
-    NavigateFrameToURL(root->child_at(0), url);
+    EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(0), url));
 
     std::string navigation_type =
         AreAllSitesIsolatedForTesting() ? "CrossProcess" : "SameProcess";

@@ -51,16 +51,35 @@ static inline ValidPropertyFilter DetermineValidPropertyFilter(
     const CSSSelector& selector) {
   for (const CSSSelector* component = &selector; component;
        component = component->TagHistory()) {
-    if (component->GetPseudoType() == CSSSelector::kPseudoCue ||
-        (component->Match() == CSSSelector::kPseudoElement &&
-         component->Value() == TextTrackCue::CueShadowPseudoId()))
+    if (component->Match() == CSSSelector::kPseudoElement &&
+        component->Value() == TextTrackCue::CueShadowPseudoId()) {
       return ValidPropertyFilter::kCue;
-    if (component->GetPseudoType() == CSSSelector::kPseudoFirstLetter)
-      return ValidPropertyFilter::kFirstLetter;
-    if (component->GetPseudoType() == CSSSelector::kPseudoMarker)
-      return ValidPropertyFilter::kMarker;
+    }
+    switch (component->GetPseudoType()) {
+      case CSSSelector::kPseudoCue:
+        return ValidPropertyFilter::kCue;
+      case CSSSelector::kPseudoFirstLetter:
+        return ValidPropertyFilter::kFirstLetter;
+      case CSSSelector::kPseudoMarker:
+        return ValidPropertyFilter::kMarker;
+      case CSSSelector::kPseudoSelection:
+      case CSSSelector::kPseudoTargetText:
+        return ValidPropertyFilter::kHighlight;
+      default:
+        break;
+    }
   }
   return ValidPropertyFilter::kNoFilter;
+}
+
+static unsigned DetermineLinkMatchType(const AddRuleFlags add_rule_flags,
+                                       const CSSSelector& selector) {
+  if (selector.HasLinkOrVisited()) {
+    return (add_rule_flags & kRuleIsVisitedDependent)
+               ? CSSSelector::kMatchVisited
+               : CSSSelector::kMatchLink;
+  }
+  return CSSSelector::kMatchAll;
 }
 
 RuleData* RuleData::MaybeCreate(StyleRule* rule,
@@ -86,7 +105,7 @@ RuleData::RuleData(StyleRule* rule,
       selector_index_(selector_index),
       position_(position),
       specificity_(Selector().Specificity()),
-      link_match_type_(Selector().ComputeLinkMatchType(CSSSelector::kMatchAll)),
+      link_match_type_(DetermineLinkMatchType(add_rule_flags, Selector())),
       has_document_security_origin_(add_rule_flags &
                                     kRuleHasDocumentSecurityOrigin),
       valid_property_filter_(
@@ -272,6 +291,19 @@ void RuleSet::AddRule(StyleRule* rule,
     // rules.
     universal_rules_.push_back(rule_data);
   }
+
+  // If the rule has CSSSelector::kMatchLink, it means that there is a :visited
+  // or :link pseudo-class somewhere in the selector. In those cases, we
+  // effectively split the rule into two: one which covers the situation
+  // where we are in an unvisited link (kMatchLink), and another which covers
+  // the visited link case (kMatchVisited).
+  if (rule_data->LinkMatchType() == CSSSelector::kMatchLink) {
+    RuleData* visited_dependent = RuleData::MaybeCreate(
+        rule, rule_data->SelectorIndex(), rule_data->GetPosition(),
+        add_rule_flags | kRuleIsVisitedDependent);
+    DCHECK(visited_dependent);
+    visited_dependent_rules_.push_back(visited_dependent);
+  }
 }
 
 void RuleSet::AddPageRule(StyleRulePage* rule) {
@@ -287,6 +319,50 @@ void RuleSet::AddFontFaceRule(StyleRuleFontFace* rule) {
 void RuleSet::AddKeyframesRule(StyleRuleKeyframes* rule) {
   EnsurePendingRules();  // So that keyframes_rules_.ShrinkToFit() gets called.
   keyframes_rules_.push_back(rule);
+  keyframes_rules_sorted_ = false;
+}
+
+void RuleSet::SortKeyframesRulesIfNeeded() {
+  if (keyframes_rules_sorted_)
+    return;
+  // Sort keyframes rules by name, breaking ties with vendor prefixing.
+  // Since equal AtomicStrings always have the same impl, there's no need to
+  // actually compare the contents of two AtomicStrings. Comparing their impl
+  // addresses is enough.
+  std::stable_sort(
+      keyframes_rules_.begin(), keyframes_rules_.end(),
+      [](const StyleRuleKeyframes* lhs, const StyleRuleKeyframes* rhs) {
+        if (lhs->GetName() != rhs->GetName())
+          return lhs->GetName().Impl() < rhs->GetName().Impl();
+        if (lhs->IsVendorPrefixed() != rhs->IsVendorPrefixed())
+          return lhs->IsVendorPrefixed();
+        return false;
+      });
+  // Deduplicate rules, erase all but the last one for each animation name,
+  // since all the preceding ones are overridden.
+  auto boundary = std::unique(
+      keyframes_rules_.rbegin(), keyframes_rules_.rend(),
+      [](const StyleRuleKeyframes* lhs, const StyleRuleKeyframes* rhs) {
+        return lhs->GetName() == rhs->GetName();
+      });
+  keyframes_rules_.erase(keyframes_rules_.begin(), boundary.base());
+  keyframes_rules_.ShrinkToFit();
+  keyframes_rules_sorted_ = true;
+}
+
+StyleRuleKeyframes* RuleSet::KeyframeStylesForAnimation(
+    const AtomicString& name) {
+  SortKeyframesRulesIfNeeded();
+  Member<StyleRuleKeyframes>* rule_iterator = std::lower_bound(
+      keyframes_rules_.begin(), keyframes_rules_.end(), name,
+      [](const StyleRuleKeyframes* rule, const AtomicString& name) {
+        return rule->GetName().Impl() < name.Impl();
+      });
+  if (rule_iterator != keyframes_rules_.end() &&
+      (*rule_iterator)->GetName() == name) {
+    return *rule_iterator;
+  }
+  return nullptr;
 }
 
 void RuleSet::AddPropertyRule(StyleRuleProperty* rule) {
@@ -431,11 +507,7 @@ void RuleSet::CompactRules() {
 
 bool RuleSet::DidMediaQueryResultsChange(
     const MediaQueryEvaluator& evaluator) const {
-  for (const auto& result : media_query_set_results_) {
-    if (result.Result() != evaluator.Eval(result.MediaQueries()))
-      return true;
-  }
-  return false;
+  return evaluator.DidResultsChange(media_query_set_results_);
 }
 
 void MinimalRuleData::Trace(Visitor* visitor) const {
@@ -471,6 +543,7 @@ void RuleSet::Trace(Visitor* visitor) const {
   visitor->Trace(scroll_timeline_rules_);
   visitor->Trace(deep_combinator_or_shadow_pseudo_rules_);
   visitor->Trace(part_pseudo_rules_);
+  visitor->Trace(visited_dependent_rules_);
   visitor->Trace(content_pseudo_element_rules_);
   visitor->Trace(slotted_pseudo_element_rules_);
   visitor->Trace(pending_rules_);

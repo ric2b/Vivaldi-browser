@@ -13,7 +13,7 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/scoped_observer.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "build/build_config.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/views/test/views_test_base.h"
@@ -61,14 +61,6 @@ View* AnyViewWithClassName(Widget* widget, const std::string& classname);
 
 class WidgetTest : public ViewsTestBase {
  public:
-  // This class can be used as a deleter for std::unique_ptr<Widget>
-  // to call function Widget::CloseNow automatically.
-  struct WidgetCloser {
-    void operator()(Widget* widget) const;
-  };
-
-  using WidgetAutoclosePtr = std::unique_ptr<Widget, WidgetCloser>;
-
   WidgetTest();
   explicit WidgetTest(
       std::unique_ptr<base::test::TaskEnvironment> task_environment);

@@ -10,13 +10,18 @@
 #include "ash/public/cpp/holding_space/holding_space_controller.h"
 #include "ash/public/cpp/holding_space/holding_space_item.h"
 #include "ash/public/cpp/holding_space/holding_space_model.h"
+#include "ash/public/cpp/holding_space/holding_space_prefs.h"
+#include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/style/ash_color_provider.h"
 #include "ash/system/holding_space/holding_space_item_chip_view.h"
 #include "ash/system/holding_space/holding_space_item_chips_container.h"
 #include "ash/system/tray/tray_constants.h"
-#include "ash/system/tray/tray_popup_item_style.h"
+#include "ash/system/tray/tray_popup_utils.h"
+#include "base/containers/adapters.h"
 #include "base/optional.h"
+#include "components/prefs/pref_service.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/label.h"
@@ -28,6 +33,15 @@
 namespace ash {
 
 namespace {
+
+bool HasEverPinnedHoldingSpaceItem() {
+  PrefService* active_pref_service =
+      Shell::Get()->session_controller()->GetActivePrefService();
+  return active_pref_service
+             ? holding_space_prefs::GetTimeOfFirstPin(active_pref_service)
+                   .has_value()
+             : false;
+}
 
 // HoldingSpaceScrollView ------------------------------------------------------
 
@@ -81,19 +95,24 @@ PinnedFilesContainer::PinnedFilesContainer(
   title_label->SetPaintToLayer();
   title_label->layer()->SetFillsBoundsOpaquely(false);
 
-  TrayPopupItemStyle(TrayPopupItemStyle::FontStyle::SUB_HEADER)
-      .SetupLabel(title_label);
+  auto label_color = AshColorProvider::Get()->GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kTextColorPrimary);
+  title_label->SetEnabledColor(label_color);
+  TrayPopupUtils::SetLabelFontList(title_label,
+                                   TrayPopupUtils::FontStyle::kSubHeader);
 
-  empty_prompt_label_ = AddChildView(std::make_unique<views::Label>(
-      l10n_util::GetStringUTF16(IDS_ASH_HOLDING_SPACE_PINNED_EMPTY_PROMPT)));
-  empty_prompt_label_->SetHorizontalAlignment(
-      gfx::HorizontalAlignment::ALIGN_LEFT);
-  empty_prompt_label_->SetMultiLine(true);
-  empty_prompt_label_->SetPaintToLayer();
-  empty_prompt_label_->layer()->SetFillsBoundsOpaquely(false);
-
-  TrayPopupItemStyle(TrayPopupItemStyle::FontStyle::DETAILED_VIEW_LABEL)
-      .SetupLabel(empty_prompt_label_);
+  if (!HasEverPinnedHoldingSpaceItem()) {
+    empty_prompt_label_ = AddChildView(std::make_unique<views::Label>(
+        l10n_util::GetStringUTF16(IDS_ASH_HOLDING_SPACE_PINNED_EMPTY_PROMPT)));
+    empty_prompt_label_->SetHorizontalAlignment(
+        gfx::HorizontalAlignment::ALIGN_LEFT);
+    empty_prompt_label_->SetMultiLine(true);
+    empty_prompt_label_->SetPaintToLayer();
+    empty_prompt_label_->layer()->SetFillsBoundsOpaquely(false);
+    empty_prompt_label_->SetEnabledColor(label_color);
+    TrayPopupUtils::SetLabelFontList(
+        empty_prompt_label_, TrayPopupUtils::FontStyle::kDetailedViewLabel);
+  }
 
   auto* scroll_view = AddChildView(std::make_unique<HoldingSpaceScrollView>());
   scroll_view->SetBackgroundColor(base::nullopt);
@@ -105,10 +124,11 @@ PinnedFilesContainer::PinnedFilesContainer(
 
   item_chips_container_ = scroll_view->SetContents(
       std::make_unique<HoldingSpaceItemChipsContainer>());
-  item_chips_container_->SetVisible(false);
 
-  if (HoldingSpaceController::Get()->model())
-    OnHoldingSpaceModelAttached(HoldingSpaceController::Get()->model());
+  if (HasEverPinnedHoldingSpaceItem())
+    SetVisible(false);
+  else
+    item_chips_container_->SetVisible(false);
 }
 
 PinnedFilesContainer::~PinnedFilesContainer() = default;
@@ -120,26 +140,42 @@ void PinnedFilesContainer::ViewHierarchyChanged(
       item_chips_container_->children().size() != 1u) {
     return;
   }
-  if (details.is_add) {
-    // `item_chips_container_` is becoming non-empty.
+
+  if (details.is_add && empty_prompt_label_ &&
+      empty_prompt_label_->GetVisible()) {
+    // An item has been added to `item_chips_container_` for the first time.
     empty_prompt_label_->SetVisible(false);
     item_chips_container_->SetVisible(true);
-  } else {
-    // `item_chips_container_` is becoming empty.
-    item_chips_container_->SetVisible(false);
-    empty_prompt_label_->SetVisible(true);
   }
+
+  SetVisible(details.is_add);
 }
 
-void PinnedFilesContainer::AddHoldingSpaceItemView(
-    const HoldingSpaceItem* item) {
+void PinnedFilesContainer::AddHoldingSpaceItemView(const HoldingSpaceItem* item,
+                                                   bool due_to_finalization) {
   DCHECK(!base::Contains(views_by_item_id_, item->id()));
+  DCHECK(item->IsFinalized());
 
-  if (item->type() == HoldingSpaceItem::Type::kPinnedFile) {
-    views_by_item_id_[item->id()] = item_chips_container_->AddChildViewAt(
-        std::make_unique<HoldingSpaceItemChipView>(delegate_, item),
-        /*index=*/0);
+  if (item->type() != HoldingSpaceItem::Type::kPinnedFile)
+    return;
+
+  size_t index = 0;
+
+  if (due_to_finalization) {
+    // Find the position at which the view should be added.
+    for (const auto& candidate :
+         base::Reversed(HoldingSpaceController::Get()->model()->items())) {
+      if (candidate->id() == item->id())
+        break;
+      if (candidate->IsFinalized() &&
+          candidate->type() == HoldingSpaceItem::Type::kPinnedFile) {
+        ++index;
+      }
+    }
   }
+
+  views_by_item_id_[item->id()] = item_chips_container_->AddChildViewAt(
+      std::make_unique<HoldingSpaceItemChipView>(delegate_, item), index);
 }
 
 void PinnedFilesContainer::RemoveAllHoldingSpaceItemViews() {

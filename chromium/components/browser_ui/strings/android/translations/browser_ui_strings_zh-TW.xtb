@@ -17,11 +17,11 @@
 <translation id="1369915414381695676">已新增 <ph name="SITE_NAME" /> 網站</translation>
 <translation id="1383876407941801731">搜尋</translation>
 <translation id="1384959399684842514">已暫停下載</translation>
+<translation id="1415402041810619267">已截斷網址</translation>
 <translation id="1431402976894535801">禁止網站取得你的使用狀態</translation>
 <translation id="1446450296470737166">允許完整控制 MIDI 裝置</translation>
 <translation id="1509960214886564027">許多網站的功能可能無法正常運作</translation>
 <translation id="1620510694547887537">攝影機</translation>
-<translation id="1647391597548383849">存取您的攝影機</translation>
 <translation id="1660204651932907780">允許網站播放音訊 (建議)</translation>
 <translation id="1677097821151855053">系統會使用 Cookie 和其他網站資料來記住你，以便將你登入帳戶或是提供個人化廣告等服務。如要管理所有網站的 Cookie，請查看<ph name="BEGIN_LINK" />設定<ph name="END_LINK" />。</translation>
 <translation id="1688867105868176567">要清除網站資料嗎？</translation>
@@ -39,13 +39,13 @@
 <translation id="1994173015038366702">網站網址</translation>
 <translation id="2025115093177348061">擴增實境</translation>
 <translation id="2030769033451695672">輕觸即可返回 <ph name="URL_OF_THE_CURRENT_TAB" /></translation>
+<translation id="2054665754582400095">你的使用狀態</translation>
 <translation id="2079545284768500474">復原</translation>
 <translation id="2091887806945687916">音訊</translation>
 <translation id="2107397443965016585">允許網站播放受保護的內容前，必須先詢問你 (建議)</translation>
 <translation id="2146738493024040262">開啟免安裝應用程式</translation>
 <translation id="2148716181193084225">今天</translation>
 <translation id="2182457891543959921">網站必須先詢問你，才能根據你的周遭環境建立 3D 地圖或追蹤攝影機位置 (建議)</translation>
-<translation id="2187243482123994665">使用者狀態</translation>
 <translation id="2212565012507486665">允許 Cookie</translation>
 <translation id="2228071138934252756">如要允許 <ph name="APP_NAME" /> 存取裝置的相機，請一併在 <ph name="BEGIN_LINK" />Android 設定<ph name="END_LINK" />中開啟相機。</translation>
 <translation id="2241634353105152135">只有這一次</translation>
@@ -55,7 +55,6 @@
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> MB</translation>
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{已允許「<ph name="PERMISSION_1" />」、「<ph name="PERMISSION_2" />」和另外 <ph name="NUM_MORE" /> 項權限}other{已允許「<ph name="PERMISSION_1" />」、「<ph name="PERMISSION_2" />」和另外 <ph name="NUM_MORE" /> 項權限}}</translation>
 <translation id="2434158240863470628">下載完成 <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
-<translation id="2440823041667407902">位置資訊存取權</translation>
 <translation id="2482878487686419369">通知</translation>
 <translation id="2490684707762498678">由 <ph name="APP_NAME" /> 管理</translation>
 <translation id="2498359688066513246">說明與意見回饋</translation>
@@ -89,6 +88,7 @@
 <translation id="3227137524299004712">麥克風</translation>
 <translation id="3277252321222022663">允許網站存取感應器 (建議)</translation>
 <translation id="3295602654194328831">隱藏資訊</translation>
+<translation id="3328801116991980348">網站資訊</translation>
 <translation id="3333961966071413176">所有聯絡人</translation>
 <translation id="3386292677130313581">允許網站存取你的位置資訊前，必須先詢問你 (建議)</translation>
 <translation id="3538390592868664640">禁止網站根據你的周遭環境建立 3D 地圖或追蹤攝影機位置</translation>
@@ -122,6 +122,7 @@
 <translation id="445467742685312942">允許網站播放受保護的內容</translation>
 <translation id="4468959413250150279">將特定網站設為靜音。</translation>
 <translation id="4479647676395637221">允許網站使用你的攝影機前，必須先詢問你 (建議)</translation>
+<translation id="4505788138578415521">已展開網址</translation>
 <translation id="4534723447064627427">如要允許 <ph name="APP_NAME" /> 存取裝置的麥克風，請一併在 <ph name="BEGIN_LINK" />Android 設定<ph name="END_LINK" />中開啟麥克風。</translation>
 <translation id="4570913071927164677">詳細資料</translation>
 <translation id="4645575059429386691">你的家長已停用這項功能</translation>
@@ -303,7 +304,6 @@
 <translation id="9074739597929991885">藍牙</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{「<ph name="PERMISSION_1" />」、「<ph name="PERMISSION_2" />」和另外 <ph name="NUM_MORE" /> 項權限}other{「<ph name="PERMISSION_1" />」、「<ph name="PERMISSION_2" />」和另外 <ph name="NUM_MORE" /> 項權限}}</translation>
 <translation id="913657688200966289">請在 <ph name="BEGIN_LINK" />Android 設定<ph name="END_LINK" />中啟用「<ph name="APP_NAME" />」的權限。</translation>
-<translation id="945632385593298557">存取您的麥克風</translation>
 <translation id="965817943346481315">封鎖干擾性或誤導性的網站廣告 (建議)</translation>
 <translation id="967624055006145463">已儲存的資料</translation>
 </translationbundle>

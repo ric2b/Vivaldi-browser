@@ -46,13 +46,18 @@ void VivaldiWindowsAPI::Shutdown() {
   BrowserList::GetInstance()->RemoveObserver(this);
 }
 
-static base::LazyInstance<BrowserContextKeyedAPIFactory<VivaldiWindowsAPI> >::
+static base::LazyInstance<VivaldiWindowsAPI::Factory>::
     DestructorAtExit g_factory_window = LAZY_INSTANCE_INITIALIZER;
 
 // static
-BrowserContextKeyedAPIFactory<VivaldiWindowsAPI>*
+VivaldiWindowsAPI::Factory*
 VivaldiWindowsAPI::GetFactoryInstance() {
   return g_factory_window.Pointer();
+}
+
+// static
+void VivaldiWindowsAPI::Init() {
+  GetFactoryInstance();
 }
 
 void VivaldiWindowsAPI::Observe(
@@ -108,18 +113,9 @@ bool VivaldiWindowsAPI::IsWindowClosingBecauseProfileClose(Browser* browser) {
 }
 
 void VivaldiWindowsAPI::OnBrowserAdded(Browser* browser) {
-  // In Vivaldi we add the ExtensionActionUtil object as an tabstripobserver for
-  // each browser. We fetch the correct browser for each update.
-  extensions::ExtensionActionUtil* utils =
-      extensions::ExtensionActionUtilFactory::GetForBrowserContext(
-          browser_context_);
+  browser->tab_strip_model()->AddObserver(this);
 
-  browser->tab_strip_model()->AddObserver(utils);
-
-  browser->tab_strip_model()->AddObserver(
-      TabsPrivateAPI::FromBrowserContext(browser_context_));
-
-  if (browser->is_vivaldi()) {
+  if (browser->is_vivaldi() && browser->profile() == browser_context_) {
     ZoomAPI::AddZoomObserver(browser);
   }
   int id = browser->session_id().id();
@@ -131,16 +127,7 @@ void VivaldiWindowsAPI::OnBrowserAdded(Browser* browser) {
 }
 
 void VivaldiWindowsAPI::OnBrowserRemoved(Browser* browser) {
-  // In Vivaldi we add the ExtensionActionUtil object as an tabstripobserver for
-  // each browser. We fetch the correct browser for each update.
-  extensions::ExtensionActionUtil* utils =
-      extensions::ExtensionActionUtilFactory::GetForBrowserContext(
-          browser_context_);
-
-  browser->tab_strip_model()->RemoveObserver(utils);
-
-  browser->tab_strip_model()->RemoveObserver(
-      TabsPrivateAPI::FromBrowserContext(browser_context_));
+  browser->tab_strip_model()->RemoveObserver(this);
 
   if (browser->is_vivaldi()) {
     ZoomAPI::RemoveZoomObserver(browser);
@@ -173,6 +160,29 @@ void VivaldiWindowsAPI::OnBrowserRemoved(Browser* browser) {
       }
     }
   }
+}
+
+void VivaldiWindowsAPI::TabChangedAt(content::WebContents* web_contents,
+                                     int index,
+                                     TabChangeType change_type) {
+  TabsPrivateAPI::NotifyTabChange(web_contents, index, change_type);
+}
+
+void VivaldiWindowsAPI::OnTabStripModelChanged(
+    TabStripModel* tab_strip_model,
+    const TabStripModelChange& change,
+    const TabStripSelectionChange& selection) {
+  if (!selection.active_tab_changed() || !selection.new_contents)
+    return;
+
+  // Lookup the proper ExtensionActionUtil based on tab WebContents.
+  extensions::ExtensionActionUtil* utils =
+      extensions::ExtensionActionUtilFactory::GetForBrowserContext(
+          selection.new_contents->GetBrowserContext());
+  DCHECK(utils);
+  if (!utils)
+    return;
+  utils->NotifyTabSelectionChange(selection.new_contents);
 }
 
 ui::WindowShowState ConvertToWindowShowState(WindowState state) {
@@ -290,7 +300,7 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   create_params.is_vivaldi = true;
   create_params.window = window;
   create_params.ext_data = ext_data;
-  window->SetBrowser(std::make_unique<Browser>(create_params));
+  window->SetBrowser(base::WrapUnique(Browser::Create(create_params)));
 
   int window_id = window->browser()->session_id().id();
 
@@ -300,9 +310,9 @@ ExtensionFunction::ResponseAction WindowPrivateCreateFunction::Run() {
   // contentWindow parameter used in the create-callback.
   content::RenderFrameHost* created_frame =
       window->web_contents()->GetMainFrame();
-  std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue);
-  result->SetInteger("frameId", created_frame->GetRoutingID());
-  result->SetInteger("windowId", window_id);
+  base::DictionaryValue result;
+  result.SetInteger("frameId", created_frame->GetRoutingID());
+  result.SetInteger("windowId", window_id);
   ResponseValue result_arg = OneArgument(std::move(result));
   // Delay sending the response until the newly created window has finished its
   // navigation or was closed during that process.

@@ -16,6 +16,8 @@
 #include "components/permissions/permission_result.h"
 #include "components/permissions/permission_uma_util.h"
 #include "components/permissions/permissions_client.h"
+#include "components/prefs/pref_service.h"
+#include "components/safe_browsing/core/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/core/db/database_manager.h"
 
 namespace {
@@ -34,8 +36,7 @@ OriginStatus GetOriginStatus(Profile* profile, const GURL& origin) {
           ->GetSettingsMap(profile)
           ->GetWebsiteSetting(
               origin, GURL(),
-              ContentSettingsType::PERMISSION_AUTOREVOCATION_DATA,
-              std::string(), nullptr);
+              ContentSettingsType::PERMISSION_AUTOREVOCATION_DATA, nullptr);
 
   OriginStatus status;
 
@@ -73,15 +74,15 @@ void SetOriginStatus(Profile* profile,
       ->GetSettingsMap(profile)
       ->SetWebsiteSettingDefaultScope(
           origin, GURL(), ContentSettingsType::PERMISSION_AUTOREVOCATION_DATA,
-          std::string(), base::WrapUnique(dict.DeepCopy()));
+          base::WrapUnique(dict.DeepCopy()));
 }
 
 void RevokePermission(const GURL& origin, Profile* profile) {
   permissions::PermissionsClient::Get()
       ->GetSettingsMap(profile)
-      ->SetContentSettingDefaultScope(
-          origin, GURL(), ContentSettingsType::NOTIFICATIONS, std::string(),
-          ContentSetting::CONTENT_SETTING_DEFAULT);
+      ->SetContentSettingDefaultScope(origin, GURL(),
+                                      ContentSettingsType::NOTIFICATIONS,
+                                      ContentSetting::CONTENT_SETTING_DEFAULT);
 
   OriginStatus status = GetOriginStatus(profile, origin);
   status.has_been_previously_revoked = true;
@@ -112,12 +113,9 @@ void AbusiveOriginPermissionRevocationRequest::CheckAndRevokeIfAbusive() {
   DCHECK(profile_);
   DCHECK(callback_);
 
-  if (!AbusiveOriginNotificationsPermissionRevocationConfig::IsEnabled()) {
-    std::move(callback_).Run(Outcome::PERMISSION_NOT_REVOKED);
-    return;
-  }
-
-  if (IsOriginExemptedFromFutureRevocations(profile_, origin_)) {
+  if (!AbusiveOriginNotificationsPermissionRevocationConfig::IsEnabled() ||
+      !safe_browsing::IsSafeBrowsingEnabled(*profile_->GetPrefs()) ||
+      IsOriginExemptedFromFutureRevocations(profile_, origin_)) {
     std::move(callback_).Run(Outcome::PERMISSION_NOT_REVOKED);
     return;
   }
@@ -130,7 +128,7 @@ void AbusiveOriginPermissionRevocationRequest::CheckAndRevokeIfAbusive() {
 
   const CrowdDenyPreloadData::SiteReputation* site_reputation =
       crowd_deny->GetReputationDataForSite(url::Origin::Create(origin_));
-  if (site_reputation &&
+  if (site_reputation && !site_reputation->warning_only() &&
       (site_reputation->notification_ux_quality() ==
            CrowdDenyPreloadData::SiteReputation::ABUSIVE_PROMPTS ||
        site_reputation->notification_ux_quality() ==

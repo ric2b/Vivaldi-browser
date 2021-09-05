@@ -45,7 +45,6 @@
 #include "content/common/child_process.mojom.h"
 #include "content/common/child_process_host_impl.h"
 #include "content/common/in_process_child_thread_params.h"
-#include "content/common/view_messages.h"
 #include "content/public/browser/browser_main_runner.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -83,6 +82,7 @@
 #include "ui/latency/latency_info.h"
 
 #if defined(OS_WIN)
+#include "base/win/win_util.h"
 #include "sandbox/policy/win/sandbox_win.h"
 #include "sandbox/win/src/sandbox_policy.h"
 #include "sandbox/win/src/window.h"
@@ -157,7 +157,9 @@ const char* GetProcessLifetimeUmaName(gpu::GpuMode gpu_mode) {
 }
 
 // Forgive one GPU process crash after this many minutes.
-constexpr int kForgiveGpuCrashMinutes = 60;
+// This value should not be too small because then Chrome could end up in an
+// endless loop where it hangs and gets killed by GPU watchdog and hangs again.
+constexpr int kForgiveGpuCrashMinutes = 5;
 
 // Forgive one GPU process crash, when the GPU process is launched to run only
 // the display compositor, after this many minutes.
@@ -236,6 +238,7 @@ static const char* const kSwitchNames[] = {
 #endif
 #if defined(OS_WIN)
     switches::kDisableHighResTimer,
+    switches::kRaiseTimerFrequency,
 #endif  // defined(OS_WIN)
     switches::kEnableANGLEFeatures,
     switches::kDisableANGLEFeatures,
@@ -243,6 +246,7 @@ static const char* const kSwitchNames[] = {
     switches::kDisableGpuRasterization,
     switches::kDisableGLExtensions,
     switches::kDisableLogging,
+    switches::kDisableMipmapGeneration,
     switches::kDisableShaderNameHashing,
     switches::kDisableSkiaRuntimeOpts,
     switches::kDisableWebRtcHWEncoding,
@@ -269,6 +273,7 @@ static const char* const kSwitchNames[] = {
     switches::kV,
     switches::kVModule,
     switches::kUseAdapterLuid,
+    switches::kWebViewDrawFunctorUsesVulkan,
     switches::kDebugVivaldi,
 #if defined(OS_MAC)
     sandbox::policy::switches::kEnableSandboxLogging,
@@ -295,6 +300,9 @@ static const char* const kSwitchNames[] = {
 #if defined(OS_ANDROID)
     switches::kEnableReachedCodeProfiler,
     switches::kReachedCodeSamplingIntervalUs,
+#endif
+#if BUILDFLAG(IS_ASH)
+    switches::kPlatformDisallowsChromeOSDirectVideoDecoder,
 #endif
     switches::kVivaldiPlatformMedia,
 };
@@ -994,7 +1002,7 @@ void GpuProcessHost::DidInitialize(
     const base::Optional<gpu::GPUInfo>& gpu_info_for_hardware_gpu,
     const base::Optional<gpu::GpuFeatureInfo>&
         gpu_feature_info_for_hardware_gpu,
-    const gpu::GpuExtraInfo& gpu_extra_info) {
+    const gfx::GpuExtraInfo& gpu_extra_info) {
   if (GetGpuCrashCount() > 0) {
     LOG(WARNING) << "Reinitialized the GPU process after a crash. The reported "
                     "initialization time was "

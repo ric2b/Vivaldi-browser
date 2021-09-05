@@ -61,7 +61,7 @@ source_set("eg_app_support+eg2") {
     "//components/autofill/core/browser",
     "//components/browsing_data/core",
     "//components/content_settings/core/browser",
-    "//components/metrics:demographic_metrics_provider",
+    "//components/metrics/demographics",
     "//components/prefs",
     "//components/strings",
     "//components/sync/base",
@@ -139,8 +139,9 @@ source_set("eg_app_support+eg2") {
     "//ios/chrome/browser/ui/settings/password:password_constants",
     "//ios/chrome/browser/ui/settings/privacy:privacy_ui",
     "//ios/chrome/browser/ui/settings/sync",
-    "//ios/chrome/browser/ui/tab_grid:tab_grid_ui_constants",
-    "//ios/chrome/browser/ui/tab_grid/grid:grid_ui_constants",
+    "//ios/chrome/browser/ui/tab_switcher/tab_grid:features",
+    "//ios/chrome/browser/ui/tab_switcher/tab_grid:tab_grid_ui_constants",
+    "//ios/chrome/browser/ui/tab_switcher/tab_grid/grid:grid_ui_constants",
     "//ios/chrome/browser/ui/table_view:feature_flags",
     "//ios/chrome/browser/ui/table_view/cells",
     "//ios/chrome/browser/ui/toolbar:eg_app_support+eg2",
@@ -226,8 +227,8 @@ source_set("eg_test_support+eg2") {
     "//ios/chrome/browser/ui/recent_tabs:recent_tabs_ui_constants",
     "//ios/chrome/browser/ui/safe_mode:eg_test_support+eg2",
     "//ios/chrome/browser/ui/settings/password:eg_test_support+eg2",
-    "//ios/chrome/browser/ui/tab_grid:tab_grid_ui_constants",
-    "//ios/chrome/browser/ui/tab_grid/grid:grid_ui_constants",
+    "//ios/chrome/browser/ui/tab_switcher/tab_grid:tab_grid_ui_constants",
+    "//ios/chrome/browser/ui/tab_switcher/tab_grid/grid:grid_ui_constants",
     "//ios/chrome/browser/ui/table_view:constants",
     "//ios/chrome/browser/ui/toolbar:eg_test_support+eg2",
     "//ios/testing:http_server_bundle_data",
@@ -261,6 +262,7 @@ source_set("chrome_egtest_bundle_main+eg2") {
 
   deps = [
     "//base",
+    "//base:i18n",
     "//ui/base",
   ]
 }

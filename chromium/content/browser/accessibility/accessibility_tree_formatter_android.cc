@@ -86,23 +86,15 @@ class AccessibilityTreeFormatterAndroid
   std::unique_ptr<base::DictionaryValue> BuildAccessibilityTree(
       BrowserAccessibility* root) override;
 
-  std::unique_ptr<base::DictionaryValue> BuildAccessibilityTreeForWindow(
-      gfx::AcceleratedWidget widget) override;
+  base::Value BuildTreeForWindow(gfx::AcceleratedWidget widget) const override;
 
-  std::unique_ptr<base::DictionaryValue> BuildAccessibilityTreeForSelector(
-      const TreeSelector& selector) override;
+  base::Value BuildTreeForSelector(
+      const AXTreeSelector& selector) const override;
 
   void AddDefaultFilters(
-      std::vector<PropertyFilter>* property_filters) override;
+      std::vector<AXPropertyFilter>* property_filters) override;
 
  private:
-  base::FilePath::StringType GetExpectedFileSuffix() override;
-  const std::string GetAllowEmptyString() override;
-  const std::string GetAllowString() override;
-  const std::string GetDenyString() override;
-  const std::string GetDenyNodeString() override;
-  const std::string GetRunUntilEventString() override;
-
   void RecursiveBuildAccessibilityTree(const BrowserAccessibility& node,
                                        base::DictionaryValue* dict) const;
 
@@ -115,8 +107,7 @@ class AccessibilityTreeFormatterAndroid
 };
 
 // static
-std::unique_ptr<AccessibilityTreeFormatter>
-AccessibilityTreeFormatter::Create() {
+std::unique_ptr<ui::AXTreeFormatter> AccessibilityTreeFormatter::Create() {
   return std::make_unique<AccessibilityTreeFormatterAndroid>();
 }
 
@@ -145,27 +136,25 @@ AccessibilityTreeFormatterAndroid::BuildAccessibilityTree(
   return dict;
 }
 
-std::unique_ptr<base::DictionaryValue>
-AccessibilityTreeFormatterAndroid::BuildAccessibilityTreeForWindow(
-    gfx::AcceleratedWidget widget) {
+base::Value AccessibilityTreeFormatterAndroid::BuildTreeForWindow(
+    gfx::AcceleratedWidget widget) const {
   NOTREACHED();
-  return nullptr;
+  return base::Value(base::Value::Type::DICTIONARY);
 }
 
-std::unique_ptr<base::DictionaryValue>
-AccessibilityTreeFormatterAndroid::BuildAccessibilityTreeForSelector(
-    const TreeSelector& selector) {
+base::Value AccessibilityTreeFormatterAndroid::BuildTreeForSelector(
+    const AXTreeSelector& selector) const {
   NOTREACHED();
-  return nullptr;
+  return base::Value(base::Value::Type::DICTIONARY);
 }
 
 void AccessibilityTreeFormatterAndroid::AddDefaultFilters(
-    std::vector<PropertyFilter>* property_filters) {
+    std::vector<AXPropertyFilter>* property_filters) {
   AddPropertyFilter(property_filters, "hint=*");
-  AddPropertyFilter(property_filters, "interesting", PropertyFilter::DENY);
+  AddPropertyFilter(property_filters, "interesting", AXPropertyFilter::DENY);
   AddPropertyFilter(property_filters, "has_character_locations",
-                    PropertyFilter::DENY);
-  AddPropertyFilter(property_filters, "has_image", PropertyFilter::DENY);
+                    AXPropertyFilter::DENY);
+  AddPropertyFilter(property_filters, "has_image", AXPropertyFilter::DENY);
 }
 
 void AccessibilityTreeFormatterAndroid::RecursiveBuildAccessibilityTree(
@@ -217,7 +206,7 @@ void AccessibilityTreeFormatterAndroid::AddProperties(
   dict->SetBoolean("link", android_node->IsLink());
   dict->SetBoolean("multiline", android_node->IsMultiLine());
   dict->SetBoolean("multiselectable", android_node->IsMultiselectable());
-  dict->SetBoolean("range", android_node->IsRangeType());
+  dict->SetBoolean("range", android_node->GetData().IsRangeValueSupported());
   dict->SetBoolean("password", android_node->IsPasswordField());
   dict->SetBoolean("scrollable", android_node->IsScrollable());
   dict->SetBoolean("selected", android_node->IsSelected());
@@ -309,31 +298,6 @@ std::string AccessibilityTreeFormatterAndroid::ProcessTreeForOutput(
   }
 
   return line;
-}
-
-base::FilePath::StringType
-AccessibilityTreeFormatterAndroid::GetExpectedFileSuffix() {
-  return FILE_PATH_LITERAL("-expected-android.txt");
-}
-
-const std::string AccessibilityTreeFormatterAndroid::GetAllowEmptyString() {
-  return "@ANDROID-ALLOW-EMPTY:";
-}
-
-const std::string AccessibilityTreeFormatterAndroid::GetAllowString() {
-  return "@ANDROID-ALLOW:";
-}
-
-const std::string AccessibilityTreeFormatterAndroid::GetDenyString() {
-  return "@ANDROID-DENY:";
-}
-
-const std::string AccessibilityTreeFormatterAndroid::GetDenyNodeString() {
-  return "@ANDROID-DENY-NODE:";
-}
-
-const std::string AccessibilityTreeFormatterAndroid::GetRunUntilEventString() {
-  return "@ANDROID-RUN-UNTIL-EVENT:";
 }
 
 }  // namespace content

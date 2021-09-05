@@ -5,7 +5,7 @@
 #include "base/base_switches.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "chrome/browser/net/prediction_options.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -134,7 +134,7 @@ IN_PROC_BROWSER_TEST_F(PrefetchBrowserTest, PreferenceWorks) {
 IN_PROC_BROWSER_TEST_F(PrefetchBrowserTest, IncognitoTest) {
   Profile* incognito_profile = browser()->profile()->GetPrimaryOTRProfile();
   Browser* incognito_browser =
-      new Browser(Browser::CreateParams(incognito_profile, true));
+      Browser::Create(Browser::CreateParams(incognito_profile, true));
 
   // Navigate just to have a tab in this window, otherwise there is no
   // WebContents for the incognito browser.

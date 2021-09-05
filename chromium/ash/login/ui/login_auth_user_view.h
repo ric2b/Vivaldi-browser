@@ -38,8 +38,7 @@ class LoginPinInputView;
 // This class will make call mojo authentication APIs directly. The embedder can
 // receive some events about the results of those mojo
 // authentication attempts (ie, success/failure).
-class ASH_EXPORT LoginAuthUserView : public NonAccessibleView,
-                                     public views::ButtonListener {
+class ASH_EXPORT LoginAuthUserView : public NonAccessibleView {
  public:
   // Flags which describe the set of currently visible auth methods.
   enum AuthMethods {
@@ -109,7 +108,6 @@ class ASH_EXPORT LoginAuthUserView : public NonAccessibleView,
   using OnAuthCallback =
       base::RepeatingCallback<void(bool auth_success,
                                    bool display_error_messages)>;
-  using OnEasyUnlockIconTapped = base::RepeatingClosure;
   using OnEasyUnlockIconHovered = base::RepeatingClosure;
 
   struct Callbacks {
@@ -130,7 +128,7 @@ class ASH_EXPORT LoginAuthUserView : public NonAccessibleView,
     // Called when the easy unlock icon is hovered.
     OnEasyUnlockIconHovered on_easy_unlock_icon_hovered;
     // Called when the easy unlock icon is tapped.
-    OnEasyUnlockIconTapped on_easy_unlock_icon_tapped;
+    views::Button::PressedCallback on_easy_unlock_icon_tapped;
   };
 
   LoginAuthUserView(const LoginUserInfo& user, const Callbacks& callbacks);
@@ -182,9 +180,6 @@ class ASH_EXPORT LoginAuthUserView : public NonAccessibleView,
   // views::View:
   gfx::Size CalculatePreferredSize() const override;
   void RequestFocus() override;
-
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
  private:
   struct UiState;

@@ -32,6 +32,8 @@
 #include "base/time/time.h"
 #include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/autofill_metrics.h"
+#include "components/autofill/core/browser/autofill_regex_constants.h"
+#include "components/autofill/core/browser/autofill_regexes.h"
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/form_parsing/field_candidates.h"
@@ -45,8 +47,6 @@
 #include "components/autofill/core/common/autofill_internals/log_message.h"
 #include "components/autofill/core/common/autofill_internals/logging_scope.h"
 #include "components/autofill/core/common/autofill_payments_features.h"
-#include "components/autofill/core/common/autofill_regex_constants.h"
-#include "components/autofill/core/common/autofill_regexes.h"
 #include "components/autofill/core/common/autofill_tick_clock.h"
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/autofill/core/common/form_data.h"
@@ -56,6 +56,7 @@
 #include "components/autofill/core/common/logging/log_buffer.h"
 #include "components/autofill/core/common/signatures.h"
 #include "components/security_state/core/security_state.h"
+#include "components/version_info/version_info.h"
 #include "url/origin.h"
 
 namespace autofill {
@@ -64,8 +65,6 @@ using mojom::SubmissionIndicatorEvent;
 
 namespace {
 
-// Version of the client sent to the server.
-constexpr char kClientVersion[] = "6.1.1715.1442/en (GGLL)";
 constexpr char kBillingMode[] = "billing";
 constexpr char kShippingMode[] = "shipping";
 
@@ -705,7 +704,8 @@ bool FormStructure::EncodeUploadRequest(
   encoded_signatures->clear();
 
   upload->set_submission(observed_submission);
-  upload->set_client_version(kClientVersion);
+  upload->set_client_version(
+      version_info::GetProductNameAndVersionForUserAgent());
   upload->set_form_signature(form_signature().value());
   upload->set_autofill_used(form_was_autofilled);
   upload->set_data_present(EncodeFieldTypes(available_field_types));
@@ -763,7 +763,8 @@ bool FormStructure::EncodeQueryRequest(
   queried_form_signatures->clear();
   queried_form_signatures->reserve(forms.size());
 
-  query->set_client_version(kClientVersion);
+  query->set_client_version(
+      version_info::GetProductNameAndVersionForUserAgent());
 
   // If a page contains repeated forms, detect that and encode only one form as
   // the returned data would be the same for all the repeated forms.
@@ -889,7 +890,6 @@ void FormStructure::ProcessQueryResponse(
     form->UpdateAutofillCount();
     form->RationalizeRepeatedFields(form_interactions_ukm_logger);
     form->RationalizeFieldTypePredictions();
-    form->OverrideServerPredictionsWithHeuristics();
     form->IdentifySections(false);
   }
 
@@ -956,8 +956,8 @@ std::string FormStructure::FormSignatureAsStr() const {
 
 bool FormStructure::IsAutofillable() const {
   size_t min_required_fields =
-      std::min({MinRequiredFieldsForHeuristics(), MinRequiredFieldsForQuery(),
-                MinRequiredFieldsForUpload()});
+      std::min({kMinRequiredFieldsForHeuristics, kMinRequiredFieldsForQuery,
+                kMinRequiredFieldsForUpload});
   if (autofill_count() < min_required_fields)
     return false;
 
@@ -999,8 +999,8 @@ bool FormStructure::ShouldBeParsed(LogManager* log_manager) const {
   }
 
   size_t min_required_fields =
-      std::min({MinRequiredFieldsForHeuristics(), MinRequiredFieldsForQuery(),
-                MinRequiredFieldsForUpload()});
+      std::min({kMinRequiredFieldsForHeuristics, kMinRequiredFieldsForQuery,
+                kMinRequiredFieldsForUpload});
   if (active_field_count() < min_required_fields &&
       (!all_fields_are_passwords() ||
        active_field_count() < kRequiredFieldsForFormsWithOnlyPasswordFields) &&
@@ -1040,7 +1040,7 @@ bool FormStructure::ShouldBeParsed(LogManager* log_manager) const {
 }
 
 bool FormStructure::ShouldRunHeuristics() const {
-  return active_field_count() >= MinRequiredFieldsForHeuristics() &&
+  return active_field_count() >= kMinRequiredFieldsForHeuristics &&
          HasAllowedScheme(source_url_) &&
          (is_form_tag_ || is_formless_checkout_ ||
           !base::FeatureList::IsEnabled(
@@ -1049,12 +1049,12 @@ bool FormStructure::ShouldRunHeuristics() const {
 
 bool FormStructure::ShouldBeQueried() const {
   return (has_password_field_ ||
-          active_field_count() >= MinRequiredFieldsForQuery()) &&
+          active_field_count() >= kMinRequiredFieldsForQuery) &&
          ShouldBeParsed();
 }
 
 bool FormStructure::ShouldBeUploaded() const {
-  return active_field_count() >= MinRequiredFieldsForUpload() &&
+  return active_field_count() >= kMinRequiredFieldsForUpload &&
          ShouldBeParsed();
 }
 
@@ -1062,37 +1062,21 @@ void FormStructure::RetrieveFromCache(
     const FormStructure& cached_form,
     const bool should_keep_cached_value,
     const bool only_server_and_autofill_state) {
-  // TODO(crbug/1101631) Clean up once the experiment is over.
-  const bool kUseRendererIds = base::FeatureList::IsEnabled(
-      features::kAutofillRetrieveFromCacheWithRendererIds);
-  std::map<base::string16, const AutofillField*> cached_fields_by_name;
   std::map<FieldRendererId, const AutofillField*> cached_fields_by_id;
   for (size_t i = 0; i < cached_form.field_count(); ++i) {
     auto* const field = cached_form.field(i);
-    if (kUseRendererIds)
-      cached_fields_by_id[field->unique_renderer_id] = field;
-    else
-      cached_fields_by_name[field->unique_name()] = field;
+    cached_fields_by_id[field->unique_renderer_id] = field;
   }
   for (auto& field : *this) {
     const AutofillField* cached_field = nullptr;
-    if (kUseRendererIds) {
-      const auto& it = cached_fields_by_id.find(field->unique_renderer_id);
-      if (it != cached_fields_by_id.end())
-        cached_field = it->second;
-    } else {
-      const auto& it = cached_fields_by_name.find(field->unique_name());
-      if (it != cached_fields_by_name.end())
-        cached_field = it->second;
-    }
+    const auto& it = cached_fields_by_id.find(field->unique_renderer_id);
+    if (it != cached_fields_by_id.end())
+      cached_field = it->second;
 
     // If the unique renderer id (or the name) is not stable due to some Java
     // Script magic in the website, use the field signature as a fallback
     // solution to find the field in the cached form.
-    // TODO(crbug.com/1125624): Remove feature check once trial ended.
-    if (!cached_field &&
-        base::FeatureList::IsEnabled(
-            features::kAutofillRetrieveFromCacheWithFieldSignatureAsFallback)) {
+    if (!cached_field) {
       // Iterates over the fields to find the field with the same form
       // signature.
       for (size_t i = 0; i < cached_form.field_count(); ++i) {
@@ -1125,24 +1109,16 @@ void FormStructure::RetrieveFromCache(
         field->is_autofilled = cached_field->is_autofilled;
       }
       if (field->form_control_type != "select-one") {
-        bool is_credit_card_field =
-            AutofillType(cached_field->Type().GetStorableType()).group() ==
-            CREDIT_CARD;
-        if (should_keep_cached_value &&
-            (is_credit_card_field ||
-             base::FeatureList::IsEnabled(
-                 features::kAutofillKeepInitialFormValuesInCache))) {
+        if (should_keep_cached_value) {
           field->value = cached_field->value;
           value_from_dynamic_change_form_ = true;
         } else if (field->value == cached_field->value &&
-                   (!base::FeatureList::IsEnabled(
-                        features::
-                            kAutofillImportPrefilledCountryAndStateValues) ||
-                    (field->server_type() != ADDRESS_HOME_COUNTRY &&
-                     field->server_type() != ADDRESS_HOME_STATE))) {
-          // TODO(crbug.com/1100231): Remove feature check once launched.
+                   (field->server_type() != ADDRESS_HOME_COUNTRY &&
+                    field->server_type() != ADDRESS_HOME_STATE)) {
           // From the perspective of learning user data, text fields containing
           // default values are equivalent to empty fields.
+          // Since a website can prefill country and state values basedw on
+          // GeoIp, the mechanism is deactivated for state and country fields.
           field->value = base::string16();
         }
       }
@@ -1242,8 +1218,8 @@ void FormStructure::LogQualityMetrics(
   // submission event.
   if (observed_submission) {
     AutofillMetrics::AutofillFormSubmittedState state;
-    if (num_detected_field_types < MinRequiredFieldsForHeuristics() &&
-        num_detected_field_types < MinRequiredFieldsForQuery()) {
+    if (num_detected_field_types < kMinRequiredFieldsForHeuristics &&
+        num_detected_field_types < kMinRequiredFieldsForQuery) {
       state = AutofillMetrics::NON_FILLABLE_FORM_OR_NEW_DATA;
     } else {
       if (did_autofill_all_possible_fields) {
@@ -1871,27 +1847,6 @@ void FormStructure::RationalizeAddressStateCountry(
   }
 }
 
-void FormStructure::OverrideServerPredictionsWithHeuristics() {
-  if (!base::FeatureList::IsEnabled(
-          features::kAutofillEnableSupportForMoreStructureInNames) &&
-      !base::FeatureList::IsEnabled(
-          features::kAutofillEnableSupportForMoreStructureInAddresses)) {
-    return;
-  }
-  for (const auto& field : fields_) {
-    switch (field->heuristic_type()) {
-      case NAME_LAST_SECOND:
-      case NAME_LAST_FIRST:
-      case ADDRESS_HOME_STREET_NAME:
-      case ADDRESS_HOME_HOUSE_NUMBER:
-        field->SetTypeTo(AutofillType(field->heuristic_type()));
-        break;
-      default: {
-      };
-    }
-  }
-}
-
 void FormStructure::RationalizeRepeatedFields(
     AutofillMetrics::FormInteractionsUkmLogger* form_interactions_ukm_logger) {
   // The type of every field whose index is in
@@ -2090,9 +2045,21 @@ void FormStructure::IdentifySections(bool has_author_specified_sections) {
       base::FeatureList::IsEnabled(
           features::kAutofillSectionUponRedundantNameInfo);
 
+  // Creates a unique name for the section that starts with |field|.
+  // TODO(crbug/896689): Cleanup once experiment is launched.
+  auto get_section_name = [](const AutofillField& field) {
+    if (base::FeatureList::IsEnabled(
+            features::kAutofillNameSectionsWithRendererIds)) {
+      return base::StrCat(
+          {field.name, base::ASCIIToUTF16("_"),
+           base::NumberToString16(field.unique_renderer_id.value())});
+    } else {
+      return field.unique_name();
+    }
+  };
+
   if (!has_author_specified_sections || is_enabled_autofill_new_sectioning) {
-    // Name sections after the first field in the section.
-    base::string16 current_section = fields_.front()->unique_name();
+    base::string16 current_section = get_section_name(*fields_.front());
 
     // Keep track of the types we've seen in this section.
     std::set<ServerFieldType> seen_types;
@@ -2214,7 +2181,7 @@ void FormStructure::IdentifySections(bool has_author_specified_sections) {
         }
 
         // The end of a section, so start a new section.
-        current_section = field->unique_name();
+        current_section = get_section_name(*field);
 
         if (is_enabled_autofill_new_sectioning) {
           // The section described in the autocomplete section attribute

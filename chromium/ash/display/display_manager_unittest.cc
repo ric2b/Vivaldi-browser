@@ -33,7 +33,6 @@
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
-#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
@@ -3549,11 +3548,11 @@ class DisplayManagerOrientationTest : public DisplayManagerTest {
 
   void SetUp() override {
     DisplayManagerTest::SetUp();
-    portrait_primary->Set(ACCELEROMETER_SOURCE_SCREEN, false,
-                          -base::kMeanGravityFloat, 0.f, 0.f);
-    portrait_secondary->Set(ACCELEROMETER_SOURCE_SCREEN, false,
+    portrait_primary->Set(ACCELEROMETER_SOURCE_SCREEN, -base::kMeanGravityFloat,
+                          0.f, 0.f);
+    portrait_secondary->Set(ACCELEROMETER_SOURCE_SCREEN,
                             base::kMeanGravityFloat, 0.f, 0.f);
-    landscape_primary->Set(ACCELEROMETER_SOURCE_SCREEN, false, 0,
+    landscape_primary->Set(ACCELEROMETER_SOURCE_SCREEN, 0,
                            -base::kMeanGravityFloat, 0.f);
   }
 

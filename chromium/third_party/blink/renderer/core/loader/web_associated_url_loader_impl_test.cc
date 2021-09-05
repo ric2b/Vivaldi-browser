@@ -32,10 +32,10 @@
 
 #include <memory>
 
-#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/platform/web_url.h"
@@ -66,7 +66,6 @@ class WebAssociatedURLLoaderTest : public testing::Test,
         did_send_data_(false),
         did_receive_response_(false),
         did_receive_data_(false),
-        did_receive_cached_metadata_(false),
         did_finish_loading_(false),
         did_fail_(false) {
     // Reuse one of the test files from WebFrameTest.
@@ -118,7 +117,7 @@ class WebAssociatedURLLoaderTest : public testing::Test,
   std::unique_ptr<WebAssociatedURLLoader> CreateAssociatedURLLoader(
       const WebAssociatedURLLoaderOptions options =
           WebAssociatedURLLoaderOptions()) {
-    return base::WrapUnique(MainFrame()->CreateAssociatedURLLoader(options));
+    return MainFrame()->CreateAssociatedURLLoader(options);
   }
 
   // WebAssociatedURLLoaderClient implementation.
@@ -156,10 +155,6 @@ class WebAssociatedURLLoaderTest : public testing::Test,
     did_receive_data_ = true;
     EXPECT_TRUE(data);
     EXPECT_GT(data_length, 0);
-  }
-
-  void DidReceiveCachedMetadata(const char* data, int data_length) override {
-    did_receive_cached_metadata_ = true;
   }
 
   void DidFinishLoading() override { did_finish_loading_ = true; }
@@ -267,7 +262,6 @@ class WebAssociatedURLLoaderTest : public testing::Test,
   bool did_receive_response_;
   bool did_download_data_;
   bool did_receive_data_;
-  bool did_receive_cached_metadata_;
   bool did_finish_loading_;
   bool did_fail_;
 };
@@ -311,7 +305,7 @@ TEST_F(WebAssociatedURLLoaderTest, CrossOriginSuccess) {
   WebURLRequest request(url);
   // No-CORS requests (CrossOriginRequestPolicyAllow) aren't allowed for the
   // default context. So we set the context as Script here.
-  request.SetRequestContext(mojom::RequestContextType::SCRIPT);
+  request.SetRequestContext(mojom::blink::RequestContextType::SCRIPT);
   request.SetCredentialsMode(network::mojom::CredentialsMode::kOmit);
 
   expected_response_ = WebURLResponse();
@@ -566,7 +560,7 @@ TEST_F(WebAssociatedURLLoaderTest, AccessCheckForLocalURL) {
   KURL url = ToKURL("file://test.pdf");
 
   WebURLRequest request(url);
-  request.SetRequestContext(mojom::RequestContextType::PLUGIN);
+  request.SetRequestContext(mojom::blink::RequestContextType::PLUGIN);
   request.SetMode(network::mojom::RequestMode::kNoCors);
   request.SetCredentialsMode(network::mojom::CredentialsMode::kOmit);
 
@@ -593,7 +587,7 @@ TEST_F(WebAssociatedURLLoaderTest, BypassAccessCheckForLocalURL) {
   KURL url = ToKURL("file://test.pdf");
 
   WebURLRequest request(url);
-  request.SetRequestContext(mojom::RequestContextType::PLUGIN);
+  request.SetRequestContext(mojom::blink::RequestContextType::PLUGIN);
   request.SetMode(network::mojom::RequestMode::kNoCors);
   request.SetCredentialsMode(network::mojom::CredentialsMode::kOmit);
 

@@ -19,7 +19,6 @@
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/installable/installable_logging.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
@@ -76,8 +75,7 @@ std::unique_ptr<base::DictionaryValue> GetOriginAppBannerData(
 
   std::unique_ptr<base::DictionaryValue> dict =
       base::DictionaryValue::From(settings->GetWebsiteSetting(
-          origin_url, origin_url, ContentSettingsType::APP_BANNER,
-          std::string(), NULL));
+          origin_url, origin_url, ContentSettingsType::APP_BANNER, NULL));
   if (!dict)
     return std::make_unique<base::DictionaryValue>();
 
@@ -115,9 +113,9 @@ class AppPrefs {
   void Save() {
     DCHECK(dict_);
     dict_ = nullptr;
-    settings_->SetWebsiteSettingDefaultScope(
-        origin_, GURL(), ContentSettingsType::APP_BANNER, std::string(),
-        std::move(origin_dict_));
+    settings_->SetWebsiteSettingDefaultScope(origin_, GURL(),
+                                             ContentSettingsType::APP_BANNER,
+                                             std::move(origin_dict_));
   }
 
  private:
@@ -255,9 +253,8 @@ void AppBannerSettingsHelper::ClearHistoryForURLs(
   HostContentSettingsMap* settings =
       HostContentSettingsMapFactory::GetForProfile(profile);
   for (const GURL& origin_url : origin_urls) {
-    settings->SetWebsiteSettingDefaultScope(origin_url, GURL(),
-                                            ContentSettingsType::APP_BANNER,
-                                            std::string(), nullptr);
+    settings->SetWebsiteSettingDefaultScope(
+        origin_url, GURL(), ContentSettingsType::APP_BANNER, nullptr);
     settings->FlushLossyWebsiteSettings();
   }
 }

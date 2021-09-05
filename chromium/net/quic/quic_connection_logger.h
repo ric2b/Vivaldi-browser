@@ -46,9 +46,17 @@ class NET_EXPORT_PRIVATE QuicConnectionLogger
   void OnFrameAddedToPacket(const quic::QuicFrame& frame) override;
   void OnStreamFrameCoalesced(const quic::QuicStreamFrame& frame) override;
 
-  // QuicConnectionDebugVisitor Interface
+  // quic::QuicConnectionDebugVisitor Interface
   void OnPacketSent(const quic::SerializedPacket& serialized_packet,
                     quic::TransmissionType transmission_type,
+                    quic::QuicTime sent_time) override;
+  void OnPacketSent(quic::QuicPacketNumber packet_number,
+                    quic::QuicPacketLength packet_length,
+                    bool has_crypto_handshake,
+                    quic::TransmissionType transmission_type,
+                    quic::EncryptionLevel encryption_level,
+                    const quic::QuicFrames& retransmittable_frames,
+                    const quic::QuicFrames& nonretransmittable_frames,
                     quic::QuicTime sent_time) override;
   void OnIncomingAck(quic::QuicPacketNumber ack_packet_number,
                      quic::EncryptionLevel ack_decrypted_level,
@@ -73,7 +81,9 @@ class NET_EXPORT_PRIVATE QuicConnectionLogger
       quic::EncryptionLevel decryption_level) override;
   void OnDuplicatePacket(quic::QuicPacketNumber packet_number) override;
   void OnProtocolVersionMismatch(quic::ParsedQuicVersion version) override;
-  void OnPacketHeader(const quic::QuicPacketHeader& header) override;
+  void OnPacketHeader(const quic::QuicPacketHeader& header,
+                      quic::QuicTime receive_time,
+                      quic::EncryptionLevel level) override;
   void OnPathChallengeFrame(const quic::QuicPathChallengeFrame& frame) override;
   void OnPathResponseFrame(const quic::QuicPathResponseFrame& frame) override;
   void OnCryptoFrame(const quic::QuicCryptoFrame& frame) override;

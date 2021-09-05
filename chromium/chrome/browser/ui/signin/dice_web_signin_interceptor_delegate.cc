@@ -16,9 +16,9 @@ DiceWebSigninInterceptorDelegate::~DiceWebSigninInterceptorDelegate() = default;
 void DiceWebSigninInterceptorDelegate::ShowSigninInterceptionBubble(
     content::WebContents* web_contents,
     const BubbleParameters& bubble_parameters,
-    base::OnceCallback<void(bool)> callback) {
+    base::OnceCallback<void(SigninInterceptionResult)> callback) {
   if (!web_contents) {
-    std::move(callback).Run(false);
+    std::move(callback).Run(SigninInterceptionResult::kNotDisplayed);
     return;
   }
   ShowSigninInterceptionBubbleInternal(
@@ -28,6 +28,5 @@ void DiceWebSigninInterceptorDelegate::ShowSigninInterceptionBubble(
 
 void DiceWebSigninInterceptorDelegate::ShowProfileCustomizationBubble(
     Browser* browser) {
-  // TODO(https://crbug.com/1130945): implement the customization bubble.
-  NOTIMPLEMENTED();
+  ShowProfileCustomizationBubbleInternal(browser);
 }

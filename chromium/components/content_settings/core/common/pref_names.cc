@@ -37,8 +37,6 @@ const char kManagedDefaultNotificationsSetting[] =
     "profile.managed_default_content_settings.notifications";
 const char kManagedDefaultMediaStreamSetting[] =
     "profile.managed_default_content_settings.media_stream";
-const char kManagedDefaultPluginsSetting[] =
-    "profile.managed_default_content_settings.plugins";
 const char kManagedDefaultPopupsSetting[] =
     "profile.managed_default_content_settings.popups";
 const char kManagedDefaultSensorsSetting[] =
@@ -84,10 +82,6 @@ const char kManagedNotificationsAllowedForUrls[] =
     "profile.managed_notifications_allowed_for_urls";
 const char kManagedNotificationsBlockedForUrls[] =
     "profile.managed_notifications_blocked_for_urls";
-const char kManagedPluginsAllowedForUrls[] =
-    "profile.managed_plugins_allowed_for_urls";
-const char kManagedPluginsBlockedForUrls[] =
-    "profile.managed_plugins_blocked_for_urls";
 const char kManagedPopupsAllowedForUrls[] =
     "profile.managed_popups_allowed_for_urls";
 const char kManagedPopupsBlockedForUrls[] =
@@ -117,10 +111,17 @@ const char kManagedSerialBlockedForUrls[] =
 const char kManagedInsecurePrivateNetworkAllowedForUrls[] =
     "profile.managed_insecure_private_network_allowed_for_urls";
 
-// Boolean indicating whether the quiet UX is enabled for notification
+// Boolean indicating whether the quiet UI is enabled for notification
 // permission requests.
 const char kEnableQuietNotificationPermissionUi[] =
     "profile.content_settings.enable_quiet_permission_ui.notifications";
+
+// Enum indicating by which method the quiet UI has been enabled for
+// notification permission requests. This is stored as of M88 and will be
+// backfilled if the quiet UI is enabled but this preference has no value.
+const char kQuietNotificationPermissionUiEnablingMethod[] =
+    "profile.content_settings.enable_quiet_permission_ui_enabling_method."
+    "notifications";
 
 #if defined(OS_ANDROID)
 // Enable vibration for web notifications.

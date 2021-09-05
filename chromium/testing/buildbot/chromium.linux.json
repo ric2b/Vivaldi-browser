@@ -25,9 +25,12 @@
         "test_id_prefix": "ninja://third_party/abseil-cpp:absl_hardening_tests/"
       },
       {
+        "args": [
+          "angle_unittests"
+        ],
         "merge": {
           "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -39,7 +42,8 @@
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "test": "angle_unittests",
-        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/"
+        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/",
+        "use_isolated_scripts_api": true
       },
       {
         "merge": {
@@ -403,6 +407,23 @@
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
+        "test": "crashpad_tests",
+        "test_id_prefix": "ninja://third_party/crashpad/crashpad:crashpad_tests/"
+      },
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
         "test": "crypto_unittests",
         "test_id_prefix": "ninja://crypto:crypto_unittests/"
       },
@@ -575,6 +596,23 @@
         },
         "test": "libjingle_xmpp_unittests",
         "test_id_prefix": "ninja://third_party/libjingle_xmpp:libjingle_xmpp_unittests/"
+      },
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "liburlpattern_unittests",
+        "test_id_prefix": "ninja://third_party/liburlpattern:liburlpattern_unittests/"
       },
       {
         "merge": {
@@ -891,9 +929,12 @@
         "test_id_prefix": "ninja://third_party/abseil-cpp:absl_hardening_tests/"
       },
       {
+        "args": [
+          "angle_unittests"
+        ],
         "merge": {
           "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -905,7 +946,8 @@
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "test": "angle_unittests",
-        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/"
+        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/",
+        "use_isolated_scripts_api": true
       },
       {
         "merge": {
@@ -1286,6 +1328,23 @@
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
+        "test": "crashpad_tests",
+        "test_id_prefix": "ninja://third_party/crashpad/crashpad:crashpad_tests/"
+      },
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
         "test": "crypto_unittests",
         "test_id_prefix": "ninja://crypto:crypto_unittests/"
       },
@@ -1475,6 +1534,23 @@
         },
         "test": "libjingle_xmpp_unittests",
         "test_id_prefix": "ninja://third_party/libjingle_xmpp:libjingle_xmpp_unittests/"
+      },
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "liburlpattern_unittests",
+        "test_id_prefix": "ninja://third_party/liburlpattern:liburlpattern_unittests/"
       },
       {
         "merge": {
@@ -1833,7 +1909,6 @@
       },
       {
         "args": [
-          "--child-arg=--ozone-platform=headless",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -2100,7 +2175,6 @@
       },
       {
         "args": [
-          "--child-arg=--ozone-platform=headless",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -2697,7 +2771,6 @@
       },
       {
         "args": [
-          "--child-arg=--ozone-platform=headless",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -2917,16 +2990,15 @@
     "isolated_scripts": [
       {
         "args": [
-          "bin/run_standalone_angle_unittests",
+          "bin/run_angle_unittests",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
-        "isolate_name": "standalone_angle_unittests",
+        "isolate_name": "angle_unittests",
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
-        "name": "standalone_angle_unittests",
-        "should_retry_with_patch": false,
+        "name": "angle_unittests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -2938,7 +3010,7 @@
           ],
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
-        "test_id_prefix": "ninja://third_party/angle/src/tests:standalone_angle_unittests/"
+        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/"
       }
     ]
   },
@@ -2988,7 +3060,6 @@
       },
       {
         "args": [
-          "--child-arg=--ozone-platform=headless",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3285,7 +3356,6 @@
       },
       {
         "args": [
-          "--child-arg=--ozone-platform=headless",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -3855,7 +3925,6 @@
       },
       {
         "args": [
-          "--child-arg=--ozone-platform=headless",
           "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
         ],
         "merge": {
@@ -4086,6 +4155,29 @@
     "isolated_scripts": [
       {
         "args": [
+          "bin/run_angle_unittests",
+          "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
+        ],
+        "isolate_name": "angle_unittests",
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
+        },
+        "name": "angle_unittests",
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "kvm": "1",
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/"
+      },
+      {
+        "args": [
           "--num-retries=3",
           "--platform=fuchsia"
         ],
@@ -4097,6 +4189,9 @@
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "blink_web_tests",
+        "resultdb": {
+          "enable": true
+        },
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -4125,6 +4220,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "context_lost_validating_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -4154,6 +4252,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "depth_capture_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -4183,6 +4284,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "gpu_process_launch_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -4212,6 +4316,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "hardware_accelerated_feature_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -4245,6 +4352,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "info_collection_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -4280,6 +4390,9 @@
           "--gerrit-patchset=${patch_set}",
           "--buildbucket-id=${buildbucket_build_id}"
         ],
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -4309,6 +4422,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "screenshot_sync_tests",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -4325,30 +4441,6 @@
       },
       {
         "args": [
-          "bin/run_standalone_angle_unittests",
-          "--runner-logs-dir=${ISOLATED_OUTDIR}/runner_logs"
-        ],
-        "isolate_name": "standalone_angle_unittests",
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
-        },
-        "name": "standalone_angle_unittests",
-        "should_retry_with_patch": false,
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "kvm": "1",
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test_id_prefix": "ninja://third_party/angle/src/tests:standalone_angle_unittests/"
-      },
-      {
-        "args": [
           "trace_test",
           "--show-stdout",
           "--browser=web-engine-shell",
@@ -4362,6 +4454,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "trace_test",
+        "resultdb": {
+          "enable": true
+        },
         "should_retry_with_patch": false,
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -4860,8 +4955,7 @@
       {
         "args": [
           "--ozone-platform=x11",
-          "--enable-features=UseOzonePlatform",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/ozone-linux.x11_browser_tests.filter"
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -4906,8 +5000,7 @@
       {
         "args": [
           "--ozone-platform=x11",
-          "--enable-features=UseOzonePlatform",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/ozone-linux.x11_content_browsertests.filter"
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -5040,8 +5133,7 @@
       {
         "args": [
           "--ozone-platform=x11",
-          "--enable-features=UseOzonePlatform",
-          "--test-launcher-filter-file=../../testing/buildbot/filters/ozone-linux.x11_views_unittests.filter"
+          "--enable-features=UseOzonePlatform"
         ],
         "merge": {
           "args": [],
@@ -5805,10 +5897,13 @@
         "test_id_prefix": "ninja://ui/accessibility:accessibility_unittests/"
       },
       {
+        "args": [
+          "angle_unittests"
+        ],
         "isolate_profile_data": true,
         "merge": {
           "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -5820,7 +5915,8 @@
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "test": "angle_unittests",
-        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/"
+        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/",
+        "use_isolated_scripts_api": true
       },
       {
         "isolate_profile_data": true,
@@ -6207,29 +6303,6 @@
         "test_id_prefix": "ninja://content/test:content_browsertests/"
       },
       {
-        "args": [
-          "--enable-features=StorageServiceOutOfProcess"
-        ],
-        "isolate_profile_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "storage_service_content_browsertests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 2
-        },
-        "test": "content_browsertests",
-        "test_id_prefix": "ninja://content/test:content_browsertests/"
-      },
-      {
         "isolate_profile_data": true,
         "merge": {
           "args": [],
@@ -6397,28 +6470,6 @@
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "extensions_browsertests",
-        "test_id_prefix": "ninja://extensions:extensions_browsertests/"
-      },
-      {
-        "args": [
-          "--enable-features=StorageServiceOutOfProcess"
-        ],
-        "isolate_profile_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "storage_service_extensions_browsertests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -6631,29 +6682,6 @@
         "test_id_prefix": "ninja://chrome/test:interactive_ui_tests/"
       },
       {
-        "args": [
-          "--enable-features=StorageServiceOutOfProcess"
-        ],
-        "isolate_profile_data": true,
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "storage_service_interactive_ui_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 3
-        },
-        "test": "interactive_ui_tests",
-        "test_id_prefix": "ninja://chrome/test:interactive_ui_tests/"
-      },
-      {
         "isolate_profile_data": true,
         "merge": {
           "args": [],
@@ -6724,6 +6752,24 @@
         },
         "test": "libjingle_xmpp_unittests",
         "test_id_prefix": "ninja://third_party/libjingle_xmpp:libjingle_xmpp_unittests/"
+      },
+      {
+        "isolate_profile_data": true,
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "liburlpattern_unittests",
+        "test_id_prefix": "ninja://third_party/liburlpattern:liburlpattern_unittests/"
       },
       {
         "isolate_profile_data": true,
@@ -7474,6 +7520,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "blink_python_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -7499,6 +7548,9 @@
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "blink_web_tests",
+        "resultdb": {
+          "enable": true
+        },
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -7561,6 +7613,10 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "content_shell_crash_test",
+        "resultdb": {
+          "enable": true,
+          "result_format": "single"
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -7580,6 +7636,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "extension_docserver_python_unittests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -7599,6 +7658,10 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "flatbuffers_unittests",
+        "resultdb": {
+          "enable": true,
+          "result_format": "single"
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -7618,6 +7681,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "grit_python_unittests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -7637,6 +7703,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "metrics_python_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -7656,6 +7725,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "mojo_python_unittests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -7684,6 +7756,9 @@
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "non_skia_renderer_swiftshader_blink_web_tests",
+        "resultdb": {
+          "enable": true
+        },
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -7713,6 +7788,9 @@
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "not_site_per_process_blink_web_tests",
+        "resultdb": {
+          "enable": true
+        },
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -7734,6 +7812,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "telemetry_gpu_unittests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -7759,6 +7840,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "telemetry_perf_unittests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -7784,6 +7868,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "telemetry_unittests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -7826,7 +7913,6 @@
           "--num-retries=3",
           "--additional-driver-flag=--enable-gpu-rasterization",
           "--additional-driver-flag=--enable-features=UseSkiaRenderer,Vulkan",
-          "--additional-driver-flag=--force-gpu-rasterization",
           "--additional-driver-flag=--enable-oop-rasterization",
           "--additional-driver-flag=--use-vulkan=swiftshader",
           "--additional-driver-flag=--disable-vulkan-fallback-to-gl-for-testing",
@@ -7846,6 +7932,9 @@
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "vulkan_swiftshader_blink_web_tests",
+        "resultdb": {
+          "enable": true
+        },
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -7929,9 +8018,12 @@
         "test_id_prefix": "ninja://ui/accessibility:accessibility_unittests/"
       },
       {
+        "args": [
+          "angle_unittests"
+        ],
         "merge": {
           "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -7943,7 +8035,8 @@
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "test": "angle_unittests",
-        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/"
+        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/",
+        "use_isolated_scripts_api": true
       },
       {
         "merge": {
@@ -8309,28 +8402,6 @@
         "test_id_prefix": "ninja://content/test:content_browsertests/"
       },
       {
-        "args": [
-          "--enable-features=StorageServiceOutOfProcess"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "storage_service_content_browsertests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 4
-        },
-        "test": "content_browsertests",
-        "test_id_prefix": "ninja://content/test:content_browsertests/"
-      },
-      {
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -8488,27 +8559,6 @@
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "extensions_browsertests",
-        "test_id_prefix": "ninja://extensions:extensions_browsertests/"
-      },
-      {
-        "args": [
-          "--enable-features=StorageServiceOutOfProcess"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "storage_service_extensions_browsertests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -8710,28 +8760,6 @@
         "test_id_prefix": "ninja://chrome/test:interactive_ui_tests/"
       },
       {
-        "args": [
-          "--enable-features=StorageServiceOutOfProcess"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "storage_service_interactive_ui_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-16.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 3
-        },
-        "test": "interactive_ui_tests",
-        "test_id_prefix": "ninja://chrome/test:interactive_ui_tests/"
-      },
-      {
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -8798,6 +8826,23 @@
         },
         "test": "libjingle_xmpp_unittests",
         "test_id_prefix": "ninja://third_party/libjingle_xmpp:libjingle_xmpp_unittests/"
+      },
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-16.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "liburlpattern_unittests",
+        "test_id_prefix": "ninja://third_party/liburlpattern:liburlpattern_unittests/"
       },
       {
         "merge": {
@@ -9507,6 +9552,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "blink_python_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -9531,6 +9579,9 @@
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "blink_web_tests",
+        "resultdb": {
+          "enable": true
+        },
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -9551,6 +9602,10 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "content_shell_crash_test",
+        "resultdb": {
+          "enable": true,
+          "result_format": "single"
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -9569,6 +9624,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "extension_docserver_python_unittests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -9587,6 +9645,10 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "flatbuffers_unittests",
+        "resultdb": {
+          "enable": true,
+          "result_format": "single"
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -9605,6 +9667,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "grit_python_unittests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -9623,6 +9688,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "metrics_python_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -9641,6 +9709,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "telemetry_gpu_unittests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -9665,6 +9736,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "telemetry_perf_unittests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -9689,6 +9763,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "telemetry_unittests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -9940,6 +10017,9 @@
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "blink_web_tests",
+        "resultdb": {
+          "enable": true
+        },
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -10002,9 +10082,12 @@
         "test_id_prefix": "ninja://ui/accessibility:accessibility_unittests/"
       },
       {
+        "args": [
+          "angle_unittests"
+        ],
         "merge": {
           "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+          "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -10016,7 +10099,8 @@
           "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
         },
         "test": "angle_unittests",
-        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/"
+        "test_id_prefix": "ninja://third_party/angle/src/tests:angle_unittests/",
+        "use_isolated_scripts_api": true
       },
       {
         "merge": {
@@ -10385,28 +10469,6 @@
         "test_id_prefix": "ninja://content/test:content_browsertests/"
       },
       {
-        "args": [
-          "--enable-features=StorageServiceOutOfProcess"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "storage_service_content_browsertests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-14.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 2
-        },
-        "test": "content_browsertests",
-        "test_id_prefix": "ninja://content/test:content_browsertests/"
-      },
-      {
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -10564,27 +10626,6 @@
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
         },
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-14.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
-        },
-        "test": "extensions_browsertests",
-        "test_id_prefix": "ninja://extensions:extensions_browsertests/"
-      },
-      {
-        "args": [
-          "--enable-features=StorageServiceOutOfProcess"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "storage_service_extensions_browsertests",
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -10786,28 +10827,6 @@
         "test_id_prefix": "ninja://chrome/test:interactive_ui_tests/"
       },
       {
-        "args": [
-          "--enable-features=StorageServiceOutOfProcess"
-        ],
-        "merge": {
-          "args": [],
-          "script": "//testing/merge_scripts/standard_gtest_merge.py"
-        },
-        "name": "storage_service_interactive_ui_tests",
-        "swarming": {
-          "can_use_on_swarming_builders": true,
-          "dimension_sets": [
-            {
-              "os": "Ubuntu-14.04"
-            }
-          ],
-          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com",
-          "shards": 3
-        },
-        "test": "interactive_ui_tests",
-        "test_id_prefix": "ninja://chrome/test:interactive_ui_tests/"
-      },
-      {
         "merge": {
           "args": [],
           "script": "//testing/merge_scripts/standard_gtest_merge.py"
@@ -10874,6 +10893,23 @@
         },
         "test": "libjingle_xmpp_unittests",
         "test_id_prefix": "ninja://third_party/libjingle_xmpp:libjingle_xmpp_unittests/"
+      },
+      {
+        "merge": {
+          "args": [],
+          "script": "//testing/merge_scripts/standard_gtest_merge.py"
+        },
+        "swarming": {
+          "can_use_on_swarming_builders": true,
+          "dimension_sets": [
+            {
+              "os": "Ubuntu-14.04"
+            }
+          ],
+          "service_account": "chromium-tester@chops-service-accounts.iam.gserviceaccount.com"
+        },
+        "test": "liburlpattern_unittests",
+        "test_id_prefix": "ninja://third_party/liburlpattern:liburlpattern_unittests/"
       },
       {
         "merge": {
@@ -11582,6 +11618,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "blink_python_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -11605,6 +11644,9 @@
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "blink_web_tests",
+        "resultdb": {
+          "enable": true
+        },
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -11664,6 +11706,10 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "content_shell_crash_test",
+        "resultdb": {
+          "enable": true,
+          "result_format": "single"
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -11682,6 +11728,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "extension_docserver_python_unittests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -11700,6 +11749,10 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "flatbuffers_unittests",
+        "resultdb": {
+          "enable": true,
+          "result_format": "single"
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -11718,6 +11771,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "grit_python_unittests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -11736,6 +11792,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "metrics_python_tests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -11754,6 +11813,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "mojo_python_unittests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -11781,6 +11843,9 @@
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "non_skia_renderer_swiftshader_blink_web_tests",
+        "resultdb": {
+          "enable": true
+        },
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -11808,6 +11873,9 @@
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "not_site_per_process_blink_web_tests",
+        "resultdb": {
+          "enable": true
+        },
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,
@@ -11828,6 +11896,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "telemetry_gpu_unittests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -11852,6 +11923,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "telemetry_perf_unittests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -11876,6 +11950,9 @@
           "script": "//testing/merge_scripts/standard_isolated_script_merge.py"
         },
         "name": "telemetry_unittests",
+        "resultdb": {
+          "enable": true
+        },
         "swarming": {
           "can_use_on_swarming_builders": true,
           "dimension_sets": [
@@ -11917,7 +11994,6 @@
           "--num-retries=3",
           "--additional-driver-flag=--enable-gpu-rasterization",
           "--additional-driver-flag=--enable-features=UseSkiaRenderer,Vulkan",
-          "--additional-driver-flag=--force-gpu-rasterization",
           "--additional-driver-flag=--enable-oop-rasterization",
           "--additional-driver-flag=--use-vulkan=swiftshader",
           "--additional-driver-flag=--disable-vulkan-fallback-to-gl-for-testing",
@@ -11936,6 +12012,9 @@
           "script": "//third_party/blink/tools/merge_web_test_results.py"
         },
         "name": "vulkan_swiftshader_blink_web_tests",
+        "resultdb": {
+          "enable": true
+        },
         "results_handler": "layout tests",
         "swarming": {
           "can_use_on_swarming_builders": true,

@@ -12,7 +12,9 @@
 #include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "gpu/config/gpu_info.h"
 #include "gpu/config/gpu_preferences.h"
@@ -277,7 +279,7 @@ void VdaVideoDecoder::Initialize(const VideoDecoderConfig& config,
   // (https://crbug.com/929565). We should support reinitialization for profile
   // changes. We limit this support as small as possible for safety.
   const bool is_profile_change =
-#if defined(OS_CHROMEOS) && BUILDFLAG(USE_VAAPI)
+#if BUILDFLAG(IS_ASH) && BUILDFLAG(USE_VAAPI)
       config_.profile() != config.profile();
 #else
       false;

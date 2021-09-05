@@ -16,7 +16,6 @@
 #include "chrome/browser/engagement/site_engagement_observer.h"
 #include "chrome/browser/installable/installable_logging.h"
 #include "chrome/browser/installable/installable_manager.h"
-#include "chrome/browser/web_applications/components/web_app_id.h"
 #include "content/public/browser/media_player_id.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -195,9 +194,9 @@ class AppBannerManager : public content::WebContentsObserver,
   // GetAppIdentifier() must return a valid value for this method to work.
   bool CheckIfShouldShowBanner();
 
-  // Returns whether the site would prefer a related application be installed
-  // instead of the PWA or a related application is already installed.
-  bool ShouldDeferToRelatedApplication() const;
+  // Returns whether the site would prefer a related non-web app be installed
+  // instead of the PWA or a related non-web app is already installed.
+  bool ShouldDeferToRelatedNonWebApp() const;
 
   // Return a string identifying this app for metrics.
   virtual std::string GetAppIdentifier();
@@ -219,11 +218,14 @@ class AppBannerManager : public content::WebContentsObserver,
   bool ShouldBypassEngagementChecks() const;
 
   // Returns whether installation of apps from |platform| is supported on the
-  // current device.
-  virtual bool IsSupportedAppPlatform(const base::string16& platform) const = 0;
+  // current device and the platform delivers apps considered replacements for
+  // web apps.
+  virtual bool IsSupportedNonWebAppPlatform(
+      const base::string16& platform) const = 0;
 
-  // Returns whether |related_app| is already installed.
-  virtual bool IsRelatedAppInstalled(
+  // Returns whether |related_app| is already installed and considered a
+  // replacement for the manifest's web app.
+  virtual bool IsRelatedNonWebAppInstalled(
       const blink::Manifest::RelatedApplication& related_app) const = 0;
 
   // Returns whether the current page is already installed as a web app, or

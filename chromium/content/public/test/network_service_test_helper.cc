@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/environment.h"
 #include "base/feature_list.h"
@@ -232,6 +232,14 @@ class NetworkServiceTestHelper::NetworkServiceTestImpl
                          ->GetPeerToPeerConnectionsCountChange();
 
     std::move(callback).Run(count);
+  }
+
+  void GetPreloadedFirstPartySetEntriesCount(
+      GetPreloadedFirstPartySetEntriesCountCallback callback) override {
+    std::move(callback).Run(
+        network::NetworkService::GetNetworkServiceForTesting()
+            ->preloaded_first_party_sets()
+            ->size());
   }
 
   void GetEnvironmentVariableValue(

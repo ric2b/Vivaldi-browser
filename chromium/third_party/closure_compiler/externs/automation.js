@@ -39,6 +39,7 @@ chrome.automation.EventType = {
   DOCUMENT_SELECTION_CHANGED: 'documentSelectionChanged',
   DOCUMENT_TITLE_CHANGED: 'documentTitleChanged',
   DROPEFFECT_CHANGED: 'dropeffectChanged',
+  EDITABLE_TEXT_CHANGED: 'editableTextChanged',
   ENABLED_CHANGED: 'enabledChanged',
   END_OF_TEST: 'endOfTest',
   EXPANDED: 'expanded',
@@ -91,9 +92,14 @@ chrome.automation.EventType = {
   NAME_CHANGED: 'nameChanged',
   OBJECT_ATTRIBUTE_CHANGED: 'objectAttributeChanged',
   OTHER_ATTRIBUTE_CHANGED: 'otherAttributeChanged',
+  PARENT_CHANGED: 'parentChanged',
   PLACEHOLDER_CHANGED: 'placeholderChanged',
   PORTAL_ACTIVATED: 'portalActivated',
   POSITION_IN_SET_CHANGED: 'positionInSetChanged',
+  RANGE_VALUE_CHANGED: 'rangeValueChanged',
+  RANGE_VALUE_MAX_CHANGED: 'rangeValueMaxChanged',
+  RANGE_VALUE_MIN_CHANGED: 'rangeValueMinChanged',
+  RANGE_VALUE_STEP_CHANGED: 'rangeValueStepChanged',
   READONLY_CHANGED: 'readonlyChanged',
   RELATED_NODE_CHANGED: 'relatedNodeChanged',
   REQUIRED_STATE_CHANGED: 'requiredStateChanged',
@@ -107,8 +113,10 @@ chrome.automation.EventType = {
   SCROLLED_TO_ANCHOR: 'scrolledToAnchor',
   SELECTED_CHANGED: 'selectedChanged',
   SELECTED_CHILDREN_CHANGED: 'selectedChildrenChanged',
+  SELECTED_VALUE_CHANGED: 'selectedValueChanged',
   SELECTION: 'selection',
   SELECTION_ADD: 'selectionAdd',
+  SELECTION_IN_TEXT_FIELD_CHANGED: 'selectionInTextFieldChanged',
   SELECTION_REMOVE: 'selectionRemove',
   SET_SIZE_CHANGED: 'setSizeChanged',
   SHOW: 'show',
@@ -116,15 +124,13 @@ chrome.automation.EventType = {
   STATE_CHANGED: 'stateChanged',
   SUBTREE_CREATED: 'subtreeCreated',
   TEXT_ATTRIBUTE_CHANGED: 'textAttributeChanged',
-  TEXT_CHANGED: 'textChanged',
   TEXT_SELECTION_CHANGED: 'textSelectionChanged',
+  TEXT_CHANGED: 'textChanged',
   TOOLTIP_CLOSED: 'tooltipClosed',
   TOOLTIP_OPENED: 'tooltipOpened',
   TREE_CHANGED: 'treeChanged',
+  VALUE_IN_TEXT_FIELD_CHANGED: 'valueInTextFieldChanged',
   VALUE_CHANGED: 'valueChanged',
-  VALUE_MAX_CHANGED: 'valueMaxChanged',
-  VALUE_MIN_CHANGED: 'valueMinChanged',
-  VALUE_STEP_CHANGED: 'valueStepChanged',
   WINDOW_ACTIVATED: 'windowActivated',
   WINDOW_DEACTIVATED: 'windowDeactivated',
   WINDOW_VISIBILITY_CHANGED: 'windowVisibilityChanged',
@@ -203,6 +209,8 @@ chrome.automation.RoleType = {
   DOC_NOTE_REF: 'docNoteRef',
   DOC_NOTICE: 'docNotice',
   DOC_PAGE_BREAK: 'docPageBreak',
+  DOC_PAGE_FOOTER: 'docPageFooter',
+  DOC_PAGE_HEADER: 'docPageHeader',
   DOC_PAGE_LIST: 'docPageList',
   DOC_PART: 'docPart',
   DOC_PREFACE: 'docPreface',
@@ -1165,6 +1173,14 @@ chrome.automation.AutomationNode.prototype.unclippedLocation;
 chrome.automation.AutomationNode.prototype.description;
 
 /**
+ * Description of the state of the checkbox. Used only when the node is
+ * checkable.
+ * @type {(string|undefined)}
+ * @see https://developer.chrome.com/extensions/automation#type-checkedStateDescription
+ */
+chrome.automation.AutomationNode.prototype.checkedStateDescription;
+
+/**
  * The placeholder for this text field, if any.
  * @type {(string|undefined)}
  * @see https://developer.chrome.com/extensions/automation#type-placeholder
@@ -1591,6 +1607,13 @@ chrome.automation.AutomationNode.prototype.selectionEndOffset;
  * @see https://developer.chrome.com/extensions/automation#type-selectionEndAffinity
  */
 chrome.automation.AutomationNode.prototype.selectionEndAffinity;
+
+/**
+ * Indicates that the node is marked user-select:none
+ * @type {(boolean|undefined)}
+ * @see https://developer.chrome.com/extensions/automation#type-notUserSelectableStyle
+ */
+chrome.automation.AutomationNode.prototype.notUserSelectableStyle;
 
 /**
  * The current value for this range.

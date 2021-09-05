@@ -135,6 +135,7 @@ class WebTestControlHost : public WebContentsObserver,
   std::unique_ptr<BluetoothChooser> RunBluetoothChooser(
       RenderFrameHost* frame,
       const BluetoothChooser::EventHandler& event_handler);
+  void RequestToLockMouse(WebContents* web_contents);
 
   WebTestResultPrinter* printer() { return printer_.get(); }
   void set_printer(WebTestResultPrinter* printer) { printer_.reset(printer); }
@@ -158,6 +159,10 @@ class WebTestControlHost : public WebContentsObserver,
   void DidUpdateFaviconURL(
       RenderFrameHost* render_frame_host,
       const std::vector<blink::mojom::FaviconURLPtr>& candidates) override;
+  void RenderViewHostChanged(RenderViewHost* old_host,
+                             RenderViewHost* new_host) override;
+  void RenderViewDeleted(RenderViewHost* render_view_host) override;
+  void DidFinishNavigation(NavigationHandle* navigation_handle) override;
 
   // RenderProcessHostObserver implementation.
   void RenderProcessHostDestroyed(
@@ -240,6 +245,13 @@ class WebTestControlHost : public WebContentsObserver,
   void RegisterIsolatedFileSystem(
       const std::vector<base::FilePath>& file_paths,
       RegisterIsolatedFileSystemCallback callback) override;
+  void DropPointerLock() override;
+  void SetPointerLockWillFail() override;
+  void SetPointerLockWillRespondAsynchronously() override;
+  void AllowPointerLock() override;
+  void WorkItemAdded(mojom::WorkItemPtr work_item) override;
+  void RequestWorkItem() override;
+  void WorkQueueStatesChanged(base::Value changed_work_queue_states) override;
 
   void DiscardMainWindow();
   void CloseTestOpenedWindows();
@@ -348,6 +360,13 @@ class WebTestControlHost : public WebContentsObserver,
   // renderer created while test is in progress).
   base::DictionaryValue accumulated_web_test_runtime_flags_changes_;
 
+  // Work items to be processed in the TestRunner on the renderer process
+  // that hosts the main window's main frame.
+  base::circular_deque<mojom::WorkItemPtr> work_queue_;
+
+  // Properties of the work queue.
+  base::DictionaryValue work_queue_states_;
+
   mojom::WebTestRendererDumpResultPtr renderer_dump_result_;
   std::string navigation_history_dump_;
   base::Optional<SkBitmap> pixel_dump_;
@@ -385,6 +404,14 @@ class WebTestControlHost : public WebContentsObserver,
       receiver_bindings_;
 
   base::ScopedTempDir writable_directory_for_tests_;
+
+  enum class NextPointerLockAction {
+    kWillSucceed,
+    kTestWillRespond,
+    kWillFail,
+  };
+  NextPointerLockAction next_pointer_lock_action_ =
+      NextPointerLockAction::kWillSucceed;
 
   SEQUENCE_CHECKER(sequence_checker_);
 

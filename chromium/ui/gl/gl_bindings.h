@@ -37,7 +37,14 @@
 #elif defined(OS_APPLE)
 #include <OpenGL/OpenGL.h>
 #elif defined(USE_GLX)
+using Display = struct _XDisplay;
+using Bool = int;
+using Status = int;
 using XID = unsigned long;
+using Colormap = XID;
+using Font = XID;
+using Pixmap = XID;
+using Window = XID;
 using GLXPixmap = XID;
 using GLXWindow = XID;
 using GLXDrawable = XID;
@@ -47,7 +54,6 @@ using GLXContext = struct __GLXcontextRec*;
 using GLXFBConfig = struct __GLXFBConfigRec*;
 struct XVisualInfo;
 
-#include "ui/gfx/x/x11.h"
 
 #include <GL/glxext.h>
 #include <GL/glxtokens.h>
@@ -127,6 +133,7 @@ struct XVisualInfo;
 
 // GL_ANGLE_robust_resource_initialization
 #define GL_ROBUST_RESOURCE_INITIALIZATION_ANGLE 0x93AB
+#define GL_RESOURCE_INITIALIZED_ANGLE 0x969F
 
 // GL_ANGLE_request_extension
 #define GL_REQUESTABLE_EXTENSIONS_ANGLE 0x93A8

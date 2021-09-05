@@ -1502,7 +1502,7 @@ bool BatchShortcutAction(
 // where no deletion occurred because directory is non-empty.
 bool RemoveShortcutFolderIfEmpty(ShellUtil::ShortcutLocation location,
                                  ShellUtil::ShellChange level) {
-  // Explicitly whitelist locations, since accidental calls can be very harmful.
+  // Explicitly allow locations, since accidental calls can be very harmful.
   if (location !=
           ShellUtil::SHORTCUT_LOCATION_START_MENU_CHROME_DIR_DEPRECATED &&
       location != ShellUtil::SHORTCUT_LOCATION_START_MENU_CHROME_APPS_DIR &&
@@ -1533,9 +1533,110 @@ base::string16 ShortenAppModelIdComponent(const base::string16& component,
          component.substr(component.length() - ((desired_length + 1) / 2));
 }
 
-}  // namespace
+} // anonymous namespace
 
 #include "installer/win/vivaldi_shell_util.inc"
+
+namespace {
+
+bool RegisterChromeBrowserImpl(const base::FilePath& chrome_exe,
+                               const base::string16& unique_suffix,
+                               bool elevate_if_not_admin,
+                               bool best_effort_no_rollback) {
+  base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
+
+  base::string16 suffix;
+  if (!unique_suffix.empty()) {
+    suffix = unique_suffix;
+  } else if (command_line.HasSwitch(
+                 installer::switches::kRegisterChromeBrowserSuffix)) {
+    suffix = command_line.GetSwitchValueNative(
+        installer::switches::kRegisterChromeBrowserSuffix);
+  } else if (command_line.HasSwitch(vivaldi::constants::kVivaldiStandalone)) {
+    vivaldi::GetPathSpecificSuffix(chrome_exe, &suffix);
+  } else if (!GetInstallationSpecificSuffix(chrome_exe, &suffix)) {
+    return false;
+  }
+
+  RemoveRunVerbOnWindows8();
+
+  vivaldi::RemoveDelegateExecuteForVivaldi(chrome_exe, suffix);
+
+  bool user_level = InstallUtil::IsPerUserInstall();
+  HKEY root = DetermineRegistrationRoot(user_level);
+
+  // Look only in HKLM for system-level installs (otherwise, if a user-level
+  // install is also present, it will lead IsChromeRegistered() to think this
+  // system-level install isn't registered properly as it is shadowed by the
+  // user-level install's registrations).
+  uint32_t look_for_in = user_level ? RegistryEntry::LOOK_IN_HKCU_THEN_HKLM
+                                    : RegistryEntry::LOOK_IN_HKLM;
+
+  // Check if chrome is already registered with this suffix.
+  if (IsChromeRegistered(chrome_exe, suffix, look_for_in))
+    return true;
+
+  // Ensure that the shell is notified of the mutations below. Specific exit
+  // points may disable this if no mutations are made.
+  base::ScopedClosureRunner notify_on_exit(base::BindOnce([] {
+    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+  }));
+
+  // Do the full registration at user-level or if the user is an admin.
+  if (root == HKEY_CURRENT_USER || IsUserAnAdmin()) {
+    std::vector<std::unique_ptr<RegistryEntry>> progid_and_appreg_entries;
+    std::vector<std::unique_ptr<RegistryEntry>> shell_entries;
+    GetChromeProgIdEntries(chrome_exe, suffix, &progid_and_appreg_entries);
+    GetChromeAppRegistrationEntries(chrome_exe, suffix,
+                                    &progid_and_appreg_entries);
+    GetShellIntegrationEntries(chrome_exe, suffix, &shell_entries);
+    return ShellUtil::AddRegistryEntries(root, progid_and_appreg_entries,
+                                         best_effort_no_rollback) &&
+           ShellUtil::AddRegistryEntries(root, shell_entries,
+                                         best_effort_no_rollback);
+  }
+  // The installer is responsible for registration for system-level installs, so
+  // never try to do it here. Getting to this point for a system-level install
+  // likely means that IsChromeRegistered thinks registration is broken due to
+  // localization issues (see https://crbug.com/717913#c18). It likely is not,
+  // so return success to allow Chrome to be made default.
+  if (!user_level) {
+    notify_on_exit.Release().Reset();
+    return true;
+  }
+  // Try to elevate and register if requested for per-user installs if the user
+  // is not an admin.
+  if (elevate_if_not_admin &&
+      ElevateAndRegisterChrome(chrome_exe, suffix, base::string16())) {
+    return true;
+  }
+  // If we got to this point then all we can do is create ProgId and basic app
+  // registrations under HKCU.
+  std::vector<std::unique_ptr<RegistryEntry>> entries;
+  GetChromeProgIdEntries(chrome_exe, base::string16(), &entries);
+  // Prefer to use |suffix|; unless Chrome's ProgIds are already registered with
+  // no suffix (as per the old registration style): in which case some other
+  // registry entries could refer to them and since we were not able to set our
+  // HKLM entries above, we are better off not altering these here.
+  if (!AreEntriesAsDesired(entries, RegistryEntry::LOOK_IN_HKCU)) {
+    if (!suffix.empty()) {
+      entries.clear();
+      GetChromeProgIdEntries(chrome_exe, suffix, &entries);
+      GetChromeAppRegistrationEntries(chrome_exe, suffix, &entries);
+    }
+    return ShellUtil::AddRegistryEntries(HKEY_CURRENT_USER, entries,
+                                         best_effort_no_rollback);
+  }
+  // The ProgId is registered unsuffixed in HKCU, also register the app with
+  // Windows in HKCU (this was not done in the old registration style and thus
+  // needs to be done after the above check for the unsuffixed registration).
+  entries.clear();
+  GetChromeAppRegistrationEntries(chrome_exe, base::string16(), &entries);
+  return ShellUtil::AddRegistryEntries(HKEY_CURRENT_USER, entries,
+                                       best_effort_no_rollback);
+}
+
+}  // namespace
 
 const wchar_t* ShellUtil::kRegDefaultIcon = L"\\DefaultIcon";
 const wchar_t* ShellUtil::kRegShellPath = L"\\shell";
@@ -1715,7 +1816,7 @@ void ShellUtil::AddDefaultShortcutProperties(const base::FilePath& target_exe,
 bool ShellUtil::MoveExistingShortcut(ShortcutLocation old_location,
                                      ShortcutLocation new_location,
                                      const ShortcutProperties& properties) {
-  // Explicitly whitelist locations to which this is applicable.
+  // Explicitly allow locations to which this is applicable.
   if (old_location != SHORTCUT_LOCATION_START_MENU_CHROME_DIR_DEPRECATED ||
       new_location != SHORTCUT_LOCATION_START_MENU_ROOT) {
     NOTREACHED();
@@ -1739,7 +1840,7 @@ bool ShellUtil::MoveExistingShortcut(ShortcutLocation old_location,
 bool ShellUtil::CreateOrUpdateShortcut(ShortcutLocation location,
                                        const ShortcutProperties& properties,
                                        ShortcutOperation operation) {
-  // Explicitly whitelist locations to which this is applicable.
+  // Explicitly allow locations to which this is applicable.
   if (location != SHORTCUT_LOCATION_DESKTOP &&
       location != SHORTCUT_LOCATION_QUICK_LAUNCH &&
       location != SHORTCUT_LOCATION_START_MENU_ROOT &&
@@ -2237,93 +2338,16 @@ bool ShellUtil::ShowMakeChromeDefaultProtocolClientSystemUI(
 bool ShellUtil::RegisterChromeBrowser(const base::FilePath& chrome_exe,
                                       const base::string16& unique_suffix,
                                       bool elevate_if_not_admin) {
-  base::CommandLine& command_line = *base::CommandLine::ForCurrentProcess();
+  return RegisterChromeBrowserImpl(chrome_exe, unique_suffix,
+                                   elevate_if_not_admin,
+                                   /*best_effort_no_rollback=*/false);
+}
 
-  base::string16 suffix;
-  if (!unique_suffix.empty()) {
-    suffix = unique_suffix;
-  } else if (command_line.HasSwitch(
-                 installer::switches::kRegisterChromeBrowserSuffix)) {
-    suffix = command_line.GetSwitchValueNative(
-        installer::switches::kRegisterChromeBrowserSuffix);
-  } else if (command_line.HasSwitch(vivaldi::constants::kVivaldiStandalone)) {
-    vivaldi::GetPathSpecificSuffix(chrome_exe, &suffix);
-  } else if (!GetInstallationSpecificSuffix(chrome_exe, &suffix)) {
-    return false;
-  }
-
-  RemoveRunVerbOnWindows8();
-
-  vivaldi::RemoveDelegateExecuteForVivaldi(chrome_exe, suffix);
-
-  bool user_level = InstallUtil::IsPerUserInstall();
-  HKEY root = DetermineRegistrationRoot(user_level);
-
-  // Look only in HKLM for system-level installs (otherwise, if a user-level
-  // install is also present, it will lead IsChromeRegistered() to think this
-  // system-level install isn't registered properly as it is shadowed by the
-  // user-level install's registrations).
-  uint32_t look_for_in = user_level ? RegistryEntry::LOOK_IN_HKCU_THEN_HKLM
-                                    : RegistryEntry::LOOK_IN_HKLM;
-
-  // Check if chrome is already registered with this suffix.
-  if (IsChromeRegistered(chrome_exe, suffix, look_for_in))
-    return true;
-
-  // Ensure that the shell is notified of the mutations below. Specific exit
-  // points may disable this if no mutations are made.
-  base::ScopedClosureRunner notify_on_exit(base::BindOnce([] {
-    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
-  }));
-
-  // Do the full registration at user-level or if the user is an admin.
-  if (root == HKEY_CURRENT_USER || IsUserAnAdmin()) {
-    std::vector<std::unique_ptr<RegistryEntry>> progid_and_appreg_entries;
-    std::vector<std::unique_ptr<RegistryEntry>> shell_entries;
-    GetChromeProgIdEntries(chrome_exe, suffix, &progid_and_appreg_entries);
-    GetChromeAppRegistrationEntries(chrome_exe, suffix,
-                                    &progid_and_appreg_entries);
-    GetShellIntegrationEntries(chrome_exe, suffix, &shell_entries);
-    return AddRegistryEntries(root, progid_and_appreg_entries) &&
-           AddRegistryEntries(root, shell_entries);
-  }
-  // The installer is responsible for registration for system-level installs, so
-  // never try to do it here. Getting to this point for a system-level install
-  // likely means that IsChromeRegistered thinks registration is broken due to
-  // localization issues (see https://crbug.com/717913#c18). It likely is not,
-  // so return success to allow Chrome to be made default.
-  if (!user_level) {
-    notify_on_exit.Release().Reset();
-    return true;
-  }
-  // Try to elevate and register if requested for per-user installs if the user
-  // is not an admin.
-  if (elevate_if_not_admin &&
-      ElevateAndRegisterChrome(chrome_exe, suffix, base::string16())) {
-    return true;
-  }
-  // If we got to this point then all we can do is create ProgId and basic app
-  // registrations under HKCU.
-  std::vector<std::unique_ptr<RegistryEntry>> entries;
-  GetChromeProgIdEntries(chrome_exe, base::string16(), &entries);
-  // Prefer to use |suffix|; unless Chrome's ProgIds are already registered with
-  // no suffix (as per the old registration style): in which case some other
-  // registry entries could refer to them and since we were not able to set our
-  // HKLM entries above, we are better off not altering these here.
-  if (!AreEntriesAsDesired(entries, RegistryEntry::LOOK_IN_HKCU)) {
-    if (!suffix.empty()) {
-      entries.clear();
-      GetChromeProgIdEntries(chrome_exe, suffix, &entries);
-      GetChromeAppRegistrationEntries(chrome_exe, suffix, &entries);
-    }
-    return AddRegistryEntries(HKEY_CURRENT_USER, entries);
-  }
-  // The ProgId is registered unsuffixed in HKCU, also register the app with
-  // Windows in HKCU (this was not done in the old registration style and thus
-  // needs to be done after the above check for the unsuffixed registration).
-  entries.clear();
-  GetChromeAppRegistrationEntries(chrome_exe, base::string16(), &entries);
-  return AddRegistryEntries(HKEY_CURRENT_USER, entries);
+void ShellUtil::RegisterChromeBrowserBestEffort(
+    const base::FilePath& chrome_exe) {
+  RegisterChromeBrowserImpl(chrome_exe, base::string16(),
+                            /*elevate_if_not_admin=*/false,
+                            /*best_effort_no_rollback=*/true);
 }
 
 bool ShellUtil::RegisterChromeForProtocol(const base::FilePath& chrome_exe,
@@ -2563,38 +2587,79 @@ bool ShellUtil::DeleteFileAssociations(const base::string16& prog_id) {
 }
 
 // static
+bool ShellUtil::AddApplicationClass(
+    const base::string16& prog_id,
+    const base::CommandLine& shell_open_command_line,
+    const base::string16& application_name,
+    const base::string16& application_description,
+    const base::FilePath& icon_path) {
+  ApplicationInfo app_info;
+
+  app_info.prog_id = prog_id;
+  app_info.file_type_name = application_description;
+  app_info.file_type_icon_path = icon_path;
+  app_info.command_line =
+      shell_open_command_line.GetCommandLineStringForShell();
+  app_info.application_name = application_name;
+  app_info.application_icon_path = icon_path;
+  app_info.application_icon_index = 0;
+
+  std::vector<std::unique_ptr<RegistryEntry>> entries;
+  GetProgIdEntries(app_info, &entries);
+
+  return AreEntriesAsDesired(entries, RegistryEntry::LOOK_IN_HKCU) ||
+         AddRegistryEntries(HKEY_CURRENT_USER, entries);
+}
+
+// static
+bool ShellUtil::DeleteApplicationClass(const base::string16& prog_id) {
+  base::string16 prog_id_path(kRegClasses);
+  prog_id_path.push_back(base::FilePath::kSeparators[0]);
+  prog_id_path.append(prog_id);
+
+  // Delete the key HKEY_CURRENT_USER\Software\Classes\|prog_id|.
+  return InstallUtil::DeleteRegistryKey(HKEY_CURRENT_USER, prog_id_path,
+                                        WorkItem::kWow64Default);
+}
+
+// static
 ShellUtil::FileAssociationsAndAppName ShellUtil::GetFileAssociationsAndAppName(
     const base::string16& prog_id) {
   FileAssociationsAndAppName file_associations_and_app_name;
 
-  // Get list of handled file extensions from value FileExtensions at
-  // HKEY_CURRENT_USER\Software\Classes\|prog_id|.
   base::string16 prog_id_path(kRegClasses);
   prog_id_path.push_back(base::FilePath::kSeparators[0]);
   prog_id_path.append(prog_id);
+
+  // Get the app name from value ApplicationName at
+  // HKEY_CURRENT_USER\Software\Classes\|prog_id|\Application.
+  base::string16 application_path = prog_id_path + kRegApplication;
+  RegKey application_key(HKEY_CURRENT_USER, application_path.c_str(),
+                         KEY_QUERY_VALUE);
+  if (application_key.ReadValue(kRegApplicationName,
+                                &file_associations_and_app_name.app_name) !=
+      ERROR_SUCCESS) {
+    return file_associations_and_app_name;
+  }
+
+  // If present, Get list of handled file extensions from value FileExtensions
+  // at HKEY_CURRENT_USER\Software\Classes\|prog_id|.
   RegKey file_extensions_key(HKEY_CURRENT_USER, prog_id_path.c_str(),
                              KEY_QUERY_VALUE);
   base::string16 handled_file_extensions;
   if (file_extensions_key.ReadValue(
-          L"FileExtensions", &handled_file_extensions) != ERROR_SUCCESS) {
-    return FileAssociationsAndAppName();
-  }
-  std::vector<base::StringPiece16> file_associations_vec =
-      base::SplitStringPiece(base::StringPiece16(handled_file_extensions),
-                             base::StringPiece16(L";"), base::TRIM_WHITESPACE,
-                             base::SPLIT_WANT_NONEMPTY);
-  for (const auto& file_extension : file_associations_vec) {
-    // Skip over the leading '.' so that we return the same
-    // extensions as were passed to AddFileAssociations.
-    file_associations_and_app_name.file_associations.emplace(
-        file_extension.substr(1));
-  }
-  prog_id_path.append(kRegApplication);
-  RegKey prog_id_key(HKEY_CURRENT_USER, prog_id_path.c_str(), KEY_QUERY_VALUE);
-  if (prog_id_key.ReadValue(kRegApplicationName,
-                            &file_associations_and_app_name.app_name) !=
-      ERROR_SUCCESS) {
-    return FileAssociationsAndAppName();
+          L"FileExtensions", &handled_file_extensions) == ERROR_SUCCESS) {
+    std::vector<base::StringPiece16> file_associations_vec =
+        base::SplitStringPiece(base::StringPiece16(handled_file_extensions),
+                               base::StringPiece16(STRING16_LITERAL(";")),
+                               base::TRIM_WHITESPACE,
+                               base::SPLIT_WANT_NONEMPTY);
+    for (const auto& file_extension : file_associations_vec) {
+      // Skip over the leading '.' so that we return the same
+      // extensions as were passed to AddFileAssociations.
+      file_associations_and_app_name.file_associations.emplace(
+          file_extension.substr(1));
+    }
   }
   return file_associations_and_app_name;
 }
@@ -2618,9 +2683,11 @@ base::FilePath ShellUtil::GetApplicationPathForProgId(
 // static
 bool ShellUtil::AddRegistryEntries(
     HKEY root,
-    const std::vector<std::unique_ptr<RegistryEntry>>& entries) {
+    const std::vector<std::unique_ptr<RegistryEntry>>& entries,
+    bool best_effort_no_rollback) {
   std::unique_ptr<WorkItemList> items(WorkItem::CreateWorkItemList());
-
+  items->set_rollback_enabled(!best_effort_no_rollback);
+  items->set_best_effort(best_effort_no_rollback);
   for (const auto& entry : entries)
     entry->AddToWorkItemList(root, items.get());
 

@@ -5,7 +5,12 @@
 #include "chrome/browser/ui/views/borealis/borealis_installer_view.h"
 
 #include "base/bind.h"
+#include "chrome/browser/chromeos/borealis/borealis_context.h"
+#include "chrome/browser/chromeos/borealis/borealis_context_manager.h"
+#include "chrome/browser/chromeos/borealis/borealis_context_manager_factory.h"
 #include "chrome/browser/chromeos/borealis/borealis_installer_factory.h"
+#include "chrome/browser/chromeos/borealis/borealis_metrics.h"
+#include "chrome/browser/chromeos/borealis/borealis_task.h"
 #include "chrome/browser/chromeos/borealis/borealis_util.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
@@ -21,7 +26,10 @@
 #include "ui/strings/grit/ui_strings.h"
 
 using ::testing::_;
-using InstallationResult = borealis::BorealisInstaller::InstallationResult;
+using InstallationResult = borealis::BorealisInstallResult;
+
+namespace borealis {
+namespace {
 
 class BorealisInstallerMock : public borealis::BorealisInstaller {
  public:
@@ -35,6 +43,21 @@ class BorealisInstallerMock : public borealis::BorealisInstaller {
   MOCK_METHOD0(Cancel, void());
   MOCK_METHOD1(AddObserver, void(Observer*));
   MOCK_METHOD1(RemoveObserver, void(Observer*));
+};
+
+class BorealisContextManagerMock : public borealis::BorealisContextManager {
+ public:
+  BorealisContextManagerMock() = default;
+  ~BorealisContextManagerMock() = default;
+  BorealisContextManagerMock(const BorealisContextManagerMock&) = delete;
+  BorealisContextManagerMock& operator=(const BorealisContextManagerMock&) =
+      delete;
+
+  MOCK_METHOD(void,
+              StartBorealis,
+              (BorealisContextManager::ResultCallback),
+              ());
+  MOCK_METHOD(void, ShutDownBorealis, (), ());
 };
 
 class BorealisInstallerViewBrowserTest : public DialogBrowserTest {
@@ -52,6 +75,15 @@ class BorealisInstallerViewBrowserTest : public DialogBrowserTest {
                     base::BindRepeating([](content::BrowserContext* context)
                                             -> std::unique_ptr<KeyedService> {
                       return std::make_unique<BorealisInstallerMock>();
+                    })));
+    mock_context_manager_ =
+        static_cast<::testing::StrictMock<BorealisContextManagerMock>*>(
+            borealis::BorealisContextManagerFactory::GetInstance()
+                ->SetTestingFactoryAndUse(
+                    browser()->profile(),
+                    base::BindRepeating([](content::BrowserContext* context)
+                                            -> std::unique_ptr<KeyedService> {
+                      return std::make_unique<BorealisContextManagerMock>();
                     })));
   }
 
@@ -128,6 +160,7 @@ class BorealisInstallerViewBrowserTest : public DialogBrowserTest {
   }
 
   ::testing::StrictMock<BorealisInstallerMock>* mock_installer_;
+  ::testing::StrictMock<BorealisContextManagerMock>* mock_context_manager_;
   BorealisInstallerView* view_;
   base::string16 app_name_;
 
@@ -149,9 +182,10 @@ IN_PROC_BROWSER_TEST_F(BorealisInstallerViewBrowserTest, SucessfulInstall) {
   ShowUi("default");
   AcceptInstallation();
 
-  view_->OnInstallationEnded(InstallationResult::kCompleted);
+  view_->OnInstallationEnded(InstallationResult::kSuccess);
   ExpectInstallationCompletedSucessfully();
 
+  EXPECT_CALL(*mock_context_manager_, StartBorealis(_));
   EXPECT_CALL(*mock_installer_, RemoveObserver(_));
   view_->AcceptDialog();
 
@@ -161,6 +195,8 @@ IN_PROC_BROWSER_TEST_F(BorealisInstallerViewBrowserTest, SucessfulInstall) {
 IN_PROC_BROWSER_TEST_F(BorealisInstallerViewBrowserTest,
                        ConfirmationCancelled) {
   ShowUi("default");
+
+  EXPECT_CALL(*mock_installer_, Cancel());
   ClickCancel();
 }
 
@@ -175,7 +211,8 @@ IN_PROC_BROWSER_TEST_F(BorealisInstallerViewBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(BorealisInstallerViewBrowserTest,
                        InstallationSucessAfterRetry) {
-  InstallationResult error_type = InstallationResult::kOperationInProgress;
+  InstallationResult error_type =
+      InstallationResult::kBorealisInstallInProgress;
   ShowUi("default");
   AcceptInstallation();
 
@@ -190,9 +227,10 @@ IN_PROC_BROWSER_TEST_F(BorealisInstallerViewBrowserTest,
 
   AcceptInstallation();
 
-  view_->OnInstallationEnded(InstallationResult::kCompleted);
+  view_->OnInstallationEnded(InstallationResult::kSuccess);
   ExpectInstallationCompletedSucessfully();
 
+  EXPECT_CALL(*mock_context_manager_, StartBorealis(_));
   EXPECT_CALL(*mock_installer_, RemoveObserver(_));
   view_->AcceptDialog();
 
@@ -200,7 +238,8 @@ IN_PROC_BROWSER_TEST_F(BorealisInstallerViewBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(BorealisInstallerViewBrowserTest, InProgressError) {
-  InstallationResult error_type = InstallationResult::kOperationInProgress;
+  InstallationResult error_type =
+      InstallationResult::kBorealisInstallInProgress;
   ShowUi("default");
   AcceptInstallation();
 
@@ -217,7 +256,7 @@ IN_PROC_BROWSER_TEST_F(BorealisInstallerViewBrowserTest, InProgressError) {
 }
 
 IN_PROC_BROWSER_TEST_F(BorealisInstallerViewBrowserTest, NotAllowedError) {
-  InstallationResult error_type = InstallationResult::kNotAllowed;
+  InstallationResult error_type = InstallationResult::kBorealisNotAllowed;
   ShowUi("default");
   AcceptInstallation();
 
@@ -234,7 +273,7 @@ IN_PROC_BROWSER_TEST_F(BorealisInstallerViewBrowserTest, NotAllowedError) {
 }
 
 IN_PROC_BROWSER_TEST_F(BorealisInstallerViewBrowserTest, DlcInternalError) {
-  InstallationResult error_type = InstallationResult::kDlcInternal;
+  InstallationResult error_type = InstallationResult::kDlcInternalError;
   ShowUi("default");
   AcceptInstallation();
 
@@ -248,7 +287,7 @@ IN_PROC_BROWSER_TEST_F(BorealisInstallerViewBrowserTest, DlcInternalError) {
 }
 
 IN_PROC_BROWSER_TEST_F(BorealisInstallerViewBrowserTest, DlcBusyError) {
-  InstallationResult error_type = InstallationResult::kDlcBusy;
+  InstallationResult error_type = InstallationResult::kDlcBusyError;
   ShowUi("default");
   AcceptInstallation();
 
@@ -262,7 +301,7 @@ IN_PROC_BROWSER_TEST_F(BorealisInstallerViewBrowserTest, DlcBusyError) {
 }
 
 IN_PROC_BROWSER_TEST_F(BorealisInstallerViewBrowserTest, DlcNeedRebootError) {
-  InstallationResult error_type = InstallationResult::kDlcNeedReboot;
+  InstallationResult error_type = InstallationResult::kDlcNeedRebootError;
   ShowUi("default");
   AcceptInstallation();
 
@@ -276,7 +315,7 @@ IN_PROC_BROWSER_TEST_F(BorealisInstallerViewBrowserTest, DlcNeedRebootError) {
 }
 
 IN_PROC_BROWSER_TEST_F(BorealisInstallerViewBrowserTest, DlcNeedSpaceError) {
-  InstallationResult error_type = InstallationResult::kDlcNeedSpace;
+  InstallationResult error_type = InstallationResult::kDlcNeedSpaceError;
   ShowUi("default");
   AcceptInstallation();
 
@@ -290,7 +329,7 @@ IN_PROC_BROWSER_TEST_F(BorealisInstallerViewBrowserTest, DlcNeedSpaceError) {
 }
 
 IN_PROC_BROWSER_TEST_F(BorealisInstallerViewBrowserTest, DlcUnknownError) {
-  InstallationResult error_type = InstallationResult::kDlcUnknown;
+  InstallationResult error_type = InstallationResult::kDlcUnknownError;
   ShowUi("default");
   AcceptInstallation();
 
@@ -305,3 +344,5 @@ IN_PROC_BROWSER_TEST_F(BorealisInstallerViewBrowserTest, DlcUnknownError) {
 
   ClickCancel();
 }
+}  // namespace
+}  // namespace borealis

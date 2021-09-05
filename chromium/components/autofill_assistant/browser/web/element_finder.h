@@ -17,6 +17,7 @@
 #include "components/autofill_assistant/browser/devtools/devtools/domains/types_runtime.h"
 #include "components/autofill_assistant/browser/devtools/devtools_client.h"
 #include "components/autofill_assistant/browser/selector.h"
+#include "components/autofill_assistant/browser/web/js_snippets.h"
 #include "components/autofill_assistant/browser/web/web_controller_worker.h"
 
 namespace content {
@@ -102,7 +103,8 @@ class ElementFinder : public WebControllerWorker {
 
    private:
     std::vector<std::string> arguments_;
-    std::vector<std::string> lines_;
+    JsSnippet snippet_;
+    bool defined_query_all_deduplicated_ = false;
 
     // A number that's increased by each call to DeclareVariable() to make sure
     // we generate unique variables.
@@ -130,11 +132,26 @@ class ElementFinder : public WebControllerWorker {
     // footer. At that point, the variable "elements" contains the current set
     // of matches, as an array of nodes. It should be updated to contain the new
     // set of matches.
-    void AddLine(const std::string& line) { lines_.emplace_back(line); }
+    //
+    // IMPORTANT: Only pass strings that originate from hardcoded strings to
+    // this method.
+    void AddLine(const std::string& line) { snippet_.AddLine(line); }
 
+    // Adds a line of JavaScript code to the function that's made up of multiple
+    // parts to be concatenated together.
+    //
+    // IMPORTANT: Only pass strings that originate from hardcoded strings to
+    // this method.
     void AddLine(const std::vector<std::string>& line) {
-      lines_.emplace_back(base::StrCat(line));
+      snippet_.AddLine(line);
     }
+
+    // Define a |queryAllDeduplicated(roots, selector)| JS function that calls
+    // querySelectorAll(selector) on all |roots| (in order) and returns a
+    // deduplicated list of the matching elements.
+    // Calling this function a second time does not do anything; the function
+    // will be defined only once.
+    void DefineQueryAllDeduplicated();
   };
 
   // Finds the element, starting at |frame| and calls |callback|.
@@ -159,9 +176,47 @@ class ElementFinder : public WebControllerWorker {
   // Figures out what to do next given the current state.
   //
   // Most background operations in this worker end by updating the state and
-  // calling ExecuteNextTask() again either directly or through
-  // DecrementResponseCountAndContinue().
+  // calling ExecuteNextTask() again either directly or through Report*().
   void ExecuteNextTask();
+
+  // Prepare a batch of |n| tasks that are sent at the same time to compute one
+  // or more matching elements.
+  //
+  // After calling this, Report*(i, ...) should be called *exactly once* for all
+  // 0 <= i < n to report the tasks results.
+  //
+  // Once all tasks reported their result, the object ID of all matching
+  // elements will be added to |current_matches_| and ExecuteNextTask() will be
+  // called.
+  void PrepareBatchTasks(int n);
+
+  // Report that task with ID |task_id| didn't match any element.
+  void ReportNoMatchingElement(size_t task_id);
+
+  // Report that task with ID |task_id| matched a single element with ID
+  // |object_id|.
+  void ReportMatchingElement(size_t task_id, const std::string& object_id);
+
+  // Report that task with ID |task_id| matched multiple elements that are
+  // stored in the JS array with ID |object_id|.
+  void ReportMatchingElementsArray(size_t task_id,
+                                   const std::string& array_object_id);
+  void ReportMatchingElementsArrayRecursive(
+      size_t task_id,
+      const std::string& array_object_id,
+      std::unique_ptr<std::vector<std::string>> acc,
+      int index);
+  void OnReportMatchingElementsArrayRecursive(
+      size_t task_id,
+      const std::string& array_object_id,
+      std::unique_ptr<std::vector<std::string>> acc,
+      int index,
+      const DevtoolsClient::ReplyStatus& reply_status,
+      std::unique_ptr<runtime::CallFunctionOnResult> result);
+
+  // If all batch tasks reported their result, add all tasks results to
+  // |current_matches_| then call ExecuteNextTask().
+  void MaybeFinalizeBatchTasks();
 
   // Make sure there's exactly one match, set it |object_id_out| then return
   // true.
@@ -174,17 +229,11 @@ class ElementFinder : public WebControllerWorker {
   // required data is available.
   bool ConsumeOneMatchOrFail(std::string& object_id_out);
 
-  // Make sure there's at least one match, take one and put it in
-  // |object_id_out|, then return true.
+  // Make sure there's at least |index + 1| matches, take the one at that index
+  // and put it in |object_id_out|, then return true.
   //
-  // If there are no matches, send an error response and return false.
-  // If there are not enough matches yet, fetch them in the background and
-  // return false. This calls ExecuteNextTask() once matches have been fetched.
-  //
-  // If this returns true, continue processing. If this returns false, return
-  // from ExecuteNextTask(). ExecuteNextTask() will be called again once the
-  // required data is available.
-  bool ConsumeAnyMatchOrFail(std::string& object_id_out);
+  // If there are not enough matches, send an error response and return false.
+  bool ConsumeMatchAtOrFail(size_t index, std::string& object_id_out);
 
   // Make sure there's at least one match and move them all into
   // |matches_out|.
@@ -200,10 +249,12 @@ class ElementFinder : public WebControllerWorker {
 
   // Make sure there's at least one match and move them all into a single array.
   //
-  // If there are no matches, call SendResult() return false. If there are
-  // matches, but they're not in a single array, move the element into the array
-  // in the background and return false. ExecuteNextTask() is called again once
-  // the background tasks have executed.
+  // If there are no matches, call SendResult() and return false.
+  //
+  // If there are matches, return false directly and move the matches into
+  // an JS array in the background. ExecuteNextTask() is called again
+  // once the background tasks have executed, and calling this will return true
+  // and write the JS array id to |array_object_id_out|.
   bool ConsumeMatchArrayOrFail(std::string& array_object_id_out);
 
   void OnConsumeMatchArray(
@@ -211,7 +262,7 @@ class ElementFinder : public WebControllerWorker {
       std::unique_ptr<runtime::CallFunctionOnResult> result);
 
   // Gets a document element from the current frame and us it as root for the
-  // rest of the tasks.
+  // rest of the tasks, then call ExecuteNextTask().
   void GetDocumentElement();
   void OnGetDocumentElement(const DevtoolsClient::ReplyStatus& reply_status,
                             std::unique_ptr<runtime::EvaluateResult> result);
@@ -219,7 +270,8 @@ class ElementFinder : public WebControllerWorker {
   // Handle Javascript filters
   void ApplyJsFilters(const JsFilterBuilder& builder,
                       const std::vector<std::string>& object_ids);
-  void OnApplyJsFilters(const DevtoolsClient::ReplyStatus& reply_status,
+  void OnApplyJsFilters(size_t task_id,
+                        const DevtoolsClient::ReplyStatus& reply_status,
                         std::unique_ptr<runtime::CallFunctionOnResult> result);
 
   // Handle PSEUDO_TYPE
@@ -227,9 +279,11 @@ class ElementFinder : public WebControllerWorker {
                             const std::vector<std::string>& object_ids);
   void OnDescribeNodeForPseudoElement(
       dom::PseudoType pseudo_type,
+      size_t task_id,
       const DevtoolsClient::ReplyStatus& reply_status,
       std::unique_ptr<dom::DescribeNodeResult> result);
   void OnResolveNodeForPseudoElement(
+      size_t task_id,
       const DevtoolsClient::ReplyStatus& reply_status,
       std::unique_ptr<dom::ResolveNodeResult> result);
 
@@ -254,33 +308,15 @@ class ElementFinder : public WebControllerWorker {
       const DevtoolsClient::ReplyStatus& reply_status,
       std::unique_ptr<runtime::CallFunctionOnResult> result);
 
-  // Get elements from |array_object_ids|, and put the result into
-  // |element_matches_|.
-  //
-  // This calls ExecuteNextTask() once all the elements of all the arrays are in
-  // |element_matches_|. If |max_count| is -1, fetch until the end of the array,
-  // otherwise fetch |max_count| elements at most in each array.
-  void ResolveMatchArrays(const std::vector<std::string>& array_object_ids,
-                          int max_count);
+  // Fill |current_matches_js_array_| with the values in |current_matches_|
+  // starting from |index|, then clear |current_matches_| and call
+  // ExecuteNextTask().
+  void MoveMatchesToJSArrayRecursive(size_t index);
 
-  // ResolveMatchArrayRecursive calls itself recursively, incrementing |index|,
-  // as long as there are elements. The chain of calls end with
-  // DecrementResponseCountAndContinue() as there can be more than one such
-  // chains executing at a time.
-  void ResolveMatchArrayRecursive(const std::string& array_object_ids,
-                                  int index,
-                                  int max_count);
-
-  void OnResolveMatchArray(
-      const std::string& array_object_id,
-      int index,
-      int max_count,
+  void OnMoveMatchesToJSArrayRecursive(
+      size_t index,
       const DevtoolsClient::ReplyStatus& reply_status,
       std::unique_ptr<runtime::CallFunctionOnResult> result);
-
-  // Tracks pending_response_count_ and call ExecuteNextTask() once the count
-  // has reached 0.
-  void DecrementResponseCountAndContinue();
 
   content::WebContents* const web_contents_;
   DevtoolsClient* const devtools_client_;
@@ -304,30 +340,19 @@ class ElementFinder : public WebControllerWorker {
 
   // Object IDs of the current set matching elements. Cleared once it's used to
   // query or filter.
-  //
-  // More matches can be found in |current_match_arrays_|. Use one of the
-  // Consume*Match() function to current matches.
   std::vector<std::string> current_matches_;
 
-  // Object ID of arrays of at least 2 matching elements.
-  //
-  // More matches can be found in |current_matches_|. Use one of the
-  // Consume*Match() function to current matches.
-  std::vector<std::string> current_match_arrays_;
+  // Object ID of the JavaScript array of the currently matching elements. In
+  // practice, this is used by ConsumeMatchArrayOrFail() to convert
+  // |current_matches_| to a JavaScript array.
+  std::string current_matches_js_array_;
 
   // True if current_matches are pseudo-elements.
   bool matching_pseudo_elements_ = false;
 
-  // Number of responses still pending.
-  //
-  // Before starting several background operations in parallel, set this counter
-  // to the number of operations and make sure that
-  // DecrementResponseCountAndContinue() is called once the result of the
-  // operation has been processed and the state of ElementFinder updated.
-  // DecrementResponseCountAndContinue() will then make sure to call
-  // ExecuteNextTask() again once this counter has reached 0 to continue the
-  // work.
-  size_t pending_response_count_ = 0;
+  // The result of the background tasks. |tasks_results_[i]| contains the
+  // elements matched by task i, or nullptr if the task is still running.
+  std::vector<std::unique_ptr<std::vector<std::string>>> tasks_results_;
 
   std::vector<Result> frame_stack_;
 

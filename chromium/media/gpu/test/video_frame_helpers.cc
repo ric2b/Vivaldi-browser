@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
 #include "gpu/ipc/common/gpu_memory_buffer_support.h"
@@ -343,6 +343,28 @@ scoped_refptr<VideoFrame> CloneVideoFrame(
   }
 
   return dst_frame;
+}
+
+scoped_refptr<VideoFrame> CreateDmabufVideoFrame(
+    const VideoFrame* const frame) {
+#if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
+  if (!frame || frame->storage_type() != VideoFrame::STORAGE_GPU_MEMORY_BUFFER)
+    return nullptr;
+  gfx::GpuMemoryBuffer* gmb = frame->GetGpuMemoryBuffer();
+  gfx::GpuMemoryBufferHandle gmb_handle = gmb->CloneHandle();
+  DCHECK_EQ(gmb_handle.type, gfx::GpuMemoryBufferType::NATIVE_PIXMAP);
+  std::vector<ColorPlaneLayout> planes;
+  std::vector<base::ScopedFD> dmabuf_fds;
+  for (auto& plane : gmb_handle.native_pixmap_handle.planes) {
+    planes.emplace_back(plane.stride, plane.offset, plane.size);
+    dmabuf_fds.emplace_back(plane.fd.release());
+  }
+  return VideoFrame::WrapExternalDmabufs(
+      frame->layout(), frame->visible_rect(), frame->natural_size(),
+      std::move(dmabuf_fds), frame->timestamp());
+#else
+  return nullptr;
+#endif  // BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)}
 }
 
 scoped_refptr<VideoFrame> CreateGpuMemoryBufferVideoFrame(

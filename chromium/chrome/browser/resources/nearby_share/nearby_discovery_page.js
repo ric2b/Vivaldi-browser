@@ -8,17 +8,18 @@
  */
 
 import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
+import 'chrome://resources/cr_elements/cr_lottie/cr_lottie.m.js';
 import 'chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js';
 import 'chrome://resources/mojo/mojo/public/mojom/base/unguessable_token.mojom-lite.js';
 import 'chrome://resources/polymer/v3_0/iron-list/iron-list.js';
 import './nearby_device.js';
 import './nearby_preview.js';
-import './nearby_share_target_types.mojom-lite.js';
-import './nearby_share.mojom-lite.js';
+import './mojo/nearby_share_target_types.mojom-lite.js';
+import './mojo/nearby_share.mojom-lite.js';
 import './shared/nearby_page_template.m.js';
 import './strings.m.js';
 
-import {assert} from 'chrome://resources/js/assert.m.js';
+import {assert, assertNotReached} from 'chrome://resources/js/assert.m.js';
 import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
@@ -51,11 +52,12 @@ Polymer({
 
   properties: {
     /**
-     * The description of the attachments
-     * @type {?string}
+     * Preview info for the file(s) to be shared.
+     * @type {?nearbyShare.mojom.SendPreview}
      */
-    attachmentsDescription: {
-      type: String,
+    sendPreview: {
+      notify: true,
+      type: Object,
       value: null,
     },
 
@@ -177,7 +179,7 @@ Polymer({
     ];
 
     getDiscoveryManager().getSendPreview().then(result => {
-      this.attachmentsDescription = result.sendPreview.description;
+      this.sendPreview = result.sendPreview;
       // TODO (vecore): Setup icon and handle case of more than one attachment.
     });
 
@@ -206,7 +208,9 @@ Polymer({
 
   /** @private */
   clearShareTargets_() {
-    this.shareTargetMap_.clear();
+    if (this.shareTargetMap_) {
+      this.shareTargetMap_.clear();
+    }
     this.lastSelectedShareTarget_ = null;
     this.selectedShareTarget = null;
     this.shareTargets_ = [];
@@ -267,21 +271,43 @@ Polymer({
 
   /** @private */
   onSelectedShareTargetChanged_() {
-    // <iron-list> causes |this.$.deviceList.selectedItem| to be null if tapped
-    // a second time. Manually reselect the last item to preserve selection.
-    if (!this.$.deviceList.selectedItem && this.lastSelectedShareTarget_) {
-      this.$.deviceList.selectItem(this.lastSelectedShareTarget_);
+    const deviceList = this.$$('#deviceList');
+    if (!deviceList) {
+      // deviceList is in dom-if and may not be found
+      return;
     }
-    this.lastSelectedShareTarget_ = this.$.deviceList.selectedItem;
+
+    // <iron-list> causes |selectedItem| to be null if tapped a second time.
+    // Manually reselect the last item to preserve selection.
+    if (!deviceList.selectedItem && this.lastSelectedShareTarget_) {
+      // Use async to make sure this happens after |selectedItem| gets its
+      // final value.
+      this.async(() => {
+        const deviceList = this.$$('#deviceList');
+        if (!deviceList.selectedItem) {
+          deviceList.selectItem(this.lastSelectedShareTarget_);
+        }
+      });
+    } else {
+      this.lastSelectedShareTarget_ = deviceList.selectedItem;
+    }
   },
 
   /**
-   * @param {!nearbyShare.mojom.ShareTarget} shareTarget
+   * @param {boolean} bool
+   * @return {string}
+   * @private
+   */
+  boolToString_(bool) {
+    return bool.toString();
+  },
+
+  /**
    * @return {boolean}
    * @private
    */
-  isShareTargetSelected_(shareTarget) {
-    return this.selectedShareTarget === shareTarget;
+  isShareTargetsEmpty_() {
+    return this.shareTargets_.length === 0;
   },
 
   /**
@@ -296,5 +322,65 @@ Polymer({
       this.lastSelectedShareTarget_ = shareTarget;
       this.selectedShareTarget = shareTarget;
     }
+  },
+
+  /**
+   * Builds the html for the help text, applying the appropriate aria labels,
+   * and setting the href of the link to |linkUrl|. This function is largely
+   * copied from getAriaLabelledContent_ in <settings-localized-link>, which
+   * can't be used directly because this isn't part of settings.
+   * @param {string} linkUrl
+   * @return {string}
+   * @private
+   */
+  getAriaLabelledHelpText_(linkUrl) {
+    const tempEl = document.createElement('div');
+    const localizedString = this.i18nAdvanced('nearbyShareDiscoveryPageInfo');
+    tempEl.innerHTML = localizedString;
+
+    const ariaLabelledByIds = [];
+    tempEl.childNodes.forEach((node, index) => {
+      // Text nodes should be aria-hidden and associated with an element id
+      // that the anchor element can be aria-labelledby.
+      if (node.nodeType == Node.TEXT_NODE) {
+        const spanNode = document.createElement('span');
+        spanNode.textContent = node.textContent;
+        spanNode.id = `helpText${index}`;
+        ariaLabelledByIds.push(spanNode.id);
+        spanNode.setAttribute('aria-hidden', true);
+        node.replaceWith(spanNode);
+        return;
+      }
+      // The single element node with anchor tags should also be aria-labelledby
+      // itself in-order with respect to the entire string.
+      if (node.nodeType == Node.ELEMENT_NODE && node.nodeName == 'A') {
+        node.id = `helpLink`;
+        ariaLabelledByIds.push(node.id);
+        return;
+      }
+
+      // Only text and <a> nodes are allowed.
+      assertNotReached('nearbyShareDiscoveryPageInfo has invalid node types');
+    });
+
+    const anchorTags = tempEl.getElementsByTagName('a');
+    // In the event the localizedString contains only text nodes, populate the
+    // contents with the localizedString.
+    if (anchorTags.length == 0) {
+      return localizedString;
+    }
+
+    assert(
+        anchorTags.length == 1,
+        'nearbyShareDiscoveryPageInfo should contain exactly one anchor tag');
+    const anchorTag = anchorTags[0];
+    anchorTag.setAttribute('aria-labelledby', ariaLabelledByIds.join(' '));
+
+    if (linkUrl != '') {
+      anchorTag.href = linkUrl;
+      anchorTag.target = '_blank';
+    }
+
+    return tempEl.innerHTML;
   },
 });

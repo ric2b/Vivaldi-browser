@@ -30,6 +30,8 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
+import static org.chromium.base.test.util.CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL;
+import static org.chromium.base.test.util.CriteriaHelper.DEFAULT_POLLING_INTERVAL;
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.areAnimatorsEnabled;
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.closeFirstTabInTabSwitcher;
 import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.createTabGroup;
@@ -46,8 +48,6 @@ import static org.chromium.chrome.browser.tasks.tab_management.TabUiTestHelper.v
 import static org.chromium.chrome.test.util.ViewUtils.onViewWaiting;
 import static org.chromium.chrome.test.util.ViewUtils.waitForView;
 import static org.chromium.components.embedder_support.util.UrlConstants.NTP_URL;
-import static org.chromium.content_public.browser.test.util.CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL;
-import static org.chromium.content_public.browser.test.util.CriteriaHelper.DEFAULT_POLLING_INTERVAL;
 
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
@@ -82,18 +82,23 @@ import org.junit.runner.RunWith;
 import org.chromium.base.Callback;
 import org.chromium.base.GarbageCollectionTestUtils;
 import org.chromium.base.metrics.RecordHistogram;
+import org.chromium.base.test.util.ApplicationTestUtils;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.base.test.util.Restriction;
+import org.chromium.base.test.util.ScalableTimeout;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.DeferredStartupHandler;
 import org.chromium.chrome.browser.compositor.layouts.Layout;
 import org.chromium.chrome.browser.compositor.layouts.StaticLayout;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
+import org.chromium.chrome.browser.feed.shared.FeedFeatures;
 import org.chromium.chrome.browser.flags.CachedFeatureFlags;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -123,7 +128,6 @@ import org.chromium.chrome.tab_ui.R;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ActivityUtils;
-import org.chromium.chrome.test.util.ApplicationTestUtils;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.MenuUtils;
@@ -132,8 +136,6 @@ import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.DisableFeatures;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.content_public.browser.LoadUrlParams;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.WebContentsUtils;
 import org.chromium.net.test.EmbeddedTestServer;
@@ -273,6 +275,7 @@ public class StartSurfaceLayoutTest {
     @Feature({"RenderTest"})
     // clang-format off
     @CommandLineFlags.Add({BASE_PARAMS})
+    @DisabledTest(message = "https://crbug.com/1139807")
     @DisableIf.Build(sdk_is_greater_than = O_MR1, message = "crbug.com/1077552")
     public void testRenderGrid_10WebTabs_InitialScroll() throws IOException {
         // clang-format on
@@ -1135,6 +1138,7 @@ public class StartSurfaceLayoutTest {
     @Test
     @MediumTest
     @CommandLineFlags.Add({BASE_PARAMS})
+    @DisabledTest(message = "https://crbug.com/1138739")
     public void testThumbnailFetchingResult_defaultAspectRatio() throws Exception {
         prepareTabs(2, 0, mUrl);
         int oldJpegCount = RecordHistogram.getHistogramValueCountForTesting(
@@ -1344,6 +1348,7 @@ public class StartSurfaceLayoutTest {
     @Test
     @MediumTest
     @Feature("NewTabVariation")
+    @DisabledTest(message = "https://crbug.com/1144666")
     // clang-format off
     @Features.DisableFeatures({ChromeFeatureList.TAB_TO_GTS_ANIMATION + "<Study",
             ChromeFeatureList.CLOSE_TAB_SUGGESTIONS})
@@ -1457,6 +1462,7 @@ public class StartSurfaceLayoutTest {
     @Test
     @MediumTest
     // clang-format off
+    @DisabledTest(message = "https://crbug.com/1144666")
     @EnableFeatures({ChromeFeatureList.TAB_GROUPS_ANDROID,
         ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID})
     @CommandLineFlags.Add({BASE_PARAMS + "/enable_launch_polish/true"})
@@ -1581,7 +1587,7 @@ public class StartSurfaceLayoutTest {
         enterTabSwitcher(mActivityTestRule.getActivity());
 
         onView(withId(R.id.tab_list_view)).check(TabCountAssertion.havingTabCount(1));
-        onView(withId(R.id.search_button)).check(matches(not(isDisplayed())));
+        onView(withId(R.id.page_info_button)).check(matches(not(isDisplayed())));
     }
 
     @Test
@@ -1614,7 +1620,7 @@ public class StartSurfaceLayoutTest {
         enterTabSwitcher(mActivityTestRule.getActivity());
 
         onView(withId(R.id.tab_list_view)).check(TabCountAssertion.havingTabCount(1));
-        onView(withId(R.id.search_button)).check(matches(not(isDisplayed())));
+        onView(withId(R.id.page_info_button)).check(matches(not(isDisplayed())));
         Espresso.pressBack();
 
         // Navigate, and verify the chip is shown.
@@ -1623,7 +1629,7 @@ public class StartSurfaceLayoutTest {
         enterTabSwitcher(mActivityTestRule.getActivity());
 
         onView(withId(R.id.tab_list_view)).check(TabCountAssertion.havingTabCount(1));
-        onView(withId(R.id.search_button))
+        onView(withId(R.id.page_info_button))
                 .check(waitForView(allOf(withText(expectedTerm), isDisplayed())));
         Espresso.pressBack();
 
@@ -1639,7 +1645,7 @@ public class StartSurfaceLayoutTest {
         enterTabSwitcher(mActivityTestRule.getActivity());
 
         onView(withId(R.id.tab_list_view)).check(TabCountAssertion.havingTabCount(1));
-        onView(withId(R.id.search_button)).check(matches(not(isDisplayed())));
+        onView(withId(R.id.page_info_button)).check(matches(not(isDisplayed())));
         Espresso.pressBack();
 
         // Back to previous page, and verify the chip is back.
@@ -1648,15 +1654,15 @@ public class StartSurfaceLayoutTest {
         enterTabSwitcher(mActivityTestRule.getActivity());
 
         onView(withId(R.id.tab_list_view)).check(TabCountAssertion.havingTabCount(1));
-        onView(withId(R.id.search_button))
+        onView(withId(R.id.page_info_button))
                 .check(waitForView(allOf(withText(expectedTerm), isDisplayed())));
 
         // Click the chip and check the tab navigates back to the search result page.
         assertEquals(mUrl, ChromeTabUtils.getUrlStringOnUiThread(currentTab));
         OverviewModeBehaviorWatcher hideWatcher = TabUiTestHelper.createOverviewHideWatcher(cta);
-        onView(withId(R.id.search_button))
+        onView(withId(R.id.page_info_button))
                 .check(waitForView(allOf(withText(expectedTerm), isDisplayed())));
-        onView(withId(R.id.search_button)).perform(click());
+        onView(withId(R.id.page_info_button)).perform(click());
         hideWatcher.waitForBehavior();
         ChromeTabUtils.waitForTabPageLoaded(currentTab, searchUrl.get());
 
@@ -1665,7 +1671,7 @@ public class StartSurfaceLayoutTest {
         enterTabSwitcher(mActivityTestRule.getActivity());
 
         onView(withId(R.id.tab_list_view)).check(TabCountAssertion.havingTabCount(1));
-        onView(withId(R.id.search_button)).check(matches(not(isDisplayed())));
+        onView(withId(R.id.page_info_button)).check(matches(not(isDisplayed())));
     }
 
     @Test
@@ -1694,7 +1700,7 @@ public class StartSurfaceLayoutTest {
         enterTabSwitcher(mActivityTestRule.getActivity());
 
         onView(withId(R.id.tab_list_view)).check(TabCountAssertion.havingTabCount(1));
-        onView(withId(R.id.search_button)).check(matches(not(isDisplayed())));
+        onView(withId(R.id.page_info_button)).check(matches(not(isDisplayed())));
         Espresso.pressBack();
 
         // Navigate, and verify the chip is shown.
@@ -1703,7 +1709,7 @@ public class StartSurfaceLayoutTest {
         enterTabSwitcher(mActivityTestRule.getActivity());
 
         onView(withId(R.id.tab_list_view)).check(TabCountAssertion.havingTabCount(1));
-        onView(withId(R.id.search_button))
+        onView(withId(R.id.page_info_button))
                 .check(waitForView(allOf(withText(searchTerm), isDisplayed())));
 
         // Switch the default search engine from google.com to yahoo.com, the search chip icon
@@ -1711,7 +1717,7 @@ public class StartSurfaceLayoutTest {
         RecyclerView tabListRecyclerView = cta.findViewById(R.id.tab_list_view);
         ChipView chipView =
                 tabListRecyclerView.findViewHolderForAdapterPosition(0).itemView.findViewById(
-                        R.id.search_button);
+                        R.id.page_info_button);
         ChromeImageView iconImageView = (ChromeImageView) chipView.getChildAt(0);
         Drawable googleDrawable = iconImageView.getDrawable();
 
@@ -1751,6 +1757,7 @@ public class StartSurfaceLayoutTest {
 
     @Test
     @MediumTest
+    @DisabledTest(message = "https://crbug.com/1144666")
     @EnableFeatures({ChromeFeatureList.TAB_GROUPS_ANDROID})
     public void testTabGroupManualSelection_DisabledForSingleTab() {
         ChromeTabbedActivity cta = mActivityTestRule.getActivity();
@@ -1874,9 +1881,12 @@ public class StartSurfaceLayoutTest {
         mTabListDelegate = null;
         mActivityTestRule.setActivity(activity);
 
-        // A longer timeout is needed. Achieve that by using the CriteriaHelper.pollUiThread.
-        CriteriaHelper.pollUiThread(
-                () -> GarbageCollectionTestUtils.canBeGarbageCollected(activityRef));
+        // TODO(crbug.com/1129187): Looks like this doesn't work with FeedV2.
+        if (!FeedFeatures.isV2Enabled()) {
+            // A longer timeout is needed. Achieve that by using the CriteriaHelper.pollUiThread.
+            CriteriaHelper.pollUiThread(
+                    () -> GarbageCollectionTestUtils.canBeGarbageCollected(activityRef));
+        }
     }
 
     /**
@@ -1923,6 +1933,7 @@ public class StartSurfaceLayoutTest {
         AtomicBoolean tabModelRestoreCompleted = new AtomicBoolean(false);
         AtomicBoolean normalModelIsEmpty = new AtomicBoolean(true);
 
+        DeferredStartupHandler.setExpectingActivityStartupForTesting();
         ChromeTabbedActivity newActivity =
                 ApplicationTestUtils.recreateActivity(mActivityTestRule.getActivity());
 
@@ -1958,10 +1969,9 @@ public class StartSurfaceLayoutTest {
                 "New Activity current TabModel is not incognito");
         TestThreadUtils.runOnUiThreadBlocking(IncognitoUtils::closeAllIncognitoTabs);
 
-        CriteriaHelper.pollUiThread(
-                ()
-                        -> DeferredStartupHandler.getInstance().isDeferredStartupCompleteForApp(),
-                "Deferred startup never completed");
+        assertTrue("Deferred startup never completed",
+                DeferredStartupHandler.waitForDeferredStartupCompleteForTesting(
+                        ScalableTimeout.scaleTimeout(CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL)));
 
         CriteriaHelper.pollUiThread(()
                                             -> tabModelRestoreCompleted.get(),

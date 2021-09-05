@@ -7,15 +7,15 @@
 
 #import "ios/chrome/browser/ui/coordinators/chrome_coordinator.h"
 
+namespace password_manager {
+struct PasswordForm;
+}  // namespace password_manager
+
 @protocol ApplicationCommands;
 class Browser;
 class IOSChromePasswordCheckManager;
 @class PasswordIssuesCoordinator;
 @class ReauthenticationModule;
-
-namespace autofill {
-struct PasswordForm;
-}
 
 // Delegate for PasswordIssuesCoordinator.
 @protocol PasswordIssuesCoordinatorDelegate
@@ -26,7 +26,8 @@ struct PasswordForm;
 
 // Called when the user deleted password. Returns whether presenter will
 // handle it or not.
-- (BOOL)willHandlePasswordDeletion:(const autofill::PasswordForm&)password;
+- (BOOL)willHandlePasswordDeletion:
+    (const password_manager::PasswordForm&)password;
 
 @end
 

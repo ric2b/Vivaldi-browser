@@ -6,11 +6,6 @@
 
 namespace arc {
 
-// Controls whether ARC++ app runtime performance statistics collection is
-// enabled.
-const base::Feature kAppRuntimePerormanceStatistics{
-    "AppRuntimePerormanceStatistics", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Controls ACTION_BOOT_COMPLETED broadcast for third party applications on ARC.
 // When disabled, third party apps will not receive this broadcast.
 const base::Feature kBootCompletedBroadcastFeature {
@@ -25,11 +20,7 @@ const base::Feature kCleanArcDataOnRegularToChildTransitionFeature{
 
 // Controls experimental Custom Tabs feature for ARC.
 const base::Feature kCustomTabsExperimentFeature{
-    "ArcCustomTabsExperiment", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Controls whether ARC applications support zoom in/out.
-const base::Feature kEnableApplicationZoomFeature{
-    "ArcEnableApplicationZoomFeature", base::FEATURE_DISABLED_BY_DEFAULT};
+    "ArcCustomTabsExperiment", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls whether ARC handles child->regular account transition.
 const base::Feature kEnableChildToRegularTransitionFeature{

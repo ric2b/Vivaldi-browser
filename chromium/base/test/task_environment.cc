@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <memory>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/lazy_instance.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -24,7 +24,7 @@
 #include "base/task/simple_task_executor.h"
 #include "base/task/thread_pool/thread_pool_impl.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/test/test_timeouts.h"
 #include "base/thread_annotations.h"

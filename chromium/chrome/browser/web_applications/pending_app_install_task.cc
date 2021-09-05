@@ -20,10 +20,9 @@
 #include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/web_applications/components/install_finalizer.h"
 #include "chrome/browser/web_applications/components/install_manager.h"
-#include "chrome/browser/web_applications/components/os_integration_manager.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_ui_manager.h"
-#include "chrome/common/web_application_info.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "content/public/browser/browser_thread.h"
 
 namespace web_app {
@@ -221,6 +220,7 @@ void PendingAppInstallTask::InstallPlaceholder(ResultCallback callback) {
     case DisplayMode::kMinimalUi:
     case DisplayMode::kStandalone:
     case DisplayMode::kFullscreen:
+    case DisplayMode::kWindowControlsOverlay:
       web_app_info.open_as_window = true;
       break;
   }
@@ -267,6 +267,8 @@ void PendingAppInstallTask::OnWebAppInstalled(bool is_placeholder,
   InstallOsHooksOptions options;
   options.os_hooks[OsHookType::kShortcuts] =
       install_options_.add_to_applications_menu;
+  options.os_hooks[OsHookType::kShortcutsMenu] =
+      install_options_.add_to_applications_menu;
   options.add_to_desktop = install_options_.add_to_desktop;
   options.add_to_quick_launch_bar = install_options_.add_to_quick_launch_bar;
   options.os_hooks[OsHookType::kRunOnOsLogin] =
@@ -275,15 +277,21 @@ void PendingAppInstallTask::OnWebAppInstalled(bool is_placeholder,
   // TODO(crbug.com/1087219): Determine if |register_file_handlers| should be
   // configured from somewhere else rather than always true.
   options.os_hooks[OsHookType::kFileHandlers] = true;
-  options.os_hooks[OsHookType::kShortcutsMenu] = true;
 
   os_integration_manager_->InstallOsHooks(
       app_id,
-      base::BindOnce(
-          [](base::ScopedClosureRunner scoped_closure,
-             OsHooksResults os_hooks_results) { scoped_closure.RunAndReset(); },
-          std::move(scoped_closure)),
+      base::BindOnce(&PendingAppInstallTask::OnOsHooksCreated,
+                     weak_ptr_factory_.GetWeakPtr(), app_id,
+                     std::move(scoped_closure)),
       nullptr, options);
+}
+
+void PendingAppInstallTask::OnOsHooksCreated(
+    const AppId& app_id,
+    base::ScopedClosureRunner scoped_closure,
+    const OsHooksResults os_hooks_results) {
+  registrar_->NotifyWebAppInstalledWithOsHooks(app_id);
+  scoped_closure.RunAndReset();
 }
 
 void PendingAppInstallTask::TryAppInfoFactoryOnFailure(

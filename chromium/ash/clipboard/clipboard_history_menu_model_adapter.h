@@ -25,23 +25,19 @@ class MenuRunner;
 
 namespace ash {
 
+namespace ClipboardHistoryUtil {
+enum class Action;
+}  // namespace ClipboardHistoryUtil
+
 class ClipboardHistory;
 class ClipboardHistoryItem;
+class ClipboardHistoryItemView;
 class ClipboardHistoryResourceManager;
 
 // Used to show the clipboard history menu, which holds the last few things
 // copied.
 class ASH_EXPORT ClipboardHistoryMenuModelAdapter : views::MenuModelAdapter {
  public:
-  // Indicates the direction of selection movement.
-  enum class SelectionMoveDirection {
-    // Selection moves up to the previous menu item.
-    kPrevious,
-
-    // Selection moves down to the next menu item.
-    kNext
-  };
-
   static std::unique_ptr<ClipboardHistoryMenuModelAdapter> Create(
       ui::SimpleMenuModel::Delegate* delegate,
       base::RepeatingClosure menu_closed_callback,
@@ -76,18 +72,27 @@ class ASH_EXPORT ClipboardHistoryMenuModelAdapter : views::MenuModelAdapter {
   // Returns the count of menu items.
   int GetMenuItemsCount() const;
 
-  // Remove the menu item specified by `command_id`.
+  // Selects the menu item specified by `command_id`.
+  void SelectMenuItemWithCommandId(int command_id);
+
+  // Removes the menu item specified by `command_id`.
   void RemoveMenuItemWithCommandId(int command_id);
 
-  // Returns the direction in which the selection state should move if the menu
-  // item corresponding to `command_id` is deleted.
-  SelectionMoveDirection CalculateSelectionMoveAfterDeletion(
-      int command_id) const;
+  // Advances the pseudo focus (backward if `reverse` is true).
+  void AdvancePseudoFocus(bool reverse);
+
+  // Returns the action to take on the menu item specified by `command_id`.
+  ClipboardHistoryUtil::Action GetActionForCommandId(int command_id) const;
 
   // Returns menu bounds in screen coordinates.
   gfx::Rect GetMenuBoundsInScreenForTest() const;
 
   const views::MenuItemView* GetMenuItemViewAtForTest(int index) const;
+  views::MenuItemView* GetMenuItemViewAtForTest(int index);
+
+  void set_item_removal_callback_for_test(base::RepeatingClosure new_callback) {
+    item_removal_callback_for_test_ = std::move(new_callback);
+  }
 
  private:
   ClipboardHistoryMenuModelAdapter(
@@ -95,6 +100,19 @@ class ASH_EXPORT ClipboardHistoryMenuModelAdapter : views::MenuModelAdapter {
       base::RepeatingClosure menu_closed_callback,
       const ClipboardHistory* clipboard_history,
       const ClipboardHistoryResourceManager* resource_manager);
+
+  // Advances the pseduo focus from the selected history item view (backward if
+  // `reverse` is true).
+  void AdvancePseudoFocusFromSelectedItem(bool reverse);
+
+  // Returns the command id of the menu item to be selected if any after the
+  // menu item specified by `command_id` is deleted. If no menu item is
+  // selectable after deletion, an absent value is returned.
+  base::Optional<int> CalculateSelectedCommandIdAfterDeletion(
+      int command_id) const;
+
+  // Removes the item view specified by `command_id` from the root menu.
+  void RemoveItemView(int command_id);
 
   // views::MenuModelAdapter:
   views::MenuItemView* AppendMenuItem(views::MenuItemView* menu,
@@ -118,13 +136,24 @@ class ASH_EXPORT ClipboardHistoryMenuModelAdapter : views::MenuModelAdapter {
   // possible inconsistency between the menu model data and the clipboard
   // history data. For example, a new item is added to `clipboard_history_`
   // while the menu is showing.
+  // It updates synchronously when a item is removed.
   std::map<int, ClipboardHistoryItem> item_snapshots_;
+
+  // Stores mappings between command ids and history item view pointers.
+  // It updates synchronously when a item is removed.
+  std::map<int, ClipboardHistoryItemView*> item_views_by_command_id_;
 
   const ClipboardHistory* const clipboard_history_;
 
   // Resource manager used to fetch image models. Owned by
   // ClipboardHistoryController.
   const ClipboardHistoryResourceManager* const resource_manager_;
+
+  // Called when an item view is removed from the root menu.
+  base::RepeatingClosure item_removal_callback_for_test_;
+
+  base::WeakPtrFactory<ClipboardHistoryMenuModelAdapter> weak_ptr_factory_{
+      this};
 };
 
 }  // namespace ash

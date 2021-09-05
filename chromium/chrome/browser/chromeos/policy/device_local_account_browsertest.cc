@@ -16,8 +16,8 @@
 #include "ash/system/session/logout_confirmation_controller.h"
 #include "ash/system/session/logout_confirmation_dialog.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -35,7 +35,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
@@ -103,7 +102,6 @@
 #include "chrome/browser/ui/webui/chromeos/login/signin_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/terms_of_service_screen_handler.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
@@ -2811,12 +2809,6 @@ class AmbientAuthenticationManagedGuestSessionTest
     : public policy::DeviceLocalAccountTest,
       public testing::WithParamInterface<net::AmbientAuthAllowedProfileTypes> {
  public:
-  AmbientAuthenticationManagedGuestSessionTest() {
-    // Switching off the feature flags to test policies in isolation.
-    AmbientAuthenticationTestHelper::CookTheFeatureList(
-        scoped_feature_list_,
-        AmbientAuthenticationFeatureState::GUEST_OFF_INCOGNITO_OFF);
-  }
 
   void SetAmbientAuthPolicy(net::AmbientAuthAllowedProfileTypes value) {
     device_local_account_policy_.payload()
@@ -2847,9 +2839,6 @@ class AmbientAuthenticationManagedGuestSessionTest
     DCHECK(browser);
     return browser;
   }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 IN_PROC_BROWSER_TEST_P(AmbientAuthenticationManagedGuestSessionTest,

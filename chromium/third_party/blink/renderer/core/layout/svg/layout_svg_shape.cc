@@ -30,13 +30,13 @@
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/layout/layout_analyzer.h"
 #include "third_party/blink/renderer/core/layout/pointer_events_hit_rules.h"
-#include "third_party/blink/renderer/core/layout/svg/layout_svg_resource_paint_server.h"
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_root.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_layout_support.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_resources.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_resources_cache.h"
 #include "third_party/blink/renderer/core/layout/svg/transform_helper.h"
 #include "third_party/blink/renderer/core/layout/svg/transformed_hit_test_location.h"
+#include "third_party/blink/renderer/core/paint/svg_object_painter.h"
 #include "third_party/blink/renderer/core/paint/svg_shape_painter.h"
 #include "third_party/blink/renderer/core/svg/svg_geometry_element.h"
 #include "third_party/blink/renderer/core/svg/svg_length_context.h"
@@ -66,9 +66,10 @@ LayoutSVGShape::~LayoutSVGShape() = default;
 void LayoutSVGShape::StyleDidChange(StyleDifference diff,
                                     const ComputedStyle* old_style) {
   NOT_DESTROYED();
+  LayoutSVGModelObject::StyleDidChange(diff, old_style);
+
   transform_uses_reference_box_ =
       TransformHelper::DependsOnReferenceBox(StyleRef());
-  LayoutSVGModelObject::StyleDidChange(diff, old_style);
   SVGResources::UpdatePaints(*GetElement(), old_style, StyleRef());
 
   // Most of the stroke attributes (caps, joins, miters, width, etc.) will cause
@@ -83,6 +84,8 @@ void LayoutSVGShape::StyleDidChange(StyleDifference diff,
       stroke_path_cache_.reset();
     }
   }
+
+  SetTransformAffectsVectorEffect(HasNonScalingStroke());
 }
 
 void LayoutSVGShape::WillBeDestroyed() {
@@ -283,10 +286,6 @@ void LayoutSVGShape::UpdateLayout() {
   NOT_DESTROYED();
   LayoutAnalyzer::Scope analyzer(*this);
 
-  // Invalidate all resources of this client if our layout changed.
-  if (EverHadLayout() && SelfNeedsLayout())
-    SVGResourcesCache::ClientLayoutChanged(*this);
-
   // The cached stroke may be affected by the ancestor transform, and so needs
   // to be cleared regardless of whether the shape or bounds have changed.
   stroke_path_cache_.reset();
@@ -307,11 +306,15 @@ void LayoutSVGShape::UpdateLayout() {
       bbox_changed = true;
     }
     needs_shape_update_ = false;
-
-    local_visual_rect_ = StrokeBoundingBox();
     needs_boundaries_update_ = false;
-
     update_parent_boundaries = true;
+  }
+
+  // Invalidate all resources of this client if our reference box changed.
+  if (EverHadLayout() && bbox_changed) {
+    SVGResourceInvalidator resource_invalidator(*this);
+    resource_invalidator.InvalidateEffects();
+    resource_invalidator.InvalidatePaints();
   }
 
   if (!needs_transform_update_ && transform_uses_reference_box_) {
@@ -341,7 +344,7 @@ AffineTransform LayoutSVGShape::ComputeRootTransform() const {
   const LayoutObject* root = this;
   while (root && !root->IsSVGRoot())
     root = root->Parent();
-  return LocalToAncestorTransform(ToLayoutSVGRoot(root)).ToAffineTransform();
+  return LocalToAncestorTransform(To<LayoutSVGRoot>(root)).ToAffineTransform();
 }
 
 AffineTransform LayoutSVGShape::ComputeNonScalingStrokeTransform() const {

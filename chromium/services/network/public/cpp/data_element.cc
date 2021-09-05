@@ -40,15 +40,6 @@ void DataElement::SetToFilePathRange(
   expected_modification_time_ = expected_modification_time;
 }
 
-void DataElement::SetToBlobRange(const std::string& blob_uuid,
-                                 uint64_t offset,
-                                 uint64_t length) {
-  type_ = mojom::DataElementType::kBlob;
-  blob_uuid_ = blob_uuid;
-  offset_ = offset;
-  length_ = length;
-}
-
 void DataElement::SetToDataPipe(
     mojo::PendingRemote<mojom::DataPipeGetter> data_pipe_getter) {
   DCHECK(data_pipe_getter);
@@ -90,6 +81,13 @@ mojo::PendingRemote<mojom::DataPipeGetter> DataElement::CloneDataPipeGetter()
   return clone;
 }
 
+const mojo::PendingRemote<mojom::ChunkedDataPipeGetter>&
+DataElement::chunked_data_pipe_getter() const {
+  DCHECK(type_ == mojom::DataElementType::kChunkedDataPipe ||
+         type_ == mojom::DataElementType::kReadOnceStream);
+  return chunked_data_pipe_getter_;
+}
+
 mojo::PendingRemote<mojom::ChunkedDataPipeGetter>
 DataElement::ReleaseChunkedDataPipeGetter() {
   DCHECK(type_ == mojom::DataElementType::kChunkedDataPipe ||
@@ -115,9 +113,6 @@ void PrintTo(const DataElement& x, std::ostream* os) {
     case mojom::DataElementType::kFile:
       *os << "TYPE_FILE, path: " << x.path().AsUTF8Unsafe()
           << ", expected_modification_time: " << x.expected_modification_time();
-      break;
-    case mojom::DataElementType::kBlob:
-      *os << "TYPE_BLOB, uuid: " << x.blob_uuid();
       break;
     case mojom::DataElementType::kDataPipe:
       *os << "TYPE_DATA_PIPE";
@@ -145,8 +140,6 @@ bool operator==(const DataElement& a, const DataElement& b) {
     case mojom::DataElementType::kFile:
       return a.path() == b.path() &&
              a.expected_modification_time() == b.expected_modification_time();
-    case mojom::DataElementType::kBlob:
-      return a.blob_uuid() == b.blob_uuid();
     case mojom::DataElementType::kDataPipe:
       return false;
     case mojom::DataElementType::kChunkedDataPipe:

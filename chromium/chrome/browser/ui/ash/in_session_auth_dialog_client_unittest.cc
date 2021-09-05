@@ -9,7 +9,7 @@
 #include "base/callback.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chromeos/login/auth/fake_extended_authenticator.h"
@@ -40,14 +40,16 @@ class FakeInSessionAuthDialogController
 
   // ash::InSessionAuthDialogController:
   void SetClient(ash::InSessionAuthDialogClient* client) override {}
-  void ShowAuthenticationDialog(FinishCallback callback) override {}
+  void ShowAuthenticationDialog(aura::Window* source_window,
+                                const std::string& origin_name,
+                                FinishCallback callback) override {}
   void DestroyAuthenticationDialog() override {}
-  void AuthenticateUserWithPasswordOrPin(
-      const std::string& password,
-      OnAuthenticateCallback callback) override {}
+  void AuthenticateUserWithPin(const std::string& pin,
+                               OnAuthenticateCallback callback) override {}
   void AuthenticateUserWithFingerprint(
       base::OnceCallback<void(bool, ash::FingerprintState)> callback) override {
   }
+  void OpenInSessionAuthHelpPage() override {}
   void Cancel() override {}
 };
 

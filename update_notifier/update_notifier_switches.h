@@ -9,6 +9,11 @@ namespace vivaldi_update_notifier {
 extern const char kCheckForUpdates[];
 extern const char kQuit[];
 
+// Debugging helpers that are not supported in the official build.
+extern const char kUpdateExeDir[];
+extern const char kUpdateKeepRunning[];
+extern const char kUpdateVersion[];
+
 }  // namespace vivaldi_update_notifier
 
 #endif  // UPDATE_NOTIFIER_UPDATE_NOTIFIER_SWITCHES_H_

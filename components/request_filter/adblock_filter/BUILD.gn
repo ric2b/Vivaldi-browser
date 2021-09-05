@@ -99,6 +99,7 @@ source_set("unit_tests") {
 }
 
 ublock_dir = "//vivaldi/thirdparty/ublock"
+ublock_resources = ublock_dir + "/src/web_accessible_resources"
 ublock_output = "$root_out_dir/resources/vivaldi/ublock_resources"
 
 copy("ublock_license") {
@@ -119,17 +120,19 @@ action("package_ublock_data") {
   ]
 
   sources = [
-    ublock_dir,
+    ublock_resources,
   ]
 
   outputs = [
     resources
   ]
 
-  script = "//vivaldi/tools/ublock_resources_packager/ublock_resources_packager.py"
+  script = "//vivaldi/tools/resources2json/resources2json.py"
 
   args = [
-    "--ublock_dir=" + rebase_path(ublock_dir, root_build_dir),
-    "--output=" + rebase_path(resources, root_build_dir)
+    "--input_dir", rebase_path(ublock_resources, root_build_dir),
+    "--output", rebase_path(resources, root_build_dir),
+    "--exclude", "README.txt", "empty",
+    "--add-empty", "noop.css"
   ]
 }

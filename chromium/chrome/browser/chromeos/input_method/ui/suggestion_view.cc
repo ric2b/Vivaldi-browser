@@ -95,13 +95,15 @@ std::unique_ptr<views::View> CreateKeyContainer() {
 
 }  // namespace
 
-SuggestionView::SuggestionView(views::ButtonListener* listener)
-    : views::Button(listener) {
+SuggestionView::SuggestionView(PressedCallback callback)
+    : views::Button(std::move(callback)) {
   index_label_ = AddChildView(CreateIndexLabel());
   index_label_->SetVisible(false);
   suggestion_label_ = AddChildView(CreateSuggestionLabel());
   annotation_label_ = AddChildView(CreateAnnotationLabel());
   annotation_label_->SetVisible(false);
+
+  SetFocusBehavior(views::View::FocusBehavior::ACCESSIBLE_ONLY);
 }
 
 SuggestionView::~SuggestionView() = default;

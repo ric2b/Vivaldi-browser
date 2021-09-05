@@ -10,11 +10,13 @@ NearbyReceiveManager::NearbyReceiveManager(
     NearbySharingService* nearby_sharing_service)
     : nearby_sharing_service_(nearby_sharing_service) {
   DCHECK(nearby_sharing_service_);
+  nearby_sharing_service_->AddObserver(this);
 }
 
 NearbyReceiveManager::~NearbyReceiveManager() {
-  ExitHighVisibility(base::DoNothing());
+  UnregisterForegroundReceiveSurface(base::DoNothing());
   observers_set_.Clear();
+  nearby_sharing_service_->RemoveObserver(this);
 }
 
 void NearbyReceiveManager::OnTransferUpdate(
@@ -27,9 +29,9 @@ void NearbyReceiveManager::OnTransferUpdate(
                   << TransferMetadata::StatusToString(
                          transfer_metadata.status());
 
+  NotifyOnTransferUpdate(share_target, transfer_metadata);
   if (TransferMetadata::Status::kAwaitingLocalConfirmation == status) {
     share_targets_map_.insert_or_assign(share_target.id, share_target);
-    NotifyOnIncomingShare(share_target, transfer_metadata.token());
   } else if (transfer_metadata.is_final_status()) {
     share_targets_map_.erase(share_target.id);
   }
@@ -42,26 +44,22 @@ void NearbyReceiveManager::AddReceiveObserver(
 
 void NearbyReceiveManager::IsInHighVisibility(
     IsInHighVisibilityCallback callback) {
-  std::move(callback).Run(in_high_visibility_);
+  std::move(callback).Run(nearby_sharing_service_->IsInHighVisibility());
 }
 
-void NearbyReceiveManager::EnterHighVisibility(
-    EnterHighVisibilityCallback callback) {
+void NearbyReceiveManager::RegisterForegroundReceiveSurface(
+    RegisterForegroundReceiveSurfaceCallback callback) {
   bool success =
       NearbySharingService::StatusCodes::kOk ==
       nearby_sharing_service_->RegisterReceiveSurface(
           this, NearbySharingService::ReceiveSurfaceState::kForeground);
-  // We are in high-visibility only if the call was successful.
-  SetInHighVisibility(success);
   std::move(callback).Run(success);
 }
 
-void NearbyReceiveManager::ExitHighVisibility(
-    ExitHighVisibilityCallback callback) {
+void NearbyReceiveManager::UnregisterForegroundReceiveSurface(
+    UnregisterForegroundReceiveSurfaceCallback callback) {
   bool success = NearbySharingService::StatusCodes::kOk ==
                  nearby_sharing_service_->UnregisterReceiveSurface(this);
-  // We have only exited high visibility if the call was successful.
-  SetInHighVisibility(success ? false : this->in_high_visibility_);
   std::move(callback).Run(success);
 }
 
@@ -105,24 +103,16 @@ void NearbyReceiveManager::Reject(const base::UnguessableToken& share_target_id,
                         std::move(callback)));
 }
 
-void NearbyReceiveManager::SetInHighVisibility(bool in_high_visibility) {
-  if (in_high_visibility_ != in_high_visibility) {
-    in_high_visibility_ = in_high_visibility;
-    NotifyOnHighVisibilityChanged(in_high_visibility_);
-  }
-}
-
-void NearbyReceiveManager::NotifyOnHighVisibilityChanged(
-    bool in_high_visibility) {
+void NearbyReceiveManager::OnHighVisibilityChanged(bool in_high_visibility) {
   for (auto& remote : observers_set_) {
     remote->OnHighVisibilityChanged(in_high_visibility);
   }
 }
 
-void NearbyReceiveManager::NotifyOnIncomingShare(
+void NearbyReceiveManager::NotifyOnTransferUpdate(
     const ShareTarget& share_target,
-    const base::Optional<std::string>& connection_token) {
+    const TransferMetadata& metadata) {
   for (auto& remote : observers_set_) {
-    remote->OnIncomingShare(share_target, connection_token);
+    remote->OnTransferUpdate(share_target, metadata.ToMojo());
   }
 }

@@ -84,13 +84,12 @@ class BinaryUploadService : public KeyedService {
 
   // Callbacks used to pass along the results of scanning. The response protos
   // will only be populated if the result is SUCCESS.
-  using Callback = base::OnceCallback<void(Result, DeepScanningClientResponse)>;
   using ContentAnalysisCallback =
       base::OnceCallback<void(Result,
                               enterprise_connectors::ContentAnalysisResponse)>;
 
   // A class to encapsulate the a request for upload. This class will provide
-  // all the functionality needed to generate a DeepScanningRequest, and
+  // all the functionality needed to generate a ContentAnalysisRequest, and
   // subclasses will provide different sources of data to upload (e.g. file or
   // string).
   class Request {
@@ -157,6 +156,7 @@ class BinaryUploadService : public KeyedService {
     void clear_dlp_scan_request();
 
     // Methods for accessing the ContentAnalysisRequest.
+    enterprise_connectors::AnalysisConnector analysis_connector();
     const std::string& device_token() const;
     const std::string& request_token() const;
     const std::string& fcm_notification_token() const;
@@ -188,10 +188,13 @@ class BinaryUploadService : public KeyedService {
 
   // Indicates whether the browser is allowed to upload data.
   using AuthorizationCallback = base::OnceCallback<void(bool)>;
-  void IsAuthorized(const GURL& url, AuthorizationCallback callback);
+  void IsAuthorized(const GURL& url,
+                    AuthorizationCallback callback,
+                    enterprise_connectors::AnalysisConnector connector);
 
   // Run every callback in |authorization_callbacks_| and empty it.
-  void RunAuthorizationCallbacks();
+  void RunAuthorizationCallbacks(
+      enterprise_connectors::AnalysisConnector connector);
 
   // Resets |can_upload_data_|. Called every 24 hour by |timer_|.
   void ResetAuthorizationData(const GURL& url);
@@ -243,22 +246,20 @@ class BinaryUploadService : public KeyedService {
 
   // Callback once the response from the backend is received.
   void ValidateDataUploadRequestConnectorCallback(
+      enterprise_connectors::AnalysisConnector connector,
       BinaryUploadService::Result result,
       enterprise_connectors::ContentAnalysisResponse response);
-  void ValidateDataUploadRequestCallback(BinaryUploadService::Result result,
-                                         DeepScanningClientResponse response);
 
   // Callback once a request's instance ID is unregistered.
-  void InstanceIDUnregisteredCallback(bool);
+  void InstanceIDUnregisteredCallback(
+      enterprise_connectors::AnalysisConnector connector,
+      bool);
 
   void RecordRequestMetrics(Request* request, Result result);
   void RecordRequestMetrics(
       Request* request,
       Result result,
       const enterprise_connectors::ContentAnalysisResponse& response);
-  void RecordRequestMetrics(Request* request,
-                            Result result,
-                            const DeepScanningClientResponse& response);
 
   // Called at the end of the FinishRequest method.
   void FinishRequestCleanup(Request* request, const std::string& instance_id);
@@ -275,10 +276,6 @@ class BinaryUploadService : public KeyedService {
   base::flat_map<Request*, std::unique_ptr<MultipartUploadRequest>>
       active_uploads_;
   base::flat_map<Request*, std::string> active_tokens_;
-  base::flat_map<Request*, std::unique_ptr<MalwareDeepScanningVerdict>>
-      received_malware_verdicts_;
-  base::flat_map<Request*, std::unique_ptr<DlpDeepScanningVerdict>>
-      received_dlp_verdicts_;
 
   // Maps requests to each corresponding tag-result pairs.
   base::flat_map<
@@ -294,7 +291,8 @@ class BinaryUploadService : public KeyedService {
   // yet.
   // true means the response indicates data can be uploaded.
   // false means the response indicates data cannot be uploaded.
-  base::Optional<bool> can_upload_enterprise_data_ = base::nullopt;
+  base::flat_map<enterprise_connectors::AnalysisConnector, bool>
+      can_upload_enterprise_data_;
 
   // Callbacks waiting on IsAuthorized request.
   std::list<base::OnceCallback<void(bool)>> authorization_callbacks_;

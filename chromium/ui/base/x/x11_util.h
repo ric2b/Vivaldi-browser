@@ -24,15 +24,15 @@
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/synchronization/lock.h"
+#include "base/values.h"
 #include "build/build_config.h"
 #include "ui/base/x/x11_cursor.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/events/platform_event.h"
 #include "ui/gfx/icc_profile.h"
+#include "ui/gfx/x/connection.h"
 #include "ui/gfx/x/event.h"
-#include "ui/gfx/x/x11.h"
-#include "ui/gfx/x/x11_types.h"
 #include "ui/gfx/x/xproto_types.h"
 
 typedef unsigned long Cursor;
@@ -113,15 +113,15 @@ struct WmHints {
   // See below
   int32_t initial_state;
   // Pixmap to be used as icon
-  xcb_pixmap_t icon_pixmap;
+  x11::Pixmap icon_pixmap;
   // Window to be used as icon
-  xcb_window_t icon_window;
+  x11::Window icon_window;
   // Initial position of icon
   int32_t icon_x, icon_y;
   // Icon mask bitmap
-  xcb_pixmap_t icon_mask;
+  x11::Pixmap icon_mask;
   // Identifier of related window group
-  xcb_window_t window_group;
+  x11::Window window_group;
 };
 
 // These functions use the default display and this /must/ be called from
@@ -143,11 +143,11 @@ bool GetArrayProperty(x11::Window window,
   using lentype = decltype(x11::GetPropertyRequest::long_length);
   auto response =
       x11::Connection::Get()
-          ->GetProperty(
-              {.window = static_cast<x11::Window>(window),
-               .property = name,
-               .long_length =
-                   amount ? length : std::numeric_limits<lentype>::max()})
+          ->GetProperty(x11::GetPropertyRequest{
+              .window = static_cast<x11::Window>(window),
+              .property = name,
+              .long_length =
+                  amount ? length : std::numeric_limits<lentype>::max()})
           .Sync();
   if (!response || response->format != CHAR_BIT * sizeof(T))
     return false;
@@ -178,13 +178,13 @@ void SetArrayProperty(x11::Window window,
   static_assert(sizeof(T) == 1 || sizeof(T) == 2 || sizeof(T) == 4, "");
   std::vector<uint8_t> data(sizeof(T) * values.size());
   memcpy(data.data(), values.data(), sizeof(T) * values.size());
-  x11::Connection::Get()->ChangeProperty(
-      {.window = static_cast<x11::Window>(window),
-       .property = name,
-       .type = type,
-       .format = CHAR_BIT * sizeof(T),
-       .data_len = values.size(),
-       .data = base::RefCountedBytes::TakeVector(&data)});
+  x11::Connection::Get()->ChangeProperty(x11::ChangePropertyRequest{
+      .window = static_cast<x11::Window>(window),
+      .property = name,
+      .type = type,
+      .format = CHAR_BIT * sizeof(T),
+      .data_len = values.size(),
+      .data = base::RefCountedBytes::TakeVector(&data)});
 }
 
 template <typename T>
@@ -406,10 +406,6 @@ static const int kAllDesktops = -1;
 COMPONENT_EXPORT(UI_BASE_X)
 bool GetWindowDesktop(x11::Window window, int* desktop);
 
-// Translates an X11 error code into a printable string.
-COMPONENT_EXPORT(UI_BASE_X)
-std::string GetX11ErrorString(XDisplay* display, int err);
-
 // Implementers of this interface receive a notification for every X window of
 // the main display.
 class EnumerateWindowsDelegate {
@@ -515,16 +511,17 @@ COMPONENT_EXPORT(UI_BASE_X) bool IsWmTiling(WindowManagerName window_manager);
 // Returns true if a compositing manager is present.
 COMPONENT_EXPORT(UI_BASE_X) bool IsCompositingManagerPresent();
 
-// Enable the default X error handlers. These will log the error and abort
-// the process if called. Use SetX11ErrorHandlers() to set your own error
-// handlers.
-COMPONENT_EXPORT(UI_BASE_X) void SetDefaultX11ErrorHandlers();
-
 // Returns true if a given window is in full-screen mode.
 COMPONENT_EXPORT(UI_BASE_X) bool IsX11WindowFullScreen(x11::Window window);
 
 // Suspends or resumes the X screen saver.  Must be called on the UI thread.
 COMPONENT_EXPORT(UI_BASE_X) void SuspendX11ScreenSaver(bool suspend);
+
+// Returns human readable description of the window manager, desktop, and
+// other system properties related to the compositing.
+COMPONENT_EXPORT(UI_BASE_X)
+base::Value GpuExtraInfoAsListValue(unsigned long system_visual,
+                                    unsigned long rgba_visual);
 
 // Returns true if the window manager supports the given hint.
 COMPONENT_EXPORT(UI_BASE_X) bool WmSupportsHint(x11::Atom atom);
@@ -550,16 +547,12 @@ x11::Future<void> SendClientMessage(
     x11::EventMask event_mask = x11::EventMask::SubstructureNotify |
                                 x11::EventMask::SubstructureRedirect);
 
-// --------------------------------------------------------------------------
-// X11 error handling.
-// Sets the X Error Handlers. Passing NULL for either will enable the default
-// error handler, which if called will log the error and abort the process.
-COMPONENT_EXPORT(UI_BASE_X)
-void SetX11ErrorHandlers(XErrorHandler error_handler,
-                         XIOErrorHandler io_error_handler);
-
 // Return true if VulkanSurface is supported.
 COMPONENT_EXPORT(UI_BASE_X) bool IsVulkanSurfaceSupported();
+
+// Returns whether the visual supports alpha.
+// The function examines the _CHROMIUM_INSIDE_XVFB environment variable.
+COMPONENT_EXPORT(UI_BASE_X) bool DoesVisualHaveAlphaForTest();
 
 // --------------------------------------------------------------------------
 // Selects a visual with a preference for alpha support on compositing window

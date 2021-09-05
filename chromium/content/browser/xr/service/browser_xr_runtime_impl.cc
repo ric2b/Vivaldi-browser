@@ -12,7 +12,7 @@
 #include "base/android/android_hardware_buffer_compat.h"
 #endif
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/numerics/ranges.h"
 #include "build/build_config.h"
 #include "content/browser/xr/service/vr_service_impl.h"
@@ -117,14 +117,6 @@ device::mojom::VRDisplayInfoPtr ValidateVRDisplayInfo(
 
   device::mojom::VRDisplayInfoPtr ret = device::mojom::VRDisplayInfo::New();
 
-  // Maximum 1000km translation.
-  if (info->stage_parameters &&
-      IsValidTransform(info->stage_parameters->mojo_from_floor, 1000000)) {
-    ret->stage_parameters = device::mojom::VRStageParameters::New(
-        info->stage_parameters->mojo_from_floor,
-        info->stage_parameters->bounds);
-  }
-
   ret->left_eye = ValidateEyeParameters(info->left_eye.get());
   ret->right_eye = ValidateEyeParameters(info->right_eye.get());
   return ret;
@@ -153,6 +145,7 @@ constexpr device::mojom::XRSessionFeature kARCoreDeviceFeatures[] = {
     device::mojom::XRSessionFeature::ANCHORS,
     device::mojom::XRSessionFeature::PLANE_DETECTION,
     device::mojom::XRSessionFeature::DEPTH,
+    device::mojom::XRSessionFeature::IMAGE_TRACKING,
 };
 
 #if BUILDFLAG(ENABLE_WINDOWS_MR)
@@ -171,15 +164,6 @@ constexpr device::mojom::XRSessionFeature kOpenXRFeatures[] = {
     device::mojom::XRSessionFeature::REF_SPACE_LOCAL_FLOOR,
     device::mojom::XRSessionFeature::REF_SPACE_BOUNDED_FLOOR,
     device::mojom::XRSessionFeature::REF_SPACE_UNBOUNDED,
-};
-#endif
-
-#if BUILDFLAG(ENABLE_OCULUS_VR)
-constexpr device::mojom::XRSessionFeature kOculusFeatures[] = {
-    device::mojom::XRSessionFeature::REF_SPACE_VIEWER,
-    device::mojom::XRSessionFeature::REF_SPACE_LOCAL,
-    device::mojom::XRSessionFeature::REF_SPACE_LOCAL_FLOOR,
-    device::mojom::XRSessionFeature::REF_SPACE_BOUNDED_FLOOR,
 };
 #endif
 
@@ -261,11 +245,6 @@ bool BrowserXRRuntimeImpl::SupportsFeature(
     case device::mojom::XRDeviceId::GVR_DEVICE_ID:
       return ContainsFeature(kGVRDeviceFeatures, feature);
 
-#if BUILDFLAG(ENABLE_OCULUS_VR)
-    case device::mojom::XRDeviceId::OCULUS_DEVICE_ID:
-      return ContainsFeature(kOculusFeatures, feature);
-#endif
-
 #if BUILDFLAG(ENABLE_WINDOWS_MR)
     case device::mojom::XRDeviceId::WINDOWS_MIXED_REALITY_ID:
       return ContainsFeature(kWindowsMixedRealityFeatures, feature);
@@ -298,10 +277,6 @@ bool BrowserXRRuntimeImpl::SupportsCustomIPD() const {
     case device::mojom::XRDeviceId::ORIENTATION_DEVICE_ID:
     case device::mojom::XRDeviceId::GVR_DEVICE_ID:
       return false;
-#if BUILDFLAG(ENABLE_OCULUS_VR)
-    case device::mojom::XRDeviceId::OCULUS_DEVICE_ID:
-      return true;
-#endif
 #if BUILDFLAG(ENABLE_WINDOWS_MR)
     case device::mojom::XRDeviceId::WINDOWS_MIXED_REALITY_ID:
       return true;
@@ -323,9 +298,6 @@ bool BrowserXRRuntimeImpl::SupportsNonEmulatedHeight() const {
     case device::mojom::XRDeviceId::ORIENTATION_DEVICE_ID:
       return false;
     case device::mojom::XRDeviceId::GVR_DEVICE_ID:
-#if BUILDFLAG(ENABLE_OCULUS_VR)
-    case device::mojom::XRDeviceId::OCULUS_DEVICE_ID:
-#endif
 #if BUILDFLAG(ENABLE_WINDOWS_MR)
     case device::mojom::XRDeviceId::WINDOWS_MIXED_REALITY_ID:
 #endif
@@ -336,6 +308,10 @@ bool BrowserXRRuntimeImpl::SupportsNonEmulatedHeight() const {
   }
 
   NOTREACHED();
+}
+
+bool BrowserXRRuntimeImpl::SupportsArBlendMode() {
+  return device_data_->is_ar_blend_mode_supported;
 }
 
 void BrowserXRRuntimeImpl::OnDisplayInfoChanged(

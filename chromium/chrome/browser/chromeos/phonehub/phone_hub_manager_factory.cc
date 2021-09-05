@@ -7,13 +7,20 @@
 #include "ash/public/cpp/system_tray.h"
 #include "chrome/browser/chromeos/device_sync/device_sync_client_factory.h"
 #include "chrome/browser/chromeos/multidevice_setup/multidevice_setup_client_factory.h"
+#include "chrome/browser/chromeos/phonehub/browser_tabs_metadata_fetcher_impl.h"
+#include "chrome/browser/chromeos/phonehub/browser_tabs_model_provider_impl.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/chromeos/secure_channel/nearby_connector_factory.h"
 #include "chrome/browser/chromeos/secure_channel/secure_channel_client_provider.h"
+#include "chrome/browser/favicon/history_ui_favicon_request_handler_factory.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/sync/session_sync_service_factory.h"
 #include "chrome/browser/ui/webui/chromeos/multidevice_setup/multidevice_setup_dialog.h"
+#include "chromeos/components/phonehub/multidevice_setup_state_updater.h"
 #include "chromeos/components/phonehub/notification_access_manager_impl.h"
 #include "chromeos/components/phonehub/onboarding_ui_tracker_impl.h"
 #include "chromeos/components/phonehub/phone_hub_manager_impl.h"
+#include "chromeos/components/phonehub/user_action_recorder_impl.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/services/multidevice_setup/public/cpp/prefs.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
@@ -60,6 +67,9 @@ PhoneHubManagerFactory::PhoneHubManagerFactory()
           BrowserContextDependencyManager::GetInstance()) {
   DependsOn(device_sync::DeviceSyncClientFactory::GetInstance());
   DependsOn(multidevice_setup::MultiDeviceSetupClientFactory::GetInstance());
+  DependsOn(secure_channel::NearbyConnectorFactory::GetInstance());
+  DependsOn(SessionSyncServiceFactory::GetInstance());
+  DependsOn(HistoryUiFaviconRequestHandlerFactory::GetInstance());
 }
 
 PhoneHubManagerFactory::~PhoneHubManagerFactory() = default;
@@ -83,6 +93,13 @@ KeyedService* PhoneHubManagerFactory::BuildServiceInstanceFor(
       device_sync::DeviceSyncClientFactory::GetForProfile(profile),
       multidevice_setup::MultiDeviceSetupClientFactory::GetForProfile(profile),
       secure_channel::SecureChannelClientProvider::GetInstance()->GetClient(),
+      std::make_unique<BrowserTabsModelProviderImpl>(
+          multidevice_setup::MultiDeviceSetupClientFactory::GetForProfile(
+              profile),
+          SessionSyncServiceFactory::GetInstance()->GetForProfile(profile),
+          std::make_unique<BrowserTabsMetadataFetcherImpl>(
+              HistoryUiFaviconRequestHandlerFactory::GetInstance()
+                  ->GetForBrowserContext(context))),
       base::BindRepeating(&multidevice_setup::MultiDeviceSetupDialog::Show));
 
   // Provide |phone_hub_manager| to the system tray so that it can be used by
@@ -98,6 +115,7 @@ bool PhoneHubManagerFactory::ServiceIsCreatedWithBrowserContext() const {
 
 void PhoneHubManagerFactory::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
+  MultideviceSetupStateUpdater::RegisterPrefs(registry);
   NotificationAccessManagerImpl::RegisterPrefs(registry);
   OnboardingUiTrackerImpl::RegisterPrefs(registry);
 }

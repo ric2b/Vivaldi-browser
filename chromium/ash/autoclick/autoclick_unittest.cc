@@ -18,7 +18,6 @@
 #include "ash/wm/window_state.h"
 #include "ash/wm/wm_event.h"
 #include "base/run_loop.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window.h"
@@ -1080,16 +1079,6 @@ TEST_F(AutoclickTest, ConfirmationDialogShownWhenDisablingFeature) {
 
   // Canceling the dialog will cause the feature to continue to be enabled.
   dialog->CancelDialog();
-  base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(GetAutoclickController()->GetDisableDialogForTesting());
-  EXPECT_TRUE(Shell::Get()->accessibility_controller()->autoclick().enabled());
-  EXPECT_TRUE(GetAutoclickController()->IsEnabled());
-
-  // Disable it again and close the dialog; the feature stays enabled.
-  Shell::Get()->accessibility_controller()->autoclick().SetEnabled(false);
-  dialog = GetAutoclickController()->GetDisableDialogForTesting();
-  ASSERT_TRUE(dialog);
-  dialog->GetWidget()->Close();
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(GetAutoclickController()->GetDisableDialogForTesting());
   EXPECT_TRUE(Shell::Get()->accessibility_controller()->autoclick().enabled());

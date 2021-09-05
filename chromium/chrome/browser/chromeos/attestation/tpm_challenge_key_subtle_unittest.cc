@@ -8,8 +8,15 @@
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/test/gmock_callback_support.h"
+#include "base/time/time.h"
+#include "chrome/browser/chromeos/attestation/mock_machine_certificate_uploader.h"
 #include "chrome/browser/chromeos/attestation/tpm_challenge_key_result.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
+#include "chrome/browser/chromeos/platform_keys/key_permissions/fake_user_private_token_kpm_service.h"
+#include "chrome/browser/chromeos/platform_keys/key_permissions/key_permissions_manager_impl.h"
+#include "chrome/browser/chromeos/platform_keys/key_permissions/mock_key_permissions_manager.h"
+#include "chrome/browser/chromeos/platform_keys/key_permissions/user_private_token_kpm_service_factory.h"
+#include "chrome/browser/chromeos/platform_keys/platform_keys.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/pref_names.h"
@@ -17,8 +24,9 @@
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "chromeos/attestation/mock_attestation_flow.h"
-#include "chromeos/cryptohome/async_method_caller.h"
-#include "chromeos/cryptohome/mock_async_method_caller.h"
+#include "chromeos/cryptohome/cryptohome_parameters.h"
+#include "chromeos/dbus/attestation/fake_attestation_client.h"
+#include "chromeos/dbus/attestation/interface.pb.h"
 #include "chromeos/dbus/constants/attestation_constants.h"
 #include "chromeos/dbus/cryptohome/fake_cryptohome_client.h"
 #include "components/prefs/pref_service.h"
@@ -28,6 +36,7 @@
 
 using base::test::RunOnceCallback;
 using testing::_;
+using testing::Invoke;
 using testing::StrictMock;
 
 namespace chromeos {
@@ -35,9 +44,11 @@ namespace attestation {
 namespace {
 
 constexpr char kTestUserEmail[] = "test@google.com";
+constexpr char kTestUserDomain[] = "google.com";
 constexpr char kTestUserGaiaId[] = "test_gaia_id";
 constexpr char kEmptyKeyName[] = "";
 constexpr char kNonDefaultKeyName[] = "key_name_123";
+constexpr char kFakeCertificate[] = "fake_cert";
 
 const char* GetDefaultKeyName(AttestationKeyType type) {
   switch (type) {
@@ -54,10 +65,10 @@ std::string GetChallenge() {
   return std::string(reinterpret_cast<const char*>(kBuffer), sizeof(kBuffer));
 }
 
-std::string GetChallengeResponse() {
-  constexpr uint8_t kBuffer[] = {0x0, 0x1, 0x2,  'r',  'e',
-                                 's', 'p', 0xfd, 0xfe, 0xff};
-  return std::string(reinterpret_cast<const char*>(kBuffer), sizeof(kBuffer));
+std::string GetChallengeResponse(bool include_spkac) {
+  return AttestationClient::Get()
+      ->GetTestInterface()
+      ->GetEnterpriseChallengeFakeSignature(GetChallenge(), include_spkac);
 }
 
 std::string GetPublicKey() {
@@ -71,6 +82,8 @@ class CallbackObserver {
   TpmChallengeKeyCallback GetCallback() {
     return base::BindOnce(&CallbackObserver::Callback, base::Unretained(this));
   }
+
+  bool IsResultReceived() const { return result_.has_value(); }
 
   const TpmChallengeKeyResult& GetResult() const {
     CHECK(result_.has_value()) << "Callback was never called";
@@ -90,6 +103,52 @@ class CallbackObserver {
   base::Optional<TpmChallengeKeyResult> result_;
 };
 
+template <typename T>
+struct CallbackHolder {
+  void SaveCallback(T new_callback) {
+    CHECK(callback.is_null());
+    callback = std::move(new_callback);
+  }
+
+  T callback;
+};
+
+//================= MockableFakeAttestationFlow ================================
+
+class MockableFakeAttestationFlow : public MockAttestationFlow {
+ public:
+  MockableFakeAttestationFlow() {
+    ON_CALL(*this, GetCertificate(_, _, _, _, _, _))
+        .WillByDefault(
+            Invoke(this, &MockableFakeAttestationFlow::GetCertificateInternal));
+  }
+  ~MockableFakeAttestationFlow() override = default;
+  void set_status(AttestationStatus status) { status_ = status; }
+
+ private:
+  void GetCertificateInternal(
+      AttestationCertificateProfile /*certificate_profile*/,
+      const AccountId& account_id,
+      const std::string& /*request_origin*/,
+      bool /*force_new_key*/,
+      const std::string& key_name,
+      CertificateCallback callback) {
+    std::string certificate;
+    if (status_ == ATTESTATION_SUCCESS) {
+      certificate = certificate_;
+      AttestationClient::Get()
+          ->GetTestInterface()
+          ->GetMutableKeyInfoReply(cryptohome::Identification(account_id).id(),
+                                   key_name)
+          ->set_public_key(public_key_);
+    }
+    std::move(callback).Run(status_, certificate);
+  }
+  AttestationStatus status_ = ATTESTATION_SUCCESS;
+  const std::string certificate_ = kFakeCertificate;
+  const std::string public_key_ = GetPublicKey();
+};
+
 //================== TpmChallengeKeySubtleTest =================================
 
 class TpmChallengeKeySubtleTest : public ::testing::Test {
@@ -101,7 +160,7 @@ class TpmChallengeKeySubtleTest : public ::testing::Test {
   void InitSigninProfile();
   void InitUnaffiliatedProfile();
   void InitAffiliatedProfile();
-  void SetDefaultSettings();
+  void InitAfterProfileCreated();
 
   TestingProfile* CreateUserProfile(bool is_affiliated);
   TestingProfile* GetProfile();
@@ -132,64 +191,79 @@ class TpmChallengeKeySubtleTest : public ::testing::Test {
   content::BrowserTaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
 
-  StrictMock<chromeos::attestation::MockAttestationFlow> mock_attestation_flow_;
-  cryptohome::MockAsyncMethodCaller* mock_async_method_caller_ = nullptr;
+  StrictMock<MockableFakeAttestationFlow> mock_attestation_flow_;
   chromeos::FakeCryptohomeClient cryptohome_client_;
+  std::unique_ptr<platform_keys::MockKeyPermissionsManager>
+      system_token_key_permissions_manager_;
+  std::unique_ptr<platform_keys::MockKeyPermissionsManager>
+      user_private_token_key_permissions_manager_;
+  MockMachineCertificateUploader mock_cert_uploader_;
 
   TestingProfileManager testing_profile_manager_;
   chromeos::FakeChromeUserManager fake_user_manager_;
   TestingProfile* testing_profile_ = nullptr;
 
-  std::unique_ptr<TpmChallengeKeySubtleImpl> challenge_key_subtle_;
+  std::unique_ptr<TpmChallengeKeySubtle> challenge_key_subtle_;
 };
 
 TpmChallengeKeySubtleTest::TpmChallengeKeySubtleTest()
     : testing_profile_manager_(TestingBrowserProcess::GetGlobal()) {
+  ::chromeos::AttestationClient::InitializeFake();
   CHECK(testing_profile_manager_.SetUp());
 
-  mock_async_method_caller_ =
-      new StrictMock<cryptohome::MockAsyncMethodCaller>();
-  // Ownership of mock_async_method_caller_ is transferred to
-  // AsyncMethodCaller::InitializeForTesting.
-  cryptohome::AsyncMethodCaller::InitializeForTesting(
-      mock_async_method_caller_);
+  challenge_key_subtle_ = std::make_unique<TpmChallengeKeySubtleImpl>(
+      &mock_attestation_flow_, &mock_cert_uploader_);
 
-  challenge_key_subtle_ =
-      std::make_unique<TpmChallengeKeySubtleImpl>(&mock_attestation_flow_);
-
-  cryptohome_client_.set_tpm_attestation_public_key(
-      CryptohomeClient::TpmAttestationDataResult{/*success=*/true,
-                                                 GetPublicKey()});
+  // By default make it reply that the certificate is already uploaded.
+  ON_CALL(mock_cert_uploader_, WaitForUploadComplete)
+      .WillByDefault(RunOnceCallback<0>(true));
 }
 
 TpmChallengeKeySubtleTest::~TpmChallengeKeySubtleTest() {
-  cryptohome::AsyncMethodCaller::Shutdown();
+  ::chromeos::AttestationClient::Shutdown();
 }
 
 void TpmChallengeKeySubtleTest::InitSigninProfile() {
   testing_profile_ =
       testing_profile_manager_.CreateTestingProfile(chrome::kInitialProfile);
-  SetDefaultSettings();
+  InitAfterProfileCreated();
 }
 
 void TpmChallengeKeySubtleTest::InitUnaffiliatedProfile() {
   testing_profile_ = CreateUserProfile(/*is_affiliated=*/false);
-  SetDefaultSettings();
+  InitAfterProfileCreated();
 }
 
 void TpmChallengeKeySubtleTest::InitAffiliatedProfile() {
   testing_profile_ = CreateUserProfile(/*is_affiliated=*/true);
-  SetDefaultSettings();
+  InitAfterProfileCreated();
   GetProfile()->GetTestingPrefService()->SetManagedPref(
       prefs::kAttestationEnabled, std::make_unique<base::Value>(true));
 }
 
-void TpmChallengeKeySubtleTest::SetDefaultSettings() {
+void TpmChallengeKeySubtleTest::InitAfterProfileCreated() {
   GetInstallAttributes()->SetCloudManaged("google.com", "device_id");
 
   GetCrosSettingsHelper()->ReplaceDeviceSettingsProviderWithStub();
   GetCrosSettingsHelper()->SetBoolean(chromeos::kDeviceAttestationEnabled,
                                       true);
+
+  user_private_token_key_permissions_manager_ =
+      std::make_unique<platform_keys::MockKeyPermissionsManager>();
+  platform_keys::UserPrivateTokenKeyPermissionsManagerServiceFactory::
+      GetInstance()
+          ->SetTestingFactory(
+              GetProfile(),
+              base::BindRepeating(
+                  &platform_keys::
+                      BuildFakeUserPrivateTokenKeyPermissionsManagerService,
+                  user_private_token_key_permissions_manager_.get()));
+
+  system_token_key_permissions_manager_ =
+      std::make_unique<platform_keys::MockKeyPermissionsManager>();
+  platform_keys::KeyPermissionsManagerImpl::
+      SetSystemTokenKeyPermissionsManagerForTesting(
+          system_token_key_permissions_manager_.get());
 }
 
 TestingProfile* TpmChallengeKeySubtleTest::CreateUserProfile(
@@ -257,9 +331,9 @@ void TpmChallengeKeySubtleTest::RunThreeStepsAndExpect(
     bool will_register_key,
     const std::string& key_name,
     const TpmChallengeKeyResult& register_result) {
-  RunTwoStepsAndExpect(
-      key_type, will_register_key, key_name,
-      TpmChallengeKeyResult::MakeChallengeResponse(GetChallengeResponse()));
+  RunTwoStepsAndExpect(key_type, will_register_key, key_name,
+                       TpmChallengeKeyResult::MakeChallengeResponse(
+                           GetChallengeResponse(will_register_key)));
 
   CallbackObserver callback_observer;
   challenge_key_subtle_->StartRegisterKeyStep(callback_observer.GetCallback());
@@ -345,7 +419,10 @@ TEST_F(TpmChallengeKeySubtleTest, UserKeyDeviceAttestationDisabled) {
 TEST_F(TpmChallengeKeySubtleTest, DoesKeyExistDbusFailed) {
   InitSigninProfile();
 
-  cryptohome_client_.set_tpm_attestation_does_key_exist_should_succeed(false);
+  AttestationClient::Get()
+      ->GetTestInterface()
+      ->GetMutableKeyInfoReply(/*username=*/"", kEnterpriseMachineKey)
+      ->set_status(::attestation::STATUS_DBUS_ERROR);
 
   RunOneStepAndExpect(
       KEY_DEVICE, /*will_register_key=*/false, kEmptyKeyName,
@@ -354,13 +431,10 @@ TEST_F(TpmChallengeKeySubtleTest, DoesKeyExistDbusFailed) {
 
 TEST_F(TpmChallengeKeySubtleTest, GetCertificateFailed) {
   InitSigninProfile();
-  AttestationKeyType key_type = KEY_DEVICE;
+  const AttestationKeyType key_type = KEY_DEVICE;
 
-  EXPECT_CALL(mock_attestation_flow_,
-              GetCertificate(_, _, _, _, GetDefaultKeyName(key_type), _))
-      .WillOnce(RunOnceCallback<5>(
-          chromeos::attestation::ATTESTATION_UNSPECIFIED_FAILURE,
-          /*pem_certificate_chain=*/""));
+  mock_attestation_flow_.set_status(ATTESTATION_UNSPECIFIED_FAILURE);
+  EXPECT_CALL(mock_attestation_flow_, GetCertificate(_, _, _, _, _, _));
 
   RunOneStepAndExpect(
       key_type, /*will_register_key=*/false, kEmptyKeyName,
@@ -370,14 +444,12 @@ TEST_F(TpmChallengeKeySubtleTest, GetCertificateFailed) {
 
 TEST_F(TpmChallengeKeySubtleTest, KeyExists) {
   InitSigninProfile();
-  AttestationKeyType key_type = KEY_DEVICE;
+  const AttestationKeyType key_type = KEY_DEVICE;
 
-  cryptohome_client_.SetTpmAttestationDeviceCertificate("attest-ent-machine",
-                                                        std::string());
-  // GetCertificate must not be called if the key exists.
-  EXPECT_CALL(mock_attestation_flow_,
-              GetCertificate(_, _, _, _, GetDefaultKeyName(key_type), _))
-      .Times(0);
+  AttestationClient::Get()
+      ->GetTestInterface()
+      ->GetMutableKeyInfoReply(/*username=*/"", kEnterpriseMachineKey)
+      ->set_public_key(GetPublicKey());
 
   RunOneStepAndExpect(key_type, /*will_register_key=*/false, kEmptyKeyName,
                       TpmChallengeKeyResult::MakePublicKey(GetPublicKey()));
@@ -386,7 +458,9 @@ TEST_F(TpmChallengeKeySubtleTest, KeyExists) {
 TEST_F(TpmChallengeKeySubtleTest, AttestationNotPrepared) {
   InitSigninProfile();
 
-  cryptohome_client_.set_tpm_attestation_is_prepared(false);
+  chromeos::AttestationClient::Get()
+      ->GetTestInterface()
+      ->ConfigureEnrollmentPreparations(false);
 
   RunOneStepAndExpect(KEY_DEVICE, /*will_register_key=*/false, kEmptyKeyName,
                       TpmChallengeKeyResult::MakeError(
@@ -396,8 +470,9 @@ TEST_F(TpmChallengeKeySubtleTest, AttestationNotPrepared) {
 // Test that we get a proper error message in case we don't have a TPM.
 TEST_F(TpmChallengeKeySubtleTest, AttestationUnsupported) {
   InitSigninProfile();
-
-  cryptohome_client_.set_tpm_attestation_is_prepared(false);
+  chromeos::AttestationClient::Get()
+      ->GetTestInterface()
+      ->ConfigureEnrollmentPreparations(false);
   cryptohome_client_.set_tpm_is_enabled(false);
 
   RunOneStepAndExpect(
@@ -409,59 +484,73 @@ TEST_F(TpmChallengeKeySubtleTest, AttestationUnsupported) {
 TEST_F(TpmChallengeKeySubtleTest, AttestationPreparedDbusFailed) {
   InitSigninProfile();
 
-  cryptohome_client_.SetServiceIsAvailable(false);
+  chromeos::AttestationClient::Get()
+      ->GetTestInterface()
+      ->ConfigureEnrollmentPreparationsStatus(::attestation::STATUS_DBUS_ERROR);
 
   RunOneStepAndExpect(
       KEY_DEVICE, /*will_register_key=*/false, kEmptyKeyName,
       TpmChallengeKeyResult::MakeError(TpmChallengeKeyResultCode::kDbusError));
 }
 
+TEST_F(TpmChallengeKeySubtleTest, AttestationPreparedServiceInternalError) {
+  InitSigninProfile();
+
+  chromeos::AttestationClient::Get()
+      ->GetTestInterface()
+      ->ConfigureEnrollmentPreparationsStatus(
+          ::attestation::STATUS_NOT_AVAILABLE);
+
+  RunOneStepAndExpect(
+      KEY_DEVICE, /*will_register_key=*/false, kEmptyKeyName,
+      TpmChallengeKeyResult::MakeError(
+          TpmChallengeKeyResultCode::kAttestationServiceInternalError));
+}
+
 TEST_F(TpmChallengeKeySubtleTest, DeviceKeyNotRegisteredSuccess) {
   InitSigninProfile();
-  AttestationKeyType key_type = KEY_DEVICE;
-  const char* key_name = GetDefaultKeyName(key_type);
+  const AttestationKeyType key_type = KEY_DEVICE;
+  const char* const key_name = GetDefaultKeyName(key_type);
 
-  EXPECT_CALL(mock_attestation_flow_, GetCertificate(_, _, _, _, key_name, _))
-      .WillOnce(
-          RunOnceCallback<5>(chromeos::attestation::ATTESTATION_SUCCESS,
-                             /*pem_certificate_chain=*/"fake_certificate"));
+  EXPECT_CALL(mock_attestation_flow_, GetCertificate(_, _, _, _, key_name, _));
 
-  EXPECT_CALL(*mock_async_method_caller_,
-              TpmAttestationSignEnterpriseChallenge(
-                  key_type, _, key_name, _, _,
-                  AttestationChallengeOptions::CHALLENGE_OPTION_NONE,
-                  GetChallenge(), kEmptyKeyName, _))
-      .WillOnce(RunOnceCallback<8>(
-          /*success=*/true, /*data=*/GetChallengeResponse()));
+  ::attestation::SignEnterpriseChallengeRequest expected_request;
+  expected_request.set_key_label(key_name);
+  expected_request.set_domain(kTestUserDomain);
+  expected_request.set_device_id(GetInstallAttributes()->GetDeviceId());
+  AttestationClient::Get()
+      ->GetTestInterface()
+      ->AllowlistSignEnterpriseChallengeKey(expected_request);
 
-  RunTwoStepsAndExpect(
-      key_type, /*will_register_key=*/false, kEmptyKeyName,
-      TpmChallengeKeyResult::MakeChallengeResponse(GetChallengeResponse()));
+  RunTwoStepsAndExpect(key_type, /*will_register_key=*/false, kEmptyKeyName,
+                       TpmChallengeKeyResult::MakeChallengeResponse(
+                           GetChallengeResponse(/*include_spkac=*/false)));
 }
 
 TEST_F(TpmChallengeKeySubtleTest, DeviceKeyRegisteredSuccess) {
   InitSigninProfile();
-  AttestationKeyType key_type = KEY_DEVICE;
-  const char* key_name = kNonDefaultKeyName;
+  const AttestationKeyType key_type = KEY_DEVICE;
+  const char* const key_name = kNonDefaultKeyName;
 
-  EXPECT_CALL(mock_attestation_flow_, GetCertificate(_, _, _, _, key_name, _))
-      .WillOnce(
-          RunOnceCallback<5>(chromeos::attestation::ATTESTATION_SUCCESS,
-                             /*pem_certificate_chain=*/"fake_certificate"));
+  EXPECT_CALL(mock_attestation_flow_, GetCertificate(_, _, _, _, key_name, _));
+
+  ::attestation::SignEnterpriseChallengeRequest expected_request;
+  expected_request.set_key_label(GetDefaultKeyName(key_type));
+  expected_request.set_key_name_for_spkac(key_name);
+  expected_request.set_domain(kTestUserDomain);
+  expected_request.set_device_id(GetInstallAttributes()->GetDeviceId());
+  AttestationClient::Get()
+      ->GetTestInterface()
+      ->AllowlistSignEnterpriseChallengeKey(expected_request);
+
+  AttestationClient::Get()->GetTestInterface()->AllowlistRegisterKey(
+      /*username=*/"", key_name);
 
   EXPECT_CALL(
-      *mock_async_method_caller_,
-      TpmAttestationSignEnterpriseChallenge(
-          key_type, _, GetDefaultKeyName(key_type), _, _,
-          AttestationChallengeOptions::CHALLENGE_INCLUDE_SIGNED_PUBLIC_KEY,
-          GetChallenge(), key_name, _))
-      .WillOnce(RunOnceCallback<8>(
-          /*success=*/true, /*data=*/GetChallengeResponse()));
-
-  EXPECT_CALL(*mock_async_method_caller_,
-              TpmAttestationRegisterKey(key_type, _, key_name, _))
-      .WillOnce(RunOnceCallback<3>(
-          /*success=*/true, cryptohome::MOUNT_ERROR_NONE));
+      *system_token_key_permissions_manager_,
+      AllowKeyForUsage(/*callback=*/_, platform_keys::KeyUsage::kCorporate,
+                       GetPublicKey()))
+      .WillOnce(RunOnceCallback<0>(platform_keys::Status::kSuccess));
 
   RunThreeStepsAndExpect(key_type, /*will_register_key=*/true, key_name,
                          TpmChallengeKeyResult::MakeSuccess());
@@ -470,51 +559,50 @@ TEST_F(TpmChallengeKeySubtleTest, DeviceKeyRegisteredSuccess) {
 TEST_F(TpmChallengeKeySubtleTest, UserKeyNotRegisteredSuccess) {
   InitAffiliatedProfile();
 
-  AttestationKeyType key_type = KEY_USER;
-  const char* key_name = GetDefaultKeyName(key_type);
+  const AttestationKeyType key_type = KEY_USER;
+  const char* const key_name = GetDefaultKeyName(key_type);
 
-  EXPECT_CALL(mock_attestation_flow_, GetCertificate(_, _, _, _, key_name, _))
-      .WillOnce(
-          RunOnceCallback<5>(chromeos::attestation::ATTESTATION_SUCCESS,
-                             /*pem_certificate_chain=*/"fake_certificate"));
+  EXPECT_CALL(mock_attestation_flow_, GetCertificate(_, _, _, _, key_name, _));
 
-  EXPECT_CALL(*mock_async_method_caller_,
-              TpmAttestationSignEnterpriseChallenge(
-                  key_type, _, key_name, _, _,
-                  AttestationChallengeOptions::CHALLENGE_OPTION_NONE,
-                  GetChallenge(), kEmptyKeyName, _))
-      .WillOnce(RunOnceCallback<8>(
-          /*success=*/true, /*data=*/GetChallengeResponse()));
+  ::attestation::SignEnterpriseChallengeRequest expected_request;
+  expected_request.set_username(kTestUserEmail);
+  expected_request.set_key_label(GetDefaultKeyName(key_type));
+  expected_request.set_domain(kTestUserEmail);
+  expected_request.set_device_id(GetInstallAttributes()->GetDeviceId());
+  AttestationClient::Get()
+      ->GetTestInterface()
+      ->AllowlistSignEnterpriseChallengeKey(expected_request);
 
-  RunTwoStepsAndExpect(
-      key_type, /*will_register_key=*/false, kEmptyKeyName,
-      TpmChallengeKeyResult::MakeChallengeResponse(GetChallengeResponse()));
+  RunTwoStepsAndExpect(key_type, /*will_register_key=*/false, kEmptyKeyName,
+                       TpmChallengeKeyResult::MakeChallengeResponse(
+                           GetChallengeResponse(/*include_spkac=*/false)));
 }
 
 TEST_F(TpmChallengeKeySubtleTest, UserKeyRegisteredSuccess) {
   InitAffiliatedProfile();
 
-  AttestationKeyType key_type = KEY_USER;
-  const char* key_name = kNonDefaultKeyName;
+  const AttestationKeyType key_type = KEY_USER;
+  const char* const key_name = kNonDefaultKeyName;
 
-  EXPECT_CALL(mock_attestation_flow_, GetCertificate(_, _, _, _, key_name, _))
-      .WillOnce(
-          RunOnceCallback<5>(chromeos::attestation::ATTESTATION_SUCCESS,
-                             /*pem_certificate_chain=*/"fake_certificate"));
+  EXPECT_CALL(mock_attestation_flow_, GetCertificate(_, _, _, _, key_name, _));
+
+  ::attestation::SignEnterpriseChallengeRequest expected_request;
+  expected_request.set_username(kTestUserEmail);
+  expected_request.set_key_label(kNonDefaultKeyName);
+  expected_request.set_domain(kTestUserEmail);
+  expected_request.set_device_id(GetInstallAttributes()->GetDeviceId());
+  AttestationClient::Get()
+      ->GetTestInterface()
+      ->AllowlistSignEnterpriseChallengeKey(expected_request);
+
+  AttestationClient::Get()->GetTestInterface()->AllowlistRegisterKey(
+      kTestUserEmail, key_name);
 
   EXPECT_CALL(
-      *mock_async_method_caller_,
-      TpmAttestationSignEnterpriseChallenge(
-          key_type, _, key_name, _, _,
-          AttestationChallengeOptions::CHALLENGE_INCLUDE_SIGNED_PUBLIC_KEY,
-          GetChallenge(), kEmptyKeyName, _))
-      .WillOnce(RunOnceCallback<8>(
-          /*success=*/true, /*data=*/GetChallengeResponse()));
-
-  EXPECT_CALL(*mock_async_method_caller_,
-              TpmAttestationRegisterKey(key_type, _, key_name, _))
-      .WillOnce(RunOnceCallback<3>(
-          /*success=*/true, cryptohome::MOUNT_ERROR_NONE));
+      *user_private_token_key_permissions_manager_,
+      AllowKeyForUsage(/*callback=*/_, platform_keys::KeyUsage::kCorporate,
+                       GetPublicKey()))
+      .WillOnce(RunOnceCallback<0>(platform_keys::Status::kSuccess));
 
   RunThreeStepsAndExpect(key_type, /*will_register_key=*/true, key_name,
                          TpmChallengeKeyResult::MakeSuccess());
@@ -522,17 +610,12 @@ TEST_F(TpmChallengeKeySubtleTest, UserKeyRegisteredSuccess) {
 
 TEST_F(TpmChallengeKeySubtleTest, SignChallengeFailed) {
   InitSigninProfile();
-  AttestationKeyType key_type = KEY_DEVICE;
+  const AttestationKeyType key_type = KEY_DEVICE;
 
   EXPECT_CALL(mock_attestation_flow_,
-              GetCertificate(_, _, _, _, GetDefaultKeyName(key_type), _))
-      .WillOnce(
-          RunOnceCallback<5>(chromeos::attestation::ATTESTATION_SUCCESS,
-                             /*pem_certificate_chain=*/"fake_certificate"));
+              GetCertificate(_, _, _, _, GetDefaultKeyName(key_type), _));
 
-  EXPECT_CALL(*mock_async_method_caller_, TpmAttestationSignEnterpriseChallenge)
-      .WillOnce(RunOnceCallback<8>(
-          /*success=*/false, /*data=*/""));
+  // The signing operations fails because we don't allowlist any key.
   RunTwoStepsAndExpect(
       key_type, /*will_register_key=*/false, kEmptyKeyName,
       TpmChallengeKeyResult::MakeError(
@@ -541,41 +624,51 @@ TEST_F(TpmChallengeKeySubtleTest, SignChallengeFailed) {
 
 TEST_F(TpmChallengeKeySubtleTest, RestorePreparedKeyState) {
   InitAffiliatedProfile();
-  AttestationKeyType key_type = KEY_USER;
-  const char* key_name = kNonDefaultKeyName;
+  const AttestationKeyType key_type = KEY_USER;
+  const char* const key_name = kNonDefaultKeyName;
 
-  std::unique_ptr<TpmChallengeKeySubtle> challenge_key_subtle =
-      TpmChallengeKeySubtleFactory::CreateForPreparedKey(
-          key_type, /*will_register_key=*/true, key_name, GetProfile());
+  // Inject mocks into the next result of CreateForPreparedKey.
+  TpmChallengeKeySubtleFactory::SetForTesting(
+      std::make_unique<TpmChallengeKeySubtleImpl>(&mock_attestation_flow_,
+                                                  &mock_cert_uploader_));
 
-  EXPECT_CALL(
-      *mock_async_method_caller_,
-      TpmAttestationSignEnterpriseChallenge(
-          key_type, _, key_name, _, _,
-          AttestationChallengeOptions::CHALLENGE_INCLUDE_SIGNED_PUBLIC_KEY,
-          GetChallenge(), kEmptyKeyName, _))
-      .WillOnce(RunOnceCallback<8>(
-          /*success=*/true, /*data=*/GetChallengeResponse()));
+  challenge_key_subtle_ = TpmChallengeKeySubtleFactory::CreateForPreparedKey(
+      key_type, /*will_register_key=*/true, key_name, GetPublicKey(),
+      GetProfile());
+
+  ::attestation::SignEnterpriseChallengeRequest expected_request;
+  expected_request.set_username(kTestUserEmail);
+  expected_request.set_key_label(kNonDefaultKeyName);
+  expected_request.set_domain(kTestUserEmail);
+  expected_request.set_device_id(GetInstallAttributes()->GetDeviceId());
+  AttestationClient::Get()
+      ->GetTestInterface()
+      ->AllowlistSignEnterpriseChallengeKey(expected_request);
 
   {
     CallbackObserver callback_observer;
-    challenge_key_subtle->StartSignChallengeStep(
+    challenge_key_subtle_->StartSignChallengeStep(
         GetChallenge(), callback_observer.GetCallback());
     callback_observer.WaitForCallback();
 
-    EXPECT_EQ(
-        callback_observer.GetResult(),
-        TpmChallengeKeyResult::MakeChallengeResponse(GetChallengeResponse()));
+    EXPECT_EQ(callback_observer.GetResult(),
+              TpmChallengeKeyResult::MakeChallengeResponse(
+                  GetChallengeResponse(/*include_spkac=*/true)));
   }
 
-  EXPECT_CALL(*mock_async_method_caller_,
-              TpmAttestationRegisterKey(key_type, _, key_name, _))
-      .WillOnce(RunOnceCallback<3>(
-          /*success=*/true, cryptohome::MOUNT_ERROR_NONE));
+  AttestationClient::Get()->GetTestInterface()->AllowlistRegisterKey(
+      kTestUserEmail, key_name);
+
+  EXPECT_CALL(
+      *user_private_token_key_permissions_manager_,
+      AllowKeyForUsage(/*callback=*/_, platform_keys::KeyUsage::kCorporate,
+                       GetPublicKey()))
+      .WillOnce(RunOnceCallback<0>(platform_keys::Status::kSuccess));
 
   {
     CallbackObserver callback_observer;
-    challenge_key_subtle->StartRegisterKeyStep(callback_observer.GetCallback());
+    challenge_key_subtle_->StartRegisterKeyStep(
+        callback_observer.GetCallback());
     callback_observer.WaitForCallback();
 
     EXPECT_EQ(callback_observer.GetResult(),
@@ -585,19 +678,20 @@ TEST_F(TpmChallengeKeySubtleTest, RestorePreparedKeyState) {
 
 TEST_F(TpmChallengeKeySubtleTest, KeyRegistrationFailed) {
   InitAffiliatedProfile();
-  AttestationKeyType key_type = KEY_USER;
-  const char* key_name = kNonDefaultKeyName;
+  const AttestationKeyType key_type = KEY_USER;
+  const char* const key_name = kNonDefaultKeyName;
 
-  std::unique_ptr<TpmChallengeKeySubtle> challenge_key_subtle =
-      TpmChallengeKeySubtleFactory::CreateForPreparedKey(
-          key_type, /*will_register_key=*/true, key_name, GetProfile());
+  // Inject mocks into the next result of CreateForPreparedKey.
+  TpmChallengeKeySubtleFactory::SetForTesting(
+      std::make_unique<TpmChallengeKeySubtleImpl>(&mock_attestation_flow_,
+                                                  &mock_cert_uploader_));
 
-  EXPECT_CALL(*mock_async_method_caller_, TpmAttestationRegisterKey)
-      .WillOnce(
-          RunOnceCallback<3>(/*success=*/false, cryptohome::MOUNT_ERROR_NONE));
+  challenge_key_subtle_ = TpmChallengeKeySubtleFactory::CreateForPreparedKey(
+      key_type, /*will_register_key=*/true, key_name, GetPublicKey(),
+      GetProfile());
 
   CallbackObserver callback_observer;
-  challenge_key_subtle->StartRegisterKeyStep(callback_observer.GetCallback());
+  challenge_key_subtle_->StartRegisterKeyStep(callback_observer.GetCallback());
   callback_observer.WaitForCallback();
 
   EXPECT_EQ(callback_observer.GetResult(),
@@ -607,18 +701,66 @@ TEST_F(TpmChallengeKeySubtleTest, KeyRegistrationFailed) {
 
 TEST_F(TpmChallengeKeySubtleTest, GetPublicKeyFailed) {
   InitAffiliatedProfile();
-  const char* key_name = kNonDefaultKeyName;
+  const char* const key_name = kNonDefaultKeyName;
 
-  cryptohome_client_.set_tpm_attestation_public_key(base::nullopt);
+  EXPECT_CALL(mock_attestation_flow_, GetCertificate(_, _, _, _, key_name, _));
 
-  EXPECT_CALL(mock_attestation_flow_, GetCertificate(_, _, _, _, key_name, _))
-      .WillOnce(
-          RunOnceCallback<5>(chromeos::attestation::ATTESTATION_SUCCESS,
-                             /*pem_certificate_chain=*/"fake_certificate"));
+  // Force the attestation client to report absence even after successful
+  // attestation flow.
+  AttestationClient::Get()
+      ->GetTestInterface()
+      ->GetMutableKeyInfoReply(/*username=*/"", key_name)
+      ->set_status(::attestation::STATUS_INVALID_PARAMETER);
 
   RunOneStepAndExpect(KEY_DEVICE, /*will_register_key=*/true, key_name,
                       TpmChallengeKeyResult::MakeError(
                           TpmChallengeKeyResultCode::kGetPublicKeyFailedError));
+}
+
+TEST_F(TpmChallengeKeySubtleTest, WaitForCertificateUploaded) {
+  InitAffiliatedProfile();
+  const char* const key_name = kNonDefaultKeyName;
+
+  using CallbackHolderT =
+      CallbackHolder<MachineCertificateUploader::UploadCallback>;
+  CallbackHolderT callback_holder;
+  EXPECT_CALL(mock_cert_uploader_, WaitForUploadComplete)
+      .WillOnce(
+          testing::Invoke(&callback_holder, &CallbackHolderT::SaveCallback));
+
+  EXPECT_CALL(mock_attestation_flow_, GetCertificate(_, _, _, _, key_name, _));
+
+  CallbackObserver callback_observer;
+  challenge_key_subtle_->StartPrepareKeyStep(
+      KEY_DEVICE, /*will_register_key=*/true, key_name, GetProfile(),
+      callback_observer.GetCallback());
+
+  // |challenge_key_subtle_| should wait until the certificate is uploaded.
+  task_environment_.FastForwardBy(base::TimeDelta::FromMinutes(10));
+  EXPECT_FALSE(callback_observer.IsResultReceived());
+
+  // Emulate callback from the certificate uploader, |challenge_key_subtle_|
+  // should be able to continue now.
+  std::move(callback_holder.callback).Run(true);
+  callback_observer.WaitForCallback();
+
+  EXPECT_EQ(callback_observer.GetResult(),
+            TpmChallengeKeyResult::MakePublicKey(GetPublicKey()));
+}
+
+// Check that the class works when MachineCertificateUploader is not provided
+// (e.g. if device is managed by Active Directory).
+TEST_F(TpmChallengeKeySubtleTest, NoCertificateUploaderSuccess) {
+  InitAffiliatedProfile();
+  const char* const key_name = kNonDefaultKeyName;
+
+  challenge_key_subtle_ = std::make_unique<TpmChallengeKeySubtleImpl>(
+      &mock_attestation_flow_, /*machine_certificate_uploader=*/nullptr);
+
+  EXPECT_CALL(mock_attestation_flow_, GetCertificate(_, _, _, _, key_name, _));
+
+  RunOneStepAndExpect(KEY_USER, /*will_register_key=*/true, key_name,
+                      TpmChallengeKeyResult::MakePublicKey(GetPublicKey()));
 }
 
 }  // namespace

@@ -105,8 +105,7 @@ bool UpdateNotifierWindow::Init() {
 
   return notification_menu_.AppendStringMenuItem(
       l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFIER_UPDATE_VIVALDI),
-      MFS_DEFAULT,
-      kUpdateMenuItemId);
+      MFS_DEFAULT, kUpdateMenuItemId);
 }
 
 UpdateNotifierWindow::~UpdateNotifierWindow() {
@@ -128,7 +127,8 @@ void UpdateNotifierWindow::ShowNotification(const std::string& version) {
   notify_icon.uCallbackMessage = kNotificationCallbackMessage;
   LoadIconMetric(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_NOTIFIER_MAIN),
                  LIM_SMALL, &notify_icon.hIcon);
-  SetNotificationString(notify_icon.szTip, base::size(notify_icon.szTip),
+  SetNotificationString(
+      notify_icon.szTip, base::size(notify_icon.szTip),
       l10n_util::GetStringUTF16(IDS_UPDATE_NOTIFICATION_TOOLTIP));
   notify_icon.dwInfoFlags = NIIF_USER;
 
@@ -224,7 +224,7 @@ bool UpdateNotifierWindow::HandleMessage(UINT message,
       switch (message) {
         case WM_LBUTTONUP:
         case NIN_BALLOONUSERCLICK: {
-          UpdateNotifierManager::GetInstance()->TriggerUpdate();
+          UpdateNotifierManager::OnNotificationAcceptance();
           RemoveNotification();
           return true;
         }
@@ -244,7 +244,7 @@ bool UpdateNotifierWindow::HandleMessage(UINT message,
       if (HIWORD(wparam) == 0) {
         switch (LOWORD(wparam)) {
           case kUpdateMenuItemId: {
-            UpdateNotifierManager::GetInstance()->TriggerUpdate();
+            UpdateNotifierManager::OnNotificationAcceptance();
             return true;
           }
         }

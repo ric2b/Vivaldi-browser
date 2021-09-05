@@ -17,6 +17,8 @@
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/assistant/model/assistant_ui_model.h"
 #include "ash/capture_mode/capture_mode_controller.h"
+#include "ash/capture_mode/capture_mode_metrics.h"
+#include "ash/clipboard/clipboard_history_controller_impl.h"
 #include "ash/debug.h"
 #include "ash/display/display_configuration_controller.h"
 #include "ash/display/display_move_window_util.h"
@@ -79,7 +81,7 @@
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
@@ -94,6 +96,7 @@
 #include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/power/power_manager_client.h"
+#include "chromeos/ui/vector_icons/vector_icons.h"
 #include "components/user_manager/user_type.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/accelerators/accelerator_manager.h"
@@ -754,29 +757,36 @@ bool CanHandleScreenshot() {
 
 // Tries to enter capture mode image type with |source|. Returns false if
 // unsuccessful (capture mode disabled).
-bool MaybeEnterImageCaptureMode(CaptureModeSource source) {
+bool MaybeEnterImageCaptureMode(CaptureModeSource source,
+                                CaptureModeEntryType entry_type) {
   if (!features::IsCaptureModeEnabled())
     return false;
 
   auto* capture_mode_controller = CaptureModeController::Get();
   capture_mode_controller->SetSource(source);
   capture_mode_controller->SetType(CaptureModeType::kImage);
-  capture_mode_controller->Start();
+  capture_mode_controller->Start(entry_type);
   return true;
 }
 
 void HandleTakeWindowScreenshot() {
   base::RecordAction(UserMetricsAction("Accel_Take_Window_Screenshot"));
-  if (MaybeEnterImageCaptureMode(CaptureModeSource::kWindow))
+  if (MaybeEnterImageCaptureMode(
+          CaptureModeSource::kWindow,
+          CaptureModeEntryType::kAccelTakeWindowScreenshot)) {
     return;
+  }
 
   Shell::Get()->screenshot_controller()->StartWindowScreenshotSession();
 }
 
 void HandleTakePartialScreenshot() {
   base::RecordAction(UserMetricsAction("Accel_Take_Partial_Screenshot"));
-  if (MaybeEnterImageCaptureMode(CaptureModeSource::kRegion))
+  if (MaybeEnterImageCaptureMode(
+          CaptureModeSource::kRegion,
+          CaptureModeEntryType::kAccelTakePartialScreenshot)) {
     return;
+  }
 
   Shell::Get()->screenshot_controller()->StartPartialScreenshotSession(
       /*draw_overlay_immediately=*/true);
@@ -784,7 +794,10 @@ void HandleTakePartialScreenshot() {
 
 void HandleTakeScreenshot() {
   base::RecordAction(UserMetricsAction("Accel_Take_Screenshot"));
-  Shell::Get()->screenshot_controller()->TakeScreenshotForAllRootWindows();
+  if (!features::IsCaptureModeEnabled())
+    Shell::Get()->screenshot_controller()->TakeScreenshotForAllRootWindows();
+  else
+    CaptureModeController::Get()->CaptureScreenshotsOfAllDisplays();
 }
 
 void HandleToggleSystemTrayBubbleInternal(bool focus_message_center) {
@@ -1234,22 +1247,22 @@ void NotifyAccessibilityFeatureDisabledByAdmin(
     int feature_name_id,
     bool feature_state,
     const std::string& notification_id) {
-  const base::string16 organization_name =
+  const base::string16 organization_manager =
       base::UTF8ToUTF16(Shell::Get()
                             ->system_tray_model()
                             ->enterprise_domain()
-                            ->enterprise_display_domain());
+                            ->enterprise_domain_manager());
   CreateAndShowStickyNotification(
       l10n_util::GetStringUTF16(
           IDS_ASH_ACCESSIBILITY_FEATURE_SHORTCUT_DISABLED_TITLE),
       l10n_util::GetStringFUTF16(
           IDS_ASH_ACCESSIBILITY_FEATURE_SHORTCUT_DISABLED_MSG,
-          organization_name,
+          organization_manager,
           l10n_util::GetStringUTF16(
               feature_state ? IDS_ASH_ACCESSIBILITY_FEATURE_ACTIVATED
                             : IDS_ASH_ACCESSIBILITY_FEATURE_DEACTIVATED),
           l10n_util::GetStringUTF16(feature_name_id)),
-      notification_id, kLoginScreenEnterpriseIcon);
+      notification_id, chromeos::kEnterpriseIcon);
 }
 
 void RemoveStickyNotitification(const std::string& notification_id) {

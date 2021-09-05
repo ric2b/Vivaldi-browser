@@ -20,7 +20,6 @@
 #include "ios/web/public/test/element_selector.h"
 #include "net/base/mac/url_conversions.h"
 
-
 using base::test::ios::kWaitForActionTimeout;
 using base::test::ios::kWaitForJSCompletionTimeout;
 using base::test::ios::kWaitForPageLoadTimeout;
@@ -82,16 +81,6 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
 
 #pragma mark - Device Utilities
 
-- (void)rotateDeviceToOrientation:(UIDeviceOrientation)deviceOrientation
-                            error:(NSError**)error {
-  [EarlGrey rotateDeviceToOrientation:deviceOrientation error:error];
-}
-
-- (BOOL)isKeyboardShownWithError:(NSError**)error {
-  return
-      [EarlGrey isKeyboardShownWithError:error];
-}
-
 - (BOOL)isIPadIdiom {
   UIUserInterfaceIdiom idiom =
       [[GREY_REMOTE_CLASS_IN_APP(UIDevice) currentDevice] userInterfaceIdiom];
@@ -136,8 +125,16 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
   GREYWaitForAppToIdle(@"App failed to idle");
 }
 
-- (NSInteger)getBrowsingHistoryEntryCount {
-  return [ChromeEarlGreyAppInterface getBrowsingHistoryEntryCount];
+- (NSInteger)browsingHistoryEntryCount {
+  NSError* error = nil;
+  NSInteger result =
+      [ChromeEarlGreyAppInterface browsingHistoryEntryCountWithError:&error];
+  EG_TEST_HELPER_ASSERT_NO_ERROR(error);
+  return result;
+}
+
+- (NSInteger)navigationBackListItemsCount {
+  return [ChromeEarlGreyAppInterface navigationBackListItemsCount];
 }
 
 - (void)removeBrowsingCache {
@@ -938,6 +935,10 @@ GREY_STUB_CLASS_IN_APP_MAIN_QUEUE(ChromeEarlGreyAppInterface)
 
 - (BOOL)areMultipleWindowsSupported {
   return [ChromeEarlGreyAppInterface areMultipleWindowsSupported];
+}
+
+- (BOOL)isCloseAllTabsConfirmationEnabled {
+  return [ChromeEarlGreyAppInterface isCloseAllTabsConfirmationEnabled];
 }
 
 #pragma mark - ScopedBlockPopupsPref

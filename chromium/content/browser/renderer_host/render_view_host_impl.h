@@ -20,6 +20,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
 #include "base/process/kill.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/input/input_device_change_observer.h"
 #include "content/browser/renderer_host/page_lifecycle_state_manager.h"
@@ -33,6 +34,7 @@
 #include "content/public/browser/render_view_host.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/base/load_states.h"
+#include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/blink/public/mojom/page/page.mojom.h"
 #include "third_party/blink/public/web/web_ax_enums.h"
 #include "third_party/blink/public/web/web_console_message.h"
@@ -57,6 +59,11 @@ class TimeoutMonitor;
 // starts.
 using WillEnterBackForwardCacheCallbackForTesting =
     base::RepeatingCallback<void()>;
+
+// A callback which will be called immediately before sending the
+// RendererPreferences information to the renderer.
+using WillSendRendererPreferencesCallbackForTesting =
+    base::RepeatingCallback<void(const blink::RendererPreferences&)>;
 
 // This implements the RenderViewHost interface that is exposed to
 // embedders of content, and adds things only visible to content.
@@ -93,8 +100,7 @@ class CONTENT_EXPORT RenderViewHostImpl
   // Convenience function, just like RenderViewHost::From.
   static RenderViewHostImpl* From(RenderWidgetHost* rwh);
 
-  static void GetPlatformSpecificPrefs(
-      blink::mojom::RendererPreferences* prefs);
+  static void GetPlatformSpecificPrefs(blink::RendererPreferences* prefs);
 
   // Checks whether any RenderViewHostImpl instance associated with a given
   // process is not currently in the back-forward cache.
@@ -113,7 +119,6 @@ class CONTENT_EXPORT RenderViewHostImpl
                      bool has_initialized_audio_host);
 
   // RenderViewHost implementation.
-  bool Send(IPC::Message* msg) override;
   RenderWidgetHostImpl* GetWidget() override;
   RenderProcessHost* GetProcess() override;
   int GetRoutingID() override;
@@ -125,9 +130,10 @@ class CONTENT_EXPORT RenderViewHostImpl
   RenderViewHostDelegate* GetDelegate() override;
   SiteInstanceImpl* GetSiteInstance() override;
   bool IsRenderViewLive() override;
-  void NotifyMoveOrResizeStarted() override;
 
   void SendWebPreferencesToRenderer();
+  void SendRendererPreferencesToRenderer(
+      const blink::RendererPreferences& preferences);
 
   // RenderProcessHostObserver implementation
   void RenderProcessExited(RenderProcessHost* host,
@@ -263,7 +269,8 @@ class CONTENT_EXPORT RenderViewHostImpl
                            const base::Optional<SkColor>& theme_color);
 
   void DidChangeBackgroundColor(RenderFrameHostImpl* rfh,
-                                const SkColor& background_color);
+                                const SkColor& background_color,
+                                bool color_adjust);
 
   base::Optional<SkColor> theme_color() const {
     return main_frame_theme_color_;
@@ -286,6 +293,9 @@ class CONTENT_EXPORT RenderViewHostImpl
 
   void SetWillEnterBackForwardCacheCallbackForTesting(
       const WillEnterBackForwardCacheCallbackForTesting& callback);
+
+  void SetWillSendRendererPreferencesCallbackForTesting(
+      const WillSendRendererPreferencesCallbackForTesting& callback);
 
   void BindPageBroadcast(
       mojo::PendingAssociatedRemote<blink::mojom::PageBroadcast>
@@ -311,7 +321,6 @@ class CONTENT_EXPORT RenderViewHostImpl
 
   // RenderWidgetHostOwnerDelegate overrides.
   void RenderWidgetDidInit() override;
-  void RenderWidgetDidClose() override;
   void RenderWidgetDidFirstVisuallyNonEmptyPaint() override;
   void RenderWidgetGotFocus() override;
   void RenderWidgetLostFocus() override;
@@ -320,7 +329,6 @@ class CONTENT_EXPORT RenderViewHostImpl
   bool MayRenderWidgetForwardKeyboardEvent(
       const NativeWebKeyboardEvent& key_event) override;
   bool ShouldContributePriorityToProcess() override;
-  void RequestSetBounds(const gfx::Rect& bounds) override;
   void SetBackgroundOpaque(bool opaque) override;
   bool IsMainFrameActive() override;
   bool IsNeverComposited() override;
@@ -332,7 +340,6 @@ class CONTENT_EXPORT RenderViewHostImpl
                   const gfx::Rect& initial_rect,
                   bool user_gesture);
   void OnShowWidget(int widget_route_id, const gfx::Rect& initial_rect);
-  void OnShowFullscreenWidget(int widget_route_id);
   void OnDidContentsPreferredSizeChange(const gfx::Size& new_size);
   void OnPasteFromSelectionClipboard();
   void OnTakeFocus(bool reverse);
@@ -363,7 +370,8 @@ class CONTENT_EXPORT RenderViewHostImpl
   // TODO(creis): Move to a private namespace on RenderFrameHostImpl.
   // Delay to wait on closing the WebContents for a beforeunload/unload handler
   // to fire.
-  static const int64_t kUnloadTimeoutMS;
+  static constexpr base::TimeDelta kUnloadTimeout =
+      base::TimeDelta::FromMilliseconds(500);
 
   // The RenderWidgetHost.
   const std::unique_ptr<RenderWidgetHostImpl> render_widget_host_;
@@ -441,6 +449,9 @@ class CONTENT_EXPORT RenderViewHostImpl
 
   WillEnterBackForwardCacheCallbackForTesting
       will_enter_back_forward_cache_callback_for_testing_;
+
+  WillSendRendererPreferencesCallbackForTesting
+      will_send_renderer_preferences_callback_for_testing_;
 
   mojo::AssociatedRemote<blink::mojom::PageBroadcast> page_broadcast_;
 

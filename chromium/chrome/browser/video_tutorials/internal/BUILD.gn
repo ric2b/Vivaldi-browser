@@ -62,6 +62,7 @@ if (is_android) {
       "android/java/src/org/chromium/chrome/browser/video_tutorials/VideoTutorialUtils.java",
       "android/java/src/org/chromium/chrome/browser/video_tutorials/bridges/TutorialConversionBridge.java",
       "android/java/src/org/chromium/chrome/browser/video_tutorials/bridges/VideoTutorialServiceBridge.java",
+      "android/java/src/org/chromium/chrome/browser/video_tutorials/iph/TryNowTrackerImpl.java",
       "android/java/src/org/chromium/chrome/browser/video_tutorials/iph/VideoIPHCoordinatorImpl.java",
       "android/java/src/org/chromium/chrome/browser/video_tutorials/iph/VideoIPHProperties.java",
       "android/java/src/org/chromium/chrome/browser/video_tutorials/iph/VideoIPHView.java",
@@ -75,7 +76,6 @@ if (is_android) {
       "android/java/src/org/chromium/chrome/browser/video_tutorials/list/TutorialCardViewBinder.java",
       "android/java/src/org/chromium/chrome/browser/video_tutorials/list/TutorialListCoordinatorImpl.java",
       "android/java/src/org/chromium/chrome/browser/video_tutorials/list/TutorialListMediator.java",
-      "android/java/src/org/chromium/chrome/browser/video_tutorials/metrics/VideoTutorialMetrics.java",
       "android/java/src/org/chromium/chrome/browser/video_tutorials/player/VideoPlayerCoordinatorImpl.java",
       "android/java/src/org/chromium/chrome/browser/video_tutorials/player/VideoPlayerMediator.java",
       "android/java/src/org/chromium/chrome/browser/video_tutorials/player/VideoPlayerProperties.java",
@@ -88,9 +88,11 @@ if (is_android) {
       ":java_resources",
       "//base:base_java",
       "//base:jni_java",
+      "//chrome/browser/flags:java",
       "//chrome/browser/image_fetcher:java",
       "//chrome/browser/profiles/android:java",
       "//chrome/browser/video_tutorials:java",
+      "//components/browser_ui/widget/android:java",
       "//components/embedder_support/android:content_view_java",
       "//components/embedder_support/android:web_contents_delegate_java",
       "//components/thin_webview:factory_java",
@@ -100,6 +102,7 @@ if (is_android) {
       "//third_party/android_deps:androidx_annotation_annotation_java",
       "//third_party/android_deps:androidx_annotation_annotation_java",
       "//third_party/android_deps:androidx_recyclerview_recyclerview_java",
+      "//third_party/gif_player:gif_player_java",
       "//ui/android:ui_java",
     ]
 
@@ -110,9 +113,7 @@ if (is_android) {
   android_resources("java_resources") {
     create_srcjar = false
     sources = [
-      "android/java/res/drawable/radio_button.xml",
-      "android/java/res/drawable/radio_button_default.xml",
-      "android/java/res/drawable/radio_button_selected.xml",
+      "android/java/res/drawable/circular_media_button_background.xml",
       "android/java/res/layout/language_card.xml",
       "android/java/res/layout/language_picker.xml",
       "android/java/res/layout/video_player_controls.xml",
@@ -146,7 +147,9 @@ if (is_android) {
     bypass_platform_checks = true
     testonly = true
     sources = [
+      "android/java/src/org/chromium/chrome/browser/video_tutorials/PlaybackStateObserverUnitTest.java",
       "android/java/src/org/chromium/chrome/browser/video_tutorials/languages/LanguagePickerMediatorUnitTest.java",
+      "android/java/src/org/chromium/chrome/browser/video_tutorials/metrics/VideoTutorialMetricsUnitTest.java",
       "android/java/src/org/chromium/chrome/browser/video_tutorials/player/VideoPlayerMediatorUnitTest.java",
     ]
 
@@ -157,6 +160,7 @@ if (is_android) {
       "//chrome/browser/video_tutorials:java",
       "//chrome/browser/video_tutorials:test_support_java",
       "//content/public/android:content_java",
+      "//services/media_session/public/cpp/android:media_session_java",
       "//third_party/android_deps:robolectric_all_java",
       "//third_party/hamcrest:hamcrest_core_java",
       "//third_party/junit",
@@ -171,17 +175,21 @@ if (is_android) {
     sources = [
       "android/java/src/org/chromium/chrome/browser/video_tutorials/iph/VideoIPHTest.java",
       "android/java/src/org/chromium/chrome/browser/video_tutorials/languages/LanguagePickerTest.java",
+      "android/java/src/org/chromium/chrome/browser/video_tutorials/list/TutorialListCoordinatorTest.java",
+      "android/java/src/org/chromium/chrome/browser/video_tutorials/player/VideoPlayerViewBinderTest.java",
     ]
     deps = [
       ":java",
       "//base:base_java",
       "//base:base_java_test_support",
-      "//chrome/browser/image_fetcher:java",
+      "//chrome/browser/flags:java",
       "//chrome/browser/video_tutorials:java",
       "//chrome/browser/video_tutorials:test_support_java",
       "//chrome/test/android:chrome_java_test_support",
+      "//components/thin_webview:java",
       "//content/public/test/android:content_java_test_support",
       "//third_party/android_deps:androidx_annotation_annotation_java",
+      "//third_party/android_deps:androidx_recyclerview_recyclerview_java",
       "//third_party/android_deps:androidx_test_runner_java",
       "//third_party/android_deps:espresso_java",
       "//third_party/android_support_test_runner:rules_java",
@@ -189,6 +197,7 @@ if (is_android) {
       "//third_party/hamcrest:hamcrest_core_java",
       "//third_party/junit",
       "//third_party/mockito:mockito_java",
+      "//ui/android:ui_java",
       "//ui/android:ui_java_test_support",
     ]
   }

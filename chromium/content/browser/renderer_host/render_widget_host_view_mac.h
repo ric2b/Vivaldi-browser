@@ -22,7 +22,6 @@
 #include "content/browser/renderer_host/text_input_manager.h"
 #include "content/common/content_export.h"
 #include "content/common/render_widget_host_ns_view.mojom.h"
-#include "ipc/ipc_sender.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "ui/accelerated_widget_mac/accelerated_widget_mac.h"
@@ -83,8 +82,7 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
       public RenderFrameMetadataProvider::Observer,
       public ui::GestureProviderClient,
       public ui::AcceleratedWidgetMacNSView,
-      public ui::AccessibilityFocusOverrider::Client,
-      public IPC::Sender {
+      public ui::AccessibilityFocusOverrider::Client {
  public:
   // The view will associate itself with the given widget. The native view must
   // be hooked up immediately to the view hierarchy, or else when it is
@@ -232,9 +230,6 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   void OnRenderFrameSubmission() override {}
   void OnLocalSurfaceIdChanged(
       const cc::RenderFrameMetadata& metadata) override {}
-
-  // IPC::Sender implementation.
-  bool Send(IPC::Message* message) override;
 
   void SetTextInputActive(bool active);
 
@@ -519,6 +514,9 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   // RenderWidgetHostViewBase:
   void UpdateBackgroundColor() override;
   bool HasFallbackSurface() const override;
+  base::Optional<DisplayFeature> GetDisplayFeature() override;
+  void SetDisplayFeatureForTesting(
+      const DisplayFeature* display_feature) override;
 
   // Gets a textual view of the page's contents, and passes it to the callback
   // provided.
@@ -657,6 +655,11 @@ class CONTENT_EXPORT RenderWidgetHostViewMac
   // content::BrowserAccessibilityCocoa accessibility tree when the NSView for
   // this is focused.
   ui::AccessibilityFocusOverrider accessibility_focus_overrider_;
+
+  // Represents a feature of the physical display whose offset and mask_length
+  // are expressed in DIPs relative to the view. See display_feature.h for more
+  // details.
+  base::Optional<DisplayFeature> display_feature_;
 
   // Factory used to safely scope delayed calls to ShutdownHost().
   base::WeakPtrFactory<RenderWidgetHostViewMac> weak_factory_;

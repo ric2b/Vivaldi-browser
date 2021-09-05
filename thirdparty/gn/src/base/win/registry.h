@@ -8,7 +8,7 @@
 #include <stdint.h>
 #include <string>
 #include <vector>
-#include "base/win/windows_types.h"
+#include <windows.h>
 
 #include "base/macros.h"
 #include "base/win/scoped_handle.h"

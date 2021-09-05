@@ -16,6 +16,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.UrlUtils;
@@ -26,8 +28,6 @@ import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.DropdownPopupWindowInterface;
@@ -81,8 +81,8 @@ public class AutofillPopupWithKeyboardTest {
                 + "<input type=\"submit\" />"
                 + "</form></body></html>"));
         new AutofillTestHelper().setProfile(new AutofillProfile("", "https://www.example.com",
-                "John Smith", "Acme Inc", "1 Main\nApt A", "CA", "San Francisco", "", "94102", "",
-                "US", "(415) 888-9999", "john@acme.inc", "en"));
+                "" /* honorific prefix */, "John Smith", "Acme Inc", "1 Main\nApt A", "CA",
+                "San Francisco", "", "94102", "", "US", "(415) 888-9999", "john@acme.inc", "en"));
         final AtomicReference<WebContents> webContentsRef = new AtomicReference<WebContents>();
         final AtomicReference<ViewGroup> viewRef = new AtomicReference<ViewGroup>();
         TestThreadUtils.runOnUiThreadBlocking(() -> {

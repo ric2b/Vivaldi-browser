@@ -6,10 +6,10 @@ package org.chromium.chrome.browser.contextualsearch;
 
 import static org.junit.Assert.assertNotNull;
 
+import static org.chromium.base.test.util.CriteriaHelper.DEFAULT_POLLING_INTERVAL;
 import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE;
 import static org.chromium.chrome.browser.multiwindow.MultiWindowTestHelper.waitForSecondChromeTabbedActivity;
 import static org.chromium.chrome.browser.multiwindow.MultiWindowTestHelper.waitForTabs;
-import static org.chromium.content_public.browser.test.util.CriteriaHelper.DEFAULT_POLLING_INTERVAL;
 
 import android.app.Activity;
 import android.app.Instrumentation;
@@ -52,9 +52,12 @@ import org.chromium.base.test.params.ParameterAnnotations;
 import org.chromium.base.test.params.ParameterProvider;
 import org.chromium.base.test.params.ParameterSet;
 import org.chromium.base.test.params.ParameterizedRunner;
+import org.chromium.base.test.util.ApplicationTestUtils;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
@@ -65,7 +68,6 @@ import org.chromium.base.test.util.UserActionTester;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeTabbedActivity2;
 import org.chromium.chrome.browser.app.ChromeActivity;
-import org.chromium.chrome.browser.compositor.animation.CompositorAnimationHandler;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayContentDelegate;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayContentProgressObserver;
 import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.PanelState;
@@ -82,6 +84,7 @@ import org.chromium.chrome.browser.findinpage.FindToolbar;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.gsa.GSAContextDisplaySelection;
+import org.chromium.chrome.browser.layouts.animation.CompositorAnimationHandler;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.omnibox.UrlBar;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
@@ -93,19 +96,17 @@ import org.chromium.chrome.browser.tabmodel.TabModelUtils;
 import org.chromium.chrome.test.ChromeJUnit4RunnerDelegate;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.batch.BlankCTATabInitialStateRule;
-import org.chromium.chrome.test.util.ApplicationTestUtils;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.FullscreenTestUtils;
 import org.chromium.chrome.test.util.MenuUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
+import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.components.external_intents.ExternalNavigationHandler;
 import org.chromium.components.navigation_interception.NavigationParams;
 import org.chromium.content_public.browser.SelectionClient;
 import org.chromium.content_public.browser.SelectionPopupController;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContents;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.KeyUtils;
 import org.chromium.content_public.browser.test.util.TestSelectionPopupController;
@@ -3235,8 +3236,7 @@ public class ContextualSearchManagerTest {
     @ParameterAnnotations.UseMethodParameter(FeatureParamProvider.class)
     @DisableIf.Build(sdk_is_greater_than = Build.VERSION_CODES.O, message = "crbug.com/1075895")
     @DisabledTest(message = "Flaky https://crbug.com/1127796")
-    public void testQuickActionUrl_Longpress_DLD(@EnabledFeature int enabledFeature)
-            throws Exception {
+    public void testQuickActionUrl_Longpress(@EnabledFeature int enabledFeature) throws Exception {
         // TODO(donnd): figure out why this fails to select on Longpress, but works fine on the
         // other experiment configurations including Translations (which should be identical for
         // this test). Probably something needs to be initialized between test runs.
@@ -3648,15 +3648,10 @@ public class ContextualSearchManagerTest {
     @Test
     @SmallTest
     @Feature({"ContextualSearch"})
-    // Force Long-press enable with the preserve-tap gesture arm variation.
-    @CommandLineFlags.
-    Add({"enable-features=ContextualSearchLongpressResolve<ContextualSearchLongpressStudy",
-            "force-fieldtrials=ContextualSearchLongpressStudy/TapEnabled",
-            "force-fieldtrial-params="
-                    + "ContextualSearchLongpressStudy.TapEnabled:longpress_resolve_variation/"
-                    + ContextualSearchFieldTrial.LONGPRESS_RESOLVE_PRESERVE_TAP})
-    public void
-    testTapNotIgnoredWithLongpressResolveEnabledAndVariationPreserveTap() throws Exception {
+    // Enable the literal-tap gesture Feature.
+    @Features.EnableFeatures(ChromeFeatureList.CONTEXTUAL_SEARCH_LITERAL_SEARCH_TAP)
+    public void testTapNotIgnoredWithLongpressResolveEnabledAndLiteralSearchTap() throws Exception {
+        FeatureList.setTestFeatures(ENABLE_LONGPRESS);
         clickWordNode("states");
         Assert.assertEquals("States", getSelectedText());
         waitForPanelToPeek();

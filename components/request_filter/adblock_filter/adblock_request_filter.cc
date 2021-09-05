@@ -41,42 +41,49 @@ flat::ResourceType ResourceTypeFromRequest(
     const vivaldi::FilteredRequestInfo& request) {
   if (request.request.url.SchemeIsWSOrWSS())
     return flat::ResourceType_WEBSOCKET;
-  else if (request.loader_factory_type ==
-           content::ContentBrowserClient::URLLoaderFactoryType::kDownload)
+  if (request.loader_factory_type ==
+      content::ContentBrowserClient::URLLoaderFactoryType::kDownload)
     return flat::ResourceType_OTHER;
+  if (request.request.is_fetch_like_api) {
+    // This must be checked before `request.keepalive` check below, because
+    // currently Fetch keepAlive is not reported as ping.
+    // See https://crbug.com/611453 for more details.
+    return flat::ResourceType_XMLHTTPREQUEST;
+  }
 
-  switch (
-      static_cast<blink::mojom::ResourceType>(request.request.resource_type)) {
-    case blink::mojom::ResourceType::kSubFrame:
-    case blink::mojom::ResourceType::kNavigationPreloadSubFrame:
+  switch (request.request.destination) {
+    case network::mojom::RequestDestination::kIframe:
+    case network::mojom::RequestDestination::kFrame:
       return flat::ResourceType_SUBDOCUMENT;
-    case blink::mojom::ResourceType::kStylesheet:
+    case network::mojom::RequestDestination::kStyle:
+    case network::mojom::RequestDestination::kXslt:
       return flat::ResourceType_STYLESHEET;
-    case blink::mojom::ResourceType::kScript:
-    case blink::mojom::ResourceType::kWorker:
-    case blink::mojom::ResourceType::kSharedWorker:
-    case blink::mojom::ResourceType::kServiceWorker:
+    case network::mojom::RequestDestination::kScript:
+    case network::mojom::RequestDestination::kWorker:
+    case network::mojom::RequestDestination::kSharedWorker:
+    case network::mojom::RequestDestination::kServiceWorker:
       return flat::ResourceType_SCRIPT;
-    case blink::mojom::ResourceType::kImage:
-    case blink::mojom::ResourceType::kFavicon:
+    case network::mojom::RequestDestination::kImage:
       return flat::ResourceType_IMAGE;
-    case blink::mojom::ResourceType::kFontResource:
+    case network::mojom::RequestDestination::kFont:
       return flat::ResourceType_FONT;
-    case blink::mojom::ResourceType::kSubResource:
-    case blink::mojom::ResourceType::kPrefetch:
+    case network::mojom::RequestDestination::kAudioWorklet:
+    case network::mojom::RequestDestination::kManifest:
+    case network::mojom::RequestDestination::kPaintWorklet:
       return flat::ResourceType_OTHER;
-    case blink::mojom::ResourceType::kObject:
-    case blink::mojom::ResourceType::kPluginResource:
+    case network::mojom::RequestDestination::kEmpty:
+      if (request.request.keepalive)
+        return flat::ResourceType_PING;
+      return flat::ResourceType_OTHER;
+    case network::mojom::RequestDestination::kObject:
+    case network::mojom::RequestDestination::kEmbed:
       return flat::ResourceType_OBJECT;
-    case blink::mojom::ResourceType::kMedia:
+    case network::mojom::RequestDestination::kAudio:
+    case network::mojom::RequestDestination::kTrack:
+    case network::mojom::RequestDestination::kVideo:
       return flat::ResourceType_MEDIA;
-    case blink::mojom::ResourceType::kXhr:
-      return flat::ResourceType_XMLHTTPREQUEST;
-    case blink::mojom::ResourceType::kPing:
-      return flat::ResourceType_PING;
-    case blink::mojom::ResourceType::kMainFrame:
-    case blink::mojom::ResourceType::kNavigationPreloadMainFrame:
-    case blink::mojom::ResourceType::kCspReport:
+    case network::mojom::RequestDestination::kDocument:
+    case network::mojom::RequestDestination::kReport:
       NOTREACHED();
       return flat::ResourceType_OTHER;
   }
@@ -133,15 +140,13 @@ bool AdBlockRequestFilter::OnBeforeRequest(
     content::BrowserContext* browser_context,
     const vivaldi::FilteredRequestInfo* request,
     BeforeRequestCallback callback) {
-  auto resource_type =
-      static_cast<blink::mojom::ResourceType>(request->request.resource_type);
+  auto destination = request->request.destination;
 
   bool is_main_frame =
-      resource_type == blink::mojom::ResourceType::kMainFrame ||
-      resource_type == blink::mojom::ResourceType::kNavigationPreloadMainFrame;
-  bool is_frame =
-      is_main_frame || resource_type == blink::mojom::ResourceType::kSubFrame ||
-      resource_type == blink::mojom::ResourceType::kNavigationPreloadSubFrame;
+      destination == network::mojom::RequestDestination::kDocument;
+  bool is_frame = is_main_frame ||
+                  destination == network::mojom::RequestDestination::kIframe ||
+                  destination == network::mojom::RequestDestination::kFrame;
 
   url::Origin document_origin;
   if (is_main_frame || !request->request.request_initiator)
@@ -151,7 +156,7 @@ bool AdBlockRequestFilter::OnBeforeRequest(
 
   // TODO(julien): Add filtering of csp reports
   if (!rules_index_manager_ || !rules_index_manager_->rules_index() ||
-      resource_type == blink::mojom::ResourceType::kCspReport ||
+      destination == network::mojom::RequestDestination::kReport ||
       !IsRequestWanted(request->request.url) ||
       !IsOriginWanted(browser_context, group_, document_origin)) {
     std::move(callback).Run(false, false, GURL());
@@ -238,14 +243,13 @@ bool AdBlockRequestFilter::OnHeadersReceived(
     const vivaldi::FilteredRequestInfo* request,
     const net::HttpResponseHeaders* headers,
     HeadersReceivedCallback callback) {
-  auto resource_type =
-      static_cast<blink::mojom::ResourceType>(request->request.resource_type);
+  auto destination = request->request.destination;
 
   url::Origin document_origin = request->request.request_initiator.value_or(
       url::Origin::Create(request->request.url));
 
   if (!rules_index_manager_ || !rules_index_manager_->rules_index() ||
-      resource_type == blink::mojom::ResourceType::kCspReport ||
+      destination == network::mojom::RequestDestination::kReport ||
       !IsRequestWanted(request->request.url) ||
       !IsOriginWanted(browser_context, group_, document_origin)) {
     std::move(callback).Run(false, GURL(),
@@ -255,11 +259,9 @@ bool AdBlockRequestFilter::OnHeadersReceived(
 
   bool is_third_party = IsThirdParty(request->request.url, document_origin);
   bool is_frame =
-      resource_type == blink::mojom::ResourceType::kMainFrame ||
-      resource_type ==
-          blink::mojom::ResourceType::kNavigationPreloadMainFrame ||
-      resource_type == blink::mojom::ResourceType::kSubFrame ||
-      resource_type == blink::mojom::ResourceType::kNavigationPreloadSubFrame;
+      destination == network::mojom::RequestDestination::kDocument ||
+      destination == network::mojom::RequestDestination::kIframe ||
+      destination == network::mojom::RequestDestination::kFrame;
 
   content::RenderFrameHost* frame = content::RenderFrameHost::FromID(
       request->render_process_id, request->render_frame_id);

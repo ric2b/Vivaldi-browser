@@ -7,8 +7,6 @@
 
 #include <memory>
 
-#include "base/macros.h"
-#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/web_applications/test/profile_test_helper.h"
 #include "chrome/browser/web_applications/test/test_system_web_app_installation.h"
 #include "chrome/browser/web_applications/test/test_web_app_provider.h"
@@ -38,6 +36,10 @@ class SystemWebAppManagerBrowserTestBase : public InProcessBrowserTest {
   // System PWA, and ensures the WebAppProvider associated with the startup
   // profile is a TestWebAppProviderCreator.
   explicit SystemWebAppManagerBrowserTestBase(bool install_mock = true);
+  SystemWebAppManagerBrowserTestBase(
+      const SystemWebAppManagerBrowserTestBase&) = delete;
+  SystemWebAppManagerBrowserTestBase& operator=(
+      const SystemWebAppManagerBrowserTestBase&) = delete;
 
   ~SystemWebAppManagerBrowserTestBase() override;
 
@@ -61,7 +63,7 @@ class SystemWebAppManagerBrowserTestBase : public InProcessBrowserTest {
   // Launch the given System App from |params|, and wait for the application to
   // finish loading. If |browser| is not nullptr, it will store the Browser*
   // that hosts the launched application.
-  content::WebContents* LaunchApp(const apps::AppLaunchParams& params,
+  content::WebContents* LaunchApp(apps::AppLaunchParams&& params,
                                   Browser** browser = nullptr);
 
   // Launch the given System App |type| with default AppLaunchParams, and wait
@@ -73,9 +75,8 @@ class SystemWebAppManagerBrowserTestBase : public InProcessBrowserTest {
   // Launch the given System App from |params|, without waiting for the
   // application to finish loading. If |browser| is not nullptr, it will store
   // the Browser* that hosts the launched application.
-  content::WebContents* LaunchAppWithoutWaiting(
-      const apps::AppLaunchParams& params,
-      Browser** browser = nullptr);
+  content::WebContents* LaunchAppWithoutWaiting(apps::AppLaunchParams&& params,
+                                                Browser** browser = nullptr);
 
   // Launch the given System App |type| with default AppLaunchParams, without
   // waiting for the application to finish loading. If |browser| is not nullptr,
@@ -93,19 +94,15 @@ class SystemWebAppManagerBrowserTestBase : public InProcessBrowserTest {
   // true, returns after the application finishes loading. Otherwise, returns
   // immediately. If |browser| is not nullptr, it will store the Browser* that
   // hosts the launched application.
-  content::WebContents* LaunchApp(const apps::AppLaunchParams& params,
+  content::WebContents* LaunchApp(apps::AppLaunchParams&& params,
                                   bool wait_for_load,
                                   Browser** out_browser);
-
-  base::test::ScopedFeatureList scoped_feature_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(SystemWebAppManagerBrowserTestBase);
 };
 
 enum class InstallationType { kManifestInstall, kWebAppInfoInstall };
 
 using SystemWebAppManagerTestParams =
-    std::tuple<ProviderType, InstallationType, TestProfileType>;
+    std::tuple<InstallationType, TestProfileType>;
 
 class SystemWebAppManagerBrowserTest
     : public SystemWebAppManagerBrowserTestBase,
@@ -114,17 +111,13 @@ class SystemWebAppManagerBrowserTest
   explicit SystemWebAppManagerBrowserTest(bool install_mock = true);
   ~SystemWebAppManagerBrowserTest() override = default;
 
-  ProviderType provider_type() const { return std::get<0>(GetParam()); }
   bool install_from_web_app_info() const {
-    return std::get<1>(GetParam()) == InstallationType::kWebAppInfoInstall;
+    return std::get<0>(GetParam()) == InstallationType::kWebAppInfoInstall;
   }
-  TestProfileType profile_type() const { return std::get<2>(GetParam()); }
+  TestProfileType profile_type() const { return std::get<1>(GetParam()); }
 
   // InProcessBrowserTest:
   void SetUpCommandLine(base::CommandLine* command_line) override;
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 using SystemWebAppManagerWebAppInfoBrowserTest = SystemWebAppManagerBrowserTest;
@@ -143,8 +136,6 @@ std::string SystemWebAppManagerTestParamsToString(
   INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_P(                          \
       SUITE,                                                                \
       ::testing::Combine(                                                   \
-          ::testing::Values(web_app::ProviderType::kBookmarkApps,           \
-                            web_app::ProviderType::kWebApps),               \
           ::testing::Values(web_app::InstallationType::kManifestInstall,    \
                             web_app::InstallationType::kWebAppInfoInstall), \
           ::testing::Values(TestProfileType::kRegular)))
@@ -154,8 +145,6 @@ std::string SystemWebAppManagerTestParamsToString(
   INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_P(                        \
       SUITE,                                                              \
       ::testing::Combine(                                                 \
-          ::testing::Values(web_app::ProviderType::kBookmarkApps,         \
-                            web_app::ProviderType::kWebApps),             \
           ::testing::Values(web_app::InstallationType::kManifestInstall), \
           ::testing::Values(TestProfileType::kRegular)))
 
@@ -164,8 +153,6 @@ std::string SystemWebAppManagerTestParamsToString(
   INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_P(                            \
       SUITE,                                                                  \
       ::testing::Combine(                                                     \
-          ::testing::Values(web_app::ProviderType::kBookmarkApps,             \
-                            web_app::ProviderType::kWebApps),                 \
           ::testing::Values(web_app::InstallationType::kWebAppInfoInstall),   \
           ::testing::Values(TestProfileType::kRegular)))
 
@@ -179,11 +166,18 @@ std::string SystemWebAppManagerTestParamsToString(
     SUITE, INSTALL_TYPE)                                                     \
   INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_P(                           \
       SUITE, ::testing::Combine(                                             \
-                 ::testing::Values(web_app::ProviderType::kBookmarkApps,     \
-                                   web_app::ProviderType::kWebApps),         \
                  ::testing::Values(web_app::InstallationType::INSTALL_TYPE), \
                  ::testing::Values(TestProfileType::kRegular,                \
                                    TestProfileType::kIncognito,              \
                                    TestProfileType::kGuest)))
+
+// Instantiate |SUITE| for all install types, on a Chrome OS guest session.
+#define INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_GUEST_SESSION_P(SUITE) \
+  INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_P(                           \
+      SUITE,                                                                 \
+      ::testing::Combine(                                                    \
+          ::testing::Values(web_app::InstallationType::kManifestInstall,     \
+                            web_app::InstallationType::kWebAppInfoInstall),  \
+          ::testing::Values(TestProfileType::kGuest)))
 
 #endif  // CHROME_BROWSER_WEB_APPLICATIONS_SYSTEM_WEB_APP_MANAGER_BROWSERTEST_H_

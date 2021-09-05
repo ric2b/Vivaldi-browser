@@ -14,7 +14,7 @@
 #include "base/task/post_task.h"
 #include "base/task/thread_pool.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "net/cookies/cookie_access_result.h"
@@ -26,6 +26,7 @@
 #include "net/cookies/cookie_store_test_helpers.h"
 #include "net/cookies/cookie_util.h"
 #include "net/cookies/test_cookie_access_delegate.h"
+#include "net/url_request/url_request_context.h"
 #include "services/network/public/mojom/cookie_manager.mojom.h"
 #include "services/network/session_cleanup_cookie_store.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -243,7 +244,6 @@ class SynchronousCookieManager {
   // No need to wrap Add*Listener and CloneInterface, since their use
   // is purely async.
  private:
-
   mojom::CookieManager* cookie_service_;
   uint32_t callback_counter_;
 
@@ -340,8 +340,11 @@ class CookieManagerTest : public testing::Test {
     connection_error_seen_ = false;
     cookie_monster_ = std::make_unique<net::CookieMonster>(
         std::move(store), nullptr /* netlog */);
+    url_request_context_ = std::make_unique<net::URLRequestContext>();
+    url_request_context_->set_cookie_store(cookie_monster_.get());
     cookie_service_ = std::make_unique<CookieManager>(
-        cookie_monster_.get(), std::move(cleanup_store), nullptr);
+        url_request_context_.get(), nullptr /* preloaded_first_party_sets */,
+        std::move(cleanup_store), nullptr);
     cookie_service_->AddReceiver(
         cookie_service_remote_.BindNewPipeAndPassReceiver());
     service_wrapper_ = std::make_unique<SynchronousCookieManager>(
@@ -359,6 +362,7 @@ class CookieManagerTest : public testing::Test {
   bool connection_error_seen_;
 
   std::unique_ptr<net::CookieMonster> cookie_monster_;
+  std::unique_ptr<net::URLRequestContext> url_request_context_;
   std::unique_ptr<CookieManager> cookie_service_;
   mojo::Remote<mojom::CookieManager> cookie_service_remote_;
   std::unique_ptr<SynchronousCookieManager> service_wrapper_;
@@ -382,27 +386,34 @@ TEST_F(CookieManagerTest, GetAllCookies) {
                            base::Time(), base::Time(),
                            /*secure=*/false, /*httponly=*/false,
                            net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("C", "D", "foo_host2", "/with/path", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie(
           "Secure", "E", kCookieDomain, "/with/path", base::Time(),
           base::Time(), base::Time(), /*secure=*/true,
           /*httponly=*/false, net::CookieSameSite::NO_RESTRICTION,
-          net::COOKIE_PRIORITY_MEDIUM),
+          net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("HttpOnly", "F", kCookieDomain, "/with/path",
                            base::Time(), base::Time(), base::Time(),
                            /*secure=*/false,
                            /*httponly=*/true, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
+      "https", true));
+  EXPECT_TRUE(SetCanonicalCookie(
+      net::CanonicalCookie("SecureSameParty", "G", kCookieDomain, "/with/path",
+                           base::Time(), base::Time(), base::Time(),
+                           /*secure=*/true,
+                           /*httponly=*/false, net::CookieSameSite::LAX_MODE,
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/true),
       "https", true));
 
   base::Time after_creation(base::Time::Now());
@@ -410,7 +421,7 @@ TEST_F(CookieManagerTest, GetAllCookies) {
   std::vector<net::CanonicalCookie> cookies =
       service_wrapper()->GetAllCookies();
 
-  ASSERT_EQ(4u, cookies.size());
+  ASSERT_EQ(5u, cookies.size());
   std::sort(cookies.begin(), cookies.end(), &CompareCanonicalCookies);
 
   EXPECT_EQ("A", cookies[0].Name());
@@ -426,6 +437,7 @@ TEST_F(CookieManagerTest, GetAllCookies) {
   EXPECT_FALSE(cookies[0].IsHttpOnly());
   EXPECT_EQ(net::CookieSameSite::LAX_MODE, cookies[0].SameSite());
   EXPECT_EQ(net::COOKIE_PRIORITY_MEDIUM, cookies[0].Priority());
+  EXPECT_FALSE(cookies[0].IsSameParty());
 
   EXPECT_EQ("C", cookies[1].Name());
   EXPECT_EQ("D", cookies[1].Value());
@@ -440,6 +452,7 @@ TEST_F(CookieManagerTest, GetAllCookies) {
   EXPECT_FALSE(cookies[1].IsHttpOnly());
   EXPECT_EQ(net::CookieSameSite::LAX_MODE, cookies[1].SameSite());
   EXPECT_EQ(net::COOKIE_PRIORITY_MEDIUM, cookies[1].Priority());
+  EXPECT_FALSE(cookies[1].IsSameParty());
 
   EXPECT_EQ("HttpOnly", cookies[2].Name());
   EXPECT_EQ("F", cookies[2].Value());
@@ -454,6 +467,7 @@ TEST_F(CookieManagerTest, GetAllCookies) {
   EXPECT_TRUE(cookies[2].IsHttpOnly());
   EXPECT_EQ(net::CookieSameSite::LAX_MODE, cookies[2].SameSite());
   EXPECT_EQ(net::COOKIE_PRIORITY_MEDIUM, cookies[2].Priority());
+  EXPECT_FALSE(cookies[2].IsSameParty());
 
   EXPECT_EQ("Secure", cookies[3].Name());
   EXPECT_EQ("E", cookies[3].Value());
@@ -468,6 +482,22 @@ TEST_F(CookieManagerTest, GetAllCookies) {
   EXPECT_FALSE(cookies[3].IsHttpOnly());
   EXPECT_EQ(net::CookieSameSite::NO_RESTRICTION, cookies[3].SameSite());
   EXPECT_EQ(net::COOKIE_PRIORITY_MEDIUM, cookies[3].Priority());
+  EXPECT_FALSE(cookies[3].IsSameParty());
+
+  EXPECT_EQ("SecureSameParty", cookies[4].Name());
+  EXPECT_EQ("G", cookies[4].Value());
+  EXPECT_EQ(kCookieDomain, cookies[4].Domain());
+  EXPECT_EQ("/with/path", cookies[4].Path());
+  EXPECT_LT(before_creation, cookies[4].CreationDate());
+  EXPECT_LE(cookies[4].CreationDate(), after_creation);
+  EXPECT_EQ(cookies[4].LastAccessDate(), base::Time());
+  EXPECT_EQ(cookies[4].ExpiryDate(), base::Time());
+  EXPECT_FALSE(cookies[4].IsPersistent());
+  EXPECT_TRUE(cookies[4].IsSecure());
+  EXPECT_FALSE(cookies[4].IsHttpOnly());
+  EXPECT_EQ(net::CookieSameSite::LAX_MODE, cookies[4].SameSite());
+  EXPECT_EQ(net::COOKIE_PRIORITY_MEDIUM, cookies[4].Priority());
+  EXPECT_TRUE(cookies[4].IsSameParty());
 }
 
 TEST_F(CookieManagerTest, GetAllCookiesWithAccessSemantics) {
@@ -495,14 +525,15 @@ TEST_F(CookieManagerTest, GetAllCookiesWithAccessSemantics) {
                            base::Time(), base::Time(), base::Time(),
                            /*secure=*/true, /*httponly=*/false,
                            net::CookieSameSite::NO_RESTRICTION,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   // LEGACY
   EXPECT_TRUE(SetCanonicalCookie(
-      net::CanonicalCookie(
-          "C", "D", "domain2.test", "/with/longer/path", base::Time(),
-          base::Time(), base::Time(), /*secure=*/true, /*httponly=*/false,
-          net::CookieSameSite::NO_RESTRICTION, net::COOKIE_PRIORITY_MEDIUM),
+      net::CanonicalCookie("C", "D", "domain2.test", "/with/longer/path",
+                           base::Time(), base::Time(), base::Time(),
+                           /*secure=*/true, /*httponly=*/false,
+                           net::CookieSameSite::NO_RESTRICTION,
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   // not set (UNKNOWN)
   EXPECT_TRUE(SetCanonicalCookie(
@@ -510,7 +541,7 @@ TEST_F(CookieManagerTest, GetAllCookiesWithAccessSemantics) {
           "HttpOnly", "F", "domain3.test", "/with/path", base::Time(),
           base::Time(), base::Time(), /*secure=*/true,
           /*httponly=*/true, net::CookieSameSite::NO_RESTRICTION,
-          net::COOKIE_PRIORITY_MEDIUM),
+          net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   // NONLEGACY
   EXPECT_TRUE(SetCanonicalCookie(
@@ -518,7 +549,7 @@ TEST_F(CookieManagerTest, GetAllCookiesWithAccessSemantics) {
           "Secure", "E", ".domainwithdot.test", "/", base::Time(), base::Time(),
           base::Time(), /*secure=*/true,
           /*httponly=*/true, net::CookieSameSite::NO_RESTRICTION,
-          net::COOKIE_PRIORITY_MEDIUM),
+          net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   std::vector<net::CookieAccessSemantics> access_semantics_list;
@@ -546,27 +577,27 @@ TEST_F(CookieManagerTest, GetCookieList) {
                            base::Time(), base::Time(),
                            /*secure=*/false, /*httponly=*/false,
                            net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("C", "D", "foo_host2", "/with/path", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("Secure", "E", kCookieDomain, "/with/path",
                            base::Time(), base::Time(), base::Time(),
                            /*secure=*/true,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("HttpOnly", "F", kCookieDomain, "/with/path",
                            base::Time(), base::Time(), base::Time(),
                            /*secure=*/false,
                            /*httponly=*/true, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   // Want the SameSite=lax cookies, but not httponly ones.
@@ -608,7 +639,7 @@ TEST_F(CookieManagerTest, GetCookieListHttpOnly) {
                            base::Time(), base::Time(),
                            /*secure=*/false, /*httponly=*/true,
                            net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true);
   ASSERT_TRUE(result);
   result = SetCanonicalCookie(
@@ -616,7 +647,7 @@ TEST_F(CookieManagerTest, GetCookieListHttpOnly) {
                            base::Time(), base::Time(),
                            /*secure=*/false, /*httponly=*/false,
                            net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true);
   ASSERT_TRUE(result);
 
@@ -658,21 +689,21 @@ TEST_F(CookieManagerTest, GetCookieListSameSite) {
                            base::Time(), base::Time(),
                            /*secure=*/true, /*httponly=*/false,
                            net::CookieSameSite::NO_RESTRICTION,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true);
   ASSERT_TRUE(result);
   result = SetCanonicalCookie(
       net::CanonicalCookie("C", "D", kCookieDomain, "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true);
   ASSERT_TRUE(result);
   result = SetCanonicalCookie(
       net::CanonicalCookie("E", "F", kCookieDomain, "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::STRICT_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true);
   ASSERT_TRUE(result);
 
@@ -732,7 +763,7 @@ TEST_F(CookieManagerTest, GetCookieListAccessTime) {
                            base::Time(), base::Time(),
                            /*secure=*/false, /*httponly=*/false,
                            net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true);
   ASSERT_TRUE(result);
 
@@ -767,7 +798,7 @@ TEST_F(CookieManagerTest, DeleteCanonicalCookie) {
       net::CanonicalCookie(
           "A", "B", "foo_host", "/", base::Time(), base::Time(), base::Time(),
           /*secure=*/false, /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-          net::COOKIE_PRIORITY_MEDIUM),
+          net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   std::vector<net::CanonicalCookie> cookies =
       service_wrapper()->GetAllCookies();
@@ -783,27 +814,27 @@ TEST_F(CookieManagerTest, DeleteThroughSet) {
                            base::Time(), base::Time(),
                            /*secure=*/false, /*httponly=*/false,
                            net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("C", "D", "foo_host2", "/with/path", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("Secure", "E", kCookieDomain, "/with/path",
                            base::Time(), base::Time(), base::Time(),
                            /*secure=*/true,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("HttpOnly", "F", kCookieDomain, "/with/path",
                            base::Time(), base::Time(), base::Time(),
                            /*secure=*/false,
                            /*httponly=*/true, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   base::Time yesterday = base::Time::Now() - base::TimeDelta::FromDays(1);
@@ -811,7 +842,7 @@ TEST_F(CookieManagerTest, DeleteThroughSet) {
       net::CanonicalCookie(
           "A", "E", kCookieDomain, "/", base::Time(), yesterday, base::Time(),
           /*secure=*/false, /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-          net::COOKIE_PRIORITY_MEDIUM),
+          net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "http", false));
 
   std::vector<net::CanonicalCookie> cookies =
@@ -837,7 +868,8 @@ TEST_F(CookieManagerTest, ConfirmSecureSetFails) {
                                base::Time(), base::Time(),
                                /*secure=*/true, /*httponly=*/false,
                                net::CookieSameSite::NO_RESTRICTION,
-                               net::COOKIE_PRIORITY_MEDIUM),
+                               net::COOKIE_PRIORITY_MEDIUM,
+                               /*same_party=*/false),
           "http", false);
 
   EXPECT_TRUE(access_result.status.HasExactlyExclusionReasonsForTesting(
@@ -857,7 +889,8 @@ TEST_F(CookieManagerTest, ConfirmHttpOnlySetFails) {
                                base::Time(), base::Time(),
                                /*secure=*/false, /*httponly=*/true,
                                net::CookieSameSite::LAX_MODE,
-                               net::COOKIE_PRIORITY_MEDIUM),
+                               net::COOKIE_PRIORITY_MEDIUM,
+                               /*same_party=*/false),
           "http", false);
 
   EXPECT_TRUE(access_result.status.HasExactlyExclusionReasonsForTesting(
@@ -876,7 +909,7 @@ TEST_F(CookieManagerTest, ConfirmSecureOverwriteFails) {
                            base::Time(), base::Time(), base::Time(),
                            /*secure=*/true,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   net::CookieAccessResult access_result =
@@ -885,7 +918,7 @@ TEST_F(CookieManagerTest, ConfirmSecureOverwriteFails) {
               "Secure", "Nope", kCookieDomain, "/with/path", base::Time(),
               base::Time(), base::Time(), /*secure=*/false,
               /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-              net::COOKIE_PRIORITY_MEDIUM),
+              net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
           "http", false);
 
   EXPECT_TRUE(access_result.status.HasExactlyExclusionReasonsForTesting(
@@ -907,7 +940,7 @@ TEST_F(CookieManagerTest, ConfirmHttpOnlyOverwriteFails) {
                            base::Time(), base::Time(), base::Time(),
                            /*secure=*/false,
                            /*httponly=*/true, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "http", true));
 
   net::CookieAccessResult access_result =
@@ -916,7 +949,7 @@ TEST_F(CookieManagerTest, ConfirmHttpOnlyOverwriteFails) {
               "HttpOnly", "Nope", kCookieDomain, "/with/path", base::Time(),
               base::Time(), base::Time(), /*secure=*/false,
               /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-              net::COOKIE_PRIORITY_MEDIUM),
+              net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
           "https", false);
 
   EXPECT_TRUE(access_result.status.HasExactlyExclusionReasonsForTesting(
@@ -939,27 +972,27 @@ TEST_F(CookieManagerTest, DeleteEverything) {
                            base::Time(), base::Time(),
                            /*secure=*/false, /*httponly=*/false,
                            net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("C", "D", "foo_host2", "/with/path", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie(
           "Secure", "E", kCookieDomain, "/with/path", base::Time(),
           base::Time(), base::Time(), /*secure=*/true,
           /*httponly=*/false, net::CookieSameSite::NO_RESTRICTION,
-          net::COOKIE_PRIORITY_MEDIUM),
+          net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("HttpOnly", "F", kCookieDomain, "/with/path",
                            base::Time(), base::Time(), base::Time(),
                            /*secure=*/false,
                            /*httponly=*/true, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   mojom::CookieDeletionFilter filter;
@@ -979,7 +1012,7 @@ TEST_F(CookieManagerTest, DeleteByTime) {
                            now - base::TimeDelta::FromMinutes(60), base::Time(),
                            base::Time(), /*secure=*/false, /*httponly=*/false,
                            net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   EXPECT_TRUE(SetCanonicalCookie(
@@ -987,7 +1020,7 @@ TEST_F(CookieManagerTest, DeleteByTime) {
           "A2", "val", kCookieDomain, "/",
           now - base::TimeDelta::FromMinutes(120), base::Time(), base::Time(),
           /*secure=*/false, /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-          net::COOKIE_PRIORITY_MEDIUM),
+          net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   EXPECT_TRUE(SetCanonicalCookie(
@@ -995,7 +1028,7 @@ TEST_F(CookieManagerTest, DeleteByTime) {
           "A3", "val", kCookieDomain, "/",
           now - base::TimeDelta::FromMinutes(180), base::Time(), base::Time(),
           /*secure=*/false, /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-          net::COOKIE_PRIORITY_MEDIUM),
+          net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   mojom::CookieDeletionFilter filter;
@@ -1016,21 +1049,21 @@ TEST_F(CookieManagerTest, DeleteByExcludingDomains) {
       net::CanonicalCookie("A1", "val", "foo_host1", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("A2", "val", "foo_host2", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("A3", "val", "foo_host3", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   mojom::CookieDeletionFilter filter;
@@ -1049,21 +1082,21 @@ TEST_F(CookieManagerTest, DeleteByIncludingDomains) {
       net::CanonicalCookie("A1", "val", "foo_host1", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("A2", "val", "foo_host2", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("A3", "val", "foo_host3", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   mojom::CookieDeletionFilter filter;
@@ -1084,19 +1117,19 @@ TEST_F(CookieManagerTest, DeleteDetails_eTLD) {
       net::CanonicalCookie("A1", "val", "example.com", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("A2", "val", "www.example.com", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("A3", "val", "www.nonexample.com", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   mojom::CookieDeletionFilter filter;
@@ -1115,19 +1148,20 @@ TEST_F(CookieManagerTest, DeleteDetails_eTLD) {
       net::CanonicalCookie("A1", "val", "example.co.uk", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("A2", "val", "www.example.co.uk", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
-      net::CanonicalCookie(
-          "A3", "val", "www.nonexample.co.uk", "/", base::Time(), base::Time(),
-          base::Time(), /*secure=*/false, /*httponly=*/false,
-          net::CookieSameSite::LAX_MODE, net::COOKIE_PRIORITY_MEDIUM),
+      net::CanonicalCookie("A3", "val", "www.nonexample.co.uk", "/",
+                           base::Time(), base::Time(), base::Time(),
+                           /*secure=*/false, /*httponly=*/false,
+                           net::CookieSameSite::LAX_MODE,
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   filter.including_domains = std::vector<std::string>();
   filter.including_domains->push_back("example.co.uk");
@@ -1144,19 +1178,20 @@ TEST_F(CookieManagerTest, DeleteDetails_eTLD) {
       net::CanonicalCookie("A1", "val", "example.co.uk", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("A2", "val", "www.example.co.uk", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
-      net::CanonicalCookie(
-          "A3", "val", "www.nonexample.co.uk", "/", base::Time(), base::Time(),
-          base::Time(), /*secure=*/false, /*httponly=*/false,
-          net::CookieSameSite::LAX_MODE, net::COOKIE_PRIORITY_MEDIUM),
+      net::CanonicalCookie("A3", "val", "www.nonexample.co.uk", "/",
+                           base::Time(), base::Time(), base::Time(),
+                           /*secure=*/false, /*httponly=*/false,
+                           net::CookieSameSite::LAX_MODE,
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   filter.including_domains = std::vector<std::string>();
   filter.including_domains->push_back("co.uk");
@@ -1177,25 +1212,25 @@ TEST_F(CookieManagerTest, DeleteDetails_HostDomain) {
       net::CanonicalCookie("A1", "val", "foo_host.com", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("A2", "val", ".foo_host.com", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("A3", "val", "bar.host.com", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("A4", "val", ".bar.host.com", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   mojom::CookieDeletionFilter filter;
@@ -1215,31 +1250,32 @@ TEST_F(CookieManagerTest, DeleteDetails_eTLDvsPrivateRegistry) {
       net::CanonicalCookie("A1", "val", "random.co.uk", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
-      net::CanonicalCookie(
-          "A2", "val", "sub.domain.random.co.uk", "/", base::Time(),
-          base::Time(), base::Time(), /*secure=*/false, /*httponly=*/false,
-          net::CookieSameSite::LAX_MODE, net::COOKIE_PRIORITY_MEDIUM),
+      net::CanonicalCookie("A2", "val", "sub.domain.random.co.uk", "/",
+                           base::Time(), base::Time(), base::Time(),
+                           /*secure=*/false, /*httponly=*/false,
+                           net::CookieSameSite::LAX_MODE,
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("A3", "val", "random.com", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie(
           "A4", "val", "random", "/", base::Time(), base::Time(), base::Time(),
           /*secure=*/false, /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-          net::COOKIE_PRIORITY_MEDIUM),
+          net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("A5", "val", "normal.co.uk", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   mojom::CookieDeletionFilter filter;
@@ -1260,7 +1296,7 @@ TEST_F(CookieManagerTest, DeleteDetails_PrivateRegistry) {
       net::CanonicalCookie("A1", "val", "privatedomain", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   EXPECT_TRUE(SetCanonicalCookie(
@@ -1269,7 +1305,8 @@ TEST_F(CookieManagerTest, DeleteDetails_PrivateRegistry) {
           // .com.
           "A2", "val", "privatedomain.com", "/", base::Time(), base::Time(),
           base::Time(), /*secure=*/false, /*httponly=*/false,
-          net::CookieSameSite::LAX_MODE, net::COOKIE_PRIORITY_MEDIUM),
+          net::CookieSameSite::LAX_MODE, net::COOKIE_PRIORITY_MEDIUM,
+          /*same_party=*/false),
       "https", true));
 
   EXPECT_TRUE(SetCanonicalCookie(
@@ -1278,7 +1315,8 @@ TEST_F(CookieManagerTest, DeleteDetails_PrivateRegistry) {
           // level
           "A3", "val", "subdomain.privatedomain", "/", base::Time(),
           base::Time(), base::Time(), /*secure=*/false, /*httponly=*/false,
-          net::CookieSameSite::LAX_MODE, net::COOKIE_PRIORITY_MEDIUM),
+          net::CookieSameSite::LAX_MODE, net::COOKIE_PRIORITY_MEDIUM,
+          /*same_party=*/false),
       "https", true));
 
   mojom::CookieDeletionFilter filter;
@@ -1309,30 +1347,34 @@ TEST_F(CookieManagerTest, DeleteDetails_IgnoredFields) {
 
   // Value
   EXPECT_TRUE(SetCanonicalCookie(
-      net::CanonicalCookie(
-          "A01", "RandomValue", "example.com", "/", base::Time(), base::Time(),
-          base::Time(), /*secure=*/false, /*httponly=*/false,
-          net::CookieSameSite::LAX_MODE, net::COOKIE_PRIORITY_MEDIUM),
+      net::CanonicalCookie("A01", "RandomValue", "example.com", "/",
+                           base::Time(), base::Time(), base::Time(),
+                           /*secure=*/false, /*httponly=*/false,
+                           net::CookieSameSite::LAX_MODE,
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
-      net::CanonicalCookie(
-          "A02", "RandomValue", "canonical.com", "/", base::Time(),
-          base::Time(), base::Time(), /*secure=*/false, /*httponly=*/false,
-          net::CookieSameSite::LAX_MODE, net::COOKIE_PRIORITY_MEDIUM),
+      net::CanonicalCookie("A02", "RandomValue", "canonical.com", "/",
+                           base::Time(), base::Time(), base::Time(),
+                           /*secure=*/false, /*httponly=*/false,
+                           net::CookieSameSite::LAX_MODE,
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   // Path
   EXPECT_TRUE(SetCanonicalCookie(
-      net::CanonicalCookie(
-          "A03", "val", "example.com", "/this/is/a/long/path", base::Time(),
-          base::Time(), base::Time(), /*secure=*/false, /*httponly=*/false,
-          net::CookieSameSite::LAX_MODE, net::COOKIE_PRIORITY_MEDIUM),
+      net::CanonicalCookie("A03", "val", "example.com", "/this/is/a/long/path",
+                           base::Time(), base::Time(), base::Time(),
+                           /*secure=*/false, /*httponly=*/false,
+                           net::CookieSameSite::LAX_MODE,
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
-      net::CanonicalCookie(
-          "A04", "val", "canonical.com", "/this/is/a/long/path", base::Time(),
-          base::Time(), base::Time(), /*secure=*/false, /*httponly=*/false,
-          net::CookieSameSite::LAX_MODE, net::COOKIE_PRIORITY_MEDIUM),
+      net::CanonicalCookie("A04", "val", "canonical.com",
+                           "/this/is/a/long/path", base::Time(), base::Time(),
+                           base::Time(), /*secure=*/false, /*httponly=*/false,
+                           net::CookieSameSite::LAX_MODE,
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   // Last_access
@@ -1342,7 +1384,7 @@ TEST_F(CookieManagerTest, DeleteDetails_IgnoredFields) {
           base::Time::Now() - base::TimeDelta::FromDays(3), base::Time(),
           base::Time::Now() - base::TimeDelta::FromDays(3), /*secure=*/false,
           /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-          net::COOKIE_PRIORITY_MEDIUM),
+          net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie(
@@ -1350,7 +1392,7 @@ TEST_F(CookieManagerTest, DeleteDetails_IgnoredFields) {
           base::Time::Now() - base::TimeDelta::FromDays(3), base::Time(),
           base::Time::Now() - base::TimeDelta::FromDays(3), /*secure=*/false,
           /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-          net::COOKIE_PRIORITY_MEDIUM),
+          net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   // Same_site
@@ -1358,13 +1400,13 @@ TEST_F(CookieManagerTest, DeleteDetails_IgnoredFields) {
       net::CanonicalCookie("A07", "val", "example.com", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::STRICT_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("A08", "val", "canonical.com", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::STRICT_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   // Priority
@@ -1372,13 +1414,13 @@ TEST_F(CookieManagerTest, DeleteDetails_IgnoredFields) {
       net::CanonicalCookie("A09", "val", "example.com", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_HIGH),
+                           net::COOKIE_PRIORITY_HIGH, /*same_party=*/false),
       "https", true));
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("A10", "val", "canonical.com", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_HIGH),
+                           net::COOKIE_PRIORITY_HIGH, /*same_party=*/false),
       "https", true));
 
   // Use the filter and make sure the result is the expected set.
@@ -1469,10 +1511,11 @@ TEST_F(CookieManagerTest, DeleteDetails_Consumer) {
 
     // Standard cookie
     EXPECT_TRUE(SetCanonicalCookie(
-        net::CanonicalCookie(
-            "A1", "val", test_cases[i].domain, test_cases[i].path, base::Time(),
-            base::Time(), base::Time(), /*secure=*/false, /*httponly=*/false,
-            net::CookieSameSite::LAX_MODE, net::COOKIE_PRIORITY_MEDIUM),
+        net::CanonicalCookie("A1", "val", test_cases[i].domain,
+                             test_cases[i].path, base::Time(), base::Time(),
+                             base::Time(), /*secure=*/false, /*httponly=*/false,
+                             net::CookieSameSite::LAX_MODE,
+                             net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
         "https", true));
 
     if (!exclude_domain_cookie) {
@@ -1482,24 +1525,26 @@ TEST_F(CookieManagerTest, DeleteDetails_Consumer) {
               "A2", "val", "." + test_cases[i].domain, test_cases[i].path,
               base::Time(), base::Time(), base::Time(), /*secure=*/false,
               /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-              net::COOKIE_PRIORITY_MEDIUM),
+              net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
           "https", true));
     }
 
     // Httponly cookie
     EXPECT_TRUE(SetCanonicalCookie(
-        net::CanonicalCookie(
-            "A3", "val", test_cases[i].domain, test_cases[i].path, base::Time(),
-            base::Time(), base::Time(), /*secure=*/false, /*httponly=*/true,
-            net::CookieSameSite::LAX_MODE, net::COOKIE_PRIORITY_MEDIUM),
+        net::CanonicalCookie("A3", "val", test_cases[i].domain,
+                             test_cases[i].path, base::Time(), base::Time(),
+                             base::Time(), /*secure=*/false, /*httponly=*/true,
+                             net::CookieSameSite::LAX_MODE,
+                             net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
         "https", true));
 
     // Httponly and secure cookie
     EXPECT_TRUE(SetCanonicalCookie(
-        net::CanonicalCookie(
-            "A4", "val", test_cases[i].domain, test_cases[i].path, base::Time(),
-            base::Time(), base::Time(), /*secure=*/false, /*httponly=*/true,
-            net::CookieSameSite::LAX_MODE, net::COOKIE_PRIORITY_MEDIUM),
+        net::CanonicalCookie("A4", "val", test_cases[i].domain,
+                             test_cases[i].path, base::Time(), base::Time(),
+                             base::Time(), /*secure=*/false, /*httponly=*/true,
+                             net::CookieSameSite::LAX_MODE,
+                             net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
         "https", true));
 
     const uint32_t number_cookies = exclude_domain_cookie ? 3u : 4u;
@@ -1520,28 +1565,28 @@ TEST_F(CookieManagerTest, DeleteByName) {
       net::CanonicalCookie("A1", "val", kCookieDomain, "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true /*modify_httponly*/));
 
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("A1", "val", "bar_host", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true /*modify_httponly*/));
 
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("A2", "val", kCookieDomain, "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true /*modify_httponly*/));
 
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("A3", "val", "bar_host", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true /*modify_httponly*/));
 
   mojom::CookieDeletionFilter filter;
@@ -1561,36 +1606,40 @@ TEST_F(CookieManagerTest, DeleteByURL) {
 
   // Cookie that shouldn't be deleted because it's secure.
   EXPECT_TRUE(SetCanonicalCookie(
-      net::CanonicalCookie(
-          "A01", "val", "www.example.com", "/path", base::Time(), base::Time(),
-          base::Time(), /*secure=*/true, /*httponly=*/false,
-          net::CookieSameSite::NO_RESTRICTION, net::COOKIE_PRIORITY_MEDIUM),
+      net::CanonicalCookie("A01", "val", "www.example.com", "/path",
+                           base::Time(), base::Time(), base::Time(),
+                           /*secure=*/true, /*httponly=*/false,
+                           net::CookieSameSite::NO_RESTRICTION,
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true /*modify_httponly*/));
 
   // Cookie that should not be deleted because it's a host cookie in a
   // subdomain that doesn't exactly match the passed URL.
   EXPECT_TRUE(SetCanonicalCookie(
-      net::CanonicalCookie(
-          "A02", "val", "sub.www.example.com", "/path", base::Time(),
-          base::Time(), base::Time(), /*secure=*/false, /*httponly=*/false,
-          net::CookieSameSite::LAX_MODE, net::COOKIE_PRIORITY_MEDIUM),
+      net::CanonicalCookie("A02", "val", "sub.www.example.com", "/path",
+                           base::Time(), base::Time(), base::Time(),
+                           /*secure=*/false, /*httponly=*/false,
+                           net::CookieSameSite::LAX_MODE,
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true /*modify_httponly*/));
 
   // Cookie that shouldn't be deleted because the path doesn't match.
   EXPECT_TRUE(SetCanonicalCookie(
-      net::CanonicalCookie(
-          "A03", "val", "www.example.com", "/otherpath", base::Time(),
-          base::Time(), base::Time(), /*secure=*/false, /*httponly=*/false,
-          net::CookieSameSite::LAX_MODE, net::COOKIE_PRIORITY_MEDIUM),
+      net::CanonicalCookie("A03", "val", "www.example.com", "/otherpath",
+                           base::Time(), base::Time(), base::Time(),
+                           /*secure=*/false, /*httponly=*/false,
+                           net::CookieSameSite::LAX_MODE,
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true /*modify_httponly*/));
 
   // Cookie that shouldn't be deleted because the path is more specific
   // than the URL.
   EXPECT_TRUE(SetCanonicalCookie(
-      net::CanonicalCookie(
-          "A04", "val", "www.example.com", "/path/path2", base::Time(),
-          base::Time(), base::Time(), /*secure=*/false, /*httponly=*/false,
-          net::CookieSameSite::LAX_MODE, net::COOKIE_PRIORITY_MEDIUM),
+      net::CanonicalCookie("A04", "val", "www.example.com", "/path/path2",
+                           base::Time(), base::Time(), base::Time(),
+                           /*secure=*/false, /*httponly=*/false,
+                           net::CookieSameSite::LAX_MODE,
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true /*modify_httponly*/));
 
   // Cookie that shouldn't be deleted because it's at a host cookie domain that
@@ -1599,25 +1648,27 @@ TEST_F(CookieManagerTest, DeleteByURL) {
       net::CanonicalCookie("A05", "val", "example.com", "/path", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true /*modify_httponly*/));
 
   // Cookie that should not be deleted because it's not a host cookie and
   // has a domain that's more specific than the URL
   EXPECT_TRUE(SetCanonicalCookie(
-      net::CanonicalCookie(
-          "A06", "val", ".sub.www.example.com", "/path", base::Time(),
-          base::Time(), base::Time(), /*secure=*/false, /*httponly=*/false,
-          net::CookieSameSite::LAX_MODE, net::COOKIE_PRIORITY_MEDIUM),
+      net::CanonicalCookie("A06", "val", ".sub.www.example.com", "/path",
+                           base::Time(), base::Time(), base::Time(),
+                           /*secure=*/false, /*httponly=*/false,
+                           net::CookieSameSite::LAX_MODE,
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true /*modify_httponly*/));
 
   // Cookie that should be deleted because it's not a host cookie and has a
   // domain that matches the URL
   EXPECT_TRUE(SetCanonicalCookie(
-      net::CanonicalCookie(
-          "A07", "val", ".www.example.com", "/path", base::Time(), base::Time(),
-          base::Time(), /*secure=*/false, /*httponly=*/false,
-          net::CookieSameSite::LAX_MODE, net::COOKIE_PRIORITY_MEDIUM),
+      net::CanonicalCookie("A07", "val", ".www.example.com", "/path",
+                           base::Time(), base::Time(), base::Time(),
+                           /*secure=*/false, /*httponly=*/false,
+                           net::CookieSameSite::LAX_MODE,
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true /*modify_httponly*/));
 
   // Cookie that should be deleted because it's not a host cookie and has a
@@ -1626,15 +1677,16 @@ TEST_F(CookieManagerTest, DeleteByURL) {
       net::CanonicalCookie("A08", "val", ".example.com", "/path", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true /*modify_httponly*/));
 
   // Cookie that should be deleted because it matches exactly.
   EXPECT_TRUE(SetCanonicalCookie(
-      net::CanonicalCookie(
-          "A09", "val", "www.example.com", "/path", base::Time(), base::Time(),
-          base::Time(), /*secure=*/false, /*httponly=*/false,
-          net::CookieSameSite::LAX_MODE, net::COOKIE_PRIORITY_MEDIUM),
+      net::CanonicalCookie("A09", "val", "www.example.com", "/path",
+                           base::Time(), base::Time(), base::Time(),
+                           /*secure=*/false, /*httponly=*/false,
+                           net::CookieSameSite::LAX_MODE,
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true /*modify_httponly*/));
 
   // Cookie that should be deleted because it applies to a larger set
@@ -1643,7 +1695,7 @@ TEST_F(CookieManagerTest, DeleteByURL) {
       net::CanonicalCookie("A10", "val", "www.example.com", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true /*modify_httponly*/));
 
   mojom::CookieDeletionFilter filter;
@@ -1670,7 +1722,7 @@ TEST_F(CookieManagerTest, DeleteBySessionStatus) {
       net::CanonicalCookie("A1", "val", kCookieDomain, "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   EXPECT_TRUE(SetCanonicalCookie(
@@ -1678,14 +1730,14 @@ TEST_F(CookieManagerTest, DeleteBySessionStatus) {
                            now + base::TimeDelta::FromDays(1), base::Time(),
                            /*secure=*/false, /*httponly=*/false,
                            net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie("A3", "val", kCookieDomain, "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   mojom::CookieDeletionFilter filter;
@@ -1732,13 +1784,13 @@ TEST_F(CookieManagerTest, DeleteByAll) {
   filter.session_control =
       mojom::CookieDeletionSessionControl::PERSISTENT_COOKIES;
 
-  // Architectypal cookie:
+  // Archetypal cookie:
   EXPECT_TRUE(SetCanonicalCookie(
       net::CanonicalCookie(
           "A1", "val0", "nope.com", "/path", now - base::TimeDelta::FromDays(3),
           now + base::TimeDelta::FromDays(3), base::Time(), /*secure=*/false,
           /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-          net::COOKIE_PRIORITY_MEDIUM),
+          net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   // Too old cookie.
@@ -1747,7 +1799,7 @@ TEST_F(CookieManagerTest, DeleteByAll) {
           "A2", "val1", "nope.com", "/path", now - base::TimeDelta::FromDays(5),
           now + base::TimeDelta::FromDays(3), base::Time(), /*secure=*/false,
           /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-          net::COOKIE_PRIORITY_MEDIUM),
+          net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   // Too young cookie.
@@ -1756,7 +1808,7 @@ TEST_F(CookieManagerTest, DeleteByAll) {
           "A3", "val2", "nope.com", "/path", now - base::TimeDelta::FromDays(1),
           now + base::TimeDelta::FromDays(3), base::Time(), /*secure=*/false,
           /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-          net::COOKIE_PRIORITY_MEDIUM),
+          net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   // Not in domains_and_ips_to_delete.
@@ -1766,7 +1818,7 @@ TEST_F(CookieManagerTest, DeleteByAll) {
                            now + base::TimeDelta::FromDays(3), base::Time(),
                            /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   // In domains_and_ips_to_ignore.
@@ -1775,7 +1827,7 @@ TEST_F(CookieManagerTest, DeleteByAll) {
           "A5", "val4", "no.com", "/path", now - base::TimeDelta::FromDays(3),
           now + base::TimeDelta::FromDays(3), base::Time(), /*secure=*/false,
           /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-          net::COOKIE_PRIORITY_MEDIUM),
+          net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   // Doesn't match URL (by path).
@@ -1785,15 +1837,16 @@ TEST_F(CookieManagerTest, DeleteByAll) {
                            now + base::TimeDelta::FromDays(3), base::Time(),
                            /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   // Session
   EXPECT_TRUE(SetCanonicalCookie(
-      net::CanonicalCookie(
-          "A7", "val7", "nope.com", "/path", now - base::TimeDelta::FromDays(3),
-          base::Time(), base::Time(), /*secure=*/false, /*httponly=*/false,
-          net::CookieSameSite::LAX_MODE, net::COOKIE_PRIORITY_MEDIUM),
+      net::CanonicalCookie("A7", "val7", "nope.com", "/path",
+                           now - base::TimeDelta::FromDays(3), base::Time(),
+                           base::Time(), /*secure=*/false, /*httponly=*/false,
+                           net::CookieSameSite::LAX_MODE,
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   EXPECT_EQ(1u, service_wrapper()->DeleteCookies(filter));
@@ -1871,7 +1924,7 @@ TEST_F(CookieManagerTest, AddCookieChangeListener) {
                            base::Time(), base::Time(), base::Time(),
                            /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(0u, listener.observed_changes().size());
@@ -1883,7 +1936,7 @@ TEST_F(CookieManagerTest, AddCookieChangeListener) {
                            base::Time(), base::Time(), base::Time(),
                            /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true);
 
   base::RunLoop().RunUntilIdle();
@@ -1895,7 +1948,7 @@ TEST_F(CookieManagerTest, AddCookieChangeListener) {
                            base::Time(), base::Time(), base::Time(),
                            /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true);
 
   // Expect asynchrony
@@ -1949,7 +2002,7 @@ TEST_F(CookieManagerTest, AddGlobalChangeListener) {
       net::CanonicalCookie("Thing1", "val", kExampleHost, "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true);
 
   // Expect asynchrony
@@ -1972,13 +2025,13 @@ TEST_F(CookieManagerTest, AddGlobalChangeListener) {
       net::CanonicalCookie("Thing1", "val", kThisHost, "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true);
   service_wrapper()->SetCanonicalCookie(
       net::CanonicalCookie("Thing2", "val", kThatHost, "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true);
 
   base::RunLoop().RunUntilIdle();
@@ -2034,7 +2087,7 @@ TEST_F(CookieManagerTest, ListenerDestroyed) {
                            base::Time(), base::Time(), base::Time(),
                            /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true);
 
   EXPECT_EQ(0u, listener1->observed_changes().size());
@@ -2087,7 +2140,7 @@ TEST_F(CookieManagerTest, CloningAndClientDestructVisible) {
       net::CanonicalCookie("X", "Y", "www.other.host", "/", base::Time(),
                            base::Time(), base::Time(), /*secure=*/false,
                            /*httponly=*/false, net::CookieSameSite::LAX_MODE,
-                           net::COOKIE_PRIORITY_MEDIUM),
+                           net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false),
       "https", true));
 
   std::vector<net::CanonicalCookie> cookies = service_wrapper()->GetCookieList(
@@ -2249,11 +2302,11 @@ class SessionCleanupCookieManagerTest : public CookieManagerTest {
 
   net::CanonicalCookie CreateCookie(const std::string& domain) {
     base::Time t = base::Time::Now();
-    return net::CanonicalCookie("A", "B", domain, "/", t,
-                                t + base::TimeDelta::FromDays(1), base::Time(),
-                                /*secure=*/false, /*httponly=*/false,
-                                net::CookieSameSite::LAX_MODE,
-                                net::COOKIE_PRIORITY_MEDIUM);
+    return net::CanonicalCookie(
+        "A", "B", domain, "/", t, t + base::TimeDelta::FromDays(1),
+        base::Time(),
+        /*secure=*/false, /*httponly=*/false, net::CookieSameSite::LAX_MODE,
+        net::COOKIE_PRIORITY_MEDIUM, /*same_party=*/false);
   }
 
  private:

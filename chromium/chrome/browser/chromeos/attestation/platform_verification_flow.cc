@@ -20,10 +20,10 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chromeos/attestation/attestation_flow.h"
 #include "chromeos/constants/chromeos_switches.h"
-#include "chromeos/cryptohome/async_method_caller.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/attestation/attestation.pb.h"
-#include "chromeos/dbus/cryptohome/cryptohome_client.h"
+#include "chromeos/dbus/attestation/attestation_client.h"
+#include "chromeos/dbus/attestation/interface.pb.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
@@ -51,22 +51,6 @@ const char kAttestationResultHistogram[] =
 const char kAttestationAvailableHistogram[] =
     "ChromeOS.PlatformVerification.Available";
 const int kOpportunisticRenewalThresholdInDays = 30;
-
-// A callback method to handle DBus errors.
-// `on_success` and `on_failure` are called mutally exclusively,
-// and `context` is moved into the chosen callback.
-template <typename ContextT>
-void DBusCallback(base::OnceCallback<void(ContextT, bool)> on_success,
-                  base::OnceCallback<void(ContextT)> on_failure,
-                  ContextT context,
-                  base::Optional<bool> result) {
-  if (result.has_value()) {
-    std::move(on_success).Run(std::move(context), result.value());
-  } else {
-    LOG(ERROR) << "PlatformVerificationFlow: DBus call failed!";
-    std::move(on_failure).Run(std::move(context));
-  }
-}
 
 // A helper to call a ChallengeCallback with an error result.
 void ReportError(
@@ -151,14 +135,13 @@ PlatformVerificationFlow::ChallengeContext::~ChallengeContext() = default;
 
 PlatformVerificationFlow::PlatformVerificationFlow()
     : attestation_flow_(NULL),
-      async_caller_(cryptohome::AsyncMethodCaller::GetInstance()),
-      cryptohome_client_(CryptohomeClient::Get()),
+      attestation_client_(AttestationClient::Get()),
       delegate_(NULL),
       timeout_delay_(base::TimeDelta::FromSeconds(kTimeoutInSeconds)) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   std::unique_ptr<ServerProxy> attestation_ca_client(new AttestationCAClient());
-  default_attestation_flow_.reset(new AttestationFlow(
-      async_caller_, cryptohome_client_, std::move(attestation_ca_client)));
+  default_attestation_flow_.reset(
+      new AttestationFlow(std::move(attestation_ca_client)));
   attestation_flow_ = default_attestation_flow_.get();
   default_delegate_.reset(new DefaultDelegate());
   delegate_ = default_delegate_.get();
@@ -166,12 +149,10 @@ PlatformVerificationFlow::PlatformVerificationFlow()
 
 PlatformVerificationFlow::PlatformVerificationFlow(
     AttestationFlow* attestation_flow,
-    cryptohome::AsyncMethodCaller* async_caller,
-    CryptohomeClient* cryptohome_client,
+    AttestationClient* attestation_client,
     Delegate* delegate)
     : attestation_flow_(attestation_flow),
-      async_caller_(async_caller),
-      cryptohome_client_(cryptohome_client),
+      attestation_client_(attestation_client),
       delegate_(delegate),
       timeout_delay_(base::TimeDelta::FromSeconds(kTimeoutInSeconds)) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -227,18 +208,23 @@ void PlatformVerificationFlow::ChallengePlatformKey(
                            std::move(callback));
 
   // Check if the device has been prepared to use attestation.
-  cryptohome_client_->TpmAttestationIsPrepared(base::BindOnce(
-      &DBusCallback<ChallengeContext>,
-      base::Bind(&PlatformVerificationFlow::OnAttestationPrepared, this),
-      base::Bind([](ChallengeContext context) {
-        ReportError(std::move(context).callback, INTERNAL_ERROR);
-      }),
-      std::move(context)));
+  ::attestation::GetEnrollmentPreparationsRequest request;
+  attestation_client_->GetEnrollmentPreparations(
+      request, base::BindOnce(&PlatformVerificationFlow::OnAttestationPrepared,
+                              this, std::move(context)));
 }
 
 void PlatformVerificationFlow::OnAttestationPrepared(
     ChallengeContext context,
-    bool attestation_prepared) {
+    const ::attestation::GetEnrollmentPreparationsReply& reply) {
+  if (reply.status() != ::attestation::STATUS_SUCCESS) {
+    LOG(ERROR)
+        << "Platform verification failed to check if attestation is prepared.";
+    ReportError(std::move(context).callback, INTERNAL_ERROR);
+    return;
+  }
+  const bool attestation_prepared =
+      AttestationClient::IsAttestationPrepared(reply);
   UMA_HISTOGRAM_BOOLEAN(kAttestationAvailableHistogram, attestation_prepared);
 
   if (!attestation_prepared) {
@@ -309,13 +295,14 @@ void PlatformVerificationFlow::OnCertificateReady(
   bool is_expiring_soon = (expiry_status == EXPIRY_STATUS_EXPIRING_SOON);
   std::string key_name = kContentProtectionKeyPrefix + context->data.service_id;
   std::string challenge = context->data.challenge;
-  cryptohome::AsyncMethodCaller::DataCallback cryptohome_callback =
-      base::BindOnce(&PlatformVerificationFlow::OnChallengeReady, this,
-                     std::move(*context).data, account_id, certificate_chain,
-                     is_expiring_soon);
-  async_caller_->TpmAttestationSignSimpleChallenge(
-      KEY_USER, cryptohome::Identification(account_id), std::move(key_name),
-      std::move(challenge), std::move(cryptohome_callback));
+  ::attestation::SignSimpleChallengeRequest request;
+  request.set_username(cryptohome::Identification(account_id).id());
+  request.set_key_label(std::move(key_name));
+  request.set_challenge(std::move(challenge));
+  AttestationClient::Get()->SignSimpleChallenge(
+      request, base::BindOnce(&PlatformVerificationFlow::OnChallengeReady, this,
+                              std::move(*context).data, account_id,
+                              certificate_chain, is_expiring_soon));
 }
 
 void PlatformVerificationFlow::OnCertificateTimeout(
@@ -329,15 +316,16 @@ void PlatformVerificationFlow::OnChallengeReady(
     const AccountId& account_id,
     const std::string& certificate_chain,
     bool is_expiring_soon,
-    bool operation_success,
-    const std::string& response_data) {
-  if (!operation_success) {
-    LOG(ERROR) << "PlatformVerificationFlow: Failed to sign challenge.";
+    const ::attestation::SignSimpleChallengeReply& reply) {
+  if (reply.status() != ::attestation::STATUS_SUCCESS) {
+    LOG(ERROR) << "PlatformVerificationFlow: Failed to sign challenge: "
+               << reply.status();
     ReportError(std::move(context).callback, INTERNAL_ERROR);
     return;
   }
   chromeos::attestation::SignedData signed_data_pb;
-  if (response_data.empty() || !signed_data_pb.ParseFromString(response_data)) {
+  if (reply.challenge_response().empty() ||
+      !signed_data_pb.ParseFromString(reply.challenge_response())) {
     LOG(ERROR) << "PlatformVerificationFlow: Failed to parse response data.";
     ReportError(std::move(context).callback, INTERNAL_ERROR);
     return;

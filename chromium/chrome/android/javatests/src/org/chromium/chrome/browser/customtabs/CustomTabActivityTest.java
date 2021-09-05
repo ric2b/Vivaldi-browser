@@ -75,6 +75,9 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.CriteriaNotSatisfiedException;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
@@ -105,6 +108,7 @@ import org.chromium.chrome.browser.metrics.PageLoadMetrics;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabContextMenuItemDelegate;
 import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabHidingType;
 import org.chromium.chrome.browser.tab.TabLaunchType;
@@ -133,9 +137,6 @@ import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.WebContentsObserver;
 import org.chromium.content_public.browser.test.util.ClickUtils;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
-import org.chromium.content_public.browser.test.util.CriteriaNotSatisfiedException;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -948,6 +949,7 @@ public class CustomTabActivityTest {
     public void testActionButtonBadRatio() {
         Bitmap expectedIcon = createTestBitmap(60, 20);
         Intent intent = createMinimalCustomTabIntent();
+        CustomTabsTestUtils.setShareState(intent, CustomTabsIntent.SHARE_STATE_OFF);
         CustomTabsTestUtils.addActionButtonToIntent(
                 intent, expectedIcon, "Good test", sIdToIncrement++);
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
@@ -2528,6 +2530,165 @@ public class CustomTabActivityTest {
         Assert.assertTrue(mCustomTabActivityTestRule.getActivity()
                                   .getActivityTab()
                                   .getHideFutureNavigations());
+    }
+
+    @Test
+    @SmallTest
+    public void testShouldBlockNewNotificationRequestsDefaultsToFalse() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation()
+                                  .getTargetContext()
+                                  .getApplicationContext();
+        Intent intent = CustomTabsTestUtils.createMinimalCustomTabIntent(context, mTestPage);
+        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
+        Assert.assertFalse(mCustomTabActivityTestRule.getActivity()
+                                   .getActivityTab()
+                                   .getShouldBlockNewNotificationRequests());
+    }
+
+    @Test
+    @SmallTest
+    public void testShouldBlockNewNotificationRequests() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation()
+                                  .getTargetContext()
+                                  .getApplicationContext();
+        Intent intent = CustomTabsTestUtils.createMinimalCustomTabIntent(context, mTestPage);
+        intent.setData(Uri.parse(mTestPage));
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.putExtra(
+                CustomTabIntentDataProvider.EXTRA_BLOCK_NEW_NOTIFICATION_REQUESTS_IN_CCT, true);
+        CustomTabsSessionToken token = CustomTabsSessionToken.getSessionTokenFromIntent(intent);
+        CustomTabsConnection connection = CustomTabsConnection.getInstance();
+        connection.newSession(token);
+        connection.overridePackageNameForSessionForTesting(
+                token, "com.google.android.googlequicksearchbox");
+        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
+        Assert.assertTrue(mCustomTabActivityTestRule.getActivity()
+                                  .getActivityTab()
+                                  .getShouldBlockNewNotificationRequests());
+    }
+
+    @Test
+    @SmallTest
+    public void testHideOpenInChromeMenuItemInContextMenu() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation()
+                                  .getTargetContext()
+                                  .getApplicationContext();
+        Intent intent = CustomTabsTestUtils.createMinimalCustomTabIntent(context, mTestPage);
+        intent.setData(Uri.parse(mTestPage));
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.putExtra(
+                CustomTabIntentDataProvider.EXTRA_HIDE_OPEN_IN_CHROME_MENU_ITEM_IN_CONTEXT_MENU,
+                true);
+        CustomTabsSessionToken token = CustomTabsSessionToken.getSessionTokenFromIntent(intent);
+        CustomTabsConnection connection = CustomTabsConnection.getInstance();
+        connection.newSession(token);
+        connection.overridePackageNameForSessionForTesting(
+                token, "com.google.android.googlequicksearchbox");
+        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Tab tab = mCustomTabActivityTestRule.getActivity().getActivityTab();
+            Assert.assertTrue(tab != null);
+            Assert.assertTrue(
+                    TabTestUtils.getDelegateFactory(tab) instanceof CustomTabDelegateFactory);
+            TabContextMenuItemDelegate tabContextMenuItemDelegate =
+                    ((CustomTabDelegateFactory) TabTestUtils.getDelegateFactory(tab))
+                            .createTabContextMenuItemDelegate(tab);
+            // EXTRA_HIDE_OPEN_IN_CHROME_MENU_ITEM_IN_CONTEXT_MENU should be propagated to the
+            // tabContextMenuItemDelegate.
+            Assert.assertFalse(tabContextMenuItemDelegate.supportsOpenInChromeFromCct());
+        });
+    }
+
+    @Test
+    @SmallTest
+    public void testHideOpenInChromeMenuItemInContextMenuIgnoredWrongPackage() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation()
+                                  .getTargetContext()
+                                  .getApplicationContext();
+        Intent intent = CustomTabsTestUtils.createMinimalCustomTabIntent(context, mTestPage);
+        intent.setData(Uri.parse(mTestPage));
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.putExtra(
+                CustomTabIntentDataProvider.EXTRA_HIDE_OPEN_IN_CHROME_MENU_ITEM_IN_CONTEXT_MENU,
+                true);
+        CustomTabsSessionToken token = CustomTabsSessionToken.getSessionTokenFromIntent(intent);
+        CustomTabsConnection connection = CustomTabsConnection.getInstance();
+        connection.newSession(token);
+        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
+        // EXTRA_HIDE_OPEN_IN_CHROME_MENU_ITEM_IN_CONTEXT_MENU should be ignored without the right
+        // package.
+        TestThreadUtils.runOnUiThreadBlocking(() -> {
+            Tab tab = mCustomTabActivityTestRule.getActivity().getActivityTab();
+            Assert.assertTrue(tab != null);
+            Assert.assertTrue(
+                    TabTestUtils.getDelegateFactory(tab) instanceof CustomTabDelegateFactory);
+            TabContextMenuItemDelegate tabContextMenuItemDelegate =
+                    ((CustomTabDelegateFactory) TabTestUtils.getDelegateFactory(tab))
+                            .createTabContextMenuItemDelegate(tab);
+            // EXTRA_HIDE_OPEN_IN_CHROME_MENU_ITEM_IN_CONTEXT_MENU should be ignored without the
+            // right package.
+            Assert.assertTrue(tabContextMenuItemDelegate.supportsOpenInChromeFromCct());
+        });
+    }
+
+    @Test
+    @SmallTest
+    public void testHideOpenInChromeMenuItem() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation()
+                                  .getTargetContext()
+                                  .getApplicationContext();
+        Intent intent = CustomTabsTestUtils.createMinimalCustomTabIntent(context, mTestPage);
+        intent.setData(Uri.parse(mTestPage));
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_HIDE_OPEN_IN_CHROME_MENU_ITEM, true);
+        CustomTabsSessionToken token = CustomTabsSessionToken.getSessionTokenFromIntent(intent);
+        CustomTabsConnection connection = CustomTabsConnection.getInstance();
+        connection.newSession(token);
+        connection.overridePackageNameForSessionForTesting(
+                token, "com.google.android.googlequicksearchbox");
+        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
+
+        IntentFilter filter = new IntentFilter(Intent.ACTION_VIEW);
+        final ActivityMonitor monitor =
+                InstrumentationRegistry.getInstrumentation().addMonitor(filter, null, false);
+        openAppMenuAndAssertMenuShown();
+        PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> {
+            MenuItem item =
+                    AppMenuTestSupport.getMenu(mCustomTabActivityTestRule.getAppMenuCoordinator())
+                            .findItem(R.id.open_in_browser_id);
+            // The menu item should be there, but hidden.
+            Assert.assertNotNull(item);
+            Assert.assertFalse(item.isVisible());
+        });
+    }
+
+    @Test
+    @SmallTest
+    public void testHideOpenInChromeMenuItemVisibleWithWrongPackage() throws Exception {
+        Context context = InstrumentationRegistry.getInstrumentation()
+                                  .getTargetContext()
+                                  .getApplicationContext();
+        Intent intent = CustomTabsTestUtils.createMinimalCustomTabIntent(context, mTestPage);
+        intent.setData(Uri.parse(mTestPage));
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.putExtra(CustomTabIntentDataProvider.EXTRA_HIDE_OPEN_IN_CHROME_MENU_ITEM, true);
+        CustomTabsSessionToken token = CustomTabsSessionToken.getSessionTokenFromIntent(intent);
+        CustomTabsConnection connection = CustomTabsConnection.getInstance();
+        connection.newSession(token);
+        mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
+
+        IntentFilter filter = new IntentFilter(Intent.ACTION_VIEW);
+        final ActivityMonitor monitor =
+                InstrumentationRegistry.getInstrumentation().addMonitor(filter, null, false);
+        openAppMenuAndAssertMenuShown();
+        PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> {
+            MenuItem item =
+                    AppMenuTestSupport.getMenu(mCustomTabActivityTestRule.getAppMenuCoordinator())
+                            .findItem(R.id.open_in_browser_id);
+            // As the package name doesn't match the expected package, the item should be visible.
+            Assert.assertNotNull(item);
+            Assert.assertTrue(item.isVisible());
+        });
     }
 
     /**

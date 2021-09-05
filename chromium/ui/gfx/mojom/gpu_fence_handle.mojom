@@ -6,5 +6,9 @@ module gfx.mojom;
 
 // See ui/gfx/ipc/gpu_fence_handle.h
 struct GpuFenceHandle {
-  handle<platform>? native_fd;
+  [EnableIf=is_posix]
+  handle<platform> native_fd;
+
+  [EnableIf=is_win]
+  handle<platform> native_handle;
 };

@@ -24,6 +24,7 @@
 
 #include "base/stl_util.h"
 #include "third_party/blink/renderer/core/css/style_change_reason.h"
+#include "third_party/blink/renderer/core/html/forms/html_text_area_element.h"
 #include "third_party/blink/renderer/core/html/forms/text_control_element.h"
 #include "third_party/blink/renderer/core/layout/hit_test_result.h"
 #include "third_party/blink/renderer/core/page/chrome_client.h"
@@ -53,7 +54,13 @@ void LayoutTextControl::StyleDidChange(StyleDifference diff,
                                        const ComputedStyle* old_style) {
   NOT_DESTROYED();
   LayoutBlockFlow::StyleDidChange(diff, old_style);
-  TextControlInnerEditorElement* inner_editor = InnerEditorElement();
+  StyleDidChange(InnerEditorElement(), old_style, StyleRef());
+}
+
+// static
+void LayoutTextControl::StyleDidChange(HTMLElement* inner_editor,
+                                       const ComputedStyle* old_style,
+                                       const ComputedStyle& new_style) {
   if (!inner_editor)
     return;
   LayoutBlock* inner_editor_layout_object =
@@ -64,7 +71,7 @@ void LayoutTextControl::StyleDidChange(StyleDifference diff,
     // (See TextControlInnerEditorElement::CreateInnerEditorStyle()).
     {
       StyleEngine::AllowMarkStyleDirtyFromRecalcScope scope(
-          GetDocument().GetStyleEngine());
+          inner_editor->GetDocument().GetStyleEngine());
       inner_editor->SetNeedsStyleRecalc(
           kLocalStyleChange,
           StyleChangeReasonForTracing::Create(style_change_reason::kControl));
@@ -74,67 +81,35 @@ void LayoutTextControl::StyleDidChange(StyleDifference diff,
     // (see: GetUncachedSelectionStyle in SelectionPaintingUtils.cpp) so ensure
     // the inner editor selection is invalidated anytime style changes and a
     // ::selection style is or was present on LayoutTextControl.
-    if (StyleRef().HasPseudoElementStyle(kPseudoIdSelection) ||
+    if (new_style.HasPseudoElementStyle(kPseudoIdSelection) ||
         (old_style && old_style->HasPseudoElementStyle(kPseudoIdSelection))) {
       inner_editor_layout_object->InvalidateSelectedChildrenOnStyleChange();
     }
   }
 }
 
-int LayoutTextControl::ScrollbarThickness() const {
-  NOT_DESTROYED();
-  return GetDocument().GetPage()->GetScrollbarTheme().ScrollbarThickness(
-      GetDocument().GetPage()->GetChromeClient().WindowToViewportScalar(
-          GetFrame(), 1.0f));
-}
-
-void LayoutTextControl::ComputeLogicalHeight(
-    LayoutUnit logical_height,
-    LayoutUnit logical_top,
-    LogicalExtentComputedValues& computed_values) const {
-  NOT_DESTROYED();
-  HTMLElement* inner_editor = InnerEditorElement();
-  DCHECK(inner_editor);
-  if (LayoutBox* inner_editor_box = inner_editor->GetLayoutBox()) {
-    LayoutUnit non_content_height = inner_editor_box->BorderAndPaddingHeight() +
-                                    inner_editor_box->MarginHeight();
-    logical_height = ComputeControlLogicalHeight(
-        inner_editor_box->LineHeight(true, kHorizontalLine,
-                                     kPositionOfInteriorLineBoxes),
-        non_content_height);
-
-    // We are able to have a horizontal scrollbar if the overflow style is
-    // scroll, or if its auto and there's no word wrap.
-    if (StyleRef().OverflowInlineDirection() == EOverflow::kScroll ||
-        (StyleRef().OverflowInlineDirection() == EOverflow::kAuto &&
-         inner_editor->GetLayoutObject()->StyleRef().OverflowWrap() ==
-             EOverflowWrap::kNormal))
-      logical_height += ScrollbarThickness();
-
-    // FIXME: The logical height of the inner text box should have been added
-    // before calling computeLogicalHeight to avoid this hack.
-    SetIntrinsicContentLogicalHeight(logical_height);
-
-    logical_height += BorderAndPaddingHeight();
-  }
-
-  LayoutBox::ComputeLogicalHeight(logical_height, logical_top, computed_values);
+// static
+int LayoutTextControl::ScrollbarThickness(const LayoutBox& box) {
+  const Page& page = *box.GetDocument().GetPage();
+  return page.GetScrollbarTheme().ScrollbarThickness(
+      page.GetChromeClient().WindowToViewportScalar(box.GetFrame(), 1.0f));
 }
 
 void LayoutTextControl::HitInnerEditorElement(
+    const LayoutBox& box,
+    HTMLElement& inner_editor,
     HitTestResult& result,
     const HitTestLocation& hit_test_location,
     const PhysicalOffset& accumulated_offset) {
   NOT_DESTROYED();
-  HTMLElement* inner_editor = InnerEditorElement();
-  if (!inner_editor->GetLayoutObject())
+  if (!inner_editor.GetLayoutObject())
     return;
 
   PhysicalOffset local_point =
       hit_test_location.Point() - accumulated_offset -
-      inner_editor->GetLayoutObject()->LocalToAncestorPoint(PhysicalOffset(),
-                                                            this);
-  result.SetNodeAndPosition(inner_editor, local_point);
+      inner_editor.GetLayoutObject()->LocalToAncestorPoint(PhysicalOffset(),
+                                                           &box);
+  result.SetNodeAndPosition(&inner_editor, local_point);
 }
 
 static const char* const kFontFamiliesWithInvalidCharWidth[] = {
@@ -179,13 +154,14 @@ static const char* const kFontFamiliesWithInvalidCharWidth[] = {
 // avgCharWidth from the width of a '0'. This only seems to apply to a fixed
 // number of Mac fonts, but, in order to get similar rendering across platforms,
 // we do this check for all platforms.
-bool LayoutTextControl::HasValidAvgCharWidth(const SimpleFontData* font_data,
-                                             const AtomicString& family) {
-  // Some fonts match avgCharWidth to CJK full-width characters.
-  // Heuristic check to avoid such fonts.
+bool LayoutTextControl::HasValidAvgCharWidth(const Font& font) {
+  const AtomicString family = font.GetFontDescription().Family().Family();
+  const SimpleFontData* font_data = font.PrimaryFont();
   DCHECK(font_data);
   if (!font_data)
     return false;
+  // Some fonts match avgCharWidth to CJK full-width characters.
+  // Heuristic check to avoid such fonts.
   const FontMetrics& metrics = font_data->GetFontMetrics();
   if (metrics.HasZeroWidth() &&
       font_data->AvgCharWidth() > metrics.ZeroWidth() * 1.7)
@@ -211,9 +187,8 @@ bool LayoutTextControl::HasValidAvgCharWidth(const SimpleFontData* font_data,
 // static
 float LayoutTextControl::GetAvgCharWidth(const ComputedStyle& style) {
   const Font& font = style.GetFont();
-  const AtomicString family = font.GetFontDescription().Family().Family();
   const SimpleFontData* primary_font = font.PrimaryFont();
-  if (primary_font && HasValidAvgCharWidth(primary_font, family))
+  if (primary_font && HasValidAvgCharWidth(font))
     return roundf(primary_font->AvgCharWidth());
 
   const UChar kCh = '0';
@@ -221,25 +196,6 @@ float LayoutTextControl::GetAvgCharWidth(const ComputedStyle& style) {
   TextRun text_run =
       ConstructTextRun(font, str, style, TextRun::kAllowTrailingExpansion);
   return font.Width(text_run);
-}
-
-MinMaxSizes LayoutTextControl::ComputeIntrinsicLogicalWidths() const {
-  NOT_DESTROYED();
-  MinMaxSizes sizes;
-  sizes += BorderAndPaddingLogicalWidth();
-
-  // Use average character width. Matches IE.
-  sizes.max_size += PreferredContentLogicalWidth(GetAvgCharWidth(StyleRef()));
-  if (InnerEditorElement()) {
-    if (LayoutBox* inner_editor_layout_box =
-            InnerEditorElement()->GetLayoutBox()) {
-      sizes.max_size += inner_editor_layout_box->PaddingStart() +
-                        inner_editor_layout_box->PaddingEnd();
-    }
-  }
-  if (!StyleRef().LogicalWidth().IsPercentOrCalc())
-    sizes.min_size = sizes.max_size;
-  return sizes;
 }
 
 void LayoutTextControl::AddOutlineRects(Vector<PhysicalRect>& rects,
@@ -290,7 +246,7 @@ LayoutUnit LayoutTextControl::FirstLineBoxBaseline() const {
   for (LayoutObject* box = inner_editor_layout_object; box && box != this;
        box = box->Parent()) {
     if (box->IsBox())
-      baseline += ToLayoutBox(box)->LogicalTop();
+      baseline += To<LayoutBox>(box)->LogicalTop();
   }
   return baseline;
 }

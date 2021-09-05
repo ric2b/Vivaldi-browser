@@ -37,6 +37,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.isIn;
 import static org.hamcrest.Matchers.iterableWithSize;
 
+import static org.chromium.base.test.util.CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL;
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.hasTypefaceSpan;
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.isImportantForAccessibility;
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.startAutofillAssistant;
@@ -45,7 +46,6 @@ import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUi
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.waitUntilViewMatchesCondition;
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.withMinimumSize;
 import static org.chromium.chrome.browser.autofill_assistant.AutofillAssistantUiTestUtil.withTextGravity;
-import static org.chromium.content_public.browser.test.util.CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL;
 
 import android.graphics.Typeface;
 import android.support.test.InstrumentationRegistry;
@@ -94,7 +94,6 @@ import org.chromium.chrome.browser.autofill_assistant.proto.ElementAreaProto.Rec
 import org.chromium.chrome.browser.autofill_assistant.proto.ElementConditionProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.EndActionProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.EventProto;
-import org.chromium.chrome.browser.autofill_assistant.proto.FocusElementProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ForEachProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.GenericUserInterfaceProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ImageViewProto;
@@ -119,6 +118,7 @@ import org.chromium.chrome.browser.autofill_assistant.proto.SetViewEnabledProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.SetViewVisibilityProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ShapeDrawableProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ShowCalendarPopupProto;
+import org.chromium.chrome.browser.autofill_assistant.proto.ShowCastProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ShowGenericUiPopupProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ShowGenericUiProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ShowGenericUiProto.PeriodicElementChecks;
@@ -145,7 +145,6 @@ import org.chromium.chrome.browser.autofill_assistant.proto.ViewContainerProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ViewLayoutParamsProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ViewProto;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
-import org.chromium.chrome.browser.customtabs.CustomTabsTestUtils;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 
@@ -171,9 +170,10 @@ public class AutofillAssistantGenericUiTest {
     @Before
     public void setUp() throws Exception {
         AutofillAssistantPreferencesUtil.setInitialPreferences(true);
-        mTestRule.startCustomTabActivityWithIntent(CustomTabsTestUtils.createMinimalCustomTabIntent(
-                InstrumentationRegistry.getTargetContext(),
-                mTestRule.getTestServer().getURL(TEST_PAGE)));
+        mTestRule.startCustomTabActivityWithIntent(
+                AutofillAssistantUiTestUtil.createMinimalCustomTabIntentForAutobot(
+                        mTestRule.getTestServer().getURL(TEST_PAGE),
+                        /* startImmediately = */ true));
         mTestRule.getActivity()
                 .getRootUiCoordinatorForTesting()
                 .getScrimCoordinator()
@@ -1988,6 +1988,12 @@ public class AutofillAssistantGenericUiTest {
         modelValues.add((ModelProto.ModelValue) ModelProto.ModelValue.newBuilder()
                                 .setIdentifier("option_e_toggled")
                                 .setValue(ValueProto.newBuilder().setBooleans(
+                                        BooleanList.newBuilder().addValues(true)))
+                                .build());
+        // Check box is initially unselected
+        modelValues.add((ModelProto.ModelValue) ModelProto.ModelValue.newBuilder()
+                                .setIdentifier("option_f_toggled")
+                                .setValue(ValueProto.newBuilder().setBooleans(
                                         BooleanList.newBuilder().addValues(false)))
                                 .build());
 
@@ -2038,7 +2044,9 @@ public class AutofillAssistantGenericUiTest {
                                                         "group_b", "option_d_view",
                                                         "option_d_toggled"),
                                                 createCheckBoxView("Optional option E",
-                                                        "option_e_view", "option_e_toggled")))))
+                                                        "option_e_view", "option_e_toggled"),
+                                                createCheckBoxView("Optional option F",
+                                                        "option_f_view", "option_f_toggled")))))
                         .setInteractions(
                                 InteractionsProto.newBuilder().addAllInteractions(interactions))
                         .setModel(ModelProto.newBuilder().addAllValues(modelValues))
@@ -2051,7 +2059,7 @@ public class AutofillAssistantGenericUiTest {
                                                    .addAllOutputModelIdentifiers(Arrays.asList(
                                                            "option_a_toggled", "option_b_toggled",
                                                            "option_c_toggled", "option_d_toggled",
-                                                           "option_e_toggled")))
+                                                           "option_e_toggled", "option_f_toggled")))
                          .build());
         AutofillAssistantTestScript script = new AutofillAssistantTestScript(
                 (SupportedScriptProto) SupportedScriptProto.newBuilder()
@@ -2081,6 +2089,9 @@ public class AutofillAssistantGenericUiTest {
                 .check(matches(isChecked()));
         onView(allOf(withClassName(is(CheckBox.class.getName())),
                        hasSibling(withText("Optional option E"))))
+                .check(matches(isChecked()));
+        onView(allOf(withClassName(is(CheckBox.class.getName())),
+                       hasSibling(withText("Optional option F"))))
                 .check(matches(isNotChecked()));
 
         onView(withText("Option A")).perform(click());
@@ -2093,7 +2104,8 @@ public class AutofillAssistantGenericUiTest {
 
         // Selecting an already checked check box inverts its value.
         onView(withText("Optional option E")).perform(click());
-        onView(withText("Optional option E")).perform(click());
+
+        onView(withText("Optional option F")).perform(click());
 
         int numNextActionsCalled = testService.getNextActionsCounter();
         onView(withText("Done")).perform(click());
@@ -2105,7 +2117,7 @@ public class AutofillAssistantGenericUiTest {
                 processedActions.get(0).getStatus(), is(ProcessedActionStatusProto.ACTION_APPLIED));
         ShowGenericUiProto.Result result = processedActions.get(0).getShowGenericUiResult();
         List<ModelProto.ModelValue> resultModelValues = result.getModel().getValuesList();
-        assertThat(resultModelValues, iterableWithSize(5));
+        assertThat(resultModelValues, iterableWithSize(6));
         assertThat(resultModelValues,
                 containsInAnyOrder((ModelProto.ModelValue) ModelProto.ModelValue.newBuilder()
                                            .setIdentifier("option_a_toggled")
@@ -2131,6 +2143,11 @@ public class AutofillAssistantGenericUiTest {
                                 .setIdentifier("option_e_toggled")
                                 .setValue(ValueProto.newBuilder().setBooleans(
                                         BooleanList.newBuilder().addValues(false)))
+                                .build(),
+                        (ModelProto.ModelValue) ModelProto.ModelValue.newBuilder()
+                                .setIdentifier("option_f_toggled")
+                                .setValue(ValueProto.newBuilder().setBooleans(
+                                        BooleanList.newBuilder().addValues(true)))
                                 .build()));
     }
 
@@ -2710,15 +2727,14 @@ public class AutofillAssistantGenericUiTest {
                         .build();
 
         ArrayList<ActionProto> list = new ArrayList<>();
-        list.add(
-                (ActionProto) ActionProto.newBuilder()
-                        .setFocusElement(FocusElementProto.newBuilder()
-                                                 .setElement(touch_area_one)
-                                                 .setTouchableElementArea(
-                                                         ElementAreaProto.newBuilder().addTouchable(
-                                                                 Rectangle.newBuilder().addElements(
-                                                                         touch_area_one))))
-                        .build());
+        list.add((ActionProto) ActionProto.newBuilder()
+                         .setShowCast(ShowCastProto.newBuilder()
+                                              .setElementToPresent(touch_area_one)
+                                              .setTouchableElementArea(
+                                                      ElementAreaProto.newBuilder().addTouchable(
+                                                              Rectangle.newBuilder().addElements(
+                                                                      touch_area_one))))
+                         .build());
 
         ElementCheck touch_area_one_present =
                 (ElementCheck) ElementCheck.newBuilder()

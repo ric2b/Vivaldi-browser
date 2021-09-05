@@ -72,28 +72,30 @@ ClientSideDetectionService::ClientSideDetectionService(Profile* profile)
     : profile_(profile),
       enabled_(false),
       extended_reporting_(false),
-      url_loader_factory_(
-          g_browser_process->safe_browsing_service()
-              ? g_browser_process->safe_browsing_service()->GetURLLoaderFactory(
-                    profile)
-              : nullptr) {
+      url_loader_factory_(nullptr) {
   // |profile_| can be null in unit tests
   if (!profile_)
     return;
 
+  if (g_browser_process->safe_browsing_service()) {
+    url_loader_factory_ =
+        g_browser_process->safe_browsing_service()->GetURLLoaderFactory(
+            profile);
+  }
+
   pref_change_registrar_.Init(profile_->GetPrefs());
   pref_change_registrar_.Add(
       prefs::kSafeBrowsingEnabled,
-      base::Bind(&ClientSideDetectionService::OnPrefsUpdated,
-                 base::Unretained(this)));
+      base::BindRepeating(&ClientSideDetectionService::OnPrefsUpdated,
+                          base::Unretained(this)));
   pref_change_registrar_.Add(
       prefs::kSafeBrowsingEnhanced,
-      base::Bind(&ClientSideDetectionService::OnPrefsUpdated,
-                 base::Unretained(this)));
+      base::BindRepeating(&ClientSideDetectionService::OnPrefsUpdated,
+                          base::Unretained(this)));
   pref_change_registrar_.Add(
       prefs::kSafeBrowsingScoutReportingEnabled,
-      base::Bind(&ClientSideDetectionService::OnPrefsUpdated,
-                 base::Unretained(this)));
+      base::BindRepeating(&ClientSideDetectionService::OnPrefsUpdated,
+                          base::Unretained(this)));
 
   // Do an initial check of the prefs.
   OnPrefsUpdated();
@@ -144,7 +146,7 @@ void ClientSideDetectionService::OnPrefsUpdated() {
          it != client_phishing_reports_.end(); ++it) {
       ClientPhishingReportInfo* info = it->second.get();
       if (!info->callback.is_null())
-        info->callback.Run(info->phishing_url, false);
+        std::move(info->callback).Run(info->phishing_url, false);
     }
     client_phishing_reports_.clear();
     cache_.clear();
@@ -157,14 +159,14 @@ void ClientSideDetectionService::SendClientReportPhishingRequest(
     std::unique_ptr<ClientPhishingRequest> verdict,
     bool is_extended_reporting,
     bool is_enhanced_reporting,
-    const ClientReportPhishingRequestCallback& callback) {
+    ClientReportPhishingRequestCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::BindOnce(
           &ClientSideDetectionService::StartClientReportPhishingRequest,
           weak_factory_.GetWeakPtr(), std::move(verdict), is_extended_reporting,
-          is_enhanced_reporting, callback));
+          is_enhanced_reporting, std::move(callback)));
 }
 
 bool ClientSideDetectionService::IsPrivateIPAddress(
@@ -216,12 +218,12 @@ void ClientSideDetectionService::StartClientReportPhishingRequest(
     std::unique_ptr<ClientPhishingRequest> request,
     bool is_extended_reporting,
     bool is_enhanced_reporting,
-    const ClientReportPhishingRequestCallback& callback) {
+    ClientReportPhishingRequestCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   if (!enabled_) {
     if (!callback.is_null())
-      callback.Run(GURL(request->url()), false);
+      std::move(callback).Run(GURL(request->url()), false);
     return;
   }
 
@@ -297,7 +299,7 @@ void ClientSideDetectionService::StartClientReportPhishingRequest(
   std::unique_ptr<ClientPhishingReportInfo> info(new ClientPhishingReportInfo);
   auto* loader_ptr = loader.get();
   info->loader = std::move(loader);
-  info->callback = callback;
+  info->callback = std::move(callback);
   info->phishing_url = GURL(request->url());
   client_phishing_reports_[loader_ptr] = std::move(info);
 
@@ -325,7 +327,7 @@ void ClientSideDetectionService::HandlePhishingVerdict(
     is_phishing = response.phishy();
   }
   if (!info->callback.is_null())
-    info->callback.Run(info->phishing_url, is_phishing);
+    std::move(info->callback).Run(info->phishing_url, is_phishing);
 }
 
 bool ClientSideDetectionService::IsInCache(const GURL& url) {

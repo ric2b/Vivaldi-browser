@@ -56,20 +56,8 @@ update_target("//media/gpu/ipc/service:service") {
 }
 
 # ------------------
-# Gpu Ipc (Media) : /media/gpu/ipc/common/BUILD.gn
+# Gpu Ipc (Media) : /media/base/ipc/BUILD.gn
 # ------------------
-
-update_target("//media/base:base") {
-
-  visibility += [ "//media/gpu/ipc/service:service" ]
-
-  sources += [
-  "//vivaldi/platform_media/common/feature_toggles.h",
-  "//vivaldi/platform_media/common/platform_media_pipeline_types.h",
-  "//vivaldi/platform_media/common/video_frame_transformer.cc",
-  "//vivaldi/platform_media/common/video_frame_transformer.h",
-  ]
-}
 
 update_target("//media/base/ipc:ipc") {
   sources += [
@@ -109,27 +97,116 @@ update_target("//content/common:common") {
 }
 
 # ------------------
-# Media : /media/BUILD.gn
+# Test files
 # ------------------
 
-update_target("//media:media") {
-  sources = [
+#vivaldi/testdata/test/platform_media/bear_truncated.mp4
+#vivaldi/testdata/test/platform_media/config_change_audio.mp4
+#vivaldi/testdata/test/platform_media/config_change_video.mp4
+#vivaldi/testdata/test/platform_media/what-does-the-fox-say.mp4
+#vivaldi/testdata/test/platform_media/bear-320x240-16x9-aspect.mp4
+#vivaldi/testdata/test/platform_media/bear_corrupt.mp4
+#vivaldi/testdata/test/platform_media/nonzero-start-time.mp4
+#vivaldi/testdata/test/platform_media/vivaldi-bear-320x240-16x9-aspect.mp4
+#vivaldi/testdata/test/platform_media/vivaldi-bear_truncated.mp4
+#vivaldi/testdata/test/platform_media/vivaldi-config_change_audio.mp4
+#vivaldi/testdata/test/platform_media/vivaldi-config_change_video.mp4
+#vivaldi/testdata/test/platform_media/what-does-the-fox-say.mp4
+
+# ------------------
+# Filters : /media/base/BUILD.gn
+# ------------------
+
+update_target("//media/base:base") {
+
+  visibility += [ "//media/gpu/ipc/service:service" ]
+
+  sources += [
+    "//vivaldi/platform_media/common/feature_toggles.h",
+    "//vivaldi/platform_media/common/platform_logging_util.cc",
+    "//vivaldi/platform_media/common/platform_logging_util.h",
+    "//vivaldi/platform_media/common/platform_media_pipeline_types.h",
+    "//vivaldi/platform_media/common/platform_mime_util.h",
+    "//vivaldi/platform_media/common/video_frame_transformer.cc",
+    "//vivaldi/platform_media/common/video_frame_transformer.h",
+  ]
+
+  if (is_linux) {
+    sources += [ "//vivaldi/platform_media/common/linux/platform_mime_util_linux.cc" ]
+  }
+
+  if (is_mac) {
+    sources += [ "//vivaldi/platform_media/common/mac/platform_mime_util_mac.mm" ]
+  }
+
+  if (is_win) {
+    sources += [
+      "//vivaldi/platform_media/common/win/mf_util.cc",
+      "//vivaldi/platform_media/common/win/mf_util.h",
+      "//vivaldi/platform_media/common/win/platform_mime_util_win.cc",
+    ]
+    deps += [
+     "//media/base/win:media_foundation_util",
+    ]
+  }
+}
+
+# ------------------
+# Mac : /media/base/mac/BUILD.gn
+# ------------------
+
+if (is_mac) {
+  update_target("//media/base/mac:mac") {
+    sources += [
+      "//vivaldi/platform_media/common/mac/framework_type_conversions.h",
+      "//vivaldi/platform_media/common/mac/framework_type_conversions.mm",
+      "//vivaldi/platform_media/common/mac/scoped_audio_queue_ref.h",
+    ]
+  }
+
+  update_target("//sandbox/policy/mac:package_sb_files") {
+    sources -= ["renderer.sb"]
+    sources += [get_label_info("//vivaldi/platform_media/mac:generate_sb_files", "target_gen_dir")+"/renderer.sb"]
+    deps = ["//vivaldi/platform_media/mac:generate_sb_files"]
+  }
+}
+
+# ------------------
+# Media : /media/renderers/BUILD.gn
+# ------------------
+
+update_target("//media/renderers:renderers") {
+   sources += [
     "//vivaldi/platform_media/gpu/data_source/ipc_data_source.cc",
     "//vivaldi/platform_media/gpu/data_source/ipc_data_source.h",
     "//vivaldi/platform_media/gpu/pipeline/ipc_decoding_buffer.cc",
     "//vivaldi/platform_media/gpu/pipeline/ipc_decoding_buffer.h",
     "//vivaldi/platform_media/gpu/pipeline/platform_media_pipeline.h",
     "//vivaldi/platform_media/gpu/pipeline/platform_media_pipeline_factory.h",
+    "//vivaldi/platform_media/renderer/decoders/debug_buffer_logger.cc",
+    "//vivaldi/platform_media/renderer/decoders/debug_buffer_logger.h",
+    "//vivaldi/platform_media/renderer/decoders/ipc_audio_decoder.cc",
+    "//vivaldi/platform_media/renderer/decoders/ipc_audio_decoder.h",
+    "//vivaldi/platform_media/renderer/decoders/ipc_demuxer.cc",
+    "//vivaldi/platform_media/renderer/decoders/ipc_demuxer.h",
+    "//vivaldi/platform_media/renderer/decoders/ipc_demuxer_stream.cc",
+    "//vivaldi/platform_media/renderer/decoders/ipc_demuxer_stream.h",
+    "//vivaldi/platform_media/renderer/decoders/ipc_factory.cc",
+    "//vivaldi/platform_media/renderer/decoders/ipc_factory.h",
+#    "//vivaldi/platform_media/renderer/decoders/ipc_video_decoder.cc",
+#    "//vivaldi/platform_media/renderer/decoders/ipc_video_decoder.h",
+#    "//vivaldi/platform_media/renderer/decoders/pass_through_bitstream_converter.cc",
+#    "//vivaldi/platform_media/renderer/decoders/pass_through_bitstream_converter.h",
+    "//vivaldi/platform_media/renderer/decoders/pass_through_audio_decoder.cc",
+    "//vivaldi/platform_media/renderer/decoders/pass_through_audio_decoder.h",
+    "//vivaldi/platform_media/renderer/decoders/pass_through_decoder_impl.cc",
+    "//vivaldi/platform_media/renderer/decoders/pass_through_decoder_impl.h",
+    "//vivaldi/platform_media/renderer/decoders/pass_through_video_decoder.cc",
+    "//vivaldi/platform_media/renderer/decoders/pass_through_video_decoder.h",
+    "//vivaldi/platform_media/renderer/pipeline/ipc_media_pipeline_host.h",
+    "//vivaldi/platform_media/renderer/pipeline/protocol_sniffer.cc",
+    "//vivaldi/platform_media/renderer/pipeline/protocol_sniffer.h",
   ]
-
-  if (is_linux) {
-    sources += [
-      "//vivaldi/platform_media/gpu/pipeline/linux/gstreamer_media_pipeline.cc",
-      "//vivaldi/platform_media/gpu/pipeline/linux/gstreamer_media_pipeline.h",
-      "//vivaldi/platform_media/gpu/pipeline/linux/platform_media_pipeline_linux.cc",
-    ]
-  }
-
   if (is_mac) {
     sources += [
       "//vivaldi/platform_media/gpu/decoders/mac/avf_audio_tap.h",
@@ -149,6 +226,19 @@ update_target("//media:media") {
       "//vivaldi/platform_media/gpu/pipeline/mac/avf_media_reader_runner.h",
       "//vivaldi/platform_media/gpu/pipeline/mac/avf_media_reader_runner.mm",
       "//vivaldi/platform_media/gpu/pipeline/mac/platform_media_pipeline_mac.mm",
+      "//vivaldi/platform_media/common/mac/platform_media_pipeline_types_mac.h",
+      "//vivaldi/platform_media/common/mac/platform_media_pipeline_types_mac.mm",
+      "//vivaldi/platform_media/renderer/decoders/mac/at_aac_helper.cc",
+      "//vivaldi/platform_media/renderer/decoders/mac/at_aac_helper.h",
+      "//vivaldi/platform_media/renderer/decoders/mac/at_audio_decoder.cc",
+      "//vivaldi/platform_media/renderer/decoders/mac/at_audio_decoder.h",
+      "//vivaldi/platform_media/renderer/decoders/mac/at_codec_helper.h",
+      "//vivaldi/platform_media/renderer/decoders/mac/core_audio_demuxer.cc",
+      "//vivaldi/platform_media/renderer/decoders/mac/core_audio_demuxer.h",
+      "//vivaldi/platform_media/renderer/decoders/mac/core_audio_demuxer_stream.cc",
+      "//vivaldi/platform_media/renderer/decoders/mac/core_audio_demuxer_stream.h",
+      "//vivaldi/platform_media/renderer/decoders/mac/viv_video_decoder.h",
+      "//vivaldi/platform_media/renderer/decoders/mac/viv_video_decoder.mm",
     ]
 
     defines = [ "GPU_IMPLEMENTATION" ]
@@ -175,7 +265,6 @@ update_target("//media:media") {
       cflags += [ "-O1" ]
     }
   }
-
   if (is_win) {
     sources += [
       "//vivaldi/platform_media/gpu/decoders/win/wmf_byte_stream.cc",
@@ -183,6 +272,12 @@ update_target("//media:media") {
       "//vivaldi/platform_media/gpu/pipeline/win/platform_media_pipeline_win.cc",
       "//vivaldi/platform_media/gpu/pipeline/win/wmf_media_pipeline.cc",
       "//vivaldi/platform_media/gpu/pipeline/win/wmf_media_pipeline.h",
+      "//vivaldi/platform_media/renderer/decoders/win/wmf_audio_decoder.cc",
+      "//vivaldi/platform_media/renderer/decoders/win/wmf_audio_decoder.h",
+      "//vivaldi/platform_media/renderer/decoders/win/wmf_decoder_impl.cc",
+      "//vivaldi/platform_media/renderer/decoders/win/wmf_decoder_impl.h",
+      "//vivaldi/platform_media/renderer/decoders/win/wmf_video_decoder.cc",
+      "//vivaldi/platform_media/renderer/decoders/win/wmf_video_decoder.h",
     ]
 
     libs += [
@@ -190,165 +285,37 @@ update_target("//media:media") {
       "dxva2.lib",
       "strmiids.lib",
       "mf.lib",
-      "mfplat.lib",
       "mfreadwrite.lib",
       "mfuuid.lib",
       "Propsys.lib",
     ]
 
-    deps += [ "//net" ]  # For GetMimeTypeFromFile
+    deps += [
+      "//media/base/win:media_foundation_util",
+    ]
+  }
+  if (is_linux) {
+    sources += [
+      "//vivaldi/platform_media/gpu/pipeline/linux/gstreamer_media_pipeline.cc",
+      "//vivaldi/platform_media/gpu/pipeline/linux/gstreamer_media_pipeline.h",
+      "//vivaldi/platform_media/gpu/pipeline/linux/platform_media_pipeline_linux.cc",
+    ]
   }
 
-  deps += [ "//base:base_static" ]   # For vivaldi_switches
+  if (is_mac) {
+    sources += [
+    ]
+
+  }
+
+  deps += [
+    "//base:base_static",   # For vivaldi_switches
+    "//net"  # For GetMimeTypeFromFile
+  ]
 
   allow_circular_includes_from = [
     "//media/filters",
-    "//media/renderers",
   ]
-}
-
-# ------------------
-# Media : /media/BUILD.gn
-# ------------------
-
-update_target("//media:media") {
-
-   sources += [
-    "//vivaldi/platform_media/renderer/decoders/debug_buffer_logger.cc",
-    "//vivaldi/platform_media/renderer/decoders/debug_buffer_logger.h",
-    "//vivaldi/platform_media/renderer/decoders/ipc_audio_decoder.cc",
-    "//vivaldi/platform_media/renderer/decoders/ipc_audio_decoder.h",
-    "//vivaldi/platform_media/renderer/decoders/ipc_demuxer.cc",
-    "//vivaldi/platform_media/renderer/decoders/ipc_demuxer.h",
-    "//vivaldi/platform_media/renderer/decoders/ipc_demuxer_stream.cc",
-    "//vivaldi/platform_media/renderer/decoders/ipc_demuxer_stream.h",
-    "//vivaldi/platform_media/renderer/decoders/ipc_factory.cc",
-    "//vivaldi/platform_media/renderer/decoders/ipc_factory.h",
-#    "//vivaldi/platform_media/renderer/decoders/ipc_video_decoder.cc",
-#    "//vivaldi/platform_media/renderer/decoders/ipc_video_decoder.h",
-#    "//vivaldi/platform_media/renderer/decoders/pass_through_bitstream_converter.cc",
-#    "//vivaldi/platform_media/renderer/decoders/pass_through_bitstream_converter.h",
-    "//vivaldi/platform_media/renderer/decoders/pass_through_audio_decoder.cc",
-    "//vivaldi/platform_media/renderer/decoders/pass_through_audio_decoder.h",
-    "//vivaldi/platform_media/renderer/decoders/pass_through_decoder_impl.cc",
-    "//vivaldi/platform_media/renderer/decoders/pass_through_decoder_impl.h",
-    "//vivaldi/platform_media/renderer/decoders/pass_through_video_decoder.cc",
-    "//vivaldi/platform_media/renderer/decoders/pass_through_video_decoder.h",
-    "//vivaldi/platform_media/renderer/pipeline/ipc_media_pipeline_host.h",
-    "//vivaldi/platform_media/renderer/pipeline/protocol_sniffer.cc",
-    "//vivaldi/platform_media/renderer/pipeline/protocol_sniffer.h",
-   ]
-
-   deps += [ "//net" ]  # For GetMimeTypeFromFile
-
-   configs += [ "//media:subcomponent_config" ]
-
-   if (is_mac) {
-      sources += [
-       "//vivaldi/platform_media/common/mac/platform_media_pipeline_types_mac.h",
-       "//vivaldi/platform_media/common/mac/platform_media_pipeline_types_mac.mm",
-       "//vivaldi/platform_media/renderer/decoders/mac/at_aac_helper.cc",
-       "//vivaldi/platform_media/renderer/decoders/mac/at_aac_helper.h",
-       "//vivaldi/platform_media/renderer/decoders/mac/at_audio_decoder.cc",
-       "//vivaldi/platform_media/renderer/decoders/mac/at_audio_decoder.h",
-       "//vivaldi/platform_media/renderer/decoders/mac/at_codec_helper.h",
-       "//vivaldi/platform_media/renderer/decoders/mac/core_audio_demuxer.cc",
-       "//vivaldi/platform_media/renderer/decoders/mac/core_audio_demuxer.h",
-       "//vivaldi/platform_media/renderer/decoders/mac/core_audio_demuxer_stream.cc",
-       "//vivaldi/platform_media/renderer/decoders/mac/core_audio_demuxer_stream.h",
-       "//vivaldi/platform_media/renderer/decoders/mac/viv_video_decoder.h",
-       "//vivaldi/platform_media/renderer/decoders/mac/viv_video_decoder.mm",
-      ]
-   }
-
-   if (is_win) {
-      sources += [
-       "//vivaldi/platform_media/renderer/decoders/win/wmf_audio_decoder.cc",
-       "//vivaldi/platform_media/renderer/decoders/win/wmf_audio_decoder.h",
-       "//vivaldi/platform_media/renderer/decoders/win/wmf_decoder_impl.cc",
-       "//vivaldi/platform_media/renderer/decoders/win/wmf_decoder_impl.h",
-       "//vivaldi/platform_media/renderer/decoders/win/wmf_video_decoder.cc",
-       "//vivaldi/platform_media/renderer/decoders/win/wmf_video_decoder.h",
-      ]
-
-      libs += [
-       "mfuuid.lib",
-       "mfplat.lib",
-      ]
-
-      deps += [
-       "//media/base/win:media_foundation_util",
-      ]
-   }
-}
-
-# ------------------
-# Test files
-# ------------------
-
-#vivaldi/testdata/test/platform_media/bear_truncated.mp4
-#vivaldi/testdata/test/platform_media/config_change_audio.mp4
-#vivaldi/testdata/test/platform_media/config_change_video.mp4
-#vivaldi/testdata/test/platform_media/what-does-the-fox-say.mp4
-#vivaldi/testdata/test/platform_media/bear-320x240-16x9-aspect.mp4
-#vivaldi/testdata/test/platform_media/bear_corrupt.mp4
-#vivaldi/testdata/test/platform_media/nonzero-start-time.mp4
-#vivaldi/testdata/test/platform_media/vivaldi-bear-320x240-16x9-aspect.mp4
-#vivaldi/testdata/test/platform_media/vivaldi-bear_truncated.mp4
-#vivaldi/testdata/test/platform_media/vivaldi-config_change_audio.mp4
-#vivaldi/testdata/test/platform_media/vivaldi-config_change_video.mp4
-#vivaldi/testdata/test/platform_media/what-does-the-fox-say.mp4
-
-# ------------------
-# Filters : /media/base/BUILD.gn
-# ------------------
-
-update_target("//media/base:base") {
-
-   sources += [
-    "//vivaldi/platform_media/common/platform_logging_util.cc",
-    "//vivaldi/platform_media/common/platform_logging_util.h",
-    "//vivaldi/platform_media/common/platform_mime_util.h",
-   ]
-
-   if (is_linux) {
-    sources += [ "//vivaldi/platform_media/common/linux/platform_mime_util_linux.cc" ]
-   }
-
-   if (is_mac) {
-    sources += [ "//vivaldi/platform_media/common/mac/platform_mime_util_mac.mm" ]
-   }
-
-   if (is_win) {
-    sources += [
-      "//vivaldi/platform_media/common/win/mf_util.cc",
-      "//vivaldi/platform_media/common/win/mf_util.h",
-      "//vivaldi/platform_media/common/win/platform_mime_util_win.cc",
-    ]
-    deps += [
-     "//media/base/win:media_foundation_util",
-    ]
-   }
-}
-
-# ------------------
-# Mac : /media/base/mac/BUILD.gn
-# ------------------
-
-if (is_mac) {
-  update_target("//media/base/mac:mac") {
-    sources += [
-      "//vivaldi/platform_media/common/mac/framework_type_conversions.h",
-      "//vivaldi/platform_media/common/mac/framework_type_conversions.mm",
-      "//vivaldi/platform_media/common/mac/scoped_audio_queue_ref.h",
-    ]
-  }
-
-  update_target("//sandbox/policy/mac:package_sb_files") {
-    sources -= ["renderer.sb"]
-    sources += [get_label_info("//vivaldi/platform_media/mac:generate_sb_files", "target_gen_dir")+"/renderer.sb"]
-    deps = ["//vivaldi/platform_media/mac:generate_sb_files"]
-  }
 }
 
 } # system_proprietary_codecs

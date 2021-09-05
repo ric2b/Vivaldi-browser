@@ -117,7 +117,7 @@ UNTRUSTED_TEST(
 UNTRUSTED_TEST(
     'UntrustedDiagnosticsRequestRunBatteryCapacityRoutine', async () => {
       const response =
-          await chromeos.diagnostics.runBatteryCapacityRoutine(3000, 4000);
+          await chromeos.diagnostics.runBatteryCapacityRoutine();
       assertDeepEquals(response, {id: 123456789, status: 'ready'});
     });
 
@@ -125,7 +125,7 @@ UNTRUSTED_TEST(
 UNTRUSTED_TEST(
     'UntrustedDiagnosticsRequestRunBatteryHealthRoutine', async () => {
       const response =
-          await chromeos.diagnostics.runBatteryHealthRoutine(10, 5);
+          await chromeos.diagnostics.runBatteryHealthRoutine();
       assertDeepEquals(response, {id: 123456789, status: 'ready'});
     });
 
@@ -441,16 +441,86 @@ UNTRUSTED_TEST(
       assertDeepEquals(response, {id: 123456789, status: 'ready'});
     });
 
-// Tests that addEventListener receives system lid events.
-UNTRUSTED_TEST('UntrustedLidEventListener', async () => {
-  await Promise.all([
-    new Promise(
-        (resolve) =>
-            chromeos.telemetry.addEventListener('lid-closed', resolve)),
-    new Promise(
-        (resolve) =>
-            chromeos.telemetry.addEventListener('lid-opened', resolve)),
-  ]);
+// Tests that addEventListener receives system bluetooth adapter added event.
+UNTRUSTED_TEST('UntrustedBluetoothAdapterAddedEventListener', async () => {
+  await new Promise(
+      (resolve) => chromeos.telemetry.addEventListener(
+          'bluetooth-adapter-added', resolve));
+});
+
+// Tests that addEventListener receives system bluetooth adapter removed event.
+UNTRUSTED_TEST('UntrustedBluetoothAdapterRemovedEventListener', async () => {
+  await new Promise(
+      (resolve) => chromeos.telemetry.addEventListener(
+          'bluetooth-adapter-removed', resolve));
+});
+
+// Tests that addEventListener receives system bluetooth adapter property
+// changed event.
+UNTRUSTED_TEST(
+    'UntrustedBluetoothAdapterPropertyChangedEventListener', async () => {
+      await new Promise(
+          (resolve) => chromeos.telemetry.addEventListener(
+              'bluetooth-adapter-property-changed', resolve));
+    });
+
+// Tests that addEventListener receives system bluetooth device added event.
+UNTRUSTED_TEST('UntrustedBluetoothDeviceAddedEventListener', async () => {
+  await new Promise(
+      (resolve) => chromeos.telemetry.addEventListener(
+          'bluetooth-device-added', resolve));
+});
+
+// Tests that addEventListener receives system bluetooth device removed event.
+UNTRUSTED_TEST('UntrustedBluetoothDeviceRemovedEventListener', async () => {
+  await new Promise(
+      (resolve) => chromeos.telemetry.addEventListener(
+          'bluetooth-device-removed', resolve));
+});
+
+// Tests that addEventListener receives system bluetooth device property changed
+// event.
+UNTRUSTED_TEST(
+    'UntrustedBluetoothDevicePropertyChangedEventListener', async () => {
+      await new Promise(
+          (resolve) => chromeos.telemetry.addEventListener(
+              'bluetooth-device-property-changed', resolve));
+    });
+
+// Tests that addEventListener receives system lid closed event.
+UNTRUSTED_TEST('UntrustedLidClosedEventListener', async () => {
+  await new Promise(
+      (resolve) => chromeos.telemetry.addEventListener('lid-closed', resolve));
+});
+
+// Tests that addEventListener receives system lid opened event.
+UNTRUSTED_TEST('UntrustedLidOpenedEventListener', async () => {
+  await new Promise(
+      (resolve) => chromeos.telemetry.addEventListener('lid-opened', resolve));
+});
+
+// Tests that addEventListener receives system ac inserted event.
+UNTRUSTED_TEST('UntrustedAcInsertedEventListener', async () => {
+  await new Promise(
+      (resolve) => chromeos.telemetry.addEventListener('ac-inserted', resolve));
+});
+
+// Tests that addEventListener receives system ac removed event.
+UNTRUSTED_TEST('UntrustedAcRemovedEventListener', async () => {
+  await new Promise(
+      (resolve) => chromeos.telemetry.addEventListener('ac-removed', resolve));
+});
+
+// Tests that addEventListener receives system os suspend event.
+UNTRUSTED_TEST('UntrustedOsSuspendEventListener', async () => {
+  await new Promise(
+      (resolve) => chromeos.telemetry.addEventListener('os-suspend', resolve));
+});
+
+// Tests that addEventListener receives system os resume event.
+UNTRUSTED_TEST('UntrustedOsResumeEventListener', async () => {
+  await new Promise(
+      (resolve) => chromeos.telemetry.addEventListener('os-resume', resolve));
 });
 
 // Tests that TelemetryInfo throws an error if category is unknown.
@@ -478,13 +548,13 @@ UNTRUSTED_TEST('UntrustedRequestTelemetryInfo', async () => {
   ]);
 
   // Rounded down to the nearest 100MiB due to privacy requirement.
-  const availableSpace =
-      Math.floor(1125899906842624 / (100 * 1024 * 1024)) * (100 * 1024 * 1024);
+  const availableSpace = BigInt(
+      Math.floor(1125899906842624 / (100 * 1024 * 1024)) * (100 * 1024 * 1024));
 
   assertDeepEquals(response, {
     batteryResult: {
       batteryInfo: {
-        cycleCount: 100000000000000,
+        cycleCount: BigInt(100000000000000),
         voltageNow: 1234567890.123456,
         vendor: 'Google',
         serialNumber: 'abcdef',
@@ -497,23 +567,23 @@ UNTRUSTED_TEST('UntrustedRequestTelemetryInfo', async () => {
         technology: 'Li-ion',
         status: 'Charging',
         manufactureDate: '2020-07-30',
-        temperature: 7777777777777777,
+        temperature: BigInt(7777777777777777),
       }
     },
     blockDeviceResult: {
       blockDeviceInfo: [{
         path: '/dev/device1',
-        size: 5555555555555555,
+        size: BigInt(5555555555555555),
         type: 'NVMe',
         manufacturerId: 200,
         name: 'goog',
         serial: '4287654321',
-        bytesReadSinceLastBoot: 9000000000000000,
-        bytesWrittenSinceLastBoot: 8000000000000000,
-        readTimeSecondsSinceLastBoot: 7000000000000000,
-        writeTimeSecondsSinceLastBoot: 6666666666666666,
-        ioTimeSecondsSinceLastBoot: 1111111111111,
-        discardTimeSecondsSinceLastBoot: 77777777777777
+        bytesReadSinceLastBoot: BigInt(9000000000000000),
+        bytesWrittenSinceLastBoot: BigInt(8000000000000000),
+        readTimeSecondsSinceLastBoot: BigInt(7000000000000000),
+        writeTimeSecondsSinceLastBoot: BigInt(6666666666666666),
+        ioTimeSecondsSinceLastBoot: BigInt(1111111111111),
+        discardTimeSecondsSinceLastBoot: BigInt(77777777777777)
       }]
     },
     vpdResult: {vpdInfo: {skuNumber: 'sku-18'}},
@@ -529,17 +599,23 @@ UNTRUSTED_TEST('UntrustedRequestTelemetryInfo', async () => {
                 maxClockSpeedKhz: 2147494759,
                 scalingMaxFrequencyKhz: 1073764046,
                 scalingCurrentFrequencyKhz: 536904245,
-                idleTimeMs: 0,
+                idleTimeMs: BigInt(0),
                 cStates: [
-                  {name: 'C1', timeInStateSinceLastBootUs: 1125899906875957},
-                  {name: 'C2', timeInStateSinceLastBootUs: 1125899906877777}
+                  {
+                    name: 'C1',
+                    timeInStateSinceLastBootUs: BigInt(1125899906875957)
+                  },
+                  {
+                    name: 'C2',
+                    timeInStateSinceLastBootUs: BigInt(1125899906877777)
+                  }
                 ]
               },
               {
                 maxClockSpeedKhz: 1147494759,
                 scalingMaxFrequencyKhz: 1063764046,
                 scalingCurrentFrequencyKhz: 936904246,
-                idleTimeMs: 0,
+                idleTimeMs: BigInt(0),
                 cStates: []
               }
             ]
@@ -559,7 +635,7 @@ UNTRUSTED_TEST('UntrustedRequestTelemetryInfo', async () => {
         totalMemoryKib: 2147483648,
         freeMemoryKib: 2147573648,
         availableMemoryKib: 2147571148,
-        pageFaultsSinceLastBoot: 2199971148
+        pageFaultsSinceLastBoot: BigInt(2199971148),
       }
     },
     backlightResult: {
@@ -577,7 +653,7 @@ UNTRUSTED_TEST('UntrustedRequestTelemetryInfo', async () => {
     statefulPartitionResult: {
       partitionInfo: {
         availableSpace: availableSpace,
-        totalSpace: 1125900006842624,
+        totalSpace: BigInt(1125900006842624),
       }
     },
     bluetoothResult: {

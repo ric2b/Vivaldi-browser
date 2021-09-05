@@ -606,6 +606,11 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalGpuMemoryBuffer(
     return nullptr;
   }
 
+  const size_t num_planes =
+      NumberOfPlanesForLinearBufferFormat(gpu_memory_buffer->GetFormat());
+  std::vector<ColorPlaneLayout> planes(num_planes);
+  for (size_t i = 0; i < num_planes; ++i)
+    planes[i].stride = gpu_memory_buffer->stride(i);
   uint64_t modifier = gfx::NativePixmapHandle::kNoModifier;
 #if defined(OS_LINUX) || defined(OS_CHROMEOS)
   if (gpu_memory_buffer->GetType() == gfx::NATIVE_PIXMAP) {
@@ -615,17 +620,24 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalGpuMemoryBuffer(
       DLOG(ERROR) << "Failed to clone the GpuMemoryBufferHandle";
       return nullptr;
     }
+    if (gmb_handle.native_pixmap_handle.planes.size() != num_planes) {
+      DLOG(ERROR) << "Invalid number of planes="
+                  << gmb_handle.native_pixmap_handle.planes.size()
+                  << ", expected num_planes=" << num_planes;
+      return nullptr;
+    }
+    for (size_t i = 0; i < num_planes; ++i) {
+      const auto& plane = gmb_handle.native_pixmap_handle.planes[i];
+      planes[i].stride = plane.stride;
+      planes[i].offset = plane.offset;
+      planes[i].size = plane.size;
+    }
     modifier = gmb_handle.native_pixmap_handle.modifier;
   }
 #endif
 
-  const size_t num_planes =
-      NumberOfPlanesForLinearBufferFormat(gpu_memory_buffer->GetFormat());
-  std::vector<int32_t> strides;
-  for (size_t i = 0; i < num_planes; ++i)
-    strides.push_back(gpu_memory_buffer->stride(i));
-  const auto layout = VideoFrameLayout::CreateWithStrides(
-      *format, coded_size, std::move(strides),
+  const auto layout = VideoFrameLayout::CreateWithPlanes(
+      *format, coded_size, std::move(planes),
       VideoFrameLayout::kBufferAddressAlignment, modifier);
   if (!layout) {
     DLOG(ERROR) << __func__ << " Invalid layout";
@@ -689,7 +701,7 @@ scoped_refptr<VideoFrame> VideoFrame::WrapExternalDmabufs(
 
 #if defined(OS_MAC)
 // static
-scoped_refptr<VideoFrame> VideoFrame::WrapIOSurface(
+scoped_refptr<VideoFrame> VideoFrame::WrapUnacceleratedIOSurface(
     gfx::GpuMemoryBufferHandle handle,
     const gfx::Rect& visible_rect,
     base::TimeDelta timestamp) {
@@ -697,8 +709,7 @@ scoped_refptr<VideoFrame> VideoFrame::WrapIOSurface(
     DLOG(ERROR) << "Non-IOSurface handle.";
     return nullptr;
   }
-  base::ScopedCFTypeRef<IOSurfaceRef> io_surface =
-      gfx::IOSurfaceMachPortToIOSurface(std::move(handle.mach_port));
+  gfx::ScopedIOSurface io_surface = handle.io_surface;
   if (!io_surface) {
     return nullptr;
   }
@@ -1102,12 +1113,9 @@ bool VideoFrame::IsMappable() const {
 bool VideoFrame::HasTextures() const {
   // A SharedImage can be turned into a texture, and so it counts as a texture
   // in the context of this call.
-  if (mailbox_holders_[0].mailbox.IsSharedImage())
-    return true;
-
-  DCHECK(!wrapped_frame_ || !wrapped_frame_->HasTextures());
   return wrapped_frame_ ? wrapped_frame_->HasTextures()
-                        : !mailbox_holders_[0].mailbox.IsZero();
+                        : (mailbox_holders_[0].mailbox.IsSharedImage() ||
+                           !mailbox_holders_[0].mailbox.IsZero());
 }
 
 size_t VideoFrame::NumTextures() const {
@@ -1297,12 +1305,6 @@ VideoFrame::~VideoFrame() {
       release_sync_token = release_sync_token_;
     }
     std::move(mailbox_holders_release_cb_).Run(release_sync_token);
-  }
-
-  // Someone might be monitoring original wrapped frame for feedback.
-  // Ensure all accumulated feedback is propagated to the original frame.
-  if (wrapped_frame_) {
-    wrapped_frame_->feedback()->Combine(feedback_);
   }
 
   for (auto& callback : done_callbacks_)

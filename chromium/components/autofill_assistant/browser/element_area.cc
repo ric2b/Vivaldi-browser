@@ -12,6 +12,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "components/autofill_assistant/browser/actions/action_delegate_util.h"
 #include "components/autofill_assistant/browser/script_executor_delegate.h"
 #include "components/autofill_assistant/browser/web/web_controller.h"
 
@@ -88,7 +89,7 @@ void ElementArea::AddRectangles(
     for (const auto& element_proto : rectangle_proto.elements()) {
       rectangle.positions.emplace_back();
       ElementPosition& position = rectangle.positions.back();
-      position.selector = Selector(element_proto).MustBeVisible();
+      position.selector = Selector(element_proto);
       DVLOG(3) << "  " << position.selector;
     }
   }
@@ -128,10 +129,15 @@ void ElementArea::Update() {
 
   for (auto& rectangle : rectangles_) {
     for (auto& position : rectangle.positions) {
-      delegate_->GetWebController()->GetElementPosition(
-          position.selector,
-          base::BindOnce(&ElementArea::OnGetElementPosition,
-                         weak_ptr_factory_.GetWeakPtr(), position.selector));
+      delegate_->GetWebController()->FindElement(
+          position.selector, /* strict= */ true,
+          base::BindOnce(
+              &action_delegate_util::TakeElementAndGetProperty<RectF>,
+              base::BindOnce(&WebController::GetElementRect,
+                             delegate_->GetWebController()->GetWeakPtr()),
+              base::BindOnce(&ElementArea::OnGetElementRect,
+                             weak_ptr_factory_.GetWeakPtr(),
+                             position.selector)));
     }
   }
 }
@@ -205,10 +211,10 @@ void ElementArea::Rectangle::FillRect(RectF* rect,
   return;
 }
 
-void ElementArea::OnGetElementPosition(const Selector& selector,
-                                       bool found,
-                                       const RectF& rect) {
-  // found == false, has all coordinates set to 0.0, which clears the area.
+void ElementArea::OnGetElementRect(const Selector& selector,
+                                   const ClientStatus& rect_status,
+                                   const RectF& rect) {
+  // !rect_status.ok() has all coordinates set to 0.0, which clears the area.
   bool updated = false;
   for (auto& rectangle : rectangles_) {
     for (auto& position : rectangle.positions) {
@@ -227,12 +233,13 @@ void ElementArea::OnGetElementPosition(const Selector& selector,
   // rectangles_. This is fine.
 }
 
-void ElementArea::OnGetVisualViewport(bool success, const RectF& rect) {
+void ElementArea::OnGetVisualViewport(const ClientStatus& rect_status,
+                                      const RectF& rect) {
   if (!visual_viewport_pending_update_)
     return;
 
   visual_viewport_pending_update_ = false;
-  if (!success)
+  if (!rect_status.ok())
     return;
 
   visual_viewport_ = rect;

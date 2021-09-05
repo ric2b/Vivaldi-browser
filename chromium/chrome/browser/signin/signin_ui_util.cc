@@ -5,8 +5,8 @@
 #include "chrome/browser/signin/signin_ui_util.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
@@ -199,10 +199,18 @@ void ShowSigninErrorLearnMorePage(Profile* profile) {
   Navigate(&params);
 }
 
-void EnableSyncFromPromo(Browser* browser,
-                         const AccountInfo& account,
-                         signin_metrics::AccessPoint access_point,
-                         bool is_default_promo_account) {
+void EnableSyncFromSingleAccountPromo(
+    Browser* browser,
+    const AccountInfo& account,
+    signin_metrics::AccessPoint access_point) {
+  EnableSyncFromMultiAccountPromo(browser, account, access_point,
+                                  /*is_default_promo_account=*/true);
+}
+
+void EnableSyncFromMultiAccountPromo(Browser* browser,
+                                     const AccountInfo& account,
+                                     signin_metrics::AccessPoint access_point,
+                                     bool is_default_promo_account) {
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
   internal::EnableSyncFromPromo(browser, account, access_point,
                                 is_default_promo_account,

@@ -6,12 +6,12 @@
 #include <set>
 #include <string>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/mock_log.h"
 #include "build/build_config.h"
 #include "content/browser/child_process_security_policy_impl.h"
@@ -85,11 +85,10 @@ void LockProcessIfNeeded(int process_id,
   scoped_refptr<SiteInstanceImpl> site_instance =
       SiteInstanceImpl::CreateForUrlInfo(
           browser_context, UrlInfo::CreateForTesting(url),
-          false /* is_coop_coep_cross_origin_isolated */);
+          CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
   if (site_instance->RequiresDedicatedProcess() &&
-      SiteInstanceImpl::ShouldLockProcess(site_instance->GetIsolationContext(),
-                                          site_instance->GetSiteInfo(),
-                                          site_instance->IsGuest())) {
+      site_instance->GetSiteInfo().ShouldLockProcessToSite(
+          site_instance->GetIsolationContext())) {
     ChildProcessSecurityPolicyImpl::GetInstance()->LockProcess(
         site_instance->GetIsolationContext(), process_id,
         site_instance->GetProcessLock());
@@ -1426,7 +1425,7 @@ TEST_F(ChildProcessSecurityPolicyTest, CanAccessDataForOrigin_URL) {
   scoped_refptr<SiteInstanceImpl> foo_instance =
       SiteInstanceImpl::CreateForUrlInfo(
           &browser_context, UrlInfo::CreateForTesting(foo_http_url),
-          false /* is_coop_coep_cross_origin_isolated */);
+          CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
   EXPECT_FALSE(foo_instance->IsDefaultSiteInstance());
   LockProcessIfNeeded(kRendererID, &browser_context, foo_http_url);
 
@@ -1543,7 +1542,7 @@ TEST_F(ChildProcessSecurityPolicyTest, CanAccessDataForOrigin_Origin) {
   scoped_refptr<SiteInstanceImpl> foo_instance =
       SiteInstanceImpl::CreateForUrlInfo(
           &browser_context, UrlInfo::CreateForTesting(foo_origin.GetURL()),
-          false /* is_coop_coep_cross_origin_isolated */);
+          CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
   EXPECT_FALSE(foo_instance->IsDefaultSiteInstance());
   LockProcessIfNeeded(kRendererID, &browser_context, foo_origin.GetURL());
 
@@ -2040,7 +2039,7 @@ TEST_F(ChildProcessSecurityPolicyTest, DynamicIsolatedOrigins) {
   scoped_refptr<SiteInstanceImpl> foo_instance =
       SiteInstanceImpl::CreateForUrlInfo(
           &context, UrlInfo::CreateForTesting(GURL("https://foo.com/")),
-          false /* is_coop_coep_cross_origin_isolated */);
+          CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
   EXPECT_EQ(BrowsingInstanceId::FromUnsafeValue(initial_id),
             foo_instance->GetIsolationContext().browsing_instance_id());
   EXPECT_EQ(BrowsingInstanceId::FromUnsafeValue(initial_id + 1),
@@ -2067,7 +2066,7 @@ TEST_F(ChildProcessSecurityPolicyTest, DynamicIsolatedOrigins) {
   scoped_refptr<SiteInstanceImpl> bar_instance =
       SiteInstanceImpl::CreateForUrlInfo(
           &context, UrlInfo::CreateForTesting(GURL("https://bar.com/")),
-          false /* is_coop_coep_cross_origin_isolated */);
+          CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
   EXPECT_EQ(BrowsingInstanceId::FromUnsafeValue(initial_id + 1),
             bar_instance->GetIsolationContext().browsing_instance_id());
   EXPECT_EQ(BrowsingInstanceId::FromUnsafeValue(initial_id + 2),
@@ -2179,7 +2178,7 @@ TEST_F(ChildProcessSecurityPolicyTest,
   scoped_refptr<SiteInstanceImpl> foo_instance =
       SiteInstanceImpl::CreateForUrlInfo(
           &context1, UrlInfo::CreateForTesting(GURL("https://foo.com/")),
-          false /* is_coop_coep_cross_origin_isolated */);
+          CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
   EXPECT_EQ(BrowsingInstanceId::FromUnsafeValue(initial_id),
             foo_instance->GetIsolationContext().browsing_instance_id());
   EXPECT_EQ(BrowsingInstanceId::FromUnsafeValue(initial_id + 1),

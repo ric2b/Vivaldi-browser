@@ -96,6 +96,10 @@ class VariationsIdsProvider : public base::FieldTrialList::Observer,
   // related keys.
   std::vector<VariationID> GetVariationsVectorForWebPropertiesKeys();
 
+  // Sets low entropy source value that was used for client-side randomization
+  // of variations.
+  void SetLowEntropySourceValue(base::Optional<int> low_entropy_source_value);
+
   // Result of ForceVariationIds() call.
   enum class ForceIdsResult {
     SUCCESS,
@@ -140,8 +144,12 @@ class VariationsIdsProvider : public base::FieldTrialList::Observer,
                            ForceDisableVariationIds_ValidCommandLine);
   FRIEND_TEST_ALL_PREFIXES(VariationsIdsProviderTest,
                            ForceDisableVariationIds_Invalid);
-  FRIEND_TEST_ALL_PREFIXES(VariationsIdsProviderTest,
+  FRIEND_TEST_ALL_PREFIXES(VariationsIdsProviderTestWithRestrictedVisibility,
                            OnFieldTrialGroupFinalized);
+  FRIEND_TEST_ALL_PREFIXES(VariationsIdsProviderTestWithRestrictedVisibility,
+                           LowEntropySourceValue_Valid);
+  FRIEND_TEST_ALL_PREFIXES(VariationsIdsProviderTestWithRestrictedVisibility,
+                           LowEntropySourceValue_Null);
   FRIEND_TEST_ALL_PREFIXES(VariationsIdsProviderTest,
                            GetGoogleAppVariationsString);
   FRIEND_TEST_ALL_PREFIXES(VariationsIdsProviderTest, GetVariationsString);
@@ -217,6 +225,10 @@ class VariationsIdsProvider : public base::FieldTrialList::Observer,
 
   // Guards access to variables below.
   base::Lock lock_;
+
+  // Low entropy source value from client that was used for client-side
+  // randomization of variations.
+  base::Optional<int> low_entropy_source_value_;
 
   // Whether or not we've initialized the caches.
   bool variation_ids_cache_initialized_;

@@ -14,6 +14,7 @@
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/optional.h"
 #include "build/build_config.h"
 #include "chrome/browser/autofill/autofill_gstatic_reader.h"
 #include "chrome/browser/profiles/profile.h"
@@ -21,6 +22,7 @@
 #include "components/autofill/core/browser/logging/log_manager.h"
 #include "components/autofill/core/browser/payments/legal_message_line.h"
 #include "components/autofill/core/browser/ui/payments/card_unmask_prompt_controller_impl.h"
+#include "components/signin/public/identity_manager/account_info.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
@@ -160,6 +162,7 @@ class ChromeAutofillClient
   base::WeakPtr<AutofillPopupControllerImpl> popup_controller_for_testing() {
     return popup_controller_;
   }
+  void KeepPopupOpenForTesting() { keep_popup_open_for_testing_ = true; }
 
 #if !defined(OS_ANDROID)
   // ZoomObserver implementation.
@@ -173,6 +176,8 @@ class ChromeAutofillClient
   explicit ChromeAutofillClient(content::WebContents* web_contents);
 
   Profile* GetProfile() const;
+  base::Optional<AccountInfo> GetAccountInfo();
+  bool IsMultipleAccountUser();
   base::string16 GetAccountHolderName();
 
   std::unique_ptr<payments::PaymentsClient> payments_client_;
@@ -180,6 +185,9 @@ class ChromeAutofillClient
   base::WeakPtr<AutofillPopupControllerImpl> popup_controller_;
   CardUnmaskPromptControllerImpl unmask_controller_;
   std::unique_ptr<LogManager> log_manager_;
+  // If set to true, the popup will stay open regardless of external changes on
+  // the test machine, that may normally cause the popup to be hidden
+  bool keep_popup_open_for_testing_ = false;
 #if defined(OS_ANDROID)
   CardExpirationDateFixFlowControllerImpl
       card_expiration_date_fix_flow_controller_;

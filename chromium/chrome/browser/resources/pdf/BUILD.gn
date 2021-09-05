@@ -121,6 +121,7 @@ js_library("controller") {
   deps = [
     ":viewport",
     "//ui/webui/resources/js:assert.m",
+    "//ui/webui/resources/js:cr.m",
     "//ui/webui/resources/js:load_time_data.m",
     "//ui/webui/resources/js:promise_resolver.m",
     "//ui/webui/resources/js/cr:event_target.m",
@@ -166,7 +167,6 @@ js_library("pdf_viewer") {
     "elements:viewer-pdf-sidenav",
     "elements:viewer-pdf-toolbar",
     "elements:viewer-pdf-toolbar-new",
-    "elements:viewer-thumbnail",
     "elements:viewer-zoom-toolbar",
     "//ui/webui/resources/js:assert.m",
     "//ui/webui/resources/js:event_tracker.m",

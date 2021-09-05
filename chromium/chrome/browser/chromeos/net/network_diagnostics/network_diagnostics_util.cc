@@ -10,6 +10,7 @@
 
 #include "base/no_destructor.h"
 #include "base/rand_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "content/public/browser/storage_partition.h"
 
@@ -17,6 +18,8 @@ namespace chromeos {
 namespace network_diagnostics {
 
 namespace util {
+
+const char kGenerate204Path[] = "/generate_204";
 
 namespace {
 
@@ -78,8 +81,72 @@ std::vector<std::string> GetRandomHostsWithFixedHosts(int num_random_hosts,
   return hosts;
 }
 
+std::vector<std::string> GetRandomHostsWithScheme(int num_hosts,
+                                                  int prefix_length,
+                                                  std::string scheme) {
+  std::vector<std::string> hosts = GetRandomHosts(num_hosts, prefix_length);
+  for (auto& host : hosts) {
+    host = scheme + host;
+  }
+  return hosts;
+}
+
+std::vector<std::string> GetRandomAndFixedHostsWithScheme(int num_random_hosts,
+                                                          int prefix_length,
+                                                          std::string scheme) {
+  std::vector<std::string> hosts =
+      GetRandomHostsWithFixedHosts(num_random_hosts, prefix_length);
+  for (auto& host : hosts) {
+    host = scheme + host;
+  }
+  return hosts;
+}
+
+std::vector<std::string> GetRandomAndFixedHostsWithSchemeAndPort(
+    int num_random_hosts,
+    int prefix_length,
+    std::string scheme,
+    int port_number) {
+  std::vector<std::string> hosts =
+      GetRandomAndFixedHostsWithScheme(num_random_hosts, prefix_length, scheme);
+  for (auto& host : hosts) {
+    host = host + ":" + base::NumberToString(port_number) + "/";
+  }
+  return hosts;
+}
+
+std::vector<std::string> GetRandomHostsWithSchemeAndGenerate204Path(
+    int num_hosts,
+    int prefix_length,
+    std::string scheme) {
+  std::vector<std::string> hosts = GetRandomHosts(num_hosts, prefix_length);
+  for (auto& host : hosts) {
+    host = scheme + host + kGenerate204Path;
+  }
+  return hosts;
+}
+
+std::vector<GURL> GetRandomHostsWithSchemeAndPortAndGenerate204Path(
+    int num_hosts,
+    int prefix_length,
+    std::string scheme,
+    int port_number) {
+  const auto& hosts = GetRandomHosts(num_hosts, prefix_length);
+  std::vector<GURL> urls;
+  for (auto& host : hosts) {
+    auto url = GURL(scheme + host + ":" + base::NumberToString(port_number) +
+                    kGenerate204Path);
+    DCHECK(url.is_valid());
+    urls.push_back(url);
+  }
+  return urls;
+}
+
 Profile* GetUserProfile() {
-  return ProfileManager::GetPrimaryUserProfile();
+  Profile* profile = ProfileManager::GetPrimaryUserProfile();
+  DCHECK(profile);
+
+  return profile;
 }
 
 }  // namespace util

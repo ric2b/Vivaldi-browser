@@ -7,7 +7,7 @@
 #include <algorithm>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/guid.h"
 #include "base/memory/ptr_util.h"
@@ -368,10 +368,17 @@ void SendTabToSelfBridge::DismissEntry(const std::string& guid) {
     return;
   }
 
+  DCHECK(change_processor()->IsTrackingMetadata());
+
   entry->SetNotificationDismissed(true);
 
   std::unique_ptr<ModelTypeStore::WriteBatch> batch =
       store_->CreateWriteBatch();
+
+  auto entity_data = CopyToEntityData(entry->AsLocalProto().specifics());
+
+  change_processor()->Put(guid, std::move(entity_data),
+                          batch->GetMetadataChangeList());
 
   batch->WriteData(guid, entry->AsLocalProto().SerializeAsString());
   Commit(std::move(batch));

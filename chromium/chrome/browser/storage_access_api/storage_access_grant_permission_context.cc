@@ -83,7 +83,7 @@ void StorageAccessGrantPermissionContext::DecidePermission(
   // |requesting_origin|.
   ContentSettingsForOneType implicit_grants;
   settings_map->GetSettingsForOneType(
-      ContentSettingsType::STORAGE_ACCESS, std::string(), &implicit_grants,
+      ContentSettingsType::STORAGE_ACCESS, &implicit_grants,
       content_settings::SessionModel::UserSession);
 
   const int existing_implicit_grants =
@@ -125,7 +125,9 @@ void StorageAccessGrantPermissionContext::NotifyPermissionSet(
     const GURL& embedding_origin,
     permissions::BrowserPermissionCallback callback,
     bool persist,
-    ContentSetting content_setting) {
+    ContentSetting content_setting,
+    bool is_one_time) {
+  DCHECK(!is_one_time);
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   NotifyPermissionSetInternal(id, requesting_origin, embedding_origin,
                               std::move(callback), persist, content_setting,
@@ -181,12 +183,11 @@ void StorageAccessGrantPermissionContext::NotifyPermissionSetInternal(
   // grant.
   settings_map->SetContentSettingDefaultScope(
       requesting_origin, embedding_origin, ContentSettingsType::STORAGE_ACCESS,
-      std::string(), content_setting,
-      implicit_result ? implicit_grant : explicit_grant);
+      content_setting, implicit_result ? implicit_grant : explicit_grant);
 
   ContentSettingsForOneType grants;
   settings_map->GetSettingsForOneType(ContentSettingsType::STORAGE_ACCESS,
-                                      std::string(), &grants);
+                                      &grants);
 
   // TODO(https://crbug.com/989663): Ensure that this update of settings doesn't
   // cause a double update with
@@ -205,7 +206,9 @@ void StorageAccessGrantPermissionContext::NotifyPermissionSetInternal(
 void StorageAccessGrantPermissionContext::UpdateContentSetting(
     const GURL& requesting_origin,
     const GURL& embedding_origin,
-    ContentSetting content_setting) {
+    ContentSetting content_setting,
+    bool is_one_time) {
+  DCHECK(!is_one_time);
   // We need to notify the network service of content setting updates before we
   // run our callback. As a result we do our updates when we're notified of a
   // permission being set and should not be called here.

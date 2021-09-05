@@ -217,10 +217,16 @@ class PageAllocator : public v8::PageAllocator {
                       size_t length,
                       size_t alignment,
                       v8::PageAllocator::Permission permissions) override {
+    if (permissions == v8::PageAllocator::Permission::kNoAccessWillJitLater) {
+      // We could use this information to conditionally set the MAP_JIT flag
+      // on Mac-arm64; however this permissions value is intended to be a
+      // short-term solution, so we continue to set MAP_JIT for all V8 pages
+      // for now.
+      permissions = v8::PageAllocator::Permission::kNoAccess;
+    }
     base::PageAccessibilityConfiguration config = GetPageConfig(permissions);
-    bool commit = (permissions != v8::PageAllocator::Permission::kNoAccess);
     return base::AllocPages(address, length, alignment, config,
-                            base::PageTag::kV8, commit);
+                            base::PageTag::kV8);
   }
 
   bool FreePages(void* address, size_t length) override {
@@ -303,12 +309,28 @@ class JobHandleImpl : public v8::JobHandle {
   void NotifyConcurrencyIncrease() override {
     handle_.NotifyConcurrencyIncrease();
   }
+  bool UpdatePriorityEnabled() const override { return true; }
+  void UpdatePriority(v8::TaskPriority new_priority) override {
+    handle_.UpdatePriority(ToBaseTaskPriority(new_priority));
+  }
   void Join() override { handle_.Join(); }
   void Cancel() override { handle_.Cancel(); }
+  void CancelAndDetach() override { handle_.CancelAndDetach(); }
   bool IsCompleted() override { return handle_.IsCompleted(); }
   bool IsRunning() override { return !!handle_; }
 
  private:
+  static base::TaskPriority ToBaseTaskPriority(v8::TaskPriority priority) {
+    switch (priority) {
+      case v8::TaskPriority::kBestEffort:
+        return base::TaskPriority::BEST_EFFORT;
+      case v8::TaskPriority::kUserVisible:
+        return base::TaskPriority::USER_VISIBLE;
+      case v8::TaskPriority::kUserBlocking:
+        return base::TaskPriority::USER_BLOCKING;
+    }
+  }
+
   base::JobHandle handle_;
   std::unique_ptr<v8::JobTask> job_task_;
 };

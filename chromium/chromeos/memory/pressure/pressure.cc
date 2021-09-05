@@ -6,6 +6,7 @@
 
 #include "base/files/file_util.h"
 #include "base/logging.h"
+#include "base/memory/singleton.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -24,8 +25,17 @@ constexpr char kMinFilelist[] = "/proc/sys/vm/min_filelist_kbytes";
 constexpr char kRamVsSwapWeight[] =
     "/sys/kernel/mm/chromeos-low_mem/ram_vs_swap_weight";
 
+// The default value if the ram_vs_swap_weight file is not available.
+constexpr uint64_t kRamVsSwapWeightDefault = 4;
+
 // The extra free to trigger kernel memory reclaim earlier.
 constexpr char kExtraFree[] = "/proc/sys/vm/extra_free_kbytes";
+
+// The margin mem file contains the two memory levels, the first is the
+// critical level and the second is the moderate level. Note, this
+// file may contain more values but only the first two are used for
+// memory pressure notifications in chromeos.
+constexpr char kMarginMemFile[] = "/sys/kernel/mm/chromeos-low_mem/margin";
 
 // Values saved for user space available memory calculation.  The value of
 // |reserved_free| should not change unless min_free_kbytes or
@@ -173,15 +183,109 @@ uint64_t GetAvailableMemoryKB() {
                                              ram_swap_weight);
 }
 
+std::vector<uint64_t> GetMarginFileParts(const std::string& file) {
+  std::vector<uint64_t> margin_values;
+  std::string margin_contents;
+  if (base::ReadFileToStringNonBlocking(base::FilePath(file),
+                                        &margin_contents)) {
+    std::vector<std::string> margins =
+        base::SplitString(margin_contents, base::kWhitespaceASCII,
+                          base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+    for (const auto& v : margins) {
+      uint64_t value = 0;
+      if (!base::StringToUint64(v, &value)) {
+        // If any of the values weren't parseable as an uint64_T we return
+        // nothing as the file format is unexpected.
+        LOG(ERROR) << "Unable to parse margin file contents as integer: " << v;
+        return std::vector<uint64_t>();
+      }
+      margin_values.push_back(value);
+    }
+  } else {
+    PLOG_IF(ERROR, base::SysInfo::IsRunningOnChromeOS())
+        << "Unable to read margin file";
+  }
+  return margin_values;
+}
+
+namespace {
+
+// This function would return valid margins even when there are less than 2
+// margin values in the kernel margin file.
+std::pair<uint64_t, uint64_t> GetMemoryMarginsKBImpl() {
+  const std::vector<uint64_t> margin_file_parts(
+      GetMarginFileParts(kMarginMemFile));
+  if (margin_file_parts.size() >= 2) {
+    return {margin_file_parts[0] * 1024, margin_file_parts[1] * 1024};
+  }
+
+  // Critical margin is 5.2% of total memory, moderate margin is 40% of total
+  // memory. See also /usr/share/cros/init/swap.sh on DUT.
+  base::SystemMemoryInfoKB info;
+  CHECK(base::GetSystemMemoryInfo(&info));
+  return {info.total * 13 / 250, info.total * 2 / 5};
+}
+
+}  // namespace
+
 std::pair<uint64_t, uint64_t> GetMemoryMarginsKB() {
-  // TODO(b/149833548): Implement this function.
-  return {0, 0};
+  static std::pair<uint64_t, uint64_t> result(GetMemoryMarginsKBImpl());
+  return result;
 }
 
 void UpdateMemoryParameters() {
   reserved_free = GetReservedMemoryKB();
   min_filelist = ReadFileToUint64(base::FilePath(kMinFilelist));
   ram_swap_weight = ReadFileToUint64(base::FilePath(kRamVsSwapWeight));
+  if (ram_swap_weight == 0)
+    ram_swap_weight = kRamVsSwapWeightDefault;
+}
+
+PressureChecker::PressureChecker() : weak_ptr_factory_(this) {}
+
+PressureChecker::~PressureChecker() = default;
+
+PressureChecker* PressureChecker::GetInstance() {
+  return base::Singleton<PressureChecker>::get();
+}
+
+void PressureChecker::SetCheckingDelay(base::TimeDelta delay) {
+  if (checking_timer_.GetCurrentDelay() == delay)
+    return;
+
+  if (delay.is_zero()) {
+    checking_timer_.Stop();
+  } else {
+    checking_timer_.Start(FROM_HERE, delay,
+                          base::BindRepeating(&PressureChecker::CheckPressure,
+                                              weak_ptr_factory_.GetWeakPtr()));
+  }
+}
+
+void PressureChecker::AddObserver(PressureObserver* observer) {
+  pressure_observers_.AddObserver(observer);
+}
+
+void PressureChecker::RemoveObserver(PressureObserver* observer) {
+  pressure_observers_.RemoveObserver(observer);
+}
+
+void PressureChecker::CheckPressure() {
+  std::pair<uint64_t, uint64_t> margins_kb =
+      chromeos::memory::pressure::GetMemoryMarginsKB();
+  uint64_t critical_margin_kb = margins_kb.first;
+  uint64_t moderate_margin_kb = margins_kb.second;
+  uint64_t available_kb = GetAvailableMemoryKB();
+
+  if (available_kb < critical_margin_kb) {
+    for (auto& observer : pressure_observers_) {
+      observer.OnCriticalPressure();
+    }
+  } else if (available_kb < moderate_margin_kb) {
+    for (auto& observer : pressure_observers_) {
+      observer.OnModeratePressure();
+    }
+  }
 }
 
 }  // namespace pressure

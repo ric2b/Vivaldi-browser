@@ -11,7 +11,6 @@
   }
 
   #wrapperContainer {
-    align-items: center;
     display: flex;
     height: calc(max(100vh, var(--view-min-size)) -
       (var(--banner-height) + var(--avatar-size)/2 + var(--vertical-gap) +
@@ -122,14 +121,15 @@
         on-click="onClickBack_" aria-label="$i18n{backButtonLabel}">
   </cr-icon-button>
   <h2 id="title">$i18n{localProfileCreationTitle}</h2>
-  <img class="avatar" src$="[[profileThemeInfo.themeGenericAvatar]]">
+  <img class="avatar" alt="" src$="[[profileThemeInfo.themeGenericAvatar]]">
 </div>
 
 <div id="wrapperContainer">
   <div id="wrapper">
     <cr-input id="nameInput" value="{{profileName_}}" pattern="[[pattern_]]"
         placeholder="$i18n{createProfileNamePlaceholder}"
-        auto-validate spellcheck="false">
+        on-blur="onProfileNameInputBlur_"
+        auto-validate spellcheck="false" required>
     </cr-input>
 
     <div id="colorPickerContainer">

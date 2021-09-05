@@ -17,6 +17,8 @@
 #include "base/callback_forward.h"
 #include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
+#include "base/debug/crash_logging.h"
+#include "base/memory/memory_pressure_listener.h"
 #include "base/synchronization/lock.h"
 #include "base/thread_annotations.h"
 #include "base/threading/platform_thread.h"
@@ -25,6 +27,7 @@
 #include "base/threading/thread_local.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 
 namespace base {
 class HangWatchScopeEnabled;
@@ -133,6 +136,13 @@ class BASE_EXPORT HangWatchScopeDisabled {
 // within a single process. This instance must outlive all monitored threads.
 class BASE_EXPORT HangWatcher : public DelegateSimpleThread::Delegate {
  public:
+  // Describes the type of a thread for logging purposes.
+  enum class ThreadType {
+    kIOThread = 0,
+    kUIThread = 1,
+    kThreadPoolThread = 2,
+    kMax = kThreadPoolThread
+  };
 
   // The first invocation of the constructor will set the global instance
   // accessible through GetInstance(). This means that only one instance can
@@ -162,7 +172,7 @@ class BASE_EXPORT HangWatcher : public DelegateSimpleThread::Delegate {
   // Sets up the calling thread to be monitored for threads. Returns a
   // ScopedClosureRunner that unregisters the thread. This closure has to be
   // called from the registered thread before it's joined.
-  ScopedClosureRunner RegisterThread()
+  ScopedClosureRunner RegisterThread(ThreadType thread_type)
       LOCKS_EXCLUDED(watch_state_lock_) WARN_UNUSED_RESULT;
 
   // Choose a closure to be run at the end of each call to Monitor(). Use only
@@ -216,6 +226,17 @@ class BASE_EXPORT HangWatcher : public DelegateSimpleThread::Delegate {
   // Use to assert that functions are called on the constructing thread.
   THREAD_CHECKER(constructing_thread_checker_);
 
+  // Invoked on memory pressure signal.
+  void OnMemoryPressure(
+      base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level);
+
+#if not defined(OS_NACL)
+  // Returns a ScopedCrashKeyString that sets the crash key with the time since
+  // last critical memory pressure signal.
+  debug::ScopedCrashKeyString GetTimeSinceLastCriticalMemoryPressureCrashKey()
+      WARN_UNUSED_RESULT;
+#endif
+
   // Invoke base::debug::DumpWithoutCrashing() insuring that the stack frame
   // right under it in the trace belongs to HangWatcher for easier attribution.
   NOINLINE static void RecordHang();
@@ -237,7 +258,6 @@ class BASE_EXPORT HangWatcher : public DelegateSimpleThread::Delegate {
     // on |watch_states|. If any deadline in |watch_states| is before
     // |deadline_ignore_threshold|, the snapshot is empty.
     WatchStateSnapShot(const HangWatchStates& watch_states,
-                       base::TimeTicks snapshot_time,
                        base::TimeTicks deadline_ignore_threshold);
     WatchStateSnapShot(const WatchStateSnapShot& other);
     ~WatchStateSnapShot();
@@ -256,7 +276,6 @@ class BASE_EXPORT HangWatcher : public DelegateSimpleThread::Delegate {
     bool IsActionable() const;
 
    private:
-    base::TimeTicks snapshot_time_;
     std::vector<WatchStateCopy> hung_watch_state_copies_;
   };
 
@@ -271,8 +290,9 @@ class BASE_EXPORT HangWatcher : public DelegateSimpleThread::Delegate {
   // invokes the appropriate closure if so.
   void Monitor() LOCKS_EXCLUDED(watch_state_lock_);
 
-  // Record the hang and perform the necessary housekeeping before and after.
-  void CaptureHang(base::TimeTicks capture_time)
+  // Record the hang crash dump and perform the necessary housekeeping before
+  // and after.
+  void DoDumpWithoutCrashing(const WatchStateSnapShot& watch_state_snapshot)
       EXCLUSIVE_LOCKS_REQUIRED(watch_state_lock_) LOCKS_EXCLUDED(capture_lock_);
 
   // Stop all monitoring and join the HangWatcher thread.
@@ -315,6 +335,15 @@ class BASE_EXPORT HangWatcher : public DelegateSimpleThread::Delegate {
   std::atomic<bool> capture_in_progress_{false};
 
   const base::TickClock* tick_clock_;
+
+  // Registration to receive memory pressure signals.
+  base::MemoryPressureListener memory_pressure_listener_;
+
+  // The last time at which a critical memory pressure signal was received, or
+  // null if no signal was ever received. Atomic because it's set and read from
+  // different threads.
+  std::atomic<base::TimeTicks> last_critical_memory_pressure_{
+      base::TimeTicks()};
 
   // The time after which all deadlines in |watch_states_| need to be for a hang
   // to be reported.
@@ -489,7 +518,10 @@ class BASE_EXPORT HangWatchDeadline {
 // GetHangWatchStateForCurrentThread().
 class BASE_EXPORT HangWatchState {
  public:
-  HangWatchState();
+  // |thread_type| is the type of thread the watch state will
+  // be associated with. It's the responsibility of the creating
+  // code to choose the correct type.
+  explicit HangWatchState(HangWatcher::ThreadType thread_type);
   ~HangWatchState();
 
   HangWatchState(const HangWatchState&) = delete;
@@ -497,7 +529,8 @@ class BASE_EXPORT HangWatchState {
 
   // Allocates a new state object bound to the calling thread and returns an
   // owning pointer to it.
-  static std::unique_ptr<HangWatchState> CreateHangWatchStateForCurrentThread();
+  static std::unique_ptr<HangWatchState> CreateHangWatchStateForCurrentThread(
+      HangWatcher::ThreadType thread_type);
 
   // Retrieves the hang watch state associated with the calling thread.
   // Returns nullptr if no HangWatchState exists for the current thread (see
@@ -571,6 +604,9 @@ class BASE_EXPORT HangWatchState {
   // Reduce the nesting level by 1;
   void DecrementNestingLevel();
 
+  // Returns the type of the thread under watch.
+  HangWatcher::ThreadType thread_type() const { return thread_type_; }
+
  private:
   // The thread that creates the instance should be the class that updates
   // the deadline.
@@ -584,6 +620,9 @@ class BASE_EXPORT HangWatchState {
 
   // Number of active HangWatchScopeEnables on this thread.
   int nesting_level_ = 0;
+
+  // The type of the thread under watch.
+  const HangWatcher::ThreadType thread_type_;
 
 #if DCHECK_IS_ON()
   // Used to keep track of the current HangWatchScopeEnabled and detect improper

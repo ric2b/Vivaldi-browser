@@ -54,6 +54,7 @@
 #include "chrome/browser/web_data_service_factory.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/chrome_constants.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
@@ -85,8 +86,8 @@
 #include "components/prefs/testing_pref_store.h"
 #include "components/security_interstitials/content/stateful_ssl_host_state_delegate.h"
 #include "components/signin/public/identity_manager/identity_test_utils.h"
-#include "components/sync/model/fake_sync_change_processor.h"
-#include "components/sync/model/sync_error_factory_mock.h"
+#include "components/sync/test/model/fake_sync_change_processor.h"
+#include "components/sync/test/model/sync_error_factory_mock.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "components/user_prefs/user_prefs.h"
@@ -184,6 +185,26 @@ const char TestingProfile::kTestUserProfileDir[] = "test-user";
 #else
 const char TestingProfile::kTestUserProfileDir[] = "Default";
 #endif
+
+// static
+bool TestingProfile::SetScopedFeatureListForEphemeralGuestProfiles(
+    base::test::ScopedFeatureList& scoped_feature_list,
+    bool enabled) {
+// This feature is now only supported on Windows, Linux, and Mac.
+#if defined(OS_WIN) || defined(OS_MAC) || \
+    (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+  if (enabled)
+    scoped_feature_list.InitAndEnableFeature(
+        features::kEnableEphemeralGuestProfilesOnDesktop);
+  else
+    scoped_feature_list.InitAndDisableFeature(
+        features::kEnableEphemeralGuestProfilesOnDesktop);
+  return true;
+#else
+  return false;
+#endif  // defined(OS_WIN) || defined(OS_MAC) || (defined(OS_LINUX) &&
+        // !defined(OS_CHROMEOS))
+}
 
 TestingProfile::TestingProfile() : TestingProfile(base::FilePath()) {}
 
@@ -308,8 +329,12 @@ void TestingProfile::Init() {
 
   ProfileManager* profile_manager = g_browser_process->profile_manager();
   if (profile_manager) {
-    set_is_system_profile(profile_path_ ==
-                          profile_manager->GetSystemProfilePath());
+    if (IsOffTheRecord()) {
+      set_is_system_profile(original_profile_->IsSystemProfile());
+    } else {
+      set_is_system_profile(profile_path_ ==
+                            profile_manager->GetSystemProfilePath());
+    }
   }
 
   if (IsOffTheRecord()) {
@@ -355,6 +380,9 @@ void TestingProfile::Init() {
 #endif
   else
     CreateTestingPrefService();
+
+  if (guest_session_ && IsEphemeralGuestProfileEnabled())
+    GetPrefs()->SetBoolean(prefs::kForceEphemeralProfiles, true);
 
   key_->SetPrefs(prefs_.get());
   SimpleKeyMap::GetInstance()->Associate(this, key_.get());
@@ -618,6 +646,10 @@ Profile* TestingProfile::GetOffTheRecordProfile(
     const OTRProfileID& otr_profile_id) {
   if (IsOffTheRecord())
     return original_profile_->GetOffTheRecordProfile(otr_profile_id);
+
+  // Ephemeral Guest profiles do not support Incognito.
+  if (IsEphemeralGuestProfile() && otr_profile_id == OTRProfileID::PrimaryID())
+    return nullptr;
 
   if (!HasOffTheRecordProfile(otr_profile_id)) {
     TestingProfile::Builder builder;
@@ -958,7 +990,11 @@ bool TestingProfile::WasCreatedByVersionOrLater(const std::string& version) {
 }
 
 bool TestingProfile::IsGuestSession() const {
-  return guest_session_;
+  return guest_session_ && !IsEphemeralGuestProfileEnabled();
+}
+
+bool TestingProfile::IsEphemeralGuestProfile() const {
+  return guest_session_ && IsEphemeralGuestProfileEnabled();
 }
 
 bool TestingProfile::IsNewProfile() const {
@@ -1088,6 +1124,11 @@ TestingProfile* TestingProfile::Builder::BuildOffTheRecord(
   DCHECK(!build_called_);
   DCHECK(original_profile);
   build_called_ = true;
+
+  // Ephemeral guest profiles do not support Incognito.
+  if (original_profile->IsEphemeralGuestProfile() &&
+      otr_profile_id == OTRProfileID::PrimaryID())
+    return nullptr;
 
   // Note: Owned by |original_profile|.
   return new TestingProfile(

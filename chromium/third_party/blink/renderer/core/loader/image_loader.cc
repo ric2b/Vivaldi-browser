@@ -522,15 +522,18 @@ void ImageLoader::DoUpdateFromElement(
     // Correct the RequestContext if necessary.
     if (IsA<HTMLPictureElement>(GetElement()->parentNode()) ||
         !GetElement()->FastGetAttribute(html_names::kSrcsetAttr).IsNull()) {
-      resource_request.SetRequestContext(mojom::RequestContextType::IMAGE_SET);
+      resource_request.SetRequestContext(
+          mojom::blink::RequestContextType::IMAGE_SET);
       resource_request.SetRequestDestination(
           network::mojom::RequestDestination::kImage);
     } else if (IsA<HTMLObjectElement>(GetElement())) {
-      resource_request.SetRequestContext(mojom::RequestContextType::OBJECT);
+      resource_request.SetRequestContext(
+          mojom::blink::RequestContextType::OBJECT);
       resource_request.SetRequestDestination(
           network::mojom::RequestDestination::kObject);
     } else if (IsA<HTMLEmbedElement>(GetElement())) {
-      resource_request.SetRequestContext(mojom::RequestContextType::EMBED);
+      resource_request.SetRequestContext(
+          mojom::blink::RequestContextType::EMBED);
       resource_request.SetRequestDestination(
           network::mojom::RequestDestination::kEmbed);
     }
@@ -541,7 +544,8 @@ void ImageLoader::DoUpdateFromElement(
       resource_request.SetHttpHeaderField(http_names::kCacheControl,
                                           "max-age=0");
       resource_request.SetKeepalive(true);
-      resource_request.SetRequestContext(mojom::RequestContextType::PING);
+      resource_request.SetRequestContext(
+          mojom::blink::RequestContextType::PING);
     }
 
     // Plug-ins should not load via service workers as plug-ins may have their
@@ -592,9 +596,10 @@ void ImageLoader::DoUpdateFromElement(
 
     if (ShouldEnableSubresourceRedirect(
             DynamicTo<HTMLImageElement>(GetElement()), params.Url())) {
-      auto& resource_request = params.MutableResourceRequest();
-      resource_request.SetPreviewsState(resource_request.GetPreviewsState() |
-                                        PreviewsTypes::kSubresourceRedirectOn);
+      auto& subresource_request = params.MutableResourceRequest();
+      subresource_request.SetPreviewsState(
+          subresource_request.GetPreviewsState() |
+          PreviewsTypes::kSubresourceRedirectOn);
     }
 
     new_image_content = ImageResourceContent::Fetch(params, document.Fetcher());
@@ -620,7 +625,7 @@ void ImageLoader::DoUpdateFromElement(
   if (update_behavior == kUpdateSizeChanged && element_->GetLayoutObject() &&
       element_->GetLayoutObject()->IsImage() &&
       new_image_content == old_image_content) {
-    ToLayoutImage(element_->GetLayoutObject())->IntrinsicSizeChanged();
+    To<LayoutImage>(element_->GetLayoutObject())->IntrinsicSizeChanged();
   } else {
     bool is_lazyload = lazy_image_load_state_ == LazyImageLoadState::kDeferred;
 
@@ -878,11 +883,11 @@ LayoutImageResource* ImageLoader::GetLayoutImageResource() {
   // We don't return style generated image because it doesn't belong to the
   // ImageLoader. See <https://bugs.webkit.org/show_bug.cgi?id=42840>
   if (layout_object->IsImage() &&
-      !ToLayoutImage(layout_object)->IsGeneratedContent())
-    return ToLayoutImage(layout_object)->ImageResource();
+      !To<LayoutImage>(layout_object)->IsGeneratedContent())
+    return To<LayoutImage>(layout_object)->ImageResource();
 
   if (layout_object->IsSVGImage())
-    return ToLayoutSVGImage(layout_object)->ImageResource();
+    return To<LayoutSVGImage>(layout_object)->ImageResource();
 
   if (auto* layout_video = DynamicTo<LayoutVideo>(layout_object))
     return layout_video->ImageResource();
@@ -940,7 +945,7 @@ void ImageLoader::DispatchPendingErrorEvent(
 }
 
 bool ImageLoader::GetImageAnimationPolicy(
-    web_pref::ImageAnimationPolicy& policy) {
+    mojom::blink::ImageAnimationPolicy& policy) {
   if (!GetElement()->GetDocument().GetSettings())
     return false;
 

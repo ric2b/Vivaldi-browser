@@ -5,7 +5,7 @@
 import("//build/config/chrome_build.gni")
 import("//components/vector_icons/vector_icons.gni")
 
-aggregate_vector_icons2("ash_vector_icons") {
+aggregate_vector_icons("ash_vector_icons") {
   icon_directory = "."
 
   sources = [
@@ -28,9 +28,9 @@ aggregate_vector_icons2("ash_vector_icons") {
     "autoclick_scroll_right.icon",
     "autoclick_scroll_up.icon",
     "battery.icon",
-    "captive_portal.icon",
     "capture_mode.icon",
     "capture_mode_circle_stop.icon",
+    "capture_mode_feedback.icon",
     "capture_mode_fullscreen.icon",
     "capture_mode_image.icon",
     "capture_mode_region.icon",
@@ -79,11 +79,10 @@ aggregate_vector_icons2("ash_vector_icons") {
     "lock_screen_time_limit_moon.icon",
     "lock_screen_time_limit_timer.icon",
     "login_screen_button_dropdown.icon",
-    "login_screen_enterprise.icon",
     "login_screen_menu_dropdown.icon",
     "mic.icon",
+    "music_note.icon",
     "muted_microphone.icon",
-    "network_badge_captive_portal.icon",
     "network_badge_off.icon",
     "network_badge_roaming.icon",
     "network_badge_secure.icon",
@@ -111,7 +110,6 @@ aggregate_vector_icons2("ash_vector_icons") {
     "notification_capslock.icon",
     "notification_center_all_done.icon",
     "notification_center_clear_all.icon",
-    "notification_center_collapse.icon",
     "notification_center_do_not_disturb_off.icon",
     "notification_center_do_not_disturb_on.icon",
     "notification_center_empty.icon",
@@ -143,11 +141,28 @@ aggregate_vector_icons2("ash_vector_icons") {
     "palette_tray_icon_laser_pointer.icon",
     "palette_tray_icon_magnify.icon",
     "palette_tray_icon_metalayer.icon",
+    "phone_hub_battery_saver.icon",
+    "phone_hub_battery_saver_outline.icon",
+    "phone_hub_default_favicon.icon",
+    "phone_hub_enable_hotspot_off.icon",
+    "phone_hub_enable_hotspot_on.icon",
+    "phone_hub_locate_phone_off.icon",
+    "phone_hub_locate_phone_on.icon",
     "phone_hub_mobile_no_connection.icon",
     "phone_hub_mobile_no_sim.icon",
+    "phone_hub_phone.icon",
+    "phone_hub_silence_phone_off.icon",
+    "phone_hub_silence_phone_on.icon",
     "pin_request_lock.icon",
     "pinned.icon",
     "privacy_screen.icon",
+    "select_to_speak_next_paragraph.icon",
+    "select_to_speak_next_sentence.icon",
+    "select_to_speak_pause.icon",
+    "select_to_speak_play.icon",
+    "select_to_speak_prev_paragraph.icon",
+    "select_to_speak_prev_sentence.icon",
+    "select_to_speak_stop.icon",
     "send.icon",
     "settings.icon",
     "shelf_add_person_button.icon",
@@ -186,6 +201,7 @@ aggregate_vector_icons2("ash_vector_icons") {
     "switch_access_move_forward_one_word_of_text.icon",
     "switch_access_move_up_one_line_of_text.icon",
     "switch_access_paste.icon",
+    "switch_access_point_scan.icon",
     "switch_access_scroll_down.icon",
     "switch_access_scroll_left.icon",
     "switch_access_scroll_right.icon",
@@ -320,6 +336,8 @@ aggregate_vector_icons2("ash_vector_icons") {
     "unified_network_badge_vpn.icon",
     "unpinned.icon",
     "unrendered_html_placeholder.icon",
+    "visibility.icon",
+    "visibility_off.icon",
     "wallpaper.icon",
   ]
 

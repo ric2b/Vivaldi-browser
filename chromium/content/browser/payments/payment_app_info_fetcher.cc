@@ -8,7 +8,7 @@
 
 #include "base/base64.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/optional.h"
 #include "base/task/post_task.h"
 #include "components/payments/content/icon/icon_size.h"
@@ -267,7 +267,7 @@ void PaymentAppInfoFetcher::SelfDeleteFetcher::FetchPaymentAppManifestCallback(
       payments::IconSizeCalculator::IdealIconHeight(native_view),
       payments::IconSizeCalculator::MinimumIconHeight(),
       ManifestIconDownloader::kMaxWidthToHeightRatio,
-      blink::Manifest::ImageResource::Purpose::ANY);
+      blink::mojom::ManifestImageResource_Purpose::ANY);
   if (!icon_url_.is_valid()) {
     WarnIfPossible(
         "No suitable payment handler icon found in the \"icons\" field defined "

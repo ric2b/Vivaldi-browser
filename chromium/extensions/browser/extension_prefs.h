@@ -671,7 +671,7 @@ class ExtensionPrefs : public KeyedService {
 
   // Whether the extension with the given |extension_id| is using its ruleset's
   // matched action count for the badge text. This is set via the
-  // setActionCountAsBadgeText API call.
+  // setExtensionActionOptions API call.
   bool GetDNRUseActionCountAsBadgeText(const ExtensionId& extension_id) const;
   void SetDNRUseActionCountAsBadgeText(const ExtensionId& extension_id,
                                        bool use_action_count_as_badge_text);
@@ -681,6 +681,19 @@ class ExtensionPrefs : public KeyedService {
   bool ShouldIgnoreDNRRuleset(
       const ExtensionId& extension_id,
       declarative_net_request::RulesetID ruleset_id) const;
+
+  // Returns the global rule allocation for the given |extension_id|. If no
+  // rules are allocated to the extension, false is returned.
+  bool GetDNRAllocatedGlobalRuleCount(const ExtensionId& extension_id,
+                                      size_t* rule_count) const;
+  void SetDNRAllocatedGlobalRuleCount(const ExtensionId& extension_id,
+                                      size_t rule_count);
+
+  // Whether the extension with the given |extension_id| should have its excess
+  // global rules allocation kept during its next load.
+  bool GetDNRKeepExcessAllocation(const ExtensionId& extension_id) const;
+  void SetDNRKeepExcessAllocation(const ExtensionId& extension_id,
+                                  bool keep_excess_allocation);
 
   // Migrates the disable reasons extension pref for extensions that were
   // disabled due to a deprecated reason.

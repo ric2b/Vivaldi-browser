@@ -31,7 +31,7 @@ import org.chromium.chrome.browser.password_manager.PasswordManagerHelper;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.safe_browsing.metrics.SettingsAccessPoint;
-import org.chromium.chrome.browser.safe_browsing.settings.SecuritySettingsFragment;
+import org.chromium.chrome.browser.safe_browsing.settings.SafeBrowsingSettingsFragment;
 import org.chromium.chrome.browser.safety_check.SafetyCheckBridge.SafetyCheckCommonObserver;
 import org.chromium.chrome.browser.safety_check.SafetyCheckProperties.PasswordsState;
 import org.chromium.chrome.browser.safety_check.SafetyCheckProperties.SafeBrowsingState;
@@ -191,13 +191,13 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
                             SafetyCheckInteractions.SAFE_BROWSING_MANAGE,
                             SafetyCheckInteractions.MAX_VALUE + 1);
                     String safeBrowsingSettingsClassName;
-                    if (ChromeFeatureList.isEnabled(
-                                ChromeFeatureList.SAFE_BROWSING_SECURITY_SECTION_UI)) {
-                        // Open the Security settings since the flag for them is enabled.
-                        safeBrowsingSettingsClassName = SecuritySettingsFragment.class.getName();
+                    if (ChromeFeatureList.isEnabled(ChromeFeatureList.SAFE_BROWSING_SECTION_UI)) {
+                        // Open the Safe Browsing settings since the flag for them is enabled.
+                        safeBrowsingSettingsClassName =
+                                SafeBrowsingSettingsFragment.class.getName();
                         p.getContext().startActivity(settingsLauncher.createSettingsActivityIntent(
                                 p.getContext(), safeBrowsingSettingsClassName,
-                                SecuritySettingsFragment.createArguments(
+                                SafeBrowsingSettingsFragment.createArguments(
                                         SettingsAccessPoint.SAFETY_CHECK)));
                     } else {
                         // Open the Sync and Services settings.
@@ -257,7 +257,7 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
                     PasswordsStatus.SIGNED_OUT, PasswordsStatus.MAX_VALUE + 1);
             updatePasswordElementClickDestination();
         }
-        PasswordCheckFactory.getOrCreate().addObserver(this, true);
+        PasswordCheckFactory.getOrCreate(mSettingsLauncher).addObserver(this, true);
         if (mPasswordsLoaded && mLeaksLoaded) {
             determinePasswordStateOnLoadComplete();
         }
@@ -289,11 +289,11 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
         // Start all the checks.
         mSafetyCheckBridge.checkSafeBrowsing();
         // Start observing the password check events (including data loads).
-        PasswordCheckFactory.getOrCreate().addObserver(this, false);
+        PasswordCheckFactory.getOrCreate(mSettingsLauncher).addObserver(this, false);
         // This indicates that the results of the initial data load should not be applied even if
         // they become available during the check.
         mLoadStage = PasswordCheckLoadStage.IDLE;
-        PasswordCheckFactory.getOrCreate().startCheck();
+        PasswordCheckFactory.getOrCreate(mSettingsLauncher).startCheck();
         mUpdatesClient.checkForUpdates(new WeakReference(mUpdatesCheckCallback));
     }
 
@@ -420,7 +420,7 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
         if (mLoadStage == PasswordCheckLoadStage.IDLE) return;
         // If something is blocked, that means the passwords check is being observed. At this point,
         // no further events need to be observed.
-        PasswordCheckFactory.getOrCreate().removeObserver(this);
+        PasswordCheckFactory.getOrCreate(mSettingsLauncher).removeObserver(this);
         // Only delay updating the UI on the user-triggered check and not initially.
         if (mLoadStage == PasswordCheckLoadStage.INITIAL_WAIT_FOR_LOAD) {
             updatePasswordsStateOnDataLoaded();
@@ -434,7 +434,8 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
     /** Applies the results of the password check to the model. Only called when data is loaded. */
     private void updatePasswordsStateOnDataLoaded() {
         // Always display the compromised state.
-        int compromised = PasswordCheckFactory.getOrCreate().getCompromisedCredentialsCount();
+        int compromised = PasswordCheckFactory.getOrCreate(mSettingsLauncher)
+                                  .getCompromisedCredentialsCount();
         if (compromised != 0) {
             mModel.set(SafetyCheckProperties.COMPROMISED_PASSWORDS, compromised);
             mModel.set(SafetyCheckProperties.PASSWORDS_STATE, PasswordsState.COMPROMISED_EXIST);
@@ -445,7 +446,8 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
                 && !mShowSafePasswordState) {
             // Cannot show the safe state at the initial load if last run is older than 10 mins.
             mModel.set(SafetyCheckProperties.PASSWORDS_STATE, PasswordsState.UNCHECKED);
-        } else if (PasswordCheckFactory.getOrCreate().getSavedPasswordsCount() == 0) {
+        } else if (PasswordCheckFactory.getOrCreate(mSettingsLauncher).getSavedPasswordsCount()
+                == 0) {
             // Can show safe state: display no passwords.
             mModel.set(SafetyCheckProperties.PASSWORDS_STATE, PasswordsState.NO_PASSWORDS);
             // Record the value in UMA.
@@ -490,8 +492,8 @@ class SafetyCheckMediator implements PasswordCheck.Observer, SafetyCheckCommonOb
                         SafetyCheckInteractions.PASSWORDS_MANAGE,
                         SafetyCheckInteractions.MAX_VALUE + 1);
                 // Open the Password Check UI.
-                PasswordCheckFactory.getOrCreate().showUi(
-                        p.getContext(), PasswordCheckReferrer.SAFETY_CHECK);
+                PasswordCheckFactory.getOrCreate(mSettingsLauncher)
+                        .showUi(p.getContext(), PasswordCheckReferrer.SAFETY_CHECK);
                 return true;
             };
         } else {

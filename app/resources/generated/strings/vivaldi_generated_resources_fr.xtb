@@ -19,7 +19,6 @@
 <translation id="1221825588892235038">Sélection uniquement</translation>
 <translation id="1244303850296295656">Erreur au niveau des extensions</translation>
 <translation id="125220115284141797">Par défaut</translation>
-<translation id="1274977772557788323">Paramètres de stockage d’Adobe Flash Player</translation>
 <translation id="1297175357211070620">Destination</translation>
 <translation id="1303101771013849280">Fichier de signets au format HTML</translation>
 <translation id="1380436189840894976">Voulez-vous vraiment quitter le mode navigation privée ?</translation>
@@ -74,7 +73,6 @@
 <translation id="2218515861914035131">Coller en texte brut</translation>
 <translation id="2249605167705922988">par exemple : 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Autoriser les identifiants d’accès aux contenus protégés (ceci nécessite le redémarrage de votre ordinateur)</translation>
-<translation id="2263497240924215535">(Désactivé)</translation>
 <translation id="2277255602909579701">Tous les cookies et données du site</translation>
 <translation id="2280486287150724112">Marge droite</translation>
 <translation id="2282146716419988068">Processeur graphique</translation>
@@ -104,6 +102,7 @@
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Réactiver</translation>
 <translation id="2721037002783622288">Rechercher une &amp;image avec <ph name="SEARCH_ENGINE" /></translation>
+<translation id="2783321960289401138">Créer un raccourci…</translation>
 <translation id="2785873697295365461">Descripteurs de fichiers</translation>
 <translation id="2809586584051668049">ainsi que <ph name="NUMBER_ADDITIONAL_DISABLED" /> autre(s) extension(s)</translation>
 <translation id="2812989263793994277">Ne pas afficher les images</translation>
@@ -125,7 +124,6 @@
 <translation id="3013291976881901233">Appareils MIDI</translation>
 <translation id="3021678814754966447">&amp;Afficher le code source du cadre</translation>
 <translation id="3036546437875325427">Activer Flash</translation>
-<translation id="3038675903128704560">N’autoriser aucun site à utiliser un plug-in pour accéder à mon ordinateur</translation>
 <translation id="3046910703532196514">Page Web complète, HTML et dossier</translation>
 <translation id="3067198360141518313">Exécuter ce plug-in</translation>
 <translation id="3080207940057008665">Un autre programme sur votre ordinateur a ajouté un thème qui risque de modifier le fonctionnement de Vivaldi.</translation>
@@ -155,18 +153,17 @@
 <translation id="3378572629723696641">Cette extension a pu être corrompue.</translation>
 <translation id="3387614642886316601">Utiliser le correcteur orthographique amélioré</translation>
 <translation id="3432227430032737297">Supprimer tous les cookies affichés</translation>
-<translation id="3440761377721825626">Me demander lorsqu’un site essaie d’utiliser un plug-in pour accéder à mon ordinateur</translation>
 <translation id="345693547134384690">Ouvrir l’&amp;image dans un nouvel onglet</translation>
 <translation id="3494769164076977169">Me demander lorsque le téléchargement automatique de fichiers est requis sur un site après le premier fichier (recommandé)</translation>
 <translation id="3505030558724226696">Retirer les droits d’accès aux appareils</translation>
 <translation id="3511307672085573050">Copier l’adr&amp;esse du lien</translation>
-<translation id="3523642406908660543">Me demander lorsqu’un plug-in doit être utilisé pour qu’un site puisse accéder à mon ordinateur (recommandé)</translation>
 <translation id="354068948465830244">Possibilité de lire et de modifier les données du site</translation>
 <translation id="3560034655160545939">&amp;Correcteur orthographique</translation>
 <translation id="3574917942258583917">Voulez-vous vraiment quitter le mode navigation privée ?</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; souhaite partager une imprimante &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; avec un groupe que vous gérez : &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Si vous acceptez, tous les membres du groupe seront en mesure d’imprimer sur cette imprimante.</translation>
 <translation id="3587482841069643663">Tous</translation>
 <translation id="3627588569887975815">Ouvrir le lien dans une fenêtre en navi&amp;gation privée</translation>
+<translation id="3627879631695760395">Installer <ph name="APP" />...</translation>
 <translation id="3668823961463113931">Gestionnaire de protocoles</translation>
 <translation id="3678156199662914018">Extension : <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Partage de l’écran demandé par <ph name="APP_NAME" /></translation>
@@ -219,7 +216,6 @@
 <translation id="4423376891418188461">Rétablir les paramètres</translation>
 <translation id="4434045419905280838">Pop-ups et redirections</translation>
 <translation id="4478664379124702289">Enregistrer le lie&amp;n sous…</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535">Impossible de caster <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Accéder à <ph name="URL" /></translation>
 <translation id="4595560905247879544">Seul l’administrateur (<ph name="CUSTODIAN_NAME" />) est autorisé à modifier les applications et les extensions.</translation>
@@ -300,7 +296,6 @@
 <translation id="583281660410589416">Inconnu</translation>
 <translation id="5860491529813859533">Activer</translation>
 <translation id="5867841422488265304">Recherchez ou saisissez une adresse Web</translation>
-<translation id="5908769186679515905">Interdire aux sites d’exécuter Flash</translation>
 <translation id="5910363049092958439">En&amp;registrer l’image sous…</translation>
 <translation id="5956585768868398362">Est-ce bien la page de recherche que vous attendiez ?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (pic : <ph name="NUM_KILOBYTES_LIVE" />)</translation>
@@ -373,7 +368,6 @@
 <translation id="7287143125007575591">Accès refusé.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> points par pouce</translation>
 <translation id="7309257895202129721">Afficher les &amp;commandes</translation>
-<translation id="7311079019872751559">Accès via un plug-in sans système de bac à sable</translation>
 <translation id="7385854874724088939">Erreur lors de la tentative d’impression. Vérifiez votre imprimante et réessayez.</translation>
 <translation id="7412226954991670867">Mémoire processeur graphique</translation>
 <translation id="7421925624202799674">&amp;Afficher le code source de la page</translation>
@@ -477,6 +471,7 @@ Conservez votre fichier de clé en lieu sûr. Vous en aurez besoin lors de la cr
 <translation id="9027459031423301635">Ouvrir le lien dans un nouvel ongle&amp;t</translation>
 <translation id="9056810968620647706">Aucune correspondance trouvée.</translation>
 <translation id="9137916601698928395">Ouvrir le lien avec le compte <ph name="USER" /></translation>
+<translation id="91568222606626347">Créer un raccourci…</translation>
 <translation id="916607977885256133">Mode PiP (Picture-in-Picture)</translation>
 <translation id="9170848237812810038">Ann&amp;uler</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" ajoutée</translation>

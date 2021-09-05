@@ -6,6 +6,7 @@
 #include "ash/public/cpp/login_screen_test_api.h"
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/public/cpp/shelf_test_api.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/app_mode/web_app/web_kiosk_app_manager.h"
 #include "chrome/browser/chromeos/login/app_mode/kiosk_launch_controller.h"
@@ -22,7 +23,7 @@
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/webui/chromeos/login/error_screen_handler.h"
-#include "chrome/common/web_application_info.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "components/account_id/account_id.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/browser_test.h"
@@ -138,7 +139,7 @@ class WebKioskTest : public OobeBaseTest {
     const keyboard::KeyboardConfig config =
         ash::KeyboardController::Get()->GetKeyboardConfig();
 
-    // |auto_capitalize| is not controlled by the policy
+    // `auto_capitalize` is not controlled by the policy
     // 'VirtualKeyboardFeatures', and its default value remains true.
     EXPECT_TRUE(config.auto_capitalize);
 

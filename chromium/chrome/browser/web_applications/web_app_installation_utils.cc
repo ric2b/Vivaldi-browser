@@ -13,9 +13,9 @@
 #include "base/notreached.h"
 #include "base/optional.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/browser/web_applications/web_app.h"
 #include "chrome/common/chrome_features.h"
-#include "chrome/common/web_application_info.h"
 #include "components/services/app_service/public/cpp/file_handler.h"
 #include "components/services/app_service/public/cpp/protocol_handler_info.h"
 #include "components/services/app_service/public/cpp/share_target.h"
@@ -85,6 +85,19 @@ void SetWebAppProtocolHandlers(
   web_app.SetProtocolHandlers(web_app_protocol_handlers);
 }
 
+void SetWebAppUrlHandlers(
+    const std::vector<blink::Manifest::UrlHandler>& url_handlers,
+    WebApp& web_app) {
+  apps::UrlHandlers web_app_url_handlers;
+  for (const auto& url_handler : url_handlers) {
+    apps::UrlHandlerInfo web_app_url_handler;
+    web_app_url_handler.origin = url_handler.origin;
+    web_app_url_handlers.push_back(std::move(web_app_url_handler));
+  }
+
+  web_app.SetUrlHandlers(std::move(web_app_url_handlers));
+}
+
 }  // namespace
 
 void SetWebAppManifestFields(const WebApplicationInfo& web_app_info,
@@ -129,6 +142,7 @@ void SetWebAppManifestFields(const WebApplicationInfo& web_app_info,
   SetWebAppFileHandlers(web_app_info.file_handlers, web_app);
   web_app.SetShareTarget(web_app_info.share_target);
   SetWebAppProtocolHandlers(web_app_info.protocol_handlers, web_app);
+  SetWebAppUrlHandlers(web_app_info.url_handlers, web_app);
 
   if (base::FeatureList::IsEnabled(features::kDesktopPWAsRunOnOsLogin) &&
       web_app_info.run_on_os_login) {

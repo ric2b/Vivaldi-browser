@@ -28,6 +28,7 @@
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/color_utils.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/text_utils.h"
 #include "ui/views/animation/ink_drop.h"
@@ -38,6 +39,7 @@
 #include "ui/views/controls/menu/menu_item_view.h"
 #include "ui/views/controls/menu/menu_model_adapter.h"
 #include "ui/views/controls/menu/menu_runner.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
 
@@ -56,14 +58,16 @@ SkColor GetDefaultTextColor(const ui::ThemeProvider* theme_provider) {
 
 }  // namespace
 
-ToolbarButton::ToolbarButton(views::ButtonListener* listener)
-    : ToolbarButton(listener, nullptr, nullptr) {}
+ToolbarButton::ToolbarButton(PressedCallback callback)
+    : ToolbarButton(std::move(callback), nullptr, nullptr) {}
 
-ToolbarButton::ToolbarButton(views::ButtonListener* listener,
+ToolbarButton::ToolbarButton(PressedCallback callback,
                              std::unique_ptr<ui::MenuModel> model,
                              TabStripModel* tab_strip_model,
                              bool trigger_menu_on_long_press)
-    : views::LabelButton(listener, base::string16(), CONTEXT_TOOLBAR_BUTTON),
+    : views::LabelButton(std::move(callback),
+                         base::string16(),
+                         CONTEXT_TOOLBAR_BUTTON),
       model_(std::move(model)),
       tab_strip_model_(tab_strip_model),
       trigger_menu_on_long_press_(trigger_menu_on_long_press),
@@ -82,7 +86,7 @@ ToolbarButton::ToolbarButton(views::ButtonListener* listener,
 
   // Make sure icons are flipped by default so that back, forward, etc. follows
   // UI direction.
-  EnableCanvasFlippingForRTLUI(true);
+  SetFlipCanvasOnPaintForRTLUI(true);
 
   SetInkDropVisibleOpacity(kToolbarInkDropVisibleOpacity);
 
@@ -146,7 +150,7 @@ void ToolbarButton::UpdateColorsAndInsets() {
   }
 
   gfx::Insets target_insets =
-      layout_insets_.value_or(GetLayoutInsets(TOOLBAR_BUTTON)) +
+      layout_insets_.value_or(::GetLayoutInsets(TOOLBAR_BUTTON)) +
       layout_inset_delta_ + *GetProperty(views::kInternalPaddingKey);
   base::Optional<SkColor> border_color =
       highlight_color_animation_.GetBorderColor();
@@ -264,7 +268,11 @@ bool ToolbarButton::IsMenuShowing() const {
   return menu_showing_;
 }
 
-void ToolbarButton::SetLayoutInsets(const gfx::Insets& insets) {
+base::Optional<gfx::Insets> ToolbarButton::GetLayoutInsets() const {
+  return layout_insets_;
+}
+
+void ToolbarButton::SetLayoutInsets(const base::Optional<gfx::Insets>& insets) {
   if (layout_insets_ == insets)
     return;
   layout_insets_ = insets;
@@ -522,10 +530,6 @@ void ToolbarButton::OnMenuClosed() {
   menu_model_adapter_.reset();
 }
 
-const char* ToolbarButton::GetClassName() const {
-  return "ToolbarButton";
-}
-
 namespace {
 
 // The default duration does not work well for dark mode where the animation has
@@ -648,3 +652,7 @@ void ToolbarButton::HighlightColorAnimation::ClearHighlightColor() {
   highlight_color_.reset();
   parent_->UpdateColorsAndInsets();
 }
+
+BEGIN_METADATA(ToolbarButton, views::LabelButton)
+ADD_PROPERTY_METADATA(base::Optional<gfx::Insets>, LayoutInsets)
+END_METADATA

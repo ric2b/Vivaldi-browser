@@ -55,6 +55,7 @@ class ThreadProfiler;
 
 namespace blink {
 class WebServiceWorkerContextProxy;
+enum class ProtocolHandlerSecurityLevel;
 }
 
 namespace chrome {
@@ -103,14 +104,12 @@ class ChromeContentRendererClient
   blink::WebPlugin* CreatePluginReplacement(
       content::RenderFrame* render_frame,
       const base::FilePath& plugin_path) override;
-  bool HasErrorPage(int http_status_code) override;
-  bool ShouldTrackUseCounter(const GURL& url) override;
   void PrepareErrorPage(content::RenderFrame* render_frame,
                         const blink::WebURLError& error,
                         const std::string& http_method,
                         std::string* error_html) override;
   void PrepareErrorPageForHttpStatusError(content::RenderFrame* render_frame,
-                                          const GURL& unreachable_url,
+                                          const blink::WebURLError& error,
                                           const std::string& http_method,
                                           int http_status,
                                           std::string* error_html) override;
@@ -123,6 +122,8 @@ class ChromeContentRendererClient
       base::SingleThreadTaskRunner* compositor_thread_task_runner) override;
   bool RunIdleHandlerWhenWidgetsHidden() override;
   bool AllowPopup() override;
+  blink::ProtocolHandlerSecurityLevel GetProtocolHandlerSecurityLevel()
+      override;
   void WillSendRequest(blink::WebLocalFrame* frame,
                        ui::PageTransition transition_type,
                        const blink::WebURL& url,
@@ -192,7 +193,7 @@ class ChromeContentRendererClient
                              const std::string& name) override;
   bool IsSafeRedirectTarget(const GURL& url) override;
   void DidSetUserAgent(const std::string& user_agent) override;
-  bool RequiresWebComponentsV0(const GURL& url) override;
+  bool RequiresHtmlImports(const GURL& url) override;
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   void MaybeProxyURLLoaderFactory(
       content::RenderFrame* render_frame,

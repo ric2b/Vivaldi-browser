@@ -53,7 +53,7 @@ const CGFloat kMostVisitedBottomMargin = 13;
 const CGFloat kCardBorderRadius = 11;
 const CGFloat kDiscoverFeedContentWith = 430;
 // Value representing offset from bottom of the page to trigger pagination.
-const CGFloat kPaginationOffset = 400;
+const CGFloat kPaginationOffset = 800;
 // Height for the Discover Feed section header.
 const CGFloat kDiscoverFeedFeaderHeight = 30;
 // Minimum height of the Discover feed content to indicate that the articles
@@ -745,8 +745,14 @@ NSString* const kContentSuggestionsMostVisitedAccessibilityIdentifierPrefix =
   [super scrollViewDidEndDragging:scrollView willDecelerate:decelerate];
   [self.overscrollActionsController scrollViewDidEndDragging:scrollView
                                               willDecelerate:decelerate];
-  [self.discoverFeedMetricsRecorder
-      recordFeedScrolled:scrollView.contentOffset.y - self.scrollStartPosition];
+  if (IsDiscoverFeedEnabled()) {
+    [self.discoverFeedMetricsRecorder
+        recordFeedScrolled:scrollView.contentOffset.y -
+                           self.scrollStartPosition];
+  } else {
+    [self.metricsRecorder recordFeedScrolled:scrollView.contentOffset.y -
+                                             self.scrollStartPosition];
+  }
 }
 
 - (void)scrollViewWillEndDragging:(UIScrollView*)scrollView
@@ -826,6 +832,7 @@ NSString* const kContentSuggestionsMostVisitedAccessibilityIdentifierPrefix =
     // more reliably.
     if (self.feedView.contentSize.height > kDiscoverFeedLoadedHeight) {
       [self.discoverFeedMenuHandler notifyFeedLoadedForHeaderMenu];
+      [self.audience discoverFeedShown];
     }
   }
 }
@@ -937,9 +944,9 @@ NSString* const kContentSuggestionsMostVisitedAccessibilityIdentifierPrefix =
                        self.traitCollection.preferredContentSizeCategory) +
                    collection.contentInset.bottom));
     if (collection.contentOffset.y != offset) {
-      collection.contentOffset = CGPointMake(0, offset);
-      // Update the constraints in case the omnibox needs to be moved.
-      [self updateConstraints];
+        collection.contentOffset = CGPointMake(0, offset);
+        // Update the constraints in case the omnibox needs to be moved.
+        [self updateConstraints];
     }
   }
   _initialContentOffset = NAN;

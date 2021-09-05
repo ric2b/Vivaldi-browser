@@ -4,7 +4,7 @@
 
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
-#include "components/autofill/core/common/password_form.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_store.h"
 
 namespace {
@@ -42,8 +42,8 @@ void VivaldiAccountPasswordHandler::SetPassword(const std::string& password) {
 
   DCHECK(!password.empty());
 
-  autofill::PasswordForm password_form = {};
-  password_form.scheme = autofill::PasswordForm::Scheme::kOther;
+  password_manager::PasswordForm password_form = {};
+  password_form.scheme = password_manager::PasswordForm::Scheme::kOther;
   password_form.signon_realm = kSyncSignonRealm;
   password_form.url = GURL(kSyncOrigin);
   password_form.username_value = base::UTF8ToUTF16(delegate_->GetUsername());
@@ -57,8 +57,8 @@ void VivaldiAccountPasswordHandler::ForgetPassword() {
   if (!password_store_)
     return;
 
-  autofill::PasswordForm password_form = {};
-  password_form.scheme = autofill::PasswordForm::Scheme::kOther;
+  password_manager::PasswordForm password_form = {};
+  password_form.scheme = password_manager::PasswordForm::Scheme::kOther;
   password_form.signon_realm = kSyncSignonRealm;
   password_form.url = GURL(kSyncOrigin);
   password_form.username_value = base::UTF8ToUTF16(delegate_->GetUsername());
@@ -67,7 +67,7 @@ void VivaldiAccountPasswordHandler::ForgetPassword() {
 }
 
 void VivaldiAccountPasswordHandler::OnGetPasswordStoreResults(
-    std::vector<std::unique_ptr<autofill::PasswordForm>> results) {
+    std::vector<std::unique_ptr<password_manager::PasswordForm>> results) {
   for (const auto& result : results) {
     const std::string username = base::UTF16ToUTF8(result->username_value);
     if (username == delegate_->GetUsername())
@@ -95,7 +95,7 @@ void VivaldiAccountPasswordHandler::UpdatePassword() {
     return;
 
   password_manager::PasswordStore::FormDigest form_digest(
-      autofill::PasswordForm::Scheme::kOther, kSyncSignonRealm,
+      password_manager::PasswordForm::Scheme::kOther, kSyncSignonRealm,
       GURL(kSyncOrigin));
 
   password_store_->GetLogins(form_digest, this);

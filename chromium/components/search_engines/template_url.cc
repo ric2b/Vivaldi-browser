@@ -5,6 +5,7 @@
 #include "components/search_engines/template_url.h"
 
 #include <string>
+#include <tuple>
 #include <vector>
 
 #include "base/base64.h"
@@ -228,7 +229,8 @@ TemplateURLRef::SearchTermsArgs::ContextualSearchParams::ContextualSearchParams(
     bool is_exact_search,
     std::string source_lang,
     std::string target_lang,
-    std::string fluent_languages)
+    std::string fluent_languages,
+    std::string related_searches_stamp)
     : version(version),
       contextual_cards_version(contextual_cards_version),
       home_country(home_country),
@@ -237,7 +239,8 @@ TemplateURLRef::SearchTermsArgs::ContextualSearchParams::ContextualSearchParams(
       is_exact_search(is_exact_search),
       source_lang(source_lang),
       target_lang(target_lang),
-      fluent_languages(fluent_languages) {}
+      fluent_languages(fluent_languages),
+      related_searches_stamp(related_searches_stamp) {}
 
 TemplateURLRef::SearchTermsArgs::ContextualSearchParams::ContextualSearchParams(
     const ContextualSearchParams& other) = default;
@@ -1009,6 +1012,8 @@ std::string TemplateURLRef::HandleReplacements(
           args.push_back("tlitetl=" + params.target_lang);
         if (!params.fluent_languages.empty())
           args.push_back("ctxs_fls=" + params.fluent_languages);
+        if (!params.related_searches_stamp.empty())
+          args.push_back("ctxsl_rs=" + params.related_searches_stamp);
 
         HandleReplacement(std::string(), base::JoinString(args, "&"), *i, &url);
         break;
@@ -1118,7 +1123,7 @@ std::string TemplateURLRef::HandleReplacements(
         // empty string.  (If we don't handle this case, we hit a
         // NOTREACHED below.)
         base::string16 rlz_string = search_terms_data.GetRlzParameterValue(
-            search_terms_args.from_app_list);
+            search_terms_args.request_source == CROS_APP_LIST);
         if (!rlz_string.empty()) {
           HandleReplacement("rlz", base::UTF16ToUTF8(rlz_string), *i, &url);
         }
@@ -1152,7 +1157,10 @@ std::string TemplateURLRef::HandleReplacements(
 
       case GOOGLE_SUGGEST_CLIENT:
         HandleReplacement(
-            std::string(), search_terms_data.GetSuggestClient(), *i, &url);
+            std::string(),
+            search_terms_data.GetSuggestClient(
+                search_terms_args.request_source == NON_SEARCHBOX_NTP),
+            *i, &url);
         break;
 
       case GOOGLE_SUGGEST_REQUEST_ID:
@@ -1308,6 +1316,37 @@ TemplateURL::TemplateURL(const TemplateURLData& data,
 }
 
 TemplateURL::~TemplateURL() {
+}
+
+bool TemplateURL::IsBetterThanEngineWithConflictingKeyword(
+    const TemplateURL* other) const {
+  DCHECK(other);
+
+  auto get_sort_key = [](const TemplateURL* engine) {
+    return std::make_tuple(
+        // Policy-created engines always win over non-policy created engines.
+        engine->created_by_policy(),
+        // The integral value of the type enum is used to sort next.
+        // This makes extension-controlled engines win.
+        engine->type(),
+        // For engines with associated extensions; more recently installed
+        // extensions win.
+        engine->extension_info_ ? engine->extension_info_->install_time
+                                : base::Time(),
+        // Prefer engines that CANNOT be auto-replaced.
+        !engine->safe_for_autoreplace(),
+        // More recently modified engines win.
+        engine->last_modified(),
+        // TODO(tommycli): This should be a tie-breaker than provides a total
+        // ordering of all TemplateURLs so that distributed clients resolve
+        // conflicts identically. This sync_guid is not globally unique today,
+        // so we need to fix that before we can resolve conflicts with this.
+        engine->sync_guid());
+  };
+
+  // Although normally sort is done by operator<, in this case, we want the
+  // BETTER engine to be preceding the worse engine.
+  return get_sort_key(this) > get_sort_key(other);
 }
 
 // static

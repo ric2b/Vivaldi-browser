@@ -22,6 +22,8 @@
 #include "components/embedder_support/switches.h"
 #include "components/error_page/content/browser/net_error_auto_reloader.h"
 #include "components/network_time/network_time_tracker.h"
+#include "components/no_state_prefetch/browser/prerender_manager.h"
+#include "components/no_state_prefetch/common/prerender_url_loader_throttle.h"
 #include "components/page_load_metrics/browser/metrics_navigation_throttle.h"
 #include "components/page_load_metrics/browser/metrics_web_contents_observer.h"
 #include "components/permissions/quota_permission_context_impl.h"
@@ -29,8 +31,6 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service_factory.h"
 #include "components/prefs/scoped_user_pref_update.h"
-#include "components/prerender/browser/prerender_manager.h"
-#include "components/prerender/common/prerender_url_loader_throttle.h"
 #include "components/security_interstitials/content/insecure_form_navigation_throttle.h"
 #include "components/security_interstitials/content/ssl_cert_reporter.h"
 #include "components/security_interstitials/content/ssl_error_handler.h"
@@ -639,10 +639,10 @@ content::ControllerPresentationServiceDelegate*
 ContentBrowserClientImpl::GetControllerPresentationServiceDelegate(
     content::WebContents* web_contents) {
 #if defined(OS_ANDROID)
-  if (WebLayerFactoryImplAndroid::GetClientMajorVersion() < 87)
+  if (WebLayerFactoryImplAndroid::GetClientMajorVersion() < 88)
     return nullptr;
 
-  if (base::FeatureList::IsEnabled(features::kMediaRouter)) {
+  if (MediaRouterFactory::IsFeatureEnabled()) {
     MediaRouterFactory::DoPlatformInitIfNeeded();
     return media_router::PresentationServiceDelegateImpl::
         GetOrCreateForWebContents(web_contents);
@@ -657,11 +657,26 @@ ContentBrowserClientImpl::CreateThrottlesForNavigation(
     content::NavigationHandle* handle) {
   std::vector<std::unique_ptr<content::NavigationThrottle>> throttles;
 
+  TabImpl* tab = TabImpl::FromWebContents(handle->GetWebContents());
+  NavigationControllerImpl* navigation_controller = nullptr;
+  if (tab) {
+    navigation_controller =
+        static_cast<NavigationControllerImpl*>(tab->GetNavigationController());
+  }
   if (handle->IsInMainFrame()) {
     NavigationUIDataImpl* navigation_ui_data =
         static_cast<NavigationUIDataImpl*>(handle->GetNavigationUIData());
+
+    NavigationImpl* navigation_impl = nullptr;
+    if (navigation_controller) {
+      navigation_impl =
+          navigation_controller->GetNavigationImplFromHandle(handle);
+    }
+
     if ((!navigation_ui_data ||
          !navigation_ui_data->disable_network_error_auto_reload()) &&
+        (!navigation_impl ||
+         !navigation_impl->disable_network_error_auto_reload()) &&
         IsNetworkErrorAutoReloadEnabled()) {
       auto auto_reload_throttle =
           error_page::NetErrorAutoReloader::MaybeCreateThrottleFor(handle);
@@ -684,11 +699,8 @@ ContentBrowserClientImpl::CreateThrottlesForNavigation(
 
   // The next highest priority throttle *must* be this as it's responsible for
   // calling to NavigationController for certain events.
-  TabImpl* tab = TabImpl::FromWebContents(handle->GetWebContents());
   if (tab) {
-    auto throttle =
-        static_cast<NavigationControllerImpl*>(tab->GetNavigationController())
-            ->CreateNavigationThrottle(handle);
+    auto throttle = navigation_controller->CreateNavigationThrottle(handle);
     if (throttle)
       throttles.push_back(std::move(throttle));
   }
@@ -713,13 +725,11 @@ ContentBrowserClientImpl::CreateThrottlesForNavigation(
       throttles.push_back(
           GetSafeBrowsingService()->CreateSafeBrowsingNavigationThrottle(
               handle));
-      if (handle->IsInMainFrame()) {
-        throttles.push_back(
-            navigation_interception::InterceptNavigationDelegate::
-                CreateThrottleFor(
-                    handle, navigation_interception::SynchronyMode::kAsync));
-      }
     }
+
+    throttles.push_back(
+        navigation_interception::InterceptNavigationDelegate::CreateThrottleFor(
+            handle, navigation_interception::SynchronyMode::kAsync));
   }
 #endif
   return throttles;
@@ -908,7 +918,7 @@ bool ContentBrowserClientImpl::WillCreateURLLoaderFactory(
     URLLoaderFactoryType type,
     const url::Origin& request_initiator,
     base::Optional<int64_t> navigation_id,
-    base::UkmSourceId ukm_source_id,
+    ukm::SourceIdObj ukm_source_id,
     mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
     mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
         header_client,
@@ -993,6 +1003,10 @@ ukm::UkmService* ContentBrowserClientImpl::GetUkmService() {
 #else
   return nullptr;
 #endif
+}
+
+bool ContentBrowserClientImpl::HasErrorPage(int http_status_code) {
+  return http_status_code >= 400;
 }
 
 }  // namespace weblayer

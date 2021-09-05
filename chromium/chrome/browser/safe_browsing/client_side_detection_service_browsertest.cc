@@ -4,7 +4,7 @@
 
 #include "chrome/browser/safe_browsing/client_side_detection_service.h"
 
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/client_side_detection_service_factory.h"
 #include "chrome/browser/ui/browser.h"
@@ -29,7 +29,9 @@ namespace {
 class FakeModelLoader : public ModelLoader {
  public:
   explicit FakeModelLoader(std::string model_str)
-      : ModelLoader(base::Closure(), nullptr, /*is_extended_reporting=*/false) {
+      : ModelLoader(base::RepeatingClosure(),
+                    nullptr,
+                    /*is_extended_reporting=*/false) {
     model_str_ = model_str;
   }
   ~FakeModelLoader() override = default;

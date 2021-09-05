@@ -23,8 +23,13 @@ namespace holding_space_metrics {
 // shelf. Note that these values are persisted to histograms so existing values
 // should remain unchanged and new values should be added to the end.
 enum class PodAction {
-  kClick = 0,
-  kMaxValue = kClick,
+  // kClick (Deprecated) = 0,
+  kShow = 1,
+  kClose = 2,
+  kShowContextMenu = 3,
+  kShowPreviews = 4,
+  kHidePreviews = 5,
+  kMaxValue = kHidePreviews,
 };
 
 // Records the specified `action` taken on the holding space pod in the shelf.
@@ -62,6 +67,11 @@ ASH_PUBLIC_EXPORT void RecordItemAction(
 // Records counts for the specified holding space `items`.
 ASH_PUBLIC_EXPORT void RecordItemCounts(
     const std::vector<const HoldingSpaceItem*>& items);
+
+// Records time from the first availability of the holding space feature to the
+// first item being added to holding space.
+ASH_PUBLIC_EXPORT void RecordTimeFromFirstAvailabilityToFirstAdd(
+    base::TimeDelta time_delta);
 
 // Records time from first availability to the first entry into holding space.
 ASH_PUBLIC_EXPORT void RecordTimeFromFirstAvailabilityToFirstEntry(

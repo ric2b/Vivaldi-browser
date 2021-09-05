@@ -7,9 +7,9 @@
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
 #include "ash/system/media/unified_media_controls_view.h"
+#include "base/metrics/histogram_functions.h"
 #include "services/media_session/public/cpp/util.h"
 #include "services/media_session/public/mojom/media_session.mojom.h"
-#include "services/media_session/public/mojom/media_session_service.mojom.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/view.h"
 
@@ -21,7 +21,7 @@ constexpr int kMinimumArtworkSize = 30;
 constexpr int kDisiredArtworkSize = 48;
 
 // Time to wait for new media session.
-constexpr base::TimeDelta kHideControlsDelay =
+constexpr base::TimeDelta kFreezeControlsTime =
     base::TimeDelta::FromMilliseconds(2000);
 
 // Time to wait for new artwork.
@@ -33,7 +33,7 @@ constexpr base::TimeDelta kHideArtworkDelay =
 UnifiedMediaControlsController::UnifiedMediaControlsController(
     Delegate* delegate)
     : delegate_(delegate) {
-  media_session::mojom::MediaSessionService* service =
+  media_session::MediaSessionService* service =
       Shell::Get()->shell_delegate()->GetMediaSessionService();
   // Happens in test.
   if (!service)
@@ -64,33 +64,45 @@ views::View* UnifiedMediaControlsController::CreateView() {
 
 void UnifiedMediaControlsController::MediaSessionInfoChanged(
     media_session::mojom::MediaSessionInfoPtr session_info) {
-  if (hide_controls_timer_->IsRunning())
+  if (freeze_session_timer_->IsRunning()) {
+    if (session_info)
+      pending_session_info_ = std::move(session_info);
     return;
+  }
 
-  if (!session_info)
+  session_info_ = std::move(session_info);
+  MaybeShowMediaControlsOrEmptyState();
+
+  if (!session_info_)
     return;
 
   media_controls_->SetIsPlaying(
-      session_info->playback_state ==
+      session_info_->playback_state ==
       media_session::mojom::MediaPlaybackState::kPlaying);
   media_controls_->UpdateActionButtonAvailability(enabled_actions_);
 }
 
 void UnifiedMediaControlsController::MediaSessionMetadataChanged(
     const base::Optional<media_session::MediaMetadata>& metadata) {
-  if (hide_controls_timer_->IsRunning())
+  pending_metadata_ = metadata.value_or(media_session::MediaMetadata());
+  if (freeze_session_timer_->IsRunning())
     return;
 
-  media_session::MediaMetadata session_metadata =
-      metadata.value_or(media_session::MediaMetadata());
-  media_controls_->SetTitle(session_metadata.title);
-  media_controls_->SetArtist(session_metadata.artist);
+  session_metadata_ = *pending_metadata_;
+  media_controls_->SetTitle(pending_metadata_->title);
+  media_controls_->SetArtist(pending_metadata_->artist);
+  pending_metadata_.reset();
+  MaybeShowMediaControlsOrEmptyState();
 }
 
 void UnifiedMediaControlsController::MediaSessionActionsChanged(
     const std::vector<media_session::mojom::MediaSessionAction>& actions) {
-  if (hide_controls_timer_->IsRunning())
+  if (freeze_session_timer_->IsRunning()) {
+    pending_enabled_actions_ =
+        base::flat_set<media_session::mojom::MediaSessionAction>(
+            actions.begin(), actions.end());
     return;
+  }
 
   enabled_actions_ = base::flat_set<media_session::mojom::MediaSessionAction>(
       actions.begin(), actions.end());
@@ -99,37 +111,91 @@ void UnifiedMediaControlsController::MediaSessionActionsChanged(
 
 void UnifiedMediaControlsController::MediaSessionChanged(
     const base::Optional<base::UnguessableToken>& request_id) {
-  // Stop the timer if we receive a new active sessoin.
-  if (hide_controls_timer_->IsRunning() && request_id.has_value())
-    hide_controls_timer_->Stop();
+  // If previous session resumes, stop freeze timer if necessary and discard
+  // any pending data.
+  if (request_id == media_session_id_) {
+    if (!freeze_session_timer_->IsRunning())
+      return;
 
-  if (request_id == media_session_id_)
-    return;
-
-  // Start hide controls timer if there is no active session, wait to
-  // see if we will receive a new session.
-  if (!request_id.has_value()) {
-    hide_controls_timer_->Start(
-        FROM_HERE, kHideControlsDelay,
-        base::BindOnce(&UnifiedMediaControlsController::HideControls,
-                       base::Unretained(this)));
+    freeze_session_timer_->Stop();
+    ResetPendingData();
     return;
   }
 
-  if (!media_session_id_.has_value())
-    delegate_->ShowMediaControls();
-  media_session_id_ = request_id;
+  // If we don't currently have a session, update session id.
+  if (!media_session_id_.has_value()) {
+    DCHECK(!freeze_session_timer_->IsRunning());
+    media_session_id_ = request_id;
+    return;
+  }
+
+  // If we do currently have a session and received a new session request,
+  // wait to see if the session will resumes. If it is not resumed after
+  // timeout, update session with all pending data.
+  pending_session_id_ = request_id;
+  if (!freeze_session_timer_->IsRunning()) {
+    if (hide_artwork_timer_->IsRunning())
+      hide_artwork_timer_->Stop();
+
+    freeze_session_timer_->Start(
+        FROM_HERE, kFreezeControlsTime,
+        base::BindOnce(&UnifiedMediaControlsController::UpdateSession,
+                       base::Unretained(this)));
+  }
 }
 
 void UnifiedMediaControlsController::MediaControllerImageChanged(
     media_session::mojom::MediaSessionImageType type,
     const SkBitmap& bitmap) {
-  if (hide_controls_timer_->IsRunning())
-    return;
-
   if (type != media_session::mojom::MediaSessionImageType::kArtwork)
     return;
 
+  if (freeze_session_timer_->IsRunning()) {
+    pending_artwork_ = bitmap;
+    return;
+  }
+
+  UpdateArtwork(bitmap, true /* should_start_hide_timer */);
+}
+
+void UnifiedMediaControlsController::UpdateSession() {
+  media_session_id_ = pending_session_id_;
+
+  if (media_session_id_ == base::nullopt)
+    ResetPendingData();
+
+  if (pending_session_info_.has_value()) {
+    media_controls_->SetIsPlaying(
+        (*pending_session_info_)->playback_state ==
+        media_session::mojom::MediaPlaybackState::kPlaying);
+    session_info_ = std::move(*pending_session_info_);
+  } else {
+    session_info_ = nullptr;
+  }
+
+  if (pending_metadata_.has_value()) {
+    media_controls_->SetTitle(pending_metadata_->title);
+    media_controls_->SetArtist(pending_metadata_->artist);
+  }
+  session_metadata_ =
+      pending_metadata_.value_or(media_session::MediaMetadata());
+
+  if (pending_enabled_actions_.has_value()) {
+    media_controls_->UpdateActionButtonAvailability(*pending_enabled_actions_);
+    enabled_actions_ = base::flat_set<media_session::mojom::MediaSessionAction>(
+        pending_enabled_actions_->begin(), pending_enabled_actions_->end());
+  }
+
+  if (pending_artwork_.has_value())
+    UpdateArtwork(*pending_artwork_, false /* should_start_hide_timer */);
+
+  MaybeShowMediaControlsOrEmptyState();
+  ResetPendingData();
+}
+
+void UnifiedMediaControlsController::UpdateArtwork(
+    const SkBitmap& bitmap,
+    bool should_start_hide_timer) {
   // Convert the bitmap to kN32_SkColorType if necessary.
   SkBitmap converted_bitmap;
   if (bitmap.colorType() == kN32_SkColorType) {
@@ -156,7 +222,12 @@ void UnifiedMediaControlsController::MediaControllerImageChanged(
   if (media_controls_->artwork_view()->GetImage().isNull())
     return;
 
-  // Start |hide_artork_timer_} if not already started and wait for
+  if (!should_start_hide_timer) {
+    media_controls_->SetArtwork(base::nullopt);
+    return;
+  }
+
+  // Start |hide_artork_timer_| if not already started and wait for
   // artwork update.
   if (!hide_artwork_timer_->IsRunning()) {
     hide_artwork_timer_->Start(
@@ -172,12 +243,39 @@ void UnifiedMediaControlsController::OnMediaControlsViewClicked() {
 
 void UnifiedMediaControlsController::PerformAction(
     media_session::mojom::MediaSessionAction action) {
+  if (freeze_session_timer_->IsRunning())
+    return;
+
+  base::UmaHistogramEnumeration(
+      "Media.CrosGlobalMediaControls.QuickSettingUserAction", action);
   media_session::PerformMediaSessionAction(action, media_controller_remote_);
 }
 
-void UnifiedMediaControlsController::HideControls() {
-  media_session_id_ = base::nullopt;
-  delegate_->HideMediaControls();
+void UnifiedMediaControlsController::ResetPendingData() {
+  pending_session_id_.reset();
+  pending_session_info_.reset();
+  pending_metadata_.reset();
+  pending_enabled_actions_.reset();
+  pending_artwork_.reset();
+}
+
+bool UnifiedMediaControlsController::ShouldShowMediaControls() const {
+  if (!session_info_ || !session_info_->is_controllable)
+    return false;
+
+  if (session_metadata_.title.empty())
+    return false;
+
+  return true;
+}
+
+void UnifiedMediaControlsController::MaybeShowMediaControlsOrEmptyState() {
+  if (ShouldShowMediaControls()) {
+    delegate_->ShowMediaControls();
+    media_controls_->OnNewMediaSession();
+  } else {
+    media_controls_->ShowEmptyState();
+  }
 }
 
 void UnifiedMediaControlsController::FlushForTesting() {

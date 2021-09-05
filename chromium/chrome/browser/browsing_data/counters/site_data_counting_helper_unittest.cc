@@ -11,7 +11,7 @@
 #include "base/files/file_util.h"
 #include "base/run_loop.h"
 #include "base/task/post_task.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "chrome/browser/browsing_data/counters/site_data_counting_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/test/base/testing_profile.h"
@@ -52,8 +52,8 @@ class SiteDataCountingHelperTest : public testing::Test {
           net::CanonicalCookie::CreateSanitizedCookie(
               url, "name", "A=1", url.host(), url.path(), creation_time,
               base::Time(), creation_time, url.SchemeIsCryptographic(), false,
-              net::CookieSameSite::NO_RESTRICTION,
-              net::COOKIE_PRIORITY_DEFAULT);
+              net::CookieSameSite::NO_RESTRICTION, net::COOKIE_PRIORITY_DEFAULT,
+              false);
       net::CookieOptions options;
       options.set_include_httponly();
       cookie_manager->SetCanonicalCookie(

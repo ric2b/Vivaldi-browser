@@ -8,7 +8,9 @@
 #include "calendar/calendar_service_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/content_injection/content_injection_service_factory.h"
 #include "components/language/core/browser/pref_names.h"
+#include "components/page_actions/page_actions_service_factory.h"
 #include "components/prefs/pref_service.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_factory.h"
@@ -55,6 +57,8 @@ void VivaldiInitProfile(Profile* profile) {
 
   adblock_filter::RuleServiceFactory::GetForBrowserContext(profile)
       ->SetDelegate(new RuleServiceDelegate);
+  content_injection::ServiceFactory::GetForBrowserContext(profile);
+  page_actions::ServiceFactory::GetForBrowserContext(profile);
 
   vivaldi::NotesModel* notes_model =
       vivaldi::NotesModelFactory::GetForBrowserContext(profile);

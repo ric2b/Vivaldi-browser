@@ -18,7 +18,7 @@ namespace media {
 CopyingTexture2DWrapper::CopyingTexture2DWrapper(
     const gfx::Size& size,
     std::unique_ptr<Texture2DWrapper> output_wrapper,
-    std::unique_ptr<VideoProcessorProxy> processor,
+    scoped_refptr<VideoProcessorProxy> processor,
     ComD3D11Texture2D output_texture,
     base::Optional<gfx::ColorSpace> output_color_space)
     : size_(size),
@@ -107,7 +107,7 @@ Status CopyingTexture2DWrapper::Init(
 }
 
 void CopyingTexture2DWrapper::SetStreamHDRMetadata(
-    const gl::HDRMetadata& stream_metadata) {
+    const gfx::HDRMetadata& stream_metadata) {
   auto dxgi_stream_metadata =
       gl::HDRMetadataHelperWin::HDRMetadataToDXGI(stream_metadata);
   video_processor_->SetStreamHDRMetadata(dxgi_stream_metadata);

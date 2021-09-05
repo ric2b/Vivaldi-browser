@@ -65,17 +65,13 @@ extern const base::Feature kPasswordProtectionForSignedInUsers;
 // Controls whether Chrome prompts Advanced Protection users for deep scanning.
 extern const base::Feature kPromptAppForDeepScanning;
 
-// Controls whether native (instead of WKWebView-provided) Safe Browsing
-// is available on iOS. When this flag is enabled, Safe Browsing is still
-// subject to an opt-out controlled by prefs::kSafeBrowsingEnabled.
-extern const base::Feature kSafeBrowsingAvailableOnIOS;
-
 // Controls whether Safe Browsing uses separate NetworkContexts for each
 // profile.
 extern const base::Feature kSafeBrowsingSeparateNetworkContexts;
 
-// Controls whether the security section is shown on the settings UI on Android.
-extern const base::Feature kSafeBrowsingSecuritySectionUIAndroid;
+// Controls whether the Safe Browsing section is shown on the settings UI on
+// Android.
+extern const base::Feature kSafeBrowsingSectionUIAndroid;
 
 // Controls whether cookies are removed from certain communications with Safe
 // Browsing.

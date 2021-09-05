@@ -9,7 +9,6 @@
 #include <memory>
 
 #include "media/base/audio_decoder.h"
-#include "media/base/media_log.h"
 #include "media/base/status.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
@@ -52,14 +51,20 @@ class MODULES_EXPORT AudioDecoderTraits {
   using MediaConfigType = media::AudioDecoderConfig;
   using InputType = EncodedAudioChunk;
 
+  static constexpr bool kNeedsGpuFactories = false;
+
   static std::unique_ptr<MediaDecoderType> CreateDecoder(
       ExecutionContext& execution_context,
+      media::GpuVideoAcceleratorFactories* gpu_factories,
       media::MediaLog* media_log);
   static void InitializeDecoder(MediaDecoderType& decoder,
                                 const MediaConfigType& media_config,
                                 MediaDecoderType::InitCB init_cb,
                                 MediaDecoderType::OutputCB output_cb);
   static int GetMaxDecodeRequests(const MediaDecoderType& decoder);
+  static void UpdateDecoderLog(const MediaDecoderType& decoder,
+                               const MediaConfigType& media_config,
+                               media::MediaLog* media_log);
 };
 
 class MODULES_EXPORT AudioDecoder : public DecoderTemplate<AudioDecoderTraits> {
@@ -77,7 +82,7 @@ class MODULES_EXPORT AudioDecoder : public DecoderTemplate<AudioDecoderTraits> {
   CodecConfigEval MakeMediaConfig(const ConfigType& config,
                                   MediaConfigType* out_media_config,
                                   String* out_console_message) override;
-  scoped_refptr<media::DecoderBuffer> MakeDecoderBuffer(
+  media::StatusOr<scoped_refptr<media::DecoderBuffer>> MakeDecoderBuffer(
       const InputType& chunk) override;
 };
 

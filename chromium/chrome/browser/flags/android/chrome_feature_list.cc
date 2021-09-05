@@ -13,10 +13,10 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/stl_util.h"
 #include "chrome/browser/flags/jni_headers/ChromeFeatureList_jni.h"
+#include "chrome/browser/notifications/chime/android/features.h"
 #include "chrome/browser/performance_hints/performance_hints_features.h"
 #include "chrome/browser/share/features.h"
 #include "chrome/browser/sharing/shared_clipboard/feature_flags.h"
-#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/video_tutorials/switches.h"
 #include "chrome/common/chrome_features.h"
 #include "components/autofill/core/common/autofill_features.h"
@@ -25,6 +25,7 @@
 #include "components/browser_sync/browser_sync_switches.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_features.h"
 #include "components/download/public/common/download_features.h"
+#include "components/embedder_support/android/util/cdn_utils.h"
 #include "components/feature_engagement/public/feature_list.h"
 #include "components/feed/feed_feature_list.h"
 #include "components/history/core/browser/features.h"
@@ -39,6 +40,7 @@
 #include "components/permissions/features.h"
 #include "components/previews/core/previews_features.h"
 #include "components/query_tiles/switches.h"
+#include "components/reading_list/features/reading_list_switches.h"
 #include "components/safe_browsing/core/features.h"
 #include "components/security_state/core/features.h"
 #include "components/signin/public/base/account_consistency_method.h"
@@ -67,6 +69,8 @@ namespace {
 const base::Feature* kFeaturesExposedToJava[] = {
     &autofill::features::kAutofillCreditCardAuthentication,
     &autofill::features::kAutofillDownstreamCvcPromptUseGooglePayLogo,
+    &autofill::features::kAutofillEnablePasswordInfoBarAccountIndicationFooter,
+    &autofill::features::kAutofillEnableSaveCardInfoBarAccountIndicationFooter,
     &autofill::features::kAutofillKeyboardAccessory,
     &autofill::features::kAutofillManualFallbackAndroid,
     &autofill::features::kAutofillRefreshStyleAndroid,
@@ -75,32 +79,37 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &autofill_assistant::features::kAutofillAssistant,
     &autofill_assistant::features::kAutofillAssistantChromeEntry,
     &autofill_assistant::features::kAutofillAssistantDirectActions,
-    &autofill::features::kAutofillTouchToFill,
+    &autofill_assistant::features::kAutofillAssistantProactiveHelp,
+    &autofill_assistant::features::
+        kAutofillAssistantDisableProactiveHelpTiedToMSBB,
     &device::kWebAuthPhoneSupport,
     &download::features::kDownloadAutoResumptionNative,
     &download::features::kDownloadLater,
     &download::features::kSmartSuggestionForLargeDownloads,
     &download::features::kUseDownloadOfflineContentProvider,
+    &embedder_support::kShowTrustedPublisherURL,
     &features::kClearOldBrowsingData,
     &features::kDownloadsLocationChange,
+    &features::kEarlyLibraryLoad,
     &features::kGenericSensorExtraClasses,
     &features::kInstallableAmbientBadgeInfoBar,
     &features::kMetricsSettingsAndroid,
     &features::kNetworkServiceInProcess,
     &features::kOverscrollHistoryNavigation,
     &features::kPredictivePrefetchingAllowedOnAllConnectionTypes,
-    &features::kPrivacyElevatedAndroid,
     &features::kPrivacyReorderedAndroid,
     &features::kPrioritizeBootstrapTasks,
     &features::kQuietNotificationPrompts,
     &features::kSafetyCheckAndroid,
-    &features::kShowTrustedPublisherURL,
     &features::kWebAuth,
     &features::kWebNfc,
     &feature_engagement::kIPHHomepagePromoCardFeature,
-    &feed::kInterestFeedV1ClicksAndViewsConditionalUpload,
+    &feature_engagement::kIPHNewTabPageHomeButtonFeature,
+    &feature_engagement::kIPHTabSwitcherButtonFeature,
     &feed::kInterestFeedContentSuggestions,
-    &feed::kInterestFeedFeedback,
+    &feed::kInterestFeedNoticeCardAutoDismiss,
+    &feed::kInterestFeedSpinnerAlwaysAnimate,
+    &feed::kInterestFeedV1ClicksAndViewsConditionalUpload,
     &feed::kInterestFeedV2,
     &feed::kReportFeedUserActions,
     &history::kHideFromApi3Transitions,
@@ -114,6 +123,7 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kAndroidPartnerCustomizationPhenotype,
     &kAndroidPayIntegrationV2,
     &kAndroidSearchEngineChoiceNotification,
+    &kAssistantIntentPageUrl,
     &kBentoOffline,
     &kCastDeviceFilter,
     &kCloseTabSuggestions,
@@ -129,10 +139,12 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kDarkenWebsitesCheckboxInThemesSetting,
     &kDontAutoHideBrowserControls,
     &kChromeShareHighlightsAndroid,
+    &kChromeShareLongScreenshot,
     &kChromeShareQRCode,
     &kChromeShareScreenshot,
     &kChromeSharingHub,
     &kChromeSharingHubV15,
+    &kChromeStartupDelegate,
     &kCommandLineOnNonRooted,
     &kConditionalTabStripAndroid,
     &kContentSuggestionsScrollToLoad,
@@ -144,6 +156,7 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kContextualSearchDebug,
     &kContextualSearchDefinitions,
     &kContextualSearchLegacyHttpPolicy,
+    &kContextualSearchLiteralSearchTap,
     &kContextualSearchLongpressResolve,
     &kContextualSearchMlTapSuppression,
     &kContextualSearchSecondTap,
@@ -160,13 +173,13 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kExploreSites,
     &kFocusOmniboxInIncognitoTabIntents,
     &kHandleMediaIntents,
-    &kHomepageLocation,
     &kHomepagePromoCard,
     &kHomepagePromoSyntheticPromoSeenEnabled,
     &kHomepagePromoSyntheticPromoSeenTracking,
     &kHomepageSettingsUIConversion,
     &kHorizontalTabSwitcherAndroid,
     &kImmersiveUiMode,
+    &kIncognitoScreenshot,
     &kInlineUpdateFlow,
     &kInstantStart,
     &kKitKatSupported,
@@ -174,7 +187,6 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kNotificationSuspender,
     &kOfflineIndicatorV2,
     &kOmniboxSpareRenderer,
-    &kOverlayNewLayout,
     &kPayWithGoogleV1,
     &kPhotoPickerVideoSupport,
     &kPhotoPickerZoom,
@@ -188,6 +200,7 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kServiceManagerForBackgroundPrefetch,
     &kServiceManagerForDownload,
     &kShareButtonInTopToolbar,
+    &kShareByDefaultInCCT,
     &kSharedClipboardUI,
     &kSharingQrCodeAndroid,
     &kShoppingAssist,
@@ -208,27 +221,40 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &kTabbedAppOverflowMenuThreeButtonActionbar,
     &kTestDefaultDisabled,
     &kTestDefaultEnabled,
+    &kToolbarIphAndroid,
+    &kToolbarIphAndroidCohort1,
+    &kToolbarIphAndroidCohort2,
+    &kToolbarIphAndroidCohort3,
+    &kToolbarIphAndroidCohort4,
+    &kToolbarIphAndroidCohort5,
+    &kToolbarIphAndroidCohort6,
+    &kToolbarIphAndroidCohort7,
+    &kToolbarIphAndroidCohort8,
     &kTrustedWebActivityLocationDelegation,
     &kTrustedWebActivityNewDisclosure,
     &kTrustedWebActivityPostMessage,
     &kTrustedWebActivityQualityEnforcement,
     &kTrustedWebActivityQualityEnforcementForced,
+    &kTrustedWebActivityQualityEnforcementWarning,
     &kStartSurfaceAndroid,
     &kUmaBackgroundSessions,
     &kUpdateNotificationSchedulingIntegration,
     &kUpdateNotificationScheduleServiceImmediateShowOption,
-    &kUsageStatsFeature,
+    &kVoiceSearchAudioCapturePolicy,
+    &kVoiceButtonInTopToolbar,
     &kVrBrowsingFeedback,
     &kWebApkAdaptiveIcon,
     &kPrefetchNotificationSchedulingIntegration,
     &features::kDnsOverHttps,
-    &features::kReadLater,
     &net::features::kSameSiteByDefaultCookies,
     &net::features::kCookiesWithoutSameSiteMustBeSecure,
+    &notifications::features::kUseChimeAndroidSdk,
     &paint_preview::kPaintPreviewDemo,
     &paint_preview::kPaintPreviewShowOnStartup,
     &language::kDetailedLanguageSettings,
     &language::kExplicitLanguageAsk,
+    &language::kTranslateAssistContent,
+    &language::kTranslateIntent,
     &messages::kMessagesForAndroidInfrastructure,
     &offline_pages::kOfflineIndicatorFeature,
     &offline_pages::kOfflineIndicatorAlwaysHttpProbeFeature,
@@ -240,14 +266,11 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &offline_pages::kPrefetchingOfflinePagesFeature,
     &omnibox::kAdaptiveSuggestionsCount,
     &omnibox::kCompactSuggestions,
-    &omnibox::kDeferredKeyboardPopup,
     &omnibox::kHideVisitsFromCct,
     &omnibox::kMostVisitedTiles,
     &omnibox::kOmniboxAssistantVoiceSearch,
     &omnibox::kOmniboxSearchEngineLogo,
     &omnibox::kOmniboxSearchReadyIncognito,
-    &omnibox::kOmniboxSuggestionsRecyclerView,
-    &omnibox::kOmniboxSuggestionsWrapAround,
     &password_manager::features::kEditPasswordsInSettings,
     &password_manager::features::kPasswordScriptsFetching,
     &password_manager::features::kPasswordCheck,
@@ -260,8 +283,9 @@ const base::Feature* kFeaturesExposedToJava[] = {
     &query_tiles::features::kQueryTilesInOmnibox,
     &query_tiles::features::kQueryTilesEnableQueryEditing,
     &query_tiles::features::kQueryTilesLocalOrdering,
+    &reading_list::switches::kReadLater,
     &safe_browsing::kEnhancedProtection,
-    &safe_browsing::kSafeBrowsingSecuritySectionUIAndroid,
+    &safe_browsing::kSafeBrowsingSectionUIAndroid,
     &security_state::features::kMarkHttpAsFeature,
     &signin::kMobileIdentityConsistency,
     &switches::kDecoupleSyncFromAndroidMasterSync,
@@ -318,6 +342,9 @@ const base::Feature kAndroidPayIntegrationV2{"AndroidPayIntegrationV2",
 const base::Feature kAndroidSearchEngineChoiceNotification{
     "AndroidSearchEngineChoiceNotification", base::FEATURE_ENABLED_BY_DEFAULT};
 
+const base::Feature kAssistantIntentPageUrl{"AssistantIntentPageUrl",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kBackgroundTaskComponentUpdate{
     "BackgroundTaskComponentUpdate", base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -367,6 +394,9 @@ const base::Feature kDontAutoHideBrowserControls{
 const base::Feature kChromeShareHighlightsAndroid{
     "ChromeShareHighlightsAndroid", base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kChromeShareLongScreenshot{
+    "ChromeShareLongScreenshot", base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kChromeShareQRCode{"ChromeShareQRCode",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -374,10 +404,13 @@ const base::Feature kChromeShareScreenshot{"ChromeShareScreenshot",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kChromeSharingHub{"ChromeSharingHub",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
+                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kChromeSharingHubV15{"ChromeSharingHubV15",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kChromeStartupDelegate{"ChromeStartupDelegate",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kCommandLineOnNonRooted{"CommandLineOnNonRooted",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
@@ -410,6 +443,9 @@ const base::Feature kContextualSearchDefinitions{
 
 const base::Feature kContextualSearchLegacyHttpPolicy{
     "ContextualSearchLegacyHttpPolicy", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kContextualSearchLiteralSearchTap{
+    "ContextualSearchLiteralSearchTap", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kContextualSearchLongpressResolve{
     "ContextualSearchLongpressResolve", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -463,11 +499,6 @@ const base::Feature kExploreSites{"ExploreSites",
 const base::Feature kHandleMediaIntents{"HandleMediaIntents",
                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enable the HomePage Location feature that allows enterprise policy set and
-// force the home page url for managed devices.
-const base::Feature kHomepageLocation{"HomepageLocationPolicy",
-                                      base::FEATURE_ENABLED_BY_DEFAULT};
-
 const base::Feature kHomepagePromoCard{"HomepagePromoCard",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -487,6 +518,9 @@ const base::Feature kHorizontalTabSwitcherAndroid{
 
 const base::Feature kImmersiveUiMode{"ImmersiveUiMode",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kIncognitoScreenshot{"IncognitoScreenshot",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kInlineUpdateFlow{"InlineUpdateFlow",
                                       base::FEATURE_DISABLED_BY_DEFAULT};
@@ -516,9 +550,6 @@ const base::Feature kOfflineIndicatorV2{"OfflineIndicatorV2",
 
 const base::Feature kOmniboxSpareRenderer{"OmniboxSpareRenderer",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kOverlayNewLayout{"OverlayNewLayout",
-                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
 // TODO(rouslan): Remove this. (Currently used in
 // GooglePayPaymentAppFactory.java)
@@ -554,6 +585,9 @@ const base::Feature kServiceManagerForDownload{
 
 const base::Feature kShareButtonInTopToolbar{"ShareButtonInTopToolbar",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kShareByDefaultInCCT{"ShareByDefaultInCCT",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kShoppingAssist{"ShoppingAssist",
                                     base::FEATURE_DISABLED_BY_DEFAULT};
@@ -611,6 +645,25 @@ const base::Feature kTestDefaultDisabled{"TestDefaultDisabled",
 const base::Feature kTestDefaultEnabled{"TestDefaultEnabled",
                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
+const base::Feature kToolbarIphAndroid{"ToolbarIphAndroid",
+                                       base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kToolbarIphAndroidCohort1{
+    "ToolbarIphAndroidCohort1", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kToolbarIphAndroidCohort2{
+    "ToolbarIphAndroidCohort2", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kToolbarIphAndroidCohort3{
+    "ToolbarIphAndroidCohort3", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kToolbarIphAndroidCohort4{
+    "ToolbarIphAndroidCohort4", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kToolbarIphAndroidCohort5{
+    "ToolbarIphAndroidCohort5", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kToolbarIphAndroidCohort6{
+    "ToolbarIphAndroidCohort6", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kToolbarIphAndroidCohort7{
+    "ToolbarIphAndroidCohort7", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kToolbarIphAndroidCohort8{
+    "ToolbarIphAndroidCohort8", base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kTrustedWebActivityLocationDelegation{
     "TrustedWebActivityLocationDelegation", base::FEATURE_ENABLED_BY_DEFAULT};
 
@@ -626,6 +679,10 @@ const base::Feature kTrustedWebActivityQualityEnforcement{
 const base::Feature kTrustedWebActivityQualityEnforcementForced{
     "TrustedWebActivityQualityEnforcementForced",
     base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kTrustedWebActivityQualityEnforcementWarning{
+    "TrustedWebActivityQualityEnforcementWarning",
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kStartSurfaceAndroid{"StartSurfaceAndroid",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
@@ -646,12 +703,14 @@ const base::Feature kUpdateNotificationScheduleServiceImmediateShowOption{
     "UpdateNotificationScheduleServiceImmediateShowOption",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Vivaldi: disabled by default
-const base::Feature kUsageStatsFeature{"UsageStats",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kUserMediaScreenCapturing{
     "UserMediaScreenCapturing", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kVoiceSearchAudioCapturePolicy{
+    "VoiceSearchAudioCapturePolicy", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kVoiceButtonInTopToolbar{"VoiceButtonInTopToolbar",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kVrBrowsingFeedback{"VrBrowsingFeedback",
                                         base::FEATURE_ENABLED_BY_DEFAULT};

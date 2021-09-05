@@ -68,6 +68,8 @@ enum Milestone {
   kM87 = 87,
   kM88 = 88,
   kM89 = 89,
+  kM90 = 90,
+  kM91 = 91,
 };
 
 // Returns estimated milestone dates as milliseconds since January 1, 1970.
@@ -124,6 +126,10 @@ base::Time::Exploded MilestoneDate(Milestone milestone) {
       return {2021, 1, 0, 19, 4};
     case kM89:
       return {2021, 3, 0, 2, 4};
+    case kM90:
+      return {2021, 4, 0, 13, 4};
+    case kM91:
+      return {2021, 5, 0, 25, 4};
   }
 
   NOTREACHED();
@@ -390,35 +396,30 @@ DeprecationInfo GetDeprecationInfo(WebFeature feature) {
           "https://www.chromestatus.com/feature/5735596811091968 for more "
           "details."};
 
-#define kWebComponentsV0DeprecationPost                \
-  "https://developers.google.com/web/updates/2019/07/" \
-  "web-components-time-to-upgrade"
-
     case WebFeature::kHTMLImports:
-      return {"HTMLImports", kM80,
-              ReplacedWillBeRemoved(
-                  "HTML Imports", "ES modules", kM80,
-                  "5144752345317376 and " kWebComponentsV0DeprecationPost)};
+      return {"HTMLImports", kUnknown,
+              "The HTML Imports feature has been removed. See "
+              "https://www.chromestatus.com/feature/5144752345317376 for more "
+              "details."};
 
     case WebFeature::kElementCreateShadowRoot:
-      return {"ElementCreateShadowRoot", kM80,
-              ReplacedWillBeRemoved(
-                  "Element.createShadowRoot", "Element.attachShadow", kM80,
-                  "4507242028072960 and " kWebComponentsV0DeprecationPost)};
+      return {"ElementCreateShadowRoot", kUnknown,
+              "The Shadow DOM v0 API has been removed. See "
+              "https://www.chromestatus.com/feature/4507242028072960 for more "
+              "details."};
 
     case WebFeature::kDocumentRegisterElement:
-      return {
-          "DocumentRegisterElement", kM80,
-          ReplacedWillBeRemoved(
-              "document.registerElement", "window.customElements.define", kM80,
-              "4642138092470272 and " kWebComponentsV0DeprecationPost)};
-    case WebFeature::kCSSSelectorPseudoUnresolved:
-      return {"CSSSelectorPseudoUnresolved", kM80,
-              ReplacedWillBeRemoved(
-                  ":unresolved pseudo selector", ":not(:defined)", kM80,
-                  "4642138092470272 and " kWebComponentsV0DeprecationPost)};
+      return {"DocumentRegisterElement", kUnknown,
+              "The Custom Elements v0 API has been removed. See "
+              "https://www.chromestatus.com/feature/4642138092470272 for more "
+              "details."};
 
-#undef kWebComponentsV0DeprecationPost
+    case WebFeature::kCSSSelectorPseudoUnresolved:
+      return {
+          "CSSSelectorPseudoUnresolved", kUnknown,
+          "The Custom Elements v0 API (:unresolved pseudo selector) has been "
+          "removed. See https://www.chromestatus.com/feature/4642138092470272 "
+          "for more details."};
 
     case WebFeature::kLocalCSSFileExtensionRejected:
       return {"LocalCSSFileExtensionRejected", kM64,
@@ -573,6 +574,11 @@ DeprecationInfo GetDeprecationInfo(WebFeature feature) {
               ReplacedWillBeRemoved("Comma separator in iframe allow attribute",
                                     "semicolons", kM89, "5740835259809792")};
 
+    case WebFeature::kRTCConstraintEnableRtpDataChannelsTrue:
+      return {"RTP data channel", kM88,
+              ReplacedWillBeRemoved("RTP data channels",
+                                    "standard SCTP data channels", kM90,
+                                    "6485681910054912")};
     // Features that aren't deprecated don't have a deprecation message.
     default:
       return {"NotDeprecated", kUnknown, ""};
@@ -688,24 +694,6 @@ void Deprecation::CountDeprecation(ExecutionContext* context,
     return;
   }
   deprecation->SetReported(feature);
-
-  // TODO(yoichio): We should remove these counters when v0 APIs are removed.
-  // crbug.com/946875.
-  if (feature == WebFeature::kHTMLImports &&
-      context->GetOriginTrialContext()->IsFeatureEnabled(
-          OriginTrialFeature::kHTMLImports)) {
-    context->CountUse(WebFeature::kHTMLImportsOnReverseOriginTrials);
-  } else if (feature == WebFeature::kElementCreateShadowRoot &&
-             context->GetOriginTrialContext()->IsFeatureEnabled(
-                 OriginTrialFeature::kShadowDOMV0)) {
-    context->CountUse(
-        WebFeature::kElementCreateShadowRootOnReverseOriginTrials);
-  } else if (feature == WebFeature::kDocumentRegisterElement &&
-             context->GetOriginTrialContext()->IsFeatureEnabled(
-                 OriginTrialFeature::kCustomElementsV0)) {
-    context->CountUse(
-        WebFeature::kDocumentRegisterElementOnReverseOriginTrials);
-  }
 
   // Don't count usage of WebComponentsV0 for chrome:// URLs, but still report
   // the deprecation messages.

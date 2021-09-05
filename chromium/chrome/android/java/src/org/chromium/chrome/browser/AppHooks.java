@@ -23,13 +23,14 @@ import org.chromium.chrome.browser.feedback.FeedbackReporter;
 import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncher;
 import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherImpl;
 import org.chromium.chrome.browser.gsa.GSAHelper;
-import org.chromium.chrome.browser.help.HelpAndFeedback;
 import org.chromium.chrome.browser.historyreport.AppIndexingReporter;
+import org.chromium.chrome.browser.init.ChromeStartupDelegate;
 import org.chromium.chrome.browser.init.ProcessInitializationHandler;
 import org.chromium.chrome.browser.instantapps.InstantAppsHandler;
 import org.chromium.chrome.browser.lens.LensController;
 import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.metrics.VariationsSession;
+import org.chromium.chrome.browser.notifications.chime.ChimeDelegate;
 import org.chromium.chrome.browser.omaha.RequestGenerator;
 import org.chromium.chrome.browser.partnerbookmarks.PartnerBookmark;
 import org.chromium.chrome.browser.partnerbookmarks.PartnerBookmarksProviderIterator;
@@ -45,6 +46,7 @@ import org.chromium.chrome.browser.usage_stats.DigitalWellbeingClient;
 import org.chromium.chrome.browser.webapps.GooglePlayWebApkInstallDelegate;
 import org.chromium.chrome.browser.xsurface.ProcessScope;
 import org.chromium.chrome.browser.xsurface.ProcessScopeDependencyProvider;
+import org.chromium.chrome.modules.image_editor.ImageEditorModuleProvider;
 import org.chromium.components.browser_ui.widget.FeatureHighlightProvider;
 import org.chromium.components.external_intents.AuthenticatorNavigationInterceptor;
 import org.chromium.components.policy.AppRestrictionsProvider;
@@ -181,14 +183,6 @@ public abstract class AppHooks {
      */
     public HelpAndFeedbackLauncher createHelpAndFeedbackLauncher() {
         return new HelpAndFeedbackLauncherImpl();
-    }
-
-    /**
-     * TODO(crbug.com/1117343): Remove this method when downstream dependency is removed.
-     * Returns a new instance of HelpAndFeedback.
-     */
-    public HelpAndFeedback createHelpAndFeedback() {
-        return new HelpAndFeedback();
     }
 
     public InstantAppsHandler createInstantAppsHandler() {
@@ -366,5 +360,20 @@ public abstract class AppHooks {
      */
     public String getWebApkServerUrl() {
         return "";
+    }
+
+    /**
+     * Returns a Chime Delegate if the chime module is defined.
+     */
+    public ChimeDelegate getChimeDelegate() {
+        return new ChimeDelegate();
+    }
+
+    public @Nullable ImageEditorModuleProvider getImageEditorModuleProvider() {
+        return null;
+    }
+
+    public ChromeStartupDelegate createChromeStartupDelegate() {
+        return new ChromeStartupDelegate();
     }
 }

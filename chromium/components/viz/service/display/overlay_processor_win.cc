@@ -27,13 +27,14 @@ OverlayProcessorWin::OverlayProcessorWin(
     OutputSurface* output_surface,
     std::unique_ptr<DCLayerOverlayProcessor> dc_layer_overlay_processor)
     : output_surface_(output_surface),
-      supports_dc_layers_(output_surface->capabilities().supports_dc_layers),
-      dc_layer_overlay_processor_(std::move(dc_layer_overlay_processor)) {}
+      dc_layer_overlay_processor_(std::move(dc_layer_overlay_processor)) {
+  DCHECK(output_surface_->capabilities().supports_dc_layers);
+}
 
 OverlayProcessorWin::~OverlayProcessorWin() = default;
 
 bool OverlayProcessorWin::IsOverlaySupported() const {
-  return supports_dc_layers_;
+  return true;
 }
 
 gfx::Rect OverlayProcessorWin::GetPreviousFrameOverlaysBoundingRect() const {
@@ -53,6 +54,7 @@ void OverlayProcessorWin::ProcessForOverlays(
     const OverlayProcessorInterface::FilterOperationsMap& render_pass_filters,
     const OverlayProcessorInterface::FilterOperationsMap&
         render_pass_backdrop_filters,
+    SurfaceDamageRectList* surface_damage_rect_list,
     OutputSurfaceOverlayPlane* output_surface_plane,
     CandidateList* candidates,
     gfx::Rect* damage_rect,
@@ -84,12 +86,10 @@ void OverlayProcessorWin::ProcessForOverlays(
     return;
   }
 
-  if (!supports_dc_layers_)
-    return;
-
   dc_layer_overlay_processor_->Process(
       resource_provider, gfx::RectF(root_render_pass->output_rect),
-      render_passes, damage_rect, candidates);
+      render_pass_filters, render_pass_backdrop_filters, render_passes,
+      damage_rect, surface_damage_rect_list, candidates);
 
   bool was_using_dc_layers = using_dc_layers_;
   if (!candidates->empty()) {
@@ -109,7 +109,7 @@ void OverlayProcessorWin::ProcessForOverlays(
   }
 }
 
-bool OverlayProcessorWin::NeedsSurfaceOccludingDamageRect() const {
+bool OverlayProcessorWin::NeedsSurfaceDamageRectList() const {
   return true;
 }
 

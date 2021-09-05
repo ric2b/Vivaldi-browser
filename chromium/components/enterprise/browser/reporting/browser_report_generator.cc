@@ -23,10 +23,16 @@ BrowserReportGenerator::BrowserReportGenerator(
 
 BrowserReportGenerator::~BrowserReportGenerator() = default;
 
-void BrowserReportGenerator::Generate(ReportCallback callback) {
+void BrowserReportGenerator::Generate(ReportType report_type,
+                                      ReportCallback callback) {
   auto report = std::make_unique<em::BrowserReport>();
+  delegate_->GenerateProfileInfo(report_type, report.get());
+  if (report_type == ReportType::kExtensionRequest) {
+    report->set_executable_path(delegate_->GetExecutablePath());
+    std::move(callback).Run(std::move(report));
+    return;
+  }
   GenerateBasicInfo(report.get());
-  delegate_->GenerateProfileInfo(report.get());
 
   // std::move is required here because the function completes the report
   // asynchronously.

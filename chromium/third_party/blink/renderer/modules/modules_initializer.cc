@@ -17,6 +17,7 @@
 #include "third_party/blink/public/web/web_view_client.h"
 #include "third_party/blink/renderer/bindings/modules/v8/module_bindings_initializer.h"
 #include "third_party/blink/renderer/core/css/css_paint_image_generator.h"
+#include "third_party/blink/renderer/core/css/native_paint_image_generator.h"
 #include "third_party/blink/renderer/core/dom/context_features_client_impl.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/editing/suggestion/text_suggestion_backend_impl.h"
@@ -42,6 +43,7 @@
 #include "third_party/blink/renderer/modules/canvas/imagebitmap/image_bitmap_rendering_context.h"
 #include "third_party/blink/renderer/modules/canvas/offscreencanvas2d/offscreen_canvas_rendering_context_2d.h"
 #include "third_party/blink/renderer/modules/csspaint/css_paint_image_generator_impl.h"
+#include "third_party/blink/renderer/modules/csspaint/native_paint_image_generator_impl.h"
 #include "third_party/blink/renderer/modules/device_orientation/device_motion_controller.h"
 #include "third_party/blink/renderer/modules/device_orientation/device_orientation_absolute_controller.h"
 #include "third_party/blink/renderer/modules/device_orientation/device_orientation_controller.h"
@@ -63,13 +65,14 @@
 #include "third_party/blink/renderer/modules/launch/web_launch_service_impl.h"
 #include "third_party/blink/renderer/modules/manifest/manifest_manager.h"
 #include "third_party/blink/renderer/modules/media/audio/audio_renderer_sink_cache.h"
+#include "third_party/blink/renderer/modules/media_capabilities_names.h"
 #include "third_party/blink/renderer/modules/media_controls/media_controls_impl.h"
 #include "third_party/blink/renderer/modules/mediasource/media_source_registry_impl.h"
 #include "third_party/blink/renderer/modules/mediastream/user_media_client.h"
 #include "third_party/blink/renderer/modules/mediastream/user_media_controller.h"
 #include "third_party/blink/renderer/modules/peerconnection/peer_connection_tracker.h"
 #include "third_party/blink/renderer/modules/picture_in_picture/picture_in_picture_controller_impl.h"
-#include "third_party/blink/renderer/modules/presentation/presentation_receiver.h"
+#include "third_party/blink/renderer/modules/presentation/presentation.h"
 #include "third_party/blink/renderer/modules/push_messaging/push_messaging_client.h"
 #include "third_party/blink/renderer/modules/remoteplayback/html_media_element_remote_playback.h"
 #include "third_party/blink/renderer/modules/remoteplayback/remote_playback.h"
@@ -89,17 +92,12 @@
 #include "third_party/blink/renderer/modules/webgl/webgl_rendering_context.h"
 #include "third_party/blink/renderer/modules/webgpu/gpu_canvas_context.h"
 #include "third_party/blink/renderer/modules/worklet/animation_and_paint_worklet_thread.h"
-#include "third_party/blink/renderer/modules/xr/navigator_xr.h"
 #include "third_party/blink/renderer/platform/heap/heap.h"
 #include "third_party/blink/renderer/platform/mojo/mojo_helper.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/cross_thread_functional.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
-
-#if defined(SUPPORT_WEBGL2_COMPUTE_CONTEXT)
-#include "third_party/blink/renderer/modules/webgl/webgl2_compute_rendering_context.h"
-#endif
 
 #if defined(OS_ANDROID)
 #include "third_party/blink/renderer/modules/remote_objects/remote_object_gateway_impl.h"
@@ -119,10 +117,12 @@ void ModulesInitializer::Initialize() {
   Document::RegisterEventFactory(EventModulesFactory::Create());
   ModuleBindingsInitializer::Init();
   indexed_db_names::Init();
+  media_capabilities_names::Init();
   AXObjectCache::Init(AXObjectCacheImpl::Create);
   DraggedIsolatedFileSystem::Init(
       DraggedIsolatedFileSystemImpl::PrepareForDataObject);
   CSSPaintImageGenerator::Init(CSSPaintImageGeneratorImpl::Create);
+  NativePaintImageGenerator::Init(NativePaintImageGeneratorImpl::Create);
   WebDatabaseHost::GetInstance().Init();
   MediaSourceRegistryImpl::Init();
 
@@ -135,10 +135,6 @@ void ModulesInitializer::Initialize() {
       std::make_unique<WebGLRenderingContext::Factory>());
   HTMLCanvasElement::RegisterRenderingContextFactory(
       std::make_unique<WebGL2RenderingContext::Factory>());
-#if defined(SUPPORT_WEBGL2_COMPUTE_CONTEXT)
-  HTMLCanvasElement::RegisterRenderingContextFactory(
-      std::make_unique<WebGL2ComputeRenderingContext::Factory>());
-#endif
   HTMLCanvasElement::RegisterRenderingContextFactory(
       std::make_unique<ImageBitmapRenderingContext::Factory>());
   HTMLCanvasElement::RegisterRenderingContextFactory(
@@ -153,10 +149,6 @@ void ModulesInitializer::Initialize() {
       std::make_unique<WebGL2RenderingContext::Factory>());
   OffscreenCanvas::RegisterRenderingContextFactory(
       std::make_unique<ImageBitmapRenderingContext::Factory>());
-#if defined(SUPPORT_WEBGL2_COMPUTE_CONTEXT)
-  OffscreenCanvas::RegisterRenderingContextFactory(
-      std::make_unique<WebGL2ComputeRenderingContext::Factory>());
-#endif
 }
 
 void ModulesInitializer::InitLocalFrame(LocalFrame& frame) const {
@@ -188,7 +180,7 @@ void ModulesInitializer::InstallSupplements(LocalFrame& frame) const {
   DCHECK(WebLocalFrameImpl::FromFrame(&frame)->Client());
   InspectorAccessibilityAgent::ProvideTo(&frame);
   ImageDownloaderImpl::ProvideTo(frame);
-  AudioRendererSinkCache::InstallFrameObserver(frame);
+  AudioRendererSinkCache::InstallWindowObserver(*frame.DomWindow());
 }
 
 MediaControls* ModulesInitializer::CreateMediaControls(
@@ -238,19 +230,18 @@ void ModulesInitializer::OnClearWindowObjectInMainWorld(
   if (!document.IsInitialEmptyDocument())
     NavigatorServiceWorker::From(window);
 
-  DOMWindowStorageController::From(document);
-  if (RuntimeEnabledFeatures::WebXREnabled(document.GetExecutionContext()))
-    NavigatorXR::From(document);
+  DOMWindowStorageController::From(window);
   if (RuntimeEnabledFeatures::PresentationEnabled() &&
       settings.GetPresentationReceiver()) {
-    // We eagerly create PresentationReceiver so that the frame creating the
-    // presentation can offer a connection to the presentation receiver.
-    PresentationReceiver::From(document);
+    // We eagerly create Presentation and associated PresentationReceiver so
+    // that the frame creating the presentation can offer a connection to the
+    // presentation receiver.
+    Presentation::presentation(*window.navigator());
   }
   ManifestManager::From(window);
 
 #if defined(OS_ANDROID)
-  LocalFrame* frame = document.GetFrame();
+  LocalFrame* frame = window.GetFrame();
   DCHECK(frame);
   if (auto* gateway = RemoteObjectGatewayImpl::From(*frame))
     gateway->OnClearWindowObjectInMainWorld();

@@ -32,8 +32,6 @@
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/text_input_manager.h"
 #include "content/common/input_messages.h"
-#include "content/common/view_messages.h"
-#include "content/common/widget_messages.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_types.h"
@@ -526,6 +524,8 @@ class RenderWidgetHostViewMacTest : public RenderViewHostImplTestHarness {
     // deleting.
     host_->ShutdownAndDestroyWidget(/*also_delete=*/false);
     host_.reset();
+    process_host_->Cleanup();
+    agent_scheduling_group_host_.reset();
     process_host_.reset();
     browser_context_.reset();
     RecycleAndWait();
@@ -1323,12 +1323,11 @@ TEST_F(RenderWidgetHostViewMacTest,
   // the MockRenderProcessHost that is set up by the test harness which mocks
   // out |OnMessageReceived()|.
   TestBrowserContext browser_context;
-  MockRenderProcessHost* process_host =
-      new MockRenderProcessHost(&browser_context);
-  process_host->Init();
-  AgentSchedulingGroupHost agent_scheduling_group_host(*process_host);
+  MockRenderProcessHost process_host(&browser_context);
+  process_host.Init();
+  AgentSchedulingGroupHost agent_scheduling_group_host(process_host);
   MockRenderWidgetHostDelegate delegate;
-  int32_t routing_id = process_host->GetNextRoutingID();
+  int32_t routing_id = process_host.GetNextRoutingID();
   MockRenderWidgetHostImpl* host = MockRenderWidgetHostImpl::Create(
       &delegate, agent_scheduling_group_host, routing_id);
   RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host);
@@ -1376,6 +1375,7 @@ TEST_F(RenderWidgetHostViewMacTest,
       FROM_HERE, run_loop.QuitClosure(),
       max_time_between_phase_ended_and_momentum_phase_began);
   run_loop.Run();
+  process_host.Cleanup();
 }
 
 TEST_F(RenderWidgetHostViewMacTest,
@@ -1384,12 +1384,11 @@ TEST_F(RenderWidgetHostViewMacTest,
   // the MockRenderProcessHost that is set up by the test harness which mocks
   // out |OnMessageReceived()|.
   TestBrowserContext browser_context;
-  MockRenderProcessHost* process_host =
-      new MockRenderProcessHost(&browser_context);
-  process_host->Init();
-  AgentSchedulingGroupHost agent_scheduling_group_host(*process_host);
+  MockRenderProcessHost process_host(&browser_context);
+  process_host.Init();
+  AgentSchedulingGroupHost agent_scheduling_group_host(process_host);
   MockRenderWidgetHostDelegate delegate;
-  int32_t routing_id = process_host->GetNextRoutingID();
+  int32_t routing_id = process_host.GetNextRoutingID();
   MockRenderWidgetHostImpl* host = MockRenderWidgetHostImpl::Create(
       &delegate, agent_scheduling_group_host, routing_id);
   RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host);
@@ -1433,6 +1432,7 @@ TEST_F(RenderWidgetHostViewMacTest,
   DCHECK(!view->HasPendingWheelEndEventForTesting());
 
   host->ShutdownAndDestroyWidget(true);
+  process_host.Cleanup();
 }
 
 TEST_F(RenderWidgetHostViewMacTest,
@@ -1441,12 +1441,11 @@ TEST_F(RenderWidgetHostViewMacTest,
   // the MockRenderProcessHost that is set up by the test harness which mocks
   // out |OnMessageReceived()|.
   TestBrowserContext browser_context;
-  MockRenderProcessHost* process_host =
-      new MockRenderProcessHost(&browser_context);
-  process_host->Init();
+  MockRenderProcessHost process_host(&browser_context);
+  process_host.Init();
   MockRenderWidgetHostDelegate delegate;
-  AgentSchedulingGroupHost agent_scheduling_group_host(*process_host);
-  int32_t routing_id = process_host->GetNextRoutingID();
+  AgentSchedulingGroupHost agent_scheduling_group_host(process_host);
+  int32_t routing_id = process_host.GetNextRoutingID();
   MockRenderWidgetHostImpl* host = MockRenderWidgetHostImpl::Create(
       &delegate, agent_scheduling_group_host, routing_id);
   RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host);
@@ -1491,6 +1490,7 @@ TEST_F(RenderWidgetHostViewMacTest,
   DCHECK(!view->HasPendingWheelEndEventForTesting());
 
   host->ShutdownAndDestroyWidget(true);
+  process_host.Cleanup();
 }
 
 class RenderWidgetHostViewMacPinchTest
@@ -1761,7 +1761,7 @@ class InputMethodMacTest : public RenderWidgetHostViewMacTest {
     // Initializing a child frame's view.
     child_browser_context_ = std::make_unique<TestBrowserContext>();
     child_process_host_ =
-        new MockRenderProcessHost(child_browser_context_.get());
+        std::make_unique<MockRenderProcessHost>(child_browser_context_.get());
     child_process_host_->Init();
     child_agent_scheduling_group_host_ =
         std::make_unique<AgentSchedulingGroupHost>(*child_process_host_);
@@ -1774,6 +1774,9 @@ class InputMethodMacTest : public RenderWidgetHostViewMacTest {
 
   void TearDown() override {
     child_widget_->ShutdownAndDestroyWidget(true);
+    child_process_host_->Cleanup();
+    child_agent_scheduling_group_host_.reset();
+    child_process_host_.reset();
     child_browser_context_.reset();
     RenderWidgetHostViewMacTest::TearDown();
   }
@@ -1803,7 +1806,7 @@ class InputMethodMacTest : public RenderWidgetHostViewMacTest {
   }
 
  protected:
-  MockRenderProcessHost* child_process_host_;
+  std::unique_ptr<MockRenderProcessHost> child_process_host_;
   std::unique_ptr<AgentSchedulingGroupHost> child_agent_scheduling_group_host_;
   MockRenderWidgetHostImpl* child_widget_;
   TestRenderWidgetHostView* child_view_;

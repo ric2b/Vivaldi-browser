@@ -4,47 +4,77 @@
 
 #include "chromeos/components/phonehub/notification_manager_impl.h"
 
+#include "base/containers/flat_set.h"
 #include "chromeos/components/multidevice/logging/logging.h"
+#include "chromeos/components/phonehub/message_sender.h"
 #include "chromeos/components/phonehub/notification.h"
+#include "chromeos/components/phonehub/user_action_recorder.h"
 
 namespace chromeos {
 namespace phonehub {
 
-NotificationManagerImpl::NotificationManagerImpl() = default;
+using multidevice_setup::mojom::Feature;
+using multidevice_setup::mojom::FeatureState;
 
-NotificationManagerImpl::~NotificationManagerImpl() = default;
+NotificationManagerImpl::NotificationManagerImpl(
+    MessageSender* message_sender,
+    UserActionRecorder* user_action_recorder,
+    multidevice_setup::MultiDeviceSetupClient* multidevice_setup_client)
+    : message_sender_(message_sender),
+      user_action_recorder_(user_action_recorder),
+      multidevice_setup_client_(multidevice_setup_client) {
+  DCHECK(message_sender_);
+  DCHECK(multidevice_setup_client_);
 
-const Notification* NotificationManagerImpl::GetNotification(
-    int64_t notification_id) const {
-  return nullptr;
+  multidevice_setup_client_->AddObserver(this);
 }
 
-void NotificationManagerImpl::SetNotificationsInternal(
-    const base::flat_set<Notification>& notifications) {
-  PA_LOG(INFO) << "Setting notifications internally.";
-  // TODO(jimmyxong): Implement this stub function.
-}
-
-void NotificationManagerImpl::RemoveNotificationsInternal(
-    const base::flat_set<int64_t>& notification_ids) {
-  PA_LOG(INFO) << "Removing notifications internally.";
-  // TODO(jimmyxgong): Implement this stub function.
+NotificationManagerImpl::~NotificationManagerImpl() {
+  multidevice_setup_client_->RemoveObserver(this);
 }
 
 void NotificationManagerImpl::DismissNotification(int64_t notification_id) {
   PA_LOG(INFO) << "Dismissing notification with ID " << notification_id << ".";
-}
 
-void NotificationManagerImpl::ClearNotificationsInternal() {
-  PA_LOG(INFO) << "Clearing notification internally.";
-  // TODO(jimmyxgong): Implement this stub function.
+  if (!GetNotification(notification_id)) {
+    PA_LOG(WARNING) << "Attempted to dismiss an invalid notification with id: "
+                    << notification_id << ".";
+    return;
+  }
+
+  user_action_recorder_->RecordNotificationDismissAttempt();
+  RemoveNotificationsInternal(base::flat_set<int64_t>{notification_id});
+  message_sender_->SendDismissNotificationRequest(notification_id);
 }
 
 void NotificationManagerImpl::SendInlineReply(
     int64_t notification_id,
     const base::string16& inline_reply_text) {
+  if (!GetNotification(notification_id)) {
+    PA_LOG(INFO) << "Could not send inline reply for notification with ID "
+                 << notification_id << ".";
+    return;
+  }
+
   PA_LOG(INFO) << "Sending inline reply for notification with ID "
                << notification_id << ".";
+  user_action_recorder_->RecordNotificationReplyAttempt();
+  message_sender_->SendNotificationInlineReplyRequest(notification_id,
+                                                      inline_reply_text);
+}
+
+void NotificationManagerImpl::OnFeatureStatesChanged(
+    const multidevice_setup::MultiDeviceSetupClient::FeatureStatesMap&
+        feature_states_map) {
+  FeatureState notifications_feature_state =
+      multidevice_setup_client_->GetFeatureState(
+          Feature::kPhoneHubNotifications);
+  if (notifications_feature_status_ == FeatureState::kEnabledByUser &&
+      notifications_feature_state != FeatureState::kEnabledByUser) {
+    ClearNotificationsInternal();
+  }
+
+  notifications_feature_status_ = notifications_feature_state;
 }
 
 }  // namespace phonehub

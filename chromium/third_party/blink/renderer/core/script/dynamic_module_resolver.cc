@@ -6,6 +6,7 @@
 
 #include "base/feature_list.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/bindings/core/v8/referrer_script_info.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_function.h"
@@ -153,8 +154,8 @@ void DynamicImportTreeClient::NotifyModuleTreeLoadFinished(
 
   // <spec step="7">Run the module script result, with the rethrow errors
   // boolean set to true.</spec>
-  ScriptEvaluationResult result = modulator_->ExecuteModule(
-      module_script, Modulator::CaptureEvalErrorFlag::kCapture);
+  ScriptEvaluationResult result = module_script->RunScriptAndReturnValue(
+      V8ScriptRunner::RethrowErrorsOption::Rethrow(String()));
 
   switch (result.GetResultType()) {
     case ScriptEvaluationResult::ResultType::kException:
@@ -216,8 +217,8 @@ void DynamicImportTreeClient::NotifyModuleTreeLoadFinished(
       // step="2.3">Assert: Evaluate has already been invoked on moduleRecord
       // and successfully completed.</spec>
       //
-      // Because |error| is empty, we are sure that ExecuteModule() above was
-      // successfully completed.
+      // Because |error| is empty, we are sure that RunScriptAndReturnValue()
+      // above was successfully completed.
 
       // <spec
       // href="https://tc39.github.io/proposal-dynamic-import/#sec-finishdynamicimport"
@@ -388,7 +389,7 @@ void DynamicModuleResolver::ResolveDynamically(
   if (auto* scope = DynamicTo<WorkerGlobalScope>(*execution_context))
     scope->EnsureFetcher();
   modulator_->FetchTree(url, execution_context->Fetcher(),
-                        mojom::RequestContextType::SCRIPT,
+                        mojom::blink::RequestContextType::SCRIPT,
                         network::mojom::RequestDestination::kScript, options,
                         ModuleScriptCustomFetchType::kNone, tree_client);
 

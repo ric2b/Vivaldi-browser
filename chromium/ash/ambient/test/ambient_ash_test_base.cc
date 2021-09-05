@@ -11,12 +11,14 @@
 #include "ash/ambient/ambient_access_token_controller.h"
 #include "ash/ambient/ambient_constants.h"
 #include "ash/ambient/ambient_photo_controller.h"
+#include "ash/ambient/test/ambient_ash_test_helper.h"
 #include "ash/ambient/ui/ambient_background_image_view.h"
 #include "ash/ambient/ui/ambient_container_view.h"
+#include "ash/ambient/ui/ambient_view_ids.h"
 #include "ash/ambient/ui/media_string_view.h"
 #include "ash/ambient/ui/photo_view.h"
-#include "ash/assistant/ui/assistant_view_ids.h"
 #include "ash/public/cpp/ambient/ambient_prefs.h"
+#include "ash/public/cpp/ambient/ambient_ui_model.h"
 #include "ash/public/cpp/ambient/fake_ambient_backend_controller_impl.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
@@ -28,7 +30,6 @@
 #include "base/threading/scoped_blocking_call.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
-#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/dbus/power_manager/idle.pb.h"
@@ -38,7 +39,7 @@
 
 namespace ash {
 namespace {
-constexpr float kFastForwardFactor = 1.0001;
+constexpr float kFastForwardFactor = 1.001;
 }  // namespace
 
 class TestAmbientURLLoaderImpl : public AmbientURLLoader {
@@ -135,14 +136,6 @@ AmbientAshTestBase::AmbientAshTestBase()
 AmbientAshTestBase::~AmbientAshTestBase() = default;
 
 void AmbientAshTestBase::SetUp() {
-  scoped_feature_list_.InitAndEnableFeatureWithParameters(
-      chromeos::features::kAmbientModeFeature,
-      {{"GeoPhotosEnabled", "true"},
-       {"CapturedOnPixelPhotosEnabled", "false"}});
-  image_downloader_ = std::make_unique<TestImageDownloader>();
-  ambient_client_ = std::make_unique<TestAmbientClient>(&wake_lock_provider_);
-  chromeos::PowerManagerClient::InitializeFake();
-
   AshTestBase::SetUp();
 
   // Need to reset first and then assign the TestPhotoClient because can only
@@ -161,14 +154,11 @@ void AmbientAshTestBase::SetUp() {
 }
 
 void AmbientAshTestBase::TearDown() {
-  ambient_client_.reset();
-  image_downloader_.reset();
-
   AshTestBase::TearDown();
 }
 
 void AmbientAshTestBase::SetAmbientModeEnabled(bool enabled) {
-  Shell::Get()->session_controller()->GetPrimaryUserPrefService()->SetBoolean(
+  Shell::Get()->session_controller()->GetActivePrefService()->SetBoolean(
       ambient::prefs::kAmbientModeEnabled, enabled);
 }
 
@@ -263,22 +253,28 @@ void AmbientAshTestBase::SetPhotoViewImageSize(int width, int height) {
 
 AmbientBackgroundImageView*
 AmbientAshTestBase::GetAmbientBackgroundImageView() {
+  DCHECK(container_view());
   return static_cast<AmbientBackgroundImageView*>(container_view()->GetViewByID(
-      AssistantViewID::kAmbientBackgroundImageView));
+      AmbientViewID::kAmbientBackgroundImageView));
 }
 
 MediaStringView* AmbientAshTestBase::GetMediaStringView() {
+  DCHECK(container_view());
   return static_cast<MediaStringView*>(
-      container_view()->GetViewByID(AssistantViewID::kAmbientMediaStringView));
+      container_view()->GetViewByID(AmbientViewID::kAmbientMediaStringView));
 }
 
-void AmbientAshTestBase::FastForwardToInactivity() {
-  task_environment()->FastForwardBy(
-      kFastForwardFactor * AmbientController::kAutoShowWaitTimeInterval);
+void AmbientAshTestBase::FastForwardToLockScreenTimeout() {
+  task_environment()->FastForwardBy(kFastForwardFactor *
+                                    ambient_controller()
+                                        ->ambient_ui_model()
+                                        ->lock_screen_inactivity_timeout());
 }
 
 void AmbientAshTestBase::FastForwardToNextImage() {
-  task_environment()->FastForwardBy(kFastForwardFactor * kPhotoRefreshInterval);
+  task_environment()->FastForwardBy(
+      kFastForwardFactor *
+      ambient_controller()->ambient_ui_model()->photo_refresh_interval());
 }
 
 void AmbientAshTestBase::FastForwardTiny() {
@@ -288,12 +284,17 @@ void AmbientAshTestBase::FastForwardTiny() {
 }
 
 void AmbientAshTestBase::FastForwardToLockScreen() {
-  task_environment()->FastForwardBy(kFastForwardFactor * kLockScreenDelay);
+  task_environment()->FastForwardBy(kFastForwardFactor *
+                                    ambient_controller()
+                                        ->ambient_ui_model()
+                                        ->background_lock_screen_timeout());
 }
 
 void AmbientAshTestBase::FastForwardHalfLockScreenDelay() {
   task_environment()->FastForwardBy(0.5 * kFastForwardFactor *
-                                    kLockScreenDelay);
+                                    ambient_controller()
+                                        ->ambient_ui_model()
+                                        ->background_lock_screen_timeout());
 }
 
 void AmbientAshTestBase::SetPowerStateCharging() {
@@ -334,7 +335,7 @@ int AmbientAshTestBase::GetNumOfActiveWakeLocks(
     device::mojom::WakeLockType type) {
   base::RunLoop run_loop;
   int result_count = 0;
-  wake_lock_provider_.GetActiveWakeLocksForTests(
+  GetAmbientAshTestHelper()->wake_lock_provider()->GetActiveWakeLocksForTests(
       type, base::BindOnce(
                 [](base::RunLoop* run_loop, int* result_count, int32_t count) {
                   *result_count = count;
@@ -347,11 +348,11 @@ int AmbientAshTestBase::GetNumOfActiveWakeLocks(
 
 void AmbientAshTestBase::IssueAccessToken(const std::string& token,
                                           bool with_error) {
-  ambient_client_->IssueAccessToken(token, with_error);
+  GetAmbientAshTestHelper()->IssueAccessToken(token, with_error);
 }
 
-bool AmbientAshTestBase::IsAccessTokenRequestPending() const {
-  return ambient_client_->IsAccessTokenRequestPending();
+bool AmbientAshTestBase::IsAccessTokenRequestPending() {
+  return GetAmbientAshTestHelper()->IsAccessTokenRequestPending();
 }
 
 base::TimeDelta AmbientAshTestBase::GetRefreshTokenDelay() {

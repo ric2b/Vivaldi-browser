@@ -8,7 +8,7 @@
 
 #include "base/base_switches.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -68,7 +68,6 @@
 #include "ui/gtk/gtk_ui.h"
 #include "ui/gtk/gtk_ui_delegate.h"
 #if defined(USE_X11)
-#include "ui/gfx/x/x11_types.h"            // nogncheck
 #include "ui/gtk/x/gtk_ui_delegate_x11.h"  // nogncheck
 #endif
 #endif
@@ -137,10 +136,6 @@ void ShellBrowserMainParts::PostMainMessageLoopStart() {
 }
 
 int ShellBrowserMainParts::PreEarlyInitialization() {
-#if defined(USE_X11)
-  if (!features::IsUsingOzonePlatform())
-    ui::SetDefaultX11ErrorHandlers();
-#endif
 #if !defined(OS_CHROMEOS) && defined(USE_AURA) && defined(OS_LINUX)
   ui::InitializeInputMethodForTesting();
 #endif

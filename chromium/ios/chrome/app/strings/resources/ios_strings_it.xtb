@@ -17,8 +17,10 @@
 <translation id="110724200315609752">Passa alla finestra aperta</translation>
 <translation id="1112015203684611006">Stampa non riuscita.</translation>
 <translation id="1125564390852150847">Crea una nuova scheda.</translation>
-<translation id="1145536944570833626">Elimina dati esistenti.</translation>
+<translation id="1145536944570833626">Elimina i dati esistenti.</translation>
+<translation id="1147031633655575115">Accesso eseguito come <ph name="USER" /></translation>
 <translation id="1154690515305205900">Impossibile creare un link al testo evidenziato.</translation>
+<translation id="1157749421655780457">Consenti accesso a posizione…</translation>
 <translation id="1165039591588034296">Errore</translation>
 <translation id="1172898394251786223">Campo successivo</translation>
 <translation id="1176932207622159128">Impossibile salvare l'immagine</translation>
@@ -53,6 +55,7 @@
 <translation id="1449835205994625556">Nascondi password</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> elementi</translation>
 <translation id="1491277525950327607">Tocca due volte per attivare/disattivare l'impostazione</translation>
+<translation id="1492417797159476138">Hai già salvato questo nome utente per questo sito</translation>
 <translation id="1509486075633541495">Accedi al sito web</translation>
 <translation id="1509960214886564027">Le funzionalità su molti siti potrebbero non essere disponibili</translation>
 <translation id="152234381334907219">Mai salvate</translation>
@@ -266,6 +269,7 @@ Svolgi i passaggi che seguono:</translation>
 <translation id="385051799172605136">Indietro</translation>
 <translation id="3892144330757387737">Qui troverai la tua cronologia</translation>
 <translation id="3897092660631435901">Menu</translation>
+<translation id="3913386780052199712">Accesso a Chrome eseguito</translation>
 <translation id="3915450441834151894">Informazioni sito</translation>
 <translation id="3922310737605261887">Cerca il testo copiato</translation>
 <translation id="3928666092801078803">Unisci i miei dati</translation>
@@ -340,6 +344,7 @@ I tuoi dati vengono criptati con la tua passphrase di sincronizzazione. Inserisc
 <translation id="4751645464639803239">Nuova scheda in incognito</translation>
 <translation id="4758977202923349869">Posiziona la carta di credito all'interno di quest'area</translation>
 <translation id="4775879719735953715">Browser predefinito</translation>
+<translation id="4778644898150334464">Utilizza un'altra password</translation>
 <translation id="4802417911091824046">La crittografia della passphrase non include metodi di pagamento e indirizzi di Google Pay.
 
 Per cambiare questa impostazione, <ph name="BEGIN_LINK" />reimposta la sincronizzazione<ph name="END_LINK" />.</translation>
@@ -372,6 +377,7 @@ Per cambiare questa impostazione, <ph name="BEGIN_LINK" />reimposta la sincroniz
 <translation id="5059136629401106827">OK</translation>
 <translation id="5062321486222145940">Installa Google Drive</translation>
 <translation id="5083464117946352670">Impossibile stabilire le dimensioni del file.</translation>
+<translation id="5090832849094901128">L'eliminazione di questa password non comporta l'eliminazione del tuo account su <ph name="WEBSITE" />.</translation>
 <translation id="5094827893301452931">Tweet completato.</translation>
 <translation id="5118764316110575523">Off</translation>
 <translation id="5127805178023152808">La sincronizzazione è disattivata</translation>
@@ -433,7 +439,7 @@ La funzione Handoff deve anche essere attivata nella sezione Generali di Imposta
 <translation id="5854790677617711513">Oltre 30 giorni fa</translation>
 <translation id="5857090052475505287">Nuova cartella</translation>
 <translation id="5857770089550859117">Per avviare la sincronizzazione è obbligatoria la passphrase.</translation>
-<translation id="5860033963881614850">OFF</translation>
+<translation id="5860033963881614850">Off</translation>
 <translation id="5869029295770560994">OK</translation>
 <translation id="5871497086027727873">1 elemento spostato</translation>
 <translation id="5897956970858271241">Visita il link copiato</translation>
@@ -447,7 +453,7 @@ La funzione Handoff deve anche essere attivata nella sezione Generali di Imposta
 <translation id="5964480694698977962">Crea nuova scheda in incognito.</translation>
 <translation id="5965679971710331625">Hai eseguito l'accesso</translation>
 <translation id="5979837087407522202">Cerca password</translation>
-<translation id="5982717868370722439">Aggiungi dati esistenti a <ph name="USER_EMAIL" />.</translation>
+<translation id="5982717868370722439">Aggiungi i dati esistenti a <ph name="USER_EMAIL" />.</translation>
 <translation id="5984222099446776634">Visitati di recente</translation>
 <translation id="5988851877894965432">Apri URL in Chrome</translation>
 <translation id="6012140227487808125">Crittografia…</translation>
@@ -511,6 +517,9 @@ I siti non possono utilizzare i cookie per conoscere la tua attività di navigaz
 <translation id="6476800141292307438">Traduzione della pagina in <ph name="LANGUAGE" />. Opzioni disponibili nella parte inferiore dello schermo.</translation>
 <translation id="648164694371393720">Errore di autenticazione</translation>
 <translation id="6482629121755362506"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> elementi eliminati</translation>
+<translation id="6497772452874122664">Se ritieni attendibile il sito <ph name="TIME" />, puoi usare una password salvata da un altro sito.
+
+Cerca di usare una password univoca per ogni sito.</translation>
 <translation id="651505212789431520">Annullare la sincronizzazione? Puoi attivare la sincronizzazione in qualsiasi momento nelle impostazioni.</translation>
 <translation id="6561262006871132942">Aumenta lo zoom</translation>
 <translation id="6585618849026997638">Puoi tornare a una pagina che ritieni importante aggiungendola ai preferiti</translation>
@@ -590,6 +599,7 @@ I siti non possono utilizzare i cookie per conoscere la tua attività di navigaz
 <translation id="739941347996872055">Scheda precedente</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7409985198648820906"><ph name="UNREAD_COUNT" /> articoli da leggere.</translation>
+<translation id="7412027924265291969">Continua</translation>
 <translation id="7425346204213733349">Le modifiche ai preferiti, alla cronologia, alle password e ad altre impostazioni non verranno più sincronizzate con il tuo Account Google. Tuttavia, i dati esistenti rimarranno memorizzati.</translation>
 <translation id="7435356471928173109">Disattivata dall'amministratore</translation>
 <translation id="7454057999980797137">Stato/contea</translation>
@@ -600,6 +610,7 @@ I siti non possono utilizzare i cookie per conoscere la tua attività di navigaz
 <translation id="7472734401283673885">Nome dell'azienda</translation>
 <translation id="7473891865547856676">No grazie</translation>
 <translation id="7481312909269577407">Avanti</translation>
+<translation id="7483467499335917849">Usa la posizione attuale</translation>
 <translation id="750493650310597496">0 selezionati</translation>
 <translation id="7514365320538308">Scarica</translation>
 <translation id="7537586195939242955">Spiacenti, il tuo pass non può essere installato in Passbook in questo momento.</translation>
@@ -733,6 +744,7 @@ I siti possono utilizzare i cookie per conoscere la tua attività di navigazione
 <translation id="9094033019050270033">Aggiorna password</translation>
 <translation id="9100610230175265781">Passphrase obbligatoria</translation>
 <translation id="9107664647686727385">Controlla eventuali password compromesse</translation>
+<translation id="9137526406337347448">Google Services</translation>
 <translation id="9148126808321036104">Esegui di nuovo l'accesso</translation>
 <translation id="9152539721251340337">Crea un codice QR</translation>
 <translation id="9157836665414082580">Elimina finestre di dialogo</translation>

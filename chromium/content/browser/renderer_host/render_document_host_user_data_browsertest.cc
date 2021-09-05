@@ -6,7 +6,7 @@
 
 #include "base/command_line.h"
 #include "base/memory/weak_ptr.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
 #include "content/browser/renderer_host/navigation_request.h"
@@ -362,6 +362,9 @@ IN_PROC_BROWSER_TEST_F(RenderDocumentHostUserDataTest,
 // RenderFrameHost (of old URL) not alive.
 IN_PROC_BROWSER_TEST_F(RenderDocumentHostUserDataTest,
                        CheckWithFrameCrashBeforeNavigation) {
+  if (ShouldSkipEarlyCommitPendingForCrashedFrame())
+    return;
+
   ASSERT_TRUE(embedded_test_server()->Start());
   GURL url_a(embedded_test_server()->GetURL("a.com", "/title1.html"));
   GURL url_b(embedded_test_server()->GetURL("b.com", "/title2.html"));

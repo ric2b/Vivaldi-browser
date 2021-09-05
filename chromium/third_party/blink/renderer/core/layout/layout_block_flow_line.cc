@@ -106,7 +106,7 @@ class ExpansionOpportunities {
 
         // Don't justify for white-space: pre.
         if (r->line_layout_item_.StyleRef().WhiteSpace() != EWhiteSpace::kPre) {
-          InlineTextBox* text_box = ToInlineTextBox(r->box_);
+          auto* text_box = To<InlineTextBox>(r->box_);
           CHECK(total_opportunities_);
           int expansion = ((available_logical_width - total_logical_width) *
                            opportunities_in_run / total_opportunities_)
@@ -162,10 +162,9 @@ static inline InlineTextBox* CreateInlineBoxForText(BidiRun& run,
 
 static inline void DirtyLineBoxesForObject(LayoutObject* o, bool full_layout) {
   if (o->IsText()) {
-    LayoutText* layout_text = ToLayoutText(o);
-    layout_text->DirtyOrDeleteLineBoxesIfNeeded(full_layout);
+    To<LayoutText>(o)->DirtyOrDeleteLineBoxesIfNeeded(full_layout);
   } else {
-    ToLayoutInline(o)->DirtyLineBoxes(full_layout);
+    To<LayoutInline>(o)->DirtyLineBoxes(full_layout);
   }
 }
 
@@ -228,7 +227,7 @@ InlineFlowBox* LayoutBlockFlow::CreateLineBoxes(LineLayoutItem line_layout_item,
       InlineBox* new_box = CreateInlineBoxForLayoutObject(
           LineLayoutItem(line_layout_item), line_layout_item.IsEqual(this));
       SECURITY_DCHECK(new_box->IsInlineFlowBox());
-      parent_box = ToInlineFlowBox(new_box);
+      parent_box = To<InlineFlowBox>(new_box);
       parent_box->SetFirstLineStyleBit(line_info.IsFirstLine());
       parent_box->SetIsHorizontal(IsHorizontalWritingMode());
       constructed_new_box = true;
@@ -549,7 +548,7 @@ static inline void SetLogicalWidthForTextRun(
   const Font& font = layout_text.Style(line_info.IsFirstLine())->GetFont();
 
   LayoutUnit hyphen_width;
-  if (ToInlineTextBox(run->box_)->HasHyphen())
+  if (To<InlineTextBox>(run->box_)->HasHyphen())
     hyphen_width = LayoutUnit(layout_text.HyphenWidth(font, run->Direction()));
 
   float measured_width = 0;
@@ -636,7 +635,7 @@ static inline void SetLogicalWidthForTextRun(
     DCHECK(run->box_->IsText());
     GlyphOverflowAndFallbackFontsMap::ValueType* it =
         text_box_data_map
-            .insert(ToInlineTextBox(run->box_),
+            .insert(To<InlineTextBox>(run->box_),
                     std::make_pair(Vector<const SimpleFontData*>(),
                                    GlyphOverflow()))
             .stored_value;
@@ -648,7 +647,7 @@ static inline void SetLogicalWidthForTextRun(
     DCHECK(run->box_->IsText());
     GlyphOverflowAndFallbackFontsMap::ValueType* it =
         text_box_data_map
-            .insert(ToInlineTextBox(run->box_),
+            .insert(To<InlineTextBox>(run->box_),
                     std::make_pair(Vector<const SimpleFontData*>(),
                                    GlyphOverflow()))
             .stored_value;
@@ -833,7 +832,7 @@ BidiRun* LayoutBlockFlow::ComputeInlineDirectionPositionsForSegment(
       if (text_align == ETextAlign::kJustify && r != trailing_space_run &&
           text_justify != TextJustify::kNone) {
         if (!is_after_expansion)
-          ToInlineTextBox(r->box_)->SetCanHaveLeadingExpansion(true);
+          To<InlineTextBox>(r->box_)->SetCanHaveLeadingExpansion(true);
         expansions.AddRunWithExpansions(*r, is_after_expansion, text_justify);
       }
 
@@ -853,11 +852,12 @@ BidiRun* LayoutBlockFlow::ComputeInlineDirectionPositionsForSegment(
     } else {
       is_after_expansion = false;
       if (!r->line_layout_item_.IsLayoutInline()) {
-        LayoutBox* layout_box =
-            ToLayoutBox(r->line_layout_item_.GetLayoutObject());
-        if (layout_box->IsRubyRun())
-          SetMarginsForRubyRun(r, ToLayoutRubyRun(layout_box), previous_object,
-                               line_info);
+        auto* layout_box =
+            To<LayoutBox>(r->line_layout_item_.GetLayoutObject());
+        if (layout_box->IsRubyRun()) {
+          SetMarginsForRubyRun(r, To<LayoutRubyRun>(layout_box),
+                               previous_object, line_info);
+        }
         r->box_->SetLogicalWidth(LogicalWidthForChild(*layout_box));
         total_logical_width +=
             MarginStartForChild(*layout_box) + MarginEndForChild(*layout_box);
@@ -905,12 +905,13 @@ void LayoutBlockFlow::ComputeBlockDirectionPositionsForLine(
 
     // Position is used to properly position both replaced elements and
     // to update the static normal flow x/y of positioned elements.
-    if (r->line_layout_item_.IsText())
-      ToLayoutText(r->line_layout_item_.GetLayoutObject())
+    if (r->line_layout_item_.IsText()) {
+      To<LayoutText>(r->line_layout_item_.GetLayoutObject())
           ->PositionLineBox(r->box_);
-    else if (r->line_layout_item_.IsBox())
-      ToLayoutBox(r->line_layout_item_.GetLayoutObject())
+    } else if (r->line_layout_item_.IsBox()) {
+      To<LayoutBox>(r->line_layout_item_.GetLayoutObject())
           ->PositionLineBox(r->box_);
+    }
   }
 }
 
@@ -1566,7 +1567,7 @@ static inline void StripTrailingSpace(LayoutUnit& inline_max,
     // the first white-space character and subtracting its width. Subsequent
     // white-space characters have been collapsed into the first one (which
     // can be either a space or a tab character).
-    LayoutText* text = ToLayoutText(trailing_space_child);
+    auto* text = To<LayoutText>(trailing_space_child);
     UChar trailing_whitespace_char = ' ';
     for (unsigned i = text->TextLength(); i > 0; i--) {
       UChar c = text->CharacterAt(i - 1);
@@ -1603,7 +1604,7 @@ static inline void AdjustMinMaxForInlineFlow(LayoutObject* child,
   // Add in padding/border/margin from the appropriate side of
   // the element.
   LayoutUnit bpm =
-      GetBorderPaddingMargin(ToLayoutInline(*child), end_of_inline);
+      GetBorderPaddingMargin(To<LayoutInline>(*child), end_of_inline);
   child_min += bpm;
   child_max += bpm;
 }
@@ -1636,7 +1637,7 @@ void LayoutBlockFlow::ComputeInlinePreferredLogicalWidths(
   LayoutUnit inline_min;
 
   if (IsListItem())
-    ToLayoutListItem(this)->UpdateMarkerTextIfNeeded();
+    To<LayoutListItem>(this)->UpdateMarkerTextIfNeeded();
 
   const ComputedStyle& style_to_use = StyleRef();
 
@@ -1651,7 +1652,7 @@ void LayoutBlockFlow::ComputeInlinePreferredLogicalWidths(
   // sites. (See Bugzilla 10517.)
   bool allow_images_to_break = !GetDocument().InQuirksMode() ||
                                !IsTableCell() ||
-                               !style_to_use.LogicalWidth().IsIntrinsicOrAuto();
+                               style_to_use.LogicalWidth().IsSpecified();
 
   bool auto_wrap, old_auto_wrap;
   auto_wrap = old_auto_wrap = style_to_use.AutoWrap();
@@ -1717,7 +1718,7 @@ void LayoutBlockFlow::ComputeInlinePreferredLogicalWidths(
 
       if (!child->IsText()) {
         if (child->IsBox() &&
-            ToLayoutBox(child)->NeedsPreferredWidthsRecalculation()) {
+            To<LayoutBox>(child)->NeedsPreferredWidthsRecalculation()) {
           // We don't really know whether the containing block of this child
           // did change or is going to change size. However, this is our only
           // opportunity to make sure that it gets its min/max widths
@@ -1826,7 +1827,7 @@ void LayoutBlockFlow::ComputeInlinePreferredLogicalWidths(
         }
       } else if (child->IsText()) {
         // Case (3). Text.
-        LayoutText* t = ToLayoutText(child);
+        auto* t = To<LayoutText>(child);
 
         if (t->IsWordBreak()) {
           min_logical_width = std::max(min_logical_width, inline_min);
@@ -1954,7 +1955,7 @@ void LayoutBlockFlow::ComputeInlinePreferredLogicalWidths(
 
 static bool IsInlineWithOutlineAndContinuation(const LayoutObject& o) {
   return o.IsLayoutInline() && o.StyleRef().HasOutline() &&
-         !o.IsElementContinuation() && ToLayoutInline(o).Continuation();
+         !o.IsElementContinuation() && To<LayoutInline>(o).Continuation();
 }
 
 bool LayoutBlockFlow::ShouldTruncateOverflowingText() const {
@@ -2013,7 +2014,7 @@ void LayoutBlockFlow::LayoutInlineChildren(bool relayout_children,
 
       if (o->IsAtomicInlineLevel() || o->IsFloating() ||
           o->IsOutOfFlowPositioned()) {
-        LayoutBox* box = ToLayoutBox(o);
+        auto* box = To<LayoutBox>(o);
         box->SetShouldCheckForPaintInvalidation();
 
         UpdateBlockChildDirtyBitsBeforeLayout(relayout_children, *box);
@@ -2044,7 +2045,7 @@ void LayoutBlockFlow::LayoutInlineChildren(bool relayout_children,
       } else if (o->IsText() ||
                  (o->IsLayoutInline() && !walker.AtEndOfInline())) {
         if (!o->IsText())
-          ToLayoutInline(o)->UpdateAlwaysCreateLineBoxes(
+          To<LayoutInline>(o)->UpdateAlwaysCreateLineBoxes(
               layout_state.IsFullLayout());
         if (layout_state.IsFullLayout() || o->SelfNeedsLayout()) {
           // In full layout mode, line boxes are deleted at the beginning of
@@ -2181,7 +2182,7 @@ RootInlineBox* LayoutBlockFlow::DetermineStartPosition(
         if (!prev_root_box->EndsWithBreak() || !prev_root_box->LineBreakObj() ||
             (prev_root_box->LineBreakObj().IsText() &&
              prev_root_box->LineBreakPos() >=
-                 ToLayoutText(prev_root_box->LineBreakObj().GetLayoutObject())
+                 To<LayoutText>(prev_root_box->LineBreakObj().GetLayoutObject())
                      ->TextLength())) {
           // The previous line didn't break cleanly or broke at a newline
           // that has been deleted, so treat it as dirty too.
@@ -2431,22 +2432,28 @@ void LayoutBlockFlow::AddVisualOverflowFromInlineChildren() {
         AddContentsVisualOverflow(child_rect);
       }
     }
-  } else if (const NGPhysicalBoxFragment* fragment = CurrentFragment()) {
-    if (const NGFragmentItems* items = fragment->Items()) {
-      for (NGInlineCursor cursor(*items); cursor;
-           cursor.MoveToNextSkippingChildren()) {
-        const NGFragmentItem* child = cursor.CurrentItem();
-        DCHECK(child);
-        if (child->HasSelfPaintingLayer())
-          continue;
-        PhysicalRect child_rect = child->InkOverflow();
-        if (!child_rect.IsEmpty()) {
-          child_rect.offset += child->OffsetInContainerBlock();
-          AddContentsVisualOverflow(child_rect);
+  } else if (PhysicalFragmentCount()) {
+    // TODO(crbug.com/1144203): This should compute in the stitched coordinate
+    // system, but overflows in the block direction is converted to the inline
+    // direction in the multicol container. Just unite overflows in the inline
+    // direction only for now.
+    for (const NGPhysicalBoxFragment& fragment : PhysicalFragments()) {
+      if (const NGFragmentItems* items = fragment.Items()) {
+        for (NGInlineCursor cursor(fragment, *items); cursor;
+             cursor.MoveToNextSkippingChildren()) {
+          const NGFragmentItem* child = cursor.CurrentItem();
+          DCHECK(child);
+          if (child->HasSelfPaintingLayer())
+            continue;
+          PhysicalRect child_rect = child->InkOverflow();
+          if (!child_rect.IsEmpty()) {
+            child_rect.offset += child->OffsetInContainerBlock();
+            AddContentsVisualOverflow(child_rect);
+          }
         }
+      } else if (fragment.HasFloatingDescendantsForPaint()) {
+        AddVisualOverflowFromFloats(fragment);
       }
-    } else if (fragment->HasFloatingDescendantsForPaint()) {
-      AddVisualOverflowFromFloats(*fragment);
     }
   } else {
     for (RootInlineBox* curr = FirstRootBox(); curr;
@@ -2470,7 +2477,7 @@ void LayoutBlockFlow::AddVisualOverflowFromInlineChildren() {
       continue;
 
     Vector<PhysicalRect> outline_rects;
-    ToLayoutInline(o).AddOutlineRectsForContinuations(
+    To<LayoutInline>(o).AddOutlineRectsForContinuations(
         outline_rects, PhysicalOffset(),
         o.OutlineRectsShouldIncludeBlockVisualOverflow());
     if (!outline_rects.IsEmpty()) {
@@ -2497,7 +2504,7 @@ void LayoutBlockFlow::AddLayoutOverflowFromInlineChildren() {
       StyleRef().IsLeftToRightDirection()) {
     if (const NGPhysicalBoxFragment* fragment = CurrentFragment()) {
       if (const NGFragmentItems* items = fragment->Items()) {
-        for (NGInlineCursor cursor(*items); cursor;
+        for (NGInlineCursor cursor(*fragment, *items); cursor;
              cursor.MoveToNextSkippingChildren()) {
           if (!cursor.Current().IsLineBox())
             continue;
@@ -2609,7 +2616,7 @@ void LayoutBlockFlow::CheckLinesForTextOverflow() {
   ellipsis_width = (font == first_line_font) ? first_line_ellipsis_width : 0;
 
   if (!ellipsis_width) {
-    const SimpleFontData* font_data = font.PrimaryFont();
+    font_data = font.PrimaryFont();
     DCHECK(font_data);
     if (font_data &&
         font_data->GlyphForCharacter(kHorizontalEllipsisCharacter)) {
@@ -2742,15 +2749,15 @@ void LayoutBlockFlow::TryPlacingEllipsisOnAtomicInlines(
           continue;
         // Root boxes can vary in width so move our offset out to allow
         // comparison with the right hand edge of the block.
-        LayoutUnit logical_left_offset = box->LogicalLeft();
+        LayoutUnit line_logical_left_offset = box->LogicalLeft();
         max_root_box_width =
             std::max<LayoutUnit>(curr->LogicalWidth(), max_root_box_width);
-        if (logical_left_offset < 0)
-          logical_left_offset += max_root_box_width - curr->LogicalWidth();
+        if (line_logical_left_offset < 0)
+          line_logical_left_offset += max_root_box_width - curr->LogicalWidth();
         InlineBox* truncation_box = nullptr;
         curr->PlaceEllipsis(selected_ellipsis_str, ltr, block_left_edge,
                             block_right_edge, ellipsis_width,
-                            logical_left_offset, &truncation_box);
+                            line_logical_left_offset, &truncation_box);
         placed_ellipsis = true;
       }
     }
@@ -2835,12 +2842,17 @@ void LayoutBlockFlow::SetShouldDoFullPaintInvalidationForFirstLine() {
     return;
   }
 
-  if (const NGFragmentItems* fragment_items = FragmentItems()) {
-    NGInlineCursor first_line(*fragment_items);
-    if (first_line) {
-      DCHECK(!FirstRootBox());
+  const auto fragments = PhysicalFragments();
+  if (!fragments.IsEmpty()) {
+    DCHECK(!FirstRootBox());
+    for (const NGPhysicalBoxFragment& fragment : fragments) {
+      NGInlineCursor first_line(fragment);
+      if (!first_line)
+        continue;
       first_line.MoveToFirstLine();
-      if (first_line && first_line.Current().UsesFirstLineStyle()) {
+      if (!first_line)
+        continue;
+      if (first_line.Current().UsesFirstLineStyle()) {
         // Mark all descendants of the first line if first-line style.
         for (NGInlineCursor descendants = first_line.CursorForDescendants();
              descendants; descendants.MoveToNext()) {
@@ -2856,6 +2868,7 @@ void LayoutBlockFlow::SetShouldDoFullPaintInvalidationForFirstLine() {
         }
         StyleRef().ClearCachedPseudoElementStyles();
         SetShouldDoFullPaintInvalidation();
+        return;
       }
     }
     return;

@@ -1,0 +1,16 @@
+# Copyright (c) 2020 Vivaldi Technologies AS. All rights reserved
+
+static_library("renderer") {
+  sources = [
+    "content_injection_frame_handler.cc",
+    "content_injection_frame_handler.h",
+    "content_injection_manager.cc",
+    "content_injection_manager.h",
+  ]
+  deps = [
+    "//base",
+    "//content/public/common",
+    "//content/public/renderer",
+    "//vivaldi_mojom/components/content_injection/mojom"
+  ]
+}

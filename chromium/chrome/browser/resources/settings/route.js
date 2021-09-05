@@ -54,10 +54,7 @@ function addPrivacyChildRoutes(r) {
   r.SITE_SETTINGS_LOCATION = r.SITE_SETTINGS.createChild('location');
   r.SITE_SETTINGS_MICROPHONE = r.SITE_SETTINGS.createChild('microphone');
   r.SITE_SETTINGS_NOTIFICATIONS = r.SITE_SETTINGS.createChild('notifications');
-  r.SITE_SETTINGS_FLASH = r.SITE_SETTINGS.createChild('flash');
   r.SITE_SETTINGS_POPUPS = r.SITE_SETTINGS.createChild('popups');
-  r.SITE_SETTINGS_UNSANDBOXED_PLUGINS =
-      r.SITE_SETTINGS.createChild('unsandboxedPlugins');
   r.SITE_SETTINGS_MIDI_DEVICES = r.SITE_SETTINGS.createChild('midiDevices');
   r.SITE_SETTINGS_USB_DEVICES = r.SITE_SETTINGS.createChild('usbDevices');
   r.SITE_SETTINGS_HID_DEVICES = r.SITE_SETTINGS.createChild('hidDevices');
@@ -102,7 +99,8 @@ function createBrowserSettingsRoutes() {
   r.SIGN_OUT.isNavigableDialog = true;
 
   r.SEARCH = r.BASIC.createSection('/search', 'search');
-  if (!loadTimeData.getBoolean('isGuest')) {
+  if (!loadTimeData.getBoolean('isGuest') ||
+      loadTimeData.getBoolean('isEphemeralGuestProfile')) {
     r.PEOPLE = r.BASIC.createSection('/people', 'people');
     r.SYNC = r.PEOPLE.createChild('/syncSetup');
     r.SYNC_ADVANCED = r.SYNC.createChild('/syncSetup/advanced');
@@ -171,9 +169,6 @@ function createBrowserSettingsRoutes() {
     if (visibility.downloads !== false) {
       r.DOWNLOADS = r.ADVANCED.createSection('/downloads', 'downloads');
     }
-
-    r.PRINTING = r.ADVANCED.createSection('/printing', 'printing');
-    r.CLOUD_PRINTERS = r.PRINTING.createChild('/cloudPrinters');
 
     r.ACCESSIBILITY = r.ADVANCED.createSection('/accessibility', 'a11y');
 

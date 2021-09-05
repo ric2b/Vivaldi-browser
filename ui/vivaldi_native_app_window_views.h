@@ -138,7 +138,6 @@ class VivaldiNativeAppWindowViews : public views::WidgetDelegateView,
   gfx::ImageSkia GetWindowIcon() override;
   bool WidgetHasHitTestMask() const override;
   void GetWidgetHitTestMask(SkPath* mask) const override;
-  void OnWindowBeginUserBoundsChange() override;
   views::ClientView* CreateClientView(views::Widget* widget) override;
   std::string GetWindowName() const override;
 

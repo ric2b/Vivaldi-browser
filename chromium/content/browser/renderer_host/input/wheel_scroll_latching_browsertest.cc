@@ -3,7 +3,10 @@
 // found in the LICENSE file.
 
 #include "base/run_loop.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
+#include "cc/base/features.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_input_event_router.h"
 #include "content/browser/web_contents/web_contents_impl.h"
@@ -146,12 +149,15 @@ class WheelScrollLatchingBrowserTest : public ContentBrowserTest {
 #define MAYBE_WheelEventTarget WheelEventTarget
 #endif
 IN_PROC_BROWSER_TEST_F(WheelScrollLatchingBrowserTest, MAYBE_WheelEventTarget) {
+  base::FeatureList::ScopedDisallowOverrides disallow_feature_overrides(
+      nullptr);
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(::features::kWheelEventRegions);
   LoadURL(kWheelEventLatchingDataURL);
   EXPECT_EQ(0, ExecuteScriptAndExtractInt("documentWheelEventCounter"));
   EXPECT_EQ(0, ExecuteScriptAndExtractInt("scrollableDivWheelEventCounter"));
 
-  MainThreadFrameObserver frame_observer(
-      shell()->web_contents()->GetRenderViewHost()->GetWidget());
+  MainThreadFrameObserver frame_observer(GetWidgetHost());
 
   auto input_msg_watcher = std::make_unique<InputMsgWatcher>(
       GetWidgetHost(), blink::WebInputEvent::Type::kMouseWheel);
@@ -275,7 +281,7 @@ IN_PROC_BROWSER_TEST_F(
              ExecuteScriptAndExtractDouble(
                  "scrollableDiv.getBoundingClientRect().bottom")) /
             2;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   bool precise = true;
 #else
   bool precise = false;

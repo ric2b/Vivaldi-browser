@@ -17,7 +17,6 @@
 #include "content/browser/renderer_host/render_frame_proxy_host.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/common/content_navigation_policy.h"
-#include "content/common/page_messages.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/visibility.h"
 #include "net/http/http_request_headers.h"
@@ -38,8 +37,8 @@ using blink::scheduler::WebSchedulerTrackedFeature;
 const base::Feature kBackForwardCacheNoTimeEviction{
     "BackForwardCacheNoTimeEviction", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// The number of entries the BackForwardCache can hold per tab.
-static constexpr size_t kBackForwardCacheLimit = 1;
+// The default number of entries the BackForwardCache can hold per tab.
+static constexpr size_t kDefaultBackForwardCacheSize = 1;
 
 // The default time to live in seconds for documents in BackForwardCache.
 static constexpr int kDefaultTimeToLiveInBackForwardCacheInSeconds = 15;
@@ -87,6 +86,14 @@ bool IsGeolocationSupported() {
 #endif
   );
   return geolocation_supported.Get();
+}
+
+bool IsFileSystemSupported() {
+  if (!DeviceHasEnoughMemoryForBackForwardCache())
+    return false;
+  static constexpr base::FeatureParam<bool> file_system_api_supported(
+      &features::kBackForwardCache, "file_system_api_supported", false);
+  return file_system_api_supported.Get();
 }
 
 bool IgnoresOutstandingNetworkRequestForTesting() {
@@ -142,13 +149,11 @@ uint64_t GetDisallowedFeatures(RenderFrameHostImpl* rfh,
       FeatureToBit(
           WebSchedulerTrackedFeature::kRequestedVideoCapturePermission) |
       FeatureToBit(WebSchedulerTrackedFeature::kSharedWorker) |
-      FeatureToBit(WebSchedulerTrackedFeature::kSmsService) |
+      FeatureToBit(WebSchedulerTrackedFeature::kWebOTPService) |
       FeatureToBit(WebSchedulerTrackedFeature::kSpeechRecognizer) |
       FeatureToBit(WebSchedulerTrackedFeature::kSpeechSynthesis) |
       FeatureToBit(WebSchedulerTrackedFeature::kWakeLock) |
       FeatureToBit(WebSchedulerTrackedFeature::kWebDatabase) |
-      FeatureToBit(WebSchedulerTrackedFeature::kWebFileSystem) |
-      FeatureToBit(WebSchedulerTrackedFeature::kWebGL) |
       FeatureToBit(WebSchedulerTrackedFeature::kWebHID) |
       FeatureToBit(WebSchedulerTrackedFeature::kWebLocks) |
       FeatureToBit(WebSchedulerTrackedFeature::kWebRTC) |
@@ -171,6 +176,10 @@ uint64_t GetDisallowedFeatures(RenderFrameHostImpl* rfh,
         FeatureToBit(
             WebSchedulerTrackedFeature::kOutstandingNetworkRequestFetch) |
         FeatureToBit(WebSchedulerTrackedFeature::kOutstandingNetworkRequestXHR);
+  }
+
+  if (!IsFileSystemSupported()) {
+    result |= FeatureToBit(WebSchedulerTrackedFeature::kWebFileSystem);
   }
 
   if (requested_features == RequestedFeatures::kOnlySticky) {
@@ -316,6 +325,11 @@ base::TimeDelta BackForwardCacheImpl::GetTimeToLiveInBackForwardCache() {
   return base::TimeDelta::FromSeconds(base::GetFieldTrialParamByFeatureAsInt(
       features::kBackForwardCache, "TimeToLiveInBackForwardCacheInSeconds",
       kDefaultTimeToLiveInBackForwardCacheInSeconds));
+}
+
+size_t BackForwardCacheImpl::GetCacheSize() {
+  return base::GetFieldTrialParamByFeatureAsInt(
+      features::kBackForwardCache, "cache_size", kDefaultBackForwardCacheSize);
 }
 
 BackForwardCacheCanStoreDocumentResult BackForwardCacheImpl::CanStorePageNow(
@@ -516,9 +530,7 @@ void BackForwardCacheImpl::StoreEntry(
   entry->render_frame_host->DidEnterBackForwardCache();
   entries_.push_front(std::move(entry));
 
-  size_t size_limit = cache_size_limit_for_testing_
-                          ? cache_size_limit_for_testing_
-                          : kBackForwardCacheLimit;
+  size_t size_limit = GetCacheSize();
   // Evict the least recently used documents if the BackForwardCache list is
   // full.
   size_t available_count = 0;

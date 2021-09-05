@@ -21,12 +21,12 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.app.tabmodel.AsyncTabParamsManagerSingleton;
 import org.chromium.chrome.browser.app.tabmodel.ChromeTabModelFilterFactory;
+import org.chromium.chrome.browser.app.tabmodel.TabWindowManagerSingleton;
 import org.chromium.chrome.browser.firstrun.FirstRunStatus;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.NextTabPolicy.NextTabPolicySupplier;
-import org.chromium.chrome.browser.tabmodel.TabWindowManager.TabModelSelectorFactory;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.browser.contextmenu.RevampedContextMenuUtils;
@@ -80,18 +80,16 @@ public class ContextMenuLoadUrlParamsTest {
         // Plant RecordingTabModelSelector as the TabModelSelector used in Main. The factory has to
         // be set before super.setUp(), as super.setUp() creates Main and consequently the
         // TabModelSelector.
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            TabWindowManager.getInstance().setTabModelSelectorFactory(
-                    new TabModelSelectorFactory() {
-                        @Override
-                        public TabModelSelector buildSelector(Activity activity,
-                                TabCreatorManager tabCreatorManager,
-                                NextTabPolicySupplier nextTabPolicySupplier, int selectorIndex) {
-                            return new RecordingTabModelSelector(activity, tabCreatorManager,
-                                    new ChromeTabModelFilterFactory(), selectorIndex);
-                        }
-                    });
-        });
+        TabWindowManagerSingleton.setTabModelSelectorFactoryForTesting(
+                new TabModelSelectorFactory() {
+                    @Override
+                    public TabModelSelector buildSelector(Activity activity,
+                            TabCreatorManager tabCreatorManager,
+                            NextTabPolicySupplier nextTabPolicySupplier, int selectorIndex) {
+                        return new RecordingTabModelSelector(activity, tabCreatorManager,
+                                new ChromeTabModelFilterFactory(), selectorIndex);
+                    }
+                });
         mActivityTestRule.startMainActivityOnBlankPage();
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> { FirstRunStatus.setFirstRunFlowComplete(true); });

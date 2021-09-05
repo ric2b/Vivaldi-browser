@@ -130,6 +130,7 @@ class ExternalVkImageBacking final : public ClearTrackingSharedImageBacking {
   // SharedImageBacking implementation.
   void Update(std::unique_ptr<gfx::GpuFence> in_fence) override;
   bool ProduceLegacyMailbox(MailboxManager* mailbox_manager) override;
+  scoped_refptr<gfx::NativePixmap> GetNativePixmap() override;
 
   // Add semaphores to a pending list for reusing or being released immediately.
   void AddSemaphoresToPendingListOrRelease(
@@ -160,6 +161,9 @@ class ExternalVkImageBacking final : public ClearTrackingSharedImageBacking {
       SharedImageManager* manager,
       MemoryTypeTracker* tracker,
       scoped_refptr<SharedContextState> context_state) override;
+  std::unique_ptr<SharedImageRepresentationOverlay> ProduceOverlay(
+      SharedImageManager* manager,
+      MemoryTypeTracker* tracker) override;
 
  private:
   // Install a shared memory GMB to the backing.

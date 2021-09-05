@@ -9,10 +9,13 @@ import './diagnostics_fonts_css.js';
 import './diagnostics_shared_css.js';
 import './memory_card.js';
 import './overview_card.js';
+import './strings.m.js';
 
-import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
-import './strings.js';
+import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {SystemDataProviderInterface, SystemInfo} from './diagnostics_types.js'
+import {getSystemDataProvider} from './mojo_interface_provider.js';
 
 /**
  * @fileoverview
@@ -26,8 +29,38 @@ Polymer({
 
   behaviors: [I18nBehavior],
 
+  /**
+   * @private {?SystemDataProviderInterface}
+   */
+  systemDataProvider_: null,
+
+  properties: {
+    /** @private */
+    showBatteryStatusCard_: {
+      type: Boolean,
+      value: false,
+    },
+  },
+
   /** @override */
-  ready() {
+  created() {
+    this.systemDataProvider_ = getSystemDataProvider();
+    this.fetchSystemInfo_();
+  },
+
+  /** @private */
+  fetchSystemInfo_() {
+    this.systemDataProvider_.getSystemInfo().then(
+        this.onSystemInfoReceived_.bind(this));
+  },
+
+  /**
+   * @param {{systemInfo: !SystemInfo}} result
+   * @private
+   */
+  onSystemInfoReceived_(result) {
+    this.showBatteryStatusCard_ =
+        result.systemInfo.deviceCapabilities.hasBattery;
   },
 
 });

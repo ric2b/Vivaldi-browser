@@ -52,7 +52,7 @@ public class AutofillAssistantFacade {
 
     /** Returns true if conditions are satisfied to attempt to start Autofill Assistant. */
     private static boolean isConfigured(AutofillAssistantArguments arguments) {
-        return arguments.isEnabled();
+        return arguments.areMandatoryParametersSet();
     }
 
     /**
@@ -107,23 +107,32 @@ public class AutofillAssistantFacade {
         // Have an "attempted starts" baseline for the drop out histogram.
         AutofillAssistantMetrics.recordDropOut(DropOutReason.AA_START);
         waitForTabWithWebContents(activity, tab -> {
-            if (arguments.containsTriggerScript()) {
+            if (arguments.containsTriggerScript() || arguments.requestsTriggerScript()
+                    || arguments.containsBase64TriggerScripts()) {
                 // Create a field trial and assign experiment arm based on script parameter. This
                 // is needed to tag UKM data to allow for A/B experiment comparisons.
                 FieldTrialList.createFieldTrial(LITE_SCRIPT_EXPERIMENT_TRIAL,
                         arguments.isLiteScriptExperiment() ? LITE_SCRIPT_EXPERIMENT_TRIAL_EXPERIMENT
                                                            : LITE_SCRIPT_EXPERIMENT_TRIAL_CONTROL);
 
-                if (!AutofillAssistantPreferencesUtil.isAutofillAssistantSwitchOn()) {
-                    AutofillAssistantMetrics.recordLiteScriptStarted(tab.getWebContents(),
-                            AutofillAssistantPreferencesUtil
-                                            .isAutofillAssistantLiteScriptCancelThresholdReached()
-                                    ? LiteScriptStarted.LITE_SCRIPT_CANCELED_TWO_TIMES
-                                    : LiteScriptStarted.LITE_SCRIPT_ONBOARDING_REJECTED);
-                    // Opt-out users who have seen and rejected the onboarding, or who have canceled
-                    // the lite script too many times.
+                // Record this as soon as possible, to establish a baseline.
+                AutofillAssistantMetrics.recordLiteScriptStarted(
+                        tab.getWebContents(), LiteScriptStarted.LITE_SCRIPT_INTENT_RECEIVED);
+
+                // Legacy, remove as soon as possible. Trigger scripts before M-88 were tied to the
+                // regular autofill assistant Chrome setting. Since M-88, they also respect the new
+                // proactive help setting.
+                if (arguments.containsTriggerScript()
+                        && (!AutofillAssistantPreferencesUtil.isAutofillAssistantSwitchOn()
+                                || !AutofillAssistantPreferencesUtil.isProactiveHelpSwitchOn())) {
+                    if (AutofillAssistantPreferencesUtil
+                                    .isAutofillAssistantLiteScriptCancelThresholdReached()) {
+                        AutofillAssistantMetrics.recordLiteScriptStarted(tab.getWebContents(),
+                                LiteScriptStarted.LITE_SCRIPT_CANCELED_TWO_TIMES);
+                    }
                     return;
                 }
+
                 if (AutofillAssistantModuleEntryProvider.INSTANCE.getModuleEntryIfInstalled()
                         == null) {
                     // Opt-out users who don't have DFM installed.
@@ -145,7 +154,9 @@ public class AutofillAssistantFacade {
                                 BottomSheetControllerProvider.from(activity.getWindowAndroid()),
                                 activity.getBrowserControlsManager(),
                                 activity.getCompositorViewHolder(), activity, tab.getWebContents(),
-                                !AutofillAssistantPreferencesUtil.getShowOnboarding(),
+                                activity.getWindowAndroid().getKeyboardDelegate(),
+                                activity.getWindowAndroid().getApplicationBottomInsetProvider(),
+                                activity.getActivityTabProvider(),
                                 activity instanceof CustomTabActivity, arguments.getInitialUrl(),
                                 arguments.getParameters(), arguments.getExperimentIds(),
                                 arguments.getCallerAccount(), arguments.getUserName());

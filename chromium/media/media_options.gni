@@ -5,6 +5,7 @@
 import("//build/config/chrome_build.gni")
 import("//build/config/chromecast_build.gni")
 import("//build/config/chromeos/args.gni")
+import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/features.gni")
 import("//media/gpu/args.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
@@ -79,8 +80,11 @@ declare_args() {
       proprietary_codecs && (is_chromecast || is_fuchsia || use_fuzzing_engine)
 
   # Enable HEVC/H265 demuxing. Actual decoding must be provided by the
-  # platform. Enabled by default for Chromecast.
-  enable_platform_hevc = proprietary_codecs && is_chromecast
+  # platform. Enabled by default for Chromecast, Chrome OS protected media and
+  # fuzzer builds.
+  enable_platform_hevc =
+      proprietary_codecs &&
+      (is_chromecast || use_chromeos_protected_media || use_fuzzing_engine)
 
   # Enable Dolby Vision demuxing. Enable by default for Chromecast. Actual
   # decoding must be provided by the platform. Note some Dolby Vision profiles
@@ -101,8 +105,7 @@ declare_args() {
 }
 
 declare_args() {
-  enable_av1_decoder =
-      enable_dav1d_decoder || enable_libaom || enable_libgav1_decoder
+  enable_av1_decoder = enable_dav1d_decoder || enable_libgav1_decoder
 }
 
 # enable_hls_sample_aes can only be true if enable_mse_mpeg2ts_stream_parser is.
@@ -174,8 +177,8 @@ declare_args() {
 
   # Enable Storage ID which is used by CDMs. This is only available with chrome
   # branding, but may be overridden by other embedders.
-  enable_cdm_storage_id = enable_library_cdms && is_chrome_branded &&
-                          (is_win || is_mac || is_chromeos)
+  enable_cdm_storage_id =
+      enable_library_cdms && is_chrome_branded && (is_win || is_mac || is_ash)
 
   # If |enable_cdm_storage_id| is set, then an implementation specific key
   # must also be provided. It can be provided by defining CDM_STORAGE_ID_KEY
@@ -203,7 +206,7 @@ if (is_chromecast) {
     "video_decoder",
   ]
   _default_mojo_media_host = "gpu"
-} else if (is_chromeos || is_mac || is_win || (is_linux && use_vaapi)) {
+} else if (is_ash || is_mac || is_win || (is_linux && use_vaapi)) {
   _default_mojo_media_services = [ "video_decoder" ]
   _default_mojo_media_host = "gpu"
 }

@@ -22,7 +22,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histograms>
 
 <histogram name="Startup.AfterStartupTaskCount" units="units"
-    expires_after="2021-02-28">
+    expires_after="2021-05-02">
   <owner>michaeln@chromium.org</owner>
   <summary>
     The number of after-startup tasks that were queued prior to startup
@@ -56,7 +56,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Startup.Android.Cold.TimeToFirstContentfulPaint"
-    units="ms" expires_after="2021-03-07">
+    units="ms" expires_after="2021-05-09">
   <owner>pasko@chromium.org</owner>
   <owner>alexilin@chromium.org</owner>
   <summary>
@@ -69,7 +69,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Startup.Android.Cold.TimeToFirstNavigationCommit"
-    units="ms" expires_after="2021-03-07">
+    units="ms" expires_after="2021-05-09">
   <owner>pasko@chromium.org</owner>
   <owner>alexilin@chromium.org</owner>
   <summary>
@@ -79,6 +79,20 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     like a chrome error page, a new tab page, a blank page. It's also not
     recorded if the application wasn't in the foreground since the start till
     the end of event.
+  </summary>
+</histogram>
+
+<histogram name="Startup.Android.Cold.TimeToVisibleContent" units="ms"
+    expires_after="2021-04-26">
+  <owner>yashard@chromium.org</owner>
+  <owner>ckitagawa@chromium.org</owner>
+  <summary>
+    Android: The time from the activity creation point to the moment the content
+    may first appear ready to a user. The intent is to capture readiness of
+    Chrome regardless of whether Chrome is launched into native UI or a web
+    page. The recorded value is the minimum of
+    'Startup.Android.Cold.TimeToFirstContentfulPaint.Tabbed' and
+    'Browser.PaintPreview.TabbedPlayer.TimeToFirstBitmap' metric values.
   </summary>
 </histogram>
 
@@ -137,7 +151,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Startup.Android.GURLEnsureMainDexInitialized" units="ms"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>mthiesse@chromium.org</owner>
   <owner>yfriedman@chromium.org</owner>
   <summary>
@@ -162,7 +176,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Startup.Android.StartupTabPreloader.TabLoaded" units="Boolean"
-    expires_after="2021-02-14">
+    expires_after="2021-04-18">
   <owner>skyostil@chromium.org</owner>
   <summary>
     Android: Whether or not creation of a profile lead to the
@@ -197,7 +211,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Startup.Android.TimeToGTSFirstMeaningfulPaint" units="ms"
-    expires_after="2021-02-14">
+    expires_after="2021-04-18">
   <owner>yusufo@chromium.org</owner>
   <owner>yfriedman@chromium.org</owner>
   <summary>
@@ -210,7 +224,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Startup.Android.TimeToGTSFirstMeaningfulPaint.Cold" units="ms"
-    expires_after="2021-02-21">
+    expires_after="2021-04-25">
   <owner>yusufo@chromium.org</owner>
   <owner>yfriedman@chromium.org</owner>
   <summary>
@@ -223,7 +237,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Startup.Android.TimeToGTSFirstMeaningfulPaint.Warm" units="ms"
-    expires_after="2021-02-14">
+    expires_after="2021-04-18">
   <owner>yusufo@chromium.org</owner>
   <owner>yfriedman@chromium.org</owner>
   <summary>
@@ -256,7 +270,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Startup.BrowserMainRunnerImplInitializeLongTime" units="ms"
-    expires_after="2021-02-14">
+    expires_after="2021-04-18">
   <owner>robliao@chromium.org</owner>
   <summary>
     The amount of time that elapsed during BrowserMainRunnerImpl::Initialize.
@@ -393,7 +407,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Startup.ColdStartFromProcessCreationTime" units="ms"
-    expires_after="2021-02-14">
+    expires_after="2021-04-18">
   <owner>djean@chromium.org</owner>
   <owner>eugenebut@chromium.org</owner>
   <summary>
@@ -405,7 +419,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Startup.ColdStartWithExternalURLTime" units="ms"
-    expires_after="2021-01-24">
+    expires_after="2021-04-18">
   <owner>jif@chromium.org</owner>
   <summary>
     The duration of all initializations in a cold start triggered by an external
@@ -537,7 +551,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Startup.MobileSessionStartAction"
-    enum="MobileSessionStartAction" expires_after="2021-02-28">
+    enum="MobileSessionStartAction" expires_after="2021-05-02">
   <owner>eugenebut@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -547,7 +561,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Startup.MobileSessionStartFromApps"
-    enum="MobileSessionCallerApp" expires_after="2021-02-28">
+    enum="MobileSessionCallerApp" expires_after="2021-05-02">
   <owner>eugenebut@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>The calling application (if any).</summary>
@@ -634,7 +648,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Startup.Temperature" enum="StartupTemperature"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
 <!-- expires-after: Diagnosis metric for changes in StartupTemperature suffix.
      Shouldn't truly expire but kColdStartHardFaultCountThreshold should be
      surveyed yearly. -->

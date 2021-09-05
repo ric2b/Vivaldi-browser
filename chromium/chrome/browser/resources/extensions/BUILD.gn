@@ -4,18 +4,25 @@
 
 import("//chrome/common/features.gni")
 import("//third_party/closure_compiler/compile_js.gni")
+import("//tools/grit/grit_rule.gni")
 import("//tools/grit/preprocess_grit.gni")
 import("//tools/polymer/html_to_js.gni")
+import("//ui/webui/resources/tools/generate_grd.gni")
 import("../optimize_webui.gni")
 
+preprocess_folder = "preprocessed"
+preprocess_manifest = "preprocessed_manifest.json"
+preprocess_gen_manifest = "preprocessed_gen_manifest.json"
+
 if (optimize_webui) {
-  preprocess_folder = "preprocessed"
+  build_manifest = "build_manifest.json"
 
   optimize_webui("build") {
     host = "extensions"
     input = rebase_path("$target_gen_dir/$preprocess_folder", root_build_dir)
     js_out_files = [ "extensions.rollup.js" ]
     js_module_in_files = [ "extensions.js" ]
+    out_manifest = "$target_gen_dir/$build_manifest"
 
     deps = [
       ":preprocess",
@@ -24,65 +31,93 @@ if (optimize_webui) {
     ]
     excludes = [ "chrome://resources/js/cr.m.js" ]
   }
+}
 
-  preprocess_grit("preprocess") {
-    in_folder = "./"
-    out_folder = "$target_gen_dir/$preprocess_folder"
-    in_files = [
-      "drag_and_drop_handler.js",
-      "extensions.js",
-      "item_behavior.js",
-      "item_util.js",
-      "keyboard_shortcut_delegate.js",
-      "navigation_helper.js",
-      "service.js",
-      "shortcut_util.js",
+generate_grd("build_grd") {
+  grd_prefix = "extensions"
+  out_grd = "$target_gen_dir/${grd_prefix}_resources.grd"
+  input_files = [
+    "checkup_image_dark.svg",
+    "checkup_image.svg",
+    "extensions.html",
+  ]
+  input_files_base_dir = rebase_path(".", "//")
+
+  if (optimize_webui) {
+    deps = [ ":build" ]
+    resource_path_rewrites = [ "extensions.rollup.js|extensions.js" ]
+    manifest_files = [ "$target_gen_dir/$build_manifest" ]
+  } else {
+    deps = [
+      ":preprocess",
+      ":preprocess_generated",
     ]
-
-    if (is_chromeos) {
-      in_files += [ "kiosk_browser_proxy.js" ]
-    }
+    manifest_files = [
+      "$target_gen_dir/$preprocess_manifest",
+      "$target_gen_dir/$preprocess_gen_manifest",
+    ]
   }
+}
 
-  preprocess_grit("preprocess_generated") {
-    deps = [ ":web_components" ]
-    in_folder = target_gen_dir
-    out_folder = "$target_gen_dir/$preprocess_folder"
-    in_files = [
-      "checkup.js",
-      "code_section.js",
-      "activity_log/activity_log_history_item.js",
-      "activity_log/activity_log_history.js",
-      "activity_log/activity_log.js",
-      "activity_log/activity_log_stream_item.js",
-      "activity_log/activity_log_stream.js",
-      "detail_view.js",
-      "drop_overlay.js",
-      "error_page.js",
-      "host_permissions_toggle_list.js",
-      "icons.js",
-      "install_warnings_dialog.js",
-      "item.js",
-      "item_list.js",
-      "keyboard_shortcuts.js",
-      "load_error.js",
-      "manager.js",
-      "options_dialog.js",
-      "pack_dialog_alert.js",
-      "pack_dialog.js",
-      "runtime_host_permissions.js",
-      "runtime_hosts_dialog.js",
-      "shared_style.js",
-      "shared_vars.js",
-      "shortcut_input.js",
-      "sidebar.js",
-      "toggle_row.js",
-      "toolbar.js",
-    ]
+preprocess_grit("preprocess") {
+  in_folder = "./"
+  out_folder = "$target_gen_dir/$preprocess_folder"
+  out_manifest = "$target_gen_dir/$preprocess_manifest"
+  in_files = [
+    "drag_and_drop_handler.js",
+    "extensions.js",
+    "item_behavior.js",
+    "item_util.js",
+    "keyboard_shortcut_delegate.js",
+    "navigation_helper.js",
+    "service.js",
+    "shortcut_util.js",
+  ]
 
-    if (is_chromeos) {
-      in_files += [ "kiosk_dialog.js" ]
-    }
+  if (is_chromeos) {
+    in_files += [ "kiosk_browser_proxy.js" ]
+  }
+}
+
+preprocess_grit("preprocess_generated") {
+  deps = [ ":web_components" ]
+  in_folder = target_gen_dir
+  out_folder = "$target_gen_dir/$preprocess_folder"
+  out_manifest = "$target_gen_dir/$preprocess_gen_manifest"
+  in_files = [
+    "checkup.js",
+    "code_section.js",
+    "activity_log/activity_log_history_item.js",
+    "activity_log/activity_log_history.js",
+    "activity_log/activity_log.js",
+    "activity_log/activity_log_stream_item.js",
+    "activity_log/activity_log_stream.js",
+    "detail_view.js",
+    "drop_overlay.js",
+    "error_page.js",
+    "host_permissions_toggle_list.js",
+    "icons.js",
+    "install_warnings_dialog.js",
+    "item.js",
+    "item_list.js",
+    "keyboard_shortcuts.js",
+    "load_error.js",
+    "manager.js",
+    "options_dialog.js",
+    "pack_dialog_alert.js",
+    "pack_dialog.js",
+    "runtime_host_permissions.js",
+    "runtime_hosts_dialog.js",
+    "shared_style.js",
+    "shared_vars.js",
+    "shortcut_input.js",
+    "sidebar.js",
+    "toggle_row.js",
+    "toolbar.js",
+  ]
+
+  if (is_chromeos) {
+    in_files += [ "kiosk_dialog.js" ]
   }
 }
 
@@ -131,6 +166,23 @@ html_to_js("web_components_local") {
   if (is_chromeos) {
     js_files += [ "kiosk_dialog.js" ]
   }
+}
+
+grit("extensions_resources") {
+  defines = chrome_grit_defines
+
+  # These arguments are needed since the grd is generated at build time.
+  enable_input_discovery_for_gn_analyze = false
+  source = "$target_gen_dir/extensions_resources.grd"
+  deps = [ ":build_grd" ]
+
+  outputs = [
+    "grit/extensions_resources.h",
+    "grit/extensions_resources_map.cc",
+    "grit/extensions_resources_map.h",
+    "extensions_resources.pak",
+  ]
+  output_dir = "$root_gen_dir/chrome"
 }
 
 js_type_check("extensions_module_resources") {

@@ -42,7 +42,6 @@ import org.chromium.components.page_info.PageInfoView.ConnectionInfoParams;
 import org.chromium.components.page_info.PageInfoView.PageInfoViewParams;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
 import org.chromium.components.security_state.SecurityStateModel;
-import org.chromium.components.url_formatter.SchemeDisplay;
 import org.chromium.components.url_formatter.UrlFormatter;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
@@ -257,14 +256,19 @@ public class PageInfoController implements PageInfoMainController, ModalDialogPr
             PageInfoContainer.Params containerParams = new PageInfoContainer.Params();
             containerParams.url = viewParams.url;
             containerParams.urlOriginLength = viewParams.urlOriginLength;
-            containerParams.truncatedUrl = UrlFormatter.formatUrlForSecurityDisplay(
-                    url, SchemeDisplay.OMIT_HTTP_AND_HTTPS);
+            containerParams.truncatedUrl =
+                    UrlFormatter.formatUrlForDisplayOmitSchemePathAndTrivialSubdomains(url);
             containerParams.backButtonClickCallback = this::exitSubpage;
             containerParams.urlTitleClickCallback = mContainer::toggleUrlTruncation;
             containerParams.urlTitleLongClickCallback = viewParams.urlTitleLongClickCallback;
             containerParams.urlTitleShown = viewParams.urlTitleShown;
+            containerParams.previewUIShown = viewParams.previewUIShown;
+            containerParams.previewUIIcon = mDelegate.getPreviewUiIcon();
             mContainer.setParams(containerParams);
             mDelegate.getFavicon(mFullUrl, favicon -> {
+                // Return early if PageInfo has been dismissed.
+                if (mContext == null) return;
+
                 if (favicon != null) {
                     mContainer.setFavicon(favicon);
                 } else {
@@ -357,8 +361,11 @@ public class PageInfoController implements PageInfoMainController, ModalDialogPr
      * Whether to show a 'Details' link to the connection info popup.
      */
     private boolean isConnectionDetailsLinkVisible() {
+        // If Paint Preview is being shown, it completely obstructs the WebContents and users
+        // cannot interact with it. Hence, showing connection details is not relevant.
         return mContentPublisher == null && !mDelegate.isShowingOfflinePage()
-                && !mDelegate.isShowingPreview() && !mIsInternalPage;
+                && !mDelegate.isShowingPreview() && !mDelegate.isShowingPaintPreviewPage()
+                && !mIsInternalPage;
     }
 
     /**
@@ -402,6 +409,8 @@ public class PageInfoController implements PageInfoMainController, ModalDialogPr
         if (mContentPublisher != null) {
             messageBuilder.append(
                     mContext.getString(R.string.page_info_domain_hidden, mContentPublisher));
+        } else if (mDelegate.isShowingPaintPreviewPage()) {
+            messageBuilder.append(mDelegate.getPaintPreviewPageConnectionMessage());
         } else if (mDelegate.isShowingPreview() && mDelegate.isPreviewPageInsecure()) {
             connectionInfoParams.summary = summary;
         } else if (mDelegate.getOfflinePageConnectionMessage() != null) {
@@ -481,6 +490,10 @@ public class PageInfoController implements PageInfoMainController, ModalDialogPr
         if (mPendingRunAfterDismissTask != null) {
             mPendingRunAfterDismissTask.run();
             mPendingRunAfterDismissTask = null;
+        }
+        if (mSubpageController != null) {
+            mSubpageController.onSubpageRemoved();
+            mSubpageController = null;
         }
         mWebContentsObserver.destroy();
         mWebContentsObserver = null;
@@ -606,6 +619,9 @@ public class PageInfoController implements PageInfoMainController, ModalDialogPr
     public void exitSubpage() {
         if (mSubpageController == null) return;
         mContainer.showPage(mView, null, () -> {
+            // The PageInfo dialog can get dismissed during the page change animation.
+            // In that case mSubpageController will already be null.
+            if (mSubpageController == null) return;
             mSubpageController.onSubpageRemoved();
             mSubpageController = null;
         });

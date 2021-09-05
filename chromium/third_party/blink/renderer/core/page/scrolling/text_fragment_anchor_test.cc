@@ -32,7 +32,7 @@ class TextFragmentAnchorTest : public SimTest {
  public:
   void SetUp() override {
     SimTest::SetUp();
-    WebView().MainFrameWidget()->Resize(WebSize(800, 600));
+    WebView().MainFrameViewWidget()->Resize(gfx::Size(800, 600));
   }
 
   void RunAsyncMatchingTasks() {
@@ -917,7 +917,7 @@ TEST_P(TextFragmentAnchorScrollTest, ScrollCancelled) {
     <img src="test.png">
   )HTML");
 
-  Compositor().PaintFrame();
+  GetDocument().View()->UpdateAllLifecyclePhasesForTest();
   mojom::blink::ScrollType scroll_type = GetParam();
 
   if (!RuntimeEnabledFeatures::BlockHTMLParserOnStyleSheetsEnabled()) {
@@ -1585,7 +1585,6 @@ TEST_F(TextFragmentAnchorTest, DismissTextHighlightOutOfView) {
     <p id="text">This is a test page</p>
   )HTML");
 
-  Compositor().PaintFrame();
   ASSERT_EQ(0u, GetDocument().Markers().Markers().size());
   SimulateClick(100, 100);
 
@@ -1945,6 +1944,69 @@ TEST_F(TextFragmentAnchorTest, PageVisibility) {
   EXPECT_TRUE(ViewportRect().Contains(BoundingRectInFrame(p)));
   EXPECT_EQ(1u, GetDocument().Markers().Markers().size());
   EXPECT_EQ(p, *GetDocument().CssTarget());
+}
+
+// Regression test for https://crbug.com/1147568. Make sure a page setting
+// manual scroll restoration doesn't cause the fragment to avoid scrolling on
+// the initial load.
+TEST_F(TextFragmentAnchorTest, ManualRestorationDoesntBlockFragment) {
+  SimRequest request("https://example.com/test.html#:~:text=test", "text/html");
+  LoadURL("https://example.com/test.html#:~:text=test");
+  request.Complete(R"HTML(
+    <!DOCTYPE html>
+    <style>
+      body {
+        height: 1200px;
+      }
+      p {
+        position: absolute;
+        top: 1000px;
+      }
+    </style>
+    <script>
+      history.scrollRestoration = 'manual';
+    </script>
+    <p id="text">This is a test page</p>
+  )HTML");
+  RunAsyncMatchingTasks();
+
+  // Render two frames and ensure matching and scrolling does not occur.
+  BeginEmptyFrame();
+  BeginEmptyFrame();
+
+  Element& p = *GetDocument().getElementById("text");
+  EXPECT_TRUE(ViewportRect().Contains(BoundingRectInFrame(p)));
+}
+
+// Regression test for https://crbug.com/1147453. Ensure replaceState doesn't
+// clobber the text fragment token and allows fragment to scroll.
+TEST_F(TextFragmentAnchorTest, ReplaceStateDoesntBlockFragment) {
+  SimRequest request("https://example.com/test.html#:~:text=test", "text/html");
+  LoadURL("https://example.com/test.html#:~:text=test");
+  request.Complete(R"HTML(
+    <!DOCTYPE html>
+    <style>
+      body {
+        height: 1200px;
+      }
+      p {
+        position: absolute;
+        top: 1000px;
+      }
+    </style>
+    <script>
+      history.replaceState({}, 'test', '');
+    </script>
+    <p id="text">This is a test page</p>
+  )HTML");
+  RunAsyncMatchingTasks();
+
+  // Render two frames and ensure matching and scrolling does not occur.
+  BeginEmptyFrame();
+  BeginEmptyFrame();
+
+  Element& p = *GetDocument().getElementById("text");
+  EXPECT_TRUE(ViewportRect().Contains(BoundingRectInFrame(p)));
 }
 
 // Test that a text directive can match across comment nodes

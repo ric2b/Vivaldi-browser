@@ -4,6 +4,11 @@
 
 static_library("background_sync") {
   sources = [
+    "background_sync_controller_impl.cc",
+    "background_sync_controller_impl.h",
+    "background_sync_delegate.h",
+    "background_sync_metrics.cc",
+    "background_sync_metrics.h",
     "background_sync_permission_context.cc",
     "background_sync_permission_context.h",
   ]
@@ -12,8 +17,14 @@ static_library("background_sync") {
     "//components/content_settings/core/browser",
     "//components/content_settings/core/common",
     "//components/permissions",
+    "//components/variations",
+    "//content/public/browser",
+    "//services/metrics/public/cpp:ukm_builders",
     "//third_party/blink/public/common:headers",
   ]
+  if (!is_android) {
+    deps += [ "//components/keep_alive_registry" ]
+  }
 }
 
 source_set("unit_tests") {

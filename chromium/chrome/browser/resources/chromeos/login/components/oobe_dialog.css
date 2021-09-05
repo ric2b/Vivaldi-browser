@@ -27,10 +27,6 @@
   padding-top: var(--oobe-dialog-content-padding);
 }
 
-#header-container[android] {
-  padding: 48px 48px 0 48px;
-}
-
 #oobe-title {
   padding-top: 20px;
 }
@@ -56,6 +52,7 @@
 #oobe-subtitle .fallback {
   color: var(--oobe-subheader-text-color);
   line-height: var(--subtitle-line-height);
+  overflow-wrap: break-word;
   margin: 0;
 }
 
@@ -123,16 +120,8 @@
   z-index: 1;
 }
 
-#buttons-overlay {
-  background: rgba(var(--google-grey-900-rgb), 0.6);
-}
-
 :host #oobe-bottom[no-buttons-padding] {
   padding: unset;
-}
-
-#oobe-bottom ::slotted(*) {
-  width: 100%;
 }
 
 #oobe-icon-div ::slotted(hd-iron-icon),

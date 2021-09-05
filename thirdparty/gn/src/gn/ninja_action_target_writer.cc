@@ -35,8 +35,14 @@ void NinjaActionTargetWriter::Run() {
   // operating on the result of that previous step, so we need to be sure to
   // serialize these.
   std::vector<const Target*> extra_hard_deps;
-  for (const auto& pair : target_->GetDeps(Target::DEPS_LINKED))
-    extra_hard_deps.push_back(pair.ptr);
+  std::vector<OutputFile> data_outs;
+  for (const auto& pair : target_->GetDeps(Target::DEPS_LINKED)) {
+    if (pair.ptr->IsDataOnly()) {
+      data_outs.push_back(pair.ptr->dependency_output_file());
+    } else {
+      extra_hard_deps.push_back(pair.ptr);
+    }
+  }
 
   // For ACTIONs, the input deps appear only once in the generated ninja
   // file, so WriteInputDepsStampAndGetDep() won't create a stamp file
@@ -88,7 +94,6 @@ void NinjaActionTargetWriter::Run() {
   // done before we run the action.
   // TODO(thakis): If the action has just a single output, make things depend
   // on that output directly without writing a stamp file.
-  std::vector<OutputFile> data_outs;
   for (const auto& dep : target_->data_deps())
     data_outs.push_back(dep.ptr->dependency_output_file());
   WriteStampForTarget(output_files, data_outs);

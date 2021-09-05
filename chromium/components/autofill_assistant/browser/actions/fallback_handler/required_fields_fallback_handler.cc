@@ -225,7 +225,7 @@ void RequiredFieldsFallbackHandler::SetFallbackFieldValuesSequentially(
   const RequiredField& required_field = required_fields_[required_fields_index];
 
   if (required_field.value_expression.empty()) {
-    ActionDelegateUtil::SetFieldValue(
+    action_delegate_util::SetFieldValue(
         action_delegate_, required_field.selector, "",
         required_field.fill_strategy, required_field.delay_in_millisecond,
         base::BindOnce(&RequiredFieldsFallbackHandler::OnSetFallbackFieldValue,
@@ -249,8 +249,9 @@ void RequiredFieldsFallbackHandler::SetFallbackFieldValuesSequentially(
       // default: TAP
       click_type = ClickType::TAP;
     }
-    ActionDelegateUtil::ClickOrTapElement(
+    action_delegate_util::ClickOrTapElement(
         action_delegate_, required_field.selector, click_type,
+        /* on_top= */ SKIP_STEP,
         base::BindOnce(
             &RequiredFieldsFallbackHandler::OnClickOrTapFallbackElement,
             weak_ptr_factory_.GetWeakPtr(), fallback_value.value(),
@@ -319,9 +320,9 @@ void RequiredFieldsFallbackHandler::OnGetFallbackFieldElementTag(
     return;
   }
 
-  action_delegate_->SetFieldValue(
-      value, required_field.fill_strategy, required_field.delay_in_millisecond,
-      *element,
+  action_delegate_util::PerformSetFieldValue(
+      action_delegate_, value, required_field.fill_strategy,
+      required_field.delay_in_millisecond, *element,
       base::BindOnce(&RequiredFieldsFallbackHandler::OnSetFallbackFieldValue,
                      weak_ptr_factory_.GetWeakPtr(), required_fields_index,
                      std::move(element)));
@@ -344,7 +345,7 @@ void RequiredFieldsFallbackHandler::OnClickOrTapFallbackElement(
 
   DCHECK(required_field.fallback_click_element.has_value());
   Selector value_selector = required_field.fallback_click_element.value();
-  value_selector.MatchingInnerText(value).MustBeVisible();
+  value_selector.MatchingInnerText(value);
 
   action_delegate_->ShortWaitForElement(
       value_selector,
@@ -356,8 +357,9 @@ void RequiredFieldsFallbackHandler::OnClickOrTapFallbackElement(
 void RequiredFieldsFallbackHandler::OnShortWaitForElement(
     const Selector& selector_to_click,
     size_t required_fields_index,
-
-    const ClientStatus& find_element_status) {
+    const ClientStatus& find_element_status,
+    base::TimeDelta wait_time) {
+  total_wait_time_ += wait_time;
   const RequiredField& required_field = required_fields_[required_fields_index];
   if (!find_element_status.ok()) {
     FillStatusDetailsWithError(
@@ -374,8 +376,8 @@ void RequiredFieldsFallbackHandler::OnShortWaitForElement(
     // default: TAP
     click_type = ClickType::TAP;
   }
-  ActionDelegateUtil::ClickOrTapElement(
-      action_delegate_, selector_to_click, click_type,
+  action_delegate_util::ClickOrTapElement(
+      action_delegate_, selector_to_click, click_type, /* on_top= */ SKIP_STEP,
       base::BindOnce(&RequiredFieldsFallbackHandler::OnSetFallbackFieldValue,
                      weak_ptr_factory_.GetWeakPtr(), required_fields_index,
                      /* element= */ nullptr));

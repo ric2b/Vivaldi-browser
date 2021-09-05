@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/files/file_path.h"
 #include "base/optional.h"
@@ -71,6 +71,10 @@ bool CloudPolicyManager::IsInitializationComplete(PolicyDomain domain) const {
     return component_policy_service_->is_initialized();
   }
   return true;
+}
+
+bool CloudPolicyManager::IsFirstPolicyLoadComplete(PolicyDomain domain) const {
+  return store()->first_policies_loaded();
 }
 
 void CloudPolicyManager::RefreshPolicies() {

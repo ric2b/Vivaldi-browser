@@ -69,6 +69,7 @@ class FakeSyncManager : public SyncManager {
   // loop for purposes of callbacks.
   void Init(InitArgs* args) override;
   ModelTypeSet InitialSyncEndedTypes() override;
+  ModelTypeSet GetEnabledTypes() override;
   void UpdateCredentials(const SyncCredentials& credentials) override;
   void InvalidateCredentials() override;
   void StartSyncingNormally(base::Time last_poll_time) override;
@@ -94,15 +95,9 @@ class FakeSyncManager : public SyncManager {
   std::vector<std::unique_ptr<ProtocolEvent>> GetBufferedProtocolEvents()
       override;
   void RefreshTypes(ModelTypeSet types) override;
-  void RegisterDirectoryTypeDebugInfoObserver(
-      TypeDebugInfoObserver* observer) override;
-  void UnregisterDirectoryTypeDebugInfoObserver(
-      TypeDebugInfoObserver* observer) override;
-  bool HasDirectoryTypeDebugInfoObserver(
-      TypeDebugInfoObserver* observer) override;
-  void RequestEmitDebugInfo() override;
   void OnCookieJarChanged(bool account_mismatch, bool empty_jar) override;
   void UpdateInvalidationClientId(const std::string&) override;
+  void UpdateSingleClientStatus(bool single_client) override;
 
  private:
   scoped_refptr<base::SequencedTaskRunner> sync_task_runner_;

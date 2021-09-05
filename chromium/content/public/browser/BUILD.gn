@@ -12,13 +12,6 @@ if (is_android) {
   import("//build/config/android/rules.gni")
 }
 
-# This file depends on the legacy global sources assignment filter. It should
-# be converted to check target platform before assigning source files to the
-# sources variable. Remove this import and set_sources_assignment_filter call
-# when the file has been converted. See https://crbug.com/1018739 for details.
-import("//build/config/deprecated_default_sources_assignment_filter.gni")
-set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
-
 # See //content/BUILD.gn for how this works.
 group("browser") {
   if (is_component_build) {
@@ -35,24 +28,8 @@ source_set("browser_sources") {
     "accessibility_tree_formatter.h",
     "allow_service_worker_result.cc",
     "allow_service_worker_result.h",
-    "android/android_overlay_provider.h",
-    "android/app_web_message_port.h",
-    "android/child_process_importance.h",
-    "android/compositor.h",
-    "android/compositor_client.h",
-    "android/devtools_auth.h",
-    "android/gpu_video_accelerator_factories_provider.h",
-    "android/java_interfaces.h",
-    "android/media_url_interceptor_register.cc",
-    "android/media_url_interceptor_register.h",
-    "android/motion_event_action.h",
-    "android/synchronous_compositor.cc",
-    "android/synchronous_compositor.h",
-    "android/synchronous_compositor_client.h",
     "appcache_service.cc",
     "appcache_service.h",
-    "audio_loopback_stream_creator.cc",
-    "audio_loopback_stream_creator.h",
     "audio_service.h",
     "audio_service_info.cc",
     "audio_service_info.h",
@@ -226,9 +203,6 @@ source_set("browser_sources") {
     "mhtml_extra_parts.h",
     "mhtml_generation_result.cc",
     "mhtml_generation_result.h",
-    "native_event_processor_mac.h",
-    "native_event_processor_observer_mac.h",
-    "native_event_processor_observer_mac.mm",
     "native_file_system_entry_factory.h",
     "native_file_system_permission_context.h",
     "native_file_system_permission_grant.cc",
@@ -272,7 +246,6 @@ source_set("browser_sources") {
     "payment_app_provider.h",
     "payment_app_provider_util.h",
     "peak_gpu_memory_tracker.h",
-    "pepper_flash_settings_helper.h",
     "pepper_vpn_provider_resource_host_proxy.h",
     "permission_controller.h",
     "permission_controller_delegate.cc",
@@ -448,7 +421,6 @@ source_set("browser_sources") {
     "//mojo/public/cpp/system",
     "//services/audio/public/mojom",
     "//services/cert_verifier/public/mojom",
-    "//services/content/public/mojom",
     "//services/data_decoder/public/mojom",
     "//services/device/public/mojom:device_service",
     "//services/device/public/mojom:usb",
@@ -508,7 +480,23 @@ source_set("browser_sources") {
 
   if (is_android) {
     deps += [ "//ui/android" ]
-    sources += [ "tts_environment_android.h" ]
+    sources += [
+      "android/android_overlay_provider.h",
+      "android/app_web_message_port.h",
+      "android/child_process_importance.h",
+      "android/compositor.h",
+      "android/compositor_client.h",
+      "android/devtools_auth.h",
+      "android/gpu_video_accelerator_factories_provider.h",
+      "android/java_interfaces.h",
+      "android/media_url_interceptor_register.cc",
+      "android/media_url_interceptor_register.h",
+      "android/motion_event_action.h",
+      "android/synchronous_compositor.cc",
+      "android/synchronous_compositor.h",
+      "android/synchronous_compositor_client.h",
+      "tts_environment_android.h",
+    ]
   }
 
   if (use_aura || is_mac) {
@@ -516,7 +504,12 @@ source_set("browser_sources") {
   }
 
   if (is_mac) {
-    sources += [ "remote_cocoa.h" ]
+    sources += [
+      "native_event_processor_mac.h",
+      "native_event_processor_observer_mac.h",
+      "native_event_processor_observer_mac.mm",
+      "remote_cocoa.h",
+    ]
   }
 
   if (is_linux || is_chromeos) {
@@ -551,7 +544,7 @@ source_set("browser_sources") {
 
     public_deps += [
       "//device/vr/public/cpp",
-      "//device/vr/public/mojom",
+      "//device/vr/public/mojom:isolated_xr_service",
     ]
   }
 }

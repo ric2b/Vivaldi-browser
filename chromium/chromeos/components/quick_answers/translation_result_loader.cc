@@ -9,11 +9,13 @@
 #include "ash/public/cpp/quick_answers/controller/quick_answers_browser_client.h"
 #include "base/json/json_writer.h"
 #include "chromeos/components/quick_answers/quick_answers_model.h"
+#include "chromeos/components/quick_answers/utils/quick_answers_utils.h"
 #include "chromeos/services/assistant/public/shared/constants.h"
 #include "net/base/escape.h"
 #include "net/base/url_util.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/simple_url_loader.h"
+#include "ui/base/resource/resource_bundle.h"
 #include "url/gurl.h"
 
 namespace chromeos {
@@ -74,11 +76,14 @@ void TranslationResultLoader::BuildRequest(
 }
 
 void TranslationResultLoader::ProcessResponse(
+    const PreprocessedOutput& preprocessed_output,
     std::unique_ptr<std::string> response_body,
     ResponseParserCallback complete_callback) {
   translation_response_parser_ =
       std::make_unique<TranslationResponseParser>(std::move(complete_callback));
-  translation_response_parser_->ProcessResponse(std::move(response_body));
+  translation_response_parser_->ProcessResponse(
+      std::move(response_body),
+      BuildTranslationTitleText(preprocessed_output.intent_info));
 }
 
 void TranslationResultLoader::OnRequestAccessTokenComplete(
@@ -93,14 +98,10 @@ void TranslationResultLoader::OnRequestAccessTokenComplete(
       kAuthorizationHeaderFormat + access_token);
   resource_request->headers.SetHeader(net::HttpRequestHeaders::kAccept,
                                       "application/json");
-  resource_request->headers.SetHeader(net::HttpRequestHeaders::kContentType,
-                                      "application/json");
 
-  auto body = BuildTranslationRequestBody(preprocessed_output.intent_info);
-  resource_request->request_body = new network::ResourceRequestBody();
-  resource_request->request_body->AppendBytes(body.c_str(), body.length());
-
-  std::move(callback).Run(std::move(resource_request));
+  std::move(callback).Run(
+      std::move(resource_request),
+      BuildTranslationRequestBody(preprocessed_output.intent_info));
 }
 
 }  // namespace quick_answers

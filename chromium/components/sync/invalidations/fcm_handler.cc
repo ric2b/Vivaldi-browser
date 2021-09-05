@@ -7,7 +7,7 @@
 #include <map>
 #include <utility>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/time/time.h"
 #include "components/gcm_driver/gcm_driver.h"
@@ -17,8 +17,6 @@
 #include "components/sync/invalidations/switches.h"
 
 namespace syncer {
-
-const char kPayloadKey[] = "payload";
 
 // Lower bound time between two token validations when listening.
 const int kTokenValidationPeriodMinutesDefault = 60 * 24;
@@ -59,6 +57,10 @@ void FCMHandler::StopListeningPermanently() {
   if (instance_id_driver_->ExistsInstanceID(app_id_)) {
     instance_id_driver_->GetInstanceID(app_id_)->DeleteID(
         /*callback=*/base::DoNothing());
+    fcm_registration_token_.clear();
+    for (FCMRegistrationTokenObserver& token_observer : token_observers_) {
+      token_observer.OnFCMRegistrationTokenChanged();
+    }
   }
   StopListening();
 }
@@ -105,14 +107,8 @@ void FCMHandler::OnMessage(const std::string& app_id,
   DCHECK_EQ(app_id, app_id_);
   DCHECK(base::FeatureList::IsEnabled(switches::kUseSyncInvalidations));
 
-  auto it = message.data.find(kPayloadKey);
-  std::string payload;
-  if (it != message.data.end()) {
-    payload = it->second;
-  }
-
   for (InvalidationsListener& listener : listeners_) {
-    listener.OnInvalidationReceived(payload);
+    listener.OnInvalidationReceived(message.raw_data);
   }
 }
 

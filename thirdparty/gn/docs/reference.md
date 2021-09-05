@@ -59,7 +59,7 @@
     *   [set_default_toolchain: Sets the default toolchain name.](#func_set_default_toolchain)
     *   [set_defaults: Set default values for a target type.](#func_set_defaults)
     *   [set_path_map: Set a path override map.](#set_path_map)
-    *   [set_sources_assignment_filter: Set a pattern to filter source files.](#func_set_sources_assignment_filter)
+    *   [set_sources_assignment_filter: Deprecated feature.](#func_set_sources_assignment_filter)
     *   [split_list: Splits a list into N different sub-lists.](#func_split_list)
     *   [string_join: Concatenates a list of strings with a separator.](#func_string_join)
     *   [string_replace: Replaces substring in the given string.](#func_string_replace)
@@ -682,9 +682,8 @@
 
 ```
   --dry-run
-      Does not change or output anything, but sets the process exit code based
-      on whether output would be different than what's on disk. This is useful
-      for presubmit/lint-type checks.
+      Prints the list of files that would be reformatted but does not write
+      anything to disk. This is useful for presubmit/lint-type checks.
       - Exit code 0: successful format, matches on disk.
       - Exit code 1: general failure (parse error, etc.)
       - Exit code 2: successful format, but differs from on disk.
@@ -790,7 +789,7 @@
       This string is passed without any quoting to the ninja invocation
       command-line. Can be used to configure ninja flags, like "-j".
 
-  --root-target=<target_name>
+  --ide-root-target=<target_name>
       Name of the target corresponding to "All" target in Xcode. If unset,
       "All" invokes ninja without any target and builds everything.
 ```
@@ -798,7 +797,7 @@
 #### **QtCreator Flags**
 
 ```
-  --root-target=<target_name>
+  --ide-root-target=<target_name>
       Name of the root target for which the QtCreator project will be generated
       to contain files of it and its dependencies. If unset, the whole build
       graph will be emitted.
@@ -1000,7 +999,7 @@
       target and all of its dependency tree, rebasing the strings in the `files`
       key onto the source directory of the target's declaration relative to "/".
 ```
-### <a name="cmd_outputs"></a>**gn outputs &lt;out_dir&gt; &lt;list of target or file names...&gt; ***
+### <a name="cmd_outputs"></a>**gn outputs &lt;out_dir&gt; &lt;list of target or file names...&gt;**
 
 ```
   Lists the output files corresponding to the given target(s) or file name(s).
@@ -1102,8 +1101,8 @@
 ### <a name="cmd_refs"></a>**gn refs**
 
 ```
-  gn refs <out_dir> (<label_pattern>|<label>|<file>|@<response_file>)*
-          [--all] [--default-toolchain] [--as=...] [--testonly=...] [--type=...]
+  gn refs <out_dir> (<label_pattern>|<label>|<file>|@<response_file>)* [--all]
+          [--default-toolchain] [--as=...] [--testonly=...] [--type=...]
 
   Finds reverse dependencies (which targets reference something). The input is
   a list containing:
@@ -2492,10 +2491,6 @@
   important because most targets have an implicit configs list, which means it
   wouldn't work at all if it didn't clobber).
 
-  The sources assignment filter (see "gn help set_sources_assignment_filter")
-  is never applied by this function. It's assumed than any desired filtering
-  was already done when sources was set on the from_scope.
-
   If variables_to_not_forward_list is non-empty, then it must contains a list
   of variable names that will not be forwarded. This is mostly useful when
   variable_list_or_star has a value of "*".
@@ -3162,36 +3157,11 @@
     //beta/d/e/f      //beta/d/e/f
     //foo/g/h/i       //gamma/foo/g/h/i
 ```
-### <a name="func_set_sources_assignment_filter"></a>**set_sources_assignment_filter**: Set a pattern to filter source files.
+### <a name="func_set_sources_assignment_filter"></a>**set_sources_assignment_filter**: Deprecated feature.
 
 ```
-  The sources assignment filter is a list of patterns that remove files from
-  the list implicitly whenever the "sources" variable is assigned to. This will
-  do nothing for non-lists.
-
-  This is intended to be used to globally filter out files with
-  platform-specific naming schemes when they don't apply, for example you may
-  want to filter out all "*_win.cc" files on non-Windows platforms.
-
-  Typically this will be called once in the master build config script to set
-  up the filter for the current platform. Subsequent calls will overwrite the
-  previous values.
-
-  If you want to bypass the filter and add a file even if it might be filtered
-  out, call set_sources_assignment_filter([]) to clear the list of filters.
-  This will apply until the current scope exits.
-
-  See "gn help file_pattern" for more information on file pattern.
-```
-
-#### **Sources assignment example**
-
-```
-  # Filter out all _win files.
-  set_sources_assignment_filter([ "*_win.cc", "*_win.h" ])
-  sources = [ "a.cc", "b_win.cc" ]
-  print(sources)
-  # Will print [ "a.cc" ]. b_win one was filtered out.
+  This feature is deprecated. It will be removed once all usages have been
+  removed. Only supports a single argument that needs to be an empty list.
 ```
 ### <a name="func_split_list"></a>**split_list**: Splits a list into N different sub-lists.
 
@@ -3647,8 +3617,7 @@
         {{target_output_name}}, {{output_extension}} and {{output_dir}} allows
         the target to override these values.
           outputs = [
-            "{{output_dir}}/{{target_output_name}}"
-                "{{output_extension}}",
+            "{{output_dir}}/{{target_output_name}}{{output_extension}}",
             "{{output_dir}}/{{target_output_name}}.lib",
           ]
 
@@ -3781,6 +3750,11 @@
         {{target_output_name}}, this is not affected by the "output_prefix" in
         the tool or the "output_name" set on the target.
 
+    {{label_no_toolchain}}
+        The label of the current target, never including the toolchain
+        (otherwise, this is identical to {{label}}). This is used as the module
+        name when using .modulemap files.
+
     {{output}}
         The relative path and name of the output(s) of the current build step.
         If there is more than one output, this will expand to a list of all of
@@ -3819,6 +3793,13 @@
         Defines will be prefixed by "-D" and include directories will be
         prefixed by "-I" (these work with Posix tools as well as Microsoft
         ones).
+
+    {{module_deps}}
+    {{module_deps_no_self}}
+        Strings that correspond to the flags necessary to depend upon the Clang
+        modules referenced by the current target. The "_no_self" version doesn't
+        include the module for the current target, and can be used to compile
+        the pcm itself.
 
     {{source}}
         The relative path and name of the current input file.
@@ -4021,14 +4002,12 @@
       command = "..."
       outputs = [
         "{{output_dir}}/{{target_output_name}}{{output_extension}}",
-        "{{output_dir}}/{{target_output_name}}"
-            "{{output_extension}}.TOC",
+        "{{output_dir}}/{{target_output_name}}{{output_extension}}.TOC",
       ]
       link_output =
         "{{output_dir}}/{{target_output_name}}{{output_extension}}"
       depend_output =
-        "{{output_dir}}/{{target_output_name}}"
-            "{{output_extension}}.TOC"
+        "{{output_dir}}/{{target_output_name}}{{output_extension}}.TOC"
       restat = true
     }
 ```
@@ -4592,7 +4571,7 @@
 ```
   action("myscript") {
     # Pass the generated output dir to the script.
-    args = [ "-o", rebase_path(target_gen_dir, root_build_dir) ]"
+    args = [ "-o", rebase_path(target_gen_dir, root_build_dir) ]
   }
 ```
 ### <a name="var_target_name"></a>**target_name**: [string] The name of the current target.
@@ -4695,7 +4674,7 @@
 ```
   action("myscript") {
     # Pass the output dir to the script.
-    args = [ "-o", rebase_path(target_out_dir, root_build_dir) ]"
+    args = [ "-o", rebase_path(target_out_dir, root_build_dir) ]
   }
 ```
 ## <a name="target_variables"></a>Variables you set in targets
@@ -5569,7 +5548,7 @@
   The .d file should go in the target output directory. If you have more than
   one source file that the script is being run over, you can use the output
   file expansions described in "gn help action_foreach" to name the .d file
-  according to the input."
+  according to the input.
 
   The format is that of a Makefile and all paths must be relative to the root
   build directory. Only one output may be listed and it must match the first
@@ -6962,6 +6941,9 @@
       cause the file //BUILD.gn to be loaded. Note that build_file_extension
       applies to the default case as well.
 
+      The command-line switch --root-target will override this value (see "gn
+      help --root-target").
+
   script_executable [optional]
       Path to specific Python executable or other interpreter to use in
       action targets and exec_script calls. By default GN searches the
@@ -7173,12 +7155,10 @@
 
       string           = `"` { char | escape | expansion } `"` .
       escape           = `\` ( "$" | `"` | char ) .
-      BracketExpansion = "{" ( identifier | ArrayAccess | ScopeAccess "
-                         ") "}" .
+      BracketExpansion = "{" ( identifier | ArrayAccess | ScopeAccess ) "}" .
       Hex              = "0x" [0-9A-Fa-f][0-9A-Fa-f]
       expansion        = "$" ( identifier | BracketExpansion | Hex ) .
-      char             = /* any character except "$", `"`, or newline "
-                        "*/ .
+      char             = /* any character except "$", `"`, or newline */ .
 
   After a backslash, certain sequences represent special characters:
 
@@ -7299,10 +7279,6 @@
 
     mylist = []
     mylist = otherlist
-
-  When assigning to a list named 'sources' using '=' or '+=', list items may be
-  automatically filtered out. See "gn help set_sources_assignment_filter" for
-  more.
 ```
 
 #### **Scopes**
@@ -8013,6 +7989,7 @@
     *   --nocolor: Force non-colored output.
     *   -q: Quiet mode. Don't print output on success.
     *   --root: Explicitly specify source root.
+    *   --root-target: Override the root target.
     *   --runtime-deps-list-file: Save runtime dependencies for targets in file.
     *   --script-executable: Set the executable used to execute scripts.
     *   --threads: Specify number of worker threads.

@@ -50,6 +50,7 @@
 #include "base/feature_list.h"
 #include "base/format_macros.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
@@ -256,13 +257,7 @@ void ApplySameSiteCookieWarningToStatus(
 
 }  // namespace
 
-// Keep defaults here in sync with content/public/common/cookie_manager.mojom.
-CanonicalCookie::CanonicalCookie()
-    : secure_(false),
-      httponly_(false),
-      same_site_(CookieSameSite::NO_RESTRICTION),
-      priority_(COOKIE_PRIORITY_MEDIUM),
-      source_scheme_(CookieSourceScheme::kUnset) {}
+CanonicalCookie::CanonicalCookie() = default;
 
 CanonicalCookie::CanonicalCookie(const CanonicalCookie& other) = default;
 
@@ -277,7 +272,9 @@ CanonicalCookie::CanonicalCookie(const std::string& name,
                                  bool httponly,
                                  CookieSameSite same_site,
                                  CookiePriority priority,
-                                 CookieSourceScheme scheme_secure)
+                                 bool same_party,
+                                 CookieSourceScheme scheme_secure,
+                                 int source_port)
     : name_(name),
       value_(value),
       domain_(domain),
@@ -289,7 +286,10 @@ CanonicalCookie::CanonicalCookie(const std::string& name,
       httponly_(httponly),
       same_site_(same_site),
       priority_(priority),
-      source_scheme_(scheme_secure) {}
+      same_party_(same_party),
+      source_scheme_(scheme_secure) {
+  SetSourcePort(source_port);
+}
 
 CanonicalCookie::~CanonicalCookie() = default;
 
@@ -408,22 +408,35 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::Create(
     status->AddExclusionReason(CookieInclusionStatus::EXCLUDE_INVALID_PREFIX);
   }
 
+  bool is_same_party_valid = IsCookieSamePartyValid(parsed_cookie);
+  if (!is_same_party_valid) {
+    status->AddExclusionReason(
+        CookieInclusionStatus::EXCLUDE_INVALID_SAMEPARTY);
+  }
+
+  // Collect metrics on whether usage of SameParty attribute is correct.
+  if (parsed_cookie.IsSameParty())
+    base::UmaHistogramBoolean("Cookie.IsSamePartyValid", is_same_party_valid);
+
   // TODO(chlily): Log metrics.
   if (!status->IsInclude())
     return nullptr;
 
   CookieSameSiteString samesite_string = CookieSameSiteString::kUnspecified;
   CookieSameSite samesite = parsed_cookie.SameSite(&samesite_string);
-  RecordCookieSameSiteAttributeValueHistogram(samesite_string);
+  RecordCookieSameSiteAttributeValueHistogram(samesite_string,
+                                              parsed_cookie.IsSameParty());
   CookieSourceScheme source_scheme = url.SchemeIsCryptographic()
                                          ? CookieSourceScheme::kSecure
                                          : CookieSourceScheme::kNonSecure;
+  // Get the port, this will get a default value if a port isn't provided.
+  int source_port = url.EffectiveIntPort();
 
   std::unique_ptr<CanonicalCookie> cc(std::make_unique<CanonicalCookie>(
       parsed_cookie.Name(), parsed_cookie.Value(), cookie_domain, cookie_path,
       creation_time, cookie_expires, creation_time, parsed_cookie.IsSecure(),
       parsed_cookie.IsHttpOnly(), samesite, parsed_cookie.Priority(),
-      source_scheme));
+      parsed_cookie.IsSameParty(), source_scheme, source_port));
 
   DCHECK(cc->IsCanonical());
 
@@ -445,7 +458,8 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::CreateSanitizedCookie(
     bool secure,
     bool http_only,
     CookieSameSite same_site,
-    CookiePriority priority) {
+    CookiePriority priority,
+    bool same_party) {
   // Validate consistency of passed arguments.
   if (ParsedCookie::ParseTokenString(name) != name ||
       ParsedCookie::ParseValueString(value) != value ||
@@ -475,6 +489,9 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::CreateSanitizedCookie(
   if (secure && source_scheme == CookieSourceScheme::kNonSecure)
     return nullptr;
 
+  // Get the port, this will get a default value if a port isn't provided.
+  int source_port = url.EffectiveIntPort();
+
   std::string cookie_path = CanonicalCookie::CanonPathWithString(url, path);
   if (!path.empty() && cookie_path != path)
     return nullptr;
@@ -483,6 +500,9 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::CreateSanitizedCookie(
                            cookie_path)) {
     return nullptr;
   }
+
+  if (!IsCookieSamePartyValid(same_party, secure, same_site))
+    return nullptr;
 
   if (!last_access_time.is_null() && creation_time.is_null())
     return nullptr;
@@ -498,14 +518,49 @@ std::unique_ptr<CanonicalCookie> CanonicalCookie::CreateSanitizedCookie(
 
   std::unique_ptr<CanonicalCookie> cc(std::make_unique<CanonicalCookie>(
       name, value, cookie_domain, cookie_path, creation_time, expiration_time,
-      last_access_time, secure, http_only, same_site, priority, source_scheme));
+      last_access_time, secure, http_only, same_site, priority, same_party,
+      source_scheme, source_port));
   DCHECK(cc->IsCanonical());
 
   return cc;
 }
 
+// static
+std::unique_ptr<CanonicalCookie> CanonicalCookie::FromStorage(
+    const std::string& name,
+    const std::string& value,
+    const std::string& domain,
+    const std::string& path,
+    const base::Time& creation,
+    const base::Time& expiration,
+    const base::Time& last_access,
+    bool secure,
+    bool httponly,
+    CookieSameSite same_site,
+    CookiePriority priority,
+    bool same_party,
+    CookieSourceScheme source_scheme,
+    int source_port) {
+  std::unique_ptr<CanonicalCookie> cc(std::make_unique<CanonicalCookie>(
+      name, value, domain, path, creation, expiration, last_access, secure,
+      httponly, same_site, priority, same_party, source_scheme, source_port));
+  if (!cc->IsCanonical())
+    return nullptr;
+  return cc;
+}
+
 std::string CanonicalCookie::DomainWithoutDot() const {
   return cookie_util::CookieDomainAsHost(domain_);
+}
+
+void CanonicalCookie::SetSourcePort(int port) {
+  if ((port >= 0 && port <= 65535) || port == url::PORT_UNSPECIFIED) {
+    // 0 would be really weird as it has a special meaning, but it's still
+    // technically a valid tcp/ip port so we're going to accept it here.
+    source_port_ = port;
+  } else {
+    source_port_ = url::PORT_INVALID;
+  }
 }
 
 bool CanonicalCookie::IsEquivalentForSecureCookieMatching(
@@ -828,7 +883,7 @@ bool CanonicalCookie::IsCanonical() const {
       break;
   }
 
-  return true;
+  return IsCookieSamePartyValid(same_party_, secure_, same_site_);
 }
 
 bool CanonicalCookie::IsEffectivelySameSiteNone(
@@ -957,6 +1012,23 @@ CookieEffectiveSameSite CanonicalCookie::GetEffectiveSameSite(
 
 bool CanonicalCookie::IsRecentlyCreated(base::TimeDelta age_threshold) const {
   return (base::Time::Now() - creation_date_) <= age_threshold;
+}
+
+// static
+bool CanonicalCookie::IsCookieSamePartyValid(
+    const ParsedCookie& parsed_cookie) {
+  return IsCookieSamePartyValid(parsed_cookie.IsSameParty(),
+                                parsed_cookie.IsSecure(),
+                                parsed_cookie.SameSite());
+}
+
+// static
+bool CanonicalCookie::IsCookieSamePartyValid(bool is_same_party,
+                                             bool is_secure,
+                                             CookieSameSite same_site) {
+  if (!is_same_party)
+    return true;
+  return is_secure && (same_site != CookieSameSite::STRICT_MODE);
 }
 
 CookieAndLineWithAccessResult::CookieAndLineWithAccessResult() = default;

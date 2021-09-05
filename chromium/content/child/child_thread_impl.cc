@@ -397,8 +397,8 @@ class ChildThreadImpl::IOThreadState
   mojo::Receiver<mojom::ChildProcess> receiver_{this};
 
   // The pending legacy IPC channel endpoint to fuse with one we will eventually
-  // receiver on the ChildProcess interface. Only used when not in the
-  // deprecated Service Manager IPC mode.
+  // receive on the ChildProcess interface. Only used when not in the deprecated
+  // Service Manager IPC mode.
   mojo::PendingRemote<IPC::mojom::ChannelBootstrap> legacy_ipc_bootstrap_;
 
   // Binding requests which should be handled by |interface_binders|, but which
@@ -841,16 +841,6 @@ void ChildThreadImpl::EnsureConnected() {
 
 bool ChildThreadImpl::IsInBrowserProcess() const {
   return static_cast<bool>(browser_process_io_runner_);
-}
-
-void ChildThreadImpl::GetAssociatedInterface(
-    int32_t routing_id,
-    const std::string& name,
-    mojo::PendingAssociatedReceiver<blink::mojom::AssociatedInterface>
-        receiver) {
-  Listener* route = router_.GetRoute(routing_id);
-  if (route)
-    route->OnAssociatedInterfaceRequest(name, receiver.PassHandle());
 }
 
 }  // namespace content

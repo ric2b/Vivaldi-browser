@@ -6,8 +6,10 @@
 #define CHROME_BROWSER_WEB_APPLICATIONS_COMPONENTS_OS_INTEGRATION_MANAGER_H_
 
 #include <bitset>
+#include <memory>
 #include <vector>
 
+#include "base/auto_reset.h"
 #include "base/callback_forward.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/web_applications/components/app_registrar.h"
@@ -16,7 +18,7 @@
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_id.h"
 #include "chrome/browser/web_applications/components/web_app_run_on_os_login.h"
-#include "chrome/common/web_application_info.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "components/services/app_service/public/cpp/file_handler.h"
 
 class Profile;
@@ -28,6 +30,7 @@ class WebContents;
 namespace web_app {
 
 class AppIconManager;
+class TestOsIntegrationManager;
 class WebAppUiManager;
 
 // OsHooksResults contains the result of all Os hook deployments
@@ -51,6 +54,12 @@ using InstallOsHooksCallback =
 // Callback made after UninstallOsHooks is finished.
 using UninstallOsHooksCallback =
     base::OnceCallback<void(OsHooksResults os_hooks_info)>;
+
+// Used to suppress OS hooks within this object's lifetime.
+using ScopedOsHooksSuppress = std::unique_ptr<base::AutoReset<bool>>;
+
+using BarrierCallback =
+    base::RepeatingCallback<void(OsHookType::Type os_hook, bool completed)>;
 
 // OsIntegrationManager is responsible of creating/updating/deleting
 // all OS hooks during Web App lifecycle.
@@ -121,7 +130,12 @@ class OsIntegrationManager {
   // Getter for testing FileHandlerManager
   FileHandlerManager& file_handler_manager_for_testing();
 
-  void SuppressOsHooksForTesting();
+  static ScopedOsHooksSuppress ScopedSuppressOsHooksForTesting();
+
+  // Suppress calling individual OS managers for testing.
+  void SuppressOsManagersForTesting();
+
+  virtual TestOsIntegrationManager* AsTestOsIntegrationManager();
 
  protected:
   AppShortcutManager* shortcut_manager() { return shortcut_manager_.get(); }
@@ -137,22 +151,41 @@ class OsIntegrationManager {
     file_handler_manager_ = std::move(file_handler_manager);
   }
 
+  virtual void CreateShortcuts(const AppId& app_id,
+                               bool add_to_desktop,
+                               CreateShortcutsCallback callback);
+
+  virtual void RegisterFileHandlers(
+      const AppId& app_id,
+      base::OnceCallback<void(bool success)> callback);
+  virtual void RegisterShortcutsMenu(
+      const AppId& app_id,
+      const std::vector<WebApplicationShortcutsMenuItemInfo>&
+          shortcuts_menu_item_infos,
+      const ShortcutsMenuIconsBitmaps& shortcuts_menu_icons_bitmaps,
+      base::OnceCallback<void(bool success)> callback);
+  virtual void ReadAllShortcutsMenuIconsAndRegisterShortcutsMenu(
+      const AppId& app_id,
+      base::OnceCallback<void(bool success)> callback);
+  virtual void RegisterRunOnOsLogin(const AppId& app_id,
+                                    RegisterRunOnOsLoginCallback callback);
+  virtual void MacAppShimOnAppInstalledForProfile(const AppId& app_id);
+  virtual void AddAppToQuickLaunchBar(const AppId& app_id);
+
  private:
   void OnShortcutsCreated(const AppId& app_id,
                           std::unique_ptr<WebApplicationInfo> web_app_info,
                           InstallOsHooksOptions options,
-                          base::RepeatingCallback<void(OsHookType::Type os_hook,
-                                                       bool created)> callback,
+                          BarrierCallback barrier,
                           bool shortcuts_created);
 
-  void RegisterRunOnOsLogin(const AppId& app_id,
-                            RegisterRunOnOsLoginCallback callback);
+  void OnShortcutsDeleted(const AppId& app_id,
+                          DeleteShortcutsCallback callback,
+                          bool shortcuts_deleted);
 
   void OnShortcutInfoRetrievedRegisterRunOnOsLogin(
       RegisterRunOnOsLoginCallback callback,
       std::unique_ptr<ShortcutInfo> info);
-
-  void DeleteSharedAppShims(const AppId& app_id);
 
   Profile* const profile_;
   AppRegistrar* registrar_ = nullptr;
@@ -160,8 +193,8 @@ class OsIntegrationManager {
 
   std::unique_ptr<AppShortcutManager> shortcut_manager_;
   std::unique_ptr<FileHandlerManager> file_handler_manager_;
+  bool suppress_os_managers_for_testing_ = false;
 
-  bool suppress_os_hooks_for_testing_ = false;
   base::WeakPtrFactory<OsIntegrationManager> weak_ptr_factory_{this};
 };
 

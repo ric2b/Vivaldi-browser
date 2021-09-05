@@ -95,11 +95,11 @@ public class FeedLoggingBridge implements BasicLoggingApi {
 
     @Override
     public void onContentViewed(ContentLoggingData data) {
-        onShownSlice(data.getPositionInStream());
-
         // Bridge could have been destroyed for policy when this is called.
         // See https://crbug.com/901414.
         if (mNativeFeedLoggingBridge == 0) return;
+
+        onShownSlice(data.getPositionInStream());
 
         FeedLoggingBridgeJni.get().onContentViewed(mNativeFeedLoggingBridge, FeedLoggingBridge.this,
                 data.getPositionInStream(),
@@ -109,15 +109,82 @@ public class FeedLoggingBridge implements BasicLoggingApi {
     }
 
     private void onShownSlice(int index) {
+        maybeUpdateNoticeCardViewsCount(index);
+
         if (mHasReachedShownIndexesThreshold) {
             return;
         }
-
+        if (!lastRefreshWasSignedIn()) {
+            return;
+        }
         if (index + 1 >= SHOWN_INDEX_THRESHOLD) {
             mHasReachedShownIndexesThreshold = true;
-            UserPrefs.get(Profile.getLastUsedRegularProfile())
+            UserPrefs.get(getProfile())
                     .setBoolean(Pref.HAS_REACHED_CLICK_AND_VIEW_ACTIONS_UPLOAD_CONDITIONS, true);
         }
+    }
+
+    private boolean lastRefreshWasSignedIn() {
+        return UserPrefs.get(getProfile()).getBoolean(Pref.LAST_REFRESH_WAS_SIGNED_IN);
+    }
+
+    private void maybeUpdateNoticeCardViewsCount(int index) {
+        if (!shouldUpdateNoticeCardClicksAndViewsCounters()) {
+            return;
+        }
+
+        if (!hasNoticeCard()) {
+            return;
+        }
+
+        if (index != getNoticeCardIndex()) {
+            return;
+        }
+
+        // Increment the stored notice card views count by 1.
+        int count = UserPrefs.get(getProfile()).getInteger(Pref.NOTICE_CARD_VIEWS_COUNT);
+        UserPrefs.get(getProfile()).setInteger(Pref.NOTICE_CARD_VIEWS_COUNT, count + 1);
+    }
+
+    private void maybeUpdateNoticeCardClicksCount(int index) {
+        if (!shouldUpdateNoticeCardClicksAndViewsCounters()) {
+            return;
+        }
+
+        if (!hasNoticeCard()) {
+            return;
+        }
+
+        if (index != getNoticeCardIndex()) {
+            return;
+        }
+
+        // Increment the stored notice card clicks count by 1.
+        int count = UserPrefs.get(getProfile()).getInteger(Pref.NOTICE_CARD_CLICKS_COUNT);
+        UserPrefs.get(getProfile()).setInteger(Pref.NOTICE_CARD_CLICKS_COUNT, count + 1);
+    }
+
+    private boolean hasNoticeCard() {
+        return UserPrefs.get(getProfile()).getBoolean(Pref.LAST_FETCH_HAD_NOTICE_CARD);
+    }
+
+    private static int getNoticeCardIndex() {
+        // Infer that the notice card is at the 2nd position when the feature related to putting the
+        // notice card at the second position is enabled.
+        if (ChromeFeatureList.isEnabled(
+                    ChromeFeatureList.INTEREST_FEEDV1_CLICKS_AND_VIEWS_CONDITIONAL_UPLOAD)) {
+            return 1;
+        }
+        return 0;
+    }
+
+    private static boolean shouldUpdateNoticeCardClicksAndViewsCounters() {
+        return ChromeFeatureList.isEnabled(
+                ChromeFeatureList.INTEREST_FEED_NOTICE_CARD_AUTO_DISMISS);
+    }
+
+    private static Profile getProfile() {
+        return Profile.getLastUsedRegularProfile();
     }
 
     @Override
@@ -156,6 +223,7 @@ public class FeedLoggingBridge implements BasicLoggingApi {
         if (mNativeFeedLoggingBridge == 0) return;
 
         recordUserAction(actionType);
+        maybeUpdateNoticeCardClicksCount(data.getPositionInStream());
         FeedLoggingBridgeJni.get().onClientAction(mNativeFeedLoggingBridge, FeedLoggingBridge.this,
                 feedActionToWindowOpenDisposition(actionType), data.getPositionInStream(),
                 TimeUnit.SECONDS.toMillis(data.getPublishedTimeSeconds()), data.getScore(),

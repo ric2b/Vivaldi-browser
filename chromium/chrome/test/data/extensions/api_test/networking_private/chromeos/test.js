@@ -541,6 +541,7 @@ var availableTests = [
           }],
           MacAddress: '00:11:22:AA:BB:CC',
           Name: 'wifi1',
+          NameServersConfigType: chrome.networkingPrivate.IPConfigType.DHCP,
           Source: 'User',
           StaticIPConfig: {
             IPAddress: '1.2.3.4',
@@ -591,8 +592,10 @@ var availableTests = [
           },
           ConnectionState: ConnectionStateType.NOT_CONNECTED,
           GUID: kCellularGuid,
+          IPAddressConfigType: chrome.networkingPrivate.IPConfigType.DHCP,
           Metered: true,
           Name: 'cellular1',
+          NameServersConfigType: chrome.networkingPrivate.IPConfigType.DHCP,
           Source: 'User',
           Type: NetworkType.CELLULAR,
         }, result);
@@ -633,7 +636,9 @@ var availableTests = [
               Connectable: false,
               ConnectionState: ConnectionStateType.NOT_CONNECTED,
               GUID: guid,
+              IPAddressConfigType: chrome.networkingPrivate.IPConfigType.DHCP,
               Name: '',
+              NameServersConfigType: chrome.networkingPrivate.IPConfigType.DHCP,
               Priority: 0,
               Source: 'None',
               Type: NetworkType.CELLULAR,
@@ -658,6 +663,14 @@ var availableTests = [
               Effective: 'UserPolicy',
               UserPolicy: 'Direct'
             }
+          },
+          IPAddressConfigType: {
+            Active: 'DHCP',
+            Effective: 'UserPolicy'
+          },
+          NameServersConfigType: {
+            Active: 'DHCP',
+            Effective: 'UserPolicy'
           },
           Source: 'UserPolicy',
           Type: NetworkType.WI_FI,
@@ -902,9 +915,7 @@ var availableTests = [
   function getCaptivePortalStatus() {
     var networks = [['stub_ethernet_guid', 'Online'],
                     ['stub_wifi1_guid', 'Offline'],
-                    ['stub_wifi2_guid', 'Portal'],
-                    ['stub_cellular1_guid', 'ProxyAuthRequired'],
-                    ['stub_vpn1_guid', 'Unknown']];
+                    ['stub_wifi2_guid', 'Portal']];
     networks.forEach(function(network) {
       var guid = network[0];
       var expectedStatus = network[1];
@@ -919,7 +930,7 @@ var availableTests = [
     var done = chrome.test.callbackAdded();
     var listener =
         new privateHelpers.watchForCaptivePortalState(
-            'wifi_guid', 'Online', done);
+            'stub_wifi1_guid', 'Portal', done);
     chrome.test.sendMessage('notifyPortalDetectorObservers');
   },
   function unlockCellularSim() {

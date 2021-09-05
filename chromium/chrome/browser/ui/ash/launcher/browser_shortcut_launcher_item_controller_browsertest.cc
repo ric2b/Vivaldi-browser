@@ -5,7 +5,7 @@
 #include "chrome/browser/ui/ash/launcher/browser_shortcut_launcher_item_controller.h"
 
 #include "ash/public/cpp/shelf_model.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
@@ -45,7 +45,7 @@ IN_PROC_BROWSER_TEST_F(BrowserShortcutLauncherItemControllerTest, AppMenu) {
 
   // Browsers are not listed in the menu if their windows have not been shown.
   Browser* browser1 =
-      new Browser(Browser::CreateParams(browser()->profile(), true));
+      Browser::Create(Browser::CreateParams(browser()->profile(), true));
   EXPECT_FALSE(browser1->window()->IsVisible());
   EXPECT_EQ(2U, browser_list->size());
   EXPECT_EQ(1U, GetAppMenuItems(controller, ui::EF_NONE).size());

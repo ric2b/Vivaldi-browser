@@ -45,8 +45,8 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/atomicops.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/i18n/rtl.h"
@@ -434,6 +434,14 @@ static void JNI_AwContents_SetAwDrawSWFunctionTable(JNIEnv* env,
 static void JNI_AwContents_SetAwDrawGLFunctionTable(JNIEnv* env,
                                                     jlong function_table) {}
 
+static void JNI_AwContents_UpdateOpenWebScreenArea(JNIEnv* env,
+                                                   jint pixels,
+                                                   jint percentage) {
+  AwBrowserProcess::GetInstance()
+      ->visibility_metrics_logger()
+      ->UpdateOpenWebScreenArea(pixels, percentage);
+}
+
 // static
 jint JNI_AwContents_GetNativeInstanceCount(JNIEnv* env) {
   return base::subtle::NoBarrier_Load(&g_instance_count);
@@ -744,7 +752,11 @@ void AwContents::ClearCache(JNIEnv* env,
                             const JavaParamRef<jobject>& obj,
                             jboolean include_disk_files) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  render_view_host_ext_->ClearCache();
+  AwRenderProcess* aw_render_process =
+      AwRenderProcess::GetInstanceForRenderProcessHost(
+          web_contents_->GetMainFrame()->GetProcess());
+
+  aw_render_process->ClearCache();
 
   if (include_disk_files) {
     content::BrowsingDataRemover* remover =
@@ -756,12 +768,6 @@ void AwContents::ClearCache(JNIEnv* env,
         content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB |
             content::BrowsingDataRemover::ORIGIN_TYPE_PROTECTED_WEB);
   }
-}
-
-void AwContents::KillRenderProcess(JNIEnv* env,
-                                   const JavaParamRef<jobject>& obj) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  render_view_host_ext_->KillRenderProcess();
 }
 
 FindHelper* AwContents::GetFindHelper() {
@@ -813,7 +819,7 @@ void AwContents::OnReceivedIcon(const GURL& icon_url, const SkBitmap& bitmap) {
   }
 
   ScopedJavaLocalRef<jobject> java_bitmap =
-      gfx::ConvertToJavaBitmap(&bitmap, gfx::OomBehavior::kReturnNullOnOom);
+      gfx::ConvertToJavaBitmap(bitmap, gfx::OomBehavior::kReturnNullOnOom);
   if (!java_bitmap) {
     LOG(WARNING) << "Skipping onReceivedIcon; Not enough memory to convert "
                     "icon to Bitmap.";
@@ -1199,6 +1205,12 @@ void AwContents::SetDipScale(JNIEnv* env,
   SetDipScaleInternal(dip_scale);
 }
 
+jboolean AwContents::IsDisplayingOpenWebContent(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj) {
+  return GetVisibilityInfo().IsDisplayingOpenWebContent();
+}
+
 void AwContents::OnInputEvent(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   browser_view_renderer_.OnInputEvent();
 }
@@ -1421,7 +1433,11 @@ void AwContents::SetJsOnlineProperty(JNIEnv* env,
                                      const JavaParamRef<jobject>& obj,
                                      jboolean network_up) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  render_view_host_ext_->SetJsOnlineProperty(network_up);
+  AwRenderProcess* aw_render_process =
+      AwRenderProcess::GetInstanceForRenderProcessHost(
+          web_contents_->GetMainFrame()->GetProcess());
+
+  aw_render_process->SetJsOnlineProperty(network_up);
 }
 
 void AwContents::TrimMemory(JNIEnv* env,

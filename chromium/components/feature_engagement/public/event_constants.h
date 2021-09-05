@@ -54,6 +54,9 @@ extern const char kWebUITabStripClosed[];
 // The WebUI tab strip was opened by the user.
 extern const char kWebUITabStripOpened[];
 
+// The PWA was installed by the user.
+extern const char kDesktopPwaInstalled[];
+
 #endif  // defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) ||
         // defined(OS_CHROMEOS)
 
@@ -79,6 +82,12 @@ extern const char kBottomToolbarOpened[];
 // The Discover feed has loaded content in the NTP.
 extern const char kDiscoverFeedLoaded[];
 #endif  // defined(OS_IOS)
+
+// Android.
+#if defined(OS_ANDROID)
+// The user has explicitly used the Install menu item under the App Menu.
+extern const char kPwaInstallMenuSelected[];
+#endif  // defined(OS_ANDROID)
 
 }  // namespace events
 

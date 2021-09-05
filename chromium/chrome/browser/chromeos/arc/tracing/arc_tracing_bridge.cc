@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file.h"
 #include "base/logging.h"
 #include "base/memory/singleton.h"
@@ -375,7 +375,7 @@ void ArcTracingBridge::StartTracing(const std::string& config,
   }
 
   tracing_instance->StartTracing(
-      selected_categories, mojo::WrapPlatformFile(write_fd.release()),
+      selected_categories, mojo::WrapPlatformFile(std::move(write_fd)),
       base::BindOnce(&ArcTracingBridge::OnArcTracingStarted,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 

@@ -29,7 +29,6 @@ void FakeLocalFrameHost::FullscreenStateChanged(bool is_fullscreen) {}
 
 void FakeLocalFrameHost::RegisterProtocolHandler(const WTF::String& scheme,
                                                  const ::blink::KURL& url,
-                                                 const ::WTF::String& title,
                                                  bool user_gesture) {}
 
 void FakeLocalFrameHost::UnregisterProtocolHandler(const WTF::String& scheme,
@@ -53,10 +52,10 @@ void FakeLocalFrameHost::VisibilityChanged(
     mojom::blink::FrameVisibility visibility) {}
 
 void FakeLocalFrameHost::DidChangeThemeColor(
-    const base::Optional<::SkColor>& theme_color) {}
+    base::Optional<::SkColor> theme_color) {}
 
-void FakeLocalFrameHost::DidChangeBackgroundColor(
-    const SkColor& background_color) {}
+void FakeLocalFrameHost::DidChangeBackgroundColor(SkColor background_color,
+                                                  bool color_adjust) {}
 
 void FakeLocalFrameHost::DidFailLoadWithError(const ::blink::KURL& url,
                                               int32_t error_code) {}
@@ -196,6 +195,10 @@ void FakeLocalFrameHost::DidChangeCSPAttribute(
 void FakeLocalFrameHost::DidChangeFramePolicy(
     const base::UnguessableToken& child_frame_token,
     const FramePolicy& frame_policy) {}
+
+void FakeLocalFrameHost::BindPolicyContainer(
+    mojo::PendingAssociatedReceiver<mojom::blink::PolicyContainerHost>
+        receiver) {}
 
 void FakeLocalFrameHost::CapturePaintPreviewOfSubframe(
     const gfx::Rect& clip_rect,

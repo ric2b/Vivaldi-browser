@@ -5,11 +5,12 @@
 #include <memory>
 
 #include "base/run_loop.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/threading/platform_thread.h"
 #include "build/build_config.h"
-#include "components/prerender/browser/prerender_histograms.h"
-#include "components/prerender/browser/prerender_manager.h"
+#include "components/no_state_prefetch/browser/prerender_histograms.h"
+#include "components/no_state_prefetch/browser/prerender_manager.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/url_loader_monitor.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -37,7 +38,7 @@ class NoStatePrefetchBrowserTest : public WebLayerBrowserTest {
  public:
 #if defined(OS_ANDROID)
   void SetUp() override {
-    InstallTestGmsBridge(/* user_consent= */ true);
+    InstallTestGmsBridge(ConsentType::kConsent);
 
     WebLayerBrowserTest::SetUp();
   }
@@ -196,21 +197,23 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest,
   prerendered_page_fetched_->Run();
 }
 
-// link-rel="next" happens even when NoStatePrefetch has been disabled.
+// link-rel="next" URLs should not be prefetched.
 IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, LinkRelNextWithNSPDisabled) {
-  GetProfile()->SetBooleanSetting(SettingType::NETWORK_PREDICTION_ENABLED,
-                                  false);
   NavigateAndWaitForCompletion(
       GURL(https_server_->GetURL("/link_rel_next_parent.html")), shell());
-
-  prerendered_page_fetched_->Run();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(prerendered_page_was_fetched_);
 }
 
 // Non-web initiated prerender succeeds and subsequent navigations reuse
 // previously downloaded resources.
-IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, ExternalPrerender) {
-  // std::unique_ptr<PrerenderControllerImpl> controller =
-  //     PrerenderControllerImpl::Create(shell()->browser());
+// TODO(https://crbug.com/1144282): Fix failures on Asan.
+#if defined(ADDRESS_SANITIZER)
+#define MAYBE_ExternalPrerender DISABLED_ExternalPrerender
+#else
+#define MAYBE_ExternalPrerender ExternalPrerender
+#endif
+IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, MAYBE_ExternalPrerender) {
   GetProfile()->GetPrerenderController()->Prerender(
       GURL(https_server_->GetURL("/prerendered_page.html")));
 

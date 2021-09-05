@@ -28,6 +28,29 @@
 #include "gn/substitution_writer.h"
 #include "gn/target.h"
 
+struct ModuleDep {
+  ModuleDep(const SourceFile* modulemap,
+            const std::string& module_name,
+            const OutputFile& pcm,
+            bool is_self)
+      : modulemap(modulemap),
+        module_name(module_name),
+        pcm(pcm),
+        is_self(is_self) {}
+
+  // The input module.modulemap source file.
+  const SourceFile* modulemap;
+
+  // The internal module name, in GN this is the target's label.
+  std::string module_name;
+
+  // The compiled version of the module.
+  OutputFile pcm;
+
+  // Is this the module for the current target.
+  bool is_self;
+};
+
 namespace {
 
 // Returns the proper escape options for writing compiler and linker flags.
@@ -52,6 +75,49 @@ const char* GetPCHLangForToolType(const char* name) {
   return "";
 }
 
+const SourceFile* GetModuleMapFromTargetSources(const Target* target) {
+  for (const SourceFile& sf : target->sources()) {
+    if (sf.type() == SourceFile::SOURCE_MODULEMAP) {
+      return &sf;
+    }
+  }
+  return nullptr;
+}
+
+std::vector<ModuleDep> GetModuleDepsInformation(const Target* target) {
+  std::vector<ModuleDep> ret;
+
+  auto add = [&ret](const Target* t, bool is_self) {
+    const SourceFile* modulemap = GetModuleMapFromTargetSources(t);
+    CHECK(modulemap);
+
+    std::string label;
+    CHECK(SubstitutionWriter::GetTargetSubstitution(
+        t, &SubstitutionLabelNoToolchain, &label));
+
+    const char* tool_type;
+    std::vector<OutputFile> modulemap_outputs;
+    CHECK(
+        t->GetOutputFilesForSource(*modulemap, &tool_type, &modulemap_outputs));
+    // Must be only one .pcm from .modulemap.
+    CHECK(modulemap_outputs.size() == 1u);
+    ret.emplace_back(modulemap, label, modulemap_outputs[0], is_self);
+  };
+
+  if (target->source_types_used().Get(SourceFile::SOURCE_MODULEMAP)) {
+    add(target, true);
+  }
+
+  for (const auto& pair: target->GetDeps(Target::DEPS_LINKED)) {
+    // Having a .modulemap source means that the dependency is modularized.
+    if (pair.ptr->source_types_used().Get(SourceFile::SOURCE_MODULEMAP)) {
+      add(pair.ptr, false);
+    }
+  }
+
+  return ret;
+}
+
 }  // namespace
 
 NinjaCBinaryTargetWriter::NinjaCBinaryTargetWriter(const Target* target,
@@ -62,7 +128,9 @@ NinjaCBinaryTargetWriter::NinjaCBinaryTargetWriter(const Target* target,
 NinjaCBinaryTargetWriter::~NinjaCBinaryTargetWriter() = default;
 
 void NinjaCBinaryTargetWriter::Run() {
-  WriteCompilerVars();
+  std::vector<ModuleDep> module_dep_info = GetModuleDepsInformation(target_);
+
+  WriteCompilerVars(module_dep_info);
 
   size_t num_stamp_uses = target_->sources().size();
 
@@ -127,8 +195,8 @@ void NinjaCBinaryTargetWriter::Run() {
   std::vector<OutputFile> obj_files;
   std::vector<SourceFile> other_files;
   if (!target_->source_types_used().SwiftSourceUsed()) {
-    WriteSources(*pch_files, input_deps, order_only_deps, &obj_files,
-                 &other_files);
+    WriteSources(*pch_files, input_deps, order_only_deps, module_dep_info,
+                 &obj_files, &other_files);
   } else {
     WriteSwiftSources(input_deps, order_only_deps, &obj_files);
   }
@@ -154,7 +222,8 @@ void NinjaCBinaryTargetWriter::Run() {
   }
 }
 
-void NinjaCBinaryTargetWriter::WriteCompilerVars() {
+void NinjaCBinaryTargetWriter::WriteCompilerVars(
+    const std::vector<ModuleDep>& module_dep_info) {
   const SubstitutionBits& subst = target_->toolchain()->substitution_bits();
 
   // Defines.
@@ -193,6 +262,17 @@ void NinjaCBinaryTargetWriter::WriteCompilerVars() {
     out_ << std::endl;
   }
 
+  if (!module_dep_info.empty()) {
+    // TODO(scottmg): Currently clang modules only working for C++.
+    if (target_->source_types_used().Get(SourceFile::SOURCE_CPP) ||
+        target_->source_types_used().Get(SourceFile::SOURCE_MODULEMAP)) {
+      WriteModuleDepsSubstitution(&CSubstitutionModuleDeps, module_dep_info,
+                                  true);
+      WriteModuleDepsSubstitution(&CSubstitutionModuleDepsNoSelf,
+                                  module_dep_info, false);
+    }
+  }
+
   bool has_precompiled_headers =
       target_->config_values().has_precompiled_headers();
 
@@ -205,7 +285,8 @@ void NinjaCBinaryTargetWriter::WriteCompilerVars() {
   if (target_->source_types_used().Get(SourceFile::SOURCE_C) ||
       target_->source_types_used().Get(SourceFile::SOURCE_CPP) ||
       target_->source_types_used().Get(SourceFile::SOURCE_M) ||
-      target_->source_types_used().Get(SourceFile::SOURCE_MM)) {
+      target_->source_types_used().Get(SourceFile::SOURCE_MM) ||
+      target_->source_types_used().Get(SourceFile::SOURCE_MODULEMAP)) {
     WriteOneFlag(target_, &CSubstitutionCFlags, false, Tool::kToolNone,
                  &ConfigValues::cflags, opts, path_output_, out_);
   }
@@ -214,7 +295,8 @@ void NinjaCBinaryTargetWriter::WriteCompilerVars() {
                  CTool::kCToolCc, &ConfigValues::cflags_c, opts, path_output_,
                  out_);
   }
-  if (target_->source_types_used().Get(SourceFile::SOURCE_CPP)) {
+  if (target_->source_types_used().Get(SourceFile::SOURCE_CPP) ||
+      target_->source_types_used().Get(SourceFile::SOURCE_MODULEMAP)) {
     WriteOneFlag(target_, &CSubstitutionCFlagsCc, has_precompiled_headers,
                  CTool::kCToolCxx, &ConfigValues::cflags_cc, opts, path_output_,
                  out_);
@@ -269,6 +351,30 @@ void NinjaCBinaryTargetWriter::WriteCompilerVars() {
   }
 
   WriteSharedVars(subst);
+}
+
+void NinjaCBinaryTargetWriter::WriteModuleDepsSubstitution(
+    const Substitution* substitution,
+    const std::vector<ModuleDep>& module_dep_info,
+    bool include_self) {
+  if (target_->toolchain()->substitution_bits().used.count(
+          substitution)) {
+    EscapeOptions options;
+    options.mode = ESCAPE_NINJA_COMMAND;
+
+    out_ << substitution->ninja_name << " = -Xclang ";
+    EscapeStringToStream(out_, "-fmodules-embed-all-files", options);
+
+    for (const auto& module_dep : module_dep_info) {
+      if (!module_dep.is_self || include_self) {
+        out_ << " ";
+        EscapeStringToStream(out_, "-fmodule-file=", options);
+        path_output_.WriteFile(out_, module_dep.pcm);
+      }
+    }
+
+    out_ << std::endl;
+  }
 }
 
 void NinjaCBinaryTargetWriter::WritePCHCommands(
@@ -427,6 +533,7 @@ void NinjaCBinaryTargetWriter::WriteSources(
     const std::vector<OutputFile>& pch_deps,
     const std::vector<OutputFile>& input_deps,
     const std::vector<OutputFile>& order_only_deps,
+    const std::vector<ModuleDep>& module_dep_info,
     std::vector<OutputFile>* object_files,
     std::vector<SourceFile>* other_files) {
   DCHECK(!target_->source_types_used().SwiftSourceUsed());
@@ -445,7 +552,6 @@ void NinjaCBinaryTargetWriter::WriteSources(
         other_files->push_back(source);
       continue;  // No output for this source.
     }
-
 
     std::copy(input_deps.begin(), input_deps.end(), std::back_inserter(deps));
 
@@ -478,13 +584,21 @@ void NinjaCBinaryTargetWriter::WriteSources(
           }
         }
       }
+
+      for (const auto& module_dep : module_dep_info) {
+        if (tool_outputs[0] != module_dep.pcm)
+          deps.push_back(module_dep.pcm);
+      }
+
       WriteCompilerBuildLine({source}, deps, order_only_deps, tool_name,
                              tool_outputs);
     }
 
     // It's theoretically possible for a compiler to produce more than one
     // output, but we'll only link to the first output.
-    object_files->push_back(tool_outputs[0]);
+    if (source.type() != SourceFile::SOURCE_MODULEMAP) {
+      object_files->push_back(tool_outputs[0]);
+    }
   }
 
   out_ << std::endl;

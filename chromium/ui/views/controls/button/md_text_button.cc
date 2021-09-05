@@ -39,7 +39,6 @@ MdTextButton::MdTextButton(PressedCallback callback,
   SetShowInkDropWhenHotTracked(true);
   SetCornerRadius(LayoutProvider::Get()->GetCornerRadiusMetric(EMPHASIS_LOW));
   SetHorizontalAlignment(gfx::ALIGN_CENTER);
-  SetFocusForPlatform();
 
   const int minimum_width = LayoutProvider::Get()->GetDistanceMetric(
       DISTANCE_DIALOG_BUTTON_MINIMUM_WIDTH);
@@ -57,11 +56,6 @@ MdTextButton::MdTextButton(PressedCallback callback,
   // Call this to calculate the border given text.
   UpdatePadding();
 }
-
-MdTextButton::MdTextButton(ButtonListener* listener,
-                           const base::string16& text,
-                           int button_context)
-    : MdTextButton(PressedCallback(listener, this), text, button_context) {}
 
 MdTextButton::~MdTextButton() = default;
 
@@ -169,9 +163,14 @@ void MdTextButton::SetEnabledTextColors(base::Optional<SkColor> color) {
   UpdateColors();
 }
 
-void MdTextButton::SetCustomPadding(const gfx::Insets& padding) {
+void MdTextButton::SetCustomPadding(
+    const base::Optional<gfx::Insets>& padding) {
   custom_padding_ = padding;
   UpdatePadding();
+}
+
+base::Optional<gfx::Insets> MdTextButton::GetCustomPadding() const {
+  return custom_padding_.value_or(CalculateDefaultPadding());
 }
 
 void MdTextButton::SetText(const base::string16& text) {
@@ -300,6 +299,7 @@ BEGIN_METADATA(MdTextButton, LabelButton)
 ADD_PROPERTY_METADATA(bool, Prominent)
 ADD_PROPERTY_METADATA(float, CornerRadius)
 ADD_PROPERTY_METADATA(base::Optional<SkColor>, BgColorOverride)
+ADD_PROPERTY_METADATA(base::Optional<gfx::Insets>, CustomPadding)
 END_METADATA
 
 }  // namespace views

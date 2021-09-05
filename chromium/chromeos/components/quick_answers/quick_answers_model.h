@@ -17,7 +17,7 @@ namespace chromeos {
 namespace quick_answers {
 
 // Interaction with the consent-view (used for logging).
-enum class ConsentInteractionType {
+enum class NoticeInteractionType {
   // When user clicks on the "grant-consent" button.
   kAccept = 0,
   // When user clicks on the "manage-settings" button.
@@ -124,6 +124,9 @@ struct QuickAnswer {
 struct DeviceProperties {
   // Device language code.
   std::string language;
+
+  // List (separated by comma) of user preferred languages.
+  std::string preferred_languages;
 };
 
 struct IntentInfo {

@@ -17,6 +17,7 @@
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/font_list.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/native_cursor.h"
 #include "ui/views/style/platform_style.h"
 
@@ -69,6 +70,14 @@ bool Link::GetCanProcessEventsWithinSubtree() const {
   // Links need to be able to accept events (e.g., clicking) even though
   // in general Labels do not.
   return View::GetCanProcessEventsWithinSubtree();
+}
+
+void Link::OnMouseEntered(const ui::MouseEvent& event) {
+  RecalculateFont();
+}
+
+void Link::OnMouseExited(const ui::MouseEvent& event) {
+  RecalculateFont();
 }
 
 bool Link::OnMousePressed(const ui::MouseEvent& event) {
@@ -198,9 +207,10 @@ void Link::OnClick(const ui::Event& event) {
 
 void Link::RecalculateFont() {
   const int style = font_list().GetFontStyle();
-  const int intended_style = ((GetEnabled() && HasFocus()) || force_underline_)
-                                 ? (style | gfx::Font::UNDERLINE)
-                                 : (style & ~gfx::Font::UNDERLINE);
+  const int intended_style =
+      ((GetEnabled() && (HasFocus() || IsMouseHovered())) || force_underline_)
+          ? (style | gfx::Font::UNDERLINE)
+          : (style & ~gfx::Font::UNDERLINE);
 
   if (style != intended_style)
     Label::SetFontList(font_list().DeriveWithStyle(intended_style));

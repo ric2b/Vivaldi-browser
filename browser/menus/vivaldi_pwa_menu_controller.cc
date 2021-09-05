@@ -3,6 +3,7 @@
 //
 #include "browser/menus/vivaldi_pwa_menu_controller.h"
 
+#include "base/strings/utf_string_conversions.h"
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -12,7 +13,7 @@
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/web_contents.h"
-#include "extensions/api/runtime/runtime_api.h"
+#include "extensions/api/features/vivaldi_runtime_feature.h"
 #include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
 #include "extensions/browser/process_manager.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -51,8 +52,7 @@ const extensions::Extension* PWAMenuController::GetExtension() const {
 }
 
 bool PWAMenuController::HasFeature() {
-  return extensions::VivaldiRuntimeFeatures::IsEnabled(browser_->profile(),
-      "install_pwa");
+  return vivaldi_runtime_feature::IsEnabled(browser_->profile(), "install_pwa");
 }
 
 void PWAMenuController::PopulateModel(ui::SimpleMenuModel* menu_model) {

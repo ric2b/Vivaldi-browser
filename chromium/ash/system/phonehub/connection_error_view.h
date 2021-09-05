@@ -6,16 +6,25 @@
 #define ASH_SYSTEM_PHONEHUB_CONNECTION_ERROR_VIEW_H_
 
 #include "ash/ash_export.h"
-#include "ui/views/controls/button/button.h"
+#include "ash/system/phonehub/phone_hub_content_view.h"
+
+namespace chromeos {
+namespace phonehub {
+class ConnectionScheduler;
+}  // namespace phonehub
+}  // namespace chromeos
 
 namespace ash {
 
 class PhoneHubInterstitialView;
 
+namespace phone_hub_metrics {
+enum class InterstitialScreenEvent;
+}
+
 // An interstitial view represeting that the Phone Hub feature is not available
 // due to connection issues.
-class ASH_EXPORT ConnectionErrorView : public views::View,
-                                       public views::ButtonListener {
+class ASH_EXPORT ConnectionErrorView : public PhoneHubContentView {
  public:
   METADATA_HEADER(ConnectionErrorView);
 
@@ -25,15 +34,22 @@ class ASH_EXPORT ConnectionErrorView : public views::View,
     kReconnecting,  // Attempts to resume the connection to the phone.
   };
 
-  explicit ConnectionErrorView(ErrorStatus error);
+  ConnectionErrorView(
+      ErrorStatus error,
+      chromeos::phonehub::ConnectionScheduler* connection_scheduler);
   ConnectionErrorView(const ConnectionErrorView&) = delete;
   ConnectionErrorView& operator=(const ConnectionErrorView&) = delete;
   ~ConnectionErrorView() override;
 
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
+  // PhoneHubContentView:
+  phone_hub_metrics::Screen GetScreenForMetrics() const override;
 
  private:
+  void ButtonPressed(phone_hub_metrics::InterstitialScreenEvent event,
+                     base::RepeatingClosure callback);
+
+  chromeos::phonehub::ConnectionScheduler* connection_scheduler_ = nullptr;
+
   PhoneHubInterstitialView* content_view_ = nullptr;
 };
 

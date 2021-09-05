@@ -113,7 +113,7 @@ class CalendarBackend
   // Updates an event
   void UpdateEvent(EventID event_id,
                    const EventRow& event,
-                   std::shared_ptr<UpdateEventResult> result);
+                   std::shared_ptr<EventResultCB> result);
   void DeleteEvent(EventID event_id, std::shared_ptr<DeleteEventResult> result);
 
   // Creates an Calendar

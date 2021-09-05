@@ -121,13 +121,12 @@ TEST(RenderPassIOTest, SharedQuadStateList) {
     ASSERT_TRUE(sqs1);
     gfx::Transform transform;
     transform.MakeIdentity();
-    sqs1->SetAll(transform, gfx::Rect(0, 0, 640, 480),
-                 gfx::Rect(10, 10, 600, 400),
-                 gfx::RRectF(gfx::RectF(2.f, 3.f, 4.f, 5.f), 1.5f),
-                 gfx::Rect(5, 20, 1000, 200), true, false, 0.5f,
-                 SkBlendMode::kDstOver, 101);
+    sqs1->SetAll(
+        transform, gfx::Rect(0, 0, 640, 480), gfx::Rect(10, 10, 600, 400),
+        gfx::MaskFilterInfo(gfx::RRectF(gfx::RectF(2.f, 3.f, 4.f, 5.f), 1.5f)),
+        gfx::Rect(5, 20, 1000, 200), true, false, 0.5f, SkBlendMode::kDstOver,
+        101);
     sqs1->is_fast_rounded_corner = true;
-    sqs1->occluding_damage_rect = gfx::Rect(7, 11, 210, 333);
     sqs1->de_jelly_delta_y = 0.7f;
   }
   base::Value dict0 = CompositorRenderPassToDict(*render_pass0);
@@ -142,7 +141,7 @@ TEST(RenderPassIOTest, SharedQuadStateList) {
     EXPECT_TRUE(sqs0->quad_to_target_transform.IsIdentity());
     EXPECT_EQ(gfx::Rect(), sqs0->quad_layer_rect);
     EXPECT_EQ(gfx::Rect(), sqs0->visible_quad_layer_rect);
-    EXPECT_TRUE(sqs0->rounded_corner_bounds.IsEmpty());
+    EXPECT_FALSE(sqs0->mask_filter_info.HasRoundedCorners());
     EXPECT_EQ(gfx::Rect(), sqs0->clip_rect);
     EXPECT_FALSE(sqs0->is_clipped);
     EXPECT_TRUE(sqs0->are_contents_opaque);
@@ -150,7 +149,6 @@ TEST(RenderPassIOTest, SharedQuadStateList) {
     EXPECT_EQ(SkBlendMode::kSrcOver, sqs0->blend_mode);
     EXPECT_EQ(0, sqs0->sorting_context_id);
     EXPECT_FALSE(sqs0->is_fast_rounded_corner);
-    EXPECT_FALSE(sqs0->occluding_damage_rect.has_value());
     EXPECT_EQ(0.0f, sqs0->de_jelly_delta_y);
 
     const SharedQuadState* sqs1 =
@@ -160,10 +158,10 @@ TEST(RenderPassIOTest, SharedQuadStateList) {
     EXPECT_EQ(gfx::Rect(0, 0, 640, 480), sqs1->quad_layer_rect);
     EXPECT_EQ(gfx::Rect(10, 10, 600, 400), sqs1->visible_quad_layer_rect);
     EXPECT_EQ(gfx::RRectF::Type::kSingle,
-              sqs1->rounded_corner_bounds.GetType());
-    EXPECT_EQ(1.5f, sqs1->rounded_corner_bounds.GetSimpleRadius());
-    EXPECT_EQ(gfx::RectF(2.f, 3.f, 4.f, 5.f),
-              sqs1->rounded_corner_bounds.rect());
+              sqs1->mask_filter_info.rounded_corner_bounds().GetType());
+    EXPECT_EQ(1.5f,
+              sqs1->mask_filter_info.rounded_corner_bounds().GetSimpleRadius());
+    EXPECT_EQ(gfx::RectF(2.f, 3.f, 4.f, 5.f), sqs1->mask_filter_info.bounds());
     EXPECT_EQ(gfx::Rect(5, 20, 1000, 200), sqs1->clip_rect);
     EXPECT_TRUE(sqs1->is_clipped);
     EXPECT_FALSE(sqs1->are_contents_opaque);
@@ -171,8 +169,6 @@ TEST(RenderPassIOTest, SharedQuadStateList) {
     EXPECT_EQ(SkBlendMode::kDstOver, sqs1->blend_mode);
     EXPECT_EQ(101, sqs1->sorting_context_id);
     EXPECT_TRUE(sqs1->is_fast_rounded_corner);
-    EXPECT_TRUE(sqs1->occluding_damage_rect.has_value());
-    EXPECT_EQ(gfx::Rect(7, 11, 210, 333), sqs1->occluding_damage_rect.value());
     EXPECT_EQ(0.7f, sqs1->de_jelly_delta_y);
   }
   base::Value dict1 = CompositorRenderPassToDict(*render_pass1);
@@ -246,7 +242,7 @@ TEST(RenderPassIOTest, QuadList) {
           gfx::RectF(0.f, 0.f, 0.5f, 0.6f), gfx::RectF(0.1f, 0.2f, 0.7f, 0.8f),
           gfx::Size(400, 200), gfx::Size(800, 400), 1u, 2u, 3u, 4u,
           gfx::ColorSpace::CreateCustom(primary_matrix, transfer_func), 3.f,
-          1.1f, 12u, gfx::ProtectedVideoType::kClear, gl::HDRMetadata());
+          1.1f, 12u, gfx::ProtectedVideoType::kClear, gfx::HDRMetadata());
       ++sqs_index;
       ++quad_count;
     }

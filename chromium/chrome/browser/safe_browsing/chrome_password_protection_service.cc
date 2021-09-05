@@ -17,6 +17,7 @@
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/api/safe_browsing_private/safe_browsing_private_event_router.h"
@@ -249,9 +250,9 @@ ChromePasswordProtectionService::ChromePasswordProtectionService(
     // Subscribe to gaia hash password changes change notifications.
     hash_password_manager_subscription_ =
         password_store->RegisterStateCallbackOnHashPasswordManager(
-            base::Bind(&ChromePasswordProtectionService::
-                           CheckGaiaPasswordChangeForAllSignedInUsers,
-                       base::Unretained(this)));
+            base::BindRepeating(&ChromePasswordProtectionService::
+                                    CheckGaiaPasswordChangeForAllSignedInUsers,
+                                base::Unretained(this)));
   }
   pref_change_registrar_->Add(
       prefs::kPasswordProtectionWarningTrigger,
@@ -1848,7 +1849,7 @@ ChromePasswordProtectionService::GetStoreForReusedCredential(
   if (!profile_)
     return nullptr;
   return reused_credential.in_store ==
-                 autofill::PasswordForm::Store::kAccountStore
+                 password_manager::PasswordForm::Store::kAccountStore
              ? GetAccountPasswordStore()
              : GetProfilePasswordStore();
 }

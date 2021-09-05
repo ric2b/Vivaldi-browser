@@ -22,7 +22,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/metrics/user_action_tester.h"
 #include "base/test/test_timeouts.h"
@@ -125,6 +125,7 @@ using extensions::ExtensionsAPIClient;
 using guest_view::GuestViewManager;
 using guest_view::TestGuestViewManager;
 using guest_view::TestGuestViewManagerFactory;
+using ui::AXTreeFormatter;
 
 const int kNumberLoadTestParts = 10;
 
@@ -377,21 +378,32 @@ class PDFExtensionTest : public extensions::ExtensionApiTest {
   // Hooks to set up feature flags. Defaults to setting the kPDFViewerUpdate
   // flag based on the value returned by ShouldEnablePDFViewerUpdate().
   virtual const std::vector<base::Feature> GetEnabledFeatures() const {
+    std::vector<base::Feature> enabled;
     if (ShouldEnablePDFViewerUpdate()) {
-      return {chrome_pdf::features::kPDFViewerUpdate};
+      enabled.push_back(chrome_pdf::features::kPDFViewerUpdate);
     }
-    return {};
+    if (ShouldEnablePdfViewerPresentationMode()) {
+      enabled.push_back(chrome_pdf::features::kPdfViewerPresentationMode);
+    }
+    return enabled;
   }
 
   virtual const std::vector<base::Feature> GetDisabledFeatures() const {
-    if (ShouldEnablePDFViewerUpdate()) {
-      return {};
+    std::vector<base::Feature> disabled;
+    if (!ShouldEnablePDFViewerUpdate()) {
+      disabled.push_back(chrome_pdf::features::kPDFViewerUpdate);
     }
-    return {chrome_pdf::features::kPDFViewerUpdate};
+    if (!ShouldEnablePdfViewerPresentationMode()) {
+      disabled.push_back(chrome_pdf::features::kPdfViewerPresentationMode);
+    }
+    return disabled;
   }
 
   // Hook to set up whether the PDFViewerUpdate feature is enabled.
   virtual bool ShouldEnablePDFViewerUpdate() const { return false; }
+
+  // Hook to set up whether the PdfViewerPresentationMode feature is enabled.
+  virtual bool ShouldEnablePdfViewerPresentationMode() const { return false; }
 
  private:
   WebContents* LoadPdfGetGuestContentsHelper(const GURL& url, bool new_tab) {
@@ -911,6 +923,21 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionJSUpdatesEnabledTest, ViewerThumbnail) {
   RunTestsInJsModule("viewer_thumbnail_test.js", "test.pdf");
 }
 
+class PDFExtensionPresentationModeEnabledTest : public PDFExtensionJSTestBase {
+ public:
+  ~PDFExtensionPresentationModeEnabledTest() override = default;
+
+ protected:
+  bool ShouldEnablePDFViewerUpdate() const override { return true; }
+  bool ShouldEnablePdfViewerPresentationMode() const override { return true; }
+};
+
+IN_PROC_BROWSER_TEST_F(PDFExtensionPresentationModeEnabledTest, Fullscreen) {
+  // Although this test file does not require a PDF to be loaded, loading the
+  // elements without loading a PDF is difficult.
+  RunTestsInJsModule("fullscreen_test.js", "test.pdf");
+}
+
 class PDFExtensionJSTest : public PDFExtensionJSTestBase,
                            public testing::WithParamInterface<bool> {
  public:
@@ -1024,6 +1051,12 @@ IN_PROC_BROWSER_TEST_P(PDFExtensionJSTest, Printing) {
 IN_PROC_BROWSER_TEST_P(PDFExtensionJSTest, MAYBE_AnnotationsFeatureEnabled) {
   RunTestsInJsModule("annotations_feature_enabled_test.js", "test.pdf");
 }
+
+IN_PROC_BROWSER_TEST_P(PDFExtensionJSTest, AnnotationsToolbar) {
+  // Although this test file does not require a PDF to be loaded, loading the
+  // elements without loading a PDF is difficult.
+  RunTestsInJsModule("annotations_toolbar_test.js", "test.pdf");
+}
 #endif  // defined(OS_CHROMEOS)
 
 INSTANTIATE_TEST_SUITE_P(/* no prefix */, PDFExtensionJSTest, testing::Bool());
@@ -1071,7 +1104,7 @@ class PDFExtensionContentSettingJSTest
         ContentSettingsPattern::Wildcard(),
         ContentSettingsPattern::FromString(
             "chrome-extension://mhjfbmdgcfjbbpaeojofohoefgiehjai"),
-        ContentSettingsType::JAVASCRIPT, std::string(),
+        ContentSettingsType::JAVASCRIPT,
         enabled ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK);
   }
 
@@ -2945,24 +2978,9 @@ class PDFExtensionAccessibilityTextExtractionTest
   }
 
  private:
-  class TestExpectationsLocator
-      : public content::AccessibilityTestExpectationsLocator {
-   public:
-    TestExpectationsLocator() = default;
-    ~TestExpectationsLocator() override = default;
-
-    base::FilePath::StringType GetExpectedFileSuffix() override {
-      return FILE_PATH_LITERAL("-expected.txt");
-    }
-    base::FilePath::StringType GetVersionSpecificExpectedFileSuffix() override {
-      return FILE_PATH_LITERAL("");
-    }
-  };
-
   void RunTest(const base::FilePath& test_file_path, const char* file_dir) {
     // Load the expectation file.
-    TestExpectationsLocator locator;
-    content::DumpAccessibilityTestHelper test_helper(&locator);
+    content::DumpAccessibilityTestHelper test_helper("content");
     base::Optional<base::FilePath> expected_file_path =
         test_helper.GetExpectationFilePath(test_file_path);
     ASSERT_TRUE(expected_file_path) << "No expectation file present.";
@@ -3121,13 +3139,13 @@ INSTANTIATE_TEST_SUITE_P(/* no prefix */,
                          PDFExtensionAccessibilityTextExtractionTest,
                          testing::Bool());
 
+using AXTestPass = content::AccessibilityTreeFormatter::TestPass;
+
 class PDFExtensionAccessibilityTreeDumpTest
     : public PDFExtensionTest,
-      public ::testing::WithParamInterface<std::pair<bool, size_t>> {
+      public ::testing::WithParamInterface<std::pair<bool, AXTestPass>> {
  public:
-  PDFExtensionAccessibilityTreeDumpTest()
-      : test_pass_(content::AccessibilityTreeFormatter::GetTestPass(
-            GetParam().second)) {}
+  PDFExtensionAccessibilityTreeDumpTest() : test_pass_(GetParam().second) {}
   ~PDFExtensionAccessibilityTreeDumpTest() override = default;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -3162,25 +3180,20 @@ class PDFExtensionAccessibilityTreeDumpTest
   }
 
  private:
-  using PropertyFilter = content::AccessibilityTreeFormatter::PropertyFilter;
+  using AXPropertyFilter = ui::AXPropertyFilter;
 
   //  See chrome/test/data/pdf/accessibility/readme.md for more info.
   void ParsePdfForExtraDirectives(
+      const content::DumpAccessibilityTestHelper& test_helper,
       const std::string& pdf_contents,
-      content::AccessibilityTreeFormatter* formatter,
-      std::vector<PropertyFilter>* property_filters) {
+      std::vector<AXPropertyFilter>* property_filters) {
     const char kCommentMark = '%';
     for (const std::string& line : base::SplitString(
              pdf_contents, "\n", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL)) {
       if (line.size() > 1 && line[0] == kCommentMark) {
         // Remove first character since it's the comment mark.
         std::string trimmed_line = line.substr(1);
-        const std::string& allow_str = formatter->GetAllowString();
-        if (base::StartsWith(trimmed_line, allow_str,
-                             base::CompareCase::SENSITIVE)) {
-          property_filters->push_back(PropertyFilter(
-              trimmed_line.substr(allow_str.size()), PropertyFilter::ALLOW));
-        }
+        test_helper.ParsePropertyFilter(trimmed_line, property_filters);
       }
     }
   }
@@ -3194,19 +3207,18 @@ class PDFExtensionAccessibilityTreeDumpTest
 
     // Set up the tree formatter. Parse filters and other directives in the test
     // file.
-    std::unique_ptr<content::AccessibilityTreeFormatter> formatter =
-        test_pass_.create_formatter();
-    std::vector<PropertyFilter> property_filters;
+    content::DumpAccessibilityTestHelper test_helper(test_pass_.name);
+
+    std::unique_ptr<AXTreeFormatter> formatter = test_pass_.create_formatter();
+    std::vector<AXPropertyFilter> property_filters;
     formatter->AddDefaultFilters(&property_filters);
     AddDefaultFilters(&property_filters);
-    ParsePdfForExtraDirectives(pdf_contents, formatter.get(),
-                               &property_filters);
+    ParsePdfForExtraDirectives(test_helper, pdf_contents, &property_filters);
     formatter->SetPropertyFilters(property_filters);
 
     // Exit without running the test if we can't find an expectation file or if
     // the expectation file contains a skip marker.
     // This is used to skip certain tests on certain platforms.
-    content::DumpAccessibilityTestHelper test_helper(formatter.get());
     base::FilePath expected_file_path =
         test_helper.GetExpectationFilePath(test_file_path);
     if (expected_file_path.empty()) {
@@ -3250,18 +3262,19 @@ class PDFExtensionAccessibilityTreeDumpTest
         test_file_path, expected_file_path, actual_lines, *expected_lines));
   }
 
-  void AddDefaultFilters(std::vector<PropertyFilter>* property_filters) {
+  void AddDefaultFilters(std::vector<AXPropertyFilter>* property_filters) {
     AddPropertyFilter(property_filters, "value='*'");
     // The value attribute on the document object contains the URL of the
     // current page which will not be the same every time the test is run.
     // The PDF plugin uses the 'chrome-extension' protocol, so block that as
     // well.
-    AddPropertyFilter(property_filters, "value='http*'", PropertyFilter::DENY);
+    AddPropertyFilter(property_filters, "value='http*'",
+                      AXPropertyFilter::DENY);
     AddPropertyFilter(property_filters, "value='chrome-extension*'",
-                      PropertyFilter::DENY);
+                      AXPropertyFilter::DENY);
     // Object attributes.value
     AddPropertyFilter(property_filters, "layout-guess:*",
-                      PropertyFilter::ALLOW);
+                      AXPropertyFilter::ALLOW);
 
     AddPropertyFilter(property_filters, "select*");
     AddPropertyFilter(property_filters, "descript*");
@@ -3271,15 +3284,17 @@ class PDFExtensionAccessibilityTreeDumpTest
     AddPropertyFilter(property_filters, "isPageBreakingObject*");
 
     // Deny most empty values
-    AddPropertyFilter(property_filters, "*=''", PropertyFilter::DENY);
+    AddPropertyFilter(property_filters, "*=''", AXPropertyFilter::DENY);
     // After denying empty values, because we want to allow name=''
-    AddPropertyFilter(property_filters, "name=*", PropertyFilter::ALLOW_EMPTY);
+    AddPropertyFilter(property_filters, "name=*",
+                      AXPropertyFilter::ALLOW_EMPTY);
   }
 
-  void AddPropertyFilter(std::vector<PropertyFilter>* property_filters,
-                         std::string filter,
-                         PropertyFilter::Type type = PropertyFilter::ALLOW) {
-    property_filters->push_back(PropertyFilter(filter, type));
+  void AddPropertyFilter(
+      std::vector<AXPropertyFilter>* property_filters,
+      std::string filter,
+      AXPropertyFilter::Type type = AXPropertyFilter::ALLOW) {
+    property_filters->push_back(AXPropertyFilter(filter, type));
   }
 
   content::AccessibilityTreeFormatter::TestPass test_pass_;
@@ -3288,19 +3303,30 @@ class PDFExtensionAccessibilityTreeDumpTest
 // Parameterize the tests so that each test-pass is run independently.
 struct DumpAccessibilityTreeTestPassToString {
   std::string operator()(
-      const ::testing::TestParamInfo<std::pair<bool, size_t>>& i) const {
-    std::string result =
-        content::AccessibilityTreeFormatter::GetTestPass(i.param.second).name;
+      const ::testing::TestParamInfo<std::pair<bool, AXTestPass>>& i) const {
+    std::string result = i.param.second.name;
     return result + (i.param.first ? "_updateEnabled" : "_updateDisabled");
   }
 };
 
-INSTANTIATE_TEST_SUITE_P(
-    All,
-    PDFExtensionAccessibilityTreeDumpTest,
-    testing::ValuesIn(GetTestPairValues(
-        content::AccessibilityTreeFormatter::GetTestPasses().size())),
-    DumpAccessibilityTreeTestPassToString());
+// Constructs a list of accessibility tests, two for each accessibility tree
+// formatter testpasses: one when pdf update is enabled and the second one when
+// pdf update is disabled.
+const std::vector<std::pair<bool, AXTestPass>> GetAXTestPairValues() {
+  std::vector<std::pair<bool, AXTestPass>> values;
+  std::vector<AXTestPass> passes =
+      content::AccessibilityTreeFormatter::GetTestPasses();
+  for (auto pass : passes) {
+    values.emplace_back(std::make_pair(true, pass));
+    values.emplace_back(std::make_pair(false, pass));
+  }
+  return values;
+}
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         PDFExtensionAccessibilityTreeDumpTest,
+                         testing::ValuesIn(GetAXTestPairValues()),
+                         DumpAccessibilityTreeTestPassToString());
 
 IN_PROC_BROWSER_TEST_P(PDFExtensionAccessibilityTreeDumpTest, HelloWorld) {
   RunPDFTest(FILE_PATH_LITERAL("hello-world.pdf"));

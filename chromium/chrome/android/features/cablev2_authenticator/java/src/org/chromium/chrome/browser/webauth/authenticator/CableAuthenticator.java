@@ -83,7 +83,6 @@ class CableAuthenticator {
 
     private final Context mContext;
     private final CableAuthenticatorUI mUi;
-    private final Callback mCallback;
     private final SingleThreadTaskRunner mTaskRunner;
 
     public enum Result {
@@ -94,50 +93,18 @@ class CableAuthenticator {
         OTHER,
     }
 
-    // Callbacks notifying the UI of certain CableAuthenticator state changes. These may run on any
-    // thread.
-    public interface Callback {
-        // Invoked when the authenticator has completed a handshake with a client device.
-        void onAuthenticatorConnected();
-        // Invoked when a transaction has completed. The response may still be transmitting and
-        // onComplete will follow.
-        void onAuthenticatorResult(Result result);
-        // Invoked when the authenticator has finished. The UI should be dismissed at this point.
-        void onComplete();
-    }
-
     public CableAuthenticator(Context context, CableAuthenticatorUI ui, long networkContext,
-            long instanceIdDriver, String activityClassName, String fragmentClassName,
-            boolean isFcmNotification, UsbAccessory accessory) {
+            long registration, String activityClassName, boolean isFcmNotification,
+            UsbAccessory accessory) {
         mContext = context;
         mUi = ui;
-        mCallback = ui;
-
-        SharedPreferences prefs =
-                mContext.getSharedPreferences(STATE_FILE_NAME, Context.MODE_PRIVATE);
-        byte[] stateBytes;
-        try {
-            stateBytes = Base64.decode(prefs.getString(STATE_VALUE_NAME, ""), Base64.DEFAULT);
-        } catch (IllegalArgumentException e) {
-            Log.w(TAG, "Ignoring corrupt state");
-            stateBytes = new byte[0];
-        }
 
         // networkContext can only be used from the UI thread, therefore all
         // short-lived work is done on that thread.
         mTaskRunner = PostTask.createSingleThreadTaskRunner(UiThreadTaskTraits.USER_VISIBLE);
         assert mTaskRunner.belongsToCurrentThread();
 
-        byte[] newStateBytes = CableAuthenticatorJni.get().setup(
-                instanceIdDriver, activityClassName, fragmentClassName, networkContext, stateBytes);
-        if (newStateBytes.length > 0) {
-            Log.i(TAG, "Writing updated state");
-            prefs.edit()
-                    .putString(STATE_VALUE_NAME,
-                            Base64.encodeToString(
-                                    newStateBytes, Base64.NO_WRAP | Base64.NO_PADDING))
-                    .apply();
-        }
+        setup(registration, activityClassName, networkContext);
 
         if (accessory != null) {
             // USB mode can start immediately.
@@ -147,13 +114,46 @@ class CableAuthenticator {
 
         if (isFcmNotification) {
             // The user tapped a notification that resulted from an FCM message.
-            CableAuthenticatorJni.get().startFCM(this);
+            CableAuthenticatorJni.get().onInteractionReady(this);
         }
 
         // Otherwise wait for a QR scan.
     }
 
+    // setup initialises the native code. This is idempotent.
+    private static void setup(long registration, String activityClassName, long networkContext) {
+        // SharedPreferences in Chromium is loaded and cached at startup, and
+        // applying changes is done asynchronously. Thus it's ok to do here, on
+        // the UI thread.
+        SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
+        byte[] stateBytes;
+        try {
+            stateBytes = Base64.decode(prefs.getString(STATE_VALUE_NAME, ""), Base64.DEFAULT);
+        } catch (IllegalArgumentException e) {
+            Log.w(TAG, "Ignoring corrupt state");
+            stateBytes = new byte[0];
+        }
+
+        byte[] newStateBytes = CableAuthenticatorJni.get().setup(
+                registration, activityClassName, networkContext, stateBytes);
+        if (newStateBytes.length > 0) {
+            Log.i(TAG, "Writing updated state");
+            prefs.edit()
+                    .putString(STATE_VALUE_NAME,
+                            Base64.encodeToString(
+                                    newStateBytes, Base64.NO_WRAP | Base64.NO_PADDING))
+                    .apply();
+        }
+    }
+
     // Calls from native code.
+
+    // Called when an informative status update is available. The argument has the same values
+    // as the Status enum from v2_authenticator.h.
+    @CalledByNative
+    public void onStatus(int code) {
+        mUi.onStatus(code);
+    }
 
     @CalledByNative
     public static BLEAdvert newBLEAdvert(byte[] payload) {
@@ -289,10 +289,10 @@ class CableAuthenticator {
     @CalledByNative
     public void onComplete() {
         assert mTaskRunner.belongsToCurrentThread();
-        mCallback.onComplete();
+        mUi.onComplete();
     }
 
-    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+    void onActivityResult(int requestCode, int resultCode, Intent data) {
         Log.i(TAG, "onActivityResult " + requestCode + " " + resultCode);
 
         Result result = Result.OTHER;
@@ -315,10 +315,10 @@ class CableAuthenticator {
                 Log.i(TAG, "invalid requestCode: " + requestCode);
                 assert (false);
         }
-        mCallback.onAuthenticatorResult(result);
+        mUi.onAuthenticatorResult(result);
     }
 
-    public boolean onRegisterResponse(int resultCode, Intent data) {
+    private boolean onRegisterResponse(int resultCode, Intent data) {
         if (resultCode != Activity.RESULT_OK || data == null) {
             Log.e(TAG, "Failed with result code" + resultCode);
             onAuthenticatorAssertionResponse(CTAP2_ERR_OPERATION_DENIED, null, null, null, null);
@@ -367,7 +367,7 @@ class CableAuthenticator {
         return true;
     }
 
-    public boolean onSignResponse(int resultCode, Intent data) {
+    private boolean onSignResponse(int resultCode, Intent data) {
         if (resultCode != Activity.RESULT_OK || data == null) {
             Log.e(TAG, "Failed with result code" + resultCode);
             onAuthenticatorAssertionResponse(CTAP2_ERR_OPERATION_DENIED, null, null, null, null);
@@ -438,22 +438,41 @@ class CableAuthenticator {
      * Called to indicate that a QR code was scanned by the user.
      *
      * @param value contents of the QR code, which will be a valid caBLE
-     *              URL, i.e. "fido://c1/"...
+     *              URL, i.e. "fido://"...
      */
-    public void onQRCode(String value) {
-        mTaskRunner.postTask(() -> {
-            CableAuthenticatorJni.get().startQR(this, getName(), value);
-            // TODO: show the user an error if that returned false.
-            // that indicates that the QR code was invalid.
-        });
+    void onQRCode(String value) {
+        assert mTaskRunner.belongsToCurrentThread();
+        CableAuthenticatorJni.get().startQR(this, getName(), value);
+        // TODO: show the user an error if that returned false.
+        // that indicates that the QR code was invalid.
     }
 
-    public void close() {
-        mTaskRunner.postTask(() -> { CableAuthenticatorJni.get().stop(); });
+    void unlinkAllDevices() {
+        Log.i(TAG, "Unlinking devices");
+        byte[] newStateBytes = CableAuthenticatorJni.get().unlink();
+        SharedPreferences prefs = ContextUtils.getAppSharedPreferences();
+        prefs.edit()
+                .putString(STATE_VALUE_NAME,
+                        Base64.encodeToString(newStateBytes, Base64.NO_WRAP | Base64.NO_PADDING))
+                .apply();
+    }
+
+    void close() {
+        assert mTaskRunner.belongsToCurrentThread();
+        CableAuthenticatorJni.get().stop();
     }
 
     static String getName() {
         return Build.MANUFACTURER + " " + Build.MODEL;
+    }
+
+    /**
+     * onCloudMessage is called by {@link CableAuthenticatorUI} when a GCM message is received.
+     */
+    static void onCloudMessage(
+            long event, long systemNetworkContext, long registration, String activityClassName) {
+        setup(registration, activityClassName, systemNetworkContext);
+        CableAuthenticatorJni.get().onCloudMessage(event);
     }
 
     /**
@@ -464,7 +483,7 @@ class CableAuthenticator {
     // TODO: localize
     @SuppressLint("SetTextI18n")
     @CalledByNative
-    public static void showNotification(String activityClassName, String fragmentClassName) {
+    public static void showNotification(String activityClassName) {
         Context context = ContextUtils.getApplicationContext();
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -491,7 +510,6 @@ class CableAuthenticator {
         }
 
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-        intent.putExtra("show_fragment", fragmentClassName);
         Bundle bundle = new Bundle();
         bundle.putBoolean("org.chromium.chrome.modules.cablev2_authenticator.FCM", true);
         intent.putExtra("show_fragment_args", bundle);
@@ -511,6 +529,13 @@ class CableAuthenticator {
         notificationManager.notify(NOTIFICATION_CHANNEL_ID, ID, builder.build());
     }
 
+    @CalledByNative
+    public static void dropNotification() {
+        Context context = ContextUtils.getApplicationContext();
+        NotificationManagerCompat notificationManager = NotificationManagerCompat.from(context);
+        notificationManager.cancel(NOTIFICATION_CHANNEL_ID, ID);
+    }
+
     @NativeMethods
     interface Natives {
         /**
@@ -519,8 +544,8 @@ class CableAuthenticator {
          * ignored. It returns an empty byte array if the given state is valid, or the new contents
          * of the persisted state otherwise.
          */
-        byte[] setup(long instanceIdDriver, String activityClassName, String fragmentClassName,
-                long networkContext, byte[] stateBytes);
+        byte[] setup(long registration, String activityClassName, long networkContext,
+                byte[] stateBytes);
 
         /**
          * Called to instruct the C++ code to start a new transaction using |usbDevice|.
@@ -537,16 +562,30 @@ class CableAuthenticator {
                 CableAuthenticator cableAuthenticator, String authenticatorName, String qrUrl);
 
         /**
-         * Called to instruct the C++ code to start a new transaction based on a cloud message
-         * because the user tapped the notification that was shown because |showNotification| was
-         * called.
+         * unlink causes the root secret to be rotated and the FCM token to be rotated. This
+         * prevents all previously linked devices from being able to contact this device in the
+         * future -- they'll have to go via the QR-scanning path again. It returns the updated state
+         * which must be persisted.
          */
-        void startFCM(CableAuthenticator cableAuthenticator);
+        byte[] unlink();
+
+        /**
+         * Called after the notification created by {@link showNotification} has been pressed and
+         * the {@link CableAuthenticatorUI} Fragment is now in the foreground for showing UI.
+         */
+        void onInteractionReady(CableAuthenticator cableAuthenticator);
 
         /**
          * Called to alert the C++ code to stop any ongoing transactions.
          */
         void stop();
+
+        /**
+         * Called when a GCM message is received. The argument is a pointer to a
+         * |device::cablev2::authenticator::Registration::Event| object that the native code takes
+         * ownership of.
+         */
+        void onCloudMessage(long event);
 
         /**
          * Called to alert native code of a response to a makeCredential request.

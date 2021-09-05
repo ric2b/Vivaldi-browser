@@ -13,6 +13,8 @@ import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.SystemClock;
 import android.text.TextUtils;
+import android.text.format.DateUtils;
+import android.util.Pair;
 import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
@@ -43,8 +45,10 @@ import org.chromium.chrome.browser.ui.appmenu.internal.R;
 import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter;
 import org.chromium.ui.widget.Toast;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Queue;
 
 import org.chromium.base.BuildConfig;
 
@@ -56,6 +60,8 @@ import org.chromium.base.BuildConfig;
  */
 class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler {
     private static final float LAST_ITEM_SHOW_FRACTION = 0.5f;
+    @VisibleForTesting
+    static final long RECENT_SELECTED_MENUITEM_EXPIRATION_MS = 10 * DateUtils.SECOND_IN_MILLIS;
 
     private final Menu mMenu;
     private final int mItemRowHeight;
@@ -68,13 +74,17 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
     private PopupWindow mPopup;
     private ListView mListView;
     private AppMenuAdapter mAdapter;
-    private AppMenuHandlerImpl mHandler;
+    @VisibleForTesting
+    AppMenuHandlerImpl mHandler;
     private View mFooterView;
     private int mCurrentScreenRotation = -1;
     private boolean mIsByPermanentButton;
     private AnimatorSet mMenuItemEnterAnimator;
     private long mMenuShownTimeMs;
     private boolean mSelectedItemBeforeDismiss;
+
+    // Selected menu item id and the timestamp.
+    private final Queue<Pair<Integer, Long>> mRecentSelectedMenuItems = new ArrayDeque<>();
 
     /**
      * Creates and sets up the App Menu.
@@ -165,15 +175,13 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
      *                              by external apps.
      * @param groupDividerResourceId     The resource id of divider menu items. This will be used to
      *         determine the number of dividers that appear in the menu.
-     * @param circleHighlightItem   Whether the highlighted item should use a circle highlight or
-     *                              not.
      * @param customViewBinders     See {@link AppMenuPropertiesDelegate#getCustomViewBinders()}.
      */
     void show(Context context, final View anchorView, boolean isByPermanentButton,
             int screenRotation, Rect visibleDisplayFrame, int screenHeight,
             @IdRes int footerResourceId, @IdRes int headerResourceId,
             @IdRes int groupDividerResourceId, Integer highlightedItemId,
-            boolean circleHighlightItem, @Nullable List<CustomViewBinder> customViewBinders) {
+            @Nullable List<CustomViewBinder> customViewBinders) {
         mPopup = new PopupWindow(context);
         mPopup.setFocusable(true);
         mPopup.setInputMethodMode(PopupWindow.INPUT_METHOD_NOT_NEEDED);
@@ -259,7 +267,7 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
 
         if (highlightedItemId != null) {
             View viewToHighlight = contentView.findViewById(highlightedItemId);
-            ViewHighlighter.turnOnHighlight(viewToHighlight, circleHighlightItem);
+            ViewHighlighter.turnOnRectangularHighlight(viewToHighlight);
         }
 
         // Set the adapter after the header is added to avoid crashes on JellyBean.
@@ -357,6 +365,7 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
     @Override
     public void onItemClick(MenuItem menuItem) {
         if (menuItem.isEnabled()) {
+            recordSelectedMenuItem(menuItem.getItemId(), SystemClock.elapsedRealtime());
             mSelectedItemBeforeDismiss = true;
             dismiss();
             mHandler.onOptionsItemSelected(menuItem);
@@ -597,5 +606,28 @@ class AppMenu implements OnItemClickListener, OnKeyListener, AppMenuClickHandler
             }
         }
         return mItemRowHeight;
+    }
+
+    @VisibleForTesting
+    void recordSelectedMenuItem(int menuItemId, long timestamp) {
+        // Remove the selected MenuItems older than RECENT_SELECTED_MENUITEM_EXPIRATION_MS.
+        while (!mRecentSelectedMenuItems.isEmpty()
+                && (timestamp - mRecentSelectedMenuItems.peek().second
+                        > RECENT_SELECTED_MENUITEM_EXPIRATION_MS)) {
+            mRecentSelectedMenuItems.remove();
+        }
+        recordSelectionSequence(menuItemId);
+
+        mRecentSelectedMenuItems.add(new Pair<Integer, Long>(menuItemId, timestamp));
+    }
+
+    private void recordSelectionSequence(int menuItemId) {
+        for (Pair<Integer, Long> previousSelectedMenuItem : mRecentSelectedMenuItems) {
+            if (mHandler.recordAppMenuSimilarSelectionIfNeeded(
+                        previousSelectedMenuItem.first, menuItemId)) {
+                // Only record the similar selection once for one user action.
+                return;
+            }
+        }
     }
 }

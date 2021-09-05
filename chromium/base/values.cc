@@ -6,7 +6,6 @@
 
 #include <string.h>
 
-#include <algorithm>
 #include <cmath>
 #include <new>
 #include <ostream>
@@ -18,6 +17,7 @@
 #include "base/json/json_writer.h"
 #include "base/memory/ptr_util.h"
 #include "base/notreached.h"
+#include "base/ranges/algorithm.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -122,12 +122,6 @@ class PathSplitter {
 }  // namespace
 
 // static
-std::unique_ptr<Value> Value::CreateWithCopiedBuffer(const char* buffer,
-                                                     size_t size) {
-  return std::make_unique<Value>(BlobStorage(buffer, buffer + size));
-}
-
-// static
 Value Value::FromUniquePtrValue(std::unique_ptr<Value> val) {
   return std::move(*val);
 }
@@ -175,7 +169,7 @@ Value::Value(Type type) {
       data_.emplace<BlobStorage>();
       return;
     case Type::DICTIONARY:
-      data_.emplace<DictStorage>();
+      data_.emplace<LegacyDictStorage>();
       return;
     case Type::LIST:
       data_.emplace<ListStorage>();
@@ -227,14 +221,22 @@ Value::Value(base::span<const uint8_t> in_blob)
 Value::Value(BlobStorage&& in_blob) noexcept : data_(std::move(in_blob)) {}
 
 Value::Value(const DictStorage& in_dict)
-    : data_(absl::in_place_type_t<DictStorage>()) {
+    : data_(absl::in_place_type_t<LegacyDictStorage>()) {
+  dict().reserve(in_dict.size());
   for (const auto& it : in_dict) {
     dict().try_emplace(dict().end(), it.first,
-                       std::make_unique<Value>(it.second->Clone()));
+                       std::make_unique<Value>(it.second.Clone()));
   }
 }
 
-Value::Value(DictStorage&& in_dict) noexcept : data_(std::move(in_dict)) {}
+Value::Value(DictStorage&& in_dict) noexcept
+    : data_(absl::in_place_type_t<LegacyDictStorage>()) {
+  dict().reserve(in_dict.size());
+  for (auto& it : in_dict) {
+    dict().try_emplace(dict().end(), std::move(it.first),
+                       std::make_unique<Value>(std::move(it.second)));
+  }
+}
 
 Value::Value(span<const Value> in_list)
     : data_(absl::in_place_type_t<ListStorage>()) {
@@ -246,6 +248,18 @@ Value::Value(span<const Value> in_list)
 Value::Value(ListStorage&& in_list) noexcept : data_(std::move(in_list)) {}
 
 Value& Value::operator=(Value&& that) noexcept = default;
+
+Value::Value(const LegacyDictStorage& storage)
+    : data_(absl::in_place_type_t<LegacyDictStorage>()) {
+  dict().reserve(storage.size());
+  for (const auto& it : storage) {
+    dict().try_emplace(dict().end(), it.first,
+                       std::make_unique<Value>(it.second->Clone()));
+  }
+}
+
+Value::Value(LegacyDictStorage&& storage) noexcept
+    : data_(std::move(storage)) {}
 
 Value::Value(absl::monostate) {}
 
@@ -725,12 +739,28 @@ Value::const_dict_iterator_proxy Value::DictItems() const {
   return const_dict_iterator_proxy(&dict());
 }
 
+Value::DictStorage Value::TakeDict() {
+  DictStorage storage;
+  storage.reserve(dict().size());
+  for (auto& pair : dict()) {
+    storage.try_emplace(storage.end(), std::move(pair.first),
+                        std::move(*pair.second));
+  }
+
+  dict().clear();
+  return storage;
+}
+
 size_t Value::DictSize() const {
   return dict().size();
 }
 
 bool Value::DictEmpty() const {
   return dict().empty();
+}
+
+void Value::DictClear() {
+  dict().clear();
 }
 
 void Value::MergeDictionary(const Value* dictionary) {
@@ -915,8 +945,8 @@ bool operator<(const Value& lhs, const Value& rhs) {
       return std::lexicographical_compare(
           std::begin(lhs.dict()), std::end(lhs.dict()), std::begin(rhs.dict()),
           std::end(rhs.dict()),
-          [](const Value::DictStorage::value_type& u,
-             const Value::DictStorage::value_type& v) {
+          [](const Value::LegacyDictStorage::value_type& u,
+             const Value::LegacyDictStorage::value_type& v) {
             return std::tie(u.first, *u.second) < std::tie(v.first, *v.second);
           });
     case Value::Type::LIST:
@@ -1024,9 +1054,12 @@ std::unique_ptr<DictionaryValue> DictionaryValue::From(
 }
 
 DictionaryValue::DictionaryValue() : Value(Type::DICTIONARY) {}
-DictionaryValue::DictionaryValue(const DictStorage& in_dict) : Value(in_dict) {}
-DictionaryValue::DictionaryValue(DictStorage&& in_dict) noexcept
-    : Value(std::move(in_dict)) {}
+
+DictionaryValue::DictionaryValue(const LegacyDictStorage& storage)
+    : Value(storage) {}
+
+DictionaryValue::DictionaryValue(LegacyDictStorage&& storage) noexcept
+    : Value(std::move(storage)) {}
 
 bool DictionaryValue::HasKey(StringPiece key) const {
   DCHECK(IsStringUTF8AllowingNoncharacters(key));
@@ -1036,7 +1069,7 @@ bool DictionaryValue::HasKey(StringPiece key) const {
 }
 
 void DictionaryValue::Clear() {
-  dict().clear();
+  DictClear();
 }
 
 Value* DictionaryValue::Set(StringPiece path, std::unique_ptr<Value> in_value) {
@@ -1442,10 +1475,6 @@ void ListValue::Clear() {
   list().clear();
 }
 
-void ListValue::Reserve(size_t n) {
-  list().reserve(n);
-}
-
 bool ListValue::Set(size_t index, std::unique_ptr<Value> in_value) {
   if (!in_value)
     return false;
@@ -1558,7 +1587,7 @@ bool ListValue::Remove(size_t index, std::unique_ptr<Value>* out_value) {
 }
 
 bool ListValue::Remove(const Value& value, size_t* index) {
-  auto it = std::find(list().begin(), list().end(), value);
+  auto it = ranges::find(list(), value);
 
   if (it == list().end())
     return false;
@@ -1611,12 +1640,6 @@ void ListValue::AppendStrings(const std::vector<std::string>& in_values) {
     list().emplace_back(in_value);
 }
 
-void ListValue::AppendStrings(const std::vector<string16>& in_values) {
-  list().reserve(list().size() + in_values.size());
-  for (const auto& in_value : in_values)
-    list().emplace_back(in_value);
-}
-
 bool ListValue::AppendIfNotPresent(std::unique_ptr<Value> in_value) {
   DCHECK(in_value);
   if (Contains(list(), *in_value))
@@ -1636,7 +1659,7 @@ bool ListValue::Insert(size_t index, std::unique_ptr<Value> in_value) {
 }
 
 ListValue::const_iterator ListValue::Find(const Value& value) const {
-  return std::find(GetList().begin(), GetList().end(), value);
+  return ranges::find(GetList(), value);
 }
 
 void ListValue::Swap(ListValue* other) {

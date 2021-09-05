@@ -31,10 +31,12 @@
 #ifndef THIRD_PARTY_BLINK_PUBLIC_PLATFORM_WEB_MEDIA_PLAYER_H_
 #define THIRD_PARTY_BLINK_PUBLIC_PLATFORM_WEB_MEDIA_PLAYER_H_
 
+#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "components/viz/common/surfaces/surface_id.h"
 #include "media/base/video_frame_metadata.h"
+#include "third_party/blink/public/common/media/display_type.h"
 #include "third_party/blink/public/platform/web_content_decryption_module.h"
 #include "third_party/blink/public/platform/web_media_source.h"
 #include "third_party/blink/public/platform/web_set_sink_id_callbacks.h"
@@ -54,6 +56,10 @@ namespace gpu {
 namespace gles2 {
 class GLES2Interface;
 }
+}
+
+namespace media {
+class VideoFrame;
 }
 
 namespace blink {
@@ -265,6 +271,12 @@ class WebMediaPlayer {
                      int already_uploaded_id = -1,
                      VideoFrameUploadMetadata* out_metadata = nullptr) = 0;
 
+  // Similar to Paint(), but just returns the frame directly instead of trying
+  // to upload or convert it. Note: This may kick off a process to update the
+  // current frame for a future call in some cases. Returns nullptr if no frame
+  // is available.
+  virtual scoped_refptr<media::VideoFrame> GetCurrentFrame() = 0;
+
   // Do a GPU-GPU texture copy of the current video frame to |texture|,
   // reallocating |texture| at the appropriate size with given internal
   // format, format, and type if necessary.
@@ -421,17 +433,6 @@ class WebMediaPlayer {
   // This method is not used to say express if the native controls are visible
   // but if the element is using them.
   virtual void OnHasNativeControlsChanged(bool) {}
-
-  enum class DisplayType {
-    // Playback is happening inline.
-    kInline,
-    // Playback is happening either with the video fullscreen. It may also be
-    // set when Blink detects that the video is effectively fullscreen even if
-    // the element is not.
-    kFullscreen,
-    // Playback is happening in a Picture-in-Picture window.
-    kPictureInPicture,
-  };
 
   // Callback called whenever the media element display type changes. By
   // default, the display type is `kInline`.

@@ -23,9 +23,10 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import static org.chromium.base.test.util.CallbackHelper.WAIT_TIMEOUT_SECONDS;
+import static org.chromium.base.test.util.CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL;
+import static org.chromium.base.test.util.CriteriaHelper.DEFAULT_POLLING_INTERVAL;
+import static org.chromium.chrome.test.util.ViewUtils.onViewWaiting;
 import static org.chromium.components.browser_ui.widget.RecyclerViewTestUtils.waitForStableRecyclerView;
-import static org.chromium.content_public.browser.test.util.CriteriaHelper.DEFAULT_MAX_TIME_TO_POLL;
-import static org.chromium.content_public.browser.test.util.CriteriaHelper.DEFAULT_POLLING_INTERVAL;
 
 import android.app.Activity;
 import android.content.pm.ActivityInfo;
@@ -51,6 +52,9 @@ import androidx.test.espresso.contrib.RecyclerViewActions;
 import org.hamcrest.Matcher;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.base.test.util.ApplicationTestUtils;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.tab.Tab;
@@ -60,11 +64,8 @@ import org.chromium.chrome.browser.tasks.pseudotab.PseudoTab;
 import org.chromium.chrome.browser.tasks.tab_groups.TabGroupModelFilter;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
-import org.chromium.chrome.test.util.ApplicationTestUtils;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.OverviewModeBehaviorWatcher;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 import java.io.File;
@@ -99,10 +100,7 @@ public class TabUiTestHelper {
     public static void enterTabSwitcher(ChromeTabbedActivity cta) {
         OverviewModeBehaviorWatcher showWatcher = createOverviewShowWatcher(cta);
         assertFalse(cta.getLayoutManager().overviewVisible());
-        // TODO(crbug.com/1019727) Figure out a better way to wait until isCompletelyDisplayed() is
-        // true in espresso.
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> { cta.findViewById(R.id.tab_switcher_button).performClick(); });
+        onViewWaiting(allOf(withId(R.id.tab_switcher_button), isDisplayed())).perform(click());
         showWatcher.waitForBehavior();
     }
 

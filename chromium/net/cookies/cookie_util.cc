@@ -630,51 +630,6 @@ bool IsSchemefulSameSiteEnabled() {
   return base::FeatureList::IsEnabled(features::kSchemefulSameSite);
 }
 
-bool IsRecentHttpSameSiteAccessGrantsLegacyCookieSemanticsEnabled() {
-  return IsSameSiteByDefaultCookiesEnabled() &&
-         base::FeatureList::IsEnabled(
-             features::kRecentHttpSameSiteAccessGrantsLegacyCookieSemantics) &&
-         features::
-                 kRecentHttpSameSiteAccessGrantsLegacyCookieSemanticsMilliseconds
-                     .Get() > 0;
-}
-
-bool IsRecentCreationTimeGrantsLegacyCookieSemanticsEnabled() {
-  return IsSameSiteByDefaultCookiesEnabled() &&
-         base::FeatureList::IsEnabled(
-             features::kRecentCreationTimeGrantsLegacyCookieSemantics) &&
-         features::kRecentCreationTimeGrantsLegacyCookieSemanticsMilliseconds
-                 .Get() > 0;
-}
-
-bool DoesLastHttpSameSiteAccessGrantLegacySemantics(
-    base::TimeTicks last_http_same_site_access) {
-  if (last_http_same_site_access.is_null())
-    return false;
-  if (!IsRecentHttpSameSiteAccessGrantsLegacyCookieSemanticsEnabled())
-    return false;
-
-  base::TimeDelta recency_threshold = base::TimeDelta::FromMilliseconds(
-      features::kRecentHttpSameSiteAccessGrantsLegacyCookieSemanticsMilliseconds
-          .Get());
-  DCHECK(!recency_threshold.is_zero());
-  return (base::TimeTicks::Now() - last_http_same_site_access) <
-         recency_threshold;
-}
-
-bool DoesCreationTimeGrantLegacySemantics(base::Time creation_date) {
-  if (creation_date.is_null())
-    return false;
-  if (!IsRecentCreationTimeGrantsLegacyCookieSemanticsEnabled())
-    return false;
-
-  base::TimeDelta recency_threshold = base::TimeDelta::FromMilliseconds(
-      features::kRecentCreationTimeGrantsLegacyCookieSemanticsMilliseconds
-          .Get());
-  DCHECK(!recency_threshold.is_zero());
-  return (base::Time::Now() - creation_date) < recency_threshold;
-}
-
 base::OnceCallback<void(CookieAccessResult)> AdaptCookieAccessResultToBool(
     base::OnceCallback<void(bool)> callback) {
   return base::BindOnce(
@@ -694,6 +649,21 @@ CookieList StripAccessResults(
     cookies.push_back(cookie_with_access_result.cookie);
   }
   return cookies;
+}
+
+NET_EXPORT void RecordCookiePortOmniboxHistograms(const GURL& url) {
+  int port = url.EffectiveIntPort();
+
+  if (port == url::PORT_UNSPECIFIED)
+    return;
+
+  if (IsLocalhost(url)) {
+    UMA_HISTOGRAM_ENUMERATION("Cookie.Port.OmniboxURLNavigation.Localhost",
+                              ReducePortRangeForCookieHistogram(port));
+  } else {
+    UMA_HISTOGRAM_ENUMERATION("Cookie.Port.OmniboxURLNavigation.RemoteHost",
+                              ReducePortRangeForCookieHistogram(port));
+  }
 }
 
 }  // namespace cookie_util

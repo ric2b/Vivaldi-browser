@@ -2,9 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ja">
 <translation id="1089894737218087497">スタンドアローンインストール</translation>
-<translation id="1682285232070778125">Vivaldiをデフォルトのブラウザーに設定する</translation>
+<translation id="1682285232070778125">Vivaldiをデフォルトのブラウザに設定する</translation>
 <translation id="1974060860693918893">高度な設定</translation>
-<translation id="2134216661302048561">VivaldiインストーラーによるVivaldiブラウザーのインストールは完了していません。終了しても本当によろしいですか？</translation>
+<translation id="2134216661302048561">VivaldiインストーラーによるVivaldiブラウザのインストールは完了していません。終了しても本当によろしいですか？</translation>
 <translation id="2286454467119466181">簡易画面</translation>
 <translation id="237789874664518125">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. All rights reserved. &lt;a&gt;プライバシーポリシー&lt;/a&gt;</translation>
 <translation id="2392002507524894126">Copyright <ph name="YEAR" /> Vivaldi Technologies AS. All rights reserved.</translation>
@@ -33,6 +33,6 @@
 <translation id="6569282126279967574">エラー: Vivaldiで問題が発生しました。今すぐ再起動しますか？</translation>
 <translation id="694714344624446243">Vivaldiインストーラー</translation>
 <translation id="7658239707568436148">キャンセル</translation>
-<translation id="8773751185824654197">注：Vivaldiブラウザーの使用中に更新を行う場合、そのインスタンスは終了し再起動します</translation>
+<translation id="8773751185824654197">注：Vivaldiブラウザの使用中に更新を行う場合、そのインスタンスは終了し再起動します</translation>
 <translation id="933060950687965486">インストール単位</translation>
 </translationbundle>

@@ -27,15 +27,16 @@
 
 namespace blink {
 
-PreferredColorScheme CSSValueIDToPreferredColorScheme(CSSValueID id) {
+mojom::blink::PreferredColorScheme CSSValueIDToPreferredColorScheme(
+    CSSValueID id) {
   switch (id) {
     case CSSValueID::kLight:
-      return PreferredColorScheme::kLight;
+      return mojom::blink::PreferredColorScheme::kLight;
     case CSSValueID::kDark:
-      return PreferredColorScheme::kDark;
+      return mojom::blink::PreferredColorScheme::kDark;
     default:
       NOTREACHED();
-      return PreferredColorScheme::kLight;
+      return mojom::blink::PreferredColorScheme::kLight;
   }
 }
 
@@ -180,7 +181,7 @@ ColorSpaceGamut MediaValues::CalculateColorGamut(LocalFrame* frame) {
       frame->GetPage()->GetChromeClient().GetScreenInfo(*frame));
 }
 
-PreferredColorScheme MediaValues::CalculatePreferredColorScheme(
+mojom::blink::PreferredColorScheme MediaValues::CalculatePreferredColorScheme(
     LocalFrame* frame) {
   DCHECK(frame);
   DCHECK(frame->GetSettings());
@@ -192,6 +193,13 @@ PreferredColorScheme MediaValues::CalculatePreferredColorScheme(
       return CSSValueIDToPreferredColorScheme(value.id);
   }
   return frame->GetDocument()->GetStyleEngine().GetPreferredColorScheme();
+}
+
+mojom::blink::PreferredContrast MediaValues::CalculatePreferredContrast(
+    LocalFrame* frame) {
+  DCHECK(frame);
+  DCHECK(frame->GetSettings());
+  return frame->GetSettings()->GetPreferredContrast();
 }
 
 bool MediaValues::CalculatePrefersReducedMotion(LocalFrame* frame) {

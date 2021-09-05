@@ -40,7 +40,6 @@ class FakeSyncService : public SyncService {
   bool HasObserver(const SyncServiceObserver* observer) const override;
   void OnDataTypeRequestsSyncStartup(ModelType type) override;
   void StopAndClear() override;
-  ModelTypeSet GetRegisteredDataTypes() const override;
   ModelTypeSet GetPreferredDataTypes() const override;
   std::unique_ptr<SyncSetupInProgressHandle> GetSetupInProgressHandle()
       override;
@@ -54,13 +53,14 @@ class FakeSyncService : public SyncService {
   base::Time GetLastSyncedTimeForDebugging() const override;
   SyncCycleSnapshot GetLastCycleSnapshotForDebugging() const override;
   std::unique_ptr<base::Value> GetTypeStatusMapForDebugging() override;
+  void GetEntityCountsForDebugging(
+      base::OnceCallback<void(const std::vector<TypeEntitiesCount>&)> callback)
+      const override;
   const GURL& GetSyncServiceUrlForDebugging() const override;
   std::string GetUnrecoverableErrorMessageForDebugging() const override;
   base::Location GetUnrecoverableErrorLocationForDebugging() const override;
   void AddProtocolEventObserver(ProtocolEventObserver* observer) override;
   void RemoveProtocolEventObserver(ProtocolEventObserver* observer) override;
-  void AddTypeDebugInfoObserver(TypeDebugInfoObserver* observer) override;
-  void RemoveTypeDebugInfoObserver(TypeDebugInfoObserver* observer) override;
   base::WeakPtr<JsController> GetJsController() override;
   void GetAllNodesForDebugging(
       base::OnceCallback<void(std::unique_ptr<base::ListValue>)> callback)
@@ -70,8 +70,10 @@ class FakeSyncService : public SyncService {
       const std::string& gaia_id,
       const std::vector<std::vector<uint8_t>>& keys,
       int last_key_version) override;
-  UserDemographicsResult GetUserNoisedBirthYearAndGender(
-      base::Time now) override;
+  void AddTrustedVaultRecoveryMethodFromWeb(
+      const std::string& gaia_id,
+      const std::vector<uint8_t>& public_key,
+      base::OnceClosure callback) override;
 
   // KeyedService implementation.
   void Shutdown() override;

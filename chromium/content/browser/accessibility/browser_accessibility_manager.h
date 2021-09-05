@@ -16,7 +16,7 @@
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "build/build_config.h"
 #include "content/browser/accessibility/accessibility_buildflags.h"
 #include "content/browser/accessibility/browser_accessibility_position.h"
@@ -447,6 +447,8 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeObserver,
   ui::AXNode* GetNodeFromTree(ui::AXTreeID tree_id,
                               ui::AXNode::AXID node_id) const override;
   ui::AXNode* GetNodeFromTree(ui::AXNode::AXID node_id) const override;
+  void AddObserver(ui::AXTreeObserver* observer) override;
+  void RemoveObserver(ui::AXTreeObserver* observer) override;
   AXTreeID GetTreeID() const override;
   AXTreeID GetParentTreeID() const override;
   ui::AXNode* GetRootAsAXNode() const override;
@@ -589,6 +591,11 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeObserver,
   static base::Optional<int32_t> last_focused_node_id_;
   static base::Optional<ui::AXTreeID> last_focused_node_tree_id_;
 
+  // For debug only: True when handling OnAccessibilityEvents.
+#if DCHECK_IS_ON()
+  bool in_on_accessibility_events_ = false;
+#endif  // DCHECK_IS_ON()
+
  private:
   // Helper that calls AXTree::Unserialize(). On failure it populates crash data
   // with error information.
@@ -605,7 +612,8 @@ class CONTENT_EXPORT BrowserAccessibilityManager : public ui::AXTreeObserver,
   // This member needs to be destructed before any observed AXTrees. Since
   // destructors for non-static member fields are called in the reverse order of
   // declaration, do not move this member above other members.
-  ScopedObserver<ui::AXTree, ui::AXTreeObserver> tree_observer_{this};
+  base::ScopedObservation<ui::AXTree, ui::AXTreeObserver> tree_observation_{
+      this};
 
   DISALLOW_COPY_AND_ASSIGN(BrowserAccessibilityManager);
 };

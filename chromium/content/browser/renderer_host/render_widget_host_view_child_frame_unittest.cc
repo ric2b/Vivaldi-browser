@@ -12,7 +12,6 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -22,14 +21,13 @@
 #include "content/browser/compositor/test/test_image_transport_factory.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/renderer_host/agent_scheduling_group_host.h"
-#include "content/browser/renderer_host/frame_connector_delegate.h"
+#include "content/browser/renderer_host/cross_process_frame_connector.h"
 #include "content/browser/renderer_host/frame_token_message_queue.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
-#include "content/common/view_messages.h"
-#include "content/common/widget_messages.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/test/browser_task_environment.h"
+#include "content/public/test/fake_frame_widget.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/test/mock_render_widget_host_delegate.h"
@@ -41,7 +39,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/frame/frame_visual_properties.h"
 #include "third_party/blink/public/common/input/synthetic_web_input_event_builders.h"
-#include "third_party/blink/public/platform/viewport_intersection_state.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/compositor/compositor.h"
 
@@ -54,20 +51,24 @@ const viz::LocalSurfaceId kArbitraryLocalSurfaceId(
 
 }  // namespace
 
-class MockFrameConnectorDelegate : public FrameConnectorDelegate {
+class MockFrameConnector : public CrossProcessFrameConnector {
  public:
-  MockFrameConnectorDelegate(bool use_zoom_for_device_scale_factor)
-      : FrameConnectorDelegate(use_zoom_for_device_scale_factor) {}
-  ~MockFrameConnectorDelegate() override {}
+  explicit MockFrameConnector(bool use_zoom_for_device_scale_factor)
+      : CrossProcessFrameConnector(nullptr) {
+    set_use_zoom_for_device_scale_factor_for_testing(
+        use_zoom_for_device_scale_factor);
+  }
+  ~MockFrameConnector() override = default;
 
   void FirstSurfaceActivation(const viz::SurfaceInfo& surface_info) override {
     last_surface_info_ = surface_info;
   }
 
-  void SetViewportIntersection(const blink::WebRect& viewport_intersection,
-                               const blink::WebRect& main_frame_intersection,
-                               const blink::WebRect& compositor_visible_rect,
-                               blink::FrameOcclusionState occlusion_state) {
+  void SetViewportIntersection(
+      const blink::WebRect& viewport_intersection,
+      const blink::WebRect& main_frame_intersection,
+      const blink::WebRect& compositor_visible_rect,
+      blink::mojom::FrameOcclusionState occlusion_state) {
     intersection_state_.viewport_intersection = viewport_intersection;
     intersection_state_.main_frame_intersection = main_frame_intersection;
     intersection_state_.compositor_visible_rect = compositor_visible_rect;
@@ -116,12 +117,12 @@ class RenderWidgetHostViewChildFrameTest : public testing::Test {
         std::make_unique<TestImageTransportFactory>());
 #endif
 
-    auto* process_host = new MockRenderProcessHost(browser_context_.get());
-
+    process_host_ =
+        std::make_unique<MockRenderProcessHost>(browser_context_.get());
     agent_scheduling_group_host_ =
-        std::make_unique<AgentSchedulingGroupHost>(*process_host);
-    int32_t routing_id = process_host->GetNextRoutingID();
-    sink_ = &process_host->sink();
+        std::make_unique<AgentSchedulingGroupHost>(*process_host_);
+    int32_t routing_id = process_host_->GetNextRoutingID();
+    sink_ = &process_host_->sink();
 
     widget_host_ = new RenderWidgetHostImpl(
         &delegate_, *agent_scheduling_group_host_, routing_id,
@@ -149,9 +150,9 @@ class RenderWidgetHostViewChildFrameTest : public testing::Test {
     EXPECT_EQ(screen_info, actual_screen_info);
 
     test_frame_connector_ =
-        new MockFrameConnectorDelegate(use_zoom_for_device_scale_factor);
+        new MockFrameConnector(use_zoom_for_device_scale_factor);
     test_frame_connector_->SetView(view_);
-    view_->SetFrameConnectorDelegate(test_frame_connector_);
+    view_->SetFrameConnector(test_frame_connector_);
   }
 
   void TearDown() override {
@@ -159,8 +160,11 @@ class RenderWidgetHostViewChildFrameTest : public testing::Test {
     if (view_)
       view_->Destroy();
     delete widget_host_;
+    process_host_->Cleanup();
     agent_scheduling_group_host_ = nullptr;
     delete test_frame_connector_;
+
+    process_host_.reset();
 
     browser_context_.reset();
 
@@ -185,6 +189,7 @@ class RenderWidgetHostViewChildFrameTest : public testing::Test {
 
   std::unique_ptr<BrowserContext> browser_context_;
   std::unique_ptr<AgentSchedulingGroupHost> agent_scheduling_group_host_;
+  std::unique_ptr<MockRenderProcessHost> process_host_;
   IPC::TestSink* sink_ = nullptr;
   MockRenderWidgetHostDelegate delegate_;
   MockWidget widget_;
@@ -193,21 +198,24 @@ class RenderWidgetHostViewChildFrameTest : public testing::Test {
   // destruction.
   RenderWidgetHostImpl* widget_host_;
   RenderWidgetHostViewChildFrame* view_;
-  MockFrameConnectorDelegate* test_frame_connector_;
+  MockFrameConnector* test_frame_connector_;
 };
 
 TEST_F(RenderWidgetHostViewChildFrameTest, VisibilityTest) {
   // Calling show and hide also needs to be propagated to child frame by the
   // |frame_connector_| which itself requires a |frame_proxy_in_parent_renderer|
-  // (set to nullptr for MockFrameConnectorDelegate). To avoid crashing the test
+  // (set to nullptr for MockFrameConnector). To avoid crashing the test
   // |frame_connector_| is to set to nullptr.
-  view_->SetFrameConnectorDelegate(nullptr);
+  view_->SetFrameConnector(nullptr);
 
   view_->Show();
   ASSERT_TRUE(view_->IsShowing());
 
   view_->Hide();
   ASSERT_FALSE(view_->IsShowing());
+
+  // Restore the MockFrameConnector to avoid a crash during destruction.
+  view_->SetFrameConnector(test_frame_connector_);
 }
 
 // Tests that the viewport intersection rect is dispatched to the RenderWidget
@@ -215,8 +223,9 @@ TEST_F(RenderWidgetHostViewChildFrameTest, VisibilityTest) {
 TEST_F(RenderWidgetHostViewChildFrameTest, ViewportIntersectionUpdated) {
   blink::WebRect intersection_rect(5, 5, 100, 80);
   blink::WebRect main_frame_intersection(5, 10, 200, 200);
-  blink::FrameOcclusionState occlusion_state =
-      blink::FrameOcclusionState::kPossiblyOccluded;
+  blink::mojom::FrameOcclusionState occlusion_state =
+      blink::mojom::FrameOcclusionState::kPossiblyOccluded;
+
   test_frame_connector_->SetViewportIntersection(
       intersection_rect, main_frame_intersection, intersection_rect,
       occlusion_state);
@@ -225,23 +234,29 @@ TEST_F(RenderWidgetHostViewChildFrameTest, ViewportIntersectionUpdated) {
       static_cast<MockRenderProcessHost*>(widget_host_->GetProcess());
   process->Init();
 
+  mojo::AssociatedRemote<blink::mojom::FrameWidgetHost> blink_frame_widget_host;
+  auto blink_frame_widget_host_receiver =
+      blink_frame_widget_host.BindNewEndpointAndPassDedicatedReceiver();
+  mojo::AssociatedRemote<blink::mojom::FrameWidget> blink_frame_widget;
+  auto blink_frame_widget_receiver =
+      blink_frame_widget.BindNewEndpointAndPassDedicatedReceiver();
+  widget_host_->BindFrameWidgetInterfaces(
+      std::move(blink_frame_widget_host_receiver), blink_frame_widget.Unbind());
+  FakeFrameWidget fake_frame_widget(std::move(blink_frame_widget_receiver));
+
   widget_host_->Init();
 
-  const IPC::Message* intersection_update =
-      process->sink().GetUniqueMessageMatching(
-          WidgetMsg_SetViewportIntersection::ID);
-  ASSERT_TRUE(intersection_update);
-  std::tuple<blink::ViewportIntersectionState> intersection_state;
+  base::RunLoop().RunUntilIdle();
 
-  WidgetMsg_SetViewportIntersection::Read(intersection_update,
-                                          &intersection_state);
-  EXPECT_EQ(intersection_rect,
-            std::get<0>(intersection_state).viewport_intersection);
-  EXPECT_EQ(main_frame_intersection,
-            std::get<0>(intersection_state).main_frame_intersection);
-  EXPECT_EQ(intersection_rect,
-            std::get<0>(intersection_state).compositor_visible_rect);
-  EXPECT_EQ(occlusion_state, std::get<0>(intersection_state).occlusion_state);
+  auto& intersection_state = fake_frame_widget.GetIntersectionState();
+  EXPECT_EQ(gfx::Rect(intersection_rect),
+            intersection_state->viewport_intersection);
+  EXPECT_EQ(gfx::Rect(main_frame_intersection),
+            intersection_state->main_frame_intersection);
+  EXPECT_EQ(gfx::Rect(intersection_rect),
+            intersection_state->compositor_visible_rect);
+  EXPECT_EQ(static_cast<blink::mojom::FrameOcclusionState>(occlusion_state),
+            intersection_state->occlusion_state);
 }
 
 class RenderWidgetHostViewChildFrameZoomForDSFTest

@@ -7,6 +7,7 @@
 #include "base/bind.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/task_environment.h"
+#include "chromeos/services/ime/mock_input_channel.h"
 #include "chromeos/services/ime/public/mojom/input_engine.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -43,32 +44,6 @@ void TestGetRulebasedKeypressCountForTestingCallback(int32_t* res_out,
   *res_out = response;
 }
 
-class TestClientChannel : mojom::InputChannel {
- public:
-  TestClientChannel() : receiver_(this) {}
-
-  mojo::PendingRemote<mojom::InputChannel> CreatePendingRemote() {
-    return receiver_.BindNewPipeAndPassRemote();
-  }
-
-  // mojom::InputChannel implementation.
-  MOCK_METHOD2(ProcessMessage,
-               void(const std::vector<uint8_t>& message,
-                    ProcessMessageCallback));
-  MOCK_METHOD0(OnFocus, void());
-  MOCK_METHOD2(ProcessKeypressForRulebased,
-               void(const mojom::PhysicalKeyEventPtr event,
-                    ProcessKeypressForRulebasedCallback));
-  MOCK_METHOD0(ResetForRulebased, void());
-  MOCK_METHOD1(GetRulebasedKeypressCountForTesting,
-               void(GetRulebasedKeypressCountForTestingCallback));
-
- private:
-  mojo::Receiver<mojom::InputChannel> receiver_;
-
-  DISALLOW_COPY_AND_ASSIGN(TestClientChannel);
-};
-
 class ImeServiceTest : public testing::Test {
  public:
   ImeServiceTest() : service_(remote_service_.BindNewPipeAndPassReceiver()) {}
@@ -99,7 +74,7 @@ class ImeServiceTest : public testing::Test {
 // activating an IME engine with an invalid IME spec.
 TEST_F(ImeServiceTest, ConnectInvalidImeEngine) {
   bool success = true;
-  TestClientChannel test_channel;
+  MockInputChannel test_channel;
   mojo::Remote<mojom::InputChannel> remote_engine;
 
   remote_manager_->ConnectToImeEngine(
@@ -112,8 +87,8 @@ TEST_F(ImeServiceTest, ConnectInvalidImeEngine) {
 
 TEST_F(ImeServiceTest, MultipleClientsRulebased) {
   bool success = false;
-  TestClientChannel test_channel_1;
-  TestClientChannel test_channel_2;
+  MockInputChannel test_channel_1;
+  MockInputChannel test_channel_2;
   mojo::Remote<mojom::InputChannel> remote_engine_1;
   mojo::Remote<mojom::InputChannel> remote_engine_2;
 
@@ -156,7 +131,7 @@ TEST_F(ImeServiceTest, MultipleClientsRulebased) {
 
 TEST_F(ImeServiceTest, RuleBasedDoesNotHandleModifierKeys) {
   bool success = false;
-  TestClientChannel test_channel;
+  MockInputChannel test_channel;
   mojo::Remote<mojom::InputChannel> to_engine_remote;
 
   remote_manager_->ConnectToImeEngine(
@@ -186,7 +161,7 @@ TEST_F(ImeServiceTest, RuleBasedDoesNotHandleModifierKeys) {
 
 TEST_F(ImeServiceTest, RuleBasedDoesNotHandleCtrlShortCut) {
   bool success = false;
-  TestClientChannel test_channel;
+  MockInputChannel test_channel;
   mojo::Remote<mojom::InputChannel> to_engine_remote;
 
   remote_manager_->ConnectToImeEngine(
@@ -216,7 +191,7 @@ TEST_F(ImeServiceTest, RuleBasedDoesNotHandleCtrlShortCut) {
 
 TEST_F(ImeServiceTest, RuleBasedDoesNotHandleAltShortCut) {
   bool success = false;
-  TestClientChannel test_channel;
+  MockInputChannel test_channel;
   mojo::Remote<mojom::InputChannel> to_engine_remote;
 
   remote_manager_->ConnectToImeEngine(
@@ -246,7 +221,7 @@ TEST_F(ImeServiceTest, RuleBasedDoesNotHandleAltShortCut) {
 
 TEST_F(ImeServiceTest, RuleBasedHandlesAltRight) {
   bool success = false;
-  TestClientChannel test_channel;
+  MockInputChannel test_channel;
   mojo::Remote<mojom::InputChannel> to_engine_remote;
 
   remote_manager_->ConnectToImeEngine(
@@ -277,7 +252,7 @@ TEST_F(ImeServiceTest, RuleBasedHandlesAltRight) {
 // Tests that the rule-based Arabic keyboard can work correctly.
 TEST_F(ImeServiceTest, RuleBasedArabic) {
   bool success = false;
-  TestClientChannel test_channel;
+  MockInputChannel test_channel;
   mojo::Remote<mojom::InputChannel> to_engine_remote;
 
   remote_manager_->ConnectToImeEngine(
@@ -348,7 +323,7 @@ TEST_F(ImeServiceTest, RuleBasedArabic) {
 // Tests that the rule-based DevaPhone keyboard can work correctly.
 TEST_F(ImeServiceTest, RuleBasedDevaPhone) {
   bool success = false;
-  TestClientChannel test_channel;
+  MockInputChannel test_channel;
   mojo::Remote<mojom::InputChannel> to_engine_remote;
 
   remote_manager_->ConnectToImeEngine(
@@ -426,7 +401,7 @@ TEST_F(ImeServiceTest, RuleBasedDevaPhone) {
 // Tests escapable characters. See https://crbug.com/1014384.
 TEST_F(ImeServiceTest, RuleBasedDoesNotEscapeCharacters) {
   bool success = false;
-  TestClientChannel test_channel;
+  MockInputChannel test_channel;
   mojo::Remote<mojom::InputChannel> to_engine_remote;
 
   remote_manager_->ConnectToImeEngine(
@@ -484,7 +459,7 @@ TEST_F(ImeServiceTest, RuleBasedDoesNotEscapeCharacters) {
 // Tests that AltGr works with rule-based. See crbug.com/1035145.
 TEST_F(ImeServiceTest, KhmerKeyboardAltGr) {
   bool success = false;
-  TestClientChannel test_channel;
+  MockInputChannel test_channel;
   mojo::Remote<mojom::InputChannel> to_engine_remote;
 
   remote_manager_->ConnectToImeEngine(

@@ -133,6 +133,33 @@ std::unique_ptr<views::View> CreateAlertView(const TabAlertState& state) {
   return alert_state_label;
 }
 
+// Calculates an appropriate size to display a preview image in the hover card.
+// For the vast majority of images, the |preferred_size| is used, but extremely
+// tall or wide images use the image size instead, centering in the available
+// space.
+gfx::Size GetPreviewImageSize(gfx::Size preview_size,
+                              gfx::Size preferred_size) {
+  DCHECK(!preferred_size.IsEmpty());
+  if (preview_size.IsEmpty())
+    return preview_size;
+  const float preview_aspect_ratio =
+      float{preview_size.width()} / preview_size.height();
+  const float preferred_aspect_ratio =
+      float{preferred_size.width()} / preferred_size.height();
+  const float ratio = preview_aspect_ratio / preferred_aspect_ratio;
+  // Images between 2/3 and 3/2 of the target aspect ratio use the preferred
+  // size, stretching the image. Only images outside this range get centered.
+  // Since this is a corner case most users will never see, the specific cutoffs
+  // just need to be reasonable and don't need to be precise values (that is,
+  // there is no "correct" value; if the results are not aesthetic they can be
+  // tuned).
+  constexpr float kMinStretchRatio = 0.667f;
+  constexpr float kMaxStretchRatio = 1.5f;
+  if (ratio >= kMinStretchRatio && ratio <= kMaxStretchRatio)
+    return preferred_size;
+  return preview_size;
+}
+
 }  // namespace
 
 // static
@@ -412,7 +439,8 @@ class TabHoverCardBubbleView::ThumbnailObserver
 };
 
 TabHoverCardBubbleView::TabHoverCardBubbleView(Tab* tab)
-    : BubbleDialogDelegateView(tab, views::BubbleBorder::TOP_LEFT) {
+    : BubbleDialogDelegateView(tab, views::BubbleBorder::TOP_LEFT),
+      using_rounded_corners_(CustomShadowsSupported()) {
   SetButtons(ui::DIALOG_BUTTON_NONE);
 
   // We'll do all of our own layout inside the bubble, so no need to inset this
@@ -529,7 +557,7 @@ TabHoverCardBubbleView::TabHoverCardBubbleView(Tab* tab)
       views::BubbleFrameView::PreferredArrowAdjustment::kOffset);
   GetBubbleFrameView()->set_hit_test_transparent(true);
 
-  if (CustomShadowsSupported()) {
+  if (using_rounded_corners_) {
     GetBubbleFrameView()->SetCornerRadius(
         ChromeLayoutProvider::Get()->GetCornerRadiusMetric(
             views::EMPHASIS_HIGH));
@@ -848,7 +876,8 @@ void TabHoverCardBubbleView::OnThumbnailImageAvailable(
     gfx::ImageSkia preview_image) {
   const gfx::Size preview_size = TabStyle::GetPreviewImageSize();
   preview_image_->SetImage(preview_image);
-  preview_image_->SetImageSize(preview_size);
+  preview_image_->SetImageSize(
+      GetPreviewImageSize(preview_image.size(), preview_size));
   preview_image_->SetPreferredSize(preview_size);
   preview_image_->SetBackground(nullptr);
   waiting_for_decompress_ = false;
@@ -863,6 +892,13 @@ gfx::Size TabHoverCardBubbleView::CalculatePreferredSize() const {
 
 void TabHoverCardBubbleView::OnThemeChanged() {
   BubbleDialogDelegateView::OnThemeChanged();
+
+  // Bubble closes if the theme changes to the point where the border has to be
+  // regenerated. See crbug.com/1140256
+  if (using_rounded_corners_ != CustomShadowsSupported()) {
+    GetWidget()->Close();
+    return;
+  }
 
   // Update fade labels' background color to match that of the the original
   // label since these child views are ignored by layout.

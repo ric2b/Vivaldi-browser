@@ -14,10 +14,10 @@
 #include "base/time/time.h"
 #include "base/version.h"
 #include "components/password_manager/core/browser/leak_detection_dialog_utils.h"
+#include "components/password_manager/core/browser/ui/password_check_referrer.h"
 #include "components/password_manager/core/common/password_manager_features.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
-#include "components/safe_browsing/core/features.h"
 #include "components/safety_check/safety_check.h"
 #include "components/version_info/version_info.h"
 #include "ios/chrome/browser/application_context.h"
@@ -64,7 +64,6 @@
 #endif
 
 using l10n_util::GetNSString;
-using safe_browsing::kSafeBrowsingAvailableOnIOS;
 
 namespace {
 
@@ -278,6 +277,7 @@ constexpr double kSafeBrowsingRowMinDelay = 1.75;
         [[TableViewTextItem alloc] initWithType:CheckStartItemType];
     _checkStartItem.text = GetNSString(IDS_IOS_CHECK_PASSWORDS_NOW_BUTTON);
     _checkStartItem.textColor = [UIColor colorNamed:kBlueColor];
+    _checkStartItem.accessibilityTraits |= UIAccessibilityTraitButton;
   }
   return self;
 }
@@ -373,6 +373,8 @@ constexpr double kSafeBrowsingRowMinDelay = 1.75;
           base::UmaHistogramEnumeration(
               kSafetyCheckInteractions,
               SafetyCheckInteractions::kPasswordsManage);
+          password_manager::LogPasswordCheckReferrer(
+              password_manager::PasswordCheckReferrer::kSafetyCheck);
           [self.handler showPasswordIssuesPage];
           break;
       }
@@ -437,7 +439,7 @@ constexpr double kSafeBrowsingRowMinDelay = 1.75;
   }
 
   // If not managed compute error info to show in popover, if available.
-  NSAttributedString* info = [self getPopoverInfoForType:itemType];
+  NSAttributedString* info = [self popoverInfoForType:itemType];
 
   // If |info| is empty there is no popover to display.
   if (!info)
@@ -458,7 +460,7 @@ constexpr double kSafeBrowsingRowMinDelay = 1.75;
 #pragma mark - Private methods
 
 // Computes the text needed for a popover on |itemType| if available.
-- (NSAttributedString*)getPopoverInfoForType:(NSInteger)itemType {
+- (NSAttributedString*)popoverInfoForType:(NSInteger)itemType {
   SafteyCheckItemType type = static_cast<SafteyCheckItemType>(itemType);
   switch (type) {
     case PasswordItemType:

@@ -37,6 +37,7 @@
 #include "extensions/test/test_extension_dir.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "ui/views/animation/ink_drop.h"
+#include "ui/views/bubble/bubble_dialog_model_host.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/layout/animating_layout_manager.h"
 #include "ui/views/layout/animating_layout_manager_test_util.h"
@@ -88,7 +89,7 @@ class ExtensionsMenuViewBrowserTest : public ExtensionsToolbarBrowserTest {
       // Trigger uninstall dialog.
       views::NamedWidgetShownWaiter waiter(
           views::test::AnyWidgetTestPasskey{},
-          "ExtensionUninstallDialogDelegateView");
+          views::BubbleDialogModelHost::kViewClassName);
       extensions::ExtensionContextMenuModel menu_model(
           extensions()[0].get(), browser(),
           extensions::ExtensionContextMenuModel::PINNED, nullptr,
@@ -148,7 +149,7 @@ class ExtensionsMenuViewBrowserTest : public ExtensionsToolbarBrowserTest {
     if (ui_test_name_ == "InstallDialog") {
       ExtensionsToolbarContainer* const container =
           GetExtensionsToolbarContainer();
-      views::BubbleDialogDelegate* const install_bubble =
+      views::DialogDelegate* const install_bubble =
           container->GetViewForId(extensions()[0]->id())
               ->GetProperty(views::kAnchoredDialogKey);
       ASSERT_TRUE(install_bubble);
@@ -164,7 +165,7 @@ class ExtensionsMenuViewBrowserTest : public ExtensionsToolbarBrowserTest {
     ExtensionsToolbarContainer* const container =
         GetExtensionsToolbarContainer();
     // Accept or cancel the dialog.
-    views::BubbleDialogDelegate* const uninstall_bubble =
+    views::DialogDelegate* const uninstall_bubble =
         container->GetViewForId(extensions()[0]->id())
             ->GetProperty(views::kAnchoredDialogKey);
     ASSERT_TRUE(uninstall_bubble);

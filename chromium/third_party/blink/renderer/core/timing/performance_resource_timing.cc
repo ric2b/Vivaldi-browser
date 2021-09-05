@@ -31,6 +31,7 @@
 
 #include "third_party/blink/renderer/core/timing/performance_resource_timing.h"
 
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/timing/performance_mark_or_measure.mojom-blink.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_object_builder.h"
 #include "third_party/blink/renderer/core/performance_entry_names.h"
@@ -104,7 +105,7 @@ PerformanceResourceTiming::PerformanceResourceTiming(
     ExecutionContext* context)
     : PerformanceEntry(name, 0.0, 0.0),
       time_origin_(time_origin),
-      context_type_(mojom::RequestContextType::HYPERLINK),
+      context_type_(mojom::blink::RequestContextType::HYPERLINK),
       request_destination_(network::mojom::RequestDestination::kDocument),
       is_secure_context_(is_secure_context),
       server_timing_(std::move(server_timing)),
@@ -310,13 +311,15 @@ DOMHighResTimeStamp PerformanceResourceTiming::secureConnectionStart() const {
     return fetchStart();
 
   ResourceLoadTiming* timing = GetResourceLoadTiming();
-  if (!timing || timing->SslStart().is_null()) {
-    // TODO(yoav): add DCHECK or use counter to make sure this never happens.
-    return 0.0;
+  if (timing && !timing->SslStart().is_null()) {
+    return Performance::MonotonicTimeToDOMHighResTimeStamp(
+        time_origin_, timing->SslStart(), allow_negative_value_);
   }
-
-  return Performance::MonotonicTimeToDOMHighResTimeStamp(
-      time_origin_, timing->SslStart(), allow_negative_value_);
+  // We would add a DCHECK(false) here but this case may happen, for instance on
+  // SXG where the behavior has not yet been properly defined. See
+  // https://github.com/w3c/navigation-timing/issues/107. Therefore, we return
+  // fetchStart() for cases where SslStart() is not provided.
+  return fetchStart();
 }
 
 DOMHighResTimeStamp PerformanceResourceTiming::requestStart() const {

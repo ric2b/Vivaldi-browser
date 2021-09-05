@@ -132,8 +132,6 @@ KeyedService* VivaldiProfileSyncServiceFactory::BuildServiceInstanceFor(
       content::GetNetworkConnectionTracker();
   init_params.debug_identifier = profile->GetDebugName();
   init_params.channel = chrome::GetChannel();
-  init_params.enable_passwords_account_storage = false;
-  init_params.autofill_enable_account_wallet_storage = false;
 
   if (vivaldi::ForcedVivaldiRunning()) {
     auto* fcm_invalidation_provider =

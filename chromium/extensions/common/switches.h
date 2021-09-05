@@ -5,6 +5,8 @@
 #ifndef EXTENSIONS_COMMON_SWITCHES_H_
 #define EXTENSIONS_COMMON_SWITCHES_H_
 
+#include "build/chromeos_buildflags.h"
+
 // All switches in alphabetical order. The switches should be documented
 // alongside the definition of their values in the .cc file.
 namespace extensions {
@@ -25,13 +27,14 @@ extern const char kForceDevModeHighlighting[];
 extern const char kForceEmptyCorbAllowlist[];
 extern const char kLoadApps[];
 extern const char kLoadExtension[];
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 extern const char kLoadSigninProfileTestExtension[];
 #endif
 extern const char kSetExtensionThrottleTestParams[];
 extern const char kShowComponentExtensionOptions[];
 extern const char kTraceAppSource[];
 extern const char kEnableCrxHashCheck[];
+extern const char kAllowFutureManifestVersion[];
 
 }  // namespace switches
 

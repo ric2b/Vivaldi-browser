@@ -2,12 +2,24 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// clang-format off
+// #import {assertEquals, assertTrue, assertFalse} from '../../../chai_assert.js';
+// #import {decorate} from 'chrome://resources/js/cr/ui.m.js';
+// #import {Command} from 'chrome://resources/js/cr/ui/command.m.js';
+// #import {Menu} from 'chrome://resources/js/cr/ui/menu.m.js';
+// #import {MenuItem} from 'chrome://resources/js/cr/ui/menu_item.m.js';
+// clang-format on
+
 /** @type {cr.ui.Menu} */
 var menu;
 
 /**
  * @param {number} x The screenX coord of the mouseup event.
  * @param {number} y The screenY coord of the mouseup event.
+ * @return {boolean} The return value is false if event is cancelable and at
+ *     least one of the event handlers which received event called
+ *     Event.preventDefault(). Otherwise it returns true.
+ *     https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/dispatchEvent
  */
 function mouseUpAt(x, y) {
   var mouseUpEvent = new MouseEvent('mouseup', {
@@ -25,6 +37,7 @@ function setUp() {
   menu = new cr.ui.Menu;
 }
 
+/** @suppress {visibility} Allow test to reach to private properties. */
 function testHandleMouseOver() {
   var called = false;
   menu.findMenuItem_ = function() {
@@ -227,3 +240,14 @@ function testMenuItemTabIndex() {
   assertTrue(separator.isSeparator());
   assertFalse(separator.hasAttribute('tabindex'));
 }
+
+Object.assign(window, {
+  setUp,
+  testHandleMouseOver,
+  testHandleMouseUp,
+  testShowViaKeyboardIgnoresMouseUps,
+  testCommandMenuItem,
+  testSeparators,
+  testFocusSelectedItems,
+  testMenuItemTabIndex,
+});

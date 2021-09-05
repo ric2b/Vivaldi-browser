@@ -250,8 +250,8 @@ std::string VivaldiDataSourcesAPI::GetMappingJSONOnFileThread() {
   std::vector<base::Value::DictStorage::value_type> items;
   for (const auto& it : path_id_map_) {
     const base::FilePath& path = it.second;
-    auto item = std::make_unique<base::Value>(base::Value::Type::DICTIONARY);
-    item->SetStringKey("local_path", path.value());
+    base::Value item(base::Value::Type::DICTIONARY);
+    item.SetStringKey("local_path", path.value());
     items.emplace_back(it.first, std::move(item));
   }
 

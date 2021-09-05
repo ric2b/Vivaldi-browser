@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/debug/debugger.h"
@@ -331,7 +331,7 @@ int LaunchTests(TestLauncherDelegate* launcher_delegate,
 #endif
 
 #if defined(OS_WIN)
-  sandbox::SandboxInterfaceInfo sandbox_info = {0};
+  sandbox::SandboxInterfaceInfo sandbox_info = {nullptr};
   InitializeSandboxInfo(&sandbox_info);
 
   params.instance = GetModuleHandle(NULL);

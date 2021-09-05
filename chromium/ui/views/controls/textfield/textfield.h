@@ -91,12 +91,17 @@ class VIEWS_EXPORT Textfield : public View,
   static const gfx::FontList& GetDefaultFontList();
 
   Textfield();
+  Textfield(const Textfield&) = delete;
+  Textfield& operator=(const Textfield&) = delete;
   ~Textfield() override;
 
   // Set the controller for this textfield.
   void set_controller(TextfieldController* controller) {
     controller_ = controller;
   }
+
+  // TODD (kylixrd): Remove set_controller and refactor codebase.
+  void SetController(TextfieldController* controller);
 
   // Gets/Sets whether or not the Textfield is read-only.
   bool GetReadOnly() const;
@@ -697,6 +702,9 @@ class VIEWS_EXPORT Textfield : public View,
   // True if this textfield should use a focus ring to indicate focus.
   bool use_focus_ring_ = true;
 
+  // Whether the user should be notified if the clipboard is restricted.
+  bool show_rejection_ui_if_any_ = false;
+
   // Whether the text should be used to improve typing suggestions.
   base::Optional<bool> should_do_learning_;
 
@@ -734,27 +742,30 @@ class VIEWS_EXPORT Textfield : public View,
 
   // Used to bind callback functions to this object.
   base::WeakPtrFactory<Textfield> weak_ptr_factory_{this};
-
-  DISALLOW_COPY_AND_ASSIGN(Textfield);
 };
 
 BEGIN_VIEW_BUILDER(VIEWS_EXPORT, Textfield, View)
-VIEW_BUILDER_PROPERTY(bool, ReadOnly)
-VIEW_BUILDER_PROPERTY(base::string16, Text)
-VIEW_BUILDER_PROPERTY(ui::TextInputType, TextInputType)
-VIEW_BUILDER_PROPERTY(int, TextInputFlags)
-VIEW_BUILDER_PROPERTY(SkColor, TextColor)
-VIEW_BUILDER_PROPERTY(SkColor, SelectionTextColor)
-VIEW_BUILDER_PROPERTY(SkColor, BackgroundColor)
-VIEW_BUILDER_PROPERTY(SkColor, SelectionBackgroundColor)
-VIEW_BUILDER_PROPERTY(bool, CursorEnabled)
-VIEW_BUILDER_PROPERTY(base::string16, PlaceholderText)
-VIEW_BUILDER_PROPERTY(bool, Invalid)
-VIEW_BUILDER_PROPERTY(gfx::HorizontalAlignment, HorizontalAlignment)
-VIEW_BUILDER_PROPERTY(gfx::Range, SelectedRange)
 VIEW_BUILDER_PROPERTY(base::string16, AccessibleName)
-END_VIEW_BUILDER(VIEWS_EXPORT, Textfield)
+VIEW_BUILDER_PROPERTY(SkColor, BackgroundColor)
+VIEW_BUILDER_PROPERTY(TextfieldController*, Controller)
+VIEW_BUILDER_PROPERTY(bool, CursorEnabled)
+VIEW_BUILDER_PROPERTY(int, DefaultWidthInChars)
+VIEW_BUILDER_PROPERTY(gfx::HorizontalAlignment, HorizontalAlignment)
+VIEW_BUILDER_PROPERTY(bool, Invalid)
+VIEW_BUILDER_PROPERTY(int, MinimumWidthInChars)
+VIEW_BUILDER_PROPERTY(base::string16, PlaceholderText)
+VIEW_BUILDER_PROPERTY(bool, ReadOnly)
+VIEW_BUILDER_PROPERTY(gfx::Range, SelectedRange)
+VIEW_BUILDER_PROPERTY(SkColor, SelectionBackgroundColor)
+VIEW_BUILDER_PROPERTY(SkColor, SelectionTextColor)
+VIEW_BUILDER_PROPERTY(base::string16, Text)
+VIEW_BUILDER_PROPERTY(SkColor, TextColor)
+VIEW_BUILDER_PROPERTY(int, TextInputFlags)
+VIEW_BUILDER_PROPERTY(ui::TextInputType, TextInputType)
+END_VIEW_BUILDER
 
 }  // namespace views
+
+DEFINE_VIEW_BUILDER(VIEWS_EXPORT, Textfield)
 
 #endif  // UI_VIEWS_CONTROLS_TEXTFIELD_TEXTFIELD_H_

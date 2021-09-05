@@ -37,9 +37,12 @@ class NotificationDisplayQueue : public NotificationBlocker::Observer {
   // NotificationBlocker::Observer:
   void OnBlockingStateChanged() override;
 
-  // Returns if we should currently queue up notifications. This is the case if
-  // at least one NotificationBlocker is active.
-  bool ShouldEnqueueNotifications();
+  // Returns if we should currently queue up |notification|. This is the case if
+  // at least one NotificationBlocker is active and |notification_type| is a Web
+  // Notification.
+  bool ShouldEnqueueNotification(
+      NotificationHandler::Type notification_type,
+      const message_center::Notification& notification) const;
 
   // Enqueue the passed |notification| to be shown once no blocker is active
   // anymore. If there is already a notification with the same id queued, it
@@ -54,15 +57,28 @@ class NotificationDisplayQueue : public NotificationBlocker::Observer {
   void RemoveQueuedNotification(const std::string& notification_id);
 
   // Returns a set of the currently queued notification ids.
-  std::set<std::string> GetQueuedNotificationIds();
+  std::set<std::string> GetQueuedNotificationIds() const;
 
-  // Sets the list of |blockers| to be used and observers their state.
+  // Sets the list of |blockers| to be used and observes their state.
   void SetNotificationBlockers(NotificationBlockers blockers);
 
+  // Adds |blocker| to the list of blockers to be used and observes its state.
+  void AddNotificationBlocker(std::unique_ptr<NotificationBlocker> blocker);
+
  private:
+  // Removes a queued notification by its |notification_id| and returns if there
+  // was a queued notification with that id. If |notify| is true this will
+  // notify all relevant blockers about the removal.
+  bool DoRemoveQueuedNotification(const std::string& notification_id,
+                                  bool notify);
+
   // Called when the state of a notification blocker changes. Will display and
   // free all queued notifications if no blocker is active anymore.
   void MaybeDisplayQueuedNotifications();
+
+  // Checks if any notification blocker is currently active for |notification|.
+  bool IsAnyNotificationBlockerActive(
+      const message_center::Notification& notification) const;
 
   // Represents a queued notification.
   struct QueuedNotification {

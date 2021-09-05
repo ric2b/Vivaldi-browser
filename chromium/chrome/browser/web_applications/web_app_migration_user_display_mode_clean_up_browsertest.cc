@@ -6,7 +6,8 @@
 
 #include "base/run_loop.h"
 #include "base/strings/string_piece.h"
-#include "base/test/bind_test_util.h"
+#include "base/strings/utf_string_conversions.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "chrome/browser/extensions/launch_util.h"
 #include "chrome/browser/profiles/profile.h"
@@ -46,12 +47,8 @@ class WebAppMigrationUserDisplayModeCleanUpBrowserTest
     : public InProcessBrowserTest {
  public:
   WebAppMigrationUserDisplayModeCleanUpBrowserTest() {
-    scoped_feature_list_.InitWithFeatures(
-        {
-            features::kDesktopPWAsWithoutExtensions,
-            features::kDesktopPWAsMigrationUserDisplayModeCleanUp,
-        },
-        {});
+    scoped_feature_list_.InitAndEnableFeature(
+        features::kDesktopPWAsMigrationUserDisplayModeCleanUp);
     switch (GetTestPreCount()) {
       case 2:
         WebAppMigrationUserDisplayModeCleanUp::DisableForTesting();
@@ -85,8 +82,8 @@ class WebAppMigrationUserDisplayModeCleanUpBrowserTest
 IN_PROC_BROWSER_TEST_F(WebAppMigrationUserDisplayModeCleanUpBrowserTest,
                        PRE_PRE_CleanUp) {
   // Clean up must be disabled for this stage.
-  ASSERT_FALSE(WebAppMigrationUserDisplayModeCleanUp::CreateIfNeeded(profile(),
-                                                                     nullptr));
+  ASSERT_FALSE(WebAppMigrationUserDisplayModeCleanUp::CreateIfNeeded(
+      profile(), nullptr, /*os_integration_manager=*/nullptr));
 
   InstallFinalizer& web_app_finalizer = provider().install_finalizer();
   InstallFinalizer* bookmark_app_finalizer =
@@ -167,8 +164,8 @@ IN_PROC_BROWSER_TEST_F(WebAppMigrationUserDisplayModeCleanUpBrowserTest,
 IN_PROC_BROWSER_TEST_F(WebAppMigrationUserDisplayModeCleanUpBrowserTest,
                        CleanUp) {
   // Check that clean up is not needed anymore.
-  EXPECT_FALSE(WebAppMigrationUserDisplayModeCleanUp::CreateIfNeeded(profile(),
-                                                                     nullptr));
+  EXPECT_FALSE(WebAppMigrationUserDisplayModeCleanUp::CreateIfNeeded(
+      profile(), nullptr, /*os_integration_manager=*/nullptr));
 }
 
 }  // namespace web_app

@@ -9,6 +9,7 @@
 
 #include "ash/app_list/test/app_list_test_helper.h"
 #include "ash/focus_cycler.h"
+#include "ash/frame_throttler/frame_throttling_controller.h"
 #include "ash/frame_throttler/mock_frame_throttling_observer.h"
 #include "ash/home_screen/home_screen_controller.h"
 #include "ash/public/cpp/ash_features.h"
@@ -1141,7 +1142,8 @@ TEST_F(InteractiveWindowCycleControllerTest, KeysConfirmSelection) {
   EXPECT_TRUE(wm::IsActiveWindow(w1.get()));
 }
 
-// When a user taps on an item, it should set the focus ring to that item.
+// When a user taps on an item, it should set the focus ring to that item. After
+// they release their finger it should confirm the selection.
 TEST_F(InteractiveWindowCycleControllerTest, TapSelect) {
   std::unique_ptr<Window> w0 = CreateTestWindow();
   std::unique_ptr<Window> w1 = CreateTestWindow();
@@ -1149,23 +1151,29 @@ TEST_F(InteractiveWindowCycleControllerTest, TapSelect) {
   ui::test::EventGenerator* generator = GetEventGenerator();
   WindowCycleController* controller = Shell::Get()->window_cycle_controller();
 
-  // Start cycle and tap third item.
+  // Start cycle and tap third item. On tap down, the focus ring should be set
+  // to the third item. On tap release, the selection should be confirmed.
   // Starting order of windows in cycle list is [2,1,0].
   controller->StartCycling();
-  generator->GestureTapAt(
+  generator->PressTouch(
       GetWindowCycleItemViews()[2]->GetBoundsInScreen().CenterPoint());
   EXPECT_TRUE(controller->IsCycling());
   EXPECT_EQ(GetTargetWindow(), w0.get());
+  generator->ReleaseTouch();
+  EXPECT_FALSE(controller->IsCycling());
+  EXPECT_TRUE(wm::IsActiveWindow(w0.get()));
 
-  // Start cycle and tap second item.
-  // Starting order of windows in cycle list is [2,1,0].
+  // Start cycle and tap second item. On tap down, the focus ring should be set
+  // to the second item. On tap release, the selection should be confirmed.
+  // Starting order of windows in cycle list is [0,2,1].
   controller->StartCycling();
-  generator->GestureTapAt(
+  generator->PressTouch(
       GetWindowCycleItemViews()[1]->GetBoundsInScreen().CenterPoint());
   EXPECT_TRUE(controller->IsCycling());
-  EXPECT_EQ(GetTargetWindow(), w1.get());
-  controller->CompleteCycling();
-  EXPECT_TRUE(wm::IsActiveWindow(w1.get()));
+  EXPECT_EQ(GetTargetWindow(), w2.get());
+  generator->ReleaseTouch();
+  EXPECT_FALSE(controller->IsCycling());
+  EXPECT_TRUE(wm::IsActiveWindow(w2.get()));
 }
 
 // Tests that mouse events are filtered until the mouse is actually used,
@@ -1266,28 +1274,32 @@ TEST_F(WindowCycleControllerTest, FrameThrottling) {
   MockFrameThrottlingObserver observer;
   FrameThrottlingController* frame_throttling_controller =
       Shell::Get()->frame_throttling_controller();
+  uint8_t throttled_fps = frame_throttling_controller->throttled_fps();
   frame_throttling_controller->AddObserver(&observer);
   const int window_count = 5;
   std::unique_ptr<aura::Window> created_windows[window_count];
   std::vector<aura::Window*> windows(window_count, nullptr);
   for (int i = 0; i < window_count; ++i) {
-    created_windows[i] = CreateTestWindow();
+    created_windows[i] = CreateAppWindow(gfx::Rect(), AppType::BROWSER);
     windows[i] = created_windows[i].get();
   }
 
   WindowCycleController* controller = Shell::Get()->window_cycle_controller();
   EXPECT_CALL(observer,
-              OnThrottlingStarted(testing::UnorderedElementsAreArray(windows)));
+              OnThrottlingStarted(testing::UnorderedElementsAreArray(windows),
+                                  throttled_fps));
   controller->HandleCycleWindow(WindowCycleController::FORWARD);
   EXPECT_CALL(observer,
-              OnThrottlingStarted(testing::UnorderedElementsAreArray(windows)))
+              OnThrottlingStarted(testing::UnorderedElementsAreArray(windows),
+                                  throttled_fps))
       .Times(0);
   controller->HandleCycleWindow(WindowCycleController::FORWARD);
   EXPECT_CALL(observer, OnThrottlingEnded());
   controller->CompleteCycling();
 
   EXPECT_CALL(observer,
-              OnThrottlingStarted(testing::UnorderedElementsAreArray(windows)));
+              OnThrottlingStarted(testing::UnorderedElementsAreArray(windows),
+                                  throttled_fps));
   controller->HandleCycleWindow(WindowCycleController::FORWARD);
   EXPECT_CALL(observer, OnThrottlingEnded());
   controller->CancelCycling();

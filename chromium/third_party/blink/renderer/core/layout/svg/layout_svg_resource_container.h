@@ -78,7 +78,7 @@ class LayoutSVGResourceContainer : public LayoutSVGHiddenContainer {
   static void MarkForLayoutAndParentResourceInvalidation(
       LayoutObject&,
       bool needs_layout = true);
-  static void MarkClientForInvalidation(LayoutObject&, InvalidationModeMask);
+  static void StyleDidChange(LayoutObject&, StyleDifference);
 
   void ClearInvalidationMask() {
     NOT_DESTROYED();
@@ -100,8 +100,6 @@ class LayoutSVGResourceContainer : public LayoutSVGHiddenContainer {
   void StyleDidChange(StyleDifference, const ComputedStyle* old_style) override;
   void WillBeDestroyed() override;
 
-  bool is_in_layout_;
-
  private:
   // Track global (markAllClientsForInvalidation) invalidations to avoid
   // redundant crawls.
@@ -111,8 +109,12 @@ class LayoutSVGResourceContainer : public LayoutSVGHiddenContainer {
   // 23 padding bits available
 };
 
-DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutSVGResourceContainer,
-                                IsSVGResourceContainer());
+template <>
+struct DowncastTraits<LayoutSVGResourceContainer> {
+  static bool AllowFrom(const LayoutObject& object) {
+    return object.IsSVGResourceContainer();
+  }
+};
 
 #define DEFINE_LAYOUT_SVG_RESOURCE_TYPE_CASTS(thisType, typeName)   \
   DEFINE_TYPE_CASTS(thisType, LayoutSVGResourceContainer, resource, \

@@ -17,11 +17,11 @@
 <translation id="1369915414381695676">Website "<ph name="SITE_NAME" />" hinzugefügt</translation>
 <translation id="1383876407941801731">Durchsuchen</translation>
 <translation id="1384959399684842514">Download angehalten</translation>
+<translation id="1415402041810619267">URL abgeschnitten</translation>
 <translation id="1431402976894535801">Websites daran hindern, Informationen zu meiner Anwesenheit abzurufen</translation>
 <translation id="1446450296470737166">Volle Kontr. über MIDI-Ger. erl.</translation>
 <translation id="1509960214886564027">Funktionen auf vielen Websites funktionieren möglicherweise nicht mehr</translation>
 <translation id="1620510694547887537">Kamera</translation>
-<translation id="1647391597548383849">Kamerazugriff</translation>
 <translation id="1660204651932907780">Wiedergabe von Ton auf Websites zulassen (empfohlen)</translation>
 <translation id="1677097821151855053">Durch Cookies und andere Websitedaten erinnert sich die Website an Sie, z. B. bei der Anmeldung oder für personalisierte Werbung. Sie können Cookies für alle Websites <ph name="BEGIN_LINK" />in den Einstellungen verwalten<ph name="END_LINK" />.</translation>
 <translation id="1688867105868176567">Websitedaten löschen?</translation>
@@ -39,13 +39,13 @@
 <translation id="1994173015038366702">Website-URL</translation>
 <translation id="2025115093177348061">Augmented Reality</translation>
 <translation id="2030769033451695672">Tippen, um zu <ph name="URL_OF_THE_CURRENT_TAB" /> zurückzukehren</translation>
+<translation id="2054665754582400095">Ihre Anwesenheit</translation>
 <translation id="2079545284768500474">Rückgängig machen</translation>
 <translation id="2091887806945687916">Ton</translation>
 <translation id="2107397443965016585">Fragen, bevor Websites erlaubt wird, geschützten Inhalt wiederzugeben (empfohlen)</translation>
 <translation id="2146738493024040262">Instant-App öffnen</translation>
 <translation id="2148716181193084225">Heute</translation>
 <translation id="2182457891543959921">Nachfragen, bevor Websites erlaubt wird, eine 3D-Karte meiner Umgebung zu erstellen oder die Kameraposition zu verfolgen (empfohlen)</translation>
-<translation id="2187243482123994665">Anwesenheit des Nutzers</translation>
 <translation id="2212565012507486665">Cookies zulassen</translation>
 <translation id="2228071138934252756">Um <ph name="APP_NAME" /> Zugriff auf Ihre Kamera zu gewähren, muss die Kameraberechtigung auch in den <ph name="BEGIN_LINK" />Android-Einstellungen<ph name="END_LINK" /> aktiviert werden.</translation>
 <translation id="2241634353105152135">Nur einmal</translation>
@@ -55,7 +55,6 @@
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> MB</translation>
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> und <ph name="NUM_MORE" /> weitere zugelassen}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> und <ph name="NUM_MORE" /> weitere zugelassen}}</translation>
 <translation id="2434158240863470628">Download abgeschlossen <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
-<translation id="2440823041667407902">Standortzugriff</translation>
 <translation id="2482878487686419369">Benachrichtigungen</translation>
 <translation id="2490684707762498678">Über <ph name="APP_NAME" /> verwaltet</translation>
 <translation id="2498359688066513246">Hilfe &amp; Feedback</translation>
@@ -89,6 +88,7 @@
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3277252321222022663">Websites den Zugriff auf Sensoren erlauben (empfohlen)</translation>
 <translation id="3295602654194328831">Informationen ausblenden</translation>
+<translation id="3328801116991980348">Websiteinformationen</translation>
 <translation id="3333961966071413176">Alle Kontakte</translation>
 <translation id="3386292677130313581">Nachfragen, bevor Websites mein Standort angezeigt wird (empfohlen)</translation>
 <translation id="3538390592868664640">Websites daran hindern, eine 3D-Karte meiner Umgebung zu erstellen oder die Kameraposition zu verfolgen</translation>
@@ -122,6 +122,7 @@
 <translation id="445467742685312942">Websites erlauben, geschützte Inhalte wiederzugeben</translation>
 <translation id="4468959413250150279">Eine bestimmte Website stummschalten.</translation>
 <translation id="4479647676395637221">Nachfragen, bevor Websites Zugriff auf meine Kamera erhalten (empfohlen)</translation>
+<translation id="4505788138578415521">URL maximiert</translation>
 <translation id="4534723447064627427">Um <ph name="APP_NAME" /> Zugriff auf Ihr Mikrofon zu gewähren, muss die Mikrofonberechtigung auch in den <ph name="BEGIN_LINK" />Android-Einstellungen<ph name="END_LINK" /> aktiviert werden.</translation>
 <translation id="4570913071927164677">Details</translation>
 <translation id="4645575059429386691">Von deinen Eltern verwaltet</translation>
@@ -303,7 +304,6 @@
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> und <ph name="NUM_MORE" /> weitere}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> und <ph name="NUM_MORE" /> weitere}}</translation>
 <translation id="913657688200966289">Die Berechtigungen für <ph name="APP_NAME" /> können in den <ph name="BEGIN_LINK" />Android-Einstellungen<ph name="END_LINK" /> aktiviert werden.</translation>
-<translation id="945632385593298557">Mikrofonzugriff</translation>
 <translation id="965817943346481315">Blockieren, wenn Website aufdringliche oder irreführende Werbung anzeigt (empfohlen)</translation>
 <translation id="967624055006145463">Gespeicherte Daten</translation>
 </translationbundle>

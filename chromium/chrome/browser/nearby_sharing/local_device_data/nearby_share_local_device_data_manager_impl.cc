@@ -36,11 +36,7 @@ constexpr std::array<char, 36> kAlphaNumericChars = {
 constexpr base::TimeDelta kUpdateDeviceDataTimeout =
     base::TimeDelta::FromSeconds(30);
 constexpr base::TimeDelta kDeviceDataDownloadPeriod =
-    base::TimeDelta::FromHours(1);
-
-// The maximum length allowed for a device name, as encoded in UTF-8 in a
-// std::string, which will not contain a null terminator.
-size_t kDeviceNameMaxByteLength = 32;
+    base::TimeDelta::FromHours(12);
 
 }  // namespace
 
@@ -145,7 +141,7 @@ NearbyShareLocalDeviceDataManagerImpl::ValidateDeviceName(
   if (!base::IsStringUTF8(name))
     return nearby_share::mojom::DeviceNameValidationResult::kErrorNotValidUtf8;
 
-  if (name.length() > kDeviceNameMaxByteLength)
+  if (name.length() > kNearbyShareDeviceNameMaxLength)
     return nearby_share::mojom::DeviceNameValidationResult::kErrorTooLong;
 
   return nearby_share::mojom::DeviceNameValidationResult::kValid;

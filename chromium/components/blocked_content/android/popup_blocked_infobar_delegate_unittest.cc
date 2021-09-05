@@ -5,7 +5,7 @@
 #include "components/blocked_content/android/popup_blocked_infobar_delegate.h"
 
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "components/blocked_content/popup_blocker_tab_helper.h"
 #include "components/blocked_content/safe_browsing_triggered_popup_blocker.h"
@@ -126,8 +126,7 @@ TEST_F(PopupBlockedInfoBarDelegateTest, ShowsBlockedPopups) {
   EXPECT_TRUE(result.did_navigate);
   EXPECT_TRUE(on_accept_called);
   EXPECT_EQ(settings_map()->GetContentSetting(GURL(kPageUrl), GURL(kPageUrl),
-                                              ContentSettingsType::POPUPS,
-                                              std::string()),
+                                              ContentSettingsType::POPUPS),
             CONTENT_SETTING_ALLOW);
 }
 

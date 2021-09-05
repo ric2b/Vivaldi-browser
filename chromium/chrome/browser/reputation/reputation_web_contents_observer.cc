@@ -196,13 +196,25 @@ void RecordSafetyTipStatusWithInitiatorOriginInfo(
 
 // Returns whether a safety tip should be shown, according to finch.
 bool IsSafetyTipEnabled(security_state::SafetyTipStatus status) {
-  if (!base::FeatureList::IsEnabled(security_state::features::kSafetyTipUI)) {
+  if (!security_state::IsSafetyTipUIFeatureEnabled()) {
     return false;
   }
-  if (status == security_state::SafetyTipStatus::kBadReputation) {
+
+  if (status != security_state::SafetyTipStatus::kBadReputation) {
+    return true;
+  }
+
+  // Safety Tips can be enabled with a few different features that have slightly
+  // different behavior. "Suspicious site" Safety Tips are enabled for the main
+  // Safety Tip feature, |kSafetyTipUI|, by a parameter, and they are always
+  // enabled for the delayed warnings Safety Tip feature (which uses "Suspicious
+  // site" Safety Tips on phishing pages blocking by Safe Browsing.)
+  if (base::FeatureList::IsEnabled(security_state::features::kSafetyTipUI)) {
     return kEnableSuspiciousSiteChecks.Get();
   }
-  return true;
+
+  return base::FeatureList::IsEnabled(
+      security_state::features::kSafetyTipUIOnDelayedWarning);
 }
 
 }  // namespace
@@ -303,10 +315,11 @@ void ReputationWebContentsObserver::MaybeShowSafetyTip(
 
   ReputationService* service = ReputationService::Get(profile_);
   service->GetReputationStatus(
-      url, base::BindOnce(
-               &ReputationWebContentsObserver::HandleReputationCheckResult,
-               weak_factory_.GetWeakPtr(), navigation_source_id,
-               called_from_visibility_check, record_ukm_if_tip_not_shown));
+      url, web_contents(),
+      base::BindOnce(
+          &ReputationWebContentsObserver::HandleReputationCheckResult,
+          weak_factory_.GetWeakPtr(), navigation_source_id,
+          called_from_visibility_check, record_ukm_if_tip_not_shown));
 }
 
 void ReputationWebContentsObserver::HandleReputationCheckResult(

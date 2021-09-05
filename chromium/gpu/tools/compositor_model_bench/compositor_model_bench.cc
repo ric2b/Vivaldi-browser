@@ -37,7 +37,6 @@
 #include "ui/base/x/x11_util.h"
 #include "ui/gfx/x/connection.h"
 #include "ui/gfx/x/glx.h"
-#include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/xproto.h"
 #include "ui/gfx/x/xproto_util.h"
 #include "ui/gl/glx_util.h"
@@ -66,19 +65,18 @@ class Simulator {
   Simulator(int seconds_per_test, const base::FilePath& output_path)
       : output_path_(output_path),
         seconds_per_test_(seconds_per_test),
-        display_(nullptr),
         gl_context_(nullptr),
         window_width_(WINDOW_WIDTH),
         window_height_(WINDOW_HEIGHT) {}
 
   ~Simulator() {
     // Cleanup GL.
-    glXMakeCurrent(display_, 0, nullptr);
-    glXDestroyContext(display_, gl_context_);
+    auto display = connection_->GetXlibDisplay(x11::XlibDisplayType::kFlushing);
+    glXMakeCurrent(display, 0, nullptr);
+    glXDestroyContext(display, gl_context_);
 
-    // Destroy window and display.
-    connection_->DestroyWindow({window_});
-    XCloseDisplay(display_);
+    // The window and X11 connection will be cleaned up when connection_ is
+    // destroyed.
   }
 
   void QueueTest(const base::FilePath& path) {
@@ -152,9 +150,8 @@ class Simulator {
   // X11 window. Further initialization is done in X11VideoRenderer.
   bool InitX11() {
     connection_ = std::make_unique<x11::Connection>();
-    display_ = connection_->display();
-    if (!display_) {
-      LOG(FATAL) << "Cannot open display";
+    if (!connection_->Ready()) {
+      LOG(FATAL) << "Cannot open X11 connection";
       return false;
     }
 
@@ -197,18 +194,20 @@ class Simulator {
     auto* glx_config = gl::GetFbConfigForWindow(connection_.get(), window_);
     if (!glx_config)
       return false;
-    auto* visual = glXGetVisualFromFBConfig(display_, glx_config);
+    auto* visual =
+        glXGetVisualFromFBConfig(connection_->GetXlibDisplay(), glx_config);
     DCHECK(visual);
 
-    gl_context_ = glXCreateContext(display_, visual, nullptr,
-                                   true /* Direct rendering */);
+    gl_context_ = glXCreateContext(
+        connection_->GetXlibDisplay(x11::XlibDisplayType::kSyncing), visual,
+        nullptr, true /* Direct rendering */);
 
     if (!gl_context_)
       return false;
 
-    if (!glXMakeCurrent(display_, static_cast<uint32_t>(window_),
-                        gl_context_)) {
-      glXDestroyContext(display_, gl_context_);
+    auto display = connection_->GetXlibDisplay(x11::XlibDisplayType::kFlushing);
+    if (!glXMakeCurrent(display, static_cast<uint32_t>(window_), gl_context_)) {
+      glXDestroyContext(display, gl_context_);
       gl_context_ = nullptr;
       return false;
     }
@@ -246,7 +245,8 @@ class Simulator {
     if (current_sim_)
       current_sim_->Update();
 
-    glXSwapBuffers(display_, static_cast<uint32_t>(window_));
+    glXSwapBuffers(connection_->GetXlibDisplay(x11::XlibDisplayType::kFlushing),
+                   static_cast<uint32_t>(window_));
 
     auto window = static_cast<x11::Window>(window_);
     x11::ExposeEvent ev{
@@ -339,7 +339,6 @@ class Simulator {
   int seconds_per_test_;
   // GUI data
   std::unique_ptr<x11::Connection> connection_;
-  Display* display_;
   x11::Window window_ = x11::Window::None;
   GLXContext gl_context_;
   int window_width_;

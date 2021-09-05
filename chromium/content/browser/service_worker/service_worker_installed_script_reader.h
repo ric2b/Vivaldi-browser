@@ -30,7 +30,7 @@ class ServiceWorkerInstalledScriptReader
   enum class FinishedReason {
     kNotFinished = 0,
     kSuccess = 1,
-    kNoHttpInfoError = 2,
+    kNoResponseHeadError = 2,
     kCreateDataPipeError = 3,
     kConnectionError = 4,
     kResponseReaderError = 5,
@@ -74,6 +74,7 @@ class ServiceWorkerInstalledScriptReader
       base::Optional<mojo_base::BigBuffer> metadata,
       mojo::ScopedDataPipeConsumerHandle body_consumer_handle);
   void OnMetaDataSent(bool success);
+  void OnReaderDisconnected();
   void CompleteSendIfNeeded(FinishedReason reason);
   bool WasMetadataWritten() const { return !meta_data_sender_; }
   bool WasBodyWritten() const { return was_body_written_; }

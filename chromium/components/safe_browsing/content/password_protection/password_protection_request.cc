@@ -11,6 +11,7 @@
 #include "base/containers/flat_set.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/task/thread_pool.h"
 #include "base/time/time.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
@@ -18,8 +19,8 @@
 #include "components/safe_browsing/content/common/safe_browsing.mojom.h"
 #include "components/safe_browsing/content/password_protection/metrics_util.h"
 #include "components/safe_browsing/content/password_protection/password_protection_navigation_throttle.h"
-#include "components/safe_browsing/content/password_protection/visual_utils.h"
 #include "components/safe_browsing/content/web_ui/safe_browsing_ui.h"
+#include "components/safe_browsing/core/common/visual_utils.h"
 #include "components/safe_browsing/core/db/allowlist_checker_client.h"
 #include "components/safe_browsing/core/features.h"
 #include "components/safe_browsing/core/proto/csd.pb.h"
@@ -478,10 +479,8 @@ void PasswordProtectionRequest::SendRequest() {
       WebUIInfoSingleton::GetInstance()->AddToPGPings(*request_proto_);
 
   std::string serialized_request;
-  if (!request_proto_->SerializeToString(&serialized_request)) {
-    Finish(RequestOutcome::REQUEST_MALFORMED, nullptr);
-    return;
-  }
+  // TODO(crbug.com/1158582): Return early if request serialization fails.
+  request_proto_->SerializeToString(&serialized_request);
 
   net::NetworkTrafficAnnotationTag traffic_annotation =
       net::DefineNetworkTrafficAnnotation("password_protection_request", R"(

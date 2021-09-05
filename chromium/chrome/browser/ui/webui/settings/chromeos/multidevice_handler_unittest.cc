@@ -63,8 +63,6 @@ GenerateDefaultFeatureStatesMap() {
        multidevice_setup::mojom::FeatureState::kUnavailableNoVerifiedHost},
       {multidevice_setup::mojom::Feature::kPhoneHubNotifications,
        multidevice_setup::mojom::FeatureState::kUnavailableNoVerifiedHost},
-      {multidevice_setup::mojom::Feature::kPhoneHubNotificationBadge,
-       multidevice_setup::mojom::FeatureState::kUnavailableNoVerifiedHost},
       {multidevice_setup::mojom::Feature::kPhoneHubTaskContinuation,
        multidevice_setup::mojom::FeatureState::kUnavailableNoVerifiedHost},
       {multidevice_setup::mojom::Feature::kWifiSync,
@@ -121,13 +119,6 @@ void VerifyPageContentDict(
       multidevice_setup::mojom::Feature::kPhoneHubNotifications);
   EXPECT_EQ(static_cast<int>(it->second), phone_hub_notifications_state);
 
-  int phone_hub_notification_badge_state;
-  EXPECT_TRUE(page_content_dict->GetInteger(
-      "phoneHubNotificationBadgeState", &phone_hub_notification_badge_state));
-  it = feature_states_map.find(
-      multidevice_setup::mojom::Feature::kPhoneHubNotificationBadge);
-  EXPECT_EQ(static_cast<int>(it->second), phone_hub_notification_badge_state);
-
   int phone_hub_task_continuation_state;
   EXPECT_TRUE(page_content_dict->GetInteger(
       "phoneHubTaskContinuationState", &phone_hub_task_continuation_state));
@@ -167,7 +158,8 @@ class MultideviceHandlerTest : public testing::Test {
         std::make_unique<multidevice_setup::FakeMultiDeviceSetupClient>();
     fake_notification_access_manager_ =
         std::make_unique<phonehub::FakeNotificationAccessManager>(
-            /*has_access_been_granted=*/false);
+            phonehub::NotificationAccessManager::AccessStatus::
+                kAvailableButNotGranted);
     fake_android_sms_pairing_state_tracker_ = std::make_unique<
         multidevice_setup::FakeAndroidSmsPairingStateTracker>();
     fake_android_sms_app_manager_ =
@@ -236,8 +228,11 @@ class MultideviceHandlerTest : public testing::Test {
   }
 
   void CallAttemptNotificationSetup(bool has_access_been_granted) {
-    fake_notification_access_manager()->SetHasAccessBeenGrantedInternal(
-        has_access_been_granted);
+    fake_notification_access_manager()->SetAccessStatusInternal(
+        has_access_been_granted
+            ? phonehub::NotificationAccessManager::AccessStatus::kAccessGranted
+            : phonehub::NotificationAccessManager::AccessStatus::
+                  kAvailableButNotGranted);
     base::ListValue empty_args;
     test_web_ui()->HandleReceivedMessage("attemptNotificationSetup",
                                          &empty_args);

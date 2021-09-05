@@ -9,7 +9,7 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/metrics/field_trial.h"
@@ -941,17 +941,22 @@ class CaptivePortalCheckRenderProcessHostFactory
   content::RenderProcessHost* CreateRenderProcessHost(
       content::BrowserContext* browser_context,
       content::SiteInstance* site_instance) override {
-    rph_ = new CaptivePortalCheckProcessHost(browser_context);
-    return rph_;
+    auto rph = std::make_unique<CaptivePortalCheckProcessHost>(browser_context);
+    content::RenderProcessHost* result = rph.get();
+    processes_.push_back(std::move(rph));
+    return result;
   }
 
   void SetupForTracking(bool* invoked_url_factory,
                         bool expected_disable_secure_dns) {
-    rph_->SetupForTracking(invoked_url_factory, expected_disable_secure_dns);
+    processes_.back()->SetupForTracking(invoked_url_factory,
+                                        expected_disable_secure_dns);
   }
 
+  void ClearRenderProcessHosts() { processes_.clear(); }
+
  private:
-  CaptivePortalCheckProcessHost* rph_ = nullptr;
+  std::list<std::unique_ptr<CaptivePortalCheckProcessHost>> processes_;
 
   DISALLOW_COPY_AND_ASSIGN(CaptivePortalCheckRenderProcessHostFactory);
 };
@@ -963,6 +968,12 @@ class ChromeContentBrowserClientCaptivePortalBrowserTest
   void SetUp() override {
     SetRenderProcessHostFactory(&cp_rph_factory_);
     ChromeRenderViewHostTestHarness::SetUp();
+  }
+
+  void TearDown() override {
+    DeleteContents();
+    cp_rph_factory_.ClearRenderProcessHosts();
+    ChromeRenderViewHostTestHarness::TearDown();
   }
 
   CaptivePortalCheckRenderProcessHostFactory cp_rph_factory_;

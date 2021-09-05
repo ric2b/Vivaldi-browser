@@ -10,7 +10,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "chrome/browser/notifications/notification_blocker.h"
 #include "chrome/browser/notifications/notification_display_queue.h"
 #include "chrome/browser/notifications/notification_display_service.h"
@@ -21,6 +21,7 @@
 #include "ui/message_center/public/cpp/notification_delegate.h"
 #include "ui/message_center/public/cpp/notification_types.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace {
 
@@ -30,15 +31,35 @@ class FakeNotificationBlocker : public NotificationBlocker {
   ~FakeNotificationBlocker() override = default;
 
   // NotificationDisplayQueue::NotificationBlocker:
-  bool ShouldBlockNotifications() override { return should_block_; }
+  bool ShouldBlockNotification(
+      const message_center::Notification& notification) override {
+    if (!should_block_ || !blocked_origin_)
+      return should_block_;
+
+    return url::IsSameOriginWith(notification.origin_url(), *blocked_origin_);
+  }
+  MOCK_METHOD(void,
+              OnBlockedNotification,
+              (const message_center::Notification&, bool),
+              (override));
+  MOCK_METHOD(void,
+              OnClosedNotification,
+              (const message_center::Notification&),
+              (override));
 
   void SetShouldBlockNotifications(bool should_block) {
     should_block_ = should_block;
     NotifyBlockingStateChanged();
   }
 
+  void SetBlockedOrigin(const base::Optional<GURL>& blocked_origin) {
+    blocked_origin_ = blocked_origin;
+    NotifyBlockingStateChanged();
+  }
+
  private:
   bool should_block_ = false;
+  base::Optional<GURL> blocked_origin_;
 };
 
 class NotificationDisplayServiceMock : public NotificationDisplayService {
@@ -70,14 +91,18 @@ MATCHER_P(EqualNotification, notification, "") {
   return arg.type() == notification.type() && arg.id() == notification.id();
 }
 
-message_center::Notification CreateNotification(const std::string& id) {
+message_center::Notification CreateNotification(const std::string& id,
+                                                const GURL& origin) {
   return message_center::Notification(
       message_center::NOTIFICATION_TYPE_SIMPLE, id, /*title=*/base::string16(),
       /*message=*/base::string16(), /*icon=*/gfx::Image(),
-      /*display_source=*/base::string16(),
-      /*origin_url=*/GURL(), message_center::NotifierId(),
+      /*display_source=*/base::string16(), origin, message_center::NotifierId(),
       message_center::RichNotificationData(),
       base::MakeRefCounted<message_center::NotificationDelegate>());
+}
+
+message_center::Notification CreateNotification(const std::string& id) {
+  return CreateNotification(id, GURL());
 }
 
 }  // namespace
@@ -113,16 +138,25 @@ class NotificationDisplayQueueTest : public testing::Test {
 
 TEST_F(NotificationDisplayQueueTest, ShouldEnqueueWithoutBlockers) {
   queue().SetNotificationBlockers({});
-  EXPECT_FALSE(queue().ShouldEnqueueNotifications());
+  EXPECT_FALSE(queue().ShouldEnqueueNotification(
+      NotificationHandler::Type::WEB_PERSISTENT, CreateNotification("id")));
 }
 
 TEST_F(NotificationDisplayQueueTest, ShouldEnqueueWithAllowingBlocker) {
-  EXPECT_FALSE(queue().ShouldEnqueueNotifications());
+  EXPECT_FALSE(queue().ShouldEnqueueNotification(
+      NotificationHandler::Type::WEB_PERSISTENT, CreateNotification("id")));
 }
 
 TEST_F(NotificationDisplayQueueTest, ShouldEnqueueWithBlockingBlocker) {
   notification_blocker().SetShouldBlockNotifications(true);
-  EXPECT_TRUE(queue().ShouldEnqueueNotifications());
+  EXPECT_TRUE(queue().ShouldEnqueueNotification(
+      NotificationHandler::Type::WEB_PERSISTENT, CreateNotification("id")));
+}
+
+TEST_F(NotificationDisplayQueueTest, ShouldEnqueueForNonWebNotification) {
+  notification_blocker().SetShouldBlockNotifications(true);
+  EXPECT_FALSE(queue().ShouldEnqueueNotification(
+      NotificationHandler::Type::TRANSIENT, CreateNotification("id")));
 }
 
 TEST_F(NotificationDisplayQueueTest, EnqueueNotification) {
@@ -179,6 +213,9 @@ TEST_F(NotificationDisplayQueueTest, BlockUnblockMultipleBlockers) {
   notification_blocker_1->SetShouldBlockNotifications(true);
   notification_blocker_2->SetShouldBlockNotifications(true);
 
+  EXPECT_CALL(*notification_blocker_1, OnBlockedNotification);
+  EXPECT_CALL(*notification_blocker_2, OnBlockedNotification);
+
   message_center::Notification notification = CreateNotification("id");
   queue().EnqueueNotification(NotificationHandler::Type::TRANSIENT,
                               notification, /*metadata=*/nullptr);
@@ -197,6 +234,8 @@ TEST_F(NotificationDisplayQueueTest, UnblockNotificationOrdering) {
   message_center::Notification notification_1 = CreateNotification("id1");
   message_center::Notification notification_2 = CreateNotification("id2");
   message_center::Notification notification_3 = CreateNotification("id3");
+
+  EXPECT_CALL(notification_blocker(), OnBlockedNotification).Times(3);
 
   queue().EnqueueNotification(NotificationHandler::Type::TRANSIENT,
                               notification_1, /*metadata=*/nullptr);
@@ -217,4 +256,109 @@ TEST_F(NotificationDisplayQueueTest, UnblockNotificationOrdering) {
                                          EqualNotification(notification_3),
                                          /*metadata=*/nullptr));
   notification_blocker().SetShouldBlockNotifications(false);
+}
+
+TEST_F(NotificationDisplayQueueTest, UnblockNotificationSubset) {
+  GURL origin_1("https://example1.com");
+  GURL origin_2("https://example2.com");
+
+  auto blocker_1 = std::make_unique<FakeNotificationBlocker>();
+  FakeNotificationBlocker* notification_blocker_1 = blocker_1.get();
+  notification_blocker_1->SetShouldBlockNotifications(true);
+  notification_blocker_1->SetBlockedOrigin(origin_1);
+
+  auto blocker_2 = std::make_unique<FakeNotificationBlocker>();
+  FakeNotificationBlocker* notification_blocker_2 = blocker_2.get();
+  notification_blocker_2->SetShouldBlockNotifications(true);
+  notification_blocker_2->SetBlockedOrigin(origin_2);
+
+  NotificationDisplayQueue::NotificationBlockers blockers;
+  blockers.push_back(std::move(blocker_1));
+  blockers.push_back(std::move(blocker_2));
+  queue().SetNotificationBlockers(std::move(blockers));
+
+  message_center::Notification notification_1 =
+      CreateNotification("id1", origin_1);
+  message_center::Notification notification_2 =
+      CreateNotification("id2", origin_2);
+
+  queue().EnqueueNotification(NotificationHandler::Type::TRANSIENT,
+                              notification_1, /*metadata=*/nullptr);
+  queue().EnqueueNotification(NotificationHandler::Type::TRANSIENT,
+                              notification_2, /*metadata=*/nullptr);
+  EXPECT_EQ(2u, queue().GetQueuedNotificationIds().size());
+
+  // Unblocking first blocker should only show first notification.
+  EXPECT_CALL(service(), DisplayMockImpl(NotificationHandler::Type::TRANSIENT,
+                                         EqualNotification(notification_1),
+                                         /*metadata=*/nullptr));
+  notification_blocker_1->SetShouldBlockNotifications(false);
+  testing::Mock::VerifyAndClearExpectations(&service());
+  EXPECT_EQ(1u, queue().GetQueuedNotificationIds().size());
+
+  // Unblocking second blocker should show second notification.
+  EXPECT_CALL(service(), DisplayMockImpl(NotificationHandler::Type::TRANSIENT,
+                                         EqualNotification(notification_2),
+                                         /*metadata=*/nullptr));
+  notification_blocker_2->SetShouldBlockNotifications(false);
+  testing::Mock::VerifyAndClearExpectations(&service());
+  EXPECT_EQ(0u, queue().GetQueuedNotificationIds().size());
+}
+
+TEST_F(NotificationDisplayQueueTest, MultipleBlockersNotifyBlocked) {
+  auto blocker_1 = std::make_unique<FakeNotificationBlocker>();
+  FakeNotificationBlocker* notification_blocker_1 = blocker_1.get();
+  auto blocker_2 = std::make_unique<FakeNotificationBlocker>();
+  FakeNotificationBlocker* notification_blocker_2 = blocker_2.get();
+
+  NotificationDisplayQueue::NotificationBlockers blockers;
+  blockers.push_back(std::move(blocker_1));
+  blockers.push_back(std::move(blocker_2));
+  queue().SetNotificationBlockers(std::move(blockers));
+
+  notification_blocker_1->SetShouldBlockNotifications(true);
+  notification_blocker_2->SetShouldBlockNotifications(false);
+
+  EXPECT_CALL(*notification_blocker_1, OnBlockedNotification).Times(1);
+  EXPECT_CALL(*notification_blocker_2, OnBlockedNotification).Times(0);
+
+  queue().EnqueueNotification(NotificationHandler::Type::TRANSIENT,
+                              CreateNotification("id1"), /*metadata=*/nullptr);
+
+  notification_blocker_2->SetShouldBlockNotifications(true);
+  notification_blocker_1->SetShouldBlockNotifications(false);
+
+  EXPECT_CALL(*notification_blocker_1, OnBlockedNotification).Times(0);
+  EXPECT_CALL(*notification_blocker_2, OnBlockedNotification).Times(1);
+
+  queue().EnqueueNotification(NotificationHandler::Type::TRANSIENT,
+                              CreateNotification("id2"), /*metadata=*/nullptr);
+}
+
+TEST_F(NotificationDisplayQueueTest, NotifiesReplacedNotification) {
+  message_center::Notification notification = CreateNotification("id");
+  notification_blocker().SetShouldBlockNotifications(true);
+
+  EXPECT_CALL(notification_blocker(),
+              OnBlockedNotification(testing::_, /*replaced=*/false));
+  queue().EnqueueNotification(NotificationHandler::Type::TRANSIENT,
+                              notification, /*metadata=*/nullptr);
+
+  EXPECT_CALL(notification_blocker(),
+              OnBlockedNotification(testing::_, /*replaced=*/true));
+  EXPECT_CALL(notification_blocker(), OnClosedNotification).Times(0);
+  queue().EnqueueNotification(NotificationHandler::Type::TRANSIENT,
+                              notification, /*metadata=*/nullptr);
+}
+
+TEST_F(NotificationDisplayQueueTest, NotifiesClosedNotification) {
+  message_center::Notification notification = CreateNotification("id");
+  notification_blocker().SetShouldBlockNotifications(true);
+
+  EXPECT_CALL(notification_blocker(), OnBlockedNotification);
+  queue().EnqueueNotification(NotificationHandler::Type::TRANSIENT,
+                              notification, /*metadata=*/nullptr);
+
+  EXPECT_CALL(notification_blocker(), OnClosedNotification);
+  queue().RemoveQueuedNotification(notification.id());
 }

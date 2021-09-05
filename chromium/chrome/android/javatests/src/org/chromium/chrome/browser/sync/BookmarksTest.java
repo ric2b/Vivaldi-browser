@@ -18,6 +18,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaNotSatisfiedException;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.bookmarks.BookmarkBridge;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -28,8 +30,6 @@ import org.chromium.components.bookmarks.BookmarkId;
 import org.chromium.components.sync.ModelType;
 import org.chromium.components.sync.protocol.BookmarkSpecifics;
 import org.chromium.components.sync.protocol.SyncEntity;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaNotSatisfiedException;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 import java.util.ArrayList;
@@ -84,7 +84,7 @@ public class BookmarksTest {
             // Without this call to fake that knowledge for testing, it crashes.
             mBookmarkBridge.loadEmptyPartnerBookmarkShimForTesting();
         });
-        mSyncTestRule.setUpAccountAndSignInForTesting();
+        mSyncTestRule.setUpAccountAndEnableSyncForTesting();
         // Make sure initial state is clean.
         assertClientBookmarkCount(0);
         assertServerBookmarkCountWithName(0, TITLE);

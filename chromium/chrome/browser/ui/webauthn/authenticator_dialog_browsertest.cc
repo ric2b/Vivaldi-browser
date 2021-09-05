@@ -5,8 +5,8 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind_helpers.h"
-#include "base/test/bind_test_util.h"
+#include "base/callback_helpers.h"
+#include "base/test/bind.h"
 #include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window.h"
@@ -40,9 +40,9 @@ class AuthenticatorDialogTest : public DialogBrowserTest {
         AuthenticatorTransport::kUsbHumanInterfaceDevice,
         AuthenticatorTransport::kInternal,
         AuthenticatorTransport::kCloudAssistedBluetoothLowEnergy};
-    std::array<uint8_t, device::cablev2::kQRKeySize> qr_key = {0};
     model->set_cable_transport_info(/*cable_extension_provided=*/true,
-                                    /*have_paired_phones=*/false, qr_key);
+                                    /*have_paired_phones=*/false,
+                                    "fido://qrcode");
     model->StartFlow(std::move(transport_availability), base::nullopt);
 
     // The dialog should immediately close as soon as it is displayed.

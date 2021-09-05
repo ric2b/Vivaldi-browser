@@ -11,11 +11,13 @@ executable("update_notifier") {
       "//chrome/installer/util:with_no_strings",
       "//chrome/install_static:install_static_util",
       "//components/language/core/browser",
+      "//components/version_info:generate_version_info",
       "//components/prefs",
       "//ui/base",
       "//vivaldi/app:resources",
       "//vivaldi/app:vivaldi_icon",
       "//vivaldi/browser:init_sparkle",
+      "thirdparty/winsparkle/src:winsparkle"
     ]
 
     sources = [

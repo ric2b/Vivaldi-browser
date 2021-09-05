@@ -3,6 +3,7 @@
 <translationbundle lang="el">
 <translation id="1276998909102132017">Εικόνες gallery</translation>
 <translation id="1430915738399379752">Εκτύπωση</translation>
+<translation id="1473110567575736769">Χρονόμετρο 3 δευτερολέπτων</translation>
 <translation id="1620510694547887537">Κάμερα</translation>
 <translation id="1627744224761163218">4 x 4</translation>
 <translation id="1664224225747386870">Καμία εγγραφή</translation>
@@ -29,7 +30,9 @@
 <translation id="3259149966178251584">Ανάλυση κάμερας</translation>
 <translation id="3517926952904427380">Δεν είναι δυνατή η λήψη φωτογραφίας πορτραίτου.</translation>
 <translation id="3569311554794739032">Είστε βέβαιοι ότι θέλετε να καταργήσετε το αρχείο <ph name="FILE" />;</translation>
+<translation id="3750315947605636967">Η κάμερά σας χρησιμοποιείται από άλλη εφαρμογή.</translation>
 <translation id="3810838688059735925">Βίντεο</translation>
+<translation id="4000398125663085899">Οι νέες φωτογραφίες και τα βίντεο θα αποθηκεύονται πλέον σε έναν φάκελο στην εφαρμογή Αρχεία: Τα αρχεία μου &gt; Κάμερα</translation>
 <translation id="4118525110028899586">Παύση εγγραφής</translation>
 <translation id="4279490309300973883">Κατοπτρισμός</translation>
 <translation id="4329152592498422850">Μετάβαση στη λειτουργία λήψης τετράγωνης φωτογραφίας</translation>
@@ -43,9 +46,11 @@
 <translation id="5057360777601936059">Η κάμερά σας δεν είναι διαθέσιμη προς το παρόν.
         Ελέγξτε εάν η κάμερα έχει συνδεθεί σωστά.</translation>
 <translation id="5152121255775685072">Μετάβαση στο gallery</translation>
+<translation id="5422455049771430511">Οι φωτογραφίες και τα βίντεό σας βρήκαν νέα στέγη</translation>
 <translation id="5671277269877808209">Τετράγωνο</translation>
 <translation id="5775960006311140197">Λειτουργία Expert</translation>
 <translation id="5869546221129391014">Πλέγμα</translation>
+<translation id="6040143037577758943">Κλείσιμο</translation>
 <translation id="6073451960410192870">Διακοπή εγγραφής</translation>
 <translation id="6197807149213783179">Αποθήκευση μεταδεδομένων</translation>
 <translation id="6233780560267770709">3 επί 3</translation>
@@ -60,6 +65,7 @@
 <translation id="6965382102122355670">OK</translation>
 <translation id="698156982839284926">3 δευτερόλεπτα</translation>
 <translation id="712848772518857951">Είστε βέβαιοι ότι θέλετε να καταργήσετε <ph name="COUNT" /> στοιχεία;</translation>
+<translation id="7134221860976209830">Χρονόμετρο 10 δευτερολέπτων</translation>
 <translation id="7243947652761655814">Ανάλυση βίντεο</translation>
 <translation id="7337660886763914220">Σφάλματα συστήματος αρχείων.</translation>
 <translation id="7557677699350329807">Μετάβαση στην επόμενη κάμερα</translation>
@@ -67,7 +73,6 @@
 <translation id="7649070708921625228">Βοήθεια</translation>
 <translation id="7658239707568436148">Ακύρωση</translation>
 <translation id="7670511624014457267">60 καρέ ανά δευτερόλεπτο</translation>
-<translation id="8049189770492311300">Χρονόμετρο</translation>
 <translation id="8067883171444229417">Αναπαραγωγή βίντεο</translation>
 <translation id="8131740175452115882">Επιβεβαίωση</translation>
 <translation id="8145038249676204903">Μετάβαση στη λειτουργία λήψης φωτογραφίας</translation>

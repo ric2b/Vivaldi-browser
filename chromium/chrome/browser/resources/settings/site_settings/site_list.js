@@ -59,6 +59,14 @@ Polymer({
 
     categoryHeader: String,
 
+    /** @private */
+    enableContentSettingsRedesign_: {
+      type: Boolean,
+      value() {
+        return loadTimeData.getBoolean('enableContentSettingsRedesign');
+      }
+    },
+
     /**
      * The site serving as the model for the currently open action menu.
      * @private {?SiteException}
@@ -324,12 +332,12 @@ Polymer({
       this.$.tooltip.hide();
       target.removeEventListener('mouseleave', hide);
       target.removeEventListener('blur', hide);
-      target.removeEventListener('tap', hide);
+      target.removeEventListener('click', hide);
       this.$.tooltip.removeEventListener('mouseenter', hide);
     };
     target.addEventListener('mouseleave', hide);
     target.addEventListener('blur', hide);
-    target.addEventListener('tap', hide);
+    target.addEventListener('click', hide);
     this.$.tooltip.addEventListener('mouseenter', hide);
     this.$.tooltip.show();
   },
@@ -538,4 +546,12 @@ Polymer({
   computeHasDiscardedExceptions_() {
     return this.sites.some(exception => exception.isDiscarded);
   },
+
+  /**
+   * @return {string}
+   * @private
+   */
+  getCssClass_() {
+    return this.enableContentSettingsRedesign_ ? 'secondary' : '';
+  }
 });

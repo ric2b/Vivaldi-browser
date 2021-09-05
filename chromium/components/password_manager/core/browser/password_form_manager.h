@@ -17,6 +17,7 @@
 #include "build/build_config.h"
 #include "components/autofill/core/common/field_data_manager.h"
 #include "components/autofill/core/common/form_data.h"
+#include "components/autofill/core/common/password_generation_util.h"
 #include "components/autofill/core/common/renderer_id.h"
 #include "components/autofill/core/common/signatures.h"
 #include "components/password_manager/core/browser/form_fetcher.h"
@@ -126,8 +127,11 @@ class PasswordFormManager : public PasswordFormManagerForUI,
   // Sends fill data to the renderer.
   void Fill();
 
-  // Sends fill data to the renderer to fill |observed_form_data|.
-  void FillForm(const autofill::FormData& observed_form_data);
+  // Sends fill data to the renderer to fill |observed_form_data| using
+  // new relevant data from |predictions|.
+  void FillForm(
+      const autofill::FormData& observed_form_data,
+      const std::map<autofill::FormSignature, FormPredictions>& predictions);
 
   void UpdateSubmissionIndicatorEvent(
       autofill::mojom::SubmissionIndicatorEvent event);
@@ -176,7 +180,8 @@ class PasswordFormManager : public PasswordFormManagerForUI,
                                 const base::string16& generated_password);
   void PasswordNoLongerGenerated();
   bool HasGeneratedPassword() const;
-  void SetGenerationPopupWasShown(bool is_manual_generation);
+  void SetGenerationPopupWasShown(
+      autofill::password_generation::PasswordGenerationType type);
   void SetGenerationElement(autofill::FieldRendererId generation_element);
   bool IsPossibleChangePasswordFormWithoutUsername() const;
   bool IsPasswordUpdate() const;
@@ -316,6 +321,17 @@ class PasswordFormManager : public PasswordFormManagerForUI,
   // predictions, data from FieldInfoManager and whether |possible_username|
   // looks valid.
   bool UsePossibleUsername(const PossibleUsernameData* possible_username);
+
+  // Updates the predictions stored in |parser_| with predictions relevant for
+  // |observed_form_or_digest_|.
+  void UpdatePredictionsForObservedForm(
+      const std::map<autofill::FormSignature, FormPredictions>& predictions);
+
+  // Updates |observed_form_or_digest_| and form predictions stored in
+  // |parser_| and resets the amount of autofills left.
+  void UpdateFormManagerWithFormChanges(
+      const autofill::FormData& observed_form_data,
+      const std::map<autofill::FormSignature, FormPredictions>& predictions);
 
   // The client which implements embedder-specific PasswordManager operations.
   PasswordManagerClient* client_;

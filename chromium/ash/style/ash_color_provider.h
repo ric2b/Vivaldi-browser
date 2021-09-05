@@ -106,22 +106,23 @@ class ASH_EXPORT AshColorProvider : public SessionObserver {
     kButtonIconColor,
     kButtonIconColorPrimary,
 
-    // Color for sliders (volume, brightness etc.)
-    kSliderThumbColorEnabled,
-    kSliderThumbColorDisabled,
-
     // Color for app state indicator.
     kAppStateIndicatorColor,
     kAppStateIndicatorColorInactive,
 
     // Color for the shelf drag handle in tablet mode.
     kShelfHandleColor,
-  };
 
-  // Types of ash styled buttons.
-  enum class ButtonType {
-    kPillButtonWithIcon,
-    kCloseButtonWithSmallBase,
+    // Color for slider.
+    kSliderColorActive,
+    kSliderColorInactive,
+
+    // Color for radio button.
+    kRadioColorActive,
+    kRadioColorInactive,
+
+    // Color for current active desk's border.
+    kCurrentDeskColor,
   };
 
   // Attributes of ripple, includes the base color, opacity of inkdrop and
@@ -157,6 +158,7 @@ class ASH_EXPORT AshColorProvider : public SessionObserver {
 
   // SessionObserver:
   void OnActiveUserPrefServiceChanged(PrefService* prefs) override;
+  void OnSessionStateChanged(session_manager::SessionState state) override;
 
   SkColor GetShieldLayerColor(ShieldLayerType type) const;
   SkColor GetBaseLayerColor(BaseLayerType type) const;
@@ -176,16 +178,20 @@ class ASH_EXPORT AshColorProvider : public SessionObserver {
   // |is_themed_|).
   SkColor GetBackgroundColor() const;
 
-  // Helpers to style buttons based on the desired |type| and theme. Depending
-  // on the type may style text, icon and background colors for both enabled and
-  // disabled states. May overwrite an prior styles on |button|.
+  // Helpers to style different types of buttons. Depending on the type may
+  // style text, icon and background colors for both enabled and disabled
+  // states. May overwrite an prior styles on |button|.
   void DecoratePillButton(views::LabelButton* button,
-                          ButtonType type,
-                          const gfx::VectorIcon& icon);
+                          const gfx::VectorIcon* icon);
   void DecorateCloseButton(views::ImageButton* button,
-                           ButtonType type,
                            int button_size,
                            const gfx::VectorIcon& icon);
+  void DecorateIconButton(views::ImageButton* button,
+                          const gfx::VectorIcon& icon,
+                          bool toggled,
+                          int icon_size);
+  void DecorateFloatingIconButton(views::ImageButton* button,
+                                  const gfx::VectorIcon& icon);
 
   void AddObserver(ColorModeObserver* observer);
   void RemoveObserver(ColorModeObserver* observer);
@@ -203,9 +209,6 @@ class ASH_EXPORT AshColorProvider : public SessionObserver {
 
   // Updates pref |kColorModeThemed| to |is_themed|.
   void UpdateColorModeThemed(bool is_themed);
-
-  // Gets the background base color for login screen.
-  SkColor GetLoginBackgroundBaseColor() const;
 
  private:
   friend class ScopedLightModeAsDefault;

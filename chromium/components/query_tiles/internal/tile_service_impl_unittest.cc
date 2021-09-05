@@ -10,8 +10,8 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
-#include "base/test/bind_test_util.h"
+#include "base/callback_helpers.h"
+#include "base/test/bind.h"
 #include "base/test/simple_test_clock.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"

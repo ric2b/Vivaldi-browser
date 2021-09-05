@@ -48,6 +48,7 @@ public abstract class BrowserServicesIntentDataProvider {
         int READER_MODE = 4;
         int MINIMAL_UI_WEBAPP = 5;
         int OFFLINE_PAGE = 6;
+        int READ_LATER = 7;
     }
 
     // The type of Disclosure for TWAs to use.
@@ -517,6 +518,34 @@ public abstract class BrowserServicesIntentDataProvider {
      * Returns true if visits from cct should be hidden.
      */
     public boolean shouldHideCctVisits() {
+        return false;
+    }
+
+    /**
+     * Returns true if new notification requests from cct should be blocked.
+     */
+    public boolean shouldBlockNewNotificationRequests() {
+        return false;
+    }
+
+    /**
+     * Returns true if 'open in chrome' should be shown in the tab context menu.
+     */
+    public boolean shouldShowOpenInChromeMenuItemInContextMenu() {
+        return true;
+    }
+
+    /**
+     * Returns true if 'open in chrome' should be shown in the app menu.
+     */
+    public boolean shouldShowOpenInChromeMenuItem() {
+        return true;
+    }
+
+    /**
+     * @return Whether the incognito icon in the toolbar should be hidden in cct-incognito mode.
+     */
+    public boolean shouldHideIncognitoIconOnToolbarInCct() {
         return false;
     }
 }

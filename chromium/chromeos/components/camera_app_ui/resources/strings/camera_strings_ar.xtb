@@ -3,6 +3,7 @@
 <translationbundle lang="ar">
 <translation id="1276998909102132017">صور المعرض</translation>
 <translation id="1430915738399379752">طباعة</translation>
+<translation id="1473110567575736769">مؤقّت لمدة 3 ثوانٍ</translation>
 <translation id="1620510694547887537">الكاميرا</translation>
 <translation id="1627744224761163218">4 × 4</translation>
 <translation id="1664224225747386870">لم يتمّ تسجيل أيّ بيانات.</translation>
@@ -29,7 +30,9 @@
 <translation id="3259149966178251584">درجة دقة الكاميرا</translation>
 <translation id="3517926952904427380">تعذّر التقاط صور أشخاص</translation>
 <translation id="3569311554794739032">هل تريد فعلاً إزالة <ph name="FILE" />؟</translation>
+<translation id="3750315947605636967">يتم حاليًا استخدام الكاميرا من قِبَل تطبيق آخر.</translation>
 <translation id="3810838688059735925">الفيديوهات</translation>
+<translation id="4000398125663085899">سيتم الآن حفظ الصور والفيديوهات الجديدة في مجلد في تطبيق "الملفات": ملفاتي &gt; الكاميرا.</translation>
 <translation id="4118525110028899586">إيقاف التسجيل مؤقتًا</translation>
 <translation id="4279490309300973883">النسخ المطابق</translation>
 <translation id="4329152592498422850">التبديل لالتقاط صورة مربّعة</translation>
@@ -43,9 +46,11 @@
 <translation id="5057360777601936059">الكاميرا غير مُتاحة حاليًا.
         يُرجى التحقُّق من اتصال الكاميرا بشكلٍ صحيح.</translation>
 <translation id="5152121255775685072">الانتقال إلى المعرض</translation>
+<translation id="5422455049771430511">سيتم حفظ صورك وفيديوهاتك في مكان جديد</translation>
 <translation id="5671277269877808209">وضع المربّع</translation>
 <translation id="5775960006311140197">الوضع المختصّ</translation>
 <translation id="5869546221129391014">شبكة</translation>
+<translation id="6040143037577758943">إغلاق</translation>
 <translation id="6073451960410192870">إيقاف التسجيل</translation>
 <translation id="6197807149213783179">حفظ البيانات الوصفية</translation>
 <translation id="6233780560267770709">3 × 3</translation>
@@ -61,6 +66,7 @@
 <translation id="6965382102122355670">حسنًا</translation>
 <translation id="698156982839284926">3 ثوانٍ</translation>
 <translation id="712848772518857951">هل تريد فعلاً إزالة <ph name="COUNT" /> من العناصر؟</translation>
+<translation id="7134221860976209830">مؤقّت لمدة 10 ثوانٍ</translation>
 <translation id="7243947652761655814">درجة دقة الفيديو</translation>
 <translation id="7337660886763914220">أخطاء نظام الملفات.</translation>
 <translation id="7557677699350329807">التبديل إلى الكاميرا التالية</translation>
@@ -68,7 +74,6 @@
 <translation id="7649070708921625228">مساعدة</translation>
 <translation id="7658239707568436148">إلغاء</translation>
 <translation id="7670511624014457267">60 لقطة في الثانية</translation>
-<translation id="8049189770492311300">مؤقت</translation>
 <translation id="8067883171444229417">تشغيل الفيديو</translation>
 <translation id="8131740175452115882">التأكيد</translation>
 <translation id="8145038249676204903">التبديل لالتقاط صورة</translation>

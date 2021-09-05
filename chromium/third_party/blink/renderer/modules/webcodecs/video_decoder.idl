@@ -12,8 +12,9 @@
 // parameters (separate from stream parameters). This is more important for
 // encoders.
 [
-    Exposed=Window,
-    RuntimeEnabled=WebCodecs
+    Exposed=(Window,DedicatedWorker),
+    RuntimeEnabled=WebCodecs,
+    ActiveScriptWrappable
 ] interface VideoDecoder {
   // |init| includes an |output| callback for emitting VideoFrames and an
   // |error| callback for emitting decode errors.

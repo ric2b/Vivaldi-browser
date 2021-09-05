@@ -27,20 +27,8 @@ class PasswordBubbleBrowserTest
       public testing::WithParamInterface<bool> {
  public:
   PasswordBubbleBrowserTest() {
-    if (GetParam()) {
-      // |kEnablePasswordsAccountStorage|, |kCompromisedPasswordsReengagement|
-      // are both enabled.
-      scoped_feature_list_.InitWithFeatures(
-          {password_manager::features::kEnablePasswordsAccountStorage,
-           password_manager::features::kCompromisedPasswordsReengagement},
-          {});
-    } else {
-      // |kCompromisedPasswordsReengagement| enabled,
-      // |kEnablePasswordsAccountStorage| disabled.
-      scoped_feature_list_.InitWithFeatures(
-          {password_manager::features::kCompromisedPasswordsReengagement},
-          {password_manager::features::kEnablePasswordsAccountStorage});
-    }
+    scoped_feature_list_.InitWithFeatureState(
+        password_manager::features::kEnablePasswordsAccountStorage, GetParam());
   }
 
   ~PasswordBubbleBrowserTest() override = default;
@@ -56,17 +44,18 @@ class PasswordBubbleBrowserTest
                           base::CompareCase::SENSITIVE)) {
       // Set test form to be account-stored. Otherwise, there is no indicator.
       test_form()->in_store =
-          GetParam() ? autofill::PasswordForm::Store::kAccountStore
-                     : autofill::PasswordForm::Store::kProfileStore;
+          GetParam() ? password_manager::PasswordForm::Store::kAccountStore
+                     : password_manager::PasswordForm::Store::kProfileStore;
       SetupManagingPasswords();
       ExecuteManagePasswordsCommand();
     } else if (StartsWith(name, "AutoSignin", base::CompareCase::SENSITIVE)) {
       test_form()->url = GURL("https://example.com");
       test_form()->display_name = base::ASCIIToUTF16("Peter");
       test_form()->username_value = base::ASCIIToUTF16("pet12@gmail.com");
-      std::vector<std::unique_ptr<autofill::PasswordForm>> local_credentials;
+      std::vector<std::unique_ptr<password_manager::PasswordForm>>
+          local_credentials;
       local_credentials.push_back(
-          std::make_unique<autofill::PasswordForm>(*test_form()));
+          std::make_unique<password_manager::PasswordForm>(*test_form()));
 
       PasswordAutoSignInView::set_auto_signin_toast_timeout(10);
       SetupAutoSignin(std::move(local_credentials));
@@ -88,7 +77,6 @@ class PasswordBubbleBrowserTest
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
-  DISALLOW_COPY_AND_ASSIGN(PasswordBubbleBrowserTest);
 };
 
 INSTANTIATE_TEST_SUITE_P(All, PasswordBubbleBrowserTest, ::testing::Bool());

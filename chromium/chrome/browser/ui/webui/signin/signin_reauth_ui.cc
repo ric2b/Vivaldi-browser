@@ -9,6 +9,7 @@
 #include "base/check.h"
 #include "base/containers/flat_map.h"
 #include "base/optional.h"
+#include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
 #include "chrome/browser/signin/identity_manager_factory.h"
@@ -29,6 +30,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/gfx/image/image.h"
+#include "ui/resources/grit/webui_generated_resources.h"
 #include "ui/resources/grit/webui_resources.h"
 
 namespace {
@@ -74,8 +76,8 @@ SigninReauthUI::SigninReauthUI(content::WebUI* web_ui)
       network::mojom::CSPDirectiveName::ScriptSrc,
       "script-src chrome://resources chrome://test 'self';");
   source->DisableTrustedTypesCSP();
-  source->AddResourcePath("test_loader.js", IDR_WEBUI_JS_TEST_LOADER);
-  source->AddResourcePath("test_loader.html", IDR_WEBUI_HTML_TEST_LOADER);
+  source->AddResourcePath("test_loader.js", IDR_WEBUI_JS_TEST_LOADER_JS);
+  source->AddResourcePath("test_loader.html", IDR_WEBUI_HTML_TEST_LOADER_HTML);
 
   // Resources for the account passwords reauth.
   source->AddResourcePath(

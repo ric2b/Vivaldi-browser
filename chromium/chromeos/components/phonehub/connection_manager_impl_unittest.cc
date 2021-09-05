@@ -7,7 +7,14 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
+#include "base/test/metrics/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
+#include "base/test/simple_test_clock.h"
+#include "base/time/time.h"
+#include "base/timer/mock_timer.h"
 #include "chromeos/components/multidevice/remote_device_test_util.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/services/device_sync/public/cpp/fake_device_sync_client.h"
 #include "chromeos/services/multidevice_setup/public/cpp/fake_multidevice_setup_client.h"
 #include "chromeos/services/secure_channel/public/cpp/client/fake_client_channel.h"
@@ -20,6 +27,14 @@ namespace phonehub {
 namespace {
 
 using multidevice_setup::mojom::HostStatus;
+
+constexpr base::TimeDelta kFakeConnectionLatencyTime(
+    base::TimeDelta::FromSeconds(3u));
+constexpr base::TimeDelta kFakeConnectionDurationTime(
+    base::TimeDelta::FromSeconds(10u));
+
+constexpr base::TimeDelta kExpectedTimeoutSeconds(
+    base::TimeDelta::FromSeconds(15u));
 
 class FakeObserver : public ConnectionManager::Observer {
  public:
@@ -64,12 +79,19 @@ class ConnectionManagerImplTest : public testing::Test {
 
   // testing::Test:
   void SetUp() override {
+    auto timer = std::make_unique<base::MockOneShotTimer>();
+    mock_timer_ = timer.get();
+
+    test_clock_ = std::make_unique<base::SimpleTestClock>();
+    test_clock_->SetNow(base::Time::UnixEpoch());
+
     fake_device_sync_client_.set_local_device_metadata(test_local_device_);
     fake_multidevice_setup_client_.SetHostStatusWithDevice(
         std::make_pair(HostStatus::kHostVerified, test_remote_device_));
-    connection_manager_ = std::make_unique<ConnectionManagerImpl>(
+    connection_manager_ = base::WrapUnique(new ConnectionManagerImpl(
         &fake_multidevice_setup_client_, &fake_device_sync_client_,
-        fake_secure_channel_client_.get());
+        fake_secure_channel_client_.get(), std::move(timer),
+        test_clock_.get()));
     connection_manager_->AddObserver(&fake_observer_);
     EXPECT_EQ(ConnectionManager::Status::kDisconnected, GetStatus());
   }
@@ -94,11 +116,30 @@ class ConnectionManagerImplTest : public testing::Test {
     auto fake_connection_attempt =
         std::make_unique<chromeos::secure_channel::FakeConnectionAttempt>();
     fake_connection_attempt_ = fake_connection_attempt.get();
-    fake_secure_channel_client_->set_next_initiate_connection_attempt(
-        test_remote_device_, test_local_device_,
-        std::move(fake_connection_attempt));
+    if (features::IsPhoneHubUseBleEnabled()) {
+      fake_secure_channel_client_->set_next_listen_connection_attempt(
+          test_remote_device_, test_local_device_,
+          std::move(fake_connection_attempt));
+    } else {
+      fake_secure_channel_client_->set_next_initiate_connection_attempt(
+          test_remote_device_, test_local_device_,
+          std::move(fake_connection_attempt));
+    }
   }
 
+  void VerifyTimerSet() {
+    EXPECT_TRUE(mock_timer_->IsRunning());
+    EXPECT_EQ(kExpectedTimeoutSeconds, mock_timer_->GetCurrentDelay());
+  }
+
+  void VerifyTimerStopped() { EXPECT_FALSE(mock_timer_->IsRunning()); }
+
+  void InvokeTimerTask() {
+    VerifyTimerSet();
+    mock_timer_->Fire();
+  }
+
+  base::MockOneShotTimer* mock_timer_;
   chromeos::multidevice::RemoteDeviceRef test_remote_device_;
   chromeos::multidevice::RemoteDeviceRef test_local_device_;
   device_sync::FakeDeviceSyncClient fake_device_sync_client_;
@@ -108,6 +149,8 @@ class ConnectionManagerImplTest : public testing::Test {
   std::unique_ptr<ConnectionManagerImpl> connection_manager_;
   FakeObserver fake_observer_;
   chromeos::secure_channel::FakeConnectionAttempt* fake_connection_attempt_;
+  std::unique_ptr<base::SimpleTestClock> test_clock_;
+  base::HistogramTester histogram_tester_;
 };
 
 TEST_F(ConnectionManagerImplTest, SuccessfullyAttemptConnection) {
@@ -119,6 +162,8 @@ TEST_F(ConnectionManagerImplTest, SuccessfullyAttemptConnection) {
   EXPECT_EQ(1u, GetNumStatusObserverCalls());
   EXPECT_EQ(ConnectionManager::Status::kConnecting, GetStatus());
 
+  test_clock_->Advance(kFakeConnectionLatencyTime);
+
   auto fake_client_channel =
       std::make_unique<chromeos::secure_channel::FakeClientChannel>();
   fake_connection_attempt_->NotifyConnection(std::move(fake_client_channel));
@@ -127,6 +172,10 @@ TEST_F(ConnectionManagerImplTest, SuccessfullyAttemptConnection) {
   // been called.
   EXPECT_EQ(2u, GetNumStatusObserverCalls());
   EXPECT_EQ(ConnectionManager::Status::kConnected, GetStatus());
+
+  histogram_tester_.ExpectTimeBucketCount("PhoneHub.Connectivity.Latency",
+                                          kFakeConnectionLatencyTime, 1);
+  histogram_tester_.ExpectBucketCount("PhoneHub.Connectivity.Success", true, 1);
 }
 
 TEST_F(ConnectionManagerImplTest, FailedToAttemptConnection) {
@@ -146,6 +195,9 @@ TEST_F(ConnectionManagerImplTest, FailedToAttemptConnection) {
   // has been called.
   EXPECT_EQ(2u, GetNumStatusObserverCalls());
   EXPECT_EQ(ConnectionManager::Status::kDisconnected, GetStatus());
+
+  histogram_tester_.ExpectBucketCount("PhoneHub.Connectivity.Success", false,
+                                      1);
 }
 
 TEST_F(ConnectionManagerImplTest, SuccessfulAttemptConnectionButDisconnected) {
@@ -156,6 +208,8 @@ TEST_F(ConnectionManagerImplTest, SuccessfulAttemptConnectionButDisconnected) {
   // has been called.
   EXPECT_EQ(1u, GetNumStatusObserverCalls());
   EXPECT_EQ(ConnectionManager::Status::kConnecting, GetStatus());
+
+  test_clock_->Advance(kFakeConnectionLatencyTime);
 
   auto fake_client_channel =
       std::make_unique<chromeos::secure_channel::FakeClientChannel>();
@@ -168,12 +222,20 @@ TEST_F(ConnectionManagerImplTest, SuccessfulAttemptConnectionButDisconnected) {
   EXPECT_EQ(2u, GetNumStatusObserverCalls());
   EXPECT_EQ(ConnectionManager::Status::kConnected, GetStatus());
 
+  histogram_tester_.ExpectTimeBucketCount("PhoneHub.Connectivity.Latency",
+                                          kFakeConnectionLatencyTime, 1);
+  histogram_tester_.ExpectBucketCount("PhoneHub.Connectivity.Success", true, 1);
+
   // Simulate a disconnected channel.
+  test_clock_->Advance(kFakeConnectionDurationTime);
   fake_client_channel_raw->NotifyDisconnected();
 
   // Expect status to be updated to disconnected.
   EXPECT_EQ(3u, GetNumStatusObserverCalls());
   EXPECT_EQ(ConnectionManager::Status::kDisconnected, GetStatus());
+
+  histogram_tester_.ExpectTimeBucketCount("PhoneHub.Connectivity.Duration",
+                                          kFakeConnectionDurationTime, 1);
 }
 
 TEST_F(ConnectionManagerImplTest, AttemptConnectionWithMessageReceived) {
@@ -185,11 +247,17 @@ TEST_F(ConnectionManagerImplTest, AttemptConnectionWithMessageReceived) {
   EXPECT_EQ(1u, GetNumStatusObserverCalls());
   EXPECT_EQ(ConnectionManager::Status::kConnecting, GetStatus());
 
+  test_clock_->Advance(kFakeConnectionLatencyTime);
+
   auto fake_client_channel =
       std::make_unique<chromeos::secure_channel::FakeClientChannel>();
   chromeos::secure_channel::FakeClientChannel* fake_client_channel_raw =
       fake_client_channel.get();
   fake_connection_attempt_->NotifyConnection(std::move(fake_client_channel));
+
+  histogram_tester_.ExpectTimeBucketCount("PhoneHub.Connectivity.Latency",
+                                          kFakeConnectionLatencyTime, 1);
+  histogram_tester_.ExpectBucketCount("PhoneHub.Connectivity.Success", true, 1);
 
   // Status has been updated to connected, verify that the status observer has
   // been called.
@@ -228,6 +296,73 @@ TEST_F(ConnectionManagerImplTest, AttemptConnectionWithoutRemoteDevice) {
   // the status observer did not get called (exited early).
   EXPECT_EQ(0u, GetNumStatusObserverCalls());
   EXPECT_EQ(ConnectionManager::Status::kDisconnected, GetStatus());
+}
+
+TEST_F(ConnectionManagerImplTest, SuccessfullyAttemptConnectionWithBle) {
+  base::test::ScopedFeatureList scoped_feature_list_;
+  scoped_feature_list_.InitWithFeatures(
+      {features::kPhoneHub, features::kPhoneHubUseBle}, {});
+  CreateFakeConnectionAttempt();
+  connection_manager_->AttemptConnection();
+
+  // Status has been updated to connecting, verify that the status observer
+  // has been called.
+  EXPECT_EQ(1u, GetNumStatusObserverCalls());
+  EXPECT_EQ(ConnectionManager::Status::kConnecting, GetStatus());
+
+  test_clock_->Advance(kFakeConnectionLatencyTime);
+
+  auto fake_client_channel =
+      std::make_unique<chromeos::secure_channel::FakeClientChannel>();
+  fake_connection_attempt_->NotifyConnection(std::move(fake_client_channel));
+
+  histogram_tester_.ExpectTimeBucketCount("PhoneHub.Connectivity.Latency",
+                                          kFakeConnectionLatencyTime, 1);
+  histogram_tester_.ExpectBucketCount("PhoneHub.Connectivity.Success", true, 1);
+
+  // Status has been updated to connected, verify that the status observer has
+  // been called.
+  EXPECT_EQ(2u, GetNumStatusObserverCalls());
+  EXPECT_EQ(ConnectionManager::Status::kConnected, GetStatus());
+}
+
+TEST_F(ConnectionManagerImplTest, ConnectionTimeout) {
+  CreateFakeConnectionAttempt();
+  connection_manager_->AttemptConnection();
+
+  // Status has been updated to connecting, verify that the status observer
+  // has been called.
+  EXPECT_EQ(1u, GetNumStatusObserverCalls());
+  EXPECT_EQ(ConnectionManager::Status::kConnecting, GetStatus());
+  VerifyTimerSet();
+
+  // Simulate fast forwarding time to time out the connection request.
+  InvokeTimerTask();
+
+  VerifyTimerStopped();
+  EXPECT_EQ(2u, GetNumStatusObserverCalls());
+  EXPECT_EQ(ConnectionManager::Status::kDisconnected, GetStatus());
+  histogram_tester_.ExpectBucketCount("PhoneHub.Connectivity.Success", false,
+                                      1);
+}
+
+TEST_F(ConnectionManagerImplTest, DisconnectConnection) {
+  CreateFakeConnectionAttempt();
+  connection_manager_->AttemptConnection();
+
+  // Status has been updated to connecting, verify that the status observer
+  // has been called.
+  EXPECT_EQ(1u, GetNumStatusObserverCalls());
+  EXPECT_EQ(ConnectionManager::Status::kConnecting, GetStatus());
+  VerifyTimerSet();
+
+  // Disconnect the connection attempt.
+  connection_manager_->Disconnect();
+  EXPECT_EQ(2u, GetNumStatusObserverCalls());
+  EXPECT_EQ(ConnectionManager::Status::kDisconnected, GetStatus());
+  VerifyTimerStopped();
+  histogram_tester_.ExpectBucketCount("PhoneHub.Connectivity.Success", false,
+                                      1);
 }
 
 }  // namespace phonehub

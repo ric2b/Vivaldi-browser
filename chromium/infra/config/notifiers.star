@@ -13,6 +13,14 @@ luci.notifier(
 )
 
 luci.notifier(
+    name = "chrome-memory-safety",
+    on_status_change = True,
+    notify_emails = [
+        "chrome-memory-safety+bots@google.com",
+    ],
+)
+
+luci.notifier(
     name = "chrome-memory-sheriffs",
     on_status_change = True,
     notify_emails = [
@@ -43,6 +51,14 @@ luci.notifier(
     notify_emails = ["chromium-component-mapping@google.com"],
 )
 
+luci.notifier(
+    name = "weblayer-sheriff",
+    on_new_status = ["FAILURE"],
+    notify_emails = [
+        "weblayer-sheriff@grotations.appspotmail.com",
+    ],
+)
+
 TREE_CLOSING_STEPS = [
     "bot_update",
     "compile",
@@ -63,7 +79,7 @@ def _empty_notifier(*, name):
     )
 
 def tree_closer(*, name, tree_status_host, **kwargs):
-    if branches.matches(branches.MAIN_ONLY):
+    if branches.matches(branches.MAIN):
         luci.tree_closer(
             name = name,
             tree_status_host = tree_status_host,
@@ -84,7 +100,7 @@ tree_closer(
 )
 
 def tree_closure_notifier(*, name, **kwargs):
-    if branches.matches(branches.MAIN_ONLY):
+    if branches.matches(branches.MAIN):
         luci.notifier(
             name = name,
             on_occurrence = ["FAILURE"],
@@ -109,7 +125,7 @@ tree_closure_notifier(
     name = "gpu-tree-closer-email",
     notify_emails = ["chrome-gpu-build-failures@google.com"],
     notify_rotation_urls = [
-        "https://rota-ng.appspot.com/legacy/sheriff_gpu.json",
+        "https://chrome-ops-rotation-proxy.appspot.com/current/grotation:chrome-gpu-pixel-wrangling",
     ],
 )
 
@@ -146,26 +162,6 @@ tree_closure_notifier(
         "thomasanderson@chromium.org",
         "timbrown@chromium.org",
         "tonikitoo@chromium.org",
-    ],
-)
-
-luci.notifier(
-    name = "Closure Compilation Linux",
-    notify_emails = [
-        "dbeam+closure-bots@chromium.org",
-        "fukino+closure-bots@chromium.org",
-        "hirono+closure-bots@chromium.org",
-        "vitalyp@chromium.org",
-    ],
-    on_occurrence = ["FAILURE"],
-    failed_step_regexp = [
-        "update_scripts",
-        "setup_build",
-        "bot_update",
-        "generate_gyp_files",
-        "compile",
-        "generate_v2_gyp_files",
-        "compile_v2",
     ],
 )
 

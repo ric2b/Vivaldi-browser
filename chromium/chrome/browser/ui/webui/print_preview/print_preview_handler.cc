@@ -14,7 +14,7 @@
 
 #include "base/base64.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/i18n/number_formatting.h"
@@ -41,6 +41,7 @@
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
+#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/webui/print_preview/cloud_print_signin.h"
 #include "chrome/browser/ui/webui/print_preview/pdf_printer_handler.h"
 #include "chrome/browser/ui/webui/print_preview/policy_settings.h"
@@ -449,9 +450,10 @@ void PrintPreviewHandler::RegisterMessages() {
           &PrintPreviewHandler::HandleGrantExtensionPrinterAccess,
           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      "openPrinterSettings",
-      base::BindRepeating(&PrintPreviewHandler::HandleOpenPrinterSettings,
+      "managePrinters",
+      base::BindRepeating(&PrintPreviewHandler::HandleManagePrinters,
                           base::Unretained(this)));
+
 #if defined(OS_CHROMEOS)
   web_ui()->RegisterMessageCallback(
       "getEulaUrl", base::BindRepeating(&PrintPreviewHandler::HandleGetEulaUrl,
@@ -647,6 +649,9 @@ void PrintPreviewHandler::HandleGetPreview(const base::ListValue* args) {
   CHECK(settings.is_dict());
   int request_id = settings.FindIntKey(kPreviewRequestID).value();
   CHECK_GT(request_id, -1);
+  PrinterType printer_type = static_cast<PrinterType>(
+      settings.FindIntKey(kSettingPrinterType).value());
+  CHECK(printer_type != PrinterType::kCloud || IsCloudPrintEnabled());
 
   CHECK(!base::Contains(preview_callbacks_, request_id));
   preview_callbacks_[request_id] = callback_id;
@@ -881,21 +886,6 @@ void PrintPreviewHandler::HandleClosePreviewDialog(
       regenerate_preview_request_count_);
 }
 
-void PrintPreviewHandler::HandleOpenPrinterSettings(
-    const base::ListValue* args) {
-#if defined(OS_CHROMEOS)
-  chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
-      Profile::FromWebUI(web_ui()),
-      chromeos::settings::mojom::kPrintingDetailsSubpagePath);
-#else
-  GURL url(chrome::GetSettingsUrl(chrome::kPrintingSettingsSubPage));
-  content::OpenURLParams params(url, content::Referrer(),
-                                WindowOpenDisposition::NEW_FOREGROUND_TAB,
-                                ui::PAGE_TRANSITION_LINK, false);
-  preview_web_contents()->OpenURL(params);
-#endif
-}
-
 #if defined(OS_CHROMEOS)
 void PrintPreviewHandler::HandleGetEulaUrl(const base::ListValue* args) {
   CHECK_EQ(2U, args->GetSize());
@@ -1110,6 +1100,9 @@ void PrintPreviewHandler::SendPrinterSetup(const std::string& callback_id,
 void PrintPreviewHandler::SendCloudPrintJob(
     const std::string& callback_id,
     const base::RefCountedMemory* data) {
+  // Crash if a cloud print job is requested and cloud print is not enabled.
+  CHECK(IsCloudPrintEnabled());
+
   // BASE64 encode the job data.
   const base::StringPiece raw_data(data->front_as<char>(), data->size());
   std::string base64_data;
@@ -1422,5 +1415,16 @@ void PrintPreviewHandler::OnPrinterStatusUpdated(
   ResolveJavascriptCallback(base::Value(callback_id), cups_printer_status);
 }
 #endif
+
+void PrintPreviewHandler::HandleManagePrinters(const base::ListValue* args) {
+#if defined(OS_CHROMEOS)
+  chrome::SettingsWindowManager::GetInstance()->ShowOSSettings(
+      Profile::FromWebUI(web_ui()),
+      chromeos::settings::mojom::kPrintingDetailsSubpagePath);
+#else
+  printing::PrinterManagerDialog::ShowPrinterManagerDialog(
+      Profile::FromWebUI(web_ui()));
+#endif
+}
 
 }  // namespace printing

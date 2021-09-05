@@ -254,6 +254,11 @@ class ConfigDescBuilder : public BaseDescBuilder {
       res->SetWithoutPathExpansion(variables::kConfigs, std::move(configs));
     }
 
+    if (what(variables::kVisibility)) {
+      res->SetWithoutPathExpansion(variables::kVisibility,
+                                   config_->visibility().AsValue());
+    }
+
 #define CONFIG_VALUE_ARRAY_HANDLER(name, type)                        \
   if (what(#name)) {                                                  \
     ValuePtr ptr =                                                    \

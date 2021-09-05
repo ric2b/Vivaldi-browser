@@ -13,6 +13,7 @@
 #include "components/performance_manager/graph/worker_node_impl.h"
 #include "components/performance_manager/performance_manager_impl.h"
 #include "components/performance_manager/process_node_source.h"
+#include "components/performance_manager/public/features.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 
 namespace performance_manager {
@@ -27,8 +28,8 @@ void RecordWorkerClientFound(bool found) {
 
 // Helper function to add |client_frame_node| as a client of |worker_node| on
 // the PM sequence.
-void ConnectClientOnGraph(WorkerNodeImpl* worker_node,
-                          FrameNodeImpl* client_frame_node) {
+void ConnectClientFrameOnGraph(WorkerNodeImpl* worker_node,
+                               FrameNodeImpl* client_frame_node) {
   PerformanceManagerImpl::CallOnGraphImpl(
       FROM_HERE,
       base::BindOnce(&WorkerNodeImpl::AddClientFrame,
@@ -37,8 +38,8 @@ void ConnectClientOnGraph(WorkerNodeImpl* worker_node,
 
 // Helper function to remove |client_frame_node| as a client of |worker_node|
 // on the PM sequence.
-void DisconnectClientOnGraph(WorkerNodeImpl* worker_node,
-                             FrameNodeImpl* client_frame_node) {
+void DisconnectClientFrameOnGraph(WorkerNodeImpl* worker_node,
+                                  FrameNodeImpl* client_frame_node) {
   PerformanceManagerImpl::CallOnGraphImpl(
       FROM_HERE,
       base::BindOnce(&WorkerNodeImpl::RemoveClientFrame,
@@ -47,8 +48,8 @@ void DisconnectClientOnGraph(WorkerNodeImpl* worker_node,
 
 // Helper function to add |client_worker_node| as a client of |worker_node| on
 // the PM sequence.
-void ConnectClientOnGraph(WorkerNodeImpl* worker_node,
-                          WorkerNodeImpl* client_worker_node) {
+void ConnectClientWorkerOnGraph(WorkerNodeImpl* worker_node,
+                                WorkerNodeImpl* client_worker_node) {
   PerformanceManagerImpl::CallOnGraphImpl(
       FROM_HERE,
       base::BindOnce(&WorkerNodeImpl::AddClientWorker,
@@ -57,8 +58,8 @@ void ConnectClientOnGraph(WorkerNodeImpl* worker_node,
 
 // Helper function to remove |client_worker_node| as a client of |worker_node|
 // on the PM sequence.
-void DisconnectClientOnGraph(WorkerNodeImpl* worker_node,
-                             WorkerNodeImpl* client_worker_node) {
+void DisconnectClientWorkerOnGraph(WorkerNodeImpl* worker_node,
+                                   WorkerNodeImpl* client_worker_node) {
   PerformanceManagerImpl::CallOnGraphImpl(
       FROM_HERE,
       base::BindOnce(&WorkerNodeImpl::RemoveClientWorker,
@@ -120,20 +121,20 @@ WorkerWatcher::WorkerWatcher(
   DCHECK(process_node_source_);
   DCHECK(frame_node_source_);
 
-  dedicated_worker_service_observer_.Add(dedicated_worker_service);
-  shared_worker_service_observer_.Add(shared_worker_service);
-  service_worker_context_observer_.Add(service_worker_context);
+  dedicated_worker_service_observation_.Observe(dedicated_worker_service);
+  shared_worker_service_observation_.Observe(shared_worker_service);
+  service_worker_context_observation_.Observe(service_worker_context);
 }
 
 WorkerWatcher::~WorkerWatcher() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(frame_node_child_workers_.empty());
   DCHECK(dedicated_worker_nodes_.empty());
-  DCHECK(!dedicated_worker_service_observer_.IsObservingSources());
+  DCHECK(!dedicated_worker_service_observation_.IsObserving());
   DCHECK(shared_worker_nodes_.empty());
-  DCHECK(!shared_worker_service_observer_.IsObservingSources());
+  DCHECK(!shared_worker_service_observation_.IsObserving());
   DCHECK(service_worker_nodes_.empty());
-  DCHECK(!service_worker_context_observer_.IsObservingSources());
+  DCHECK(!service_worker_context_observation_.IsObserving());
 }
 
 void WorkerWatcher::TearDown() {
@@ -200,9 +201,9 @@ void WorkerWatcher::TearDown() {
 
   PerformanceManagerImpl::BatchDeleteNodes(std::move(nodes));
 
-  dedicated_worker_service_observer_.RemoveAll();
-  shared_worker_service_observer_.RemoveAll();
-  service_worker_context_observer_.RemoveAll();
+  dedicated_worker_service_observation_.RemoveObservation();
+  shared_worker_service_observation_.RemoveObservation();
+  service_worker_context_observation_.RemoveObservation();
 }
 
 void WorkerWatcher::OnWorkerCreated(
@@ -356,19 +357,129 @@ void WorkerWatcher::OnControlleeAdded(
     int64_t version_id,
     const std::string& client_uuid,
     const content::ServiceWorkerClientInfo& client_info) {
-  // TODO(pmonette): Handle service worker clients.
+  if (!base::FeatureList::IsEnabled(
+          features::kServiceWorkerRelationshipsInGraph))
+    return;
+
+  switch (client_info.type()) {
+    case blink::mojom::ServiceWorkerClientType::kWindow: {
+      // For window clients, it is necessary to wait until the navigation has
+      // committed to a render frame host.
+      bool inserted = client_frames_awaiting_commit_.insert(client_uuid).second;
+      DCHECK(inserted);
+      break;
+    }
+    case blink::mojom::ServiceWorkerClientType::kDedicatedWorker: {
+      blink::DedicatedWorkerToken dedicated_worker_token =
+          client_info.GetDedicatedWorkerToken();
+
+      bool inserted = service_worker_clients_[version_id]
+                          .emplace(client_uuid, dedicated_worker_token)
+                          .second;
+      DCHECK(inserted);
+
+      // If the service worker is already started, connect it to the client.
+      WorkerNodeImpl* service_worker_node = GetServiceWorkerNode(version_id);
+      if (service_worker_node)
+        ConnectDedicatedWorkerClient(service_worker_node,
+                                     dedicated_worker_token);
+      break;
+    }
+    case blink::mojom::ServiceWorkerClientType::kSharedWorker: {
+      blink::SharedWorkerToken shared_worker_token =
+          client_info.GetSharedWorkerToken();
+
+      bool inserted = service_worker_clients_[version_id]
+                          .emplace(client_uuid, shared_worker_token)
+                          .second;
+      DCHECK(inserted);
+
+      // If the service worker is already started, connect it to the client.
+      WorkerNodeImpl* service_worker_node = GetServiceWorkerNode(version_id);
+      if (service_worker_node)
+        ConnectSharedWorkerClient(service_worker_node, shared_worker_token);
+      break;
+    }
+    case blink::mojom::ServiceWorkerClientType::kAll:
+      NOTREACHED();
+      break;
+  }
 }
 
 void WorkerWatcher::OnControlleeRemoved(int64_t version_id,
                                         const std::string& client_uuid) {
-  // TODO(pmonette): Handle service worker clients.
+  if (!base::FeatureList::IsEnabled(
+          features::kServiceWorkerRelationshipsInGraph))
+    return;
+
+  // Nothing to do for a frame client whose navigation never committed.
+  size_t removed = client_frames_awaiting_commit_.erase(client_uuid);
+  if (removed) {
+#if DCHECK_IS_ON()
+    // |client_uuid| should not be part of this service worker's clients.
+    auto it = service_worker_clients_.find(version_id);
+    if (it != service_worker_clients_.end())
+      DCHECK(!base::Contains(it->second, client_uuid));
+#endif  // DCHECK_IS_ON()
+    return;
+  }
+
+  // First get clients for this worker.
+  auto it = service_worker_clients_.find(version_id);
+  DCHECK(it != service_worker_clients_.end());
+
+  base::flat_map<std::string /*client_uuid*/, ServiceWorkerClient>& clients =
+      it->second;
+
+  auto it2 = clients.find(client_uuid);
+  DCHECK(it2 != clients.end());
+  const ServiceWorkerClient client = it2->second;
+  clients.erase(it2);
+
+  if (clients.empty())
+    service_worker_clients_.erase(it);
+
+  // Now disconnect the client if the service worker is still running.
+  WorkerNodeImpl* worker_node = GetServiceWorkerNode(version_id);
+  if (!worker_node)
+    return;
+
+  switch (client.type()) {
+    case blink::mojom::ServiceWorkerClientType::kWindow:
+      DisconnectFrameClient(worker_node, client.GetRenderFrameHostId());
+      break;
+    case blink::mojom::ServiceWorkerClientType::kDedicatedWorker:
+      DisconnectDedicatedWorkerClient(worker_node,
+                                      client.GetDedicatedWorkerToken());
+      break;
+    case blink::mojom::ServiceWorkerClientType::kSharedWorker:
+      DisconnectSharedWorkerClient(worker_node, client.GetSharedWorkerToken());
+      break;
+    case blink::mojom::ServiceWorkerClientType::kAll:
+      NOTREACHED();
+      break;
+  }
 }
 
 void WorkerWatcher::OnControlleeNavigationCommitted(
     int64_t version_id,
     const std::string& client_uuid,
     content::GlobalFrameRoutingId render_frame_host_id) {
-  // TODO(pmonette): Handle service worker clients.
+  if (!base::FeatureList::IsEnabled(
+          features::kServiceWorkerRelationshipsInGraph))
+    return;
+
+  size_t removed = client_frames_awaiting_commit_.erase(client_uuid);
+  DCHECK_EQ(removed, 1u);
+
+  bool inserted = service_worker_clients_[version_id]
+                      .emplace(client_uuid, render_frame_host_id)
+                      .second;
+  DCHECK(inserted);
+
+  WorkerNodeImpl* service_worker_node = GetServiceWorkerNode(version_id);
+  if (service_worker_node)
+    ConnectFrameClient(service_worker_node, render_frame_host_id);
 }
 
 void WorkerWatcher::ConnectFrameClient(
@@ -394,7 +505,7 @@ void WorkerWatcher::ConnectFrameClient(
 
   RecordWorkerClientFound(true);
 
-  ConnectClientOnGraph(worker_node, frame_node);
+  ConnectClientFrameOnGraph(worker_node, frame_node);
 
   // Keep track of the workers that this frame is a client to.
   if (AddChildWorker(client_render_frame_host_id, worker_node)) {
@@ -439,7 +550,7 @@ void WorkerWatcher::DisconnectFrameClient(
     return;
   }
 
-  DisconnectClientOnGraph(worker_node, frame_node);
+  DisconnectClientFrameOnGraph(worker_node, frame_node);
 
   // Remove |worker_node| from the set of workers that this frame is a client
   // of.
@@ -452,8 +563,8 @@ void WorkerWatcher::ConnectDedicatedWorkerClient(
     blink::DedicatedWorkerToken client_dedicated_worker_token) {
   DCHECK(worker_node);
 
-  ConnectClientOnGraph(worker_node,
-                       GetDedicatedWorkerNode(client_dedicated_worker_token));
+  ConnectClientWorkerOnGraph(
+      worker_node, GetDedicatedWorkerNode(client_dedicated_worker_token));
 
   // Remember that |worker_node| is a child worker of this dedicated worker.
   bool inserted = dedicated_worker_child_workers_[client_dedicated_worker_token]
@@ -479,7 +590,7 @@ void WorkerWatcher::DisconnectDedicatedWorkerClient(
   if (child_workers.empty())
     dedicated_worker_child_workers_.erase(it);
 
-  DisconnectClientOnGraph(
+  DisconnectClientWorkerOnGraph(
       worker_node, GetDedicatedWorkerNode(client_dedicated_worker_token));
 }
 
@@ -488,8 +599,8 @@ void WorkerWatcher::ConnectSharedWorkerClient(
     blink::SharedWorkerToken client_shared_worker_token) {
   DCHECK(worker_node);
 
-  ConnectClientOnGraph(worker_node,
-                       GetSharedWorkerNode(client_shared_worker_token));
+  ConnectClientWorkerOnGraph(worker_node,
+                             GetSharedWorkerNode(client_shared_worker_token));
 
   // Remember that |worker_node| is a child worker of this shared worker.
   bool inserted = shared_worker_child_workers_[client_shared_worker_token]
@@ -514,8 +625,8 @@ void WorkerWatcher::DisconnectSharedWorkerClient(
   if (child_workers.empty())
     shared_worker_child_workers_.erase(it);
 
-  DisconnectClientOnGraph(worker_node,
-                          GetSharedWorkerNode(client_shared_worker_token));
+  DisconnectClientWorkerOnGraph(
+      worker_node, GetSharedWorkerNode(client_shared_worker_token));
 }
 
 void WorkerWatcher::ConnectAllServiceWorkerClients(

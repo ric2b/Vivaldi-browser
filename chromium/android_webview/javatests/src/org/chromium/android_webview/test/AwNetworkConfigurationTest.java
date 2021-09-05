@@ -23,6 +23,7 @@ import org.chromium.android_webview.AwContents;
 import org.chromium.android_webview.AwContentsClient.AwWebResourceRequest;
 import org.chromium.android_webview.test.TestAwContentsClient.OnReceivedSslErrorHelper;
 import org.chromium.base.BuildInfo;
+import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.net.test.ServerCertificate;
@@ -57,7 +58,8 @@ public class AwNetworkConfigurationTest {
     @Test
     @SmallTest
     @Feature({"AndroidWebView", "Network"})
-    // clang-format off
+    @DisabledTest(message = "crbug.com/1148388")
+    // clang-format off+
     public void testSHA1LocalAnchorsAllowed() throws Throwable {
         // clang-format on
         mTestServer = EmbeddedTestServer.createAndStartHTTPSServer(
@@ -196,7 +198,7 @@ public class AwNetworkConfigurationTest {
         mTestServer = EmbeddedTestServer.createAndStartServer(
                 InstrumentationRegistry.getInstrumentation().getContext());
         try {
-            final String url = mTestServer.getURL("/any-http-url-will-suffice.html");
+            final String url = mTestServer.getURL("/android_webview/test/data/hello_world.html");
             mActivityTestRule.loadUrlSync(
                     mAwContents, mContentsClient.getOnPageFinishedHelper(), url);
             AwWebResourceRequest request =

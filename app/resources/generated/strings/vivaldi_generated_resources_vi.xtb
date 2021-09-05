@@ -19,7 +19,6 @@
 <translation id="1221825588892235038">Chỉ lựa chọn</translation>
 <translation id="1244303850296295656">Lỗi tiện ích</translation>
 <translation id="125220115284141797">Mặc định</translation>
-<translation id="1274977772557788323">Cài đặt bộ nhớ của Adobe Flash Player</translation>
 <translation id="1297175357211070620">Máy in đích</translation>
 <translation id="1303101771013849280">Tệp dấu trang HTML</translation>
 <translation id="1380436189840894976">Thoát khỏi chế độ ẩn danh?</translation>
@@ -74,7 +73,6 @@
 <translation id="2218515861914035131">Dán dưới dạng văn bản thuần túy</translation>
 <translation id="2249605167705922988">ví dụ: 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Cho phép định danh trên nội dung được bảo vệ (có thể cần phải khởi động lại máy tính)</translation>
-<translation id="2263497240924215535">(Đã vô hiệu hoá)</translation>
 <translation id="2277255602909579701">Tất cả cookie và dữ liệu trang web</translation>
 <translation id="2280486287150724112">Lề phải</translation>
 <translation id="2282146716419988068">Quá trình GPU</translation>
@@ -125,7 +123,6 @@
 <translation id="3013291976881901233">Thiết bị MIDI</translation>
 <translation id="3021678814754966447">&amp;Xem Nguồn Khung</translation>
 <translation id="3036546437875325427">Cho phép Flash</translation>
-<translation id="3038675903128704560">Không cho phép bất kỳ trang web nào sử dụng plugin để truy cập máy tính của bạn</translation>
 <translation id="3046910703532196514">Trang web, Toàn bộ</translation>
 <translation id="3067198360141518313">Chạy plugin này</translation>
 <translation id="3080207940057008665">Một chương trình khác trên máy tính của bạn đã thêm một chủ đề có thể thay đổi cách Vivaldi hoạt động.</translation>
@@ -154,12 +151,10 @@
 <translation id="3378572629723696641">Tiện ích này có thể đã bị hỏng.</translation>
 <translation id="3387614642886316601">Sử dụng tính năng kiểm tra lỗi chính tả nâng cao</translation>
 <translation id="3432227430032737297">Xóa Tất cả cookie Hiển thị</translation>
-<translation id="3440761377721825626">Hỏi khi một trang web muốn sử dụng plugin để truy cập máy tính của bạn</translation>
 <translation id="345693547134384690">Mở &amp;hình ảnh trong tab mới</translation>
 <translation id="3494769164076977169">Hỏi khi trang web cố gắng tự động tải tệp xuống sau tệp đầu tiên (được đề xuất)</translation>
 <translation id="3505030558724226696">Thu hồi quyền truy cập thiết bị</translation>
 <translation id="3511307672085573050">S&amp;ao chép Địa chỉ Liên kết</translation>
-<translation id="3523642406908660543">Hỏi khi một trang web muốn sử dụng plugin để truy cập vào máy tính của bạn (được khuyến nghị)</translation>
 <translation id="354068948465830244">Tiện ích này có thể đọc và thay đổi dữ liệu trang web</translation>
 <translation id="3560034655160545939">&amp;Kiểm tra chính tả</translation>
 <translation id="3574917942258583917">Bạn vẫn muốn thoát khỏi chế độ ẩn danh?</translation>
@@ -218,7 +213,6 @@
 <translation id="4423376891418188461">Khôi phục Cài đặt</translation>
 <translation id="4434045419905280838">Cửa sổ bật lên và liên kết chuyển hướng</translation>
 <translation id="4478664379124702289">Lưu Liên &amp;kết Dưới dạng...</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535">Không thể truyền <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">Đ&amp;i đến <ph name="URL" /></translation>
 <translation id="4595560905247879544">Chỉ người quản lý mới có thể sửa đổi ứng dụng và tiện ích (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -299,7 +293,6 @@
 <translation id="583281660410589416">Không xác định</translation>
 <translation id="5860491529813859533">Bật</translation>
 <translation id="5867841422488265304">Tìm kiếm hoặc nhập địa chỉ web</translation>
-<translation id="5908769186679515905">Chặn trang web chạy Flash</translation>
 <translation id="5910363049092958439">Lưu &amp;Hình ảnh Dưới dạng...</translation>
 <translation id="5956585768868398362">Đây có phải là trang tìm kiếm bạn muốn không?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (tối đa <ph name="NUM_KILOBYTES_LIVE" />)</translation>
@@ -372,7 +365,6 @@
 <translation id="7287143125007575591">Truy cập bị từ chối.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Hiển thị &amp;các điều khiển</translation>
-<translation id="7311079019872751559">Truy cập plugin không có hộp cát</translation>
 <translation id="7385854874724088939">Có trục trặc xảy ra khi in. Hãy kiểm tra máy in của bạn và thử lại.</translation>
 <translation id="7412226954991670867">Bộ nhớ GPU</translation>
 <translation id="7421925624202799674">&amp;Xem Nguồn Trang</translation>

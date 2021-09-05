@@ -17,9 +17,8 @@ import org.junit.runners.model.Statement;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Log;
 import org.chromium.base.test.util.CallbackHelper;
-import org.chromium.chrome.browser.app.ChromeActivity;
 import org.chromium.chrome.browser.download.items.OfflineContentAggregatorFactory;
-import org.chromium.chrome.test.ChromeActivityTestRule;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.components.offline_items_collection.ContentId;
 import org.chromium.components.offline_items_collection.OfflineContentProvider;
 import org.chromium.components.offline_items_collection.OfflineItem;
@@ -30,7 +29,6 @@ import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -44,7 +42,7 @@ import java.util.concurrent.TimeoutException;
  * and all of our test cases.
  *
  */
-public class DownloadTestRule extends ChromeActivityTestRule<ChromeActivity> {
+public class DownloadTestRule extends ChromeTabbedActivityTestRule {
     private static final String TAG = "DownloadTestBase";
     private static final File DOWNLOAD_DIRECTORY =
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
@@ -54,7 +52,6 @@ public class DownloadTestRule extends ChromeActivityTestRule<ChromeActivity> {
     private List<DownloadItem> mAllDownloads;
 
     public DownloadTestRule(CustomMainActivityStart action) {
-        super(ChromeActivity.class);
         mActivityStart = action;
     }
 
@@ -222,7 +219,7 @@ public class DownloadTestRule extends ChromeActivityTestRule<ChromeActivity> {
 
     private class TestDownloadBackendObserver implements OfflineContentProvider.Observer {
         @Override
-        public void onItemsAdded(ArrayList<OfflineItem> items) {}
+        public void onItemsAdded(List<OfflineItem> items) {}
 
         @Override
         public void onItemRemoved(ContentId id) {}

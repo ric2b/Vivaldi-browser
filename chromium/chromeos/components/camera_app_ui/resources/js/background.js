@@ -2,16 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// eslint-disable-next-line no-unused-vars
+import {AppWindow} from './app_window.js';
 import {
   BackgroundOps,  // eslint-disable-line no-unused-vars
   ForegroundOps,  // eslint-disable-line no-unused-vars
 } from './background_ops.js';
 import {browserProxy} from './browser_proxy/browser_proxy.js';
-// eslint-disable-next-line no-unused-vars
-import {TestingErrorCallback} from './error.js';
 import {Intent} from './intent.js';
 import {initMetrics, setMetricsEnabled} from './metrics.js';
-import {PerfEvent, PerfLogger} from './perf.js';
+import {PerfLogger} from './perf.js';
+import {
+  PerfEvent,
+  TestingErrorCallback,  // eslint-disable-line no-unused-vars
+} from './type.js';
 
 /**
  * Fixed minimum width of the window inner-bounds in pixels.
@@ -136,6 +140,12 @@ class CCAWindow {
     this.appWindow_ = null;
 
     /**
+     * @type {?AppWindow}
+     * @private
+     */
+    this.testAppWindow_ = null;
+
+    /**
      * @type {?ForegroundOps}
      * @private
      */
@@ -195,8 +205,6 @@ class CCAWindow {
           this.appWindow_ = appWindow;
           this.appWindow_.onClosed.addListener(() => {
             browserProxy.localStorageSet({maximized: appWindow.isMaximized()});
-            browserProxy.localStorageSet(
-                {fullscreen: appWindow.isFullscreen()});
             this.state_ = WindowState.CLOSED;
             if (this.intent_ !== null && !this.intent_.done) {
               this.intent_.cancel();
@@ -204,6 +212,9 @@ class CCAWindow {
             this.callbacks_.onClosed(this);
             if (this.testingCallbacks_ !== null) {
               this.testingCallbacks_.onClosed(windowUrl);
+            }
+            if (this.testAppWindow_ !== null) {
+              this.testAppWindow_.notifyClosed();
             }
           });
           appWindow.contentWindow['backgroundOps'] = this;
@@ -223,6 +234,13 @@ class CCAWindow {
   /**
    * @override
    */
+  bindAppWindow(appWindow) {
+    this.testAppWindow_ = appWindow;
+  }
+
+  /**
+   * @override
+   */
   getIntent() {
     return this.intent_;
   }
@@ -232,12 +250,6 @@ class CCAWindow {
    */
   notifyActivation() {
     this.state_ = WindowState.ACTIVE;
-    // For intent only requiring open camera with specific mode without
-    // returning the capture result, called onIntentHandled() right
-    // after app successfully launched.
-    if (this.intent_ !== null && !this.intent_.shouldHandleResult) {
-      this.intent_.finish();
-    }
     this.callbacks_.onActive(this);
   }
 
@@ -546,13 +558,15 @@ function handleExternalConnectionFromTest(port) {
     return;
   }
   switch (port.name) {
+    // TODO(crbug.com/980846): Remove the old error reporting logic once the
+    // implementation using TestBridge on Tast side is ready.
     case 'SET_PERF_CONNECTION':
       port.onMessage.addListener((event) => {
         if (perfLoggerForTesting === null) {
           perfLoggerForTesting = new PerfLogger();
 
-          perfLoggerForTesting.addListener((event, duration, extras) => {
-            port.postMessage({event, duration, extras});
+          perfLoggerForTesting.addListener(({event, duration, perfInfo}) => {
+            port.postMessage({event, duration, extras: perfInfo});
           });
         }
 
@@ -600,4 +614,4 @@ chrome.app.runtime.onLaunched.addListener((launchData) => {
   }
 });
 
-browserProxy.addOnConnectExternalListener(handleExternalConnectionFromTest);
+chrome.runtime.onConnectExternal.addListener(handleExternalConnectionFromTest);

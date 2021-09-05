@@ -181,7 +181,7 @@ class CORE_EXPORT NGPaintFragment : public RefCounted<NGPaintFragment>,
   bool IsScrollContainer() const {
     return PhysicalFragment().IsScrollContainer();
   }
-  bool ShouldClipOverflowAlongEitherAxis() const;
+  bool ShouldClipOverflowAlongBothAxis() const;
   bool HasSelfPaintingLayer() const;
 
   // Set ShouldDoFullPaintInvalidation flag in the corresponding LayoutObject.
@@ -217,6 +217,7 @@ class CORE_EXPORT NGPaintFragment : public RefCounted<NGPaintFragment>,
   // Converts the given point, relative to the fragment itself, into a position
   // in DOM tree.
   PositionWithAffinity PositionForPoint(const PhysicalOffset&) const;
+  PositionWithAffinity PositionForPointInText(unsigned text_offset) const;
 
   // A range of fragments for |FragmentsFor()|.
   class TraverseNextForSameLayoutObject {

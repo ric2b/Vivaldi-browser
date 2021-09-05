@@ -17,6 +17,7 @@
 #include "base/callback.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
+#include "base/containers/mru_cache.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/shared_memory_mapping.h"
 #include "base/optional.h"
@@ -25,6 +26,7 @@
 #include "cc/base/synced_property.h"
 #include "cc/benchmarks/micro_benchmark_controller_impl.h"
 #include "cc/cc_export.h"
+#include "cc/input/actively_scrolling_type.h"
 #include "cc/input/browser_controls_offset_manager_client.h"
 #include "cc/input/input_handler.h"
 #include "cc/input/scrollbar_animation_controller.h"
@@ -84,8 +86,10 @@ struct FrameTimingDetails;
 
 namespace cc {
 
+enum class ActivelyScrollingType;
 class BrowserControlsOffsetManager;
 class CompositorFrameReportingController;
+class RasterDarkModeFilter;
 class DebugRectHistory;
 class EvictionTilePriorityQueue;
 class DroppedFrameCounter;
@@ -179,6 +183,11 @@ class LayerTreeHostImplClient {
       base::TimeDelta first_scroll_delay,
       base::TimeTicks first_scroll_timestamp) = 0;
 
+  // Returns true if the client is currently compositing synchronously. This is
+  // only true in tests, but some behavior needs to be synchronized in non-test
+  // code as a result.
+  virtual bool IsInSynchronousComposite() const = 0;
+
  protected:
   virtual ~LayerTreeHostImplClient() = default;
 };
@@ -258,6 +267,7 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
       RenderingStatsInstrumentation* rendering_stats_instrumentation,
       TaskGraphRunner* task_graph_runner,
       std::unique_ptr<MutatorHost> mutator_host,
+      RasterDarkModeFilter* dark_mode_filter,
       int id,
       scoped_refptr<base::SequencedTaskRunner> image_worker_task_runner,
       LayerTreeHostSchedulingClient* scheduling_client);
@@ -280,7 +290,8 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   std::unique_ptr<SwapPromiseMonitor> CreateLatencyInfoSwapPromiseMonitor(
       ui::LatencyInfo* latency);
   std::unique_ptr<EventsMetricsManager::ScopedMonitor>
-  GetScopedEventMetricsMonitor(std::unique_ptr<EventMetrics> event_metrics);
+  GetScopedEventMetricsMonitor(
+      EventsMetricsManager::ScopedMonitor::DoneCallback done_callback);
   void NotifyInputEvent();
 
   // BrowserControlsOffsetManagerClient implementation.
@@ -490,6 +501,8 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   int GetMSAASampleCountForRaster(
       const scoped_refptr<DisplayItemList>& display_list) override;
 
+  bool HasPendingTree() override;
+
   // ScrollbarAnimationControllerClient implementation.
   void PostDelayedScrollbarAnimationTask(base::OnceClosure task,
                                          base::TimeDelta delay) override;
@@ -612,7 +625,7 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   // LayerTreeHostImpl's interface.
   bool IsPinchGestureActive() const;
   // See comment in equivalent ThreadedInputHandler method for what this means.
-  bool IsActivelyPrecisionScrolling() const;
+  ActivelyScrollingType GetActivelyScrollingType() const;
   bool ScrollAffectsScrollHandler() const;
   void SetExternalPinchGestureActive(bool active);
   void set_force_smooth_wheel_scrolling_for_testing(bool enabled) {
@@ -800,6 +813,11 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
     return &dropped_frame_counter_;
   }
 
+  // Returns true if the client is currently compositing synchronously.
+  bool IsInSynchronousComposite() const {
+    return client_->IsInSynchronousComposite();
+  }
+
  protected:
   LayerTreeHostImpl(
       const LayerTreeSettings& settings,
@@ -808,6 +826,7 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
       RenderingStatsInstrumentation* rendering_stats_instrumentation,
       TaskGraphRunner* task_graph_runner,
       std::unique_ptr<MutatorHost> mutator_host,
+      RasterDarkModeFilter* dark_mode_filter,
       int id,
       scoped_refptr<base::SequencedTaskRunner> image_worker_task_runner,
       LayerTreeHostSchedulingClient* scheduling_client);
@@ -934,7 +953,10 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
                            const viz::FrameTimingDetails& details);
 
   // Notifies client about the custom tracker results.
-  void NotifyThroughputTrackerResults(CustomTrackerResults results);
+  void NotifyThroughputTrackerResults(const CustomTrackerResults& results);
+
+  // Wrapper for checking and updating |contains_srgb_cache_|.
+  bool CheckColorSpaceContainsSrgb(const gfx::ColorSpace& color_space) const;
 
   // Once bound, this instance owns the InputHandler. However, an InputHandler
   // need not be bound so this should be null-checked before dereferencing.
@@ -1052,6 +1074,7 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   std::unique_ptr<MutatorHost> mutator_host_;
   std::unique_ptr<MutatorEvents> mutator_events_;
   std::set<VideoFrameController*> video_frame_controllers_;
+  RasterDarkModeFilter* const dark_mode_filter_;
 
   // Map from scroll element ID to scrollbar animation controller.
   // There is one animation controller per pair of overlay scrollbars.
@@ -1177,6 +1200,12 @@ class CC_EXPORT LayerTreeHostImpl : public TileManagerClient,
   bool is_measuring_smoothness_ = false;
 
   base::WritableSharedMemoryMapping ukm_smoothness_mapping_;
+
+  // Cache for the results of calls to gfx::ColorSpace::Contains() on sRGB. This
+  // computation is deterministic for a given color space, can be called
+  // multiple times per frame, and incurs a non-trivial cost.
+  // mutable because |contains_srgb_cache_| is accessed in a const method.
+  mutable base::MRUCache<gfx::ColorSpace, bool> contains_srgb_cache_;
 
   // Must be the last member to ensure this is destroyed first in the
   // destruction order and invalidates all weak pointers.

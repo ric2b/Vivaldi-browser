@@ -14,6 +14,7 @@
 #include "cc/paint/paint_flags.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/focus_ring.h"
+#include "ui/views/metadata/view_factory.h"
 
 namespace gfx {
 struct VectorIcon;
@@ -29,7 +30,6 @@ class VIEWS_EXPORT Checkbox : public LabelButton {
 
   explicit Checkbox(const base::string16& label = base::string16(),
                     PressedCallback callback = PressedCallback());
-  Checkbox(const base::string16& label, ButtonListener* listener);
   ~Checkbox() override;
 
   // Sets/Gets whether or not the checkbox is checked.
@@ -82,14 +82,21 @@ class VIEWS_EXPORT Checkbox : public LabelButton {
   void GetExtraParams(ui::NativeTheme::ExtraParams* params) const override;
 
   // True if the checkbox is checked.
-  bool checked_;
+  bool checked_ = false;
 
   // The unique id for the associated label's accessible object.
-  int32_t label_ax_id_;
+  int32_t label_ax_id_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(Checkbox);
 };
 
+BEGIN_VIEW_BUILDER(VIEWS_EXPORT, Checkbox, LabelButton)
+VIEW_BUILDER_PROPERTY(bool, Checked)
+VIEW_BUILDER_PROPERTY(bool, MultiLine)
+END_VIEW_BUILDER
+
 }  // namespace views
+
+DEFINE_VIEW_BUILDER(VIEWS_EXPORT, Checkbox)
 
 #endif  // UI_VIEWS_CONTROLS_BUTTON_CHECKBOX_H_

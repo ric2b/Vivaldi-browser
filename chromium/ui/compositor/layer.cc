@@ -281,6 +281,9 @@ std::unique_ptr<Layer> Layer::Clone() const {
   clone->SetIsFastRoundedCorner(is_fast_rounded_corner());
   clone->SetName(name_);
 
+  // the |damaged_region_| will be sent to cc later in SendDamagedRects().
+  clone->damaged_region_ = damaged_region_;
+
   return clone;
 }
 
@@ -1300,8 +1303,7 @@ gfx::Rect Layer::PaintableRegion() {
   return gfx::Rect(size());
 }
 
-scoped_refptr<cc::DisplayItemList> Layer::PaintContentsToDisplayList(
-    ContentLayerClient::PaintingControlSetting painting_control) {
+scoped_refptr<cc::DisplayItemList> Layer::PaintContentsToDisplayList() {
   TRACE_EVENT1("ui", "Layer::PaintContentsToDisplayList", "name", name_);
   gfx::Rect local_bounds(bounds().size());
   gfx::Rect invalidation(
@@ -1321,12 +1323,6 @@ scoped_refptr<cc::DisplayItemList> Layer::PaintContentsToDisplayList(
 }
 
 bool Layer::FillsBoundsCompletely() const { return fills_bounds_completely_; }
-
-size_t Layer::GetApproximateUnsharedMemoryUsage() const {
-  // Most of the "picture memory" is shared with the cc::DisplayItemList, so
-  // there's nothing significant to report here.
-  return 0;
-}
 
 bool Layer::PrepareTransferableResource(
     cc::SharedBitmapIdRegistrar* bitmap_registar,

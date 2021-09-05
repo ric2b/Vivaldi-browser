@@ -36,6 +36,12 @@ void FakeAccessibilityController::SetSelectToSpeakState(
 void FakeAccessibilityController::SetSelectToSpeakEventHandlerDelegate(
     ash::SelectToSpeakEventHandlerDelegate* delegate) {}
 
+void FakeAccessibilityController::ShowSelectToSpeakPanel(
+    const gfx::Rect& anchor,
+    bool is_paused) {}
+
+void FakeAccessibilityController::HideSelectToSpeakPanel() {}
+
 void FakeAccessibilityController::HideSwitchAccessBackButton() {}
 
 void FakeAccessibilityController::HideSwitchAccessMenu() {}
@@ -46,6 +52,8 @@ void FakeAccessibilityController::ShowSwitchAccessBackButton(
 void FakeAccessibilityController::ShowSwitchAccessMenu(
     const gfx::Rect& anchor,
     std::vector<std::string> actions) {}
+
+void FakeAccessibilityController::ActivatePointScan() {}
 
 void FakeAccessibilityController::SetDictationActive(bool is_active) {}
 

@@ -9,6 +9,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-blink.h"
 #include "third_party/blink/public/common/blob/blob_utils.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_network_provider.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_url_loader_factory.h"
@@ -39,7 +40,8 @@ void LoaderFactoryForFrame::Trace(Visitor* visitor) const {
 std::unique_ptr<WebURLLoader> LoaderFactoryForFrame::CreateURLLoader(
     const ResourceRequest& request,
     const ResourceLoaderOptions& options,
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
+    scoped_refptr<base::SingleThreadTaskRunner> freezable_task_runner,
+    scoped_refptr<base::SingleThreadTaskRunner> unfreezable_task_runner) {
   WrappedResourceRequest webreq(request);
 
   mojo::PendingRemote<network::mojom::blink::URLLoaderFactory>
@@ -68,7 +70,8 @@ std::unique_ptr<WebURLLoader> LoaderFactoryForFrame::CreateURLLoader(
   // TODO(mek): Move the RequestContext check to the worker side's relevant
   // callsite when we make Shared Worker loading off-main-thread.
   if (request.Url().ProtocolIs("blob") && !url_loader_factory &&
-      request.GetRequestContext() != mojom::RequestContextType::SHARED_WORKER) {
+      request.GetRequestContext() !=
+          mojom::blink::RequestContextType::SHARED_WORKER) {
     window_->GetPublicURLManager().Resolve(
         request.Url(), url_loader_factory.InitWithNewPipeAndPassReceiver());
   }
@@ -85,14 +88,15 @@ std::unique_ptr<WebURLLoader> LoaderFactoryForFrame::CreateURLLoader(
   if (url_loader_factory) {
     return Platform::Current()
         ->WrapURLLoaderFactory(std::move(url_loader_factory))
-        ->CreateURLLoader(
-            webreq, frame_scheduler->CreateResourceLoadingTaskRunnerHandle());
+        ->CreateURLLoader(webreq, CreateTaskRunnerHandle(freezable_task_runner),
+                          CreateTaskRunnerHandle(unfreezable_task_runner));
   }
 
   if (document_loader_->GetServiceWorkerNetworkProvider()) {
     auto loader =
         document_loader_->GetServiceWorkerNetworkProvider()->CreateURLLoader(
-            webreq, frame_scheduler->CreateResourceLoadingTaskRunnerHandle());
+            webreq, CreateTaskRunnerHandle(freezable_task_runner),
+            CreateTaskRunnerHandle(unfreezable_task_runner));
     if (loader)
       return loader;
   }
@@ -104,7 +108,8 @@ std::unique_ptr<WebURLLoader> LoaderFactoryForFrame::CreateURLLoader(
       return loader;
   }
   return frame->GetURLLoaderFactory()->CreateURLLoader(
-      webreq, frame_scheduler->CreateResourceLoadingTaskRunnerHandle());
+      webreq, CreateTaskRunnerHandle(freezable_task_runner),
+      CreateTaskRunnerHandle(unfreezable_task_runner));
 }
 
 std::unique_ptr<WebCodeCacheLoader>
@@ -112,4 +117,10 @@ LoaderFactoryForFrame::CreateCodeCacheLoader() {
   return Platform::Current()->CreateCodeCacheLoader();
 }
 
+std::unique_ptr<blink::scheduler::WebResourceLoadingTaskRunnerHandle>
+LoaderFactoryForFrame::CreateTaskRunnerHandle(
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
+  return scheduler::WebResourceLoadingTaskRunnerHandle::CreateUnprioritized(
+      std::move(task_runner));
+}
 }  // namespace blink

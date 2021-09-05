@@ -109,6 +109,7 @@
 #include "ash/system/brightness/brightness_controller_chromeos.h"
 #include "ash/system/brightness_control_delegate.h"
 #include "ash/system/caps_lock_notification_controller.h"
+#include "ash/system/holding_space/holding_space_color_provider_impl.h"
 #include "ash/system/keyboard_brightness/keyboard_brightness_controller.h"
 #include "ash/system/keyboard_brightness_control_delegate.h"
 #include "ash/system/locale/locale_update_controller_impl.h"
@@ -167,7 +168,7 @@
 #include "ash/wm/wm_shadow_controller_delegate.h"
 #include "ash/wm/workspace_controller.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
@@ -821,6 +822,10 @@ Shell::~Shell() {
   // Stop observing window activation changes before closing all windows.
   focus_controller_->RemoveObserver(this);
 
+  // Depends on shelf owned by RootWindowController so destroy this before the
+  // |window_tree_host_manager_|.
+  clipboard_history_controller_.reset();
+
   // This also deletes all RootWindows. Note that we invoke Shutdown() on
   // WindowTreeHostManager before resetting |window_tree_host_manager_|, since
   // destruction of its owned RootWindowControllers relies on the value.
@@ -877,7 +882,7 @@ Shell::~Shell() {
   // Destroys the MessageCenter singleton, so must happen late.
   message_center_controller_.reset();
 
-  // HoldingSpaceController observes SessionController and must be
+  // `HoldingSpaceController` observes `SessionController` and must be
   // destructed before it.
   holding_space_controller_.reset();
 
@@ -1029,6 +1034,13 @@ void Shell::Init(
         std::make_unique<ClipboardHistoryControllerImpl>();
     clipboard_history_controller_->Init();
   }
+
+  // `HoldingSpaceController` must be instantiated before the shelf.
+  if (features::IsTemporaryHoldingSpaceEnabled()) {
+    holding_space_controller_ = std::make_unique<HoldingSpaceController>(
+        std::make_unique<HoldingSpaceColorProviderImpl>());
+  }
+
   shelf_config_ = std::make_unique<ShelfConfig>();
   shelf_controller_ = std::make_unique<ShelfController>();
 
@@ -1109,8 +1121,7 @@ void Shell::Init(
   magnification_controller_ = std::make_unique<MagnificationController>();
   mru_window_tracker_ = std::make_unique<MruWindowTracker>();
   assistant_controller_ = std::make_unique<AssistantControllerImpl>();
-  if (chromeos::features::IsQuickAnswersEnabled() &&
-      chromeos::features::IsQuickAnswersRichUiEnabled()) {
+  if (chromeos::features::IsQuickAnswersEnabled()) {
     quick_answers_controller_ = std::make_unique<QuickAnswersControllerImpl>();
   }
 
@@ -1254,9 +1265,6 @@ void Shell::Init(
     display_alignment_controller_ =
         std::make_unique<DisplayAlignmentController>();
   }
-
-  if (features::IsTemporaryHoldingSpaceEnabled())
-    holding_space_controller_ = std::make_unique<HoldingSpaceController>();
 
   for (auto& observer : shell_observers_)
     observer.OnShellInitialized();

@@ -111,7 +111,7 @@
 #include "third_party/blink/public/mojom/prerender/prerender.mojom.h"
 #include "third_party/blink/public/mojom/presentation/presentation.mojom.h"
 #include "third_party/blink/public/mojom/quota/quota_manager_host.mojom.h"
-#include "third_party/blink/public/mojom/sms/sms_receiver.mojom.h"
+#include "third_party/blink/public/mojom/sms/webotp_service.mojom.h"
 #include "third_party/blink/public/mojom/speech/speech_recognizer.mojom.h"
 #include "third_party/blink/public/mojom/speech/speech_synthesis.mojom.h"
 #include "third_party/blink/public/mojom/usb/web_usb_service.mojom.h"
@@ -119,6 +119,7 @@
 #include "third_party/blink/public/mojom/webaudio/audio_context_manager.mojom.h"
 #include "third_party/blink/public/mojom/webauthn/authenticator.mojom.h"
 #include "third_party/blink/public/mojom/webauthn/virtual_authenticator.mojom.h"
+#include "third_party/blink/public/mojom/webid/federated_auth_request.mojom.h"
 #include "third_party/blink/public/mojom/websockets/websocket_connector.mojom.h"
 #include "third_party/blink/public/mojom/webtransport/quic_transport_connector.mojom.h"
 #include "third_party/blink/public/mojom/worker/dedicated_worker_host_factory.mojom.h"
@@ -590,9 +591,16 @@ void PopulateFrameBinders(RenderFrameHostImpl* host, mojo::BinderMap* map) {
       base::BindRepeating(&RenderFrameHostImpl::BindScreenEnumerationReceiver,
                           base::Unretained(host)));
 
-  if (base::FeatureList::IsEnabled(features::kSmsReceiver)) {
-    map->Add<blink::mojom::SmsReceiver>(base::BindRepeating(
-        &RenderFrameHostImpl::BindSmsReceiverReceiver, base::Unretained(host)));
+  if (base::FeatureList::IsEnabled(features::kWebOTP)) {
+    map->Add<blink::mojom::WebOTPService>(
+        base::BindRepeating(&RenderFrameHostImpl::BindWebOTPServiceReceiver,
+                            base::Unretained(host)));
+  }
+
+  if (base::FeatureList::IsEnabled(features::kWebID)) {
+    map->Add<blink::mojom::FederatedAuthRequest>(base::BindRepeating(
+        &RenderFrameHostImpl::BindFederatedAuthRequestReceiver,
+        base::Unretained(host)));
   }
 
   map->Add<blink::mojom::WebUsbService>(base::BindRepeating(
@@ -757,8 +765,13 @@ void PopulateBinderMapWithContext(
   // production embedder (such as in tests).
   map->Add<blink::mojom::InsecureInputService>(base::BindRepeating(
       &EmptyBinderForFrame<blink::mojom::InsecureInputService>));
-  map->Add<blink::mojom::PrerenderProcessor>(base::BindRepeating(
-      &EmptyBinderForFrame<blink::mojom::PrerenderProcessor>));
+  if (base::FeatureList::IsEnabled(blink::features::kPrerender2)) {
+    map->Add<blink::mojom::PrerenderProcessor>(base::BindRepeating(
+        &RenderFrameHostImpl::BindPrerenderProcessor, base::Unretained(host)));
+  } else {
+    map->Add<blink::mojom::PrerenderProcessor>(base::BindRepeating(
+        &EmptyBinderForFrame<blink::mojom::PrerenderProcessor>));
+  }
   map->Add<payments::mojom::PaymentCredential>(base::BindRepeating(
       &EmptyBinderForFrame<payments::mojom::PaymentCredential>));
   map->Add<payments::mojom::PaymentRequest>(base::BindRepeating(
@@ -774,6 +787,10 @@ void PopulateBinderMapWithContext(
   }
   map->Add<media::mojom::SpeechRecognitionContext>(base::BindRepeating(
       &EmptyBinderForFrame<media::mojom::SpeechRecognitionContext>));
+  map->Add<media::mojom::SpeechRecognitionClientBrowserInterface>(
+      base::BindRepeating(
+          &EmptyBinderForFrame<
+              media::mojom::SpeechRecognitionClientBrowserInterface>));
 #endif
 #if BUILDFLAG(ENABLE_UNHANDLED_TAP)
   map->Add<blink::mojom::UnhandledTapNotifier>(base::BindRepeating(
@@ -873,9 +890,10 @@ void PopulateDedicatedWorkerBinders(DedicatedWorkerHost* host,
   map->Add<blink::mojom::DedicatedWorkerHostFactory>(
       base::BindRepeating(&DedicatedWorkerHost::CreateNestedDedicatedWorker,
                           base::Unretained(host)));
-  if (base::FeatureList::IsEnabled(features::kSmsReceiver)) {
-    map->Add<blink::mojom::SmsReceiver>(base::BindRepeating(
-        &DedicatedWorkerHost::BindSmsReceiverReceiver, base::Unretained(host)));
+  if (base::FeatureList::IsEnabled(features::kWebOTP)) {
+    map->Add<blink::mojom::WebOTPService>(
+        base::BindRepeating(&DedicatedWorkerHost::BindWebOTPServiceReceiver,
+                            base::Unretained(host)));
   }
   map->Add<blink::mojom::WebUsbService>(base::BindRepeating(
       &DedicatedWorkerHost::CreateWebUsbService, base::Unretained(host)));

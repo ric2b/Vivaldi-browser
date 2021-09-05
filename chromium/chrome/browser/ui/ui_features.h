@@ -27,23 +27,21 @@ extern const base::Feature kExtensionSettingsOverriddenDialogs;
 
 extern const base::Feature kExtensionsToolbarMenu;
 
-extern const base::Feature kForceEnableDevicesPage;
+extern const base::Feature kForceEnablePrivetPrinting;
 
 extern const base::Feature kNewProfilePicker;
 
 extern const base::Feature kNewTabstripAnimation;
 
-extern const base::Feature kPermissionChip;
-
 extern const base::Feature kProminentDarkModeActiveTabTitle;
-
-extern const base::Feature kReadLater;
 
 extern const base::Feature kScrollableTabStrip;
 
-extern const base::Feature kProfilesUIRevamp;
+extern const base::Feature kScrollableTabStripButtons;
 
-extern const base::Feature kTabGroups;
+extern const base::Feature kSidePanel;
+
+extern const base::Feature kProfilesUIRevamp;
 
 extern const base::Feature kTabGroupsAutoCreate;
 
@@ -63,8 +61,6 @@ extern const base::Feature kTabOutlinesInLowContrastThemes;
 extern const base::Feature kTabSearch;
 
 extern const base::Feature kTabSearchFeedback;
-
-extern const base::Feature kTabSearchFixedEntrypoint;
 
 // Setting this to true will ignore the distance parameter when finding matches.
 // This means that it will not matter where in the string the pattern occurs.
@@ -88,7 +84,8 @@ constexpr double kTabSearchSearchThresholdMax = 1.0;
 // Controls how heavily weighted the tab's title is relative to the hostname.
 extern const base::FeatureParam<double> kTabSearchTitleToHostnameWeightRatio;
 
-extern const base::Feature kUseTextForUpdateButton;
+// Whether to move the active tab to the bottom of the list.
+extern const base::FeatureParam<bool> kTabSearchMoveActiveTabToBottom;
 
 extern const base::Feature kWebFooterExperiment;
 

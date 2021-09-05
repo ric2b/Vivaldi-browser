@@ -19,10 +19,7 @@
 #include "chrome/browser/history/history_test_utils.h"
 #include "chrome/browser/reputation/reputation_service.h"
 #include "chrome/browser/reputation/reputation_web_contents_observer.h"
-#include "chrome/browser/reputation/safety_tip_test_utils.h"
 #include "chrome/browser/reputation/safety_tip_ui_helper.h"
-#include "chrome/browser/reputation/safety_tips.pb.h"
-#include "chrome/browser/reputation/safety_tips_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_navigator.h"
@@ -35,6 +32,9 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/lookalikes/core/features.h"
 #include "components/lookalikes/core/lookalike_url_util.h"
+#include "components/reputation/core/safety_tip_test_utils.h"
+#include "components/reputation/core/safety_tips.pb.h"
+#include "components/reputation/core/safety_tips_config.h"
 #include "components/safe_browsing/core/db/v4_protocol_manager_util.h"
 #include "components/security_interstitials/core/common_string_util.h"
 #include "components/security_state/core/features.h"
@@ -203,7 +203,7 @@ void TriggerWarningFromBlocklist(Browser* browser,
   safe_browsing::V4ProtocolManagerUtil::CanonicalizeUrl(url, &host, &path,
                                                         &query);
   // For simplicity, ignore query
-  SetSafetyTipBadRepPatterns({host + path});
+  reputation::SetSafetyTipBadRepPatterns({host + path});
   SetEngagementScore(browser, url, kLowEngagement);
   NavigateToURL(browser, url, disposition);
 }
@@ -278,7 +278,7 @@ class SafetyTipPageInfoBubbleViewBrowserTest
         break;
     }
 
-    InitializeSafetyTipConfig();
+    reputation::InitializeSafetyTipConfig();
     InProcessBrowserTest::SetUp();
   }
 
@@ -309,6 +309,14 @@ class SafetyTipPageInfoBubbleViewBrowserTest
     auto* bubble = static_cast<SafetyTipPageInfoBubbleView*>(
         PageInfoBubbleViewBase::GetPageInfoBubbleForTesting());
     bubble->OpenHelpCenter();
+  }
+
+  void CheckNoButtons() {
+    auto* bubble = static_cast<SafetyTipPageInfoBubbleView*>(
+        PageInfoBubbleViewBase::GetPageInfoBubbleForTesting());
+    EXPECT_FALSE(bubble->info_button_);
+    EXPECT_FALSE(bubble->ignore_button_);
+    EXPECT_FALSE(bubble->leave_button_);
   }
 
   void CloseWarningLeaveSite(Browser* browser) {
@@ -449,7 +457,7 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
 // Ensure normal sites with low engagement are not blocked in incognito.
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
                        NoShowOnLowEngagementIncognito) {
-  Browser* incognito_browser = new Browser(Browser::CreateParams(
+  Browser* incognito_browser = Browser::Create(Browser::CreateParams(
       browser()->profile()->GetPrimaryOTRProfile(), true));
   auto kNavigatedUrl = GetURL("site1.com");
   SetEngagementScore(incognito_browser, kNavigatedUrl, kLowEngagement);
@@ -465,7 +473,7 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
                        NoShowOnHighEngagement) {
   auto kNavigatedUrl = GetURL("site1.com");
-  SetSafetyTipBadRepPatterns({"site1.com/"});
+  reputation::SetSafetyTipBadRepPatterns({"site1.com/"});
 
   SetEngagementScore(browser(), kNavigatedUrl, kHighEngagement);
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
@@ -477,10 +485,10 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
 // Ensure blocked sites with high engagement are not blocked in incognito.
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
                        NoShowOnHighEngagementIncognito) {
-  Browser* incognito_browser = new Browser(Browser::CreateParams(
+  Browser* incognito_browser = Browser::Create(Browser::CreateParams(
       browser()->profile()->GetPrimaryOTRProfile(), true));
   auto kNavigatedUrl = GetURL("site1.com");
-  SetSafetyTipBadRepPatterns({"site1.com/"});
+  reputation::SetSafetyTipBadRepPatterns({"site1.com/"});
 
   SetEngagementScore(incognito_browser, kNavigatedUrl, kHighEngagement);
   NavigateToURL(incognito_browser, kNavigatedUrl,
@@ -494,7 +502,7 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
 // Ensure blocked sites get blocked.
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest, ShowOnBlock) {
   auto kNavigatedUrl = GetURL("site1.com");
-  SetSafetyTipBadRepPatterns({"site1.com/"});
+  reputation::SetSafetyTipBadRepPatterns({"site1.com/"});
 
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
   EXPECT_TRUE(IsUIShowingOrSuspiciousSitesDisabled());
@@ -507,7 +515,7 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest, ShowOnBlock) {
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest, NoShowOnError) {
   auto kNavigatedUrl =
       embedded_test_server()->GetURL("site1.com", "/close-socket");
-  SetSafetyTipBadRepPatterns({"site1.com/"});
+  reputation::SetSafetyTipBadRepPatterns({"site1.com/"});
 
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
   EXPECT_FALSE(IsUIShowing());
@@ -518,10 +526,10 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest, NoShowOnError) {
 // Ensure blocked sites get blocked in incognito.
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
                        ShowOnBlockIncognito) {
-  Browser* incognito_browser = new Browser(Browser::CreateParams(
+  Browser* incognito_browser = Browser::Create(Browser::CreateParams(
       browser()->profile()->GetPrimaryOTRProfile(), true));
   auto kNavigatedUrl = GetURL("site1.com");
-  SetSafetyTipBadRepPatterns({"site1.com/"});
+  reputation::SetSafetyTipBadRepPatterns({"site1.com/"});
 
   NavigateToURL(incognito_browser, kNavigatedUrl,
                 WindowOpenDisposition::CURRENT_TAB);
@@ -537,7 +545,7 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
                        StillShowAfterSameDocNav) {
   auto kNavigatedUrl = GetURL("site1.com");
-  SetSafetyTipBadRepPatterns({"site1.com/"});
+  reputation::SetSafetyTipBadRepPatterns({"site1.com/"});
 
   // Generate a Safety Tip.
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
@@ -559,14 +567,14 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
   auto kNavigatedUrl = GetURL("site1.com");
 
   // Ensure a Safety Tip is triggered initially...
-  SetSafetyTipBadRepPatterns({"site1.com/"});
+  reputation::SetSafetyTipBadRepPatterns({"site1.com/"});
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
   EXPECT_TRUE(IsUIShowingOrSuspiciousSitesDisabled());
   ASSERT_NO_FATAL_FAILURE(CheckPageInfoShowsSafetyTipInfo(
       browser(), security_state::SafetyTipStatus::kBadReputation, GURL()));
 
   // ...but suppressed by the allowlist.
-  SetSafetyTipAllowlistPatterns({"site1.com/"}, {});
+  reputation::SetSafetyTipAllowlistPatterns({"site1.com/"}, {});
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
   EXPECT_FALSE(IsUIShowing());
   ASSERT_NO_FATAL_FAILURE(CheckPageInfoDoesNotShowSafetyTipInfo(browser()));
@@ -578,7 +586,7 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
   const std::vector<const char*> kUrls = {"site1.com", "bla.site2.com",
                                           "bla.site3.com"};
 
-  SetSafetyTipBadRepPatterns({"site1.com/", "site2.com/"});
+  reputation::SetSafetyTipBadRepPatterns({"site1.com/", "site2.com/"});
   SetEnterpriseAllowlistForTesting(browser()->profile()->GetPrefs(),
                                    {"site1.com", "bla.site2.com", "site3.com"});
 
@@ -592,13 +600,17 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
 // After the user clicks 'leave site', the user should end up on a safe domain.
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
                        LeaveSiteLeavesSite) {
-  auto kNavigatedUrl = GetURL("site1.com");
-  if (!IsSuspiciousSiteWarningEnabled()) {
+  // The suspicious site warning doesn't have call-to-action buttons, so this
+  // test only applies to lookalike warnings.
+  if (!AreLookalikeWarningsEnabled()) {
     return;
   }
 
-  TriggerWarningFromBlocklist(browser(), kNavigatedUrl,
-                              WindowOpenDisposition::CURRENT_TAB);
+  // This domain is a lookalike of a top domain not in the top 500.
+  const GURL kNavigatedUrl = GetURL("googlé.sk");
+  SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
+  NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
+  ASSERT_TRUE(IsUIShowing());
 
   CloseWarningLeaveSite(browser());
   EXPECT_FALSE(IsUIShowing());
@@ -624,10 +636,30 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
   EXPECT_NE(kNavigatedUrl, new_tab_observer.GetWebContents()->GetURL());
 }
 
+// Test that the Suspicious Site Safety Tip has no buttons and has the correct
+// strings.
+IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
+                       SuspiciousSiteUI) {
+  if (!IsSuspiciousSiteWarningEnabled()) {
+    return;
+  }
+
+  auto kNavigatedUrl = GetURL("site1.com");
+  TriggerWarningFromBlocklist(browser(), kNavigatedUrl,
+                              WindowOpenDisposition::CURRENT_TAB);
+  ASSERT_NO_FATAL_FAILURE(CheckNoButtons());
+  auto* page_info = PageInfoBubbleViewBase::GetPageInfoBubbleForTesting();
+  EXPECT_EQ(
+      page_info->GetWindowTitle(),
+      l10n_util::GetStringUTF16(IDS_PAGE_INFO_SAFETY_TIP_BAD_REPUTATION_TITLE));
+}
+
 // If the user clicks 'leave site', the warning should re-appear when the user
 // re-visits the page.
+// Flaky on Mac: https://crbug.com/1139955
+// Flaky in general, test depends on subtle timing, https://crbug.com/1142769
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
-                       LeaveSiteStillWarnsAfter) {
+                       DISABLED_LeaveSiteStillWarnsAfter) {
   auto kNavigatedUrl = GetURL("site1.com");
 
   if (!IsSuspiciousSiteWarningEnabled()) {
@@ -725,7 +757,7 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
   const GURL kFrameUrl =
       embedded_test_server()->GetURL("b.com", "/title1.html");
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
-  SetSafetyTipBadRepPatterns({"a.com/"});
+  reputation::SetSafetyTipBadRepPatterns({"a.com/"});
 
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
   EXPECT_TRUE(IsUIShowingOrSuspiciousSitesDisabled());
@@ -810,7 +842,7 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
   EXPECT_TRUE(IsUIShowingOrAllFeaturesEnabled());
 
   // ...but suppressed by the allowlist.
-  SetSafetyTipAllowlistPatterns({"xn--googl-fsa.sk/"}, {});
+  reputation::SetSafetyTipAllowlistPatterns({"xn--googl-fsa.sk/"}, {});
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
   EXPECT_FALSE(IsUIShowing());
@@ -827,7 +859,7 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
   // This domain is one edit distance from one of a top 500 domain.
   const GURL kNavigatedUrl = GetURL("gooogle.com");
 
-  SetSafetyTipAllowlistPatterns({}, {"google\\.com"});
+  reputation::SetSafetyTipAllowlistPatterns({}, {"google\\.com"});
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
 
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
@@ -848,8 +880,9 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
 }
 
 // Tests that the SafetyTipShown histogram triggers correctly.
+// Flaky on all platforms: https://crbug.com/1139955
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
-                       SafetyTipShownHistogram) {
+                       DISABLED_SafetyTipShownHistogram) {
   const char kHistogramName[] = "Security.SafetyTips.SafetyTipShown";
   base::HistogramTester histograms;
 
@@ -1013,8 +1046,10 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
 
 // Tests that the histograms recording how long the Safety Tip is open are
 // recorded properly.
+// Flaky on Mac: https://crbug.com/1139955
+// Flaky in general, test depends on subtle timing, https://crbug.com/1142769
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
-                       TimeOpenHistogram) {
+                       DISABLED_TimeOpenHistogram) {
   if (!IsSuspiciousSiteWarningEnabled()) {
     return;
   }
@@ -1098,8 +1133,8 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
                        NotShownOnUnknownFlag) {
   auto kNavigatedUrl = GetURL("site1.com");
-  SetSafetyTipPatternsWithFlagType(
-      {"site1.com/"}, chrome_browser_safety_tips::FlaggedPage::UNKNOWN);
+  reputation::SetSafetyTipPatternsWithFlagType(
+      {"site1.com/"}, reputation::FlaggedPage::UNKNOWN);
 
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
@@ -1114,8 +1149,8 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
 IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
                        NotShownOnYoungDomain) {
   auto kNavigatedUrl = GetURL("site1.com");
-  SetSafetyTipPatternsWithFlagType(
-      {"site1.com/"}, chrome_browser_safety_tips::FlaggedPage::YOUNG_DOMAIN);
+  reputation::SetSafetyTipPatternsWithFlagType(
+      {"site1.com/"}, reputation::FlaggedPage::YOUNG_DOMAIN);
 
   SetEngagementScore(browser(), kNavigatedUrl, kLowEngagement);
   NavigateToURL(browser(), kNavigatedUrl, WindowOpenDisposition::CURRENT_TAB);
@@ -1257,8 +1292,10 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
 
 // Tests that UKM data is only recorded after the safety tip warning is
 // dismissed or accepted, for the blocklist heuristic.
-IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
-                       WarningDismissalCausesUkmRecordingForBlocklist) {
+// Flaky on all platforms: https://crbug.com/1139955
+IN_PROC_BROWSER_TEST_P(
+    SafetyTipPageInfoBubbleViewBrowserTest,
+    DISABLED_WarningDismissalCausesUkmRecordingForBlocklist) {
   // Only test when any UI is actually enabled.
   if (!IsSuspiciousSiteWarningEnabled()) {
     return;
@@ -1297,4 +1334,50 @@ IN_PROC_BROWSER_TEST_P(SafetyTipPageInfoBubbleViewBrowserTest,
   CheckRecordedHeuristicsUkmCount(2);
   CheckHeuristicsUkmRecord({kNavigatedUrl, {true, false, false}}, 0);
   CheckHeuristicsUkmRecord({kNavigatedUrl, {true, false, false}}, 1);
+}
+
+// Test fixture that enables the |kSafetyTipUIForSimplifiedDomainDisplay|
+// feature and disables other Safety Tips features.
+class SafetyTipSimplifiedDomainPageInfoBubbleViewBrowserTest
+    : public InProcessBrowserTest {
+ protected:
+  void SetUp() override {
+    feature_list_.InitWithFeatures(
+        {security_state::features::kSafetyTipUIForSimplifiedDomainDisplay},
+        {security_state::features::kSafetyTipUI,
+         security_state::features::kSafetyTipUIOnDelayedWarning});
+    reputation::InitializeSafetyTipConfig();
+    InProcessBrowserTest::SetUp();
+  }
+
+  void SetUpOnMainThread() override {
+    host_resolver()->AddRule("*", "127.0.0.1");
+    ASSERT_TRUE(embedded_test_server()->Start());
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+// Tests that the Safety Tips for simplified domains feature enables lookalike
+// Safety Tips.
+IN_PROC_BROWSER_TEST_F(SafetyTipSimplifiedDomainPageInfoBubbleViewBrowserTest,
+                       SafetyTipForSimplifiedDomain) {
+  // This domain is a lookalike of a top domain not in the top 500.
+  const GURL url = embedded_test_server()->GetURL("googlé.sk", "/title1.html");
+  SetEngagementScore(browser(), url, kLowEngagement);
+  NavigateToURL(browser(), url, WindowOpenDisposition::CURRENT_TAB);
+  EXPECT_TRUE(IsUIShowing());
+}
+
+// Tests that the Safety Tips for simplified domains feature does not enable the
+// bad reputation Safety Tip.
+IN_PROC_BROWSER_TEST_F(SafetyTipSimplifiedDomainPageInfoBubbleViewBrowserTest,
+                       SafetyTipForSimplifiedDomainNoBadRep) {
+  GURL url = embedded_test_server()->GetURL("site1.com", "/title1.html");
+  reputation::SetSafetyTipPatternsWithFlagType(
+      {"site1.com/"}, reputation::FlaggedPage::BAD_REP);
+  SetEngagementScore(browser(), url, kLowEngagement);
+  NavigateToURL(browser(), url, WindowOpenDisposition::CURRENT_TAB);
+  EXPECT_FALSE(IsUIShowing());
 }

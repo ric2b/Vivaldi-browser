@@ -82,6 +82,30 @@
   }
 
   /**
+   * @param {!chromeos.networkConfig.mojom.PortalState} value
+   * @return {string}
+   */
+  static getPortalStateString(value) {
+    const PortalState = chromeos.networkConfig.mojom.PortalState;
+    switch (value) {
+      case PortalState.kUnknown:
+        return 'Unknown';
+      case PortalState.kOnline:
+        return 'Online';
+      case PortalState.kPortalSuspected:
+        return 'PortalSuspected';
+      case PortalState.kPortal:
+        return 'Portal';
+      case PortalState.kProxyAuthRequired:
+        return 'ProxyAuthRequired';
+      case PortalState.kNoInternet:
+        return 'NoInternet';
+    }
+    assertNotReached('Unexpected enum value: ' + OncMojo.getEnumString(value));
+    return '';
+  }
+
+  /**
    * @param {!chromeos.networkConfig.mojom.ConnectionStateType} value
    * @return {string}
    */
@@ -555,6 +579,7 @@
       connectionState: mojom.ConnectionStateType.kNotConnected,
       guid: opt_name ? (opt_name + '_guid') : '',
       name: opt_name || '',
+      portalState: mojom.PortalState.kUnknown,
       priority: 0,
       proxyMode: mojom.ProxyMode.kDirect,
       prohibitedByPolicy: false,
@@ -692,7 +717,9 @@
       connectable: false,
       guid: guid,
       name: OncMojo.createManagedString(name),
-      restrictedConnectivity: false,
+      ipAddressConfigType: OncMojo.createManagedString('DHCP'),
+      nameServersConfigType: OncMojo.createManagedString('DHCP'),
+      portalState: mojom.PortalState.kUnknown,
     };
     switch (type) {
       case mojom.NetworkType.kCellular:
@@ -1134,6 +1161,30 @@
     }
     return a.every((apn, index) => OncMojo.apnMatch(apn, b[index]));
   }
+
+  /**
+   * Returns true if the portal state has restricted connectivity.
+   * @param {!chromeos.networkConfig.mojom.PortalState|undefined} portal
+   * @return {boolean}
+   */
+  static isRestrictedConnectivity(portal) {
+    if (portal === undefined) {
+      return false;
+    }
+    const PortalState = chromeos.networkConfig.mojom.PortalState;
+    switch (portal) {
+      case PortalState.kUnknown:
+      case PortalState.kOnline:
+        return false;
+      case PortalState.kPortalSuspected:
+      case PortalState.kPortal:
+      case PortalState.kProxyAuthRequired:
+      case PortalState.kNoInternet:
+        return true;
+    }
+    assertNotReached();
+    return false;
+  }
 }
 
 /** @typedef {chromeos.networkConfig.mojom.DeviceStateProperties} */
@@ -1152,13 +1203,14 @@ OncMojo.NetworkStateProperties;
 OncMojo.ManagedProperty;
 
 /**
- * Modified version of mojom.IPConfigProperties to store routingPrefix as a
- * human-readable string instead of as a number. Used in network_ip_config.js.
+ * Modified version of mojom.IPConfigProperties to store routingPrefix as
+ * a human-readable netmask string instead of as a number. Used in
+ * network_ip_config.js.
  * @typedef {{
  *   gateway: (string|undefined),
  *   ipAddress: (string|undefined),
- *   nameServers: (!Array<string>|undefined),
- *   routingPrefix: (string|undefined),
+ *   nameServers: (Array<string>|undefined),
+ *   netmask: (string|undefined),
  *   type: (string|undefined),
  *   webProxyAutoDiscoveryUrl: (string|undefined),
  * }}

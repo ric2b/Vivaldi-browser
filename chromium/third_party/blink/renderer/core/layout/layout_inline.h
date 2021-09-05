@@ -487,7 +487,12 @@ inline wtf_size_t LayoutInline::FirstInlineFragmentItemIndex() const {
   return first_fragment_item_index_;
 }
 
-DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutInline, IsLayoutInline());
+template <>
+struct DowncastTraits<LayoutInline> {
+  static bool AllowFrom(const LayoutObject& object) {
+    return object.IsLayoutInline();
+  }
+};
 
 }  // namespace blink
 

@@ -18,13 +18,12 @@
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
-#include "chrome/browser/prerender/chrome_prerender_contents_delegate.h"
+#include "chrome/browser/prefetch/no_state_prefetch/chrome_prerender_contents_delegate.h"
 #include "chrome/browser/tab_contents/tab_util.h"
-#include "chrome/common/chrome_features.h"
 #include "components/autofill/core/browser/logging/log_manager.h"
+#include "components/no_state_prefetch/browser/prerender_contents.h"
 #include "components/password_manager/core/browser/browser_save_password_progress_logger.h"
 #include "components/password_manager/core/browser/http_auth_manager.h"
-#include "components/prerender/browser/prerender_contents.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/elide_url.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -54,10 +53,10 @@
 #include "extensions/browser/view_type_utils.h"
 #endif
 
-using autofill::PasswordForm;
 using content::BrowserThread;
 using content::NavigationController;
 using content::WebContents;
+using password_manager::PasswordForm;
 
 namespace {
 
@@ -83,7 +82,7 @@ void RecordHttpAuthPromptType(AuthPromptType prompt_type) {
 
 LoginHandler::LoginModelData::LoginModelData(
     password_manager::HttpAuthManager* login_model,
-    const autofill::PasswordForm& observed_form)
+    const password_manager::PasswordForm& observed_form)
     : model(login_model), form(observed_form) {
   DCHECK(model);
 }

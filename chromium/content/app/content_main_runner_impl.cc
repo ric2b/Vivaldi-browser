@@ -15,6 +15,7 @@
 
 #include "base/allocator/allocator_check.h"
 #include "base/allocator/allocator_extension.h"
+#include "base/allocator/allocator_shim.h"
 #include "base/allocator/buildflags.h"
 #include "base/at_exit.h"
 #include "base/base_switches.h"
@@ -69,6 +70,7 @@
 #include "content/public/app/content_main_delegate.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/system_connector.h"
+#include "content/public/common/content_client.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/content_descriptor_keys.h"
 #include "content/public/common/content_features.h"
@@ -86,6 +88,7 @@
 #include "gin/v8_initializer.h"
 #include "media/base/media.h"
 #include "media/media_buildflags.h"
+#include "mojo/core/embedder/embedder.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "mojo/public/cpp/platform/platform_channel.h"
 #include "mojo/public/cpp/system/dynamic_library_support.h"
@@ -172,7 +175,6 @@ namespace content {
 extern int GpuMain(const content::MainFunctionParams&);
 #if BUILDFLAG(ENABLE_PLUGINS)
 extern int PpapiPluginMain(const MainFunctionParams&);
-extern int PpapiBrokerMain(const MainFunctionParams&);
 #endif
 extern int RendererMain(const content::MainFunctionParams&);
 extern int UtilityMain(const MainFunctionParams&);
@@ -231,6 +233,13 @@ void InitializeV8IfNeeded(const base::CommandLine& command_line,
 #if defined(V8_USE_EXTERNAL_STARTUP_DATA)
   LoadV8SnapshotFile();
 #endif  // V8_USE_EXTERNAL_STARTUP_DATA
+}
+
+void EnablePCScanForMallocPartitionsIfNeeded() {
+#if BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+  CHECK(base::FeatureList::GetInstance());
+  base::allocator::EnablePCScanIfNeeded();
+#endif
 }
 
 #if BUILDFLAG(USE_ZYGOTE_HANDLE)
@@ -479,6 +488,11 @@ int RunZygote(ContentMainDelegate* delegate) {
 
   InitializeFieldTrialAndFeatureList();
   delegate->PostFieldTrialInitialization();
+  mojo::core::InitFeatures();
+
+  // After feature list has been initialized, enable pcscan on malloc
+  // partitions.
+  EnablePCScanForMallocPartitionsIfNeeded();
 
   for (size_t i = 0; i < base::size(kMainFunctions); ++i) {
     if (process_type == kMainFunctions[i].name)
@@ -515,7 +529,6 @@ int RunOtherNamedProcessTypeMain(const std::string& process_type,
   static const MainFunction kMainFunctions[] = {
 #if BUILDFLAG(ENABLE_PLUGINS)
     {switches::kPpapiPluginProcess, PpapiPluginMain},
-    {switches::kPpapiBrokerProcess, PpapiBrokerMain},
 #endif  // ENABLE_PLUGINS
     {switches::kUtilityProcess, UtilityMain},
     {switches::kRendererProcess, RendererMain},
@@ -529,6 +542,11 @@ int RunOtherNamedProcessTypeMain(const std::string& process_type,
         return exit_code;
       return kMainFunctions[i].function(main_function_params);
     }
+  }
+
+  if (process_type != switches::kZygoteProcess) {
+    // Zygote processes are handled in RunZygote.
+    EnablePCScanForMallocPartitionsIfNeeded();
   }
 
 #if BUILDFLAG(USE_ZYGOTE_HANDLE)
@@ -708,8 +726,10 @@ int ContentMainRunnerImpl::Initialize(const ContentMainParams& params) {
     if (process_type.empty()) {
       TRACE_EVENT0("startup", "InitializeICU");
       // In browser process load ICU data files from disk.
-      if (GetContentClient()->browser()->ShouldLoadExtraIcuDataFile()) {
-        if (!base::i18n::InitializeExtraICU()) {
+      std::string split_name;
+      if (GetContentClient()->browser()->ShouldLoadExtraIcuDataFile(
+              &split_name)) {
+        if (!base::i18n::InitializeExtraICU(split_name)) {
           return TerminateForFatalInitializationError();
         }
       }
@@ -828,6 +848,11 @@ int ContentMainRunnerImpl::Run(bool start_service_manager_only) {
       // has been updated.
       InitializeFieldTrialAndFeatureList();
       delegate_->PostFieldTrialInitialization();
+
+      // After feature list has been initialized, enable pcscan on malloc
+      // partitions.
+      EnablePCScanForMallocPartitionsIfNeeded();
+      mojo::core::InitFeatures();
     }
 
 #if defined(OS_LINUX) || defined(OS_CHROMEOS)
@@ -878,6 +903,7 @@ int ContentMainRunnerImpl::RunServiceManager(MainFunctionParams& main_params,
       ANNOTATE_LEAKING_OBJECT_PTR(leaked_field_trial_list);
       ignore_result(leaked_field_trial_list);
       delegate_->PostFieldTrialInitialization();
+      mojo::core::InitFeatures();
     }
 
     if (GetContentClient()->browser()->ShouldCreateThreadPool()) {
@@ -967,6 +993,9 @@ int ContentMainRunnerImpl::RunServiceManager(MainFunctionParams& main_params,
 #endif
   }
 
+  // Enable PCScan once we are certain that FeatureList was initialized.
+  EnablePCScanForMallocPartitionsIfNeeded();
+
   if (should_start_service_manager_only) {
     DVLOG(0) << "Chrome is running in ServiceManager only mode.";
     return -1;
@@ -1014,5 +1043,15 @@ void ContentMainRunnerImpl::Shutdown() {
 std::unique_ptr<ContentMainRunner> ContentMainRunner::Create() {
   return ContentMainRunnerImpl::Create();
 }
+
+ContentClient* GetContentClientForTesting() {
+  return GetContentClient();
+}
+
+#if defined(OS_ANDROID)
+ContentMainDelegate* GetContentMainDelegateForTesting() {
+  return GetContentMainDelegate();
+}
+#endif
 
 }  // namespace content

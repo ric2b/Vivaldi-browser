@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 
+#include "ash/public/cpp/holding_space/holding_space_item.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/test/base/in_process_browser_test.h"
 
@@ -32,6 +33,10 @@ class HoldingSpaceBrowserTestBase : public InProcessBrowserTest {
   HoldingSpaceBrowserTestBase();
   ~HoldingSpaceBrowserTestBase() override;
 
+  // InProcessBrowserTest:
+  void SetUpInProcessBrowserTestFixture() override;
+  void SetUpOnMainThread() override;
+
   // Returns the root window that newly created windows should be added to.
   static aura::Window* GetRootWindowForNewWindows();
 
@@ -54,11 +59,26 @@ class HoldingSpaceBrowserTestBase : public InProcessBrowserTest {
   // Adds and returns an arbitrary download file to the holding space.
   HoldingSpaceItem* AddDownloadFile();
 
+  // Adds and returns an arbitrary nearby share file to the holding space.
+  HoldingSpaceItem* AddNearbyShareFile();
+
   // Adds and returns an arbitrary pinned file to the holding space.
   HoldingSpaceItem* AddPinnedFile();
 
   // Adds and returns an arbitrary screenshot file to the holding space.
   HoldingSpaceItem* AddScreenshotFile();
+
+  // Adds and returns an arbitrary screen recording file to the holding space.
+  HoldingSpaceItem* AddScreenRecordingFile();
+
+  // Adds and returns a holding space item of the specified `type` backed by the
+  // file at the specified `file_path`.
+  HoldingSpaceItem* AddItem(Profile* profile,
+                            HoldingSpaceItem::Type type,
+                            const base::FilePath& file_path);
+
+  // Removes the specified holding space `item`.
+  void RemoveItem(const HoldingSpaceItem* item);
 
   // Returns the collection of download chips in holding space UI.
   // If holding space UI is not visible, an empty collection is returned.
@@ -68,18 +88,17 @@ class HoldingSpaceBrowserTestBase : public InProcessBrowserTest {
   // If holding space UI is not visible, an empty collection is returned.
   std::vector<views::View*> GetPinnedFileChips();
 
-  // Returns the collection of screenshot views in holding space UI.
+  // Returns the collection of screen capture views in holding space UI.
   // If holding space UI is not visible, an empty collection is returned.
-  std::vector<views::View*> GetScreenshotViews();
+  std::vector<views::View*> GetScreenCaptureViews();
+
+  // Returns the holding space tray icon in the shelf.
+  views::View* GetTrayIcon();
 
   // Requests lock screen, waiting to return until session state is locked.
   void RequestAndAwaitLockScreen();
 
  private:
-  // InProcessBrowserTest:
-  void SetUpInProcessBrowserTestFixture() override;
-  void SetUpOnMainThread() override;
-
   base::test::ScopedFeatureList scoped_feature_list_;
   std::unique_ptr<HoldingSpaceTestApi> test_api_;
 };

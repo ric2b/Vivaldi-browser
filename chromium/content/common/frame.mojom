@@ -25,6 +25,7 @@ import "services/service_manager/public/mojom/interface_provider.mojom";
 import "services/viz/public/mojom/compositing/frame_sink_id.mojom";
 import "services/viz/public/mojom/compositing/surface_id.mojom";
 import "third_party/blink/public/mojom/blob/blob_url_store.mojom";
+import "third_party/blink/public/mojom/browser_interface_broker.mojom";
 import "third_party/blink/public/mojom/commit_result/commit_result.mojom";
 import "third_party/blink/public/mojom/devtools/console_message.mojom";
 import "third_party/blink/public/mojom/devtools/devtools_agent.mojom";
@@ -32,8 +33,13 @@ import "third_party/blink/public/mojom/feature_policy/document_policy_feature.mo
 import "third_party/blink/public/mojom/feature_policy/feature_policy.mojom";
 import "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom";
 import "third_party/blink/public/mojom/feature_policy/policy_value.mojom";
+import "third_party/blink/public/mojom/frame/frame_owner_element_type.mojom";
+import "third_party/blink/public/mojom/frame/frame_owner_properties.mojom";
+import "third_party/blink/public/mojom/frame/frame_policy.mojom";
 import "third_party/blink/public/mojom/frame/lifecycle.mojom";
 import "third_party/blink/public/mojom/frame/navigation_initiator.mojom";
+import "third_party/blink/public/mojom/frame/policy_container.mojom";
+import "third_party/blink/public/mojom/frame/tree_scope_type.mojom";
 import "third_party/blink/public/mojom/loader/resource_load_info.mojom";
 import "third_party/blink/public/mojom/loader/url_loader_factory_bundle.mojom";
 import "third_party/blink/public/mojom/messaging/transferable_message.mojom";
@@ -51,6 +57,9 @@ import "ui/base/mojom/window_open_disposition.mojom";
 import "ui/gfx/geometry/mojom/geometry.mojom";
 import "url/mojom/origin.mojom";
 import "url/mojom/url.mojom";
+
+[Native]
+struct PageState;
 
 // The name of the InterfaceProviderSpec in service manifests used by the
 // frame tree to expose frame-specific interfaces between renderer and browser.
@@ -83,9 +92,6 @@ interface Frame {
   // It is safe to call this without calling BlockRequests.
   ResumeBlockedRequests();
 
-  // Cancels blocked requests. BlockRequests must have been called before.
-  CancelBlockedRequests();
-
   // Samsung Galaxy Note-specific "smart clip" stylus text getter.
   // Extracts the data at the given rect.
   [EnableIf=is_android]
@@ -103,6 +109,10 @@ interface Frame {
   // Requests a one-time snapshot of the accessibility tree without enabling
   // accessibility if it wasn't already enabled.
   // See ui/accessibility/ax_mode.h for valid values of |ax_mode|.
+  //
+  // TODO(crbug.com/1141990): AXTreeUpdate can be quite large, hence the
+  // [UnlimitedSize] tag. It may be possible to remove this if AXTreeUpdate
+  // can be reworked to avoid very large serialized values.
   SnapshotAccessibilityTree(uint32 ax_mode)
       => (ax.mojom.AXTreeUpdate snapshot);
 
@@ -338,6 +348,10 @@ struct CreateNewWindowReply {
   // that it should pause created window and wait for an explicit resume command
   // from the client.
   bool wait_for_debugger;
+
+  // The policy container for the new frame that will be created by Blink in
+  // response.
+  blink.mojom.PolicyContainer policy_container;
 };
 
 [Native]
@@ -417,17 +431,29 @@ interface FrameHost {
 
 
   // Similar to CreateNewWindow, except used for sub-widgets, like <select>
-  // dropdowns.
-  [Sync] CreateNewWidget(
+  // dropdowns. Upon return, the renderer side popup will be owned by the
+  // PopupWidgetHost.
+  CreateNewPopupWidget(
+         pending_associated_receiver<blink.mojom.PopupWidgetHost> popup_host,
          pending_associated_receiver<blink.mojom.WidgetHost> blink_widget_host,
-         pending_associated_remote<blink.mojom.Widget> blink_widget)
-      => (int32 routing_id);
+         pending_associated_remote<blink.mojom.Widget> blink_widget);
 
-  // Similar to CreateNewWidget except the widget is a full screen window.
-  [Sync] CreateNewFullscreenWidget(
-         pending_associated_receiver<blink.mojom.WidgetHost> blink_widget_host,
-         pending_associated_remote<blink.mojom.Widget> blink_widget)
-      => (int32 routing_id);
+  // Asynchronously creates a child frame. A routing ID must be allocated first
+  // by calling RenderMessageFilter::GenerateFrameRoutingID()
+  // Each of these messages will have a corresponding mojom::FrameHost::Detach
+  // API sent when the frame is detached from the DOM.
+  CreateChildFrame(int32 child_routing_id,
+                   pending_receiver<service_manager.mojom.InterfaceProvider>
+                     new_interface_provider,
+                   pending_receiver<blink.mojom.BrowserInterfaceBroker>
+                     browser_interface_broker,
+                   blink.mojom.TreeScopeType scope,
+                   string frame_name,
+                   string frame_unique_name,
+                   bool is_created_by_script,
+                   blink.mojom.FramePolicy frame_policy,
+                   blink.mojom.FrameOwnerProperties frame_owner_properties,
+                   blink.mojom.FrameOwnerElementType frame_owner_element_type);
 
   // Creates and returns a KeepAliveHandle.
   IssueKeepAliveHandle(pending_receiver<KeepAliveHandle> keep_alive_handle);
@@ -529,15 +555,11 @@ interface FrameHost {
       int32 line_number,
       mojo_base.mojom.String16 source_id);
 
-  // Causes a window previously opened via RenderMessageFilter::CreateNewWindow
-  // to be shown on the screen. This message is routed to the preexisting frame
-  // that opened the window, and |pending_widget_routing_id| corresponds to the
-  // widget routing id from the CreateNewWindow reply.
-  ShowCreatedWindow(int32 pending_widget_routing_id,
-                    ui.mojom.WindowOpenDisposition disposition,
-                    gfx.mojom.Rect rect, bool opened_by_user_gesture);
-
   // Notifies the browser that this frame has new session history information.
+  //
+  // NOTE: PageState can be quite large when serialized, and its message
+  // structure must remain stable; hence [UnlimitedSize] for this message.
+  [UnlimitedSize]
   UpdateState(PageState state);
 
   // Requests that the given URL be opened in the specified manner.

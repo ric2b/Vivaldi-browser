@@ -10,8 +10,8 @@
 #include "chrome/browser/password_check/android/password_check_bridge.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliation_utils.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/browser/ui/insecure_credentials_manager.h"
@@ -35,7 +35,7 @@ base::string16 GetDisplayUsername(const base::string16& username) {
 
 }  // namespace
 
-using autofill::PasswordForm;
+using password_manager::PasswordForm;
 
 using CredentialsView =
     password_manager::InsecureCredentialsManager::CredentialsView;
@@ -91,7 +91,6 @@ void PasswordCheckManager::StartCheck() {
   // The request is being handled, so reset the boolean.
   was_start_requested_ = false;
   is_check_running_ = true;
-
   progress_ = std::make_unique<PasswordCheckProgress>();
   for (const auto& password : saved_passwords_presenter_.GetSavedPasswords())
     progress_->IncrementCounts(password);
@@ -144,7 +143,7 @@ PasswordCheckManager::PasswordCheckProgress::PasswordCheckProgress() = default;
 PasswordCheckManager::PasswordCheckProgress::~PasswordCheckProgress() = default;
 
 void PasswordCheckManager::PasswordCheckProgress::IncrementCounts(
-    const autofill::PasswordForm& password) {
+    const password_manager::PasswordForm& password) {
   ++remaining_in_queue_;
   ++counts_[password];
 }
@@ -197,6 +196,11 @@ void PasswordCheckManager::OnStateChanged(State state) {
   if (state != State::kRunning) {
     progress_.reset();
     is_check_running_ = false;
+    if (saved_passwords_presenter_.GetSavedPasswords().empty()) {
+      observer_->OnPasswordCheckStatusChanged(
+          PasswordCheckUIStatus::kErrorNoPasswords);
+      return;
+    }
   }
 
   observer_->OnPasswordCheckStatusChanged(GetUIStatus(state));
@@ -225,17 +229,6 @@ CompromisedCredentialForUI PasswordCheckManager::MakeUICredential(
   auto facet = password_manager::FacetURI::FromPotentiallyInvalidSpec(
       credential.signon_realm);
 
-  ui_credential.display_username = GetDisplayUsername(credential.username);
-  ui_credential.has_startable_script =
-      !credential.username.empty() && ShouldFetchPasswordScripts() &&
-      password_script_fetcher_->IsScriptAvailable(
-          url::Origin::Create(credential.url.GetOrigin()),
-          version_info::GetVersion());
-  ui_credential.has_auto_change_button =
-      ui_credential.has_startable_script &&
-      base::FeatureList::IsEnabled(
-          password_manager::features::kPasswordChangeInSettings);
-
   if (facet.IsValidAndroidFacetURI()) {
     const PasswordForm& android_form =
         insecure_credentials_manager_.GetSavedPasswordsFor(credential)[0];
@@ -252,6 +245,12 @@ CompromisedCredentialForUI PasswordCheckManager::MakeUICredential(
       ui_credential.display_origin =
           base::UTF8ToUTF16(android_form.app_display_name);
     }
+    // In case no affiliated_web_realm could be obtained we should not have an
+    // associated url for android credential.
+    ui_credential.url = android_form.affiliated_web_realm.empty()
+                            ? GURL::EmptyGURL()
+                            : GURL(android_form.affiliated_web_realm);
+
   } else {
     ui_credential.display_origin = url_formatter::FormatUrl(
         credential.url.GetOrigin(),
@@ -263,6 +262,17 @@ CompromisedCredentialForUI PasswordCheckManager::MakeUICredential(
     ui_credential.change_password_url =
         password_manager::CreateChangePasswordUrl(ui_credential.url).spec();
   }
+
+  ui_credential.display_username = GetDisplayUsername(credential.username);
+  ui_credential.has_startable_script =
+      !credential.username.empty() && ShouldFetchPasswordScripts() &&
+      password_script_fetcher_->IsScriptAvailable(
+          url::Origin::Create(ui_credential.url.GetOrigin()),
+          version_info::GetVersion());
+  ui_credential.has_auto_change_button =
+      ui_credential.has_startable_script &&
+      base::FeatureList::IsEnabled(
+          password_manager::features::kPasswordChangeInSettings);
 
   return ui_credential;
 }

@@ -14,6 +14,7 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_block_break_token.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_break_token.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_container_fragment_builder.h"
+#include "third_party/blink/renderer/core/layout/ng/ng_layout_overflow_calculator.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_layout_result.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_length_utils.h"
 #include "third_party/blink/renderer/core/layout/ng/table/ng_table_borders.h"
@@ -208,7 +209,8 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   void AddChild(const NGPhysicalContainerFragment&,
                 const LogicalOffset&,
                 const LayoutInline* inline_container = nullptr,
-                const NGMarginStrut* margin_strut = nullptr);
+                const NGMarginStrut* margin_strut = nullptr,
+                bool is_self_collapsing = false);
 
   // Manually add a break token to the builder. Note that we're assuming that
   // this break token is for content in the same flow as this parent.
@@ -351,6 +353,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   bool HasSeenAllChildren() { return has_seen_all_children_; }
 
   void SetIsAtBlockEnd() { is_at_block_end_ = true; }
+  bool IsAtBlockEnd() const { return is_at_block_end_; }
 
   void SetColumnSpanner(NGBlockNode spanner) { column_spanner_ = spanner; }
   bool FoundColumnSpanner() const { return !!column_spanner_; }
@@ -403,6 +406,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final
     return BoxType() == NGPhysicalFragment::kColumnBox;
   }
   void SetIsFieldsetContainer() { is_fieldset_container_ = true; }
+  void SetIsTableNGPart() { is_table_ng_part_ = true; }
   void SetIsLegacyLayoutRoot() { is_legacy_layout_root_ = true; }
 
   void SetIsInlineFormattingContext(bool is_inline_formatting_context) {
@@ -410,14 +414,13 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   }
 
   void SetIsMathMLFraction() { is_math_fraction_ = true; }
+  void SetIsMathMLOperator() { is_math_operator_ = true; }
   void SetMathMLPaintInfo(
       UChar operator_character,
       scoped_refptr<const ShapeResultView> operator_shape_result_view,
       LayoutUnit operator_inline_size,
       LayoutUnit operator_ascent,
-      LayoutUnit operator_descent,
-      const LayoutUnit* radical_operator_inline_offset,
-      const NGBoxStrut* radical_base_margins) {
+      LayoutUnit operator_descent) {
     if (!mathml_paint_info_)
       mathml_paint_info_ = std::make_unique<NGMathMLPaintInfo>();
 
@@ -428,12 +431,27 @@ class CORE_EXPORT NGBoxFragmentBuilder final
     mathml_paint_info_->operator_inline_size = operator_inline_size;
     mathml_paint_info_->operator_ascent = operator_ascent;
     mathml_paint_info_->operator_descent = operator_descent;
-    if (radical_base_margins)
-      mathml_paint_info_->radical_base_margins = *radical_base_margins;
-    if (radical_operator_inline_offset) {
-      mathml_paint_info_->radical_operator_inline_offset =
-          *radical_operator_inline_offset;
-    }
+  }
+  void SetMathMLPaintInfo(
+      scoped_refptr<const ShapeResultView> operator_shape_result_view,
+      LayoutUnit operator_inline_size,
+      LayoutUnit operator_ascent,
+      LayoutUnit operator_descent,
+      LayoutUnit radical_operator_inline_offset,
+      const NGBoxStrut& radical_base_margins) {
+    if (!mathml_paint_info_)
+      mathml_paint_info_ = std::make_unique<NGMathMLPaintInfo>();
+
+    mathml_paint_info_->operator_character = kSquareRootCharacter;
+    mathml_paint_info_->operator_shape_result_view =
+        std::move(operator_shape_result_view);
+
+    mathml_paint_info_->operator_inline_size = operator_inline_size;
+    mathml_paint_info_->operator_ascent = operator_ascent;
+    mathml_paint_info_->operator_descent = operator_descent;
+    mathml_paint_info_->radical_base_margins = radical_base_margins;
+    mathml_paint_info_->radical_operator_inline_offset =
+        radical_operator_inline_offset;
   }
 
   void SetSidesToInclude(LogicalBoxSides sides_to_include) {
@@ -530,6 +548,12 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   void CheckNoBlockFragmentation() const;
 #endif
 
+  // Moves all the children by |offset| in the block-direction. (Ensure that
+  // any baselines, OOFs, etc, are also moved by the appropriate amount).
+  void MoveChildrenInBlockDirection(LayoutUnit offset);
+
+  void SetMathItalicCorrection(LayoutUnit italic_correction);
+
  private:
   // Update whether we have fragmented in this flow.
   void PropagateBreak(const NGLayoutResult&);
@@ -556,6 +580,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   NGPhysicalFragment::NGBoxType box_type_;
   bool may_have_descendant_above_block_start_ = false;
   bool is_fieldset_container_ = false;
+  bool is_table_ng_part_ = false;
   bool is_initial_block_size_indefinite_ = false;
   bool is_inline_formatting_context_;
   bool is_first_for_node_ = true;
@@ -567,6 +592,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   bool subtree_modified_margin_strut_ = false;
   bool has_seen_all_children_ = false;
   bool is_math_fraction_ = false;
+  bool is_math_operator_ = false;
   bool is_at_block_end_ = false;
   LayoutUnit consumed_block_size_;
   LayoutUnit block_offset_for_additional_columns_;
@@ -603,6 +629,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   base::Optional<int> lines_until_clamp_;
 
   std::unique_ptr<NGMathMLPaintInfo> mathml_paint_info_;
+  base::Optional<NGLayoutResult::MathData> math_data_;
 
   scoped_refptr<const NGBlockBreakToken> previous_break_token_;
 

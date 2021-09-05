@@ -10,6 +10,7 @@
 
 #include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/logging.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "components/payments/content/can_make_payment_query_factory.h"
@@ -68,7 +69,6 @@ mojom::PaymentAddressPtr RedactShippingAddress(
   address->address_line.clear();
   return address;
 }
-
 }  // namespace
 
 PaymentRequest::PaymentRequest(
@@ -221,6 +221,26 @@ void PaymentRequest::Init(
     delegate_->set_dialog_type(
         PaymentRequestDelegate::DialogType::SECURE_PAYMENT_CONFIRMATION);
   }
+
+  if (VLOG_IS_ON(2)) {
+    std::vector<std::string> payment_method_identifiers(
+        spec_->payment_method_identifiers_set().begin(),
+        spec_->payment_method_identifiers_set().end());
+    std::string total = spec_->details().total
+                            ? (spec_->details().total->amount->currency +
+                               spec_->details().total->amount->value)
+                            : "N/A";
+    VLOG(2) << "Initialized PaymentRequest (" << *spec_->details().id << ")"
+            << "\n    Top origin: " << top_level_origin_.spec()
+            << "\n    Frame origin: " << frame_origin_.spec()
+            << "\n    Requested methods: "
+            << base::JoinString(payment_method_identifiers, ", ")
+            << "\n    Total: " << total
+            << "\n    Options: shipping = " << spec_->request_shipping()
+            << ", name = " << spec_->request_payer_name()
+            << ", phone = " << spec_->request_payer_phone()
+            << ", email = " << spec_->request_payer_email();
+  }
 }
 
 void PaymentRequest::Show(bool is_user_gesture, bool wait_for_updated_details) {
@@ -281,7 +301,11 @@ void PaymentRequest::Show(bool is_user_gesture, bool wait_for_updated_details) {
         spec_->details().total->amount->value, false /*completed*/);
   }
 
-  display_handle_->Show(weak_ptr_factory_.GetWeakPtr());
+  // If an app store billing payment method is one of the payment methods being
+  // requested, then don't show any user interface until its known whether it's
+  // possible to skip UI directly into an app store billing payment app.
+  if (!spec_->IsAppStoreBillingAlsoRequested())
+    display_handle_->Show(weak_ptr_factory_.GetWeakPtr());
 
   state_->set_is_show_user_gesture(is_show_user_gesture_);
   state_->AreRequestedMethodsSupported(
@@ -310,6 +334,9 @@ void PaymentRequest::Retry(mojom::PaymentValidationErrorsPtr errors) {
     OnConnectionTerminated();
     return;
   }
+
+  VLOG(2) << "PaymentRequest (" << *spec_->details().id
+          << ") retry with error: " << error;
 
   state()->SetAvailablePaymentAppForRetry();
   spec()->Retry(std::move(errors));
@@ -364,8 +391,14 @@ void PaymentRequest::UpdateWith(mojom::PaymentDetailsPtr details) {
         spec_->details().total->amount->value, false /*completed*/);
     if (SatisfiesSkipUIConstraints()) {
       Pay();
-    } else if (spec_->request_shipping()) {
-      state_->SelectDefaultShippingAddressAndNotifyObservers();
+    } else {
+      // If not skipping UI, then make sure that the browser payment sheet is
+      // being displayed.
+      if (!display_handle_->was_shown())
+        display_handle_->Show(weak_ptr_factory_.GetWeakPtr());
+
+      if (spec_->request_shipping())
+        state_->SelectDefaultShippingAddressAndNotifyObservers();
     }
   }
 }
@@ -446,7 +479,7 @@ void PaymentRequest::Complete(mojom::PaymentComplete result) {
   // Failed transactions show an error. Successful and unknown-state
   // transactions don't show an error.
   if (result == mojom::PaymentComplete::FAIL) {
-    delegate_->ShowErrorMessage();
+    ShowErrorMessageAndAbortPayment();
   } else {
     DCHECK(!has_recorded_completion_);
     journey_logger_.SetCompleted();
@@ -567,9 +600,16 @@ void PaymentRequest::AreRequestedMethodsSupportedCallback(
   }
 
   if (methods_supported) {
-    if (SatisfiesSkipUIConstraints())
+    if (SatisfiesSkipUIConstraints()) {
       Pay();
+    } else if (!display_handle_->was_shown()) {
+      // If not skipping UI, then make sure that the browser payment sheet is
+      // being displayed.
+      display_handle_->Show(weak_ptr_factory_.GetWeakPtr());
+    }
   } else {
+    VLOG(2) << "PaymentRequest (" << *spec_->details().id
+            << "): requested method not supported.";
     DCHECK(!has_recorded_completion_);
     has_recorded_completion_ = true;
     journey_logger_.SetNotShown(
@@ -713,9 +753,7 @@ void PaymentRequest::OnPaymentResponseError(const std::string& error_message) {
   RecordFirstAbortReason(JourneyLogger::ABORT_REASON_INSTRUMENT_DETAILS_ERROR);
 
   reject_show_error_message_ = error_message;
-  delegate_->ShowErrorMessage();
-  // When the user dismisses the error message, UserCancelled() will reject
-  // PaymentRequest.show() with |reject_show_error_message_|.
+  ShowErrorMessageAndAbortPayment();
 }
 
 void PaymentRequest::OnShippingOptionIdSelected(
@@ -732,7 +770,7 @@ void PaymentRequest::OnPayerInfoSelected(mojom::PayerDetailPtr payer_info) {
   client_->OnPayerDetailChange(std::move(payer_info));
 }
 
-void PaymentRequest::UserCancelled() {
+void PaymentRequest::OnUserCancelled() {
   // If |client_| is not bound, then the object is already being destroyed as
   // a result of a renderer event.
   if (!client_.is_bound())
@@ -799,6 +837,16 @@ void PaymentRequest::Pay() {
   journey_logger_.RecordCheckoutStep(
       JourneyLogger::CheckoutFunnelStep::kPaymentHandlerInvoked);
   DCHECK(state_->selected_app());
+  VLOG(2) << "PaymentRequest (" << *spec_->details().id
+          << "): paying with app: " << state_->selected_app()->GetLabel();
+
+  if (!display_handle_->was_shown() &&
+      state_->selected_app()->type() != PaymentApp::Type::NATIVE_MOBILE_APP) {
+    // If not paying with a native mobile app (such as app store billing), then
+    // make sure that the browser payment sheet is being displayed.
+    display_handle_->Show(weak_ptr_factory_.GetWeakPtr());
+  }
+
   state_->selected_app()->SetPaymentHandlerHost(
       payment_handler_host_->AsWeakPtr());
   state_->GeneratePaymentResponse();
@@ -836,6 +884,8 @@ void PaymentRequest::RecordFirstAbortReason(
 }
 
 void PaymentRequest::CanMakePaymentCallback(bool can_make_payment) {
+  VLOG(2) << "PaymentRequest (" << *spec_->details().id
+          << "): canMakePayment = " << can_make_payment;
   client_->OnCanMakePayment(
       can_make_payment ? mojom::CanMakePaymentQueryResult::CAN_MAKE_PAYMENT
                        : mojom::CanMakePaymentQueryResult::CANNOT_MAKE_PAYMENT);
@@ -851,6 +901,9 @@ void PaymentRequest::HasEnrolledInstrumentCallback(
   auto* rfh = content::RenderFrameHost::FromID(initiator_frame_routing_id_);
   if (!rfh)
     return;
+
+  VLOG(2) << "PaymentRequest (" << *spec_->details().id
+          << "): hasEnrolledInstrument = " << has_enrolled_instrument;
 
   if (!spec_ || CanMakePaymentQueryFactory::GetInstance()
                     ->GetForContext(rfh->GetBrowserContext())
@@ -888,12 +941,28 @@ void PaymentRequest::RespondToHasEnrolledInstrumentQuery(
 }
 
 void PaymentRequest::OnAbortResult(bool aborted) {
+  VLOG(2) << "PaymentRequest (" << *spec_->details().id
+          << "): abort = " << aborted;
   if (client_.is_bound())
     client_->OnAbort(aborted);
 
   if (aborted) {
     RecordFirstAbortReason(JourneyLogger::ABORT_REASON_ABORTED_BY_MERCHANT);
     state_->OnAbort();
+  }
+}
+
+void PaymentRequest::ShowErrorMessageAndAbortPayment() {
+  // Note that both branches of the if-else will invoke the OnUserCancelled()
+  // method.
+  if (display_handle_ && display_handle_->was_shown()) {
+    // Will invoke OnUserCancelled() asynchronously when the user closes the
+    // error message UI.
+    delegate_->ShowErrorMessage();
+  } else {
+    // Only app store billing apps do not display any browser payment UI.
+    DCHECK(spec_->IsAppStoreBillingAlsoRequested());
+    OnUserCancelled();
   }
 }
 

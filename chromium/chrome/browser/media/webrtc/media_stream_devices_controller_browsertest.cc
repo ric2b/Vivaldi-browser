@@ -118,13 +118,13 @@ class MediaStreamDevicesControllerTest : public WebRtcTestBase {
             Profile::FromBrowserContext(GetWebContents()->GetBrowserContext()));
     content_settings->SetContentSettingDefaultScope(
         example_url_, GURL(), ContentSettingsType::MEDIASTREAM_MIC,
-        std::string(), mic_setting);
+        mic_setting);
     content_settings->SetContentSettingDefaultScope(
         example_url_, GURL(), ContentSettingsType::MEDIASTREAM_CAMERA,
-        std::string(), cam_setting);
+        cam_setting);
     content_settings->SetContentSettingDefaultScope(
         example_url_, GURL(), ContentSettingsType::CAMERA_PAN_TILT_ZOOM,
-        std::string(), ptz_setting);
+        ptz_setting);
   }
 
   // Checks whether the devices returned in OnMediaStreamResponse contains a
@@ -610,7 +610,9 @@ IN_PROC_BROWSER_TEST_F(MediaStreamDevicesControllerTest,
       dispatcher->GetMediaStreamCaptureIndicator()->RegisterMediaStream(
           GetWebContents(), video_devices);
   video_stream_ui->OnStarted(base::OnceClosure(),
-                             content::MediaStreamUI::SourceCallback());
+                             content::MediaStreamUI::SourceCallback(),
+                             /*label=*/std::string(), /*screen_capture_ids=*/{},
+                             content::MediaStreamUI::StateChangeCallback());
 
   // Request mic and deny.
   SetDevicePolicy(DEVICE_TYPE_AUDIO, ACCESS_DENIED);

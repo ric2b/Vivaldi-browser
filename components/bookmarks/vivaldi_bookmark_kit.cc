@@ -327,4 +327,10 @@ void SetNodeSpeeddial(BookmarkModel* model,
   }
 }
 
+void SetNodeThumbnail(BookmarkModel* model,
+                      const BookmarkNode* node,
+                      const std::string& thumbnail) {
+  VivaldiBookmarkModelFriend::SetNodeMetaInfoWithIndexChange(
+      model, node, GetMetaNames().thumbnail, thumbnail);
+}
 }  // namespace vivaldi_bookmark_kit

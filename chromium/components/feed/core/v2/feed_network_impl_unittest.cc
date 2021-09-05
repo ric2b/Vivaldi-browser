@@ -10,7 +10,7 @@
 #include "base/bind.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "base/test/task_environment.h"
@@ -277,6 +277,7 @@ TEST_F(FeedNetworkTest, SendQueryRequestReceivesResponse) {
       "https://www.google.com/httpservice/retry/TrellisClankService/FeedQuery",
       result.response_info.base_request_url);
   EXPECT_NE(base::Time(), result.response_info.fetch_time);
+  EXPECT_TRUE(result.response_info.was_signed_in);
   EXPECT_EQ(GetTestFeedResponse().response_version(),
             result.response_body->response_version());
 }

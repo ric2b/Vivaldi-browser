@@ -29,10 +29,12 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+#include "third_party/blink/public/platform/resource_load_info_notifier_wrapper.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/web_url_loader.h"
 #include "third_party/blink/public/platform/web_url_loader_client.h"
 #include "third_party/blink/public/platform/web_url_loader_factory.h"
+#include "third_party/blink/public/platform/web_url_request_extra_data.h"
 #include "third_party/blink/renderer/core/animation/document_animations.h"
 #include "third_party/blink/renderer/core/animation/document_timeline.h"
 #include "third_party/blink/renderer/core/dom/document_parser.h"
@@ -54,7 +56,6 @@
 #include "third_party/blink/renderer/core/svg/animation/smil_time_container.h"
 #include "third_party/blink/renderer/core/svg/graphics/svg_image_chrome_client.h"
 #include "third_party/blink/renderer/core/svg/svg_animated_preserve_aspect_ratio.h"
-#include "third_party/blink/renderer/core/svg/svg_document_extensions.h"
 #include "third_party/blink/renderer/core/svg/svg_fe_image_element.h"
 #include "third_party/blink/renderer/core/svg/svg_image_element.h"
 #include "third_party/blink/renderer/core/svg/svg_svg_element.h"
@@ -80,16 +81,19 @@ using TaskRunnerHandle = scheduler::WebResourceLoadingTaskRunnerHandle;
 
 class FailingLoader final : public WebURLLoader {
  public:
-  explicit FailingLoader(std::unique_ptr<TaskRunnerHandle> task_runner_handle)
-      : task_runner_handle_(std::move(task_runner_handle)) {}
+  explicit FailingLoader(
+      std::unique_ptr<TaskRunnerHandle> freezable_task_runner_handle,
+      std::unique_ptr<TaskRunnerHandle> unfreezable_task_runner_handle)
+      : freezable_task_runner_handle_(std::move(freezable_task_runner_handle)),
+        unfreezable_task_runner_handle_(
+            std::move(unfreezable_task_runner_handle)) {}
   ~FailingLoader() override = default;
 
   // WebURLLoader implementation:
   void LoadSynchronously(
       std::unique_ptr<network::ResourceRequest> request,
-      scoped_refptr<WebURLRequest::ExtraData> request_extra_data,
+      scoped_refptr<WebURLRequestExtraData> url_request_extra_data,
       int requestor_id,
-      bool download_to_network_cache_only,
       bool pass_response_pipe_to_client,
       bool no_mime_sniffing,
       base::TimeDelta timeout_interval,
@@ -99,26 +103,31 @@ class FailingLoader final : public WebURLLoader {
       WebData&,
       int64_t& encoded_data_length,
       int64_t& encoded_body_length,
-      WebBlobInfo& downloaded_blob) override {
+      WebBlobInfo& downloaded_blob,
+      std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>
+          resource_load_info_notifier_wrapper) override {
     NOTREACHED();
   }
   void LoadAsynchronously(
       std::unique_ptr<network::ResourceRequest> request,
-      scoped_refptr<WebURLRequest::ExtraData> request_extra_data,
+      scoped_refptr<WebURLRequestExtraData> url_request_extra_data,
       int requestor_id,
-      bool download_to_network_cache_only,
       bool no_mime_sniffing,
+      std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>
+          resource_load_info_notifier_wrapper,
       WebURLLoaderClient* client) override {
     NOTREACHED();
   }
-  void SetDefersLoading(bool) override {}
+  void SetDefersLoading(DeferType) override {}
   void DidChangePriority(WebURLRequest::Priority, int) override {}
-  scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner() override {
-    return task_runner_handle_->GetTaskRunner();
+  scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunnerForBodyLoader()
+      override {
+    return freezable_task_runner_handle_->GetTaskRunner();
   }
 
  private:
-  const std::unique_ptr<TaskRunnerHandle> task_runner_handle_;
+  const std::unique_ptr<TaskRunnerHandle> freezable_task_runner_handle_;
+  const std::unique_ptr<TaskRunnerHandle> unfreezable_task_runner_handle_;
 };
 
 class FailingLoaderFactory final : public WebURLLoaderFactory {
@@ -126,8 +135,12 @@ class FailingLoaderFactory final : public WebURLLoaderFactory {
   // WebURLLoaderFactory implementation:
   std::unique_ptr<WebURLLoader> CreateURLLoader(
       const WebURLRequest&,
-      std::unique_ptr<TaskRunnerHandle> task_runner_handle) override {
-    return std::make_unique<FailingLoader>(std::move(task_runner_handle));
+      std::unique_ptr<TaskRunnerHandle> freezable_task_runner_handle,
+      std::unique_ptr<TaskRunnerHandle> unfreezable_task_runner_handle)
+      override {
+    return std::make_unique<FailingLoader>(
+        std::move(freezable_task_runner_handle),
+        std::move(unfreezable_task_runner_handle));
   }
 };
 
@@ -220,8 +233,8 @@ bool SVGImage::CurrentFrameHasSingleSecurityOrigin() const {
 
   CheckLoaded();
 
-  SVGSVGElement* root_element =
-      frame->GetDocument()->AccessSVGExtensions().rootElement();
+  auto* root_element =
+      DynamicTo<SVGSVGElement>(frame->GetDocument()->documentElement());
   if (!root_element)
     return true;
 
@@ -248,7 +261,7 @@ static SVGSVGElement* SvgRootElement(Page* page) {
   if (!page)
     return nullptr;
   auto* frame = To<LocalFrame>(page->MainFrame());
-  return frame->GetDocument()->AccessSVGExtensions().rootElement();
+  return DynamicTo<SVGSVGElement>(frame->GetDocument()->documentElement());
 }
 
 LayoutSize SVGImage::ContainerSize() const {
@@ -256,8 +269,7 @@ LayoutSize SVGImage::ContainerSize() const {
   if (!root_element)
     return LayoutSize();
 
-  LayoutSVGRoot* layout_object =
-      ToLayoutSVGRoot(root_element->GetLayoutObject());
+  auto* layout_object = To<LayoutSVGRoot>(root_element->GetLayoutObject());
   if (!layout_object)
     return LayoutSize();
 
@@ -302,7 +314,7 @@ bool SVGImage::GetIntrinsicSizingInfo(
   if (!svg)
     return false;
 
-  LayoutSVGRoot* layout_object = ToLayoutSVGRoot(svg->GetLayoutObject());
+  auto* layout_object = To<LayoutSVGRoot>(svg->GetLayoutObject());
   if (!layout_object)
     return false;
 
@@ -378,8 +390,8 @@ void SVGImage::ForContainer(const FloatSize& container_size, Func&& func) {
   LayoutSize rounded_container_size = RoundedLayoutSize(container_size);
 
   if (SVGSVGElement* root_element = SvgRootElement(page_.Get())) {
-    if (LayoutSVGRoot* layout_object =
-            ToLayoutSVGRoot(root_element->GetLayoutObject()))
+    if (auto* layout_object =
+            To<LayoutSVGRoot>(root_element->GetLayoutObject()))
       layout_object->SetContainerSize(rounded_container_size);
   }
 
@@ -409,8 +421,7 @@ void SVGImage::DrawForContainer(cc::PaintCanvas* canvas,
 }
 
 PaintImage SVGImage::PaintImageForCurrentFrame() {
-  auto builder =
-      CreatePaintImageBuilder().set_completion_state(completion_state());
+  auto builder = CreatePaintImageBuilder();
   PopulatePaintRecordForCurrentFrameForContainer(builder, Size(), 1, NullURL());
   return builder.TakePaintImage();
 }
@@ -473,6 +484,10 @@ void SVGImage::PopulatePaintRecordForCurrentFrameForContainer(
     const IntSize& zoomed_container_size,
     float zoom,
     const KURL& url) {
+  builder.set_completion_state(
+      load_state_ == LoadState::kLoadCompleted
+          ? PaintImage::CompletionState::DONE
+          : PaintImage::CompletionState::PARTIALLY_DONE);
   if (!page_)
     return;
 
@@ -856,7 +871,7 @@ Image::SizeAvailability SVGImage::DataChanged(bool all_data_received) {
     frame = MakeGarbageCollected<LocalFrame>(
         frame_client_, *page, nullptr, nullptr, nullptr,
         FrameInsertType::kInsertInConstructor, base::UnguessableToken::Create(),
-        nullptr, nullptr);
+        nullptr, nullptr, /* policy_container */ nullptr);
     frame->SetView(MakeGarbageCollected<LocalFrameView>(*frame));
     frame->Init(nullptr);
   }

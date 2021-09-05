@@ -15,6 +15,7 @@
 #include "content/browser/accessibility/accessibility_tree_formatter_utils_mac.h"
 #include "content/browser/accessibility/browser_accessibility_mac.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
+#include "ui/accessibility/platform/inspect/property_node.h"
 
 // This file uses the deprecated NSObject accessibility interface.
 // TODO(crbug.com/948844): Migrate to the new NSAccessibility interface.
@@ -33,6 +34,7 @@ using content::a11y::IsBrowserAccessibilityCocoa;
 using content::a11y::LineIndexer;
 using content::a11y::OptionalNSObject;
 using std::string;
+using ui::AXPropertyNode;
 
 namespace content {
 
@@ -60,29 +62,20 @@ class AccessibilityTreeFormatterMac : public AccessibilityTreeFormatterBase {
   ~AccessibilityTreeFormatterMac() override;
 
   void AddDefaultFilters(
-      std::vector<PropertyFilter>* property_filters) override;
+      std::vector<AXPropertyFilter>* property_filters) override;
 
   std::unique_ptr<base::DictionaryValue> BuildAccessibilityTree(
       BrowserAccessibility* root) override;
-  std::unique_ptr<base::DictionaryValue> BuildAccessibilityTreeForWindow(
-      gfx::AcceleratedWidget widget) override;
-  std::unique_ptr<base::DictionaryValue> BuildAccessibilityTreeForSelector(
-      const TreeSelector& selector) override;
+  base::Value BuildTreeForWindow(gfx::AcceleratedWidget widget) const override;
+  base::Value BuildTreeForSelector(
+      const AXTreeSelector& selector) const override;
 
  private:
-  std::unique_ptr<base::DictionaryValue> BuildAccessibilityTreeForAXUIElement(
-      AXUIElementRef node) const;
+  base::Value BuildTreeForAXUIElement(AXUIElementRef node) const;
 
-  void RecursiveBuildAccessibilityTree(const id node,
-                                       const LineIndexer* line_indexer,
-                                       base::DictionaryValue* dict) const;
-
-  base::FilePath::StringType GetExpectedFileSuffix() override;
-  const std::string GetAllowEmptyString() override;
-  const std::string GetAllowString() override;
-  const std::string GetDenyString() override;
-  const std::string GetDenyNodeString() override;
-  const std::string GetRunUntilEventString() override;
+  void RecursiveBuildTree(const id node,
+                          const LineIndexer* line_indexer,
+                          base::Value* dict) const;
 
   void AddProperties(const id node,
                      const LineIndexer* line_indexer,
@@ -91,7 +84,7 @@ class AccessibilityTreeFormatterMac : public AccessibilityTreeFormatterBase {
   // Invokes an attributes by a property node.
   OptionalNSObject InvokeAttributeFor(
       const BrowserAccessibilityCocoa* cocoa_node,
-      const PropertyNode& property_node,
+      const AXPropertyNode& property_node,
       const LineIndexer* line_indexer) const;
 
   base::Value PopulateSize(const BrowserAccessibilityCocoa*) const;
@@ -117,8 +110,7 @@ class AccessibilityTreeFormatterMac : public AccessibilityTreeFormatterBase {
 };
 
 // static
-std::unique_ptr<AccessibilityTreeFormatter>
-AccessibilityTreeFormatter::Create() {
+std::unique_ptr<ui::AXTreeFormatter> AccessibilityTreeFormatter::Create() {
   return std::make_unique<AccessibilityTreeFormatterMac>();
 }
 
@@ -136,7 +128,7 @@ AccessibilityTreeFormatterMac::AccessibilityTreeFormatterMac() {}
 AccessibilityTreeFormatterMac::~AccessibilityTreeFormatterMac() {}
 
 void AccessibilityTreeFormatterMac::AddDefaultFilters(
-    std::vector<PropertyFilter>* property_filters) {
+    std::vector<AXPropertyFilter>* property_filters) {
   static NSArray* default_attributes = [@[
     @"AXAutocompleteValue=*", @"AXDescription=*", @"AXRole=*", @"AXTitle=*",
     @"AXTitleUIElement=*", @"AXHelp=*", @"AXValue=*"
@@ -158,50 +150,48 @@ AccessibilityTreeFormatterMac::BuildAccessibilityTree(
   BrowserAccessibilityCocoa* cocoa_root = ToBrowserAccessibilityCocoa(root);
   LineIndexer line_indexer(cocoa_root);
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue);
-  RecursiveBuildAccessibilityTree(cocoa_root, &line_indexer, dict.get());
+  RecursiveBuildTree(cocoa_root, &line_indexer, dict.get());
   return dict;
 }
 
-std::unique_ptr<base::DictionaryValue>
-AccessibilityTreeFormatterMac::BuildAccessibilityTreeForWindow(
-    gfx::AcceleratedWidget widget) {
-  return BuildAccessibilityTreeForAXUIElement(
-      AXUIElementCreateApplication(widget));
+base::Value AccessibilityTreeFormatterMac::BuildTreeForWindow(
+    gfx::AcceleratedWidget widget) const {
+  return BuildTreeForAXUIElement(AXUIElementCreateApplication(widget));
 }
 
-std::unique_ptr<base::DictionaryValue>
-AccessibilityTreeFormatterMac::BuildAccessibilityTreeForSelector(
-    const TreeSelector& selector) {
+base::Value AccessibilityTreeFormatterMac::BuildTreeForSelector(
+    const AXTreeSelector& selector) const {
   AXUIElementRef node = nil;
   std::tie(node, std::ignore) = a11y::FindAXUIElement(selector);
-  return node != nil ? BuildAccessibilityTreeForAXUIElement(node) : nil;
+  if (node == nil) {
+    return base::Value(base::Value::Type::DICTIONARY);
+  }
+  return BuildTreeForAXUIElement(node);
 }
 
-std::unique_ptr<base::DictionaryValue>
-AccessibilityTreeFormatterMac::BuildAccessibilityTreeForAXUIElement(
+base::Value AccessibilityTreeFormatterMac::BuildTreeForAXUIElement(
     AXUIElementRef node) const {
   LineIndexer line_indexer(static_cast<id>(node));
-  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue);
-  RecursiveBuildAccessibilityTree(static_cast<id>(node), &line_indexer,
-                                  dict.get());
+
+  base::Value dict(base::Value::Type::DICTIONARY);
+  RecursiveBuildTree(static_cast<id>(node), &line_indexer, &dict);
   return dict;
 }
 
-void AccessibilityTreeFormatterMac::RecursiveBuildAccessibilityTree(
+void AccessibilityTreeFormatterMac::RecursiveBuildTree(
     const id node,
     const LineIndexer* line_indexer,
-    base::DictionaryValue* dict) const {
+    base::Value* dict) const {
   AddProperties(node, line_indexer, dict);
 
   NSArray* children = ChildrenOf(node);
-  auto child_dict_list = std::make_unique<base::ListValue>();
+  base::Value child_dict_list(base::Value::Type::LIST);
   for (id child in children) {
-    std::unique_ptr<base::DictionaryValue> child_dict(
-        new base::DictionaryValue);
-    RecursiveBuildAccessibilityTree(child, line_indexer, child_dict.get());
-    child_dict_list->Append(std::move(child_dict));
+    base::Value child_dict(base::Value::Type::DICTIONARY);
+    RecursiveBuildTree(child, line_indexer, &child_dict);
+    child_dict_list.Append(std::move(child_dict));
   }
-  dict->Set(kChildrenDictAttr, std::move(child_dict_list));
+  dict->SetPath(kChildrenDictAttr, std::move(child_dict_list));
 }
 
 void AccessibilityTreeFormatterMac::AddProperties(
@@ -236,7 +226,8 @@ void AccessibilityTreeFormatterMac::AddProperties(
 
   // Otherwise dump attributes matching allow filters only.
   std::string line_index = line_indexer->IndexBy(node);
-  for (const PropertyNode& property_node : PropertyFilterNodesFor(line_index)) {
+  for (const AXPropertyNode& property_node :
+       PropertyFilterNodesFor(line_index)) {
     AttributeInvoker invoker(node, line_indexer);
     OptionalNSObject value = invoker.Invoke(property_node);
     if (value.IsNotApplicable()) {
@@ -498,7 +489,13 @@ std::string AccessibilityTreeFormatterMac::ProcessTreeForOutput(
       continue;
     }
 
-    // Special processing for position and size.
+    // Special case: children.
+    // Children are used to generate the tree
+    // itself, thus no sense to expose them on each node.
+    if (item.first == kChildrenDictAttr) {
+      continue;
+    }
+    // Special case: position.
     if (item.first == kPositionDictAttr) {
       WriteAttribute(false,
                      FormatCoordinates(
@@ -507,6 +504,7 @@ std::string AccessibilityTreeFormatterMac::ProcessTreeForOutput(
                      &line);
       continue;
     }
+    // Special case: size.
     if (item.first == kSizeDictAttr) {
       WriteAttribute(
           false,
@@ -579,31 +577,6 @@ std::string AccessibilityTreeFormatterMac::FormatAttributeValue(
     return "{" + output + "}";
   }
   return "";
-}
-
-base::FilePath::StringType
-AccessibilityTreeFormatterMac::GetExpectedFileSuffix() {
-  return FILE_PATH_LITERAL("-expected-mac.txt");
-}
-
-const string AccessibilityTreeFormatterMac::GetAllowEmptyString() {
-  return "@MAC-ALLOW-EMPTY:";
-}
-
-const string AccessibilityTreeFormatterMac::GetAllowString() {
-  return "@MAC-ALLOW:";
-}
-
-const string AccessibilityTreeFormatterMac::GetDenyString() {
-  return "@MAC-DENY:";
-}
-
-const string AccessibilityTreeFormatterMac::GetDenyNodeString() {
-  return "@MAC-DENY-NODE:";
-}
-
-const std::string AccessibilityTreeFormatterMac::GetRunUntilEventString() {
-  return "@MAC-RUN-UNTIL-EVENT:";
 }
 
 }  // namespace content

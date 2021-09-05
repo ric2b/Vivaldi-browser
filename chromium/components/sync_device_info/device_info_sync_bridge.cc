@@ -12,7 +12,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/strings/string_util.h"
 #include "components/sync/base/model_type.h"
@@ -230,7 +230,11 @@ void DeviceInfoSyncBridge::RefreshLocalDeviceInfo(base::OnceClosure callback) {
     device_info_synced_callback_list_.push_back(std::move(callback));
   }
 
-  SendLocalData();
+  // Device info cannot be synced if the provider is not initialized. When it
+  // gets initialized, local device info will be sent.
+  if (local_device_info_provider_->GetLocalDeviceInfo()) {
+    SendLocalData();
+  }
 }
 
 void DeviceInfoSyncBridge::OnSyncStarting(
@@ -621,7 +625,7 @@ void DeviceInfoSyncBridge::SendLocalDataWithBatch(
   change_processor()->Put(specifics->cache_guid(), CopyToEntityData(*specifics),
                           batch->GetMetadataChangeList());
   StoreSpecifics(std::move(specifics), batch.get());
-  CommitAndNotify(std::move(batch), /*should_notify=*/true);
+  CommitAndNotify(std::move(batch), /*notify_if_restricted=*/true);
 
   pulse_timer_.Start(FROM_HERE, DeviceInfoUtil::GetPulseInterval(),
                      base::BindOnce(&DeviceInfoSyncBridge::SendLocalData,
@@ -710,7 +714,7 @@ void DeviceInfoSyncBridge::ExpireOldEntries() {
     batch->GetMetadataChangeList()->ClearMetadata(cache_guid);
     change_processor()->UntrackEntityForStorageKey(cache_guid);
   }
-  CommitAndNotify(std::move(batch), /*should_notify=*/true);
+  CommitAndNotify(std::move(batch), /*notify_if_restricted=*/true);
 }
 
 }  // namespace syncer

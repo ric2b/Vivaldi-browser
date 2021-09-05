@@ -6,6 +6,7 @@ import("//build/config/android/config.gni")
 import("//build/config/arm.gni")
 import("//build/config/features.gni")
 import("//build/config/linux/pkg_config.gni")
+import("//build/config/ozone.gni")
 import("//build/config/ui.gni")
 import("//media/media_options.gni")
 import("//testing/libfuzzer/fuzzer_test.gni")
@@ -229,6 +230,8 @@ source_set("base") {
     "multi_channel_resampler.h",
     "null_video_sink.cc",
     "null_video_sink.h",
+    "offloading_video_encoder.cc",
+    "offloading_video_encoder.h",
     "output_device_info.cc",
     "output_device_info.h",
     "overlay_info.cc",
@@ -355,6 +358,7 @@ source_set("base") {
   deps = [
     "//base/allocator:buildflags",
     "//base/util/values:values_util",
+    "//build:chromeos_buildflags",
     "//components/system_media_controls/linux/buildflags",
     "//gpu/command_buffer/client:interface_base",
     "//gpu/command_buffer/common",
@@ -362,6 +366,7 @@ source_set("base") {
     "//third_party/libyuv",
     "//third_party/widevine/cdm:headers",
     "//ui/display:display",
+    "//ui/events:events",
     "//ui/events:events_base",
     "//url:url",
   ]
@@ -387,7 +392,7 @@ source_set("base") {
     deps += [ "//third_party/libvpx" ]
   }
 
-  if (use_x11) {
+  if (use_x11 || ozone_platform_x11) {
     sources += [ "user_input_monitor_linux.cc" ]
     deps += [
       "//ui/base:features",
@@ -408,12 +413,11 @@ source_set("base") {
   } else {
     defines += [ "DISABLE_USER_INPUT_MONITOR" ]
   }
-
-  if (is_linux || is_chromeos || is_win) {
-    sources += [
-      "keyboard_event_counter.cc",
-      "keyboard_event_counter.h",
-    ]
+  if (use_x11) {
+    deps += [ "//ui/base/x" ]
+  }
+  if (use_ozone) {
+    deps += [ "//ui/ozone" ]
   }
 
   # Note: should also work on is_posix || is_fuchsia
@@ -428,10 +432,14 @@ source_set("base") {
     public_deps += [ "//media/base/win:mf_cdm_proxy" ]
   }
 
-  if (is_chromecast || is_fuchsia) {
-    sources += [ "demuxer_memory_limit_low.cc" ]
-  } else if (is_android) {
+  # TODO(ziyangch): Check |is_chromecast| first when using cast media pipeline
+  # on Android cast devices.
+  if (is_android) {
     sources += [ "demuxer_memory_limit_android.cc" ]
+  } else if (is_chromecast) {
+    sources += [ "demuxer_memory_limit_cast.cc" ]
+  } else if (is_fuchsia) {
+    sources += [ "demuxer_memory_limit_low.cc" ]
   } else {
     sources += [ "demuxer_memory_limit_default.cc" ]
   }
@@ -570,6 +578,7 @@ source_set("unit_tests") {
     "moving_average_unittest.cc",
     "multi_channel_resampler_unittest.cc",
     "null_video_sink_unittest.cc",
+    "offloading_video_encoder_unittest.cc",
     "pipeline_impl_unittest.cc",
     "ranges_unittest.cc",
     "reentrancy_checker_unittest.cc",
@@ -608,6 +617,7 @@ source_set("unit_tests") {
   ]
   deps = [
     "//base/test:test_support",
+    "//build:chromeos_buildflags",
     "//components/viz/common",
     "//gpu/command_buffer/common",
     "//media:test_support",
@@ -622,9 +632,6 @@ source_set("unit_tests") {
     deps += [ "//media/base/mac:unit_tests" ]
   }
 
-  if (is_linux || is_chromeos || is_win) {
-    sources += [ "keyboard_event_counter_unittest.cc" ]
-  }
   if (is_win) {
     sources += [ "win/dxgi_device_scope_handle_unittest.cc" ]
     deps += [ "//media/base/win:media_foundation_util" ]
@@ -632,6 +639,10 @@ source_set("unit_tests") {
       "d3d11.lib",
       "mfplat.lib",
     ]
+  }
+
+  if (is_chromecast && !is_android) {
+    sources += [ "demuxer_memory_limit_cast_unittest.cc" ]
   }
 }
 

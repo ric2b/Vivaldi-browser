@@ -642,6 +642,7 @@ experimental domain Audits
       optional string blockedURL
       # Specific directive that is violated, causing the CSP issue.
       string violatedDirective
+      boolean isReportOnly
       ContentSecurityPolicyViolationType contentSecurityPolicyViolationType
       optional AffectedFrame frameAncestor
       optional SourceCodeLocation sourceCodeLocation
@@ -826,6 +827,7 @@ domain Browser
       protectedMediaIdentifier
       sensors
       videoCapture
+      videoCapturePanTiltZoom
       idleDetection
       wakeLockScreen
       wakeLockSystem
@@ -850,6 +852,14 @@ domain Browser
       optional boolean userVisibleOnly
       # For "clipboard" permission, may specify allowWithoutSanitization.
       optional boolean allowWithoutSanitization
+      # For "camera" permission, may specify panTiltZoom.
+      optional boolean panTiltZoom
+
+  # Browser command ids used by executeBrowserCommand.
+  experimental type BrowserCommandId extends string
+    enum
+      openTabSearch
+      closeTabSearch
 
   # Set permission settings for given origin.
   experimental command setPermission
@@ -1009,6 +1019,11 @@ domain Browser
       optional string badgeLabel
       # Png encoded image.
       optional binary image
+
+  # Invoke custom browser commands used by telemetry.
+  experimental command executeBrowserCommand
+    parameters
+      BrowserCommandId commandId
 
 # This domain exposes CSS read/write operations. All CSS objects (stylesheets, rules, and styles)
 # have an associated `id` used in subsequent operations on the related object. Each object type has
@@ -1775,6 +1790,7 @@ domain DOM
       marker
       backdrop
       selection
+      target-text
       first-line-inherited
       scrollbar
       scrollbar-thumb
@@ -3295,6 +3311,17 @@ domain Emulation
   # Notification sent after the virtual time budget for the current VirtualTimePolicy has run out.
   experimental event virtualTimeBudgetExpired
 
+  # Enum of image types that can be disabled.
+  experimental type DisabledImageType extends string
+    enum
+      avif
+      webp
+
+  experimental command setDisabledImageTypes
+    parameters
+      # Image types to disable.
+      array of DisabledImageType imageTypes
+
   # Allows overriding user agent with the given string.
   command setUserAgentOverride
     parameters
@@ -3604,6 +3631,14 @@ domain Input
       optional number rotationAngle
       # Force (default: 1.0).
       optional number force
+      # The normalized tangential pressure, which has a range of [-1,1] (default: 0).
+      experimental optional number tangentialPressure
+      # The plane angle between the Y-Z plane and the plane containing both the stylus axis and the Y axis, in degrees of the range [-90,90], a positive tiltX is to the right (default: 0)
+      experimental optional integer tiltX
+      # The plane angle between the X-Z plane and the plane containing both the stylus axis and the X axis, in degrees of the range [-90,90], a positive tiltY is towards the user (default: 0).
+      experimental optional integer tiltY
+      # The clockwise rotation of a pen stylus around its own major axis, in degrees in the range [0,359] (default: 0).
+      experimental optional integer twist
       # Identifier used to track touch sources between events, must be unique within an event.
       optional number id
 
@@ -3703,6 +3738,16 @@ domain Input
       optional integer buttons
       # Number of times the mouse button was clicked (default: 0).
       optional integer clickCount
+      # The normalized pressure, which has a range of [0,1] (default: 0).
+      experimental optional number force
+      # The normalized tangential pressure, which has a range of [-1,1] (default: 0).
+      experimental optional number tangentialPressure
+      # The plane angle between the Y-Z plane and the plane containing both the stylus axis and the Y axis, in degrees of the range [-90,90], a positive tiltX is to the right (default: 0).
+      experimental optional integer tiltX
+      # The plane angle between the X-Z plane and the plane containing both the stylus axis and the X axis, in degrees of the range [-90,90], a positive tiltY is towards the user (default: 0).
+      experimental optional integer tiltY
+      # The clockwise rotation of a pen stylus around its own major axis, in degrees in the range [0,359] (default: 0).
+      experimental optional integer twist
       # X delta in CSS pixels for mouse wheel event (default: 0).
       optional number deltaX
       # Y delta in CSS pixels for mouse wheel event (default: 0).
@@ -4374,6 +4419,9 @@ domain Network
         strict-origin-when-cross-origin
       # Whether is loaded via link preload.
       optional boolean isLinkPreload
+      # Set for requests when the TrustToken API is used. Contains the parameters
+      # passed by the developer (e.g. via "fetch") as understood by the backend.
+      experimental optional TrustTokenParams trustTokenParams
 
   # Details of a signed certificate timestamp (SCT).
   type SignedCertificateTimestamp extends object
@@ -4449,6 +4497,40 @@ domain Network
       corp-not-same-origin-after-defaulted-to-same-origin-by-coep
       corp-not-same-site
 
+  # The reason why request was blocked.
+  type CorsError extends string
+    enum
+      DisallowedByMode
+      InvalidResponse
+      WildcardOriginNotAllowed
+      MissingAllowOriginHeader
+      MultipleAllowOriginValues
+      InvalidAllowOriginValue
+      AllowOriginMismatch
+      InvalidAllowCredentials
+      CorsDisabledScheme
+      PreflightInvalidStatus
+      PreflightDisallowedRedirect
+      PreflightWildcardOriginNotAllowed
+      PreflightMissingAllowOriginHeader
+      PreflightMultipleAllowOriginValues
+      PreflightInvalidAllowOriginValue
+      PreflightAllowOriginMismatch
+      PreflightInvalidAllowCredentials
+      PreflightMissingAllowExternal
+      PreflightInvalidAllowExternal
+      InvalidAllowMethodsPreflightResponse
+      InvalidAllowHeadersPreflightResponse
+      MethodDisallowedByPreflightResponse
+      HeaderDisallowedByPreflightResponse
+      RedirectContainsCredentials
+      InsecurePrivateNetwork
+
+  type CorsErrorStatus extends object
+    properties
+      CorsError corsError
+      string failedParameter
+
   # Source of serviceworker response.
   type ServiceWorkerResponseSource extends string
     enum
@@ -4456,6 +4538,32 @@ domain Network
       http-cache
       fallback-code
       network
+
+  # Determines what type of Trust Token operation is executed and
+  # depending on the type, some additional parameters. The values
+  # are specified in third_party/blink/renderer/core/fetch/trust_token.idl.
+  experimental type TrustTokenParams extends object
+    properties
+      TrustTokenOperationType type
+
+      # Only set for "token-redemption" type and determine whether
+      # to request a fresh SRR or use a still valid cached SRR.
+      enum refreshPolicy
+        UseCached
+        Refresh
+
+      # Origins of issuers from whom to request tokens or redemption
+      # records.
+      optional array of string issuers
+
+  experimental type TrustTokenOperationType extends string
+    enum
+      # Type "token-request" in the Trust Token API.
+      Issuance
+      # Type "token-redemption" in the Trust Token API.
+      Redemption
+      # Type "send-redemption-record" in the Trust Token API.
+      Signing
 
   # HTTP response data.
   type Response extends object
@@ -4570,6 +4678,9 @@ domain Network
       # Initiator line number, set for Parser type or for Script type (when script is importing
       # module) (0-based).
       optional number lineNumber
+      # Initiator column number, set for Parser type or for Script type (when script is importing
+      # module) (0-based).
+      optional number columnNumber
 
   # Cookie object
   type Cookie extends object
@@ -4630,6 +4741,20 @@ domain Network
       InvalidPrefix
       # An unknown error was encountered when trying to store this cookie.
       UnknownError
+      # The cookie had the "SameSite=Strict" attribute but came from a response
+      # with the same registrable domain but a different scheme.
+      # This includes navigation requests intitiated by other origins.
+      # This is the "Schemeful Same-Site" version of the blocked reason.
+      SchemefulSameSiteStrict
+      # The cookie had the "SameSite=Lax" attribute but came from a response
+      # with the same registrable domain but a different scheme.
+      # This is the "Schemeful Same-Site" version of the blocked reason.
+      SchemefulSameSiteLax
+      # The cookie didn't specify a "SameSite" attribute and was defaulted to
+      # "SameSite=Lax" and broke the same rules specified in the SchemefulSameSiteLax
+      # value.
+      # This is the "Schemeful Same-Site" version of the blocked reason.
+      SchemefulSameSiteUnspecifiedTreatedAsLax
 
   # Types of reasons why a cookie may not be sent with a request.
   experimental type CookieBlockedReason extends string
@@ -4658,6 +4783,20 @@ domain Network
       UserPreferences
       # An unknown error was encountered when trying to send this cookie.
       UnknownError
+      # The cookie had the "SameSite=Strict" attribute but came from a response
+      # with the same registrable domain but a different scheme.
+      # This includes navigation requests intitiated by other origins.
+      # This is the "Schemeful Same-Site" version of the blocked reason.
+      SchemefulSameSiteStrict
+      # The cookie had the "SameSite=Lax" attribute but came from a response
+      # with the same registrable domain but a different scheme.
+      # This is the "Schemeful Same-Site" version of the blocked reason.
+      SchemefulSameSiteLax
+      # The cookie didn't specify a "SameSite" attribute and was defaulted to
+      # "SameSite=Lax" and broke the same rules specified in the SchemefulSameSiteLax
+      # value.
+      # This is the "Schemeful Same-Site" version of the blocked reason.
+      SchemefulSameSiteUnspecifiedTreatedAsLax
 
   # A cookie which was not stored from a response with the corresponding reason.
   experimental type BlockedSetCookieWithReason extends object
@@ -5074,10 +5213,10 @@ domain Network
       # Map with extra HTTP headers.
       Headers headers
 
-  # Specifies whether to sned a debug header to all outgoing requests.
-  experimental command setAttachDebugHeader
+  # Specifies whether to attach a page script stack id in requests
+  experimental command setAttachDebugStack
     parameters
-      # Whether to send a debug header.
+      # Whether to attach a page script stack for debugging purpose.
       boolean enabled
 
   # Sets the requests to intercept that match the provided patterns and optionally resource types.
@@ -5143,6 +5282,8 @@ domain Network
       optional boolean canceled
       # The reason why loading was blocked, if any.
       optional BlockedReason blockedReason
+       # The reason why loading was blocked by CORS, if any.
+      optional CorsErrorStatus corsErrorStatus
 
   # Fired when HTTP request has finished loading.
   event loadingFinished
@@ -5389,8 +5530,8 @@ domain Network
 
   experimental type SecurityIsolationStatus extends object
     properties
-      CrossOriginOpenerPolicyStatus coop
-      CrossOriginEmbedderPolicyStatus coep
+      optional CrossOriginOpenerPolicyStatus coop
+      optional CrossOriginEmbedderPolicyStatus coep
 
   # Returns information about the COEP/COOP isolation status.
   experimental command getSecurityIsolationStatus
@@ -5490,6 +5631,26 @@ experimental domain Overlay
       # The grid container background color (Default: transparent).
       optional DOM.RGBA gridBackgroundColor
 
+  # Configuration data for the highlighting of Flex container elements.
+  type FlexContainerHighlightConfig extends object
+    properties
+      # The style of the container border
+      optional LineStyle containerBorder
+      # The style of the separator between lines
+      optional LineStyle lineSeparator
+      # The style of the separator between items
+      optional LineStyle itemSeparator
+
+  # Style information for drawing a line.
+  type LineStyle extends object
+    properties
+      # The color of the line (default: transparent)
+      optional DOM.RGBA color
+      # The line pattern (default: solid)
+      optional enum pattern
+        dashed
+        dotted
+
   # Configuration data for the highlighting of page elements.
   type HighlightConfig extends object
     properties
@@ -5523,6 +5684,8 @@ experimental domain Overlay
       optional ColorFormat colorFormat
       # The grid layout highlight configuration (default: all transparent).
       optional GridHighlightConfig gridHighlightConfig
+      # The flex container highlight configuration (default: all transparent).
+      optional FlexContainerHighlightConfig flexContainerHighlightConfig
 
   type ColorFormat extends string
     enum
@@ -5802,6 +5965,13 @@ domain Page
       # The cross-origin isolation feature is disabled.
       NotIsolatedFeatureDisabled
 
+  experimental type GatedAPIFeatures extends string
+    enum
+      SharedArrayBuffers
+      SharedArrayBuffersTransferAllowed
+      PerformanceMeasureMemory
+      PerformanceProfile
+
   # Information about the Frame on the page.
   type Frame extends object
     properties
@@ -5834,6 +6004,8 @@ domain Page
       experimental SecureContextType secureContextType
       # Indicates whether this is a cross origin isolated context.
       experimental CrossOriginIsolatedContextType crossOriginIsolatedContextType
+      # Indicated which gated APIs / features are available.
+      experimental array of GatedAPIFeatures gatedAPIFeatures
 
   # Information about the Resource on the page.
   experimental type FrameResource extends object
@@ -6596,6 +6768,12 @@ domain Page
     parameters
       # Id of the frame that has been detached.
       FrameId frameId
+      experimental enum reason
+        # The frame is removed from the DOM.
+        remove
+        # The frame is being swapped out in favor of an out-of-process iframe.
+        # A new frame target will be created (see Target.attachedToTarget).
+        swap
 
   # Fired once navigation of the frame has completed. Frame is now associated with the new loader.
   event frameNavigated
@@ -7189,8 +7367,24 @@ experimental domain Storage
       number usage
       # Storage quota (bytes).
       number quota
+      # Whether or not the origin has an active storage quota override
+      boolean overrideActive
       # Storage usage per type (bytes).
       array of UsageForType usageBreakdown
+
+  # Override quota for the specified origin
+  experimental command overrideQuotaForOrigin
+    parameters
+      # Security origin.
+      string origin
+      # The quota size (in bytes) to override the original quota with.
+      # If this is called multiple times, the overriden quota will be equal to
+      # the quotaSize provided in the final call. If this is called without
+      # specifying a quotaSize, the quota will be reset to the default value for
+      # the specified origin. If this is called multiple times with different
+      # origins, the override will be maintained for each origin until it is
+      # disabled (called without a quotaSize).
+      optional number quotaSize
 
   # Registers origin to be notified when an update occurs to its cache storage list.
   command trackCacheStorageForOrigin
@@ -7681,6 +7875,15 @@ experimental domain Tracing
       none
       gzip
 
+  # Details exposed when memory request explicitly declared.
+  # Keep consistent with memory_dump_request_args.h and
+  # memory_instrumentation.mojom
+  type MemoryDumpLevelOfDetail extends string
+    enum
+      background
+      light
+      detailed
+
   # Stop trace events collection.
   command end
 
@@ -7701,6 +7904,8 @@ experimental domain Tracing
     parameters
       # Enables more deterministic results by forcing garbage collection
       optional boolean deterministic
+      # Specifies level of details in memory dump. Defaults to "detailed".
+      optional MemoryDumpLevelOfDetail levelOfDetail
     returns
       # GUID of the resulting global memory dump.
       string dumpGuid
@@ -8175,6 +8380,11 @@ experimental domain WebAuthn
       # Client To Authenticator Protocol 2.
       ctap2
 
+  type Ctap2Version extends string
+    enum
+      ctap2_0
+      ctap2_1
+
   type AuthenticatorTransport extends string
     enum
       # Cross-Platform authenticator attachments:
@@ -8188,11 +8398,17 @@ experimental domain WebAuthn
   type VirtualAuthenticatorOptions extends object
     properties
       AuthenticatorProtocol protocol
+      # Defaults to ctap2_0. Ignored if |protocol| == u2f.
+      optional Ctap2Version ctap2Version
       AuthenticatorTransport transport
       # Defaults to false.
       optional boolean hasResidentKey
       # Defaults to false.
       optional boolean hasUserVerification
+      # If set to true, the authenticator will support the largeBlob extension.
+      # https://w3c.github.io/webauthn#largeBlob
+      # Defaults to false.
+      optional boolean hasLargeBlob
       # If set to true, tests of user presence will succeed immediately.
       # Otherwise, they will not be resolved. Defaults to true.
       optional boolean automaticPresenceSimulation
@@ -8216,6 +8432,9 @@ experimental domain WebAuthn
       # assertion.
       # See https://w3c.github.io/webauthn/#signature-counter
       integer signCount
+      # The large blob associated with the credential.
+      # See https://w3c.github.io/webauthn/#sctn-large-blob-extension
+      optional binary largeBlob
 
   # Enable the WebAuthn domain and start intercepting credential storage and
   # retrieval with a virtual authenticator.

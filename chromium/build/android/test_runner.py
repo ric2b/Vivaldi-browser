@@ -655,6 +655,13 @@ def AddJUnitTestOptions(parser):
       '--runner-filter',
       help='Filters tests by runner class. Must be fully qualified.')
   parser.add_argument(
+      '--shards',
+      default=1,
+      type=int,
+      help='Number of shards to run junit tests in parallel on. Only 1 shard '
+      'is supported when test-filter is specified. Values less than 1 will '
+      'use auto select.')
+  parser.add_argument(
       '-s', '--test-suite', required=True,
       help='JUnit test suite to run.')
   debug_group = parser.add_mutually_exclusive_group()
@@ -933,7 +940,11 @@ def RunTestsInPlatformMode(args, result_sink_client=None):
         iteration_count += 1
         for r in iteration_results.GetAll():
           if result_sink_client:
-            result_sink_client.Post(r.GetName(), r.GetType(), r.GetLog())
+            # Some tests put in non utf-8 char as part of the test
+            # which breaks uploads, so need to decode and re-encode.
+            result_sink_client.Post(
+                r.GetName(), r.GetType(),
+                r.GetLog().decode('utf-8', 'replace').encode('utf-8'))
 
           result_counts[r.GetName()][r.GetType()] += 1
         report_results.LogFull(

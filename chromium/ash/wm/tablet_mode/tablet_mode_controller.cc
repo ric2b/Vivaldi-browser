@@ -48,12 +48,14 @@
 #include "ui/compositor/layer_animation_sequence.h"
 #include "ui/display/display.h"
 #include "ui/display/manager/display_manager.h"
+#include "ui/display/tablet_state.h"
 #include "ui/events/devices/device_data_manager.h"
 #include "ui/events/devices/input_device.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/vector3d_f.h"
 #include "ui/views/widget/widget.h"
+#include "ui/wm/core/cursor_manager.h"
 #include "ui/wm/core/window_util.h"
 
 namespace ash {
@@ -491,8 +493,8 @@ bool TabletModeController::TriggerRecordLidAngleTimerForTesting() {
 void TabletModeController::MaybeObserveBoundsAnimation(aura::Window* window) {
   StopObservingAnimation(/*record_stats=*/false, /*delete_screenshot=*/false);
 
-  if (state_ != State::kEnteringTabletMode &&
-      state_ != State::kExitingTabletMode) {
+  if (tablet_state_.state() != display::TabletState::kEnteringTabletMode &&
+      tablet_state_.state() != display::TabletState::kExitingTabletMode) {
     return;
   }
 
@@ -545,7 +547,7 @@ void TabletModeController::RemoveObserver(TabletModeObserver* observer) {
 }
 
 bool TabletModeController::InTabletMode() const {
-  return state_ == State::kInTabletMode || state_ == State::kEnteringTabletMode;
+  return tablet_state_.InTabletMode();
 }
 
 void TabletModeController::ForceUiTabletModeState(
@@ -628,12 +630,15 @@ void TabletModeController::OnChromeTerminating() {
 
 void TabletModeController::OnAccelerometerUpdated(
     scoped_refptr<const AccelerometerUpdate> update) {
+  if (ec_lid_angle_driver_status_ == ECLidAngleDriverStatus::UNKNOWN) {
+    ec_lid_angle_driver_status_ =
+        AccelerometerReader::GetInstance()->GetECLidAngleDriverStatus();
+  }
+
   // When ChromeOS EC lid angle driver is present, EC can handle lid angle
   // calculation, thus Chrome side lid angle calculation is disabled. In this
   // case, TabletModeController no longer listens to accelerometer events.
-  if (update->HasLidAngleDriver(ACCELEROMETER_SOURCE_SCREEN) ||
-      update->HasLidAngleDriver(ACCELEROMETER_SOURCE_ATTACHED_KEYBOARD)) {
-    ec_lid_angle_driver_present_ = true;
+  if (ec_lid_angle_driver_status_ == ECLidAngleDriverStatus::SUPPORTED) {
     // Reset lid angle that might be calculated before lid angle driver is
     // read.
     lid_angle_ = 0.f;
@@ -789,7 +794,8 @@ void TabletModeController::OnLayerAnimationScheduled(
     transition_tracker_ =
         animating_layer_->GetCompositor()->RequestNewThroughputTracker();
     transition_tracker_->Start(metrics_util::ForSmoothness(base::BindRepeating(
-        &ReportTrasitionSmoothness, state_ == State::kEnteringTabletMode)));
+        &ReportTrasitionSmoothness,
+        tablet_state_.state() == display::TabletState::kEnteringTabletMode)));
     return;
   }
 
@@ -835,7 +841,8 @@ void TabletModeController::SetTabletModeEnabledInternal(bool should_enable) {
   DeleteScreenshot();
 
   if (should_enable) {
-    state_ = State::kEnteringTabletMode;
+    Shell::Get()->display_manager()->NotifyDisplayTabletStateChanged(
+        display::TabletState::kEnteringTabletMode);
 
     // Take a screenshot if there is a top window that will get animated.
     // TODO(sammiequon): Handle the case where the top window is not on the
@@ -865,7 +872,8 @@ void TabletModeController::SetTabletModeEnabledInternal(bool should_enable) {
       FinishInitTabletMode();
     }
   } else {
-    state_ = State::kExitingTabletMode;
+    Shell::Get()->display_manager()->NotifyDisplayTabletStateChanged(
+        display::TabletState::kExitingTabletMode);
 
     // We may have entered tablet mode, then tried to exit before the screenshot
     // was taken. In this case |tablet_mode_window_manager_| will be null.
@@ -881,12 +889,14 @@ void TabletModeController::SetTabletModeEnabledInternal(bool should_enable) {
 
     base::RecordAction(base::UserMetricsAction("Touchview_Disabled"));
     RecordTabletModeUsageInterval(TABLET_MODE_INTERVAL_ACTIVE);
-    state_ = State::kInClamshellMode;
+    Shell::Get()->display_manager()->NotifyDisplayTabletStateChanged(
+        display::TabletState::kInClamshellMode);
     for (auto& observer : tablet_mode_observers_)
       observer.OnTabletModeEnded();
     VLOG(1) << "Exit tablet mode.";
 
     UpdateInternalInputDevicesEventBlocker();
+    Shell::Get()->cursor_manager()->ShowCursor();
   }
 }
 
@@ -1124,7 +1134,7 @@ void TabletModeController::ResetPauser() {
 }
 
 void TabletModeController::FinishInitTabletMode() {
-  DCHECK_EQ(State::kEnteringTabletMode, state_);
+  DCHECK_EQ(display::TabletState::kEnteringTabletMode, tablet_state_.state());
 
   for (auto& observer : tablet_mode_observers_)
     observer.OnTabletModeStarting();
@@ -1133,7 +1143,8 @@ void TabletModeController::FinishInitTabletMode() {
 
   base::RecordAction(base::UserMetricsAction("Touchview_Enabled"));
   RecordTabletModeUsageInterval(TABLET_MODE_INTERVAL_INACTIVE);
-  state_ = State::kInTabletMode;
+  Shell::Get()->display_manager()->NotifyDisplayTabletStateChanged(
+      display::TabletState::kInTabletMode);
 
   for (auto& observer : tablet_mode_observers_)
     observer.OnTabletModeStarted();
@@ -1151,6 +1162,7 @@ void TabletModeController::FinishInitTabletMode() {
   }
 
   UpdateInternalInputDevicesEventBlocker();
+  Shell::Get()->cursor_manager()->HideCursor();
 
   VLOG(1) << "Enter tablet mode.";
 }
@@ -1296,7 +1308,8 @@ bool TabletModeController::ShouldUiBeInTabletMode() const {
 
   const bool can_enter_tablet_mode =
       IsBoardTypeMarkedAsTabletCapable() && HasActiveInternalDisplay() &&
-      (ec_lid_angle_driver_present_ || have_seen_accelerometer_data_);
+      (ec_lid_angle_driver_status_ == ECLidAngleDriverStatus::SUPPORTED ||
+       have_seen_accelerometer_data_);
 
   return !has_internal_pointing_device_ && can_enter_tablet_mode &&
          chromeos::IsRunningAsSystemCompositor();

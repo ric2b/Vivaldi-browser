@@ -39,6 +39,16 @@ class VirtualAuthenticator {
     return clearRegistrationsResponse.keys;
   }
 
+  async setLargeBlob(keyHandle, blob) {
+    let setLargeBlobResponse = await this.virtualAuthenticator_.setLargeBlob(keyHandle, blob);
+    return setLargeBlobResponse.set;
+  }
+
+  async getLargeBlob(keyHandle) {
+    let getLargeBlobResponse = await this.virtualAuthenticator_.getLargeBlob(keyHandle);
+    return getLargeBlobResponse.blob;
+  }
+
   async setUserPresence(present) {
     return this.virtualAuthenticator_.setUserPresence(present);
   }
@@ -67,6 +77,7 @@ class VirtualAuthenticatorManager {
           attachment: blink.mojom.AuthenticatorAttachment.CROSS_PLATFORM,
           hasResidentKey: true,
           hasUserVerification: true,
+          hasLargeBlob: false,
         },
         options);
     let createAuthenticatorResponse =

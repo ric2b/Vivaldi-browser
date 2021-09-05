@@ -10,13 +10,13 @@ import buildbot_json_magic_substitutions as magic_substitutions
 
 def CreateConfigWithPool(pool, device_type=None):
   dims = {
-      'swarming': {
-          'dimension_sets': [
-              {
-                  'pool': pool,
-              },
-          ],
-      },
+    'swarming': {
+      'dimension_sets': [
+        {
+          'pool': pool,
+        },
+      ],
+    },
   }
   if device_type:
     dims['swarming']['dimension_sets'][0]['device_type'] = device_type

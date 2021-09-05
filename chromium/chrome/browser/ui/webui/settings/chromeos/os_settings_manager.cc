@@ -11,7 +11,7 @@
 #include "chrome/browser/ui/webui/settings/chromeos/search/search_handler.h"
 #include "chrome/browser/ui/webui/settings/chromeos/search/search_tag_registry.h"
 #include "chrome/browser/ui/webui/settings/chromeos/settings_user_action_tracker.h"
-#include "chromeos/components/local_search_service/local_search_service.h"
+#include "chromeos/components/local_search_service/local_search_service_sync.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -21,7 +21,7 @@ namespace settings {
 
 OsSettingsManager::OsSettingsManager(
     Profile* profile,
-    local_search_service::LocalSearchService* local_search_service,
+    local_search_service::LocalSearchServiceSync* local_search_service,
     multidevice_setup::MultiDeviceSetupClient* multidevice_setup_client,
     phonehub::PhoneHubManager* phone_hub_manager,
     syncer::SyncService* sync_service,
@@ -45,9 +45,10 @@ OsSettingsManager::OsSettingsManager(
                                                identity_manager,
                                                android_sms_service,
                                                printers_manager)),
-      settings_user_action_tracker_(
-          std::make_unique<SettingsUserActionTracker>()),
       hierarchy_(std::make_unique<Hierarchy>(sections_.get())),
+      settings_user_action_tracker_(
+          std::make_unique<SettingsUserActionTracker>(hierarchy_.get(),
+                                                      sections_.get())),
       search_handler_(
           std::make_unique<SearchHandler>(search_tag_registry_.get(),
                                           sections_.get(),
@@ -71,6 +72,7 @@ void OsSettingsManager::Shutdown() {
   // Note: These must be deleted in the opposite order of their creation to
   // prevent against UAF violations.
   search_handler_.reset();
+  settings_user_action_tracker_.reset();
   hierarchy_.reset();
   sections_.reset();
   search_tag_registry_.reset();

@@ -14,6 +14,7 @@
 #include "third_party/blink/public/common/blob/blob_utils.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/browser_interface_broker.mojom-blink.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/script/script_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/worker/dedicated_worker_host_factory.mojom-blink.h"
 #include "third_party/blink/public/platform/web_content_settings_client.h"
@@ -244,8 +245,7 @@ void DedicatedWorker::OnHostCreated(
     classic_script_loader_->LoadTopLevelScriptAsynchronously(
         *GetExecutionContext(), GetExecutionContext()->Fetcher(),
         script_request_url_, nullptr /* worker_main_script_load_params */,
-        mojo::NullRemote() /* resource_load_info_notifier */,
-        mojom::RequestContextType::WORKER,
+        mojom::blink::RequestContextType::WORKER,
         network::mojom::RequestDestination::kWorker,
         network::mojom::RequestMode::kSameOrigin,
         network::mojom::CredentialsMode::kSameOrigin,
@@ -283,9 +283,8 @@ BeginFrameProviderParams DedicatedWorker::CreateBeginFrameProviderParams() {
     if (frame) {
       WebFrameWidgetBase* widget =
           WebLocalFrameImpl::FromFrame(frame)->LocalRootFrameWidget();
-      WebWidgetClient* client = widget->Client();
       begin_frame_provider_params.parent_frame_sink_id =
-          client->GetFrameSinkId();
+          widget->GetFrameSinkId();
     }
     begin_frame_provider_params.frame_sink_id =
         Platform::Current()->GenerateFrameSinkId();
@@ -401,7 +400,7 @@ void DedicatedWorker::ContinueStart(
                                       response_address_space),
       std::move(worker_main_script_load_params), options_, script_url,
       *outside_fetch_client_settings_object_, v8_stack_trace_id_, source_code,
-      reject_coep_unsafe_none);
+      reject_coep_unsafe_none, token_);
 }
 
 std::unique_ptr<GlobalScopeCreationParams>

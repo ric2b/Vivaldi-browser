@@ -12,6 +12,7 @@
 #include "media/base/channel_layout.h"
 #include "media/base/decode_status.h"
 #include "media/base/decoder_buffer.h"
+#include "media/base/media_util.h"
 #include "media/base/mock_filters.h"
 #include "media/base/sample_format.h"
 #include "media/base/test_data_util.h"
@@ -25,7 +26,8 @@
 #include "mojo/public/cpp/bindings/unique_receiver_set.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
+#include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_binding_for_testing.h"
 #include "third_party/blink/renderer/platform/wtf/functional.h"
 
@@ -184,14 +186,15 @@ class AudioDecoderBrokerTest : public testing::Test {
     // that simulate gpu-accelerated decode.
     interface_factory_ = std::make_unique<FakeInterfaceFactory>();
     EXPECT_TRUE(
-        execution_context.GetBrowserInterfaceBroker().SetBinderForTesting(
+        Platform::Current()->GetBrowserInterfaceBroker()->SetBinderForTesting(
             media::mojom::InterfaceFactory::Name_,
             WTF::BindRepeating(&FakeInterfaceFactory::BindRequest,
                                base::Unretained(interface_factory_.get()))));
   }
 
   void ConstructDecoder(ExecutionContext& execution_context) {
-    decoder_broker_ = std::make_unique<AudioDecoderBroker>(execution_context);
+    decoder_broker_ = std::make_unique<AudioDecoderBroker>(&null_media_log_,
+                                                           execution_context);
   }
 
   void InitializeDecoder(media::AudioDecoderConfig config) {
@@ -236,6 +239,7 @@ class AudioDecoderBrokerTest : public testing::Test {
   bool SupportsDecryption() { return decoder_broker_->SupportsDecryption(); }
 
  protected:
+  media::NullMediaLog null_media_log_;
   std::unique_ptr<AudioDecoderBroker> decoder_broker_;
   std::vector<scoped_refptr<media::AudioBuffer>> output_buffers_;
   std::unique_ptr<FakeInterfaceFactory> interface_factory_;

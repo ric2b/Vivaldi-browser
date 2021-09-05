@@ -40,11 +40,9 @@
 #include "ui/views/view_targeter_delegate.h"
 #include "ui/views/widget/widget_observer.h"
 
-class NewTabButton;
 class StackedTabStripLayout;
 class Tab;
 class TabHoverCardBubbleView;
-class TabSearchButton;
 class TabStripController;
 class TabStripObserver;
 class TabStripLayoutHelper;
@@ -89,6 +87,8 @@ class TabStrip : public views::View,
 
   void SetAvailableWidthCallback(
       base::RepeatingCallback<int()> available_width_callback);
+
+  void NewTabButtonPressed(const ui::Event& event);
 
   // Returns the size needed for the specified views. This is invoked during
   // drag and drop to calculate offsets and positioning.
@@ -146,11 +146,6 @@ class TabStrip : public views::View,
   // Sets |stacked_layout_| and animates if necessary.
   void SetStackedLayout(bool stacked_layout);
 
-  // Returns the ideal bounds of the tab controls container.
-  gfx::Rect tab_controls_container_ideal_bounds() const {
-    return tab_controls_container_ideal_bounds_;
-  }
-
   // Adds a tab at the specified index.
   void AddTabAt(int model_index, TabRendererData data, bool is_active);
 
@@ -205,12 +200,6 @@ class TabStrip : public views::View,
   // Attempts to move the specified group to the right.
   void ShiftGroupRight(const tab_groups::TabGroupId& group);
 
-  // While the Tab Search bubble is open, the |tab_controls_container_| is kept
-  // in a fixed position in the tab strip. This is called when the bubble is
-  // closed to allow the |tab_controls_container_| to animate to the correct
-  // position.
-  void OnTabSearchBubbleClosed();
-
   // Returns true if the tab is not partly or fully clipped (due to overflow),
   // and the tab couldn't become partly clipped due to changing the selected tab
   // (for example, if currently the strip has the last tab selected, and
@@ -243,12 +232,6 @@ class TabStrip : public views::View,
   TabGroupHeader* group_header(const tab_groups::TabGroupId& id) const {
     return group_views_.at(id).get()->header();
   }
-
-  // Returns the NewTabButton.
-  NewTabButton* new_tab_button() { return new_tab_button_; }
-
-  // Returns the TabSearchButton.
-  TabSearchButton* tab_search_button() { return tab_search_button_; }
 
   // Returns the index of the specified view in the model coordinate system, or
   // -1 if view is closing or not a tab.
@@ -298,8 +281,8 @@ class TabStrip : public views::View,
   void ToggleSelected(Tab* tab) override;
   void AddSelectionFromAnchorTo(Tab* tab) override;
   void CloseTab(Tab* tab, CloseTabSource source) override;
-  void ShiftTabLeft(Tab* tab) override;
-  void ShiftTabRight(Tab* tab) override;
+  void ShiftTabNext(Tab* tab) override;
+  void ShiftTabPrevious(Tab* tab) override;
   void MoveTabFirst(Tab* tab) override;
   void MoveTabLast(Tab* tab) override;
   void ShowContextMenuForTab(Tab* tab,
@@ -377,6 +360,7 @@ class TabStrip : public views::View,
   friend class TabHoverCardBubbleViewBrowserTest;
   friend class TabHoverCardBubbleViewInteractiveUiTest;
   friend class TabStripTest;
+  friend class TabStripRegionViewTestBase;
 
   class TabContextMenuController : public views::ContextMenuController {
    public:
@@ -435,8 +419,6 @@ class TabStrip : public views::View,
 
   std::map<tab_groups::TabGroupId, TabGroupHeader*> GetGroupHeaders();
 
-  void NewTabButtonPressed(const ui::Event& event);
-
   // Invoked from |AddTabAt| after the newly created tab has been inserted.
   void StartInsertTabAnimation(int model_index, TabPinned pinned);
 
@@ -467,14 +449,6 @@ class TabStrip : public views::View,
   // Returns whether the close button should be highlighted after a remove.
   bool ShouldHighlightCloseButtonAfterRemove();
 
-  // Returns the spacing between the trailing edge of the tabs and the leading
-  // edge of the new tab button.
-  int TabToNewTabButtonSpacing() const;
-
-  // Returns the space to reserve after the tabs to guarantee the user can grab
-  // part of the window frame (to move the window with).
-  int FrameGrabWidth() const;
-
   // Returns whether the window background behind the tabstrip is transparent.
   bool TitlebarBackgroundIsTransparent() const;
 
@@ -503,10 +477,6 @@ class TabStrip : public views::View,
   // Returns the width of the area right of the tabs reserved for the new tab
   // button and the frame grab area.
   int GetRightSideReservedWidth() const;
-
-  // Returns the X coordinate the new tab button should be placed at.  Requires
-  // |tabs_| to have correct ideal bounds.
-  int GetNewTabButtonIdealX() const;
 
   // Returns the last tab in the strip that's actually visible.  This will be
   // the actual last tab unless the strip is in the overflow node_data.
@@ -596,11 +566,12 @@ class TabStrip : public views::View,
   // the index of the first non-pinned tab.
   int UpdateIdealBoundsForPinnedTabs(int* first_non_pinned_index);
 
-  // Calculates the width that can be occupied by the tabs in the strip.
-  int CalculateAvailableWidthForTabs();
+  // Calculates the width that can be occupied by the tabs in the strip. This
+  // can differ from GetAvailableWidthForTabStrip() when in tab closing mode.
+  int CalculateAvailableWidthForTabs() const;
 
   // Returns the total width available for the TabStrip's use.
-  int GetAvailableWidthForTabStrip();
+  int GetAvailableWidthForTabStrip() const;
 
   // Starts various types of TabStrip animations.
   void StartResizeLayoutAnimation();
@@ -640,10 +611,6 @@ class TabStrip : public views::View,
   // layout is reset.
   void SetResetToShrinkOnExit(bool value);
 
-  // Updates the border padding for |new_tab_button_|.  This should be called
-  // whenever any input of the computation of the border's sizing changes.
-  void UpdateNewTabButtonBorder();
-
   // Called whenever a tab animation has progressed.
   void OnTabSlotAnimationProgressed(TabSlotView* view);
 
@@ -652,7 +619,6 @@ class TabStrip : public views::View,
   void UpdateTabGroupVisuals(tab_groups::TabGroupId tab_group_id);
 
   // views::View:
-  const views::View* GetViewByID(int id) const override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
   bool OnMouseDragged(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;
@@ -678,6 +644,10 @@ class TabStrip : public views::View,
   void OnWidgetActivationChanged(views::Widget* widget, bool active) override;
 
   void OnTouchUiChanged();
+
+  // Screen-reader-only announcements that depend on tab group titles.
+  void AnnounceTabAddedToGroup(tab_groups::TabGroupId group_id);
+  void AnnounceTabRemovedFromGroup(tab_groups::TabGroupId group_id);
 
   // -- Member Variables ------------------------------------------------------
 
@@ -706,16 +676,6 @@ class TabStrip : public views::View,
 
   // Responsible for animating tabs in response to model changes.
   views::BoundsAnimator bounds_animator_{this};
-
-  // Container that holds the |new_tab_button_| and the |tab_search_button_|.
-  views::View* tab_controls_container_ = nullptr;
-  NewTabButton* new_tab_button_ = nullptr;
-  // |tab_search_button_| will be null if features::kTabSearch is disabled or if
-  // the current profile is an incognito profile.
-  TabSearchButton* tab_search_button_ = nullptr;
-
-  // Ideal bounds of container holding the tab controls.
-  gfx::Rect tab_controls_container_ideal_bounds_;
 
   // If this value is defined, it is used as the width to lay out tabs
   // (instead of GetTabAreaWidth()). It is defined when closing tabs with the
@@ -796,7 +756,7 @@ class TabStrip : public views::View,
 
   SkColor separator_color_ = gfx::kPlaceholderColor;
 
-  std::unique_ptr<ui::TouchUiController::Subscription> subscription_ =
+  const std::unique_ptr<ui::TouchUiController::Subscription> subscription_ =
       ui::TouchUiController::Get()->RegisterCallback(
           base::BindRepeating(&TabStrip::OnTouchUiChanged,
                               base::Unretained(this)));

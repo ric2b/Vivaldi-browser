@@ -45,8 +45,8 @@ class ChromeLoginPerformer : public LoginPerformer {
 
  protected:
   bool RunTrustedCheck(base::OnceClosure callback) override;
-  // Runs |callback| unconditionally, but DidRunTrustedCheck() will only be run
-  // itself sometimes, so ownership of |callback| should not be held in the
+  // Runs `callback` unconditionally, but DidRunTrustedCheck() will only be run
+  // itself sometimes, so ownership of `callback` should not be held in the
   // Callback pointing to DidRunTrustedCheck.
   void DidRunTrustedCheck(base::OnceClosure* callback);
 
@@ -55,14 +55,6 @@ class ChromeLoginPerformer : public LoginPerformer {
                                const std::string& refresh_token,
                                base::OnceClosure success_callback,
                                base::OnceClosure failure_callback) override;
-  bool AreSupervisedUsersAllowed() override;
-
-  bool UseExtendedAuthenticatorForSupervisedUser(
-      const UserContext& user_context) override;
-
-  UserContext TransformSupervisedKey(const UserContext& context) override;
-
-  void SetupSupervisedUserFlow(const AccountId& account_id) override;
 
   void SetupEasyUnlockUserFlow(const AccountId& account_id) override;
 

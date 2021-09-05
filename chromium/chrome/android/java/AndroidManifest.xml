@@ -66,7 +66,7 @@ by a child template that "extends" this file.
     -->
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS"/>
     <uses-permission android:name="android.permission.NFC"/>
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
     <uses-permission android:name="android.permission.READ_SYNC_SETTINGS"/>
     <uses-permission android:name="android.permission.READ_SYNC_STATS"/>
@@ -106,8 +106,9 @@ by a child template that "extends" this file.
         android:protectionLevel="signature" />
     <permission android:name="{{ manifest_package }}.permission.DEBUG"
                 android:label="Debug web pages"
-                android:permissionGroup="android.permission-group.DEVELOPMENT_TOOLS"
                 android:protectionLevel="signature" />
+    <permission android:name="{{ manifest_package }}.permission.TRANSLATE"
+        android:protectionLevel="signature" />
 
     <uses-permission android:name="{{ manifest_package }}.permission.C2D_MESSAGE" />
     <uses-permission android:name="{{ manifest_package }}.permission.READ_WRITE_BOOKMARK_FOLDERS" />
@@ -190,49 +191,13 @@ by a child template that "extends" this file.
         android:allowBackup="false"
         {% endif %}
         android:networkSecurityConfig="@xml/network_security_config"
+        android:allowAudioPlaybackCapture="false"
+        {% if definitions_in_split %}
+        android:appComponentFactory="org.chromium.chrome.browser.base.SplitCompatAppComponentFactory"
+        {% endif %}
         {% block extra_application_attributes %}{% endblock %}>
 
       {% macro application_definitions() %}
-        <meta-data android:name="android.allow_multiple_resumed_activities" android:value="true" />
-
-        <!-- Samsung MultiWindow Support -->
-        <meta-data android:name="com.samsung.android.sdk.multiwindow.enable"
-            android:value="true" />
-
-        {% if min_sdk_version|int < 24 %}
-        <meta-data android:name="com.samsung.android.sdk.multiwindow.multiinstance.enable"
-            android:value="true" />
-        <meta-data android:name="com.samsung.android.sdk.multiwindow.multiinstance.launchmode"
-            android:value="singleTask" />
-        {% endif %}
-
-        <meta-data android:name="com.samsung.android.sdk.multiwindow.penwindow.enable"
-            android:value="true"/>
-
-        {% if backup_key is defined %}
-        <!-- Backup keys are channel dependent -->
-        <meta-data android:name="com.google.android.backup.api_key"
-            android:value="{{ backup_key }}" />
-        {% endif %}
-
-        {% if channel in ['dev', 'canary', 'default'] %}
-        <meta-data android:name="com.sec.android.support.multiwindow" android:value="true" />
-        {% endif %}
-        <meta-data android:name="android.content.APP_RESTRICTIONS"
-            android:resource="@xml/app_restrictions"/>
-
-        {% if include_arcore_manifest_flag == 'true' %}
-        <!-- ARCore APK integration -->
-        <!-- This tag indicates that this application optionally uses ARCore. -->
-        <meta-data android:name="com.google.ar.core" android:value="optional" />
-        {% endif %}
-
-        <!-- Cast support -->
-        <meta-data
-            android:name=
-            "com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
-            android:value="org.chromium.components.media_router.caf.CastOptionsProvider"/>
-
         <!-- Note: All activities directly or indirectly derived from ChromeActivity
              must specify android:hardwareAccelerated="false".
 
@@ -363,6 +328,17 @@ by a child template that "extends" this file.
             </intent-filter>
             <meta-data android:name="android.app.searchable"
                 android:resource="@xml/searchable" />
+        </activity-alias>
+        <activity-alias android:name="com.google.android.apps.chrome.TranslateDispatcher"
+            android:targetActivity="org.chromium.chrome.browser.document.ChromeLauncherActivity"
+            android:exported="true"
+            {% if channel == 'stable' %}
+            android:permission="{{ manifest_package }}.permission.TRANSLATE"
+            {% endif %} >
+            <intent-filter>
+                <action android:name="org.chromium.chrome.browser.translate.TRANSLATE_TAB" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity-alias>
 
         <activity android:name="org.chromium.chrome.browser.media.MediaLauncherActivity"
@@ -702,6 +678,11 @@ by a child template that "extends" this file.
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:exported="false">
         </activity>
+        <activity android:name="org.vivaldi.browser.downloads.ExternalDownloadManagerFragment"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
+            android:exported="false">
+        </activity>
+
         <!-- Vivaldi -> -->
         <activity android:name="org.chromium.chrome.browser.bookmarks.BookmarkAddActivity"
             android:theme="@android:style/Theme.NoDisplay"
@@ -737,8 +718,9 @@ by a child template that "extends" this file.
         </activity>
 
         <!-- Activities for video tutorials. -->
-        <activity android:name="org.chromium.chrome.browser.video_tutorials.VideoTutorialListActivity"
+        <activity android:name="org.chromium.chrome.browser.app.video_tutorials.VideoTutorialListActivity"
             android:theme="@style/Theme.Chromium.Activity.Fullscreen"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
             android:exported="false">
         </activity>
 
@@ -753,9 +735,13 @@ by a child template that "extends" this file.
         < -->
 
         <!-- Activities for video tutorials. -->
-        <activity android:name="org.chromium.chrome.browser.video_tutorials.VideoPlayerActivity"
+        <activity android:name="org.chromium.chrome.browser.app.video_tutorials.VideoPlayerActivity"
             android:theme="@style/Theme.Chromium.Activity.Fullscreen"
-            android:exported="false">
+            android:screenOrientation="portrait"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|mcc|mnc|screenLayout|smallestScreenSize"
+            android:exported="false"
+            tools:ignore="LockedOrientationActivity">
+            <!-- We want to explicitly disallow landscape UI for video tutorials. -->
         </activity>
 
         <!-- Activities for history. -->
@@ -990,6 +976,22 @@ by a child template that "extends" this file.
             </intent-filter>
         </activity>
 
+        <activity android:name="org.chromium.chrome.browser.webauth.authenticator.CableAuthenticatorActivity"
+            android:theme="@style/Theme.Chromium.Activity.Fullscreen"
+            android:label="@string/cablev2_activity_title"
+            android:exported="false">
+            <!-- This has an intent filter but is not exported. This works
+            because the intent is sent by the Android system, not another
+            application. We want to limit this activity to only be invoked by
+            Chromium or the OS because otherwise applications could fool
+            Chromium into communicating with a fake USB device. -->
+            <intent-filter>
+                 <action android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED" />
+            </intent-filter>
+            <meta-data android:name="android.hardware.usb.action.USB_ACCESSORY_ATTACHED"
+                android:resource="@xml/phone_as_a_security_key_accessory_filter" />
+        </activity>
+
         <receiver
             android:name="org.chromium.chrome.browser.browserservices.ui.trustedwebactivity.DisclosureAcceptanceBroadcastReceiver"
             android:exported="false" />
@@ -1146,6 +1148,8 @@ by a child template that "extends" this file.
         <service android:name="org.chromium.chrome.browser.notifications.NotificationService"
             android:exported="false"/>
         <receiver android:name="org.chromium.chrome.browser.notifications.NotificationService$Receiver"
+            android:exported="false"/>
+        <receiver android:name="org.chromium.chrome.browser.notifications.NotificationServiceImpl$Receiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="org.chromium.chrome.browser.notifications.CLICK_NOTIFICATION" />
@@ -1197,6 +1201,7 @@ by a child template that "extends" this file.
               <category android:name="androidx.browser.customtabs.category.NavBarColorCustomization"/>
               <category android:name="androidx.browser.trusted.category.ImmersiveMode"/>
               <category android:name="androidx.browser.trusted.category.LaunchSiteSettings" />
+              <category android:name="androidx.browser.trusted.category.LaunchWebApkSiteSettings"/>
               <category android:name="androidx.browser.trusted.category.TrustedWebActivities"/>
               <category android:name="androidx.browser.trusted.category.TrustedWebActivitySplashScreensV1"/>
               <category android:name="androidx.browser.trusted.category.WebShareTargetV2"/>
@@ -1220,7 +1225,8 @@ by a child template that "extends" this file.
              payment method, shipping address, or shipping option -->
         <service
             android:name="org.chromium.components.payments.PaymentDetailsUpdateService"
-            android:exported="true"/>
+            android:exported="true"
+            tools:ignore="ExportedService"/>
 
         <receiver android:name="org.chromium.chrome.browser.announcement.AnnouncementNotificationManager$Receiver"
             android:exported="false"/>
@@ -1232,6 +1238,9 @@ by a child template that "extends" this file.
             android:exported="false"/>
 
         <receiver android:name="org.chromium.chrome.browser.app.send_tab_to_self.SendTabToSelfNotificationReceiver"
+            android:exported="false"/>
+
+        <receiver android:name="org.chromium.chrome.browser.customtabs.CustomTabsShareBroadcastReceiver"
             android:exported="false"/>
 
         <receiver android:name="org.chromium.chrome.browser.sharing.click_to_call.ClickToCallMessageHandler$TapReceiver"
@@ -1253,19 +1262,19 @@ by a child template that "extends" this file.
 
         <service android:name="org.chromium.chrome.browser.media.MediaCaptureNotificationService"
             android:exported="false"/>
-        <service android:name="org.chromium.chrome.browser.media.ui.ChromeMediaNotificationControllerDelegate$PlaybackListenerService"
+        <service android:name="org.chromium.chrome.browser.media.ui.ChromeMediaNotificationControllerServices$PlaybackListenerService"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </service>
-        <service android:name="org.chromium.chrome.browser.media.ui.ChromeMediaNotificationControllerDelegate$PresentationListenerService"
+        <service android:name="org.chromium.chrome.browser.media.ui.ChromeMediaNotificationControllerServices$PresentationListenerService"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </service>
-        <service android:name="org.chromium.chrome.browser.media.ui.ChromeMediaNotificationControllerDelegate$CastListenerService"
+        <service android:name="org.chromium.chrome.browser.media.ui.ChromeMediaNotificationControllerServices$CastListenerService"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
@@ -1293,16 +1302,6 @@ by a child template that "extends" this file.
         {% endif %}
 
         {% block extra_application_definitions %}
-        <!-- Media route controllers to use for remote playback (cast).
-             This is here, rather than in code, since it varies between upstream and downstream,
-             yet we need this list of classes in the notification service, which belongs upstream
-             and doesn't run the downstream startup code. The Cast code will, for each media element,
-             choose the first MediaRouteController that can play it, so the order of the list can be important.
-             The most specific MediaRouteControllers should be listed first, followed by more generic ones.
-             The downstream manifest replaces this block, and hence replaces the list of media route
-             controllers with its own list. -->
-        <meta-data android:name="org.chromium.content.browser.REMOTE_MEDIA_PLAYERS"
-            android:value="org.chromium.chrome.browser.media.remote.DefaultMediaRouteController"/>
         {% endblock %}
       {% endmacro %}
       {% if not definitions_in_split %}
@@ -1350,7 +1349,47 @@ by a child template that "extends" this file.
 
       <!-- Downloads Google Sans from GMS Core -->
       <meta-data android:name="preloaded_fonts"
-          android:resource="@array/preloaded_google_sans_fonts" />
+          android:resource="@array/chrome_preloaded_google_sans_fonts" />
+
+      <meta-data android:name="android.allow_multiple_resumed_activities" android:value="true" />
+
+      <!-- Samsung MultiWindow Support -->
+      <meta-data android:name="com.samsung.android.sdk.multiwindow.enable"
+          android:value="true" />
+
+      {% if min_sdk_version|int < 24 %}
+      <meta-data android:name="com.samsung.android.sdk.multiwindow.multiinstance.enable"
+          android:value="true" />
+      <meta-data android:name="com.samsung.android.sdk.multiwindow.multiinstance.launchmode"
+          android:value="singleTask" />
+      {% endif %}
+
+      <meta-data android:name="com.samsung.android.sdk.multiwindow.penwindow.enable"
+          android:value="true"/>
+
+      {% if backup_key is defined %}
+      <!-- Backup keys are channel dependent -->
+      <meta-data android:name="com.google.android.backup.api_key"
+          android:value="{{ backup_key }}" />
+      {% endif %}
+
+      {% if channel in ['dev', 'canary', 'default'] %}
+      <meta-data android:name="com.sec.android.support.multiwindow" android:value="true" />
+      {% endif %}
+      <meta-data android:name="android.content.APP_RESTRICTIONS"
+          android:resource="@xml/app_restrictions"/>
+
+      {% if include_arcore_manifest_flag == 'true' %}
+      <!-- ARCore APK integration -->
+      <!-- This tag indicates that this application optionally uses ARCore. -->
+      <meta-data android:name="com.google.ar.core" android:value="optional" />
+      {% endif %}
+
+      <!-- Cast support -->
+      <meta-data
+          android:name=
+          "com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
+          android:value="org.chromium.components.media_router.caf.CastOptionsProvider"/>
 
       {% block base_application_definitions %}
       {% endblock %}

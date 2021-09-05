@@ -262,8 +262,7 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
         audio_setting =
             HostContentSettingsMapFactory::GetForProfile(profile)
                 ->GetContentSetting(request.security_origin, GURL(),
-                                    ContentSettingsType::MEDIASTREAM_MIC,
-                                    std::string());
+                                    ContentSettingsType::MEDIASTREAM_MIC);
 
         if (audio_setting != CONTENT_SETTING_ALLOW &&
             audio_setting != CONTENT_SETTING_BLOCK)
@@ -280,8 +279,7 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
         camera_setting =
             HostContentSettingsMapFactory::GetForProfile(profile)
                 ->GetContentSetting(request.security_origin, GURL(),
-                                    ContentSettingsType::MEDIASTREAM_CAMERA,
-                                    std::string());
+                                    ContentSettingsType::MEDIASTREAM_CAMERA);
         if (camera_setting != CONTENT_SETTING_ALLOW &&
             camera_setting != CONTENT_SETTING_BLOCK)
           break;
@@ -386,14 +384,14 @@ void WebViewPermissionHelper::OnMediaPermissionResponse(
       HostContentSettingsMapFactory::GetForProfile(profile)
           ->SetContentSettingCustomScope(
               primary_pattern, ContentSettingsPattern::Wildcard(),
-              ContentSettingsType::MEDIASTREAM_MIC, std::string(),
+              ContentSettingsType::MEDIASTREAM_MIC,
               allow ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK);
     }
     if (request.video_type  != blink::mojom::MediaStreamType::NO_SERVICE) {
       HostContentSettingsMapFactory::GetForProfile(profile)
           ->SetContentSettingCustomScope(
               primary_pattern, ContentSettingsPattern::Wildcard(),
-              ContentSettingsType::MEDIASTREAM_CAMERA, std::string(),
+              ContentSettingsType::MEDIASTREAM_CAMERA,
               allow ? CONTENT_SETTING_ALLOW : CONTENT_SETTING_BLOCK);
     }
   }

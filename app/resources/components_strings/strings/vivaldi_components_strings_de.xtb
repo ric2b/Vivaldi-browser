@@ -188,7 +188,7 @@
 <translation id="759889825892636187"><ph name="HOST_NAME" /> kann diese Anfrage momentan nicht verarbeiten.</translation>
 <translation id="7662298039739062396">Einstellung wird von einer Erweiterung gesteuert</translation>
 <translation id="7663736086183791259">Zertifikat <ph name="CERTIFICATE_VALIDITY" /></translation>
-<translation id="7669271284792375604">Angreifer auf dieser Website könnten versuchen, Sie dazu zu verleiten, Programme zu installieren, die die Nutzung Ihres Browsers beeinträchtigen (z.B. indem sie Ihre Startseite ändern oder zusätzliche Werbung auf von Ihnen besuchten Websites schalten).</translation>
+<translation id="7669271284792375604">Angreifer könnten Sie auf dieser Website dazu verleiten, Programme zu installieren, die Ihre Nutzung des Browsers beeinträchtigen (z.B. indem sie Ihre Startseite ändern oder zusätzliche Werbung auf von Ihnen besuchten Websites schalten).</translation>
 <translation id="7714464543167945231">Zertifikat</translation>
 <translation id="7716147886133743102">Von Ihrem Administrator blockiert</translation>
 <translation id="7716424297397655342">Diese Website kann nicht aus dem Cache geladen werden</translation>
@@ -206,7 +206,7 @@
 <translation id="8150722005171944719">Die Datei unter <ph name="URL" /> kann nicht gelesen werden. Sie wurde möglicherweise entfernt oder verschoben oder die Dateiberechtigungen verhindern den Zugriff.</translation>
 <translation id="8184538546369750125">Globalen Standard verwenden (Zulassen)</translation>
 <translation id="8211406090763984747">Verbindung ist sicher</translation>
-<translation id="8225771182978767009">Die Person, die diesen Computer eingerichtet hat, hat diese Website gesperrt.</translation>
+<translation id="8225771182978767009">Diese Webseite wurde durch die Person gesperrt, die diesen Computer eingerichtet hat.</translation>
 <translation id="8241707690549784388">Die gesuchte Seite hat die von Ihnen eingegebenen Informationen verwendet bzw. verarbeitet. Wenn Sie zu dieser Seite zurückgehen, wird eventuell eine schon ausgeführte Aktion wiederholt. Möchten Sie fortfahren?</translation>
 <translation id="8241712895048303527">Auf dieser Website blockieren</translation>
 <translation id="8286036467436129157">Anmelden</translation>

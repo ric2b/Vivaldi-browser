@@ -9,10 +9,12 @@
 #include "base/test/scoped_feature_list.h"
 #include "chromeos/components/phonehub/fake_phone_hub_manager.h"
 #include "chromeos/constants/chromeos_features.h"
+#include "ui/views/test/button_test_api.h"
 
 namespace ash {
 
-using Status = chromeos::phonehub::TetherController::Status;
+using TetherController = chromeos::phonehub::TetherController;
+using FindMyDeviceController = chromeos::phonehub::FindMyDeviceController;
 
 namespace {
 
@@ -21,11 +23,15 @@ class DummyEvent : public ui::Event {
   DummyEvent() : Event(ui::ET_UNKNOWN, base::TimeTicks(), 0) {}
 };
 
+constexpr base::TimeDelta kWaitForRequestTimeout =
+    base::TimeDelta::FromSeconds(10);
+
 }  // namespace
 
 class QuickActionsViewTest : public AshTestBase {
  public:
-  QuickActionsViewTest() = default;
+  QuickActionsViewTest()
+      : AshTestBase(base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
   ~QuickActionsViewTest() override = default;
 
   // AshTestBase:
@@ -60,17 +66,108 @@ class QuickActionsViewTest : public AshTestBase {
   base::test::ScopedFeatureList feature_list_;
 };
 
-TEST_F(QuickActionsViewTest, QuickActionsToggle) {
+TEST_F(QuickActionsViewTest, EnableHotspotVisibility) {
+  tether_controller()->SetStatus(
+      TetherController::Status::kIneligibleForFeature);
+
+  // Enable Hotspot button should not be shown if the feature is ineligible.
+  EXPECT_FALSE(actions_view()->enable_hotspot_for_testing()->GetVisible());
+
+  tether_controller()->SetStatus(
+      TetherController::Status::kConnectionAvailable);
+  // Enable Hotspot button should be shown if the feature is available.
+  EXPECT_TRUE(actions_view()->enable_hotspot_for_testing()->GetVisible());
+}
+
+TEST_F(QuickActionsViewTest, EnableHotspotToggle) {
+  tether_controller()->SetStatus(
+      TetherController::Status::kConnectionAvailable);
+
+  // Simulate a toggle press. Status should be connecting.
+  views::test::ButtonTestApi test_api(
+      actions_view()->enable_hotspot_for_testing()->icon_button());
+  test_api.NotifyClick(DummyEvent());
+  EXPECT_EQ(TetherController::Status::kConnecting,
+            tether_controller()->GetStatus());
+
+  tether_controller()->SetStatus(TetherController::Status::kConnected);
+  // Toggling again will change the state.
+  test_api.NotifyClick(DummyEvent());
+  EXPECT_EQ(TetherController::Status::kConnecting,
+            tether_controller()->GetStatus());
+}
+
+TEST_F(QuickActionsViewTest, SilencePhoneToggle) {
+  // Allow silence phone to be toggle-able.
+  dnd_controller()->SetDoNotDisturbStateInternal(
+      /*is_dnd_enabled=*/false,
+      /*can_request_new_dnd_state=*/true);
+
   // Initially, silence phone is not enabled.
   EXPECT_FALSE(dnd_controller()->IsDndEnabled());
 
-  // Toggle the button will enable the feature.
-  actions_view()->silence_phone_->ButtonPressed(nullptr, DummyEvent());
+  // Toggling the button will enable the feature.
+  views::test::ButtonTestApi test_api(
+      actions_view()->silence_phone_for_testing()->icon_button());
+  test_api.NotifyClick(DummyEvent());
   EXPECT_TRUE(dnd_controller()->IsDndEnabled());
 
-  // Togge again to disable.
-  actions_view()->silence_phone_->ButtonPressed(nullptr, DummyEvent());
+  // Locate phone should be disabled when do not disturb is enabled.
+  EXPECT_FALSE(actions_view()->locate_phone_for_testing()->GetEnabled());
+
+  // Toggle again to disable.
+  test_api.NotifyClick(DummyEvent());
   EXPECT_FALSE(dnd_controller()->IsDndEnabled());
+  EXPECT_TRUE(actions_view()->locate_phone_for_testing()->GetEnabled());
+
+  // Test the error state.
+  dnd_controller()->SetShouldRequestFail(true);
+  test_api.NotifyClick(DummyEvent());
+
+  // In error state, do not disturb is disabled but the button should still be
+  // on after being pressed.
+  EXPECT_FALSE(dnd_controller()->IsDndEnabled());
+  EXPECT_TRUE(actions_view()->silence_phone_for_testing()->IsToggled());
+
+  // After a certain time, the button should be corrected to be off.
+  task_environment()->FastForwardBy(kWaitForRequestTimeout);
+  EXPECT_FALSE(actions_view()->silence_phone_for_testing()->IsToggled());
+
+  dnd_controller()->SetShouldRequestFail(false);
+}
+
+TEST_F(QuickActionsViewTest, LocatePhoneToggle) {
+  // Initially, locate phone is not enabled.
+  EXPECT_EQ(FindMyDeviceController::Status::kRingingOff,
+            find_my_device_controller()->GetPhoneRingingStatus());
+
+  // Toggling the button will enable the feature.
+  views::test::ButtonTestApi test_api(
+      actions_view()->locate_phone_for_testing()->icon_button());
+  test_api.NotifyClick(DummyEvent());
+  EXPECT_EQ(FindMyDeviceController::Status::kRingingOn,
+            find_my_device_controller()->GetPhoneRingingStatus());
+
+  // Toggle again to disable.
+  test_api.NotifyClick(DummyEvent());
+  EXPECT_EQ(FindMyDeviceController::Status::kRingingOff,
+            find_my_device_controller()->GetPhoneRingingStatus());
+
+  // Test the error state.
+  find_my_device_controller()->SetShouldRequestFail(true);
+  test_api.NotifyClick(DummyEvent());
+
+  // In error state, find my device is disabled but the button should still be
+  // on after being pressed.
+  EXPECT_EQ(FindMyDeviceController::Status::kRingingOff,
+            find_my_device_controller()->GetPhoneRingingStatus());
+  EXPECT_TRUE(actions_view()->locate_phone_for_testing()->IsToggled());
+
+  // After a certain time, the button should be corrected to be off.
+  task_environment()->FastForwardBy(kWaitForRequestTimeout);
+  EXPECT_FALSE(actions_view()->locate_phone_for_testing()->IsToggled());
+
+  find_my_device_controller()->SetShouldRequestFail(false);
 }
 
 }  // namespace ash

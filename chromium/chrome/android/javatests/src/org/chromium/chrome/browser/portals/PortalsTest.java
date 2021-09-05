@@ -32,6 +32,8 @@ import org.chromium.base.ContextUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
@@ -54,8 +56,6 @@ import org.chromium.components.location.LocationUtils;
 import org.chromium.components.permissions.PermissionDialogController;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.test.util.Coordinates;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
@@ -279,6 +279,7 @@ public class PortalsTest {
     @Test
     @MediumTest
     @Feature({"Portals"})
+    @DisabledTest(message = "https://crbug.com/1024850")
     public void testTouchTransfer() throws Exception {
         mActivityTestRule.startMainActivityWithURL(mTestServer.getURL(
                 "/chrome/test/data/android/portals/touch-transfer.html?event=overscroll"));
@@ -320,6 +321,7 @@ public class PortalsTest {
     @Test
     @MediumTest
     @Feature({"Portals"})
+    @DisabledTest(message = "https://crbug.com/1024850")
     public void testTouchTransferAfterTouchStartActivate() throws Exception {
         mActivityTestRule.startMainActivityWithURL(mTestServer.getURL(
                 "/chrome/test/data/android/portals/touch-transfer.html?event=touchstart"));

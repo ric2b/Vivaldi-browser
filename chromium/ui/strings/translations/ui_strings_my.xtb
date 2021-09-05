@@ -8,7 +8,7 @@
 <translation id="1169783199079129864">{MINUTES,plural, =1{၁ မိနစ်}other{# မိနစ်}}</translation>
 <translation id="1181037720776840403">ဖယ်ရှားရန်</translation>
 <translation id="1201402288615127009">ရှေ့သို့</translation>
-<translation id="1218444235442067213"><ph name="APP_NAME" />၊ Play စတိုးအက်ပ်</translation>
+<translation id="1218444235442067213"><ph name="APP_NAME" />၊ Play Store အက်ပ်</translation>
 <translation id="1243314992276662751">အာပ်လုဒ် လုပ်ရန်</translation>
 <translation id="1266864766717917324"><ph name="CONTENT_TYPE" /> ကို မျှဝေ၍မရပါ။</translation>
 <translation id="1269641567813814718">Win</translation>
@@ -23,6 +23,7 @@
 <translation id="1450753235335490080"><ph name="CONTENT_TYPE" /> ကို မျှဝေ၍ မရပါ</translation>
 <translation id="1487931858675166540"><ph name="FIRST_ITEM_TITLE" /> ကို <ph name="SECOND_ITEM_TITLE" /> ဖြင့် လှဲလှယ်ထားသည်</translation>
 <translation id="1498028757988366001">ဤအရာကို ယခင်က ရှာဖွေဖူးသည်။ "<ph name="QUERY" />" အား သင့်မှတ်တမ်းမှ ဖျက်ခြင်းက စက်ပစ္စည်းအားလုံးရှိ သင်၏အကောင့်မှ ၎င်းကို အပြီးဖယ်ရှားလိုက်ပါမည်။</translation>
+<translation id="1510238584712386396">Launcher</translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{၁ မိနစ်နှင့် }other{# မိနစ်နှင့် }}</translation>
 <translation id="1643823602425662293">အကြောင်းကြားချက်</translation>
 <translation id="169515659049020177">Shift ကီး</translation>
@@ -99,6 +100,7 @@
 <translation id="3600969208114796418"><ph name="SAVEAS_EXTENSION_TYPE" /> ဖိုင်</translation>
 <translation id="3608915363409716668"><ph name="MAXIMUM_VALUE" />+</translation>
 <translation id="3618849550573277856">“<ph name="LOOKUP_STRING" />”ကို ကြည့်ရန်</translation>
+<translation id="3622035490309591977">ကလစ်ဘုတ် မှတ်တမ်း</translation>
 <translation id="364720409959344976">တင်ရန် ဖိုင်တွဲရွေးပါ</translation>
 <translation id="3660179305079774227">အပေါ်မြား</translation>
 <translation id="3670030362669914947">နံပါတ်</translation>
@@ -151,6 +153,7 @@
 <translation id="5763338081255973061">{DAYS,plural, =0{ယနေ့ အသုံးပြုထားသည်}=1{ပြီးခဲ့သော ၁ ရက်က အသုံးပြုထားသည်}other{ပြီးခဲ့သော # ရက်က အသုံးပြုထားသည်}}</translation>
 <translation id="5768079895599174203">{DAYS,plural, =1{၁ ရက်နှင့် }other{# ရက်နှင့် }}</translation>
 <translation id="5789643057113097023">.</translation>
+<translation id="5843690142429128814">ပုံ။</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{၁နှစ် အတွင်း}other{#နှစ် အတွင်း}}</translation>
 <translation id="588258955323874662">မျက်နှာပြင် အပြည့်</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{၁ စက္ကန့်ကျန်၏}other{# စက္ကန့်ကျန်၏}}</translation>
@@ -179,7 +182,7 @@
 <translation id="6503257047630241175">RTF အကြောင်းအရာ</translation>
 <translation id="6539092367496845964">တစ်ခုခု မှားသွားသည်။ နောက်မှ ထပ်စမ်းကြည့်ပါ။</translation>
 <translation id="654149438358937226">သတိပေးချက်များအားလုံးကို ပိတ်ရန်</translation>
-<translation id="6567071839949112727">ပင်မကို ကလစ်နှိပ်ပါ</translation>
+<translation id="6567071839949112727">ပင်မကို နှိပ်ပါ</translation>
 <translation id="6578407462441924264">အမည်ပေးမထား</translation>
 <translation id="6612467943526193239">တိုင်းတာချိန်ညှိမှုမှ ထွက်ရန် Esc ကို နှိပ်ပါ။</translation>
 <translation id="6620110761915583480">ဖိုင် သိမ်းရန်</translation>
@@ -191,6 +194,7 @@
 <translation id="6845533974506654842">နှိပ်ရန်</translation>
 <translation id="6863590663815976734">{HOURS,plural, =1{ 1 နာရီကျန်၏}other{# နာရီကျန်၏}}</translation>
 <translation id="688711909580084195">ခေါင်းစဉ်မဲ့ ဝဘ်စာမျက်နှာ</translation>
+<translation id="6902419395050653510">HTML အကြောင်းအရာ။</translation>
 <translation id="6907759265145635167"><ph name="QUANTITY" /> PB/s</translation>
 <translation id="6917971086528278418">{YEARS,plural, =1{၁ နှစ် ကျန်သည်}other{# နှစ် ကျန်သည်}}</translation>
 <translation id="6945221475159498467">ရွေးရန်</translation>

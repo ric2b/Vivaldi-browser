@@ -323,12 +323,16 @@ export function getZoomableViewport(
   return viewport;
 }
 
-/** @param {Function} f */
-export async function testAsync(f) {
-  try {
-    await f();
-    chrome.test.succeed();
-  } catch (e) {
-    chrome.test.fail(e.stack);
+/**
+ * Async spin until predicate() returns true.
+ * @param {function(): boolean} predicate
+ * @return {!Promise|undefined}
+ */
+export function waitFor(predicate) {
+  if (predicate()) {
+    return;
   }
+  return new Promise(resolve => setTimeout(() => {
+                       resolve(waitFor(predicate));
+                     }, 0));
 }

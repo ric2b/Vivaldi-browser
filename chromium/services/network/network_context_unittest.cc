@@ -13,7 +13,7 @@
 
 #include "base/barrier_closure.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/span.h"
 #include "base/files/file.h"
@@ -32,7 +32,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/gtest_util.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_entropy_provider.h"
@@ -45,6 +45,7 @@
 #include "base/time/default_tick_clock.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/network_session_configurator/browser/network_session_configurator.h"
 #include "components/network_session_configurator/common/network_switches.h"
 #include "components/prefs/testing_pref_service.h"
@@ -71,6 +72,7 @@
 #include "net/cookies/cookie_options.h"
 #include "net/cookies/cookie_store.h"
 #include "net/cookies/cookie_util.h"
+#include "net/disk_cache/cache_util.h"
 #include "net/disk_cache/disk_cache.h"
 #include "net/dns/context_host_resolver.h"
 #include "net/dns/dns_test_util.h"
@@ -153,9 +155,9 @@
 #include "net/reporting/reporting_test_util.h"
 #endif  // BUILDFLAG(ENABLE_REPORTING)
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
 #include "services/network/mock_mojo_dhcp_wpad_url_client.h"
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_ASH)
 
 namespace network {
 
@@ -231,7 +233,7 @@ std::unique_ptr<TestURLLoaderClient> FetchRequest(
   // NIK must be consistent with |site_for_cookies|.
   if (request.site_for_cookies.IsNull()) {
     params->isolation_info = net::IsolationInfo::Create(
-        net::IsolationInfo::RedirectMode::kUpdateNothing,
+        net::IsolationInfo::RequestType::kOther,
         url::Origin::Create(GURL("https://abc.com")),
         url::Origin::Create(GURL("https://xyz.com")), request.site_for_cookies);
   } else {
@@ -910,6 +912,66 @@ TEST_F(NetworkContextTest, DiskCache) {
             GetBackendType(backend));
 }
 
+class DiskCacheSizeTest : public NetworkContextTest {
+ public:
+  DiskCacheSizeTest() = default;
+  ~DiskCacheSizeTest() override = default;
+
+  int64_t VerifyDiskCacheSize(int scale = 100) {
+    base::test::ScopedFeatureList scoped_feature_list;
+    if (scale != 100) {
+      std::map<std::string, std::string> field_trial_params;
+      field_trial_params["percent_relative_size"] = base::NumberToString(scale);
+      scoped_feature_list.InitAndEnableFeatureWithParameters(
+          disk_cache::kChangeDiskCacheSizeExperiment, field_trial_params);
+    }
+
+    base::HistogramTester histogram_tester;
+
+    mojom::NetworkContextParamsPtr context_params = CreateContextParams();
+    context_params->http_cache_enabled = true;
+
+    base::ScopedTempDir temp_dir;
+    EXPECT_TRUE(temp_dir.CreateUniqueTempDir());
+    context_params->http_cache_path = temp_dir.GetPath();
+
+    std::unique_ptr<NetworkContext> network_context =
+        CreateContextWithParams(std::move(context_params));
+
+    net::HttpCache* cache = network_context->url_request_context()
+                                ->http_transaction_factory()
+                                ->GetCache();
+    EXPECT_TRUE(cache);
+
+    disk_cache::Backend* backend = nullptr;
+    net::TestCompletionCallback callback;
+    int rv = cache->GetBackend(&backend, callback.callback());
+    EXPECT_EQ(net::OK, callback.GetResult(rv));
+    EXPECT_TRUE(backend);
+
+    EXPECT_EQ(net::DISK_CACHE, backend->GetCacheType());
+
+    int64_t max_file_size = backend->MaxFileSize();
+    histogram_tester.ExpectTotalCount("HttpCache.MaxFileSizeOnInit", 1);
+    histogram_tester.ExpectUniqueSample("HttpCache.MaxFileSizeOnInit",
+                                        max_file_size / 1024, 1);
+
+    return max_file_size;
+  }
+};
+
+TEST_F(DiskCacheSizeTest, DiskCacheSize) {
+  int64_t max_file_size = VerifyDiskCacheSize();
+
+  // Scale to 200%. The size should be twice of |max_file_size| but
+  // since max size is capped on 20% of available size, checking for the size to
+  // be between max_file_size and max_file_size*2.
+  int64_t max_file_size_scaled = VerifyDiskCacheSize(200);
+
+  EXPECT_GE(max_file_size_scaled, max_file_size);
+  EXPECT_LE(max_file_size_scaled, 2 * max_file_size);
+}
+
 // This makes sure that network_session_configurator::ChooseCacheType is
 // connected to NetworkContext.
 TEST_F(NetworkContextTest, SimpleCache) {
@@ -1548,7 +1610,9 @@ TEST_F(NetworkContextTest, NotifyExternalCacheHit) {
     GURL test_url(entry_urls[i]);
 
     net::NetworkIsolationKey key;
-    network_context->NotifyExternalCacheHit(test_url, test_url.scheme(), key);
+    network_context->NotifyExternalCacheHit(
+        test_url, test_url.scheme(), key,
+        false /* is_subframe_document_resource */);
     EXPECT_EQ(i + 1, mock_cache.disk_cache()->GetExternalCacheHits().size());
 
     // Note: if this breaks check HttpCache::GenerateCacheKey() for changes.
@@ -1585,12 +1649,22 @@ TEST_F(NetworkContextTest, NotifyExternalCacheHit_Split) {
     GURL test_url(entry_urls[i]);
 
     net::NetworkIsolationKey key = net::NetworkIsolationKey(origin_a, origin_a);
-    network_context->NotifyExternalCacheHit(test_url, test_url.scheme(), key);
+
+    bool is_subframe_document_resource = false;
+    std::string subframe_prefix;
+    if (i / 2) {
+      is_subframe_document_resource = true;
+      subframe_prefix = "s_";
+    }
+
+    network_context->NotifyExternalCacheHit(test_url, test_url.scheme(), key,
+                                            is_subframe_document_resource);
     EXPECT_EQ(i + 1, mock_cache.disk_cache()->GetExternalCacheHits().size());
 
     // Since this is splitting the cache, the key also includes the network
-    // isolation key.
-    EXPECT_EQ(base::StrCat({"_dk_", key.ToString(), " ", test_url.spec()}),
+    // isolation key and optionally, the subframe prefix.
+    EXPECT_EQ(base::StrCat({"_dk_", subframe_prefix, key.ToString(), " ",
+                            test_url.spec()}),
               mock_cache.disk_cache()->GetExternalCacheHits().back());
   }
 }
@@ -1927,7 +2001,7 @@ TEST_F(NetworkContextTest, LookupServerBasicAuthCredentials) {
   EXPECT_FALSE(result.has_value());
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
 base::Optional<net::AuthCredentials> GetProxyAuthCredentials(
     NetworkContext* network_context,
     const net::ProxyServer& proxy_server,
@@ -2052,8 +2126,8 @@ TEST_F(NetworkContextTest, ClearReportingCacheReports) {
       reporting_service.get());
 
   GURL domain("http://google.com");
-  reporting_service->QueueReport(domain, "Mozilla/1.0", "group", "type",
-                                 nullptr, 0);
+  reporting_service->QueueReport(domain, net::NetworkIsolationKey(),
+                                 "Mozilla/1.0", "group", "type", nullptr, 0);
 
   std::vector<const net::ReportingReport*> reports;
   reporting_cache->GetReports(&reports);
@@ -2081,12 +2155,12 @@ TEST_F(NetworkContextTest, ClearReportingCacheReportsWithFilter) {
   network_context->url_request_context()->set_reporting_service(
       reporting_service.get());
 
-  GURL domain1("http://google.com");
-  reporting_service->QueueReport(domain1, "Mozilla/1.0", "group", "type",
-                                 nullptr, 0);
-  GURL domain2("http://chromium.org");
-  reporting_service->QueueReport(domain2, "Mozilla/1.0", "group", "type",
-                                 nullptr, 0);
+  GURL url1("http://google.com");
+  reporting_service->QueueReport(url1, net::NetworkIsolationKey(),
+                                 "Mozilla/1.0", "group", "type", nullptr, 0);
+  GURL url2("http://chromium.org");
+  reporting_service->QueueReport(url2, net::NetworkIsolationKey(),
+                                 "Mozilla/1.0", "group", "type", nullptr, 0);
 
   std::vector<const net::ReportingReport*> reports;
   reporting_cache->GetReports(&reports);
@@ -2103,7 +2177,7 @@ TEST_F(NetworkContextTest, ClearReportingCacheReportsWithFilter) {
 
   reporting_cache->GetReports(&reports);
   EXPECT_EQ(1u, reports.size());
-  EXPECT_EQ(domain2, reports.front()->url);
+  EXPECT_EQ(url2, reports.front()->url);
 }
 
 TEST_F(NetworkContextTest,
@@ -2120,12 +2194,12 @@ TEST_F(NetworkContextTest,
   network_context->url_request_context()->set_reporting_service(
       reporting_service.get());
 
-  GURL domain1("http://192.168.0.1");
-  reporting_service->QueueReport(domain1, "Mozilla/1.0", "group", "type",
-                                 nullptr, 0);
-  GURL domain2("http://192.168.0.2");
-  reporting_service->QueueReport(domain2, "Mozilla/1.0", "group", "type",
-                                 nullptr, 0);
+  GURL url1("http://192.168.0.1");
+  reporting_service->QueueReport(url1, net::NetworkIsolationKey(),
+                                 "Mozilla/1.0", "group", "type", nullptr, 0);
+  GURL url2("http://192.168.0.2");
+  reporting_service->QueueReport(url2, net::NetworkIsolationKey(),
+                                 "Mozilla/1.0", "group", "type", nullptr, 0);
 
   std::vector<const net::ReportingReport*> reports;
   reporting_cache->GetReports(&reports);
@@ -2142,7 +2216,7 @@ TEST_F(NetworkContextTest,
 
   reporting_cache->GetReports(&reports);
   EXPECT_EQ(1u, reports.size());
-  EXPECT_EQ(domain2, reports.front()->url);
+  EXPECT_EQ(url2, reports.front()->url);
 }
 
 TEST_F(NetworkContextTest, ClearEmptyReportingCacheReports) {
@@ -2307,18 +2381,19 @@ TEST_F(NetworkContextTest, ClearNetworkErrorLogging) {
   ASSERT_TRUE(logging_service);
 
   GURL domain("https://google.com");
-  logging_service->OnHeader(url::Origin::Create(domain),
+  logging_service->OnHeader(net::NetworkIsolationKey(),
+                            url::Origin::Create(domain),
                             net::IPAddress(192, 168, 0, 1),
                             "{\"report_to\":\"group\",\"max_age\":86400}");
 
-  ASSERT_EQ(1u, logging_service->GetPolicyOriginsForTesting().size());
+  ASSERT_EQ(1u, logging_service->GetPolicyKeysForTesting().size());
 
   base::RunLoop run_loop;
   network_context->ClearNetworkErrorLogging(nullptr /* filter */,
                                             run_loop.QuitClosure());
   run_loop.Run();
 
-  EXPECT_TRUE(logging_service->GetPolicyOriginsForTesting().empty());
+  EXPECT_TRUE(logging_service->GetPolicyKeysForTesting().empty());
 }
 
 TEST_F(NetworkContextTest, ClearNetworkErrorLoggingWithFilter) {
@@ -2332,15 +2407,17 @@ TEST_F(NetworkContextTest, ClearNetworkErrorLoggingWithFilter) {
   ASSERT_TRUE(logging_service);
 
   GURL domain1("https://google.com");
-  logging_service->OnHeader(url::Origin::Create(domain1),
+  logging_service->OnHeader(net::NetworkIsolationKey(),
+                            url::Origin::Create(domain1),
                             net::IPAddress(192, 168, 0, 1),
                             "{\"report_to\":\"group\",\"max_age\":86400}");
   GURL domain2("https://chromium.org");
-  logging_service->OnHeader(url::Origin::Create(domain2),
+  logging_service->OnHeader(net::NetworkIsolationKey(),
+                            url::Origin::Create(domain2),
                             net::IPAddress(192, 168, 0, 1),
                             "{\"report_to\":\"group\",\"max_age\":86400}");
 
-  ASSERT_EQ(2u, logging_service->GetPolicyOriginsForTesting().size());
+  ASSERT_EQ(2u, logging_service->GetPolicyKeysForTesting().size());
 
   mojom::ClearDataFilterPtr filter = mojom::ClearDataFilter::New();
   filter->type = mojom::ClearDataFilter_Type::KEEP_MATCHES;
@@ -2351,11 +2428,13 @@ TEST_F(NetworkContextTest, ClearNetworkErrorLoggingWithFilter) {
                                             run_loop.QuitClosure());
   run_loop.Run();
 
-  std::set<url::Origin> policy_origins =
-      logging_service->GetPolicyOriginsForTesting();
-  EXPECT_EQ(1u, policy_origins.size());
-  EXPECT_NE(policy_origins.end(),
-            policy_origins.find(url::Origin::Create(domain2)));
+  std::set<net::NetworkErrorLoggingService::NelPolicyKey> policy_keys =
+      logging_service->GetPolicyKeysForTesting();
+  EXPECT_EQ(1u, policy_keys.size());
+  EXPECT_THAT(
+      policy_keys,
+      testing::ElementsAre(net::NetworkErrorLoggingService::NelPolicyKey(
+          net::NetworkIsolationKey(), url::Origin::Create(domain2))));
 }
 
 TEST_F(NetworkContextTest, ClearEmptyNetworkErrorLogging) {
@@ -2368,14 +2447,14 @@ TEST_F(NetworkContextTest, ClearEmptyNetworkErrorLogging) {
       network_context->url_request_context()->network_error_logging_service();
   ASSERT_TRUE(logging_service);
 
-  ASSERT_TRUE(logging_service->GetPolicyOriginsForTesting().empty());
+  ASSERT_TRUE(logging_service->GetPolicyKeysForTesting().empty());
 
   base::RunLoop run_loop;
   network_context->ClearNetworkErrorLogging(nullptr /* filter */,
                                             run_loop.QuitClosure());
   run_loop.Run();
 
-  EXPECT_TRUE(logging_service->GetPolicyOriginsForTesting().empty());
+  EXPECT_TRUE(logging_service->GetPolicyKeysForTesting().empty());
 }
 
 TEST_F(NetworkContextTest, ClearEmptyNetworkErrorLoggingWithNoService) {
@@ -2423,7 +2502,7 @@ bool SetCookieHelper(NetworkContext* network_context,
       net::CanonicalCookie(key, value, url.host(), "/", base::Time(),
                            base::Time(), base::Time(), true, false,
                            net::CookieSameSite::NO_RESTRICTION,
-                           net::COOKIE_PRIORITY_LOW),
+                           net::COOKIE_PRIORITY_LOW, false),
       url, net::CookieOptions::MakeAllInclusive(),
       base::BindOnce(&SetCookieCallback, &run_loop, &result));
   run_loop.Run();
@@ -2444,7 +2523,7 @@ TEST_F(NetworkContextTest, CookieManager) {
   net::CanonicalCookie cookie("TestCookie", "1", "www.test.com", "/",
                               base::Time(), base::Time(), base::Time(), false,
                               false, net::CookieSameSite::LAX_MODE,
-                              net::COOKIE_PRIORITY_LOW);
+                              net::COOKIE_PRIORITY_LOW, false);
   cookie_manager_remote->SetCanonicalCookie(
       cookie, net::cookie_util::SimulatedCookieSource(cookie, "https"),
       net::CookieOptions::MakeAllInclusive(),
@@ -2722,11 +2801,11 @@ TEST_F(NetworkContextTest, ProxyLookupWithNetworkIsolationKey) {
   context_params->proxy_config_client_receiver =
       config_client.BindNewPipeAndPassReceiver();
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
   context_params->dhcp_wpad_url_client =
       network::MockMojoDhcpWpadUrlClient::CreateWithSelfOwnedReceiver(
           std::string());
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_ASH)
 
   std::unique_ptr<NetworkContext> network_context =
       CreateContextWithParams(std::move(context_params));
@@ -2819,11 +2898,11 @@ TEST_F(NetworkContextTest, PacQuickCheck) {
   // unsupported platforms, we'd simply ignore the PAC quick check input and
   // default to false.
   mojom::NetworkContextParamsPtr context_params = CreateContextParams();
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
   context_params->dhcp_wpad_url_client =
       network::MockMojoDhcpWpadUrlClient::CreateWithSelfOwnedReceiver(
           std::string());
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_ASH)
   context_params->proxy_resolver_factory =
       MockMojoProxyResolverFactory::Create();
   std::unique_ptr<NetworkContext> network_context =
@@ -2837,11 +2916,11 @@ TEST_F(NetworkContextTest, PacQuickCheck) {
 
   // Explicitly enable.
   context_params = CreateContextParams();
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
   context_params->dhcp_wpad_url_client =
       network::MockMojoDhcpWpadUrlClient::CreateWithSelfOwnedReceiver(
           std::string());
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_ASH)
   context_params->proxy_resolver_factory =
       MockMojoProxyResolverFactory::Create();
   context_params->pac_quick_check_enabled = true;
@@ -2855,11 +2934,11 @@ TEST_F(NetworkContextTest, PacQuickCheck) {
 
   // Explicitly disable.
   context_params = CreateContextParams();
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
   context_params->dhcp_wpad_url_client =
       network::MockMojoDhcpWpadUrlClient::CreateWithSelfOwnedReceiver(
           std::string());
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_ASH)
   context_params->proxy_resolver_factory =
       MockMojoProxyResolverFactory::Create();
   context_params->pac_quick_check_enabled = false;
@@ -3730,11 +3809,11 @@ TEST_F(NetworkContextTest, CreateHostResolverWithConfigOverrides) {
   net::IPAddress result;
   CHECK(result.AssignFromIPLiteral(kResult));
   net::MockDnsClientRuleList rules;
-  rules.emplace_back(kQueryHostname, net::dns_protocol::kTypeA,
-                     false /* secure */,
-                     net::MockDnsClientRule::Result(
-                         net::BuildTestDnsResponse(kQueryHostname, result)),
-                     false /* delay */);
+  rules.emplace_back(
+      kQueryHostname, net::dns_protocol::kTypeA, false /* secure */,
+      net::MockDnsClientRule::Result(
+          net::BuildTestDnsAddressResponse(kQueryHostname, result)),
+      false /* delay */);
   rules.emplace_back(
       kQueryHostname, net::dns_protocol::kTypeAAAA, false /* secure */,
       net::MockDnsClientRule::Result(net::MockDnsClientRule::ResultType::EMPTY),
@@ -3911,7 +3990,7 @@ TEST_F(NetworkContextTest, CanSetCookieFalseIfCookiesBlocked) {
   net::CanonicalCookie cookie("TestCookie", "1", "www.test.com", "/",
                               base::Time(), base::Time(), base::Time(), false,
                               false, net::CookieSameSite::LAX_MODE,
-                              net::COOKIE_PRIORITY_LOW);
+                              net::COOKIE_PRIORITY_LOW, false);
   EXPECT_TRUE(
       network_context->url_request_context()->network_delegate()->CanSetCookie(
           *request, cookie, nullptr, true));
@@ -3931,7 +4010,7 @@ TEST_F(NetworkContextTest, CanSetCookieTrueIfCookiesAllowed) {
   net::CanonicalCookie cookie("TestCookie", "1", "www.test.com", "/",
                               base::Time(), base::Time(), base::Time(), false,
                               false, net::CookieSameSite::LAX_MODE,
-                              net::COOKIE_PRIORITY_LOW);
+                              net::COOKIE_PRIORITY_LOW, false);
 
   SetDefaultContentSetting(CONTENT_SETTING_ALLOW, network_context.get());
   EXPECT_TRUE(
@@ -5061,11 +5140,11 @@ TEST_F(NetworkContextTest, ProxyErrorClientNotifiedOfPacError) {
       mojom::NetworkContextParams::New();
   context_params->proxy_error_client = proxy_error_client.CreateRemote();
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
   context_params->dhcp_wpad_url_client =
       network::MockMojoDhcpWpadUrlClient::CreateWithSelfOwnedReceiver(
           std::string());
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_ASH)
 
   // The PAC URL doesn't matter, since the test is configured to use a
   // mock ProxyResolverFactory which doesn't actually evaluate it. It just
@@ -6443,8 +6522,8 @@ class NetworkContextSplitCacheTest : public NetworkContextTest {
     auto params = mojom::URLLoaderFactoryParams::New();
     params->process_id = mojom::kBrowserProcessId;
     params->is_corb_enabled = false;
-    if (isolation_info.redirect_mode() ==
-        net::IsolationInfo::RedirectMode::kUpdateNothing) {
+    if (isolation_info.request_type() ==
+        net::IsolationInfo::RequestType::kOther) {
       params->isolation_info = isolation_info;
     } else {
       request.trusted_params = ResourceRequest::TrustedParams();
@@ -6513,18 +6592,18 @@ TEST_F(NetworkContextSplitCacheTest,
        NavigationResourceCachedUsingNetworkIsolationKey) {
   GURL url = test_server()->GetURL("othersite.test", "/main.html");
   url::Origin origin_a = url::Origin::Create(url);
-  net::IsolationInfo info_a = net::IsolationInfo::Create(
-      net::IsolationInfo::RedirectMode::kUpdateFrameOnly, origin_a, origin_a,
-      net::SiteForCookies());
+  net::IsolationInfo info_a =
+      net::IsolationInfo::Create(net::IsolationInfo::RequestType::kSubFrame,
+                                 origin_a, origin_a, net::SiteForCookies());
   LoadAndVerifyCached(url, info_a, false /* was_cached */);
 
   // Load again with a different isolation key. The cached entry should not be
   // loaded.
   GURL url_b = test_server()->GetURL("/main.html");
   url::Origin origin_b = url::Origin::Create(url_b);
-  net::IsolationInfo info_b = net::IsolationInfo::Create(
-      net::IsolationInfo::RedirectMode::kUpdateFrameOnly, origin_b, origin_b,
-      net::SiteForCookies());
+  net::IsolationInfo info_b =
+      net::IsolationInfo::Create(net::IsolationInfo::RequestType::kSubFrame,
+                                 origin_b, origin_b, net::SiteForCookies());
   LoadAndVerifyCached(url_b, info_b, false /* was_cached */);
 
   // Load again with the same isolation key. The cached entry should be loaded.
@@ -6541,17 +6620,17 @@ TEST_F(NetworkContextSplitCacheTest,
 
   GURL url = test_server()->GetURL("/resource");
   url::Origin origin_a = url::Origin::Create(GURL("http://a.test/"));
-  net::IsolationInfo info_a = net::IsolationInfo::Create(
-      net::IsolationInfo::RedirectMode::kUpdateNothing, origin_a, origin_a,
-      net::SiteForCookies());
+  net::IsolationInfo info_a =
+      net::IsolationInfo::Create(net::IsolationInfo::RequestType::kOther,
+                                 origin_a, origin_a, net::SiteForCookies());
   LoadAndVerifyCached(url, info_a, false /* was_cached */);
 
   // Load again with a different isolation key. The cached entry should not be
   // loaded.
   url::Origin origin_b = url::Origin::Create(GURL("http://b.test/"));
-  net::IsolationInfo info_b = net::IsolationInfo::Create(
-      net::IsolationInfo::RedirectMode::kUpdateNothing, origin_a, origin_b,
-      net::SiteForCookies());
+  net::IsolationInfo info_b =
+      net::IsolationInfo::Create(net::IsolationInfo::RequestType::kOther,
+                                 origin_a, origin_b, net::SiteForCookies());
   LoadAndVerifyCached(url, info_b, false /* was_cached */);
 }
 
@@ -6563,7 +6642,7 @@ TEST_F(NetworkContextSplitCacheTest,
       test_server()->GetURL("othersite.test", "/title1.html").spec());
   url::Origin origin = url::Origin::Create(url);
   net::IsolationInfo info = net::IsolationInfo::Create(
-      net::IsolationInfo::RedirectMode::kUpdateTopFrame, origin, origin,
+      net::IsolationInfo::RequestType::kMainFrame, origin, origin,
       net::SiteForCookies::FromOrigin(origin));
   LoadAndVerifyCached(url, info, false /* was_cached */,
                       true /* expect_redirect */);
@@ -6578,7 +6657,7 @@ TEST_F(NetworkContextSplitCacheTest,
   // A non-navigation resource with the same key and url should also be cached.
   net::IsolationInfo non_navigation_redirected_info =
       net::IsolationInfo::Create(
-          net::IsolationInfo::RedirectMode::kUpdateNothing, redirected_origin,
+          net::IsolationInfo::RequestType::kOther, redirected_origin,
           redirected_origin,
           net::SiteForCookies::FromOrigin(redirected_origin));
   LoadAndVerifyCached(redirected_url, non_navigation_redirected_info,

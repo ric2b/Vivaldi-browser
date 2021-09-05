@@ -22,8 +22,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histograms>
 
 <histogram name="ServiceWorker.AbortPaymentEvent.Time" units="ms"
-    expires_after="M85">
-  <owner>nhiroki@chromium.org</owner>
+    expires_after="2021-08-01">
+  <owner>danyao@chromium.org</owner>
+  <owner>web-payments-team@google.com</owner>
   <owner>jinho.bang@samsung.com</owner>
   <summary>
     The time taken between dispatching an AbortPaymentEvent to a Service Worker
@@ -169,8 +170,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ServiceWorker.CanMakePaymentEvent.Time" units="ms"
-    expires_after="2020-04-19">
-  <owner>nhiroki@chromium.org</owner>
+    expires_after="2021-08-01">
+  <owner>danyao@chromium.org</owner>
+  <owner>web-payments-team@google.com</owner>
   <owner>jinho.bang@samsung.com</owner>
   <summary>
     The time taken between dispatching an CanMakePaymentEvent to a Service
@@ -180,7 +182,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ServiceWorker.ContentDeleteEvent.Time" units="ms"
-    expires_after="M88">
+    expires_after="M92">
   <owner>rayankans@chromium.org</owner>
   <owner>platform-capabilities@chromium.org</owner>
   <summary>
@@ -310,7 +312,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ServiceWorker.FetchEvent.HasResponse.Time" units="ms"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>falken@chromium.org</owner>
   <owner>chrome-worker@google.com</owner>
   <summary>
@@ -367,15 +369,6 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="ServiceWorker.FetchRespondWithDataPipeCreation.Time"
-    units="ms" expires_after="M85">
-  <owner>wanderview@chromium.org</owner>
-  <summary>
-    Measures how long the service worker thread is blocked creating a
-    mojo::DataPipe during FetchEvent.respondWith() processing.
-  </summary>
-</histogram>
-
 <histogram name="ServiceWorker.GetAllOriginsInfoTime" units="ms"
     expires_after="2021-01-24">
   <owner>bashi@chromium.org</owner>
@@ -385,7 +378,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="ServiceWorker.InstallEvent.All.FetchCount" units="ms"
+<histogram name="ServiceWorker.InstallEvent.All.FetchCount" units="fetches"
     expires_after="2021-10-01">
   <owner>wanderview@chromium.org</owner>
   <owner>chrome-worker@google.com</owner>
@@ -666,7 +659,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ServiceWorker.NotificationCloseEvent.Time" units="ms"
-    expires_after="M87">
+    expires_after="M90">
   <owner>nsatragno@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>
@@ -677,15 +670,16 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ServiceWorker.PageLoad" enum="ServiceWorkerSite"
-    expires_after="2021-02-16">
+    expires_after="2021-04-18">
   <owner>falken@chromium.org</owner>
   <owner>chrome-worker@google.com</owner>
   <summary>Counts page loads controlled by a service worker.</summary>
 </histogram>
 
 <histogram name="ServiceWorker.PaymentRequestEvent.Time" units="ms"
-    expires_after="M81">
-  <owner>nhiroki@chromium.org</owner>
+    expires_after="2021-08-01">
+  <owner>danyao@chromium.org</owner>
+  <owner>web-payments-team@google.com</owner>
   <owner>jinho.bang@samsung.com</owner>
   <summary>
     The time taken between dispatching an PaymentRequestEvent to a Service
@@ -715,7 +709,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ServiceWorker.PushSubscriptionChangeEvent.Time" units="ms"
-    expires_after="M88">
+    expires_after="M92">
   <owner>peter@chromium.org</owner>
   <owner>rayankans@chromium.org</owner>
   <owner>knollr@chromium.org</owner>
@@ -1023,7 +1017,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ServiceWorker.StartWorker.Status"
-    enum="ServiceWorkerStatusCode" expires_after="2021-01-31">
+    enum="ServiceWorkerStatusCode" expires_after="2021-04-04">
   <owner>falken@chromium.org</owner>
   <owner>chrome-worker@google.com</owner>
   <summary>
@@ -1034,7 +1028,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ServiceWorker.StartWorker.StatusByPurpose"
-    enum="ServiceWorkerStatusCode" expires_after="2021-01-31">
+    enum="ServiceWorkerStatusCode" expires_after="2021-04-18">
   <owner>falken@chromium.org</owner>
   <owner>chrome-worker@google.com</owner>
   <summary>
@@ -1045,7 +1039,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ServiceWorker.StartWorker.Time" units="ms"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>falken@chromium.org</owner>
   <owner>chrome-worker@google.com</owner>
   <summary>
@@ -1100,16 +1094,15 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="ServiceWorker.SubresourceNotifyStartLoadingResponseBodyDelay"
-    units="ms" expires_after="M85">
-  <owner>wanderview@chromium.org</owner>
+<histogram name="ServiceWorker.Storage.RetryCountForRecovery" units="retries"
+    expires_after="2021-06-30">
+  <owner>bashi@chromium.org</owner>
+  <owner>chrome-worker@google.com</owner>
   <summary>
-    The time between when the ServiceWorkerSubresourceLoader receives a Response
-    and when it notifies the loader's client that the body has started loading.
-    This is different from SubresourceStartBlobReadingDelay in that notifying
-    the client about the Response may take place some time later than when the
-    blob body reading begins. This will be triggered for every successful
-    subresource load handled by a ServiceWorker with servification enabled.
+    The counts of retries to recover after a Storage Service crash. Logged after
+    a recovery, or the maximum number of retries is exceeded See
+    ServiceWorkerRegistry::OnRemoteStorageDisconnected() for the maximum number
+    of retries.
   </summary>
 </histogram>
 
@@ -1125,7 +1118,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ServiceWorker.WorkerStopped" enum="ServiceWorkerStoppedStatus"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>falken@chromium.org</owner>
   <owner>chrome-worker@google.com</owner>
   <summary>

@@ -238,8 +238,8 @@ public class StatusBarColorController
 
     // TopToolbarCoordinator.UrlExpansionObserver implementation.
     @Override
-    public void onUrlExpansionPercentageChanged(float percentage) {
-        mToolbarUrlExpansionPercentage = percentage;
+    public void onUrlExpansionProgressChanged(float fraction) {
+        mToolbarUrlExpansionPercentage = fraction;
         // Note (david@vivaldi.com): This is not required and would only lead into blinking effects.
         if (!ChromeApplication.isVivaldi()) {
         if (mShouldUpdateStatusBarColorForNTP) updateStatusBarColor();

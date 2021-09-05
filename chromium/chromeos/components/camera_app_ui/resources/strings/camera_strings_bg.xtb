@@ -3,6 +3,7 @@
 <translationbundle lang="bg">
 <translation id="1276998909102132017">Изображения в галерията</translation>
 <translation id="1430915738399379752">Печат</translation>
+<translation id="1473110567575736769">Таймер за 3 секунди</translation>
 <translation id="1620510694547887537">Камера</translation>
 <translation id="1627744224761163218">4 x 4</translation>
 <translation id="1664224225747386870">Нищо не е записано</translation>
@@ -29,7 +30,9 @@
 <translation id="3259149966178251584">Разделителна способност на камерата</translation>
 <translation id="3517926952904427380">Не може да се направи вертикална снимка</translation>
 <translation id="3569311554794739032">Наистина ли искате да премахнете „<ph name="FILE" />“?</translation>
+<translation id="3750315947605636967">Камерата ви се използва от друго приложение</translation>
 <translation id="3810838688059735925">Видео</translation>
+<translation id="4000398125663085899">Новите снимки и видеоклипове вече ще се запазват в папка в приложението Файлове: „Моите файлове &gt; Камера“</translation>
 <translation id="4118525110028899586">Пауза на записа</translation>
 <translation id="4279490309300973883">Дублиране</translation>
 <translation id="4329152592498422850">Превключвател за правене на квадратна снимка</translation>
@@ -43,9 +46,11 @@
 <translation id="5057360777601936059">Понастоящем няма достъп до камерата ви.
         Моля, проверете дали камерата е свързана правилно.</translation>
 <translation id="5152121255775685072">Към галерията</translation>
+<translation id="5422455049771430511">Снимките и видеоклиповете ви имат нов дом</translation>
 <translation id="5671277269877808209">Квадрат</translation>
 <translation id="5775960006311140197">Експертен режим</translation>
 <translation id="5869546221129391014">Таблица</translation>
+<translation id="6040143037577758943">Затваряне</translation>
 <translation id="6073451960410192870">Спиране на записа</translation>
 <translation id="6197807149213783179">Запазване на метаданните</translation>
 <translation id="6233780560267770709">3 на 3</translation>
@@ -60,6 +65,7 @@
 <translation id="6965382102122355670">OK</translation>
 <translation id="698156982839284926">3 секунди</translation>
 <translation id="712848772518857951">Наистина ли искате да премахнете <ph name="COUNT" /> елемента?</translation>
+<translation id="7134221860976209830">Таймер за 10 секунди</translation>
 <translation id="7243947652761655814">Разделителна способност за видеоклиповете</translation>
 <translation id="7337660886763914220">Грешки във файловата система.</translation>
 <translation id="7557677699350329807">Превключване към следващата камера</translation>
@@ -67,7 +73,6 @@
 <translation id="7649070708921625228">Помощ</translation>
 <translation id="7658239707568436148">Отказ</translation>
 <translation id="7670511624014457267">60 кдр/сек</translation>
-<translation id="8049189770492311300">Таймер</translation>
 <translation id="8067883171444229417">Възпроизвеждане на видеоклипа</translation>
 <translation id="8131740175452115882">Потвърждаване</translation>
 <translation id="8145038249676204903">Превключване към режима за правене на снимки</translation>

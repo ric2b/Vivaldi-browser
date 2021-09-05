@@ -90,4 +90,11 @@ if (is_mac) {
       "//vivaldi/installer/mac/app-entitlements-vivaldi.plist",
     ]
   }
+  if (is_official_build) {
+    update_template_instance("//chrome:entitlements") {
+      entitlements_templates += [
+        "//vivaldi/installer/mac/app-entitlements-vivaldi-official.plist",
+      ]
+    }
+  }
 }

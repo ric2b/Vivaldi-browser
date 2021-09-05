@@ -40,6 +40,10 @@ class SharedImageGLBackingProduceDawnTest : public WebGPUTest {
     WebGPUTest::Options option;
     Initialize(option);
 
+    if (ShouldSkipTest()) {
+      return;
+    }
+
     gpu::ContextCreationAttribs attributes;
     attributes.alpha_size = 8;
     attributes.depth_size = 24;
@@ -55,7 +59,8 @@ class SharedImageGLBackingProduceDawnTest : public WebGPUTest {
     ContextResult result = gl_context_->Initialize(
         GetGpuServiceHolder()->task_executor(), nullptr, true,
         gpu::kNullSurfaceHandle, attributes, option.shared_memory_limits,
-        nullptr, nullptr, base::ThreadTaskRunnerHandle::Get());
+        nullptr, nullptr, nullptr, nullptr,
+        base::ThreadTaskRunnerHandle::Get());
     ASSERT_EQ(result, ContextResult::kSuccess);
     mock_buffer_map_callback =
         std::make_unique<testing::StrictMock<MockBufferMapCallback>>();
@@ -70,7 +75,9 @@ class SharedImageGLBackingProduceDawnTest : public WebGPUTest {
   bool ShouldSkipTest() {
 // Windows is the only platform enabled passthrough in this test.
 #if defined(OS_WIN)
-    return false;
+    // Skip the test if there is no GPU service holder. It is not created if
+    // Dawn is not supported on the platform (Win7).
+    return GetGpuServiceHolder() == nullptr;
 #else
     return true;
 #endif  // defined(OS_WIN)

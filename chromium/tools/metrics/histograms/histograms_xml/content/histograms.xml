@@ -37,7 +37,11 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ContentCapture.CaptureContentTime" units="microseconds"
-    expires_after="2021-02-01">
+    expires_after="M87">
+  <obsolete>
+    Replaced by ContentCapture.CaptureContentTime2 since M87, the new histogram
+    records the grouping time additionally.
+  </obsolete>
   <owner>michaelbai@chromium.org</owner>
   <owner>src/third_party/blink/renderer/core/content_capture/OWNERS</owner>
   <summary>
@@ -48,8 +52,20 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="ContentCapture.CaptureContentTime2" units="microseconds"
+    expires_after="2021-04-04">
+  <owner>michaelbai@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/core/content_capture/OWNERS</owner>
+  <summary>
+    The time taken to capture the on-screen content and group them by document.
+
+    Note that this metrics is only recorded on clients on which a
+    high-resolution clock is available.
+  </summary>
+</histogram>
+
 <histogram name="ContentCapture.GetBoundingBox" units="microseconds"
-    expires_after="2021-02-01">
+    expires_after="2021-04-04">
   <owner>michaelbai@chromium.org</owner>
   <owner>src/third_party/blink/renderer/core/content_capture/OWNERS</owner>
   <summary>
@@ -61,7 +77,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ContentCapture.SendContentTime" units="microseconds"
-    expires_after="2021-02-01">
+    expires_after="2021-04-04">
   <owner>michaelbai@chromium.org</owner>
   <owner>src/third_party/blink/renderer/core/content_capture/OWNERS</owner>
   <summary>
@@ -73,14 +89,14 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ContentCapture.SentContentCount" units="count"
-    expires_after="2021-02-01">
+    expires_after="2021-04-04">
   <owner>michaelbai@chromium.org</owner>
   <owner>src/third_party/blink/renderer/core/content_capture/OWNERS</owner>
   <summary>The total number of content captures sent for a document.</summary>
 </histogram>
 
 <histogram name="ContentCapture.TaskDelayTimeInMs" units="ms"
-    expires_after="2021-02-01">
+    expires_after="2021-04-04">
   <owner>michaelbai@chromium.org</owner>
   <owner>src/third_party/blink/renderer/core/content_capture/OWNERS</owner>
   <summary>
@@ -88,6 +104,18 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
     Note: The time of task that was scheduled for the retry wasn't measured
     because it is always 500ms.
+  </summary>
+</histogram>
+
+<histogram name="ContentCapture.TaskRunsPerCapture" units="runs"
+    expires_after="2021-04-04">
+  <owner>michaelbai@chromium.org</owner>
+  <owner>src/third_party/blink/renderer/core/content_capture/OWNERS</owner>
+  <summary>
+    The number of the times the task runs for a content capture session.
+
+    A content capture session begins with capturing on-screen content and ends
+    in sending all changes.
   </summary>
 </histogram>
 
@@ -221,6 +249,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="ContentSettings.DefaultPluginsSetting" enum="ContentSetting"
     expires_after="2021-06-19">
+  <obsolete>
+    Removed as of 09/2020. Flash / Plugins is deprecated.
+  </obsolete>
   <owner>engedy@chromium.org</owner>
   <owner>src/components/permissions/PERMISSIONS_OWNERS</owner>
   <summary>The default plugins setting at profile open.</summary>
@@ -526,7 +557,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ContentSettings.Popups.StrongBlockerActions"
-    enum="StrongPopupBlockerAction" expires_after="2021-02-07">
+    enum="StrongPopupBlockerAction" expires_after="2021-04-11">
   <owner>csharrison@chromium.org</owner>
   <summary>
     Counts of various events related to the strong popup blocker (aka abusive
@@ -570,7 +601,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ContentSuggestions.Feed.AvailableOffline.Opened"
-    enum="Boolean" expires_after="2021-01-31">
+    enum="Boolean" expires_after="2021-04-04">
   <owner>carlosk@chromium.org</owner>
   <owner>harringtond@chromium.org</owner>
   <owner>feed@chromium.org</owner>
@@ -585,7 +616,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ContentSuggestions.Feed.AvailableOffline.Shown" enum="Boolean"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>carlosk@chromium.org</owner>
   <owner>harringtond@chromium.org</owner>
   <owner>feed@chromium.org</owner>
@@ -633,7 +664,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ContentSuggestions.Feed.DisplayStatusOnOpen"
-    enum="ContentSuggestionsDisplayStatus" expires_after="2021-02-14">
+    enum="ContentSuggestionsDisplayStatus" expires_after="2021-04-18">
   <owner>carlosk@chromium.org</owner>
   <owner>harringtond@chromium.org</owner>
   <owner>feed@chromium.org</owner>
@@ -834,6 +865,22 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="ContentSuggestions.Feed.Network.Duration.{NetworkEvent}"
+    units="ms" expires_after="M90">
+  <owner>sczs@chromium.org</owner>
+  <owner>harringtond@chromium.org</owner>
+  <owner>feed@chromium.org</owner>
+  <summary>The amount of time a {NetworkEvent} network event took.</summary>
+  <token key="NetworkEvent">
+    <variant name="ActionUploadFailure"/>
+    <variant name="ActionUploadSuccess"/>
+    <variant name="ArticlesFetchFailure"/>
+    <variant name="ArticlesFetchSuccess"/>
+    <variant name="MoreArticlesFetchFailure"/>
+    <variant name="MoreArticlesFetchSuccess"/>
+  </token>
+</histogram>
+
 <histogram name="ContentSuggestions.Feed.Network.RequestSizeKB.Compressed"
     units="KB" expires_after="M90">
   <owner>carlosk@chromium.org</owner>
@@ -846,7 +893,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ContentSuggestions.Feed.Network.RequestStatusCode"
-    enum="CombinedHttpResponseAndNetErrorCode" expires_after="2021-02-14">
+    enum="CombinedHttpResponseAndNetErrorCode" expires_after="2021-04-18">
   <owner>carlosk@chromium.org</owner>
   <owner>harringtond@chromium.org</owner>
   <owner>feed@chromium.org</owner>
@@ -858,7 +905,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ContentSuggestions.Feed.Network.ResponseSizeKB" units="KB"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>carlosk@chromium.org</owner>
   <owner>harringtond@chromium.org</owner>
   <owner>feed@chromium.org</owner>
@@ -889,7 +936,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ContentSuggestions.Feed.Network.TokenFetchStatus"
-    enum="GoogleServiceAuthError" expires_after="2021-02-28">
+    enum="GoogleServiceAuthError" expires_after="2021-05-02">
   <owner>carlosk@chromium.org</owner>
   <owner>harringtond@chromium.org</owner>
   <owner>feed@chromium.org</owner>
@@ -900,7 +947,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ContentSuggestions.Feed.NoticeCardFulfilled" enum="Boolean"
-    expires_after="2021-03-07">
+    expires_after="2021-05-09">
   <owner>vincb@google.com</owner>
   <owner>feed@chromium.org</owner>
   <summary>
@@ -1152,7 +1199,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="ContentSuggestions.Feed.UploadActionsBatchStatus"
-    enum="FeedUploadActionsBatchStatus" expires_after="2021-02-14">
+    enum="FeedUploadActionsBatchStatus" expires_after="2021-04-18">
   <owner>iwells@chromium.org</owner>
   <owner>harringtond@chromium.org</owner>
   <owner>feed@chromium.org</owner>
@@ -1179,7 +1226,21 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <owner>carlosk@chromium.org</owner>
   <owner>feed@chromium.org</owner>
   <summary>
-    Counts of user actions within the feed surface (Feed v2 only).
+    Counts of user actions within the feed surface (Feed v2 only). Recorded
+    whenever a user has taken an explicit action in the Feed. e.g. (Open a Card,
+    Hide the Feed, etc.)
+  </summary>
+</histogram>
+
+<histogram name="ContentSuggestions.Feed.UserActions.Commands"
+    enum="FeedUserCommandType" expires_after="2021-09-01">
+  <owner>harringtond@chromium.org</owner>
+  <owner>sczs@chromium.org</owner>
+  <owner>feed@chromium.org</owner>
+  <summary>
+    Recorded whenever an Elements commands has taken place which wasn't handled
+    explicitly by ContentSuggestions.Feed.UserActions. e.g. A new command to
+    added server side to &quot;Report Content&quot;.(iOS only).
   </summary>
 </histogram>
 

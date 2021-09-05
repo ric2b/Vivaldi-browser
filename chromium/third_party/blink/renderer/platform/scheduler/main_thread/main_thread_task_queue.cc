@@ -16,8 +16,6 @@
 namespace blink {
 namespace scheduler {
 
-using base::sequence_manager::TaskQueue;
-
 namespace internal {
 using base::sequence_manager::internal::TaskQueueImpl;
 }
@@ -60,6 +58,8 @@ const char* MainThreadTaskQueue::NameForQueueType(
       return "web_scheduling_tq";
     case MainThreadTaskQueue::QueueType::kNonWaking:
       return "non_waking_tq";
+    case MainThreadTaskQueue::QueueType::kIPCTrackingForCachedPages:
+      return "ipc_tracking_for_cached_pages_tq";
     case MainThreadTaskQueue::QueueType::kCount:
       NOTREACHED();
       return nullptr;
@@ -91,6 +91,7 @@ bool MainThreadTaskQueue::IsPerFrameTaskQueue(
     case MainThreadTaskQueue::QueueType::kDetached:
     case MainThreadTaskQueue::QueueType::kNonWaking:
     case MainThreadTaskQueue::QueueType::kOther:
+    case MainThreadTaskQueue::QueueType::kIPCTrackingForCachedPages:
       return false;
     case MainThreadTaskQueue::QueueType::kCount:
       NOTREACHED();
@@ -101,26 +102,27 @@ bool MainThreadTaskQueue::IsPerFrameTaskQueue(
 }
 
 MainThreadTaskQueue::MainThreadTaskQueue(
-    std::unique_ptr<internal::TaskQueueImpl> impl,
+    std::unique_ptr<base::sequence_manager::internal::TaskQueueImpl> impl,
     const TaskQueue::Spec& spec,
     const QueueCreationParams& params,
     MainThreadSchedulerImpl* main_thread_scheduler)
-    : TaskQueue(std::move(impl), spec),
-      queue_type_(params.queue_type),
+    : queue_type_(params.queue_type),
       queue_traits_(params.queue_traits),
       freeze_when_keep_active_(params.freeze_when_keep_active),
       web_scheduling_priority_(params.web_scheduling_priority),
       main_thread_scheduler_(main_thread_scheduler),
+      agent_group_scheduler_(params.agent_group_scheduler),
       frame_scheduler_(params.frame_scheduler) {
-  if (GetTaskQueueImpl() && spec.should_notify_observers) {
+  task_queue_ = base::MakeRefCounted<TaskQueue>(std::move(impl), spec);
+  if (task_queue_->HasImpl() && spec.should_notify_observers) {
     // TaskQueueImpl may be null for tests.
     // TODO(scheduler-dev): Consider mapping directly to
     // MainThreadSchedulerImpl::OnTaskStarted/Completed. At the moment this
     // is not possible due to task queue being created inside
     // MainThreadScheduler's constructor.
-    GetTaskQueueImpl()->SetOnTaskStartedHandler(base::BindRepeating(
+    task_queue_->SetOnTaskStartedHandler(base::BindRepeating(
         &MainThreadTaskQueue::OnTaskStarted, base::Unretained(this)));
-    GetTaskQueueImpl()->SetOnTaskCompletedHandler(base::BindRepeating(
+    task_queue_->SetOnTaskCompletedHandler(base::BindRepeating(
         &MainThreadTaskQueue::OnTaskCompleted, base::Unretained(this)));
   }
 }
@@ -129,7 +131,7 @@ MainThreadTaskQueue::~MainThreadTaskQueue() = default;
 
 void MainThreadTaskQueue::OnTaskStarted(
     const base::sequence_manager::Task& task,
-    const TaskQueue::TaskTiming& task_timing) {
+    const base::sequence_manager::TaskQueue::TaskTiming& task_timing) {
   if (main_thread_scheduler_)
     main_thread_scheduler_->OnTaskStarted(this, task, task_timing);
 }
@@ -151,16 +153,14 @@ void MainThreadTaskQueue::DetachFromMainThreadScheduler() {
   if (!main_thread_scheduler_)
     return;
 
-  if (GetTaskQueueImpl()) {
-    GetTaskQueueImpl()->SetOnTaskStartedHandler(
-        base::BindRepeating(&MainThreadSchedulerImpl::OnTaskStarted,
-                            main_thread_scheduler_->GetWeakPtr(), nullptr));
-    GetTaskQueueImpl()->SetOnTaskCompletedHandler(
-        base::BindRepeating(&MainThreadSchedulerImpl::OnTaskCompleted,
-                            main_thread_scheduler_->GetWeakPtr(), nullptr));
-    GetTaskQueueImpl()->SetOnTaskPostedHandler(
-        internal::TaskQueueImpl::OnTaskPostedHandler());
-  }
+  task_queue_->SetOnTaskStartedHandler(
+      base::BindRepeating(&MainThreadSchedulerImpl::OnTaskStarted,
+                          main_thread_scheduler_->GetWeakPtr(), nullptr));
+  task_queue_->SetOnTaskCompletedHandler(
+      base::BindRepeating(&MainThreadSchedulerImpl::OnTaskCompleted,
+                          main_thread_scheduler_->GetWeakPtr(), nullptr));
+  task_queue_->SetOnTaskPostedHandler(
+      internal::TaskQueueImpl::OnTaskPostedHandler());
 
   ClearReferencesToSchedulers();
 }
@@ -168,27 +168,28 @@ void MainThreadTaskQueue::DetachFromMainThreadScheduler() {
 void MainThreadTaskQueue::SetOnIPCTaskPosted(
     base::RepeatingCallback<void(const base::sequence_manager::Task&)>
         on_ipc_task_posted_callback) {
-  if (GetTaskQueueImpl()) {
+  if (task_queue_->HasImpl()) {
     // We use the frame_scheduler_ to track metrics so as to ensure that metrics
     // are not tied to individual task queues.
-    GetTaskQueueImpl()->SetOnTaskPostedHandler(on_ipc_task_posted_callback);
+    task_queue_->SetOnTaskPostedHandler(on_ipc_task_posted_callback);
   }
 }
 
 void MainThreadTaskQueue::DetachOnIPCTaskPostedWhileInBackForwardCache() {
-  if (GetTaskQueueImpl()) {
-    GetTaskQueueImpl()->SetOnTaskPostedHandler(
+  if (task_queue_->HasImpl()) {
+    task_queue_->SetOnTaskPostedHandler(
         internal::TaskQueueImpl::OnTaskPostedHandler());
   }
 }
 
 void MainThreadTaskQueue::ShutdownTaskQueue() {
   ClearReferencesToSchedulers();
-  TaskQueue::ShutdownTaskQueue();
+  task_queue_->ShutdownTaskQueue();
 }
 
-AgentGroupSchedulerImpl* MainThreadTaskQueue::GetAgentGroupScheduler() {
-  DCHECK(task_runner()->BelongsToCurrentThread());
+WebAgentGroupScheduler* MainThreadTaskQueue::GetAgentGroupScheduler() {
+  DCHECK(task_queue_->task_runner()->BelongsToCurrentThread());
+
   if (agent_group_scheduler_) {
     DCHECK(!frame_scheduler_);
     return agent_group_scheduler_;
@@ -210,7 +211,7 @@ void MainThreadTaskQueue::ClearReferencesToSchedulers() {
 }
 
 FrameSchedulerImpl* MainThreadTaskQueue::GetFrameScheduler() const {
-  DCHECK(task_runner()->BelongsToCurrentThread());
+  DCHECK(task_queue_->task_runner()->BelongsToCurrentThread());
   return frame_scheduler_;
 }
 

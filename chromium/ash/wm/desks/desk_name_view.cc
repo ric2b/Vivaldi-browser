@@ -17,6 +17,7 @@
 #include "ui/gfx/text_elider.h"
 #include "ui/views/background.h"
 #include "ui/views/focus/focus_manager.h"
+#include "ui/views/native_cursor.h"
 #include "ui/views/widget/widget.h"
 
 namespace ash {
@@ -73,8 +74,7 @@ void DeskNameView::CommitChanges(views::Widget* widget) {
 }
 
 void DeskNameView::SetTextAndElideIfNeeded(const base::string16& text) {
-  SetText(gfx::ElideText(text, GetFontList(),
-                         parent()->GetPreferredSize().width(),
+  SetText(gfx::ElideText(text, GetFontList(), GetContentsBounds().width(),
                          gfx::ELIDE_TAIL));
   full_text_ = text;
 }
@@ -127,10 +127,8 @@ void DeskNameView::OnMouseExited(const ui::MouseEvent& event) {
 
 void DeskNameView::OnThemeChanged() {
   Textfield::OnThemeChanged();
-
   SetBackground(views::CreateRoundedRectBackground(GetBackgroundColor(),
                                                    kDeskNameViewBorderRadius));
-
   AshColorProvider* color_provider = AshColorProvider::Get();
   const SkColor text_color = color_provider->GetContentLayerColor(
       AshColorProvider::ContentLayerType::kTextColorPrimary);
@@ -140,6 +138,11 @@ void DeskNameView::OnThemeChanged() {
   const SkColor selection_color = color_provider->GetControlsLayerColor(
       AshColorProvider::ControlsLayerType::kFocusAuraColor);
   SetSelectionBackgroundColor(selection_color);
+  UpdateBorderState();
+}
+
+gfx::NativeCursor DeskNameView::GetCursor(const ui::MouseEvent& event) {
+  return views::GetNativeIBeamCursor();
 }
 
 views::View* DeskNameView::GetView() {

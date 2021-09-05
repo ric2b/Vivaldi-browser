@@ -49,15 +49,17 @@ public class CachedFeatureFlags {
         {
             put(ChromeFeatureList.ANDROID_MANAGED_BY_MENU_ITEM, true);
             put(ChromeFeatureList.ANDROID_PARTNER_CUSTOMIZATION_PHENOTYPE, true);
+            put(ChromeFeatureList.CHROME_STARTUP_DELEGATE, false);
             put(ChromeFeatureList.CONDITIONAL_TAB_STRIP_ANDROID, false);
-            put(ChromeFeatureList.HOMEPAGE_LOCATION_POLICY, false);
             put(ChromeFeatureList.HORIZONTAL_TAB_SWITCHER_ANDROID, false);
-            put(ChromeFeatureList.SERVICE_MANAGER_FOR_DOWNLOAD, false);
+            put(ChromeFeatureList.SERVICE_MANAGER_FOR_DOWNLOAD, true);
             put(ChromeFeatureList.SERVICE_MANAGER_FOR_BACKGROUND_PREFETCH, true);
             put(ChromeFeatureList.COMMAND_LINE_ON_NON_ROOTED, false);
             put(ChromeFeatureList.DOWNLOADS_AUTO_RESUMPTION_NATIVE, true);
+            put(ChromeFeatureList.EARLY_LIBRARY_LOAD, false);
             put(ChromeFeatureList.PRIORITIZE_BOOTSTRAP_TASKS, true);
             put(ChromeFeatureList.IMMERSIVE_UI_MODE, false);
+            put(ChromeFeatureList.SHARE_BY_DEFAULT_IN_CCT, false);
             put(ChromeFeatureList.SWAP_PIXEL_FORMAT_TO_FIX_CONVERT_FROM_TRANSLUCENT, true);
             put(ChromeFeatureList.START_SURFACE_ANDROID, false);
             put(ChromeFeatureList.PAINT_PREVIEW_DEMO, false);
@@ -71,15 +73,15 @@ public class CachedFeatureFlags {
             put(ChromeFeatureList.INSTANT_START, false);
             put(ChromeFeatureList.TAB_GROUPS_CONTINUATION_ANDROID, false);
             put(ChromeFeatureList.TAB_TO_GTS_ANIMATION, false);
-            put(ChromeFeatureList.OMNIBOX_SUGGESTIONS_RECYCLER_VIEW, false);
             put(ChromeFeatureList.TEST_DEFAULT_DISABLED, false);
             put(ChromeFeatureList.TEST_DEFAULT_ENABLED, true);
             put(ChromeFeatureList.REPORT_FEED_USER_ACTIONS, false);
             put(ChromeFeatureList.INTEREST_FEED_V2, false);
             put(ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_ICONS, false);
             put(ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_REGROUP, false);
-            put(ChromeFeatureList.MESSAGES_FOR_ANDROID_INFRASTRUCTURE, false);
             put(ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_THREE_BUTTON_ACTIONBAR, false);
+            put(ChromeFeatureList.USE_CHIME_ANDROID_SDK, false);
+            put(ChromeFeatureList.READ_LATER, false);
         }
     };
 

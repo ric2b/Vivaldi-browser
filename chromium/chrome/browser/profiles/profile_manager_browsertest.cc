@@ -5,14 +5,14 @@
 #include <stddef.h>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "build/build_config.h"
 #include "chrome/browser/apps/platform_apps/shortcut_manager.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
@@ -27,9 +27,9 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/testing_browser_process.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/keep_alive_registry/keep_alive_types.h"
 #include "components/keep_alive_registry/scoped_keep_alive.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_consumer.h"
 #include "components/prefs/pref_service.h"
@@ -181,7 +181,8 @@ class PasswordStoreConsumerVerifier
     : public password_manager::PasswordStoreConsumer {
  public:
   void OnGetPasswordStoreResults(
-      std::vector<std::unique_ptr<autofill::PasswordForm>> results) override {
+      std::vector<std::unique_ptr<password_manager::PasswordForm>> results)
+      override {
     password_entries_.swap(results);
     run_loop_.Quit();
   }
@@ -190,14 +191,15 @@ class PasswordStoreConsumerVerifier
     run_loop_.Run();
   }
 
-  const std::vector<std::unique_ptr<autofill::PasswordForm>>& GetPasswords()
-      const {
+  const std::vector<std::unique_ptr<password_manager::PasswordForm>>&
+  GetPasswords() const {
     return password_entries_;
   }
 
  private:
   base::RunLoop run_loop_;
-  std::vector<std::unique_ptr<autofill::PasswordForm>> password_entries_;
+  std::vector<std::unique_ptr<password_manager::PasswordForm>>
+      password_entries_;
 };
 
 base::FilePath GetFirstNonSigninNonLockScreenAppProfile(
@@ -297,7 +299,7 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DeleteInactiveProfile) {
   base::FilePath new_path = profile_manager->GenerateNextProfileDirectoryPath();
   base::RunLoop run_loop;
   profile_manager->CreateProfileAsync(
-      new_path, base::Bind(&OnUnblockOnProfileCreation, &run_loop),
+      new_path, base::BindRepeating(&OnUnblockOnProfileCreation, &run_loop),
       base::string16(), std::string());
   run_loop.Run();
 
@@ -327,7 +329,7 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DeleteCurrentProfile) {
   base::FilePath new_path = profile_manager->GenerateNextProfileDirectoryPath();
   base::RunLoop run_loop;
   profile_manager->CreateProfileAsync(
-      new_path, base::Bind(&OnUnblockOnProfileCreation, &run_loop),
+      new_path, base::BindRepeating(&OnUnblockOnProfileCreation, &run_loop),
       base::string16(), std::string());
   run_loop.Run();
 
@@ -357,7 +359,7 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, DeleteAllProfiles) {
   base::FilePath new_path = profile_manager->GenerateNextProfileDirectoryPath();
   base::RunLoop run_loop;
   profile_manager->CreateProfileAsync(
-      new_path, base::Bind(&OnUnblockOnProfileCreation, &run_loop),
+      new_path, base::BindRepeating(&OnUnblockOnProfileCreation, &run_loop),
       base::string16(), std::string());
 
   // Run the message loop to allow profile creation to take place; the loop is
@@ -401,7 +403,7 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, ProfileFromProfileKey) {
   base::FilePath new_path = profile_manager->GenerateNextProfileDirectoryPath();
   base::RunLoop run_loop;
   profile_manager->CreateProfileAsync(
-      new_path, base::Bind(&OnUnblockOnProfileCreation, &run_loop),
+      new_path, base::BindRepeating(&OnUnblockOnProfileCreation, &run_loop),
       base::string16(), std::string());
 
   // Run the message loop to allow profile creation to take place; the loop is
@@ -476,9 +478,10 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest,
 
   // Create a profile, make sure callback is invoked before any callbacks are
   // invoked (so they can do things like sign in the profile, etc).
-  ProfileManager::CreateMultiProfileAsync(base::string16(),  // name
-                                          std::string(),     // icon url
-                                          base::Bind(ProfileCreationComplete));
+  ProfileManager::CreateMultiProfileAsync(
+      base::string16(),  // name
+      std::string(),     // icon url
+      base::BindRepeating(ProfileCreationComplete));
   // Wait for profile to finish loading.
   content::RunMessageLoop();
   EXPECT_EQ(profile_manager->GetNumberOfProfiles(), 2U);
@@ -512,7 +515,8 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, SwitchToProfile) {
       profile_manager->GenerateNextProfileDirectoryPath();
   base::RunLoop run_loop;
   profile_manager->CreateProfileAsync(
-      path_profile2, base::Bind(&OnUnblockOnProfileCreation, &run_loop),
+      path_profile2,
+      base::BindRepeating(&OnUnblockOnProfileCreation, &run_loop),
       base::string16(), std::string());
 
   // Run the message loop to allow profile creation to take place; the loop is
@@ -569,7 +573,7 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, MAYBE_EphemeralProfile) {
   base::FilePath path_profile2 =
       profile_manager->GenerateNextProfileDirectoryPath();
   profile_manager->CreateProfileAsync(
-      path_profile2, base::Bind(&EphemeralProfileCreationComplete),
+      path_profile2, base::BindRepeating(&EphemeralProfileCreationComplete),
       base::string16(), std::string());
 
   // Spin to allow profile creation to take place.
@@ -619,8 +623,8 @@ IN_PROC_BROWSER_TEST_F(ProfileManagerBrowserTest, MAYBE_DeletePasswords) {
   Profile* profile = ProfileManager::GetActiveUserProfile();
   ASSERT_TRUE(profile);
 
-  autofill::PasswordForm form;
-  form.scheme = autofill::PasswordForm::Scheme::kHtml;
+  password_manager::PasswordForm form;
+  form.scheme = password_manager::PasswordForm::Scheme::kHtml;
   form.url = GURL("http://accounts.google.com/LoginAuth");
   form.signon_realm = "http://accounts.google.com/";
   form.username_value = base::ASCIIToUTF16("my_username");

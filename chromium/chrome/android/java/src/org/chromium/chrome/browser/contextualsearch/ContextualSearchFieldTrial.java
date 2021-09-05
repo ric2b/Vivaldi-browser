@@ -22,17 +22,21 @@ import java.lang.annotation.RetentionPolicy;
  * Provides Field Trial support for the Contextual Search application within Chrome for Android.
  */
 public class ContextualSearchFieldTrial {
-    //==========================================================================================
-    // Public settings synchronized with src/components/contextual_search/core/browser/public.cc
-    //==========================================================================================
-    public static final String LONGPRESS_RESOLVE_PARAM_NAME = "longpress_resolve_variation";
-    public static final String LONGPRESS_RESOLVE_PRESERVE_TAP = "1";
-
-    //==========================================================================================
     private static final String FIELD_TRIAL_NAME = "ContextualSearch";
     private static final String DISABLED_PARAM = "disabled";
     private static final String ENABLED_VALUE = "true";
 
+    //==========================================================================================
+    // Related Searches FieldTrial and parameter names.
+    //==========================================================================================
+    // Params used elsewhere but gathered here since they may be present in FieldTrial configs.
+    static final String RELATED_SEARCHES_NEEDS_URL_PARAM_NAME = "needs_url";
+    static final String RELATED_SEARCHES_NEEDS_CONTENT_PARAM_NAME = "needs_content";
+    // A comma-separated list of lower-case ISO 639 language codes.
+    static final String RELATED_SEARCHES_LANGUAGE_ALLOWLIST_PARAM_NAME = "language_allowlist";
+    private static final String RELATED_SEARCHES_CONFIG_STAMP_PARAM_NAME = "stamp";
+
+    // Deprecated.
     private static final int MANDATORY_PROMO_DEFAULT_LIMIT = 10;
 
     // Cached values to avoid repeated and redundant JNI operations.
@@ -269,6 +273,37 @@ public class ContextualSearchFieldTrial {
                             : 0);
         }
         return sSettings[value].intValue();
+    }
+
+    /**
+     * Gets the "stamp" parameter from the RelatedSearches FieldTrial feature.
+     * @return The stamp parameter from the feature. If no stamp param is present then an empty
+     *         string is returned.
+     */
+    static String getRelatedSearchesExperiementConfigurationStamp() {
+        return getRelatedSearchesParam(RELATED_SEARCHES_CONFIG_STAMP_PARAM_NAME);
+    }
+
+    /**
+     * Gets the given parameter from the RelatedSearches FieldTrial feature.
+     * @param paramName The name of the parameter to get.
+     * @return The value of the parameter from the feature. If no param is present then an empty
+     *         string is returned.
+     */
+    static String getRelatedSearchesParam(String paramName) {
+        return ChromeFeatureList.getFieldTrialParamByFeature(
+                ChromeFeatureList.RELATED_SEARCHES, paramName);
+    }
+
+    /**
+     * Determines whether the specified parameter is present and enabled in the RelatedSearches
+     * Feature.
+     * @param relatedSearchesParamName The name of the param to get from the Feature.
+     * @return Whether the given parameter is enabled or not (has a value of "true").
+     */
+    static boolean isRelatedSearchesParamEnabled(String relatedSearchesParamName) {
+        return ChromeFeatureList.getFieldTrialParamByFeatureAsBoolean(
+                ChromeFeatureList.RELATED_SEARCHES, relatedSearchesParamName, false);
     }
 
     // --------------------------------------------------------------------------------------------

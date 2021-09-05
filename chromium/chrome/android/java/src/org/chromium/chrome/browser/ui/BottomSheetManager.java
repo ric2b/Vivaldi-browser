@@ -4,8 +4,12 @@
 
 package org.chromium.chrome.browser.ui;
 
+import androidx.annotation.Nullable;
+
 import org.chromium.base.Callback;
+import org.chromium.base.CallbackController;
 import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.OneshotSupplier;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.ActivityTabProvider.ActivityTabObserver;
@@ -23,6 +27,8 @@ import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.util.ChromeAccessibilityUtil;
 import org.chromium.chrome.browser.vr.VrModuleProvider;
 import org.chromium.chrome.features.start_surface.StartSurface;
+import org.chromium.chrome.features.start_surface.StartSurface.StateObserver;
+import org.chromium.chrome.features.start_surface.StartSurfaceState;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.StateChangeReason;
@@ -60,8 +66,11 @@ class BottomSheetManager extends EmptyBottomSheetObserver implements Destroyable
     /** A tab observer that is only attached to the active tab. */
     private final TabObserver mTabObserver;
 
+    private final CallbackController mCallbackController;
+
     /** The supplier of {@link StartSurface} instance. */
-    private final Supplier<StartSurface> mStartSurfaceSupplier;
+    private final OneshotSupplier<StartSurface> mStartSurfaceSupplier;
+    private StateObserver mStartSurfaceStateObserver;
 
     /** A browser controls manager for polling browser controls offsets. */
     private BrowserControlsVisibilityManager mBrowserControlsVisibilityManager;
@@ -111,6 +120,9 @@ class BottomSheetManager extends EmptyBottomSheetObserver implements Destroyable
     /** The token used to enable browser controls persistence. */
     private int mPersistentControlsToken;
 
+    /** A token used to suppress the bottom sheet in Tab switcher. */
+    private int mTabSwitcherToken;
+
     public BottomSheetManager(ManagedBottomSheetController controller,
             ActivityTabProvider tabProvider,
             BrowserControlsVisibilityManager controlsVisibilityManager,
@@ -119,7 +131,7 @@ class BottomSheetManager extends EmptyBottomSheetObserver implements Destroyable
             TabObscuringHandler obscuringDelegate,
             ObservableSupplier<Boolean> omniboxFocusStateSupplier,
             Supplier<OverlayPanelManager> overlayManager,
-            Supplier<StartSurface> startSurfaceSupplier) {
+            OneshotSupplier<StartSurface> startSurfaceSupplier) {
         mSheetController = controller;
         mTabProvider = tabProvider;
         mBrowserControlsVisibilityManager = controlsVisibilityManager;
@@ -131,6 +143,9 @@ class BottomSheetManager extends EmptyBottomSheetObserver implements Destroyable
         mOmniboxFocusStateSupplier = omniboxFocusStateSupplier;
         mOverlayPanelManager = overlayManager;
         mStartSurfaceSupplier = startSurfaceSupplier;
+        mCallbackController = new CallbackController();
+        mStartSurfaceSupplier.onAvailable(
+                mCallbackController.makeCancelable(this::addStartSurfaceStateObserver));
 
         mSheetController.addObserver(this);
         mSheetController.setAccssibilityUtil(ChromeAccessibilityUtil.get());
@@ -159,22 +174,17 @@ class BottomSheetManager extends EmptyBottomSheetObserver implements Destroyable
         };
 
         mActivityTabObserver = new HintlessActivityTabObserver() {
-            /** A token held while this object is suppressing the bottom sheet. */
-            private int mToken;
-
             @Override
             public void onActivityTabChanged(Tab tab) {
                 // Temporarily suppress the sheet if entering a state where there is no activity
                 // tab and the Start surface homepage isn't showing.
-                if (tab == null) {
-                    if (mStartSurfaceSupplier.get() == null
-                            || !mStartSurfaceSupplier.get().getController().isHomePageShowing()) {
-                        mToken = controller.suppressSheet(StateChangeReason.COMPOSITED_UI);
-                    }
-                    return;
-                }
+                updateSuppressionForTabSwitcher(tab,
+                        mStartSurfaceSupplier.get() == null ? null
+                                                            : mStartSurfaceSupplier.get()
+                                                                      .getController()
+                                                                      .getStartSurfaceState());
 
-                controller.unsuppressSheet(mToken);
+                if (tab == null) return;
 
                 // If refocusing the same tab, simply unsuppress the sheet.
                 if (mLastActivityTab == tab) return;
@@ -255,6 +265,72 @@ class BottomSheetManager extends EmptyBottomSheetObserver implements Destroyable
             }
         };
         mOmniboxFocusStateSupplier.addObserver(mOmniboxFocusObserver);
+    }
+
+    /**
+     * Called by both {@link StateObserver} and {@link HintlessActivityTabObserver} to update the
+     * suppression of the bottom sheet for Tab switcher.
+     * @param tab The current tab. It might be null when the Start surface or the Tab switcher is
+     *            showing.
+     * @param startSurfaceState The current state surface state when the Start surface is enabled,
+     *                          null otherwise.
+     */
+    private void updateSuppressionForTabSwitcher(
+            @Nullable Tab tab, @Nullable @StartSurfaceState Integer startSurfaceState) {
+        if (shouldSuppressForTabSwitcher(tab, startSurfaceState)) {
+            if (mTabSwitcherToken == 0) {
+                mTabSwitcherToken = mSheetController.suppressSheet(StateChangeReason.COMPOSITED_UI);
+            }
+        } else {
+            mSheetController.unsuppressSheet(mTabSwitcherToken);
+            /**
+             * Reset the token after unsuppression. Without resetting the token, the bottom sheet
+             * won't be suppress again the next time entering Tab switcher. This is because the
+             * bottom sheet is only suppressed in Tab switcher if {@link mTabSwitcherToken} is 0 by
+             * the first observer who notices the event.
+             */
+            mTabSwitcherToken = 0;
+        }
+    }
+
+    private boolean shouldSuppressForTabSwitcher(
+            Tab tab, @StartSurfaceState Integer startSurfaceState) {
+        StartSurface startSurface = mStartSurfaceSupplier.get();
+        if (tab == null && startSurface == null) return true;
+
+        /** When the Start surface is enabled, the {@link startSurfaceState} isn't null. */
+        if (startSurfaceState != null) {
+            if (startSurfaceState == StartSurfaceState.SHOWING_HOMEPAGE
+                    || startSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE) {
+                return false;
+            } else if (startSurfaceState != StartSurfaceState.NOT_SHOWN
+                    && startSurfaceState != StartSurfaceState.DISABLED) {
+                return true;
+            }
+        }
+
+        return tab == null;
+    }
+
+    private void addStartSurfaceStateObserver(StartSurface startSurface) {
+        mStartSurfaceStateObserver = new StateObserver() {
+            private int mStartSurfaceState;
+            @Override
+            public void onStateChanged(
+                    int startSurfaceState, boolean shouldShowTabSwitcherToolbar) {
+                if (mStartSurfaceState == startSurfaceState) return;
+
+                assert startSurfaceState == startSurface.getController().getStartSurfaceState();
+                mStartSurfaceState = startSurfaceState;
+                updateSuppressionForTabSwitcher(mTabProvider.get(), startSurfaceState);
+
+                if (startSurfaceState == StartSurfaceState.SHOWN_HOMEPAGE) {
+                    mSheetController.clearRequestsAndHide();
+                }
+            }
+        };
+
+        startSurface.addStateChangeObserver(mStartSurfaceStateObserver);
     }
 
     @Override
@@ -348,6 +424,7 @@ class BottomSheetManager extends EmptyBottomSheetObserver implements Destroyable
 
     @Override
     public void destroy() {
+        mCallbackController.destroy();
         if (mLastActivityTab != null) mLastActivityTab.removeObserver(mTabObserver);
         mTabProvider.removeObserver(mActivityTabObserver);
         mSheetController.removeObserver(this);
@@ -355,5 +432,8 @@ class BottomSheetManager extends EmptyBottomSheetObserver implements Destroyable
         mBrowserControlsVisibilityManager.removeObserver(mBrowserControlsObserver);
         mOmniboxFocusStateSupplier.removeObserver(mOmniboxFocusObserver);
         VrModuleProvider.unregisterVrModeObserver(mVrModeObserver);
+        if (mStartSurfaceSupplier.get() != null) {
+            mStartSurfaceSupplier.get().removeStateChangeObserver(mStartSurfaceStateObserver);
+        }
     }
 }

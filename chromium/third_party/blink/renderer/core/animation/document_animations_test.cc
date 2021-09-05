@@ -62,8 +62,7 @@ class DocumentAnimationsTest : public RenderingTest {
   }
 
   void UpdateAllLifecyclePhasesForTest() {
-    document->View()->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
-    document->View()->RunPostLifecycleSteps();
+    document->View()->UpdateAllLifecyclePhasesForTest();
   }
 
   Persistent<Document> document;
@@ -135,8 +134,8 @@ TEST_F(DocumentAnimationsTest, UpdateAnimationsUpdatesAllTimelines) {
   EXPECT_CALL(*timeline1, ScheduleNextService());
   EXPECT_CALL(*timeline2, ScheduleNextService());
 
-  document->GetDocumentAnimations().UpdateAnimations(
-      DocumentLifecycle::kPaintClean, nullptr);
+  document->GetFrame()->LocalFrameRoot().View()->UpdateAllLifecyclePhases(
+      DocumentUpdateReason::kTest);
 
   // Verify that animations count is correctly updated on animation host.
   cc::AnimationHost* host = document->View()->GetCompositorAnimationHost();

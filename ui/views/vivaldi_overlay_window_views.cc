@@ -49,8 +49,27 @@ private:
   vivaldi::MuteButton* mute_button_ = nullptr;
 };
 
+void OverlayWindowViews::HandleVivaldiMuteButton() {
+  content::WebContents* contents = controller_->GetWebContents();
+
+  DCHECK_EQ(contents->IsAudioMuted(),
+            mute_button_->muted_mode() == vivaldi::MuteButton::Mode::kMute);
+
+  if (contents->IsAudioMuted()) {
+    contents->SetAudioMuted(false);
+    mute_button_->ChangeMode(vivaldi::MuteButton::Mode::kAudible, false);
+  } else {
+    contents->SetAudioMuted(true);
+    mute_button_->ChangeMode(vivaldi::MuteButton::Mode::kMute, false);
+  }
+}
+
 void OverlayWindowViews::CreateVivaldiVideoControls() {
-  auto mute_button = std::make_unique<vivaldi::MuteButton>(this);
+  auto mute_button = std::make_unique<vivaldi::MuteButton>(base::BindRepeating(
+      [](OverlayWindowViews* overlay) {
+        overlay->HandleVivaldiMuteButton();
+    }, base::Unretained(this)));
+
   mute_button->SetPaintToLayer(ui::LAYER_TEXTURED);
   mute_button->layer()->SetFillsBoundsOpaquely(false);
   mute_button->layer()->SetName("MuteControlsView");
@@ -129,30 +148,13 @@ void OverlayWindowViews::HandleVivaldiKeyboardEvents(ui::KeyEvent* event) {
   }
 }
 
-void OverlayWindowViews::HandleVivaldiButtonPressed(views::Button* sender) {
-  if (sender == mute_button_) {
-    content::WebContents* contents = controller_->GetWebContents();
-
-    DCHECK_EQ(contents->IsAudioMuted(),
-              mute_button_->muted_mode() == vivaldi::MuteButton::Mode::kMute);
-
-    if (contents->IsAudioMuted()) {
-      contents->SetAudioMuted(false);
-      mute_button_->ChangeMode(vivaldi::MuteButton::Mode::kAudible, false);
-    } else {
-      contents->SetAudioMuted(true);
-      mute_button_->ChangeMode(vivaldi::MuteButton::Mode::kMute, false);
-    }
-  }
-}
-
 void OverlayWindowViews::HandleVivaldiGestureEvent(ui::GestureEvent* event) {
   bool handled = false;
   if (progress_view_) {
     handled = progress_view_->HandleGestureEvent(event);
   }
   if (!handled) {
-    HandleVivaldiButtonPressed(mute_button_);
+    HandleVivaldiMuteButton();
   }
 }
 

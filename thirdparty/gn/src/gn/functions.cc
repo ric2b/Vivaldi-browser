@@ -810,35 +810,12 @@ Value RunNotNeeded(Scope* scope,
 
 const char kSetSourcesAssignmentFilter[] = "set_sources_assignment_filter";
 const char kSetSourcesAssignmentFilter_HelpShort[] =
-    "set_sources_assignment_filter: Set a pattern to filter source files.";
+    "set_sources_assignment_filter: Deprecated feature.";
 const char kSetSourcesAssignmentFilter_Help[] =
-    R"(set_sources_assignment_filter: Set a pattern to filter source files.
+    R"(set_sources_assignment_filter: Deprecated feature.
 
-  The sources assignment filter is a list of patterns that remove files from
-  the list implicitly whenever the "sources" variable is assigned to. This will
-  do nothing for non-lists.
-
-  This is intended to be used to globally filter out files with
-  platform-specific naming schemes when they don't apply, for example you may
-  want to filter out all "*_win.cc" files on non-Windows platforms.
-
-  Typically this will be called once in the master build config script to set
-  up the filter for the current platform. Subsequent calls will overwrite the
-  previous values.
-
-  If you want to bypass the filter and add a file even if it might be filtered
-  out, call set_sources_assignment_filter([]) to clear the list of filters.
-  This will apply until the current scope exits.
-
-  See "gn help file_pattern" for more information on file pattern.
-
-Sources assignment example
-
-  # Filter out all _win files.
-  set_sources_assignment_filter([ "*_win.cc", "*_win.h" ])
-  sources = [ "a.cc", "b_win.cc" ]
-  print(sources)
-  # Will print [ "a.cc" ]. b_win one was filtered out.
+  This feature is deprecated. It will be removed once all usages have been
+  removed. Only supports a single argument that needs to be an empty list.
 )";
 
 Value RunSetSourcesAssignmentFilter(Scope* scope,
@@ -847,12 +824,19 @@ Value RunSetSourcesAssignmentFilter(Scope* scope,
                                     Err* err) {
   if (args.size() != 1) {
     *err = Err(function, "set_sources_assignment_filter takes one argument.");
-  } else {
-    std::unique_ptr<PatternList> f = std::make_unique<PatternList>();
-    f->SetFromValue(args[0], err);
-    if (!err->has_error())
-      scope->set_sources_assignment_filter(std::move(f));
+    return Value();
   }
+
+  if (!args[0].VerifyTypeIs(Value::LIST, err)) {
+    return Value();
+  }
+
+  if (!args[0].list_value().empty()) {
+    *err = Err(function,
+               "set_sources_assignment_filter argument must be an empty list.");
+    return Value();
+  }
+
   return Value();
 }
 

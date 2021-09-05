@@ -463,6 +463,11 @@
         "default": "dialog",
         "syncable": false
       },
+      "notification_sound": {
+        "type": "string",
+        "default": "",
+        "syncable": false
+      },
       "display": {
         "density": {
           "type": "enum",
@@ -1237,6 +1242,12 @@
         ],
         "syncable": false
       },
+      "lazy_load": {
+        "description": "Load panels upon startup",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
       "position": {
         "type": "enum",
         "enum_values": {
@@ -1244,6 +1255,12 @@
           "right": 1
         },
         "default": "left",
+        "syncable": true
+      },
+      "show_folder_badge": {
+        "description": "Show a badge with the number of children",
+        "type": "boolean",
+        "default": true,
         "syncable": true
       },
       "show_toggle": {
@@ -1790,6 +1807,18 @@
           "default": 30,
           "syncable": true
         },
+        "slider_xpos": {
+          "description": "Vertical tab bar split when second row active",
+          "type": "integer",
+          "default": 90,
+          "syncable": true
+        },
+        "slider_ypos": {
+          "description": "Horizontal tab bar split when second row active",
+          "type": "integer",
+          "default": 30,
+          "syncable": true
+        },
         "position": {
           "type": "enum",
           "enum_values": {
@@ -1967,7 +1996,7 @@
           "syncable": true
         },
         "allow_rename": {
-          "description": "Allow tab stack renaming",
+          "description": "[DEPRECATED 2021/1] Allow tab stack renaming",
           "type": "boolean",
           "default": false,
           "syncable": true
@@ -1983,9 +2012,23 @@
           "type": "enum",
           "enum_values": {
             "off": 0,
-            "on": 1
+            "dotted": 1,
+            "substrip": 2,
+            "accordion": 3
           },
-          "default": "on",
+          "default": "substrip",
+          "syncable": true
+        },
+        "prefer_dotted": {
+          "description": "Use Dotted Tabs to visualize the stack",
+          "type": "boolean",
+          "default": false,
+          "syncable": true
+        },
+        "substrip_locked": {
+          "description": "Keep the second tab bar open when empty",
+          "type": "boolean",
+          "default": false,
           "syncable": true
         },
         "name_map": {
@@ -2004,7 +2047,7 @@
       "thumbnails": {
         "description": "Show page preview thumbnail within a tab",
         "type": "boolean",
-        "default": true,
+        "default": false,
         "syncable": true
       },
       "tooltip": {
@@ -2075,9 +2118,9 @@
         "default": 1.0,
         "syncable": true
       },
-      "contrast_minimum": {
+      "contrast": {
         "type": "double",
-        "default": 0.0,
+        "default": 5.0,
         "syncable": true
       },
       "dim_blurred": {

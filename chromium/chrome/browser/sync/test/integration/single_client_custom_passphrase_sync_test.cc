@@ -3,12 +3,11 @@
 // found in the LICENSE file.
 
 #include "base/base64.h"
-#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/sync/test/integration/bookmarks_helper.h"
 #include "chrome/browser/sync/test/integration/encryption_helper.h"
 #include "chrome/browser/sync/test/integration/passwords_helper.h"
 #include "chrome/browser/sync/test/integration/sync_test.h"
-#include "components/autofill/core/common/password_form.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/sync/base/passphrase_enums.h"
 #include "components/sync/driver/profile_sync_service.h"
 #include "components/sync/engine/sync_engine_switches.h"
@@ -59,7 +58,7 @@ class CommittedBookmarkEntityNameObserver : public FakeServer::Observer {
     fake_server_->RemoveObserver(this);
   }
 
-  void OnCommit(const std::string& committer_id,
+  void OnCommit(const std::string& committer_invalidator_client_id,
                 ModelTypeSet committed_model_types) override {
     sync_pb::ClientToServerMessage message;
     fake_server_->GetLastCommitMessage(&message);
@@ -202,18 +201,20 @@ class SingleClientCustomPassphraseUseScryptSyncTest
 
 IN_PROC_BROWSER_TEST_F(SingleClientCustomPassphraseSyncTest,
                        CommitsEncryptedData) {
+  const std::string title1 = "Hello world";
+  const std::string title2 = "Bookmark #2";
+  const GURL page_url1("https://google.com/");
+  const GURL page_url2("https://example.com/");
+
   SetEncryptionPassphraseForClient(/*index=*/0, "hunter2");
   ASSERT_TRUE(SetupSync());
 
-  ASSERT_TRUE(
-      AddURL(/*profile=*/0, "Hello world", GURL("https://google.com/")));
-  ASSERT_TRUE(
-      AddURL(/*profile=*/0, "Bookmark #2", GURL("https://example.com/")));
+  ASSERT_TRUE(AddURL(/*profile=*/0, title1, page_url1));
+  ASSERT_TRUE(AddURL(/*profile=*/0, title2, page_url2));
   ASSERT_TRUE(WaitForNigori(PassphraseType::kCustomPassphrase));
 
   EXPECT_TRUE(WaitForEncryptedServerBookmarks(
-      {{"Hello world", GURL("https://google.com/")},
-       {"Bookmark #2", GURL("https://example.com/")}},
+      {{title1, page_url1}, {title2, page_url2}},
       /*passphrase=*/"hunter2"));
 }
 
@@ -250,7 +251,7 @@ IN_PROC_BROWSER_TEST_F(SingleClientCustomPassphraseSyncTest,
 // reencrypt the data and recover from this state.
 IN_PROC_BROWSER_TEST_F(SingleClientCustomPassphraseSyncTest,
                        CanDecryptWithKeystoreKeys) {
-  const autofill::PasswordForm password_form =
+  const password_manager::PasswordForm password_form =
       passwords_helper::CreateTestPasswordForm(0);
   passwords_helper::InjectKeystoreEncryptedServerPassword(password_form,
                                                           GetFakeServer());
@@ -262,37 +263,39 @@ IN_PROC_BROWSER_TEST_F(SingleClientCustomPassphraseSyncTest,
 
 IN_PROC_BROWSER_TEST_F(SingleClientCustomPassphraseDoNotUseScryptSyncTest,
                        CommitsEncryptedDataUsingPbkdf2WhenScryptDisabled) {
+  const std::string title = "PBKDF2 encrypted";
+  const GURL page_url("https://google.com/pbkdf2-encrypted");
+
   SetEncryptionPassphraseForClient(/*index=*/0, "hunter2");
   ASSERT_TRUE(SetupSync());
-  ASSERT_TRUE(AddURL(/*profile=*/0, "PBKDF2 encrypted",
-                     GURL("https://google.com/pbkdf2-encrypted")));
+  ASSERT_TRUE(AddURL(/*profile=*/0, title, page_url));
 
   ASSERT_TRUE(WaitForNigori(PassphraseType::kCustomPassphrase));
   NigoriSpecifics nigori;
   EXPECT_TRUE(GetServerNigori(GetFakeServer(), &nigori));
   EXPECT_EQ(nigori.custom_passphrase_key_derivation_method(),
             sync_pb::NigoriSpecifics::PBKDF2_HMAC_SHA1_1003);
-  EXPECT_TRUE(WaitForEncryptedServerBookmarks(
-      {{"PBKDF2 encrypted", GURL("https://google.com/pbkdf2-encrypted")}},
-      /*passphrase=*/"hunter2"));
+  EXPECT_TRUE(WaitForEncryptedServerBookmarks({{title, page_url}},
+                                              /*passphrase=*/"hunter2"));
 }
 
 IN_PROC_BROWSER_TEST_F(SingleClientCustomPassphraseUseScryptSyncTest,
                        CommitsEncryptedDataUsingScryptWhenScryptEnabled) {
+  const std::string title = "scrypt encrypted";
+  const GURL page_url("https://google.com/scrypt-encrypted");
+
   SetEncryptionPassphraseForClient(/*index=*/0, "hunter2");
   ASSERT_TRUE(SetupSync());
 
-  ASSERT_TRUE(AddURL(/*profile=*/0, "scrypt encrypted",
-                     GURL("https://google.com/scrypt-encrypted")));
+  ASSERT_TRUE(AddURL(/*profile=*/0, title, page_url));
 
   ASSERT_TRUE(WaitForNigori(PassphraseType::kCustomPassphrase));
   NigoriSpecifics nigori;
   EXPECT_TRUE(GetServerNigori(GetFakeServer(), &nigori));
   EXPECT_EQ(nigori.custom_passphrase_key_derivation_method(),
             sync_pb::NigoriSpecifics::SCRYPT_8192_8_11);
-  EXPECT_TRUE(WaitForEncryptedServerBookmarks(
-      {{"scrypt encrypted", GURL("https://google.com/scrypt-encrypted")}},
-      /*passphrase=*/"hunter2"));
+  EXPECT_TRUE(WaitForEncryptedServerBookmarks({{title, page_url}},
+                                              /*passphrase=*/"hunter2"));
 }
 
 IN_PROC_BROWSER_TEST_F(SingleClientCustomPassphraseDoNotUseScryptSyncTest,
@@ -314,12 +317,13 @@ IN_PROC_BROWSER_TEST_F(SingleClientCustomPassphraseDoNotUseScryptSyncTest,
 
 IN_PROC_BROWSER_TEST_F(SingleClientCustomPassphraseDoNotUseScryptSyncTest,
                        DoesNotLeakUnencryptedData) {
+  const std::string title = "Should be encrypted";
+  const GURL page_url("https://google.com/encrypted");
   SetEncryptionPassphraseForClient(/*index=*/0, "hunter2");
   ASSERT_TRUE(SetupClients());
 
   // Create local bookmarks before sync is enabled.
-  ASSERT_TRUE(AddURL(/*profile=*/0, "Should be encrypted",
-                     GURL("https://google.com/encrypted")));
+  ASSERT_TRUE(AddURL(/*profile=*/0, title, page_url));
 
   CommittedBookmarkEntityNameObserver observer(GetFakeServer());
   ASSERT_TRUE(SetupSync());
@@ -333,19 +337,20 @@ IN_PROC_BROWSER_TEST_F(SingleClientCustomPassphraseDoNotUseScryptSyncTest,
   // once, we are certain that no bookmarks other than those we've verified to
   // be encrypted have been committed.
   EXPECT_TRUE(WaitForEncryptedServerBookmarks(
-      {{"Should be encrypted", GURL("https://google.com/encrypted")}},
+      {{title, page_url}},
       {KeyDerivationParams::CreateForPbkdf2(), "hunter2"}));
   EXPECT_THAT(observer.GetCommittedEntityNames(), ElementsAre("encrypted"));
 }
 
 IN_PROC_BROWSER_TEST_F(SingleClientCustomPassphraseDoNotUseScryptSyncTest,
                        ReencryptsDataWhenPassphraseIsSet) {
+  const std::string title = "Re-encryption is great";
+  const GURL page_url("https://google.com/re-encrypted");
   ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(WaitForNigori(PassphraseType::kKeystorePassphrase));
-  ASSERT_TRUE(AddURL(/*profile=*/0, "Re-encryption is great",
-                     GURL("https://google.com/re-encrypted")));
-  std::vector<ServerBookmarksEqualityChecker::ExpectedBookmark> expected = {
-      {"Re-encryption is great", GURL("https://google.com/re-encrypted")}};
+  ASSERT_TRUE(AddURL(/*profile=*/0, title, page_url));
+  const std::vector<ServerBookmarksEqualityChecker::ExpectedBookmark> expected =
+      {{title, page_url}};
   ASSERT_TRUE(WaitForUnencryptedServerBookmarks(expected));
 
   GetSyncService()->GetUserSettings()->SetEncryptionPassphrase("hunter2");

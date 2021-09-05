@@ -7,6 +7,8 @@
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
 #include "chrome/browser/media/router/media_router_feature.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/global_media_controls/cast_media_notification_item.h"
 #include "chrome/browser/ui/global_media_controls/media_notification_container_impl.h"
 #include "chrome/browser/ui/global_media_controls/media_notification_container_observer.h"
 #include "chrome/browser/ui/global_media_controls/media_notification_service.h"
@@ -15,6 +17,8 @@
 #include "chrome/browser/ui/views/global_media_controls/media_notification_device_selector_view.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/media_message_center/media_notification_view_modern_impl.h"
+#include "components/media_router/browser/media_router.h"
+#include "components/media_router/browser/media_router_factory.h"
 #include "components/vector_icons/vector_icons.h"
 #include "media/audio/audio_device_description.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -43,6 +47,11 @@ constexpr int kDismissButtonBackgroundRadius = 15;
 constexpr SkColor kDefaultForegroundColor = SK_ColorBLACK;
 constexpr SkColor kDefaultBackgroundColor = SK_ColorTRANSPARENT;
 constexpr float kDragImageOpacity = 0.7f;
+constexpr gfx::Insets kStopCastButtonStripInsets{6, 15};
+constexpr gfx::Size kStopCastButtonStripSize{400, 30};
+constexpr gfx::Insets kStopCastButtonBorderInsets{4, 8};
+constexpr gfx::Size kCrOSDismissButtonSize = gfx::Size(20, 20);
+constexpr int kCrOSDismissButtonIconSize = 12;
 
 // The minimum number of enabled and visible user actions such that we should
 // force the MediaNotificationView to be expanded.
@@ -57,11 +66,12 @@ constexpr int kMinMovementSquaredToBeDragging = 10;
 class MediaNotificationContainerImplView::DismissButton
     : public views::ImageButton {
  public:
-  explicit DismissButton(views::ButtonListener* listener)
-      : views::ImageButton(listener) {
+  explicit DismissButton(PressedCallback callback)
+      : views::ImageButton(std::move(callback)) {
     views::ConfigureVectorImageButton(this);
     views::InstallFixedSizeCircleHighlightPathGenerator(
         this, kDismissButtonBackgroundRadius);
+    SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
   }
 
   ~DismissButton() override = default;
@@ -74,13 +84,20 @@ MediaNotificationContainerImplView::MediaNotificationContainerImplView(
     const std::string& id,
     base::WeakPtr<media_message_center::MediaNotificationItem> item,
     MediaNotificationService* service,
-    media_message_center::MediaNotificationViewImpl::BackgroundStyle
-        background_style)
-    : views::Button(this),
+    base::Optional<media_message_center::NotificationTheme> theme)
+    : views::Button(base::BindRepeating(
+          [](MediaNotificationContainerImplView* view) {
+            // If |is_dragging_| is set, this click should be treated as a drag
+            // and not fire ContainerClicked().
+            if (!view->is_dragging_)
+              view->ContainerClicked();
+          },
+          base::Unretained(this))),
       id_(id),
       foreground_color_(kDefaultForegroundColor),
       background_color_(kDefaultBackgroundColor),
-      service_(service) {
+      service_(service),
+      is_cros_(theme.has_value()) {
   SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
   SetPreferredSize(kNormalSize);
@@ -95,30 +112,43 @@ MediaNotificationContainerImplView::MediaNotificationContainerImplView(
   swipeable_container->layer()->SetFillsBoundsOpaquely(false);
   swipeable_container_ = AddChildView(std::move(swipeable_container));
 
+  gfx::Size dismiss_button_size =
+      is_cros_ ? kCrOSDismissButtonSize : kDismissButtonSize;
+
   auto dismiss_button_placeholder = std::make_unique<views::View>();
-  dismiss_button_placeholder->SetPreferredSize(kDismissButtonSize);
+  dismiss_button_placeholder->SetPreferredSize(dismiss_button_size);
   dismiss_button_placeholder->SetLayoutManager(
       std::make_unique<views::FillLayout>());
   dismiss_button_placeholder_ = dismiss_button_placeholder.get();
 
   auto dismiss_button_container = std::make_unique<views::View>();
-  dismiss_button_container->SetPreferredSize(kDismissButtonSize);
+  dismiss_button_container->SetPreferredSize(dismiss_button_size);
   dismiss_button_container->SetLayoutManager(
       std::make_unique<views::FillLayout>());
   dismiss_button_container->SetVisible(false);
   dismiss_button_container_ = dismiss_button_placeholder_->AddChildView(
       std::move(dismiss_button_container));
 
-  auto dismiss_button = std::make_unique<DismissButton>(this);
-  dismiss_button->SetPreferredSize(kDismissButtonSize);
-  dismiss_button->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
+  auto dismiss_button = std::make_unique<DismissButton>(base::BindRepeating(
+      &MediaNotificationContainerImplView::DismissNotification,
+      base::Unretained(this)));
+  dismiss_button->SetPreferredSize(dismiss_button_size);
   dismiss_button->SetTooltipText(l10n_util::GetStringUTF16(
       IDS_GLOBAL_MEDIA_CONTROLS_DISMISS_ICON_TOOLTIP_TEXT));
   dismiss_button_ =
       dismiss_button_container_->AddChildView(std::move(dismiss_button));
   UpdateDismissButtonIcon();
 
-  bool is_cast_notification = item ? item->SourceIsCast() : false;
+  // Compute a few things related to |item| before the construction of |view|
+  // below moves it.
+  const bool is_cast_notification =
+      item && item->SourceType() == media_message_center::SourceType::kCast;
+  auto* const cast_item =
+      is_cast_notification ? static_cast<CastMediaNotificationItem*>(item.get())
+                           : nullptr;
+  const bool is_local_media_session =
+      item && item->SourceType() ==
+                  media_message_center::SourceType::kLocalMediaSession;
 
   std::unique_ptr<media_message_center::MediaNotificationView> view;
   if (base::FeatureList::IsEnabled(media::kGlobalMediaControlsModernUI)) {
@@ -130,15 +160,53 @@ MediaNotificationContainerImplView::MediaNotificationContainerImplView(
   } else {
     view = std::make_unique<media_message_center::MediaNotificationViewImpl>(
         this, std::move(item), std::move(dismiss_button_placeholder),
-        base::string16(), kWidth, /*should_show_icon=*/false, background_style);
+        base::string16(), kWidth, /*should_show_icon=*/false, theme);
     SetPreferredSize(kNormalSize);
   }
 
   view_ = swipeable_container_->AddChildView(std::move(view));
+  if (is_cast_notification &&
+      media_router::GlobalMediaControlsCastStartStopEnabled()) {
+    stop_button_strip_ = AddChildView(std::make_unique<views::View>());
+    auto* stop_cast_button_strip_layout =
+        stop_button_strip_->SetLayoutManager(std::make_unique<views::BoxLayout>(
+            views::BoxLayout::Orientation::kHorizontal,
+            kStopCastButtonStripInsets));
+    stop_cast_button_strip_layout->set_main_axis_alignment(
+        views::BoxLayout::MainAxisAlignment::kStart);
+    stop_cast_button_strip_layout->set_cross_axis_alignment(
+        views::BoxLayout::CrossAxisAlignment::kCenter);
+    stop_button_strip_->SetBackground(
+        views::CreateSolidBackground(background_color_));
+    stop_button_strip_->SetPreferredSize(kStopCastButtonStripSize);
+
+    stop_cast_button_ =
+        stop_button_strip_->AddChildView(std::make_unique<views::LabelButton>(
+            base::BindRepeating(
+                [](CastMediaNotificationItem* cast_item) {
+                  media_router::MediaRouterFactory::GetApiForBrowserContext(
+                      cast_item->profile())
+                      ->TerminateRoute(cast_item->route_id());
+                },
+                base::Unretained(cast_item)),
+            l10n_util::GetStringUTF16(
+                IDS_GLOBAL_MEDIA_CONTROLS_STOP_CASTING_BUTTON_LABEL)));
+    stop_cast_button_->SetInkDropMode(InkDropMode::ON);
+    stop_cast_button_->SetHasInkDropActionOnClick(true);
+    stop_cast_button_->SetInkDropBaseColor(foreground_color_);
+    stop_cast_button_->SetInkDropLargeCornerRadius(
+        kStopCastButtonStripSize.height());
+    stop_cast_button_->SetEnabledTextColors(foreground_color_);
+    stop_cast_button_->SetFocusBehavior(FocusBehavior::ALWAYS);
+    stop_cast_button_->SetBorder(views::CreatePaddedBorder(
+        views::CreateRoundedRectBorder(1, kStopCastButtonStripSize.height() / 2,
+                                       foreground_color_),
+        kStopCastButtonBorderInsets));
+  }
 
   if (base::FeatureList::IsEnabled(
           media::kGlobalMediaControlsSeamlessTransfer) &&
-      !is_cast_notification) {
+      is_local_media_session) {
     auto cast_controller =
         media_router::GlobalMediaControlsCastStartStopEnabled()
             ? service_->CreateCastDialogControllerForSession(id_)
@@ -347,10 +415,19 @@ void MediaNotificationContainerImplView::OnColorsChanged(SkColor foreground,
   if (foreground_color_ != foreground) {
     foreground_color_ = foreground;
     UpdateDismissButtonIcon();
+    if (stop_cast_button_) {
+      stop_cast_button_->SetEnabledTextColors(foreground_color_);
+      stop_cast_button_->SetInkDropBaseColor(foreground_color_);
+    }
   }
+
   if (background_color_ != background) {
     background_color_ = background;
     UpdateDismissButtonBackground();
+    if (stop_button_strip_) {
+      stop_button_strip_->SetBackground(
+          views::CreateSolidBackground(background_color_));
+    }
   }
   if (audio_device_selector_view_)
     audio_device_selector_view_->OnColorsChanged(foreground, background);
@@ -400,20 +477,6 @@ void MediaNotificationContainerImplView::OnSlideOut() {
   DismissNotification();
 }
 
-void MediaNotificationContainerImplView::ButtonPressed(views::Button* sender,
-                                                       const ui::Event& event) {
-  if (sender == dismiss_button_) {
-    DismissNotification();
-  } else if (sender == this) {
-    // If |is_dragging_| is set, this click should be treated as a drag and not
-    // fire the |OnContainerClicked()| event.
-    if (!is_dragging_)
-      ContainerClicked();
-  } else {
-    NOTREACHED();
-  }
-}
-
 void MediaNotificationContainerImplView::AddObserver(
     MediaNotificationContainerObserver* observer) {
   observers_.AddObserver(observer);
@@ -448,9 +511,15 @@ MediaNotificationContainerImplView::GetDismissButtonForTesting() {
   return dismiss_button_;
 }
 
+views::Button*
+MediaNotificationContainerImplView::GetStopCastingButtonForTesting() {
+  return stop_cast_button_;
+}
+
 void MediaNotificationContainerImplView::UpdateDismissButtonIcon() {
   views::SetImageFromVectorIconWithColor(
-      dismiss_button_, vector_icons::kCloseRoundedIcon, kDismissButtonIconSize,
+      dismiss_button_, vector_icons::kCloseRoundedIcon,
+      is_cros_ ? kCrOSDismissButtonIconSize : kDismissButtonIconSize,
       foreground_color_);
 }
 

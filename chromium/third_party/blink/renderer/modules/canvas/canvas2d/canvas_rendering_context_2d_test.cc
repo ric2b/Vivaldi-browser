@@ -138,7 +138,7 @@ class CanvasRenderingContext2DTest : public ::testing::Test {
       LatencyMode = kNormalLatency,
       ReadFrequencyMode = ReadFrequencyMode::kWillNotReadFrequency);
   ScriptState* GetScriptState() {
-    return ToScriptStateForMainWorld(canvas_element_->GetFrame());
+    return ToScriptStateForMainWorld(canvas_element_->DomWindow()->GetFrame());
   }
 
   void TearDown() override;
@@ -154,8 +154,7 @@ class CanvasRenderingContext2DTest : public ::testing::Test {
   }
 
   void UpdateAllLifecyclePhasesForTest() {
-    GetDocument().View()->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
-    GetDocument().View()->RunPostLifecycleSteps();
+    GetDocument().View()->UpdateAllLifecyclePhasesForTest();
   }
 
   std::unique_ptr<frame_test_helpers::WebViewHelper> web_view_helper_;
@@ -787,14 +786,14 @@ static void TestDrawSingleHighBitDepthPNGOnCanvas(
   ImageDataArray data_array = image_data->data();
   ASSERT_TRUE(data_array.IsFloat32Array());
   DOMArrayBufferView* buffer_view = data_array.GetAsFloat32Array().View();
-  ASSERT_EQ(16u, buffer_view->byteLengthAsSizeT() / buffer_view->TypeSize());
+  ASSERT_EQ(16u, buffer_view->byteLength() / buffer_view->TypeSize());
   float* actual_pixels = static_cast<float*>(buffer_view->BaseAddress());
 
   sk_sp<SkImage> decoded_image =
       resource_content->GetImage()->PaintImageForCurrentFrame().GetSwSkImage();
   ASSERT_EQ(kRGBA_F16_SkColorType, decoded_image->colorType());
   sk_sp<SkImage> color_converted_image = decoded_image->makeColorSpace(
-      context->ColorParamsForTest().GetSkColorSpaceForSkSurfaces());
+      context->ColorParamsForTest().GetSkColorSpace());
   float expected_pixels[16];
   SkImageInfo expected_info_no_color_space = SkImageInfo::Make(
       2, 2, kRGBA_F32_SkColorType, kUnpremul_SkAlphaType, nullptr);
@@ -927,15 +926,15 @@ void TestPutImageDataOnCanvasWithColorSpaceSettings(
   NotShared<DOMUint8ClampedArray> data_u8(
       DOMUint8ClampedArray::Create(u8_pixels, data_length));
   DCHECK(data_u8);
-  EXPECT_EQ(data_length, data_u8->lengthAsSizeT());
+  EXPECT_EQ(data_length, data_u8->length());
   NotShared<DOMUint16Array> data_u16(
       DOMUint16Array::Create(u16_pixels, data_length));
   DCHECK(data_u16);
-  EXPECT_EQ(data_length, data_u16->lengthAsSizeT());
+  EXPECT_EQ(data_length, data_u16->length());
   NotShared<DOMFloat32Array> data_f32(
       DOMFloat32Array::Create(f32_pixels, data_length));
   DCHECK(data_f32);
-  EXPECT_EQ(data_length, data_f32->lengthAsSizeT());
+  EXPECT_EQ(data_length, data_f32->length());
 
   ImageData* image_data = nullptr;
   ImageDataColorSettings* color_settings = ImageDataColorSettings::Create();

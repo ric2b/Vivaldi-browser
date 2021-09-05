@@ -85,11 +85,8 @@ class MODULES_EXPORT CanvasRenderingContext2D final
 
     CanvasRenderingContext* Create(
         CanvasRenderingContextHost* host,
-        const CanvasContextCreationAttributesCore& attrs) override {
-      DCHECK(!host->IsOffscreenCanvas());
-      return MakeGarbageCollected<CanvasRenderingContext2D>(
-          static_cast<HTMLCanvasElement*>(host), attrs);
-    }
+        const CanvasContextCreationAttributesCore& attrs) override;
+
     CanvasRenderingContext::ContextType GetContextType() const override {
       return CanvasRenderingContext::kContext2D;
     }
@@ -128,6 +125,13 @@ class MODULES_EXPORT CanvasRenderingContext2D final
 
   String direction() const;
   void setDirection(const String&);
+
+  void setTextLetterSpacing(const double letter_spacing);
+  void setTextWordSpacing(const double word_spacing);
+  void setTextRendering(const String&);
+
+  void setFontKerning(const String&);
+  void setFontVariantCaps(const String&);
 
   void fillText(const String& text, double x, double y);
   void fillText(const String& text, double x, double y, double max_width);
@@ -276,7 +280,7 @@ class MODULES_EXPORT CanvasRenderingContext2D final
   void Stop() final;
 
   bool IsTransformInvertible() const override;
-  AffineTransform Transform() const override;
+  TransformationMatrix GetTransform() const override;
 
   cc::Layer* CcLayer() const override;
   bool IsCanvas2DBufferValid() const override;

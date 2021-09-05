@@ -35,14 +35,10 @@
   (path "/var/run")
 )
 
-; Local preferences.
-(allow file-read*
-  (path (user-homedir-path (string-append "/Library/Preferences/" (param bundle-id) ".plist")))
-)
-
 ; Certificate databases.
 (allow file-read*
   (path "/Library/Preferences/com.apple.security.plist")
+  (path (user-homedir-path "/Library/Preferences/com.apple.security.plist"))
   ; https://crbug.com/1024000
   (path (user-homedir-path "/Library/Preferences/com.apple.security.revocation.plist"))
   (subpath "/Library/Keychains")
@@ -116,9 +112,10 @@
 ; Kerberos support. This should be removed after GSS is moved out of the
 ; network service. https://crbug.com/1017830
 (allow mach-lookup
+  (global-name "com.apple.GSSCred") ; https://crbug.com/1134449
   (global-name "org.h5l.kcm")
 )
 (allow file-read*
   (path "/private/etc/krb5.conf")
-  (subpath "/System/Library/KerberosPlugins/KerberosFrameworkPlugins")
+  (subpath "/System/Library/KerberosPlugins") ; https://crbug.com/1134449
 )

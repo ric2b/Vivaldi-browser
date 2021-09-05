@@ -125,6 +125,7 @@ bool SupportsInvalidation(CSSSelector::PseudoType type) {
     case CSSSelector::kPseudoBefore:
     case CSSSelector::kPseudoAfter:
     case CSSSelector::kPseudoMarker:
+    case CSSSelector::kPseudoModal:
     case CSSSelector::kPseudoBackdrop:
     case CSSSelector::kPseudoLang:
     case CSSSelector::kPseudoNot:
@@ -177,9 +178,9 @@ bool SupportsInvalidation(CSSSelector::PseudoType type) {
     case CSSSelector::kPseudoVideoPersistent:
     case CSSSelector::kPseudoVideoPersistentAncestor:
     case CSSSelector::kPseudoXrOverlay:
-      return true;
     case CSSSelector::kPseudoIs:
     case CSSSelector::kPseudoWhere:
+    case CSSSelector::kPseudoTargetText:
       return true;
     case CSSSelector::kPseudoUnknown:
     case CSSSelector::kPseudoLeftPage:
@@ -265,6 +266,21 @@ bool InvalidationSetMapsEqual(const MapType& a, const MapType& b) {
       return false;
   }
   return true;
+}
+
+void ExtractInvalidationSets(InvalidationSet* invalidation_set,
+                             DescendantInvalidationSet*& descendants,
+                             SiblingInvalidationSet*& siblings) {
+  CHECK(invalidation_set->IsAlive());
+  if (auto* descendant =
+          DynamicTo<DescendantInvalidationSet>(invalidation_set)) {
+    descendants = descendant;
+    siblings = nullptr;
+    return;
+  }
+
+  siblings = To<SiblingInvalidationSet>(invalidation_set);
+  descendants = siblings->Descendants();
 }
 
 }  // anonymous namespace
@@ -368,21 +384,6 @@ void RuleFeatureSet::AddInvalidationSet(
         invalidation_set->IsSelfInvalidationSet() ? kSubject : kAncestor)
         .Combine(*invalidation_set);
   }
-}
-
-void ExtractInvalidationSets(InvalidationSet* invalidation_set,
-                             DescendantInvalidationSet*& descendants,
-                             SiblingInvalidationSet*& siblings) {
-  CHECK(invalidation_set->IsAlive());
-  if (auto* descendant =
-          DynamicTo<DescendantInvalidationSet>(invalidation_set)) {
-    descendants = descendant;
-    siblings = nullptr;
-    return;
-  }
-
-  siblings = To<SiblingInvalidationSet>(invalidation_set);
-  descendants = siblings->Descendants();
 }
 
 RuleFeatureSet::RuleFeatureSet() : is_alive_(true) {}
@@ -608,6 +609,7 @@ InvalidationSet* RuleFeatureSet::InvalidationSetForSimpleSelector(
       case CSSSelector::kPseudoSpatialNavigationInterest:
       case CSSSelector::kPseudoHasDatalist:
       case CSSSelector::kPseudoMultiSelectFocus:
+      case CSSSelector::kPseudoModal:
         return &EnsurePseudoInvalidationSet(selector.GetPseudoType(), type,
                                             position);
       case CSSSelector::kPseudoFirstOfType:
@@ -656,8 +658,7 @@ RuleFeatureSet::UpdateInvalidationSetsForComplex(
   InvalidationSetFeatures* sibling_features = nullptr;
 
   const CSSSelector* last_in_compound =
-      ExtractInvalidationSetFeaturesFromCompound(complex, features, position,
-                                                 pseudo_type);
+      ExtractInvalidationSetFeaturesFromCompound(complex, features, position);
 
   bool was_whole_subtree_invalid =
       features.invalidation_flags.WholeSubtreeInvalid();
@@ -717,8 +718,7 @@ void RuleFeatureSet::UpdateRuleSetInvalidation(
     type_rule_invalidation_set_->AddTagName(tag_name);
 }
 
-RuleFeatureSet::FeatureInvalidationType
-RuleFeatureSet::ExtractInvalidationSetFeaturesFromSelectorList(
+void RuleFeatureSet::ExtractInvalidationSetFeaturesFromSelectorList(
     const CSSSelector& simple_selector,
     InvalidationSetFeatures& features,
     PositionType position) {
@@ -726,8 +726,10 @@ RuleFeatureSet::ExtractInvalidationSetFeaturesFromSelectorList(
 
   const CSSSelectorList* selector_list = simple_selector.SelectorList();
   if (!selector_list)
-    return kNormalInvalidation;
-  DCHECK(SupportsInvalidationWithSelectorList(simple_selector.GetPseudoType()));
+    return;
+  CSSSelector::PseudoType pseudo_type = simple_selector.GetPseudoType();
+
+  DCHECK(SupportsInvalidationWithSelectorList(pseudo_type));
 
   const CSSSelector* sub_selector = selector_list->First();
 
@@ -737,11 +739,11 @@ RuleFeatureSet::ExtractInvalidationSetFeaturesFromSelectorList(
 
   for (; sub_selector; sub_selector = CSSSelectorList::Next(*sub_selector)) {
     InvalidationSetFeatures complex_features;
-    if (UpdateInvalidationSetsForComplex(
-            *sub_selector, complex_features, position,
-            simple_selector.GetPseudoType()) == kRequiresSubtreeInvalidation) {
+    if (UpdateInvalidationSetsForComplex(*sub_selector, complex_features,
+                                         position, pseudo_type) ==
+        kRequiresSubtreeInvalidation) {
       features.invalidation_flags.SetWholeSubtreeInvalid(true);
-      return kRequiresSubtreeInvalidation;
+      continue;
     }
     all_sub_selectors_have_features_for_ruleset_invalidation &=
         complex_features.has_features_for_rule_set_invalidation;
@@ -756,18 +758,26 @@ RuleFeatureSet::ExtractInvalidationSetFeaturesFromSelectorList(
   }
   // Don't add any features if one of the sub-selectors of does not contain
   // any invalidation set features. E.g. :-webkit-any(*, span).
-  if (all_sub_selectors_have_features)
-    features.NarrowToFeatures(any_features);
-  features.has_features_for_rule_set_invalidation |=
-      all_sub_selectors_have_features_for_ruleset_invalidation;
-  return kNormalInvalidation;
+  //
+  // For the :not() pseudo class, we should not use the inner features for
+  // invalidation because we should invalidate elements _without_ that
+  // feature. On the other hand, we should still have invalidation sets
+  // for the features since we are able to detect when they change.
+  // That is, ".a" should not have ".b" in its invalidation set for
+  // ".a :not(.b)", but there should be an invalidation set for ".a" in
+  // ":not(.a) .b".
+  if (pseudo_type != CSSSelector::kPseudoNot) {
+    if (all_sub_selectors_have_features)
+      features.NarrowToFeatures(any_features);
+    features.has_features_for_rule_set_invalidation |=
+        all_sub_selectors_have_features_for_ruleset_invalidation;
+  }
 }
 
 const CSSSelector* RuleFeatureSet::ExtractInvalidationSetFeaturesFromCompound(
     const CSSSelector& compound,
     InvalidationSetFeatures& features,
-    PositionType position,
-    CSSSelector::PseudoType pseudo) {
+    PositionType position) {
   // Extract invalidation set features and return a pointer to the the last
   // simple selector of the compound, or nullptr if one of the selectors
   // requiresSubtreeInvalidation().
@@ -783,17 +793,8 @@ const CSSSelector* RuleFeatureSet::ExtractInvalidationSetFeaturesFromCompound(
       return nullptr;
     }
 
-    // When inside a :not(), we should not use the found features for
-    // invalidation because we should invalidate elements _without_ that
-    // feature. On the other hand, we should still have invalidation sets
-    // for the features since we are able to detect when they change.
-    // That is, ".a" should not have ".b" in its invalidation set for
-    // ".a :not(.b)", but there should be an invalidation set for ".a" in
-    // ":not(.a) .b".
-    if (pseudo != CSSSelector::kPseudoNot) {
-      ExtractInvalidationSetFeaturesFromSimpleSelector(*simple_selector,
-                                                       features);
-    }
+    ExtractInvalidationSetFeaturesFromSimpleSelector(*simple_selector,
+                                                     features);
 
     // Initialize the entry in the invalidation set map for self-
     // invalidation, if supported.
@@ -806,12 +807,8 @@ const CSSSelector* RuleFeatureSet::ExtractInvalidationSetFeaturesFromCompound(
         invalidation_set->SetInvalidatesSelf();
     }
 
-    if (ExtractInvalidationSetFeaturesFromSelectorList(*simple_selector,
-                                                       features, position) ==
-        kRequiresSubtreeInvalidation) {
-      DCHECK(features.invalidation_flags.WholeSubtreeInvalid());
-      return nullptr;
-    }
+    ExtractInvalidationSetFeaturesFromSelectorList(*simple_selector, features,
+                                                   position);
 
     if (features.invalidation_flags.InvalidatesParts())
       metadata_.invalidates_parts = true;
@@ -886,9 +883,13 @@ void RuleFeatureSet::AddFeaturesToInvalidationSetsForSelectorList(
     AutoRestoreMaxDirectAdjacentSelectors restore_max(sibling_features);
     AutoRestoreTreeBoundaryCrossingFlag restore_tree_boundary(
         descendant_features);
+    AutoRestoreInsertionPointCrossingFlag restore_insertion_point(
+        descendant_features);
 
     if (simple_selector.IsHostPseudoClass())
       descendant_features.invalidation_flags.SetTreeBoundaryCrossing(true);
+    if (simple_selector.IsV0InsertionPointCrossing())
+      descendant_features.invalidation_flags.SetInsertionPointCrossing(true);
 
     descendant_features.has_features_for_rule_set_invalidation = false;
 
@@ -947,8 +948,6 @@ void RuleFeatureSet::AddFeaturesToInvalidationSetsForSimpleSelector(
     return;
   }
 
-  if (simple_selector.IsV0InsertionPointCrossing())
-    descendant_features.invalidation_flags.SetInsertionPointCrossing(true);
   if (simple_selector.GetPseudoType() == CSSSelector::kPseudoPart)
     descendant_features.invalidation_flags.SetInvalidatesParts(true);
 

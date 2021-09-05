@@ -36,6 +36,8 @@ class Vector2d;
 namespace pp {
 class Size;
 class TextInput_Dev;
+class VarArray;
+class VarDictionary;
 }  // namespace pp
 
 namespace chrome_pdf {
@@ -161,6 +163,9 @@ class OutOfProcessInstance : public PdfViewPluginBase,
   void EnteredEditMode() override;
   float GetToolbarHeightInScreenCoords() override;
   void DocumentFocusChanged(bool document_has_focus) override;
+  void SetSelectedText(const std::string& selected_text) override;
+  void SetLinkUnderCursor(const std::string& link_under_cursor) override;
+  bool IsValidLink(const std::string& url) override;
 
   // PreviewModeClient::Client:
   void PreviewDocumentLoadComplete() override;

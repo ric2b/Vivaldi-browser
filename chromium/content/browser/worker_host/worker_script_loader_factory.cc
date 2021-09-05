@@ -16,6 +16,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
+#include "services/network/public/mojom/fetch_api.mojom.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_container_type.mojom.h"
 
 namespace content {
@@ -26,12 +27,14 @@ WorkerScriptLoaderFactory::WorkerScriptLoaderFactory(
     ServiceWorkerMainResourceHandle* service_worker_handle,
     base::WeakPtr<AppCacheHost> appcache_host,
     const BrowserContextGetter& browser_context_getter,
-    scoped_refptr<network::SharedURLLoaderFactory> loader_factory)
+    scoped_refptr<network::SharedURLLoaderFactory> loader_factory,
+    ukm::SourceId worker_source_id)
     : process_id_(process_id),
       worker_token_(worker_token),
       appcache_host_(std::move(appcache_host)),
       browser_context_getter_(browser_context_getter),
-      loader_factory_(std::move(loader_factory)) {
+      loader_factory_(std::move(loader_factory)),
+      worker_source_id_(worker_source_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   if (service_worker_handle) {
@@ -52,11 +55,11 @@ void WorkerScriptLoaderFactory::CreateLoaderAndStart(
     mojo::PendingRemote<network::mojom::URLLoaderClient> client,
     const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK(resource_request.resource_type ==
-             static_cast<int>(blink::mojom::ResourceType::kWorker) ||
-         resource_request.resource_type ==
-             static_cast<int>(blink::mojom::ResourceType::kSharedWorker))
-      << resource_request.resource_type;
+  DCHECK(resource_request.destination ==
+             network::mojom::RequestDestination::kWorker ||
+         resource_request.destination ==
+             network::mojom::RequestDestination::kSharedWorker)
+      << resource_request.destination;
   DCHECK(!script_loader_);
 
   // Create a WorkerScriptLoader to load the script.
@@ -64,7 +67,7 @@ void WorkerScriptLoaderFactory::CreateLoaderAndStart(
       process_id_, worker_token_, routing_id, request_id, options,
       resource_request, std::move(client), service_worker_handle_,
       appcache_host_, browser_context_getter_, loader_factory_,
-      traffic_annotation);
+      traffic_annotation, worker_source_id_);
   script_loader_ = script_loader->GetWeakPtr();
   mojo::MakeSelfOwnedReceiver(std::move(script_loader), std::move(receiver));
 }

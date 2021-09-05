@@ -19,7 +19,7 @@ if (current_cpu == "arm" || current_cpu == "arm64") {
   import("//build/config/arm.gni")
 }
 
-if (is_mac) {
+if (is_apple) {
   import("//build/config/mac/symbols.gni")
 }
 
@@ -73,10 +73,6 @@ declare_args() {
   # If true, use Goma for ThinLTO code generation where applicable.
   use_goma_thin_lto = false
 
-  # Limit the number of jobs (threads/processes) the linker is allowed
-  # to use (for linkers that support this).
-  max_jobs_per_link = 8
-
   # Whether we're using a sample profile collected on an architecture different
   # than the one we're compiling for.
   #
@@ -101,6 +97,14 @@ declare_args() {
   # Where to redirect clang crash diagnoses
   clang_diagnostic_dir =
       rebase_path("//tools/clang/crashreports", root_build_dir)
+
+  # Experimental option to mark binaries as compatible with Shadow
+  # Stack of Control-flow Enforcement Technology (CET). If Windows version
+  # and hardware supports the feature and it's enabled by OS then additional
+  # additional validation of return address will be performed as mitigation
+  # against Return-oriented programming (ROP).
+  # https://chromium.googlesource.com/chromium/src/+/master/docs/design/sandbox.md#cet-shadow-stack
+  enable_cet_shadow_stack = false
 }
 
 assert(!is_cfi || use_thin_lto, "CFI requires ThinLTO")
@@ -212,7 +216,7 @@ declare_args() {
 # official builders.
 strip_absolute_paths_from_debug_symbols_default =
     is_android || is_fuchsia || is_nacl || (is_win && use_lld) || is_linux ||
-    is_chromeos || (is_mac && !enable_dsyms) || ios_use_goma_rbe
+    is_chromeos || (is_apple && !enable_dsyms)
 
 # If the platform uses stripped absolute paths by default, then we don't expose
 # it as a configuration option. If this is causing problems, please file a bug.
@@ -268,6 +272,9 @@ if (symbol_level == -1) {
     symbol_level = 0
   }
 }
+
+# Split dwarf works only for symbol_level == 2.
+use_debug_fission = use_debug_fission && symbol_level == 2
 
 # Non-component debug builds with symbol_level = 2 are an undesirable (very slow
 # build times) and unsupported (some test binaries will fail with > 4 GB PDBs)

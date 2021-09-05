@@ -11,6 +11,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chromeos/components/multidevice/logging/logging.h"
 #include "chromeos/components/phonehub/fake_phone_hub_manager.h"
+#include "chromeos/components/phonehub/pref_names.h"
+#include "components/prefs/pref_service.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/image/image.h"
 
@@ -184,6 +186,18 @@ void MultidevicePhoneHubHandler::RegisterMessages() {
       "setTetherStatus",
       base::BindRepeating(&MultidevicePhoneHubHandler::HandleSetTetherStatus,
                           base::Unretained(this)));
+
+  web_ui()->RegisterMessageCallback(
+      "resetShouldShowOnboardingUi",
+      base::BindRepeating(
+          &MultidevicePhoneHubHandler::HandleResetShouldShowOnboardingUi,
+          base::Unretained(this)));
+
+  web_ui()->RegisterMessageCallback(
+      "resetHasNotificationSetupUiBeenDismissed",
+      base::BindRepeating(&MultidevicePhoneHubHandler::
+                              HandleResetHasNotificationSetupUiBeenDismissed,
+                          base::Unretained(this)));
 }
 
 void MultidevicePhoneHubHandler::OnJavascriptDisallowed() {
@@ -199,6 +213,8 @@ void MultidevicePhoneHubHandler::AddObservers() {
       fake_phone_hub_manager_->fake_find_my_device_controller());
   tether_controller_observer_.Add(
       fake_phone_hub_manager_->fake_tether_controller());
+  onboarding_ui_tracker_observer_.Add(
+      fake_phone_hub_manager_->fake_onboarding_ui_tracker());
 }
 
 void MultidevicePhoneHubHandler::RemoveObservers() {
@@ -228,6 +244,12 @@ void MultidevicePhoneHubHandler::RemoveObservers() {
   if (tether_controller_observer_.IsObserving(fake_tether_controller)) {
     tether_controller_observer_.Remove(fake_tether_controller);
   }
+
+  phonehub::OnboardingUiTracker* fake_onboarding_ui_tracker =
+      fake_phone_hub_manager_->fake_onboarding_ui_tracker();
+  if (onboarding_ui_tracker_observer_.IsObserving(fake_onboarding_ui_tracker)) {
+    onboarding_ui_tracker_observer_.Remove(fake_onboarding_ui_tracker);
+  }
 }
 
 void MultidevicePhoneHubHandler::OnNotificationsRemoved(
@@ -247,12 +269,12 @@ void MultidevicePhoneHubHandler::OnDndStateChanged() {
 }
 
 void MultidevicePhoneHubHandler::OnPhoneRingingStateChanged() {
-  // TODO(jimmyxgong): Change to casting the enum TBA to int.
-  bool is_ringing = fake_phone_hub_manager_->fake_find_my_device_controller()
-                        ->IsPhoneRinging();
-  int status_as_int = is_ringing ? 2 : 1;
+  phonehub::FindMyDeviceController::Status ringing_status =
+      fake_phone_hub_manager_->fake_find_my_device_controller()
+          ->GetPhoneRingingStatus();
+
   FireWebUIListener("find-my-device-status-changed",
-                    base::Value(status_as_int));
+                    base::Value(static_cast<int>(ringing_status)));
 }
 
 void MultidevicePhoneHubHandler::OnTetherStatusChanged() {
@@ -261,12 +283,21 @@ void MultidevicePhoneHubHandler::OnTetherStatusChanged() {
   FireWebUIListener("tether-status-changed", base::Value(status_as_int));
 }
 
+void MultidevicePhoneHubHandler::OnShouldShowOnboardingUiChanged() {
+  bool should_show_onboarding_ui =
+      fake_phone_hub_manager_->fake_onboarding_ui_tracker()
+          ->ShouldShowOnboardingUi();
+  FireWebUIListener("should-show-onboarding-ui-changed",
+                    base::Value(should_show_onboarding_ui));
+}
+
 void MultidevicePhoneHubHandler::HandleEnableDnd(const base::ListValue* args) {
   bool enabled = false;
   CHECK(args->GetBoolean(0, &enabled));
   PA_LOG(VERBOSE) << "Setting Do Not Disturb state to " << enabled;
   fake_phone_hub_manager_->fake_do_not_disturb_controller()
-      ->SetDoNotDisturbStateInternal(enabled);
+      ->SetDoNotDisturbStateInternal(enabled,
+                                     /*can_request_new_dnd_state=*/true);
 }
 
 void MultidevicePhoneHubHandler::HandleSetFindMyDeviceStatus(
@@ -274,11 +305,11 @@ void MultidevicePhoneHubHandler::HandleSetFindMyDeviceStatus(
   int status_as_int = 0;
   CHECK(args->GetInteger(0, &status_as_int));
 
-  // TODO(jimmyxgong): Change to casting the enum TBA to int.
-  bool is_ringing = status_as_int == 2;
-  PA_LOG(VERBOSE) << "Setting phone ringing status to " << is_ringing;
+  auto status =
+      static_cast<phonehub::FindMyDeviceController::Status>(status_as_int);
+  PA_LOG(VERBOSE) << "Setting phone ringing status to " << status;
   fake_phone_hub_manager_->fake_find_my_device_controller()
-      ->SetIsPhoneRingingInternal(is_ringing);
+      ->SetPhoneRingingState(status);
 }
 
 void MultidevicePhoneHubHandler::HandleSetTetherStatus(
@@ -430,10 +461,6 @@ void MultidevicePhoneHubHandler::HandleSetBrowserTabs(
                     metadatas);
   TryAddingMetadata("browserTabTwoMetadata", browser_tab_status_dict,
                     metadatas);
-  TryAddingMetadata("browserTabThreeMetadata", browser_tab_status_dict,
-                    metadatas);
-  TryAddingMetadata("browserTabFourMetadata", browser_tab_status_dict,
-                    metadatas);
 
   fake_phone_hub_manager_->mutable_phone_model()->SetBrowserTabsModel(
       phonehub::BrowserTabsModel(is_tab_sync_enabled, metadatas));
@@ -526,6 +553,21 @@ void MultidevicePhoneHubHandler::HandleRemoveNotification(
   fake_phone_hub_manager_->fake_notification_manager()->RemoveNotification(
       notification_id);
   PA_LOG(VERBOSE) << "Removed notification with id " << notification_id;
+}
+
+void MultidevicePhoneHubHandler::HandleResetShouldShowOnboardingUi(
+    const base::ListValue* args) {
+  PrefService* prefs = Profile::FromWebUI(web_ui())->GetPrefs();
+  prefs->SetBoolean(chromeos::phonehub::prefs::kHideOnboardingUi, false);
+  PA_LOG(VERBOSE) << "Reset kHideOnboardingUi pref";
+}
+
+void MultidevicePhoneHubHandler::HandleResetHasNotificationSetupUiBeenDismissed(
+    const base::ListValue* args) {
+  PrefService* prefs = Profile::FromWebUI(web_ui())->GetPrefs();
+  prefs->SetBoolean(chromeos::phonehub::prefs::kHasDismissedSetupRequiredUi,
+                    false);
+  PA_LOG(VERBOSE) << "Reset kHasDismissedSetupRequiredUi pref";
 }
 
 }  // namespace multidevice

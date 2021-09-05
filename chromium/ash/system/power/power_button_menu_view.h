@@ -9,16 +9,15 @@
 #include "ash/system/power/power_button_controller.h"
 #include "base/macros.h"
 #include "ui/compositor/layer_animation_observer.h"
-#include "ui/views/controls/button/button.h"
 #include "ui/views/view.h"
 
 namespace ash {
+enum class PowerButtonMenuActionType;
 class PowerButtonMenuItemView;
 
 // PowerButtonMenuView displays the menu items of the power button menu. It
 // includes power off and sign out items currently.
 class ASH_EXPORT PowerButtonMenuView : public views::View,
-                                       public views::ButtonListener,
                                        public ui::ImplicitAnimationObserver {
  public:
   // The duration of showing or dismissing power button menu animation.
@@ -40,6 +39,8 @@ class ASH_EXPORT PowerButtonMenuView : public views::View,
 
   explicit PowerButtonMenuView(
       PowerButtonController::PowerButtonPosition power_button_position);
+  PowerButtonMenuView(const PowerButtonMenuView&) = delete;
+  PowerButtonMenuView& operator=(const PowerButtonMenuView&) = delete;
   ~PowerButtonMenuView() override;
 
   PowerButtonMenuItemView* sign_out_item_for_test() const {
@@ -75,23 +76,23 @@ class ASH_EXPORT PowerButtonMenuView : public views::View,
   // views::View:
   void Layout() override;
   gfx::Size CalculatePreferredSize() const override;
-
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
+  void OnThemeChanged() override;
 
   // ui::ImplicitAnimationObserver:
   void OnImplicitAnimationsCompleted() override;
+
+  void ButtonPressed(PowerButtonMenuActionType action,
+                     base::RepeatingClosure callback);
 
   // Items in the menu. Owned by views hierarchy.
   PowerButtonMenuItemView* power_off_item_ = nullptr;
   PowerButtonMenuItemView* sign_out_item_ = nullptr;
   PowerButtonMenuItemView* lock_screen_item_ = nullptr;
+  PowerButtonMenuItemView* capture_mode_item_ = nullptr;
   PowerButtonMenuItemView* feedback_item_ = nullptr;
 
   // The physical display side of power button in landscape primary.
   PowerButtonController::PowerButtonPosition power_button_position_;
-
-  DISALLOW_COPY_AND_ASSIGN(PowerButtonMenuView);
 };
 
 }  // namespace ash

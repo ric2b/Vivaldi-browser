@@ -299,7 +299,6 @@ void NinjaRustBinaryTargetWriter::WriteRustdeps(
 
   EscapeOptions lib_escape_opts;
   lib_escape_opts.mode = ESCAPE_NINJA_COMMAND;
-  const std::string_view lib_prefix("lib");
 
   // Non-Rust native dependencies.
   UniqueVector<SourceDir> nonrustdep_dirs;
@@ -307,22 +306,15 @@ void NinjaRustBinaryTargetWriter::WriteRustdeps(
     nonrustdep_dirs.push_back(
         nonrustdep.AsSourceFile(settings_->build_settings()).GetDir());
   }
-  // First -Lnative to specify search directories
+  // First -Lnative to specify the search directories.
+  // This is necessary for #[link(...)] directives to work properly.
   for (const auto& nonrustdep_dir : nonrustdep_dirs) {
     out_ << " -Lnative=";
     path_output_.WriteDir(out_, nonrustdep_dir, PathOutput::DIR_NO_LAST_SLASH);
   }
-  // Now the dependencies themselves.
   for (const auto& nonrustdep : nonrustdeps) {
-    std::string_view file = FindFilenameNoExtension(&nonrustdep.value());
-    if (!file.compare(0, lib_prefix.size(), lib_prefix)) {
-      out_ << " -l";
-      EscapeStringToStream(out_, file.substr(lib_prefix.size()),
-                           lib_escape_opts);
-    } else {
-      out_ << " -Clink-arg=";
-      path_output_.WriteFile(out_, nonrustdep);
-    }
+    out_ << " -Clink-arg=";
+    path_output_.WriteFile(out_, nonrustdep);
   }
 
   WriteLinkerFlags(out_, tool_, nullptr);

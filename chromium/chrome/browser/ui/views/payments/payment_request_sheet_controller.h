@@ -13,6 +13,7 @@
 #include "ui/views/controls/button/button.h"
 
 namespace views {
+class MdTextButton;
 class View;
 }
 
@@ -24,7 +25,7 @@ class PaymentRequestState;
 
 // The base class for objects responsible for the creation and event handling in
 // views shown in the PaymentRequestDialog.
-class PaymentRequestSheetController : public views::ButtonListener {
+class PaymentRequestSheetController {
  public:
   // Objects of this class are owned by |dialog|, so it's a non-owned pointer
   // that should be valid throughout this object's lifetime.
@@ -33,7 +34,7 @@ class PaymentRequestSheetController : public views::ButtonListener {
   PaymentRequestSheetController(base::WeakPtr<PaymentRequestSpec> spec,
                                 base::WeakPtr<PaymentRequestState> state,
                                 base::WeakPtr<PaymentRequestDialogView> dialog);
-  ~PaymentRequestSheetController() override;
+  virtual ~PaymentRequestSheetController();
 
   // Creates a view to be displayed in the PaymentRequestDialog. The header view
   // is the view displayed on top of the dialog, containing title, (optional)
@@ -81,29 +82,20 @@ class PaymentRequestSheetController : public views::ButtonListener {
   // (e.g., made it taller or shorter), and want to relayout the whole pane.
   void RelayoutPane();
 
-  // Creates and returns the primary action button for this sheet. It's
-  // typically a blue button with the "Pay" or "Done" labels. Subclasses may
-  // return an empty std::unique_ptr (nullptr) to indicate that no primary
-  // button should be displayed. The caller takes ownership of the button but
-  // the view is guaranteed to be outlived by the controller so subclasses may
-  // retain a raw pointer to the returned button (for example to control its
-  // enabled state).
-  virtual std::unique_ptr<views::Button> CreatePrimaryButton();
+  // Methods that control the appearance and behavior of the primary dialog
+  // button.  By default the dialog shows a "pay" button.
+  virtual bool ShouldShowPrimaryButton();
+  virtual base::string16 GetPrimaryButtonLabel();
+  virtual views::Button::PressedCallback GetPrimaryButtonCallback();
+  virtual int GetPrimaryButtonId();
+  virtual bool GetPrimaryButtonEnabled();
 
-  // Returns the text that should be on the secondary button, by default
-  // "Cancel".
-  virtual base::string16 GetSecondaryButtonLabel();
-
-  // Returns the secondary button tag, by default
-  // static_cast<int>(PaymentRequestCommonTags::CLOSE_BUTTON_TAG).
-  virtual int GetSecondaryButtonTag();
-
-  // Returns the secondary button id, by default
-  // static_cast<int>(DialogViewID::CANCEL_BUTTON).
-  virtual int GetSecondaryButtonId();
-
-  // Returns true if the secondary button should be shown, false otherwise.
+  // Methods that control the appearance and behavior of the secondary dialog
+  // button.  By default the dialog shows a "cancel payment" button.
   virtual bool ShouldShowSecondaryButton();
+  virtual base::string16 GetSecondaryButtonLabel();
+  virtual views::Button::PressedCallback GetSecondaryButtonCallback();
+  virtual int GetSecondaryButtonId();
 
   // Returns whether this sheet should display a back arrow in the header next
   // to the title.
@@ -138,9 +130,6 @@ class PaymentRequestSheetController : public views::ButtonListener {
   virtual std::unique_ptr<views::Background> GetHeaderBackground(
       views::View* header_view);
 
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
   // Creates the row of button containing the Pay, cancel, and extra buttons.
   // |controller| is installed as the listener for button events.
   std::unique_ptr<views::View> CreateFooterView();
@@ -160,7 +149,9 @@ class PaymentRequestSheetController : public views::ButtonListener {
   // Returns true to display dynamic top and bottom border for hidden contents.
   virtual bool DisplayDynamicBorderForHiddenContents();
 
-  views::Button* primary_button() { return primary_button_; }
+  void CloseButtonPressed();
+
+  views::MdTextButton* primary_button() { return primary_button_; }
 
   views::View* header_content_separator_container() {
     return header_content_separator_container_;
@@ -170,6 +161,10 @@ class PaymentRequestSheetController : public views::ButtonListener {
   bool is_active() const { return is_active_; }
 
  private:
+  // Add the primary/secondary buttons to |container|.
+  void AddPrimaryButton(views::View* container);
+  void AddSecondaryButton(views::View* container);
+
   // Called when the Enter accelerator is pressed. Perform the action associated
   // with the primary button and sets |is_enabled| to true if it's enabled,
   // otherwise sets it to false. The |is_enabled| is an out-param to enable
@@ -177,9 +172,7 @@ class PaymentRequestSheetController : public views::ButtonListener {
   // values.
   void PerformPrimaryButtonAction(bool* is_enabled);
 
-  // Add the primary/secondary buttons to |container|.
-  void AddPrimaryButton(views::View* container);
-  void AddSecondaryButton(views::View* container);
+  virtual void BackButtonPressed();
 
   base::WeakPtr<PaymentRequestSpec> const spec_;
   base::WeakPtr<PaymentRequestState> const state_;
@@ -195,7 +188,7 @@ class PaymentRequestSheetController : public views::ButtonListener {
 
   // Hold on to the primary and secondary buttons to use them as initial focus
   // targets when subclasses don't want to focus anything else.
-  views::Button* primary_button_ = nullptr;
+  views::MdTextButton* primary_button_ = nullptr;
   views::Button* secondary_button_ = nullptr;
   views::View* header_view_ = nullptr;
   views::View* header_content_separator_container_ = nullptr;

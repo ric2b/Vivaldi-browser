@@ -10,7 +10,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
 #include "build/build_config.h"
-#include "chrome/browser/browser_features.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -27,12 +26,12 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/content_features.h"
 #include "media/base/media_switches.h"
+#include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
-
 #if defined(OS_CHROMEOS)
-#include "ui/base/l10n/l10n_util.h"
-#endif
+#include "chrome/browser/nearby_sharing/common/nearby_share_features.h"
+#endif  // defined(OS_CHROMEOS)
 
 namespace settings {
 #if defined(OS_CHROMEOS)
@@ -52,9 +51,9 @@ base::string16 GetHelpUrlWithBoard(const std::string& original_url) {
 void AddCaptionSubpageStrings(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
       {"captionsTitle", IDS_SETTINGS_CAPTIONS},
-      {"captionsSubtitle", IDS_SETTINGS_CAPTIONS_SUBTITLE},
-      {"captionsSettings", IDS_SETTINGS_CAPTIONS_SETTINGS},
-      {"captionsPreview", IDS_SETTINGS_CAPTIONS_PREVIEW},
+      {"captionsPreferencesTitle", IDS_SETTINGS_CAPTIONS_PREFERENCES_TITLE},
+      {"captionsPreferencesSubtitle",
+       IDS_SETTINGS_CAPTIONS_PREFERENCES_SUBTITLE},
       {"captionsTextSize", IDS_SETTINGS_CAPTIONS_TEXT_SIZE},
       {"captionsTextFont", IDS_SETTINGS_CAPTIONS_TEXT_FONT},
       {"captionsTextColor", IDS_SETTINGS_CAPTIONS_TEXT_COLOR},
@@ -82,8 +81,15 @@ void AddCaptionSubpageStrings(content::WebUIDataSource* html_source) {
       {"captionsColorCyan", IDS_SETTINGS_CAPTIONS_COLOR_CYAN},
       {"captionsColorMagenta", IDS_SETTINGS_CAPTIONS_COLOR_MAGENTA},
       {"captionsDefaultSetting", IDS_SETTINGS_CAPTIONS_DEFAULT_SETTING},
+      {"captionsEnableLiveCaptionTitle",
+       IDS_SETTINGS_CAPTIONS_ENABLE_LIVE_CAPTION_TITLE},
+      {"captionsEnableLiveCaptionSubtitle",
+       IDS_SETTINGS_CAPTIONS_ENABLE_LIVE_CAPTION_SUBTITLE},
   };
   AddLocalizedStringsBulk(html_source, kLocalizedStrings);
+
+  html_source->AddBoolean("enableLiveCaption",
+                          base::FeatureList::IsEnabled(media::kLiveCaption));
 }
 
 void AddPersonalizationOptionsStrings(content::WebUIDataSource* html_source) {
@@ -184,6 +190,7 @@ void AddSyncPageStrings(content::WebUIDataSource* html_source) {
       {"syncPageTitle", IDS_SETTINGS_SYNC_SYNC_AND_NON_PERSONALIZED_SERVICES},
       {"passphraseConfirmationPlaceholder",
        IDS_SETTINGS_PASSPHRASE_CONFIRMATION_PLACEHOLDER},
+      {"readingListCheckboxLabel", IDS_SETTINGS_READING_LIST_CHECKBOX_LABEL},
       {"syncLoading", IDS_SETTINGS_SYNC_LOADING},
       {"themesAndWallpapersCheckboxLabel",
        IDS_SETTINGS_THEMES_AND_WALLPAPERS_CHECKBOX_LABEL},
@@ -232,6 +239,7 @@ void AddSyncPageStrings(content::WebUIDataSource* html_source) {
 #endif
 }
 
+#if defined(OS_CHROMEOS)
 void AddNearbyShareData(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
       {"nearbyShareTitle", IDS_SETTINGS_NEARBY_SHARE_TITLE},
@@ -276,6 +284,15 @@ void AddNearbyShareData(content::WebUIDataSource* html_source) {
   html_source->AddBoolean(
       "nearbySharingFeatureFlag",
       base::FeatureList::IsEnabled(features::kNearbySharing));
+
+  // To use lottie, the worker-src CSP needs to be updated for the web ui that
+  // is using it. Since as of now there are only a couple of webuis using
+  // lottie animations, this update has to be performed manually. As the usage
+  // increases, set this as the default so manual override is no longer
+  // required.
+  html_source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::WorkerSrc, "worker-src blob: 'self';");
 }
+#endif  // defined(OS_CHROMEOS)
 
 }  // namespace settings

@@ -3,8 +3,8 @@
 # found in the LICENSE file.
 
 import("//build/config/linux/gtk/gtk.gni")
+import("//build/config/ozone.gni")
 import("//build/config/ui.gni")
-import("//ui/ozone/ozone.gni")
 
 assert(use_x11 || ozone_platform_x11)
 
@@ -26,8 +26,8 @@ component("x") {
     "x11_display_manager.h",
     "x11_display_util.cc",
     "x11_display_util.h",
-    "x11_error_handler.cc",
-    "x11_error_handler.h",
+    "x11_idle_query.cc",
+    "x11_idle_query.h",
     "x11_menu_list.cc",
     "x11_menu_list.h",
     "x11_menu_registrar.cc",
@@ -36,6 +36,8 @@ component("x") {
     "x11_move_loop_delegate.h",
     "x11_pointer_grab.cc",
     "x11_pointer_grab.h",
+    "x11_screensaver_window_finder.cc",
+    "x11_screensaver_window_finder.h",
     "x11_shm_image_pool.cc",
     "x11_shm_image_pool.h",
     "x11_software_bitmap_presenter.cc",
@@ -44,6 +46,8 @@ component("x") {
     "x11_topmost_window_finder.h",
     "x11_ui_thread.cc",
     "x11_ui_thread.h",
+    "x11_user_input_monitor.cc",
+    "x11_user_input_monitor.h",
     "x11_util.cc",
     "x11_util.h",
     "x11_whole_screen_move_loop.cc",
@@ -54,7 +58,7 @@ component("x") {
     "x11_workspace_handler.h",
   ]
 
-  if (is_desktop_linux || is_chromeos) {
+  if (is_linux || is_chromeos) {
     sources += [
       "selection_owner.cc",
       "selection_owner.h",
@@ -118,10 +122,15 @@ source_set("test_support") {
   sources = [
     "test/x11_property_change_waiter.cc",
     "test/x11_property_change_waiter.h",
+    "test/x11_ui_controls_test_helper.cc",
+    "test/x11_ui_controls_test_helper.h",
   ]
 
   deps = [
+    ":x",
+    "//ui/base:test_support",
     "//ui/events:platform_event",
+    "//ui/events:test_support",
     "//ui/events/platform/x11",
     "//ui/gfx/x",
   ]

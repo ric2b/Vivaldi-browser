@@ -146,7 +146,8 @@ bool VTVideoEncodeAccelerator::Initialize(const Config& config,
   // Clients are expected to call Flush() before reinitializing the encoder.
   DCHECK_EQ(pending_encodes_, 0);
 
-  if (config.input_format != PIXEL_FORMAT_I420) {
+  if (config.input_format != PIXEL_FORMAT_I420 &&
+      config.input_format != PIXEL_FORMAT_NV12) {
     DLOG(ERROR) << "Input format not supported= "
                 << VideoPixelFormatToString(config.input_format);
     return false;

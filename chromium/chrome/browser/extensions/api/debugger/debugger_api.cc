@@ -274,6 +274,7 @@ bool ExtensionDevToolsClientHost::Attach() {
 }
 
 ExtensionDevToolsClientHost::~ExtensionDevToolsClientHost() {
+  ExtensionDevToolsInfoBarDelegate::NotifyExtensionDetached(extension_id());
   g_attached_client_hosts.Get().erase(this);
 }
 
@@ -716,7 +717,8 @@ ExtensionFunction::ResponseAction DebuggerGetTargetsFunction::Run() {
   for (size_t i = 0; i < list.size(); ++i)
     result->Append(SerializeTarget(list[i]));
 
-  return RespondNow(OneArgument(std::move(result)));
+  return RespondNow(
+      OneArgument(base::Value::FromUniquePtrValue(std::move(result))));
 }
 
 }  // namespace extensions

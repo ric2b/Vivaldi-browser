@@ -9,8 +9,10 @@
 <translation id="1411638389238344450">Kirim Tautan melalui Surat</translation>
 <translation id="1454726940098520109">Jangan Tampilkan Konfirmasi Lagi</translation>
 <translation id="1462666970065907900">Anda yakin ingin menutup jendela ini?</translation>
+<translation id="1526344461589023948">Galat terjadi saat mencoba menyimpan pembaruan terunduh. Mohon periksa kecukupan ruang disk Anda dan coba lagi nanti.</translation>
 <translation id="1657174850639146440">Monster 9</translation>
 <translation id="1676595396635191120">Jendela Pribadi Baru</translation>
+<translation id="1702758681952953055">Jika galat masih terjadi, mohon laporkan ini dan sertakan detail berikut:</translation>
 <translation id="1728549374069268714">Tempel dan buka</translation>
 <translation id="1756026472674246267">Buka Tautan di Tab Baru</translation>
 <translation id="1759842336958782510">Chrome</translation>
@@ -20,6 +22,7 @@
 <translation id="1924750141060565109">Lanskap 15</translation>
 <translation id="19598411548897379">Umum</translation>
 <translation id="2079036669923635404">Klik di sini untuk memperbarui Vivaldi ke versi <ph name="VERSION" />.</translation>
+<translation id="2141974047387702305">Galat terjadi saat mengunduh berkas pembaruan. Mohon periksa sambungan internet Anda dan coba lagi nanti.</translation>
 <translation id="2441056087170876076">Monster 2</translation>
 <translation id="2444387452209867610">Masukkan Catatan</translation>
 <translation id="2486841023299517366">Hewan 4</translation>
@@ -45,6 +48,7 @@
 <translation id="3542768452570884558">Buka Tautan di Jendela Baru</translation>
 <translation id="3588820906588687999">Buka gambar di Tab Baru</translation>
 <translation id="3601066750251199488">Monster 3</translation>
+<translation id="3708982624815781692">Unduhan dibatalkan.</translation>
 <translation id="3732157130969736834">Tandai Tautan</translation>
 <translation id="3732388226447288666">Hewan 2</translation>
 <translation id="3732439195215136813">Hewan 5</translation>
@@ -81,11 +85,13 @@
 <translation id="5594602170491763400">Monster 5</translation>
 <translation id="5615637589913244581">Opera versi 15+ (Beta)</translation>
 <translation id="5648110075441906505">Buka Gambar di Jendela Baru</translation>
+<translation id="5656371807944747581">Pembaruan Galat!</translation>
 <translation id="5716238312826274098">Mematikan notifikasi</translation>
 <translation id="5770433027661640693">Lanskap 10</translation>
 <translation id="5857090052475505287">Folder Baru</translation>
 <translation id="588258955323874662">Layar Penuh</translation>
 <translation id="5916080360077521750">Sayangnya, semua pengaturan Chrome anda tidak tersedia ketika peramban itu sedang berjalan. Untuk mengimpor pengaturan ke Vivaldi, simpan pekerjaan anda dan tutup semua jendela Chrome. Kemudian klik Lanjutkan.</translation>
+<translation id="6040143037577758943">Tutup</translation>
 <translation id="6229528619562190452">Klik di sini untuk memperbarui Vivaldi.</translation>
 <translation id="6234173136417926046">Gunakan Gambar sebagai Latar Belakang Halaman Awal</translation>
 <translation id="630690498669249215">Berkas Semua Penanda Opera</translation>
@@ -102,9 +108,11 @@
 <translation id="7111492742514999492">Lanskap 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi terbentuk oleh proyek sumber terbuka <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> dan <ph name="BEGIN_LINK_OSS" />software sumber terbuka<ph name="END_LINK_OSS" /> lainnya.</translation>
+<translation id="7581266044164103589">Gagal meluncurkan pemasang pembaruan. Mohon periksa kecukupan memori atau ruang disk Anda dan coba lagi nanti.</translation>
 <translation id="7715497554424665066">&amp;Abaikan Pembaruan</translation>
 <translation id="7724603315864178912">Potong</translation>
 <translation id="7793738202466490491">Tambahkan sebagai Acara Kalender</translation>
+<translation id="7848222781052558334">Gagal memverifikasi tanda tangan digital berkas terunduh.</translation>
 <translation id="7865983598101744945">Konfirmasi keluar</translation>
 <translation id="7957213167373139414">Kalender Saya</translation>
 <translation id="8027581147000338959">Buka di Jendela Baru</translation>

@@ -18,7 +18,9 @@
 <translation id="1112015203684611006">ማተም አልተሳካም።</translation>
 <translation id="1125564390852150847">አዲስ ትር ፍጠር።</translation>
 <translation id="1145536944570833626">ነባሩን ውሂብ ይሰርዙ።</translation>
+<translation id="1147031633655575115">እንደ <ph name="USER" /> ሆነው ገብተዋል</translation>
 <translation id="1154690515305205900">ወደ የደመቀው ጽሑፍ አገናኝ ሊፈጠር አይችልም።</translation>
+<translation id="1157749421655780457">አካባቢን ፍቀድ...</translation>
 <translation id="1165039591588034296">ስህተት</translation>
 <translation id="1172898394251786223">ቀጣይ መስክ</translation>
 <translation id="1176932207622159128">ምስሉን ማስቀመጥ አልተቻለም</translation>
@@ -53,6 +55,7 @@
 <translation id="1449835205994625556">የይለፍ ቃል ደብቅ</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> ንጥሎች</translation>
 <translation id="1491277525950327607">ቅንብርን ለመቀያየር ሁለቴ መታ ያድርጉ</translation>
+<translation id="1492417797159476138">ይህንን የተጠቃሚ ስም ለዚህ ጣቢያ ቀድሞውኑ አስቀምጠዋል</translation>
 <translation id="1509486075633541495">ወደ የድር ጣቢያ በመለያ ይግቡ</translation>
 <translation id="1509960214886564027">በበርካታ ጣቢያዎች ላይ ያሉ ባሕሪያት ሊሰበሩ ይችላሉ</translation>
 <translation id="152234381334907219">በጭራሽ አልተቀመጠም</translation>
@@ -266,6 +269,7 @@
 <translation id="385051799172605136">ተመለስ</translation>
 <translation id="3892144330757387737">ታሪክዎን እዚህ ያገኛሉ</translation>
 <translation id="3897092660631435901">ምናሌ</translation>
+<translation id="3913386780052199712">Chrome ውስጥ ገብተዋል</translation>
 <translation id="3915450441834151894">የጣቢያ መረጃ</translation>
 <translation id="3922310737605261887">የቀዱትን ጽሑፍ ይፈልጉ</translation>
 <translation id="3928666092801078803">የእኔን ውሂብ አጣምር</translation>
@@ -340,6 +344,7 @@
 <translation id="4751645464639803239">አዲስ ማንነት የማያሳውቅ ትር</translation>
 <translation id="4758977202923349869">ክሬዲት ካርድን በዚህ ክፈፍ ውስጥ ያድርጉት</translation>
 <translation id="4775879719735953715">ነባሪ አሳሽ፦</translation>
+<translation id="4778644898150334464">ሌላ የይለፍ ቃል ይጠቀሙ</translation>
 <translation id="4802417911091824046">የይለፍ ሐረግ ምስጠራ ከGoogle Pay የመክፈያ ዘዴዎችን እና አድራሻዎችን አያካትትም።
 
 ይህን ቅንብር ለመቀየር <ph name="BEGIN_LINK" />ስምረትን ዳግም ያስጀምሩ<ph name="END_LINK" /></translation>
@@ -372,6 +377,7 @@
 <translation id="5059136629401106827">እሺ</translation>
 <translation id="5062321486222145940">Google Driveን ጫን</translation>
 <translation id="5083464117946352670">የፋይል መጠን ማወቅ አልተቻለም።</translation>
+<translation id="5090832849094901128">ይህን የይለፍ ቃል መሰረዝ <ph name="WEBSITE" /> ላይ መለያዎን አይሰርዘውም።</translation>
 <translation id="5094827893301452931">Tweet ተጠናቅቋል።</translation>
 <translation id="5118764316110575523">ጠፍቷል</translation>
 <translation id="5127805178023152808">አመሳስል ጠፍቷል</translation>
@@ -511,6 +517,9 @@ Handoff እንዲሁም በSettings ውስጥ ባለው የGeneral ክፍል ላ
 <translation id="6476800141292307438">ገጹን ወደ <ph name="LANGUAGE" /> በመተርጎም ላይ። አማራጮች ከማያ ገጹ ግርጌ አጠገብ ይገኛሉ።</translation>
 <translation id="648164694371393720">የማረጋገጥ ስህተት</translation>
 <translation id="6482629121755362506"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> ንጥሎች ተሰርዘዋል</translation>
+<translation id="6497772452874122664"><ph name="TIME" />ን የሚያምኑት ከሆነ ከሌላ ጣቢያ የተቀመጠ የይለፍ ቃልን መጠቀም ይችላሉ።
+
+ለእያንዳንዱ ጣቢያ የተለየ የይለፍ ቃል ለመጠቀም ይሞክሩ።</translation>
 <translation id="651505212789431520">ስምረት ይሰረዝ? ስምረትን በማንኛውም ጊዜ በቅንብሮች ውስጥ ማብራት ይችላሉ።</translation>
 <translation id="6561262006871132942">አጉላ</translation>
 <translation id="6585618849026997638">ዕልባት በማከል ለእርስዎ አስፈላጊ ወደ ሆነ ገጽ መመለስ ይችላሉ</translation>
@@ -590,6 +599,7 @@ Handoff እንዲሁም በSettings ውስጥ ባለው የGeneral ክፍል ላ
 <translation id="739941347996872055">ቀዳሚ ትር</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7409985198648820906"><ph name="UNREAD_COUNT" /> ያልተነበቡ ጽሑፎች።</translation>
+<translation id="7412027924265291969">ቀጥል</translation>
 <translation id="7425346204213733349">በእርስዎ ዕልባቶች፣ ታሪክ፣ የይለፍ ቃላት እና ሌሎች ቅንብሮች ላይ የተደረጉ ለውጦች ከአሁን በኋላ ከእርስዎ የGoogle መለያ ጋር አይሠምሩም። ሆኖም ግን ነባር ውሂብዎ በእርስዎ የGoogle መለያ ላይ እንደተከማቸ ይቆያል።</translation>
 <translation id="7435356471928173109">በአስተዳዳሪዎ ጠፍቷል</translation>
 <translation id="7454057999980797137">ግዛት / አውራጃ</translation>
@@ -600,6 +610,7 @@ Handoff እንዲሁም በSettings ውስጥ ባለው የGeneral ክፍል ላ
 <translation id="7472734401283673885">የኩባንያ ስም</translation>
 <translation id="7473891865547856676">አይ፣ አመሰግናለሁ</translation>
 <translation id="7481312909269577407">ወደ ፊት</translation>
+<translation id="7483467499335917849">የአሁኑ አካባቢዎን ይጠቀሙ።</translation>
 <translation id="750493650310597496">0 ተመርጧል</translation>
 <translation id="7514365320538308">አውርድ</translation>
 <translation id="7537586195939242955">ይቅርታ፣ በአሁኑ ጊዜ የእርስዎ ማለፊያ ወደ Passbook ሊጫን አይችልም።</translation>
@@ -733,6 +744,7 @@ Handoff እንዲሁም በSettings ውስጥ ባለው የGeneral ክፍል ላ
 <translation id="9094033019050270033">የይለፍ ቃል ያዘምኑ</translation>
 <translation id="9100610230175265781">የይለፍ ሐረግ ያስፈልጋል</translation>
 <translation id="9107664647686727385">የተጠለፉ የይለፍ ቃላትን ይፈትሹ</translation>
+<translation id="9137526406337347448">Google አገልግሎቶች</translation>
 <translation id="9148126808321036104">እንደገና ይግቡ</translation>
 <translation id="9152539721251340337">የQR ኮድ ይፍጠሩ</translation>
 <translation id="9157836665414082580">መገናኛዎችን አፍን</translation>

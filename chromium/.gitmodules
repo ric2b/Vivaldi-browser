@@ -61,6 +61,9 @@
 [submodule "third_party/tint/src"]
 	path = third_party/tint/src
 	url = ../../dawn/tint.git
+[submodule "third_party/freetype-testing/src"]
+	path = third_party/freetype-testing/src
+	url = ../../external/github.com/freetype/freetype2-testing.git
 [submodule "third_party/minigbm/src"]
 	path = third_party/minigbm/src
 	url = ../../chromiumos/platform/minigbm.git

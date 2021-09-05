@@ -12,7 +12,7 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
@@ -89,7 +89,8 @@ bool CanShowNetworkDiagnosticsDialog(content::WebContents* web_contents) {
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
   // The Windows diagnostic tool logs URLs it's run with, so it shouldn't be
   // used with incognito or guest profiles.  See https://crbug.com/929141
-  return !profile->IsOffTheRecord() && !profile->IsGuestSession();
+  return !profile->IsIncognitoProfile() && !profile->IsGuestSession() &&
+         !profile->IsEphemeralGuestProfile();
 }
 
 void ShowNetworkDiagnosticsDialog(content::WebContents* web_contents,

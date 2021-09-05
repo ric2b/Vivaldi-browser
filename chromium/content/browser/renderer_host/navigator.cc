@@ -32,8 +32,6 @@
 #include "content/common/inter_process_time_ticks_converter.h"
 #include "content/common/navigation_params.h"
 #include "content/common/navigation_params_utils.h"
-#include "content/common/page_messages.h"
-#include "content/common/view_messages.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/global_request_id.h"
@@ -137,13 +135,9 @@ bool Navigator::CheckWebUIRendererDoesNotDisplayNormalURL(
   // Embedders might disable locking for WebUI URLs, which is bad idea, however
   // this method should take this into account.
   SiteInstanceImpl* site_instance = render_frame_host->GetSiteInstance();
-  SiteInfo site_info = SiteInstanceImpl::ComputeSiteInfo(
-      site_instance->GetIsolationContext(), url_info,
-      site_instance->IsCoopCoepCrossOriginIsolated(),
-      site_instance->CoopCoepCrossOriginIsolatedOrigin());
+  SiteInfo site_info = site_instance->DeriveSiteInfo(url_info);
   bool should_lock_process =
-      SiteInstanceImpl::ShouldLockProcess(site_instance->GetIsolationContext(),
-                                          site_info, site_instance->IsGuest());
+      site_info.ShouldLockProcessToSite(site_instance->GetIsolationContext());
 
   // If the |render_frame_host| has any WebUI bindings, disallow URLs that are
   // not allowed in a WebUI renderer process.
@@ -256,10 +250,9 @@ void Navigator::DidNavigate(
   bool is_cross_document_same_site_navigation =
       !is_same_document_navigation &&
       old_frame_host->IsNavigationSameSite(
-          url_info,
-          render_frame_host->GetSiteInstance()->IsCoopCoepCrossOriginIsolated(),
-          render_frame_host->GetSiteInstance()
-              ->CoopCoepCrossOriginIsolatedOrigin());
+          url_info, render_frame_host->GetSiteInstance()
+                        ->GetCoopCoepCrossOriginIsolatedInfo());
+
   if (is_cross_document_same_site_navigation) {
     UMA_HISTOGRAM_BOOLEAN(
         "BackForwardCache.ProactiveSameSiteBISwap.SameSiteNavigationDidSwap",
@@ -309,12 +302,6 @@ void Navigator::DidNavigate(
     }
   }
 
-  // For browser initiated navigation and same document navigation, frame policy
-  // in commit_params is nullopt and should use fallback value instead.
-  const blink::FramePolicy pending_frame_policy =
-      navigation_request->commit_params().frame_policy.value_or(
-          frame_tree_node->pending_frame_policy());
-
   // DidNavigateFrame() must be called before replicating the new origin and
   // other properties to proxies.  This is because it destroys the subframes of
   // the frame we're navigating from, which might trigger those subframes to
@@ -325,7 +312,7 @@ void Navigator::DidNavigate(
       is_same_document_navigation,
       navigation_request->coop_status()
           .require_browsing_instance_swap() /* clear_proxies_on_commit */,
-      pending_frame_policy);
+      navigation_request->commit_params().frame_policy);
 
   // Save the new page's origin and other properties, and replicate them to
   // proxies, including the proxy created in DidNavigateFrame() to replace the
@@ -401,9 +388,14 @@ void Navigator::DidNavigate(
   if (old_entry_count != controller_->GetEntryCount() ||
       details.previous_entry_index !=
           controller_->GetLastCommittedEntryIndex()) {
-    frame_tree->root()->render_manager()->SendPageMessage(
-        new PageMsg_SetHistoryOffsetAndLength(
-            MSG_ROUTING_NONE, controller_->GetLastCommittedEntryIndex(),
+    frame_tree->root()->render_manager()->ExecutePageBroadcastMethod(
+        base::BindRepeating(
+            [](int history_offset, int history_count, RenderViewHostImpl* rvh) {
+              if (auto& broadcast = rvh->GetAssociatedPageBroadcast())
+                broadcast->SetHistoryOffsetAndLength(history_offset,
+                                                     history_count);
+            },
+            controller_->GetLastCommittedEntryIndex(),
             controller_->GetEntryCount()),
         site_instance);
   }
@@ -559,7 +551,7 @@ void Navigator::RequestOpenURL(
   // redirects.  http://crbug.com/311721.
   std::vector<GURL> redirect_chain;
 
-  int frame_tree_node_id = -1;
+  int frame_tree_node_id = FrameTreeNode::kFrameTreeNodeInvalidId;
 
   // Send the navigation to the current FrameTreeNode if it's destined for a
   // subframe in the current tab.  We'll assume it's for the main frame

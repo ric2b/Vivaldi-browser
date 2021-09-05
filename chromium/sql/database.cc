@@ -233,28 +233,19 @@ void Database::StatementRef::Close(bool forced) {
   was_valid_ = was_valid_ && forced;
 }
 
-static_assert(
-    Database::kDefaultPageSize == SQLITE_DEFAULT_PAGE_SIZE,
-    "Database::kDefaultPageSize must match the value configured into SQLite");
+static_assert(DatabaseOptions::kDefaultPageSize == SQLITE_DEFAULT_PAGE_SIZE,
+              "DatabaseOptions::kDefaultPageSize must match the value "
+              "configured into SQLite");
 
-constexpr int Database::kDefaultPageSize;
+Database::Database() : Database({.exclusive_locking = false}) {}
 
-Database::Database()
-    : db_(nullptr),
-      page_size_(kDefaultPageSize),
-      cache_size_(0),
-      exclusive_locking_(false),
-      want_wal_mode_(
-          base::FeatureList::IsEnabled(features::kEnableWALModeByDefault)),
-      transaction_nesting_(0),
-      needs_rollback_(false),
-      in_memory_(false),
-      poisoned_(false),
-      mmap_alt_status_(false),
-      mmap_disabled_(!enable_mmap_by_default_),
-      mmap_enabled_(false),
-      total_changes_at_last_release_(0),
-      stats_histogram_(nullptr) {}
+Database::Database(DatabaseOptions options)
+    : options_(options), mmap_disabled_(!enable_mmap_by_default_) {
+  DCHECK_GE(options.page_size, 512);
+  DCHECK_LE(options.page_size, 65536);
+  DCHECK(!(options.page_size & (options.page_size - 1)))
+      << "page_size must be a power of two";
+}
 
 Database::~Database() {
   Close();
@@ -821,7 +812,7 @@ bool Database::Raze() {
   }
 
   const std::string page_size_sql =
-      base::StringPrintf("PRAGMA page_size=%d", page_size_);
+      base::StringPrintf("PRAGMA page_size=%d", options_.page_size);
   if (!null_db.Execute(page_size_sql.c_str()))
     return false;
 
@@ -1401,6 +1392,33 @@ int Database::GetLastChangeCount() const {
   return sqlite3_changes(db_);
 }
 
+int Database::GetMemoryUsage() {
+  if (!db_) {
+    DCHECK(poisoned_) << "Illegal use of Database without a db";
+    return 0;
+  }
+
+  int highwater_should_always_be_zero;
+  int cache_memory = 0, schema_memory = 0, statement_memory = 0;
+
+  int error =
+      sqlite3_db_status(db_, SQLITE_DBSTATUS_CACHE_USED, &cache_memory,
+                        &highwater_should_always_be_zero, /*resetFlg=*/false);
+  DCHECK_EQ(error, SQLITE_OK);
+
+  error =
+      sqlite3_db_status(db_, SQLITE_DBSTATUS_SCHEMA_USED, &schema_memory,
+                        &highwater_should_always_be_zero, /*resetFlg=*/false);
+  DCHECK_EQ(error, SQLITE_OK);
+
+  error =
+      sqlite3_db_status(db_, SQLITE_DBSTATUS_STMT_USED, &statement_memory,
+                        &highwater_should_always_be_zero, /*resetFlg=*/false);
+  DCHECK_EQ(error, SQLITE_OK);
+
+  return cache_memory + schema_memory + statement_memory;
+}
+
 int Database::GetErrorCode() const {
   if (!db_)
     return SQLITE_ERROR;
@@ -1487,22 +1505,15 @@ bool Database::OpenInternal(const std::string& file_name,
     return false;
   }
 
-  // If indicated, lock up the database before doing anything else, so
-  // that the following code doesn't have to deal with locking.
+  // If indicated, enable shared mode ("NORMAL") on the database, so it can be
+  // opened by multiple processes. This needs to happen before WAL mode is
+  // enabled.
   //
-  // Needs to happen before any other operation is performed in WAL mode so that
-  // no operation relies on shared memory if exclusive locking is turned on.
-  //
-  // TODO(shess): This code is brittle.  Find the cases where code
-  // doesn't request |exclusive_locking_| and audit that it does the
-  // right thing with SQLITE_BUSY, and that it doesn't make
-  // assumptions about who might change things in the database.
-  // http://crbug.com/56559
-  if (exclusive_locking_) {
-    // TODO(shess): This should probably be a failure.  Code which
-    // requests exclusive locking but doesn't get it is almost certain
-    // to be ill-tested.
-    ignore_result(Execute("PRAGMA locking_mode=EXCLUSIVE"));
+  // TODO(crbug.com/1120969): Remove support for non-exclusive mode.
+  if (!options_.exclusive_locking) {
+    err = ExecuteAndReturnErrorCode("PRAGMA locking_mode=NORMAL");
+    if (err != SQLITE_OK)
+      return false;
   }
 
   // Enable extended result codes to provide more color on I/O errors.
@@ -1542,7 +1553,7 @@ bool Database::OpenInternal(const std::string& file_name,
   // Needs to happen before entering WAL mode. Will only work if this the first
   // time the database is being opened in WAL mode.
   const std::string page_size_sql =
-      base::StringPrintf("PRAGMA page_size=%d", page_size_);
+      base::StringPrintf("PRAGMA page_size=%d", options_.page_size);
   ignore_result(ExecuteWithTimeout(page_size_sql.c_str(), kBusyTimeout));
 
   // http://www.sqlite.org/pragma.html#pragma_journal_mode
@@ -1574,9 +1585,9 @@ bool Database::OpenInternal(const std::string& file_name,
     ignore_result(Execute("PRAGMA journal_mode=TRUNCATE"));
   }
 
-  if (cache_size_ != 0) {
+  if (options_.cache_size != 0) {
     const std::string cache_size_sql =
-        base::StringPrintf("PRAGMA cache_size=%d", cache_size_);
+        base::StringPrintf("PRAGMA cache_size=%d", options_.cache_size);
     ignore_result(ExecuteWithTimeout(cache_size_sql.c_str(), kBusyTimeout));
   }
 
@@ -1802,9 +1813,9 @@ bool Database::UseWALMode() const {
   // locking, because this case does not require shared memory support.
   // At the time this was implemented (May 2020), Fuchsia's shared
   // memory support was insufficient for SQLite's needs.
-  return want_wal_mode_ && exclusive_locking_;
+  return options_.wal_mode && options_.exclusive_locking;
 #else
-  return want_wal_mode_;
+  return options_.wal_mode;
 #endif  // defined(OS_FUCHSIA)
 }
 

@@ -6,26 +6,33 @@
 
 #include <memory>
 
+#include "ash/public/cpp/new_window_delegate.h"
 #include "ash/public/cpp/resources/grit/ash_public_unscaled_resources.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
+#include "ash/system/phonehub/interstitial_view_button.h"
 #include "ash/system/phonehub/phone_hub_interstitial_view.h"
-#include "ash/system/unified/rounded_label_button.h"
+#include "ash/system/phonehub/phone_hub_metrics.h"
+#include "ash/system/phonehub/phone_hub_view_ids.h"
+#include "ash/system/phonehub/ui_constants.h"
+#include "chromeos/components/phonehub/connection_scheduler.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/views/layout/fill_layout.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 
 namespace ash {
 
-namespace {
+using phone_hub_metrics::InterstitialScreenEvent;
+using phone_hub_metrics::Screen;
 
-// Tag value used to uniquely identify the "Learn More" and "Refresh" buttons.
-constexpr int kLearnMoreButtonTag = 1;
-constexpr int kRefreshButtonTag = 2;
-
-}  // namespace
-
-ConnectionErrorView::ConnectionErrorView(ErrorStatus error) {
+ConnectionErrorView::ConnectionErrorView(
+    ErrorStatus error,
+    chromeos::phonehub::ConnectionScheduler* connection_scheduler)
+    : connection_scheduler_(connection_scheduler) {
+  SetID(error == ErrorStatus::kDisconnected
+            ? PhoneHubViewID::kDisconnectedView
+            : PhoneHubViewID::kReconnectingView);
   SetLayoutManager(std::make_unique<views::FillLayout>());
   content_view_ = AddChildView(std::make_unique<PhoneHubInterstitialView>(
       /*show_progress=*/error == ErrorStatus::kReconnecting));
@@ -45,31 +52,59 @@ ConnectionErrorView::ConnectionErrorView(ErrorStatus error) {
   content_view_->SetDescription(l10n_util::GetStringUTF16(
       IDS_ASH_PHONE_HUB_CONNECTION_ERROR_DIALOG_DESCRIPTION));
 
-  if (error == ErrorStatus::kReconnecting)
+  if (error == ErrorStatus::kReconnecting) {
+    phone_hub_metrics::LogInterstitialScreenEvent(
+        Screen::kReconnecting, InterstitialScreenEvent::kShown);
     return;
+  }
 
   // Add "Learn more" and "Refresh" buttons only for disconnected state.
-  auto learn_more = std::make_unique<views::LabelButton>(
-      this, l10n_util::GetStringUTF16(
-                IDS_ASH_PHONE_HUB_CONNECTION_ERROR_DIALOG_LEARN_MORE_BUTTON));
+  auto learn_more = std::make_unique<InterstitialViewButton>(
+      base::BindRepeating(
+          &ConnectionErrorView::ButtonPressed, base::Unretained(this),
+          InterstitialScreenEvent::kLearnMore,
+          base::BindRepeating(
+              &NewWindowDelegate::NewTabWithUrl,
+              base::Unretained(NewWindowDelegate::GetInstance()),
+              GURL(kLearnMoreUrl), /*from_user_interaction=*/true)),
+      l10n_util::GetStringUTF16(
+          IDS_ASH_PHONE_HUB_CONNECTION_ERROR_DIALOG_LEARN_MORE_BUTTON),
+      /*paint_background=*/false);
   learn_more->SetEnabledTextColors(
       AshColorProvider::Get()->GetContentLayerColor(
           AshColorProvider::ContentLayerType::kTextColorPrimary));
-  learn_more->set_tag(kLearnMoreButtonTag);
+  learn_more->SetID(PhoneHubViewID::kDisconnectedLearnMoreButton);
   content_view_->AddButton(std::move(learn_more));
 
-  auto refresh = std::make_unique<RoundedLabelButton>(
-      this, l10n_util::GetStringUTF16(
-                IDS_ASH_PHONE_HUB_CONNECTION_ERROR_DIALOG_REFRESH_BUTTON));
-  refresh->set_tag(kRefreshButtonTag);
+  auto refresh = std::make_unique<InterstitialViewButton>(
+      base::BindRepeating(
+          &ConnectionErrorView::ButtonPressed, base::Unretained(this),
+          InterstitialScreenEvent::kConfirm,
+          base::BindRepeating(
+              &chromeos::phonehub::ConnectionScheduler::ScheduleConnectionNow,
+              base::Unretained(connection_scheduler_))),
+      l10n_util::GetStringUTF16(
+          IDS_ASH_PHONE_HUB_CONNECTION_ERROR_DIALOG_REFRESH_BUTTON),
+      /*paint_background=*/true);
+  refresh->SetID(PhoneHubViewID::kDisconnectedRefreshButton);
   content_view_->AddButton(std::move(refresh));
+
+  phone_hub_metrics::LogInterstitialScreenEvent(
+      Screen::kConnectionError, InterstitialScreenEvent::kShown);
 }
 
 ConnectionErrorView::~ConnectionErrorView() = default;
 
-void ConnectionErrorView::ButtonPressed(views::Button* sender,
-                                        const ui::Event& event) {
-  // TODO(meilinw): implement button pressed actions.
+phone_hub_metrics::Screen ConnectionErrorView::GetScreenForMetrics() const {
+  return GetID() == PhoneHubViewID::kReconnectingView
+             ? Screen::kReconnecting
+             : Screen::kConnectionError;
+}
+
+void ConnectionErrorView::ButtonPressed(InterstitialScreenEvent event,
+                                        base::RepeatingClosure callback) {
+  LogInterstitialScreenEvent(event);
+  std::move(callback).Run();
 }
 
 BEGIN_METADATA(ConnectionErrorView, views::View)

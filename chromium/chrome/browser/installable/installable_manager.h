@@ -100,7 +100,7 @@ class InstallableManager
   FRIEND_TEST_ALL_PREFIXES(InstallableManagerOfflineCapabilityBrowserTest,
                            CheckWebapp);
 
-  using IconPurpose = blink::Manifest::ImageResource::Purpose;
+  using IconPurpose = blink::mojom::ManifestImageResource_Purpose;
 
   enum class IconUsage { kPrimary, kSplash };
 
@@ -218,7 +218,9 @@ class InstallableManager
       content::ServiceWorkerCapability capability);
   void OnDidCheckOfflineCapability(
       base::TimeTicks check_service_worker_start_time,
-      content::OfflineCapability capability);
+      bool enforce_offline_capability,
+      content::OfflineCapability capability,
+      int64_t service_worker_registration_id);
 
   void CheckAndFetchBestIcon(int ideal_icon_size_in_px,
                              int minimum_icon_size_in_px,

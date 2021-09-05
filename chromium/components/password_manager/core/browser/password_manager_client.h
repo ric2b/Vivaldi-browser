@@ -15,12 +15,12 @@
 #include "base/util/type_safety/strong_alias.h"
 #include "build/build_config.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom.h"
+#include "components/autofill/core/common/password_generation_util.h"
 #include "components/password_manager/core/browser/credentials_filter.h"
 #include "components/password_manager/core/browser/hsts_query.h"
 #include "components/password_manager/core/browser/http_auth_manager.h"
 #include "components/password_manager/core/browser/leak_detection_dialog_utils.h"
 #include "components/password_manager/core/browser/manage_passwords_referrer.h"
-#include "components/password_manager/core/browser/password_form_forward.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_reuse_detector.h"
@@ -59,11 +59,9 @@ class Origin;
 
 class GURL;
 
-#if defined(ON_FOCUS_PING_ENABLED)
 namespace safe_browsing {
 class PasswordProtectionService;
 }
-#endif
 
 namespace password_manager {
 
@@ -76,6 +74,7 @@ class PasswordManagerMetricsRecorder;
 class HttpAuthManager;
 class PasswordRequirementsService;
 class PasswordStore;
+struct PasswordForm;
 
 enum SyncState {
   NOT_SYNCING,
@@ -173,13 +172,18 @@ class PasswordManagerClient {
   // Instructs the client to show the Touch To Fill UI.
   virtual void ShowTouchToFill(PasswordManagerDriver* driver);
 
+  // Informs `PasswordReuseDetectionManager` about reused passwords selected
+  // from the AllPasswordsBottomSheet.
+  virtual void OnPasswordSelected(const base::string16& text);
+
   // Returns a pointer to a BiometricAuthenticator. Might be null if
   // BiometricAuthentication is not available for a given platform.
   virtual BiometricAuthenticator* GetBiometricAuthenticator();
 
-  // Informs the embedder that the user has manually requested to generate a
+  // Informs the embedder that the user has requested to generate a
   // password in the focused password field.
-  virtual void GeneratePassword();
+  virtual void GeneratePassword(
+      autofill::password_generation::PasswordGenerationType type);
 
   // Informs the embedder that automatic signing in just happened. The form
   // returned to the site is |local_forms[0]|. |local_forms| contains all the
@@ -321,11 +325,9 @@ class PasswordManagerClient {
   // Returns the current best guess as to the page's display language.
   virtual std::string GetPageLanguage() const;
 
-#if defined(ON_FOCUS_PING_ENABLED) || defined(PASSWORD_REUSE_DETECTION_ENABLED)
   // Return the PasswordProtectionService associated with this instance.
   virtual safe_browsing::PasswordProtectionService*
   GetPasswordProtectionService() const = 0;
-#endif
 
 #if defined(ON_FOCUS_PING_ENABLED)
   // Checks the safe browsing reputation of the webpage when the
@@ -335,7 +337,6 @@ class PasswordManagerClient {
                                            const GURL& frame_url) = 0;
 #endif
 
-#if defined(PASSWORD_REUSE_DETECTION_ENABLED)
   // Checks the safe browsing reputation of the webpage where password reuse
   // happens. This is called by the PasswordReuseDetectionManager when a
   // protected password is typed on the wrong domain. This may trigger a
@@ -348,7 +349,6 @@ class PasswordManagerClient {
       const std::string& username,
       const std::vector<MatchingReusedCredential>& matching_reused_credentials,
       bool password_field_exists) = 0;
-#endif
 
 #if defined(PASSWORD_REUSE_WARNING_ENABLED)
   // Records a Chrome Sync event that GAIA password reuse was detected.
@@ -408,8 +408,8 @@ class PasswordManagerClient {
   // Returns a FieldInfoManager associated with the current profile.
   virtual FieldInfoManager* GetFieldInfoManager() const = 0;
 
-  // Returns the currently set autofill-assistant mode.
-  virtual AutofillAssistantMode GetAutofillAssistantMode() const;
+  // Returns if the Autofill Assistant UI is shown.
+  virtual bool IsAutofillAssistantUIVisible() const = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PasswordManagerClient);

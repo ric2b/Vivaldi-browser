@@ -156,3 +156,32 @@ jboolean JNI_DownloadDialogBridge_IsDataReductionProxyEnabled(JNIEnv* env) {
           ProfileManager::GetActiveUserProfile());
   return data_reduction_settings->IsDataReductionProxyEnabled();
 }
+
+// Vivaldi - External download manager support
+bool DownloadDialogBridge::DownloadWithExternalDownloadManager(
+    gfx::NativeWindow native_window,
+    DownloadLocationDialogType dialog_type,
+    const base::FilePath& suggested_path,
+    download::DownloadItem* download,
+    DialogCallback dialog_callback) {
+  if (!native_window)
+    return false;
+
+  dialog_callback_ = std::move(dialog_callback);
+
+  // This shouldn't happen, but if it does, cancel download.
+  if (dialog_type == DownloadLocationDialogType::NO_DIALOG) {
+    NOTREACHED();
+    DownloadDialogResult dialog_result;
+    dialog_result.location_result = DownloadLocationDialogResult::USER_CANCELED;
+    CompleteSelection(std::move(dialog_result));
+    return false;
+  }
+
+  JNIEnv* env = base::android::AttachCurrentThread();
+  return Java_DownloadDialogBridge_downloadWithExternalDownloadManager(
+      env, java_obj_, native_window->GetJavaObject(),
+      base::android::ConvertUTF8ToJavaString(env,
+                                             suggested_path.AsUTF8Unsafe()),
+      base::android::ConvertUTF8ToJavaString(env, download->GetURL().spec()));
+}

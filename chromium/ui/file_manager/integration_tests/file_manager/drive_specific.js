@@ -385,6 +385,52 @@ testcase.drivePinFileMobileNetwork = async () => {
 };
 
 /**
+ * Tests that the pinned toggle in the toolbar updates on pinned state changes
+ * within fake entries.
+ */
+testcase.drivePinToggleUpdatesInFakeEntries = async () => {
+  const appId = await setupAndWaitUntilReady(RootPath.DRIVE);
+
+  // Navigate to the Offline fake entry.
+  await navigateWithDirectoryTree(appId, '/Offline');
+
+  // Bring up the context menu for test.txt.
+  await remoteCall.waitAndRightClick(
+      appId, '#file-list [file-name="test.txt"]');
+
+  // The pinned toggle should update to be checked.
+  await remoteCall.waitForElement(appId, '#pinned-toggle[checked]');
+
+  // Unpin the file.
+  await remoteCall.waitAndClickElement(
+      appId,
+      '#file-context-menu:not([hidden]) ' +
+          '[command="#toggle-pinned"][checked]');
+
+  // The pinned toggle should change to be unchecked.
+  await remoteCall.waitForElement(appId, '#pinned-toggle:not([checked])');
+
+  // Navigate to the Shared with me fake entry.
+  await navigateWithDirectoryTree(appId, '/Shared with me');
+
+  // Bring up the context menu for test.txt.
+  await remoteCall.waitAndRightClick(
+      appId, '#file-list [file-name="test.txt"]');
+
+  // The pinned toggle should remain unchecked.
+  await remoteCall.waitForElement(appId, '#pinned-toggle:not([checked])');
+
+  // Pin the file.
+  await remoteCall.waitAndClickElement(
+      appId,
+      '#file-context-menu:not([hidden]) ' +
+          '[command="#toggle-pinned"]:not([checked])');
+
+  // The pinned toggle should change to be checked.
+  await remoteCall.waitForElement(appId, '#pinned-toggle[checked]');
+};
+
+/**
  * Tests that pressing Ctrl+A (select all files) from the search box doesn't put
  * the Files App into check-select mode (crbug.com/849253).
  */
@@ -438,9 +484,14 @@ testcase.driveBackupPhotos = async () => {
   // Wait for the USB mount.
   await remoteCall.waitForElement(appId, USB_VOLUME_QUERY);
 
-  // Navigate to the DCIM directory.
-  await remoteCall.navigateWithDirectoryTree(
-      appId, '/DCIM', 'fake-usb', 'removable');
+  if (await isSinglePartitionFormat(appId)) {
+    // Navigate to the DCIM directory.
+    await navigateWithDirectoryTree(appId, '/FAKEUSB/fake-usb/DCIM');
+  } else {
+    // Navigate to the DCIM directory.
+    await remoteCall.navigateWithDirectoryTree(
+        appId, '/DCIM', 'fake-usb', 'removable');
+  }
 
   // Wait for the import button to be ready.
   await remoteCall.waitForElement(
@@ -468,8 +519,8 @@ testcase.driveBackupPhotos = async () => {
 };
 
 /**
- * Verify that "Available Offline" is available from the gear menu for a drive
- * file before the context menu has been opened.
+ * Verify that "Available Offline" is not available from the gear menu for a
+ * drive file.
  */
 testcase.driveAvailableOfflineGearMenu = async () => {
   const pinnedMenuQuery = '#file-context-menu:not([hidden]) ' +
@@ -494,17 +545,20 @@ testcase.driveAvailableOfflineGearMenu = async () => {
   // Ensure gear button is available
   await remoteCall.waitForElement(appId, '#selection-menu-button');
 
-  // Click on gear menu and ensure "Available Offline" is shown.
+  // Click on gear menu and ensure "Available Offline" is not shown.
   chrome.test.assertTrue(await remoteCall.callRemoteTestUtil(
       'fakeMouseClick', appId, ['#selection-menu-button']));
 
-  // Check that "Available Offline" is shown in the menu.
-  await remoteCall.waitForElement(appId, pinnedMenuQuery);
+  // Check that "Available Offline" is not shown in the menu. This element is
+  // hidden via a display:none css rule, so check that.
+  const e = await remoteCall.waitForElementStyles(
+      appId, pinnedMenuQuery, ['display']);
+  chrome.test.assertEq('none', e.styles.display);
 };
 
 /**
- * Verify that "Available Offline" is available from the gear menu for a drive
- * directory before the context menu has been opened.
+ * Verify that "Available Offline" is not available from the gear menu for a
+ * drive directory.
  */
 testcase.driveAvailableOfflineDirectoryGearMenu = async () => {
   const pinnedMenuQuery = '#file-context-menu:not([hidden]) ' +
@@ -529,12 +583,15 @@ testcase.driveAvailableOfflineDirectoryGearMenu = async () => {
   // Ensure gear button is available
   await remoteCall.waitForElement(appId, '#selection-menu-button');
 
-  // Click on gear menu and ensure "Available Offline" is shown.
+  // Click on gear menu and ensure "Available Offline" is not shown.
   chrome.test.assertTrue(await remoteCall.callRemoteTestUtil(
       'fakeMouseClick', appId, ['#selection-menu-button']));
 
-  // Check that "Available Offline" is shown in the menu.
-  await remoteCall.waitForElement(appId, pinnedMenuQuery);
+  // Check that "Available Offline" is not shown in the menu. This element is
+  // hidden via a display:none css rule, so check that.
+  const e = await remoteCall.waitForElementStyles(
+      appId, pinnedMenuQuery, ['display']);
+  chrome.test.assertEq('none', e.styles.display);
 };
 
 /**
@@ -742,4 +799,29 @@ testcase.driveWelcomeBanner = async () => {
       return pending(caller, 'Welcome banner is still visible.');
     }
   });
+};
+
+/**
+ * Tests that the Drive offline info banner appears when a Drive volume is
+ * opened.
+ */
+testcase.driveOfflineInfoBanner = async () => {
+  // Open Files app on Drive.
+  const appId = await setupAndWaitUntilReady(RootPath.DRIVE, []);
+
+  // Check: the Drive Offline info banner should appear.
+  await remoteCall.waitForElement(appId, '#offline-info-banner:not([hidden])');
+};
+
+/**
+ * Tests that the Drive offline info banner does not show when the
+ * DriveFsBidirectionalNativeMessaging flag is disabled.
+ */
+testcase.driveOfflineInfoBannerWithoutFlag = async () => {
+  // Open Files app on Drive.
+  const appId = await setupAndWaitUntilReady(RootPath.DRIVE, []);
+
+  // Check: the Drive Offline info banner should not appear.
+  await remoteCall.waitForElementLost(
+      appId, '#offline-info-banner:not([hidden])');
 };

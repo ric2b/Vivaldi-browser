@@ -18,9 +18,9 @@
 #include "chrome/browser/web_applications/components/app_registry_controller.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/chrome_features.h"
-#include "chrome/common/web_application_info.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/background_color_change_waiter.h"
@@ -31,7 +31,7 @@
 namespace {
 
 constexpr SkColor kAppBackgroundColor = SK_ColorBLUE;
-constexpr char kAppPath[] = "/web_apps/basic.html";
+constexpr char kAppPath[] = "/web_apps/no_service_worker.html";
 
 }  // namespace
 namespace web_app {
@@ -86,9 +86,8 @@ class WebAppTabStripBrowserTest : public InProcessBrowserTest {
   base::test::ScopedFeatureList features_;
 };
 
-// Disabled due to flake. https://crbug.com/1113951
 IN_PROC_BROWSER_TEST_F(WebAppTabStripBrowserTest,
-                       DISABLED_CustomTabBarUpdateOnTabSwitch) {
+                       CustomTabBarUpdateOnTabSwitch) {
   App app = InstallAndLaunch();
 
   CustomTabBarView* custom_tab_bar =

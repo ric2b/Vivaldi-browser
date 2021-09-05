@@ -42,7 +42,6 @@
 #import "ios/chrome/browser/ui/commands/text_zoom_commands.h"
 #import "ios/chrome/browser/ui/commands/whats_new_commands.h"
 #import "ios/chrome/browser/ui/download/ar_quick_look_coordinator.h"
-#import "ios/chrome/browser/ui/download/features.h"
 #import "ios/chrome/browser/ui/download/pass_kit_coordinator.h"
 #import "ios/chrome/browser/ui/find_bar/find_bar_controller_ios.h"
 #import "ios/chrome/browser/ui/find_bar/find_bar_coordinator.h"
@@ -242,6 +241,7 @@
   [self removeWebStateListObserver];
   [self uninstallDelegatesForBrowser];
   [self uninstallDelegatesForAllWebStates];
+  self.viewController.commandDispatcher = nil;
   [self.dispatcher stopDispatchingToTarget:self];
   [self stopChildCoordinators];
   [self destroyViewController];
@@ -305,7 +305,8 @@
                      initWithBrowser:self.browser
                    dependencyFactory:factory
       browserContainerViewController:self.browserContainerCoordinator
-                                         .viewController];
+                                         .viewController
+                          dispatcher:self.dispatcher];
 }
 
 // Shuts down the BrowserViewController.
@@ -518,30 +519,13 @@
 }
 
 - (void)showDownloadsFolder {
-  if (base::FeatureList::IsEnabled(kOpenDownloadsInFilesApp)) {
-    NSURL* URL = GetFilesAppUrl();
-    if (!URL)
-      return;
-
-    [[UIApplication sharedApplication] openURL:URL
-                                       options:@{}
-                             completionHandler:nil];
+  NSURL* URL = GetFilesAppUrl();
+  if (!URL)
     return;
-  }
 
-  base::FilePath download_dir;
-  if (!GetTempDownloadsDirectory(&download_dir)) {
-    return;
-  }
-
-  UIDocumentPickerViewController* documentPicker =
-      [[UIDocumentPickerViewController alloc]
-          initWithDocumentTypes:@[ @"public.data" ]
-                         inMode:UIDocumentPickerModeImport];
-  documentPicker.modalPresentationStyle = UIModalPresentationFormSheet;
-  [self.viewController presentViewController:documentPicker
-                                    animated:YES
-                                  completion:nil];
+  [[UIApplication sharedApplication] openURL:URL
+                                     options:@{}
+                           completionHandler:nil];
 }
 
 - (void)showRecentTabs {

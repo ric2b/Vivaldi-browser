@@ -166,7 +166,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Platform.Cr50.BoardIdFlags" enum="Cr50BoardIdFlags"
-    expires_after="M85">
+    expires_after="2021-10-18">
+  <owner>apronin@chromium.org</owner>
   <owner>vbendeb@chromium.org</owner>
   <summary>
     A sparse histogram of values of Board ID flags programmed in H1 devices in
@@ -225,7 +226,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Platform.CrOS.CrashSenderRemoveReason"
-    enum="CrosCrashSenderRemoveReason" expires_after="2021-01-30">
+    enum="CrosCrashSenderRemoveReason" expires_after="2021-04-04">
   <owner>iby@chromium.org</owner>
   <owner>mutexlox@chromium.org</owner>
   <owner>cros-telemetry@google.com</owner>
@@ -624,7 +625,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="Platform.Memory.Gpu" units="MiB" expires_after="2021-01-31">
+<histogram name="Platform.Memory.Gpu" units="MiB" expires_after="2021-04-04">
 <!-- Name completed by histogram_suffixes name="ProcessMemoryType" -->
 
   <owner>sonnyrao@chromium.org</owner>
@@ -645,24 +646,13 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="Platform.Memory.VMs" units="MiB" expires_after="2021-01-31">
+<histogram name="Platform.Memory.VMs" units="MiB" expires_after="2021-04-04">
 <!-- Name completed by histogram_suffixes name="ProcessMemoryType" -->
 
   <owner>sonnyrao@chromium.org</owner>
   <owner>chromeos-memory@google.com</owner>
   <summary>
     Memory usage of VMs (crostini) in Chrome OS, reported every 10 minutes.
-  </summary>
-</histogram>
-
-<histogram name="Platform.MemoryBandwidth.ReadWrite" units="MB/s"
-    expires_after="M85">
-  <owner>hajimehoshi@chromium.org</owner>
-  <owner>kouhei@chromium.org</owner>
-  <owner>cast-analytics@google.com</owner>
-  <summary>
-    Peak memory bandwith (read and write) usage during the last sample interval.
-    The sample interval may vary from seconds to several minutes.
   </summary>
 </histogram>
 
@@ -993,7 +983,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Platform.Temperature.Sensor00" units="Celsius"
-    expires_after="2021-02-21">
+    expires_after="2021-04-25">
   <owner>fletcherw@chromium.org</owner>
   <summary>
     Temperature reading from EC temperature sensor 0 (TSR0) taken every 30s.
@@ -1035,7 +1025,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Platform.Temperature.Sensor02" units="Celsius"
-    expires_after="2021-02-21">
+    expires_after="2021-04-25">
   <owner>fletcherw@chromium.org</owner>
   <summary>
     Temperature reading from EC temperature sensor 2 (TSR2) taken every 30s.
@@ -1444,7 +1434,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="PlatformThread.Mac.AttemptedRealtimePeriod"
-    units="microseconds" expires_after="2021-03-01">
+    units="microseconds" expires_after="2021-05-02">
   <owner>olka@chromium.org</owner>
   <owner>handellm@chromium.org</owner>
   <summary>
@@ -1454,7 +1444,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="PlatformThread.Mac.SucceededRealtimePeriod"
-    units="microseconds" expires_after="2021-03-01">
+    units="microseconds" expires_after="2021-05-02">
   <owner>olka@chromium.org</owner>
   <owner>handellm@chromium.org</owner>
   <summary>

@@ -6,6 +6,7 @@
 #define ASH_SYSTEM_PHONEHUB_PHONE_CONNECTED_VIEW_H_
 
 #include "ash/ash_export.h"
+#include "ash/system/phonehub/phone_hub_content_view.h"
 #include "ui/views/view.h"
 
 namespace chromeos {
@@ -16,14 +17,12 @@ class PhoneHubManager;
 
 namespace ash {
 
-class TrayBubbleView;
-
 // A view of the Phone Hub panel, displaying phone status and utility actions
 // such as phone status, task continuation, etc.
-class PhoneConnectedView : public views::View {
+class PhoneConnectedView : public PhoneHubContentView {
  public:
-  PhoneConnectedView(TrayBubbleView* bubble_view,
-                     chromeos::phonehub::PhoneHubManager* phone_hub_manager);
+  explicit PhoneConnectedView(
+      chromeos::phonehub::PhoneHubManager* phone_hub_manager);
   ~PhoneConnectedView() override;
 
   // views::View:
@@ -31,8 +30,8 @@ class PhoneConnectedView : public views::View {
   void ChildVisibilityChanged(View* child) override;
   const char* GetClassName() const override;
 
- private:
-  void AddSeparator();
+  // PhoneHubContentView:
+  phone_hub_metrics::Screen GetScreenForMetrics() const override;
 };
 
 }  // namespace ash

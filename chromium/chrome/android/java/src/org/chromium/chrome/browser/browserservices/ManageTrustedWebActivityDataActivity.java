@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.browserservices;
 import android.os.Bundle;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.browser.customtabs.CustomTabsSessionToken;
 
@@ -26,6 +27,8 @@ public class ManageTrustedWebActivityDataActivity extends AppCompatActivity {
 
     private static final String TAG = "TwaDataActivity";
 
+    private static String sMockCallingPackage;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -37,7 +40,7 @@ public class ManageTrustedWebActivityDataActivity extends AppCompatActivity {
     }
 
     private void launchSettings(@Nullable String urlToLaunchSettingsFor, boolean isWebApk) {
-        String packageName = getClientPackageName();
+        String packageName = getClientPackageName(isWebApk);
         if (packageName == null) {
             logNoPackageName();
             finish();
@@ -54,8 +57,17 @@ public class ManageTrustedWebActivityDataActivity extends AppCompatActivity {
         }
     }
 
+    @VisibleForTesting
+    public static void setCallingPackageForTesting(String packageName) {
+        sMockCallingPackage = packageName;
+    }
+
     @Nullable
-    private String getClientPackageName() {
+    private String getClientPackageName(boolean isWebApk) {
+        if (isWebApk) {
+            return sMockCallingPackage != null ? sMockCallingPackage : getCallingPackage();
+        }
+
         CustomTabsSessionToken session =
                 CustomTabsSessionToken.getSessionTokenFromIntent(getIntent());
         if (session == null) {

@@ -8,9 +8,11 @@
 
 #include "ash/style/ash_color_provider.h"
 #include "ash/system/phonehub/notification_opt_in_view.h"
+#include "ash/system/phonehub/phone_hub_view_ids.h"
 #include "ash/system/phonehub/phone_status_view.h"
 #include "ash/system/phonehub/quick_actions_view.h"
 #include "ash/system/phonehub/task_continuation_view.h"
+#include "ash/system/phonehub/ui_constants.h"
 #include "ash/system/tray/tray_constants.h"
 #include "chromeos/components/phonehub/notification_access_manager.h"
 #include "chromeos/components/phonehub/phone_hub_manager.h"
@@ -24,40 +26,30 @@
 
 namespace ash {
 
-namespace {
-constexpr int kPaddingBetweenTitleAndSeparator = 3;
-}  // namespace
-
 PhoneConnectedView::PhoneConnectedView(
-    TrayBubbleView* bubble_view,
     chromeos::phonehub::PhoneHubManager* phone_hub_manager) {
+  SetID(PhoneHubViewID::kPhoneConnectedView);
+
   auto setup_layered_view = [](views::View* view) {
     view->SetPaintToLayer();
     view->layer()->SetFillsBoundsOpaquely(false);
   };
 
   auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical, gfx::Insets(0, 0, 0, 0)));
+      views::BoxLayout::Orientation::kVertical,
+      gfx::Insets(0, kBubbleHorizontalSidePaddingDip)));
   layout->SetDefaultFlex(1);
 
-  AddSeparator();
-
-  // TODO(meilinw): handle the case when the user has dismissed this opt in
-  // view once, we shouldn't show it again.
-  if (!phone_hub_manager->GetNotificationAccessManager()
-           ->HasAccessBeenGranted()) {
-    AddChildView(std::make_unique<NotificationOptInView>(bubble_view));
-  }
+  AddChildView(std::make_unique<NotificationOptInView>(
+      phone_hub_manager->GetNotificationAccessManager()));
 
   setup_layered_view(
       AddChildView(std::make_unique<QuickActionsView>(phone_hub_manager)));
 
-  AddSeparator();
-
   auto* phone_model = phone_hub_manager->GetPhoneModel();
   if (phone_model) {
-    setup_layered_view(
-        AddChildView(std::make_unique<TaskContinuationView>(phone_model)));
+    setup_layered_view(AddChildView(std::make_unique<TaskContinuationView>(
+        phone_model, phone_hub_manager->GetUserActionRecorder())));
   }
 }
 
@@ -77,14 +69,8 @@ const char* PhoneConnectedView::GetClassName() const {
   return "PhoneConnectedView";
 }
 
-void PhoneConnectedView::AddSeparator() {
-  auto* separator = AddChildView(std::make_unique<views::Separator>());
-  separator->SetPaintToLayer();
-  separator->layer()->SetFillsBoundsOpaquely(false);
-  separator->SetColor(AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kSeparatorColor));
-  separator->SetBorder(views::CreateEmptyBorder(gfx::Insets(
-      kPaddingBetweenTitleAndSeparator, 0, kMenuSeparatorVerticalPadding, 0)));
+phone_hub_metrics::Screen PhoneConnectedView::GetScreenForMetrics() const {
+  return phone_hub_metrics::Screen::kPhoneConnected;
 }
 
 }  // namespace ash

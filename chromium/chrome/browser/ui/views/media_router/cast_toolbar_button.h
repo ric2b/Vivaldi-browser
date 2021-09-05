@@ -11,13 +11,13 @@
 #include "chrome/browser/ui/views/toolbar/toolbar_button.h"
 #include "components/media_router/browser/issues_observer.h"
 #include "ui/events/event.h"
-#include "ui/views/controls/button/button.h"
 
 class Browser;
 
 namespace media_router {
 
 class MediaRouter;
+class LoggerImpl;
 
 // Cast icon shown in the trusted area of toolbar. Its lifetime is tied to that
 // of its parent ToolbarView. The icon is made visible in following situations:
@@ -26,7 +26,6 @@ class MediaRouter;
 // - There is an active local cast session.
 // - There is an outstanding issue.
 class CastToolbarButton : public ToolbarButton,
-                          public views::ButtonListener,
                           public MediaRouterActionController::Observer,
                           public IssuesObserver,
                           public MediaRoutesObserver {
@@ -59,9 +58,6 @@ class CastToolbarButton : public ToolbarButton,
   void OnGestureEvent(ui::GestureEvent* event) override;
   void UpdateIcon() override;
 
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
   MediaRouterContextualMenu* context_menu_for_test() {
     return context_menu_.get();
   }
@@ -72,6 +68,10 @@ class CastToolbarButton : public ToolbarButton,
   // Updates insets per touch ui mode.
   void UpdateLayoutInsetDelta();
 
+  void ButtonPressed();
+
+  void LogIconChange(const gfx::VectorIcon* icon);
+
   Browser* const browser_;
   Profile* const profile_;
 
@@ -81,6 +81,10 @@ class CastToolbarButton : public ToolbarButton,
   std::unique_ptr<MediaRouterContextualMenu> context_menu_;
 
   bool has_local_display_route_ = false;
+
+  const gfx::VectorIcon* icon_ = nullptr;
+
+  LoggerImpl* const logger_;
 
   DISALLOW_COPY_AND_ASSIGN(CastToolbarButton);
 };

@@ -4,7 +4,6 @@
 
 #include "base/command_line.h"
 #include "base/feature_list.h"
-#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -14,7 +13,6 @@
 #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
 #include "chrome/browser/ui/exclusive_access/exclusive_access_test.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/test/base/interactive_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -64,14 +62,14 @@ class FullscreenControllerInteractiveTest : public ExclusiveAccessTest {
   bool IsMouseLocked() {
     // Verify that IsMouseLocked is consistent between the
     // Fullscreen Controller and the Render View Host View.
-    EXPECT_TRUE(browser()->IsMouseLocked() ==
-                browser()
-                    ->tab_strip_model()
-                    ->GetActiveWebContents()
-                    ->GetRenderViewHost()
-                    ->GetWidget()
-                    ->GetView()
-                    ->IsMouseLocked());
+    EXPECT_TRUE(browser()->IsMouseLocked() == browser()
+                                                  ->tab_strip_model()
+                                                  ->GetActiveWebContents()
+                                                  ->GetMainFrame()
+                                                  ->GetRenderViewHost()
+                                                  ->GetWidget()
+                                                  ->GetView()
+                                                  ->IsMouseLocked());
     return browser()->IsMouseLocked();
   }
 
@@ -413,37 +411,6 @@ IN_PROC_BROWSER_TEST_F(FullscreenControllerInteractiveTest,
     fullscreen_observer.Wait();
   }
   ASSERT_TRUE(IsExclusiveAccessBubbleDisplayed());
-  ASSERT_TRUE(IsMouseLocked());
-  ASSERT_TRUE(IsWindowFullscreenForTabOrPending());
-}
-
-// Tests mouse lock and fullscreen for the privileged fullscreen case (e.g.,
-// embedded flash fullscreen, since the Flash plugin handles user permissions
-// requests itself).
-// Flaky on Linux: crbug.com/1066607
-#if defined(OS_LINUX) || defined(OS_CHROMEOS) || defined(OS_MAC)
-#define MAYBE_PrivilegedMouseLockAndFullscreen \
-  DISABLED_PrivilegedMouseLockAndFullscreen
-#else
-#define MAYBE_PrivilegedMouseLockAndFullscreen PrivilegedMouseLockAndFullscreen
-#endif
-IN_PROC_BROWSER_TEST_F(FullscreenControllerInteractiveTest,
-                       MAYBE_PrivilegedMouseLockAndFullscreen) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-  ui_test_utils::NavigateToURL(
-      browser(), embedded_test_server()->GetURL(kFullscreenMouseLockHTML));
-
-  ASSERT_FALSE(IsExclusiveAccessBubbleDisplayed());
-
-  SetPrivilegedFullscreen(true);
-
-  // Request to lock the mouse and enter fullscreen.
-  FullscreenNotificationObserver fullscreen_observer(browser());
-  PressKeyAndWaitForMouseLockRequest(ui::VKEY_B);
-  fullscreen_observer.Wait();
-
-  // Confirm they are enabled and there is no prompt.
-  ASSERT_FALSE(IsExclusiveAccessBubbleDisplayed());
   ASSERT_TRUE(IsMouseLocked());
   ASSERT_TRUE(IsWindowFullscreenForTabOrPending());
 }

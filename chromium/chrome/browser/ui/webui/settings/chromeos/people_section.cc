@@ -7,6 +7,7 @@
 #include "ash/public/cpp/ash_features.h"
 #include "base/bind.h"
 #include "base/i18n/number_formatting.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/no_destructor.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
@@ -100,7 +101,7 @@ const std::vector<SearchConcept>& GetPeopleSearchConcepts() {
        mojom::SearchResultIcon::kAvatar,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kRemoveFromUserWhitelist}},
+       {.setting = mojom::Setting::kRemoveFromUserAllowlist}},
       {IDS_OS_SETTINGS_TAG_GUEST_BROWSING,
        mojom::kManageOtherPeopleSubpagePath,
        mojom::SearchResultIcon::kAvatar,
@@ -133,7 +134,7 @@ const std::vector<SearchConcept>& GetPeopleSearchConcepts() {
        mojom::SearchResultIcon::kAvatar,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
-       {.setting = mojom::Setting::kAddToUserWhitelist}},
+       {.setting = mojom::Setting::kAddToUserAllowlist}},
   });
   return *tags;
 }
@@ -235,25 +236,25 @@ const std::vector<SearchConcept>& GetSplitSyncOffSearchConcepts() {
 const std::vector<SearchConcept>& GetKerberosSearchConcepts() {
   static const base::NoDestructor<std::vector<SearchConcept>> tags({
       {IDS_OS_SETTINGS_TAG_KERBEROS_ADD,
-       mojom::kKerberosSubpagePath,
+       mojom::kKerberosAccountsSubpagePath,
        mojom::SearchResultIcon::kAvatar,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kAddKerberosTicket}},
       {IDS_OS_SETTINGS_TAG_KERBEROS_REMOVE,
-       mojom::kKerberosSubpagePath,
+       mojom::kKerberosAccountsSubpagePath,
        mojom::SearchResultIcon::kAvatar,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
        {.setting = mojom::Setting::kRemoveKerberosTicket}},
       {IDS_OS_SETTINGS_TAG_KERBEROS,
-       mojom::kKerberosSubpagePath,
+       mojom::kKerberosAccountsSubpagePath,
        mojom::SearchResultIcon::kAvatar,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSubpage,
-       {.subpage = mojom::Subpage::kKerberos}},
+       {.subpage = mojom::Subpage::kKerberosAccounts}},
       {IDS_OS_SETTINGS_TAG_KERBEROS_ACTIVE,
-       mojom::kKerberosSubpagePath,
+       mojom::kKerberosAccountsSubpagePath,
        mojom::SearchResultIcon::kAvatar,
        mojom::SearchResultDefaultRank::kMedium,
        mojom::SearchResultType::kSetting,
@@ -351,72 +352,6 @@ void AddAccountManagerPageStrings(content::WebUIDataSource* html_source) {
 
   html_source->AddString("accountManagerLearnMoreUrl",
                          chrome::kAccountManagerLearnMoreURL);
-}
-
-void AddKerberosAddAccountDialogStrings(content::WebUIDataSource* html_source) {
-  static constexpr webui::LocalizedString kLocalizedStrings[] = {
-      {"kerberosAccountsAdvancedConfigLabel",
-       IDS_SETTINGS_KERBEROS_ACCOUNTS_ADVANCED_CONFIG_LABEL},
-      {"kerberosAdvancedConfigTitle",
-       IDS_SETTINGS_KERBEROS_ADVANCED_CONFIG_TITLE},
-      {"kerberosAdvancedConfigDesc",
-       IDS_SETTINGS_KERBEROS_ADVANCED_CONFIG_DESC},
-      {"addKerberosAccountRememberPassword",
-       IDS_SETTINGS_ADD_KERBEROS_ACCOUNT_REMEMBER_PASSWORD},
-      {"kerberosPassword", IDS_SETTINGS_KERBEROS_PASSWORD},
-      {"kerberosUsername", IDS_SETTINGS_KERBEROS_USERNAME},
-      {"addKerberosAccountDescription",
-       IDS_SETTINGS_ADD_KERBEROS_ACCOUNT_DESCRIPTION},
-      {"kerberosErrorNetworkProblem",
-       IDS_SETTINGS_KERBEROS_ERROR_NETWORK_PROBLEM},
-      {"kerberosErrorUsernameInvalid",
-       IDS_SETTINGS_KERBEROS_ERROR_USERNAME_INVALID},
-      {"kerberosErrorUsernameUnknown",
-       IDS_SETTINGS_KERBEROS_ERROR_USERNAME_UNKNOWN},
-      {"kerberosErrorDuplicatePrincipalName",
-       IDS_SETTINGS_KERBEROS_ERROR_DUPLICATE_PRINCIPAL_NAME},
-      {"kerberosErrorContactingServer",
-       IDS_SETTINGS_KERBEROS_ERROR_CONTACTING_SERVER},
-      {"kerberosErrorPasswordInvalid",
-       IDS_SETTINGS_KERBEROS_ERROR_PASSWORD_INVALID},
-      {"kerberosErrorPasswordExpired",
-       IDS_SETTINGS_KERBEROS_ERROR_PASSWORD_EXPIRED},
-      {"kerberosErrorKdcEncType", IDS_SETTINGS_KERBEROS_ERROR_KDC_ENC_TYPE},
-      {"kerberosErrorGeneral", IDS_SETTINGS_KERBEROS_ERROR_GENERAL},
-      {"kerberosConfigErrorSectionNestedInGroup",
-       IDS_SETTINGS_KERBEROS_CONFIG_ERROR_SECTION_NESTED_IN_GROUP},
-      {"kerberosConfigErrorSectionSyntax",
-       IDS_SETTINGS_KERBEROS_CONFIG_ERROR_SECTION_SYNTAX},
-      {"kerberosConfigErrorExpectedOpeningCurlyBrace",
-       IDS_SETTINGS_KERBEROS_CONFIG_ERROR_EXPECTED_OPENING_CURLY_BRACE},
-      {"kerberosConfigErrorExtraCurlyBrace",
-       IDS_SETTINGS_KERBEROS_CONFIG_ERROR_EXTRA_CURLY_BRACE},
-      {"kerberosConfigErrorRelationSyntax",
-       IDS_SETTINGS_KERBEROS_CONFIG_ERROR_RELATION_SYNTAX_ERROR},
-      {"kerberosConfigErrorKeyNotSupported",
-       IDS_SETTINGS_KERBEROS_CONFIG_ERROR_KEY_NOT_SUPPORTED},
-      {"kerberosConfigErrorSectionNotSupported",
-       IDS_SETTINGS_KERBEROS_CONFIG_ERROR_SECTION_NOT_SUPPORTED},
-      {"kerberosConfigErrorKrb5FailedToParse",
-       IDS_SETTINGS_KERBEROS_CONFIG_ERROR_KRB5_FAILED_TO_PARSE},
-      {"addKerberosAccountRefreshButtonLabel",
-       IDS_SETTINGS_ADD_KERBEROS_ACCOUNT_REFRESH_BUTTON_LABEL},
-      {"addKerberosAccount", IDS_SETTINGS_ADD_KERBEROS_ACCOUNT},
-      {"refreshKerberosAccount", IDS_SETTINGS_REFRESH_KERBEROS_ACCOUNT},
-  };
-  AddLocalizedStringsBulk(html_source, kLocalizedStrings);
-
-  PrefService* local_state = g_browser_process->local_state();
-
-  // Whether the 'Remember password' checkbox is enabled.
-  html_source->AddBoolean(
-      "kerberosRememberPasswordEnabled",
-      local_state->GetBoolean(::prefs::kKerberosRememberPasswordEnabled));
-
-  // Kerberos default configuration.
-  html_source->AddString(
-      "defaultKerberosConfig",
-      chromeos::KerberosCredentialsManager::GetDefaultKerberosConfig());
 }
 
 void AddLockScreenPageStrings(content::WebUIDataSource* html_source,
@@ -683,17 +618,15 @@ void AddParentalControlStrings(content::WebUIDataSource* html_source,
                          tooltip);
 }
 
-bool IsSameAccount(const AccountManager::AccountKey& account_key,
+bool IsSameAccount(const ::account_manager::AccountKey& account_key,
                    const AccountId& account_id) {
   switch (account_key.account_type) {
-    case account_manager::AccountType::ACCOUNT_TYPE_GAIA:
+    case account_manager::AccountType::kGaia:
       return account_id.GetAccountType() == AccountType::GOOGLE &&
              account_id.GetGaiaId() == account_key.id;
-    case account_manager::AccountType::ACCOUNT_TYPE_ACTIVE_DIRECTORY:
+    case account_manager::AccountType::kActiveDirectory:
       return account_id.GetAccountType() == AccountType::ACTIVE_DIRECTORY &&
              account_id.GetObjGuid() == account_key.id;
-    case account_manager::AccountType::ACCOUNT_TYPE_UNSPECIFIED:
-      return false;
   }
 }
 
@@ -787,10 +720,7 @@ void PeopleSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       {"accountManagerSubMenuLabel",
        IDS_SETTINGS_ACCOUNT_MANAGER_SUBMENU_LABEL},
       {"accountManagerPageTitle", IDS_SETTINGS_ACCOUNT_MANAGER_PAGE_TITLE},
-      {"kerberosAccountsSubMenuLabel",
-       IDS_SETTINGS_KERBEROS_ACCOUNTS_SUBMENU_LABEL},
       {"accountManagerPageTitle", IDS_SETTINGS_ACCOUNT_MANAGER_PAGE_TITLE},
-      {"kerberosAccountsPageTitle", IDS_SETTINGS_KERBEROS_ACCOUNTS_PAGE_TITLE},
       {"lockScreenFingerprintTitle",
        IDS_SETTINGS_PEOPLE_LOCK_SCREEN_FINGERPRINT_SUBPAGE_TITLE},
       {"manageOtherPeople", IDS_SETTINGS_PEOPLE_MANAGE_OTHER_PEOPLE},
@@ -841,8 +771,8 @@ void PeopleSection::AddLoadTimeData(content::WebUIDataSource* html_source) {
       base::FeatureList::IsEnabled(omnibox::kDocumentProvider));
 
   AddAccountManagerPageStrings(html_source);
-  AddKerberosAccountsPageStrings(html_source);
-  AddKerberosAddAccountDialogStrings(html_source);
+  KerberosAccountsHandler::AddLoadTimeKerberosStrings(
+      html_source, kerberos_credentials_manager_);
   AddLockScreenPageStrings(html_source, profile()->GetPrefs());
   AddFingerprintListStrings(html_source);
   AddFingerprintStrings(html_source, AreFingerprintSettingsAllowed());
@@ -920,8 +850,15 @@ std::string PeopleSection::GetSectionPath() const {
 
 bool PeopleSection::LogMetric(mojom::Setting setting,
                               base::Value& value) const {
-  // Unimplemented.
-  return false;
+  switch (setting) {
+    case mojom::Setting::kAddAccount:
+      base::UmaHistogramCounts1000("ChromeOS.Settings.People.AddAccountCount",
+                                   value.GetInt());
+      return true;
+
+    default:
+      return false;
+  }
 }
 
 void PeopleSection::RegisterHierarchy(HierarchyGenerator* generator) const {
@@ -1003,24 +940,25 @@ void PeopleSection::RegisterHierarchy(HierarchyGenerator* generator) const {
       mojom::Setting::kGuestBrowsing,
       mojom::Setting::kShowUsernamesAndPhotosAtSignIn,
       mojom::Setting::kRestrictSignIn,
-      mojom::Setting::kAddToUserWhitelist,
-      mojom::Setting::kRemoveFromUserWhitelist,
+      mojom::Setting::kAddToUserAllowlist,
+      mojom::Setting::kRemoveFromUserAllowlist,
   };
   RegisterNestedSettingBulk(mojom::Subpage::kManageOtherPeople,
                             kManageOtherPeopleSettings, generator);
 
   // Kerberos.
-  generator->RegisterTopLevelSubpage(
-      IDS_SETTINGS_KERBEROS_ACCOUNTS_PAGE_TITLE, mojom::Subpage::kKerberos,
-      mojom::SearchResultIcon::kAvatar, mojom::SearchResultDefaultRank::kMedium,
-      mojom::kKerberosSubpagePath);
-  static constexpr mojom::Setting kKerberosSettings[] = {
+  generator->RegisterTopLevelSubpage(IDS_SETTINGS_KERBEROS_ACCOUNTS_PAGE_TITLE,
+                                     mojom::Subpage::kKerberosAccounts,
+                                     mojom::SearchResultIcon::kAvatar,
+                                     mojom::SearchResultDefaultRank::kMedium,
+                                     mojom::kKerberosAccountsSubpagePath);
+  static constexpr mojom::Setting kKerberosAccountsSettings[] = {
       mojom::Setting::kAddKerberosTicket,
       mojom::Setting::kRemoveKerberosTicket,
       mojom::Setting::kSetActiveKerberosTicket,
   };
-  RegisterNestedSettingBulk(mojom::Subpage::kKerberos, kKerberosSettings,
-                            generator);
+  RegisterNestedSettingBulk(mojom::Subpage::kKerberosAccounts,
+                            kKerberosAccountsSettings, generator);
 }
 
 void PeopleSection::FetchAccounts() {
@@ -1029,16 +967,17 @@ void PeopleSection::FetchAccounts() {
                      weak_factory_.GetWeakPtr()));
 }
 
-void PeopleSection::OnTokenUpserted(const AccountManager::Account& account) {
+void PeopleSection::OnTokenUpserted(const ::account_manager::Account& account) {
   FetchAccounts();
 }
 
-void PeopleSection::OnAccountRemoved(const AccountManager::Account& account) {
+void PeopleSection::OnAccountRemoved(
+    const ::account_manager::Account& account) {
   FetchAccounts();
 }
 
 void PeopleSection::UpdateAccountManagerSearchTags(
-    const std::vector<AccountManager::Account>& accounts) {
+    const std::vector<::account_manager::Account>& accounts) {
   DCHECK(IsAccountManagerAvailable(profile()));
 
   // Start with no Account Manager search tags.
@@ -1048,7 +987,7 @@ void PeopleSection::UpdateAccountManagerSearchTags(
   user_manager::User* user = ProfileHelper::Get()->GetUserByProfile(profile());
   DCHECK(user);
 
-  for (const AccountManager::Account& account : accounts) {
+  for (const ::account_manager::Account& account : accounts) {
     if (IsSameAccount(account.key, user->GetAccountId()))
       continue;
 
@@ -1081,54 +1020,6 @@ void PeopleSection::OnKerberosEnabledStateChanged() {
     updater.AddSearchTags(GetKerberosSearchConcepts());
   else
     updater.RemoveSearchTags(GetKerberosSearchConcepts());
-}
-
-void PeopleSection::AddKerberosAccountsPageStrings(
-    content::WebUIDataSource* html_source) const {
-  static constexpr webui::LocalizedString kLocalizedStrings[] = {
-      {"kerberosAccountsAddAccountLabel",
-       IDS_SETTINGS_KERBEROS_ACCOUNTS_ADD_ACCOUNT_LABEL},
-      {"kerberosAccountsRefreshNowLabel",
-       IDS_SETTINGS_KERBEROS_ACCOUNTS_REFRESH_NOW_LABEL},
-      {"kerberosAccountsSetAsActiveAccountLabel",
-       IDS_SETTINGS_KERBEROS_ACCOUNTS_SET_AS_ACTIVE_ACCOUNT_LABEL},
-      {"kerberosAccountsSignedOut", IDS_SETTINGS_KERBEROS_ACCOUNTS_SIGNED_OUT},
-      {"kerberosAccountsListHeader",
-       IDS_SETTINGS_KERBEROS_ACCOUNTS_LIST_HEADER},
-      {"kerberosAccountsRemoveAccountLabel",
-       IDS_SETTINGS_KERBEROS_ACCOUNTS_REMOVE_ACCOUNT_LABEL},
-      {"kerberosAccountsReauthenticationLabel",
-       IDS_SETTINGS_KERBEROS_ACCOUNTS_REAUTHENTICATION_LABEL},
-      {"kerberosAccountsTicketActive",
-       IDS_SETTINGS_KERBEROS_ACCOUNTS_TICKET_ACTIVE},
-      {"kerberosAccountsAccountRemovedTip",
-       IDS_SETTINGS_KERBEROS_ACCOUNTS_ACCOUNT_REMOVED_TIP},
-      {"kerberosAccountsAccountRefreshedTip",
-       IDS_SETTINGS_KERBEROS_ACCOUNTS_ACCOUNT_REFRESHED_TIP},
-      {"kerberosAccountsSignedIn", IDS_SETTINGS_KERBEROS_ACCOUNTS_SIGNED_IN},
-  };
-  AddLocalizedStringsBulk(html_source, kLocalizedStrings);
-
-  // Toggles the Chrome OS Kerberos Accounts submenu in the People section.
-  // Note that the handler is also dependent on this pref.
-  html_source->AddBoolean(
-      "isKerberosEnabled",
-      kerberos_credentials_manager_ != nullptr &&
-          kerberos_credentials_manager_->IsKerberosEnabled());
-
-  PrefService* local_state = g_browser_process->local_state();
-
-  // Whether new Kerberos accounts may be added.
-  html_source->AddBoolean(
-      "kerberosAddAccountsAllowed",
-      local_state->GetBoolean(::prefs::kKerberosAddAccountsAllowed));
-
-  // Kerberos accounts page with "Learn more" link.
-  html_source->AddString(
-      "kerberosAccountsDescription",
-      l10n_util::GetStringFUTF16(
-          IDS_SETTINGS_KERBEROS_ACCOUNTS_DESCRIPTION,
-          GetHelpUrlWithBoard(chrome::kKerberosAccountsLearnMoreURL)));
 }
 
 bool PeopleSection::AreFingerprintSettingsAllowed() {

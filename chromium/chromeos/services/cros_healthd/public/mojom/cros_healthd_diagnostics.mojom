@@ -33,6 +33,13 @@ enum DiagnosticRoutineEnum {
   kMemory = 14,
   kLanConnectivity = 15,
   kSignalStrength = 16,
+  kGatewayCanBePinged = 17,
+  kHasSecureWiFiConnection = 18,
+  kDnsResolverPresent = 19,
+  kDnsLatency = 20,
+  kDnsResolution = 21,
+  kCaptivePortal = 22,
+  kHttpFirewall = 23,
 };
 
 // Enumeration of the possible DiskRead routine's command type

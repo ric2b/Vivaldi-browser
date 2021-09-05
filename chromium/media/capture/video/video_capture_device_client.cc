@@ -14,6 +14,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/video_frame.h"
 #include "media/capture/video/scoped_buffer_pool_reservation.h"
@@ -23,9 +24,9 @@
 #include "media/capture/video_capture_types.h"
 #include "third_party/libyuv/include/libyuv.h"
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
 #include "media/capture/video/chromeos/video_capture_jpeg_decoder.h"
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_ASH)
 
 namespace {
 
@@ -162,7 +163,7 @@ class BufferPoolBufferHandleProvider
   const int buffer_id_;
 };
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
 VideoCaptureDeviceClient::VideoCaptureDeviceClient(
     VideoCaptureBufferType target_buffer_type,
     std::unique_ptr<VideoFrameReceiver> receiver,
@@ -187,7 +188,7 @@ VideoCaptureDeviceClient::VideoCaptureDeviceClient(
       receiver_(std::move(receiver)),
       buffer_pool_(std::move(buffer_pool)),
       last_captured_pixel_format_(PIXEL_FORMAT_UNKNOWN) {}
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_ASH)
 
 VideoCaptureDeviceClient::~VideoCaptureDeviceClient() {
   for (int buffer_id : buffer_ids_known_by_receiver_)
@@ -225,7 +226,7 @@ void VideoCaptureDeviceClient::OnIncomingCapturedData(
     OnLog("Pixel format: " + VideoPixelFormatToString(format.pixel_format));
     last_captured_pixel_format_ = format.pixel_format;
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
     if (format.pixel_format == PIXEL_FORMAT_MJPEG &&
         optional_jpeg_decoder_factory_callback_) {
       external_jpeg_decoder_ =
@@ -233,7 +234,7 @@ void VideoCaptureDeviceClient::OnIncomingCapturedData(
       DCHECK(external_jpeg_decoder_);
       external_jpeg_decoder_->Initialize();
     }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_ASH)
   }
 
   if (!format.IsValid()) {
@@ -352,7 +353,7 @@ void VideoCaptureDeviceClient::OnIncomingCapturedData(
   // paddings and/or alignments, but it cannot be smaller.
   DCHECK_GE(static_cast<size_t>(length), format.ImageAllocationSize());
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
   if (external_jpeg_decoder_) {
     const VideoCaptureJpegDecoder::STATUS status =
         external_jpeg_decoder_->GetStatus();
@@ -368,7 +369,7 @@ void VideoCaptureDeviceClient::OnIncomingCapturedData(
       return;
     }
   }
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_ASH)
 
   // libyuv::ConvertToI420 use Rec601 to convert RGB to YUV.
   if (libyuv::ConvertToI420(
@@ -465,19 +466,18 @@ void VideoCaptureDeviceClient::OnIncomingCapturedGfxBuffer(
 
 void VideoCaptureDeviceClient::OnIncomingCapturedExternalBuffer(
     gfx::GpuMemoryBufferHandle handle,
-    std::unique_ptr<VideoCaptureDevice::Client::Buffer::ScopedAccessPermission>
-        scoped_access_permission_to_wrap,
     const VideoCaptureFormat& format,
     const gfx::ColorSpace& color_space,
     base::TimeTicks reference_time,
     base::TimeDelta timestamp) {
   // Reserve an ID for this buffer that will not conflict with any of the IDs
   // used by |buffer_pool_|.
-  std::vector<int> buffer_ids_to_drop;
-  int buffer_id = buffer_pool_->ReserveIdForExternalBuffer(&buffer_ids_to_drop);
+  int buffer_id_to_drop = VideoCaptureBufferPool::kInvalidId;
+  int buffer_id =
+      buffer_pool_->ReserveIdForExternalBuffer(handle, &buffer_id_to_drop);
 
   // If a buffer to retire was specified, retire one.
-  for (int buffer_id_to_drop : buffer_ids_to_drop) {
+  if (buffer_id_to_drop != VideoCaptureBufferPool::kInvalidId) {
     auto entry_iter =
         std::find(buffer_ids_known_by_receiver_.begin(),
                   buffer_ids_known_by_receiver_.end(), buffer_id_to_drop);
@@ -487,32 +487,13 @@ void VideoCaptureDeviceClient::OnIncomingCapturedExternalBuffer(
     }
   }
 
-  // Register the buffer with the receiver.
-  {
+  // Register the buffer with the receiver if it is new.
+  if (!base::Contains(buffer_ids_known_by_receiver_, buffer_id)) {
     media::mojom::VideoBufferHandlePtr buffer_handle =
         media::mojom::VideoBufferHandle::New();
     buffer_handle->set_gpu_memory_buffer_handle(std::move(handle));
     receiver_->OnNewBuffer(buffer_id, std::move(buffer_handle));
     buffer_ids_known_by_receiver_.push_back(buffer_id);
-  }
-
-  // Wrap |scoped_access_permission_to_wrap| in a ScopedAccessPermission that
-  // will retire |buffer_id| as soon as access ends.
-  std::unique_ptr<VideoCaptureDevice::Client::Buffer::ScopedAccessPermission>
-      scoped_access_permission;
-  {
-    auto callback_lambda =
-        [](int buffer_id, scoped_refptr<VideoCaptureBufferPool> buffer_pool,
-           std::unique_ptr<
-               VideoCaptureDevice::Client::Buffer::ScopedAccessPermission>
-               scoped_access_permission) {
-          buffer_pool->RelinquishExternalBufferReservation(buffer_id);
-        };
-    auto closure = base::BindOnce(callback_lambda, buffer_id, buffer_pool_,
-                                  std::move(scoped_access_permission_to_wrap));
-    scoped_access_permission =
-        std::make_unique<ScopedAccessPermissionEndWithCallback>(
-            std::move(closure));
   }
 
   // Tell |receiver_| that the frame has been received.
@@ -525,9 +506,14 @@ void VideoCaptureDeviceClient::OnIncomingCapturedExternalBuffer(
     info->visible_rect = gfx::Rect(format.frame_size);
     info->metadata.frame_rate = format.frame_rate;
     info->metadata.reference_time = reference_time;
-    receiver_->OnFrameReadyInBuffer(buffer_id, 0 /* frame_feedback_id */,
-                                    std::move(scoped_access_permission),
-                                    std::move(info));
+
+    buffer_pool_->HoldForConsumers(buffer_id, 1);
+    buffer_pool_->RelinquishProducerReservation(buffer_id);
+    receiver_->OnFrameReadyInBuffer(
+        buffer_id, 0 /* frame_feedback_id */,
+        std::make_unique<ScopedBufferPoolReservation<ConsumerReleaseTraits>>(
+            buffer_pool_, buffer_id),
+        std::move(info));
   }
 }
 
@@ -557,8 +543,10 @@ VideoCaptureDeviceClient::ReserveOutputBuffer(const gfx::Size& frame_size,
       receiver_->OnBufferRetired(buffer_id_to_drop);
     }
   }
-  if (reservation_result_code != ReserveResult::kSucceeded)
+  if (reservation_result_code != ReserveResult::kSucceeded) {
+    DVLOG(2) << __func__ << " reservation failed";
     return reservation_result_code;
+  }
 
   DCHECK_NE(VideoCaptureBufferPool::kInvalidId, buffer_id);
 

@@ -13,17 +13,19 @@ import android.text.TextUtils;
 import androidx.annotation.ColorRes;
 import androidx.annotation.DrawableRes;
 import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 
+import org.chromium.base.ObserverList;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.compositor.layouts.OverviewModeBehavior;
 import org.chromium.chrome.browser.dom_distiller.DomDistillerTabUtils;
-import org.chromium.chrome.browser.native_page.NativePageFactory;
-import org.chromium.chrome.browser.ntp.NewTabPage;
+import org.chromium.chrome.browser.layouts.LayoutStateProvider;
+import org.chromium.chrome.browser.layouts.LayoutType;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
 import org.chromium.chrome.browser.omnibox.ChromeAutocompleteSchemeClassifier;
+import org.chromium.chrome.browser.omnibox.LocationBarDataProvider;
 import org.chromium.chrome.browser.omnibox.SearchEngineLogoUtils;
 import org.chromium.chrome.browser.omnibox.UrlBarData;
 import org.chromium.chrome.browser.paint_preview.TabbedPaintPreview;
@@ -31,10 +33,11 @@ import org.chromium.chrome.browser.previews.Previews;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TrustedCdn;
+import org.chromium.chrome.browser.ui.native_page.NativePage;
 import org.chromium.components.browser_ui.styles.ChromeColors;
 import org.chromium.components.dom_distiller.core.DomDistillerUrlUtils;
 import org.chromium.components.embedder_support.util.UrlConstants;
-import org.chromium.components.embedder_support.util.UrlUtilities;
+import org.chromium.components.metrics.OmniboxEventProtos.OmniboxEventProto.PageClassification;
 import org.chromium.components.omnibox.OmniboxUrlEmphasizer;
 import org.chromium.components.omnibox.SecurityStatusIcon;
 import org.chromium.components.security_state.ConnectionSecurityLevel;
@@ -48,30 +51,35 @@ import java.net.URISyntaxException;
 
 import android.graphics.Color;
 import org.chromium.chrome.browser.ChromeApplication;
+import org.chromium.components.embedder_support.util.UrlUtilities;
 import org.vivaldi.browser.omnibox.status.SearchEngineIconHandler;
 
 /**
  * Provides a way of accessing toolbar data and state.
  */
-public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPropertiesModel {
+public class LocationBarModel implements ToolbarDataProvider, LocationBarDataProvider {
     private final Context mContext;
+    private final NewTabPageDelegate mNtpDelegate;
 
     private Tab mTab;
     private int mPrimaryColor;
-    private OverviewModeBehavior mOverviewModeBehavior;
+    private LayoutStateProvider mLayoutStateProvider;
 
     private boolean mIsIncognito;
     private boolean mIsUsingBrandColor;
     private boolean mShouldShowOmniboxInOverviewMode;
 
     private long mNativeLocationBarModelAndroid;
+    private ObserverList<LocationBarDataProvider.Observer> mLocationBarDataObservers =
+            new ObserverList<>();
 
     /**
      * Default constructor for this class.
      * @param context The Context used for styling the toolbar visuals.
      */
-    public LocationBarModel(Context context) {
+    public LocationBarModel(Context context, NewTabPageDelegate newTabPageDelegate) {
         mContext = context;
+        mNtpDelegate = newTabPageDelegate;
         mPrimaryColor = ChromeColors.getDefaultThemeColor(context.getResources(), false);
     }
 
@@ -111,6 +119,8 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
         mTab = tab;
         mIsIncognito = isIncognito;
         updateUsingBrandColor();
+        notifyTitleChanged();
+        notifyUrlChanged();
     }
 
     @Override
@@ -124,6 +134,16 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
         // TAB_CLOSED events to remove this tab.  Otherwise there is a chance we use this tab after
         // {@link ChromeTab#destroy()} is called.
         return mTab != null && mTab.isInitialized();
+    }
+
+    @Override
+    public void addObserver(LocationBarDataProvider.Observer observer) {
+        mLocationBarDataObservers.addObserver(observer);
+    }
+
+    @Override
+    public void removeObserver(LocationBarDataProvider.Observer observer) {
+        mLocationBarDataObservers.removeObserver(observer);
     }
 
     @Override
@@ -141,12 +161,15 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
         return getTab().getUrlString().trim();
     }
 
-    @Override
-    public NewTabPage getNewTabPageForCurrentTab() {
-        if (hasTab() && mTab.getNativePage() instanceof NewTabPage) {
-            return (NewTabPage) mTab.getNativePage();
+    public void notifyUrlChanged() {
+        for (LocationBarDataProvider.Observer observer : mLocationBarDataObservers) {
+            observer.onUrlChanged();
         }
-        return null;
+    }
+
+    @Override
+    public NewTabPageDelegate getNewTabPageDelegate() {
+        return mNtpDelegate;
     }
 
     @Override
@@ -154,7 +177,7 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
         if (!hasTab()) return UrlBarData.EMPTY;
 
         String url = getCurrentUrl();
-        if (NativePageFactory.isNativePageUrl(url, isIncognito()) || NewTabPage.isNTPUrl(url)) {
+        if (NativePage.isNativePageUrl(url, isIncognito()) || UrlUtilities.isNTPUrl(url)) {
             return UrlBarData.EMPTY;
         }
 
@@ -255,6 +278,12 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
         return TextUtils.isEmpty(title) ? title : title.trim();
     }
 
+    public void notifyTitleChanged() {
+        for (LocationBarDataProvider.Observer observer : mLocationBarDataObservers) {
+            observer.onTitleChanged();
+        }
+    }
+
     @Override
     public boolean isIncognito() {
         return mIsIncognito;
@@ -268,7 +297,8 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
     public boolean isInOverviewAndShowingOmnibox() {
         if (!mShouldShowOmniboxInOverviewMode) return false;
 
-        return mOverviewModeBehavior != null && mOverviewModeBehavior.overviewVisible();
+        return mLayoutStateProvider != null
+                && mLayoutStateProvider.isLayoutVisible(LayoutType.TAB_SWITCHER);
     }
 
     /**
@@ -299,8 +329,8 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
         return lastUsedRegularProfile;
     }
 
-    public void setOverviewModeBehavior(OverviewModeBehavior overviewModeBehavior) {
-        mOverviewModeBehavior = overviewModeBehavior;
+    public void setLayoutStateProvider(LayoutStateProvider layoutStateProvider) {
+        mLayoutStateProvider = layoutStateProvider;
     }
 
     public void setShouldShowOmniboxInOverviewMode(boolean shouldShowOmniboxInOverviewMode) {
@@ -360,11 +390,11 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
 
     @Override
     public int getPageClassification(boolean isFocusedFromFakebox) {
-        if (mNativeLocationBarModelAndroid == 0) return 0;
+        if (mNativeLocationBarModelAndroid == 0) return PageClassification.INVALID_SPEC_VALUE;
 
-        // Provide (NTP=1) as page class in overview mode (when Start Surface is enabled). No call
+        // Provide NTP as page class in overview mode (when Start Surface is enabled). No call
         // to the backend necessary or possible, since there is no tab or navigation entry.
-        if (isInOverviewAndShowingOmnibox()) return 1;
+        if (isInOverviewAndShowingOmnibox()) return PageClassification.NTP_VALUE;
 
         return LocationBarModelJni.get().getPageClassification(
                 mNativeLocationBarModelAndroid, LocationBarModel.this, isFocusedFromFakebox);
@@ -372,7 +402,7 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
 
     @Override
     public int getSecurityIconResource(boolean isTablet) {
-        if (ChromeApplication.isVivaldi() && NewTabPage.isNTPUrl(getCurrentUrl())) {
+        if (ChromeApplication.isVivaldi() && UrlUtilities.isNTPUrl(getCurrentUrl())) {
             return (mNativeLocationBarModelAndroid == 0)
                     ? 0
                     : SearchEngineIconHandler.get().getDefaultSearchEngineLogoResId();
@@ -380,6 +410,12 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
 
         return getSecurityIconResource(
                 getSecurityLevel(), !isTablet, isOfflinePage(), isPreview(), isPaintPreview());
+    }
+
+    @Override
+    @StringRes
+    public int getSecurityIconContentDescriptionResourceId() {
+        return SecurityStatusIcon.getSecurityIconContentDescriptionResourceId(getSecurityLevel());
     }
 
     @VisibleForTesting
@@ -431,7 +467,7 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
 
         boolean skipIconForNeutralState =
                 !SearchEngineLogoUtils.shouldShowSearchEngineLogo(isIncognito())
-                || getNewTabPageForCurrentTab() != null;
+                || mNtpDelegate.isCurrentlyVisible();
 
         return SecurityStatusIcon.getSecurityIconResource(securityLevel,
                 SecurityStateModel.shouldShowDangerTriangleForWarningLevel(), isSmallDevice,
@@ -444,7 +480,7 @@ public class LocationBarModel implements ToolbarDataProvider, ToolbarCommonPrope
 
         if (ChromeApplication.isVivaldi()
                 && securityLevel == ConnectionSecurityLevel.NONE
-                && NewTabPage.isNTPUrl(getCurrentUrl()))
+                && UrlUtilities.isNTPUrl(getCurrentUrl()))
             return R.color.vivaldi_transparent;
 
         int color = getPrimaryColor();

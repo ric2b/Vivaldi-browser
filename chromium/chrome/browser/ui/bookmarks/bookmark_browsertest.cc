@@ -6,7 +6,7 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
@@ -323,6 +323,9 @@ IN_PROC_BROWSER_TEST_F(BookmarkBrowsertest, DragMultipleBookmarks) {
 IN_PROC_BROWSER_TEST_F(BookmarkBrowsertest, PRE_EmitUmaForDuplicates) {
   BookmarkModel* bookmark_model = WaitForBookmarkModel(browser()->profile());
   const BookmarkNode* parent = bookmarks::GetParentForNewNodes(bookmark_model);
+  const BookmarkNode* other_parent =
+      bookmark_model->AddFolder(parent, 0, base::ASCIIToUTF16("Folder"));
+
   // Add one bookmark with a unique URL, two other bookmarks with a shared URL,
   // and three more with another shared URL.
   bookmark_model->AddURL(parent, parent->children().size(),
@@ -336,18 +339,49 @@ IN_PROC_BROWSER_TEST_F(BookmarkBrowsertest, PRE_EmitUmaForDuplicates) {
   bookmark_model->AddURL(parent, parent->children().size(),
                          base::ASCIIToUTF16("title5"), GURL("http://c.com"));
   bookmark_model->AddURL(parent, parent->children().size(),
-                         base::ASCIIToUTF16("title6"), GURL("http://c.com"));
+                         base::ASCIIToUTF16("title5"), GURL("http://c.com"));
+  bookmark_model->AddURL(other_parent, other_parent->children().size(),
+                         base::ASCIIToUTF16("title5"), GURL("http://c.com"));
 }
 
 IN_PROC_BROWSER_TEST_F(BookmarkBrowsertest, EmitUmaForDuplicates) {
   WaitForBookmarkModel(browser()->profile());
 
+  // The total number of bookmarks is 7, but it gets rounded down due to
+  // bucketing.
   ASSERT_THAT(
       histogram_tester()->GetAllSamples("Bookmarks.Count.OnProfileLoad"),
       testing::ElementsAre(base::Bucket(/*min=*/6, /*count=*/1)));
+
+  // 2 bookmarks have URL http://b.com and 4 have http://c.com. This counts as 4
+  // duplicates.
   EXPECT_THAT(histogram_tester()->GetAllSamples(
-                  "Bookmarks.Count.OnProfileLoad.DuplicateUrl"),
+                  "Bookmarks.Count.OnProfileLoad.DuplicateUrl2"),
+              testing::ElementsAre(base::Bucket(/*min=*/4, /*count=*/1)));
+  // 3 bookmarks have the pair (http://c.com, title5). This counts as 2
+  // duplicates when considering URLs and titles.
+  EXPECT_THAT(histogram_tester()->GetAllSamples(
+                  "Bookmarks.Count.OnProfileLoad.DuplicateUrlAndTitle"),
+              testing::ElementsAre(base::Bucket(/*min=*/2, /*count=*/1)));
+  // Among the three above, only two have the same parent. This means only one
+  // counts as duplicate when considering all three attributes.
+  EXPECT_THAT(
+      histogram_tester()->GetAllSamples(
+          "Bookmarks.Count.OnProfileLoad.DuplicateUrlAndTitleAndParent"),
+      testing::ElementsAre(base::Bucket(/*min=*/1, /*count=*/1)));
+
+  // The remaining histograms are the result of substracting the number of
+  // duplicates from the total, which is 7 despite the bucket for the first
+  // histogram above suggesting 6.
+  EXPECT_THAT(histogram_tester()->GetAllSamples(
+                  "Bookmarks.Count.OnProfileLoad.UniqueUrl"),
+              testing::ElementsAre(base::Bucket(/*min=*/3, /*count=*/1)));
+  EXPECT_THAT(histogram_tester()->GetAllSamples(
+                  "Bookmarks.Count.OnProfileLoad.UniqueUrlAndTitle"),
               testing::ElementsAre(base::Bucket(/*min=*/5, /*count=*/1)));
+  EXPECT_THAT(histogram_tester()->GetAllSamples(
+                  "Bookmarks.Count.OnProfileLoad.UniqueUrlAndTitleAndParent"),
+              testing::ElementsAre(base::Bucket(/*min=*/6, /*count=*/1)));
 }
 
 #endif  // !defined(OS_CHROMEOS)

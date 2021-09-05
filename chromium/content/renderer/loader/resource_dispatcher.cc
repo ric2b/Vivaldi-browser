@@ -25,10 +25,7 @@
 #include "content/common/navigation_params.h"
 #include "content/public/renderer/request_peer.h"
 #include "content/public/renderer/resource_dispatcher_delegate.h"
-#include "content/renderer/loader/request_extra_data.h"
-#include "content/renderer/loader/resource_load_stats.h"
 #include "content/renderer/loader/sync_load_context.h"
-#include "content/renderer/loader/sync_load_response.h"
 #include "content/renderer/loader/url_loader_client_impl.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_thread_impl.h"
@@ -48,6 +45,8 @@
 #include "third_party/blink/public/common/loader/resource_type_util.h"
 #include "third_party/blink/public/common/loader/throttling_url_loader.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info.mojom-shared.h"
+#include "third_party/blink/public/platform/resource_load_info_notifier_wrapper.h"
+#include "third_party/blink/public/platform/sync_load_response.h"
 
 namespace content {
 
@@ -167,9 +166,9 @@ void ResourceDispatcher::OnReceivedResponse(
   if (!GetPendingRequestInfo(request_id))
     return;
 
-  NotifyResourceResponseReceived(
-      request_info->render_frame_id, request_info->resource_load_info.get(),
-      std::move(response_head), request_info->previews_state);
+  request_info->resource_load_info_notifier_wrapper
+      ->NotifyResourceResponseReceived(std::move(response_head),
+                                       request_info->previews_state);
 }
 
 void ResourceDispatcher::OnReceivedCachedMetadata(int request_id,
@@ -236,10 +235,12 @@ void ResourceDispatcher::OnReceivedRedirect(
 
     request_info->response_url = redirect_info.new_url;
     request_info->has_pending_redirect = true;
-    NotifyResourceRedirectReceived(request_info->render_frame_id,
-                                   request_info->resource_load_info.get(),
-                                   redirect_info, std::move(response_head));
-    if (!request_info->is_deferred)
+    request_info->resource_load_info_notifier_wrapper
+        ->NotifyResourceRedirectReceived(redirect_info,
+                                         std::move(response_head));
+
+    if (request_info->is_deferred ==
+        blink::WebURLLoader::DeferType::kNotDeferred)
       FollowPendingRedirect(request_info);
   } else {
     Cancel(request_id, std::move(task_runner));
@@ -275,9 +276,8 @@ void ResourceDispatcher::OnRequestComplete(
     return;
   request_info->net_error = status.error_code;
 
-  NotifyResourceLoadCompleted(request_info->render_frame_id,
-                              std::move(request_info->resource_load_info),
-                              status);
+  request_info->resource_load_info_notifier_wrapper
+      ->NotifyResourceLoadCompleted(status);
 
   RequestPeer* peer = request_info->peer.get();
 
@@ -326,9 +326,8 @@ bool ResourceDispatcher::RemovePendingRequest(
   PendingRequestInfo* info = it->second.get();
   if (info->net_error == net::ERR_IO_PENDING) {
     info->net_error = net::ERR_ABORTED;
-    NotifyResourceLoadCanceled(info->render_frame_id,
-                               std::move(info->resource_load_info),
-                               info->net_error);
+    info->resource_load_info_notifier_wrapper->NotifyResourceLoadCanceled(
+        info->net_error);
   }
 
   // Cancel loading.
@@ -360,18 +359,22 @@ void ResourceDispatcher::Cancel(
   RemovePendingRequest(request_id, std::move(task_runner));
 }
 
-void ResourceDispatcher::SetDefersLoading(int request_id, bool value) {
+void ResourceDispatcher::SetDefersLoading(
+    int request_id,
+    blink::WebURLLoader::DeferType value) {
   PendingRequestInfo* request_info = GetPendingRequestInfo(request_id);
   if (!request_info) {
     DLOG(ERROR) << "unknown request";
     return;
   }
-  if (value) {
+  if (value != blink::WebURLLoader::DeferType::kNotDeferred) {
     request_info->is_deferred = value;
-    request_info->url_loader_client->SetDefersLoading();
-  } else if (request_info->is_deferred) {
-    request_info->is_deferred = false;
-    request_info->url_loader_client->UnsetDefersLoading();
+    request_info->url_loader_client->SetDefersLoading(value);
+  } else if (request_info->is_deferred !=
+             blink::WebURLLoader::DeferType::kNotDeferred) {
+    request_info->is_deferred = blink::WebURLLoader::DeferType::kNotDeferred;
+    request_info->url_loader_client->SetDefersLoading(
+        blink::WebURLLoader::DeferType::kNotDeferred);
 
     FollowPendingRedirect(request_info);
   }
@@ -401,10 +404,18 @@ void ResourceDispatcher::OnTransferSizeUpdated(int request_id,
   request_info->peer->OnTransferSizeUpdated(transfer_size_diff);
   if (!GetPendingRequestInfo(request_id))
     return;
+  request_info->resource_load_info_notifier_wrapper
+      ->NotifyResourceTransferSizeUpdated(transfer_size_diff);
+}
 
-  NotifyResourceTransferSizeUpdated(request_info->render_frame_id,
-                                    request_info->resource_load_info.get(),
-                                    transfer_size_diff);
+void ResourceDispatcher::EvictFromBackForwardCache(
+    blink::mojom::RendererEvictionReason reason,
+    int request_id) {
+  PendingRequestInfo* request_info = GetPendingRequestInfo(request_id);
+  if (!request_info)
+    return;
+
+  return request_info->peer->EvictFromBackForwardCache(reason);
 }
 
 void ResourceDispatcher::SetCorsExemptHeaderList(
@@ -416,13 +427,17 @@ ResourceDispatcher::PendingRequestInfo::PendingRequestInfo(
     std::unique_ptr<RequestPeer> peer,
     network::mojom::RequestDestination request_destination,
     int render_frame_id,
-    const GURL& request_url)
+    const GURL& request_url,
+    std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>
+        resource_load_info_notifier_wrapper)
     : peer(std::move(peer)),
       request_destination(request_destination),
       render_frame_id(render_frame_id),
       url(request_url),
       response_url(request_url),
-      local_request_start(base::TimeTicks::Now()) {}
+      local_request_start(base::TimeTicks::Now()),
+      resource_load_info_notifier_wrapper(
+          std::move(resource_load_info_notifier_wrapper)) {}
 
 ResourceDispatcher::PendingRequestInfo::~PendingRequestInfo() {
 }
@@ -432,12 +447,14 @@ void ResourceDispatcher::StartSync(
     int routing_id,
     const net::NetworkTrafficAnnotationTag& traffic_annotation,
     uint32_t loader_options,
-    SyncLoadResponse* response,
+    blink::SyncLoadResponse* response,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
     std::vector<std::unique_ptr<blink::URLLoaderThrottle>> throttles,
     base::TimeDelta timeout,
     mojo::PendingRemote<blink::mojom::BlobRegistry> download_to_blob_registry,
-    std::unique_ptr<RequestPeer> peer) {
+    std::unique_ptr<RequestPeer> peer,
+    std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>
+        resource_load_info_notifier_wrapper) {
   CheckSchemeForReferrerPolicy(*request);
 
   DCHECK(loader_options & network::mojom::kURLLoadOptionSynchronous);
@@ -455,26 +472,28 @@ void ResourceDispatcher::StartSync(
 
   // A task is posted to a separate thread to execute the request so that
   // this thread may block on a waitable event. It is safe to pass raw
-  // pointers to |sync_load_response| and |event| as this stack frame will
+  // pointers to on-stack objects as this stack frame will
   // survive until the request is complete.
   scoped_refptr<base::SingleThreadTaskRunner> task_runner =
       base::ThreadPool::CreateSingleThreadTaskRunner({});
+  SyncLoadContext* context_for_redirect = nullptr;
   task_runner->PostTask(
       FROM_HERE,
       base::BindOnce(
           &SyncLoadContext::StartAsyncWithWaitableEvent, std::move(request),
           routing_id, task_runner, traffic_annotation, loader_options,
           std::move(pending_factory), std::move(throttles),
-          base::Unretained(response),
+          base::Unretained(response), base::Unretained(&context_for_redirect),
           base::Unretained(&redirect_or_response_event),
           base::Unretained(terminate_sync_load_event_), timeout,
-          std::move(download_to_blob_registry), cors_exempt_header_list_));
+          std::move(download_to_blob_registry), cors_exempt_header_list_,
+          std::move(resource_load_info_notifier_wrapper)));
 
   // redirect_or_response_event will signal when each redirect completes, and
   // when the final response is complete.
   redirect_or_response_event.Wait();
 
-  while (response->context_for_redirect) {
+  while (context_for_redirect) {
     DCHECK(response->redirect_info);
     bool follow_redirect = peer->OnReceivedRedirect(
         *response->redirect_info, response->head.Clone(),
@@ -482,14 +501,12 @@ void ResourceDispatcher::StartSync(
     redirect_or_response_event.Reset();
     if (follow_redirect) {
       task_runner->PostTask(
-          FROM_HERE,
-          base::BindOnce(&SyncLoadContext::FollowRedirect,
-                         base::Unretained(response->context_for_redirect)));
+          FROM_HERE, base::BindOnce(&SyncLoadContext::FollowRedirect,
+                                    base::Unretained(context_for_redirect)));
     } else {
       task_runner->PostTask(
-          FROM_HERE,
-          base::BindOnce(&SyncLoadContext::CancelRedirect,
-                         base::Unretained(response->context_for_redirect)));
+          FROM_HERE, base::BindOnce(&SyncLoadContext::CancelRedirect,
+                                    base::Unretained(context_for_redirect)));
     }
     redirect_or_response_event.Wait();
   }
@@ -503,7 +520,9 @@ int ResourceDispatcher::StartAsync(
     uint32_t loader_options,
     std::unique_ptr<RequestPeer> peer,
     scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory,
-    std::vector<std::unique_ptr<blink::URLLoaderThrottle>> throttles) {
+    std::vector<std::unique_ptr<blink::URLLoaderThrottle>> throttles,
+    std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>
+        resource_load_info_notifier_wrapper) {
   CheckSchemeForReferrerPolicy(*request);
 
 #if defined(OS_ANDROID)
@@ -511,7 +530,7 @@ int ResourceDispatcher::StartAsync(
   DCHECK(!(request->is_main_frame &&
            blink::IsRequestDestinationFrame(request->destination)));
   if (request->has_user_gesture) {
-    NotifyUpdateUserGestureCarryoverInfo(request->render_frame_id);
+    resource_load_info_notifier_wrapper->NotifyUpdateUserGestureCarryoverInfo();
   }
 #endif
 
@@ -519,13 +538,13 @@ int ResourceDispatcher::StartAsync(
   int request_id = MakeRequestID();
   pending_requests_[request_id] = std::make_unique<PendingRequestInfo>(
       std::move(peer), request->destination, request->render_frame_id,
-      request->url);
+      request->url, std::move(resource_load_info_notifier_wrapper));
   PendingRequestInfo* pending_request = pending_requests_[request_id].get();
 
-  pending_request->resource_load_info = NotifyResourceLoadInitiated(
-      request->render_frame_id, request_id, request->url, request->method,
-      request->referrer, pending_request->request_destination,
-      request->priority);
+  pending_request->resource_load_info_notifier_wrapper
+      ->NotifyResourceLoadInitiated(
+          request_id, request->url, request->method, request->referrer,
+          pending_request->request_destination, request->priority);
 
   pending_request->previews_state = request->previews_state;
 

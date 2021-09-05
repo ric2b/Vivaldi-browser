@@ -19,7 +19,6 @@
 #include "base/containers/flat_set.h"
 #include "base/files/file_path.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/metrics/ukm_source_id.h"
 #include "base/optional.h"
 #include "base/strings/string_piece.h"
 #include "base/time/time.h"
@@ -43,6 +42,7 @@
 #include "mojo/public/cpp/bindings/remote.h"
 #include "mojo/public/cpp/system/message_pipe.h"
 #include "ppapi/buildflags/buildflags.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/network_context.mojom-forward.h"
 #include "services/network/public/mojom/restricted_cookie_manager.mojom-forward.h"
 #include "services/network/public/mojom/url_loader_factory.mojom-forward.h"
@@ -85,7 +85,6 @@ class SequencedTaskRunner;
 namespace blink {
 namespace mojom {
 class BadgeService;
-class RendererPreferences;
 class RendererPreferenceWatcher;
 class WebUsbService;
 class WindowFeatures;
@@ -95,6 +94,7 @@ namespace web_pref {
 struct WebPreferences;
 }  // namespace web_pref
 class AssociatedInterfaceRegistry;
+struct RendererPreferences;
 class URLLoaderThrottle;
 }  // namespace blink
 
@@ -207,7 +207,6 @@ class ReceiverPresentationServiceDelegate;
 class RenderFrameHost;
 class RenderProcessHost;
 class RenderViewHost;
-class ResourceContext;
 class SerialDelegate;
 class SiteInstance;
 class SpeechRecognitionManagerDelegate;
@@ -369,12 +368,9 @@ class CONTENT_EXPORT ContentBrowserClient {
 
   // Returns true unless the effective URL is part of a site that cannot live in
   // a process restricted to just that site.  This is only called if site
-  // isolation is enabled for this URL, and is a bug workaround.
-  //
-  // TODO(nick): Remove this function once https://crbug.com/160576 is fixed,
-  // and ProcessLock can be applied to all URLs.
-  virtual bool ShouldLockProcess(BrowserContext* browser_context,
-                                 const GURL& effective_url);
+  // isolation is enabled for this URL.
+  virtual bool ShouldLockProcessToSite(BrowserContext* browser_context,
+                                       const GURL& effective_url);
 
   // Returns a boolean indicating whether the WebUI |scheme| requires its
   // process to be locked to the WebUI origin.
@@ -466,6 +462,13 @@ class CONTENT_EXPORT ContentBrowserClient {
   // protocol handlers.
   virtual bool IsHandledURL(const GURL& url);
 
+  // Returns whether a custom handler is registered for the scheme of the
+  // specified URL scheme.
+  // https://html.spec.whatwg.org/multipage/system-state.html#custom-handlers
+  // TODO(crbug.com/1139176) Move custom protocol handler code to content.
+  virtual bool HasCustomSchemeHandler(content::BrowserContext* browser_context,
+                                      const std::string& scheme);
+
   // Returns whether the given process is allowed to commit |url|.  This is a
   // more conservative check than IsSuitableHost, since it is used after a
   // navigation has committed to ensure that the process did not exceed its
@@ -549,14 +552,17 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual std::vector<url::Origin> GetOriginsRequiringDedicatedProcess();
 
   // Allows the embedder to programmatically control whether the
-  // --site-per-process mode of Site Isolation should be used.
+  // --site-per-process mode of Site Isolation should be used.  Note that
+  // returning true here will only take effect if ShouldDisableSiteIsolation()
+  // below returns false.
   //
   // Note that for correctness, the same value should be consistently returned.
   // See also https://crbug.com/825369
   virtual bool ShouldEnableStrictSiteIsolation();
 
   // Allows the embedder to programmatically control whether Site Isolation
-  // should be disabled.
+  // should be disabled.  Note that this takes precedence over
+  // ShouldEnableStrictSiteIsolation() if both return true.
   //
   // Note that for correctness, the same value should be consistently returned.
   virtual bool ShouldDisableSiteIsolation();
@@ -639,15 +645,8 @@ class CONTENT_EXPORT ContentBrowserClient {
   // made to access the registration but there is no specific service worker in
   // the registration being acted on.
   //
-  // This is called on the IO thread.
-  virtual AllowServiceWorkerResult AllowServiceWorkerOnIO(
-      const GURL& scope,
-      const GURL& site_for_cookies,
-      const base::Optional<url::Origin>& top_frame_origin,
-      const GURL& script_url,
-      ResourceContext* context);
-  // Same but for the UI thread.
-  virtual AllowServiceWorkerResult AllowServiceWorkerOnUI(
+  // This is called on the UI thread.
+  virtual AllowServiceWorkerResult AllowServiceWorker(
       const GURL& scope,
       const GURL& site_for_cookies,
       const base::Optional<url::Origin>& top_frame_origin,
@@ -684,7 +683,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   // from their closest ancestor frame.
   virtual void UpdateRendererPreferencesForWorker(
       BrowserContext* browser_context,
-      blink::mojom::RendererPreferences* out_prefs);
+      blink::RendererPreferences* out_prefs);
 
   // Allow the embedder to control if access to file system by a shared worker
   // is allowed.
@@ -1252,21 +1251,12 @@ class CONTENT_EXPORT ContentBrowserClient {
   //
   // |ukm_source_id| can be used to record UKM events associated with the
   // navigation.
-  //
-  // TODO(lukasza): https://crbug.com/1106995: Remove
-  // NonNetworkURLLoaderFactoryDeprecatedMap type alias (and parameters in
-  // methods below that use this type).  This type encourages incorrect lifetime
-  // of factories (the factories and their clones need to be fully owned by
-  // their receivers).
-  using NonNetworkURLLoaderFactoryDeprecatedMap =
-      std::map<std::string, std::unique_ptr<network::mojom::URLLoaderFactory>>;
   using NonNetworkURLLoaderFactoryMap =
       std::map<std::string,
                mojo::PendingRemote<network::mojom::URLLoaderFactory>>;
   virtual void RegisterNonNetworkNavigationURLLoaderFactories(
       int frame_tree_node_id,
-      base::UkmSourceId ukm_source_id,
-      NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
+      ukm::SourceIdObj ukm_source_id,
       NonNetworkURLLoaderFactoryMap* factories);
 
   // Allows the embedder to register per-scheme URLLoaderFactory
@@ -1296,14 +1286,9 @@ class CONTENT_EXPORT ContentBrowserClient {
   //   -downloads
   //   -service worker script when starting a service worker. In that case, the
   //    frame id will be MSG_ROUTING_NONE
-  //
-  // TODO(lukasza): https://crbug.com/1106995: Deprecate and remove the
-  // |uniquely_owned_factories| parameter - it results in incorrect factory
-  // lifetimes.
   virtual void RegisterNonNetworkSubresourceURLLoaderFactories(
       int render_process_id,
       int render_frame_id,
-      NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
       NonNetworkURLLoaderFactoryMap* factories);
 
   // Describes the purpose of the factory in WillCreateURLLoaderFactory().
@@ -1417,7 +1402,7 @@ class CONTENT_EXPORT ContentBrowserClient {
       URLLoaderFactoryType type,
       const url::Origin& request_initiator,
       base::Optional<int64_t> navigation_id,
-      base::UkmSourceId ukm_source_id,
+      ukm::SourceIdObj ukm_source_id,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
           header_client,
@@ -1725,9 +1710,9 @@ class CONTENT_EXPORT ContentBrowserClient {
       int64_t recv_bytes,
       int64_t sent_bytes);
 
-  // Returns the path to a root directory to which sandboxed out-of-process
-  // Storage Service instances should be confined. By default this is empty,
-  // and the browser cannot create sandboxed Storage Service instances.
+  // Returns the absolute path to a directory in which sandboxed out-of-process
+  // Storage Service instances should be confined. By default this is empty, and
+  // the browser cannot create sandboxed Storage Service instances.
   virtual base::FilePath GetSandboxedStorageServiceDataDirectory();
 
   // Returns true if the audio service should be sandboxed. false otherwise.
@@ -1835,8 +1820,9 @@ class CONTENT_EXPORT ContentBrowserClient {
                                       const url::Origin& embedding_origin);
 
   // Returns true if the extra ICU data file is available and should be used to
-  // initialize ICU.
-  virtual bool ShouldLoadExtraIcuDataFile();
+  // initialize ICU. |split_name| can be set on Android to the split where the
+  // asset is located.
+  virtual bool ShouldLoadExtraIcuDataFile(std::string* split_name);
 
   // Returns true if the site is allowed to use persistent media device IDs.
   virtual bool ArePersistentMediaDeviceIDsAllowed(
@@ -1926,6 +1912,14 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Returns the URL-Keyed Metrics service for chrome:ukm.
   virtual ukm::UkmService* GetUkmService();
 
+  // Called when a keepalive request
+  // (https://fetch.spec.whatwg.org/#request-keepalive-flag) is requested.
+  virtual void OnKeepaliveRequestStarted();
+
+  // Called when a keepalive request finishes either successfully or
+  // unsuccessfully.
+  virtual void OnKeepaliveRequestFinished();
+
 #if defined(OS_MAC)
   // Sets up the embedder sandbox parameters for the given sandbox type. Returns
   // true if parameters were successfully set up or false if no additional
@@ -1934,6 +1928,13 @@ class CONTENT_EXPORT ContentBrowserClient {
       sandbox::policy::SandboxType sandbox_type,
       sandbox::SeatbeltExecClient* client);
 #endif  // defined(OS_MAC)
+
+  virtual void GetHyphenationDictionary(
+      base::OnceCallback<void(const base::FilePath&)>);
+
+  // Returns true if the embedder has an error page to show for the given http
+  // status code.
+  virtual bool HasErrorPage(int http_status_code);
 };
 
 }  // namespace content

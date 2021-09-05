@@ -38,6 +38,7 @@
 #include "components/omnibox/browser/history_url_provider.h"
 #include "components/omnibox/browser/keyword_provider.h"
 #include "components/omnibox/browser/local_history_zero_suggest_provider.h"
+#include "components/omnibox/browser/most_visited_sites_provider.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/omnibox_pedal_provider.h"
 #include "components/omnibox/browser/on_device_head_provider.h"
@@ -290,22 +291,22 @@ AutocompleteController::AutocompleteController(
         ZeroSuggestProvider::Create(provider_client_.get(), this);
     if (zero_suggest_provider_)
       providers_.push_back(zero_suggest_provider_);
-#if defined(OS_ANDROID)
+  }
+  if (provider_types & AutocompleteProvider::TYPE_ZERO_SUGGEST_LOCAL_HISTORY) {
+    providers_.push_back(
+        LocalHistoryZeroSuggestProvider::Create(provider_client_.get(), this));
+  }
+  if (provider_types & AutocompleteProvider::TYPE_MOST_VISITED_SITES) {
+    providers_.push_back(
+        new MostVisitedSitesProvider(provider_client_.get(), this));
     // Note: the need for the always-present verbatim match originates from the
     // OmniboxSearchReadyIncognito feature.
     // The feature aims at showing SRO in an Incognito mode, where the
     // ZeroSuggestProvider intentionally never gets invoked.
     // The gating flag here should be removed when the SRO Incognito is
     // launched.
-    if (base::FeatureList::IsEnabled(omnibox::kOmniboxSearchReadyIncognito)) {
-      providers_.push_back(
-          new ZeroSuggestVerbatimMatchProvider(provider_client_.get()));
-    }
-#endif
-  }
-  if (provider_types & AutocompleteProvider::TYPE_ZERO_SUGGEST_LOCAL_HISTORY) {
     providers_.push_back(
-        LocalHistoryZeroSuggestProvider::Create(provider_client_.get(), this));
+        new ZeroSuggestVerbatimMatchProvider(provider_client_.get()));
   }
   if (provider_types & AutocompleteProvider::TYPE_DOCUMENT) {
     document_provider_ = DocumentProvider::Create(provider_client_.get(), this);
@@ -543,12 +544,12 @@ void AutocompleteController::OnProviderUpdate(bool updated_matches) {
     UpdateResult(false, false);
 }
 
-void AutocompleteController::AddProvidersInfo(
-    ProvidersInfo* provider_info) const {
-  provider_info->clear();
-  for (auto i(providers_.begin()); i != providers_.end(); ++i) {
+void AutocompleteController::AddProviderAndTriggeringLogs(
+    OmniboxLog* logs) const {
+  logs->providers_info.clear();
+  for (const auto& provider : providers_) {
     // Add per-provider info, if any.
-    (*i)->AddProviderInfo(provider_info);
+    provider->AddProviderInfo(&logs->providers_info);
 
     // This is also a good place to put code to add info that you want to
     // add for every provider.
@@ -558,16 +559,22 @@ void AutocompleteController::AddProvidersInfo(
     // OmniboxPedalProvider is not a "true" AutocompleteProvider and isn't
     // included in the list of providers, though needs to report information for
     // its field trial.  Manually call AddProviderInfo for pedals.
-    provider_client_->GetPedalProvider()->AddProviderInfo(provider_info);
+    provider_client_->GetPedalProvider()->AddProviderInfo(
+        &logs->providers_info);
   }
+
+  // Add any features that have been triggered.
+  // |GetOmniboxTriggeredFeatureService()| can be null in tests.
+  if (provider_client_->GetOmniboxTriggeredFeatureService())
+    provider_client_->GetOmniboxTriggeredFeatureService()->RecordToLogs(
+        &logs->feature_triggered_in_session);
 }
 
 void AutocompleteController::ResetSession() {
   search_service_worker_signal_sent_ = false;
 
-  for (Providers::const_iterator i(providers_.begin()); i != providers_.end();
-       ++i) {
-    (*i)->ResetSession();
+  for (const auto& provider : providers_) {
+    provider->ResetSession();
   }
 
   if (OmniboxFieldTrial::IsPedalSuggestionsEnabled()) {
@@ -575,6 +582,10 @@ void AutocompleteController::ResetSession() {
     // a "true" AutocompleteProvider.  Manually call ResetSession() for pedals.
     provider_client_->GetPedalProvider()->ResetSession();
   }
+
+  // |GetOmniboxTriggeredFeatureService()| can be null in tests.
+  if (provider_client_->GetOmniboxTriggeredFeatureService())
+    provider_client_->GetOmniboxTriggeredFeatureService()->ResetSession();
 }
 
 void AutocompleteController::UpdateMatchDestinationURLWithQueryFormulationTime(
@@ -1002,4 +1013,9 @@ bool AutocompleteController::OnMemoryDump(
   dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
                   base::trace_event::MemoryAllocatorDump::kUnitsBytes, res);
   return true;
+}
+
+void AutocompleteController::SetStartStopTimerDurationForTesting(
+    base::TimeDelta duration) {
+  stop_timer_duration_ = duration;
 }

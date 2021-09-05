@@ -16,16 +16,15 @@
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_inline_cursor.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_offset_mapping.h"
 #include "third_party/blink/renderer/core/layout/ng/inline/ng_physical_text_fragment.h"
-#include "third_party/blink/renderer/core/layout/ng/inline/ng_text_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_physical_box_fragment.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_text_decoration_offset.h"
 #include "third_party/blink/renderer/core/paint/document_marker_painter.h"
+#include "third_party/blink/renderer/core/paint/highlight_painting_utils.h"
 #include "third_party/blink/renderer/core/paint/inline_text_box_painter.h"
 #include "third_party/blink/renderer/core/paint/list_marker_painter.h"
 #include "third_party/blink/renderer/core/paint/ng/ng_paint_fragment.h"
 #include "third_party/blink/renderer/core/paint/ng/ng_text_painter.h"
 #include "third_party/blink/renderer/core/paint/paint_info.h"
-#include "third_party/blink/renderer/core/paint/selection_painting_utils.h"
 #include "third_party/blink/renderer/core/paint/text_painter_base.h"
 #include "third_party/blink/renderer/core/style/applied_text_decoration.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
@@ -42,8 +41,8 @@ Color SelectionBackgroundColor(const Document& document,
                                const ComputedStyle& style,
                                Node* node,
                                Color text_color) {
-  const Color color =
-      SelectionPaintingUtils::SelectionBackgroundColor(document, style, node);
+  const Color color = HighlightPaintingUtils::HighlightBackgroundColor(
+      document, style, node, kPseudoIdSelection);
   if (!color.Alpha())
     return Color();
 
@@ -255,7 +254,7 @@ PhysicalRect MarkerRectForForeground(const TextItem& text_fragment,
 
 // Copied from InlineTextBoxPainter
 template <typename TextItem>
-void PaintDocumentMarkers(GraphicsContext& context,
+void PaintDocumentMarkers(const PaintInfo& paint_info,
                           const TextItem& text_fragment,
                           StringView text,
                           const DocumentMarkerVector& markers_to_paint,
@@ -283,33 +282,35 @@ void PaintDocumentMarkers(GraphicsContext& context,
     switch (marker->GetType()) {
       case DocumentMarker::kSpelling:
       case DocumentMarker::kGrammar: {
-        if (context.Printing())
+        if (paint_info.context.Printing())
           break;
         if (marker_paint_phase == DocumentMarkerPaintPhase::kBackground)
           continue;
         DocumentMarkerPainter::PaintDocumentMarker(
-            context, box_origin, style, marker->GetType(),
+            paint_info, box_origin, style, marker->GetType(),
             MarkerRectForForeground(text_fragment, text, paint_start_offset,
                                     paint_end_offset));
       } break;
 
       case DocumentMarker::kTextFragment:
       case DocumentMarker::kTextMatch: {
+        Node* node = text_fragment.GetNode();
+        const Document& document = node->GetDocument();
         if (marker->GetType() == DocumentMarker::kTextMatch &&
-            !text_fragment.GetNode()
-                 ->GetDocument()
-                 .GetFrame()
-                 ->GetEditor()
-                 .MarkedTextMatchesAreHighlighted())
+            !document.GetFrame()->GetEditor().MarkedTextMatchesAreHighlighted())
           break;
         const auto& text_marker = To<TextMarkerBase>(*marker);
         if (marker_paint_phase == DocumentMarkerPaintPhase::kBackground) {
-          const Color color =
-              LayoutTheme::GetTheme().PlatformTextSearchHighlightColor(
-                  text_marker.IsActiveMatch(),
-                  text_fragment.GetNode()->GetDocument().InForcedColorsMode(),
-                  style.UsedColorScheme());
-          PaintRect(context, PhysicalOffset(box_origin),
+          Color color;
+          if (marker->GetType() == DocumentMarker::kTextMatch) {
+            color = LayoutTheme::GetTheme().PlatformTextSearchHighlightColor(
+                text_marker.IsActiveMatch(), document.InForcedColorsMode(),
+                style.UsedColorScheme());
+          } else {
+            color = HighlightPaintingUtils::HighlightBackgroundColor(
+                document, style, node, kPseudoIdTargetText);
+          }
+          PaintRect(paint_info.context, PhysicalOffset(box_origin),
                     ComputeLocalRect(text_fragment, text, paint_start_offset,
                                      paint_end_offset),
                     color);
@@ -318,8 +319,7 @@ void PaintDocumentMarkers(GraphicsContext& context,
 
         const TextPaintStyle text_style =
             DocumentMarkerPainter::ComputeTextPaintStyleFrom(
-                style, text_marker,
-                text_fragment.GetNode()->GetDocument().InForcedColorsMode());
+                document, node, style, text_marker, paint_info);
         if (text_style.current_color == Color::kTransparent)
           break;
         text_painter->Paint(paint_start_offset, paint_end_offset,
@@ -332,7 +332,7 @@ void PaintDocumentMarkers(GraphicsContext& context,
       case DocumentMarker::kSuggestion: {
         const auto& styleable_marker = To<StyleableMarker>(*marker);
         if (marker_paint_phase == DocumentMarkerPaintPhase::kBackground) {
-          PaintRect(context, PhysicalOffset(box_origin),
+          PaintRect(paint_info.context, PhysicalOffset(box_origin),
                     ComputeLocalRect(text_fragment, text, paint_start_offset,
                                      paint_end_offset),
                     styleable_marker.BackgroundColor());
@@ -342,7 +342,7 @@ void PaintDocumentMarkers(GraphicsContext& context,
                 styleable_marker)) {
           const SimpleFontData* font_data = style.GetFont().PrimaryFont();
           DocumentMarkerPainter::PaintStyleableMarkerUnderline(
-              context, box_origin, styleable_marker, style,
+              paint_info.context, box_origin, styleable_marker, style,
               FloatRect(MarkerRectForForeground(
                   text_fragment, text, paint_start_offset, paint_end_offset)),
               LayoutUnit(font_data->GetFontMetrics().Height()),
@@ -367,6 +367,8 @@ class SelectionPaintState {
 
   const LayoutSelectionStatus& Status() const { return selection_status_; }
 
+  const TextPaintStyle& GetSelectionStyle() const { return selection_style_; }
+
   bool ShouldPaintSelectedTextOnly() const { return paint_selected_text_only_; }
 
   bool ShouldPaintSelectedTextSeparately() const {
@@ -381,7 +383,7 @@ class SelectionPaintState {
                              const PaintInfo& paint_info,
                              const TextPaintStyle& text_style) {
     selection_style_ = TextPainterBase::SelectionPaintingStyle(
-        document, style, node, /*have_selection*/ true, paint_info, text_style);
+        document, style, node, paint_info, text_style);
     paint_selected_text_only_ =
         (paint_info.phase == PaintPhase::kSelectionDragImage);
     paint_selected_text_separately_ =
@@ -468,7 +470,7 @@ bool ShouldPaintEmphasisMark(const ComputedStyle& style,
   const LayoutObject* parent = containing_block->Parent();
   if (!parent || !parent->IsRubyRun())
     return true;
-  const LayoutRubyText* ruby_text = ToLayoutRubyRun(parent)->RubyText();
+  const LayoutRubyText* ruby_text = To<LayoutRubyRun>(parent)->RubyText();
   if (!ruby_text)
     return true;
   if (!NGInlineCursor(*ruby_text))
@@ -612,7 +614,7 @@ void NGTextFragmentPainter<Cursor>::Paint(const PaintInfo& paint_info,
       ComputeMarkersToPaint(node, text_item.IsEllipsis());
   if (paint_info.phase != PaintPhase::kSelectionDragImage &&
       paint_info.phase != PaintPhase::kTextClip && !is_printing) {
-    PaintDocumentMarkers(context, text_item, cursor_.CurrentText(),
+    PaintDocumentMarkers(paint_info, text_item, cursor_.CurrentText(),
                          markers_to_paint, box_rect.offset, style,
                          DocumentMarkerPaintPhase::kBackground, nullptr);
     if (UNLIKELY(selection)) {
@@ -653,7 +655,7 @@ void NGTextFragmentPainter<Cursor>::Paint(const PaintInfo& paint_info,
 
   DOMNodeId node_id = kInvalidDOMNodeId;
   if (node) {
-    if (auto* layout_text = ToLayoutTextOrNull(node->GetLayoutObject()))
+    if (auto* layout_text = DynamicTo<LayoutText>(node->GetLayoutObject()))
       node_id = layout_text->EnsureNodeId();
   }
 
@@ -668,9 +670,15 @@ void NGTextFragmentPainter<Cursor>::Paint(const PaintInfo& paint_info,
         !text_item.IsEllipsis()) {
       PhysicalOffset local_origin = box_rect.offset;
       LayoutUnit width = box_rect.Width();
+      base::Optional<AppliedTextDecoration> selection_text_decoration =
+          UNLIKELY(selection)
+              ? base::Optional<AppliedTextDecoration>(
+                    selection->GetSelectionStyle().selection_text_decoration)
+              : base::nullopt;
 
       decoration_info.emplace(box_rect.offset, local_origin, width,
-                              style.GetFontBaseline(), style, nullptr);
+                              style.GetFontBaseline(), style,
+                              selection_text_decoration, nullptr);
       NGTextDecorationOffset decoration_offset(decoration_info->Style(),
                                                text_item.Style(), nullptr);
       text_painter.PaintDecorationsExceptLineThrough(
@@ -709,7 +717,7 @@ void NGTextFragmentPainter<Cursor>::Paint(const PaintInfo& paint_info,
 
   if (paint_info.phase != PaintPhase::kForeground)
     return;
-  PaintDocumentMarkers(context, text_item, cursor_.CurrentText(),
+  PaintDocumentMarkers(paint_info, text_item, cursor_.CurrentText(),
                        markers_to_paint, box_rect.offset, style,
                        DocumentMarkerPaintPhase::kForeground, &text_painter);
 }

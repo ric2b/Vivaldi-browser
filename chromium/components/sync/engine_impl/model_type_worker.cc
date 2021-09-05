@@ -6,20 +6,20 @@
 
 #include <stdint.h>
 
-#include <map>
+#include <set>
 #include <utility>
-#include <vector>
 
 #include "base/bind.h"
 #include "base/format_macros.h"
 #include "base/guid.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
+#include "base/stl_util.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/trace_event/memory_usage_estimator.h"
-#include "components/sync/base/cancelation_signal.h"
 #include "components/sync/base/client_tag_hash.h"
 #include "components/sync/base/data_type_histogram.h"
 #include "components/sync/base/hash_util.h"
@@ -28,8 +28,10 @@
 #include "components/sync/base/unique_position.h"
 #include "components/sync/engine/model_type_processor.h"
 #include "components/sync/engine_impl/bookmark_update_preprocessing.h"
+#include "components/sync/engine_impl/cancelation_signal.h"
 #include "components/sync/engine_impl/commit_contribution.h"
-#include "components/sync/engine_impl/non_blocking_type_commit_contribution.h"
+#include "components/sync/engine_impl/commit_contribution_impl.h"
+#include "components/sync/engine_impl/cycle/entity_change_metric_recording.h"
 #include "components/sync/protocol/proto_memory_estimations.h"
 
 #include "sync/notes/note_update_preprocessing.h"
@@ -37,6 +39,9 @@
 namespace syncer {
 
 namespace {
+
+const char kTimeUntilEncryptionKeyFoundHistogramPrefix[] =
+    "Sync.ModelTypeTimeUntilEncryptionKeyFound.";
 
 void AdaptClientTagForFullUpdateData(ModelType model_type,
                                      syncer::EntityData* data) {
@@ -65,6 +70,25 @@ void AdaptClientTagForFullUpdateData(ModelType model_type,
   }
 }
 
+// Returns empty string if |entity| is not encrypted.
+// TODO(crbug.com/1109221): Consider moving this to a util file and converting
+// UpdateResponseData::encryption_key_name into a method that calls it. Consider
+// returning a struct containing also the encrypted blob, which would make the
+// code of PopulateUpdateResponseData() simpler.
+std::string GetEncryptionKeyName(const sync_pb::SyncEntity& entity) {
+  if (entity.deleted()) {
+    return std::string();
+  }
+  // Passwords use their own legacy encryption scheme.
+  if (entity.specifics().password().has_encrypted()) {
+    return entity.specifics().password().encrypted().key_name();
+  }
+  if (entity.specifics().has_encrypted()) {
+    return entity.specifics().encrypted().key_name();
+  }
+  return std::string();
+}
+
 }  // namespace
 
 ModelTypeWorker::ModelTypeWorker(
@@ -75,10 +99,8 @@ ModelTypeWorker::ModelTypeWorker(
     PassphraseType passphrase_type,
     NudgeHandler* nudge_handler,
     std::unique_ptr<ModelTypeProcessor> model_type_processor,
-    DataTypeDebugInfoEmitter* debug_info_emitter,
     CancelationSignal* cancelation_signal)
     : type_(type),
-      debug_info_emitter_(debug_info_emitter),
       model_type_state_(initial_state),
       model_type_processor_(std::move(model_type_processor)),
       cryptographer_(std::move(cryptographer)),
@@ -171,17 +193,6 @@ SyncerError ModelTypeWorker::ProcessGetUpdatesResponse(
     const sync_pb::DataTypeContext& mutated_context,
     const SyncEntityList& applicable_updates,
     StatusController* status) {
-  return ProcessGetUpdatesResponse(progress_marker, mutated_context,
-                                   applicable_updates,
-                                   /*from_uss_migrator=*/false, status);
-}
-
-SyncerError ModelTypeWorker::ProcessGetUpdatesResponse(
-    const sync_pb::DataTypeProgressMarker& progress_marker,
-    const sync_pb::DataTypeContext& mutated_context,
-    const SyncEntityList& applicable_updates,
-    bool from_uss_migrator,
-    StatusController* status) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   const bool is_initial_sync = !model_type_state_.initial_sync_done();
@@ -190,21 +201,17 @@ SyncerError ModelTypeWorker::ProcessGetUpdatesResponse(
   *model_type_state_.mutable_type_context() = mutated_context;
   *model_type_state_.mutable_progress_marker() = progress_marker;
 
-  UpdateCounters* counters = debug_info_emitter_->GetMutableUpdateCounters();
-
-  if (!from_uss_migrator) {
-    if (is_initial_sync) {
-      counters->num_initial_updates_received += applicable_updates.size();
-    } else {
-      counters->num_non_initial_updates_received += applicable_updates.size();
-    }
-  }
-
   for (const sync_pb::SyncEntity* update_entity : applicable_updates) {
+    RecordEntityChangeMetrics(
+        type_, is_initial_sync
+                   ? ModelTypeEntityChange::kRemoteInitialUpdate
+                   : ModelTypeEntityChange::kRemoteNonInitialUpdate);
+
     if (update_entity->deleted()) {
       status->increment_num_tombstone_updates_downloaded_by(1);
       if (!is_initial_sync) {
-        ++counters->num_non_initial_tombstone_updates_received;
+        RecordEntityChangeMetrics(type_,
+                                  ModelTypeEntityChange::kRemoteDeletion);
       }
     }
 
@@ -213,11 +220,17 @@ SyncerError ModelTypeWorker::ProcessGetUpdatesResponse(
                                        *update_entity, &response_data)) {
       case SUCCESS:
         pending_updates_.push_back(std::move(response_data));
+        // Override any previously undecryptable update for the same id.
+        entries_pending_decryption_.erase(update_entity->id_string());
         break;
       case DECRYPTION_PENDING:
         // Cannot decrypt now, copy the sync entity for later decryption.
         entries_pending_decryption_[update_entity->id_string()] =
             *update_entity;
+        // If there's no entry for this unknown encryption key, create one.
+        DCHECK(!response_data.encryption_key_name.empty());
+        unknown_encryption_keys_by_name_.emplace(
+            response_data.encryption_key_name, UnknownEncryptionKeyInfo());
         SyncRecordModelTypeUpdateDropReason(
             UpdateDropReason::kDecryptionPending, type_);
         break;
@@ -229,7 +242,16 @@ SyncerError ModelTypeWorker::ProcessGetUpdatesResponse(
     }
   }
 
-  debug_info_emitter_->EmitUpdateCountersUpdate();
+  // Some updates pending decryption might have been overwritten by decryptable
+  // ones. So some encryption keys may no longer fit the definition of unknown.
+  RemoveKeysNoLongerUnknown();
+
+  if (!cryptographer_ || cryptographer_->CanEncrypt()) {
+    for (auto& key_and_info : unknown_encryption_keys_by_name_) {
+      key_and_info.second.gu_responses_while_should_have_been_known++;
+    }
+  }
+
   return SyncerError(SyncerError::SYNCER_OK);
 }
 
@@ -250,6 +272,7 @@ ModelTypeWorker::DecryptionStatus ModelTypeWorker::PopulateUpdateResponseData(
                               : update_entity.specifics();
   bool specifics_were_encrypted = false;
 
+  response_data->encryption_key_name = GetEncryptionKeyName(update_entity);
   if (specifics.password().has_encrypted()) {
     // Passwords use their own legacy encryption scheme.
     DCHECK(cryptographer);
@@ -265,8 +288,6 @@ ModelTypeWorker::DecryptionStatus ModelTypeWorker::PopulateUpdateResponseData(
     if (!DecryptPasswordSpecifics(*cryptographer, specifics, &data.specifics)) {
       return FAILED_TO_DECRYPT;
     }
-    response_data->encryption_key_name =
-        specifics.password().encrypted().key_name();
     specifics_were_encrypted = true;
   } else if (specifics.has_encrypted()) {
     // Check if specifics are encrypted and try to decrypt if so.
@@ -280,7 +301,6 @@ ModelTypeWorker::DecryptionStatus ModelTypeWorker::PopulateUpdateResponseData(
     if (!DecryptSpecifics(*cryptographer, specifics, &data.specifics)) {
       return FAILED_TO_DECRYPT;
     }
-    response_data->encryption_key_name = specifics.encrypted().key_name();
     specifics_were_encrypted = true;
   } else {
     // No encryption.
@@ -378,14 +398,8 @@ void ModelTypeWorker::ApplyPendingUpdates() {
   DeduplicatePendingUpdatesBasedOnClientTagHash();
   DeduplicatePendingUpdatesBasedOnOriginatorClientItemId();
 
-  int num_updates_applied = pending_updates_.size();
   model_type_processor_->OnUpdateReceived(model_type_state_,
                                           std::move(pending_updates_));
-
-  UpdateCounters* counters = debug_info_emitter_->GetMutableUpdateCounters();
-  counters->num_updates_applied += num_updates_applied;
-  debug_info_emitter_->EmitUpdateCountersUpdate();
-  debug_info_emitter_->EmitStatusCountersUpdate();
 
   pending_updates_.clear();
 }
@@ -423,7 +437,7 @@ std::unique_ptr<CommitContribution> ModelTypeWorker::GetContribution(
   model_type_processor_->GetLocalChanges(
       max_entries,
       base::BindOnce(&GetLocalChangesRequest::SetResponse, request));
-  request->WaitForResponse();
+  request->WaitForResponseOrCancelation();
   CommitRequestDataList response;
   if (!request->WasCancelled())
     response = request->ExtractResponse();
@@ -433,13 +447,13 @@ std::unique_ptr<CommitContribution> ModelTypeWorker::GetContribution(
   }
 
   DCHECK(response.size() <= max_entries);
-  return std::make_unique<NonBlockingTypeCommitContribution>(
+  return std::make_unique<CommitContributionImpl>(
       GetModelType(), model_type_state_.type_context(), std::move(response),
       base::BindOnce(&ModelTypeWorker::OnCommitResponse,
                      weak_ptr_factory_.GetWeakPtr()),
       base::BindOnce(&ModelTypeWorker::OnFullCommitFailure,
                      weak_ptr_factory_.GetWeakPtr()),
-      cryptographer_.get(), passphrase_type_, debug_info_emitter_,
+      cryptographer_.get(), passphrase_type_,
       CommitOnlyTypes().Has(GetModelType()));
 }
 
@@ -532,6 +546,21 @@ void ModelTypeWorker::DecryptStoredEntities() {
         // blocking other updates.
         it = entries_pending_decryption_.erase(it);
         break;
+    }
+  }
+
+  // Note this can perfectly contain keys that were encrypting corrupt updates
+  // (FAILED_TO_DECRYPT above); all that matters is the key was found.
+  const std::vector<UnknownEncryptionKeyInfo> newly_found_keys =
+      RemoveKeysNoLongerUnknown();
+  for (const UnknownEncryptionKeyInfo& newly_found_key : newly_found_keys) {
+    // Don't record UMA for the dominant case where the key was only unknown
+    // while the cryptographer was pending external interaction.
+    if (newly_found_key.gu_responses_while_should_have_been_known > 0) {
+      base::UmaHistogramCounts1000(
+          base::StrCat({kTimeUntilEncryptionKeyFoundHistogramPrefix,
+                        ModelTypeToString(GetModelType())}),
+          newly_found_key.gu_responses_while_should_have_been_known);
     }
   }
 }
@@ -655,6 +684,28 @@ bool ModelTypeWorker::DecryptPasswordSpecifics(
   return true;
 }
 
+std::vector<ModelTypeWorker::UnknownEncryptionKeyInfo>
+ModelTypeWorker::RemoveKeysNoLongerUnknown() {
+  std::set<std::string> keys_blocking_updates;
+  for (const auto& id_and_update : entries_pending_decryption_) {
+    const std::string key_name = GetEncryptionKeyName(id_and_update.second);
+    DCHECK(!key_name.empty());
+    keys_blocking_updates.insert(key_name);
+  }
+
+  std::vector<ModelTypeWorker::UnknownEncryptionKeyInfo> removed_keys;
+  base::EraseIf(
+      unknown_encryption_keys_by_name_, [&](const auto& key_and_info) {
+        if (base::Contains(keys_blocking_updates, key_and_info.first)) {
+          return false;
+        }
+        removed_keys.push_back(key_and_info.second);
+        return true;
+      });
+
+  return removed_keys;
+}
+
 GetLocalChangesRequest::GetLocalChangesRequest(
     CancelationSignal* cancelation_signal)
     : cancelation_signal_(cancelation_signal),
@@ -663,11 +714,11 @@ GetLocalChangesRequest::GetLocalChangesRequest(
 
 GetLocalChangesRequest::~GetLocalChangesRequest() {}
 
-void GetLocalChangesRequest::OnSignalReceived() {
+void GetLocalChangesRequest::OnCancelationSignalReceived() {
   response_accepted_.Signal();
 }
 
-void GetLocalChangesRequest::WaitForResponse() {
+void GetLocalChangesRequest::WaitForResponseOrCancelation() {
   if (!cancelation_signal_->TryRegisterHandler(this)) {
     return;
   }

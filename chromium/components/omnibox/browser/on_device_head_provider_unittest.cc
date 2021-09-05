@@ -121,29 +121,8 @@ TEST_F(OnDeviceHeadProviderTest, TestIfIncognitoIsAllowed) {
   EXPECT_CALL(*client_.get(), SearchSuggestEnabled())
       .WillRepeatedly(Return(true));
 
-  // By default incognito request will be rejected.
+  // By default incognito request will be accepted.
   {
-    base::test::ScopedFeatureList scoped_feature_list;
-    scoped_feature_list.InitAndEnableFeature(
-        omnibox::kOnDeviceHeadProviderNonIncognito);
-    ASSERT_FALSE(IsOnDeviceHeadProviderAllowed(input));
-  }
-
-  // Now enable for incognito.
-  {
-    base::test::ScopedFeatureList scoped_feature_list;
-    scoped_feature_list.InitAndEnableFeature(
-        omnibox::kOnDeviceHeadProviderIncognito);
-    ASSERT_TRUE(IsOnDeviceHeadProviderAllowed(input));
-  }
-
-  // Test enable for both.
-  {
-    base::test::ScopedFeatureList scoped_feature_list;
-    scoped_feature_list.InitWithFeatures(
-        {omnibox::kOnDeviceHeadProviderNonIncognito,
-         omnibox::kOnDeviceHeadProviderIncognito},
-        {});
     ASSERT_TRUE(IsOnDeviceHeadProviderAllowed(input));
   }
 

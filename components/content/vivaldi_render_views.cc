@@ -11,14 +11,15 @@ void RenderViewImpl::OnLoadImageAt(int x, int y) {
 
 void RenderViewImpl::ApplyVivaldiSpecificPreferences() {
   if (GetWebView()) {
-    GetWebView()->SetImagesEnabled(renderer_preferences_.should_show_images);
+    auto renderer_preferences = GetRendererPreferences();
+    GetWebView()->SetImagesEnabled(renderer_preferences.should_show_images);
     GetWebView()->SetServeResourceFromCacheOnly(
-      renderer_preferences_.serve_resources_only_from_cache);
+      renderer_preferences.serve_resources_only_from_cache);
     GetWebView()->SetPluginsEnabled(
-      renderer_preferences_.should_enable_plugin_content);
+      renderer_preferences.should_enable_plugin_content);
     GetWebView()->SetAllowTabCycleIntoUI(
-        renderer_preferences_.allow_tab_cycle_from_webpage_into_ui);
-    GetWebView()->SetAllowAccessKeys(renderer_preferences_.allow_access_keys);
+        renderer_preferences.allow_tab_cycle_from_webpage_into_ui);
+    GetWebView()->SetAllowAccessKeys(renderer_preferences.allow_access_keys);
   }
 }
 

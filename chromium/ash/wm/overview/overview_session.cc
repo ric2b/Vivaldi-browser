@@ -34,7 +34,6 @@
 #include "ash/wm/overview/scoped_overview_animation_settings.h"
 #include "ash/wm/splitview/split_view_controller.h"
 #include "ash/wm/splitview/split_view_utils.h"
-#include "ash/wm/switchable_windows.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "base/auto_reset.h"
@@ -105,7 +104,7 @@ class AsyncWindowStateChangeObserver : public WindowStateObserver,
 
   // WindowStateObserver:
   void OnPostWindowStateTypeChange(WindowState* window_state,
-                                   WindowStateType) override {
+                                   chromeos::WindowStateType) override {
     RemoveAllObservers();
     std::move(on_post_window_state_changed_).Run(window_state);
     delete this;
@@ -126,7 +125,7 @@ class AsyncWindowStateChangeObserver : public WindowStateObserver,
 // role button as the overview focus widget's contents.
 class OverviewFocusButton : public views::Button {
  public:
-  OverviewFocusButton() : views::Button(/*listener=*/nullptr) {
+  OverviewFocusButton() : views::Button(views::Button::PressedCallback()) {
     // Make this not focusable to avoid accessibility error since this view has
     // no accessible name.
     SetFocusBehavior(FocusBehavior::NEVER);
@@ -220,7 +219,6 @@ OverviewSession::OverviewSession(OverviewDelegate* delegate)
 }
 
 OverviewSession::~OverviewSession() {
-  DCHECK(observed_windows_.empty());
   // Don't delete |window_drag_controller_| yet since the stack might be still
   // using it.
   if (window_drag_controller_) {
@@ -254,14 +252,6 @@ void OverviewSession::Init(const WindowList& windows,
             });
 
   for (auto* root : root_windows) {
-    // Observed switchable containers for newly created windows on all root
-    // windows.
-    for (auto* container :
-         GetSwitchableContainersForRoot(root, /*active_desk_only=*/true)) {
-      container->AddObserver(this);
-      observed_windows_.insert(container);
-    }
-
     auto grid = std::make_unique<OverviewGrid>(root, windows, this);
     num_items_ += grid->size();
     grid_list_.push_back(std::move(grid));
@@ -283,16 +273,8 @@ void OverviewSession::Init(const WindowList& windows,
     // grid.
     if (enter_exit_overview_type_ == OverviewEnterExitType::kImmediateEnter) {
       overview_grid->PositionWindows(/*animate=*/false);
-    } else if (enter_exit_overview_type_ ==
-               OverviewEnterExitType::kSlideInEnter) {
-      overview_grid->PositionWindows(/*animate=*/false);
-      overview_grid->SlideWindowsIn();
     } else {
       // Exit only types should not appear here:
-      DCHECK_NE(enter_exit_overview_type_,
-                OverviewEnterExitType::kSwipeFromShelf);
-      DCHECK_NE(enter_exit_overview_type_,
-                OverviewEnterExitType::kSlideOutExit);
       DCHECK_NE(enter_exit_overview_type_, OverviewEnterExitType::kFadeOutExit);
 
       overview_grid->PositionWindows(/*animate=*/true, /*ignored_items=*/{},
@@ -406,9 +388,8 @@ void OverviewSession::Shutdown() {
 
     // Fade out the no windows widget. This animation continues past the
     // lifetime of |this|.
-    FadeOutWidgetAndMaybeSlideOnExit(std::move(no_windows_widget_),
-                                     OVERVIEW_ANIMATION_RESTORE_WINDOW,
-                                     /*slide=*/false);
+    FadeOutWidgetFromOverview(std::move(no_windows_widget_),
+                              OVERVIEW_ANIMATION_RESTORE_WINDOW);
   }
 }
 
@@ -595,11 +576,9 @@ void OverviewSession::RemoveItem(OverviewItem* overview_item) {
 void OverviewSession::RemoveItem(OverviewItem* overview_item,
                                  bool item_destroying,
                                  bool reposition) {
-  if (overview_item->GetWindow()->HasObserver(this)) {
-    overview_item->GetWindow()->RemoveObserver(this);
-    observed_windows_.erase(overview_item->GetWindow());
-    if (overview_item->GetWindow() == restore_focus_window_)
-      restore_focus_window_ = nullptr;
+  if (overview_item->GetWindow() == restore_focus_window_) {
+    restore_focus_window_->RemoveObserver(this);
+    restore_focus_window_ = nullptr;
   }
 
   overview_item->overview_grid()->RemoveItem(overview_item, item_destroying,
@@ -763,38 +742,6 @@ void OverviewSession::SetWindowListNotAnimatedWhenExiting(
     grid->SetWindowListNotAnimatedWhenExiting();
 }
 
-std::unique_ptr<ui::ScopedLayerAnimationSettings>
-OverviewSession::UpdateGridAtLocationYPositionAndOpacity(
-    int64_t display_id,
-    float new_y,
-    float opacity,
-    UpdateAnimationSettingsCallback callback) {
-  OverviewGrid* grid = GetGridWithRootWindow(
-      Shell::Get()->GetRootWindowForDisplayId(display_id));
-  if (!grid)
-    return nullptr;
-
-  std::unique_ptr<ui::ScopedLayerAnimationSettings> settings =
-      grid->UpdateYPositionAndOpacity(new_y, opacity, callback);
-  if (no_windows_widget_) {
-    DCHECK(grid->empty());
-
-    // Translate and fade |no_windows_widget_| if it is visible. Overwrite
-    // |settings| to observe |no_windows_widget| if necessary.
-    aura::Window* window = no_windows_widget_->GetNativeWindow();
-    ui::Layer* layer = window->layer();
-    if (!callback.is_null()) {
-      settings = std::make_unique<ui::ScopedLayerAnimationSettings>(
-          layer->GetAnimator());
-      callback.Run(settings.get());
-    }
-    window->SetTransform(gfx::Transform(1.f, 0.f, 0.f, 1.f, 0.f, -new_y));
-    layer->SetOpacity(opacity);
-  }
-
-  return settings;
-}
-
 void OverviewSession::UpdateRoundedCornersAndShadow() {
   for (auto& grid : grid_list_)
     for (auto& window : grid->window_list())
@@ -886,11 +833,6 @@ void OverviewSession::OnWindowActivating(
     return;
   }
 
-  // Do not cancel overview mode if the window activation was caused while
-  // dragging overview mode offscreen.
-  if (IsSlidingOutOverviewFromShelf())
-    return;
-
   // Do not cancel overview mode while a window or overview item is being
   // dragged as evidenced by the presence of a drop target. (Dragging to close
   // does not count; canceling overview mode is okay then.)
@@ -962,12 +904,8 @@ void OverviewSession::ResetFocusRestoreWindow(bool focus) {
     base::AutoReset<bool> restoring_focus(&ignore_activations_, true);
     wm::ActivateWindow(restore_focus_window_);
   }
-  // If the window is in the observed_windows_ list it needs to continue to be
-  // observed.
-  if (observed_windows_.find(restore_focus_window_) ==
-      observed_windows_.end()) {
-    restore_focus_window_->RemoveObserver(this);
-  }
+
+  restore_focus_window_->RemoveObserver(this);
   restore_focus_window_ = nullptr;
 }
 
@@ -1060,10 +998,9 @@ void OverviewSession::OnDisplayMetricsChanged(const display::Display& display,
 }
 
 void OverviewSession::OnWindowDestroying(aura::Window* window) {
-  window->RemoveObserver(this);
-  observed_windows_.erase(window);
-  if (window == restore_focus_window_)
-    restore_focus_window_ = nullptr;
+  DCHECK_EQ(restore_focus_window_, window);
+  restore_focus_window_->RemoveObserver(this);
+  restore_focus_window_ = nullptr;
 }
 
 void OverviewSession::OnKeyEvent(ui::KeyEvent* event) {
@@ -1258,13 +1195,10 @@ bool OverviewSession::ProcessForScrolling(const ui::KeyEvent& event) {
 }
 
 void OverviewSession::RemoveAllObservers() {
-  for (auto* window : observed_windows_)
-    window->RemoveObserver(this);
-  observed_windows_.clear();
-
   display::Screen::GetScreen()->RemoveObserver(this);
   if (restore_focus_window_)
     restore_focus_window_->RemoveObserver(this);
+  restore_focus_window_ = nullptr;
 }
 
 void OverviewSession::UpdateNoWindowsWidget() {

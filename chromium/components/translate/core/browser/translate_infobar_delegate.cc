@@ -106,6 +106,7 @@ void TranslateInfoBarDelegate::Create(
   if (old_delegate) {
     old_delegate->step_ = step;
     for (auto& observer : old_delegate->observers_) {
+      observer.OnTargetLanguageChanged(target_language);
       observer.OnTranslateStepChanged(step, error_type);
     }
     return;
@@ -117,10 +118,7 @@ void TranslateInfoBarDelegate::Create(
       base::WrapUnique(new TranslateInfoBarDelegate(
           translate_manager, is_off_the_record, step, original_language,
           target_language, error_type, triggered_from_menu))));
-  if (old_delegate)
-    infobar_manager->ReplaceInfoBar(old_infobar, std::move(infobar));
-  else
-    infobar_manager->AddInfoBar(std::move(infobar));
+  infobar_manager->AddInfoBar(std::move(infobar));
 }
 
 size_t TranslateInfoBarDelegate::num_languages() const {
@@ -431,6 +429,8 @@ int TranslateInfoBarDelegate::GetIconId() const {
 }
 
 void TranslateInfoBarDelegate::InfoBarDismissed() {
+  OnInfoBarClosedByUser();
+
   bool declined = false;
   bool has_observer = false;
   for (auto& observer : observers_) {
@@ -476,6 +476,10 @@ int TranslateInfoBarDelegate::GetMaximumNumberOfAutoNever() {
   static constexpr base::FeatureParam<int> auto_never_maximum{
       &kTranslateAutoSnackbars, "AutoNeverMaximum", kMaxNumberOfAutoNever};
   return auto_never_maximum.Get();
+}
+
+void TranslateInfoBarDelegate::OnInfoBarClosedByUser() {
+  ui_delegate_.OnUIClosedByUser();
 }
 
 }  // namespace translate

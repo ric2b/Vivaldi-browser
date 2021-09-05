@@ -2,9 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assert, promisify} from '../chrome_util.js';
+import {promisify} from '../chrome_util.js';
 import {ChromeDirectoryEntry} from '../models/chrome_file_system_entry.js';
-import {Resolution} from '../type.js';
+import {getMaybeLazyDirectory} from '../models/lazy_directory_entry.js';
+import {Resolution, UntrustedOrigin} from '../type.js';
+
 // eslint-disable-next-line no-unused-vars
 import {BrowserProxy} from './browser_proxy_interface.js';
 
@@ -39,7 +41,7 @@ class ChromeAppBrowserProxy {
   }
 
   /** @override */
-  async getExternalDir() {
+  async getCameraDirectory() {
     let volumes;
     try {
       volumes = await promisify(chrome.fileSystem.getVolumeList)();
@@ -67,9 +69,8 @@ class ChromeAppBrowserProxy {
         continue;
       }
 
-      const rootEntry = new ChromeDirectoryEntry(root);
-      const entries = await rootEntry.getDirectories();
-      return entries.find((entry) => entry.name === 'Downloads') || null;
+      const myFilesDir = new ChromeDirectoryEntry(root);
+      return getMaybeLazyDirectory(myFilesDir, 'Camera');
     }
     return null;
   }
@@ -89,6 +90,11 @@ class ChromeAppBrowserProxy {
   localStorageRemove(items) {
     return promisify(chrome.storage.local.remove.bind(chrome.storage.local))(
         items);
+  }
+
+  /** @override */
+  localStorageClear() {
+    return promisify(chrome.storage.local.clear.bind(chrome.storage.local))();
   }
 
   /** @override */
@@ -140,37 +146,13 @@ class ChromeAppBrowserProxy {
   }
 
   /** @override */
-  addOnMessageExternalListener(listener) {
-    chrome.runtime.onMessageExternal.addListener(listener);
+  getTextDirection() {
+    return this.getI18nMessage('@@bidi_dir');
   }
 
   /** @override */
-  addOnConnectExternalListener(listener) {
-    chrome.runtime.onConnectExternal.addListener(listener);
-  }
-
-  /** @override */
-  addDummyHistoryIfNotAvailable() {
-    // Since GA will use history.length to generate hash but it is not available
-    // in platform apps, set it to 1 manually.
-    window.history.length = 1;
-  }
-
-  /** @override */
-  isMp4RecordingEnabled() {
+  shouldAddFakeHistory() {
     return true;
-  }
-
-  /** @override */
-  getBackgroundOps() {
-    assert(window['backgroundOps'] !== undefined);
-    return window['backgroundOps'];
-  }
-
-  /** @override */
-  isFullscreenOrMaximized() {
-    return chrome.app.window.current().outerBounds.width >= screen.width ||
-        chrome.app.window.current().outerBounds.height >= screen.height;
   }
 
   /** @override */
@@ -220,26 +202,6 @@ class ChromeAppBrowserProxy {
   }
 
   /** @override */
-  showWindow() {
-    chrome.app.window.current().show();
-  }
-
-  /** @override */
-  hideWindow() {
-    chrome.app.window.current().hide();
-  }
-
-  /** @override */
-  isMinimized() {
-    return chrome.app.window.current().isMinimized();
-  }
-
-  /** @override */
-  addOnMinimizedListener(listener) {
-    chrome.app.window.current().onMinimized.addListener(listener);
-  }
-
-  /** @override */
   openFeedback() {
     const data = {
       'categoryTag': 'chromeos-camera-app',
@@ -255,6 +217,37 @@ class ChromeAppBrowserProxy {
     };
     const id = 'gfdkimpbcpahaombhbimeihdjnejgicl';  // Feedback extension id.
     chrome.runtime.sendMessage(id, data);
+  }
+
+  /** @override */
+  async initCameraUsageMonitor(exploitUsage, releaseUsage) {
+    // For platform app, since the multi-window behavior is handled in
+    // background page, we can assume when the new CCA instance is launched,
+    // the camera usage has been already released by the previous CCA instance
+    // and we can safely use the camera.
+    await exploitUsage();
+  }
+
+  /** @override */
+  setupUnloadListener(listener) {
+    // Platform app should use chrome.app.window.AppWindow onClosed event
+    // listener in background page instead of window unload event listener.
+  }
+
+  /** @override */
+  async setLaunchingFromWindowCreationStartTime(callback) {
+    // For platform app, the start time of window creation is recorded by
+    // background page so we don't need to trigger it here.
+  }
+
+  /** @override */
+  getUntrustedOrigin() {
+    return UntrustedOrigin.CHROME_EXTENSION;
+  }
+
+  /** @override */
+  setBeforeUnloadListenerEnabled(enabled) {
+    // Do nothing since beforeunload event is unavailable for platform apps.
   }
 }
 

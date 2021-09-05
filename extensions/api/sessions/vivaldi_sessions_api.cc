@@ -19,6 +19,7 @@
 #include "base/i18n/time_formatting.h"
 #include "base/strings/string_util.h"
 #include "base/task/post_task.h"
+#include "browser/sessions/vivaldi_session_service.h"
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/profiles/profile.h"
@@ -32,7 +33,6 @@
 #include "content/public/browser/navigation_entry.h"
 #include "extensions/browser/extension_function_dispatcher.h"
 #include "extensions/schema/vivaldi_sessions.h"
-#include "ui/vivaldi_session_service.h"
 
 using extensions::vivaldi::sessions_private::SessionOpenOptions;
 
@@ -151,15 +151,14 @@ ExtensionFunction::ResponseAction SessionsPrivateGetAllFunction::Run() {
 }
 
 std::vector<std::unique_ptr<SessionsPrivateGetAllFunction::SessionEntry>>
-SessionsPrivateGetAllFunction::RunOnFileThread(
-    base::FilePath path) {
+SessionsPrivateGetAllFunction::RunOnFileThread(base::FilePath path) {
   using extensions::vivaldi::sessions_private::SessionItem;
   namespace Results = vivaldi::sessions_private::GetAll::Results;
   std::vector<std::unique_ptr<SessionEntry>> sessions;
   ::vivaldi::VivaldiSessionService service;
 
   base::FileEnumerator iter(path, false, base::FileEnumerator::FILES,
-    FILE_PATH_LITERAL("*.bin"));
+                            FILE_PATH_LITERAL("*.bin"));
   for (base::FilePath name = iter.Next(); !name.empty(); name = iter.Next()) {
     std::unique_ptr<SessionEntry> entry = std::make_unique<SessionEntry>();
     entry->item = std::make_unique<SessionItem>();

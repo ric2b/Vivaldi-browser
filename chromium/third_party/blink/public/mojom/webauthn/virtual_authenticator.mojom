@@ -32,6 +32,7 @@ struct VirtualAuthenticatorOptions {
   bool has_resident_key;
   bool has_user_verification;
   bool is_user_present = true;
+  bool has_large_blob;
 };
 
 // Encapsulates both public (key handle) and private information associated
@@ -54,6 +55,11 @@ interface VirtualAuthenticator {
   // registration was found and removed, |false| otherwise.
   RemoveRegistration(array<uint8> key_handle) => (bool removed);
   ClearRegistrations() => ();
+
+  // Returns the large blob associated with |key_handle|, if any.
+  GetLargeBlob(array<uint8> key_handle) => (array<uint8>? blob);
+  // Sets or replaces the per-credential large blob associated with |key_handle|.
+  SetLargeBlob(array<uint8> key_handle, array<uint8> blob) => (bool set);
 
   // Sets whether the authenticator will reply to user verification requests
   // successfully (UV = true) or not.

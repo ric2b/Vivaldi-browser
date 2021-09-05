@@ -10,6 +10,7 @@
 
 import("//build/config/chromeos/ui_mode.gni")
 import("//build/config/compiler/compiler.gni")
+import("//build/config/dcheck_always_on.gni")
 import("//build/config/features.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/ui.gni")
@@ -73,6 +74,7 @@ group("gn_all") {
     "//base/util:base_util_unittests",
     "//chrome/installer",
     "//chrome/updater",
+    "//codelabs",
     "//components:components_unittests",
     "//components/gwp_asan:gwp_asan_unittests",
     "//net:net_unittests",
@@ -81,6 +83,7 @@ group("gn_all") {
     "//skia:skia_unittests",
     "//sql:sql_unittests",
     "//third_party/flatbuffers:flatbuffers_unittests",
+    "//third_party/liburlpattern:liburlpattern_unittests",
     "//tools/binary_size:binary_size_trybot_py",
     "//tools/ipc_fuzzer:ipc_fuzzer_all",
     "//tools/metrics:metrics_metadata",
@@ -125,9 +128,7 @@ group("gn_all") {
       "//ppapi/examples/audio",
       "//ppapi/examples/audio_input",
       "//ppapi/examples/crxfs",
-      "//ppapi/examples/enumerate_devices",
       "//ppapi/examples/file_chooser",
-      "//ppapi/examples/flash_topmost",
       "//ppapi/examples/font",
       "//ppapi/examples/gamepad",
       "//ppapi/examples/gles2",
@@ -153,6 +154,7 @@ group("gn_all") {
       "//third_party/pdfium/samples:pdfium_test",
       "//tools/perf/clear_system_cache",
       "//tools/polymer:polymer_tools_python_unittests",
+      "//tools/privacy_budget:privacy_budget_tools",
       "//ui/accessibility:accessibility_perftests",
       "//ui/accessibility:accessibility_unittests",
       "//ui/accessibility/extensions:extension_tests",
@@ -340,7 +342,7 @@ group("gn_all") {
       "//build/android/gyp/test:hello_world",
       "//build/android/stacktrace:java_deobfuscate",
       "//build/config/android/test/proto:test_build_protos",
-      "//chrome/android/monochrome:monochrome_apk_checker",
+      "//chrome/android/monochrome:monochrome_public_apk_checker",
       "//chrome/android/webapk/shell_apk:maps_go_webapk",
       "//chrome/android/webapk/shell_apk:webapk",
       "//chrome/android/webapk/shell_apk/prepare_upload_dir:prepare_webapk_shell_upload_dir",
@@ -443,7 +445,9 @@ group("gn_all") {
       "//chromeos:chromeos_unittests",
       "//chromeos/components:chromeos_components_unittests",
       "//chromeos/components/proximity_auth:proximity_auth_unittests",
+      "//components/exo/wayland:wayland_client_compatibility_tests",
       "//components/session_manager/core",
+      "//third_party/shell-encryption:shell_encryption_unittests",
       "//ui/chromeos:ui_chromeos_unittests",
     ]
   }
@@ -545,7 +549,7 @@ group("gn_all") {
 
     if (enable_extensions) {
       deps += [ "//extensions/shell:app_shell" ]
-      if (is_desktop_linux && is_official_build) {
+      if (is_linux && is_official_build) {
         deps += [ "//extensions/shell:app_shell_linux_symbols" ]
       }
     }
@@ -678,7 +682,7 @@ group("gn_all") {
     }
   }
 
-  if (is_mac || is_win || is_android || (is_linux && !is_chromeos)) {
+  if (is_mac || is_win || is_android || is_linux || is_chromeos) {
     deps += [
       "//third_party/crashpad/crashpad:crashpad_tests",
       "//third_party/crashpad/crashpad/handler:crashpad_handler",
@@ -766,6 +770,7 @@ group("gn_all") {
     deps += [
       "//chrome/services/ipp_parser/public/cpp:fuzzers",
       "//testing/libfuzzer/fuzzers",
+      "//third_party/freetype-testing:freetype_truetype_render_fuzzer",
       "//third_party/grpc:fuzzers",
       "//third_party/icu/fuzzers",
       "//third_party/qcms:fuzzers",
@@ -1040,22 +1045,16 @@ if (!is_ios) {
     }
   }
 
-  group("devtools_web_tests") {
-    testonly = true
-    deps = [ ":blink_web_tests" ]
-    data_deps = [ ":blink_web_tests" ]
-    data = [ "//third_party/devtools-frontend/src/test/webtests/" ]
-  }
-
   group("blink_web_tests_support_data") {
     testonly = true
     data_deps = [
       ":layout_test_data_mojo_bindings",
       ":layout_test_data_mojo_bindings_lite",
       "//content/shell:content_shell",
+      "//content/test:mojo_bindings_web_test_mojom_js_data_deps",
       "//content/test:mojo_web_test_bindings_js_data_deps",
       "//device/bluetooth/public/mojom:fake_bluetooth_interfaces_js_data_deps",
-      "//device/vr/public/mojom:mojom_js_data_deps",
+      "//device/vr/public/mojom:vr_service_js_data_deps",
       "//media/capture/mojom:image_capture_js_data_deps",
       "//media/midi:mojo_js_data_deps",
       "//mojo/public/interfaces/bindings/tests:test_data_deps",
@@ -1070,8 +1069,9 @@ if (!is_ios) {
       "//third_party/blink/public:blink_devtools_frontend_resources_files",
       "//third_party/blink/public:blink_devtools_inspector_resources",
       "//third_party/blink/public/mojom:mojom_platform_js_data_deps",
-      "//third_party/blink/renderer/core/html:js_files_for_form_controls_web_tests",
+      "//third_party/blink/renderer/core:js_files_for_form_controls_web_tests",
       "//third_party/catapult/third_party/typ",
+      "//third_party/hyphenation-patterns:test_data",
       "//third_party/mesa_headers",
       "//tools/imagediff",
     ]
@@ -1120,9 +1120,6 @@ if (!is_ios) {
       "//third_party/blink/web_tests/wpt_internal/",
       "//third_party/pywebsocket3/src/mod_pywebsocket/",
       "//third_party/test_fonts/test_fonts/",
-
-      # Needed by run_web_tests.py to detect DCHECK build.
-      "$root_out_dir/args.gn",
     ]
 
     if (is_win) {
@@ -1145,25 +1142,44 @@ if (!is_ios) {
     }
   }
 
+  _common_web_test_script = "//testing/scripts/run_isolated_script_test.py"
+
+  _common_web_test_args = [ "@WrappedPath(" + rebase_path(
+                                "//third_party/blink/tools/run_web_tests.py",
+                                root_build_dir) + ")" ]
+  if (is_debug) {
+    _common_web_test_args += [ "--debug" ]
+  } else {
+    _common_web_test_args += [ "--release" ]
+    if (dcheck_always_on) {
+      _common_web_test_args += [ "--time-out-ms=12000" ]
+    }
+  }
+
+  if (is_android) {
+    _common_web_test_args += [
+      "--platform",
+      "android",
+    ]
+  }
+
+  _common_web_test_args += [
+    "--seed",
+    "4",
+    "--no-show-results",
+    "--zero-tests-executed-ok",
+    "--clobber-old-results",
+    "--exit-after-n-failures",
+    "5000",
+    "--exit-after-n-crashes-or-timeouts",
+    "100",
+  ]
+
   # https://chromium.googlesource.com/chromium/src/+/master/docs/testing/web_tests.md
-  generate_wrapper("blink_web_tests") {
-    testonly = true
-    wrapper_script = "${root_build_dir}/bin/run_blink_web_tests"
-    executable = "//third_party/blink/tools/run_web_tests.py"
-    executable_args = []
+  script_test("blink_web_tests") {
+    script = _common_web_test_script
 
-    if (is_debug) {
-      executable_args += [ "--debug" ]
-    } else {
-      executable_args += [ "--release" ]
-    }
-
-    if (is_android) {
-      executable_args += [
-        "--platform",
-        "android",
-      ]
-    }
+    args = _common_web_test_args
 
     data_deps = [ ":blink_web_tests_support_data" ]
     data = [
@@ -1172,30 +1188,37 @@ if (!is_ios) {
     ]
   }
 
-  generate_wrapper("webgpu_blink_web_tests") {
-    testonly = true
-    wrapper_script = "${root_build_dir}/bin/run_webgpu_blink_web_tests"
-    executable = "//third_party/blink/tools/run_web_tests.py"
-    executable_args = [
-      "--additional-driver-flag=--enable-unsafe-webgpu",
-      "--ignore-default-expectations",
-      "--additional-expectations",
-      "@WrappedPath(../../third_party/blink/web_tests/WebGPUExpectations)",
-      "--isolated-script-test-filter=wpt_internal/webgpu/*",
-    ]
+  script_test("devtools_web_tests") {
+    # This target differs from :blink_web_tests in that it uses the
+    # same test harness but runs an entirely different set of tests
+    # and doesn't have a dependency on the web_test directory at all.
+    script = _common_web_test_script
 
-    if (is_debug) {
-      executable_args += [ "--debug" ]
-    } else {
-      executable_args += [ "--release" ]
-    }
+    args = _common_web_test_args + [
+             "--layout-tests-directory=@WrappedPath(" + rebase_path(
+                     "//third_party/devtools-frontend/src/test/webtests",
+                     root_out_dir) + ")",
+             "http/tests/devtools",
+           ]
 
-    if (is_android) {
-      executable_args += [
-        "--platform",
-        "android",
-      ]
-    }
+    data_deps = [ ":blink_web_tests_support_data" ]
+    data = [ "//third_party/devtools-frontend/src/test/webtests/" ]
+  }
+
+  script_test("webgpu_blink_web_tests") {
+    # This target differs from :blink_web_tests in that it uses the same
+    # test harness and a few additional flags but, more importantly, only runs
+    # the web_tests/wpt_internal/webgpu tests, so it doesn't have a data
+    # dependency on the whole web_test directory.
+    script = _common_web_test_script
+    args =
+        _common_web_test_args + [
+          "--additional-driver-flag=--enable-unsafe-webgpu",
+          "--ignore-default-expectations",
+          "--additional-expectations",
+          "@WrappedPath(../../third_party/blink/web_tests/WebGPUExpectations)",
+          "--isolated-script-test-filter=wpt_internal/webgpu/*",
+        ]
 
     data_deps = [ ":blink_web_tests_support_data" ]
     data = [
@@ -1227,14 +1250,15 @@ if (!is_ios) {
     deps = [ "//mojo/public/js:bindings_lite" ]
   }
 
-  group("blink_python_tests") {
+  script_test("blink_python_tests") {
+    script = "//testing/scripts/run_isolated_script_test.py"
+    args = [ "@WrappedPath(" +
+             rebase_path("//third_party/blink/tools/run_blinkpy_tests.py",
+                         root_build_dir) + ")" ]
+
     data = [
       "//build/android/",
       "//components/crash/content/tools/generate_breakpad_symbols.py",
-      "//testing/scripts/common.py",
-      "//testing/scripts/run_isolated_script_test.py",
-      "//testing/test_env.py",
-      "//testing/xvfb.py",
       "//third_party/blink/renderer/bindings/scripts/",
       "//third_party/blink/renderer/build/scripts/",
       "//third_party/blink/tools/",

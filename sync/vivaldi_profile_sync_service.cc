@@ -100,14 +100,12 @@ void VivaldiProfileSyncService::ClearSyncData() {
           }
         })");
   auto resource_request = std::make_unique<network::ResourceRequest>();
-  GURL::Replacements replacements;
-  std::string new_path = sync_service_url_.path() + "/command/";
-  std::string new_query = syncer::MakeSyncQueryString(client_id);
-  replacements.SetPath(new_path.c_str(), url::Component(0, new_path.length()));
-  replacements.SetQuery(new_query.c_str(),
-                        url::Component(0, new_query.length()));
+  std::string full_path = sync_service_url_.path() + "/command/";
+  GURL::Replacements path_replacement;
+  path_replacement.SetPathStr(full_path);
 
-  resource_request->url = sync_service_url_.ReplaceComponents(replacements);
+  resource_request->url = syncer::AppendSyncQueryString(
+      sync_service_url_.ReplaceComponents(path_replacement), client_id);
   resource_request->method = "POST";
   resource_request->load_flags =
       net::LOAD_BYPASS_CACHE | net::LOAD_DISABLE_CACHE;

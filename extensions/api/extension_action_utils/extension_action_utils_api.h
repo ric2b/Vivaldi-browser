@@ -13,8 +13,8 @@
 #include "chrome/browser/extensions/api/extension_action/extension_action_api.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser_list_observer.h"
-#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
+#include "components/sessions/core/session_id.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/browser/extension_icon_image.h"
 #include "extensions/browser/extension_registry.h"
@@ -53,8 +53,7 @@ class ExtensionActionUtil
     : public KeyedService,
       public extensions::ExtensionActionAPI::Observer,
       public extensions::ExtensionRegistryObserver,
-      public CommandService::Observer,
-      public TabStripModelObserver {
+      public CommandService::Observer {
   friend struct base::DefaultSingletonTraits<ExtensionActionUtil>;
 
  public:
@@ -67,6 +66,8 @@ class ExtensionActionUtil
   void FillInfoForTabId(vivaldi::extension_action_utils::ExtensionInfo* info,
                         ExtensionAction* action,
                         int tab_id);
+
+  void NotifyTabSelectionChange(content::WebContents* selected_contents);
 
  private:
   ~ExtensionActionUtil() override;
@@ -98,12 +99,6 @@ class ExtensionActionUtil
   void OnExtensionCommandRemoved(const std::string& extension_id,
       const Command& removed_command) override;
 
-  // Overridden from TabStripModelObserver:
-  void OnTabStripModelChanged(
-    TabStripModel* tab_strip_model,
-    const TabStripModelChange& change,
-    const TabStripSelectionChange& selection) override;
-
   void PrefsChange();
 
   // Cached settings
@@ -113,7 +108,7 @@ class ExtensionActionUtil
 
   Profile* profile_;
 
-  content::WebContents* current_webcontents_ = nullptr;
+  SessionID last_active_tab_window_ = SessionID::InvalidValue();
 
   DISALLOW_COPY_AND_ASSIGN(ExtensionActionUtil);
 };

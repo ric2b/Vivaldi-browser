@@ -28,7 +28,7 @@
 
 #include "base/callback_helpers.h"
 #include "cc/input/scroll_snap_data.h"
-#include "third_party/blink/public/common/css/color_scheme.h"
+#include "third_party/blink/public/mojom/frame/color_scheme.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom-blink-forward.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_rect.h"
@@ -271,8 +271,17 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
   virtual bool HasTickmarks() const { return false; }
   virtual Vector<IntRect> GetTickmarks() const { return Vector<IntRect>(); }
 
+  // Note that this function just set the scrollbar itself needs repaint by
+  // blink during paint, but doesn't set the scrollbar parts (thumb or track)
+  // of an accelerated scrollbar needing repaint by the compositor.
+  // Use Scrollbar::SetNeedsPaintInvaldiation() instead.
   virtual void SetScrollbarNeedsPaintInvalidation(ScrollbarOrientation);
+
   virtual void SetScrollCornerNeedsPaintInvalidation();
+
+  // Set all scrollbars and their parts and the scroll corner needs full paint
+  // invalidation.
+  void SetScrollControlsNeedFullPaintInvalidation();
 
   // Convert points and rects between the scrollbar and its containing
   // EmbeddedContentView. The client needs to implement these in order to be
@@ -462,7 +471,7 @@ class CORE_EXPORT ScrollableArea : public GarbageCollectedMixin {
     return mojom::blink::ScrollBehavior::kInstant;
   }
 
-  virtual ColorScheme UsedColorScheme() const = 0;
+  virtual mojom::blink::ColorScheme UsedColorScheme() const = 0;
 
   // Subtracts space occupied by this ScrollableArea's scrollbars.
   // Does nothing if overlay scrollbars are enabled.

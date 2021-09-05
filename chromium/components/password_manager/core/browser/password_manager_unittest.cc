@@ -25,6 +25,7 @@
 #include "components/autofill/core/browser/form_structure.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
+#include "components/autofill/core/common/password_generation_util.h"
 #include "components/autofill/core/common/renderer_id.h"
 #include "components/autofill/core/common/signatures.h"
 #include "components/password_manager/core/browser/field_info_manager.h"
@@ -69,7 +70,6 @@ using autofill::NOT_USERNAME;
 using autofill::PasswordFormFillData;
 using autofill::ServerFieldType;
 using autofill::SINGLE_USERNAME;
-using autofill::mojom::PasswordFormFieldPredictionType;
 using base::ASCIIToUTF16;
 using base::Feature;
 using base::TestMockTimeTaskRunner;
@@ -142,6 +142,7 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
         .WillByDefault(Return(false));
     ON_CALL(filter_, IsSyncAccountEmail(_)).WillByDefault(Return(false));
     ON_CALL(*this, IsNewTabPage()).WillByDefault(Return(false));
+    ON_CALL(*this, IsAutofillAssistantUIVisible()).WillByDefault(Return(false));
   }
 
   MOCK_METHOD(bool,
@@ -184,6 +185,7 @@ class MockPasswordManagerClient : public StubPasswordManagerClient {
               (),
               (override));
   MOCK_METHOD(bool, IsNewTabPage, (), (const, override));
+  MOCK_METHOD(bool, IsAutofillAssistantUIVisible, (), (const, override));
   MOCK_METHOD(SyncState, GetPasswordSyncState, (), (const, override));
   MOCK_METHOD(FieldInfoManager*, GetFieldInfoManager, (), (const, override));
 
@@ -2144,7 +2146,7 @@ TEST_P(PasswordManagerTest, PasswordGenerationPresavePasswordAndLogin) {
   }
 }
 
-TEST_P(PasswordManagerTest, SetGenerationElementAndReasonForForm) {
+TEST_P(PasswordManagerTest, SetGenerationElementAndTypeForForm) {
   PasswordForm form(MakeSimpleForm());
   EXPECT_CALL(client_, IsSavingAndFillingEnabled(form.url))
       .WillRepeatedly(Return(true));
@@ -2152,9 +2154,9 @@ TEST_P(PasswordManagerTest, SetGenerationElementAndReasonForForm) {
   EXPECT_CALL(*store_, GetLogins(PasswordStore::FormDigest(form), _));
   manager()->OnPasswordFormsParsed(&driver_, {form.form_data});
 
-  manager()->SetGenerationElementAndReasonForForm(
+  manager()->SetGenerationElementAndTypeForForm(
       &driver_, form.form_data, form.form_data.fields[1].unique_renderer_id,
-      false);
+      autofill::password_generation::PasswordGenerationType::kAutomatic);
   EXPECT_CALL(*store_, AddLogin(_));
   manager()->OnPresaveGeneratedPassword(&driver_, form.form_data,
                                         form.password_value);
@@ -3404,9 +3406,7 @@ TEST_P(PasswordManagerTest,
   EXPECT_CALL(driver_, FormEligibleForGenerationFound(_))
       .WillOnce(SaveArg<0>(&form_generation_data));
   manager()->ProcessAutofillPredictions(&driver_, {&form_structure});
-#if !defined(OS_IOS)
   EXPECT_EQ(password_field_id, form_generation_data.new_password_renderer_id);
-#endif
 }
 
 // Checks that username is saved on username first flow.
@@ -3585,8 +3585,8 @@ TEST_P(PasswordManagerTest, FormSubmittedOnIFrameMainFrameLoaded) {
 }
 
 TEST_P(PasswordManagerTest, NoPromptAutofillAssistantManuallyCuratedScript) {
-  manager()->SetAutofillAssistantMode(AutofillAssistantMode::kUIShown);
-
+  EXPECT_CALL(client_, IsAutofillAssistantUIVisible)
+      .WillRepeatedly(Return(true));
   EXPECT_CALL(client_, IsSavingAndFillingEnabled(_))
       .WillRepeatedly(Return(true));
   EXPECT_CALL(*store_, GetLogins)
@@ -3623,7 +3623,6 @@ TEST_P(PasswordManagerTest,
     EXPECT_CALL(client_, IsSavingAndFillingEnabled)
         .WillRepeatedly(Return(true));
     EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr).Times(0);
-    manager()->SetAutofillAssistantMode(AutofillAssistantMode::kUIShown);
 
     // Make several forms ready for saving.
     PasswordForm form1(MakeFormWithOnlyNewPasswordField());
@@ -3634,20 +3633,25 @@ TEST_P(PasswordManagerTest,
     manager()->OnInformAboutUserInput(&driver_, form2.form_data);
 
     // Simulate submission in different ways depending on whether
-    // |owned_submitted_form_manager_| should be set and |form_managers_| should
+    // |owned_submitted_form_manager_| should be set and |form_managers_|should
     // be cleared OR the submitted form manager should be in |form_managers_|.
     if (set_owned_form_manager)
       manager()->DidNavigateMainFrame(true /* form_may_be_submitted */);
     else
       OnPasswordFormSubmitted(form2.form_data);
 
-    manager()->SetAutofillAssistantMode(AutofillAssistantMode::kUINotShown);
-
+    // Test that Autofill Assistant has finished a script before Password
+    // Manager detected a successful submission. As a script has finished,
+    // pending credentials have reset.
+    manager()->ResetPendingCredentials();
     manager()->OnPasswordFormsRendered(&driver_, {} /* observed */,
                                        true /* did stop loading */);
+
     // No form manager is ready for saving.
     EXPECT_FALSE(manager()->GetSubmittedManagerForTest());
+
     Mock::VerifyAndClearExpectations(&client_);
+    EXPECT_CALL(client_, IsAutofillAssistantUIVisible).WillOnce(Return(false));
 
     // A form reappears again and a user submits it manually. Now expect a
     // prompt.
@@ -3660,6 +3664,201 @@ TEST_P(PasswordManagerTest,
                                        true /* did stop loading */);
     Mock::VerifyAndClearExpectations(&client_);
   }
+}
+
+TEST_P(PasswordManagerTest, GenerationOnChangedForm) {
+  const bool kIsReparsingEnabled = GetParam();
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitWithFeatureState(
+      features::kReparseServerPredictionsFollowingFormChange,
+      kIsReparsingEnabled);
+
+  EXPECT_CALL(client_, IsSavingAndFillingEnabled(_))
+      .WillRepeatedly(Return(true));
+  EXPECT_CALL(*store_, GetLogins(_, _))
+      .WillRepeatedly(WithArg<1>(InvokeEmptyConsumerWithForms(store_.get())));
+
+  // Create FormdData for a form with 1 password field and process it.
+  FormData form_data;
+  form_data.is_form_tag = false;
+  form_data.url = GURL("http://www.testwebsite.com");
+
+  FormFieldData old_password_field;
+  old_password_field.form_control_type = "password";
+  old_password_field.unique_renderer_id = FieldRendererId(0);
+  old_password_field.name = ASCIIToUTF16("oldpass");
+  form_data.fields.push_back(old_password_field);
+
+  manager()->OnPasswordFormsParsed(&driver_, {form_data});
+
+  // Form changes: new and confirmation password fields are added by the
+  // website's scripts.
+  FormFieldData new_password_field;
+  new_password_field.form_control_type = "password";
+  new_password_field.unique_renderer_id = FieldRendererId(1);
+  new_password_field.name = ASCIIToUTF16("newpass");
+  form_data.fields.push_back(new_password_field);
+
+  FormFieldData confirm_password_field;
+  confirm_password_field.form_control_type = "password";
+  confirm_password_field.unique_renderer_id = FieldRendererId(2);
+  confirm_password_field.name = ASCIIToUTF16("confpass");
+  form_data.fields.push_back(confirm_password_field);
+
+  // Server predictions may arrive before the form is parsed by PasswordManager.
+  FormStructure form_structure(form_data);
+  form_structure.field(1)->set_server_type(autofill::ACCOUNT_CREATION_PASSWORD);
+  form_structure.field(2)->set_server_type(autofill::CONFIRMATION_PASSWORD);
+  manager()->ProcessAutofillPredictions(&driver_, {&form_structure});
+
+  autofill::PasswordFormGenerationData form_generation_data;
+  if (kIsReparsingEnabled) {
+    EXPECT_CALL(driver_, FormEligibleForGenerationFound)
+        .WillOnce(SaveArg<0>(&form_generation_data));
+    // The change is discovered by PasswordManager.
+    manager()->OnPasswordFormsParsed(&driver_, {form_data});
+    EXPECT_EQ(new_password_field.unique_renderer_id,
+              form_generation_data.new_password_renderer_id);
+  } else {
+    EXPECT_CALL(driver_, FormEligibleForGenerationFound).Times(0);
+  }
+}
+
+#if !defined(OS_IOS)
+TEST_P(PasswordManagerTest, SubmissionDetectedOnClearedForm) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kDetectFormSubmissionOnFormClear);
+  EXPECT_CALL(client_, IsSavingAndFillingEnabled).WillRepeatedly(Return(true));
+  PasswordForm saved_match(MakeSavedForm());
+  EXPECT_CALL(*store_, GetLogins)
+      .WillRepeatedly(WithArg<1>(InvokeConsumer(store_.get(), saved_match)));
+
+  // Create FormData for a form with 1 password field and process it.
+  FormData form_data;
+  form_data.unique_renderer_id = FormRendererId(0);
+  form_data.url = GURL("http://www.google.com/a/LoginAuth");
+
+  FormFieldData old_password_field;
+  old_password_field.form_control_type = "password";
+  old_password_field.unique_renderer_id = FieldRendererId(1);
+  old_password_field.name = ASCIIToUTF16("oldpass");
+  old_password_field.value = ASCIIToUTF16("oldpass");
+  form_data.fields.push_back(old_password_field);
+
+  FormFieldData new_password_field;
+  new_password_field.form_control_type = "password";
+  new_password_field.unique_renderer_id = FieldRendererId(2);
+  new_password_field.name = ASCIIToUTF16("newpass");
+  new_password_field.autocomplete_attribute = "new-password";
+  form_data.fields.push_back(new_password_field);
+
+  FormFieldData confirm_password_field;
+  confirm_password_field.form_control_type = "password";
+  confirm_password_field.unique_renderer_id = FieldRendererId(3);
+  confirm_password_field.name = ASCIIToUTF16("confpass");
+  form_data.fields.push_back(confirm_password_field);
+
+  manager()->OnPasswordFormsParsed(&driver_, {form_data});
+
+  form_data.fields[0].value = ASCIIToUTF16("oldpass");
+  form_data.fields[1].value = ASCIIToUTF16("newpass");
+  form_data.fields[2].value = ASCIIToUTF16("newpass");
+
+  manager()->OnInformAboutUserInput(&driver_, form_data);
+
+  std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
+  EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr)
+      .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
+  manager()->OnPasswordFormCleared(&driver_, form_data);
+}
+
+TEST_P(PasswordManagerTest, SubmissionDetectedOnClearedFormlessFields) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kDetectFormSubmissionOnFormClear);
+  EXPECT_CALL(client_, IsSavingAndFillingEnabled).WillRepeatedly(Return(true));
+  PasswordForm saved_match(MakeSavedForm());
+  EXPECT_CALL(*store_, GetLogins)
+      .WillRepeatedly(WithArg<1>(InvokeConsumer(store_.get(), saved_match)));
+
+  for (bool new_password_field_was_cleared : {true, false}) {
+    SCOPED_TRACE(testing::Message("#new password field was cleared = ")
+                 << new_password_field_was_cleared);
+
+    // Create FormData for a form with 1 password field and process it.
+    FormData form_data;
+    form_data.is_form_tag = false;
+    form_data.unique_renderer_id = FormRendererId(0);
+    form_data.url = GURL("http://www.google.com/a/LoginAuth");
+
+    FormFieldData old_password_field;
+    old_password_field.form_control_type = "password";
+    old_password_field.unique_renderer_id = FieldRendererId(1);
+    old_password_field.name = ASCIIToUTF16("oldpass");
+    old_password_field.value = ASCIIToUTF16("oldpass");
+    form_data.fields.push_back(old_password_field);
+
+    FormFieldData new_password_field;
+    new_password_field.form_control_type = "password";
+    new_password_field.unique_renderer_id = FieldRendererId(2);
+    new_password_field.name = ASCIIToUTF16("newpass");
+    new_password_field.autocomplete_attribute = "new-password";
+    form_data.fields.push_back(new_password_field);
+
+    FormFieldData confirm_password_field;
+    confirm_password_field.form_control_type = "password";
+    confirm_password_field.unique_renderer_id = FieldRendererId(3);
+    confirm_password_field.name = ASCIIToUTF16("confpass");
+    form_data.fields.push_back(confirm_password_field);
+
+    manager()->OnPasswordFormsParsed(&driver_, {form_data});
+
+    form_data.fields[0].value = ASCIIToUTF16("oldpass");
+    form_data.fields[1].value = ASCIIToUTF16("newpass");
+    form_data.fields[2].value = ASCIIToUTF16("newpass");
+
+    manager()->OnInformAboutUserInput(&driver_, form_data);
+
+    form_data.fields[0].value = base::string16();
+    form_data.fields[2].value = base::string16();
+    if (new_password_field_was_cleared)
+      form_data.fields[1].value = base::string16();
+
+    std::unique_ptr<PasswordFormManagerForUI> form_manager_to_save;
+    if (new_password_field_was_cleared) {
+      EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr)
+          .WillOnce(WithArg<0>(SaveToScopedPtr(&form_manager_to_save)));
+    } else {
+      EXPECT_CALL(client_, PromptUserToSaveOrUpdatePasswordPtr).Times(0);
+    }
+
+    manager()->OnPasswordFormCleared(&driver_, form_data);
+  }
+}
+#endif  // !defined(OS_IOS)
+
+TEST_P(PasswordManagerTest, IsFormManagerPendingPasswordUpdate) {
+  PasswordForm form(MakeSimpleForm());
+  std::vector<FormData> observed = {form.form_data};
+  EXPECT_CALL(client_, IsSavingAndFillingEnabled).WillRepeatedly(Return(true));
+  EXPECT_CALL(*store_, GetLogins)
+      .WillOnce(WithArg<1>(InvokeConsumer(store_.get(), form)));
+  manager()->OnPasswordFormsParsed(&driver_, observed);
+  manager()->OnPasswordFormsRendered(&driver_, observed, true);
+
+  // Password was not updated yet.
+  EXPECT_FALSE(manager()->IsFormManagerPendingPasswordUpdate());
+
+  // The user updates the password.
+  FormData updated_data(form.form_data);
+  updated_data.fields[1].value = ASCIIToUTF16("new_password");
+  manager()->OnInformAboutUserInput(&driver_, updated_data);
+  EXPECT_TRUE(manager()->IsFormManagerPendingPasswordUpdate());
+
+  // The user submits the form.
+  OnPasswordFormSubmitted(updated_data);
+  EXPECT_TRUE(manager()->GetSubmittedManagerForTest());
+  // OnFormManagerPendingPasswordUpdate() still returns true after submission.
+  EXPECT_TRUE(manager()->IsFormManagerPendingPasswordUpdate());
 }
 
 INSTANTIATE_TEST_SUITE_P(, PasswordManagerTest, testing::Bool());

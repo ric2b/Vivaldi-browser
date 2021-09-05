@@ -5,9 +5,10 @@
 // clang-format off
 // #import {assertEquals} from '../../chai_assert.js';
 // #import {isChildVisible, waitAfterNextRender} from '../../test_util.m.js';
-// #import {setReceiveManagerForTesting, setContactManagerForTesting} from 'chrome://os-settings/chromeos/os_settings.js';
+// #import {setNearbyShareSettingsForTesting, setReceiveManagerForTesting, setContactManagerForTesting} from 'chrome://os-settings/chromeos/os_settings.js';
 // #import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 // #import {FakeContactManager} from '../../nearby_share/shared/fake_nearby_contact_manager.m.js';
+// #import {FakeNearbyShareSettings} from '../../nearby_share/shared/fake_nearby_share_settings.m.js';
 // #import {FakeReceiveManager} from './fake_receive_manager.m.js'
 // clang-format on
 
@@ -18,6 +19,8 @@ suite('NearbyShare', function() {
   let fakeReceiveManager;
   /** @type {!nearby_share.FakeContactManager} */
   let fakeContactManager;
+  /** @type {!nearby_share.FakeNearbyShareSettings} */
+  let fakeSettings;
 
   /**
    * This allows both sub-suites to share the same setup logic but with a
@@ -27,9 +30,12 @@ suite('NearbyShare', function() {
   function sharedSetup(enabled) {
     fakeReceiveManager = new nearby_share.FakeReceiveManager();
     fakeContactManager = new nearby_share.FakeContactManager();
+    fakeSettings = new nearby_share.FakeNearbyShareSettings();
+    fakeSettings.setEnabled(true);
 
     nearby_share.setReceiveManagerForTesting(fakeReceiveManager);
     nearby_share.setContactManagerForTesting(fakeContactManager);
+    nearby_share.setNearbyShareSettingsForTesting(fakeSettings);
 
     PolymerTest.clearBody();
 
@@ -56,6 +62,13 @@ suite('NearbyShare', function() {
    */
   function getButton(page, button) {
     return dialog.$$(page).$$('nearby-page-template').$$(button);
+  }
+
+  function selectAllContacts() {
+    dialog.$$('nearby-visibility-page')
+        .$$('nearby-contact-visibility')
+        .$$('#allContacts')
+        .click();
   }
 
   suite('EnabledTests', function() {
@@ -110,15 +123,29 @@ suite('NearbyShare', function() {
     });
 
     test(
-        'show high visibility page, exitHighVisibility, closes dialog',
+        'show high visibility page, unregister surface, closes dialog',
         async function() {
           // When attached we enter high visibility mode by default
           assertTrue(isVisible('nearby-share-high-visibility-page'));
           assertFalse(isVisible('nearby-share-confirm-page'));
           // If a share target comes in, we show it.
-          await fakeReceiveManager.exitHighVisibility();
+          await fakeReceiveManager.unregisterForegroundReceiveSurface();
           Polymer.dom.flush();
           assertFalse(isVisible('cr-dialog'));
+        });
+
+    test(
+        'unregister surface, OnTransferUpdate, does not close dialog',
+        async function() {
+          // When attached we enter high visibility mode by default
+          assertTrue(isVisible('nearby-share-high-visibility-page'));
+          assertFalse(isVisible('nearby-share-confirm-page'));
+          // If a share target comes in, we show it.
+          await fakeReceiveManager.unregisterForegroundReceiveSurface();
+          const target =
+              fakeReceiveManager.simulateShareTargetArrival('testName', '1234');
+          Polymer.dom.flush();
+          assertFalse(dialog.closing_);
         });
   });
 
@@ -143,6 +170,8 @@ suite('NearbyShare', function() {
 
       assertTrue(isVisible('nearby-visibility-page'));
       // Advance to the next page.
+      fakeContactManager.completeDownload();
+      selectAllContacts();
       getButton('nearby-visibility-page', '#actionButton').click();
 
       await test_util.waitAfterNextRender(dialog);
@@ -163,6 +192,8 @@ suite('NearbyShare', function() {
 
       assertTrue(isVisible('nearby-visibility-page'));
       // This should close the dialog.
+      fakeContactManager.completeDownload();
+      selectAllContacts();
       getButton('nearby-visibility-page', '#actionButton').click();
 
       assertTrue(dialog.closing_);

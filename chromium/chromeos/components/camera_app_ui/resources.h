@@ -25,7 +25,8 @@ const struct {
     {"gallery_button", IDS_GALLERY_BUTTON},
     {"error_msg_save_file_failed", IDS_ERROR_MSG_SAVE_FILE_FAILED},
     {"export_button", IDS_EXPORT_BUTTON},
-    {"toggle_timer_button", IDS_TOGGLE_TIMER_BUTTON},
+    {"toggle_timer_3s_button", IDS_TOGGLE_TIMER_3S_BUTTON},
+    {"toggle_timer_10s_button", IDS_TOGGLE_TIMER_10S_BUTTON},
     {"migrate_pictures_msg", IDS_MIGRATE_PICTURES_MSG},
     {"aria_grid_3x3", IDS_ARIA_GRID_3X3},
     {"record_video_start_button", IDS_RECORD_VIDEO_START_BUTTON},
@@ -100,14 +101,19 @@ const struct {
     {"record_video_pause_button", IDS_RECORD_VIDEO_PAUSE_BUTTON},
     {"record_video_resume_button", IDS_RECORD_VIDEO_RESUME_BUTTON},
     {"feedback_description_placeholder", IDS_FEEDBACK_DESCRIPTION_PLACEHOLDER},
+    {"banner_title", IDS_BANNER_TITLE},
+    {"banner_msg", IDS_BANNER_MSG},
+    {"banner_close_button", IDS_BANNER_CLOSE_BUTTON},
+    {"error_msg_camera_being_used", IDS_ERROR_MSG_CAMERA_BEING_USED},
 };
 
 const struct {
   const char* path;
   int id;
 } kGritResourceMap[] = {
-    {"js/browser_proxy/browser_proxy.js",
-     IDR_CAMERA_WEBUI_BROWSER_PROXY_JS},
+    {"js/browser_proxy/browser_proxy.js", IDR_CAMERA_WEBUI_BROWSER_PROXY_JS},
+    {"js/window_controller/window_controller.js",
+     IDR_CAMERA_MOJO_WINDOW_CONTROLLER_JS},
     {"js/mojo/camera_intent.mojom-lite.js",
      IDR_CAMERA_CAMERA_INTENT_MOJOM_LITE_JS},
     {"js/mojo/image_capture.mojom-lite.js",
@@ -118,16 +124,14 @@ const struct {
      IDR_CAMERA_CAMERA_METADATA_MOJOM_LITE_JS},
     {"js/mojo/camera_metadata_tags.mojom-lite.js",
      IDR_CAMERA_CAMERA_METADATA_TAGS_MOJOM_LITE_JS},
-    {"js/mojo/camera_app.mojom-lite.js",
-     IDR_CAMERA_CAMERA_APP_MOJOM_LITE_JS},
+    {"js/mojo/camera_app.mojom-lite.js", IDR_CAMERA_CAMERA_APP_MOJOM_LITE_JS},
     {"js/mojo/mojo_bindings_lite.js", IDR_MOJO_MOJO_BINDINGS_LITE_JS},
     {"js/mojo/camera_app_helper.mojom-lite.js",
      IDR_CAMERA_CAMERA_APP_HELPER_MOJOM_LITE_JS},
     {"js/mojo/time.mojom-lite.js", IDR_CAMERA_TIME_MOJOM_LITE_JS},
     {"js/mojo/idle_manager.mojom-lite.js",
      IDR_CAMERA_IDLE_MANAGER_MOJOM_LITE_JS},
-    {"js/mojo/camera_app.mojom-lite.js",
-     IDR_CAMERA_CAMERA_APP_MOJOM_LITE_JS},
+    {"js/mojo/camera_app.mojom-lite.js", IDR_CAMERA_CAMERA_APP_MOJOM_LITE_JS},
     {"js/mojo/geometry.mojom-lite.js", IDR_CAMERA_GEOMETRY_MOJOM_LITE_JS},
     {"js/mojo/range.mojom-lite.js", IDR_CAMERA_RANGE_MOJOM_LITE_JS},
 };

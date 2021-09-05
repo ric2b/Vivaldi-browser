@@ -381,11 +381,13 @@ need to be translated for each locale.-->
       <message name="IDS_CLIPBOARD_MENU_DELETE_ALL" desc="Used to indicate to a user that all clipboard items will be deleted if selected">
         Delete All
       </message>
-      <message name="IDS_MENU_ITEM_NEW_BADGE" desc="Appears as a badge on menu items denoting new features">
+
+      <!-- New Badge (user education) -->
+      <message name="IDS_NEW_BADGE" desc="Appears as a badge on UI elements like menus, denoting new features">
         New
       </message>
-      <message name="IDS_MENU_ITEM_NEW_BADGE_SCREEN_READER_MESSAGE"
-               desc="Message appended to screen reader description of menu items which have the 'New' badge">
+      <message name="IDS_NEW_BADGE_SCREEN_READER_MESSAGE"
+               desc="Message appended to screen reader description of UI elements which have the 'New' badge">
         This is a new feature
       </message>
 
@@ -940,6 +942,9 @@ need to be translated for each locale.-->
       <message name="IDS_APP_LIST_SUGGESTED_APPS_ACCESSIBILITY_ANNOUNCEMENT" desc="The accessibility announcement that notifies users that the UI is showing a small version of the app list">
         Launcher, partial view
       </message>
+      <message name="IDS_APP_LIST_LAUNCHER_ACCESSIBILITY_ANNOUNCEMENT" desc="The accessibility announcement that notifies users that the UI is showing the search results">
+        Launcher
+      </message>
       <message name="IDS_APP_LIST_CLEAR_SEARCHBOX" desc="Tooltip for the button that clears all text from the search box in the app list.">
         Clear searchbox text
       </message>
@@ -1052,6 +1057,17 @@ need to be translated for each locale.-->
       </message>
       <message name="IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER" desc="Placeholder text for the search box shown in the app list UI.">
         Search your device, apps, settings, web...
+      </message>
+
+      <!-- Clipboard history menu -->
+      <message name="IDS_CLIPBOARD_HISTORY_MENU_BITMAP_IMAGE" desc="Accessibility text for the bitmap image shown on the clipboard history menu">
+        Image.
+      </message>
+      <message name="IDS_CLIPBOARD_HISTORY_MENU_HTML_IMAGE" desc="Accessibility text for the HTML-rendered image shown on the clipboard history menu">
+        HTML content.
+      </message>
+      <message name="IDS_CLIPBOARD_HISTORY_MENU_TITLE" desc="The title of the clipboard history menu which shows the history of the clipboard data">
+        Clipboard history
       </message>
 
       <!-- Strings describing the touch calibration UX -->

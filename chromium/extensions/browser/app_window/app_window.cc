@@ -19,6 +19,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/file_select_listener.h"
@@ -476,13 +477,6 @@ bool AppWindow::PreHandleGestureEvent(WebContents* source,
   return AppWebContentsHelper::ShouldSuppressGestureEvent(event);
 }
 
-std::unique_ptr<content::BluetoothChooser> AppWindow::RunBluetoothChooser(
-    content::RenderFrameHost* frame,
-    const content::BluetoothChooser::EventHandler& event_handler) {
-  return ExtensionsBrowserClient::Get()->CreateBluetoothChooser(frame,
-                                                                event_handler);
-}
-
 bool AppWindow::TakeFocus(WebContents* source, bool reverse) {
   return app_delegate_->TakeFocus(source, reverse);
 }
@@ -500,11 +494,11 @@ void AppWindow::ExitPictureInPicture() {
 }
 
 bool AppWindow::ShouldShowStaleContentOnEviction(content::WebContents* source) {
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   return true;
 #else
   return false;
-#endif  // defined(OS_CHROMEOS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
 bool AppWindow::OnMessageReceived(const IPC::Message& message,

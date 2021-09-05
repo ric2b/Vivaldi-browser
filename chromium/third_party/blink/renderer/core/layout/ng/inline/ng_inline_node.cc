@@ -280,7 +280,7 @@ void CollectInlinesInternal(ItemsBuilder* builder,
   const LayoutObject* symbol =
       LayoutNGListItem::FindSymbolMarkerLayoutText(block);
   while (node) {
-    if (LayoutText* layout_text = ToLayoutTextOrNull(node)) {
+    if (auto* layout_text = DynamicTo<LayoutText>(node)) {
       builder->AppendText(layout_text, previous_data);
 
       if (symbol == layout_text)
@@ -321,7 +321,7 @@ void CollectInlinesInternal(ItemsBuilder* builder,
       // should not appear. LayoutObject tree should have created an anonymous
       // box to prevent having inline/block-mixed children.
       DCHECK(node->IsInline());
-      LayoutInline* layout_inline = ToLayoutInline(node);
+      auto* layout_inline = To<LayoutInline>(node);
       builder->UpdateShouldCreateBoxFragment(layout_inline);
 
       builder->EnterInline(layout_inline);
@@ -954,6 +954,9 @@ void NGInlineNode::CollectInlines(NGInlineNodeData* data,
   NGInlineItemsBuilder builder(block, &data->items);
   CollectInlinesInternal(&builder, previous_data);
   builder.DidFinishCollectInlines(data);
+
+  if (UNLIKELY(builder.HasUnicodeBidiPlainText()))
+    UseCounter::Count(GetDocument(), WebFeature::kUnicodeBidiPlainText);
 }
 
 void NGInlineNode::SegmentText(NGInlineNodeData* data) const {
@@ -1370,7 +1373,7 @@ void NGInlineNode::AssociateItemsWithInlines(NGInlineNodeData* data) const {
   Vector<NGInlineItem>& items = data->items;
   for (NGInlineItem* item = items.begin(); item != items.end();) {
     LayoutObject* object = item->GetLayoutObject();
-    if (LayoutNGText* layout_text = ToLayoutNGTextOrNull(object)) {
+    if (auto* layout_text = DynamicTo<LayoutNGText>(object)) {
 #if DCHECK_IS_ON()
       // Items split from a LayoutObject should be consecutive.
       DCHECK(associated_objects.insert(object).is_new_entry);
@@ -1528,14 +1531,13 @@ static LayoutUnit ComputeContentSize(
     base::Optional<LayoutUnit>* max_size_out,
     bool* depends_on_percentage_block_size_out) {
   const ComputedStyle& style = node.Style();
-  WritingMode writing_mode = style.GetWritingMode();
   LayoutUnit available_inline_size =
       mode == NGLineBreakerMode::kMaxContent ? LayoutUnit::Max() : LayoutUnit();
 
-  NGConstraintSpaceBuilder builder(/* parent_writing_mode */ writing_mode,
-                                   /* out_writing_mode */ writing_mode,
-                                   /* is_new_fc */ false);
-  builder.SetTextDirection(style.Direction());
+  NGConstraintSpaceBuilder builder(
+      /* parent_writing_mode */ style.GetWritingMode(),
+      style.GetWritingDirection(),
+      /* is_new_fc */ false);
   builder.SetAvailableSize({available_inline_size, kIndefiniteSize});
   builder.SetPercentageResolutionSize({LayoutUnit(), LayoutUnit()});
   builder.SetReplacedPercentageResolutionSize({LayoutUnit(), LayoutUnit()});
@@ -1727,6 +1729,7 @@ static LayoutUnit ComputeContentSize(
     }
   };
   FloatsMaxSize floats_max_size(input);
+  bool can_compute_max_size_from_min_size = true;
   MaxSizeFromMinSize max_size_from_min_size(items_data, *max_size_cache,
                                             &floats_max_size);
 
@@ -1737,16 +1740,6 @@ static LayoutUnit ComputeContentSize(
       break;
 
     LayoutUnit inline_size = line_info.Width();
-#if DCHECK_IS_ON()
-    // Text measurement is done using floats which may introduce small rounding
-    // errors for near-saturated values.
-    // See http://crbug.com/1112560
-    if (!LayoutUnit(line_info.ComputeWidthInFloat()).MightBeSaturated()) {
-      DCHECK_EQ(inline_size.Round(),
-                line_info.ComputeWidth().ClampNegativeToZero().Round());
-    }
-#endif
-
     for (const NGInlineItemResult& item_result : line_info.Results()) {
       DCHECK(item_result.item);
       const NGInlineItem& item = *item_result.item;
@@ -1755,7 +1748,7 @@ static LayoutUnit ComputeContentSize(
       LayoutObject* floating_object = item.GetLayoutObject();
       DCHECK(floating_object && floating_object->IsFloating());
 
-      NGBlockNode float_node(ToLayoutBox(floating_object));
+      NGBlockNode float_node(To<LayoutBox>(floating_object));
       const ComputedStyle& float_style = float_node.Style();
 
       // Floats don't intrude into floats.
@@ -1782,13 +1775,21 @@ static LayoutUnit ComputeContentSize(
 
     if (mode == NGLineBreakerMode::kMinContent) {
       result = std::max(result, inline_size);
-      max_size_from_min_size.ComputeFromMinSize(line_info);
+      can_compute_max_size_from_min_size =
+          can_compute_max_size_from_min_size &&
+          // `box-decoration-break: clone` clones box decorations to each
+          // fragment (line) that we cannot compute max-content from
+          // min-content.
+          !line_breaker.HasClonedBoxDecorations();
+      if (can_compute_max_size_from_min_size)
+        max_size_from_min_size.ComputeFromMinSize(line_info);
     } else {
       result = floats_max_size.ComputeMaxSizeForLine(inline_size, result);
     }
   } while (!line_breaker.IsFinished());
 
-  if (mode == NGLineBreakerMode::kMinContent) {
+  if (mode == NGLineBreakerMode::kMinContent &&
+      can_compute_max_size_from_min_size) {
     *max_size_out = max_size_from_min_size.Finish(items_data.items.end());
     // Check the max size matches to the value computed from 2 pass.
 #if DCHECK_IS_ON()
@@ -1823,8 +1824,13 @@ MinMaxSizesResult NGInlineNode::ComputeMinMaxSizes(
   sizes.min_size = ComputeContentSize(
       *this, container_writing_mode, input, NGLineBreakerMode::kMinContent,
       &max_size_cache, &max_size, &depends_on_percentage_block_size);
-  DCHECK(max_size.has_value());
-  sizes.max_size = *max_size;
+  if (max_size) {
+    sizes.max_size = *max_size;
+  } else {
+    sizes.max_size = ComputeContentSize(*this, container_writing_mode, input,
+                                        NGLineBreakerMode::kMaxContent,
+                                        &max_size_cache, nullptr, nullptr);
+  }
 
   // Negative text-indent can make min > max. Ensure min is the minimum size.
   sizes.min_size = std::min(sizes.min_size, sizes.max_size);

@@ -4,7 +4,7 @@
 
 #include "content/browser/worker_host/worker_script_loader_factory.h"
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/run_loop.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/service_worker_container_host.h"
@@ -17,6 +17,7 @@
 #include "net/base/isolation_info.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "services/network/public/cpp/wrapper_shared_url_loader_factory.h"
+#include "services/network/public/mojom/fetch_api.mojom.h"
 #include "services/network/test/test_url_loader_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
@@ -70,11 +71,12 @@ class WorkerScriptLoaderFactoryTest : public testing::Test {
     resource_request.trusted_params = network::ResourceRequest::TrustedParams();
     resource_request.trusted_params->isolation_info =
         net::IsolationInfo::Create(
-            net::IsolationInfo::RedirectMode::kUpdateNothing,
-            url::Origin::Create(url), url::Origin::Create(url),
-            net::SiteForCookies());
+            net::IsolationInfo::RequestType::kOther, url::Origin::Create(url),
+            url::Origin::Create(url), net::SiteForCookies());
     resource_request.resource_type =
         static_cast<int>(blink::mojom::ResourceType::kSharedWorker);
+    resource_request.destination =
+        network::mojom::RequestDestination::kSharedWorker;
     factory->CreateLoaderAndStart(
         loader.InitWithNewPipeAndPassReceiver(), 0 /* routing_id */,
         0 /* request_id */, network::mojom::kURLLoadOptionNone,
@@ -97,7 +99,7 @@ TEST_F(WorkerScriptLoaderFactoryTest, ServiceWorkerContainerHost) {
   auto factory = std::make_unique<WorkerScriptLoaderFactory>(
       kProcessId, DedicatedOrSharedWorkerToken(), service_worker_handle_.get(),
       /*appcache_host=*/nullptr, browser_context_getter_,
-      network_loader_factory_);
+      network_loader_factory_, ukm::kInvalidSourceId);
 
   // Load the script.
   GURL url("https://www.example.com/worker.js");
@@ -122,7 +124,7 @@ TEST_F(WorkerScriptLoaderFactoryTest, NullServiceWorkerHandle) {
   auto factory = std::make_unique<WorkerScriptLoaderFactory>(
       kProcessId, DedicatedOrSharedWorkerToken(), service_worker_handle_.get(),
       nullptr /* appcache_host */, browser_context_getter_,
-      network_loader_factory_);
+      network_loader_factory_, ukm::kInvalidSourceId);
 
   // Destroy the handle.
   service_worker_handle_.reset();
@@ -146,7 +148,7 @@ TEST_F(WorkerScriptLoaderFactoryTest, NullBrowserContext) {
   auto factory = std::make_unique<WorkerScriptLoaderFactory>(
       kProcessId, DedicatedOrSharedWorkerToken(), service_worker_handle_.get(),
       nullptr /* appcache_host */, browser_context_getter_,
-      network_loader_factory_);
+      network_loader_factory_, ukm::kInvalidSourceId);
 
   // Set a null browser context.
   helper_->context_wrapper()->Shutdown();

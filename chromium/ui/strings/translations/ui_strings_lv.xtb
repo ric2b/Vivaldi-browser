@@ -23,6 +23,7 @@
 <translation id="1450753235335490080">Nevar kopīgot: <ph name="CONTENT_TYPE" /></translation>
 <translation id="1487931858675166540"><ph name="FIRST_ITEM_TITLE" /> ir samainīts ar <ph name="SECOND_ITEM_TITLE" /></translation>
 <translation id="1498028757988366001">Jūs jau iepriekš meklējāt šo vienumu. Dzēšot vienumu “<ph name="QUERY" />” no vēstures, tas tiks neatgriezeniski noņemts no jūsu konta visās ierīcēs.</translation>
+<translation id="1510238584712386396">Lietojumprogrammu palaidējs</translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{1 minūte un }zero{# minūtes un }one{# minūte un }other{# minūtes un }}</translation>
 <translation id="1643823602425662293">Paziņojums</translation>
 <translation id="169515659049020177">Shift</translation>
@@ -99,6 +100,7 @@
 <translation id="3600969208114796418">Fails “<ph name="SAVEAS_EXTENSION_TYPE" />”</translation>
 <translation id="3608915363409716668">Vairāk nekā <ph name="MAXIMUM_VALUE" /></translation>
 <translation id="3618849550573277856">Meklēt “<ph name="LOOKUP_STRING" />”</translation>
+<translation id="3622035490309591977">Starpliktuves vēsture</translation>
 <translation id="364720409959344976">Augšupielādējamās mapes atlase</translation>
 <translation id="3660179305079774227">Bulta augšup</translation>
 <translation id="3670030362669914947">Numurs</translation>
@@ -151,6 +153,7 @@
 <translation id="5763338081255973061">{DAYS,plural, =0{Aktīva šodien}=1{Aktīva pirms 1 dienas}zero{Aktīva pirms # dienām}one{Aktīva pirms # dienas}other{Aktīva pirms # dienām}}</translation>
 <translation id="5768079895599174203">{DAYS,plural, =1{1 diena un }zero{# dienas un }one{# diena un }other{# dienas un }}</translation>
 <translation id="5789643057113097023">:</translation>
+<translation id="5843690142429128814">Attēls.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{pēc 1 g.}zero{pēc # g.}one{pēc # g.}other{pēc # g.}}</translation>
 <translation id="588258955323874662">Pilnekrāna</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{Atlikusi 1 sekunde}zero{Atlikušas # sekundes}one{Atlikusi # sekunde}other{Atlikušas # sekundes}}</translation>
@@ -191,6 +194,7 @@
 <translation id="6845533974506654842">nospiest</translation>
 <translation id="6863590663815976734">{HOURS,plural, =1{Atlikusi 1 stunda}zero{Atlikušas # stundas}one{Atlikusi # stunda}other{Atlikušas # stundas}}</translation>
 <translation id="688711909580084195">Tīmekļa lapa bez nosaukuma</translation>
+<translation id="6902419395050653510">HTML saturs.</translation>
 <translation id="6907759265145635167"><ph name="QUANTITY" /> PB/s</translation>
 <translation id="6917971086528278418">{YEARS,plural, =1{Atlicis 1 gads}zero{Atlikuši # gadi}one{Atlicis # gads}other{Atlikuši # gadi}}</translation>
 <translation id="6945221475159498467">Atlasīt</translation>

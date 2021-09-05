@@ -6,8 +6,9 @@
 
 #include <memory>
 
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
+#include "base/json/json_writer.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/time/default_clock.h"
@@ -16,6 +17,7 @@
 #include "chrome/browser/chromeos/login/screens/error_screen.h"
 #include "chrome/browser/chromeos/login/test/device_state_mixin.h"
 #include "chrome/browser/chromeos/login/test/js_checker.h"
+#include "chrome/browser/chromeos/login/test/login_manager_mixin.h"
 #include "chrome/browser/chromeos/login/test/network_portal_detector_mixin.h"
 #include "chrome/browser/chromeos/login/test/oobe_base_test.h"
 #include "chrome/browser/chromeos/login/test/oobe_screen_waiter.h"
@@ -24,6 +26,7 @@
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/policy/device_policy_builder.h"
 #include "chrome/browser/chromeos/policy/device_policy_cros_browser_test.h"
+#include "chrome/browser/chromeos/policy/minimum_version_policy_test_helpers.h"
 #include "chrome/browser/ui/webui/chromeos/login/error_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/gaia_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/oobe_ui.h"
@@ -34,6 +37,7 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/fake_update_engine_client.h"
 #include "chromeos/network/network_state_test_helper.h"
+#include "components/user_manager/user_manager.h"
 #include "content/public/test/browser_test.h"
 #include "dbus/object_path.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
@@ -44,38 +48,47 @@ namespace chromeos {
 
 namespace {
 
-const test::UIPath kUpdateRequiredScreen = {"update-required-card"};
-const test::UIPath kUpdateRequiredStep = {"update-required-card",
+const test::UIPath kUpdateRequiredScreen = {"update-required"};
+const test::UIPath kUpdateRequiredStep = {"update-required",
                                           "update-required-dialog"};
-const test::UIPath kUpdateNowButton = {"update-required-card", "update-button"};
-const test::UIPath kUpdateProcessStep = {"update-required-card",
+const test::UIPath kUpdateNowButton = {"update-required", "update-button"};
+const test::UIPath kUpdateProcessStep = {"update-required",
                                          "checking-downloading-update"};
-const test::UIPath kUpdateRequiredEolDialog = {"update-required-card",
-                                               "eolDialog"};
-const test::UIPath kEolAdminMessageContainer = {"update-required-card",
+const test::UIPath kUpdateRequiredEolDialog = {"update-required", "eolDialog"};
+const test::UIPath kEolAdminMessageContainer = {"update-required",
                                                 "adminMessageContainer"};
-const test::UIPath kEolAdminMessage = {"update-required-card", "adminMessage"};
-const test::UIPath kMeteredNetworkStep = {"update-required-card",
+const test::UIPath kEolAdminMessage = {"update-required", "adminMessage"};
+const test::UIPath kEolDeleteUsersDataMessage = {"update-required",
+                                                 "deleteDataMessageContainer"};
+const test::UIPath kEolNoUsersDataMsg = {"update-required",
+                                         "noUsersDataMessage"};
+const test::UIPath kEolDeleteUsersDataLink = {"update-required",
+                                              "deleteDataLink"};
+const test::UIPath kEolDeleteUsersDataConfirmDialog = {
+    "update-required", "confirmationDialog", "helpDialog"};
+const test::UIPath kEolDeleteUsersDataConfirmButton = {"update-required",
+                                                       "confirmDelete"};
+const test::UIPath kEolDeleteUsersDataCancelButton = {"update-required",
+                                                      "cancelDelete"};
+const test::UIPath kMeteredNetworkStep = {"update-required",
                                           "update-need-permission-dialog"};
 const test::UIPath kMeteredNetworkAcceptButton = {
-    "update-required-card", "cellular-permission-accept-button"};
-const test::UIPath kNoNetworkStep = {"update-required-card",
+    "update-required", "cellular-permission-accept-button"};
+const test::UIPath kNoNetworkStep = {"update-required",
                                      "update-required-no-network-dialog"};
 
 // Elements in checking-downloading-update
-const test::UIPath kUpdateProcessCheckingStep = {"update-required-card",
+const test::UIPath kUpdateProcessCheckingStep = {"update-required",
                                                  "checking-downloading-update",
                                                  "checking-for-updates-dialog"};
 const test::UIPath kUpdateProcessUpdatingStep = {
-    "update-required-card", "checking-downloading-update", "updating-dialog"};
-const test::UIPath kUpdateProcessCompleteStep = {"update-required-card",
-                                                 "checking-downloading-update",
-                                                 "update-complete-dialog"};
-const test::UIPath kCheckingForUpdatesMessage = {"update-required-card",
-                                                 "checking-downloading-update",
-                                                 "checkingForUpdatesMsg"};
+    "update-required", "checking-downloading-update", "updating-dialog"};
+const test::UIPath kUpdateProcessCompleteStep = {
+    "update-required", "checking-downloading-update", "update-complete-dialog"};
+const test::UIPath kCheckingForUpdatesMessage = {
+    "update-required", "checking-downloading-update", "checkingForUpdatesMsg"};
 const test::UIPath kUpdatingProgress = {
-    "update-required-card", "checking-downloading-update", "updating-progress"};
+    "update-required", "checking-downloading-update", "updating-progress"};
 
 constexpr char kWifiServicePath[] = "/service/wifi2";
 constexpr char kCellularServicePath[] = "/service/cellular1";
@@ -101,11 +114,25 @@ void SetConnected(const std::string& service_path) {
   run_loop.Run();
 }
 
+void WaitForConfirmationDialogToOpen() {
+  test::OobeJS()
+      .CreateAttributePresenceWaiter("open", true /*present*/,
+                                     kEolDeleteUsersDataConfirmDialog)
+      ->Wait();
+}
+
+void WaitForConfirmationDialogToClose() {
+  test::OobeJS()
+      .CreateAttributePresenceWaiter("open", false /*present*/,
+                                     kEolDeleteUsersDataConfirmDialog)
+      ->Wait();
+}
+
 }  // namespace
 
 class UpdateRequiredScreenTest : public OobeBaseTest {
  public:
-  UpdateRequiredScreenTest() = default;
+  UpdateRequiredScreenTest() { login_manager_mixin_.AppendRegularUsers(2); }
   ~UpdateRequiredScreenTest() override = default;
   UpdateRequiredScreenTest(const UpdateRequiredScreenTest&) = delete;
   UpdateRequiredScreenTest& operator=(const UpdateRequiredScreenTest&) = delete;
@@ -127,7 +154,6 @@ class UpdateRequiredScreenTest : public OobeBaseTest {
     network_state_test_helper_->manager_test()->SetupDefaultEnvironment();
     // Fake networks have been set up. Connect to WiFi network.
     SetConnected(kWifiServicePath);
-    chromeos::OobeScreenWaiter(GetFirstSigninScreen()).Wait();
   }
   void TearDownOnMainThread() override {
     network_state_test_helper_.reset();
@@ -151,11 +177,9 @@ class UpdateRequiredScreenTest : public OobeBaseTest {
   void ShowUpdateRequiredScreen() {
     LoginDisplayHost::default_host()->StartWizard(
         UpdateRequiredView::kScreenId);
-
     OobeScreenWaiter update_screen_waiter(UpdateRequiredView::kScreenId);
     update_screen_waiter.set_assert_next_screen();
     update_screen_waiter.Wait();
-
     test::OobeJS().ExpectVisiblePath(kUpdateRequiredScreen);
   }
 
@@ -172,7 +196,7 @@ class UpdateRequiredScreenTest : public OobeBaseTest {
   UpdateRequiredScreen* update_required_screen_;
   // Error screen - owned by OobeUI.
   ErrorScreen* error_screen_ = nullptr;
-  // Version updater - owned by |update_required_screen_|.
+  // Version updater - owned by `update_required_screen_`.
   VersionUpdater* version_updater_ = nullptr;
   // For testing captive portal
   NetworkPortalDetectorMixin network_portal_detector_{&mixin_host_};
@@ -183,13 +207,14 @@ class UpdateRequiredScreenTest : public OobeBaseTest {
   chromeos::DeviceStateMixin device_state_mixin_{
       &mixin_host_,
       chromeos::DeviceStateMixin::State::OOBE_COMPLETED_CLOUD_ENROLLED};
+  LoginManagerMixin login_manager_mixin_{&mixin_host_};
 };
 
 IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestCaptivePortal) {
+  ShowUpdateRequiredScreen();
+
   network_portal_detector_.SimulateDefaultNetworkState(
       NetworkPortalDetector::CAPTIVE_PORTAL_STATUS_PORTAL);
-
-  ShowUpdateRequiredScreen();
 
   static_cast<UpdateRequiredScreen*>(
       WizardController::default_controller()->current_screen())
@@ -234,6 +259,52 @@ IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestEolReached) {
 
   test::OobeJS().ExpectVisiblePath(kUpdateRequiredEolDialog);
   test::OobeJS().ExpectHiddenPath(kUpdateRequiredStep);
+  test::OobeJS().ExpectVisiblePath(kEolDeleteUsersDataMessage);
+  test::OobeJS().ExpectHiddenPath(kEolNoUsersDataMsg);
+}
+
+// Test to verify that clicking on the confirm button on the popup in case of
+// update required and end-of-life reached, deletes all users on the device.
+IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestEolDeleteUsersConfirm) {
+  EXPECT_EQ(user_manager::UserManager::Get()->GetUsers().size(), 2u);
+  update_engine_client()->set_eol_date(
+      base::DefaultClock::GetInstance()->Now() - base::TimeDelta::FromDays(1));
+  ShowUpdateRequiredScreen();
+
+  test::OobeJS().ExpectVisiblePath(kUpdateRequiredEolDialog);
+  test::OobeJS().ExpectVisiblePath(kEolDeleteUsersDataMessage);
+
+  test::OobeJS().TapOnPath(kEolDeleteUsersDataLink);
+  WaitForConfirmationDialogToOpen();
+
+  test::OobeJS().TapOnPath(kEolDeleteUsersDataConfirmButton);
+  WaitForConfirmationDialogToClose();
+
+  test::OobeJS().CreateVisibilityWaiter(true, kEolNoUsersDataMsg)->Wait();
+  test::OobeJS().ExpectHiddenPath(kEolDeleteUsersDataMessage);
+  EXPECT_EQ(user_manager::UserManager::Get()->GetUsers().size(), 0u);
+}
+
+// Test to verify that clicking on the cancel button on the popup in case of
+// update required and end-of-life reached, does not delete any user.
+IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestEolDeleteUsersCancel) {
+  EXPECT_EQ(user_manager::UserManager::Get()->GetUsers().size(), 2u);
+  update_engine_client()->set_eol_date(
+      base::DefaultClock::GetInstance()->Now() - base::TimeDelta::FromDays(1));
+  ShowUpdateRequiredScreen();
+
+  test::OobeJS().ExpectVisiblePath(kUpdateRequiredEolDialog);
+  test::OobeJS().ExpectVisiblePath(kEolDeleteUsersDataMessage);
+
+  test::OobeJS().TapOnPath(kEolDeleteUsersDataLink);
+  WaitForConfirmationDialogToOpen();
+
+  test::OobeJS().TapOnPath(kEolDeleteUsersDataCancelButton);
+  WaitForConfirmationDialogToClose();
+
+  test::OobeJS().ExpectVisiblePath(kEolDeleteUsersDataMessage);
+  test::OobeJS().ExpectHiddenPath(kEolNoUsersDataMsg);
+  EXPECT_EQ(user_manager::UserManager::Get()->GetUsers().size(), 2u);
 }
 
 IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestEolReachedAdminMessage) {
@@ -419,6 +490,59 @@ IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenTest, TestUpdateProcess) {
 
   // UpdateStatusChanged(status) calls RebootAfterUpdate().
   EXPECT_EQ(1, update_engine_client()->reboot_after_update_call_count());
+}
+
+class UpdateRequiredScreenPolicyPresentTest : public OobeBaseTest {
+ public:
+  UpdateRequiredScreenPolicyPresentTest() {}
+  ~UpdateRequiredScreenPolicyPresentTest() override = default;
+
+  void SetUpInProcessBrowserTestFixture() override {
+    OobeBaseTest::SetUpInProcessBrowserTestFixture();
+    // Create and set policy value.
+    SetAndRefreshMinimumChromeVersionPolicy(
+        policy::CreateMinimumVersionSingleRequirementPolicyValue(
+            "1111.2.3.4" /* version */, 0 /* warning */, 0 /* eol_warning */,
+            false /* unmanaged_user_restricted */));
+    // Simulate end-of-life reached.
+    update_engine_client()->set_eol_date(
+        base::DefaultClock::GetInstance()->Now() -
+        base::TimeDelta::FromDays(1));
+  }
+
+  void SetMinimumChromeVersionPolicy(const base::Value& value) {
+    policy::DevicePolicyBuilder* const device_policy(
+        policy_helper_.device_policy());
+    em::ChromeDeviceSettingsProto& proto(device_policy->payload());
+    std::string policy_value;
+    EXPECT_TRUE(base::JSONWriter::Write(value, &policy_value));
+    proto.mutable_device_minimum_version()->set_value(policy_value);
+  }
+
+  void SetAndRefreshMinimumChromeVersionPolicy(const base::Value& value) {
+    SetMinimumChromeVersionPolicy(value);
+    policy_helper_.RefreshDevicePolicy();
+  }
+
+ protected:
+  chromeos::DeviceStateMixin device_state_mixin_{
+      &mixin_host_,
+      chromeos::DeviceStateMixin::State::OOBE_COMPLETED_CLOUD_ENROLLED};
+  policy::DevicePolicyCrosTestHelper policy_helper_;
+};
+
+// Test to verify that reboot after deleting all users data from the device
+// still shows the update required screen to block user sign in.
+IN_PROC_BROWSER_TEST_F(UpdateRequiredScreenPolicyPresentTest,
+                       TestUpdateRequiredScreen) {
+  EXPECT_EQ(user_manager::UserManager::Get()->GetUsers().size(), 0u);
+  OobeScreenWaiter update_screen_waiter(UpdateRequiredView::kScreenId);
+  update_screen_waiter.set_assert_next_screen();
+  update_screen_waiter.Wait();
+
+  test::OobeJS().ExpectVisiblePath(kUpdateRequiredEolDialog);
+  test::OobeJS().ExpectVisiblePath(kEolNoUsersDataMsg);
+  test::OobeJS().ExpectHiddenPath(kEolDeleteUsersDataMessage);
 }
 
 }  // namespace chromeos

@@ -5,14 +5,10 @@
 #include "third_party/blink/renderer/core/layout/ng/ng_absolute_utils.h"
 
 #include <algorithm>
-#include "third_party/blink/renderer/core/frame/local_frame_view.h"
-#include "third_party/blink/renderer/core/html/html_dialog_element.h"
-#include "third_party/blink/renderer/core/layout/layout_object.h"
 #include "third_party/blink/renderer/core/layout/ng/geometry/ng_static_position.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_block_node.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_constraint_space.h"
 #include "third_party/blink/renderer/core/layout/ng/ng_length_utils.h"
-#include "third_party/blink/renderer/core/paint/paint_layer_scrollable_area.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/geometry/length_functions.h"
 
@@ -27,17 +23,13 @@ namespace {
 // vlr rtl => bottom left
 // vrl ltr => top right
 // vrl rtl => bottom right
-bool IsLeftDominant(const WritingMode container_writing_mode,
-                    const TextDirection container_direction) {
-  return (container_writing_mode != WritingMode::kVerticalRl) &&
-         !(container_writing_mode == WritingMode::kHorizontalTb &&
-           container_direction == TextDirection::kRtl);
+bool IsLeftDominant(const WritingDirectionMode writing_direction) {
+  return (writing_direction.GetWritingMode() != WritingMode::kVerticalRl) &&
+         !(writing_direction.IsHorizontal() && writing_direction.IsRtl());
 }
 
-bool IsTopDominant(const WritingMode container_writing_mode,
-                   const TextDirection container_direction) {
-  return (container_writing_mode == WritingMode::kHorizontalTb) ||
-         (container_direction != TextDirection::kRtl);
+bool IsTopDominant(const WritingDirectionMode writing_direction) {
+  return writing_direction.IsHorizontal() || writing_direction.IsLtr();
 }
 
 // A direction agnostic version of |NGLogicalStaticPosition::InlineEdge|, and
@@ -336,9 +328,9 @@ bool AbsoluteNeedsChildInlineSize(const NGBlockNode& node) {
   if (node.IsTable())
     return true;
   const auto& style = node.Style();
-  return style.LogicalWidth().IsIntrinsic() ||
-         style.LogicalMinWidth().IsIntrinsic() ||
-         style.LogicalMaxWidth().IsIntrinsic() ||
+  return style.LogicalWidth().IsContentOrIntrinsic() ||
+         style.LogicalMinWidth().IsContentOrIntrinsic() ||
+         style.LogicalMaxWidth().IsContentOrIntrinsic() ||
          (style.LogicalWidth().IsAuto() &&
           (style.LogicalLeft().IsAuto() || style.LogicalRight().IsAuto()));
 }
@@ -347,9 +339,9 @@ bool AbsoluteNeedsChildBlockSize(const NGBlockNode& node) {
   if (node.IsTable())
     return true;
   const auto& style = node.Style();
-  return style.LogicalHeight().IsIntrinsic() ||
-         style.LogicalMinHeight().IsIntrinsic() ||
-         style.LogicalMaxHeight().IsIntrinsic() ||
+  return style.LogicalHeight().IsContentOrIntrinsic() ||
+         style.LogicalMinHeight().IsContentOrIntrinsic() ||
+         style.LogicalMaxHeight().IsContentOrIntrinsic() ||
          (style.LogicalHeight().IsAuto() &&
           (style.LogicalTop().IsAuto() || style.LogicalBottom().IsAuto()));
 }
@@ -374,56 +366,6 @@ bool IsInlineSizeComputableFromBlockSize(const NGBlockNode& node) {
          AbsoluteNeedsChildInlineSize(node);
 }
 
-base::Optional<LayoutUnit> ComputeAbsoluteDialogYPosition(
-    const LayoutObject& dialog,
-    LayoutUnit height) {
-  auto* dialog_node = DynamicTo<HTMLDialogElement>(dialog.GetNode());
-  if (!dialog_node)
-    return base::nullopt;
-
-  // This code implements <dialog> static-position spec.
-  //
-  // https://html.spec.whatwg.org/C/#the-dialog-element
-  if (dialog_node->GetCenteringMode() == HTMLDialogElement::kNotCentered)
-    return base::nullopt;
-
-  bool can_center_dialog =
-      (dialog.Style()->GetPosition() == EPosition::kAbsolute ||
-       dialog.Style()->GetPosition() == EPosition::kFixed) &&
-      dialog.Style()->HasAutoTopAndBottom();
-
-  if (dialog_node->GetCenteringMode() == HTMLDialogElement::kCentered) {
-    if (can_center_dialog)
-      return dialog_node->CenteredPosition();
-    return base::nullopt;
-  }
-
-  DCHECK_EQ(dialog_node->GetCenteringMode(),
-            HTMLDialogElement::kNeedsCentering);
-  if (!can_center_dialog) {
-    dialog_node->SetNotCentered();
-    return base::nullopt;
-  }
-
-  auto& document = dialog.GetDocument();
-  auto* scrollable_area = document.View()->LayoutViewport();
-  LayoutUnit top =
-      LayoutUnit((dialog.Style()->GetPosition() == EPosition::kFixed)
-                     ? 0
-                     : scrollable_area->ScrollOffsetInt().Height());
-
-  if (top)
-    UseCounter::Count(document, WebFeature::kDialogWithNonZeroScrollOffset);
-
-  int visible_height = document.View()->Height();
-  if (height < visible_height)
-    top += (visible_height - height) / 2;
-  else if (height > visible_height)
-    UseCounter::Count(document, WebFeature::kDialogHeightLargerThanViewport);
-  dialog_node->SetCentered(top);
-  return top;
-}
-
 void ComputeOutOfFlowInlineDimensions(
     const NGBlockNode& node,
     const NGConstraintSpace& space,
@@ -432,8 +374,7 @@ void ComputeOutOfFlowInlineDimensions(
     const base::Optional<MinMaxSizes>& minmax_content_sizes,
     const base::Optional<MinMaxSizes>& minmax_intrinsic_sizes_for_ar,
     const base::Optional<LogicalSize>& replaced_size,
-    const WritingMode container_writing_mode,
-    const TextDirection container_direction,
+    const WritingDirectionMode container_writing_direction,
     NGLogicalOutOfFlowDimensions* dimensions) {
   DCHECK(dimensions);
 
@@ -480,15 +421,14 @@ void ComputeOutOfFlowInlineDimensions(
     inline_size = minmax_content_sizes->min_size;
   }
 
+  const auto writing_direction = style.GetWritingDirection();
   bool is_start_dominant;
-  if (style.GetWritingMode() == WritingMode::kHorizontalTb) {
-    is_start_dominant =
-        IsLeftDominant(container_writing_mode, container_direction) ==
-        IsLeftDominant(style.GetWritingMode(), style.Direction());
+  if (writing_direction.IsHorizontal()) {
+    is_start_dominant = IsLeftDominant(container_writing_direction) ==
+                        IsLeftDominant(writing_direction);
   } else {
-    is_start_dominant =
-        IsTopDominant(container_writing_mode, container_direction) ==
-        IsTopDominant(style.GetWritingMode(), style.Direction());
+    is_start_dominant = IsTopDominant(container_writing_direction) ==
+                        IsTopDominant(writing_direction);
   }
 
   ComputeAbsoluteSize(
@@ -511,8 +451,7 @@ void ComputeOutOfFlowBlockDimensions(
     const NGLogicalStaticPosition& static_position,
     const base::Optional<LayoutUnit>& child_block_size,
     const base::Optional<LogicalSize>& replaced_size,
-    const WritingMode container_writing_mode,
-    const TextDirection container_direction,
+    const WritingDirectionMode container_writing_direction,
     NGLogicalOutOfFlowDimensions* dimensions) {
   const auto& style = node.Style();
   // After partial size has been computed, child block size is either unknown,
@@ -546,15 +485,14 @@ void ComputeOutOfFlowBlockDimensions(
     block_size = replaced_size->block_size;
   }
 
+  const auto writing_direction = style.GetWritingDirection();
   bool is_start_dominant;
-  if (style.GetWritingMode() == WritingMode::kHorizontalTb) {
-    is_start_dominant =
-        IsTopDominant(container_writing_mode, container_direction) ==
-        IsTopDominant(style.GetWritingMode(), style.Direction());
+  if (writing_direction.IsHorizontal()) {
+    is_start_dominant = IsTopDominant(container_writing_direction) ==
+                        IsTopDominant(writing_direction);
   } else {
-    is_start_dominant =
-        IsLeftDominant(container_writing_mode, container_direction) ==
-        IsLeftDominant(style.GetWritingMode(), style.Direction());
+    is_start_dominant = IsLeftDominant(container_writing_direction) ==
+                        IsLeftDominant(writing_direction);
   }
 
   ComputeAbsoluteSize(

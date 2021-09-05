@@ -10,7 +10,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/feature_list.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -144,7 +144,9 @@ class WebSocket::WebSocketEventHandler final
   void OnDropChannel(bool was_clean,
                      uint16_t code,
                      const std::string& reason) override;
-  void OnFailChannel(const std::string& message) override;
+  void OnFailChannel(const std::string& message,
+                     int net_error,
+                     base::Optional<int> response_code) override;
   void OnStartOpeningHandshake(
       std::unique_ptr<net::WebSocketHandshakeRequestInfo> request) override;
   void OnSSLCertificateError(
@@ -290,12 +292,22 @@ void WebSocket::WebSocketEventHandler::OnDropChannel(
 }
 
 void WebSocket::WebSocketEventHandler::OnFailChannel(
-    const std::string& message) {
+    const std::string& message,
+    int net_error,
+    base::Optional<int> response_code) {
   DVLOG(3) << "WebSocketEventHandler::OnFailChannel @"
-           << reinterpret_cast<void*>(this) << " message=\"" << message << "\"";
+           << reinterpret_cast<void*>(this) << " message=\"" << message << "\""
+           << " error=" << net_error
+           << " response_code=" << response_code.value_or(-1);
 
-  impl_->handshake_client_.ResetWithReason(mojom::WebSocket::kInternalFailure,
-                                           message);
+  // OnAddChannelResponse may have already reset |impl_->handshake_client_| if
+  // the failure happened after a successful connection.
+  if (impl_->handshake_client_.is_bound()) {
+    impl_->handshake_client_->OnFailure(message, net_error,
+                                        response_code.value_or(-1));
+    impl_->handshake_client_.ResetWithReason(mojom::WebSocket::kInternalFailure,
+                                             message);
+  }
   impl_->client_.ResetWithReason(mojom::WebSocket::kInternalFailure, message);
   impl_->Reset();
 }

@@ -129,6 +129,13 @@ Polymer({
       computed: 'computeShowHideMenuTitle(activePassword_)',
     },
 
+    /** @private */
+    iconHaloClass_: {
+      type: String,
+      computed: 'computeIconHaloClass_(status, isSignedOut_, ' +
+          'leakedPasswords, weakPasswords)',
+    },
+
     /**
      * The ids of insecure credentials for which user clicked "Change Password"
      * button
@@ -423,6 +430,16 @@ Polymer({
   },
 
   /**
+   * @return {string}
+   * @private
+   */
+  computeIconHaloClass_() {
+    return !this.isCheckInProgress_() && this.hasInsecureCredentials_() ?
+        'warning-halo' :
+        '';
+  },
+
+  /**
    * Returns the icon (warning, info or error) indicating the check status.
    * @return {string}
    * @private
@@ -513,8 +530,10 @@ Polymer({
    * @private
    */
   showsTimestamp_() {
-    return this.status.state === CheckState.IDLE &&
-        !!this.status.elapsedTimeSinceLastCheck;
+    return !!this.status.elapsedTimeSinceLastCheck &&
+        (this.status.state === CheckState.IDLE ||
+         (this.status.state === CheckState.SIGNED_OUT &&
+          this.passwordsWeaknessCheckEnabled));
   },
 
   /**

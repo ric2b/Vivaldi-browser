@@ -75,17 +75,10 @@ class HTMLCanvasElement;
 class ImageBitmapOptions;
 class IntSize;
 
-#if defined(SUPPORT_WEBGL2_COMPUTE_CONTEXT)
-class
-    CanvasRenderingContext2DOrWebGLRenderingContextOrWebGL2RenderingContextOrWebGL2ComputeRenderingContextOrImageBitmapRenderingContextOrGPUCanvasContext;
-typedef CanvasRenderingContext2DOrWebGLRenderingContextOrWebGL2RenderingContextOrWebGL2ComputeRenderingContextOrImageBitmapRenderingContextOrGPUCanvasContext
-    RenderingContext;
-#else
 class
     CanvasRenderingContext2DOrWebGLRenderingContextOrWebGL2RenderingContextOrImageBitmapRenderingContextOrGPUCanvasContext;
 typedef CanvasRenderingContext2DOrWebGLRenderingContextOrWebGL2RenderingContextOrImageBitmapRenderingContextOrGPUCanvasContext
     RenderingContext;
-#endif
 
 // This contains the information of HTML Canvas Element,
 // There are four different types of rendering context this HTML Canvas can own.
@@ -226,6 +219,9 @@ class CORE_EXPORT HTMLCanvasElement final
       RasterModeHint hint) override;
   bool IsPrinting() const override;
 
+  // CanvasRenderingContextHost implementation.
+  UkmParameters GetUkmParameters() override;
+
   void DisableAcceleration(std::unique_ptr<Canvas2DLayerBridge>
                                unaccelerated_bridge_used_for_testing = nullptr);
 
@@ -283,6 +279,10 @@ class CORE_EXPORT HTMLCanvasElement final
     return DispatchEvent(*event);
   }
 
+  // Gets the settings of this Html Canvas Element. If there is a frame, it will
+  // return the settings from the frame. If it is a frameless element it will
+  // try to fetch the global dom window and get the settings from there.
+  Settings* GetSettings() const;
   bool IsWebGL1Enabled() const override;
   bool IsWebGL2Enabled() const override;
   bool IsWebGLBlocked() const override;

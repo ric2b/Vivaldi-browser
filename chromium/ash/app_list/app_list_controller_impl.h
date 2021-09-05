@@ -177,8 +177,7 @@ class ASH_EXPORT AppListControllerImpl
                                 int suggestion_index) override;
   void LogSearchAbandonHistogram() override;
   void InvokeSearchResultAction(const std::string& result_id,
-                                int action_index,
-                                int event_flags) override;
+                                int action_index) override;
   using GetContextMenuModelCallback =
       AppListViewDelegate::GetContextMenuModelCallback;
   void GetSearchResultContextMenuModel(
@@ -198,13 +197,9 @@ class ASH_EXPORT AppListControllerImpl
       AppListViewState target_state) override;
   void ShowWallpaperContextMenu(const gfx::Point& onscreen_location,
                                 ui::MenuSourceType source_type) override;
-  bool ProcessHomeLauncherGesture(ui::GestureEvent* event) override;
   bool KeyboardTraversalEngaged() override;
   bool CanProcessEventsOnApplistViews() override;
   bool ShouldDismissImmediately() override;
-  void GetNavigableContentsFactory(
-      mojo::PendingReceiver<content::mojom::NavigableContentsFactory> receiver)
-      override;
   int GetTargetYForAppListHide(aura::Window* root_window) override;
   AssistantViewDelegate* GetAssistantViewDelegate() override;
   void OnSearchResultVisibilityChanged(const std::string& id,
@@ -284,17 +279,11 @@ class ASH_EXPORT AppListControllerImpl
   // HomeScreenDelegate:
   void ShowHomeScreenView() override;
   aura::Window* GetHomeScreenWindow() override;
-  void UpdateYPositionAndOpacityForHomeLauncher(
-      int y_position_in_screen,
-      float opacity,
-      base::Optional<AnimationInfo> animation_info,
-      UpdateAnimationSettingsCallback callback) override;
   void UpdateScaleAndOpacityForHomeLauncher(
       float scale,
       float opacity,
       base::Optional<AnimationInfo> animation_info,
       UpdateAnimationSettingsCallback callback) override;
-  base::Optional<base::TimeDelta> GetOptionalAnimationDuration() override;
   base::ScopedClosureRunner DisableHomeScreenBackgroundBlur() override;
   void OnHomeLauncherAnimationComplete(bool shown, int64_t display_id) override;
   void OnHomeLauncherPositionChanged(int percent_shown,
@@ -312,10 +301,6 @@ class ASH_EXPORT AppListControllerImpl
   void OnQuietModeChanged(bool in_quiet_mode) override;
 
   bool onscreen_keyboard_shown() const { return onscreen_keyboard_shown_; }
-
-  HomeLauncherTransitionState home_launcher_transition_state() const {
-    return home_launcher_transition_state_;
-  }
 
   // Performs the 'back' action for the active page.
   void Back();
@@ -364,11 +349,6 @@ class ASH_EXPORT AppListControllerImpl
   void RecordAppListState();
 
  private:
-  // HomeScreenDelegate:
-  void OnHomeLauncherDragStart() override;
-  void OnHomeLauncherDragInProgress() override;
-  void OnHomeLauncherDragEnd() override;
-
   syncer::StringOrdinal GetOemFolderPos();
   std::unique_ptr<AppListItem> CreateAppListItem(
       std::unique_ptr<AppListItemMetadata> metadata);

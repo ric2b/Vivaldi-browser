@@ -8,6 +8,7 @@
 #import <UIKit/UIKit.h>
 
 #include "base/macros.h"
+#include "ios/public/provider/chrome/browser/user_feedback/user_feedback_sender.h"
 
 @protocol ApplicationCommands;
 
@@ -60,7 +61,8 @@ class UserFeedbackProvider {
   // parameters.
   virtual UIViewController* CreateViewController(
       id<UserFeedbackDataSource> data_source,
-      id<ApplicationCommands> handler);
+      id<ApplicationCommands> handler,
+      UserFeedbackSender sender);
   // Uploads collected feedback reports.
   virtual void Synchronize();
 

@@ -90,8 +90,6 @@ NGMathScriptsLayoutAlgorithm::NGMathScriptsLayoutAlgorithm(
     const NGLayoutAlgorithmParams& params)
     : NGLayoutAlgorithm(params) {
   DCHECK(params.space.IsNewFormattingContext());
-  container_builder_.SetIsNewFormattingContext(
-      params.space.IsNewFormattingContext());
 }
 
 void NGMathScriptsLayoutAlgorithm::GatherChildren(
@@ -275,7 +273,7 @@ NGMathScriptsLayoutAlgorithm::LayoutAndGetMetrics(NGBlockNode child) const {
   child_and_metrics.result =
       child.Layout(constraint_space, nullptr /*break_token*/);
   NGBoxFragment fragment(
-      ConstraintSpace().GetWritingMode(), ConstraintSpace().Direction(),
+      ConstraintSpace().GetWritingDirection(),
       To<NGPhysicalBoxFragment>(child_and_metrics.result->PhysicalFragment()));
   child_and_metrics.inline_size = fragment.InlineSize();
   child_and_metrics.margins =
@@ -319,7 +317,8 @@ scoped_refptr<const NGLayoutResult> NGMathScriptsLayoutAlgorithm::Layout() {
       content_start_offset.block_offset;
   LayoutUnit descent =
       std::max(base_metrics.descent, metrics.descent + metrics.sub_shift);
-  // TODO(crbug.com/1125136): take into account italic correction.
+  LayoutUnit base_italic_correction = std::min(
+      base_metrics.inline_size, base_metrics.result->MathItalicCorrection());
   LayoutUnit inline_offset = content_start_offset.inline_offset;
 
   LayoutUnit space = GetSpaceAfterScript(Style());
@@ -368,9 +367,12 @@ scoped_refptr<const NGLayoutResult> NGMathScriptsLayoutAlgorithm::Layout() {
       sup_metric = sup_metrics[idx];
 
     if (sub_metric.node) {
-      LogicalOffset sub_offset(inline_offset + sub_metric.margins.inline_start,
-                               ascent + metrics.sub_shift - sub_metric.ascent +
-                                   sub_metric.margins.block_start);
+      LogicalOffset sub_offset(
+          LayoutUnit(inline_offset + sub_metric.margins.inline_start -
+                     base_italic_correction)
+              .ClampNegativeToZero(),
+          ascent + metrics.sub_shift - sub_metric.ascent +
+              sub_metric.margins.block_start);
       container_builder_.AddChild(sub_metric.result->PhysicalFragment(),
                                   sub_offset);
       sub_metric.node.StoreMargins(ConstraintSpace(), sub_metric.margins);
@@ -421,6 +423,9 @@ MinMaxSizesResult NGMathScriptsLayoutAlgorithm::ComputeMinMaxSizes(
   MinMaxSizes sizes;
   bool depends_on_percentage_block_size = false;
 
+  ChildAndMetrics base_metrics = LayoutAndGetMetrics(base);
+  LayoutUnit base_italic_correction = std::min(
+      base_metrics.inline_size, base_metrics.result->MathItalicCorrection());
   MinMaxSizesResult base_result =
       ComputeMinAndMaxContentContribution(Style(), base, child_input);
   base_result.sizes += ComputeMinMaxMargins(Style(), base).InlineSum();
@@ -435,7 +440,6 @@ MinMaxSizesResult NGMathScriptsLayoutAlgorithm::ComputeMinMaxSizes(
     case MathScriptType::kUnder:
     case MathScriptType::kOver:
     case MathScriptType::kSuper: {
-      // TODO(crbug.com/1125136): Take italic correction into account.
       NGBlockNode sub = sub_sup_pairs[0].sub;
       NGBlockNode sup = sub_sup_pairs[0].sup;
       auto first_post_script = sub ? sub : sup;
@@ -445,6 +449,8 @@ MinMaxSizesResult NGMathScriptsLayoutAlgorithm::ComputeMinMaxSizes(
           ComputeMinMaxMargins(Style(), first_post_script).InlineSum();
 
       sizes += first_post_script_result.sizes;
+      if (sub)
+        sizes -= base_italic_correction;
       sizes += space;
       depends_on_percentage_block_size |=
           first_post_script_result.depends_on_percentage_block_size;
@@ -453,7 +459,6 @@ MinMaxSizesResult NGMathScriptsLayoutAlgorithm::ComputeMinMaxSizes(
     case MathScriptType::kSubSup:
     case MathScriptType::kUnderOver:
     case MathScriptType::kMultiscripts: {
-      // TODO(crbug.com/1125136): Take italic correction into account.
       MinMaxSizes sub_sup_pair_size;
       unsigned index = 0;
       do {
@@ -463,6 +468,7 @@ MinMaxSizesResult NGMathScriptsLayoutAlgorithm::ComputeMinMaxSizes(
         auto sub_result =
             ComputeMinAndMaxContentContribution(Style(), sub, child_input);
         sub_result.sizes += ComputeMinMaxMargins(Style(), sub).InlineSum();
+        sub_result.sizes -= base_italic_correction;
         sub_sup_pair_size.Encompass(sub_result.sizes);
 
         auto sup = sub_sup_pairs[index].sup;

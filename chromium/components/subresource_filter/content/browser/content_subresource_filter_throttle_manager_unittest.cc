@@ -10,7 +10,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/check.h"
 #include "base/command_line.h"
 #include "base/run_loop.h"
@@ -29,6 +29,7 @@
 #include "components/subresource_filter/content/browser/subresource_filter_observer_manager.h"
 #include "components/subresource_filter/content/common/subresource_filter_messages.h"
 #include "components/subresource_filter/content/mojom/subresource_filter_agent.mojom.h"
+#include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "components/subresource_filter/core/common/common_features.h"
 #include "components/subresource_filter/core/common/test_ruleset_creator.h"
 #include "components/subresource_filter/core/common/test_ruleset_utils.h"
@@ -175,10 +176,45 @@ class MockPageStateActivationThrottle : public content::NavigationThrottle {
   DISALLOW_COPY_AND_ASSIGN(MockPageStateActivationThrottle);
 };
 
+class TestSubresourceFilterClient : public SubresourceFilterClient {
+ public:
+  TestSubresourceFilterClient() = default;
+  ~TestSubresourceFilterClient() override = default;
+
+  // SubresourceFilterClient:
+  void ShowNotification() override { ++disallowed_notification_count_; }
+  mojom::ActivationLevel OnPageActivationComputed(
+      content::NavigationHandle* navigation_handle,
+      mojom::ActivationLevel effective_activation_level,
+      ActivationDecision* decision) override {
+    return effective_activation_level;
+  }
+  void OnAdsViolationTriggered(
+      content::RenderFrameHost* rfh,
+      mojom::AdsViolation triggered_violation) override {}
+  const scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>
+  GetSafeBrowsingDatabaseManager() override {
+    return database_manager_;
+  }
+  void OnReloadRequested() override {}
+
+  void CreateSafeBrowsingDatabaseManager() {
+    database_manager_ =
+        base::MakeRefCounted<CustomTestSafeBrowsingDatabaseManager>();
+  }
+
+  int disallowed_notification_count() const {
+    return disallowed_notification_count_;
+  }
+
+ private:
+  scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager> database_manager_;
+  int disallowed_notification_count_ = 0;
+};
+
 class ContentSubresourceFilterThrottleManagerTest
     : public content::RenderViewHostTestHarness,
       public content::WebContentsObserver,
-      public SubresourceFilterClient,
       public ::testing::WithParamInterface<PageActivationNotificationTiming> {
  public:
   ContentSubresourceFilterThrottleManagerTest() {}
@@ -211,13 +247,19 @@ class ContentSubresourceFilterThrottleManagerTest
                                              /*expected_checksum=*/0,
                                              base::DoNothing());
 
+    auto subresource_filter_client =
+        std::make_unique<TestSubresourceFilterClient>();
+    client_ = subresource_filter_client.get();
     throttle_manager_ =
         std::make_unique<ContentSubresourceFilterThrottleManager>(
-            this, dealer_handle_.get(), web_contents);
+            std::move(subresource_filter_client), dealer_handle_.get(),
+            web_contents);
+
     Observe(web_contents);
   }
 
   void TearDown() override {
+    client_ = nullptr;
     throttle_manager_.reset();
     dealer_handle_.reset();
     base::RunLoop().RunUntilIdle();
@@ -272,7 +314,9 @@ class ContentSubresourceFilterThrottleManagerTest
     return throttle_manager_->ruleset_handle_for_testing();
   }
 
-  int disallowed_notification_count() { return disallowed_notification_count_; }
+  int disallowed_notification_count() const {
+    return client_->disallowed_notification_count();
+  }
 
  protected:
   // content::WebContentsObserver
@@ -321,23 +365,6 @@ class ContentSubresourceFilterThrottleManagerTest
     agent_map_[host] = std::move(new_agent);
   }
 
-  // SubresourceFilterClient:
-  void ShowNotification() override { ++disallowed_notification_count_; }
-  mojom::ActivationLevel OnPageActivationComputed(
-      content::NavigationHandle* navigation_handle,
-      mojom::ActivationLevel effective_activation_level,
-      ActivationDecision* decision) override {
-    return effective_activation_level;
-  }
-  void OnAdsViolationTriggered(
-      content::RenderFrameHost* rfh,
-      mojom::AdsViolation triggered_violation) override {}
-
-  const scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>
-  GetSafeBrowsingDatabaseManager() override {
-    return database_manager_;
-  }
-
   ContentSubresourceFilterThrottleManager* throttle_manager() {
     return throttle_manager_.get();
   }
@@ -347,14 +374,17 @@ class ContentSubresourceFilterThrottleManagerTest
   }
 
   void CreateSafeBrowsingDatabaseManager() {
-    database_manager_ =
-        base::MakeRefCounted<CustomTestSafeBrowsingDatabaseManager>();
+    client_->CreateSafeBrowsingDatabaseManager();
+  }
+
+  VerifiedRulesetDealer::Handle* dealer_handle() {
+    return dealer_handle_.get();
   }
 
  private:
   testing::TestRulesetCreator test_ruleset_creator_;
   testing::TestRulesetPair test_ruleset_pair_;
-  scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager> database_manager_;
+  TestSubresourceFilterClient* client_;
 
   std::unique_ptr<VerifiedRulesetDealer::Handle> dealer_handle_;
 
@@ -367,9 +397,6 @@ class ContentSubresourceFilterThrottleManagerTest
   std::unique_ptr<content::NavigationSimulator> navigation_simulator_;
 
   bool created_safe_browsing_throttle_for_last_navigation_ = false;
-
-  // Incremented on every OnFirstSubresourceLoadDisallowed call.
-  int disallowed_notification_count_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(ContentSubresourceFilterThrottleManagerTest);
 };
@@ -814,6 +841,46 @@ TEST_P(ContentSubresourceFilterThrottleManagerTest,
   EXPECT_EQ(0, disallowed_notification_count());
 }
 
+TEST_F(ContentSubresourceFilterThrottleManagerTest, CreateForWebContents) {
+  auto web_contents =
+      content::RenderViewHostTestHarness::CreateTestWebContents();
+  ASSERT_EQ(ContentSubresourceFilterThrottleManager::FromWebContents(
+                web_contents.get()),
+            nullptr);
+
+  {
+    base::test::ScopedFeatureList scoped_feature;
+    scoped_feature.InitAndDisableFeature(kSafeBrowsingSubresourceFilter);
+
+    // CreateForWebContents() should not do anything if the subresource filter
+    // feature is not enabled.
+    ContentSubresourceFilterThrottleManager::CreateForWebContents(
+        web_contents.get(), std::make_unique<TestSubresourceFilterClient>(),
+        dealer_handle());
+    EXPECT_EQ(ContentSubresourceFilterThrottleManager::FromWebContents(
+                  web_contents.get()),
+              nullptr);
+  }
+
+  // If the subresource filter feature is enabled (as it is by default),
+  // CreateForWebContents() should create and attach an instance.
+  ContentSubresourceFilterThrottleManager::CreateForWebContents(
+      web_contents.get(), std::make_unique<TestSubresourceFilterClient>(),
+      dealer_handle());
+  auto* throttle_manager =
+      ContentSubresourceFilterThrottleManager::FromWebContents(
+          web_contents.get());
+  EXPECT_NE(throttle_manager, nullptr);
+
+  // A second call should not attach a different instance.
+  ContentSubresourceFilterThrottleManager::CreateForWebContents(
+      web_contents.get(), std::make_unique<TestSubresourceFilterClient>(),
+      dealer_handle());
+  EXPECT_EQ(ContentSubresourceFilterThrottleManager::FromWebContents(
+                web_contents.get()),
+            throttle_manager);
+}
+
 TEST_F(ContentSubresourceFilterThrottleManagerTest,
        SafeBrowsingThrottleCreation) {
   // If no safe browsing database is present, the throttle should not be
@@ -871,13 +938,6 @@ TEST_F(ContentSubresourceFilterThrottleManagerTest, LogActivation) {
   ExpectActivationSignalForFrame(subframe1, true /* expect_activation */);
 
   tester.ExpectTotalCount(kActivationStateHistogram, 3);
-  // Only those with page level activation do ruleset lookups.
-  tester.ExpectTotalCount("SubresourceFilter.PageLoad.Activation.WallDuration",
-                          2);
-  // The *.CPUDuration histograms are recorded only if base::ThreadTicks is
-  // supported.
-  tester.ExpectTotalCount("SubresourceFilter.PageLoad.Activation.CPUDuration",
-                          base::ThreadTicks::IsSupported() ? 2 : 0);
 }
 
 // Check to make sure we don't send an IPC with the ad tag bit for ad frames

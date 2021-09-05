@@ -333,8 +333,6 @@ class AwContents : public FindHelper::Listener,
   void ClearCache(JNIEnv* env,
                   const base::android::JavaParamRef<jobject>& obj,
                   jboolean include_disk_files);
-  void KillRenderProcess(JNIEnv* env,
-                         const base::android::JavaParamRef<jobject>& obj);
   // See //android_webview/docs/how-does-on-create-window-work.md for more
   // details.
   void SetPendingWebContentsForPopup(
@@ -359,6 +357,9 @@ class AwContents : public FindHelper::Listener,
   void SetDipScale(JNIEnv* env,
                    const base::android::JavaParamRef<jobject>& obj,
                    jfloat dip_scale);
+  jboolean IsDisplayingOpenWebContent(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
   void OnInputEvent(JNIEnv* env,
                     const base::android::JavaParamRef<jobject>& obj);
   void SetSaveFormData(bool enabled);

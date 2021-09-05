@@ -111,7 +111,7 @@ void ContextMenuController::PopulateModel(const Element& child,
         menu_model->AddCheckItem(id, label);
         id_to_checked_map_[id] = item.checked && *item.checked;
         break;
-      case context_menu::ITEM_TYPE_RADIOBUTTON:
+      case context_menu::ITEM_TYPE_RADIO:
         menu_model->AddRadioItem(id, label, *item.radiogroup.get());
         id_to_checked_map_[id] = item.checked && *item.checked;
         break;

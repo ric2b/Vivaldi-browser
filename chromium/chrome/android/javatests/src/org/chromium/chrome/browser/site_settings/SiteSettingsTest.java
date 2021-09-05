@@ -415,9 +415,7 @@ public class SiteSettingsTest {
     @Test
     @SmallTest
     @Feature({"Preferences"})
-    // Todo(eokoyomon) figure out how to set and test third party cookie setting in this test
-    // @EnableFeatures(
-    //         ContentSettingsFeatureList.IMPROVED_COOKIE_CONTROLS_FOR_THIRD_PARTY_COOKIE_BLOCKING)
+    // TODO(eokoyomon) figure out how to set and test third party cookie setting in this test
     public void testSiteExceptionCookiesBlocked() throws Exception {
         SettingsActivity settingsActivity =
                 SiteSettingsTestUtils.startSiteSettingsCategory(SiteSettingsCategory.Type.COOKIES);
@@ -442,14 +440,13 @@ public class SiteSettingsTest {
         settingsActivity =
                 SiteSettingsTestUtils.startSiteSettingsCategory(SiteSettingsCategory.Type.COOKIES);
         setBlockCookiesSiteException(settingsActivity, url, false);
+        settingsActivity.finish();
         mPermissionRule.runJavaScriptCodeInCurrentTab("setCookie()");
         Assert.assertEquals("\"\"", mPermissionRule.runJavaScriptCodeInCurrentTab("getCookie()"));
 
         // Load the page again and ensure the cookie remains unset.
         mPermissionRule.loadUrl(url);
         Assert.assertEquals("\"\"", mPermissionRule.runJavaScriptCodeInCurrentTab("getCookie()"));
-
-        settingsActivity.finish();
     }
 
     /**
@@ -1237,8 +1234,9 @@ public class SiteSettingsTest {
                 "exampleToBlock.com", "/chrome/test/data/notifications/notification_tester.html");
 
         TestThreadUtils.runOnUiThreadBlocking(() -> {
-            WebsitePreferenceBridgeJni.get().setNotificationSettingForOrigin(
-                    getBrowserContextHandle(), urlToBlock, ContentSettingValues.BLOCK);
+            WebsitePreferenceBridgeJni.get().setSettingForOrigin(getBrowserContextHandle(),
+                    ContentSettingsType.NOTIFICATIONS, urlToBlock, urlToBlock,
+                    ContentSettingValues.BLOCK);
         });
 
         final SettingsActivity settingsActivity = SiteSettingsTestUtils.startSiteSettingsCategory(

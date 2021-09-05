@@ -10,7 +10,6 @@
 #include "base/unguessable_token.h"
 #include "services/network/public/mojom/fetch_api.mojom-blink-forward.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink-forward.h"
-#include "third_party/blink/public/mojom/loader/resource_load_info_notifier.mojom-shared.h"
 #include "third_party/blink/public/mojom/v8_cache_options.mojom-blink.h"
 #include "third_party/blink/public/platform/cross_variant_mojo_util.h"
 #include "third_party/blink/public/platform/web_url_request.h"
@@ -153,14 +152,11 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope : public EventTargetWithInlineData,
 
   void ApplySandboxFlags(network::mojom::blink::WebSandboxFlags mask);
 
-  void SetDefersLoadingForResourceFetchers(bool defers);
+  void SetDefersLoadingForResourceFetchers(WebURLLoader::DeferType defers);
 
   virtual int GetOutstandingThrottledLimit() const;
 
   Deprecation& GetDeprecation() { return deprecation_; }
-
-  CrossVariantMojoRemote<mojom::ResourceLoadInfoNotifierInterfaceBase>
-  CloneResourceLoadInfoNotifier();
 
  protected:
   // Sets outside's CSP used for off-main-thread top-level worker script
@@ -174,7 +170,7 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope : public EventTargetWithInlineData,
   void FetchModuleScript(const KURL& module_url_record,
                          const FetchClientSettingsObjectSnapshot&,
                          WorkerResourceTimingNotifier&,
-                         mojom::RequestContextType context_type,
+                         mojom::blink::RequestContextType context_type,
                          network::mojom::RequestDestination destination,
                          network::mojom::CredentialsMode,
                          ModuleScriptCustomFetchType,

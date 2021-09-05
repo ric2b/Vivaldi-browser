@@ -5,8 +5,8 @@
 module network.mojom;
 
 import "mojo/public/mojom/base/big_buffer.mojom";
-import "mojo/public/mojom/base/file.mojom";
 import "mojo/public/mojom/base/file_path.mojom";
+import "mojo/public/mojom/base/read_only_file.mojom";
 import "mojo/public/mojom/base/time.mojom";
 import "mojo/public/mojom/base/unguessable_token.mojom";
 import "mojo/public/mojom/base/values.mojom";
@@ -697,10 +697,6 @@ struct URLLoaderFactoryParams {
   // trusted source, it would be good to set this depending on the headers'
   // values, too.
   TrustTokenRedemptionPolicy trust_token_redemption_policy = kPotentiallyPermit;
-
-  // TODO(lukasza): https://crbug.com/1056949: Remove this diagnostic aid once
-  // the bug is understood.
-  string debug_tag = "<uninitialized>";
 };
 
 // The |credentials| output parameter is given to URLRequest::SetAuth()
@@ -818,7 +814,7 @@ interface NetworkContextClient {
   OnFileUploadRequested(int32 process_id,
                         bool async,
                         array<mojo_base.mojom.FilePath> file_paths) =>
-                        (int32 net_error, array<mojo_base.mojom.File> files);
+      (int32 net_error, array<mojo_base.mojom.ReadOnlyFile> files);
 
   // Checks if network error reports could be sent for the given origins.
   // Replies with the origins that are allowed.
@@ -849,6 +845,15 @@ interface NetworkContextClient {
   // Notification that a trust anchor was used for the given user.
   [EnableIf=is_chromeos]
   OnTrustAnchorUsed();
+
+  // If it's supported by the implementation, attempts to provide a response to
+  // the given Trust Tokens issuance request through some kind of local
+  // mediation---i.e., probably by a method other than sending a web request
+  // directly to the issuer's server. In situations where it's not possible to
+  // answer the request, returns a status of kNotFound (see the request and
+  // response structs' comments for more information).
+  OnTrustTokenIssuanceDivertedToSystem(FulfillTrustTokenIssuanceRequest request)
+    => (FulfillTrustTokenIssuanceAnswer response);
 };
 
 // Represents a distinct context for making network requests, with its own
@@ -958,13 +963,15 @@ interface NetworkContext {
       => (bool is_upper_bound, int64 size_or_error);
 
   // Notifies the HttpCache of a renderer-level cache hit with |url|
-  // and |http_method|, with the top-level frame of the containing page
-  // being on origin |top_frame_origin|.
+  // and |http_method|, with the network isolation key |key| and
+  // |is_subframe_document_resource| is true if this is a subframe navigation
+  // resource.
   //
   // This is being proxied by the browser because the renderer is unable to
   // directly interact with NetworkContext.
   NotifyExternalCacheHit(url.mojom.Url url, string http_method,
-                         NetworkIsolationKey key);
+                         NetworkIsolationKey key,
+                         bool is_subframe_document_resource);
 
   // Clears the host cache. This will affect all NetworkContexts that share the
   // same HostResolved as the NetworkContext this is called on.
@@ -1012,22 +1019,32 @@ interface NetworkContext {
   // Queues a report via the Reporting API. |type| describes the type of report
   // (as well as what data will contained in |body|). |group| specifies the
   // endpoint group that the report will be delivered to. |url| indicates the
-  // URL of the resource that the report describes; |user_agent| may be
-  // provided, or will be automatically generated if omitted; |body| holds the
-  // contents of the report.
+  // URL of the resource that the report describes; |network_isolation_key|
+  // indicates the NetworkIsolationKey associated with the request, and is
+  // used for both looking up the appropriately scoped reporting information
+  // and for sending the report. |user_agent| may be provided, or will be
+  // automatically generated if omitted; |body| holds the contents of the
+  // report.
   //
   // Note that this queued report will never be delivered if no reporting
-  // endpoint is registered for this |url|.
+  // endpoint is registered for this |url| with the provided
+  // |network_isolation_key|.
   //
   // Spec: https://w3c.github.io/reporting/#concept-reports
   QueueReport(string type,
               string group,
               url.mojom.Url url,
+              NetworkIsolationKey network_isolation_key,
               string? user_agent,
               mojo_base.mojom.DictionaryValue body);
 
   // Queues a signed exchange report.
-  QueueSignedExchangeReport(SignedExchangeReport report);
+  //
+  // Note that this queued report will never be delivered if no reporting
+  // endpoint matching is registered for with the provided
+  // |network_isolation_key|.
+  QueueSignedExchangeReport(SignedExchangeReport report,
+                            NetworkIsolationKey network_isolation_key);
 
   // Closes all open connections within this context.
   CloseAllConnections() => ();
@@ -1291,12 +1308,16 @@ interface NetworkContext {
 
   // Checks the given certificate against the CertVerifier and CTVerifier. This
   // implementation is currently specific for use by Signed Exchange.
+  //
+  // |network_isolation_key| must be the NetworkIsolationKey associated with the
+  // underlying resource load, and is used foy any reports generated as a result
+  // of verifying the cert.
   VerifyCertForSignedExchange(X509Certificate certificate,
                               url.mojom.Url url,
+                              NetworkIsolationKey network_isolation_key,
                               string ocsp_response,
                               string sct_list) => (int32 error_code,
-                                                   CertVerifyResult cv_result,
-                                                   CTVerifyResult ct_result);
+                                                   CertVerifyResult cv_result);
 
   // Parses response headers and returns a structured version to the caller.
   // This call originates from the browser process. Used for navigations when

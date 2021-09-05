@@ -40,9 +40,9 @@
 #include "chrome/browser/web_applications/components/web_app_install_utils.h"
 #include "chrome/browser/web_applications/components/web_app_provider_base.h"
 #include "chrome/browser/web_applications/components/web_app_utils.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/common/extensions/extension_metrics.h"
 #include "chrome/common/extensions/manifest_handlers/app_launch_info.h"
-#include "chrome/common/web_application_info.h"
 #include "components/favicon/core/favicon_service.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
@@ -302,6 +302,8 @@ class ChromeAppForLinkDelegate : public extensions::AppForLinkDelegate {
         info.launch_type =
             extensions::api::management::LAUNCH_TYPE_OPEN_FULL_SCREEN;
         break;
+      // This mode is not supported by the extension app backend.
+      case web_app::DisplayMode::kWindowControlsOverlay:
       case web_app::DisplayMode::kUndefined:
         info.launch_type = extensions::api::management::LAUNCH_TYPE_NONE;
         break;

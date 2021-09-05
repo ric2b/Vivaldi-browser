@@ -8,8 +8,8 @@
 #include <memory>
 #include <utility>
 
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
@@ -119,6 +119,7 @@ class TestPlatformFieldTrials : public PlatformFieldTrials {
   void SetupFieldTrials() override {}
   void SetupFeatureControllingFieldTrials(
       bool has_seed,
+      const base::FieldTrial::EntropyProvider& low_entropy_provider,
       base::FeatureList* feature_list) override {}
 
  private:
@@ -249,7 +250,7 @@ class TestVariationsFieldTrialCreator : public VariationsFieldTrialCreator {
         "", "", "", std::vector<std::string>(),
         std::vector<base::FeatureList::FeatureOverrideInfo>(), nullptr,
         std::make_unique<base::FeatureList>(), &platform_field_trials,
-        safe_seed_manager_);
+        safe_seed_manager_, base::nullopt);
   }
 
   TestVariationsSeedStore* seed_store() { return &seed_store_; }
@@ -500,7 +501,7 @@ TEST_F(FieldTrialCreatorTest, SetupFieldTrials_LoadsCountryOnFirstRun) {
       "", "", "", std::vector<std::string>(),
       std::vector<base::FeatureList::FeatureOverrideInfo>(), nullptr,
       std::make_unique<base::FeatureList>(), &platform_field_trials,
-      &safe_seed_manager));
+      &safe_seed_manager, base::nullopt));
 
   EXPECT_EQ(kTestSeedExperimentName,
             base::FieldTrialList::FindFullName(kTestSeedStudyName));

@@ -4,7 +4,7 @@
 
 #include "content/renderer/navigation_client.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "content/renderer/render_frame_impl.h"
 #include "third_party/blink/public/platform/task_type.h"
 
@@ -29,6 +29,7 @@ void NavigationClient::CommitNavigation(
     mojo::PendingRemote<network::mojom::URLLoaderFactory>
         prefetch_loader_factory,
     const base::UnguessableToken& devtools_navigation_token,
+    blink::mojom::PolicyContainerPtr policy_container,
     CommitNavigationCallback callback) {
   // TODO(ahemery): The reset should be done when the navigation did commit
   // (meaning at a later stage). This is not currently possible because of
@@ -42,7 +43,7 @@ void NavigationClient::CommitNavigation(
       std::move(subresource_overrides),
       std::move(controller_service_worker_info), std::move(container_info),
       std::move(prefetch_loader_factory), devtools_navigation_token,
-      std::move(callback));
+      std::move(policy_container), std::move(callback));
 }
 
 void NavigationClient::CommitFailedNavigation(

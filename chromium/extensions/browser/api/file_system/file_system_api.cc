@@ -26,6 +26,7 @@
 #include "base/util/values/values_util.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -62,7 +63,7 @@
 #include "base/mac/foundation_util.h"
 #endif
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "extensions/browser/api/file_handlers/non_native_file_system_delegate.h"
 #endif
 
@@ -89,7 +90,7 @@ const char kRetainEntryError[] = "Could not retain file entry.";
 const char kRetainEntryIncognitoError[] =
     "Could not retain file entry in incognito mode";
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 const char kNotSupportedOnNonKioskSessionError[] =
     "Operation only supported for kiosk apps running in a kiosk session.";
 #endif
@@ -251,8 +252,7 @@ ExtensionFunction::ResponseAction FileSystemGetDisplayPathFunction::Run() {
   }
 
   file_path = path_util::PrettifyPath(file_path);
-  return RespondNow(
-      OneArgument(std::make_unique<base::Value>(file_path.value())));
+  return RespondNow(OneArgument(base::Value(file_path.value())));
 }
 
 FileSystemEntryFunction::FileSystemEntryFunction()
@@ -285,7 +285,7 @@ void FileSystemEntryFunction::RegisterFileSystemsAndSendResponse(
   std::unique_ptr<base::DictionaryValue> result = CreateResult();
   for (const auto& path : paths)
     AddEntryToResult(path, std::string(), result.get());
-  Respond(OneArgument(std::move(result)));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(std::move(result))));
 }
 
 std::unique_ptr<base::DictionaryValue> FileSystemEntryFunction::CreateResult() {
@@ -382,7 +382,7 @@ ExtensionFunction::ResponseAction FileSystemIsWritableEntryFunction::Run() {
   bool is_writable =
       policy->CanReadWriteFileSystem(source_process_id(), filesystem_id);
 
-  return RespondNow(OneArgument(std::make_unique<base::Value>(is_writable)));
+  return RespondNow(OneArgument(base::Value(is_writable)));
 }
 
 void FileSystemChooseEntryFunction::ShowPicker(
@@ -524,7 +524,7 @@ void FileSystemChooseEntryFunction::FilesSelected(
 
     DCHECK_EQ(paths.size(), 1u);
     bool non_native_path = false;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     NonNativeFileSystemDelegate* delegate =
         ExtensionsAPIClient::Get()->GetNonNativeFileSystemDelegate();
     non_native_path = delegate && delegate->IsUnderNonNativeLocalPath(
@@ -776,7 +776,7 @@ ExtensionFunction::ResponseAction FileSystemChooseEntryFunction::Run() {
       previous_path, suggested_name, file_type_info, picker_type);
 
 // Check whether the |previous_path| is a non-native directory.
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   NonNativeFileSystemDelegate* delegate =
       ExtensionsAPIClient::Get()->GetNonNativeFileSystemDelegate();
   if (delegate &&
@@ -895,7 +895,7 @@ ExtensionFunction::ResponseAction FileSystemIsRestorableFunction::Run() {
       delegate->GetSavedFilesService(browser_context());
   DCHECK(saved_files_service);
 
-  return RespondNow(OneArgument(std::make_unique<base::Value>(
+  return RespondNow(OneArgument(base::Value(
       saved_files_service->IsRegistered(extension_->id(), entry_id))));
 }
 
@@ -925,12 +925,13 @@ ExtensionFunction::ResponseAction FileSystemRestoreEntryFunction::Run() {
     is_directory_ = file->is_directory;
     std::unique_ptr<base::DictionaryValue> result = CreateResult();
     AddEntryToResult(file->path, file->id, result.get());
-    return RespondNow(OneArgument(std::move(result)));
+    return RespondNow(
+        OneArgument(base::Value::FromUniquePtrValue(std::move(result))));
   }
   return RespondNow(NoArguments());
 }
 
-#if !defined(OS_CHROMEOS)
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 ExtensionFunction::ResponseAction FileSystemRequestFileSystemFunction::Run() {
   using file_system::RequestFileSystem::Params;
   const std::unique_ptr<Params> params(Params::Create(*args_));
@@ -982,7 +983,7 @@ void FileSystemRequestFileSystemFunction::OnGotFileSystem(
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetString("file_system_id", id);
   dict->SetString("file_system_path", path);
-  Respond(OneArgument(std::move(dict)));
+  Respond(OneArgument(base::Value::FromUniquePtrValue(std::move(dict))));
 }
 
 void FileSystemRequestFileSystemFunction::OnError(const std::string& error) {

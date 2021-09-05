@@ -8,16 +8,19 @@
 
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/modules/payments/goods/digital_goods_service.h"
+#include "third_party/blink/renderer/modules/payments/goods/digital_goods_type_converters.h"
+#include "third_party/blink/renderer/modules/payments/goods/util.h"
+#include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 
 namespace blink {
 
 namespace {
 
+using blink::digital_goods_util::LogConsoleError;
 using payments::mojom::blink::CreateDigitalGoodsResponseCode;
-
-const char known_payment_method_[] = "https://play.google.com/billing";
 
 void OnCreateDigitalGoodsResponse(
     ScriptPromiseResolver* resolver,
@@ -25,8 +28,9 @@ void OnCreateDigitalGoodsResponse(
     mojo::PendingRemote<payments::mojom::blink::DigitalGoods> pending_remote) {
   if (code != CreateDigitalGoodsResponseCode::kOk) {
     DCHECK(!pending_remote);
-    DVLOG(1) << "CreateDigitalGoodsResponseCode " << code;
-    resolver->Resolve();
+    LogConsoleError(resolver->GetScriptState(),
+                    "GetDigitalGoodsService: " + mojo::ConvertTo<String>(code));
+    resolver->Resolve(v8::Null(resolver->GetScriptState()->GetIsolate()));
     return;
   }
   DCHECK(pending_remote);
@@ -55,19 +59,38 @@ ScriptPromise DOMWindowDigitalGoods::GetDigitalGoodsService(
   auto promise = resolver->Promise();
 
   if (payment_method.IsEmpty()) {
-    resolver->Resolve();
-    return promise;
-  }
-  if (payment_method != known_payment_method_) {
-    resolver->Resolve();
+    LogConsoleError(script_state,
+                    "GetDigitalGoodsService: Empty payment method.");
+    resolver->Resolve(v8::Null(script_state->GetIsolate()));
     return promise;
   }
 
-  // TODO: Bind only on platforms where an implementation exists.
+  if (!script_state->ContextIsValid()) {
+    LogConsoleError(script_state, "GetDigitalGoodsService: internal error.");
+    resolver->Resolve(v8::Null(script_state->GetIsolate()));
+    return promise;
+  }
+
+  auto* execution_context = ExecutionContext::From(script_state);
+  DCHECK(execution_context);
+
+  if (execution_context->IsContextDestroyed()) {
+    LogConsoleError(script_state, "GetDigitalGoodsService: internal error.");
+    resolver->Resolve(v8::Null(script_state->GetIsolate()));
+    return promise;
+  }
+
+  if (!execution_context->IsFeatureEnabled(
+          mojom::blink::FeaturePolicyFeature::kPayment)) {
+    LogConsoleError(script_state,
+                    "GetDigitalGoodsService: Payments not enabled.");
+    resolver->Resolve(v8::Null(script_state->GetIsolate()));
+    return promise;
+  }
+
   if (!mojo_service_) {
-    ExecutionContext::From(script_state)
-        ->GetBrowserInterfaceBroker()
-        .GetInterface(mojo_service_.BindNewPipeAndPassReceiver());
+    execution_context->GetBrowserInterfaceBroker().GetInterface(
+        mojo_service_.BindNewPipeAndPassReceiver());
   }
 
   mojo_service_->CreateDigitalGoods(

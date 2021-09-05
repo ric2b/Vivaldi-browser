@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "ash/ash_export.h"
+#include "ash/frame_throttler/frame_throttling_observer.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
@@ -28,13 +29,6 @@ constexpr uint8_t kDefaultThrottleFps = 20;
 
 class ASH_EXPORT FrameThrottlingController {
  public:
-  class Observer : public base::CheckedObserver {
-   public:
-    virtual void OnThrottlingStarted(
-        const std::vector<aura::Window*>& windows) {}
-    virtual void OnThrottlingEnded() {}
-  };
-
   explicit FrameThrottlingController(ui::ContextFactory* context_factory);
   FrameThrottlingController(const FrameThrottlingController&) = delete;
   FrameThrottlingController& operator=(const FrameThrottlingController&) =
@@ -46,17 +40,27 @@ class ASH_EXPORT FrameThrottlingController {
   // Ends throttling of all throttled windows.
   void EndThrottling();
 
-  void AddObserver(Observer* observer);
-  void RemoveObserver(Observer* observer);
+  void AddObserver(FrameThrottlingObserver* observer);
+  void RemoveObserver(FrameThrottlingObserver* observer);
+
+  void AddArcObserver(FrameThrottlingObserver* observer);
+  void RemoveArcObserver(FrameThrottlingObserver* observer);
+
+  uint8_t throttled_fps() const { return throttled_fps_; }
 
  private:
-  void StartThrottling(const std::vector<viz::FrameSinkId>& frame_sink_ids,
-                       uint8_t fps);
+  void StartThrottlingFrameSinks(
+      const std::vector<viz::FrameSinkId>& frame_sink_ids);
+  void StartThrottlingArc(const std::vector<aura::Window*>& windows);
+  void EndThrottlingFrameSinks();
+  void EndThrottlingArc();
 
   ui::ContextFactory* context_factory_ = nullptr;
-  base::ObserverList<Observer> observers_;
+  base::ObserverList<FrameThrottlingObserver> observers_;
+  base::ObserverList<FrameThrottlingObserver> arc_observers_;
+
   // The fps used for throttling.
-  uint8_t fps_ = kDefaultThrottleFps;
+  uint8_t throttled_fps_ = kDefaultThrottleFps;
   bool windows_throttled_ = false;
 };
 

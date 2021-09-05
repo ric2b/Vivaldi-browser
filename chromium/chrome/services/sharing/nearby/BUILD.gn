@@ -10,15 +10,17 @@ source_set("nearby") {
     "nearby_connections.h",
     "nearby_connections_conversions.cc",
     "nearby_connections_conversions.h",
+    "nearby_connections_stream_buffer_manager.cc",
+    "nearby_connections_stream_buffer_manager.h",
     "platform.cc",
   ]
 
   public_deps = [
     "decoder",
-    "platform_v2",
+    "platform",
     "//base",
     "//chrome/services/sharing/public/cpp",
-    "//chrome/services/sharing/public/mojom",
+    "//chromeos/services/nearby/public/mojom",
     "//mojo/public/cpp/bindings",
     "//third_party/nearby:core",
   ]
@@ -29,7 +31,10 @@ source_set("nearby") {
 source_set("unit_tests") {
   testonly = true
 
-  sources = [ "nearby_connections_unittest.cc" ]
+  sources = [
+    "nearby_connections_stream_buffer_manager_unittest.cc",
+    "nearby_connections_unittest.cc",
+  ]
 
   deps = [
     ":nearby",
@@ -37,6 +42,6 @@ source_set("unit_tests") {
     "//base/test:test_support",
     "//testing/gmock",
     "//testing/gtest",
-    "//third_party/nearby:core_v2_internal_test",
+    "//third_party/nearby:core_internal_test",
   ]
 }

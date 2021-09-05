@@ -35,11 +35,12 @@
 #include "base/auto_reset.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/time/default_tick_clock.h"
-#include "services/network/public/cpp/features.h"
+#include "build/chromeos_buildflags.h"
 #include "services/network/public/cpp/web_sandbox_flags.h"
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/commit_result/commit_result.mojom-blink.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/platform/modules/service_worker/web_service_worker_network_provider.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/core/dom/document.h"
@@ -252,10 +253,7 @@ DocumentLoader::DocumentLoader(
           params_->is_cross_browsing_context_group_navigation) {
   DCHECK(frame_);
 
-  // TODO(nasko): How should this work with OOPIF?
-  // The MHTMLArchive is parsed as a whole, but can be constructed from frames
-  // in multiple processes. In that case, which process should parse it and how
-  // should the output be spread back across multiple processes?
+  // See `archive_` attribute documentation.
   if (!frame_->IsMainFrame()) {
     if (auto* parent = DynamicTo<LocalFrame>(frame_->Tree().Parent()))
       archive_ = parent->Loader().GetDocumentLoader()->archive_;
@@ -500,11 +498,14 @@ void DocumentLoader::UpdateForSameDocumentNavigation(
   redirect_chain_.push_back(new_url);
 
   // We want to allow same-document text fragment navigations if they're coming
-  // from the browser.
-  has_text_fragment_token_ =
-      TextFragmentAnchor::GenerateNewTokenForSameDocument(
-          new_url.FragmentIdentifier(), type, is_content_initiated,
-          same_document_navigation_source);
+  // from the browser. Do this only on a standard navigation so that we don't
+  // clobber the token when this is called from e.g. history.replaceState.
+  if (type == WebFrameLoadType::kStandard) {
+    has_text_fragment_token_ =
+        TextFragmentAnchor::GenerateNewTokenForSameDocument(
+            new_url.FragmentIdentifier(), type, is_content_initiated,
+            same_document_navigation_source);
+  }
 
   SetHistoryItemStateForCommit(
       history_item_.Get(), type,
@@ -532,24 +533,6 @@ void DocumentLoader::UpdateForSameDocumentNavigation(
 
 const KURL& DocumentLoader::UrlForHistory() const {
   return UnreachableURL().IsEmpty() ? Url() : UnreachableURL();
-}
-
-void DocumentLoader::FillNavigationParamsForErrorPage(
-    WebNavigationParams* params) {
-  params->http_method = http_method_;
-  params->referrer = referrer_.referrer;
-  params->referrer_policy = referrer_.referrer_policy;
-  params->http_body = WebHTTPBody(http_body_.get());
-  params->http_content_type = http_content_type_;
-  params->previews_state = previews_state_;
-  params->requestor_origin = requestor_origin_;
-  params->origin_policy = origin_policy_;
-  // Force the commit origin for the error page to be opaque and
-  // contain precursor information from the document's origin.
-  // This is only used for renderer-side enforcement of CSP and the
-  // document origin used here is the origin of the document that was blocked.
-  params->origin_to_commit =
-      frame_->DomWindow()->GetSecurityOrigin()->DeriveNewOpaqueOrigin();
 }
 
 void DocumentLoader::SetHistoryItemStateForCommit(
@@ -634,7 +617,7 @@ void DocumentLoader::BodyDataReceived(base::span<const char> data) {
   DCHECK(!frame_->GetPage()->Paused());
   time_of_last_data_received_ = clock_->NowTicks();
 
-  if (listing_ftp_directory_ || loading_mhtml_archive_) {
+  if (listing_ftp_directory_ || loading_main_document_from_mhtml_archive_) {
     // 1) Ftp directory listings accumulate data buffer and transform it later
     //    to the actual document content.
     // 2) Mhtml archives accumulate data buffer and parse it as mhtml later
@@ -739,8 +722,12 @@ void DocumentLoader::FinishedLoading(base::TimeTicks finish_time) {
     ProcessDataBuffer();
   }
 
-  if (loading_mhtml_archive_ && state_ < kCommitted) {
-    FinalizeMHTMLArchiveLoad();
+  if (loading_main_document_from_mhtml_archive_ && state_ < kCommitted) {
+    // The browser process should block any navigation to an MHTML archive
+    // inside iframes. See NavigationRequest::OnResponseStarted().
+    CHECK(frame_->IsMainFrame());
+
+    archive_ = MHTMLArchive::Create(url_, std::move(data_buffer_));
   }
 
   // We should not call FinishedLoading before committing navigation,
@@ -748,7 +735,7 @@ void DocumentLoader::FinishedLoading(base::TimeTicks finish_time) {
   // has to be validated before committing the navigation. The validation
   // process loads the entire body of the archive, which will move the state to
   // FinishedLoading.
-  if (!loading_mhtml_archive_)
+  if (!loading_main_document_from_mhtml_archive_)
     DCHECK_GE(state_, kCommitted);
 
   base::TimeTicks response_end_time = finish_time;
@@ -769,29 +756,6 @@ void DocumentLoader::FinishedLoading(base::TimeTicks finish_time) {
       parser_.Clear();
     }
   }
-}
-
-void DocumentLoader::FinalizeMHTMLArchiveLoad() {
-  if (!frame_->IsMainFrame()) {
-    // Only the top-frame can load MHTML.
-    frame_->Console().AddMessage(MakeGarbageCollected<ConsoleMessage>(
-        mojom::ConsoleMessageSource::kJavaScript,
-        mojom::ConsoleMessageLevel::kError,
-        "Attempted to load a multipart archive into an subframe: " +
-            url_.GetString()));
-  } else {
-    archive_ = MHTMLArchive::Create(url_, data_buffer_);
-    archive_load_result_ = archive_->LoadResult();
-    if (archive_load_result_ != mojom::MHTMLLoadResult::kSuccess) {
-      archive_.Clear();
-      // Log if attempting to load an invalid archive resource.
-      frame_->Console().AddMessage(MakeGarbageCollected<ConsoleMessage>(
-          mojom::ConsoleMessageSource::kJavaScript,
-          mojom::ConsoleMessageLevel::kError,
-          "Malformed multipart archive: " + url_.GetString()));
-    }
-  }
-  data_buffer_ = nullptr;
 }
 
 void DocumentLoader::HandleRedirect(const KURL& current_request_url) {
@@ -1098,7 +1062,7 @@ void DocumentLoader::StopLoading() {
     LoadFailed(ResourceError::CancelledError(Url()));
 }
 
-void DocumentLoader::SetDefersLoading(bool defers) {
+void DocumentLoader::SetDefersLoading(WebURLLoader::DeferType defers) {
   defers_loading_ = defers;
   if (body_loader_)
     body_loader_->SetDefersLoading(defers);
@@ -1198,7 +1162,7 @@ void DocumentLoader::StartLoadingInternal() {
 
   navigation_timing_info_ = ResourceTimingInfo::Create(
       fetch_initiator_type_names::kDocument, GetTiming().NavigationStart(),
-      mojom::RequestContextType::IFRAME,
+      mojom::blink::RequestContextType::IFRAME,
       network::mojom::RequestDestination::kIframe);
   navigation_timing_info_->SetInitialURL(url_);
   report_timing_info_to_parent_ = ShouldReportTimingInfoToParent();
@@ -1267,7 +1231,7 @@ void DocumentLoader::StartLoadingInternal() {
       nullptr /* recursive_prefetch_token */);
   if (!frame_->IsMainFrame() && response_.HasMajorCertificateErrors()) {
     MixedContentChecker::HandleCertificateError(
-        response_, mojom::RequestContextType::HYPERLINK,
+        response_, mojom::blink::RequestContextType::HYPERLINK,
         MixedContentChecker::DecideCheckModeForPlugin(
             GetFrame()->GetSettings()),
         GetContentSecurityNotifier());
@@ -1280,30 +1244,25 @@ void DocumentLoader::StartLoadingInternal() {
 
   HandleResponse();
 
-  loading_mhtml_archive_ =
+  loading_main_document_from_mhtml_archive_ =
       EqualIgnoringASCIICase("multipart/related", response_.MimeType()) ||
       EqualIgnoringASCIICase("message/rfc822", response_.MimeType());
-  if (loading_mhtml_archive_) {
+  if (loading_main_document_from_mhtml_archive_) {
+    // The browser process should block any navigation to an MHTML archive
+    // inside iframes. See NavigationRequest::OnResponseStarted().
+    CHECK(frame_->IsMainFrame());
+
     // To commit an mhtml archive synchronously we have to load the whole body
     // synchronously and parse it, and it's already loaded in a buffer usually.
     // This means we should not defer, and we'll finish loading synchronously
     // from StartLoadingBody().
     body_loader_->StartLoadingBody(this, false /* use_isolated_code_cache */);
-    if (body_loader_) {
-      // Finalize the load of the MHTML archive. If the load fail (ie. did not
-      // finish synchronously), |body_loader_| will be null amd the load will
-      // not be finalized. When StartLoadingResponse is called later, an empty
-      // document will be loaded instead of the MHTML archive.
-      // TODO(clamy): Simplify this code path.
-      FinalizeMHTMLArchiveLoad();
-    }
     return;
   }
 
   InitializePrefetchedSignedExchangeManager();
 
-  if (defers_loading_)
-    body_loader_->SetDefersLoading(true);
+  body_loader_->SetDefersLoading(defers_loading_);
 }
 
 void DocumentLoader::StartLoadingResponse() {
@@ -1318,22 +1277,37 @@ void DocumentLoader::StartLoadingResponse() {
   //
   // It is important to forward all the CSP data before loading the response
   // body, otherwise some loaded content might not be blocked.
-  frame_->DomWindow()->GetContentSecurityPolicy()->ReportAccumulatedHeaders(
-      frame_);
+  frame_->DomWindow()->GetContentSecurityPolicy()->ReportAccumulatedHeaders();
 
   CreateParserPostCommit();
 
-  // Finish load of MHTML archives and empty documents.
-  ArchiveResource* main_resource =
-      loading_mhtml_archive_ && archive_ ? archive_->MainResource() : nullptr;
-  if (main_resource) {
-    data_buffer_ = main_resource->Data();
-    ProcessDataBuffer();
+  // The main document from an MHTML archive is not loaded from its HTTP
+  // response, but from the main resource within the archive (in the response).
+  if (loading_main_document_from_mhtml_archive_) {
+    // If the `archive_` contains a main resource, load the main document from
+    // the archive, else it will remain empty.
+    if (ArchiveResource* resource = archive_->MainResource()) {
+      DCHECK_EQ(archive_->LoadResult(),
+                mojom::blink::MHTMLLoadResult::kSuccess);
+
+      data_buffer_ = resource->Data();
+      ProcessDataBuffer();
+      FinishedLoading(base::TimeTicks::Now());
+      return;
+    }
+
+    // Log attempts loading a malformed archive.
+    DCHECK_NE(archive_->LoadResult(), mojom::blink::MHTMLLoadResult::kSuccess);
+    frame_->Console().AddMessage(MakeGarbageCollected<ConsoleMessage>(
+        mojom::blink::ConsoleMessageSource::kJavaScript,
+        mojom::blink::ConsoleMessageLevel::kError,
+        "Malformed multipart archive: " + url_.GetString()));
+    FinishedLoading(base::TimeTicks::Now());
+    return;
   }
 
-  if (loading_mhtml_archive_ || loading_url_as_empty_document_) {
-    // Finish the load of an empty document if the URL was meant to load as an
-    // empty document or the load of the MHTML archive failed.
+  // Empty documents are empty by definition. Nothing to load.
+  if (loading_url_as_empty_document_) {
     FinishedLoading(base::TimeTicks::Now());
     return;
   }
@@ -1360,7 +1334,7 @@ void DocumentLoader::StartLoadingResponse() {
 
   bool use_isolated_code_cache =
       RuntimeEnabledFeatures::CacheInlineScriptCodeEnabled() &&
-      ShouldUseIsolatedCodeCache(mojom::RequestContextType::HYPERLINK,
+      ShouldUseIsolatedCodeCache(mojom::blink::RequestContextType::HYPERLINK,
                                  response_);
 
   // The |cached_metadata_handler_| is created, even when
@@ -1667,11 +1641,25 @@ void DocumentLoader::InitializeWindow(Document* owner_document) {
   }
   frame_->DomWindow()->SetAddressSpace(ip_address_space_);
 
+  if (base::FeatureList::IsEnabled(blink::features::kPolicyContainer)) {
+    // SVG image documents go throught this but don't have a PolicyContainer, so
+    // ignore them.
+    if (frame_->GetPolicyContainer()) {
+      frame_->DomWindow()->SetReferrerPolicy(
+          frame_->GetPolicyContainer()->GetReferrerPolicy(), false);
+    }
+  }
   String referrer_policy_header =
       response_.HttpHeaderField(http_names::kReferrerPolicy);
   if (!referrer_policy_header.IsNull()) {
     CountUse(WebFeature::kReferrerPolicyHeader);
     frame_->DomWindow()->ParseAndSetReferrerPolicy(referrer_policy_header);
+    if (base::FeatureList::IsEnabled(blink::features::kPolicyContainer)) {
+      if (frame_->GetPolicyContainer()) {
+        frame_->GetPolicyContainer()->UpdateReferrerPolicy(
+            frame_->DomWindow()->GetReferrerPolicy());
+      }
+    }
   }
 }
 
@@ -1787,9 +1775,14 @@ void DocumentLoader::CommitNavigation() {
     frame_->Tree().CrossBrowsingContextGroupSetNulledName();
   }
 
-  if (loading_mhtml_archive_ && archive_ &&
-      !archive_->MainResource()->Url().IsEmpty()) {
-    document->SetBaseURLOverride(archive_->MainResource()->Url());
+  // MHTML archive's URL is usually a local file. However the main resource
+  // within the archive has a public URL and must be used to resolve all the
+  // relative links.
+  if (loading_main_document_from_mhtml_archive_) {
+    ArchiveResource* main_resource = archive_->MainResource();
+    KURL main_resource_url = main_resource ? main_resource->Url() : KURL();
+    if (!main_resource_url.IsEmpty())
+      document->SetBaseURLOverride(main_resource_url);
   }
 
   if (commit_reason_ == CommitReason::kXSLT)
@@ -1897,7 +1890,7 @@ void DocumentLoader::CreateParserPostCommit() {
     window->GetOriginTrialContext()->AddForceEnabledTrials(
         force_enabled_origin_trials_);
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
     // Enable Auto Picture-in-Picture feature for the built-in Chrome OS Video
     // Player app.
     const url::Origin origin = window->GetSecurityOrigin()->ToUrlOrigin();
@@ -1958,8 +1951,11 @@ void DocumentLoader::CreateParserPostCommit() {
 const AtomicString& DocumentLoader::MimeType() const {
   // In the case of mhtml archive, |response_| has an archive mime type,
   // while the document has a different mime type.
-  if (archive_ && loading_mhtml_archive_)
-    return archive_->MainResource()->MimeType();
+  if (loading_main_document_from_mhtml_archive_) {
+    if (ArchiveResource* main_resource = archive_->MainResource())
+      return main_resource->MimeType();
+  }
+
   return response_.MimeType();
 }
 

@@ -14,8 +14,8 @@ import 'chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js';
 import 'chrome://resources/mojo/mojo/public/mojom/base/unguessable_token.mojom-lite.js';
 import './nearby_preview.js';
 import './nearby_progress.js';
-import './nearby_share_target_types.mojom-lite.js';
-import './nearby_share.mojom-lite.js';
+import './mojo/nearby_share_target_types.mojom-lite.js';
+import './mojo/nearby_share.mojom-lite.js';
 import './shared/nearby_page_template.m.js';
 import './strings.m.js';
 
@@ -90,12 +90,41 @@ Polymer({
     },
 
     /**
+     * Preview info for the file(s) to send. Expected to start
+     * as null, then change to a valid object before this component is shown.
+     * @type {?nearbyShare.mojom.SendPreview}
+     */
+    sendPreview: {
+      type: Object,
+      value: null,
+    },
+
+    /**
      * Token to show to the user to confirm the selected share target. Expected
      * to start as null, then change to a valid object via updates from the
      * transferUpdateListener.
      * @private {?string}
      */
     confirmationToken_: {
+      type: String,
+      value: null,
+    },
+
+    /**
+     * Header text for error. The error section is not displayed if this is
+     * falsey.
+     * @private {?string}
+     */
+    errorTitle_: {
+      type: String,
+      value: null,
+    },
+
+    /**
+     * Description text for error, displayed under the error title.
+     * @private {?string}
+     */
+    errorDescription_: {
       type: String,
       value: null,
     },
@@ -152,6 +181,25 @@ Polymer({
         break;
       case nearbyShare.mojom.TransferStatus.kInProgress:
         this.fire('close');
+        break;
+      case nearbyShare.mojom.TransferStatus.kRejected:
+        this.errorTitle_ = this.i18n('nearbyShareErrorCantShare');
+        this.errorDescription_ = this.i18n('nearbyShareErrorRejected');
+        break;
+      case nearbyShare.mojom.TransferStatus.kTimedOut:
+        this.errorTitle_ = this.i18n('nearbyShareErrorTimeOut');
+        this.errorDescription_ = this.i18n('nearbyShareErrorNoResponse');
+        break;
+      case nearbyShare.mojom.TransferStatus.kUnsupportedAttachmentType:
+        this.errorTitle_ = this.i18n('nearbyShareErrorCantShare');
+        this.errorDescription_ =
+            this.i18n('nearbyShareErrorUnsupportedFileType');
+        break;
+      case nearbyShare.mojom.TransferStatus.kMediaUnavailable:
+      case nearbyShare.mojom.TransferStatus.kNotEnoughSpace:
+      case nearbyShare.mojom.TransferStatus.kFailed:
+        this.errorTitle_ = this.i18n('nearbyShareErrorCantShare');
+        this.errorDescription_ = this.i18n('nearbyShareErrorSomethingWrong');
         break;
     }
   },
@@ -223,7 +271,8 @@ Polymer({
    * @private
    */
   attachmentTitle_() {
-    // TODO(crbug.com/1123942): Pass attachments to UI.
-    return 'Unknown file';
+    return this.sendPreview && this.sendPreview.description ?
+        this.sendPreview.description :
+        'Unknown file';
   },
 });

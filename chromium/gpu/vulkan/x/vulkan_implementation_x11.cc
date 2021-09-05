@@ -5,7 +5,7 @@
 #include "gpu/vulkan/x/vulkan_implementation_x11.h"
 
 #include "base/base_paths.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/notreached.h"
 #include "base/optional.h"
@@ -20,8 +20,6 @@
 #include "ui/gfx/gpu_fence.h"
 #include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/gfx/x/connection.h"
-#include "ui/gfx/x/x11.h"
-#include "ui/gfx/x/x11_types.h"
 
 namespace gpu {
 
@@ -40,7 +38,7 @@ bool InitializeVulkanFunctionPointers(
 
 VulkanImplementationX11::VulkanImplementationX11(bool use_swiftshader)
     : VulkanImplementation(use_swiftshader) {
-  gfx::GetXDisplay();
+  x11::Connection::Get();
 }
 
 VulkanImplementationX11::~VulkanImplementationX11() = default;
@@ -60,7 +58,7 @@ bool VulkanImplementationX11::InitializeVulkanInstance(bool using_surface) {
       VK_KHR_EXTERNAL_SEMAPHORE_CAPABILITIES_EXTENSION_NAME};
   if (using_surface_) {
     required_extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
-    required_extensions.push_back(VK_KHR_XLIB_SURFACE_EXTENSION_NAME);
+    required_extensions.push_back(VK_KHR_XCB_SURFACE_EXTENSION_NAME);
   }
 
   VulkanFunctionPointers* vulkan_function_pointers =
@@ -105,10 +103,9 @@ bool VulkanImplementationX11::GetPhysicalDevicePresentationSupport(
   if (use_swiftshader())
     return true;
   auto* connection = x11::Connection::Get();
-  auto* display = connection->display();
-  return vkGetPhysicalDeviceXlibPresentationSupportKHR(
-      device, queue_family_index, display,
-      static_cast<VisualID>(connection->default_root_visual().visual_id));
+  return vkGetPhysicalDeviceXcbPresentationSupportKHR(
+      device, queue_family_index, connection->XcbConnection(),
+      static_cast<xcb_visualid_t>(connection->default_root_visual().visual_id));
 }
 
 std::vector<const char*>

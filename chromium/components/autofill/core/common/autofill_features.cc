@@ -24,6 +24,13 @@ namespace features {
 const base::Feature kAutofillAddressEnhancementVotes{
     "kAutofillAddressEnhancementVotes", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// TODO(crbug.com/1135188): Remove this feature flag after the explicit save
+// prompts for address profiles is complete.
+// When enabled, a save prompt will be shown to user upon form submission before
+// storing any detected address profile.
+const base::Feature kAutofillAddressProfileSavePrompt{
+    "AutofillAddressProfileSavePrompt", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // By default, AutofillAgent and, if |kAutofillProbableFormSubmissionInBrowser|
 // is enabled, also ContentAutofillDriver omit duplicate form submissions, even
 // though the form's data may have changed substantially. If enabled, the
@@ -31,13 +38,6 @@ const base::Feature kAutofillAddressEnhancementVotes{
 // TODO(crbug/1117451): Remove once the form-submission experiment is over.
 const base::Feature kAutofillAllowDuplicateFormSubmissions{
     "AutofillAllowDuplicateFormSubmissions", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Controls if a full country name instead of a country code in a field with a
-// type derived from HTML_TYPE_COUNTRY_CODE can be used to set the profile
-// country.
-const base::Feature kAutofillAllowHtmlTypeCountryCodesWithFullNames{
-    "AutofillAllowHtmlTypeCountryCodesWithFullNames",
-    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls whether autofill activates on non-HTTP(S) pages. Useful for
 // automated with data URLS in cases where it's too difficult to use the
@@ -86,6 +86,28 @@ const base::Feature kAutofillEnableAugmentedPhoneCountryCode{
 const base::Feature kAutofillEnableHideSuggestionsUI{
     "AutofillEnableHideSuggestionsUI", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// When enabled and user has single account, a footer indicating user's e-mail
+// address and profile picture will appear at the bottom of InfoBars which has
+// corresponding account indication footer flags on.
+const base::Feature
+    kAutofillEnableInfoBarAccountIndicationFooterForSingleAccountUsers{
+        "AutofillEnableInfoBarAccountIndicationFooterForSingleAccountUsers",
+        base::FEATURE_DISABLED_BY_DEFAULT};
+
+// When enabled and user is syncing, a footer indicating user's e-mail address
+// and profile picture will appear at the bottom of InfoBars which has
+// corresponding account indication footer flags on.
+const base::Feature kAutofillEnableInfoBarAccountIndicationFooterForSyncUsers{
+    "AutofillEnableInfoBarAccountIndicationFooterForSyncUsers",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// When enabled and user is signed in, a footer indicating user's e-mail address
+// and profile picture will appear at the bottom of corresponding password
+// InfoBars.
+const base::Feature kAutofillEnablePasswordInfoBarAccountIndicationFooter{
+    "AutofillEnablePasswordInfoBarAccountIndicationFooter",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Controls if Autofill supports new structure in names.
 // TODO(crbug.com/1098943): Remove once launched.
 const base::Feature kAutofillEnableSupportForMoreStructureInNames{
@@ -104,23 +126,12 @@ const base::Feature kAutofillEnableSupportForMergingSubsetNames{
     "AutofillEnableSupportForMergingSubsetNames",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Controls whether or not a minimum number of fields is required before
-// heuristic field type prediction is run for a form.
-const base::Feature kAutofillEnforceMinRequiredFieldsForHeuristics{
-    "AutofillEnforceMinRequiredFieldsForHeuristics",
-    base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Controls whether or not a minimum number of fields is required before
-// crowd-sourced field type predictions are queried for a form.
-const base::Feature kAutofillEnforceMinRequiredFieldsForQuery{
-    "AutofillEnforceMinRequiredFieldsForQuery",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Controls whether or not a minimum number of fields is required before
-// field type votes are uploaded to the crowd-sourcing server.
-const base::Feature kAutofillEnforceMinRequiredFieldsForUpload{
-    "AutofillEnforceMinRequiredFieldsForUpload",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+// Controls whether honorific prefix is shown and editable in Autofill Settings
+// on Android, iOS and Desktop.
+// TODO(crbug.com/1141460): Remove once launched.
+const base::Feature kAutofillEnableUIForHonorificPrefixesInSettings{
+   "AutofillEnableUIForHonorificPrefixesInSettings",
+   base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls whether or not all datalist shall be extracted into FormFieldData.
 // This feature is enabled in both WebView and WebLayer where all datalists
@@ -137,30 +148,17 @@ const base::Feature kAutofillExtractAllDatalists{
 const base::Feature kAutofillFixFillableFieldTypes{
     "AutofillFixFillableFieldTypes", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// If enabled, prefilled country and state values are not reset before
-// an address profile import.
-// TODO(crbug.com/1100231): Remove once fix is tested.
-const base::Feature kAutofillImportPrefilledCountryAndStateValues{
-    "AutofillImportPrefilledCountryAndStateValues",
-    base::FEATURE_ENABLED_BY_DEFAULT};
+// When enabled, Autofill will use FormRendererIds instead of
+// GetIdentifierForRefill() to identify forms during refills.
+// TODO(crbug/896689): Remove once experiment is finished.
+const base::Feature kAutofillRefillWithRendererIds{
+    "AutofillRefillWithRendererIds", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// When enabled, Autofill keeps the initial field values in the |FormStructure|
-// cache for all field types.
-const base::Feature kAutofillKeepInitialFormValuesInCache{
-    "AutofillKeepCachedFormValues", base::FEATURE_ENABLED_BY_DEFAULT};
-
-// When enabled, Autofill will use FieldRendererIds instead of unique_names
-// to align forms in FormStructure::RetrieveFromCache().
-const base::Feature kAutofillRetrieveFromCacheWithRendererIds{
-    "AutofillRetrieveFromCacheWithRendererIds",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-
-// When enabled, Autofill will try to retrieve cached fields by signatures as a
-// fallback that is useful if unique renderer ids are unstable.
-// TODO(crbug.com/1125624): Remove experiment once trial ended.
-const base::Feature kAutofillRetrieveFromCacheWithFieldSignatureAsFallback{
-    "AutofillRetrieveFromCacheWithFieldSignatureAsFallback",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+// When enabled, Autofill will use FormRendererIds instead of
+// unique_name() to create unique section names.
+// TODO(crbug/896689): Remove once experiment is finished.
+const base::Feature kAutofillNameSectionsWithRendererIds{
+    "AutofillNameSectionsWithRendererIds", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // When enabled, autofill suggestions are displayed in the keyboard accessory
 // instead of the regular popup.
@@ -195,15 +193,6 @@ const base::Feature kAutofillProbableFormSubmissionInBrowser{
 
 const base::Feature kAutofillProfileClientValidation{
     "AutofillProfileClientValidation", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kAutofillProfileImportFromUnifiedSection{
-    "AutofillProfileImportFromUnifiedSection",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-
-// TODO(crbug.com/1101280): Remove once feature is tested.
-const base::Feature kAutofillProfileImportFromUnfocusableFields{
-    "AutofillProfileImportFromUnfocusableFields",
-    base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls whether Autofill uses server-side validation to ensure that fields
 // with invalid data are not suggested.
@@ -263,13 +252,16 @@ const base::Feature kAutofillSkipFillingFieldsWithChangedValues{
 const base::Feature kAutofillTokenPrefixMatching{
     "AutofillTokenPrefixMatching", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables the touch to fill feature for Android.
-const base::Feature kAutofillTouchToFill = {"TouchToFillAndroid",
-                                            base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Autofill upload throttling is used for testing.
 const base::Feature kAutofillUploadThrottling{"AutofillUploadThrottling",
                                               base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Controls whether to use the AutofillUseAlternativeStateNameMap for filling
+// of state selection fields, comparison of profiles and sending state votes to
+// the server.
+// TODO(crbug.com/1143516): Remove the feature when the experiment is completed.
+const base::Feature kAutofillUseAlternativeStateNameMap{
+    "AutofillUseAlternativeStateNameMap", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Controls whether suggestions' labels use the improved label disambiguation
 // format.
@@ -282,30 +274,11 @@ const base::Feature kAutofillUseImprovedLabelDisambiguation{
 const base::Feature kAutofillUseNewSectioningMethod{
     "AutofillUseNewSectioningMethod", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// TODO(crbug.com/1075604): Remove once launched.
-// Controls whether the page language is used as a fall-back locale to translate
-// the country name when a profile is imported from a form.
-const base::Feature kAutofillUsePageLanguageToTranslateCountryNames{
-    "AutofillUsePageLanguageToTranslateCountryNames",
-    base::FEATURE_ENABLED_BY_DEFAULT};
-
-// Controls whether to use the |ParseCityStateCountryZipCode| or not for
-// predicting the heuristic type.
-// |ParseCityStateCountryZipCode| is intended to prevent the misclassification
-// of the country field into |ADDRESS_HOME_STATE| while determining the
-// heuristic type. The misclassification happens sometimes because the regular
-// expression for |ADDRESS_HOME_STATE| contains the term "region" which is also
-// used for country selectors.
-const base::Feature kAutofillUseParseCityStateCountryZipCodeInHeuristic{
-    "AutofillUseParseCityStateCountryZipCodeInHeuristic",
+// Controls whether page language is used to match patterns.
+// TODO(crbug.com/1134496): Remove once launched.
+const base::Feature kAutofillUsePageLanguageToSelectFieldParsingPatterns{
+    "AutofillUsePageLanguageToSelectFieldParsingPatterns",
     base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Controls whether or not autofill utilizes the country code from the Chrome
-// variation service. The country code is used for determining the address
-// requirements for address profile creation and as source for a default country
-// used in a new address profile.
-const base::Feature kAutofillUseVariationCountryCode{
-    "AutofillUseVariationCountryCode", base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(OS_ANDROID)
 // Controls whether the Autofill manual fallback for Addresses and Payments is
@@ -333,6 +306,14 @@ const char kAutofillUseMobileLabelDisambiguationParameterShowOne[] = "show-one";
 // TODO(crbug/1131038): Remove once it's launched.
 const base::Feature kAutofillUseUniqueRendererIDsOnIOS{
     "AutofillUseUniqueRendererIDsOnIOS", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
+#if defined(OS_ANDROID)
+// Controls whether the Wallet (GPay) integration requires first-sync-setup to
+// be complete.
+// TODO(crbug.com/1134564): Clean up after launch.
+const base::Feature kWalletRequiresFirstSyncSetupComplete{
+    "WalletRequiresFirstSyncSetupComplete", base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 }  // namespace features

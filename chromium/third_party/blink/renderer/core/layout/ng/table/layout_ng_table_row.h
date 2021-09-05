@@ -30,7 +30,10 @@ class CORE_EXPORT LayoutNGTableRow : public LayoutNGMixin<LayoutBlock>,
 
   void UpdateBlockLayout(bool relayout_children) override { NOTREACHED(); }
 
-  const char* GetName() const override { return "LayoutNGTableRow"; }
+  const char* GetName() const override {
+    NOT_DESTROYED();
+    return "LayoutNGTableRow";
+  }
 
   void AddChild(LayoutObject* child,
                 LayoutObject* before_child = nullptr) override;
@@ -48,16 +51,30 @@ class CORE_EXPORT LayoutNGTableRow : public LayoutNGMixin<LayoutBlock>,
   // For simplicity, just conservatively assume all table rows are not opaque.
   // Copied from Legacy's LayoutTableRow
   bool BackgroundIsKnownToBeOpaqueInRect(const PhysicalRect&) const override {
+    NOT_DESTROYED();
     return false;
   }
 
-  bool AllowsNonVisibleOverflow() const override { return false; }
+  bool AllowsNonVisibleOverflow() const override {
+    NOT_DESTROYED();
+    return false;
+  }
+
+  void AddVisualOverflowFromBlockChildren() override;
+
+  bool VisualRectRespectsVisibility() const final {
+    NOT_DESTROYED();
+    return false;
+  }
 
   // LayoutBlock methods end.
 
   // LayoutNGTableRowInterface methods start.
 
-  const LayoutObject* ToLayoutObject() const final { return this; }
+  const LayoutObject* ToLayoutObject() const final {
+    NOT_DESTROYED();
+    return this;
+  }
 
   const LayoutTableRow* ToLayoutTableRow() const final {
     NOTREACHED();
@@ -65,10 +82,12 @@ class CORE_EXPORT LayoutNGTableRow : public LayoutNGMixin<LayoutBlock>,
   }
 
   const LayoutNGTableRowInterface* ToLayoutNGTableRowInterface() const final {
+    NOT_DESTROYED();
     return this;
   }
 
   LayoutNGTableInterface* TableInterface() const final {
+    NOT_DESTROYED();
     return SectionInterface()->TableInterface();
   }
 
@@ -90,6 +109,7 @@ class CORE_EXPORT LayoutNGTableRow : public LayoutNGMixin<LayoutBlock>,
   LayoutNGTableCell* LastCell() const;
 
   bool IsOfType(LayoutObjectType type) const override {
+    NOT_DESTROYED();
     return type == kLayoutObjectTableRow ||
            LayoutNGMixin<LayoutBlock>::IsOfType(type);
   }

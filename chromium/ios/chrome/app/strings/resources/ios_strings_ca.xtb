@@ -18,7 +18,9 @@
 <translation id="1112015203684611006">Error en imprimir</translation>
 <translation id="1125564390852150847">Crea una pestanya nova.</translation>
 <translation id="1145536944570833626">Suprimeix les dades existents.</translation>
+<translation id="1147031633655575115">Has iniciat la sessió com a <ph name="USER" /></translation>
 <translation id="1154690515305205900">No es pot crear un enllaç al text marcat.</translation>
+<translation id="1157749421655780457">Permet l'accés a la ubicació...</translation>
 <translation id="1165039591588034296">Error</translation>
 <translation id="1172898394251786223">Camp següent</translation>
 <translation id="1176932207622159128">No es pot desar.</translation>
@@ -53,6 +55,7 @@
 <translation id="1449835205994625556">Amaga la contrasenya</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> elements</translation>
 <translation id="1491277525950327607">Fes doble toc per canviar la configuració</translation>
+<translation id="1492417797159476138">Ja has desat aquest nom d'usuari per a aquest lloc web</translation>
 <translation id="1509486075633541495">Inicia la sessió al lloc web</translation>
 <translation id="1509960214886564027">Pot ser que les funcions de molts llocs web no funcionin</translation>
 <translation id="152234381334907219">No es desen mai</translation>
@@ -266,6 +269,7 @@ Segueix aquests passos:</translation>
 <translation id="385051799172605136">Enrere</translation>
 <translation id="3892144330757387737">Trobaràs l'historial aquí</translation>
 <translation id="3897092660631435901">Menú</translation>
+<translation id="3913386780052199712">Sessió iniciada a Chrome</translation>
 <translation id="3915450441834151894">Informació del lloc web</translation>
 <translation id="3922310737605261887">Cerca el text copiat</translation>
 <translation id="3928666092801078803">Combina les meves dades</translation>
@@ -340,6 +344,7 @@ Les vostres dades estan encriptades amb la vostra frase de contrasenya de sincro
 <translation id="4751645464639803239">Pestanya d'incògnit nova</translation>
 <translation id="4758977202923349869">Situa la targeta de crèdit dins d'aquest marc</translation>
 <translation id="4775879719735953715">Navegador predeterminat</translation>
+<translation id="4778644898150334464">Utilitza una altra contrasenya</translation>
 <translation id="4802417911091824046">L'encriptació de frases de contrasenya no inclou les formes de pagament ni les adreces de Google Pay.
 
 Per canviar aquesta opció, <ph name="BEGIN_LINK" />restableix la sincronització<ph name="END_LINK" />.</translation>
@@ -372,6 +377,7 @@ Per canviar aquesta opció, <ph name="BEGIN_LINK" />restableix la sincronitzaci�
 <translation id="5059136629401106827">D'acord</translation>
 <translation id="5062321486222145940">Instal. de Google Drive</translation>
 <translation id="5083464117946352670">No es determina mida fitxer.</translation>
+<translation id="5090832849094901128">Encara que suprimeixis aquesta contrasenya, no se suprimirà el teu compte a <ph name="WEBSITE" />.</translation>
 <translation id="5094827893301452931">S'ha completat el tuit.</translation>
 <translation id="5118764316110575523">Desactivat</translation>
 <translation id="5127805178023152808">Sincronització desactivada</translation>
@@ -511,6 +517,9 @@ Els llocs web no poden fer servir galetes per veure la teva activitat de navegac
 <translation id="6476800141292307438">La pàgina s'està traduint a <ph name="LANGUAGE" />. Tens opcions disponibles a la part inferior de la pantalla.</translation>
 <translation id="648164694371393720">Error d’autenticació</translation>
 <translation id="6482629121755362506"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> elements suprimits</translation>
+<translation id="6497772452874122664">Si confies en <ph name="TIME" />, pots utilitzar una contrasenya desada d'un altre lloc web.
+
+Prova d'utilitzar una contrasenya única per a cada lloc web.</translation>
 <translation id="651505212789431520">Vols cancel·lar la sincronització? Pots activar la sincronització en qualsevol moment des de la configuració.</translation>
 <translation id="6561262006871132942">Amplia</translation>
 <translation id="6585618849026997638">Afegeix adreces d'interès per tornar a pàgines que consideris importants</translation>
@@ -590,6 +599,7 @@ Els llocs web no poden fer servir galetes per veure la teva activitat de navegac
 <translation id="739941347996872055">Pestanya anterior</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7409985198648820906"><ph name="UNREAD_COUNT" /> articles sense llegir.</translation>
+<translation id="7412027924265291969">Continua</translation>
 <translation id="7425346204213733349">Els canvis que es facin a les adreces d'interès, l'historial, les contrasenyes i altres opcions de configuració es deixaran de sincronitzar amb el Compte de Google. No obstant això, les dades actuals hi continuaran emmagatzemades.</translation>
 <translation id="7435356471928173109">Desactivada per l'administrador</translation>
 <translation id="7454057999980797137">Província</translation>
@@ -600,6 +610,7 @@ Els llocs web no poden fer servir galetes per veure la teva activitat de navegac
 <translation id="7472734401283673885">Nom de l'empresa</translation>
 <translation id="7473891865547856676">No, gràcies</translation>
 <translation id="7481312909269577407">Endavant</translation>
+<translation id="7483467499335917849">Utilitza la teva ubicació actual</translation>
 <translation id="750493650310597496">No se n'ha seleccionat cap</translation>
 <translation id="7514365320538308">Baixa</translation>
 <translation id="7537586195939242955">No es pot instal·lar el passi a Passbook en aquest moment.</translation>
@@ -733,6 +744,7 @@ Els llocs web poden fer servir galetes per veure la teva activitat de navegació
 <translation id="9094033019050270033">Actualitza la contrasenya</translation>
 <translation id="9100610230175265781">S'ha d'introduir una frase de contrasenya </translation>
 <translation id="9107664647686727385">Comprova que no hi hagi contrasenyes en perill</translation>
+<translation id="9137526406337347448">Google Services</translation>
 <translation id="9148126808321036104">Torna a iniciar la sessió</translation>
 <translation id="9152539721251340337">Crea un codi QR</translation>
 <translation id="9157836665414082580">Suprimeix quadres de diàleg</translation>

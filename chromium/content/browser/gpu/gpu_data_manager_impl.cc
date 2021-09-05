@@ -241,7 +241,7 @@ void GpuDataManagerImpl::UpdateGpuFeatureInfo(
 }
 
 void GpuDataManagerImpl::UpdateGpuExtraInfo(
-    const gpu::GpuExtraInfo& gpu_extra_info) {
+    const gfx::GpuExtraInfo& gpu_extra_info) {
   base::AutoLock auto_lock(lock_);
   private_->UpdateGpuExtraInfo(gpu_extra_info);
 }
@@ -262,7 +262,7 @@ gpu::GpuFeatureInfo GpuDataManagerImpl::GetGpuFeatureInfoForHardwareGpu()
   return private_->GetGpuFeatureInfoForHardwareGpu();
 }
 
-gpu::GpuExtraInfo GpuDataManagerImpl::GetGpuExtraInfo() const {
+gfx::GpuExtraInfo GpuDataManagerImpl::GetGpuExtraInfo() const {
   base::AutoLock auto_lock(lock_);
   return private_->GetGpuExtraInfo();
 }
@@ -367,6 +367,13 @@ void GpuDataManagerImpl::OnDisplayAdded(const display::Display& new_display) {
 void GpuDataManagerImpl::OnDisplayRemoved(const display::Display& old_display) {
   base::AutoLock auto_lock(lock_);
   private_->OnDisplayRemoved(old_display);
+}
+
+void GpuDataManagerImpl::OnDisplayMetricsChanged(
+    const display::Display& display,
+    uint32_t changed_metrics) {
+  base::AutoLock auto_lock(lock_);
+  private_->OnDisplayMetricsChanged(display, changed_metrics);
 }
 
 // static

@@ -26,11 +26,13 @@
 #include "build/build_config.h"
 #include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/autofill_external_delegate.h"
+#include "components/autofill/core/browser/autofill_form_test_utils.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/metrics/address_form_event_logger.h"
 #include "components/autofill/core/browser/metrics/credit_card_form_event_logger.h"
 #include "components/autofill/core/browser/metrics/form_events.h"
 #include "components/autofill/core/browser/mock_autocomplete_history_manager.h"
+#include "components/autofill/core/browser/pattern_provider/test_pattern_provider.h"
 #include "components/autofill/core/browser/payments/credit_card_access_manager.h"
 #include "components/autofill/core/browser/payments/test_credit_card_save_manager.h"
 #include "components/autofill/core/browser/payments/test_payments_client.h"
@@ -80,9 +82,6 @@ using ::testing::UnorderedPointwise;
 
 namespace autofill {
 
-using features::kAutofillEnforceMinRequiredFieldsForHeuristics;
-using features::kAutofillEnforceMinRequiredFieldsForQuery;
-using features::kAutofillEnforceMinRequiredFieldsForUpload;
 using mojom::SubmissionSource;
 using SyncSigninState = AutofillSyncSigninState;
 
@@ -357,10 +356,6 @@ class AutofillMetricsTest : public testing::Test {
                            bool include_masked_server_credit_card,
                            bool include_full_server_credit_card);
 
-  // Creates a masked server card with a nickname, and adds it to existing
-  // credit card list.
-  void AddMaskedServerCreditCardWithNickname();
-
   void AddMaskedServerCreditCardWithOffer(std::string guid,
                                           std::string offer_reward_amount,
                                           GURL url,
@@ -388,6 +383,7 @@ class AutofillMetricsTest : public testing::Test {
   std::unique_ptr<MockAutocompleteHistoryManager> autocomplete_history_manager_;
   std::unique_ptr<AutofillExternalDelegate> external_delegate_;
   base::test::ScopedFeatureList scoped_feature_list_;
+  TestPatternProvider test_pattern_provider_;
 
  private:
   void CreateTestAutofillProfiles();
@@ -562,13 +558,6 @@ void AutofillMetricsTest::RecreateCreditCards(
   personal_data_->Refresh();
 }
 
-void AutofillMetricsTest::AddMaskedServerCreditCardWithNickname() {
-  CreditCard masked_server_credit_card =
-      test::GetMaskedServerCardWithNickname();
-  personal_data_->AddServerCreditCard(masked_server_credit_card);
-  personal_data_->Refresh();
-}
-
 void AutofillMetricsTest::AddMaskedServerCreditCardWithOffer(
     std::string guid,
     std::string offer_reward_amount,
@@ -640,53 +629,43 @@ INSTANTIATE_TEST_SUITE_P(AutofillMetricsTest,
 // Test that we log quality metrics appropriately.
 TEST_F(AutofillMetricsTest, QualityMetrics) {
   // Set up our form data.
-  FormData form;
-  form.unique_renderer_id = MakeFormRendererId();
-  form.name = ASCIIToUTF16("TestForm");
-  form.url = GURL("http://example.com/form.html");
-  form.action = GURL("http://example.com/submit.html");
-  form.main_frame_origin = url::Origin::Create(autofill_client_.form_origin());
+  FormData form =
+      test::GetFormData({.description_for_logging = "QualityMetrics",
+                         .fields = {{.label = "Autofilled",
+                                     .name = "autofilled",
+                                     .value = "Elvis Aaron Presley",
+                                     .is_autofilled = true},
+                                    {.label = "Autofill Failed",
+                                     .name = "autofillfailed",
+                                     .value = "buddy@gmail.com",
+                                     .is_autofilled = false},
+                                    {.label = "Empty",
+                                     .name = "empty",
+                                     .value = "",
+                                     .is_autofilled = false},
+                                    {.label = "Unknown",
+                                     .name = "unknown",
+                                     .value = "garbage",
+                                     .is_autofilled = false},
+                                    {.label = "Select",
+                                     .name = "select",
+                                     .value = "USA",
+                                     .form_control_type = "select-one",
+                                     .is_autofilled = false},
+                                    {.role = ServerFieldType::PHONE_HOME_NUMBER,
+                                     .value = "2345678901",
+                                     .form_control_type = "tel",
+                                     .is_autofilled = true}},
+                         .unique_renderer_id = MakeFormRendererId(),
+                         .main_frame_origin = url::Origin::Create(
+                             autofill_client_.form_origin())});
 
-  std::vector<ServerFieldType> heuristic_types, server_types;
-  FormFieldData field;
-
-  test::CreateTestFormField("Autofilled", "autofilled", "Elvis Aaron Presley",
-                            "text", &field);
-  field.is_autofilled = true;
-  form.fields.push_back(field);
-  heuristic_types.push_back(NAME_FULL);
-  server_types.push_back(NAME_FIRST);
-
-  test::CreateTestFormField("Autofill Failed", "autofillfailed",
-                            "buddy@gmail.com", "text", &field);
-  field.is_autofilled = false;
-  form.fields.push_back(field);
-  heuristic_types.push_back(PHONE_HOME_NUMBER);
-  server_types.push_back(EMAIL_ADDRESS);
-
-  test::CreateTestFormField("Empty", "empty", "", "text", &field);
-  field.is_autofilled = false;
-  form.fields.push_back(field);
-  heuristic_types.push_back(NAME_FULL);
-  server_types.push_back(NAME_FIRST);
-
-  test::CreateTestFormField("Unknown", "unknown", "garbage", "text", &field);
-  field.is_autofilled = false;
-  form.fields.push_back(field);
-  heuristic_types.push_back(PHONE_HOME_NUMBER);
-  server_types.push_back(EMAIL_ADDRESS);
-
-  test::CreateTestFormField("Select", "select", "USA", "select-one", &field);
-  field.is_autofilled = false;
-  form.fields.push_back(field);
-  heuristic_types.push_back(UNKNOWN_TYPE);
-  server_types.push_back(NO_SERVER_DATA);
-
-  test::CreateTestFormField("Phone", "phone", "2345678901", "tel", &field);
-  field.is_autofilled = true;
-  form.fields.push_back(field);
-  heuristic_types.push_back(PHONE_HOME_CITY_AND_NUMBER);
-  server_types.push_back(PHONE_HOME_CITY_AND_NUMBER);
+  std::vector<ServerFieldType> heuristic_types = {
+      NAME_FULL,         PHONE_HOME_NUMBER, NAME_FULL,
+      PHONE_HOME_NUMBER, UNKNOWN_TYPE,      PHONE_HOME_CITY_AND_NUMBER};
+  std::vector<ServerFieldType> server_types = {
+      NAME_FIRST,    EMAIL_ADDRESS,  NAME_FIRST,
+      EMAIL_ADDRESS, NO_SERVER_DATA, PHONE_HOME_CITY_AND_NUMBER};
 
   // Simulate having seen this form on page load.
   autofill_manager_->AddSeenForm(form, heuristic_types, server_types);
@@ -829,50 +808,31 @@ TEST_F(AutofillMetricsTest, QualityMetrics) {
 // Test that the ProfileImportStatus logs a no import.
 TEST_F(AutofillMetricsTest, ProfileImportStatus_NoImport) {
   // Set up our form data.
-  FormData form;
-  form.name = ASCIIToUTF16("TestForm");
-  form.url = GURL("http://example.com/form.html");
-  form.action = GURL("http://example.com/submit.html");
+  FormData form = test::GetFormData(
+      {.description_for_logging = "ProfileImportStatus_NoImport",
+       .fields = {
+           {.role = ServerFieldType::NAME_FULL, .value = "Elvis Aaron Presley"},
+           {.role = ServerFieldType::ADDRESS_HOME_LINE1,
+            .value = "3734 Elvis Presley Blvd."},
+           {.role = ServerFieldType::ADDRESS_HOME_CITY, .value = "New York"},
+           {.role = ServerFieldType::PHONE_HOME_NUMBER, .value = "2345678901"},
+           {.role = ServerFieldType::ADDRESS_HOME_STATE,
+            .value = "Invalid State"},
+           {.role = ServerFieldType::ADDRESS_HOME_ZIP,
+            .value = "00000000000000000"},
+           {.role = ServerFieldType::ADDRESS_HOME_COUNTRY,
+            .value = "NoACountry"}}});
 
-  std::vector<ServerFieldType> heuristic_types, server_types;
-  FormFieldData field;
-
-  test::CreateTestFormField("Name", "name", "Elvis Aaron Presley", "text",
-                            &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(NAME_FULL);
-  server_types.push_back(NAME_FULL);
-
-  test::CreateTestFormField("Address", "home_line_one",
-                            "3734 Elvis Presley Blvd.", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_LINE1);
-  server_types.push_back(ADDRESS_HOME_LINE1);
-
-  test::CreateTestFormField("City", "city", "New York", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_CITY);
-  server_types.push_back(ADDRESS_HOME_CITY);
-
-  test::CreateTestFormField("Phone", "phone", "2345678901", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(PHONE_HOME_CITY_AND_NUMBER);
-  server_types.push_back(PHONE_HOME_CITY_AND_NUMBER);
-
-  test::CreateTestFormField("State", "state", "InvalidState", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_STATE);
-  server_types.push_back(ADDRESS_HOME_STATE);
-
-  test::CreateTestFormField("ZIP", "zip", "00000000000000000", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_ZIP);
-  server_types.push_back(ADDRESS_HOME_ZIP);
-
-  test::CreateTestFormField("Country", "country", "NoACountry", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_COUNTRY);
-  server_types.push_back(ADDRESS_HOME_COUNTRY);
+  std::vector<ServerFieldType> heuristic_types = {
+      NAME_FULL,           ADDRESS_HOME_LINE1,
+      ADDRESS_HOME_CITY,   PHONE_HOME_CITY_AND_NUMBER,
+      ADDRESS_HOME_STATE,  ADDRESS_HOME_ZIP,
+      ADDRESS_HOME_COUNTRY};
+  std::vector<ServerFieldType> server_types = {
+      NAME_FULL,           ADDRESS_HOME_LINE1,
+      ADDRESS_HOME_CITY,   PHONE_HOME_CITY_AND_NUMBER,
+      ADDRESS_HOME_STATE,  ADDRESS_HOME_ZIP,
+      ADDRESS_HOME_COUNTRY};
 
   // Simulate having seen this form on page load.
   autofill_manager_->AddSeenForm(form, heuristic_types, server_types);
@@ -902,50 +862,28 @@ TEST_F(AutofillMetricsTest, ProfileImportStatus_NoImport) {
 // Test that the ProfileImportStatus logs a regular import.
 TEST_F(AutofillMetricsTest, ProfileImportStatus_RegularImport) {
   // Set up our form data.
-  FormData form;
-  form.name = ASCIIToUTF16("TestForm");
-  form.url = GURL("http://example.com/form.html");
-  form.action = GURL("http://example.com/submit.html");
+  FormData form = test::GetFormData(
+      {.description_for_logging = "ProfileImportStatus_RegularImport",
+       .fields = {
+           {.role = ServerFieldType::NAME_FULL, .value = "Elvis Aaron Presley"},
+           {.role = ServerFieldType::ADDRESS_HOME_LINE1,
+            .value = "3734 Elvis Presley Blvd."},
+           {.role = ServerFieldType::ADDRESS_HOME_CITY, .value = "New York"},
+           {.role = ServerFieldType::PHONE_HOME_NUMBER, .value = "2345678901"},
+           {.role = ServerFieldType::ADDRESS_HOME_STATE, .value = "CA"},
+           {.role = ServerFieldType::ADDRESS_HOME_ZIP, .value = "37373"},
+           {.role = ServerFieldType::ADDRESS_HOME_COUNTRY, .value = "USA"}}});
 
-  std::vector<ServerFieldType> heuristic_types, server_types;
-  FormFieldData field;
-
-  test::CreateTestFormField("Name", "name", "Elvis Aaron Presley", "text",
-                            &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(NAME_FULL);
-  server_types.push_back(NAME_FULL);
-
-  test::CreateTestFormField("Address", "home_line_one",
-                            "3734 Elvis Presley Blvd.", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_LINE1);
-  server_types.push_back(ADDRESS_HOME_LINE1);
-
-  test::CreateTestFormField("City", "city", "New York", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_CITY);
-  server_types.push_back(ADDRESS_HOME_CITY);
-
-  test::CreateTestFormField("Phone", "phone", "2345678901", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(PHONE_HOME_CITY_AND_NUMBER);
-  server_types.push_back(PHONE_HOME_CITY_AND_NUMBER);
-
-  test::CreateTestFormField("State", "state", "CA", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_STATE);
-  server_types.push_back(ADDRESS_HOME_STATE);
-
-  test::CreateTestFormField("ZIP", "zip", "37373", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_ZIP);
-  server_types.push_back(ADDRESS_HOME_ZIP);
-
-  test::CreateTestFormField("Country", "country", "USA", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_COUNTRY);
-  server_types.push_back(ADDRESS_HOME_COUNTRY);
+  std::vector<ServerFieldType> heuristic_types = {
+      NAME_FULL,           ADDRESS_HOME_LINE1,
+      ADDRESS_HOME_CITY,   PHONE_HOME_CITY_AND_NUMBER,
+      ADDRESS_HOME_STATE,  ADDRESS_HOME_ZIP,
+      ADDRESS_HOME_COUNTRY};
+  std::vector<ServerFieldType> server_types = {
+      NAME_FULL,           ADDRESS_HOME_LINE1,
+      ADDRESS_HOME_CITY,   PHONE_HOME_CITY_AND_NUMBER,
+      ADDRESS_HOME_STATE,  ADDRESS_HOME_ZIP,
+      ADDRESS_HOME_COUNTRY};
 
   // Simulate having seen this form on page load.
   autofill_manager_->AddSeenForm(form, heuristic_types, server_types);
@@ -975,54 +913,40 @@ TEST_F(AutofillMetricsTest, ProfileImportStatus_RegularImport) {
 // Test that the ProfileImportStatus logs a section union mport.
 TEST_F(AutofillMetricsTest, ProfileImportStatus_UnionImport) {
   // Set up our form data.
-  FormData form;
-  form.name = ASCIIToUTF16("TestForm");
-  form.url = GURL("http://example.com/form.html");
-  form.action = GURL("http://example.com/submit.html");
+  FormData form = test::GetFormData(
+      {.description_for_logging = "ProfileImportStatus_UnionImport",
+       .fields = {
+           {.role = ServerFieldType::NAME_FULL, .value = "Elvis Aaron Presley"},
+           {.role = ServerFieldType::ADDRESS_HOME_LINE1,
+            .value = "3734 Elvis Presley Blvd."},
+           {.role = ServerFieldType::ADDRESS_HOME_ZIP, .value = "37373"},
+           {.role = ServerFieldType::ADDRESS_HOME_COUNTRY, .value = "USA"},
+           {.role = ServerFieldType::PHONE_HOME_NUMBER, .value = "2345678901"},
+           {.role = ServerFieldType::ADDRESS_HOME_CITY,
+            .value = "New York",
+            .autocomplete_attribute = "section-billing locality"},
+           // Add the last field of the form into a new section.
+           {.role = ServerFieldType::ADDRESS_HOME_STATE,
+            .value = "CA",
+            .autocomplete_attribute = "section-shipping address-level1"}}});
 
-  std::vector<ServerFieldType> heuristic_types, server_types;
-  FormFieldData field;
+  // Set the heuristic types.
+  std::vector<ServerFieldType> heuristic_types = {NAME_FULL,
+                                                  ADDRESS_HOME_LINE1,
+                                                  ADDRESS_HOME_ZIP,
+                                                  ADDRESS_HOME_COUNTRY,
+                                                  PHONE_HOME_CITY_AND_NUMBER,
+                                                  ADDRESS_HOME_CITY,
+                                                  ADDRESS_HOME_STATE};
 
-  test::CreateTestFormField("Name", "name", "Elvis Aaron Presley", "text",
-                            &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(NAME_FULL);
-  server_types.push_back(NAME_FULL);
-
-  test::CreateTestFormField("Address", "home_line_one",
-                            "3734 Elvis Presley Blvd.", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_LINE1);
-  server_types.push_back(ADDRESS_HOME_LINE1);
-
-  test::CreateTestFormField("ZIP", "zip", "37373", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_ZIP);
-  server_types.push_back(ADDRESS_HOME_ZIP);
-
-  test::CreateTestFormField("Country", "country", "USA", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_COUNTRY);
-  server_types.push_back(ADDRESS_HOME_COUNTRY);
-
-  test::CreateTestFormField("Phone", "phone", "2345678901", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(PHONE_HOME_CITY_AND_NUMBER);
-  server_types.push_back(PHONE_HOME_CITY_AND_NUMBER);
-
-  test::CreateTestFormField("City", "city", "New York", "text", &field);
-  // Assign a specific section.
-  field.autocomplete_attribute = "section-billing locality";
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_CITY);
-  server_types.push_back(ADDRESS_HOME_CITY);
-
-  test::CreateTestFormField("State", "state", "CA", "text", &field);
-  // Make the state a different section than the city.
-  field.autocomplete_attribute = "section-shipping address-level1";
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_STATE);
-  server_types.push_back(ADDRESS_HOME_STATE);
+  // Set the server types.
+  std::vector<ServerFieldType> server_types = {NAME_FULL,
+                                               ADDRESS_HOME_LINE1,
+                                               ADDRESS_HOME_ZIP,
+                                               ADDRESS_HOME_COUNTRY,
+                                               PHONE_HOME_CITY_AND_NUMBER,
+                                               ADDRESS_HOME_CITY,
+                                               ADDRESS_HOME_STATE};
 
   // Simulate having seen this form on page load.
   autofill_manager_->AddSeenForm(form, heuristic_types, server_types);
@@ -1034,39 +958,16 @@ TEST_F(AutofillMetricsTest, ProfileImportStatus_UnionImport) {
   base::HistogramTester histogram_tester;
   std::string histogram = "Autofill.AddressProfileImportStatus";
 
-  // Disable the union import feature.
-  scoped_feature_list_.InitAndDisableFeature(
-      features::kAutofillProfileImportFromUnifiedSection);
-
-  // Simulate form submission.
   autofill_manager_->OnFormSubmitted(form, false,
                                      SubmissionSource::FORM_SUBMISSION);
 
+  // Verify that one profile was imported using the union of the two sections.
   histogram_tester.ExpectBucketCount(
       histogram,
       AutofillMetrics::AddressProfileImportStatusMetric::REGULAR_IMPORT, 0);
   histogram_tester.ExpectBucketCount(
       histogram, AutofillMetrics::AddressProfileImportStatusMetric::NO_IMPORT,
-      1);
-  histogram_tester.ExpectBucketCount(
-      histogram,
-      AutofillMetrics::AddressProfileImportStatusMetric::SECTION_UNION_IMPORT,
       0);
-
-  // Enable the union import feature.
-  scoped_feature_list_.Reset();
-  scoped_feature_list_.InitAndEnableFeature(
-      features::kAutofillProfileImportFromUnifiedSection);
-  // Simulate form submission.
-  autofill_manager_->OnFormSubmitted(form, false,
-                                     SubmissionSource::FORM_SUBMISSION);
-
-  histogram_tester.ExpectBucketCount(
-      histogram,
-      AutofillMetrics::AddressProfileImportStatusMetric::REGULAR_IMPORT, 0);
-  histogram_tester.ExpectBucketCount(
-      histogram, AutofillMetrics::AddressProfileImportStatusMetric::NO_IMPORT,
-      1);
   histogram_tester.ExpectBucketCount(
       histogram,
       AutofillMetrics::AddressProfileImportStatusMetric::SECTION_UNION_IMPORT,
@@ -1077,50 +978,28 @@ TEST_F(AutofillMetricsTest, ProfileImportStatus_UnionImport) {
 // 'perfect' profile import.
 TEST_F(AutofillMetricsTest, ProfileImportRequirements_AllFulfilled) {
   // Set up our form data.
-  FormData form;
-  form.name = ASCIIToUTF16("TestForm");
-  form.url = GURL("http://example.com/form.html");
-  form.action = GURL("http://example.com/submit.html");
+  FormData form = test::GetFormData(
+      {.description_for_logging = "ProfileImportRequirements_AllFulfilled",
+       .fields = {
+           {.role = ServerFieldType::NAME_FULL, .value = "Elvis Aaron Presley"},
+           {.role = ServerFieldType::ADDRESS_HOME_LINE1,
+            .value = "3734 Elvis Presley Blvd."},
+           {.role = ServerFieldType::ADDRESS_HOME_CITY, .value = "New York"},
+           {.role = ServerFieldType::PHONE_HOME_NUMBER, .value = "2345678901"},
+           {.role = ServerFieldType::ADDRESS_HOME_STATE, .value = "CA"},
+           {.role = ServerFieldType::ADDRESS_HOME_ZIP, .value = "37373"},
+           {.role = ServerFieldType::ADDRESS_HOME_COUNTRY, .value = "USA"}}});
 
-  std::vector<ServerFieldType> heuristic_types, server_types;
-  FormFieldData field;
-
-  test::CreateTestFormField("Name", "name", "Elvis Aaron Presley", "text",
-                            &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(NAME_FULL);
-  server_types.push_back(NAME_FULL);
-
-  test::CreateTestFormField("Address", "home_line_one",
-                            "3734 Elvis Presley Blvd.", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_LINE1);
-  server_types.push_back(ADDRESS_HOME_LINE1);
-
-  test::CreateTestFormField("City", "city", "New York", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_CITY);
-  server_types.push_back(ADDRESS_HOME_CITY);
-
-  test::CreateTestFormField("Phone", "phone", "2345678901", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(PHONE_HOME_CITY_AND_NUMBER);
-  server_types.push_back(PHONE_HOME_CITY_AND_NUMBER);
-
-  test::CreateTestFormField("State", "state", "CA", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_STATE);
-  server_types.push_back(ADDRESS_HOME_STATE);
-
-  test::CreateTestFormField("ZIP", "zip", "37373", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_ZIP);
-  server_types.push_back(ADDRESS_HOME_ZIP);
-
-  test::CreateTestFormField("Country", "country", "USA", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_COUNTRY);
-  server_types.push_back(ADDRESS_HOME_COUNTRY);
+  std::vector<ServerFieldType> heuristic_types = {
+      NAME_FULL,           ADDRESS_HOME_LINE1,
+      ADDRESS_HOME_CITY,   PHONE_HOME_CITY_AND_NUMBER,
+      ADDRESS_HOME_STATE,  ADDRESS_HOME_ZIP,
+      ADDRESS_HOME_COUNTRY};
+  std::vector<ServerFieldType> server_types = {
+      NAME_FULL,           ADDRESS_HOME_LINE1,
+      ADDRESS_HOME_CITY,   PHONE_HOME_CITY_AND_NUMBER,
+      ADDRESS_HOME_STATE,  ADDRESS_HOME_ZIP,
+      ADDRESS_HOME_COUNTRY};
 
   // Simulate having seen this form on page load.
   autofill_manager_->AddSeenForm(form, heuristic_types, server_types);
@@ -1178,49 +1057,28 @@ TEST_F(AutofillMetricsTest, ProfileImportRequirements_AllFulfilled) {
 // ADDRESS_HOME_LINE1 is missing.
 TEST_F(AutofillMetricsTest, ProfileImportRequirements_MissingHomeLineOne) {
   // Set up our form data.
-  FormData form;
-  form.name = ASCIIToUTF16("TestForm");
-  form.url = GURL("http://example.com/form.html");
-  form.action = GURL("http://example.com/submit.html");
+  FormData form = test::GetFormData(
+      {.description_for_logging =
+           "ProfileImportRequirements_MissingHomeLineOne",
+       .fields = {
+           {.role = ServerFieldType::NAME_FULL, .value = "Elvis Aaron Presley"},
+           {.role = ServerFieldType::ADDRESS_HOME_LINE1, .value = ""},
+           {.role = ServerFieldType::ADDRESS_HOME_CITY, .value = "New York"},
+           {.role = ServerFieldType::PHONE_HOME_NUMBER, .value = "2345678901"},
+           {.role = ServerFieldType::ADDRESS_HOME_STATE, .value = "CA"},
+           {.role = ServerFieldType::ADDRESS_HOME_ZIP, .value = "37373"},
+           {.role = ServerFieldType::ADDRESS_HOME_COUNTRY, .value = "USA"}}});
 
-  std::vector<ServerFieldType> heuristic_types, server_types;
-  FormFieldData field;
-
-  test::CreateTestFormField("Name", "name", "Elvis Aaron Presley", "text",
-                            &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(NAME_FULL);
-  server_types.push_back(NAME_FULL);
-
-  test::CreateTestFormField("Address", "home_line_one", "", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_LINE1);
-  server_types.push_back(ADDRESS_HOME_LINE1);
-
-  test::CreateTestFormField("City", "city", "New York", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_CITY);
-  server_types.push_back(ADDRESS_HOME_CITY);
-
-  test::CreateTestFormField("Phone", "phone", "2345678901", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(PHONE_HOME_CITY_AND_NUMBER);
-  server_types.push_back(PHONE_HOME_CITY_AND_NUMBER);
-
-  test::CreateTestFormField("State", "state", "CA", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_STATE);
-  server_types.push_back(ADDRESS_HOME_STATE);
-
-  test::CreateTestFormField("ZIP", "zip", "37373", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_ZIP);
-  server_types.push_back(ADDRESS_HOME_ZIP);
-
-  test::CreateTestFormField("Country", "country", "USA", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_COUNTRY);
-  server_types.push_back(ADDRESS_HOME_COUNTRY);
+  std::vector<ServerFieldType> heuristic_types = {
+      NAME_FULL,           ADDRESS_HOME_LINE1,
+      ADDRESS_HOME_CITY,   PHONE_HOME_CITY_AND_NUMBER,
+      ADDRESS_HOME_STATE,  ADDRESS_HOME_ZIP,
+      ADDRESS_HOME_COUNTRY};
+  std::vector<ServerFieldType> server_types = {
+      NAME_FULL,           ADDRESS_HOME_LINE1,
+      ADDRESS_HOME_CITY,   PHONE_HOME_CITY_AND_NUMBER,
+      ADDRESS_HOME_STATE,  ADDRESS_HOME_ZIP,
+      ADDRESS_HOME_COUNTRY};
 
   // Simulate having seen this form on page load.
   autofill_manager_->AddSeenForm(form, heuristic_types, server_types);
@@ -1280,50 +1138,30 @@ TEST_F(AutofillMetricsTest, ProfileImportRequirements_MissingHomeLineOne) {
 TEST_F(AutofillMetricsTest,
        ProfileImportRequirements_AllFulfilledForNonStateCountry) {
   // Set up our form data.
-  FormData form;
-  form.name = ASCIIToUTF16("TestForm");
-  form.url = GURL("http://example.com/form.html");
-  form.action = GURL("http://example.com/submit.html");
+  FormData form = test::GetFormData(
+      {.description_for_logging =
+           "ProfileImportRequirements_AllFulfilledForNonStateCountry",
+       .fields = {
+           {.role = ServerFieldType::NAME_FULL, .value = "Elvis Aaron Presley"},
+           {.role = ServerFieldType::ADDRESS_HOME_LINE1,
+            .value = "3734 Elvis Presley Blvd."},
+           {.role = ServerFieldType::ADDRESS_HOME_CITY, .value = "New York"},
+           {.role = ServerFieldType::PHONE_HOME_NUMBER, .value = "2345678901"},
+           {.role = ServerFieldType::ADDRESS_HOME_STATE, .value = ""},
+           {.role = ServerFieldType::ADDRESS_HOME_ZIP, .value = "37373"},
+           {.role = ServerFieldType::ADDRESS_HOME_COUNTRY,
+            .value = "Germany"}}});
 
-  std::vector<ServerFieldType> heuristic_types, server_types;
-  FormFieldData field;
-
-  test::CreateTestFormField("Name", "name", "Elvis Aaron Presley", "text",
-                            &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(NAME_FULL);
-  server_types.push_back(NAME_FULL);
-
-  test::CreateTestFormField("Address", "home_line_one",
-                            "3734 Elvis Presley Blvd.", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_LINE1);
-  server_types.push_back(ADDRESS_HOME_LINE1);
-
-  test::CreateTestFormField("City", "city", "New York", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_CITY);
-  server_types.push_back(ADDRESS_HOME_CITY);
-
-  test::CreateTestFormField("Phone", "phone", "2345678901", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(PHONE_HOME_CITY_AND_NUMBER);
-  server_types.push_back(PHONE_HOME_CITY_AND_NUMBER);
-
-  test::CreateTestFormField("State", "state", "", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_STATE);
-  server_types.push_back(ADDRESS_HOME_STATE);
-
-  test::CreateTestFormField("ZIP", "zip", "37373", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_ZIP);
-  server_types.push_back(ADDRESS_HOME_ZIP);
-
-  test::CreateTestFormField("Country", "country", "Germany", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_COUNTRY);
-  server_types.push_back(ADDRESS_HOME_COUNTRY);
+  std::vector<ServerFieldType> heuristic_types = {
+      NAME_FULL,           ADDRESS_HOME_LINE1,
+      ADDRESS_HOME_CITY,   PHONE_HOME_CITY_AND_NUMBER,
+      ADDRESS_HOME_STATE,  ADDRESS_HOME_ZIP,
+      ADDRESS_HOME_COUNTRY};
+  std::vector<ServerFieldType> server_types = {
+      NAME_FULL,           ADDRESS_HOME_LINE1,
+      ADDRESS_HOME_CITY,   PHONE_HOME_CITY_AND_NUMBER,
+      ADDRESS_HOME_STATE,  ADDRESS_HOME_ZIP,
+      ADDRESS_HOME_COUNTRY};
 
   // Simulate having seen this form on page load.
   autofill_manager_->AddSeenForm(form, heuristic_types, server_types);
@@ -1381,56 +1219,38 @@ TEST_F(AutofillMetricsTest,
 TEST_F(AutofillMetricsTest,
        ProfileImportRequirements_FilledButInvalidZipEmailAndState) {
   // Set up our form data.
-  FormData form;
-  form.name = ASCIIToUTF16("TestForm");
-  form.url = GURL("http://example.com/form.html");
-  form.action = GURL("http://example.com/submit.html");
+  FormData form = test::GetFormData(
+      {.description_for_logging =
+           "ProfileImportRequirements_FilledButInvalidZipEmailAndState",
+       .fields = {
+           {.role = ServerFieldType::NAME_FULL, .value = "Elvis Aaron Presley"},
+           {.role = ServerFieldType::ADDRESS_HOME_LINE1,
+            .value = "3734 Elvis Presley Blvd."},
+           {.role = ServerFieldType::ADDRESS_HOME_CITY, .value = "New York"},
+           {.role = ServerFieldType::PHONE_HOME_NUMBER, .value = "2345678901"},
+           {.role = ServerFieldType::ADDRESS_HOME_STATE,
+            .value = "DefNotAState"},
+           {.role = ServerFieldType::ADDRESS_HOME_ZIP, .value = "1234567890"},
+           {.role = ServerFieldType::ADDRESS_HOME_COUNTRY, .value = "USA"},
+           {.role = ServerFieldType::EMAIL_ADDRESS,
+            .value = "test_noat_test.io"}}});
 
-  std::vector<ServerFieldType> heuristic_types, server_types;
-  FormFieldData field;
-
-  test::CreateTestFormField("Name", "name", "Elvis Aaron Presley", "text",
-                            &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(NAME_FULL);
-  server_types.push_back(NAME_FULL);
-
-  test::CreateTestFormField("Address", "home_line_one",
-                            "3734 Elvis Presley Blvd.", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_LINE1);
-  server_types.push_back(ADDRESS_HOME_LINE1);
-
-  test::CreateTestFormField("City", "city", "New York", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_CITY);
-  server_types.push_back(ADDRESS_HOME_CITY);
-
-  test::CreateTestFormField("Phone", "phone", "2345678901", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(PHONE_HOME_CITY_AND_NUMBER);
-  server_types.push_back(PHONE_HOME_CITY_AND_NUMBER);
-
-  test::CreateTestFormField("State", "state", "DefNotAState", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_STATE);
-  server_types.push_back(ADDRESS_HOME_STATE);
-
-  test::CreateTestFormField("ZIP", "zip", "1234567890", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_ZIP);
-  server_types.push_back(ADDRESS_HOME_ZIP);
-
-  test::CreateTestFormField("Country", "country", "USA", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_COUNTRY);
-  server_types.push_back(ADDRESS_HOME_COUNTRY);
-
-  test::CreateTestFormField("Email1", "email1", "test_noat_test.io", "text",
-                            &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(EMAIL_ADDRESS);
-  server_types.push_back(EMAIL_ADDRESS);
+  std::vector<ServerFieldType> heuristic_types = {NAME_FULL,
+                                                  ADDRESS_HOME_LINE1,
+                                                  ADDRESS_HOME_CITY,
+                                                  PHONE_HOME_CITY_AND_NUMBER,
+                                                  ADDRESS_HOME_STATE,
+                                                  ADDRESS_HOME_ZIP,
+                                                  ADDRESS_HOME_COUNTRY,
+                                                  EMAIL_ADDRESS};
+  std::vector<ServerFieldType> server_types = {NAME_FULL,
+                                               ADDRESS_HOME_LINE1,
+                                               ADDRESS_HOME_CITY,
+                                               PHONE_HOME_CITY_AND_NUMBER,
+                                               ADDRESS_HOME_STATE,
+                                               ADDRESS_HOME_ZIP,
+                                               ADDRESS_HOME_COUNTRY,
+                                               EMAIL_ADDRESS};
 
   // Simulate having seen this form on page load.
   autofill_manager_->AddSeenForm(form, heuristic_types, server_types);
@@ -1488,61 +1308,41 @@ TEST_F(AutofillMetricsTest,
 // profile with multiple email addresses.
 TEST_F(AutofillMetricsTest, ProfileImportRequirements_NonUniqueEmail) {
   // Set up our form data.
-  FormData form;
-  form.name = ASCIIToUTF16("TestForm");
-  form.url = GURL("http://example.com/form.html");
-  form.action = GURL("http://example.com/submit.html");
+  FormData form = test::GetFormData(
+      {.description_for_logging = "ProfileImportRequirements_NonUniqueEmail",
+       .fields = {
+           {.role = ServerFieldType::NAME_FULL, .value = "Elvis Aaron Presley"},
+           {.role = ServerFieldType::ADDRESS_HOME_LINE1,
+            .value = "3734 Elvis Presley Blvd."},
+           {.role = ServerFieldType::ADDRESS_HOME_CITY, .value = "New York"},
+           {.role = ServerFieldType::PHONE_HOME_NUMBER, .value = "2345678901"},
+           {.role = ServerFieldType::ADDRESS_HOME_STATE, .value = "CA"},
+           {.role = ServerFieldType::ADDRESS_HOME_ZIP, .value = "37373"},
+           {.role = ServerFieldType::ADDRESS_HOME_COUNTRY, .value = "USA"},
+           {.role = ServerFieldType::EMAIL_ADDRESS,
+            .value = "test_noat_test.io"},
+           {.label = "Email1",
+            .name = ".email1",
+            .value = "not_test@test.io"}}});
 
-  std::vector<ServerFieldType> heuristic_types, server_types;
-  FormFieldData field;
-
-  test::CreateTestFormField("Name", "name", "Elvis Aaron Presley", "text",
-                            &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(NAME_FULL);
-  server_types.push_back(NAME_FULL);
-
-  test::CreateTestFormField("Address", "home_line_one",
-                            "3734 Elvis Presley Blvd.", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_LINE1);
-  server_types.push_back(ADDRESS_HOME_LINE1);
-
-  test::CreateTestFormField("City", "city", "New York", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_CITY);
-  server_types.push_back(ADDRESS_HOME_CITY);
-
-  test::CreateTestFormField("Phone", "phone", "2345678901", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(PHONE_HOME_CITY_AND_NUMBER);
-  server_types.push_back(PHONE_HOME_CITY_AND_NUMBER);
-
-  test::CreateTestFormField("State", "state", "CA", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_STATE);
-  server_types.push_back(ADDRESS_HOME_STATE);
-
-  test::CreateTestFormField("ZIP", "zip", "37373", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_ZIP);
-  server_types.push_back(ADDRESS_HOME_ZIP);
-
-  test::CreateTestFormField("Country", "country", "USA", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_COUNTRY);
-  server_types.push_back(ADDRESS_HOME_COUNTRY);
-
-  test::CreateTestFormField("Email1", "email1", "test@test.io", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(EMAIL_ADDRESS);
-  server_types.push_back(EMAIL_ADDRESS);
-
-  test::CreateTestFormField("Email2", "email2", "not_test@test.io", "text",
-                            &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(EMAIL_ADDRESS);
-  server_types.push_back(EMAIL_ADDRESS);
+  std::vector<ServerFieldType> heuristic_types = {NAME_FULL,
+                                                  ADDRESS_HOME_LINE1,
+                                                  ADDRESS_HOME_CITY,
+                                                  PHONE_HOME_CITY_AND_NUMBER,
+                                                  ADDRESS_HOME_STATE,
+                                                  ADDRESS_HOME_ZIP,
+                                                  ADDRESS_HOME_COUNTRY,
+                                                  EMAIL_ADDRESS,
+                                                  EMAIL_ADDRESS};
+  std::vector<ServerFieldType> server_types = {NAME_FULL,
+                                               ADDRESS_HOME_LINE1,
+                                               ADDRESS_HOME_CITY,
+                                               PHONE_HOME_CITY_AND_NUMBER,
+                                               ADDRESS_HOME_STATE,
+                                               ADDRESS_HOME_ZIP,
+                                               ADDRESS_HOME_COUNTRY,
+                                               EMAIL_ADDRESS,
+                                               EMAIL_ADDRESS};
 
   // Simulate having seen this form on page load.
   autofill_manager_->AddSeenForm(form, heuristic_types, server_types);
@@ -1600,50 +1400,29 @@ TEST_F(AutofillMetricsTest, ProfileImportRequirements_NonUniqueEmail) {
 // missing.
 TEST_F(AutofillMetricsTest, ProfileImportRequirements_OnlyAddressLineOne) {
   // Set up our form data.
-  FormData form;
-  form.name = ASCIIToUTF16("TestForm");
-  form.url = GURL("http://example.com/form.html");
-  form.action = GURL("http://example.com/submit.html");
+  FormData form = test::GetFormData(
+      {.description_for_logging =
+           "ProfileImportRequirements_OnlyAddressLineOne",
+       .fields = {
+           {.role = ServerFieldType::NAME_FULL, .value = "Elvis Aaron Presley"},
+           {.role = ServerFieldType::ADDRESS_HOME_LINE1,
+            .value = "3734 Elvis Presley Blvd."},
+           {.role = ServerFieldType::ADDRESS_HOME_CITY, .value = ""},
+           {.role = ServerFieldType::PHONE_HOME_NUMBER, .value = ""},
+           {.role = ServerFieldType::ADDRESS_HOME_STATE, .value = ""},
+           {.role = ServerFieldType::ADDRESS_HOME_ZIP, .value = ""},
+           {.role = ServerFieldType::ADDRESS_HOME_COUNTRY, .value = ""}}});
 
-  std::vector<ServerFieldType> heuristic_types, server_types;
-  FormFieldData field;
-
-  test::CreateTestFormField("Name", "name", "Elvis Aaron Presley", "text",
-                            &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(NAME_FULL);
-  server_types.push_back(NAME_FULL);
-
-  test::CreateTestFormField("Address", "home_line_one",
-                            "3734 Elvis Presley Blvd.", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_LINE1);
-  server_types.push_back(ADDRESS_HOME_LINE1);
-
-  test::CreateTestFormField("City", "city", "", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_CITY);
-  server_types.push_back(ADDRESS_HOME_CITY);
-
-  test::CreateTestFormField("Phone", "phone", "", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(PHONE_HOME_CITY_AND_NUMBER);
-  server_types.push_back(PHONE_HOME_CITY_AND_NUMBER);
-
-  test::CreateTestFormField("State", "state", "", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_STATE);
-  server_types.push_back(ADDRESS_HOME_STATE);
-
-  test::CreateTestFormField("ZIP", "zip", "", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_ZIP);
-  server_types.push_back(ADDRESS_HOME_ZIP);
-
-  test::CreateTestFormField("Country", "", "USA", "text", &field);
-  form.fields.push_back(field);
-  heuristic_types.push_back(ADDRESS_HOME_COUNTRY);
-  server_types.push_back(ADDRESS_HOME_COUNTRY);
+  std::vector<ServerFieldType> heuristic_types = {
+      NAME_FULL,           ADDRESS_HOME_LINE1,
+      ADDRESS_HOME_CITY,   PHONE_HOME_CITY_AND_NUMBER,
+      ADDRESS_HOME_STATE,  ADDRESS_HOME_ZIP,
+      ADDRESS_HOME_COUNTRY};
+  std::vector<ServerFieldType> server_types = {
+      NAME_FULL,           ADDRESS_HOME_LINE1,
+      ADDRESS_HOME_CITY,   PHONE_HOME_CITY_AND_NUMBER,
+      ADDRESS_HOME_STATE,  ADDRESS_HOME_ZIP,
+      ADDRESS_HOME_COUNTRY};
 
   // Simulate having seen this form on page load.
   autofill_manager_->AddSeenForm(form, heuristic_types, server_types);
@@ -3200,92 +2979,6 @@ TEST_F(AutofillMetricsTest, UpiVirtualPaymentAddress) {
   histogram_tester.ExpectTotalCount("Autofill.UserHappiness.Unknown", 0);
 }
 
-// Verify that when a field is annotated with the autocomplete attribute, its
-// predicted type is remembered when quality metrics are logged.
-TEST_F(AutofillMetricsTest, PredictedMetricsWithAutocomplete) {
-  // Allow heuristics to run (and be accepted) for small forms.
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitAndDisableFeature(
-      kAutofillEnforceMinRequiredFieldsForHeuristics);
-
-  // Set up our form data. Note that the fields have default values not found
-  // in the user profiles. They will be changed between the time the form is
-  // seen/parsed, and the time it is submitted.
-  FormData form;
-  FormFieldData field;
-  form.unique_renderer_id = MakeFormRendererId();
-  form.name = ASCIIToUTF16("TestForm");
-  form.url = GURL("http://example.com/form.html");
-  form.action = GURL("http://example.com/submit.html");
-  form.main_frame_origin =
-      url::Origin::Create(GURL("http://example_root.com/form.html"));
-
-  test::CreateTestFormField("Select", "select", "USA", "select-one", &field);
-  form.fields.push_back(field);
-  form.fields.back().autocomplete_attribute = "country";
-
-  test::CreateTestFormField("Unknown", "Unknown", "", "text", &field);
-  form.fields.push_back(field);
-
-  test::CreateTestFormField("Phone", "phone", "", "tel", &field);
-  form.fields.push_back(field);
-
-  std::vector<FormData> forms(1, form);
-
-  base::HistogramTester histogram_tester;
-  autofill_manager_->OnFormsSeen(forms, TimeTicks());
-
-  // We change the value of the text fields to change the default/seen values
-  // (hence the values are not cleared in UpdateFromCache). The new values
-  // match what is in the test profile.
-  form.fields[1].value = base::ASCIIToUTF16("79401");
-  form.fields[2].value = base::ASCIIToUTF16("2345678901");
-  autofill_manager_->OnFormSubmitted(form, false,
-                                     SubmissionSource::FORM_SUBMISSION);
-
-  for (const std::string source : {"Heuristic", "Server", "Overall"}) {
-    std::string histogram_name =
-        "Autofill.FieldPredictionQuality.ByFieldType." + source;
-    // First verify that country was not predicted by client or server.
-    {
-      SCOPED_TRACE("ADDRESS_HOME_COUNTRY");
-      histogram_tester.ExpectBucketCount(
-          histogram_name,
-          GetFieldTypeGroupPredictionQualityMetric(
-              ADDRESS_HOME_COUNTRY,
-              source == "Overall" ? AutofillMetrics::TRUE_POSITIVE
-                                  : AutofillMetrics::FALSE_NEGATIVE_UNKNOWN),
-          1);
-    }
-
-    // We did not predict zip code because it did not have an autocomplete
-    // attribute, nor client or server predictions.
-    {
-      SCOPED_TRACE("ADDRESS_HOME_ZIP");
-      histogram_tester.ExpectBucketCount(
-          histogram_name,
-          GetFieldTypeGroupPredictionQualityMetric(
-              ADDRESS_HOME_ZIP, AutofillMetrics::FALSE_NEGATIVE_UNKNOWN),
-          1);
-    }
-
-    // Phone should have been predicted by the heuristics but not the server.
-    {
-      SCOPED_TRACE("PHONE_HOME_WHOLE_NUMBER");
-      histogram_tester.ExpectBucketCount(
-          histogram_name,
-          GetFieldTypeGroupPredictionQualityMetric(
-              PHONE_HOME_WHOLE_NUMBER,
-              source == "Server" ? AutofillMetrics::FALSE_NEGATIVE_UNKNOWN
-                                 : AutofillMetrics::TRUE_POSITIVE),
-          1);
-    }
-
-    // Sanity check.
-    histogram_tester.ExpectTotalCount(histogram_name, 3);
-  }
-}
-
 // Test that we behave sanely when the cached form differs from the submitted
 // one.
 TEST_F(AutofillMetricsTest, SaneMetricsWithCacheMismatch) {
@@ -3426,8 +3119,6 @@ TEST_F(AutofillMetricsTest, StoredProfileCountAutofillableFormSubmission) {
 // Verify that when submitting a non-autofillable form, the stored profile
 // metric is not logged.
 TEST_F(AutofillMetricsTest, StoredProfileCountNonAutofillableFormSubmission) {
-  base::test::ScopedFeatureList features;
-  features.InitAndEnableFeature(kAutofillEnforceMinRequiredFieldsForHeuristics);
   // Construct a non-fillable form.
   FormData form;
   form.unique_renderer_id = MakeFormRendererId();
@@ -3729,19 +3420,6 @@ TEST_F(AutofillMetricsTest, DeveloperEngagement) {
     histogram_tester.ExpectTotalCount("Autofill.DeveloperEngagement", 0);
   }
 
-  // Otherwise, log developer engagement for all forms.
-  {
-    base::test::ScopedFeatureList features;
-    features.InitAndDisableFeature(
-        kAutofillEnforceMinRequiredFieldsForHeuristics);
-    base::HistogramTester histogram_tester;
-    autofill_manager_->OnFormsSeen(forms, TimeTicks());
-    autofill_manager_->Reset();
-    histogram_tester.ExpectUniqueSample(
-        "Autofill.DeveloperEngagement",
-        AutofillMetrics::FILLABLE_FORM_PARSED_WITHOUT_TYPE_HINTS, 1);
-  }
-
   // Add another field to the form, so that it becomes fillable.
   test::CreateTestFormField("Phone", "phone", "", "text", &field);
   forms.back().fields.push_back(field);
@@ -3827,9 +3505,6 @@ TEST_F(AutofillMetricsTest,
 
   // Ensure no entries are logged when loading a non-fillable form.
   {
-    base::test::ScopedFeatureList features;
-    features.InitAndEnableFeature(
-        kAutofillEnforceMinRequiredFieldsForHeuristics);
     autofill_manager_->OnFormsSeen(forms, AutofillTickClock::NowTicks());
     autofill_manager_->Reset();
 
@@ -3907,14 +3582,6 @@ TEST_F(AutofillMetricsTest,
 // Verify that we correctly log UKM for form parsed with type hints regarding
 // developer engagement.
 TEST_F(AutofillMetricsTest, UkmDeveloperEngagement_LogUpiVpaTypeHint) {
-  base::test::ScopedFeatureList feature_list;
-  feature_list.InitWithFeatures(
-      // Enabled.
-      {kAutofillEnforceMinRequiredFieldsForHeuristics,
-       kAutofillEnforceMinRequiredFieldsForQuery,
-       kAutofillEnforceMinRequiredFieldsForUpload},
-      // Disabled.
-      {});
   FormData form;
   form.unique_renderer_id = MakeFormRendererId();
   form.name = ASCIIToUTF16("TestForm");
@@ -3930,27 +3597,11 @@ TEST_F(AutofillMetricsTest, UkmDeveloperEngagement_LogUpiVpaTypeHint) {
   test::CreateTestFormField("Payment", "payment", "", "text", &field);
   field.autocomplete_attribute = "upi-vpa";
   form.fields.push_back(field);
-
-  std::vector<FormData> forms(1, form);
-
-  // Expect the "upi-vpa hint" metric to be logged and the "form loaded" form
-  // interaction event to be logged.
-  {
-    SCOPED_TRACE("VPA is the only hint");
-    autofill_manager_->OnFormsSeen(forms, AutofillTickClock::NowTicks());
-
-    VerifyDeveloperEngagementUkm(
-        test_ukm_recorder_, forms.back(), /*is_for_credit_card=*/false,
-        /* UPI VPA has Unknown form type.*/
-        {FormType::ADDRESS_FORM, FormType::UNKNOWN_FORM_TYPE},
-        {AutofillMetrics::FORM_CONTAINS_UPI_VPA_HINT});
-    PurgeUKM();
-  }
-
-  // Add another field with an author-specified field type to the form.
   test::CreateTestFormField("", "", "", "text", &field);
   field.autocomplete_attribute = "address-line1";
-  forms.back().fields.push_back(field);
+  form.fields.push_back(field);
+
+  std::vector<FormData> forms(1, form);
 
   {
     SCOPED_TRACE("VPA and other autocomplete hint present");
@@ -6665,349 +6316,6 @@ TEST_P(AutofillMetricsIFrameTest, CreditCardWillSubmitFormEvents) {
   }
 }
 
-// Test that we log form events for masked server card nickname.
-// TODO(crbug.com/1059087): Remove histogram logging for server nickname.
-TEST_F(AutofillMetricsTest, LogServerNicknameFormEvents) {
-  // Set up our form data.
-  FormData form;
-  form.name = ASCIIToUTF16("TestForm");
-  form.url = GURL("http://example.com/form.html");
-  form.action = GURL("http://example.com/submit.html");
-  form.main_frame_origin = url::Origin::Create(autofill_client_.form_origin());
-
-  FormFieldData field;
-  std::vector<ServerFieldType> field_types;
-  test::CreateTestFormField("Month", "card_month", "", "text", &field);
-  form.fields.push_back(field);
-  field_types.push_back(CREDIT_CARD_EXP_MONTH);
-  test::CreateTestFormField("Year", "card_year", "", "text", &field);
-  form.fields.push_back(field);
-  field_types.push_back(CREDIT_CARD_EXP_2_DIGIT_YEAR);
-  test::CreateTestFormField("Credit card", "card", "", "text", &field);
-  form.fields.push_back(field);
-  field_types.push_back(CREDIT_CARD_NUMBER);
-
-  // Creating all kinds of cards. None of them has nicknames.
-  RecreateCreditCards(true /* include_local_credit_card */,
-                      true /* include_masked_server_credit_card */,
-                      true /* include_full_server_credit_card */);
-
-  // Simulate having seen this form on page load.
-  autofill_manager_->AddSeenForm(form, field_types, field_types);
-
-  {
-    // A masked server card with nickname.
-    // Simulating activating the autofill popup for the credit card field, new
-    // popup being shown and filling a local card suggestion.
-    base::HistogramTester histogram_tester;
-    autofill_manager_->OnQueryFormFieldAutofill(
-        0, form, field, gfx::RectF(), /*autoselect_first_suggestion=*/false);
-    autofill_manager_->DidShowSuggestions(true /* is_new_popup */, form, field);
-    std::string guid("10000000-0000-0000-0000-000000000001");  // local card
-    autofill_manager_->FillOrPreviewForm(
-        AutofillDriver::FORM_DATA_ACTION_FILL, 0, form, form.fields.front(),
-        autofill_manager_->MakeFrontendIDForTest(guid, std::string()));
-    histogram_tester.ExpectBucketCount("Autofill.FormEvents.CreditCard",
-                                       FORM_EVENT_SUGGESTIONS_SHOWN, 1);
-    histogram_tester.ExpectBucketCount("Autofill.FormEvents.CreditCard",
-                                       FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
-    histogram_tester.ExpectBucketCount("Autofill.FormEvents.CreditCard",
-                                       FORM_EVENT_LOCAL_SUGGESTION_FILLED, 1);
-    // Check that the nickname sub-histogram was not recorded.
-    // ExpectBucketCount() can't be used here because it expects the histogram
-    // to exist.
-    EXPECT_EQ(0, histogram_tester.GetTotalCountsForPrefix(
-                     "Autofill.FormEvents.CreditCard")
-                     ["Autofill.FormEvents.CreditCard.WithServerNickname"]);
-  }
-
-  // Add another masked server card with nickname.
-  AddMaskedServerCreditCardWithNickname();
-  // Reset the autofill manager state.
-  autofill_manager_->Reset();
-  autofill_manager_->AddSeenForm(form, field_types, field_types);
-
-  {
-    // A masked server card with nickname.
-    // Simulating activating the autofill popup for the credit card field, new
-    // popup being shown and filling a local card suggestion. Both general
-    // histogram and nickname sub-histogram are logged.
-    base::HistogramTester histogram_tester;
-    autofill_manager_->OnQueryFormFieldAutofill(
-        0, form, field, gfx::RectF(), /*autoselect_first_suggestion=*/false);
-    autofill_manager_->DidShowSuggestions(true /* is_new_popup */, form, field);
-    // Select the local card, still log to sub-histogram because user has
-    // another masked servr card with nickname.
-    std::string guid("10000000-0000-0000-0000-000000000001");
-    autofill_manager_->FillOrPreviewForm(
-        AutofillDriver::FORM_DATA_ACTION_FILL, 0, form, form.fields.front(),
-        autofill_manager_->MakeFrontendIDForTest(guid, std::string()));
-    // The general credit card form event historgram is still logged.
-    histogram_tester.ExpectBucketCount("Autofill.FormEvents.CreditCard",
-                                       FORM_EVENT_SUGGESTIONS_SHOWN, 1);
-    histogram_tester.ExpectBucketCount("Autofill.FormEvents.CreditCard",
-                                       FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
-    histogram_tester.ExpectBucketCount("Autofill.FormEvents.CreditCard",
-                                       FORM_EVENT_LOCAL_SUGGESTION_FILLED, 1);
-    // Sub-histogratm CreditCard.WithServerNickname is also logged
-    histogram_tester.ExpectBucketCount(
-        "Autofill.FormEvents.CreditCard.WithServerNickname",
-        FORM_EVENT_SUGGESTIONS_SHOWN, 1);
-    histogram_tester.ExpectBucketCount(
-        "Autofill.FormEvents.CreditCard.WithServerNickname",
-        FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
-    histogram_tester.ExpectBucketCount(
-        "Autofill.FormEvents.CreditCard.WithServerNickname",
-        FORM_EVENT_LOCAL_SUGGESTION_FILLED, 1);
-  }
-
-  // Reset the autofill manager state.
-  autofill_manager_->Reset();
-  autofill_manager_->AddSeenForm(form, field_types, field_types);
-
-  {
-    // A masked server card with nickname.
-    // Simulating activating the autofill popup for the credit card field, new
-    // popup being shown, selecting a masked card server suggestion and
-    // submitting the form. Verify that all related form events are correctly
-    // logged to nickname sub-histogram.
-    base::HistogramTester histogram_tester;
-    autofill_manager_->OnQueryFormFieldAutofill(
-        0, form, field, gfx::RectF(), /*autoselect_first_suggestion=*/false);
-    autofill_manager_->DidShowSuggestions(true /* is_new_popup */, form, field);
-    // Select the masked server card without nickname, still log to nickname
-    // sub-histogram because user has another masked server card with nickname.
-    std::string guid("10000000-0000-0000-0000-000000000002");
-    autofill_manager_->FillOrPreviewForm(
-        AutofillDriver::FORM_DATA_ACTION_FILL, 0, form, form.fields.back(),
-        autofill_manager_->MakeFrontendIDForTest(guid, std::string()));
-    OnDidGetRealPan(AutofillClient::SUCCESS, "6011000990139424");
-    autofill_manager_->OnFormSubmitted(form, false,
-                                       SubmissionSource::FORM_SUBMISSION);
-    histogram_tester.ExpectBucketCount(
-        "Autofill.FormEvents.CreditCard.WithServerNickname",
-        FORM_EVENT_INTERACTED_ONCE, 1);
-    histogram_tester.ExpectBucketCount(
-        "Autofill.FormEvents.CreditCard.WithServerNickname",
-        FORM_EVENT_SUGGESTIONS_SHOWN, 1);
-    histogram_tester.ExpectBucketCount(
-        "Autofill.FormEvents.CreditCard.WithServerNickname",
-        FORM_EVENT_SUGGESTIONS_SHOWN_ONCE, 1);
-    histogram_tester.ExpectBucketCount(
-        "Autofill.FormEvents.CreditCard.WithServerNickname",
-        FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_SELECTED, 1);
-    histogram_tester.ExpectBucketCount(
-        "Autofill.FormEvents.CreditCard.WithServerNickname",
-        FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_SELECTED_ONCE, 1);
-    histogram_tester.ExpectBucketCount(
-        "Autofill.FormEvents.CreditCard.WithServerNickname",
-        FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_FILLED, 1);
-    histogram_tester.ExpectBucketCount(
-        "Autofill.FormEvents.CreditCard.WithServerNickname",
-        FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_FILLED_ONCE, 1);
-    histogram_tester.ExpectBucketCount(
-        "Autofill.FormEvents.CreditCard.WithServerNickname",
-        FORM_EVENT_MASKED_SERVER_CARD_SUGGESTION_SUBMITTED_ONCE, 1);
-  }
-}
-
-// Test that we log suggestion selection duration for masked server card
-// nickname.
-// TODO(crbug.com/1059087): Remove histogram logging for server nickname.
-TEST_F(AutofillMetricsTest, LogServerNicknameSelectionDuration) {
-  base::TimeTicks now = AutofillTickClock::NowTicks();
-  TestAutofillTickClock test_clock;
-  test_clock.SetNowTicks(now);
-
-  // Set up our form data.
-  FormData form;
-  form.name = ASCIIToUTF16("TestForm");
-  form.url = GURL("http://example.com/form.html");
-  form.action = GURL("http://example.com/submit.html");
-  form.main_frame_origin = url::Origin::Create(autofill_client_.form_origin());
-
-  FormFieldData field;
-  std::vector<ServerFieldType> field_types;
-  test::CreateTestFormField("Month", "card_month", "", "text", &field);
-  form.fields.push_back(field);
-  field_types.push_back(CREDIT_CARD_EXP_MONTH);
-  test::CreateTestFormField("Year", "card_year", "", "text", &field);
-  form.fields.push_back(field);
-  field_types.push_back(CREDIT_CARD_EXP_2_DIGIT_YEAR);
-  test::CreateTestFormField("Credit card", "card", "", "text", &field);
-  form.fields.push_back(field);
-  field_types.push_back(CREDIT_CARD_NUMBER);
-
-  // Creating all kinds of cards. None of them have nicknames.
-  RecreateCreditCards(true /* include_local_credit_card */,
-                      true /* include_masked_server_credit_card */,
-                      true /* include_full_server_credit_card */);
-
-  // Simulate having seen this form on page load.
-  autofill_manager_->AddSeenForm(form, field_types, field_types);
-
-  {
-    // No masked server card has nickname.
-    // Simulating activating the autofill popup for the credit card field, new
-    // popup being shown and filling a local card suggestion.
-    base::HistogramTester histogram_tester;
-    autofill_manager_->OnQueryFormFieldAutofill(
-        0, form, field, gfx::RectF(), /*autoselect_first_suggestion=*/false);
-    autofill_manager_->DidShowSuggestions(true /* is_new_popup */, form, field);
-    // Simulate choosing a suggestion after 1 second.
-    base::TimeDelta selection_delta = base::TimeDelta::FromSeconds(1);
-    test_clock.SetNowTicks(now + selection_delta);
-    std::string guid("10000000-0000-0000-0000-000000000001");  // local card
-    autofill_manager_->FillOrPreviewForm(
-        AutofillDriver::FORM_DATA_ACTION_FILL, 0, form, form.fields.front(),
-        autofill_manager_->MakeFrontendIDForTest(guid, std::string()));
-    // Check that the nickname sub-histogram was not recorded.
-    histogram_tester.ExpectTotalCount(
-        "Autofill.FormEvents.CreditCard.WithServerNickname.SelectionDuration",
-        0);
-  }
-
-  // Add another masked server card with nickname.
-  AddMaskedServerCreditCardWithNickname();
-  // Reset the autofill manager state.
-  autofill_manager_->Reset();
-  autofill_manager_->AddSeenForm(form, field_types, field_types);
-
-  {
-    // A masked server card with nickname.
-    // Simulating activating the autofill popup for the credit card field, new
-    // popup being shown and filling a local card suggestion.
-    base::HistogramTester histogram_tester;
-    test_clock.SetNowTicks(now);
-    autofill_manager_->OnQueryFormFieldAutofill(
-        0, form, field, gfx::RectF(), /*autoselect_first_suggestion=*/false);
-    autofill_manager_->DidShowSuggestions(true /* is_new_popup */, form, field);
-    // Simulate choosing a suggestion after 1 second.
-    base::TimeDelta selection_delta = base::TimeDelta::FromSeconds(1);
-    test_clock.SetNowTicks(now + selection_delta);
-    // Select the local card, log nickname selection duration because user has
-    // another masked servr card with nickname.
-    std::string guid("10000000-0000-0000-0000-000000000001");
-    autofill_manager_->FillOrPreviewForm(
-        AutofillDriver::FORM_DATA_ACTION_FILL, 0, form, form.fields.front(),
-        autofill_manager_->MakeFrontendIDForTest(guid, std::string()));
-    histogram_tester.ExpectTotalCount(
-        "Autofill.FormEvents.CreditCard.WithServerNickname.SelectionDuration",
-        1);
-    histogram_tester.ExpectTimeBucketCount(
-        "Autofill.FormEvents.CreditCard.WithServerNickname.SelectionDuration",
-        selection_delta, 1);
-  }
-
-  // Reset the autofill manager state.
-  autofill_manager_->Reset();
-  autofill_manager_->AddSeenForm(form, field_types, field_types);
-
-  {
-    // A masked server card with nickname.
-    // Simulating activating the autofill popup for the credit card field, new
-    // popup being shown and selecting a masked card server suggestion.
-    base::HistogramTester histogram_tester;
-    test_clock.SetNowTicks(now);
-    autofill_manager_->OnQueryFormFieldAutofill(
-        0, form, field, gfx::RectF(), /*autoselect_first_suggestion=*/false);
-    autofill_manager_->DidShowSuggestions(true /* is_new_popup */, form, field);
-    // Simulate choosing a suggestion after 1 second.
-    base::TimeDelta selection_delta = base::TimeDelta::FromSeconds(1);
-    test_clock.SetNowTicks(now + selection_delta);
-    // Select the masked server card without nickname, still log select
-    // duration, even though GetRealPan fails afterwards, because user has
-    // another masked server card with nickname.
-    std::string guid("10000000-0000-0000-0000-000000000002");
-    autofill_manager_->FillOrPreviewForm(
-        AutofillDriver::FORM_DATA_ACTION_FILL, 0, form, form.fields.back(),
-        autofill_manager_->MakeFrontendIDForTest(guid, std::string()));
-    OnDidGetRealPan(AutofillClient::PERMANENT_FAILURE, std::string());
-    histogram_tester.ExpectTotalCount(
-        "Autofill.FormEvents.CreditCard.WithServerNickname.SelectionDuration",
-        1);
-    histogram_tester.ExpectTimeBucketCount(
-        "Autofill.FormEvents.CreditCard.WithServerNickname.SelectionDuration",
-        selection_delta, 1);
-  }
-
-  // Reset the autofill manager state.
-  autofill_manager_->Reset();
-  autofill_manager_->AddSeenForm(form, field_types, field_types);
-
-  {
-    // A masked server card with nickname.
-    // Simulating suggestions are shown twice, then choosing a local card.
-    base::HistogramTester histogram_tester;
-    test_clock.SetNowTicks(now);
-    autofill_manager_->OnQueryFormFieldAutofill(
-        0, form, field, gfx::RectF(), /*autoselect_first_suggestion=*/false);
-    autofill_manager_->DidShowSuggestions(true /* is_new_popup */, form, field);
-    // Simulate the first popup was dismissed and the second popup is shown
-    // after 1 second.
-    base::TimeDelta suggestion_delta = base::TimeDelta::FromSeconds(1);
-    test_clock.SetNowTicks(now + suggestion_delta);
-    autofill_manager_->DidShowSuggestions(true /* is_new_popup */, form, field);
-    // Simulate choosing a suggestion on the second popup after 2 seconds.
-    // The overall selection duration will be 3 seconds, between the first time
-    // suggestion was shown and the first card is chosen.
-    base::TimeDelta total_selection_delta =
-        suggestion_delta + base::TimeDelta::FromSeconds(2);
-    test_clock.SetNowTicks(now + total_selection_delta);
-    std::string guid("10000000-0000-0000-0000-000000000001");  // local card
-    autofill_manager_->FillOrPreviewForm(
-        AutofillDriver::FORM_DATA_ACTION_FILL, 0, form, form.fields.back(),
-        autofill_manager_->MakeFrontendIDForTest(guid, std::string()));
-    histogram_tester.ExpectTotalCount(
-        "Autofill.FormEvents.CreditCard.WithServerNickname.SelectionDuration",
-        1);
-    histogram_tester.ExpectTimeBucketCount(
-        "Autofill.FormEvents.CreditCard.WithServerNickname.SelectionDuration",
-        total_selection_delta, 1);
-  }
-
-  // Reset the autofill manager state.
-  autofill_manager_->Reset();
-  autofill_manager_->AddSeenForm(form, field_types, field_types);
-
-  {
-    // A masked server card with nickname.
-    // Simulating suggestions being shown and selecting masked server card
-    // multiple times.
-    base::HistogramTester histogram_tester;
-    test_clock.SetNowTicks(now);
-    autofill_manager_->OnQueryFormFieldAutofill(
-        0, form, field, gfx::RectF(), /*autoselect_first_suggestion=*/false);
-    autofill_manager_->DidShowSuggestions(true /* is_new_popup */, form, field);
-    // Simulate the first selection happens 1 second after suggestion is shown.
-    base::TimeDelta first_suggestion_delta = base::TimeDelta::FromSeconds(1);
-    test_clock.SetNowTicks(now + first_suggestion_delta);
-    std::string guid1(
-        "10000000-0000-0000-0000-000000000002");  // masked server card
-    autofill_manager_->FillOrPreviewForm(
-        AutofillDriver::FORM_DATA_ACTION_FILL, 0, form, form.fields.back(),
-        autofill_manager_->MakeFrontendIDForTest(guid1, std::string()));
-    // Simulate choosing another local card 2 seconds after user chooses the
-    // server card.
-    base::TimeDelta second_selection_delta =
-        first_suggestion_delta + base::TimeDelta::FromSeconds(2);
-    test_clock.SetNowTicks(now + second_selection_delta);
-    std::string guid2("10000000-0000-0000-0000-000000000001");  // local card
-    autofill_manager_->FillOrPreviewForm(
-        AutofillDriver::FORM_DATA_ACTION_FILL, 0, form, form.fields.back(),
-        autofill_manager_->MakeFrontendIDForTest(guid2, std::string()));
-    // The selection duration should be only logged once.
-    histogram_tester.ExpectTotalCount(
-        "Autofill.FormEvents.CreditCard.WithServerNickname.SelectionDuration",
-        1);
-    // The logged selection duration should be 1 second, between the suggestion
-    // was shown and the first card is chosen.
-    histogram_tester.ExpectTimeBucketCount(
-        "Autofill.FormEvents.CreditCard.WithServerNickname.SelectionDuration",
-        first_suggestion_delta, 1);
-  }
-}
-
 // Test that we log form events for masked server card with offers.
 TEST_F(AutofillMetricsTest, LogServerOfferFormEvents) {
   scoped_feature_list_.InitAndEnableFeature(
@@ -8657,45 +7965,6 @@ TEST_F(AutofillMetricsTest, AutofillFormSubmittedState) {
   // Clear out the third field's value.
   form.fields[2].value = base::string16();
   forms.front() = form;
-
-  // This form is non-fillable if small form support is disabled (min number
-  // of fields enforced.)
-  {
-    base::test::ScopedFeatureList features;
-    features.InitWithFeatures(
-        // Enabled
-        {kAutofillEnforceMinRequiredFieldsForHeuristics,
-         kAutofillEnforceMinRequiredFieldsForQuery},
-        // Disabled
-        {});
-    base::HistogramTester histogram_tester;
-    base::UserActionTester user_action_tester;
-    autofill_manager_->OnFormSubmitted(form, false,
-                                       SubmissionSource::FORM_SUBMISSION);
-    histogram_tester.ExpectUniqueSample(
-        "Autofill.FormSubmittedState",
-        AutofillMetrics::NON_FILLABLE_FORM_OR_NEW_DATA, 1);
-    EXPECT_EQ(1, user_action_tester.GetActionCount(
-                     "Autofill_FormSubmitted_NonFillable"));
-
-    expected_form_submission_ukm_metrics.push_back(
-        {{UkmFormSubmittedType::kAutofillFormSubmittedStateName,
-          AutofillMetrics::NON_FILLABLE_FORM_OR_NEW_DATA},
-         {UkmSuggestionFilledType::kMillisecondsSinceFormParsedName, 0},
-         {UkmFormSubmittedType::kIsForCreditCardName, false},
-         {UkmFormSubmittedType::kHasUpiVpaFieldName, false},
-         {UkmFormSubmittedType::kFormTypesName,
-          AutofillMetrics::FormTypesToBitVector(
-              {FormType::ADDRESS_FORM, FormType::UNKNOWN_FORM_TYPE})},
-         {UkmFormSubmittedType::kFormSignatureName,
-          Collapse(CalculateFormSignature(form)).value()}});
-    VerifyUkm(test_ukm_recorder_, form, UkmFormSubmittedType::kEntryName,
-              expected_form_submission_ukm_metrics);
-
-    AppendFieldFillStatusUkm(form, &expected_field_fill_status_ukm_metrics);
-    VerifyUkm(test_ukm_recorder_, form, UkmFieldFillStatusType::kEntryName,
-              expected_field_fill_status_ukm_metrics);
-  }
 }
 
 // Verify that we correctly log the submitted form's state with fields

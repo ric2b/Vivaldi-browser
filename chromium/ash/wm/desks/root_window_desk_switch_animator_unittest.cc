@@ -13,6 +13,7 @@
 #include "ash/wm/desks/desks_histogram_enums.h"
 #include "ash/wm/desks/root_window_desk_switch_animator_test_api.h"
 #include "base/callback_forward.h"
+#include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
@@ -89,6 +90,7 @@ class RootWindowDeskSwitchAnimatorTest
   int ending_desk_screenshot_taken_count() const {
     return ending_desk_screenshot_taken_count_;
   }
+  int visible_desk_changed_count() const { return visible_desk_changed_count_; }
 
   // Creates an animator from the given indices on the primary root window.
   // Creates a test api for the animator as well.
@@ -139,6 +141,7 @@ class RootWindowDeskSwitchAnimatorTest
   }
 
   void OnDeskSwitchAnimationFinished() override {}
+  void OnVisibleDeskChanged() override { ++visible_desk_changed_count_; }
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -154,6 +157,7 @@ class RootWindowDeskSwitchAnimatorTest
 
   int starting_desk_screenshot_taken_count_ = 0;
   int ending_desk_screenshot_taken_count_ = 0;
+  int visible_desk_changed_count_ = 0;
 };
 
 // Tests a simple animation from one desk to another.
@@ -444,6 +448,72 @@ TEST_F(RootWindowDeskSwitchAnimatorTest, EndSwipeAnimation) {
       Shell::GetPrimaryRootWindow()->bounds(),
       GetTargetVisibleBounds(test_api()->GetScreenshotLayerOfDeskWithIndex(1),
                              animation_layer));
+}
+
+// Test that there is no crash if we end swiping before the desk animation
+// screenshots are finished taking. Regression test for
+// https://crbug.com/1134390.
+TEST_F(RootWindowDeskSwitchAnimatorTest,
+       EndSwipeAnimationBeforeScreenshotTaken) {
+  InitAnimator(0, 1);
+  animator()->TakeStartingDeskScreenshot();
+  animator()->EndSwipeAnimation();
+
+  // Reinitialize the animator as each animator only supports one
+  // EndSwipeAnimation during its lifetime.
+  InitAnimator(0, 1);
+  TakeStartingDeskScreenshotAndWait();
+  animator()->TakeEndingDeskScreenshot();
+  animator()->EndSwipeAnimation();
+}
+
+// Tests that visible desk change count updates as expected. It is used higher
+// up for metrics collection, but the logic is in this class.
+TEST_F(RootWindowDeskSwitchAnimatorTest, VisibleDeskChangeCount) {
+  // Add three desks for a total of four.
+  DesksController::Get()->NewDesk(DesksCreationRemovalSource::kButton);
+  DesksController::Get()->NewDesk(DesksCreationRemovalSource::kButton);
+  DesksController::Get()->NewDesk(DesksCreationRemovalSource::kButton);
+
+  InitAnimator(0, 1);
+  TakeStartingDeskScreenshotAndWait();
+  TakeEndingDeskScreenshotAndWait();
+  EXPECT_EQ(0, visible_desk_changed_count());
+
+  const int touchpad_swipe_length_for_desk_change =
+      RootWindowDeskSwitchAnimator::kTouchpadSwipeLengthForDeskChange;
+
+  // Swipe enough so that our third and fourth desk screenshots are taken, and
+  // then swipe so that the fourth desk is fully shown. There should be 3
+  // visible desk changes in total.
+  base::Optional<int> new_index =
+      animator()->UpdateSwipeAnimation(-touchpad_swipe_length_for_desk_change);
+  ASSERT_TRUE(new_index.has_value());
+  animator()->PrepareForEndingDeskScreenshot(*new_index);
+  TakeEndingDeskScreenshotAndWait();
+
+  new_index =
+      animator()->UpdateSwipeAnimation(-touchpad_swipe_length_for_desk_change);
+  ASSERT_TRUE(new_index.has_value());
+  animator()->PrepareForEndingDeskScreenshot(*new_index);
+  TakeEndingDeskScreenshotAndWait();
+
+  animator()->UpdateSwipeAnimation(-3 * touchpad_swipe_length_for_desk_change);
+  EXPECT_EQ(3, visible_desk_changed_count());
+
+  // Do some minor swipes to the right. We should still be focused on the last
+  // desk so the visible desk change count remains the same.
+  animator()->UpdateSwipeAnimation(touchpad_swipe_length_for_desk_change / 10);
+  animator()->UpdateSwipeAnimation(touchpad_swipe_length_for_desk_change / 10);
+  EXPECT_EQ(3, visible_desk_changed_count());
+
+  // Do two full swipes to the right, and then two full swipes to the left. Test
+  // that the desk change count has increased by four.
+  animator()->UpdateSwipeAnimation(touchpad_swipe_length_for_desk_change);
+  animator()->UpdateSwipeAnimation(touchpad_swipe_length_for_desk_change);
+  animator()->UpdateSwipeAnimation(-touchpad_swipe_length_for_desk_change);
+  animator()->UpdateSwipeAnimation(-touchpad_swipe_length_for_desk_change);
+  EXPECT_EQ(7, visible_desk_changed_count());
 }
 
 }  // namespace ash

@@ -47,9 +47,14 @@ void WebWidgetTestProxy::ScheduleAnimationForWebTests() {
     ScheduleAnimationInternal(/*do_raster=*/true);
 }
 
-void WebWidgetTestProxy::RequestPresentation(
-    PresentationTimeCallback callback) {
-  RenderWidget::RequestPresentation(std::move(callback));
+void WebWidgetTestProxy::UpdateAllLifecyclePhasesAndComposite(
+    base::OnceClosure callback) {
+  layer_tree_host()->RequestPresentationTimeForNextFrame(base::BindOnce(
+      [](base::OnceClosure callback, const gfx::PresentationFeedback&) {
+        std::move(callback).Run();
+      },
+      std::move(callback)));
+  layer_tree_host()->SetNeedsCommitWithForcedRedraw();
   ScheduleAnimationForWebTests();
 }
 
@@ -81,30 +86,6 @@ void WebWidgetTestProxy::ScheduleAnimationInternal(bool do_raster) {
                                          weak_factory_.GetWeakPtr()),
                           base::TimeDelta::FromMilliseconds(1));
   }
-}
-
-bool WebWidgetTestProxy::RequestPointerLock(
-    blink::WebLocalFrame* requester_frame,
-    blink::WebWidgetClient::PointerLockCallback callback,
-    bool request_unadjusted_movement) {
-  return event_sender_.RequestPointerLock(requester_frame, std::move(callback));
-}
-
-bool WebWidgetTestProxy::RequestPointerLockChange(
-    blink::WebLocalFrame* requester_frame,
-    blink::WebWidgetClient::PointerLockCallback callback,
-    bool request_unadjusted_movement) {
-  // This isn't implemented yet for web tests.
-  CHECK(false);
-  return false;
-}
-
-void WebWidgetTestProxy::RequestPointerUnlock() {
-  event_sender_.RequestPointerUnlock();
-}
-
-bool WebWidgetTestProxy::IsPointerLocked() {
-  return event_sender_.IsPointerLocked();
 }
 
 bool WebWidgetTestProxy::InterceptStartDragging(
@@ -182,7 +163,8 @@ void WebWidgetTestProxy::DoComposite(content::RenderWidget* widget,
     widget->layer_tree_host()->SetNeedsCommitWithForcedRedraw();
   }
 
-  widget->layer_tree_host()->Composite(base::TimeTicks::Now(), do_raster);
+  widget->layer_tree_host()->CompositeForTest(base::TimeTicks::Now(),
+                                              do_raster);
 }
 
 void WebWidgetTestProxy::SynchronouslyComposite(bool do_raster) {

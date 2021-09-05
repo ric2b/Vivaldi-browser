@@ -6,7 +6,7 @@
 
 #include <utility>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/histogram_samples.h"
@@ -54,7 +54,7 @@ enum CallsBitmap {
 
 void InitInputMethod() {
   auto* comp_ime_manager = new ComponentExtensionIMEManager;
-  auto* delegate = new MockComponentExtIMEManagerDelegate;
+  auto* delegate = new MockComponentExtensionIMEManagerDelegate;
 
   ComponentExtensionIME ext1;
   ext1.id = kTestExtensionId;

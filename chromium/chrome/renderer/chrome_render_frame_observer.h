@@ -86,11 +86,12 @@ class ChromeRenderFrameObserver : public content::RenderFrameObserver,
       chrome::mojom::ImageFormat image_format,
       RequestImageForContextNodeCallback callback) override;
   void RequestReloadImageForContextNode() override;
-  void GetWebApplicationInfo(GetWebApplicationInfoCallback callback) override;
+  void GetWebPageMetadata(GetWebPageMetadataCallback callback) override;
 #if defined(OS_ANDROID)
   void SetCCTClientHeader(const std::string& header) override;
 #endif
   void GetMediaFeedURL(GetMediaFeedURLCallback callback) override;
+  void LoadBlockedPlugins(const std::string& identifier) override;
 
   // Initialize a |phishing_classifier_delegate_|.
   void SetClientSidePhishingDetection();

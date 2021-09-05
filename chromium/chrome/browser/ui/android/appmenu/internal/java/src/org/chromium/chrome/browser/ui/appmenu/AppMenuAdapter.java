@@ -308,10 +308,13 @@ class AppMenuAdapter extends BaseAdapter {
                 break;
         }
 
-        if (mHighlightedItemId != null && item.getItemId() == mHighlightedItemId) {
-            ViewHighlighter.turnOnHighlight(convertView, false);
-        } else {
-            ViewHighlighter.turnOffHighlight(convertView);
+        if (getCustomItemViewType(item) == CustomViewBinder.NOT_HANDLED) {
+            // IPH for custom view is handled by themselves.
+            if (mHighlightedItemId != null && item.getItemId() == mHighlightedItemId) {
+                ViewHighlighter.turnOnRectangularHighlight(convertView);
+            } else {
+                ViewHighlighter.turnOffHighlight(convertView);
+            }
         }
 
         convertView.setTag(R.id.menu_item_view_type, itemViewType);
@@ -361,7 +364,7 @@ class AppMenuAdapter extends BaseAdapter {
         button.setOnLongClickListener(v -> mAppMenuClickHandler.onItemLongClick(item, v));
 
         if (mHighlightedItemId != null && item.getItemId() == mHighlightedItemId) {
-            ViewHighlighter.turnOnHighlight(button, true);
+            ViewHighlighter.turnOnCircularHighlight(button);
         } else {
             ViewHighlighter.turnOffHighlight(button);
         }
@@ -495,7 +498,9 @@ class AppMenuAdapter extends BaseAdapter {
             setupImageButton(holder.buttons[i], item.getSubMenu().getItem(i));
         }
 
-        if (CachedFeatureFlags.isEnabled(ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_ICONS)) {
+        if (CachedFeatureFlags.isEnabled(ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_ICONS)
+                || CachedFeatureFlags.isEnabled(
+                        ChromeFeatureList.TABBED_APP_OVERFLOW_MENU_THREE_BUTTON_ACTIONBAR)) {
             // Tint action bar's background.
             convertView.setBackgroundDrawable(ApiCompatibilityUtils.getDrawable(
                     convertView.getContext().getResources(), R.drawable.menu_action_bar_bg));

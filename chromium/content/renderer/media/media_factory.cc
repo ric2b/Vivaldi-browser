@@ -10,7 +10,6 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/task_runner_util.h"
@@ -120,7 +119,7 @@ class FrameFetchContext : public media::ResourceFetchContext {
   // media::ResourceFetchContext implementation.
   std::unique_ptr<blink::WebAssociatedURLLoader> CreateUrlLoader(
       const blink::WebAssociatedURLLoaderOptions& options) override {
-    return base::WrapUnique(frame_->CreateAssociatedURLLoader(options));
+    return frame_->CreateAssociatedURLLoader(options);
   }
 
  private:
@@ -360,12 +359,10 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
     viz::FrameSinkId parent_frame_sink_id,
     const cc::LayerTreeSettings& settings) {
   blink::WebLocalFrame* web_frame = render_frame_->GetWebFrame();
-  blink::WebSecurityOrigin security_origin =
-      render_frame_->GetWebFrame()->GetSecurityOrigin();
   if (source.IsMediaStream()) {
-    return CreateWebMediaPlayerForMediaStream(
-        client, inspector_context, sink_id, security_origin, web_frame,
-        parent_frame_sink_id, settings);
+    return CreateWebMediaPlayerForMediaStream(client, inspector_context,
+                                              sink_id, web_frame,
+                                              parent_frame_sink_id, settings);
   }
 
   // If |source| was not a MediaStream, it must be a URL.
@@ -404,16 +401,12 @@ blink::WebMediaPlayer* MediaFactory::CreateMediaPlayer(
 
   std::vector<std::unique_ptr<BatchingMediaLog::EventHandler>> handlers;
   handlers.push_back(std::make_unique<RenderMediaEventHandler>());
-
-  if (base::FeatureList::IsEnabled(media::kMediaInspectorLogging)) {
-    handlers.push_back(
-        std::make_unique<InspectorMediaEventHandler>(inspector_context));
-  }
+  handlers.push_back(
+      std::make_unique<InspectorMediaEventHandler>(inspector_context));
 
   // This must be created for every new WebMediaPlayer, each instance generates
   // a new player id which is used to collate logs on the browser side.
   auto media_log = std::make_unique<BatchingMediaLog>(
-      url::Origin(security_origin).GetURL(),
       render_frame_->GetTaskRunner(blink::TaskType::kInternalMedia),
       std::move(handlers));
 
@@ -699,7 +692,6 @@ blink::WebMediaPlayer* MediaFactory::CreateWebMediaPlayerForMediaStream(
     blink::WebMediaPlayerClient* client,
     blink::MediaInspectorContext* inspector_context,
     const blink::WebString& sink_id,
-    const blink::WebSecurityOrigin& security_origin,
     blink::WebLocalFrame* frame,
     viz::FrameSinkId parent_frame_sink_id,
     const cc::LayerTreeSettings& settings) {
@@ -710,16 +702,12 @@ blink::WebMediaPlayer* MediaFactory::CreateWebMediaPlayerForMediaStream(
 
   std::vector<std::unique_ptr<BatchingMediaLog::EventHandler>> handlers;
   handlers.push_back(std::make_unique<RenderMediaEventHandler>());
-
-  if (base::FeatureList::IsEnabled(media::kMediaInspectorLogging)) {
-    handlers.push_back(
-        std::make_unique<InspectorMediaEventHandler>(inspector_context));
-  }
+  handlers.push_back(
+      std::make_unique<InspectorMediaEventHandler>(inspector_context));
 
   // This must be created for every new WebMediaPlayer, each instance generates
   // a new player id which is used to collate logs on the browser side.
   auto media_log = std::make_unique<BatchingMediaLog>(
-      url::Origin(security_origin).GetURL(),
       render_frame_->GetTaskRunner(blink::TaskType::kInternalMedia),
       std::move(handlers));
 

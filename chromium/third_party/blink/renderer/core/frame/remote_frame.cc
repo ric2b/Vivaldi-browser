@@ -17,6 +17,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/window_proxy.h"
 #include "third_party/blink/renderer/bindings/core/v8/window_proxy_manager.h"
 #include "third_party/blink/renderer/core/events/message_event.h"
+#include "third_party/blink/renderer/core/exported/web_view_impl.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
@@ -108,9 +109,12 @@ RemoteFrame::RemoteFrame(
             frame_token,
             MakeGarbageCollected<RemoteWindowProxyManager>(*this),
             inheriting_agent_factory),
-      interface_registry_(
-          interface_registry ? interface_registry
-                             : InterfaceRegistry::GetEmptyInterfaceRegistry()) {
+      interface_registry_(interface_registry
+                              ? interface_registry
+                              : InterfaceRegistry::GetEmptyInterfaceRegistry()),
+      task_runner_(page.GetPageScheduler()
+                       ->GetAgentGroupScheduler()
+                       .DefaultTaskRunner()) {
   // TODO(crbug.com/1094850): Remove this check once the renderer is correctly
   // handling errors during the creation of HTML portal elements, which would
   // otherwise cause RemoteFrame() being created with empty frame tokens.
@@ -125,8 +129,9 @@ RemoteFrame::RemoteFrame(
   interface_registry->AddAssociatedInterface(WTF::BindRepeating(
       &RemoteFrame::BindToReceiver, WrapWeakPersistent(this)));
 
+  DCHECK(task_runner_);
   associated_interface_provider->GetInterface(
-      remote_frame_host_remote_.BindNewEndpointAndPassReceiver());
+      remote_frame_host_remote_.BindNewEndpointAndPassReceiver(task_runner_));
 
   UpdateInertIfPossible();
   UpdateInheritedEffectiveTouchActionIfPossible();
@@ -542,13 +547,13 @@ void RemoteFrame::UpdateUserActivationState(
     mojom::blink::UserActivationNotificationType notification_type) {
   switch (update_type) {
     case mojom::blink::UserActivationUpdateType::kNotifyActivation:
-      NotifyUserActivationInLocalTree(notification_type);
+      NotifyUserActivationInFrameTree(notification_type);
       break;
     case mojom::blink::UserActivationUpdateType::kConsumeTransientActivation:
-      ConsumeTransientUserActivationInLocalTree();
+      ConsumeTransientUserActivationInFrameTree();
       break;
     case mojom::blink::UserActivationUpdateType::kClearActivation:
-      ClearUserActivationInLocalTree();
+      ClearUserActivationInFrameTree();
       break;
     case mojom::blink::UserActivationUpdateType::
         kNotifyActivationPendingBrowserVerification:
@@ -619,7 +624,9 @@ void RemoteFrame::ScrollRectToVisible(
   // This is due to something such as scroll focused editable element into
   // view on Android which also requires an automatic zoom into legible scale.
   // This is handled by main frame's WebView.
-  WebFrame::FromFrame(this)->View()->ZoomAndScrollToFocusedEditableElementRect(
+  WebViewImpl* web_view =
+      static_cast<WebViewImpl*>(WebFrame::FromFrame(this)->View());
+  web_view->ZoomAndScrollToFocusedEditableElementRect(
       element_bounds_in_document, caret_bounds_in_document, true);
 }
 
@@ -829,14 +836,14 @@ void RemoteFrame::BindToReceiver(
     RemoteFrame* frame,
     mojo::PendingAssociatedReceiver<mojom::blink::RemoteFrame> receiver) {
   DCHECK(frame);
-  frame->receiver_.Bind(std::move(receiver));
+  frame->receiver_.Bind(std::move(receiver), frame->task_runner_);
 }
 
 void RemoteFrame::BindToMainFrameReceiver(
     RemoteFrame* frame,
     mojo::PendingAssociatedReceiver<mojom::blink::RemoteMainFrame> receiver) {
   DCHECK(frame);
-  frame->main_frame_receiver_.Bind(std::move(receiver));
+  frame->main_frame_receiver_.Bind(std::move(receiver), frame->task_runner_);
 }
 
 }  // namespace blink

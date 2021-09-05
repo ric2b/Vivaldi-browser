@@ -48,7 +48,6 @@
 #include "components/safe_browsing/content/password_protection/password_protection_service.h"
 #include "components/safe_browsing/core/proto/csd.pb.h"
 #include "components/security_interstitials/content/stateful_ssl_host_state_delegate.h"
-#include "components/security_state/core/features.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/ssl_errors/error_info.h"
 #include "components/strings/grit/components_chromium_strings.h"
@@ -162,12 +161,9 @@ bool ShouldShowPermission(const PageInfo::PermissionInfo& info,
   if (info.type == ContentSettingsType::FILE_SYSTEM_WRITE_GUARD)
     return false;
 #else
-  // Flash is shown if the user has ever changed its setting for |site_url|.
-  if (info.type == ContentSettingsType::PLUGINS &&
-      content_settings->GetWebsiteSetting(site_url, site_url,
-                                          ContentSettingsType::PLUGINS_DATA,
-                                          std::string(), nullptr) != nullptr) {
-    return true;
+  // Flash is deprecated and should never be shown.
+  if (info.type == ContentSettingsType::PLUGINS) {
+    return false;
   }
 
   // NFC is Android-only at the moment.
@@ -184,8 +180,7 @@ bool ShouldShowPermission(const PageInfo::PermissionInfo& info,
   // Hide camera if camera PTZ is granted or blocked.
   if (info.type == ContentSettingsType::MEDIASTREAM_CAMERA) {
     std::unique_ptr<base::Value> value = content_settings->GetWebsiteSetting(
-        site_url, site_url, ContentSettingsType::CAMERA_PAN_TILT_ZOOM,
-        std::string(), nullptr);
+        site_url, site_url, ContentSettingsType::CAMERA_PAN_TILT_ZOOM, nullptr);
     DCHECK(value.get());
     ContentSetting camera_ptz_setting =
         content_settings::ValueToContentSetting(value.get());
@@ -511,7 +506,8 @@ void PageInfo::UpdatePermissions() {
 }
 
 void PageInfo::OnSitePermissionChanged(ContentSettingsType type,
-                                       ContentSetting setting) {
+                                       ContentSetting setting,
+                                       bool is_one_time) {
   ContentSettingChangedViaPageInfo(type);
 
   // Count how often a permission for a specific content type is changed using
@@ -562,8 +558,12 @@ void PageInfo::OnSitePermissionChanged(ContentSettingsType type,
     delegate_->GetPermissionDecisionAutoblocker()->RemoveEmbargoAndResetCounts(
         site_url_, type);
   }
-  content_settings->SetNarrowestContentSetting(site_url_, site_url_, type,
-                                               setting);
+  using Constraints = content_settings::ContentSettingConstraints;
+  content_settings->SetNarrowestContentSetting(
+      site_url_, site_url_, type, setting,
+      is_one_time
+          ? Constraints{base::Time(), content_settings::SessionModel::OneTime}
+          : Constraints{});
 
   // When the sound setting is changed, no reload is necessary.
   if (type != ContentSettingsType::SOUND)
@@ -797,7 +797,7 @@ void PageInfo::ComputeUIInputs(const GURL& url) {
 
   safety_tip_info_ = visible_security_state.safety_tip_info;
 #if defined(OS_ANDROID)
-  if (base::FeatureList::IsEnabled(security_state::features::kSafetyTipUI)) {
+  if (security_state::IsSafetyTipUIFeatureEnabled()) {
     // identity_status_description_android_ is only displayed on Android when
     // the user taps "Details" link on the page info. Reuse the description from
     // page info UI.
@@ -924,7 +924,7 @@ void PageInfo::PresentSitePermissions() {
     // TODO(crbug.com/1030245) Investigate why the value is queried from the low
     // level routine GetWebsiteSettings.
     std::unique_ptr<base::Value> value = content_settings->GetWebsiteSetting(
-        site_url_, site_url_, permission_info.type, std::string(), &info);
+        site_url_, site_url_, permission_info.type, &info);
     DCHECK(value.get());
     if (value->type() == base::Value::Type::INTEGER) {
       permission_info.setting =
@@ -936,6 +936,8 @@ void PageInfo::PresentSitePermissions() {
     permission_info.source = info.source;
     permission_info.is_incognito =
         web_contents()->GetBrowserContext()->IsOffTheRecord();
+    permission_info.is_one_time =
+        (info.session_model == content_settings::SessionModel::OneTime);
 
     if (info.primary_pattern == ContentSettingsPattern::Wildcard() &&
         info.secondary_pattern == ContentSettingsPattern::Wildcard()) {
@@ -1032,7 +1034,7 @@ void PageInfo::PresentSiteIdentity() {
   info.connection_status_description = UTF16ToUTF8(site_connection_details_);
   info.identity_status = site_identity_status_;
   info.safe_browsing_status = safe_browsing_status_;
-  if (base::FeatureList::IsEnabled(security_state::features::kSafetyTipUI)) {
+  if (security_state::IsSafetyTipUIFeatureEnabled()) {
     info.safety_tip_info = safety_tip_info_;
   }
 #if defined(OS_ANDROID)

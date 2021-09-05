@@ -20,8 +20,15 @@ class CONTENT_EXPORT TtsPlatform {
  public:
   static TtsPlatform* GetInstance();
 
-  // Returns true if this platform implementation is supported and available.
-  virtual bool PlatformImplAvailable() = 0;
+  // Returns true if this platform implementation is supported. The returned
+  // value of this method won't change over time.
+  virtual bool PlatformImplSupported() = 0;
+
+  // Returns true if this platform implementation is initialized. If the
+  // platform is supported, this method will eventually return true, when
+  // the asynchronous initialisation is completed. Other methods may fail if
+  // called when not yet initialized.
+  virtual bool PlatformImplInitialized() = 0;
 
   // Some platforms may provide a built-in TTS engine. Returns true
   // if the engine was not previously loaded and is now loading, and
@@ -74,6 +81,10 @@ class CONTENT_EXPORT TtsPlatform {
   virtual std::string GetError() = 0;
   virtual void ClearError() = 0;
   virtual void SetError(const std::string& error) = 0;
+
+  // If supported, the platform shutdown its internal state. After that call,
+  // other methods may no-op.
+  virtual void Shutdown() = 0;
 };
 
 }  // namespace content

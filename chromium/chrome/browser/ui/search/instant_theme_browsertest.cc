@@ -11,7 +11,6 @@
 #include "chrome/browser/search/instant_service.h"
 #include "chrome/browser/search/instant_service_factory.h"
 #include "chrome/browser/search/instant_service_observer.h"
-#include "chrome/browser/search/ntp_features.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
 #include "chrome/browser/ui/browser.h"
@@ -24,6 +23,7 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/search/ntp_features.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
@@ -82,14 +82,13 @@ class InstantThemeTest : public extensions::ExtensionBrowserTest,
   InstantThemeTest() {}
 
  protected:
-  void SetUpInProcessBrowserTestFixture() override {
+  void SetUpOnMainThread() override {
     ASSERT_TRUE(https_test_server().Start());
     GURL base_url = https_test_server().GetURL("/instant_extended.html");
     GURL ntp_url = https_test_server().GetURL("/instant_extended_ntp.html");
-    InstantTestBase::Init(base_url, ntp_url, false);
-  }
+    ASSERT_NO_FATAL_FAILURE(
+        SetupInstant(browser()->profile(), base_url, ntp_url));
 
-  void SetUpOnMainThread() override {
     extensions::ExtensionBrowserTest::SetUpOnMainThread();
 
     content::URLDataSource::Add(profile(),
@@ -149,7 +148,6 @@ class InstantThemeTest : public extensions::ExtensionBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(InstantThemeTest, ThemeBackgroundAccess) {
   ASSERT_NO_FATAL_FAILURE(InstallThemeAndVerify("theme", "camo theme"));
-  ASSERT_NO_FATAL_FAILURE(SetupInstant(browser()));
 
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), GURL(chrome::kChromeSearchLocalNtpUrl),

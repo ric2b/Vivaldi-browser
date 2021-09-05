@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//base/trace_event/tracing.gni")
 import("//build/buildflag_header.gni")
 import("//build/compiled_action.gni")
 import("//build/config/compiler/compiler.gni")
@@ -16,13 +17,6 @@ import("//third_party/blink/renderer/build/scripts/scripts.gni")
 import("//third_party/blink/renderer/config.gni")
 import("//third_party/blink/renderer/platform/platform_generated.gni")
 import("//v8/gni/v8.gni")
-
-# This file depends on the legacy global sources assignment filter. It should
-# be converted to check target platform before assigning source files to the
-# sources variable. Remove this import and set_sources_assignment_filter call
-# when the file has been converted. See https://crbug.com/1018739 for details.
-import("//build/config/deprecated_default_sources_assignment_filter.gni")
-set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
 
 # Most targets in this file are private actions so use that as the default.
 visibility = [
@@ -194,8 +188,9 @@ group("blink_platform_public_deps") {
 declare_args() {
   runtime_call_stats_count_everything = false
 
-  # Enable TRACE_EVENT instrumentation for Blink bindings. Disabled by default as it increases binary size.
-  enable_blink_bindings_tracing = false
+  # Enable TRACE_EVENT instrumentation for Blink bindings.
+  # Disabled by default as it increases binary size.
+  enable_blink_bindings_tracing = extended_tracing_enabled
 }
 
 buildflag_header("bindings_buildflags") {
@@ -258,6 +253,7 @@ component("platform") {
     "//services/device/public/mojom:mojom_blink",
     "//services/media_session/public/mojom:mojom_blink",
     "//third_party/blink/*",
+    "//tools/privacy_budget/font_indexer:*",
     "//url/mojom:url_mojom_gurl_blink",
     "//url/mojom:url_mojom_origin_blink",
   ]
@@ -373,8 +369,6 @@ component("platform") {
     "audio/hrtf_panner.h",
     "audio/iir_filter.cc",
     "audio/iir_filter.h",
-    "audio/mac/fft_frame_mac.cc",
-    "audio/mac/vector_math_mac.h",
     "audio/media_multi_channel_resampler.cc",
     "audio/media_multi_channel_resampler.h",
     "audio/panner.cc",
@@ -427,6 +421,8 @@ component("platform") {
     "bindings/exception_messages.h",
     "bindings/exception_state.cc",
     "bindings/exception_state.h",
+    "bindings/idl_member_installer.cc",
+    "bindings/idl_member_installer.h",
     "bindings/microtask.cc",
     "bindings/microtask.h",
     "bindings/name_client.h",
@@ -466,6 +462,7 @@ component("platform") {
     "bindings/v8_dom_wrapper.h",
     "bindings/v8_global_value_map.h",
     "bindings/v8_interface_bridge.h",
+    "bindings/v8_interface_bridge_base.h",
     "bindings/v8_object_constructor.cc",
     "bindings/v8_object_constructor.h",
     "bindings/v8_per_context_data.cc",
@@ -488,10 +485,6 @@ component("platform") {
     "context_lifecycle_notifier.h",
     "context_lifecycle_observer.cc",
     "context_lifecycle_observer.h",
-    "cookie/canonical_cookie.cc",
-    "cookie/canonical_cookie.h",
-    "cookie/canonical_cookie_mojom_traits.cc",
-    "cookie/canonical_cookie_mojom_traits.h",
     "cpu/mips/common_macros_msa.h",
     "crypto.cc",
     "crypto.h",
@@ -510,8 +503,11 @@ component("platform") {
     "exported/mediastream/web_media_stream_track.cc",
     "exported/mediastream/web_platform_media_stream_source.cc",
     "exported/platform.cc",
+    "exported/resource_load_info_notifier_wrapper.cc",
+    "exported/sync_load_response.cc",
     "exported/url_conversion.cc",
     "exported/video_capture/web_video_capture_impl_manager.cc",
+    "exported/weak_wrapper_resource_load_info_notifier.cc",
     "exported/web_audio_bus.cc",
     "exported/web_audio_device.cc",
     "exported/web_blob_info.cc",
@@ -562,9 +558,6 @@ component("platform") {
     "file_metadata.cc",
     "file_metadata.h",
     "fonts/alternate_font_family.h",
-    "fonts/android/font_cache_android.cc",
-    "fonts/android/font_unique_name_lookup_android.cc",
-    "fonts/android/font_unique_name_lookup_android.h",
     "fonts/bitmap_glyphs_block_list.cc",
     "fonts/bitmap_glyphs_block_list.h",
     "fonts/canvas_rotation_in_vertical.h",
@@ -638,18 +631,6 @@ component("platform") {
     "fonts/generic_font_family_settings.cc",
     "fonts/generic_font_family_settings.h",
     "fonts/glyph_metrics_map.h",
-    "fonts/linux/font_cache_linux.cc",
-    "fonts/linux/font_unique_name_lookup_linux.cc",
-    "fonts/linux/font_unique_name_lookup_linux.h",
-    "fonts/mac/attributed_string_type_converter.h",
-    "fonts/mac/attributed_string_type_converter.mm",
-    "fonts/mac/core_text_font_format_support.cc",
-    "fonts/mac/core_text_font_format_support.h",
-    "fonts/mac/font_cache_mac.mm",
-    "fonts/mac/font_matcher_mac.h",
-    "fonts/mac/font_matcher_mac.mm",
-    "fonts/mac/font_platform_data_mac.h",
-    "fonts/mac/font_platform_data_mac.mm",
     "fonts/ng_text_fragment_paint_info.h",
     "fonts/opentype/font_format_check.cc",
     "fonts/opentype/font_format_check.h",
@@ -737,16 +718,6 @@ component("platform") {
     "fonts/web_font_render_style.cc",
     "fonts/web_font_typeface_factory.cc",
     "fonts/web_font_typeface_factory.h",
-    "fonts/win/dwrite_font_format_support.cc",
-    "fonts/win/dwrite_font_format_support.h",
-    "fonts/win/fallback_family_style_cache_win.cc",
-    "fonts/win/fallback_family_style_cache_win.h",
-    "fonts/win/font_cache_skia_win.cc",
-    "fonts/win/font_fallback_win.cc",
-    "fonts/win/font_fallback_win.h",
-    "fonts/win/font_platform_data_win.cc",
-    "fonts/win/font_unique_name_lookup_win.cc",
-    "fonts/win/font_unique_name_lookup_win.h",
     "geometry/blend.h",
     "geometry/calculation_expression_node.cc",
     "geometry/calculation_expression_node.h",
@@ -1066,8 +1037,6 @@ component("platform") {
     "graphics/paint/geometry_mapper_clip_cache.h",
     "graphics/paint/geometry_mapper_transform_cache.cc",
     "graphics/paint/geometry_mapper_transform_cache.h",
-    "graphics/paint/graphics_layer_display_item.cc",
-    "graphics/paint/graphics_layer_display_item.h",
     "graphics/paint/hit_test_data.cc",
     "graphics/paint/hit_test_data.h",
     "graphics/paint/ignore_paint_timing_scope.cc",
@@ -1078,6 +1047,7 @@ component("platform") {
     "graphics/paint/paint_chunk.cc",
     "graphics/paint/paint_chunk.h",
     "graphics/paint/paint_chunk_subset.h",
+    "graphics/paint/paint_chunk_subset_recorder.h",
     "graphics/paint/paint_chunker.cc",
     "graphics/paint/paint_chunker.h",
     "graphics/paint/paint_controller.cc",
@@ -1132,6 +1102,8 @@ component("platform") {
     "graphics/platform_paint_worklet_layer_painter.h",
     "graphics/profiling_canvas.cc",
     "graphics/profiling_canvas.h",
+    "graphics/raster_dark_mode_filter_impl.cc",
+    "graphics/raster_dark_mode_filter_impl.h",
     "graphics/replaying_canvas.cc",
     "graphics/replaying_canvas.h",
     "graphics/scoped_interpolation_quality.h",
@@ -1161,6 +1133,8 @@ component("platform") {
     "graphics/video_frame_resource_provider.h",
     "graphics/video_frame_submitter.cc",
     "graphics/video_frame_submitter.h",
+    "graphics/web_graphics_context_3d_provider_util.cc",
+    "graphics/web_graphics_context_3d_provider_util.h",
     "graphics/web_graphics_context_3d_provider_wrapper.cc",
     "graphics/web_graphics_context_3d_provider_wrapper.h",
     "heap_observer_set.h",
@@ -1204,16 +1178,6 @@ component("platform") {
     "language.h",
     "link_hash.cc",
     "link_hash.h",
-    "mac/block_exceptions.h",
-    "mac/block_exceptions.mm",
-    "mac/color_mac.h",
-    "mac/color_mac.mm",
-    "mac/graphics_context_canvas.h",
-    "mac/graphics_context_canvas.mm",
-    "mac/local_current_graphics_context.h",
-    "mac/local_current_graphics_context.mm",
-    "mac/web_core_ns_cell_extras.h",
-    "mac/web_core_ns_cell_extras.mm",
     "media/web_audio_source_provider_client.h",
     "media/webaudiosourceprovider_impl.cc",
     "media_capabilities/web_audio_configuration.h",
@@ -1304,6 +1268,8 @@ component("platform") {
     "p2p/socket_dispatcher.h",
     "peerconnection/audio_codec_factory.cc",
     "peerconnection/audio_codec_factory.h",
+    "peerconnection/gpu_codec_support_waiter.cc",
+    "peerconnection/gpu_codec_support_waiter.h",
     "peerconnection/rtc_answer_options_platform.h",
     "peerconnection/rtc_api_name.h",
     "peerconnection/rtc_dtmf_sender_handler.cc",
@@ -1390,16 +1356,10 @@ component("platform") {
     "text/icu_error.h",
     "text/layout_locale.cc",
     "text/layout_locale.h",
-    "text/linux/hyphenation_linux.cc",
     "text/locale_icu.cc",
     "text/locale_icu.h",
-    "text/locale_mac.h",
-    "text/locale_mac.mm",
     "text/locale_to_script_mapping.cc",
     "text/locale_to_script_mapping.h",
-    "text/locale_win.cc",
-    "text/locale_win.h",
-    "text/mac/hyphenation_mac.cc",
     "text/mathml_operator_dictionary.cc",
     "text/mathml_operator_dictionary.h",
     "text/platform_locale.cc",
@@ -1430,7 +1390,6 @@ component("platform") {
     "text/unicode_utilities.h",
     "text/web_entities.cc",
     "text/web_entities.h",
-    "text/win/hyphenation_win.cc",
     "text/writing_direction_mode.cc",
     "text/writing_direction_mode.h",
     "text/writing_mode.cc",
@@ -1501,6 +1460,8 @@ component("platform") {
     "widget/compositing/layer_tree_view_delegate.h",
     "widget/compositing/queue_report_time_swap_promise.cc",
     "widget/compositing/queue_report_time_swap_promise.h",
+    "widget/compositing/render_frame_metadata_observer_impl.cc",
+    "widget/compositing/render_frame_metadata_observer_impl.h",
     "widget/compositing/widget_compositor.cc",
     "widget/compositing/widget_compositor.h",
     "widget/compositing/widget_swap_queue.cc",
@@ -1509,6 +1470,8 @@ component("platform") {
     "widget/frame_widget.h",
     "widget/input/compositor_thread_event_queue.cc",
     "widget/input/compositor_thread_event_queue.h",
+    "widget/input/cursor_control_handler.cc",
+    "widget/input/cursor_control_handler.h",
     "widget/input/elastic_overscroll_controller.cc",
     "widget/input/elastic_overscroll_controller.h",
     "widget/input/elastic_overscroll_controller_bezier.cc",
@@ -1561,10 +1524,56 @@ component("platform") {
     }
   }
 
-  if (is_android) {
+  if (is_mac) {
     sources += [
-      "widget/input/synchronous_compositor_proxy.cc",
-      "widget/input/synchronous_compositor_proxy.h",
+      "audio/mac/fft_frame_mac.cc",
+      "audio/mac/vector_math_mac.h",
+      "fonts/mac/attributed_string_type_converter.h",
+      "fonts/mac/attributed_string_type_converter.mm",
+      "fonts/mac/core_text_font_format_support.cc",
+      "fonts/mac/core_text_font_format_support.h",
+      "fonts/mac/font_cache_mac.mm",
+      "fonts/mac/font_matcher_mac.h",
+      "fonts/mac/font_matcher_mac.mm",
+      "fonts/mac/font_platform_data_mac.h",
+      "fonts/mac/font_platform_data_mac.mm",
+      "mac/block_exceptions.h",
+      "mac/block_exceptions.mm",
+      "mac/color_mac.h",
+      "mac/color_mac.mm",
+      "mac/graphics_context_canvas.h",
+      "mac/graphics_context_canvas.mm",
+      "mac/local_current_graphics_context.h",
+      "mac/local_current_graphics_context.mm",
+      "mac/web_core_ns_cell_extras.h",
+      "mac/web_core_ns_cell_extras.mm",
+      "text/locale_mac.h",
+      "text/locale_mac.mm",
+    ]
+  }
+
+  if (is_linux || is_chromeos) {
+    sources += [
+      "fonts/linux/font_cache_linux.cc",
+      "fonts/linux/font_unique_name_lookup_linux.cc",
+      "fonts/linux/font_unique_name_lookup_linux.h",
+    ]
+  }
+
+  if (is_win) {
+    sources += [
+      "fonts/win/dwrite_font_format_support.cc",
+      "fonts/win/dwrite_font_format_support.h",
+      "fonts/win/fallback_family_style_cache_win.cc",
+      "fonts/win/fallback_family_style_cache_win.h",
+      "fonts/win/font_cache_skia_win.cc",
+      "fonts/win/font_fallback_win.cc",
+      "fonts/win/font_fallback_win.h",
+      "fonts/win/font_platform_data_win.cc",
+      "fonts/win/font_unique_name_lookup_win.cc",
+      "fonts/win/font_unique_name_lookup_win.h",
+      "text/locale_win.cc",
+      "text/locale_win.h",
     ]
   }
 
@@ -1594,6 +1603,7 @@ component("platform") {
     "//mojo/public/cpp/base",
     "//mojo/public/cpp/bindings",
     "//services/network/public/mojom:mojom_headers",
+    "//third_party/blink/public/mojom:color_scheme_mojo_bindings",
     "//third_party/blink/public/mojom:embedded_frame_sink_mojo_bindings_blink",
     "//third_party/blink/renderer/platform/blob",
     "//third_party/blink/renderer/platform/heap",
@@ -1607,13 +1617,15 @@ component("platform") {
   deps = [
     "//base:base_static",
     "//base/allocator:buildflags",
+    "//build:chromeos_buildflags",
     "//cc/ipc",
+    "//cc/mojo_embedder",
     "//components/paint_preview/common",
     "//components/search_engines:search_engine_utils",
     "//components/viz/client",
     "//components/viz/common",
     "//crypto",
-    "//device/vr/public/mojom:mojom_blink",
+    "//device/vr/public/mojom:vr_service_blink",
     "//gin",
     "//gpu:gpu",
     "//gpu/command_buffer/client:webgpu_interface",
@@ -1692,11 +1704,19 @@ component("platform") {
     ]
   }
 
-  if (is_fuchsia) {
+  if (is_android) {
     sources += [
-      "fonts/fuchsia/font_cache_fuchsia.cc",
-      "text/fuchsia/hyphenation_fuchsia.cc",
+      "fonts/android/font_cache_android.cc",
+      "fonts/android/font_unique_name_lookup_android.cc",
+      "fonts/android/font_unique_name_lookup_android.h",
+      "widget/input/synchronous_compositor_proxy.cc",
+      "widget/input/synchronous_compositor_proxy.h",
     ]
+    deps += [ "//third_party/blink/renderer/platform/widget/compositing/android_webview" ]
+  }
+
+  if (is_fuchsia) {
+    sources += [ "fonts/fuchsia/font_cache_fuchsia.cc" ]
   }
 
   if (use_minikin_hyphenation) {
@@ -1706,6 +1726,10 @@ component("platform") {
       "text/hyphenation/hyphenator_aosp.cc",
       "text/hyphenation/hyphenator_aosp.h",
     ]
+  } else if (is_mac) {
+    sources += [ "text/mac/hyphenation_mac.cc" ]
+  } else {
+    sources += [ "text/hyphenation/hyphenation_null.cc" ]
   }
 
   if (enable_av1_decoder) {
@@ -1750,7 +1774,10 @@ component("platform") {
 }
 
 static_library("test_support") {
-  visibility += [ "//third_party/blink/*" ]
+  visibility += [
+    "//third_party/blink/*",
+    "//tools/privacy_budget/font_indexer:*",
+  ]
   testonly = true
 
   sources = [
@@ -1773,7 +1800,6 @@ static_library("test_support") {
     "testing/empty_web_media_player.cc",
     "testing/empty_web_media_player.h",
     "testing/fake_display_item_client.h",
-    "testing/fake_graphics_layer.h",
     "testing/fake_graphics_layer_client.h",
     "testing/find_cc_layer.cc",
     "testing/find_cc_layer.h",
@@ -1797,7 +1823,6 @@ static_library("test_support") {
     "testing/scoped_mocked_url.h",
     "testing/scoped_scheduler_overrider.cc",
     "testing/scoped_scheduler_overrider.h",
-    "testing/stub_graphics_layer_client.h",
     "testing/test_paint_artifact.cc",
     "testing/test_paint_artifact.h",
     "testing/testing_platform_support.cc",
@@ -1810,8 +1835,6 @@ static_library("test_support") {
     "testing/url_test_helpers.h",
     "testing/video_frame_utils.cc",
     "testing/video_frame_utils.h",
-    "testing/viewport_layers_setup.cc",
-    "testing/viewport_layers_setup.h",
     "testing/weburl_loader_mock.cc",
     "testing/weburl_loader_mock.h",
     "testing/weburl_loader_mock_factory_impl.cc",
@@ -1889,7 +1912,6 @@ source_set("blink_platform_unittests_sources") {
     "audio/vector_math_test.cc",
     "bindings/parkable_string_test.cc",
     "bindings/runtime_call_stats_test.cc",
-    "cookie/canonical_cookie_test.cc",
     "disk_data_allocator_test.cc",
     "disk_data_allocator_test_utils.h",
     "exported/file_path_conversion_test.cc",
@@ -1899,7 +1921,6 @@ source_set("blink_platform_unittests_sources") {
     "exported/web_screen_info_test.cc",
     "exported/web_string_test.cc",
     "exported/web_vector_test.cc",
-    "fonts/android/font_cache_android_test.cc",
     "fonts/bitmap_glyphs_block_list_test.cc",
     "fonts/cursor_position_test.cc",
     "fonts/font_cache_test.cc",
@@ -1910,8 +1931,6 @@ source_set("blink_platform_unittests_sources") {
     "fonts/font_test.cc",
     "fonts/font_test_utilities.cc",
     "fonts/generic_font_family_settings_test.cc",
-    "fonts/mac/font_matcher_mac_test.mm",
-    "fonts/mac/font_platform_data_mac_test.mm",
     "fonts/opentype/font_settings_test.cc",
     "fonts/opentype/open_type_math_support_test.cc",
     "fonts/opentype/open_type_vertical_data_test.cc",
@@ -1993,6 +2012,7 @@ source_set("blink_platform_unittests_sources") {
     "graphics/paint_invalidation_reason_test.cc",
     "graphics/path_test.cc",
     "graphics/placeholder_image_test.cc",
+    "graphics/raster_dark_mode_filter_impl_test.cc",
     "graphics/static_bitmap_image_test.cc",
     "graphics/video_frame_submitter_test.cc",
     "heap_observer_set_test.cc",
@@ -2012,7 +2032,6 @@ source_set("blink_platform_unittests_sources") {
     "image-decoders/webp/webp_image_decoder_test.cc",
     "json/json_parser_test.cc",
     "json/json_values_test.cc",
-    "mac/graphics_context_canvas_test.mm",
     "media/webaudiosourceprovider_impl_test.cc",
     "mediastream/media_stream_audio_processor_options_test.cc",
     "mediastream/media_stream_audio_test.cc",
@@ -2065,6 +2084,7 @@ source_set("blink_platform_unittests_sources") {
     "transforms/rotation_test.cc",
     "transforms/transform_operations_test.cc",
     "transforms/transformation_matrix_test.cc",
+    "transforms/transformation_matrix_test_helpers.h",
     "video_capture/gpu_memory_buffer_test_support.cc",
     "video_capture/gpu_memory_buffer_test_support.h",
     "video_capture/video_capture_impl_test.cc",
@@ -2076,6 +2096,7 @@ source_set("blink_platform_unittests_sources") {
     "webrtc/webrtc_video_frame_adapter_test.cc",
     "widget/compositing/layer_tree_settings_unittest.cc",
     "widget/compositing/layer_tree_view_unittest.cc",
+    "widget/compositing/render_frame_metadata_observer_impl_unittest.cc",
     "widget/compositing/test/stub_layer_tree_view_delegate.h",
     "widget/compositing/widget_compositor_unittest.cc",
     "widget/input/elastic_overscroll_controller_bezier_unittest.cc",
@@ -2087,14 +2108,19 @@ source_set("blink_platform_unittests_sources") {
     "widget/input/scroll_predictor_unittest.cc",
   ]
 
-  if (is_win) {
+  if (is_android) {
+    sources += [ "fonts/android/font_cache_android_test.cc" ]
+  } else if (is_win) {
     sources += [
       "fonts/win/fallback_lru_cache_win_test.cc",
       "text/locale_win_test.cc",
     ]
   } else if (is_mac) {
     sources += [
+      "fonts/mac/font_matcher_mac_test.mm",
+      "fonts/mac/font_platform_data_mac_test.mm",
       "fonts/opentype/open_type_caps_support_test.mm",
+      "mac/graphics_context_canvas_test.mm",
       "text/locale_mac_test.mm",
     ]
   } else if (is_posix || is_fuchsia) {
@@ -2158,6 +2184,9 @@ source_set("blink_platform_unittests_sources") {
   data_deps = [ ":blink_platform_unittests_data" ]
 
   defines = [ "INSIDE_BLINK" ]
+  if (use_minikin_hyphenation) {
+    defines += [ "USE_MINIKIN_HYPHENATION" ]
+  }
 }
 
 executable("image_decode_bench") {
@@ -2233,6 +2262,8 @@ test("blink_platform_perftests") {
 }
 
 group("blink_platform_unittests_data") {
+  testonly = true
+
   data = [
     "testing/data/",
 
@@ -2246,6 +2277,8 @@ group("blink_platform_unittests_data") {
     # Required by some font tests.
     "//third_party/blink/web_tests/third_party/",
   ]
+
+  data_deps = [ "//third_party/hyphenation-patterns:test_data" ]
 }
 
 if (current_cpu == "x86" || current_cpu == "x64") {
@@ -2362,6 +2395,17 @@ fuzzer_test("blink_json_parser_fuzzer") {
   dict = "//testing/libfuzzer/fuzzers/dicts/json.dict"
 }
 
+# Fuzzer for blink::SecurityOrigin
+fuzzer_test("blink_security_origin_fuzzer") {
+  sources = [ "weborigin/security_origin_fuzzer.cc" ]
+  deps = [
+    ":blink_fuzzer_test_support",
+    ":platform",
+  ]
+  dict = "//url/gurl_fuzzer.dict"
+  defines = [ "INSIDE_BLINK" ]
+}
+
 fuzzer_test("blink_harfbuzz_shaper_fuzzer") {
   sources = [ "fonts/shaping/harfbuzz_shaper_fuzzer.cc" ]
   deps = [
@@ -2413,7 +2457,6 @@ source_set("unit_tests") {
   visibility = []
   visibility = [ "//third_party/blink/renderer/*" ]
   sources = [
-    "animation/animated_layers_test.cc",
     "graphics/animation_worklet_mutator_dispatcher_impl_test.cc",
     "graphics/canvas_2d_layer_bridge_test.cc",
     "graphics/canvas_color_params_test.cc",
@@ -2430,7 +2473,7 @@ source_set("unit_tests") {
     "graphics/test/stub_image.h",
 
     # Tests migrated from the web/tests directory.
-    "exported/web_url_request_test.cc",
+    "exported/web_url_request_extra_data_test.cc",
     "exported/web_url_response_test.cc",
     "timer_perf_test.cc",
   ]

@@ -3,6 +3,12 @@
 ; NOTE(tomas@vivaldi.com): Add video permissions, VB-55187.
 (allow mach-lookup (global-name "com.apple.coremedia.videodecoder"))
 
+; NOTE(tomas@vivaldi.com): VB-74195 Needed for VivVideoDecoder on macOS 11.0
+(if (>= os-version 1016)
+  (allow iokit-get-properties
+      (iokit-property "IOGVACodec")
+))
+
 ; *** NOTE(jarle@vivaldi.com): Add audio permissions.
 ; *** Ref. VB-42787, VB-40858.
 ; File access.

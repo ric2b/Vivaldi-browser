@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "base/files/file_util.h"
 #include "base/no_destructor.h"
 #include "base/strings/stringprintf.h"
@@ -249,6 +250,10 @@ bool InMemoryURLIndex::OnMemoryDump(
   auto* dump = process_memory_dump->CreateAllocatorDump(dump_name);
   dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
                   base::trace_event::MemoryAllocatorDump::kUnitsBytes, res);
+
+  // TODO(https://crbug.com/1068883): Remove this code when the bug is fixed.
+  private_data_->OnMemoryAllocatorDump(dump);
+
   return true;
 }
 
@@ -257,6 +262,13 @@ bool InMemoryURLIndex::OnMemoryDump(
 void InMemoryURLIndex::PostRestoreFromCacheFileTask() {
   DCHECK(thread_checker_.CalledOnValidThread());
   TRACE_EVENT0("browser", "InMemoryURLIndex::PostRestoreFromCacheFileTask");
+
+  if (base::FeatureList::IsEnabled(
+          omnibox::kHistoryQuickProviderAblateInMemoryURLIndexCacheFile)) {
+    // To short circuit the cache, pretend we've failed to load it.
+    OnCacheLoadDone(nullptr);
+    return;
+  }
 
   base::FilePath path;
   if (!GetCacheFilePath(&path) || shutdown_) {
@@ -310,11 +322,16 @@ void InMemoryURLIndex::Shutdown() {
   if (!GetCacheFilePath(&path))
     return;
   private_data_tracker_.TryCancelAll();
-  task_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(base::IgnoreResult(
-                         &URLIndexPrivateData::WritePrivateDataToCacheFileTask),
-                     private_data_, path));
+
+  if (!base::FeatureList::IsEnabled(
+          omnibox::kHistoryQuickProviderAblateInMemoryURLIndexCacheFile)) {
+    task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(
+            base::IgnoreResult(
+                &URLIndexPrivateData::WritePrivateDataToCacheFileTask),
+            private_data_, path));
+  }
 #ifndef LEAK_SANITIZER
   // Intentionally create and then leak a scoped_refptr to private_data_. This
   // permanently raises the reference count so that the URLIndexPrivateData
@@ -367,6 +384,11 @@ void InMemoryURLIndex::RebuildFromHistory(
 // Saving to Cache -------------------------------------------------------------
 
 void InMemoryURLIndex::PostSaveToCacheFileTask() {
+  if (base::FeatureList::IsEnabled(
+          omnibox::kHistoryQuickProviderAblateInMemoryURLIndexCacheFile)) {
+    return;
+  }
+
   base::FilePath path;
   if (!GetCacheFilePath(&path))
     return;

@@ -11,7 +11,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -870,6 +870,11 @@ TEST_F(ChromeDownloadManagerDelegateTest, InterceptDownloadByOfflinePages) {
   should_intercept = delegate()->InterceptDownloadIfApplicable(
       kUrl, "", "", mime_type, "", 10, true /*is_transient*/, nullptr);
   EXPECT_FALSE(should_intercept);
+
+  should_intercept = delegate()->InterceptDownloadIfApplicable(
+      kUrl, "", "attachment" /*content_disposition*/, mime_type, "", 10,
+      false /*is_transient*/, nullptr);
+  EXPECT_FALSE(should_intercept);
 }
 #endif
 
@@ -1177,7 +1182,7 @@ TEST_F(ChromeDownloadManagerDelegateTest,
   HostContentSettingsMapFactory::GetForProfile(profile())
       ->SetContentSettingDefaultScope(kSecureOrigin.GetURL(), GURL(),
                                       ContentSettingsType::MIXEDSCRIPT,
-                                      std::string(), CONTENT_SETTING_ALLOW);
+                                      CONTENT_SETTING_ALLOW);
 
   VerifyMixedContentExtensionOverride(
       warned_download_item.get(), {{}}, InsecureDownloadExtensions::kTest,

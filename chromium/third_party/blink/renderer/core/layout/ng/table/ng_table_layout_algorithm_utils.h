@@ -10,8 +10,12 @@
 
 namespace blink {
 
-class NGTableBorders;
 class NGBlockNode;
+class NGBoxFragment;
+class NGConstraintSpace;
+class NGTableBorders;
+enum class NGCacheSlot;
+struct LogicalSize;
 
 // Table size distribution algorithms.
 class NGTableAlgorithmUtils {
@@ -25,22 +29,29 @@ class NGTableAlgorithmUtils {
            align == EVerticalAlign::kLength;
   }
 
-  static void ComputeColumnInlineConstraints(
-      const Vector<NGBlockNode>& columns,
-      bool is_fixed_layout,
-      NGTableTypes::Columns* column_constraints);
+  // Creates a constraint-space for a table-cell.
+  //
+  // In order to make the cache as effective as possible, we try and keep
+  // creating the constraint-space for table-cells as consistent as possible.
+  static NGConstraintSpace CreateTableCellConstraintSpace(
+      const WritingDirectionMode table_writing_direction,
+      const NGBlockNode cell,
+      const NGBoxStrut& cell_borders,
+      LogicalSize cell_size,
+      LayoutUnit percentage_inline_size,
+      base::Optional<LayoutUnit> alignment_baseline,
+      wtf_size_t column_index,
+      bool is_fixed_block_size_indefinite,
+      bool is_restricted_block_size_table,
+      bool is_hidden_for_paint,
+      bool has_collapsed_borders,
+      NGCacheSlot);
 
-  // Populate cell inline size constraints for a single section.
-  static void ComputeSectionInlineConstraints(
-      const NGBlockNode& section,
-      bool is_fixed_layout,
-      bool is_first_section,
-      WritingMode table_writing_mode,
+  static scoped_refptr<NGTableTypes::Columns> ComputeColumnConstraints(
+      const NGBlockNode& table,
+      const NGTableGroupedChildren&,
       const NGTableBorders& table_borders,
-      wtf_size_t section_index,
-      wtf_size_t* row_index,
-      NGTableTypes::CellInlineConstraints* cell_inline_constraints,
-      NGTableTypes::ColspanCells* colspan_cell_inline_constraints);
+      const NGBoxStrut& border_padding);
 
   static void ComputeSectionMinimumRowBlockSizes(
       const NGBlockNode& section,
@@ -90,6 +101,36 @@ class NGColspanCellTabulator {
  private:
   unsigned current_column_ = 0;
   Vector<Cell> colspanned_cells_;
+};
+
+// NGRowBaselineTabulator computes baseline information for row.
+// Standard: https://www.w3.org/TR/css-tables-3/#row-layout
+// Baseline is either max-baseline of baseline-aligned cells,
+// or bottom content edge of non-baseline-aligned cells.
+class NGRowBaselineTabulator {
+ public:
+  void ProcessCell(const NGBoxFragment& fragment,
+                   const LayoutUnit cell_min_block_size,
+                   bool is_baseline_aligned,
+                   bool is_parallel,
+                   bool descendant_depends_on_percentage_block_size);
+
+  LayoutUnit ComputeRowBlockSize(const LayoutUnit max_cell_block_size);
+
+  LayoutUnit ComputeBaseline(const LayoutUnit row_block_size);
+
+  bool ComputeBaselineDependsOnPercentageBlockDescendant();
+
+ private:
+  // Cell baseline is computed from baseline-aligned cells.
+  base::Optional<LayoutUnit> max_cell_ascent_;
+  base::Optional<LayoutUnit> max_cell_descent_;
+  bool max_cell_baseline_depends_on_percentage_block_descendant_ = false;
+
+  // Non-baseline aligned cells are used to compute baseline if baseline
+  // cells are not available.
+  base::Optional<LayoutUnit> fallback_cell_descent_;
+  bool fallback_cell_depends_on_percentage_block_descendant_ = false;
 };
 
 }  // namespace blink

@@ -50,7 +50,7 @@
 <translation id="5854621639439811139">Dica do Chrome. Alguns botões agora estão na parte inferior da tela, como "Voltar", "Avançar" e "Pesquisar".</translation>
 <translation id="6036420186814142909">O Google Chrome tem recursos que ajudam a gerenciar seus dados de Internet e a velocidade de carregamento de páginas da Web.
 <ph name="BEGIN_LINK" />Saiba mais<ph name="END_LINK" /></translation>
-<translation id="6573431926118603307">As guias que você abriu no Chrome nos seus outros dispositivos serão exibidas aqui.</translation>
+<translation id="6573431926118603307">Aqui ficam as guias do Chrome que você abriu em outros dispositivos.</translation>
 <translation id="6600954340915313787">Copiado no Chrome</translation>
 <translation id="6648150602980899529">Você está fazendo login com uma conta gerenciada por <ph name="DOMAIN" /> e dando ao administrador dela o controle sobre seus dados do Chrome, os quais ficarão permanentemente vinculados a essa conta. Se você sair do Chrome, seus dados serão excluídos desse dispositivo, mas permanecerão armazenados na sua Conta do Google.</translation>
 <translation id="6676840375528380067">Limpar seus dados do Chrome deste dispositivo?</translation>
@@ -76,4 +76,5 @@
 <translation id="840168496893712993">Alguns complementos causam a falha do Google Chrome. Tente desinstalá-los.</translation>
 <translation id="8459495907675268833">Os dados selecionados foram removidos do Chrome e dos dispositivos sincronizados. É possível que sua Conta do Google tenha outras formas de histórico de navegação, como pesquisas e atividades de outros serviços do Google em history.google.com.</translation>
 <translation id="8540666473246803645">Google Chrome</translation>
+<translation id="9135668017386497357">Se você permitir que o Chrome saiba sua localização, ele a enviará para o mecanismo de pesquisa padrão e para os sites aos quais você concedeu permissão. Os sites podem solicitar sua localização para enviar informações locais para você, como notícias ou lojas próximas.</translation>
 </translationbundle>

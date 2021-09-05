@@ -108,8 +108,10 @@ TEST_F(PhoneStatusProcessorTest, PhoneStatusSnapshotUpdate) {
   auto expected_phone_properties = std::make_unique<proto::PhoneProperties>();
   expected_phone_properties->set_notification_mode(
       proto::NotificationMode::DO_NOT_DISTURB_ON);
+  expected_phone_properties->set_profile_type(
+      proto::ProfileType::DEFAULT_PROFILE);
   expected_phone_properties->set_notification_access_state(
-      proto::NotificationAccessState::ACCESS_GRANTED);
+      proto::NotificationAccessState::ACCESS_NOT_GRANTED);
   expected_phone_properties->set_ring_status(
       proto::FindMyDeviceRingStatus::RINGING);
   expected_phone_properties->set_battery_percentage(24u);
@@ -137,8 +139,11 @@ TEST_F(PhoneStatusProcessorTest, PhoneStatusSnapshotUpdate) {
   EXPECT_EQ(base::UTF8ToUTF16(test_remote_device_.name()),
             *mutable_phone_model_->phone_name());
   EXPECT_TRUE(fake_do_not_disturb_controller_->IsDndEnabled());
-  EXPECT_TRUE(fake_find_my_device_controller_->IsPhoneRinging());
-  EXPECT_TRUE(fake_notification_access_manager_->HasAccessBeenGranted());
+  EXPECT_TRUE(fake_do_not_disturb_controller_->CanRequestNewDndState());
+  EXPECT_EQ(FindMyDeviceController::Status::kRingingOn,
+            fake_find_my_device_controller_->GetPhoneRingingStatus());
+  EXPECT_EQ(NotificationAccessManager::AccessStatus::kAvailableButNotGranted,
+            fake_notification_access_manager_->GetAccessStatus());
 
   base::Optional<PhoneStatusModel> phone_status_model =
       mutable_phone_model_->phone_status_model();
@@ -170,6 +175,7 @@ TEST_F(PhoneStatusProcessorTest, PhoneStatusUpdate) {
   auto expected_phone_properties = std::make_unique<proto::PhoneProperties>();
   expected_phone_properties->set_notification_mode(
       proto::NotificationMode::DO_NOT_DISTURB_ON);
+  expected_phone_properties->set_profile_type(proto::ProfileType::WORK_PROFILE);
   expected_phone_properties->set_notification_access_state(
       proto::NotificationAccessState::ACCESS_GRANTED);
   expected_phone_properties->set_ring_status(
@@ -198,8 +204,11 @@ TEST_F(PhoneStatusProcessorTest, PhoneStatusUpdate) {
   EXPECT_EQ(base::UTF8ToUTF16(test_remote_device_.name()),
             *mutable_phone_model_->phone_name());
   EXPECT_TRUE(fake_do_not_disturb_controller_->IsDndEnabled());
-  EXPECT_TRUE(fake_find_my_device_controller_->IsPhoneRinging());
-  EXPECT_TRUE(fake_notification_access_manager_->HasAccessBeenGranted());
+  EXPECT_FALSE(fake_do_not_disturb_controller_->CanRequestNewDndState());
+  EXPECT_EQ(FindMyDeviceController::Status::kRingingOn,
+            fake_find_my_device_controller_->GetPhoneRingingStatus());
+  EXPECT_EQ(NotificationAccessManager::AccessStatus::kProhibited,
+            fake_notification_access_manager_->GetAccessStatus());
 
   base::Optional<PhoneStatusModel> phone_status_model =
       mutable_phone_model_->phone_status_model();
@@ -213,16 +222,21 @@ TEST_F(PhoneStatusProcessorTest, PhoneStatusUpdate) {
   EXPECT_EQ(PhoneStatusModel::MobileStatus::kSimWithReception,
             phone_status_model->mobile_status());
 
-  // Update with one removed notification.
+  // Update with one removed notification and a default profile.
   expected_update.add_removed_notification_ids(0u);
+  expected_update.mutable_properties()->set_profile_type(
+      proto::ProfileType::DEFAULT_PROFILE);
   fake_message_receiver_->NotifyPhoneStatusUpdateReceived(expected_update);
 
   EXPECT_EQ(0u, fake_notification_manager_->num_notifications());
   EXPECT_EQ(base::UTF8ToUTF16(test_remote_device_.name()),
             *mutable_phone_model_->phone_name());
   EXPECT_TRUE(fake_do_not_disturb_controller_->IsDndEnabled());
-  EXPECT_TRUE(fake_find_my_device_controller_->IsPhoneRinging());
-  EXPECT_TRUE(fake_notification_access_manager_->HasAccessBeenGranted());
+  EXPECT_TRUE(fake_do_not_disturb_controller_->CanRequestNewDndState());
+  EXPECT_EQ(FindMyDeviceController::Status::kRingingOn,
+            fake_find_my_device_controller_->GetPhoneRingingStatus());
+  EXPECT_EQ(NotificationAccessManager::AccessStatus::kAccessGranted,
+            fake_notification_access_manager_->GetAccessStatus());
 
   phone_status_model = mutable_phone_model_->phone_status_model();
   EXPECT_EQ(PhoneStatusModel::ChargingState::kChargingAc,
@@ -245,7 +259,7 @@ TEST_F(PhoneStatusProcessorTest, PhoneStatusUpdate) {
   EXPECT_FALSE(mutable_phone_model_->phone_status_model().has_value());
 }
 
-TEST_F(PhoneStatusProcessorTest, NoHostPhoneName) {
+TEST_F(PhoneStatusProcessorTest, PhoneName) {
   fake_multidevice_setup_client_->SetHostStatusWithDevice(
       std::make_pair(HostStatus::kHostVerified, base::nullopt));
   CreatePhoneStatusProcessor();
@@ -262,6 +276,17 @@ TEST_F(PhoneStatusProcessorTest, NoHostPhoneName) {
 
   EXPECT_EQ(0u, fake_notification_manager_->num_notifications());
   EXPECT_EQ(base::nullopt, mutable_phone_model_->phone_name());
+
+  // Create new fake phone with name.
+  const multidevice::RemoteDeviceRef kFakePhoneA =
+      multidevice::RemoteDeviceRefBuilder().SetName("Phone A").Build();
+
+  // Trigger a host status update and expect a new phone with new name to be
+  // updated.
+  fake_multidevice_setup_client_->SetHostStatusWithDevice(
+      std::make_pair(HostStatus::kHostVerified, kFakePhoneA));
+
+  EXPECT_EQ(base::UTF8ToUTF16("Phone A"), mutable_phone_model_->phone_name());
 }
 
 }  // namespace phonehub

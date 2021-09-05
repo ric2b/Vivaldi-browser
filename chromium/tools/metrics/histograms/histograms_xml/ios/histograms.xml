@@ -51,7 +51,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.ContentExtension.DisplayCount" units="count"
-    expires_after="2021-02-28">
+    expires_after="2021-05-02">
   <owner>javierrobles@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -61,7 +61,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.ContentExtension.Index" units="index"
-    expires_after="2020-12-25">
+    expires_after="2021-11-01">
   <owner>javierrobles@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -108,7 +108,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.CredentialExtension.CopyPasswordCount" units="count"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>javierrobles@chromium.org</owner>
   <owner>djean@chromium.org</owner>
   <summary>
@@ -118,7 +118,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.CredentialExtension.CopyURLCount" units="count"
-    expires_after="2021-01-31">
+    expires_after="2021-05-09">
   <owner>javierrobles@chromium.org</owner>
   <owner>djean@chromium.org</owner>
   <summary>
@@ -128,7 +128,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.CredentialExtension.CopyUsernameCount" units="count"
-    expires_after="2021-01-31">
+    expires_after="2021-05-09">
   <owner>javierrobles@chromium.org</owner>
   <owner>djean@chromium.org</owner>
   <summary>
@@ -138,7 +138,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.CredentialExtension.DisplayCount" units="count"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>javierrobles@chromium.org</owner>
   <owner>djean@chromium.org</owner>
   <summary>
@@ -148,7 +148,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.CredentialExtension.FetchPasswordFailure" units="count"
-    expires_after="2021-01-31">
+    expires_after="2021-05-09">
   <owner>javierrobles@chromium.org</owner>
   <owner>djean@chromium.org</owner>
   <summary>
@@ -159,7 +159,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.CredentialExtension.FetchPasswordNilArgument"
-    units="count" expires_after="2021-01-31">
+    units="count" expires_after="2021-04-04">
   <owner>javierrobles@chromium.org</owner>
   <owner>djean@chromium.org</owner>
   <summary>
@@ -170,7 +170,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.CredentialExtension.PasswordUseCount" units="count"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>javierrobles@chromium.org</owner>
   <owner>djean@chromium.org</owner>
   <summary>
@@ -180,7 +180,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.CredentialExtension.QuickPasswordUseCount" units="count"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>javierrobles@chromium.org</owner>
   <owner>djean@chromium.org</owner>
   <summary>
@@ -191,7 +191,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.CredentialExtension.ReauthCount" units="count"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>javierrobles@chromium.org</owner>
   <owner>djean@chromium.org</owner>
   <summary>
@@ -201,7 +201,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.CredentialExtension.SearchCount" units="count"
-    expires_after="2021-01-31">
+    expires_after="2021-05-09">
   <owner>javierrobles@chromium.org</owner>
   <owner>djean@chromium.org</owner>
   <summary>
@@ -357,6 +357,16 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="IOS.Incognito.TimeSpent" units="ms" expires_after="2021-05-09">
+  <owner>olivierrobin@chromium.org</owner>
+  <owner>thegreenfrog@chromium.org</owner>
+  <summary>
+    The time incognito profile is displayed to the user. Incognito sessions
+    during less than 10 seconds are not reported. Incognito session paused for
+    less than 10 seconds is resumed.
+  </summary>
+</histogram>
+
 <histogram name="IOS.IPHBubbleDismissalReason" enum="BubbleDismissalReason"
     expires_after="M77">
   <owner>pkl@chromium.org</owner>
@@ -366,7 +376,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.IsDefaultBrowser" enum="Boolean"
-    expires_after="2021-03-21">
+    expires_after="2021-09-21">
   <owner>thegreenfrog@chromium.org</owner>
   <owner>rohitrao@chromium.org</owner>
   <summary>
@@ -375,7 +385,19 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     likely to change certain stability metrics. Thus, it will be good to filter
     those metrics by default browser status. This metrics records whether the
     user was deemed to have set Chrome as the device's default browser. This
-    metric will be logged with ever histogram upload.
+    metric will be logged once per metrics log upload.
+  </summary>
+</histogram>
+
+<histogram name="IOS.IsEligibleDefaultBrowserPromoUser" enum="BooleanEligible"
+    expires_after="2021-09-21">
+  <owner>thegreenfrog@chromium.org</owner>
+  <owner>rohitrao@chromium.org</owner>
+  <summary>
+    This metric reports whether the user was deemed eligible to be shown default
+    browser fullscreen promos. Eligibility currently includes signed-in users,
+    external intent app opens, clipboard copies, and GrowthKit opens. This
+    metric will be logged once per metrics log upload.
   </summary>
 </histogram>
 
@@ -387,6 +409,26 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     IOS Content Blocking uses special injected Javascript to block access to
     things like cookies and local storage. Future changes to iOS/WebKit could
     cause these blocks to break. This logs that occurrence.
+  </summary>
+</histogram>
+
+<histogram name="IOS.LocationPermissions.FirstRunModal.Interaction"
+    enum="LocationPermissionsFirstRunModalIOSEnum" expires_after="2021-05-31">
+  <owner>thegreenfrog@chromium.org</owner>
+  <owner>rohitrao@chromium.org</owner>
+  <summary>
+    The user engagement of the Location permissions first run modal.
+  </summary>
+</histogram>
+
+<histogram name="IOS.LocationPermissionsUI" enum="LocationPermissionsIOSUI"
+    expires_after="2021-05-31">
+  <owner>thegreenfrog@chromium.org</owner>
+  <owner>rohitrao@chromium.org</owner>
+  <summary>
+    The user was shown an arm of the location permissions experiment. Recorded
+    when the user is shown the UI of an experiment arm. Not recorded for the
+    control arm.
   </summary>
 </histogram>
 
@@ -414,7 +456,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.MetricKit.ApplicationResumeTime" units="ms"
-    expires_after="2021-03-07">
+    expires_after="2021-05-09">
   <owner>eugenebut@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -424,7 +466,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.MetricKit.AverageSuspendedMemory" units="MB"
-    expires_after="2021-01-06">
+    expires_after="2021-04-25">
   <owner>eugenebut@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -434,7 +476,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.MetricKit.BackgroundExitData" enum="MetricKitExitData"
-    expires_after="2021-03-07">
+    expires_after="2021-05-09">
   <owner>eugenebut@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -495,6 +537,13 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="IOS.MultiWindow.Configuration"
+    enum="IOSMultiWindowConfiguration" expires_after="2021-06-30">
+  <owner>marq@chromium.org</owner>
+  <owner>djean@chromium.org</owner>
+  <summary>MultiWindow configration sampled once per minute.</summary>
+</histogram>
+
 <histogram name="IOS.MultiWindow.OpenInNewWindow" enum="WindowActivityOrigin"
     expires_after="2021-06-30">
   <owner>marq@chromium.org</owner>
@@ -516,7 +565,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.NTP.Impression" enum="IOSNTPImpression"
-    expires_after="2021-03-07">
+    expires_after="2021-05-09">
   <owner>gambard@chromium.org</owner>
   <summary>
     The type of NTP impressions on iOS, split by type of suggestions shown
@@ -546,13 +595,13 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.PageLoadCount.Counts"
-    enum="IOSPageLoadCountNavigationType" expires_after="2021-02-07">
+    enum="IOSPageLoadCountNavigationType" expires_after="2021-04-11">
   <owner>danyao@chromium.org</owner>
   <summary>The number of navigation started events by navigation type.</summary>
 </histogram>
 
 <histogram name="IOS.PageLoadCount.LoadingStarted" units="units"
-    expires_after="2020-12-20">
+    expires_after="2021-04-18">
   <owner>danyao@chromium.org</owner>
   <summary>
     The &quot;true&quot; value of this boolean histogram counts the number of
@@ -582,7 +631,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.Reauth.Password.Autofill" enum="ReauthenticationEvent"
-    expires_after="2021-02-01">
+    expires_after="2021-04-18">
   <owner>javierrobles@chromium.org</owner>
   <owner>bling-team@google.com</owner>
   <summary>
@@ -592,7 +641,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.Reauth.Password.ManualFallback"
-    enum="ReauthenticationEvent" expires_after="2021-02-01">
+    enum="ReauthenticationEvent" expires_after="2021-04-18">
   <owner>javierrobles@chromium.org</owner>
   <owner>bling-team@google.com</owner>
   <summary>
@@ -612,7 +661,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.RestoreNavigationItemCount" units="rank"
-    expires_after="2021-03-01">
+    expires_after="2021-05-02">
   <owner>eugenebut@chromium.org</owner>
   <owner>justincohen@chromium.org</owner>
   <summary>
@@ -626,7 +675,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.RestoreNavigationTime" units="ms"
-    expires_after="2021-03-01">
+    expires_after="2021-05-02">
   <owner>eugenebut@chromium.org</owner>
   <owner>justincohen@chromium.org</owner>
   <summary>
@@ -639,6 +688,21 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="IOS.SafeBrowsing.RedirectedRequestResponseHostsMatch"
+    enum="BooleanMatched" expires_after="2021-11-06">
+  <owner>ajuma@chromium.org</owner>
+  <owner>eugenebut@chromium.org</owner>
+  <owner>gambard@chromium.org</owner>
+  <summary>
+    The URL in a navigation request should have the same host as the URL in the
+    corresponding response, but this sometimes doesn't hold after a server
+    redirect because of a WKWebView bug. This histogram counts the frequency of
+    this invariant violation, and is logged each time that a main-frame
+    navigation response is received after a server redirect. True means that the
+    request and response URLs have the same host.
+  </summary>
+</histogram>
+
 <histogram name="IOS.SearchExtension.Action" enum="IOSSearchExtensionAction"
     expires_after="2021-03-07">
   <owner>javierrobles@chromium.org</owner>
@@ -647,7 +711,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.SearchExtension.DisplayCount" units="count"
-    expires_after="2021-02-28">
+    expires_after="2021-05-02">
   <owner>javierrobles@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -657,7 +721,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.ShareExtension.ReceivedEntriesCount" units="files"
-    expires_after="2020-12-25">
+    expires_after="2021-11-01">
   <owner>javierrobles@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -667,14 +731,14 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.ShareExtension.ReceivedEntry"
-    enum="IOSShareExtensionReceivedEntryType" expires_after="2020-12-25">
+    enum="IOSShareExtensionReceivedEntryType" expires_after="2021-11-01">
   <owner>javierrobles@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>Type of the item received from the iOS share extension.</summary>
 </histogram>
 
 <histogram name="IOS.ShareExtension.ReceivedEntryDelay" units="ms"
-    expires_after="2020-12-25">
+    expires_after="2021-11-01">
   <owner>javierrobles@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -684,7 +748,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.ShareExtension.Source"
-    enum="IOSShareExtensionReceivedEntrySource" expires_after="2020-12-25">
+    enum="IOSShareExtensionReceivedEntrySource" expires_after="2021-11-01">
   <owner>javierrobles@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -724,7 +788,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.Spotlight.Availability" enum="IOSSpotlightAvailability"
-    expires_after="2020-12-25">
+    expires_after="2021-05-09">
   <owner>eugenebut@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -735,21 +799,21 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="IOS.Spotlight.BookmarksIndexingDuration" units="ms"
-    expires_after="2020-12-25">
+    expires_after="2021-05-09">
   <owner>eugenebut@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>Time spent in Spotlight initial indexation of bookmarks.</summary>
 </histogram>
 
 <histogram name="IOS.Spotlight.BookmarksInitialIndexSize" units="units"
-    expires_after="2020-12-25">
+    expires_after="2021-05-09">
   <owner>eugenebut@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>Number of bookmarks indexed during initial indexation.</summary>
 </histogram>
 
 <histogram name="IOS.Spotlight.Origin" enum="IOSSpotlightOrigin"
-    expires_after="2021-02-28">
+    expires_after="2021-05-02">
   <owner>eugenebut@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
   <summary>
@@ -797,6 +861,35 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     has changed to a nil or empty URL. Recorded on the KVO of the URL of the
     WKWebView.
   </summary>
+</histogram>
+
+<histogram name="IOS.WidgetKit.Action" enum="IOSWidgetKitAction"
+    expires_after="2021-09-24">
+  <owner>javierrobles@chromium.org</owner>
+  <owner>muradyan@google.com</owner>
+  <summary>
+    Measures UI interactions in WidgetKit extension. Recorded after a user taps
+    in a widget and Chrome is openned.
+  </summary>
+</histogram>
+
+<histogram name="IOS.WidgetKit.{Status}" enum="IOSWidgetKitExtensionKind"
+    expires_after="2021-10-30">
+  <owner>javierrobles@chromium.org</owner>
+  <owner>muradyan@chromium.org</owner>
+  <summary>
+    Indicates the {Status} of an iOS 14 widget. Logged when the app goes to
+    foreground. &quot;Current&quot; widgets are logged everytime widgets are
+    detected, &quot;Install&quot; and &quot;Uninstall&quot; are logged only when
+    changes are detected. It is important to consider the bias created towards
+    users that foreground the app more often when doing analysis. This can be
+    accounted by filtering per unique users when looking at the metric.
+  </summary>
+  <token key="Status">
+    <variant name="Current" summary="presence"/>
+    <variant name="Install" summary="installation"/>
+    <variant name="Uninstall" summary="removal"/>
+  </token>
 </histogram>
 
 <histogram name="IOS.WKWebViewClobberedHistory" enum="Boolean"

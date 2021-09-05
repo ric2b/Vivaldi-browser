@@ -17,11 +17,11 @@
 <translation id="1369915414381695676">ਸਾਈਟ <ph name="SITE_NAME" /> ਜੋੜੀ ਗਈ</translation>
 <translation id="1383876407941801731">ਖੋਜੋ</translation>
 <translation id="1384959399684842514">ਡਾਊਨਲੋਡ ਰੋਕਿਆ ਗਿਆ</translation>
+<translation id="1415402041810619267">URL ਛੋਟਾ ਕੀਤਾ ਗਿਆ</translation>
 <translation id="1431402976894535801">ਸਾਈਟਾਂ ਨੂੰ ਤੁਹਾਡੀ ਮੌਜੂਦਗੀ ਬਾਰੇ ਜਾਣਨ ਤੋਂ ਰੋਕਣ ਲਈ ਬਲਾਕ ਕਰੋ</translation>
 <translation id="1446450296470737166">MIDI ਡਿਵਾਈਸਾਂ ਦੇ ਪੂਰੇ ਨਿਯੰਤਰਣ ਦੀ ਆਗਿਆ ਦਿਓ</translation>
 <translation id="1509960214886564027">ਸ਼ਾਇਦ ਕਈ ਸਾਈਟਾਂ 'ਤੇ ਵਿਸ਼ੇਸ਼ਤਾਵਾਂ ਠੀਕ ਤਰੀਕੇ ਨਾਲ ਕੰਮ ਨਾ ਕਰਨ</translation>
 <translation id="1620510694547887537">ਕੈਮਰਾ</translation>
-<translation id="1647391597548383849">ਆਪਣੇ ਕੈਮਰੇ ਤੱਕ ਪਹੁੰਚੋ</translation>
 <translation id="1660204651932907780">ਸਾਈਟਾਂ ਨੂੰ ਧੁਨੀ ਵਜਾਉਣ ਦਿਓ (ਸਿਫ਼ਾਰਸ਼ੀ)</translation>
 <translation id="1677097821151855053">ਕੁਕੀਜ਼ ਅਤੇ ਹੋਰ ਸਾਈਟ ਡਾਟੇ ਦੀ ਵਰਤੋਂ ਤੁਹਾਨੂੰ ਯਾਦ ਰੱਖਣ ਲਈ ਕੀਤੀ ਜਾਂਦੀ ਹੈ, ਉਦਾਹਰਨ ਦੇ ਤੌਰ 'ਤੇ ਤੁਹਾਨੂੰ ਸਾਈਨ-ਇਨ ਕਰਨ ਲਈ ਜਾਂ ਵਿਗਿਆਪਨਾਂ ਨੂੰ ਵਿਅਕਤੀਗਤ ਬਣਾਉਣ ਲਈ। ਸਾਰੀਆਂ ਸਾਈਟਾਂ ਲਈ ਕੁਕੀਜ਼ ਦਾ ਪ੍ਰਬੰਧਨ ਕਰਨ ਲਈ, <ph name="BEGIN_LINK" />ਸੈਟਿੰਗਾਂ<ph name="END_LINK" /> ਦੇਖੋ।</translation>
 <translation id="1688867105868176567">ਕੀ ਸਾਈਟ ਡਾਟਾ ਕਲੀਅਰ ਕਰਨਾ ਹੈ?</translation>
@@ -39,13 +39,13 @@
 <translation id="1994173015038366702">ਸਾਈਟ URL</translation>
 <translation id="2025115093177348061">ਆਗਮੈਂਟਿਡ ਰਿਐਲਿਟੀ</translation>
 <translation id="2030769033451695672"><ph name="URL_OF_THE_CURRENT_TAB" /> 'ਤੇ ਵਾਪਸ ਜਾਣ ਲਈ ਟੈਪ ਕਰੋ</translation>
+<translation id="2054665754582400095">ਤੁਹਾਡੀ ਮੌਜੂਦਗੀ</translation>
 <translation id="2079545284768500474">ਅਣਕੀਤਾ ਕਰੋ</translation>
 <translation id="2091887806945687916">ਧੁਨੀ</translation>
 <translation id="2107397443965016585">ਸਾਈਟਾਂ ਨੂੰ ਸੁਰੱਖਿਅਤ ਕੀਤੀ ਸਮੱਗਰੀ ਚਲਾਉਣ ਦੇਣ ਤੋਂ ਪਹਿਲਾਂ ਪੁੱਛੋ (ਸਿਫ਼ਾਰਸ਼ੀ)</translation>
 <translation id="2146738493024040262">ਤਤਕਾਲ ਐਪ ਖੋਲ੍ਹੋ</translation>
 <translation id="2148716181193084225">ਅੱਜ</translation>
 <translation id="2182457891543959921">ਸਾਈਟਾਂ ਵੱਲੋਂ ਤੁਹਾਡੇ ਆਲੇ-ਦੁਆਲੇ ਦਾ 3D ਨਕਸ਼ਾ ਬਣਾਉਣ ਜਾਂ ਕੈਮਰਾ ਸਥਿਤੀ ਨੂੰ ਟਰੈਕ ਕਰਨ ਦੀ ਇਜਾਜ਼ਤ ਦੇਣ ਤੋਂ ਪਹਿਲਾਂ ਪੁੱਛੋ (ਸਿਫ਼ਾਰਸ਼ੀ)</translation>
-<translation id="2187243482123994665">ਵਰਤੋਂਕਾਰ ਦੀ ਮੌਜੂਦਗੀ</translation>
 <translation id="2212565012507486665">ਕੁਕੀਜ਼ ਨੂੰ ਆਗਿਆ ਦਿਓ</translation>
 <translation id="2228071138934252756"><ph name="APP_NAME" /> ਨੂੰ ਆਪਣੇ ਕੈਮਰੇ ਤੱਕ ਪਹੁੰਚ ਕਰਨ ਦੇਣ ਲਈ, <ph name="BEGIN_LINK" />Android ਸੈਟਿੰਗਾਂ<ph name="END_LINK" /> ਵਿੱਚ ਕੈਮਰਾ ਵੀ ਚਾਲੂ ਕਰੋ।</translation>
 <translation id="2241634353105152135">ਸਿਰਫ ਇੱਕ ਵਾਰ</translation>
@@ -55,7 +55,6 @@
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> MB</translation>
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> ਅਤੇ <ph name="NUM_MORE" /> ਹੋਰ ਦੀ ਇਜਾਜ਼ਤ ਦਿੱਤੀ ਗਈ}one{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> ਅਤੇ <ph name="NUM_MORE" /> ਹੋਰ ਦੀ ਇਜਾਜ਼ਤ ਦਿੱਤੀ ਗਈ}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> ਅਤੇ <ph name="NUM_MORE" /> ਹੋਰ ਦੀ ਇਜਾਜ਼ਤ ਦਿੱਤੀ ਗਈ}}</translation>
 <translation id="2434158240863470628">ਡਾਊਨਲੋਡ ਮੁਕੰਮਲ ਹੋਇਆ <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
-<translation id="2440823041667407902">ਨਿਰਧਾਰਿਤ ਸਥਾਨ ਪਹੁੰਚ</translation>
 <translation id="2482878487686419369">ਸੂਚਨਾਵਾਂ</translation>
 <translation id="2490684707762498678"><ph name="APP_NAME" /> ਵੱਲੋਂ ਪ੍ਰਬੰਧਨ ਕੀਤਾ ਜਾਂਦਾ ਹੈ</translation>
 <translation id="2498359688066513246">ਮਦਦ ਅਤੇ ਪ੍ਰਤੀਕਰਮ</translation>
@@ -89,6 +88,7 @@
 <translation id="3227137524299004712">ਮਾਈਕ੍ਰੋਫੋਨ</translation>
 <translation id="3277252321222022663">ਸਾਈਟਾਂ ਨੂੰ ਸੈਂਸਰਾਂ ਤੱਕ ਪਹੁੰਚ ਕਰਨ ਦਿਓ (ਸਿਫ਼ਾਰਸ਼ੀ)</translation>
 <translation id="3295602654194328831">ਜਾਣਕਾਰੀ ਲੁਕਾਓ</translation>
+<translation id="3328801116991980348">ਸਾਈਟ ਜਾਣਕਾਰੀ</translation>
 <translation id="3333961966071413176">ਸਭ ਸੰਪਰਕ</translation>
 <translation id="3386292677130313581">ਸਾਈਟਾਂ ਨੂੰ ਤੁਹਾਡਾ ਟਿਕਾਣਾ ਜਾਣਨ ਤੋਂ ਪਹਿਲਾਂ ਤੁਹਾਡੀ ਇਜਾਜ਼ਤ ਲੈਣ ਨੂੰ ਜ਼ਰੂਰੀ ਬਣਾਓ (ਸਿਫ਼ਾਰਸ਼ੀ)</translation>
 <translation id="3538390592868664640">ਸਾਈਟਾਂ ਨੂੰ ਤੁਹਾਡੇ ਆਲੇ-ਦੁਆਲੇ ਦਾ 3D ਨਕਸ਼ਾ ਬਣਾਉਣ ਜਾਂ ਕੈਮਰਾ ਸਥਿਤੀ ਨੂੰ ਟਰੈਕ ਕਰਨ ਤੋਂ ਬਲਾਕ ਕਰੋ</translation>
@@ -122,6 +122,7 @@
 <translation id="445467742685312942">ਸਾਈਟਾਂ ਨੂੰ ਸੁਰੱਖਿਅਤ ਕੀਤੀ ਸਮੱਗਰੀ ਚਲਾਉਣ ਦਿਓ</translation>
 <translation id="4468959413250150279">ਕਿਸੇ ਖਾਸ ਸਾਈਟ ਦੀ ਧੁਨੀ ਨੂੰ ਮਿਊਟ ਕਰੋ।</translation>
 <translation id="4479647676395637221">ਸਾਈਟਾਂ ਨੂੰ ਤੁਹਾਡੇ ਕੈਮਰੇ ਦੀ ਵਰਤੋਂ ਕਰਨ ਤੋਂ ਪਹਿਲਾਂ ਤੁਹਾਡੀ ਇਜਾਜ਼ਤ ਲੈਣ ਨੂੰ ਜ਼ਰੂਰੀ ਬਣਾਓ (ਸਿਫ਼ਾਰਸ਼ੀ)</translation>
+<translation id="4505788138578415521">URL ਦਾ ਵਿਸਤਾਰ ਕੀਤਾ ਗਿਆ</translation>
 <translation id="4534723447064627427"><ph name="APP_NAME" /> ਨੂੰ ਆਪਣੇ ਮਾਈਕ੍ਰੋਫ਼ੋਨ ਤੱਕ ਪਹੁੰਚ ਕਰਨ ਦੇਣ ਲਈ, <ph name="BEGIN_LINK" />Android ਸੈਟਿੰਗਾਂ<ph name="END_LINK" /> ਵਿੱਚ ਮਾਈਕ੍ਰੋਫ਼ੋਨ ਵੀ ਚਾਲੂ ਕਰੋ।</translation>
 <translation id="4570913071927164677">ਵੇਰਵੇ</translation>
 <translation id="4645575059429386691">ਤੁਹਾਡੇ ਮਾਤਾ ਜਾਂ ਪਿਤਾ ਵੱਲੋਂ ਵਿਵਸਥਿਤ</translation>
@@ -303,7 +304,6 @@
 <translation id="9074739597929991885">ਬਲੂਟੁੱਥ</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> ਅਤੇ <ph name="NUM_MORE" /> ਹੋਰ}one{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> ਅਤੇ <ph name="NUM_MORE" /> ਹੋਰ}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> ਅਤੇ <ph name="NUM_MORE" /> ਹੋਰ}}</translation>
 <translation id="913657688200966289"><ph name="BEGIN_LINK" />Android ਸੈਟਿੰਗਾਂ<ph name="END_LINK" /> ਵਿੱਚ <ph name="APP_NAME" /> ਲਈ ਇਜਾਜ਼ਤਾਂ ਚਾਲੂ ਕਰੋ।</translation>
-<translation id="945632385593298557">ਆਪਣੇ ਮਾਈਕ੍ਰੋਫੋਨ ਤੱਕ ਪਹੁੰਚੋ</translation>
 <translation id="965817943346481315">ਜੇਕਰ ਸਾਈਟ ਦਖਲਅੰਦਾਜ਼ੀ ਅਤੇ ਗੁਮਰਾਹ ਕਰਨ ਵਾਲੇ ਵਿਗਿਆਪਨ ਦਿਖਾਉਂਦੀ ਹੈ, ਤਾਂ ਇਸਨੂੰ ਬਲਾਕ ਕਰੋ (ਸਿਫ਼ਾਰਸ਼ੀ)</translation>
 <translation id="967624055006145463">ਸਟੋਰ ਕੀਤਾ ਡਾਟਾ</translation>
 </translationbundle>

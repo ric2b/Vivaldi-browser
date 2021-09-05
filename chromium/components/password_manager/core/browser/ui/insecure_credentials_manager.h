@@ -8,12 +8,14 @@
 #include <map>
 #include <vector>
 
+#include "base/callback_forward.h"
+#include "base/callback_helpers.h"
 #include "base/containers/flat_set.h"
 #include "base/containers/span.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/timer/elapsed_timer.h"
 #include "base/util/type_safety/strong_alias.h"
 #include "components/password_manager/core/browser/compromised_credentials_consumer.h"
@@ -164,7 +166,7 @@ class InsecureCredentialsManager
 
   // Computes weak credentials in a separate thread and then passes the result
   // to OnWeakCheckDone.
-  void StartWeakCheck();
+  void StartWeakCheck(base::OnceClosure on_check_done = base::DoNothing());
 
   // Marks all saved credentials which have same username & password as
   // compromised.
@@ -198,6 +200,12 @@ class InsecureCredentialsManager
   using CredentialPasswordsMap =
       std::map<CredentialView, CredentialMetadata, PasswordCredentialLess>;
 
+  // Recomputes the insecure credentials by making use of information stored in
+  // `compromised_credentials_`, `weak_passwords_` and `presenter_`.
+  // This does not invoke either `NotifyCompromisedCredentialsChanged` or
+  // `NotifyWeakCredentialsChanged`, so that it can be used more generally.
+  void UpdateInsecureCredentials();
+
   // Updates |weak_passwords| set and notifies observers that weak credentials
   // were changed.
   void OnWeakCheckDone(base::ElapsedTimer timer_since_weak_check_start,
@@ -209,6 +217,7 @@ class InsecureCredentialsManager
       override;
 
   // SavedPasswordsPresenter::Observer:
+  void OnEdited(const PasswordForm& form) override;
   void OnSavedPasswordsChanged(
       SavedPasswordsPresenter::SavedPasswordsView passwords) override;
 
@@ -246,12 +255,13 @@ class InsecureCredentialsManager
 
   // A scoped observer for |compromised_credentials_reader_| to listen changes
   // related to CompromisedCredentials only.
-  ScopedObserver<CompromisedCredentialsReader,
-                 CompromisedCredentialsReader::Observer>
+  base::ScopedObservation<CompromisedCredentialsReader,
+                          CompromisedCredentialsReader::Observer>
       observed_compromised_credentials_reader_{this};
 
   // A scoped observer for |presenter_|.
-  ScopedObserver<SavedPasswordsPresenter, SavedPasswordsPresenter::Observer>
+  base::ScopedObservation<SavedPasswordsPresenter,
+                          SavedPasswordsPresenter::Observer>
       observed_saved_password_presenter_{this};
 
   base::ObserverList<Observer, /*check_empty=*/true> observers_;

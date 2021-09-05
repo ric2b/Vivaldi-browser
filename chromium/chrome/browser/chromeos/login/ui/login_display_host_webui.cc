@@ -233,8 +233,8 @@ void ShowLoginWizardFinish(
     // Tests may have already allocated an instance for us to use.
     display_host = chromeos::LoginDisplayHost::default_host();
   } else if (ShouldShowSigninScreen(first_screen)) {
-    display_host = new chromeos::LoginDisplayHostMojo(
-        LoginDisplayHostMojo::DisplayedScreen::SIGN_IN_SCREEN);
+    display_host =
+        new chromeos::LoginDisplayHostMojo(DisplayedScreen::SIGN_IN_SCREEN);
   } else {
     display_host = new chromeos::LoginDisplayHostWebUI();
   }
@@ -305,7 +305,7 @@ void OnLanguageSwitchedCallback(
 }
 
 // Triggers ShowLoginWizardFinish directly if no locale switch is required
-// (|switch_locale| is empty) or after a locale switch otherwise.
+// (`switch_locale` is empty) or after a locale switch otherwise.
 void TriggerShowLoginWizardFinish(
     std::string switch_locale,
     std::unique_ptr<ShowLoginWizardSwitchLanguageCallbackData> data) {
@@ -405,8 +405,8 @@ bool CanPlayStartupSound() {
 }  // namespace
 
 // static
-const trace_event_internal::TraceID LoginDisplayHostWebUI::kShowLoginWebUIid =
-    TRACE_ID_WITH_SCOPE("ShowLoginWebUI", TRACE_ID_GLOBAL(1));
+const char LoginDisplayHostWebUI::kShowLoginWebUIid[] = "ShowLoginWebUI";
+
 bool LoginDisplayHostWebUI::disable_restrictive_proxy_check_for_test_ = false;
 
 // A class to handle special menu key for keyboard driven OOBE.
@@ -653,10 +653,12 @@ void LoginDisplayHostWebUI::OnStartSignInScreen() {
 
   // TODO(crbug.com/784495): Make sure this is ported to views.
   if (!login_window_) {
-    TRACE_EVENT_NESTABLE_ASYNC_BEGIN0("ui", "ShowLoginWebUI",
-                                      kShowLoginWebUIid);
+    TRACE_EVENT_NESTABLE_ASYNC_BEGIN0(
+        "ui", "ShowLoginWebUI",
+        TRACE_ID_WITH_SCOPE(kShowLoginWebUIid, TRACE_ID_GLOBAL(1)));
     TRACE_EVENT_NESTABLE_ASYNC_INSTANT0(
-        "ui", "StartSignInScreen", LoginDisplayHostWebUI::kShowLoginWebUIid);
+        "ui", "StartSignInScreen",
+        TRACE_ID_WITH_SCOPE(kShowLoginWebUIid, TRACE_ID_GLOBAL(1)));
     BootTimesRecorder::Get()->RecordCurrentStats("login-start-signin-screen");
     LoadURL(GURL(kLoginURL));
   }
@@ -675,8 +677,9 @@ void LoginDisplayHostWebUI::OnStartSignInScreen() {
 
   OnStartSignInScreenCommon();
 
-  TRACE_EVENT_NESTABLE_ASYNC_INSTANT0("ui", "WaitForScreenStateInitialize",
-                                      LoginDisplayHostWebUI::kShowLoginWebUIid);
+  TRACE_EVENT_NESTABLE_ASYNC_INSTANT0(
+      "ui", "WaitForScreenStateInitialize",
+      TRACE_ID_WITH_SCOPE(kShowLoginWebUIid, TRACE_ID_GLOBAL(1)));
 
   // TODO(crbug.com/784495): Make sure this is ported to views.
   BootTimesRecorder::Get()->RecordCurrentStats(
@@ -830,6 +833,12 @@ void LoginDisplayHostWebUI::OnWidgetDestroying(views::Widget* widget) {
   login_view_ = nullptr;
 }
 
+void LoginDisplayHostWebUI::OnWidgetBoundsChanged(views::Widget* widget,
+                                                  const gfx::Rect& new_bounds) {
+  for (auto& observer : observers_)
+    observer.WebDialogViewBoundsChanged(new_bounds);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // LoginDisplayHostWebUI, ash::MultiUserWindowManagerObserver:
 void LoginDisplayHostWebUI::OnUserSwitchAnimationFinished() {
@@ -935,9 +944,9 @@ void LoginDisplayHostWebUI::ResetLoginWindowAndView() {
   ash::LoginScreen::Get()->GetModel()->NotifyOobeDialogState(
       ash::OobeDialogState::HIDDEN);
 
-  // Make sure to reset the |login_view_| pointer first; it is owned by
-  // |login_window_|. Closing |login_window_| could immediately invalidate the
-  // |login_view_| pointer.
+  // Make sure to reset the `login_view_` pointer first; it is owned by
+  // `login_window_`. Closing `login_window_` could immediately invalidate the
+  // `login_view_` pointer.
   if (login_view_) {
     login_view_->SetUIEnabled(true);
     login_view_ = nullptr;
@@ -1021,6 +1030,19 @@ void LoginDisplayHostWebUI::RequestSystemInfoUpdate() {
   NOTREACHED();
 }
 
+bool LoginDisplayHostWebUI::HasUserPods() {
+  return false;
+}
+
+void LoginDisplayHostWebUI::AddObserver(LoginDisplayHost::Observer* observer) {
+  observers_.AddObserver(observer);
+}
+
+void LoginDisplayHostWebUI::RemoveObserver(
+    LoginDisplayHost::Observer* observer) {
+  observers_.RemoveObserver(observer);
+}
+
 void LoginDisplayHostWebUI::PlayStartupSoundIfPossible() {
   if (!need_to_play_startup_sound_ || oobe_startup_sound_played_)
     return;
@@ -1063,7 +1085,7 @@ void ShowLoginWizard(OobeScreenId first_screen) {
   input_method::InputMethodManager* manager =
       input_method::InputMethodManager::Get();
 
-  // Set up keyboards. For example, when |locale| is "en-US", enable US qwerty
+  // Set up keyboards. For example, when `locale` is "en-US", enable US qwerty
   // and US dvorak keyboard layouts.
   if (g_browser_process && g_browser_process->local_state()) {
     manager->GetActiveIMEState()->SetInputMethodLoginDefault();

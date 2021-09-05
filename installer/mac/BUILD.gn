@@ -11,9 +11,8 @@ import("//vivaldi/gn/config/signer_features.gni")
 build_app_dmg_script_path = "//vivaldi/thirdparty/create_dmg/create-dmg"
 
 vivaldi_name = "Vivaldi"
-mac_product_filename = vivaldi_name
 vivaldi_app_name = vivaldi_name
-input_app_folder_for_dmg = "$root_build_dir/$mac_product_filename.app"
+input_app_folder_for_dmg = "$root_build_dir/$vivaldi_name.app"
 
 pgo_suffix = ""
 if (chrome_pgo_phase > 0) {
@@ -32,17 +31,23 @@ if (perform_signing) {
   dmg__signing_deps += [ ":sign_dmg" ]
 
   mac_packaging_dir = "$root_build_dir/Vivaldi_Packaging"
+
+  name_prefix = ""
+  mac_product_directory = "stable"
+
   if (VIVALDI_RELEASE_KIND == "vivaldi_snapshot") {
     app_name_fragment = "Snapshot"
-    mac_product_filename = "$vivaldi_name$app_name_fragment"
+    mac_product_directory = "$vivaldi_name $app_name_fragment"
     vivaldi_app_name = "$vivaldi_name $app_name_fragment"
+    name_prefix = "sxs-snapshot-$app_name_fragment-"
   } else if (VIVALDI_RELEASE_KIND == "vivaldi_sopranos") {
     app_name_fragment = "Internal"
-    mac_product_filename = "$vivaldi_name$app_name_fragment"
+    mac_product_directory = "$vivaldi_name $app_name_fragment"
     vivaldi_app_name = "$vivaldi_name $app_name_fragment"
+    name_prefix = "sxs-internal-$app_name_fragment-"
   }
 
-  input_app_folder_for_dmg = "$root_build_dir/$mac_product_filename-$vivaldi_version_full"
+  input_app_folder_for_dmg = "$root_build_dir/$name_prefix$mac_product_directory"
 }
 
 group("mac") {

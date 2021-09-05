@@ -20,16 +20,9 @@ VivaldiMainDelegate::~VivaldiMainDelegate() {}
 
 content::ContentBrowserClient*
 VivaldiMainDelegate::CreateContentBrowserClient() {
-#if defined(CHROME_MULTIPLE_DLL_CHILD)
-  return NULL;
-#else
   if (chrome_content_browser_client_ == nullptr) {
-    DCHECK(!startup_data_);
-    startup_data_ = std::make_unique<StartupData>();
-
     chrome_content_browser_client_ =
-        std::make_unique<VivaldiContentBrowserClient>(startup_data_.get());
+        std::make_unique<VivaldiContentBrowserClient>();
   }
   return chrome_content_browser_client_.get();
-#endif
 }

@@ -1,33 +1,6 @@
 // Copyright 2018 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-'use strict';
-
-goog.provide('mojo.internal');
-
-// "self" is always defined as opposed to "this", which isn't defined in
-// modules, or "window", which isn't defined in workers.
-/** @const {!Object} */
-mojo.internal.globalScope = self;
-
-/**
- * This is effectively the same as goog.provide, but it's made available under
- * the mojo.internal namespace to avoid potential collisions in certain
- * compilation environments.
- *
- * @param {string} namespace
- * @export
- */
-mojo.internal.exportModule = function(namespace) {
-  let current = mojo.internal.globalScope;
-  const parts = namespace.split('.');
-
-  for (let part; parts.length && (part = parts.shift());) {
-    if (!current[part])
-      current[part] = {};
-    current = current[part];
-  }
-};
 
 /** @const {number} */
 mojo.internal.kArrayHeaderSize = 8;
@@ -85,7 +58,7 @@ mojo.internal.align = function(size, alignment) {
 /**
  * @param {!DataView} dataView
  * @param {number} byteOffset
- * @param {number} value
+ * @param {number|bigint} value
  */
 mojo.internal.setInt64 = function(dataView, byteOffset, value) {
   if (mojo.internal.kHostLittleEndian) {
@@ -93,11 +66,12 @@ mojo.internal.setInt64 = function(dataView, byteOffset, value) {
         byteOffset, Number(BigInt(value) & BigInt(0xffffffff)),
         mojo.internal.kHostLittleEndian);
     dataView.setInt32(
-        byteOffset + 4, Number(BigInt(value) >> BigInt(32)),
+        byteOffset + 4,
+        Number((BigInt(value) >> BigInt(32)) & BigInt(0xffffffff)),
         mojo.internal.kHostLittleEndian);
   } else {
     dataView.setInt32(
-        byteOffset, Number(BigInt(value) >> BigInt(32)),
+        byteOffset, Number((BigInt(value) >> BigInt(32)) & BigInt(0xffffffff)),
         mojo.internal.kHostLittleEndian);
     dataView.setUint32(
         byteOffset + 4, Number(BigInt(value) & BigInt(0xffffffff)),
@@ -108,7 +82,7 @@ mojo.internal.setInt64 = function(dataView, byteOffset, value) {
 /**
  * @param {!DataView} dataView
  * @param {number} byteOffset
- * @param {number} value
+ * @param {number|bigint} value
  */
 mojo.internal.setUint64 = function(dataView, byteOffset, value) {
   if (mojo.internal.kHostLittleEndian) {
@@ -116,11 +90,12 @@ mojo.internal.setUint64 = function(dataView, byteOffset, value) {
         byteOffset, Number(BigInt(value) & BigInt(0xffffffff)),
         mojo.internal.kHostLittleEndian);
     dataView.setUint32(
-        byteOffset + 4, Number(BigInt(value) >> BigInt(32)),
+        byteOffset + 4,
+        Number((BigInt(value) >> BigInt(32)) & BigInt(0xffffffff)),
         mojo.internal.kHostLittleEndian);
   } else {
     dataView.setUint32(
-        byteOffset, Number(BigInt(value) >> BigInt(32)),
+        byteOffset, Number((BigInt(value) >> BigInt(32)) & BigInt(0xffffffff)),
         mojo.internal.kHostLittleEndian);
     dataView.setUint32(
         byteOffset + 4, Number(BigInt(value) & BigInt(0xffffffff)),
@@ -131,7 +106,7 @@ mojo.internal.setUint64 = function(dataView, byteOffset, value) {
 /**
  * @param {!DataView} dataView
  * @param {number} byteOffset
- * @return {number}
+ * @return {bigint}
  */
 mojo.internal.getInt64 = function(dataView, byteOffset) {
   let low, high;
@@ -142,12 +117,24 @@ mojo.internal.getInt64 = function(dataView, byteOffset) {
     low = dataView.getUint32(byteOffset + 4, mojo.internal.kHostLittleEndian);
     high = dataView.getInt32(byteOffset, mojo.internal.kHostLittleEndian);
   }
-  const value = (BigInt(high) << BigInt(32)) | BigInt(low);
-  if (value <= BigInt(Number.MAX_SAFE_INTEGER) &&
-      value >= BigInt(Number.MIN_SAFE_INTEGER)) {
-    return Number(value);
+  return (BigInt(high) << BigInt(32)) | BigInt(low);
+};
+
+/**
+ * @param {!DataView} dataView
+ * @param {number} byteOffset
+ * @return {bigint}
+ */
+mojo.internal.getUint64 = function(dataView, byteOffset) {
+  let low, high;
+  if (mojo.internal.kHostLittleEndian) {
+    low = dataView.getUint32(byteOffset, mojo.internal.kHostLittleEndian);
+    high = dataView.getUint32(byteOffset + 4, mojo.internal.kHostLittleEndian);
+  } else {
+    low = dataView.getUint32(byteOffset + 4, mojo.internal.kHostLittleEndian);
+    high = dataView.getUint32(byteOffset, mojo.internal.kHostLittleEndian);
   }
-  return value;
+  return (BigInt(high) << BigInt(32)) | BigInt(low);
 };
 
 /**
@@ -247,26 +234,6 @@ mojo.internal.computeTotalArraySize = function(arraySpec, value) {
   }
 
   return totalSize;
-};
-
-/**
- * @param {!DataView} dataView
- * @param {number} byteOffset
- * @return {number}
- */
-mojo.internal.getUint64 = function(dataView, byteOffset) {
-  let low, high;
-  if (mojo.internal.kHostLittleEndian) {
-    low = dataView.getUint32(byteOffset, mojo.internal.kHostLittleEndian);
-    high = dataView.getUint32(byteOffset + 4, mojo.internal.kHostLittleEndian);
-  } else {
-    low = dataView.getUint32(byteOffset + 4, mojo.internal.kHostLittleEndian);
-    high = dataView.getUint32(byteOffset, mojo.internal.kHostLittleEndian);
-  }
-  const value = (BigInt(high) << BigInt(32)) | BigInt(low);
-  if (value <= BigInt(Number.MAX_SAFE_INTEGER))
-    return Number(value);
-  return value;
 };
 
 /** Owns an outgoing message buffer and facilitates serialization. */
@@ -683,7 +650,9 @@ mojo.internal.Decoder = class {
     const relativeOffset = this.decodeUint64(offset);
     if (relativeOffset == 0)
       return 0;
-    return this.data_.byteOffset + offset + relativeOffset;
+    if (relativeOffset > BigInt(Number.MAX_SAFE_INTEGER))
+      throw new Error('Mesage offset too large');
+    return this.data_.byteOffset + offset + Number(relativeOffset);
   }
 
   /**

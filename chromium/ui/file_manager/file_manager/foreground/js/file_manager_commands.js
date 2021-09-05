@@ -384,6 +384,28 @@ CommandUtil.isDriveEntries = (entries, volumeManager) => {
   return false;
 };
 
+
+/**
+ * Extracts entry on which command event was dispatched.
+ *
+ * @param {!Event} event Command event to mark.
+ * @param {!CommandHandlerDeps} fileManager CommandHandlerDeps to use.
+ * @return {Entry|FilesAppDirEntry} Entry of the event node.
+ */
+CommandUtil.getEventEntry = (event, fileManager) => {
+  let entry;
+  if (fileManager.ui.directoryTree.contains(
+          /** @type {Node} */ (event.target))) {
+    // The command is executed from the directory tree context menu.
+    entry = CommandUtil.getCommandEntry(fileManager, event.target);
+  } else {
+    // The command is executed from the gear menu.
+    entry = fileManager.directoryModel.getCurrentDirEntry();
+  }
+  return entry;
+};
+
+
 /**
  * Handle of the command events.
  */
@@ -737,7 +759,59 @@ CommandHandler.COMMANDS_['format'] = new class extends Command {
     const removableRoot = location && isRoot &&
         location.rootType === VolumeManagerCommon.RootType.REMOVABLE;
     event.canExecute = removableRoot && (isUnrecognizedVolume || writable);
-    event.command.setHidden(!removableRoot);
+
+    if (util.isSinglePartitionFormatEnabled()) {
+      let isDevice = false;
+      if (root && root instanceof EntryList) {
+        // root entry is device node if it has child (partition).
+        isDevice = !!removableRoot && root.getUIChildren().length > 0;
+      }
+      // Disable format command on device when SinglePartitionFormat on,
+      // erase command will be available.
+      event.command.setHidden(!removableRoot || isDevice);
+    } else {
+      event.command.setHidden(!removableRoot);
+    }
+  }
+};
+
+/**
+ * Deletes removable device partition, creates single partition and formats it.
+ */
+CommandHandler.COMMANDS_['erase-device'] = new class extends Command {
+  execute(event, fileManager) {
+    const root = CommandUtil.getEventEntry(event, fileManager);
+
+    if (root && root instanceof EntryList) {
+      /** @type {FilesFormatDialogElement} */ (fileManager.ui.formatDialog)
+          .showEraseModal(root);
+    }
+  }
+
+  /** @override */
+  canExecute(event, fileManager) {
+    if (!util.isSinglePartitionFormatEnabled()) {
+      event.canExecute = false;
+      event.command.setHidden(true);
+      return;
+    }
+    const root = CommandUtil.getEventEntry(event, fileManager);
+    const location = root && fileManager.volumeManager.getLocationInfo(root);
+    const writable = location && !location.isReadOnly;
+    const isRoot = location && location.isRootEntry;
+
+    const removableRoot = location && isRoot &&
+        location.rootType === VolumeManagerCommon.RootType.REMOVABLE;
+
+    let isDevice = false;
+    if (root && root instanceof EntryList) {
+      // root entry is device node if it has child (partition).
+      isDevice = !!removableRoot && root.getUIChildren().length > 0;
+    }
+
+    event.canExecute = removableRoot && !writable;
+    // Enable the command if this is a removable and device node.
+    event.command.setHidden(!removableRoot || !isDevice);
   }
 };
 
@@ -1038,6 +1112,13 @@ CommandHandler.COMMANDS_['delete'] = new class extends Command {
       return;
     }
 
+    // We show undo toast rather than dialog for entries which will use trash.
+    if (fileManager.fileOperationManager.willUseTrash(
+            fileManager.volumeManager, entries)) {
+      fileManager.fileOperationManager.deleteEntries(entries);
+      return;
+    }
+
     const message = entries.length === 1 ?
         strf('GALLERY_CONFIRM_DELETE_ONE', entries[0].name) :
         strf('GALLERY_CONFIRM_DELETE_SOME', entries.length);
@@ -1103,6 +1184,35 @@ CommandHandler.COMMANDS_['delete'] = new class extends Command {
           util.isNonModifiable(fileManager.volumeManager, entry);
     });
   }
+};
+
+/**
+ * Register listener on background for delete event, and show undo toast if
+ * files are in trash and can be restored.
+ * @param {!CommandHandlerDeps} fileManager
+ */
+CommandHandler.registerUndoDeleteToast = function(fileManager) {
+  /**
+   * @param {!FileOperationProgressEvent} e
+   */
+  const onDeleted = (e) => {
+    if (e.reason === 'BEGIN' || e.reason === 'PROGRESS' ||
+        !e.trashedItems.length) {
+      return;
+    }
+    const message = e.trashedItems.length === 1 ?
+        strf('UNDO_DELETE_ONE', e.trashedItems[0].name) :
+        strf('UNDO_DELETE_SOME', e.trashedItems.length);
+    fileManager.ui.toast.show(message, {
+      text: str('UNDO_DELETE_ACTION_LABEL'),
+      callback: () => {
+        fileManager.fileOperationManager.restoreDeleted(e.trashedItems);
+      }
+    });
+  };
+
+  util.addEventListenerToBackgroundComponent(
+      assert(fileManager.fileOperationManager), 'delete', onDeleted);
 };
 
 /**
@@ -1598,7 +1708,12 @@ CommandHandler.COMMANDS_['invoke-sharesheet'] = new class extends Command {
     }
 
     event.canExecute = true;
-    event.command.disabled = true;
+    // In the case where changing focus to action bar elements, it is safe to
+    // keep the command enabled if it was visible before, because there should
+    // be no change to the selected entries.
+    event.command.disabled =
+        !fileManager.ui.actionbar.contains(/** @type {Node} */ (event.target));
+
     chrome.fileManagerPrivate.sharesheetHasTargets(entries, hasTargets => {
       if (chrome.runtime.lastError) {
         console.error(chrome.runtime.lastError.message);

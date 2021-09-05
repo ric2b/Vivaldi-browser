@@ -357,13 +357,6 @@ void VivaldiNativeAppWindowViews::GetWidgetHitTestMask(SkPath* mask) const {
   NOTREACHED();
 }
 
-void VivaldiNativeAppWindowViews::OnWindowBeginUserBoundsChange() {
-  content::WebContents* web_contents = window_->GetActiveWebContents();
-  if (!web_contents)
-    return;
-  web_contents->GetRenderViewHost()->NotifyMoveOrResizeStarted();
-}
-
 void VivaldiNativeAppWindowViews::OnWidgetMove() {
   window_->OnNativeWindowChanged(true);
 }

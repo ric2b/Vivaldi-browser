@@ -50,6 +50,7 @@
 #include "extensions/test/test_extension_dir.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/test/test_url_loader_client.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -202,7 +203,7 @@ class ExtensionProtocolsTestBase : public testing::Test {
       : task_environment_(content::BrowserTaskEnvironment::IO_MAINLOOP),
         rvh_test_enabler_(new content::RenderViewHostTestEnabler()),
         force_incognito_(force_incognito),
-        test_ukm_id_(base::UkmSourceId::New()) {}
+        test_ukm_id_(ukm::SourceIdObj::New()) {}
 
   void SetUp() override {
     testing::Test::SetUp();
@@ -319,7 +320,7 @@ class ExtensionProtocolsTestBase : public testing::Test {
           entries,
       ExtensionResourceAccessResult expected) {
     ASSERT_EQ(1u, entries.size());
-    EXPECT_EQ(test_ukm_id_, entries[0].source);
+    EXPECT_EQ(test_ukm_id_.ToInt64(), entries[0].source);
     ASSERT_EQ(1u, entries[0].metrics.size());
     EXPECT_EQ(blink::IdentifiableSurface::FromTypeAndToken(
                   blink::IdentifiableSurface::Type::kExtensionFileAccess,
@@ -373,7 +374,7 @@ class ExtensionProtocolsTestBase : public testing::Test {
   std::unique_ptr<TestingProfile> testing_profile_;
   std::unique_ptr<content::WebContents> contents_;
   const bool force_incognito_;
-  const base::UkmSourceId test_ukm_id_;
+  const ukm::SourceIdObj test_ukm_id_;
 
   // |power_monitor_source_| is owned by the global PowerMonitor.
   base::PowerMonitorTestSource* power_monitor_source_ = nullptr;

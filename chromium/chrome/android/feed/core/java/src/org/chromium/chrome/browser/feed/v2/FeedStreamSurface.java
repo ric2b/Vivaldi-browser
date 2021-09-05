@@ -4,6 +4,8 @@
 
 package org.chromium.chrome.browser.feed.v2;
 
+import android.animation.ObjectAnimator;
+import android.animation.PropertyValuesHolder;
 import android.app.Activity;
 import android.content.Context;
 import android.os.Handler;
@@ -18,15 +20,14 @@ import androidx.recyclerview.widget.RecyclerView;
 import androidx.recyclerview.widget.RecyclerView.ItemAnimator.ItemAnimatorFinishedListener;
 
 import org.chromium.base.Callback;
-import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
+import org.chromium.base.supplier.Supplier;
 import org.chromium.base.task.PostTask;
-import org.chromium.base.task.TaskTraits;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.AppHooks;
 import org.chromium.chrome.browser.feed.shared.ScrollTracker;
@@ -47,14 +48,15 @@ import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.xsurface.FeedActionsHandler;
 import org.chromium.chrome.browser.xsurface.HybridListRenderer;
-import org.chromium.chrome.browser.xsurface.ImageFetchClient;
 import org.chromium.chrome.browser.xsurface.ProcessScope;
-import org.chromium.chrome.browser.xsurface.ProcessScopeDependencyProvider;
 import org.chromium.chrome.browser.xsurface.SurfaceActionsHandler;
 import org.chromium.chrome.browser.xsurface.SurfaceScope;
 import org.chromium.chrome.browser.xsurface.SurfaceScopeDependencyProvider;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.components.browser_ui.share.ShareHelper;
+import org.chromium.components.browser_ui.share.ShareParams;
+import org.chromium.components.browser_ui.widget.animation.Interpolators;
 import org.chromium.components.feed.proto.FeedUiProto.SharedState;
 import org.chromium.components.feed.proto.FeedUiProto.Slice;
 import org.chromium.components.feed.proto.FeedUiProto.StreamUpdate;
@@ -123,6 +125,9 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
     private String mBottomSheetOriginatingSliceId;
     private final int mLoadMoreTriggerLookahead;
     private boolean mIsLoadingMoreContent;
+    private boolean mIsPlaceholderShown;
+    // TabSupplier for the current tab to share.
+    private final ShareHelperWrapper mShareHelper;
 
     private static ProcessScope sXSurfaceProcessScope;
 
@@ -205,78 +210,25 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
     }
 
     /**
-     * Provides logging and context for all surfaces.
+     * Provides a wrapper around sharing methods.
      *
-     * TODO(rogerm): Find a more global home for this.
+     * Makes it easier to test.
      */
-    private static class FeedProcessScopeDependencyProvider
-            implements ProcessScopeDependencyProvider {
-        private ImageFetchClient mImageFetchClient;
-
-        FeedProcessScopeDependencyProvider() {
-            mImageFetchClient = new FeedImageFetchClient();
+    public static class ShareHelperWrapper {
+        private Supplier<Tab> mTabSupplier;
+        public ShareHelperWrapper(Supplier<Tab> tabSupplier) {
+            mTabSupplier = tabSupplier;
         }
 
-        @Override
-        public Context getContext() {
-            return ContextUtils.getApplicationContext();
-        }
-
-        @Deprecated
-        @Override
-        public String getAccountName() {
-            assert ThreadUtils.runningOnUiThread();
-            CoreAccountInfo primaryAccount =
-                    IdentityServicesProvider.get()
-                            .getIdentityManager(Profile.getLastUsedRegularProfile())
-                            .getPrimaryAccountInfo(ConsentLevel.NOT_REQUIRED);
-            return (primaryAccount == null) ? "" : primaryAccount.getEmail();
-        }
-
-        @Deprecated
-        @Override
-        public int[] getExperimentIds() {
-            // Note: this is thread-safe.
-            return FeedStreamSurfaceJni.get().getExperimentIds();
-        }
-
-        @Deprecated
-        @Override
-        public String getClientInstanceId() {
-            assert ThreadUtils.runningOnUiThread();
-            return FeedServiceBridge.getClientInstanceId();
-        }
-
-        @Override
-        public ImageFetchClient getImageFetchClient() {
-            return mImageFetchClient;
-        }
-
-        @Override
-        public void logError(String tag, String format, Object... args) {
-            Log.e(tag, format, args);
-        }
-
-        @Override
-        public void logWarning(String tag, String format, Object... args) {
-            Log.w(tag, format, args);
-        }
-
-        @Override
-        public void postTask(int taskType, Runnable task, long delayMs) {
-            TaskTraits traits;
-            switch (taskType) {
-                case ProcessScopeDependencyProvider.TASK_TYPE_UI_THREAD:
-                    traits = UiThreadTaskTraits.DEFAULT;
-                    break;
-                case ProcessScopeDependencyProvider.TASK_TYPE_BACKGROUND_MAY_BLOCK:
-                    traits = TaskTraits.BEST_EFFORT_MAY_BLOCK;
-                    break;
-                default:
-                    assert false : "Invalid task type";
-                    return;
-            }
-            PostTask.postDelayedTask(traits, task, delayMs);
+        /**
+         * Shares a url and title from Chrome to another app.
+         * Brings up the share sheet.
+         */
+        public void share(String url, String title) {
+            ShareParams params =
+                    new ShareParams.Builder(mTabSupplier.get().getWindowAndroid(), url, title)
+                            .build();
+            ShareHelper.shareWithUi(params);
         }
     }
 
@@ -288,7 +240,8 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
         final boolean mDarkMode;
 
         FeedSurfaceScopeDependencyProvider(Context activityContext, boolean darkMode) {
-            mActivityContext = activityContext;
+            mActivityContext =
+                    FeedProcessScopeDependencyProvider.createFeedContext(activityContext);
             mDarkMode = darkMode;
         }
 
@@ -310,6 +263,10 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
 
         @Override
         public String getAccountName() {
+            // Don't return account name if there's a signed-out session ID.
+            if (!getSignedOutSessionId().isEmpty()) {
+                return "";
+            }
             assert ThreadUtils.runningOnUiThread();
             CoreAccountInfo primaryAccount =
                     IdentityServicesProvider.get()
@@ -326,8 +283,19 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
 
         @Override
         public String getClientInstanceId() {
+            // Don't return client instance id if there's a signed-out session ID.
+            if (!getSignedOutSessionId().isEmpty()) {
+                return "";
+            }
             assert ThreadUtils.runningOnUiThread();
             return FeedServiceBridge.getClientInstanceId();
+        }
+
+        @Override
+        public String getSignedOutSessionId() {
+            assert ThreadUtils.runningOnUiThread();
+            return FeedStreamSurfaceJni.get().getSessionId(
+                    mNativeFeedStreamSurface, FeedStreamSurface.this);
         }
     }
 
@@ -374,7 +342,8 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
     public FeedStreamSurface(Activity activity, boolean isBackgroundDark,
             SnackbarManager snackbarManager, NativePageNavigationDelegate pageNavigationDelegate,
             BottomSheetController bottomSheetController,
-            HelpAndFeedbackLauncher helpAndFeedbackLauncher) {
+            HelpAndFeedbackLauncher helpAndFeedbackLauncher, boolean isPlaceholderShown,
+            ShareHelperWrapper shareHelper) {
         mNativeFeedStreamSurface = FeedStreamSurfaceJni.get().init(FeedStreamSurface.this);
         mSnackbarManager = snackbarManager;
         mActivity = activity;
@@ -385,6 +354,9 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
         mLoadMoreTriggerLookahead = FeedServiceBridge.getLoadMoreTriggerLookahead();
 
         mContentManager = new FeedListContentManager(this, this);
+
+        mIsPlaceholderShown = isPlaceholderShown;
+        mShareHelper = shareHelper;
 
         Context context = new ContextThemeWrapper(
                 activity, (isBackgroundDark ? R.style.Dark : R.style.Light));
@@ -531,7 +503,11 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
         }
         for (SliceUpdate sliceUpdate : streamUpdate.getUpdatedSlicesList()) {
             if (sliceUpdate.hasSlice()) {
-                newContentList.add(createContentFromSlice(sliceUpdate.getSlice()));
+                FeedListContentManager.FeedContent content =
+                        createContentFromSlice(sliceUpdate.getSlice());
+                if (content != null) {
+                    newContentList.add(content);
+                }
             } else {
                 String existingSliceId = sliceUpdate.getSliceId();
                 int position = mContentManager.findContentPositionByKey(existingSliceId);
@@ -627,6 +603,10 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
             return new FeedListContentManager.ExternalViewContent(
                     sliceId, slice.getXsurfaceSlice().getXsurfaceFrame().toByteArray());
         } else if (slice.hasLoadingSpinnerSlice()) {
+            // If the placeholder is shown, spinner is not needed.
+            if (mIsPlaceholderShown) {
+                return null;
+            }
             return new FeedListContentManager.NativeViewContent(sliceId, R.layout.feed_spinner);
         }
         assert slice.hasZeroStateSlice();
@@ -770,6 +750,11 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
 
     @Override
     public void processThereAndBackAgainData(byte[] data) {
+        processThereAndBackAgainData(data, null);
+    }
+
+    @Override
+    public void processThereAndBackAgainData(byte[] data, @Nullable View actionSourceView) {
         assert ThreadUtils.runningOnUiThread();
         FeedStreamSurfaceJni.get().processThereAndBackAgain(
                 mNativeFeedStreamSurface, FeedStreamSurface.this, data);
@@ -894,6 +879,11 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
                         .setDuration(durationMs));
     }
 
+    @Override
+    public void share(String url, String title) {
+        mShareHelper.share(url, title);
+    }
+
     /**
      * Informs whether or not feed content should be shown.
      */
@@ -1003,6 +993,29 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
         mScrollReporter.trackScroll(dx, dy);
     }
 
+    boolean isPlaceholderShown() {
+        return mIsPlaceholderShown;
+    }
+
+    /**
+     * Feed v2's background is set to be transparent in {@link FeedSurfaceCoordinator#createStream}
+     * if the Feed placeholder is shown. After first batch of articles are loaded, set recyclerView
+     * back to non-transparent. Since Feed v2 doesn't have fade-in animation, we add a fade-in
+     * animation for Feed background to make the transition smooth.
+     */
+    void hidePlaceholder() {
+        if (!mIsPlaceholderShown) {
+            return;
+        }
+        ObjectAnimator animator = ObjectAnimator.ofPropertyValuesHolder(
+                mRootView.getBackground(), PropertyValuesHolder.ofInt("alpha", 255));
+        animator.setTarget(mRootView.getBackground());
+        animator.setDuration(mRootView.getItemAnimator().getAddDuration())
+                .setInterpolator(Interpolators.LINEAR_INTERPOLATOR);
+        animator.start();
+        mIsPlaceholderShown = false;
+    }
+
     // Detects animation finishes in RecyclerView.
     // https://stackoverflow.com/questions/33710605/detect-animation-finish-in-androids-recyclerview
     private class RecyclerViewAnimationFinishDetector implements ItemAnimatorFinishedListener {
@@ -1075,6 +1088,7 @@ public class FeedStreamSurface implements SurfaceActionsHandler, FeedActionsHand
         long init(FeedStreamSurface caller);
         boolean isActivityLoggingEnabled(long nativeFeedStreamSurface, FeedStreamSurface caller);
         int[] getExperimentIds();
+        String getSessionId(long nativeFeedStreamSurface, FeedStreamSurface caller);
         void reportFeedViewed(long nativeFeedStreamSurface, FeedStreamSurface caller);
         void reportSliceViewed(
                 long nativeFeedStreamSurface, FeedStreamSurface caller, String sliceId);

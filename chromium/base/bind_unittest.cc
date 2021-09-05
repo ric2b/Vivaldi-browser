@@ -13,7 +13,8 @@
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/test/bind_test_util.h"
+#include "base/strings/string_number_conversions.h"
+#include "base/test/bind.h"
 #include "base/test/gtest_util.h"
 #include "build/build_config.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -511,6 +512,32 @@ TEST_F(BindTest, IgnoreResultForOnce) {
   weak_factory.InvalidateWeakPtrs();
   std::move(non_void_weak_const_method_cb).Run();
   std::move(non_void_weak_method_cb).Run();
+}
+
+TEST_F(BindTest, IgnoreResultForRepeatingCallback) {
+  std::string s;
+  RepeatingCallback<int(int)> cb = BindRepeating(
+      [](std::string* s, int i) {
+        *s += "Run" + base::NumberToString(i);
+        return 5;
+      },
+      &s);
+  RepeatingCallback<void(int)> noreturn = BindRepeating(IgnoreResult(cb));
+  noreturn.Run(2);
+  EXPECT_EQ(s, "Run2");
+}
+
+TEST_F(BindTest, IgnoreResultForOnceCallback) {
+  std::string s;
+  OnceCallback<int(int)> cb = BindOnce(
+      [](std::string* s, int i) {
+        *s += "Run" + base::NumberToString(i);
+        return 5;
+      },
+      &s);
+  OnceCallback<void(int)> noreturn = BindOnce(IgnoreResult(std::move(cb)));
+  std::move(noreturn).Run(2);
+  EXPECT_EQ(s, "Run2");
 }
 
 // Functions that take reference parameters.

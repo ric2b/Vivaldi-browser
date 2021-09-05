@@ -24,10 +24,10 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/clipboard_constants.h"
-#include "ui/base/clipboard/clipboard_data_endpoint.h"
 #include "ui/base/clipboard/clipboard_format_type.h"
 #include "ui/base/clipboard/custom_data_helper.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
+#include "ui/base/data_transfer_policy/data_transfer_endpoint.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -89,13 +89,16 @@ ClipboardHostImpl::ClipboardHostImpl(
       clipboard_(ui::Clipboard::GetForCurrentThread()) {
   // |render_frame_host| may be null in unit tests.
   if (render_frame_host) {
-    render_frame_routing_id_ = render_frame_host->GetRoutingID();
-    render_process_id_ = render_frame_host->GetProcess()->GetID();
+    render_frame_routing_id_ =
+        GlobalFrameRoutingId(render_frame_host->GetProcess()->GetID(),
+                             render_frame_host->GetRoutingID());
     clipboard_writer_ = std::make_unique<ui::ScopedClipboardWriter>(
         ui::ClipboardBuffer::kCopyPaste,
-        std::make_unique<ui::ClipboardDataEndpoint>(
+        std::make_unique<ui::DataTransferEndpoint>(
             render_frame_host->GetLastCommittedOrigin()));
   } else {
+    render_frame_routing_id_ = GlobalFrameRoutingId(
+        ChildProcessHost::kInvalidUniqueID, MSG_ROUTING_NONE);
     clipboard_writer_ = std::make_unique<ui::ScopedClipboardWriter>(
         ui::ClipboardBuffer::kCopyPaste);
   }
@@ -393,7 +396,7 @@ void ClipboardHostImpl::StartIsPasteAllowedRequest(
     std::string data) {
   // May not have a RenderFrameHost in tests.
   RenderFrameHostImpl* render_frame_host =
-      RenderFrameHostImpl::FromID(render_process_id_, render_frame_routing_id_);
+      RenderFrameHostImpl::FromID(render_frame_routing_id_);
   if (render_frame_host) {
     render_frame_host->IsClipboardPasteAllowed(
         data_type, data,
@@ -422,13 +425,14 @@ void ClipboardHostImpl::CleanupObsoleteRequests() {
   }
 }
 
-std::unique_ptr<ui::ClipboardDataEndpoint>
+std::unique_ptr<ui::DataTransferEndpoint>
 ClipboardHostImpl::CreateDataEndpoint() {
   RenderFrameHostImpl* render_frame_host =
-      RenderFrameHostImpl::FromID(render_process_id_, render_frame_routing_id_);
+      RenderFrameHostImpl::FromID(render_frame_routing_id_);
   if (render_frame_host) {
-    return std::make_unique<ui::ClipboardDataEndpoint>(
-        render_frame_host->GetLastCommittedOrigin());
+    return std::make_unique<ui::DataTransferEndpoint>(
+        render_frame_host->GetLastCommittedOrigin(),
+        render_frame_host->HasTransientUserActivation());
   }
   return nullptr;
 }

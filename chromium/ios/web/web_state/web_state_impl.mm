@@ -447,15 +447,14 @@ void WebStateImpl::SetUserAgent(UserAgentType user_agent) {
   user_agent_type_ = user_agent;
 }
 
-void WebStateImpl::OnAuthRequired(
-    NSURLProtectionSpace* protection_space,
-    NSURLCredential* proposed_credential,
-    const WebStateDelegate::AuthCallback& callback) {
+void WebStateImpl::OnAuthRequired(NSURLProtectionSpace* protection_space,
+                                  NSURLCredential* proposed_credential,
+                                  WebStateDelegate::AuthCallback callback) {
   if (delegate_) {
     delegate_->OnAuthRequired(this, protection_space, proposed_credential,
-                              callback);
+                              std::move(callback));
   } else {
-    callback.Run(nil, nil);
+    std::move(callback).Run(nil, nil);
   }
 }
 
@@ -583,6 +582,16 @@ void WebStateImpl::SetWebUsageEnabled(bool enabled) {
 
 UIView* WebStateImpl::GetView() {
   return [web_controller_ view];
+}
+
+void WebStateImpl::DidCoverWebContent() {
+  [web_controller_ removeWebViewFromViewHierarchy];
+  WasHidden();
+}
+
+void WebStateImpl::DidRevealWebContent() {
+  [web_controller_ addWebViewToViewHierarchy];
+  WasShown();
 }
 
 void WebStateImpl::WasShown() {

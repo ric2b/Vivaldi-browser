@@ -13,9 +13,9 @@
 #include "base/containers/flat_set.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/run_loop.h"
-#include "base/scoped_observer.h"
+#include "base/scoped_observation.h"
 #include "base/stl_util.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
 #include "components/image_fetcher/core/fake_image_decoder.h"
@@ -61,6 +61,7 @@
 #if defined(OS_CHROMEOS)
 #include "chromeos/components/account_manager/account_manager.h"
 #include "chromeos/components/account_manager/account_manager_factory.h"
+#include "components/account_manager_core/account.h"
 #include "components/signin/internal/identity_manager/test_profile_oauth2_token_service_delegate_chromeos.h"
 #endif
 
@@ -307,8 +308,8 @@ class IdentityManagerTest : public testing::Test {
                          std::string token) {
 #if defined(OS_CHROMEOS)
     identity_manager()->GetChromeOSAccountManager()->UpsertAccount(
-        chromeos::AccountManager::AccountKey{
-            gaia_id, chromeos::account_manager::AccountType::ACCOUNT_TYPE_GAIA},
+        ::account_manager::AccountKey{gaia_id,
+                                      account_manager::AccountType::kGaia},
         email, token);
 #else
     token_service()->UpdateCredentials(account_id, "refresh_token");
@@ -318,9 +319,8 @@ class IdentityManagerTest : public testing::Test {
   void RevokeCredentials(const CoreAccountId& account_id, std::string gaia_id) {
 #if defined(OS_CHROMEOS)
     identity_manager()->GetChromeOSAccountManager()->RemoveAccount(
-        chromeos::AccountManager::AccountKey{
-            gaia_id,
-            chromeos::account_manager::AccountType::ACCOUNT_TYPE_GAIA});
+        ::account_manager::AccountKey{gaia_id,
+                                      account_manager::AccountType::kGaia});
 #else
     token_service()->RevokeCredentials(account_id);
 #endif
@@ -2054,7 +2054,7 @@ TEST_F(IdentityManagerTest, CallbackSentOnAccountsCookieDeletedByUserAction) {
   net::CanonicalCookie cookie(
       "SAPISID", std::string(), ".google.com", "/", base::Time(), base::Time(),
       base::Time(), /*secure=*/true, false, net::CookieSameSite::NO_RESTRICTION,
-      net::COOKIE_PRIORITY_DEFAULT);
+      net::COOKIE_PRIORITY_DEFAULT, false);
   SimulateCookieDeletedByUser(identity_manager()->GetGaiaCookieManagerService(),
                               cookie);
   run_loop.Run();
@@ -2086,7 +2086,7 @@ TEST_F(IdentityManagerTest, OnNetworkInitialized) {
   net::CanonicalCookie cookie(
       "SAPISID", std::string(), ".google.com", "/", base::Time(), base::Time(),
       base::Time(), /*secure=*/true, false, net::CookieSameSite::NO_RESTRICTION,
-      net::COOKIE_PRIORITY_DEFAULT);
+      net::COOKIE_PRIORITY_DEFAULT, false);
   test_cookie_manager_ptr->DispatchCookieChange(net::CookieChangeInfo(
       cookie, net::CookieAccessResult(), net::CookieChangeCause::EXPLICIT));
   run_loop.Run();

@@ -29,6 +29,7 @@
 #include "components/password_manager/core/browser/password_account_storage_settings_watcher.h"
 #include "components/password_manager/core/browser/reauth_purpose.h"
 #include "components/password_manager/core/browser/ui/export_progress_status.h"
+#include "components/password_manager/core/browser/ui/saved_passwords_presenter.h"
 #include "extensions/browser/extension_function.h"
 
 class Profile;
@@ -59,8 +60,8 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
                                 api::passwords_private::PlaintextReason reason,
                                 PlaintextPasswordCallback callback,
                                 content::WebContents* web_contents) override;
-  void MovePasswordToAccount(int id,
-                             content::WebContents* web_contents) override;
+  void MovePasswordsToAccount(const std::vector<int>& ids,
+                              content::WebContents* web_contents) override;
   void ImportPasswords(content::WebContents* web_contents) override;
   void ExportPasswords(base::OnceCallback<void(const std::string&)> accepted,
                        content::WebContents* web_contents) override;
@@ -94,10 +95,10 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
   // PasswordUIView implementation.
   Profile* GetProfile() override;
   void SetPasswordList(
-      const std::vector<std::unique_ptr<autofill::PasswordForm>>& password_list)
-      override;
+      const std::vector<std::unique_ptr<password_manager::PasswordForm>>&
+          password_list) override;
   void SetPasswordExceptionList(
-      const std::vector<std::unique_ptr<autofill::PasswordForm>>&
+      const std::vector<std::unique_ptr<password_manager::PasswordForm>>&
           password_exception_list) override;
 
   // KeyedService overrides:
@@ -147,6 +148,9 @@ class PasswordsPrivateDelegateImpl : public PasswordsPrivateDelegate,
 
   // Used to communicate with the password store.
   std::unique_ptr<PasswordManagerPresenter> password_manager_presenter_;
+
+  // Used to edit passwords and to create |password_check_delegate_|.
+  password_manager::SavedPasswordsPresenter saved_passwords_presenter_;
 
   // Used to control the export and import flows.
   std::unique_ptr<PasswordManagerPorter> password_manager_porter_;

@@ -4,6 +4,7 @@
 
 #include "components/media_message_center/media_notification_background_ash_impl.h"
 
+#include "base/i18n/rtl.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace media_message_center {
@@ -37,14 +38,18 @@ class MediaNotificationBackgroundAshImplTest : public testing::Test {
 
 TEST_F(MediaNotificationBackgroundAshImplTest, ArtworkBoundsTest) {
   gfx::Rect parent_bounds(0, 0, 100, 100);
-  background()->UpdateArtwork(CreateTestImage(160, 60));
-  EXPECT_EQ(GetArtworkBounds(parent_bounds).size(), gfx::Size(80, 30));
+  background()->UpdateArtwork(CreateTestImage(120, 60));
+  EXPECT_EQ(GetArtworkBounds(parent_bounds), gfx::Rect(-36, 4, 160, 80));
 
-  background()->UpdateArtwork(CreateTestImage(60, 160));
-  EXPECT_EQ(GetArtworkBounds(parent_bounds).size(), gfx::Size(30, 80));
+  background()->UpdateArtwork(CreateTestImage(40, 50));
+  EXPECT_EQ(GetArtworkBounds(parent_bounds), gfx::Rect(4, -6, 80, 100));
 
-  background()->UpdateArtwork(CreateTestImage(40, 20));
-  EXPECT_EQ(GetArtworkBounds(parent_bounds).size(), gfx::Size(80, 40));
+  background()->UpdateArtwork(CreateTestImage(80, 120));
+  EXPECT_EQ(GetArtworkBounds(parent_bounds), gfx::Rect(4, -16, 80, 120));
+
+  base::i18n::SetRTLForTesting(true);
+  background()->UpdateArtwork(CreateTestImage(80, 40));
+  EXPECT_EQ(GetArtworkBounds(parent_bounds), gfx::Rect(-24, 4, 160, 80));
 }
 
 }  // namespace media_message_center

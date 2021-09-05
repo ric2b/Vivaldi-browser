@@ -11,7 +11,7 @@
 #include <memory>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
@@ -602,11 +602,6 @@ class EventSenderBindings : public gin::Wrappable<EventSenderBindings> {
   void ClearKillRing();
   std::vector<std::string> ContextClick();
   void ClearTouchPoints();
-  void DidAcquirePointerLock();
-  void DidNotAcquirePointerLock();
-  void DidLosePointerLock();
-  void SetPointerLockWillFailSynchronously();
-  void SetPointerLockWillRespondAsynchronously();
   void ReleaseTouchPoint(unsigned index);
   void UpdateTouchPoint(unsigned index,
                         double x,
@@ -725,23 +720,6 @@ gin::ObjectTemplateBuilder EventSenderBindings::GetObjectTemplateBuilder(
       .SetMethod("clearKillRing", &EventSenderBindings::ClearKillRing)
       .SetMethod("contextClick", &EventSenderBindings::ContextClick)
       .SetMethod("clearTouchPoints", &EventSenderBindings::ClearTouchPoints)
-      // When setPointerLockWillRespondAsynchronously() was called, this is used
-      // to respond to the async pointer request.
-      .SetMethod("didAcquirePointerLock",
-                 &EventSenderBindings::DidAcquirePointerLock)
-      // While holding a pointer lock, this breaks the lock.
-      .SetMethod("didLosePointerLock", &EventSenderBindings::DidLosePointerLock)
-      // When setPointerLockWillRespondAsynchronously() was called, this is used
-      // to respond to the async pointer request.
-      .SetMethod("didNotAcquirePointerLock",
-                 &EventSenderBindings::DidNotAcquirePointerLock)
-      // Causes the next pointer lock request to fail in the renderer.
-      .SetMethod("setPointerLockWillFailSynchronously",
-                 &EventSenderBindings::SetPointerLockWillFailSynchronously)
-      // Causes the next pointer lock request to delay until the test calls
-      // either didAcquirePointerLock() or didNotAcquirePointerLock().
-      .SetMethod("setPointerLockWillRespondAsynchronously",
-                 &EventSenderBindings::SetPointerLockWillRespondAsynchronously)
       .SetMethod("releaseTouchPoint", &EventSenderBindings::ReleaseTouchPoint)
       .SetMethod("updateTouchPoint", &EventSenderBindings::UpdateTouchPoint)
       .SetMethod("cancelTouchPoint", &EventSenderBindings::CancelTouchPoint)
@@ -838,35 +816,6 @@ std::vector<std::string> EventSenderBindings::ContextClick() {
 void EventSenderBindings::ClearTouchPoints() {
   if (sender_)
     sender_->ClearTouchPoints();
-}
-
-void EventSenderBindings::DidAcquirePointerLock() {
-  if (sender_)
-    sender_->DidAcquirePointerLock();
-}
-
-void EventSenderBindings::DidNotAcquirePointerLock() {
-  if (sender_)
-    sender_->DidNotAcquirePointerLock();
-}
-
-void EventSenderBindings::DidLosePointerLock() {
-  if (sender_)
-    sender_->DidLosePointerLock();
-}
-
-void EventSenderBindings::SetPointerLockWillFailSynchronously() {
-  if (sender_) {
-    sender_->SetNextPointerLockAction(
-        EventSender::NextPointerLockAction::kWillFail);
-  }
-}
-
-void EventSenderBindings::SetPointerLockWillRespondAsynchronously() {
-  if (sender_) {
-    sender_->SetNextPointerLockAction(
-        EventSender::NextPointerLockAction::kTestWillRespond);
-  }
 }
 
 void EventSenderBindings::ReleaseTouchPoint(unsigned index) {
@@ -1317,17 +1266,9 @@ void EventSender::Reset() {
   current_drag_data_ = base::nullopt;
   current_drag_effect_ = blink::kDragOperationNone;
   current_drag_effects_allowed_ = blink::kDragOperationNone;
-  if (widget() && current_pointer_state_[kRawMousePointerId].pressed_button_ !=
-                      WebMouseEvent::Button::kNoButton)
-    widget()->MouseCaptureLost();
   current_pointer_state_.clear();
   is_drag_mode_ = true;
   force_layout_on_events_ = true;
-  pointer_lock_pending_ = false;
-  pointer_unlock_pending_ = false;
-  pointer_locked_ = false;
-  next_pointer_lock_action_ = NextPointerLockAction::kWillSucceedAsync;
-  pointer_locked_callback_.Reset();
 
   // Disable the zoom level override. Reset() also happens during creation of
   // the RenderWidget, which we can detect by checking for the WebWidget.
@@ -1376,118 +1317,6 @@ int EventSender::ModifiersForPointer(int pointer_id) {
       current_pointer_state_[pointer_id].current_buttons_);
 }
 
-bool EventSender::RequestPointerLock(
-    blink::WebLocalFrame* requester_frame,
-    blink::WebWidgetClient::PointerLockCallback callback) {
-  // The fuzzer may call this at incorrect times, so guard against that.
-  if (pointer_lock_pending_)
-    return false;
-
-  blink::scheduler::WebThreadScheduler* scheduler =
-      web_widget_test_proxy_->compositor_deps()->GetWebMainThreadScheduler();
-
-  switch (next_pointer_lock_action_) {
-    case NextPointerLockAction::kWillSucceedAsync:
-      // This action lets the test harness pretend to do a pointer lock. Pointer
-      // lock requests normally go to the browser, so they are expected to be
-      // asynchronous and reply in a fresh callstack. We will return true.
-      scheduler->DefaultTaskRunner()->PostTask(
-          FROM_HERE, base::BindOnce(&EventSender::DidAcquirePointerLock,
-                                    weak_factory_.GetWeakPtr()));
-      break;
-    case NextPointerLockAction::kTestWillRespond:
-      // This action lets the web test itself initiate the reply. We will return
-      // true. The test will need to call eventSender.didAcquirePointerLock() or
-      // eventSender.didNotAcquirePointerLock() in order to resolve the request.
-      break;
-    case NextPointerLockAction::kWillFail:
-      // This action immediately fails. The |callback| is not run when returning
-      // false.
-      return false;
-  }
-
-  pointer_lock_pending_ = true;
-  pointer_locked_callback_ = std::move(callback);
-  return true;
-}
-
-void EventSender::RequestPointerUnlock() {
-  // The fuzzer may call this at incorrect times, so guard against that.
-  if (pointer_unlock_pending_)
-    return;
-  if (!(pointer_locked_ || pointer_lock_pending_))
-    return;
-
-  blink::scheduler::WebThreadScheduler* scheduler =
-      web_widget_test_proxy_->compositor_deps()->GetWebMainThreadScheduler();
-
-  // This request normally goes to the browser, so the result is expected to be
-  // asynchronous and reply in a fresh callstack.
-  scheduler->DefaultTaskRunner()->PostTask(
-      FROM_HERE, base::BindOnce(&EventSender::DidLosePointerLock,
-                                weak_factory_.GetWeakPtr()));
-}
-
-void EventSender::SetNextPointerLockAction(NextPointerLockAction action) {
-  // The fuzzer may call this at incorrect times, so guard against that.
-  if (pointer_lock_pending_ || pointer_locked_)
-    return;
-  next_pointer_lock_action_ = action;
-}
-
-void EventSender::DidAcquirePointerLock() {
-  // The fuzzer may call this at incorrect times, so guard against that.
-  // Also, |pointer_lock_pending_| is reset to false in between tests, and the
-  // callback to here could have been in flight.
-  if (!pointer_lock_pending_)
-    return;
-  // If a lock was already active and requested again (without unlocking first),
-  // the second lock would fail.
-  if (pointer_locked_)
-    return DidNotAcquirePointerLock();
-
-  pointer_lock_pending_ = false;
-  pointer_locked_ = true;
-  // The callback runs first, then the WebWidget method.
-  // TODO(dtapuska): Why do we have both of these? Is the callback not enough?
-  std::move(pointer_locked_callback_)
-      .Run(blink::mojom::PointerLockResult::kSuccess);
-  web_widget_test_proxy_->GetWebWidget()->DidAcquirePointerLock();
-
-  // Reset planned result to default.
-  next_pointer_lock_action_ = NextPointerLockAction::kWillSucceedAsync;
-}
-
-void EventSender::DidNotAcquirePointerLock() {
-  // The fuzzer may call this at incorrect times, so guard against that.
-  // Also, |pointer_lock_pending_| is reset to false in between tests, and the
-  // callback to here could have been in flight.
-  if (!pointer_lock_pending_ || pointer_locked_)
-    return;
-
-  pointer_lock_pending_ = false;
-  // The callback runs first, then the WebWidget method.
-  // TODO(dtapuska): Why do we have both of these? Is the callback not enough?
-  std::move(pointer_locked_callback_)
-      .Run(blink::mojom::PointerLockResult::kUnknownError);
-  web_widget_test_proxy_->GetWebWidget()->DidNotAcquirePointerLock();
-
-  // Reset planned result to default.
-  next_pointer_lock_action_ = NextPointerLockAction::kWillSucceedAsync;
-}
-
-void EventSender::DidLosePointerLock() {
-  // The fuzzer may call this at incorrect times, so guard against that.
-  // Also, |pointer_locked_| is reset to false in between tests, and the
-  // callback to here could have been in flight.
-  if (!pointer_locked_)
-    return;
-
-  pointer_unlock_pending_ = false;
-  pointer_locked_ = false;
-  web_widget_test_proxy_->GetWebWidget()->DidLosePointerLock();
-}
-
 void EventSender::DoDragDrop(const WebDragData& drag_data,
                              DragOperationsMask mask) {
   if (!MainFrameWidget())
@@ -1503,12 +1332,18 @@ void EventSender::DoDragDrop(const WebDragData& drag_data,
 
   current_drag_data_ = drag_data;
   current_drag_effects_allowed_ = mask;
-  current_drag_effect_ = MainFrameWidget()->DragTargetDragEnter(
+  MainFrameWidget()->DragTargetDragEnter(
       drag_data, event.PositionInWidget(), event.PositionInScreen(),
       current_drag_effects_allowed_,
       ModifiersWithButtons(
           current_pointer_state_[kRawMousePointerId].modifiers_,
-          current_pointer_state_[kRawMousePointerId].current_buttons_));
+          current_pointer_state_[kRawMousePointerId].current_buttons_),
+      base::BindOnce(
+          [](base::WeakPtr<EventSender> sender, blink::DragOperation op) {
+            if (sender)
+              sender->current_drag_effect_ = op;
+          },
+          weak_factory_.GetWeakPtr()));
 
   // Finish processing events.
   ReplaySavedEvents();
@@ -2090,9 +1925,9 @@ void EventSender::BeginDragWithItems(
       current_pointer_state_[kRawMousePointerId].last_pos_;
 
   // Provide a drag source.
-  MainFrameWidget()->DragTargetDragEnter(*current_drag_data_, last_pos,
-                                         last_pos,
-                                         current_drag_effects_allowed_, 0);
+  MainFrameWidget()->DragTargetDragEnter(
+      *current_drag_data_, last_pos, last_pos, current_drag_effects_allowed_, 0,
+      base::DoNothing());
   // |is_drag_mode_| saves events and then replays them later. We don't
   // need/want that.
   is_drag_mode_ = false;

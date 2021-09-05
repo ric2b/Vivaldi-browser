@@ -5,6 +5,9 @@
 #include "ash/events/accessibility_event_rewriter.h"
 
 #include "ash/accessibility/accessibility_controller_impl.h"
+#include "ash/accessibility/point_scan_controller.h"
+#include "ash/keyboard/keyboard_util.h"
+#include "ash/magnifier/magnification_controller.h"
 #include "ash/public/cpp/accessibility_event_rewriter_delegate.h"
 #include "ash/shell.h"
 #include "ui/chromeos/events/event_rewriter_chromeos.h"
@@ -182,11 +185,83 @@ bool AccessibilityEventRewriter::RewriteEventForSwitchAccess(
       switch_access_key_codes_to_capture_.count(key_event->key_code()) > 0;
 
   if (capture && key_event->type() == ui::ET_KEY_PRESSED) {
-    SwitchAccessCommand command =
-        key_code_to_switch_access_command_[key_event->key_code()];
-    delegate_->SendSwitchAccessCommand(command);
+    AccessibilityControllerImpl* accessibility_controller =
+        Shell::Get()->accessibility_controller();
+
+    if (accessibility_controller->IsPointScanEnabled()) {
+      PointScanController* point_scan_controller =
+          accessibility_controller->GetPointScanController();
+      base::Optional<gfx::PointF> point =
+          point_scan_controller->OnPointSelect();
+      if (point.has_value()) {
+        delegate_->SendPointScanPoint(point.value());
+      }
+    } else {
+      SwitchAccessCommand command =
+          key_code_to_switch_access_command_[key_event->key_code()];
+      delegate_->SendSwitchAccessCommand(command);
+    }
   }
   return capture;
+}
+
+bool AccessibilityEventRewriter::RewriteEventForMagnifier(
+    const ui::Event& event,
+    const Continuation continuation) {
+  if (!event.IsKeyEvent())
+    return false;
+
+  const ui::KeyEvent* key_event = event.AsKeyEvent();
+
+  if (!keyboard_util::IsArrowKeyCode(key_event->key_code()) ||
+      !key_event->IsControlDown() || !key_event->IsAltDown()) {
+    return false;
+  }
+
+  if (key_event->type() == ui::ET_KEY_PRESSED) {
+    // If first time key is pressed (e.g. not repeat), start scrolling.
+    if (!(key_event->flags() & ui::EF_IS_REPEAT))
+      OnMagnifierKeyPressed(key_event);
+
+    // Either way (first or repeat), capture key press.
+    return true;
+  }
+
+  if (key_event->type() == ui::ET_KEY_RELEASED) {
+    OnMagnifierKeyReleased(key_event);
+    return true;
+  }
+
+  return false;
+}
+
+void AccessibilityEventRewriter::OnMagnifierKeyPressed(
+    const ui::KeyEvent* event) {
+  MagnificationController* controller =
+      Shell::Get()->magnification_controller();
+  switch (event->key_code()) {
+    case ui::VKEY_UP:
+      controller->SetScrollDirection(MagnificationController::SCROLL_UP);
+      break;
+    case ui::VKEY_DOWN:
+      controller->SetScrollDirection(MagnificationController::SCROLL_DOWN);
+      break;
+    case ui::VKEY_LEFT:
+      controller->SetScrollDirection(MagnificationController::SCROLL_LEFT);
+      break;
+    case ui::VKEY_RIGHT:
+      controller->SetScrollDirection(MagnificationController::SCROLL_RIGHT);
+      break;
+    default:
+      NOTREACHED() << "Unexpected keyboard_code:" << event->key_code();
+  }
+}
+
+void AccessibilityEventRewriter::OnMagnifierKeyReleased(
+    const ui::KeyEvent* event) {
+  MagnificationController* controller =
+      Shell::Get()->magnification_controller();
+  controller->SetScrollDirection(MagnificationController::SCROLL_NONE);
 }
 
 void AccessibilityEventRewriter::UpdateKeyboardDeviceIds() {
@@ -212,6 +287,10 @@ ui::EventDispatchDetails AccessibilityEventRewriter::RewriteEvent(
 
   if (Shell::Get()->accessibility_controller()->IsSwitchAccessRunning()) {
     captured = RewriteEventForSwitchAccess(event, continuation);
+  }
+
+  if (!captured && Shell::Get()->magnification_controller()->IsEnabled()) {
+    captured = RewriteEventForMagnifier(event, continuation);
   }
 
   if (!captured) {

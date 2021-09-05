@@ -23,7 +23,6 @@ namespace chromeos {
 
 class InputEventsBlocker;
 class WelcomeView;
-class ScreenManager;
 
 namespace locale_util {
 struct LanguageSwitchResult;
@@ -33,6 +32,8 @@ class WelcomeScreen : public BaseScreen,
                       public input_method::InputMethodManager::Observer,
                       public DemoModeDetector::Observer {
  public:
+  using TView = WelcomeView;
+
   // This enum is tied directly to a UMA enum defined in
   // //tools/metrics/histograms/enums.xml, and should always reflect it (do not
   // change one without changing the other).  Entries should be never modified
@@ -70,11 +71,10 @@ class WelcomeScreen : public BaseScreen,
   WelcomeScreen(WelcomeView* view, const ScreenExitCallback& exit_callback);
   ~WelcomeScreen() override;
 
-  static WelcomeScreen* Get(ScreenManager* manager);
   static std::string GetResultString(Result result);
 
-  // Called when |view| has been destroyed. If this instance is destroyed before
-  // the |view| it should call view->Unbind().
+  // Called when `view` has been destroyed. If this instance is destroyed before
+  // the `view` it should call view->Unbind().
   void OnViewDestroyed(WelcomeView* view);
 
   const std::string& language_list_locale() const {
@@ -84,9 +84,9 @@ class WelcomeScreen : public BaseScreen,
 
   void UpdateLanguageList();
 
-  // Set locale and input method. If |locale| is empty or doesn't change, set
-  // the |input_method| directly. If |input_method| is empty or ineligible, we
-  // don't change the current |input_method|.
+  // Set locale and input method. If `locale` is empty or doesn't change, set
+  // the `input_method` directly. If `input_method` is empty or ineligible, we
+  // don't change the current `input_method`.
   void SetApplicationLocaleAndInputMethod(const std::string& locale,
                                           const std::string& input_method);
   std::string GetApplicationLocale();
@@ -96,6 +96,8 @@ class WelcomeScreen : public BaseScreen,
   void SetInputMethod(const std::string& input_method);
   void SetTimezone(const std::string& timezone_id);
   std::string GetTimezone() const;
+
+  void SetDeviceRequisition(const std::string& requisition);
 
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);

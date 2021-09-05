@@ -45,6 +45,7 @@
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/frame/lifecycle.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/frame/reporting_observer.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/frame/viewport_intersection_state.mojom-blink.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/link_to_text/link_to_text.mojom-blink.h"
 #include "third_party/blink/public/mojom/loader/pause_subresource_loading_handle.mojom-blink-forward.h"
@@ -52,7 +53,7 @@
 #include "third_party/blink/public/mojom/reporting/reporting.mojom-blink.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom-blink-forward.h"
 #include "third_party/blink/public/platform/task_type.h"
-#include "third_party/blink/public/platform/viewport_intersection_state.h"
+#include "third_party/blink/public/platform/web_rect.h"
 #include "third_party/blink/renderer/core/clipboard/raw_system_clipboard.h"
 #include "third_party/blink/renderer/core/clipboard/system_clipboard.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -61,6 +62,7 @@
 #include "third_party/blink/renderer/core/frame/frame.h"
 #include "third_party/blink/renderer/core/frame/frame_types.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
+#include "third_party/blink/renderer/core/frame/policy_container.h"
 #include "third_party/blink/renderer/core/loader/frame_loader.h"
 #include "third_party/blink/renderer/platform/graphics/touch_action.h"
 #include "third_party/blink/renderer/platform/heap/handle.h"
@@ -168,6 +170,7 @@ class CORE_EXPORT LocalFrame final
       const base::UnguessableToken& frame_token,
       WindowAgentFactory* inheriting_agent_factory,
       InterfaceRegistry*,
+      std::unique_ptr<blink::PolicyContainer> policy_container,
       const base::TickClock* clock = base::DefaultTickClock::GetInstance());
 
   void Init(Frame* opener);
@@ -199,8 +202,10 @@ class CORE_EXPORT LocalFrame final
       Frame* child) override;
   void DidFocus() override;
 
+  void EvictFromBackForwardCache(mojom::blink::RendererEvictionReason reason);
+
   void DidChangeThemeColor();
-  void DidChangeBackgroundColor(SkColor background_color);
+  void DidChangeBackgroundColor(SkColor background_color, bool color_adjust);
 
   void DetachChildren();
   // After Document is attached, resets state related to document, and sets
@@ -419,25 +424,27 @@ class CORE_EXPORT LocalFrame final
   // Called on a view for a LocalFrame with a RemoteFrame parent. This makes
   // viewport intersection and occlusion/obscuration available that accounts for
   // remote ancestor frames and their respective scroll positions, clips, etc.
-  void SetViewportIntersectionFromParent(const ViewportIntersectionState&);
+  void SetViewportIntersectionFromParent(
+      const mojom::blink::ViewportIntersectionState& intersection_state);
 
   IntSize GetMainFrameViewportSize() const override;
   IntPoint GetMainFrameScrollOffset() const override;
 
   void SetOpener(Frame* opener) override;
 
-  // See viewport_intersection_state.h for more info on these methods.
+  // See viewport_intersection_state.mojom for more info on these
+  // methods.
   IntRect RemoteViewportIntersection() const {
-    return intersection_state_.viewport_intersection;
+    return IntRect(intersection_state_.viewport_intersection);
   }
   IntRect RemoteMainFrameIntersection() const {
-    return intersection_state_.main_frame_intersection;
+    return IntRect(intersection_state_.main_frame_intersection);
   }
   gfx::Transform RemoteMainFrameTransform() const {
     return intersection_state_.main_frame_transform;
   }
 
-  FrameOcclusionState GetOcclusionState() const;
+  mojom::blink::FrameOcclusionState GetOcclusionState() const;
 
   bool NeedsOcclusionTracking() const;
 
@@ -638,6 +645,14 @@ class CORE_EXPORT LocalFrame final
   void UpdateOpener(
       const base::Optional<base::UnguessableToken>& opener_routing_id) final;
   void GetSavableResourceLinks(GetSavableResourceLinksCallback callback) final;
+  void MixedContentFound(
+      const KURL& main_resource_url,
+      const KURL& mixed_content_url,
+      mojom::blink::RequestContextType request_context,
+      bool was_allowed,
+      const KURL& url_before_redirects,
+      bool had_redirect,
+      network::mojom::blink::SourceLocationPtr source_location) final;
 
   // blink::mojom::LocalMainFrame overrides:
   void AnimateDoubleTapZoom(const gfx::Point& point,
@@ -669,6 +684,7 @@ class CORE_EXPORT LocalFrame final
       mojo::PendingAssociatedRemote<mojom::blink::Portal> portal,
       mojo::PendingAssociatedReceiver<mojom::blink::PortalClient> portal_client,
       BlinkTransferableMessage data,
+      uint64_t trace_id,
       OnPortalActivatedCallback callback) final;
   void ForwardMessageFromHost(
       BlinkTransferableMessage message,
@@ -701,6 +717,12 @@ class CORE_EXPORT LocalFrame final
   TextFragmentSelectorGenerator* GetTextFragmentSelectorGenerator() const {
     return text_fragment_selector_generator_;
   }
+
+  PolicyContainer* GetPolicyContainer() { return policy_container_.get(); }
+  void SetPolicyContainer(std::unique_ptr<PolicyContainer> container);
+
+  WebURLLoader::DeferType GetLoadDeferType();
+  bool IsLoadDeferred();
 
  private:
   friend class FrameNavigationDisabler;
@@ -753,8 +775,6 @@ class CORE_EXPORT LocalFrame final
   void DidFreeze();
   void DidResume();
   void SetContextPaused(bool);
-
-  void EvictFromBackForwardCache();
 
   HitTestResult HitTestResultForVisualViewportPos(
       const IntPoint& pos_in_viewport);
@@ -857,7 +877,7 @@ class CORE_EXPORT LocalFrame final
       text_input_host_{nullptr};
 #endif
 
-  ViewportIntersectionState intersection_state_;
+  mojom::blink::ViewportIntersectionState intersection_state_;
 
   // Per-frame URLLoader factory.
   std::unique_ptr<WebURLLoaderFactory> url_loader_factory_;
@@ -926,6 +946,8 @@ class CORE_EXPORT LocalFrame final
 
   // Manages a transient affordance for this frame to enter fullscreen.
   TransientAllowFullscreen transient_allow_fullscreen_;
+
+  std::unique_ptr<PolicyContainer> policy_container_;
 };
 
 inline FrameLoader& LocalFrame::Loader() const {

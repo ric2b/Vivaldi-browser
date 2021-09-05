@@ -18,7 +18,9 @@
 <translation id="1112015203684611006">Échec impr.</translation>
 <translation id="1125564390852150847">Créer un onglet.</translation>
 <translation id="1145536944570833626">Supprimer toutes les données existantes.</translation>
+<translation id="1147031633655575115">Connecté en tant que <ph name="USER" /></translation>
 <translation id="1154690515305205900">Impossible de créer un lien vers le texte mis en évidence.</translation>
+<translation id="1157749421655780457">Autoriser l'accès à la position…</translation>
 <translation id="1165039591588034296">Erreur</translation>
 <translation id="1172898394251786223">Champ suivant</translation>
 <translation id="1176932207622159128">Enreg. image imposs.</translation>
@@ -53,6 +55,7 @@
 <translation id="1449835205994625556">Masquer le mot de passe</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> éléments</translation>
 <translation id="1491277525950327607">Touchez deux fois pour activer ou désactiver le paramètre</translation>
+<translation id="1492417797159476138">Vous avez déjà enregistré ce nom d'utilisateur pour ce site</translation>
 <translation id="1509486075633541495">Connexion au site Web</translation>
 <translation id="1509960214886564027">Des fonctionnalités sur de nombreux sites risquent de ne pas fonctionner</translation>
 <translation id="152234381334907219">Jamais enregistrés</translation>
@@ -266,6 +269,7 @@ Suivez les étapes ci-dessous :</translation>
 <translation id="385051799172605136">Retour</translation>
 <translation id="3892144330757387737">Vous trouverez votre historique ici</translation>
 <translation id="3897092660631435901">Menu</translation>
+<translation id="3913386780052199712">Connecté à Chrome</translation>
 <translation id="3915450441834151894">Information sur le site</translation>
 <translation id="3922310737605261887">Rechercher le texte copié</translation>
 <translation id="3928666092801078803">Combiner mes données</translation>
@@ -340,6 +344,7 @@ Vos données sont chiffrées avec votre phrase de passe. Veuillez l'entrer pour 
 <translation id="4751645464639803239">Nouvel onglet de navigation privée</translation>
 <translation id="4758977202923349869">Placer la carte de crédit dans ce cadre</translation>
 <translation id="4775879719735953715">Navigateur par défaut</translation>
+<translation id="4778644898150334464">Utiliser un autre mot de passe</translation>
 <translation id="4802417911091824046">Le chiffrement par phrase de passe ne couvre pas les modes de paiement ni les adresses de Google Pay.
 
 Pour modifier ce paramètre, <ph name="BEGIN_LINK" />réinitialisez la synchronisation<ph name="END_LINK" /></translation>
@@ -372,6 +377,7 @@ Pour modifier ce paramètre, <ph name="BEGIN_LINK" />réinitialisez la synchroni
 <translation id="5059136629401106827">OK</translation>
 <translation id="5062321486222145940">Installer Google Disque</translation>
 <translation id="5083464117946352670">Imposs. déterm. taille fichier</translation>
+<translation id="5090832849094901128">Supprimer ce mot de passe ne supprimera pas également votre compte sur <ph name="WEBSITE" />.</translation>
 <translation id="5094827893301452931">Gazouillis terminé.</translation>
 <translation id="5118764316110575523">Désactivé</translation>
 <translation id="5127805178023152808">La synchronisation est désactivée</translation>
@@ -511,6 +517,9 @@ Les sites ne peuvent pas utiliser de témoins pour voir votre activité de navig
 <translation id="6476800141292307438">Traduction de la page en <ph name="LANGUAGE" /> en cours… Les options sont affichées dans le bas de l'écran.</translation>
 <translation id="648164694371393720">Erreur d'authentification</translation>
 <translation id="6482629121755362506"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> éléments supprimés</translation>
+<translation id="6497772452874122664">Si vous faites confiance à <ph name="TIME" />, vous pouvez utiliser un mot de passe enregistré pour un autre site.
+
+Tâchez d'utiliser un mot de passe différent pour chaque site.</translation>
 <translation id="651505212789431520">Annuler la synchronisation? Vous pouvez activer la synchronisation à tout moment dans les paramètres.</translation>
 <translation id="6561262006871132942">Zoom avant</translation>
 <translation id="6585618849026997638">Vous pouvez revenir à une page importante pour vous en ajoutant un favori</translation>
@@ -590,6 +599,7 @@ Les sites ne peuvent pas utiliser de témoins pour voir votre activité de navig
 <translation id="739941347996872055">Onglet précédent</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7409985198648820906"><ph name="UNREAD_COUNT" /> articles non lus.</translation>
+<translation id="7412027924265291969">Continuer</translation>
 <translation id="7425346204213733349">Les modifications apportées à vos favoris, à votre historique, à vos mots de passe et aux autres paramètres ne seront plus synchronisées avec votre compte Google. Cependant, vos données actuelles resteront stockées dans votre compte Google.</translation>
 <translation id="7435356471928173109">Désactivée par votre administrateur</translation>
 <translation id="7454057999980797137">État / Comté</translation>
@@ -600,6 +610,7 @@ Les sites ne peuvent pas utiliser de témoins pour voir votre activité de navig
 <translation id="7472734401283673885">Nom d'entreprise</translation>
 <translation id="7473891865547856676">Non merci</translation>
 <translation id="7481312909269577407">Suivant</translation>
+<translation id="7483467499335917849">Utiliser votre position actuelle</translation>
 <translation id="750493650310597496">0 sélectionné</translation>
 <translation id="7514365320538308">Télécharger</translation>
 <translation id="7537586195939242955">Imposs. d'install. votre pass. pour Passbook pour le moment.</translation>
@@ -733,6 +744,7 @@ Les sites peuvent utiliser des témoins afin de voir votre activité de navigati
 <translation id="9094033019050270033">Mettre à jour le mot de passe</translation>
 <translation id="9100610230175265781">Une phrase de passe est requise</translation>
 <translation id="9107664647686727385">Pour vérifier la présence de mots de passe compromis</translation>
+<translation id="9137526406337347448">Services Google</translation>
 <translation id="9148126808321036104">Connectez-vous de nouveau</translation>
 <translation id="9152539721251340337">Créer un code QR</translation>
 <translation id="9157836665414082580">Supprimer les boîtes de dialogue</translation>

@@ -92,6 +92,14 @@
         "enum": ["normal", "popup", "panel"]
       },
       {
+        "id": "QueryOptions",
+        "type": "object",
+        "properties": {
+          "populate": {"type": "boolean", "optional": true, "description": "If true, the $(ref:windows.Window) object has a <var>tabs</var> property that contains a list of the $(ref:tabs.Tab) objects. The <code>Tab</code> objects only contain the <code>url</code>, <code>pendingUrl</code>, <code>title</code>, and <code>favIconUrl</code> properties if the extension's manifest file includes the <code>\"tabs\"</code> permission." },
+          "windowTypes": {"type": "array", "items": { "$ref": "WindowType" }, "optional": true, "description": "If set, the $(ref:windows.Window) returned is filtered based on its type. If unset, the default filter is set to <code>['normal', 'popup']</code>."}
+        }
+      },
+      {
         "id": "Dummy",
         "description": "This is a hack to have a hard reference to the history.TransitionType type somewhere in this file. We use a soft reference to it below, but no headers get generated for it because of a hack in json_schema_compiler/h_generator.py (see include_soft).",
         "type": "object",
@@ -118,25 +126,19 @@
         "parameters": [
           {"type": "integer", "name": "windowId", "minimum": -2},
           {
-            "type": "object",
-            "name": "getInfo",
-            "optional": true,
-            "description": "",
-            "properties": {
-              "populate": {"type": "boolean", "optional": true, "description": "If true, the $(ref:windows.Window) object has a <var>tabs</var> property that contains a list of the $(ref:tabs.Tab) objects. The <code>Tab</code> objects only contain the <code>url</code>, <code>pendingUrl</code>, <code>title</code>, and <code>favIconUrl</code> properties if the extension's manifest file includes the <code>\"tabs\"</code> permission." },
-              "windowTypes": {"type": "array", "items": { "$ref": "WindowType" }, "optional": true, "description": "If set, the $(ref:windows.Window) returned is filtered based on its type. If unset, the default filter is set to <code>['normal', 'popup']</code>."}
-            }
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "window", "$ref": "Window"
-              }
-            ]
+            "name": "queryOptions",
+            "$ref": "QueryOptions",
+            "optional": true
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "window", "$ref": "Window"
+            }
+          ]
+        }
       },
       {
         "name": "getCurrent",
@@ -144,25 +146,19 @@
         "description": "Gets the <a href='#current-window'>current window</a>.",
         "parameters": [
           {
-            "type": "object",
-            "name": "getInfo",
-            "optional": true,
-            "description": "",
-            "properties": {
-              "populate": {"type": "boolean", "optional": true, "description": "If true, the $(ref:windows.Window) object has a <var>tabs</var> property that contains a list of the $(ref:tabs.Tab) objects. The <code>Tab</code> objects only contain the <code>url</code>, <code>pendingUrl</code>, <code>title</code>, and <code>favIconUrl</code> properties if the extension's manifest file includes the <code>\"tabs\"</code> permission." },
-              "windowTypes": {"type": "array", "items": { "$ref": "WindowType" }, "optional": true, "description": "If set, the $(ref:windows.Window) returned is filtered based on its type. If unset, the default filter is set to <code>['normal', 'popup']</code>."}
-            }
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "window", "$ref": "Window"
-              }
-            ]
+            "name": "queryOptions",
+            "$ref": "QueryOptions",
+            "optional": true
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "window", "$ref": "Window"
+            }
+          ]
+        }
       },
       {
         "name": "getLastFocused",
@@ -170,25 +166,19 @@
         "description": "Gets the window that was most recently focused &mdash; typically the window 'on top'.",
         "parameters": [
           {
-            "type": "object",
-            "name": "getInfo",
-            "optional": true,
-            "description": "",
-            "properties": {
-              "populate": {"type": "boolean", "optional": true, "description": "If true, the $(ref:windows.Window) object has a <var>tabs</var> property that contains a list of the $(ref:tabs.Tab) objects. The <code>Tab</code> objects only contain the <code>url</code>, <code>pendingUrl</code>, <code>title</code>, and <code>favIconUrl</code> properties if the extension's manifest file includes the <code>\"tabs\"</code> permission." },
-              "windowTypes": {"type": "array", "items": { "$ref": "WindowType" }, "optional": true, "description": "If set, the $(ref:windows.Window) returned is filtered based on its type. If unset, the default filter is set to <code>['normal', 'popup']</code>."}
-            }
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "window", "$ref": "Window"
-              }
-            ]
+            "name": "queryOptions",
+            "$ref": "QueryOptions",
+            "optional": true
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "window", "$ref": "Window"
+            }
+          ]
+        }
       },
       {
         "name": "getAll",
@@ -196,25 +186,19 @@
         "description": "Gets all windows.",
         "parameters": [
           {
-            "type": "object",
-            "name": "getInfo",
-            "optional": true,
-            "description": "",
-            "properties": {
-              "populate": {"type": "boolean", "optional": true, "description": "If true, each $(ref:windows.Window) object has a <var>tabs</var> property that contains a list of the $(ref:tabs.Tab) objects for that window. The <code>Tab</code> objects only contain the <code>url</code>, <code>pendingUrl</code>, <code>title</code>, and <code>favIconUrl</code> properties if the extension's manifest file includes the <code>\"tabs\"</code> permission." },
-              "windowTypes": {"type": "array", "items": { "$ref": "WindowType" }, "optional": true, "description": "If set, the $(ref:windows.Window) returned is filtered based on its type. If unset, the default filter is set to <code>['normal', 'popup']</code>."}
-            }
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "windows", "type": "array", "items": { "$ref": "Window" }
-              }
-            ]
+            "name": "queryOptions",
+            "$ref": "QueryOptions",
+            "optional": true
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "parameters": [
+            {
+              "name": "windows", "type": "array", "items": { "$ref": "Window" }
+            }
+          ]
+        }
       },
       {
         "name": "create",
@@ -263,19 +247,18 @@
               }
             },
             "optional": true
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "window", "$ref": "Window", "description": "Contains details about the created window.",
-                "optional": true
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "window", "$ref": "Window", "description": "Contains details about the created window.",
+              "optional": true
+            }
+          ]
+        }
       },
       {
         "name": "update",
@@ -300,27 +283,26 @@
               },
               "extData": {"type": "string", "optional": true, "description": "Extra data."}
             }
-          },
-          {
-            "type": "function",
-            "name": "callback",
-            "optional": true,
-            "parameters": [
-              {
-                "name": "window", "$ref": "Window"
-              }
-            ]
           }
-        ]
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": true,
+          "parameters": [
+            {
+              "name": "window", "$ref": "Window"
+            }
+          ]
+        }
       },
       {
         "name": "remove",
         "type": "function",
         "description": "Removes (closes) a window and all the tabs inside it.",
         "parameters": [
-          {"type": "integer", "name": "windowId", "minimum": 0},
-          {"type": "function", "name": "callback", "optional": true, "parameters": []}
-        ]
+          {"type": "integer", "name": "windowId", "minimum": 0}
+        ],
+        "returns_async": {"name": "callback", "optional": true, "parameters": []}
       }
     ],
     "events": [

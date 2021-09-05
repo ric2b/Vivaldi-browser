@@ -36,7 +36,6 @@
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
 #include "chrome/browser/ui/views/frame/top_controls_slide_controller.h"
 #include "chrome/browser/ui/views/frame/web_contents_close_handler.h"
-#include "chrome/browser/ui/views/in_product_help/reopen_tab_promo_controller.h"
 #include "chrome/browser/ui/views/intent_picker_bubble_view.h"
 #include "chrome/browser/ui/views/load_complete_listener.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
@@ -65,6 +64,7 @@ class FeaturePromoControllerViews;
 class FullscreenControlHost;
 class InfoBarContainerView;
 class LocationBarView;
+class SidePanel;
 class StatusBubbleViews;
 class TabSearchButton;
 class TabStrip;
@@ -76,11 +76,6 @@ class TopContainerView;
 class TopControlsSlideControllerTest;
 class WebContentsCloseHandler;
 class WebUITabStripContainerView;
-
-namespace extensions {
-class Command;
-class Extension;
-}
 
 #if defined(OS_CHROMEOS)
 namespace ui {
@@ -177,6 +172,8 @@ class BrowserView : public BrowserWindow,
 
   // Container for the web contents.
   views::View* contents_container() { return contents_container_; }
+
+  SidePanel* side_panel() { return side_panel_; }
 
   void set_contents_border_widget(views::Widget* contents_border_widget) {
     GetBrowserViewLayout()->set_contents_border_widget(contents_border_widget);
@@ -398,7 +395,7 @@ class BrowserView : public BrowserWindow,
   autofill::AutofillBubbleHandler* GetAutofillBubbleHandler() override;
   void ExecutePageActionIconForTesting(PageActionIconType type) override;
   LocationBar* GetLocationBar() const override;
-  void SetFocusToLocationBar(bool select_all) override;
+  void SetFocusToLocationBar(bool is_user_initiated) override;
   void UpdateReloadStopState(bool is_loading, bool force) override;
   void UpdateToolbar(content::WebContents* contents) override;
   void UpdateCustomTabBarVisibility(bool visible, bool animate) override;
@@ -471,9 +468,9 @@ class BrowserView : public BrowserWindow,
       AvatarBubbleMode mode,
       signin_metrics::AccessPoint access_point,
       bool is_source_keyboard) override;
-  void ShowHatsBubble(const std::string& site_id) override;
-  void ExecuteExtensionCommand(const extensions::Extension* extension,
-                               const extensions::Command& command) override;
+  void ShowHatsBubble(const std::string& site_id,
+                      base::OnceClosure success_callback,
+                      base::OnceClosure failure_callback) override;
   ExclusiveAccessContext* GetExclusiveAccessContext() override;
   std::string GetWorkspace() const override;
   bool IsVisibleOnAllWorkspaces() const override;
@@ -617,6 +614,8 @@ class BrowserView : public BrowserWindow,
 
   // Create and open the tab search bubble.
   void CreateTabSearchBubble() override;
+  // Closes the tab search bubble if open for the given browser instance.
+  void CloseTabSearchBubble() override;
 
   AccessibilityFocusHighlight* GetAccessibilityFocusHighlightForTesting() {
     return accessibility_focus_highlight_.get();
@@ -629,6 +628,7 @@ class BrowserView : public BrowserWindow,
   friend class TopControlsSlideControllerTest;
   FRIEND_TEST_ALL_PREFIXES(BrowserViewTest, BrowserView);
   FRIEND_TEST_ALL_PREFIXES(BrowserViewTest, AccessibleWindowTitle);
+  class AccessibilityModeObserver;
 
   // If the browser is in immersive full screen mode, it will reveal the
   // tabstrip for a short duration. This is useful for shortcuts that perform
@@ -815,6 +815,13 @@ class BrowserView : public BrowserWindow,
   // the webui based tabstrip, when applicable. see https://crbug.com/989131.
   WebUITabStripContainerView* webui_tab_strip_ = nullptr;
 
+  // Allows us to react to changes in accessibility mode.
+  // TODO(dfried): this is only used to disable WebUI tabstrip (see above) while
+  // that mode has accessibile mode issues (e.g. crbug.com/1136185,
+  // crbug.com/1136236). Having an observer object allows for the browser to
+  // change mode if it enters or leaves accessibility mode.
+  std::unique_ptr<AccessibilityModeObserver> accessibility_mode_observer_;
+
   // The Toolbar containing the navigation buttons, menus and the address bar.
   ToolbarView* toolbar_ = nullptr;
 
@@ -853,6 +860,9 @@ class BrowserView : public BrowserWindow,
   // The view managing the devtools and contents positions.
   // Handled by ContentsLayoutManager.
   views::View* contents_container_ = nullptr;
+
+  // The side panel.
+  SidePanel* side_panel_ = nullptr;
 
   // Provides access to the toolbar buttons this browser view uses. Buttons may
   // appear in a hosted app frame or in a tabbed UI toolbar.
@@ -938,8 +948,6 @@ class BrowserView : public BrowserWindow,
   // on a particular display, this closure will be called after fullscreen is
   // exited to restore the original pre-fullscreen bounds of the window.
   base::OnceClosure restore_pre_fullscreen_bounds_callback_;
-
-  ReopenTabPromoController reopen_tab_promo_controller_{this};
 
   ScopedObserver<banners::AppBannerManager, banners::AppBannerManager::Observer>
       app_banner_manager_observer_{this};

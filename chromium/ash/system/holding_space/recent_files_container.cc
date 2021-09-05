@@ -17,9 +17,9 @@
 #include "ash/style/ash_color_provider.h"
 #include "ash/system/holding_space/holding_space_item_chip_view.h"
 #include "ash/system/holding_space/holding_space_item_chips_container.h"
-#include "ash/system/holding_space/holding_space_item_screenshot_view.h"
+#include "ash/system/holding_space/holding_space_item_screen_capture_view.h"
 #include "ash/system/tray/tray_constants.h"
-#include "ash/system/tray/tray_popup_item_style.h"
+#include "ash/system/tray/tray_popup_utils.h"
 #include "base/bind.h"
 #include "base/containers/adapters.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -41,9 +41,24 @@ namespace {
 
 // Sets up the specified `label`.
 void SetupLabel(views::Label* label) {
-  TrayPopupItemStyle(TrayPopupItemStyle::FontStyle::SUB_HEADER)
-      .SetupLabel(label);
+  label->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kTextColorPrimary));
+  TrayPopupUtils::SetLabelFontList(label,
+                                   TrayPopupUtils::FontStyle::kSubHeader);
   label->SetHorizontalAlignment(gfx::HorizontalAlignment::ALIGN_LEFT);
+}
+
+// Returns if an item of the specified `type` belongs in the downloads section.
+bool BelongsToDownloadsSection(HoldingSpaceItem::Type type) {
+  return type == HoldingSpaceItem::Type::kDownload ||
+         type == HoldingSpaceItem::Type::kNearbyShare;
+}
+
+// Returns if items of the specified types belong to the same section.
+bool BelongToSameSection(HoldingSpaceItem::Type type,
+                         HoldingSpaceItem::Type other_type) {
+  return type == other_type || (BelongsToDownloadsSection(type) &&
+                                BelongsToDownloadsSection(other_type));
 }
 
 // DownloadsHeader--------------------------------------------------------------
@@ -64,15 +79,15 @@ class DownloadsHeader : public views::Button {
     SetupLabel(label);
 
     auto* chevron = AddChildView(std::make_unique<views::ImageView>());
-    chevron->EnableCanvasFlippingForRTLUI(true);
+    chevron->SetFlipCanvasOnPaintForRTLUI(true);
 
     const SkColor icon_color = AshColorProvider::Get()->GetContentLayerColor(
         AshColorProvider::ContentLayerType::kIconColorPrimary);
     chevron->SetImage(CreateVectorIcon(
         kChevronRightIcon, kHoldingSpaceDownloadsChevronIconSize, icon_color));
 
-    set_callback(base::BindRepeating(&DownloadsHeader::OnPressed,
-                                     base::Unretained(this)));
+    SetCallback(base::BindRepeating(&DownloadsHeader::OnPressed,
+                                    base::Unretained(this)));
   }
 
  private:
@@ -98,21 +113,21 @@ RecentFilesContainer::RecentFilesContainer(
       views::BoxLayout::Orientation::kVertical, kHoldingSpaceContainerPadding,
       kHoldingSpaceContainerChildSpacing));
 
-  screenshots_label_ = AddChildView(std::make_unique<views::Label>(
-      l10n_util::GetStringUTF16(IDS_ASH_HOLDING_SPACE_SCREENSHOTS_TITLE)));
-  screenshots_label_->SetPaintToLayer();
-  screenshots_label_->layer()->SetFillsBoundsOpaquely(false);
-  screenshots_label_->SetVisible(false);
-  SetupLabel(screenshots_label_);
+  screen_captures_label_ = AddChildView(std::make_unique<views::Label>(
+      l10n_util::GetStringUTF16(IDS_ASH_HOLDING_SPACE_SCREEN_CAPTURES_TITLE)));
+  screen_captures_label_->SetPaintToLayer();
+  screen_captures_label_->layer()->SetFillsBoundsOpaquely(false);
+  screen_captures_label_->SetVisible(false);
+  SetupLabel(screen_captures_label_);
 
-  screenshots_container_ = AddChildView(std::make_unique<views::View>());
-  screenshots_container_->SetVisible(false);
-  screenshots_container_
+  screen_captures_container_ = AddChildView(std::make_unique<views::View>());
+  screen_captures_container_->SetVisible(false);
+  screen_captures_container_
       ->SetLayoutManager(std::make_unique<views::FlexLayout>())
       ->SetOrientation(views::LayoutOrientation::kHorizontal)
       .SetDefault(views::kMarginsKey,
                   gfx::Insets(/*top=*/0, /*left=*/0, /*bottom=*/0,
-                              /*right=*/kHoldingSpaceScreenshotSpacing));
+                              /*right=*/kHoldingSpaceScreenCaptureSpacing));
 
   downloads_header_ = AddChildView(std::make_unique<DownloadsHeader>());
   downloads_header_->SetPaintToLayer();
@@ -122,9 +137,6 @@ RecentFilesContainer::RecentFilesContainer(
   downloads_container_ =
       AddChildView(std::make_unique<HoldingSpaceItemChipsContainer>());
   downloads_container_->SetVisible(false);
-
-  if (HoldingSpaceController::Get()->model())
-    OnHoldingSpaceModelAttached(HoldingSpaceController::Get()->model());
 }
 
 RecentFilesContainer::~RecentFilesContainer() = default;
@@ -143,55 +155,81 @@ void RecentFilesContainer::ChildVisibilityChanged(views::View* child) {
 
 void RecentFilesContainer::ViewHierarchyChanged(
     const views::ViewHierarchyChangedDetails& details) {
-  if (details.parent == screenshots_container_)
-    OnScreenshotsContainerViewHierarchyChanged(details);
+  if (details.parent == screen_captures_container_)
+    OnScreenCapturesContainerViewHierarchyChanged(details);
   else if (details.parent == downloads_container_)
     OnDownloadsContainerViewHierarchyChanged(details);
 }
 
-void RecentFilesContainer::AddHoldingSpaceItemView(
-    const HoldingSpaceItem* item) {
+void RecentFilesContainer::AddHoldingSpaceItemView(const HoldingSpaceItem* item,
+                                                   bool due_to_finalization) {
+  DCHECK(item->IsFinalized());
+
+  if (item->type() != HoldingSpaceItem::Type::kScreenshot &&
+      !BelongsToDownloadsSection(item->type())) {
+    return;
+  }
+
+  size_t index = 0;
+
+  if (due_to_finalization) {
+    // Find the position at which the view should be added.
+    for (const auto& candidate :
+         base::Reversed(HoldingSpaceController::Get()->model()->items())) {
+      if (candidate->id() == item->id())
+        break;
+      if (candidate->IsFinalized() &&
+          BelongToSameSection(candidate->type(), item->type())) {
+        ++index;
+      }
+    }
+  }
+
   if (item->type() == HoldingSpaceItem::Type::kScreenshot)
-    AddHoldingSpaceScreenshotView(item);
-  else if (item->type() == HoldingSpaceItem::Type::kDownload)
-    AddHoldingSpaceDownloadView(item);
+    AddHoldingSpaceScreenCaptureView(item, index);
+  else if (BelongsToDownloadsSection(item->type()))
+    AddHoldingSpaceDownloadView(item, index);
 }
 
 void RecentFilesContainer::RemoveAllHoldingSpaceItemViews() {
   views_by_item_id_.clear();
-  screenshots_container_->RemoveAllChildViews(true);
+  screen_captures_container_->RemoveAllChildViews(true);
   downloads_container_->RemoveAllChildViews(true);
 }
 
 void RecentFilesContainer::RemoveHoldingSpaceItemView(
     const HoldingSpaceItem* item) {
   if (item->type() == HoldingSpaceItem::Type::kScreenshot)
-    RemoveHoldingSpaceScreenshotView(item);
-  else if (item->type() == HoldingSpaceItem::Type::kDownload)
+    RemoveHoldingSpaceScreenCaptureView(item);
+  else if (BelongsToDownloadsSection(item->type()))
     RemoveHoldingSpaceDownloadView(item);
 }
 
-void RecentFilesContainer::AddHoldingSpaceScreenshotView(
-    const HoldingSpaceItem* item) {
+void RecentFilesContainer::AddHoldingSpaceScreenCaptureView(
+    const HoldingSpaceItem* item,
+    size_t index) {
   DCHECK_EQ(item->type(), HoldingSpaceItem::Type::kScreenshot);
   DCHECK(!base::Contains(views_by_item_id_, item->id()));
 
-  // Remove the last screenshot view if we are already at max capacity.
-  if (screenshots_container_->children().size() == kMaxScreenshots) {
+  if (index >= kMaxScreenCaptures)
+    return;
+
+  // Remove the last screen capture view if we are already at max capacity.
+  if (screen_captures_container_->children().size() == kMaxScreenCaptures) {
     std::unique_ptr<views::View> view =
-        screenshots_container_->RemoveChildViewT(
-            screenshots_container_->children().back());
+        screen_captures_container_->RemoveChildViewT(
+            screen_captures_container_->children().back());
     views_by_item_id_.erase(
         HoldingSpaceItemView::Cast(view.get())->item()->id());
   }
 
-  // Add the screenshot view to the front in order to sort by recency.
-  views_by_item_id_[item->id()] = screenshots_container_->AddChildViewAt(
-      std::make_unique<HoldingSpaceItemScreenshotView>(delegate_, item),
-      /*index=*/0);
+  // Add the screen capture view to the front in order to sort by recency.
+  views_by_item_id_[item->id()] = screen_captures_container_->AddChildViewAt(
+      std::make_unique<HoldingSpaceItemScreenCaptureView>(delegate_, item),
+      index);
 }
 
-void RecentFilesContainer::RemoveHoldingSpaceScreenshotView(
+void RecentFilesContainer::RemoveHoldingSpaceScreenCaptureView(
     const HoldingSpaceItem* item) {
   DCHECK_EQ(item->type(), HoldingSpaceItem::Type::kScreenshot);
 
@@ -199,32 +237,38 @@ void RecentFilesContainer::RemoveHoldingSpaceScreenshotView(
   if (it == views_by_item_id_.end())
     return;
 
-  // Remove the screenshot view associated with `item`.
-  screenshots_container_->RemoveChildViewT(it->second);
+  // Remove the screen capture view associated with `item`.
+  screen_captures_container_->RemoveChildViewT(it->second);
   views_by_item_id_.erase(it);
 
   // Verify that we are *not* at max capacity.
-  DCHECK_LT(screenshots_container_->children().size(), kMaxScreenshots);
+  DCHECK_LT(screen_captures_container_->children().size(), kMaxScreenCaptures);
 
-  // Since we are under max capacity, we can add at most one screenshot view to
-  // replace the view we just removed. Note that we add the replacement to the
-  // back in order to maintain sort by recency.
+  // Since we are under max capacity, we can add at most one screen capture view
+  // to replace the view we just removed. Note that we add the replacement to
+  // the back in order to maintain sort by recency.
   for (const auto& candidate :
        base::Reversed(HoldingSpaceController::Get()->model()->items())) {
-    if (candidate->type() == HoldingSpaceItem::Type::kScreenshot &&
+    if (candidate->IsFinalized() &&
+        candidate->type() == HoldingSpaceItem::Type::kScreenshot &&
         !base::Contains(views_by_item_id_, candidate->id())) {
-      views_by_item_id_[candidate->id()] = screenshots_container_->AddChildView(
-          std::make_unique<HoldingSpaceItemScreenshotView>(delegate_,
-                                                           candidate.get()));
+      views_by_item_id_[candidate->id()] =
+          screen_captures_container_->AddChildView(
+              std::make_unique<HoldingSpaceItemScreenCaptureView>(
+                  delegate_, candidate.get()));
       return;
     }
   }
 }
 
 void RecentFilesContainer::AddHoldingSpaceDownloadView(
-    const HoldingSpaceItem* item) {
-  DCHECK_EQ(item->type(), HoldingSpaceItem::Type::kDownload);
+    const HoldingSpaceItem* item,
+    size_t index) {
+  DCHECK(BelongsToDownloadsSection(item->type()));
   DCHECK(!base::Contains(views_by_item_id_, item->id()));
+
+  if (index >= kMaxDownloads)
+    return;
 
   // Remove the last download view if we are already at max capacity.
   if (downloads_container_->children().size() == kMaxDownloads) {
@@ -236,12 +280,12 @@ void RecentFilesContainer::AddHoldingSpaceDownloadView(
 
   // Add the download view to the front in order to sort by recency.
   views_by_item_id_[item->id()] = downloads_container_->AddChildViewAt(
-      std::make_unique<HoldingSpaceItemChipView>(delegate_, item), /*index=*/0);
+      std::make_unique<HoldingSpaceItemChipView>(delegate_, item), index);
 }
 
 void RecentFilesContainer::RemoveHoldingSpaceDownloadView(
     const HoldingSpaceItem* item) {
-  DCHECK_EQ(item->type(), HoldingSpaceItem::Type::kDownload);
+  DCHECK(BelongsToDownloadsSection(item->type()));
 
   auto it = views_by_item_id_.find(item->id());
   if (it == views_by_item_id_.end())
@@ -259,7 +303,7 @@ void RecentFilesContainer::RemoveHoldingSpaceDownloadView(
   // back in order to maintain sort by recency.
   for (const auto& candidate :
        base::Reversed(HoldingSpaceController::Get()->model()->items())) {
-    if (candidate->type() == HoldingSpaceItem::Type::kDownload &&
+    if (candidate->IsFinalized() && BelongsToDownloadsSection(item->type()) &&
         !base::Contains(views_by_item_id_, candidate->id())) {
       views_by_item_id_[candidate->id()] = downloads_container_->AddChildView(
           std::make_unique<HoldingSpaceItemChipView>(delegate_,
@@ -269,12 +313,12 @@ void RecentFilesContainer::RemoveHoldingSpaceDownloadView(
   }
 }
 
-void RecentFilesContainer::OnScreenshotsContainerViewHierarchyChanged(
+void RecentFilesContainer::OnScreenCapturesContainerViewHierarchyChanged(
     const views::ViewHierarchyChangedDetails& details) {
-  // Update screenshots visibility when becoming empty or non-empty.
-  if (screenshots_container_->children().size() == 1u) {
-    screenshots_label_->SetVisible(details.is_add);
-    screenshots_container_->SetVisible(details.is_add);
+  // Update screen capture visibility when becoming empty or non-empty.
+  if (screen_captures_container_->children().size() == 1u) {
+    screen_captures_label_->SetVisible(details.is_add);
+    screen_captures_container_->SetVisible(details.is_add);
   }
 }
 

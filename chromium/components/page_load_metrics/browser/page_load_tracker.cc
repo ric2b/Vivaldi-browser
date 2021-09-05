@@ -141,6 +141,18 @@ void DispatchEventsAfterBackForwardCacheRestore(
                                                                i);
     }
 
+    auto request_animation_frames =
+        new_timings[i]
+            ->request_animation_frames_after_back_forward_cache_restore;
+    if (request_animation_frames.size() == 3 &&
+        (i >= last_timings.size() ||
+         last_timings[i]
+             ->request_animation_frames_after_back_forward_cache_restore
+             .empty())) {
+      observer->OnRequestAnimationFramesAfterBackForwardCacheRestoreInPage(
+          *new_timings[i]);
+    }
+
     auto first_input_delay =
         new_timings[i]->first_input_delay_after_back_forward_cache_restore;
     if (first_input_delay.has_value() &&
@@ -899,8 +911,16 @@ const PageRenderData& PageLoadTracker::GetPageRenderData() const {
   return metrics_update_dispatcher_.page_render_data();
 }
 
+const NormalizedCLSData& PageLoadTracker::GetNormalizedCLSData() const {
+  return metrics_update_dispatcher_.normalized_cls_data();
+}
+
 const mojom::InputTiming& PageLoadTracker::GetPageInputTiming() const {
   return metrics_update_dispatcher_.page_input_timing();
+}
+const blink::MobileFriendliness& PageLoadTracker::GetMobileFriendliness()
+    const {
+  return metrics_update_dispatcher_.mobile_friendliness();
 }
 
 const PageRenderData& PageLoadTracker::GetMainFrameRenderData() const {

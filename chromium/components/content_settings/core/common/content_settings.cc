@@ -62,7 +62,6 @@ constexpr HistogramValue kHistogramValue[] = {
     {ContentSettingsType::CLIENT_HINTS, 37},
     {ContentSettingsType::SENSORS, 38},
     {ContentSettingsType::ACCESSIBILITY_EVENTS, 39},
-    {ContentSettingsType::PLUGINS_DATA, 42},
     {ContentSettingsType::PAYMENT_HANDLER, 43},
     {ContentSettingsType::USB_GUARD, 44},
     {ContentSettingsType::BACKGROUND_FETCH, 45},
@@ -93,6 +92,7 @@ constexpr HistogramValue kHistogramValue[] = {
     {ContentSettingsType::INSECURE_PRIVATE_NETWORK, 70},
     {ContentSettingsType::FONT_ACCESS, 71},
     {ContentSettingsType::PERMISSION_AUTOREVOCATION_DATA, 72},
+    {ContentSettingsType::FILE_SYSTEM_LAST_PICKED_DIRECTORY, 73},
 };
 
 }  // namespace

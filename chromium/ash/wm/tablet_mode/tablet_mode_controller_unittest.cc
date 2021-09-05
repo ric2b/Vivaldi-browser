@@ -43,7 +43,6 @@
 #include "base/run_loop.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/metrics/user_action_tester.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_tick_clock.h"
 #include "chromeos/constants/chromeos_switches.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
@@ -65,6 +64,7 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/vector3d_f.h"
 #include "ui/message_center/message_center.h"
+#include "ui/wm/core/cursor_manager.h"
 #include "ui/wm/core/window_util.h"
 
 namespace ash {
@@ -1069,6 +1069,19 @@ TEST_P(TabletModeControllerTest, InternalKeyboardMouseInDockedModeTest) {
   EXPECT_TRUE(AreEventsBlocked());
 }
 
+// Test that the mouse cursor is hidden when entering tablet mode, and shown
+// when exiting tablet mode.
+TEST_P(TabletModeControllerTest, ShowAndHideMouseCursorTest) {
+  wm::CursorManager* cursor_manager = Shell::Get()->cursor_manager();
+  EXPECT_TRUE(cursor_manager->IsCursorVisible());
+
+  tablet_mode_controller()->SetEnabledForTest(true);
+  EXPECT_FALSE(cursor_manager->IsCursorVisible());
+
+  tablet_mode_controller()->SetEnabledForTest(false);
+  EXPECT_TRUE(cursor_manager->IsCursorVisible());
+}
+
 class TabletModeControllerForceTabletModeTest
     : public TabletModeControllerTest {
  public:
@@ -1551,48 +1564,21 @@ TEST_P(TabletModeControllerTest, DoNotObserverInputDeviceChangeDuringSuspend) {
   EXPECT_FALSE(IsTabletModeStarted());
 }
 
+// Tests that we get no animation smoothness histograms when entering or
+// exiting tablet mode with no windows.
 TEST_P(TabletModeControllerTest, TabletModeTransitionHistogramsNotLogged) {
   ui::ScopedAnimationDurationScaleMode test_duration_mode(
       ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
   base::HistogramTester histogram_tester;
 
-  // Tests that we get no animation smoothness histograms when entering or
-  // exiting tablet mode with no windows.
-  {
-    SCOPED_TRACE("No window");
-    histogram_tester.ExpectTotalCount(kEnterHistogram, 0);
-    histogram_tester.ExpectTotalCount(kExitHistogram, 0);
-    tablet_mode_controller()->SetEnabledForTest(true);
-    tablet_mode_controller()->SetEnabledForTest(false);
-    WaitForSmoothnessMetrics();
-    histogram_tester.ExpectTotalCount(kEnterHistogram, 0);
-    histogram_tester.ExpectTotalCount(kExitHistogram, 0);
-  }
-
-  // The workspace size changes when going between clamshell and tablet mode.
-  // This means there will be an animation during the transition.
-  if (chromeos::switches::ShouldShowShelfHotseat())
-    return;
-
-  // Test that we get no animation smoothness histograms when entering or
-  // exiting tablet mode with a maximized window as no animation will take
-  // place.
-  auto window = CreateTestWindow(gfx::Rect(200, 200));
-  {
-    SCOPED_TRACE("Window is maximized");
-    WindowState::Get(window.get())->Maximize();
-    window->layer()->GetAnimator()->StopAnimating();
-    tablet_mode_controller()->SetEnabledForTest(true);
-    EXPECT_FALSE(window->layer()->GetAnimator()->is_animating());
-    WaitForSmoothnessMetrics();
-    histogram_tester.ExpectTotalCount(kEnterHistogram, 0);
-    histogram_tester.ExpectTotalCount(kExitHistogram, 0);
-    tablet_mode_controller()->SetEnabledForTest(false);
-    EXPECT_FALSE(window->layer()->GetAnimator()->is_animating());
-    WaitForSmoothnessMetrics();
-    histogram_tester.ExpectTotalCount(kEnterHistogram, 0);
-    histogram_tester.ExpectTotalCount(kExitHistogram, 0);
-  }
+  SCOPED_TRACE("No window");
+  histogram_tester.ExpectTotalCount(kEnterHistogram, 0);
+  histogram_tester.ExpectTotalCount(kExitHistogram, 0);
+  tablet_mode_controller()->SetEnabledForTest(true);
+  tablet_mode_controller()->SetEnabledForTest(false);
+  WaitForSmoothnessMetrics();
+  histogram_tester.ExpectTotalCount(kEnterHistogram, 0);
+  histogram_tester.ExpectTotalCount(kExitHistogram, 0);
 }
 
 TEST_P(TabletModeControllerTest, TabletModeTransitionHistogramsLogged) {
@@ -1750,13 +1736,6 @@ TEST_P(TabletModeControllerScreenshotTest, NoAnimationNoScreenshot) {
 
   waiter.Wait();
   EXPECT_FALSE(IsScreenshotShown());
-  EXPECT_TRUE(IsShelfOpaque());
-
-  // The window will animate if the hotseat is enabled because the workspace
-  // area will change. As long as a screenshot is not shown, this is ok.
-  if (chromeos::switches::ShouldShowShelfHotseat())
-    return;
-  EXPECT_FALSE(window->layer()->GetAnimator()->is_animating());
   EXPECT_TRUE(IsShelfOpaque());
 }
 

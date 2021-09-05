@@ -7,14 +7,13 @@
 #include <string>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "base/time/clock.h"
 #include "build/build_config.h"
@@ -405,10 +404,10 @@ IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, DisplaysPrompt) {
   ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
   ASSERT_TRUE(WatchPositionAndGrantPermission());
 
-  EXPECT_EQ(CONTENT_SETTING_ALLOW,
-            GetHostContentSettingsMap()->GetContentSetting(
-                current_url(), current_url(), ContentSettingsType::GEOLOCATION,
-                std::string()));
+  EXPECT_EQ(
+      CONTENT_SETTING_ALLOW,
+      GetHostContentSettingsMap()->GetContentSetting(
+          current_url(), current_url(), ContentSettingsType::GEOLOCATION));
 
   // Ensure a second request doesn't create a prompt in this tab.
   WatchPositionAndObservePermissionRequest(false);
@@ -425,10 +424,10 @@ IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, ErrorOnPermissionDenied) {
   EXPECT_TRUE(WatchPositionAndDenyPermission());
   ExpectValueFromScript(GetErrorCodePermissionDenied(), "geoGetLastError()");
 
-  EXPECT_EQ(CONTENT_SETTING_BLOCK,
-            GetHostContentSettingsMap()->GetContentSetting(
-                current_url(), current_url(), ContentSettingsType::GEOLOCATION,
-                std::string()));
+  EXPECT_EQ(
+      CONTENT_SETTING_BLOCK,
+      GetHostContentSettingsMap()->GetContentSetting(
+          current_url(), current_url(), ContentSettingsType::GEOLOCATION));
 
   // Ensure a second request doesn't create a prompt in this tab.
   WatchPositionAndObservePermissionRequest(false);
@@ -448,7 +447,7 @@ IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, NoPromptForDeniedOrigin) {
   ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
   GetHostContentSettingsMap()->SetContentSettingDefaultScope(
       current_url(), current_url(), ContentSettingsType::GEOLOCATION,
-      std::string(), CONTENT_SETTING_BLOCK);
+      CONTENT_SETTING_BLOCK);
 
   // Check that the request wasn't shown but we get an error for this origin.
   WatchPositionAndObservePermissionRequest(false);
@@ -464,7 +463,7 @@ IN_PROC_BROWSER_TEST_F(GeolocationBrowserTest, NoPromptForAllowedOrigin) {
   ASSERT_NO_FATAL_FAILURE(Initialize(INITIALIZATION_DEFAULT));
   GetHostContentSettingsMap()->SetContentSettingDefaultScope(
       current_url(), current_url(), ContentSettingsType::GEOLOCATION,
-      std::string(), CONTENT_SETTING_ALLOW);
+      CONTENT_SETTING_ALLOW);
   // The request is not shown, there is no error, and the position gets to the
   // script.
   WatchPositionAndObservePermissionRequest(false);

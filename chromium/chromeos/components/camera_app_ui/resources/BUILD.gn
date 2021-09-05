@@ -27,6 +27,7 @@ group("chrome_camera_app") {
     ":chrome_camera_app_js_views",
     ":chrome_camera_app_js_views_camera",
     ":chrome_camera_app_js_views_camera_mode",
+    ":chrome_camera_app_js_window_controller",
     ":chrome_camera_app_mojo_generated",
     ":chrome_camera_app_sounds",
     ":chrome_camera_app_views",
@@ -68,6 +69,8 @@ copy("chrome_camera_app_images") {
     "images/camera_intent_play_video.svg",
     "images/camera_intent_result_cancel.svg",
     "images/camera_intent_result_confirm.svg",
+    "images/camera_intro_banner_close.svg",
+    "images/camera_intro_banner_icon.svg",
     "images/camera_mode_photo.svg",
     "images/camera_mode_portrait.svg",
     "images/camera_mode_square.svg",
@@ -94,11 +97,13 @@ copy("chrome_camera_app_images") {
 
 copy("chrome_camera_app_js") {
   sources = [
+    "js/app_window.js",
     "js/async_job_queue.js",
     "js/background.js",
     "js/background_ops.js",
     "js/chrome_util.js",
     "js/dom.js",
+    "js/dynamic_import.js",
     "js/error.js",
     "js/gallerybutton.js",
     "js/init.js",
@@ -109,9 +114,14 @@ copy("chrome_camera_app_js") {
     "js/perf.js",
     "js/sound.js",
     "js/state.js",
+    "js/test_bridge.js",
     "js/toast.js",
     "js/tooltip.js",
     "js/type.js",
+    "js/untrusted_ga_helper.js",
+    "js/untrusted_helper_interfaces.js",
+    "js/untrusted_script_loader.js",
+    "js/untrusted_video_processor_helper.js",
     "js/util.js",
     "js/waitable_event.js",
   ]
@@ -158,9 +168,10 @@ copy("chrome_camera_app_js_models") {
     "js/models/file_system.js",
     "js/models/file_system_entry.js",
     "js/models/file_util.js",
+    "js/models/lazy_directory_entry.js",
     "js/models/mp4_video_processor.js",
-    "js/models/nop_video_processor.js",
     "js/models/result_saver.js",
+    "js/models/video_processor_interface.js",
     "js/models/video_saver.js",
   ]
 
@@ -216,6 +227,16 @@ copy("chrome_camera_app_js_views_camera_mode") {
   outputs = [ "$out_camera_app_dir/js/views/camera/mode/{{source_file_part}}" ]
 }
 
+copy("chrome_camera_app_js_window_controller") {
+  sources = [
+    "js/window_controller/mojo_window_controller.js",
+    "js/window_controller/window_controller.js",
+    "js/window_controller/window_controller_interface.js",
+  ]
+
+  outputs = [ "$out_camera_app_dir/js/window_controller/{{source_file_part}}" ]
+}
+
 copy("chrome_camera_app_sounds") {
   sources = [
     "sounds/record_end.ogg",
@@ -234,6 +255,7 @@ copy("chrome_camera_app_views") {
   sources = [
     "views/background.html",
     "views/main.html",
+    "views/untrusted_script_loader.html",
   ]
 
   outputs = [ "$out_camera_app_dir/views/{{source_file_part}}" ]

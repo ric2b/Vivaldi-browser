@@ -26,7 +26,7 @@
 #include "util/build_config.h"
 
 #if defined(OS_WIN)
-#include "base/win/windows_types.h"
+#include <windows.h>
 #elif defined(OS_POSIX) || defined(OS_FUCHSIA)
 #include "base/logging.h"
 #include "base/posix/eintr_wrapper.h"
@@ -325,7 +325,7 @@ bool VerifyPathControlledByAdmin(const base::FilePath& path);
 // the directory |path|, in the number of FilePath::CharType, or -1 on failure.
 int GetMaximumPathComponentLength(const base::FilePath& path);
 
-#if defined(OS_LINUX) || defined(OS_AIX)
+#if defined(OS_LINUX) || defined(OS_AIX) || defined(OS_BSD)
 // Broad categories of file systems as returned by statfs() on Linux.
 enum FileSystemType {
   FILE_SYSTEM_UNKNOWN,   // statfs failed.

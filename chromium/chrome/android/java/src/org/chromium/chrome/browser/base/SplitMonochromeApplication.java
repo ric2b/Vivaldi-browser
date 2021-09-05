@@ -17,7 +17,7 @@ import org.chromium.chrome.browser.version.ChromeVersionInfo;
  * SplitChromeApplication} for more info.
  */
 public class SplitMonochromeApplication extends SplitChromeApplication {
-    private static class NonBrowserMonochromeApplication extends Impl {
+    private static class NonBrowserMonochromeApplication extends MainDexApplicationImpl {
         @Override
         public void attachBaseContext(Context context) {
             super.attachBaseContext(context);
@@ -41,11 +41,12 @@ public class SplitMonochromeApplication extends SplitChromeApplication {
     }
 
     public SplitMonochromeApplication() {
-        super("org.chromium.chrome.browser.MonochromeApplication$MonochromeApplicationImpl");
+        super(SplitCompatUtils.getIdentifierName(
+                "org.chromium.chrome.browser.MonochromeApplication$MonochromeApplicationImpl"));
     }
 
     @Override
-    protected Impl createNonBrowserApplication() {
+    protected MainDexApplicationImpl createNonBrowserApplication() {
         return new NonBrowserMonochromeApplication();
     }
 

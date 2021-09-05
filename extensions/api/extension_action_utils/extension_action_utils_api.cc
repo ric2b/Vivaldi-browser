@@ -349,31 +349,24 @@ void ExtensionActionUtil::OnExtensionActionUpdated(
     ExtensionAction* extension_action,
     content::WebContents* web_contents,
     content::BrowserContext* browser_context) {
-
   // TODO(igor@vivaldi.com): web_contents is null when
   // extension_action->action_type() is ActionInfo::TYPE_BROWSER or
   // ActionInfo::TYPE_SYSTEM_INDICATOR when tab_id should be
   // ExtensionAction::kDefaultTabId, see ExtensionActionFunction::Run in
-  // Chromium. Yet we use tabId for the last active tab in this case. Is it
+  // Chromium. Yet we always use tabId for the last active window. Is it
   // right? See VB-52519.
 
+  Browser* browser = web_contents
+                         ? chrome::FindBrowserWithWebContents(web_contents)
+                         : chrome::FindBrowserWithID(last_active_tab_window_);
+  if (!browser)
+    return;
+
   // We only update the browseraction items for the active tab.
-  int tab_id = ExtensionAction::kDefaultTabId;
-
-  if (!web_contents) {
-    web_contents = current_webcontents_;
-  }
-
-  int32_t window_id = 0;
-  Browser* browser =
-      web_contents ? chrome::FindBrowserWithWebContents(web_contents) : nullptr;
-  if (browser) {
-    TabStripModel* tab_strip = browser->tab_strip_model();
-    tab_id =
-        sessions::SessionTabHelper::IdForTab(tab_strip->GetActiveWebContents())
-            .id();
-    window_id = browser->session_id().id();
-  }
+  int tab_id = sessions::SessionTabHelper::IdForTab(
+                   browser->tab_strip_model()->GetActiveWebContents())
+                   .id();
+  SessionID::id_type window_id = browser->session_id().id();
 
   vivaldi::extension_action_utils::ExtensionInfo info;
 
@@ -533,14 +526,13 @@ void ExtensionActionUtil::OnExtensionCommandRemoved(
       profile_);
 }
 
-void ExtensionActionUtil::OnTabStripModelChanged(
-    TabStripModel* tab_strip_model,
-    const TabStripModelChange& change,
-    const TabStripSelectionChange& selection) {
-  if (!selection.active_tab_changed())
-    return;
+void ExtensionActionUtil::NotifyTabSelectionChange(
+  content::WebContents* selected_contents) {
 
-  current_webcontents_ = selection.new_contents;
+  Browser* browser = chrome::FindBrowserWithWebContents(selected_contents);
+  if (!browser)
+    return;
+  last_active_tab_window_ = browser->session_id();
 
   // loop through the extensions and update the actions based on the tabid
   const extensions::ExtensionSet& extensions =
@@ -555,7 +547,7 @@ void ExtensionActionUtil::OnTabStripModelChanged(
 
     ExtensionAction* action = action_manager->GetExtensionAction(*extension);
     if (action) {
-      OnExtensionActionUpdated(action, selection.new_contents, profile_);
+      OnExtensionActionUpdated(action, selected_contents, profile_);
     }
   }
 }

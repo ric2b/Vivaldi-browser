@@ -56,20 +56,10 @@ class WebWidgetTestProxy : public RenderWidget {
 
   // RenderWidget overrides.
   void WillBeginMainFrame() override;
-  void RequestPresentation(PresentationTimeCallback callback) override;
 
   // WebWidgetClient implementation.
   void ScheduleAnimation() override;
   void ScheduleAnimationForWebTests() override;
-  bool RequestPointerLock(blink::WebLocalFrame* requester_frame,
-                          blink::WebWidgetClient::PointerLockCallback callback,
-                          bool request_unajusted_movement) override;
-  bool RequestPointerLockChange(
-      blink::WebLocalFrame* requester_frame,
-      blink::WebWidgetClient::PointerLockCallback callback,
-      bool request_unadjusted_movement) override;
-  void RequestPointerUnlock() override;
-  bool IsPointerLocked() override;
   bool InterceptStartDragging(const blink::WebDragData& data,
                               blink::DragOperationsMask mask,
                               const SkBitmap& drag_image,
@@ -88,6 +78,11 @@ class WebWidgetTestProxy : public RenderWidget {
   EventSender* event_sender() { return &event_sender_; }
   void Reset();
   void Install(blink::WebLocalFrame* frame);
+
+  // Forces a redraw and invokes the callback once the frame's been displayed
+  // to the user in the display compositor.
+  void UpdateAllLifecyclePhasesAndComposite(
+      base::OnceClosure completion_callback);
 
   // Called to composite when the test has ended, in order to ensure the test
   // produces up-to-date pixel output. This is a separate path as most

@@ -7,7 +7,7 @@
 #include <utility>
 #include "third_party/blink/public/mojom/loader/referrer.mojom-blink.h"
 #include "third_party/blink/public/mojom/web_feature/web_feature.mojom-blink.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_event_listener.h"
+#include "third_party/blink/renderer/bindings/core/v8/js_event_handler_for_content_attribute.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/post_message_helper.h"
@@ -474,11 +474,9 @@ void HTMLPortalElement::RemovedFrom(ContainerNode& node) {
 }
 
 void HTMLPortalElement::DefaultEventHandler(Event& event) {
-  // Support the new behavior whereby clicking (or equivalent operations via
-  // keyboard and other input modalities) a portal element causes it to activate
-  // unless prevented.
-  if (RuntimeEnabledFeatures::PortalsDefaultActivationEnabled() &&
-      event.type() == event_type_names::kDOMActivate) {
+  // Clicking (or equivalent operations via keyboard and other input modalities)
+  // a portal element causes it to activate unless prevented.
+  if (event.type() == event_type_names::kDOMActivate) {
     ActivateDefault();
     event.SetDefaultHandled();
   }
@@ -523,7 +521,8 @@ void HTMLPortalElement::ParseAttribute(
     if (params.name == attribute.name) {
       SetAttributeEventListener(
           attribute.event_name,
-          CreateAttributeEventListener(this, attribute.name, params.new_value));
+          JSEventHandlerForContentAttribute::Create(
+              GetExecutionContext(), attribute.name, params.new_value));
       return;
     }
   }

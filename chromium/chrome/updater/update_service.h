@@ -5,12 +5,13 @@
 #ifndef CHROME_UPDATER_UPDATE_SERVICE_H_
 #define CHROME_UPDATER_UPDATE_SERVICE_H_
 
+#include <ostream>
 #include <string>
 
 #include "base/callback_forward.h"
 #include "base/memory/ref_counted.h"
 #include "base/version.h"
-#include "chrome/updater/util.h"
+#include "chrome/updater/enum_traits.h"
 
 namespace updater {
 
@@ -54,6 +55,15 @@ class UpdateService : public base::RefCountedThreadSafe<UpdateService> {
 
     // A function argument was invalid.
     kInvalidArgument = 7,
+
+    // This server is not the active server.
+    kInactive = 8,
+
+    // Change the EnumTraits class in this file when adding new values.
+    // IPC connection to the remote process failed for some reason.
+    kIPCConnectionFailed = 9,
+
+    // Change the traits class in this file when adding new values.
   };
 
   // Run time errors are organized in specific categories to indicate the
@@ -158,6 +168,12 @@ class UpdateService : public base::RefCountedThreadSafe<UpdateService> {
   using StateChangeCallback = base::RepeatingCallback<void(UpdateState)>;
   using Callback = base::OnceCallback<void(Result)>;
 
+  // Returns the version of the active updater. In the current implementation,
+  // this value corresponds to UPDATER_VERSION. The version object is invalid
+  // ]if an error occurs.
+  virtual void GetVersion(
+      base::OnceCallback<void(const base::Version&)>) const = 0;
+
   // Registers given request to the updater.
   virtual void RegisterApp(
       const RegistrationRequest& request,
@@ -203,6 +219,13 @@ class UpdateService : public base::RefCountedThreadSafe<UpdateService> {
 
 // These specializations must be defined in the |updater| namespace.
 template <>
+struct EnumTraits<UpdateService::Result> {
+  using Result = UpdateService::Result;
+  static constexpr Result first_elem = Result::kSuccess;
+  static constexpr Result last_elem = Result::kInactive;
+};
+
+template <>
 struct EnumTraits<UpdateService::UpdateState::State> {
   using State = UpdateService::UpdateState::State;
   static constexpr State first_elem = State::kUnknown;
@@ -215,6 +238,14 @@ struct EnumTraits<UpdateService::ErrorCategory> {
   static constexpr ErrorCategory first_elem = ErrorCategory::kNone;
   static constexpr ErrorCategory last_elem = ErrorCategory::kUpdateCheck;
 };
+
+inline std::ostream& operator<<(std::ostream& os,
+                                const UpdateService::Result& result) {
+  return os << static_cast<int>(result);
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const UpdateService::UpdateState& update_state);
 
 // A factory method to create an UpdateService class instance.
 scoped_refptr<UpdateService> CreateUpdateService();

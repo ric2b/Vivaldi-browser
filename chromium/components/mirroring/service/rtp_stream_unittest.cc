@@ -4,7 +4,7 @@
 
 #include "components/mirroring/service/rtp_stream.h"
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/run_loop.h"
 #include "base/test/mock_callback.h"
 #include "base/test/simple_test_tick_clock.h"
@@ -92,7 +92,7 @@ TEST_F(RtpStreamTest, VideoStreaming) {
   auto video_sender = std::make_unique<media::cast::VideoSender>(
       cast_environment_, media::cast::GetDefaultVideoSenderConfig(),
       base::DoNothing(), base::DoNothing(), base::DoNothing(), &transport_,
-      base::DoNothing());
+      base::DoNothing(), base::DoNothing());
   VideoRtpStream video_stream(std::move(video_sender), client_.GetWeakPtr());
   {
     base::RunLoop run_loop;

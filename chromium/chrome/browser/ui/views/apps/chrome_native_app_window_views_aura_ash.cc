@@ -10,13 +10,11 @@
 #include "ash/frame/non_client_frame_view_ash.h"
 #include "ash/public/cpp/app_types.h"
 #include "ash/public/cpp/ash_switches.h"
-#include "ash/public/cpp/immersive/immersive_fullscreen_controller.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/public/cpp/tablet_mode.h"
 #include "ash/public/cpp/window_backdrop.h"
 #include "ash/public/cpp/window_properties.h"
-#include "ash/public/cpp/window_state_type.h"
 #include "base/bind.h"
 #include "base/logging.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -31,7 +29,10 @@
 #include "chrome/browser/ui/views/exclusive_access_bubble_views.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/extensions/extension_constants.h"
-#include "chromeos/ui/chromeos_ui_constants.h"
+#include "chromeos/ui/base/chromeos_ui_constants.h"
+#include "chromeos/ui/base/window_properties.h"
+#include "chromeos/ui/base/window_state_type.h"
+#include "chromeos/ui/frame/immersive/immersive_fullscreen_controller.h"
 #include "components/session_manager/core/session_manager.h"
 #include "extensions/browser/app_window/app_delegate.h"
 #include "extensions/common/constants.h"
@@ -89,13 +90,9 @@ void ChromeNativeAppWindowViewsAuraAsh::InitializeWindow(
   aura::Window* window = GetNativeWindow();
   window->SetProperty(aura::client::kAppType,
                       static_cast<int>(ash::AppType::CHROME_APP));
-  window->SetProperty(
-      ash::kImmersiveWindowType,
-      static_cast<int>(
-          ash::ImmersiveFullscreenController::WINDOW_TYPE_PACKAGED_APP));
   // Fullscreen doesn't always imply immersive mode (see
   // ShouldEnableImmersive()).
-  window->SetProperty(ash::kImmersiveImpliedByFullscreen, false);
+  window->SetProperty(chromeos::kImmersiveImpliedByFullscreen, false);
   // TODO(https://crbug.com/997480): Determine if all non-resizable windows
   // should have this behavior, or just the feedback app.
   if (app_window->extension_id() == extension_misc::kFeedbackExtensionId) {
@@ -205,7 +202,7 @@ ChromeNativeAppWindowViewsAuraAsh::GetRestoredState() const {
   if (GetNativeWindow()->GetProperty(ash::kRestoreBoundsOverrideKey)) {
     // If an override is given, use that restore state, unless the window is in
     // immersive fullscreen.
-    restore_state = ash::ToWindowShowState(GetNativeWindow()->GetProperty(
+    restore_state = chromeos::ToWindowShowState(GetNativeWindow()->GetProperty(
         ash::kRestoreWindowStateTypeOverrideKey));
     is_fullscreen = restore_state == ui::SHOW_STATE_FULLSCREEN;
   } else {
@@ -311,8 +308,8 @@ void ChromeNativeAppWindowViewsAuraAsh::SetFullscreen(int fullscreen_types) {
   const bool should_hide_shelf =
       !profiles::IsPublicSession() &&
       fullscreen_types != AppWindow::FULLSCREEN_TYPE_OS;
-  widget()->GetNativeWindow()->SetProperty(ash::kHideShelfWhenFullscreenKey,
-                                           should_hide_shelf);
+  widget()->GetNativeWindow()->SetProperty(
+      chromeos::kHideShelfWhenFullscreenKey, should_hide_shelf);
   widget()->non_client_view()->Layout();
 }
 
@@ -438,12 +435,13 @@ gfx::Rect ChromeNativeAppWindowViewsAuraAsh::GetClientAreaBoundsInScreen()
 }
 
 bool ChromeNativeAppWindowViewsAuraAsh::IsImmersiveModeEnabled() const {
-  return GetWidget()->GetNativeWindow()->GetProperty(ash::kImmersiveIsActive);
+  return GetWidget()->GetNativeWindow()->GetProperty(
+      chromeos::kImmersiveIsActive);
 }
 
 gfx::Rect ChromeNativeAppWindowViewsAuraAsh::GetTopContainerBoundsInScreen() {
   gfx::Rect* bounds = GetWidget()->GetNativeWindow()->GetProperty(
-      ash::kImmersiveTopContainerBoundsInScreen);
+      chromeos::kImmersiveTopContainerBoundsInScreen);
   return bounds ? *bounds : gfx::Rect();
 }
 
@@ -469,7 +467,7 @@ void ChromeNativeAppWindowViewsAuraAsh::OnWidgetActivationChanged(
 
 void ChromeNativeAppWindowViewsAuraAsh::OnPostWindowStateTypeChange(
     ash::WindowState* window_state,
-    ash::WindowStateType old_type) {
+    chromeos::WindowStateType old_type) {
   DCHECK(!IsFrameless());
   DCHECK_EQ(GetNativeWindow(), window_state->window());
   if (window_state->IsFullscreen() != app_window()->IsFullscreen()) {
@@ -546,7 +544,7 @@ bool ChromeNativeAppWindowViewsAuraAsh::ShouldEnableImmersiveMode() const {
 }
 
 void ChromeNativeAppWindowViewsAuraAsh::UpdateImmersiveMode() {
-  ash::ImmersiveFullscreenController::EnableForWidget(
+  chromeos::ImmersiveFullscreenController::EnableForWidget(
       widget(), ShouldEnableImmersiveMode());
 }
 

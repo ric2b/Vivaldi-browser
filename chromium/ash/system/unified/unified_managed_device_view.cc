@@ -28,10 +28,13 @@ namespace ash {
 
 UnifiedManagedDeviceView::UnifiedManagedDeviceView(
     UnifiedSystemTrayController* controller)
-    : Button(this),
+    : Button(base::BindRepeating(
+          &UnifiedSystemTrayController::HandleEnterpriseInfoAction,
+          base::Unretained(controller))),
       icon_(new views::ImageView),
-      label_(new views::Label),
-      controller_(controller) {
+      label_(new views::Label) {
+  SetFocusBehavior(views::View::FocusBehavior::ACCESSIBLE_ONLY);
+
   auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kHorizontal,
       kUnifiedManagedDeviceViewPadding, kUnifiedManagedDeviceSpacing));
@@ -44,8 +47,6 @@ UnifiedManagedDeviceView::UnifiedManagedDeviceView(
 
   label_->SetAutoColorReadabilityEnabled(false);
   label_->SetSubpixelRenderingEnabled(false);
-  label_->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kTextColorSecondary));
   label_->SetID(VIEW_ID_TRAY_ENTERPRISE_LABEL);
   AddChildView(label_);
 
@@ -61,11 +62,6 @@ UnifiedManagedDeviceView::~UnifiedManagedDeviceView() {
   Shell::Get()->session_controller()->RemoveObserver(this);
 }
 
-void UnifiedManagedDeviceView::ButtonPressed(views::Button* sender,
-                                             const ui::Event& event) {
-  controller_->HandleEnterpriseInfoAction();
-}
-
 void UnifiedManagedDeviceView::OnLoginStatusChanged(LoginStatus status) {
   Update();
 }
@@ -78,25 +74,32 @@ const char* UnifiedManagedDeviceView::GetClassName() const {
   return "UnifiedManagedDeviceView";
 }
 
+void UnifiedManagedDeviceView::OnThemeChanged() {
+  views::Button::OnThemeChanged();
+  label_->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kTextColorSecondary));
+  Update();
+}
+
 void UnifiedManagedDeviceView::Update() {
   SessionControllerImpl* session = Shell::Get()->session_controller();
   EnterpriseDomainModel* model =
       Shell::Get()->system_tray_model()->enterprise_domain();
-  std::string enterprise_domain_name = model->enterprise_display_domain();
+  std::string enterprise_domain_manager = model->enterprise_domain_manager();
 
   const SkColor icon_color = AshColorProvider::Get()->GetContentLayerColor(
       AshColorProvider::ContentLayerType::kIconColorSecondary);
   if (session->ShouldDisplayManagedUI() || model->active_directory_managed() ||
-      !enterprise_domain_name.empty()) {
+      !enterprise_domain_manager.empty()) {
     // Show enterpised managed UI.
     icon_->SetImage(gfx::CreateVectorIcon(kSystemTrayManagedIcon, icon_color));
 
     base::string16 managed_string =
-        enterprise_domain_name.empty()
+        enterprise_domain_manager.empty()
             ? l10n_util::GetStringUTF16(IDS_ASH_ENTERPRISE_DEVICE_MANAGED)
             : l10n_util::GetStringFUTF16(
                   IDS_ASH_ENTERPRISE_DEVICE_MANAGED_BY,
-                  base::UTF8ToUTF16(enterprise_domain_name));
+                  base::UTF8ToUTF16(enterprise_domain_manager));
     label_->SetText(managed_string);
     SetAccessibleName(managed_string);
     SetVisible(true);

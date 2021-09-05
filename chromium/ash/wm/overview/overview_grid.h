@@ -103,8 +103,8 @@ class ASH_EXPORT OverviewGrid : public SplitViewObserver,
   // of |reposition| and |animate| is false, the stacking order will be adjusted
   // immediately.
   // Note: OverviewSession has versions of the Add/Remove items. Those are
-  // preferred as they update other things like the overview accessibility
-  // annotator.
+  // preferred as they will call into these functions and update other things
+  // like the overview accessibility annotator and the no recent items widget.
   void AddItem(aura::Window* window,
                bool reposition,
                bool animate,
@@ -261,22 +261,6 @@ class ASH_EXPORT OverviewGrid : public SplitViewObserver,
 
   // Clears |nudge_data_|.
   void EndNudge();
-
-  // Called after PositionWindows when entering overview from the home launcher
-  // screen. Translates all windows vertically and animates to their final
-  // locations.
-  void SlideWindowsIn();
-
-  // Update the y position and opacity of the entire grid. Does this by
-  // transforming the windows in |window_list_|. If |callback| is non null, the
-  // transformation and opacity change should be animated. The animation
-  // settings will be set by the caller via |callback|. Returns the settings of
-  // the first window we are animating; the caller will observe this animation.
-  // The returned object may be nullptr.
-  std::unique_ptr<ui::ScopedLayerAnimationSettings> UpdateYPositionAndOpacity(
-      float new_y,
-      float opacity,
-      OverviewSession::UpdateAnimationSettingsCallback callback);
 
   // Returns the window of the overview item that contains |location_in_screen|.
   // |ignored_item| is excluded from consideration. Overview items covered by

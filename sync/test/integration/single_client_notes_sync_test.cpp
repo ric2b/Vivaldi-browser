@@ -192,7 +192,6 @@ IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, InjectedNote) {
           " ", GURL("http://canadiens.nhl.com"), content);
   fake_server_->InjectEntity(notes_builder.Build());
 
-  DisableVerifier();
   ASSERT_TRUE(SetupClients());
   ASSERT_TRUE(SetupSync());
 

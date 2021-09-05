@@ -149,11 +149,11 @@ class QuicTransport::Stream final {
   }
 
   ~Stream() {
-    if (!incoming_ && !outgoing_) {
+    auto* stream = incoming_ ? incoming_ : outgoing_;
+    if (!stream) {
       return;
     }
-    transport_->transport_->session()->ResetStream(
-        id_, quic::QuicRstStreamErrorCode::QUIC_STREAM_CANCELLED);
+    stream->Reset(quic::QuicRstStreamErrorCode::QUIC_STREAM_CANCELLED);
   }
 
  private:
@@ -207,8 +207,8 @@ class QuicTransport::Stream final {
       }
       DCHECK_EQ(result, MOJO_RESULT_OK);
 
-      bool send_result = outgoing_->Write(quiche::QuicheStringPiece(
-          reinterpret_cast<const char*>(data), available));
+      bool send_result = outgoing_->Write(
+          absl::string_view(reinterpret_cast<const char*>(data), available));
       if (!send_result) {
         // TODO(yhirano): Handle this failure.
         readable_->EndReadData(0);
@@ -516,15 +516,13 @@ void QuicTransport::OnIncomingBidirectionalStreamAvailable() {
         sizeof(options), MOJO_CREATE_DATA_PIPE_FLAG_NONE, 1, 256 * 1024};
     if (mojo::CreateDataPipe(&options, &writable_for_outgoing,
                              &readable_for_outgoing) != MOJO_RESULT_OK) {
-      transport_->session()->ResetStream(
-          stream->id(), quic::QuicRstStreamErrorCode::QUIC_STREAM_CANCELLED);
+      stream->Reset(quic::QuicRstStreamErrorCode::QUIC_STREAM_CANCELLED);
       // TODO(yhirano): Error the entire connection.
       return;
     }
     if (mojo::CreateDataPipe(&options, &writable_for_incoming,
                              &readable_for_incoming) != MOJO_RESULT_OK) {
-      transport_->session()->ResetStream(
-          stream->id(), quic::QuicRstStreamErrorCode::QUIC_STREAM_CANCELLED);
+      stream->Reset(quic::QuicRstStreamErrorCode::QUIC_STREAM_CANCELLED);
       // TODO(yhirano): Error the entire connection.
       return;
     }
@@ -559,8 +557,7 @@ void QuicTransport::OnIncomingUnidirectionalStreamAvailable() {
         sizeof(options), MOJO_CREATE_DATA_PIPE_FLAG_NONE, 1, 256 * 1024};
     if (mojo::CreateDataPipe(&options, &writable_for_incoming,
                              &readable_for_incoming) != MOJO_RESULT_OK) {
-      transport_->session()->ResetStream(
-          stream->id(), quic::QuicRstStreamErrorCode::QUIC_STREAM_CANCELLED);
+      stream->Reset(quic::QuicRstStreamErrorCode::QUIC_STREAM_CANCELLED);
       // TODO(yhirano): Error the entire connection.
       return;
     }

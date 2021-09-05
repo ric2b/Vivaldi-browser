@@ -10,7 +10,7 @@
 
 #if defined(OS_WIN)
 #include "base/win/scoped_handle.h"
-#include "base/win/windows_types.h"
+#include <windows.h>
 #endif
 
 // This file defines platform-independent types for dealing with

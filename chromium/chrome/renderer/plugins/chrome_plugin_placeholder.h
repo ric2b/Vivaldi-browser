@@ -11,10 +11,9 @@
 #include "base/macros.h"
 #include "chrome/common/buildflags.h"
 #include "chrome/common/plugin.mojom.h"
-#include "chrome/renderer/plugins/power_saver_info.h"
+#include "components/no_state_prefetch/common/prerender_types.mojom.h"
+#include "components/no_state_prefetch/renderer/prerender_observer.h"
 #include "components/plugins/renderer/loadable_plugin_placeholder.h"
-#include "components/prerender/common/prerender_types.mojom.h"
-#include "components/prerender/renderer/prerender_observer.h"
 #include "content/public/renderer/context_menu_client.h"
 #include "content/public/renderer/render_thread_observer.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
@@ -37,13 +36,17 @@ class ChromePluginPlaceholder final
       const std::string& identifier,
       const base::string16& name,
       int resource_id,
-      const base::string16& message,
-      const PowerSaverInfo& power_saver_info);
+      const base::string16& message);
 
   // Creates a new WebViewPlugin with a MissingPlugin as a delegate.
   static ChromePluginPlaceholder* CreateLoadableMissingPlugin(
       content::RenderFrame* render_frame,
       const blink::WebPluginParams& params);
+
+  // Runs |callback| over each plugin placeholder for the given RenderFrame.
+  static void ForEach(
+      content::RenderFrame* render_frame,
+      const base::RepeatingCallback<void(ChromePluginPlaceholder*)>& callback);
 
   void SetStatus(chrome::mojom::PluginStatus status);
 
@@ -64,9 +67,6 @@ class ChromePluginPlaceholder final
   // gin::Wrappable (via PluginPlaceholder) method
   gin::ObjectTemplateBuilder GetObjectTemplateBuilder(
       v8::Isolate* isolate) final;
-
-  // content::RenderViewObserver (via PluginPlaceholder) override:
-  bool OnMessageReceived(const IPC::Message& message) override;
 
   // WebViewPlugin::Delegate (via PluginPlaceholder) methods:
   v8::Local<v8::Value> GetV8Handle(v8::Isolate* isolate) override;

@@ -533,7 +533,7 @@ TEST_P(PaintAndRasterInvalidationTest,
   Element* child = GetDocument().getElementById("child");
   UpdateAllLifecyclePhasesForTest();
 
-  auto* target_obj = ToLayoutBoxModelObject(target->GetLayoutObject());
+  auto* target_obj = To<LayoutBoxModelObject>(target->GetLayoutObject());
   EXPECT_EQ(kBackgroundPaintInScrollingContents,
             target_obj->GetBackgroundPaintLocation());
 
@@ -595,8 +595,7 @@ TEST_P(PaintAndRasterInvalidationTest,
   Element* child = GetDocument().getElementById("child");
   UpdateAllLifecyclePhasesForTest();
 
-  LayoutBoxModelObject* target_obj =
-      ToLayoutBoxModelObject(target->GetLayoutObject());
+  auto* target_obj = To<LayoutBoxModelObject>(target->GetLayoutObject());
   auto container_raster_invalidation_tracking =
       [&]() -> const RasterInvalidationTracking* {
     if (RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
@@ -662,7 +661,7 @@ TEST_P(PaintAndRasterInvalidationTest,
   if (!RuntimeEnabledFeatures::CompositeAfterPaintEnabled())
     EXPECT_EQ(&GetLayoutView(), EnclosingCompositedContainer(*object));
   EXPECT_EQ(kBackgroundPaintInScrollingContents,
-            ToLayoutBoxModelObject(object)
+            To<LayoutBoxModelObject>(object)
                 ->ComputeBackgroundPaintLocationIfComposited());
   EXPECT_EQ(kBackgroundPaintInGraphicsLayer,
             object->GetBackgroundPaintLocation());
@@ -703,8 +702,7 @@ TEST_P(PaintAndRasterInvalidationTest, CompositedSolidBackgroundResize) {
   target->setAttribute(html_names::kStyleAttr, "width: 100px");
   UpdateAllLifecyclePhasesForTest();
 
-  LayoutBoxModelObject* target_object =
-      ToLayoutBoxModelObject(target->GetLayoutObject());
+  auto* target_object = To<LayoutBoxModelObject>(target->GetLayoutObject());
   EXPECT_EQ(
       kBackgroundPaintInScrollingContents | kBackgroundPaintInGraphicsLayer,
       target_object->GetBackgroundPaintLocation());
@@ -843,14 +841,15 @@ TEST_P(PaintAndRasterInvalidationTest, SVGHiddenContainer) {
   UpdateAllLifecyclePhasesForTest();
 
   // Should invalidate raster for real_rect only.
-  EXPECT_THAT(GetRasterInvalidationTracking()->Invalidations(),
-              UnorderedElementsAre(
-                  RasterInvalidationInfo{real_rect, real_rect->DebugName(),
-                                         IntRect(155, 166, 7, 8),
-                                         PaintInvalidationReason::kFull},
-                  RasterInvalidationInfo{real_rect, real_rect->DebugName(),
-                                         IntRect(155, 166, 7, 8),
-                                         PaintInvalidationReason::kFull}));
+  EXPECT_THAT(
+      GetRasterInvalidationTracking()->Invalidations(),
+      UnorderedElementsAre(
+          RasterInvalidationInfo{real_rect, real_rect->DebugName(),
+                                 IntRect(155, 166, 7, 8),
+                                 PaintInvalidationReason::kSVGResource},
+          RasterInvalidationInfo{real_rect, real_rect->DebugName(),
+                                 IntRect(154, 165, 9, 10),
+                                 PaintInvalidationReason::kSVGResource}));
 
   GetDocument().View()->SetTracksRasterInvalidations(false);
 }
@@ -862,11 +861,10 @@ TEST_P(PaintAndRasterInvalidationTest, PaintPropertyChange) {
   target->setAttribute(html_names::kClassAttr, "solid transform");
   UpdateAllLifecyclePhasesForTest();
 
-  auto* layer = ToLayoutBoxModelObject(object)->Layer();
+  auto* layer = To<LayoutBoxModelObject>(object)->Layer();
   GetDocument().View()->SetTracksRasterInvalidations(true);
   target->setAttribute(html_names::kStyleAttr, "transform: scale(3)");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
+  UpdateAllLifecyclePhasesExceptPaint();
   EXPECT_FALSE(layer->SelfNeedsRepaint());
   const auto* transform =
       object->FirstFragment().PaintProperties()->Transform();
@@ -902,8 +900,7 @@ TEST_P(PaintAndRasterInvalidationTest, ResizeContainerOfFixedSizeSVG) {
 
   GetDocument().View()->SetTracksRasterInvalidations(true);
   target->setAttribute(html_names::kStyleAttr, "width: 200px; height: 200px");
-  GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
-      DocumentUpdateReason::kTest);
+  UpdateAllLifecyclePhasesExceptPaint();
 
   // We don't invalidate paint of the SVG rect.
   EXPECT_TRUE(static_cast<const DisplayItemClient*>(rect)->IsValid());
@@ -980,7 +977,7 @@ TEST_P(PaintAndRasterInvalidationTest, ResizeElementWhichHasNonCustomResizer) {
   invalidations.push_back(RasterInvalidationInfo{
       object, object->DebugName(), IntRect(100, 0, 100, 100),
       PaintInvalidationReason::kIncremental});
-  const auto& scroll_corner = ToLayoutBoxModelObject(object)
+  const auto& scroll_corner = To<LayoutBoxModelObject>(object)
                                   ->GetScrollableArea()
                                   ->GetScrollCornerDisplayItemClient();
   invalidations.push_back(RasterInvalidationInfo{

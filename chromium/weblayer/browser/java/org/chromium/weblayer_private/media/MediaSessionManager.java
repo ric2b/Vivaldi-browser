@@ -12,14 +12,12 @@ import org.chromium.components.browser_ui.media.MediaNotificationController;
 import org.chromium.components.browser_ui.media.MediaNotificationInfo;
 import org.chromium.components.browser_ui.media.MediaNotificationManager;
 import org.chromium.components.browser_ui.media.MediaSessionHelper;
-import org.chromium.components.browser_ui.notifications.ForegroundServiceUtils;
-import org.chromium.components.browser_ui.notifications.NotificationMetadata;
 import org.chromium.components.browser_ui.notifications.NotificationWrapper;
 import org.chromium.components.browser_ui.notifications.NotificationWrapperBuilder;
+import org.chromium.components.embedder_support.browser_context.BrowserContextHandle;
 import org.chromium.weblayer_private.IntentUtils;
+import org.chromium.weblayer_private.TabImpl;
 import org.chromium.weblayer_private.WebLayerImpl;
-import org.chromium.weblayer_private.WebLayerNotificationChannels;
-import org.chromium.weblayer_private.WebLayerNotificationWrapperBuilder;
 
 /**
  * A glue class for MediaSession.
@@ -31,43 +29,30 @@ public class MediaSessionManager {
     private static int sNotificationId;
 
     public static void serviceStarted(Service service, Intent intent) {
-        MediaNotificationController controller = getController();
-        if (controller != null && controller.processIntent(service, intent)) return;
-
-        // The service has been started with startForegroundService() but the
-        // notification hasn't been shown. See similar logic in {@link
-        // ChromeMediaNotificationControllerDelegate}.
-        MediaNotificationController.finishStartingForegroundServiceOnO(
-                service, createNotificationWrapperBuilder().buildNotificationWrapper());
-        // Call stopForeground to guarantee Android unset the foreground bit.
-        ForegroundServiceUtils.getInstance().stopForeground(
-                service, Service.STOP_FOREGROUND_REMOVE);
-        service.stopSelf();
+        MediaSessionNotificationHelper.serviceStarted(service, intent, getNotificationId());
     }
 
     public static void serviceDestroyed() {
-        MediaNotificationController controller = getController();
-        if (controller != null) controller.onServiceDestroyed();
-        MediaNotificationManager.clear(getNotificationId());
+        MediaSessionNotificationHelper.serviceDestroyed(getNotificationId());
     }
 
-    public static MediaSessionHelper.Delegate createMediaSessionHelperDelegate(int tabId) {
+    public static MediaSessionHelper.Delegate createMediaSessionHelperDelegate(TabImpl tab) {
         return new MediaSessionHelper.Delegate() {
             @Override
             public Intent createBringTabToFrontIntent() {
-                return IntentUtils.createBringTabToFrontIntent(tabId);
+                return IntentUtils.createBringTabToFrontIntent(tab.getId());
             }
 
             @Override
-            public boolean fetchLargeFaviconImage() {
-                // TODO(crbug.com/1076463): WebLayer doesn't support favicons.
-                return false;
+            public BrowserContextHandle getBrowserContextHandle() {
+                return tab.getProfile();
             }
 
             @Override
             public MediaNotificationInfo.Builder createMediaNotificationInfoBuilder() {
-                return new MediaNotificationInfo.Builder().setInstanceId(tabId).setId(
-                        getNotificationId());
+                return new MediaNotificationInfo.Builder()
+                        .setInstanceId(tab.getId())
+                        .setId(getNotificationId());
             }
 
             @Override
@@ -79,12 +64,13 @@ public class MediaSessionManager {
 
             @Override
             public void hideMediaNotification() {
-                MediaNotificationManager.hide(tabId, getNotificationId());
+                MediaNotificationManager.hide(tab.getId(), getNotificationId());
             }
 
             @Override
             public void activateAndroidMediaSession() {
-                MediaNotificationManager.activateAndroidMediaSession(tabId, getNotificationId());
+                MediaNotificationManager.activateAndroidMediaSession(
+                        tab.getId(), getNotificationId());
             }
         };
     }
@@ -108,7 +94,8 @@ public class MediaSessionManager {
 
         @Override
         public NotificationWrapperBuilder createNotificationWrapperBuilder() {
-            return MediaSessionManager.createNotificationWrapperBuilder();
+            return MediaSessionNotificationHelper.createNotificationWrapperBuilder(
+                    getNotificationId());
         }
 
         @Override
@@ -120,22 +107,8 @@ public class MediaSessionManager {
         public void logNotificationShown(NotificationWrapper notification) {}
     }
 
-    private static NotificationWrapperBuilder createNotificationWrapperBuilder() {
-        // Only the null tag will work as expected, because {@link Service#startForeground()} only
-        // takes an ID and no tag. If we pass a tag here, then the notification that's used to
-        // display a paused state (no foreground service) will not be identified as the same one
-        // that's used with the foreground service.
-        return WebLayerNotificationWrapperBuilder.create(
-                WebLayerNotificationChannels.ChannelId.MEDIA_PLAYBACK,
-                new NotificationMetadata(0, null /*notificationTag*/, getNotificationId()));
-    }
-
     private static int getNotificationId() {
         if (sNotificationId == 0) sNotificationId = WebLayerImpl.getMediaSessionNotificationId();
         return sNotificationId;
-    }
-
-    private static MediaNotificationController getController() {
-        return MediaNotificationManager.getController(getNotificationId());
     }
 }

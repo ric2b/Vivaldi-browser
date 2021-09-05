@@ -12,6 +12,7 @@
 #include "ui/base/cursor/cursor.h"
 #include "ui/gfx/canvas.h"
 #include "ui/views/controls/native/native_view_host_wrapper.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/painter.h"
 #include "ui/views/widget/widget.h"
 
@@ -55,6 +56,10 @@ void NativeViewHost::Detach() {
 
 void NativeViewHost::SetParentAccessible(gfx::NativeViewAccessible accessible) {
   native_wrapper_->SetParentAccessible(accessible);
+}
+
+gfx::NativeViewAccessible NativeViewHost::GetParentAccessible() {
+  return native_wrapper_->GetParentAccessible();
 }
 
 bool NativeViewHost::SetCornerRadii(const gfx::RoundedCornersF& corner_radii) {

@@ -9,9 +9,9 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/mock_callback.h"
 #include "build/build_config.h"
@@ -21,9 +21,9 @@
 #include "components/sync/model/data_batch.h"
 #include "components/sync/model/entity_change.h"
 #include "components/sync/model/metadata_batch.h"
-#include "components/sync/model/mock_model_type_change_processor.h"
 #include "components/sync/model_impl/in_memory_metadata_change_list.h"
 #include "components/sync/model_impl/sync_metadata_store_change_list.h"
+#include "components/sync/test/model/mock_model_type_change_processor.h"
 #include "components/sync/test/test_matchers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -183,42 +183,74 @@ class FakeDatabase {
 
 class MockSyncMetadataStore : public PasswordStoreSync::MetadataStore {
  public:
-  MOCK_METHOD0(GetAllSyncMetadata, std::unique_ptr<syncer::MetadataBatch>());
-  MOCK_METHOD0(DeleteAllSyncMetadata, void());
-  MOCK_METHOD3(UpdateSyncMetadata,
-               bool(syncer::ModelType,
-                    const std::string&,
-                    const sync_pb::EntityMetadata&));
-  MOCK_METHOD2(ClearSyncMetadata, bool(syncer::ModelType, const std::string&));
-  MOCK_METHOD2(UpdateModelTypeState,
-               bool(syncer::ModelType, const sync_pb::ModelTypeState&));
-  MOCK_METHOD1(ClearModelTypeState, bool(syncer::ModelType));
-  MOCK_METHOD1(SetDeletionsHaveSyncedCallback,
-               void(base::RepeatingCallback<void(bool)>));
-  MOCK_METHOD0(HasUnsyncedDeletions, bool());
+  MOCK_METHOD(std::unique_ptr<syncer::MetadataBatch>,
+              GetAllSyncMetadata,
+              (),
+              (override));
+  MOCK_METHOD(void, DeleteAllSyncMetadata, (), (override));
+  MOCK_METHOD(bool,
+              UpdateSyncMetadata,
+              (syncer::ModelType,
+               const std::string&,
+               const sync_pb::EntityMetadata&),
+              (override));
+  MOCK_METHOD(bool,
+              ClearSyncMetadata,
+              (syncer::ModelType, const std::string&),
+              (override));
+  MOCK_METHOD(bool,
+              UpdateModelTypeState,
+              (syncer::ModelType, const sync_pb::ModelTypeState&),
+              (override));
+  MOCK_METHOD(bool, ClearModelTypeState, (syncer::ModelType), (override));
+  MOCK_METHOD(void,
+              SetDeletionsHaveSyncedCallback,
+              (base::RepeatingCallback<void(bool)>),
+              (override));
+  MOCK_METHOD(bool, HasUnsyncedDeletions, (), (override));
 };
 
 class MockPasswordStoreSync : public PasswordStoreSync {
  public:
-  MOCK_METHOD1(ReadAllLogins, FormRetrievalResult(PrimaryKeyToFormMap*));
-  MOCK_METHOD1(RemoveLoginByPrimaryKeySync, PasswordStoreChangeList(int));
-  MOCK_METHOD0(DeleteUndecryptableLogins, DatabaseCleanupResult());
-  MOCK_METHOD2(AddLoginSync,
-               PasswordStoreChangeList(const PasswordForm&, AddLoginError*));
-  MOCK_METHOD2(UpdateLoginSync,
-               PasswordStoreChangeList(const PasswordForm&, UpdateLoginError*));
-  MOCK_METHOD1(RemoveLoginSync, PasswordStoreChangeList(const PasswordForm&));
-  MOCK_METHOD1(NotifyLoginsChanged, void(const PasswordStoreChangeList&));
-  MOCK_METHOD1(NotifyDeletionsHaveSynced, void(bool));
-
-  MOCK_METHOD1(NotifyUnsyncedCredentialsWillBeDeleted,
-               void(std::vector<PasswordForm> unsynced_credentials));
-  MOCK_METHOD0(BeginTransaction, bool());
-  MOCK_METHOD0(CommitTransaction, bool());
-  MOCK_METHOD0(RollbackTransaction, void());
-  MOCK_METHOD0(GetMetadataStore, PasswordStoreSync::MetadataStore*());
-  MOCK_CONST_METHOD0(IsAccountStore, bool());
-  MOCK_METHOD0(DeleteAndRecreateDatabaseFile, bool());
+  MOCK_METHOD(FormRetrievalResult,
+              ReadAllLogins,
+              (PrimaryKeyToFormMap*),
+              (override));
+  MOCK_METHOD(PasswordStoreChangeList,
+              RemoveLoginByPrimaryKeySync,
+              (int),
+              (override));
+  MOCK_METHOD(DatabaseCleanupResult, DeleteUndecryptableLogins, (), (override));
+  MOCK_METHOD(PasswordStoreChangeList,
+              AddLoginSync,
+              (const PasswordForm&, AddLoginError*),
+              (override));
+  MOCK_METHOD(PasswordStoreChangeList,
+              UpdateLoginSync,
+              (const PasswordForm&, UpdateLoginError*),
+              (override));
+  MOCK_METHOD(PasswordStoreChangeList,
+              RemoveLoginSync,
+              (const PasswordForm&),
+              (override));
+  MOCK_METHOD(void,
+              NotifyLoginsChanged,
+              (const PasswordStoreChangeList&),
+              (override));
+  MOCK_METHOD(void, NotifyDeletionsHaveSynced, (bool), (override));
+  MOCK_METHOD(void,
+              NotifyUnsyncedCredentialsWillBeDeleted,
+              (std::vector<PasswordForm> unsynced_credentials),
+              (override));
+  MOCK_METHOD(bool, BeginTransaction, (), (override));
+  MOCK_METHOD(bool, CommitTransaction, (), (override));
+  MOCK_METHOD(void, RollbackTransaction, (), (override));
+  MOCK_METHOD(PasswordStoreSync::MetadataStore*,
+              GetMetadataStore,
+              (),
+              (override));
+  MOCK_METHOD(bool, IsAccountStore, (), (const override));
+  MOCK_METHOD(bool, DeleteAndRecreateDatabaseFile, (), (override));
 };
 
 }  // namespace
@@ -999,6 +1031,39 @@ TEST_F(PasswordSyncBridgeTest,
 
   histogram_tester.ExpectTotalCount(
       "PasswordManager.AccountStorage.UnsyncedPasswordsFoundDuringSignOut", 0);
+}
+
+TEST_F(PasswordSyncBridgeTest, ShouldReportDownloadedPasswordsIfAccountStore) {
+  ON_CALL(*mock_password_store_sync(), IsAccountStore())
+      .WillByDefault(Return(true));
+  ON_CALL(mock_processor(), IsTrackingMetadata()).WillByDefault(Return(true));
+
+  syncer::EntityChangeList entity_change_list;
+  entity_change_list.push_back(syncer::EntityChange::CreateAdd(
+      /*storage_key=*/"",
+      SpecificsToEntity(CreateSpecificsWithSignonRealm(kSignonRealm1))));
+  entity_change_list.push_back(syncer::EntityChange::CreateAdd(
+      /*storage_key=*/"",
+      SpecificsToEntity(CreateSpecificsWithSignonRealm(kSignonRealm2))));
+
+  sync_pb::PasswordSpecifics blocklisted_specifics;
+  sync_pb::PasswordSpecificsData* password_data =
+      blocklisted_specifics.mutable_client_only_encrypted_data();
+  password_data->set_origin("http://www.origin.com");
+  password_data->set_signon_realm(kSignonRealm3);
+  password_data->set_blacklisted(true);
+
+  entity_change_list.push_back(syncer::EntityChange::CreateAdd(
+      /*storage_key=*/"", SpecificsToEntity(blocklisted_specifics)));
+
+  base::HistogramTester histogram_tester;
+  base::Optional<syncer::ModelError> error = bridge()->MergeSyncData(
+      bridge()->CreateMetadataChangeList(), std::move(entity_change_list));
+  EXPECT_FALSE(error);
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.AccountStoreCredentialsAfterOptIn", 2, 1);
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.AccountStoreBlocklistedEntriesAfterOptIn", 1, 1);
 }
 
 }  // namespace password_manager

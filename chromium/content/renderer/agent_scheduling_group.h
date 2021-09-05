@@ -5,15 +5,18 @@
 #ifndef CONTENT_RENDERER_AGENT_SCHEDULING_GROUP_H_
 #define CONTENT_RENDERER_AGENT_SCHEDULING_GROUP_H_
 
+#include "base/containers/id_map.h"
 #include "content/common/agent_scheduling_group.mojom.h"
 #include "content/common/associated_interfaces.mojom.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
+#include "mojo/public/cpp/bindings/associated_receiver_set.h"
 #include "mojo/public/cpp/bindings/associated_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/abseil-cpp/absl/types/variant.h"
 #include "third_party/blink/public/mojom/associated_interfaces/associated_interfaces.mojom.h"
+#include "third_party/blink/public/platform/scheduler/web_agent_group_scheduler.h"
 
 namespace IPC {
 class Listener;
@@ -54,7 +57,12 @@ class CONTENT_EXPORT AgentSchedulingGroup
   void AddRoute(int32_t routing_id, IPC::Listener* listener);
   void RemoveRoute(int32_t routing_id);
 
-  mojom::RouteProvider* GetRemoteRouteProvider();
+  // This is virtual only for unit tests.
+  virtual mojom::RouteProvider* GetRemoteRouteProvider();
+
+  blink::scheduler::WebAgentGroupScheduler& agent_group_scheduler() {
+    return *agent_group_scheduler_;
+  }
 
  private:
   // `MaybeAssociatedReceiver` and `MaybeAssociatedRemote` are temporary helper
@@ -70,10 +78,12 @@ class CONTENT_EXPORT AgentSchedulingGroup
    public:
     MaybeAssociatedReceiver(
         AgentSchedulingGroup& impl,
-        mojo::PendingReceiver<mojom::AgentSchedulingGroup> receiver);
+        mojo::PendingReceiver<mojom::AgentSchedulingGroup> receiver,
+        scoped_refptr<base::SingleThreadTaskRunner> task_runner);
     MaybeAssociatedReceiver(
         AgentSchedulingGroup& impl,
-        mojo::PendingAssociatedReceiver<mojom::AgentSchedulingGroup> receiver);
+        mojo::PendingAssociatedReceiver<mojom::AgentSchedulingGroup> receiver,
+        scoped_refptr<base::SingleThreadTaskRunner> task_runner);
     ~MaybeAssociatedReceiver();
 
    private:
@@ -85,11 +95,14 @@ class CONTENT_EXPORT AgentSchedulingGroup
   class MaybeAssociatedRemote {
    public:
     explicit MaybeAssociatedRemote(
-        mojo::PendingRemote<mojom::AgentSchedulingGroupHost> host_remote);
+        mojo::PendingRemote<mojom::AgentSchedulingGroupHost> host_remote,
+        scoped_refptr<base::SingleThreadTaskRunner> task_runner);
     explicit MaybeAssociatedRemote(
         mojo::PendingAssociatedRemote<mojom::AgentSchedulingGroupHost>
-            host_remote);
+            host_remote,
+        scoped_refptr<base::SingleThreadTaskRunner> task_runner);
     ~MaybeAssociatedRemote();
+    mojom::AgentSchedulingGroupHost* get();
 
    private:
     absl::variant<mojo::Remote<mojom::AgentSchedulingGroupHost>,
@@ -99,7 +112,7 @@ class CONTENT_EXPORT AgentSchedulingGroup
 
   // mojom::AgentSchedulingGroup:
   void CreateView(mojom::CreateViewParamsPtr params) override;
-  void DestroyView(int32_t view_id) override;
+  void DestroyView(int32_t view_id, DestroyViewCallback callback) override;
   void CreateFrame(mojom::CreateFrameParamsPtr params) override;
   void CreateFrameProxy(
       int32_t routing_id,
@@ -109,6 +122,9 @@ class CONTENT_EXPORT AgentSchedulingGroup
       const FrameReplicationState& replicated_state,
       const base::UnguessableToken& frame_token,
       const base::UnguessableToken& devtools_frame_token) override;
+  void BindAssociatedRouteProvider(
+      mojo::PendingAssociatedRemote<mojom::RouteProvider> remote,
+      mojo::PendingAssociatedReceiver<mojom::RouteProvider> receiever) override;
 
   // mojom::RouteProvider
   void GetRoute(
@@ -122,6 +138,15 @@ class CONTENT_EXPORT AgentSchedulingGroup
       mojo::PendingAssociatedReceiver<blink::mojom::AssociatedInterface>
           receiver) override;
 
+  IPC::Listener* GetListener(int32_t routing_id);
+
+  // Map of registered IPC listeners.
+  base::IDMap<IPC::Listener*> listener_map_;
+
+  // A dedicated scheduler for this AgentSchedulingGroup.
+  std::unique_ptr<blink::scheduler::WebAgentGroupScheduler>
+      agent_group_scheduler_;
+
   RenderThread& render_thread_;
 
   // Implementation of `mojom::AgentSchedulingGroup`, used for responding to
@@ -131,6 +156,20 @@ class CONTENT_EXPORT AgentSchedulingGroup
   // Remote stub of mojom::AgentSchedulingGroupHost, used for sending calls to
   // the (browser-side) AgentSchedulingGroupHost.
   MaybeAssociatedRemote host_remote_;
+
+  // The |mojom::RouteProvider| mojo pair to setup
+  // |blink::AssociatedInterfaceProvider| routes between us and the browser-side
+  // |AgentSchedulingGroup|.
+  mojo::AssociatedRemote<mojom::RouteProvider> remote_route_provider_;
+  mojo::AssociatedReceiver<mojom::RouteProvider> route_provider_receiver_{this};
+
+  // The `blink::mojom::AssociatedInterfaceProvider` receiver set that *all*
+  // browser-side `blink::AssociatedInterfaceProvider` objects own a remote to.
+  // `AgentSchedulingGroupHost` will be responsible for routing each associated
+  // interface request to the appropriate renderer object.
+  mojo::AssociatedReceiverSet<blink::mojom::AssociatedInterfaceProvider,
+                              int32_t>
+      associated_interface_provider_receivers_;
 };
 
 }  // namespace content

@@ -15,6 +15,7 @@ LayoutNGTableSection::LayoutNGTableSection(Element* element)
     : LayoutNGMixin<LayoutBlock>(element) {}
 
 bool LayoutNGTableSection::IsEmpty() const {
+  NOT_DESTROYED();
   for (LayoutObject* child = FirstChild(); child;
        child = child->NextSibling()) {
     if (!To<LayoutNGTableRow>(child)->IsEmpty())
@@ -24,11 +25,13 @@ bool LayoutNGTableSection::IsEmpty() const {
 }
 
 LayoutNGTable* LayoutNGTableSection::Table() const {
+  NOT_DESTROYED();
   return To<LayoutNGTable>(Parent());
 }
 
 void LayoutNGTableSection::AddChild(LayoutObject* child,
                                     LayoutObject* before_child) {
+  NOT_DESTROYED();
   if (LayoutNGTable* table = Table())
     table->TableGridStructureChanged();
 
@@ -78,6 +81,7 @@ void LayoutNGTableSection::AddChild(LayoutObject* child,
 }
 
 void LayoutNGTableSection::RemoveChild(LayoutObject* child) {
+  NOT_DESTROYED();
   if (LayoutNGTable* table = Table())
     table->TableGridStructureChanged();
   LayoutNGMixin<LayoutBlock>::RemoveChild(child);
@@ -85,9 +89,11 @@ void LayoutNGTableSection::RemoveChild(LayoutObject* child) {
 
 void LayoutNGTableSection::StyleDidChange(StyleDifference diff,
                                           const ComputedStyle* old_style) {
+  NOT_DESTROYED();
   if (LayoutNGTable* table = Table()) {
-    if (NGTableBorders::HasBorder(old_style) ||
-        NGTableBorders::HasBorder(Style())) {
+    if ((old_style && !old_style->BorderVisuallyEqual(StyleRef())) ||
+        (diff.TextDecorationOrColorChanged() &&
+         StyleRef().HasBorderColorReferencingCurrentColor())) {
       table->GridBordersChanged();
     }
   }
@@ -96,55 +102,41 @@ void LayoutNGTableSection::StyleDidChange(StyleDifference diff,
 
 LayoutBox* LayoutNGTableSection::CreateAnonymousBoxWithSameTypeAs(
     const LayoutObject* parent) const {
+  NOT_DESTROYED();
   return LayoutObjectFactory::CreateAnonymousTableSectionWithParent(*parent);
 }
 
 LayoutNGTableInterface* LayoutNGTableSection::TableInterface() const {
+  NOT_DESTROYED();
   return ToInterface<LayoutNGTableInterface>(Parent());
 }
 
 void LayoutNGTableSection::SetNeedsCellRecalc() {
+  NOT_DESTROYED();
   SetNeedsLayout(layout_invalidation_reason::kDomChanged);
 }
 
 LayoutNGTableRowInterface* LayoutNGTableSection::FirstRowInterface() const {
+  NOT_DESTROYED();
   return ToInterface<LayoutNGTableRowInterface>(FirstChild());
 }
 
 LayoutNGTableRowInterface* LayoutNGTableSection::LastRowInterface() const {
+  NOT_DESTROYED();
   return ToInterface<LayoutNGTableRowInterface>(LastChild());
-}
-
-const LayoutNGTableCellInterface* LayoutNGTableSection::PrimaryCellInterfaceAt(
-    unsigned row,
-    unsigned column) const {
-  unsigned current_row = 0;
-  for (LayoutObject* layout_row = FirstChild(); layout_row;
-       layout_row = layout_row->NextSibling()) {
-    DCHECK(layout_row->IsTableRow());
-    if (current_row++ == row) {
-      unsigned current_column = 0;
-      for (LayoutObject* layout_cell = layout_row->SlowFirstChild();
-           layout_cell; layout_cell = layout_cell->NextSibling()) {
-        if (current_column++ == column) {
-          return ToInterface<LayoutNGTableCellInterface>(layout_cell);
-        }
-      }
-      return nullptr;
-    }
-  }
-  return nullptr;
 }
 
 // TODO(crbug.com/1079133): Used by AXLayoutObject::IsDataTable, verify
 // behaviour is correct. Consider removing these methods.
 unsigned LayoutNGTableSection::NumEffectiveColumns() const {
+  NOT_DESTROYED();
   return To<LayoutNGTable>(TableInterface()->ToLayoutObject())->ColumnCount();
 }
 
 // TODO(crbug.com/1079133): Used by AXLayoutObject::IsDataTable/ColumnCount,
 // verify behaviour is correct.
 unsigned LayoutNGTableSection::NumCols(unsigned row) const {
+  NOT_DESTROYED();
   unsigned current_row = 0;
   for (LayoutObject* layout_row = FirstChild(); layout_row;
        layout_row = layout_row->NextSibling()) {
@@ -163,6 +155,7 @@ unsigned LayoutNGTableSection::NumCols(unsigned row) const {
 // TODO(crbug.com/1079133): Used by AXLayoutObject, verify behaviour is
 // correct, and if caching is required.
 unsigned LayoutNGTableSection::NumRows() const {
+  NOT_DESTROYED();
   unsigned num_rows = 0;
   for (LayoutObject* layout_row = FirstChild(); layout_row;
        layout_row = layout_row->NextSibling()) {

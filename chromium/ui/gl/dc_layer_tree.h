@@ -29,7 +29,6 @@ class SwapChainPresenter;
 class DCLayerTree {
  public:
   DCLayerTree(bool disable_nv12_dynamic_textures,
-              bool disable_larger_than_screen_overlays,
               bool disable_vp_scaling,
               bool reset_vp_when_colorspace_changes);
   ~DCLayerTree();
@@ -51,25 +50,18 @@ class DCLayerTree {
   // at least given input and output size.  The video processor is shared across
   // layers so the same one can be reused if it's large enough.  Returns true on
   // success.
-  bool InitializeVideoProcessor(const gfx::Size& input_size,
-                                const gfx::Size& output_size,
-                                const gfx::ColorSpace& input_color_space,
-                                const gfx::ColorSpace& output_color_space);
-
-  void SetColorspaceForVideoProcessor(
+  bool InitializeVideoProcessor(
+      const gfx::Size& input_size,
+      const gfx::Size& output_size,
       const gfx::ColorSpace& input_color_space,
       const gfx::ColorSpace& output_color_space,
-      Microsoft::WRL::ComPtr<IDXGISwapChain1> swapchain,
+      Microsoft::WRL::ComPtr<IDXGISwapChain1> swap_chain,
       bool is_yuv_swapchain);
 
   void SetNeedsRebuildVisualTree() { needs_rebuild_visual_tree_ = true; }
 
   bool disable_nv12_dynamic_textures() const {
     return disable_nv12_dynamic_textures_;
-  }
-
-  bool disable_larger_than_screen_overlays() const {
-    return disable_larger_than_screen_overlays_;
   }
 
   bool disable_vp_scaling() const { return disable_vp_scaling_; }
@@ -94,18 +86,31 @@ class DCLayerTree {
   Microsoft::WRL::ComPtr<IDXGISwapChain1> GetLayerSwapChainForTesting(
       size_t index) const;
 
+  void GetSwapChainVisualInfoForTesting(size_t index,
+                                        gfx::Transform* transform,
+                                        gfx::Point* offset,
+                                        gfx::Rect* clip_rect) const;
+
   void SetFrameRate(float frame_rate);
 
   const std::unique_ptr<HDRMetadataHelperWin>& GetHDRMetadataHelper() {
     return hdr_metadata_helper_;
   }
 
+  HWND window() const { return window_; }
+
  private:
+  void SetColorSpaceForVideoProcessor(
+      const gfx::ColorSpace& input_color_space,
+      const gfx::ColorSpace& output_color_space,
+      Microsoft::WRL::ComPtr<IDXGISwapChain1> swap_chain,
+      bool is_yuv_swapchain);
+
   const bool disable_nv12_dynamic_textures_;
-  const bool disable_larger_than_screen_overlays_;
   const bool disable_vp_scaling_;
   const bool reset_vp_when_colorspace_changes_;
 
+  HWND window_;
   Microsoft::WRL::ComPtr<ID3D11Device> d3d11_device_;
   Microsoft::WRL::ComPtr<IDCompositionDevice2> dcomp_device_;
   Microsoft::WRL::ComPtr<IDCompositionTarget> dcomp_target_;
@@ -125,9 +130,7 @@ class DCLayerTree {
   // Current video processor input and output colorspace.
   gfx::ColorSpace video_input_color_space_;
   gfx::ColorSpace video_output_color_space_;
-
-  // Cache the last swapchain that has been set output colorspace.
-  Microsoft::WRL::ComPtr<IDXGISwapChain1> last_swapchain_setting_colorspace_;
+  bool is_yuv_video_output_ = false;
 
   // Set to true if a direct composition visual tree needs rebuild.
   bool needs_rebuild_visual_tree_ = false;

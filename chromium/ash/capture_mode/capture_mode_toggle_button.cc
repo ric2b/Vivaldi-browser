@@ -10,24 +10,21 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/highlight_path_generator.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 
 namespace ash {
 
 CaptureModeToggleButton::CaptureModeToggleButton(
-    views::ButtonListener* listener,
+    views::Button::PressedCallback callback,
     const gfx::VectorIcon& icon)
-    : ViewWithInkDrop(listener) {
+    : ViewWithInkDrop(callback) {
   SetPreferredSize(capture_mode::kButtonSize);
   SetBorder(views::CreateEmptyBorder(capture_mode::kButtonPadding));
   SetImageHorizontalAlignment(ALIGN_CENTER);
   SetImageVerticalAlignment(ALIGN_MIDDLE);
   GetViewAccessibility().OverrideIsLeaf(true);
 
-  // TODO(afakhry): Fix this.
-  SetTooltipText(base::UTF8ToUTF16(GetClassName()));
-
   SetInstallFocusRingOnFocus(true);
-  SetFocusForPlatform();
   const auto* color_provider = AshColorProvider::Get();
   focus_ring()->SetColor(color_provider->GetControlsLayerColor(
       AshColorProvider::ControlsLayerType::kFocusRingColor));
@@ -40,10 +37,6 @@ CaptureModeToggleButton::CaptureModeToggleButton(
   SetIcon(icon);
   toggled_background_color_ = color_provider->GetControlsLayerColor(
       AshColorProvider::ControlsLayerType::kControlBackgroundColorActive);
-}
-
-const char* CaptureModeToggleButton::GetClassName() const {
-  return "CaptureModeToggleButton";
 }
 
 void CaptureModeToggleButton::OnPaintBackground(gfx::Canvas* canvas) {
@@ -60,7 +53,9 @@ void CaptureModeToggleButton::OnPaintBackground(gfx::Canvas* canvas) {
 
 void CaptureModeToggleButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   ImageButton::GetAccessibleNodeData(node_data);
-  node_data->SetName(GetTooltipText(gfx::Point()));
+  const base::string16 tooltip = GetTooltipText(gfx::Point());
+  DCHECK(!tooltip.empty());
+  node_data->SetName(tooltip);
   node_data->role = ax::mojom::Role::kToggleButton;
   node_data->SetCheckedState(GetToggled() ? ax::mojom::CheckedState::kTrue
                                           : ax::mojom::CheckedState::kFalse);
@@ -75,8 +70,17 @@ void CaptureModeToggleButton::SetIcon(const gfx::VectorIcon& icon) {
 
   SetImage(views::Button::STATE_NORMAL,
            gfx::CreateVectorIcon(icon, normal_color));
+  SetImage(views::Button::STATE_DISABLED,
+           gfx::CreateVectorIcon(
+               icon, color_provider->GetDisabledColor(normal_color)));
+  // Note that a disabled button cannot be toggled, so we don't need to set a
+  // toggled icon for the disabled state.
   const auto toggled_icon = gfx::CreateVectorIcon(icon, toggled_color);
   SetToggledImage(views::Button::STATE_NORMAL, &toggled_icon);
 }
+
+BEGIN_METADATA(CaptureModeToggleButton,
+               ViewWithInkDrop<views::ToggleImageButton>)
+END_METADATA
 
 }  // namespace ash

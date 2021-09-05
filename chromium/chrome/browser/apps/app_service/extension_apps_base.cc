@@ -405,9 +405,9 @@ content::WebContents* ExtensionAppsBase::LaunchAppWithIntentImpl(
       app_id, event_flags, GetAppLaunchSource(launch_source), display_id,
       extensions::GetLaunchContainer(extensions::ExtensionPrefs::Get(profile_),
                                      extension),
-      intent);
+      std::move(intent));
   params.launch_source = launch_source;
-  return LaunchImpl(params);
+  return LaunchImpl(std::move(params));
 }
 
 const extensions::Extension* ExtensionAppsBase::MaybeGetExtension(
@@ -554,7 +554,7 @@ void ExtensionAppsBase::Launch(const std::string& app_id,
         extension_url, extension_urls::kWebstoreSourceField, source_value);
   }
 
-  LaunchImpl(params);
+  LaunchImpl(std::move(params));
 }
 
 void ExtensionAppsBase::LaunchAppWithFiles(
@@ -570,7 +570,7 @@ void ExtensionAppsBase::LaunchAppWithFiles(
   for (const auto& file_path : file_paths->file_paths) {
     params.launch_files.push_back(file_path);
   }
-  LaunchImpl(params);
+  LaunchImpl(std::move(params));
 }
 
 void ExtensionAppsBase::LaunchAppWithIntent(
@@ -620,8 +620,7 @@ void ExtensionAppsBase::SetPermission(const std::string& app_id,
   }
 
   host_content_settings_map->SetContentSettingDefaultScope(
-      url, url, permission_type, std::string() /* resource identifier */,
-      permission_value);
+      url, url, permission_type, permission_value);
 }
 void ExtensionAppsBase::Uninstall(const std::string& app_id,
                                   apps::mojom::UninstallSource uninstall_source,
@@ -715,7 +714,7 @@ void ExtensionAppsBase::OpenNativeSettings(const std::string& app_id) {
                  *extension)) {
     Browser* browser = chrome::FindTabbedBrowser(profile_, false);
     if (!browser) {
-      browser = new Browser(Browser::CreateParams(profile_, true));
+      browser = Browser::Create(Browser::CreateParams(profile_, true));
     }
 
     chrome::ShowExtensions(browser, extension->id());
@@ -725,8 +724,7 @@ void ExtensionAppsBase::OpenNativeSettings(const std::string& app_id) {
 void ExtensionAppsBase::OnContentSettingChanged(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
-    ContentSettingsType content_type,
-    const std::string& resource_identifier) {
+    ContentSettingsType content_type) {
   // If content_type is not one of the supported permissions, do nothing.
   if (!base::Contains(kSupportedPermissionTypes, content_type)) {
     return;
@@ -895,10 +893,9 @@ bool ExtensionAppsBase::RunExtensionEnableFlow(const std::string& app_id,
   return true;
 }
 
-content::WebContents* ExtensionAppsBase::LaunchImpl(
-    const AppLaunchParams& params) {
+content::WebContents* ExtensionAppsBase::LaunchImpl(AppLaunchParams&& params) {
   if (web_app_launch_manager_) {
-    return web_app_launch_manager_->OpenApplication(params);
+    return web_app_launch_manager_->OpenApplication(std::move(params));
   }
 
   if (params.container ==
@@ -907,7 +904,7 @@ content::WebContents* ExtensionAppsBase::LaunchImpl(
     web_app::RecordAppWindowLaunch(profile_, params.app_id);
   }
 
-  return ::OpenApplication(profile_, params);
+  return ::OpenApplication(profile_, std::move(params));
 }
 
 // static
@@ -938,8 +935,8 @@ void ExtensionAppsBase::PopulatePermissions(
   DCHECK(host_content_settings_map);
 
   for (ContentSettingsType type : kSupportedPermissionTypes) {
-    ContentSetting setting = host_content_settings_map->GetContentSetting(
-        url, url, type, std::string() /* resource_identifier */);
+    ContentSetting setting =
+        host_content_settings_map->GetContentSetting(url, url, type);
 
     // Map ContentSettingsType to an apps::mojom::TriState value
     apps::mojom::TriState setting_val;
@@ -958,8 +955,7 @@ void ExtensionAppsBase::PopulatePermissions(
     }
 
     content_settings::SettingInfo setting_info;
-    host_content_settings_map->GetWebsiteSetting(url, url, type, std::string(),
-                                                 &setting_info);
+    host_content_settings_map->GetWebsiteSetting(url, url, type, &setting_info);
 
     auto permission = apps::mojom::Permission::New();
     permission->permission_id = static_cast<uint32_t>(type);

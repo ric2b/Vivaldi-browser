@@ -12,8 +12,7 @@ namespace password_manager {
 //       names, e.g. "MyGreatFeature".
 namespace features {
 
-// Enables Biometrics for the Touch To Fill feature. This only effects Android
-// and requires autofill::features::kAutofillTouchToFill to be enabled as well.
+// Enables Biometrics for the Touch To Fill feature. This only effects Android.
 const base::Feature kBiometricTouchToFill = {"BiometricTouchToFill",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -22,10 +21,10 @@ const base::Feature kBiometricTouchToFill = {"BiometricTouchToFill",
 const base::Feature kChangePasswordAffiliationInfo = {
     "ChangePasswordAffiliationInfo", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// After saving/updating a password show a bubble reminder about the status of
-// other compromised credentials.
-const base::Feature kCompromisedPasswordsReengagement = {
-    "CompromisedPasswordsReengagement", base::FEATURE_DISABLED_BY_DEFAULT};
+// Enables submission detection for forms dynamically cleared but not removed
+// from the page.
+const base::Feature kDetectFormSubmissionOnFormClear = {
+    "DetectFormSubmissionOnFormClear", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables the editing of passwords in Chrome settings.
 const base::Feature kEditPasswordsInSettings = {
@@ -66,12 +65,7 @@ const base::Feature kPasswordChangeInSettings = {
 
 // Enables the bulk Password Check feature for signed in users.
 const base::Feature kPasswordCheck = {"PasswordCheck",
-#if defined(OS_ANDROID) || defined(OS_IOS)
-                                      base::FEATURE_DISABLED_BY_DEFAULT
-#else
-                                      base::FEATURE_ENABLED_BY_DEFAULT
-#endif
-};
+                                      base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls the ability to import passwords from Chrome's settings page.
 const base::Feature kPasswordImport = {"PasswordImport",
@@ -90,13 +84,32 @@ const base::Feature kPasswordsWeaknessCheck = {
 const base::Feature kRecoverFromNeverSaveAndroid = {
     "RecoverFromNeverSaveAndroid", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables reparsing server predictions once the password form manager notices a
+// dynamic form change.
+const base::Feature kReparseServerPredictionsFollowingFormChange = {
+    "ReparseServerPredictionsFollowingFormChange",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables considering secondary server field predictions during form parsing.
+const base::Feature kSecondaryServerFieldPredictions = {
+    "SecondaryServerFieldPredictions", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Treat heuritistics to find new password fields as reliable. This enables
+// password generation on more forms, but could lead to false positives.
+const base::Feature kTreatNewPasswordHeuristicsAsReliable = {
+    "TreatNewPasswordHeuristicsAsReliable", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables use of Hash Affiliation fetcher for all requests.
+const base::Feature kUseOfHashAffiliationFetcher = {
+    "UseOfHashAffiliationFetcher", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables support of filling and saving on username first flow.
 const base::Feature kUsernameFirstFlow = {"UsernameFirstFlow",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enable support for .well-known/change-password URLs.
 const base::Feature kWellKnownChangePassword = {
-    "WellKnownChangePassword", base::FEATURE_DISABLED_BY_DEFAULT};
+    "WellKnownChangePassword", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Field trial identifier for password generation requirements.
 const char kGenerationRequirementsFieldTrial[] =

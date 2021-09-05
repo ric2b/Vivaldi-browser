@@ -24,16 +24,19 @@
 #include "base/timer/timer.h"
 #include "base/values.h"
 #include "build/chromecast_buildflags.h"
+#include "build/chromeos_buildflags.h"
 #include "components/network_session_configurator/common/network_features.h"
 #include "components/os_crypt/os_crypt.h"
 #include "mojo/public/cpp/bindings/scoped_message_error_crash_key.h"
 #include "mojo/public/cpp/system/functions.h"
+#include "net/base/features.h"
 #include "net/base/logging_network_change_observer.h"
 #include "net/base/network_change_notifier.h"
 #include "net/base/network_change_notifier_posix.h"
 #include "net/base/port_util.h"
 #include "net/cert/cert_database.h"
 #include "net/cert/ct_log_response_parser.h"
+#include "net/cert/internal/system_trust_store.h"
 #include "net/cert/signed_tree_head.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/host_resolver_manager.h"
@@ -70,7 +73,7 @@
 #include "third_party/boringssl/src/include/openssl/cpu.h"
 #endif
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS) && !BUILDFLAG(IS_CHROMECAST)
+#if (defined(OS_LINUX) || BUILDFLAG(IS_LACROS)) && !BUILDFLAG(IS_CHROMECAST)
 #include "components/os_crypt/key_storage_config_linux.h"
 #endif
 
@@ -321,6 +324,14 @@ void NetworkService::Initialize(mojom::NetworkServiceParamsPtr params,
 
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
 
+#if defined(OS_MAC)
+  if (!base::FeatureList::IsEnabled(network::features::kCertVerifierService) &&
+      base::FeatureList::IsEnabled(
+          net::features::kCertVerifierBuiltinFeature)) {
+    net::InitializeTrustStoreMacCache();
+  }
+#endif
+
   // Set-up the global port overrides.
   if (command_line->HasSwitch(switches::kExplicitlyAllowedPorts)) {
     std::string allowed_ports =
@@ -374,6 +385,10 @@ void NetworkService::Initialize(mojom::NetworkServiceParamsPtr params,
   trust_token_key_commitments_ = std::make_unique<TrustTokenKeyCommitments>();
 
   preloaded_first_party_sets_ = std::make_unique<PreloadedFirstPartySets>();
+  if (command_line->HasSwitch(switches::kUseFirstPartySet)) {
+    preloaded_first_party_sets_->SetManuallySpecifiedSet(
+        command_line->GetSwitchValueASCII(switches::kUseFirstPartySet));
+  }
 
 #if BUILDFLAG(IS_CT_SUPPORTED)
   constexpr size_t kMaxSCTAuditingCacheEntries = 1024;
@@ -442,7 +457,7 @@ void NetworkService::DeregisterNetworkContext(NetworkContext* network_context) {
   network_contexts_.erase(network_context);
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
 void NetworkService::ReinitializeLogging(mojom::LoggingSettingsPtr settings) {
   logging::LoggingSettings logging_settings;
   logging_settings.logging_dest = settings->logging_dest;
@@ -482,8 +497,8 @@ void NetworkService::StartNetLog(base::File file,
   constants->MergeDictionary(&client_constants);
 
   file_net_log_observer_ = net::FileNetLogObserver::CreateUnboundedPreExisting(
-      std::move(file), std::move(constants));
-  file_net_log_observer_->StartObserving(net_log_, capture_mode);
+      std::move(file), capture_mode, std::move(constants));
+  file_net_log_observer_->StartObserving(net_log_);
 }
 
 void NetworkService::AttachNetLogProxy(
@@ -536,13 +551,6 @@ void NetworkService::ConfigureStubHostResolver(
   overrides.disabled_upgrade_providers =
       SplitString(features::kDnsOverHttpsUpgradeDisabledProvidersParam.Get(),
                   ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-
-  // Because SECURE mode does not allow any fallback, allow multiple retries as
-  // a quick hack to increase the timeout for these requests.
-  // TODO(crbug.com/1105138): Rethink the timeout logic to be less aggressive in
-  // cases where there is no fallback, without needing to make so many retries.
-  if (secure_dns_mode == net::SecureDnsMode::kSecure)
-    overrides.doh_attempts = 3;
 
   host_resolver_manager_->SetDnsConfigOverrides(overrides);
 }
@@ -670,7 +678,7 @@ void NetworkService::OnCertDBChanged() {
   net::CertDatabase::GetInstance()->NotifyObserversCertDBChanged();
 }
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#if defined(OS_LINUX) || BUILDFLAG(IS_LACROS)
 void NetworkService::SetCryptConfig(mojom::CryptConfigPtr crypt_config) {
 #if !BUILDFLAG(IS_CHROMECAST)
   DCHECK(!os_crypt_config_set_);

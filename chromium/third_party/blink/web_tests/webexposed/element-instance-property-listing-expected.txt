@@ -104,7 +104,6 @@ namespace http://www.w3.org/1999/xhtml
     property computedStyleMap
     property contains
     property contentEditable
-    property createShadowRoot
     property dataset
     property dir
     property dispatchEvent
@@ -122,7 +121,6 @@ namespace http://www.w3.org/1999/xhtml
     property getAttributeNodeNS
     property getBoundingClientRect
     property getClientRects
-    property getDestinationInsertionPoints
     property getElementsByClassName
     property getElementsByTagName
     property getElementsByTagNameNS
@@ -310,6 +308,7 @@ namespace http://www.w3.org/1999/xhtml
     property setAttributeNS
     property setAttributeNode
     property setAttributeNodeNS
+    property setInnerHTML
     property setPointerCapture
     property shadowRoot
     property slot
@@ -463,7 +462,6 @@ html element body
     property onpagehide
     property onpageshow
     property onpopstate
-    property onportalactivate
     property onrejectionhandled
     property onstorage
     property ontimezonechange
@@ -616,7 +614,6 @@ html element frameset
     property onpagehide
     property onpageshow
     property onpopstate
-    property onportalactivate
     property onrejectionhandled
     property onstorage
     property ontimezonechange
@@ -782,7 +779,6 @@ html element link
     property hreflang
     property imageSizes
     property imageSrcset
-    property import
     property importance
     property integrity
     property media
@@ -904,13 +900,6 @@ html element param
     property valueType
 html element picture
 html element plaintext
-html element portal
-    property activate
-    property onmessage
-    property onmessageerror
-    property postMessage
-    property referrerPolicy
-    property src
 html element pre
     property width
 html element progress
@@ -1315,7 +1304,6 @@ namespace http://www.w3.org/2000/svg
     property computedRole
     property computedStyleMap
     property contains
-    property createShadowRoot
     property dataset
     property dispatchEvent
     property elementTiming
@@ -1330,7 +1318,6 @@ namespace http://www.w3.org/2000/svg
     property getAttributeNodeNS
     property getBoundingClientRect
     property getClientRects
-    property getDestinationInsertionPoints
     property getElementsByClassName
     property getElementsByTagName
     property getElementsByTagNameNS
@@ -1507,6 +1494,7 @@ namespace http://www.w3.org/2000/svg
     property setAttributeNS
     property setAttributeNode
     property setAttributeNodeNS
+    property setInnerHTML
     property setPointerCapture
     property shadowRoot
     property slot

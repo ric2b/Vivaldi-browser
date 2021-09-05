@@ -120,6 +120,12 @@ const base::Feature kCertDualVerificationTrialFeature{
 const base::Feature kChangePictureVideoMode{"ChangePictureVideoMode",
                                             base::FEATURE_ENABLED_BY_DEFAULT};
 
+#if defined(OS_WIN)
+const base::Feature kChromeCleanupScanCompletedNotification{
+    "ChromeCleanupScanCompletedNotification",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
 #if defined(OS_ANDROID)
 // Enables clearing of browsing data which is older than given time period.
 const base::Feature kClearOldBrowsingData{"ClearOldBrowsingData",
@@ -134,6 +140,10 @@ const base::Feature kClientStorageAccessContextAuditing{
 
 const base::Feature kContentSettingsRedesign{"ContentSettingsRedesign",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables a redesign of the cookies page.
+const base::Feature kCookiesPageRedesign{"CookiesPageRedesign",
+                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(OS_ANDROID)
 // Restricts all of Chrome's threads to use only LITTLE cores on big.LITTLE
@@ -205,8 +215,8 @@ const base::Feature kCryptohomeUserDataAuthKillswitch{
 // Enables parsing and enforcing Data Leak Prevention policy rules that
 // restricts usage of some system features, e.g.clipboard, screenshot, etc.
 // for confidential content.
-const base::Feature kDataLeakPreventionPolicy{
-    "DataLeakPreventionPolicy", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kDataLeakPreventionPolicy{"DataLeakPreventionPolicy",
+                                              base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -322,32 +332,36 @@ const base::Feature kDownloadsLocationChange{"DownloadsLocationChange",
                                              base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
+#if defined(OS_ANDROID)
+// Enable loading native libraries earlier in startup on Android.
+const base::Feature kEarlyLibraryLoad{"EarlyLibraryLoad",
+                                      base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
 // Enables all registered system web apps, regardless of their respective
 // feature flags.
 const base::Feature kEnableAllSystemWebApps{"EnableAllSystemWebApps",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Disables ambient authentication in guest sessions.
-const base::Feature kEnableAmbientAuthenticationInGuestSession{
-    "EnableAmbientAuthenticationInGuestSession",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Disables ambient authentication in incognito mode.
-const base::Feature kEnableAmbientAuthenticationInIncognito{
-    "EnableAmbientAuthenticationInIncognito",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-
-#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MAC)
+#if defined(OS_WIN) || (defined(OS_LINUX) && !defined(OS_CHROMEOS)) || \
+    defined(OS_MAC)
 COMPONENT_EXPORT(CHROME_FEATURES)
 // Enables ephemeral Guest profiles on desktop.
 extern const base::Feature kEnableEphemeralGuestProfilesOnDesktop{
     "EnableEphemeralGuestProfilesOnDesktop", base::FEATURE_DISABLED_BY_DEFAULT};
-#endif  // defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MAC)
+#endif  // defined(OS_WIN) || (defined(OS_LINUX) && !defined(OS_CHROMEOS)) ||
+        // defined(OS_MAC)
 
 #if defined(OS_WIN)
 // Enables users to create a desktop shortcut for incognito mode.
 const base::Feature kEnableIncognitoShortcutOnDesktop{
     "EnableIncognitoShortcutOnDesktop", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
+
+#if defined(OS_MAC)
+const base::Feature kEnterpriseReportingApiKeychainRecreation{
+    "EnterpriseReportingApiKeychainRecreation",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -360,6 +374,12 @@ const base::Feature kEnterpriseReportingInChromeOS{
 // Enables event-based status reporting for child accounts in Chrome OS.
 const base::Feature kEventBasedStatusReporting{
     "EventBasedStatusReporting", base::FEATURE_ENABLED_BY_DEFAULT};
+#endif
+
+#if !defined(OS_ANDROID)
+// Enables real-time reporting for extension request
+const base::Feature kEnterpriseRealtimeExtensionRequest{
+    "EnterpriseRealtimeExtensionRequest", base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 // If enabled, this feature's |kExternalInstallDefaultButtonKey| field trial
@@ -379,11 +399,12 @@ const base::Feature kFlashDeprecationWarning{"FlashDeprecationWarning",
 // floc id is first computed for a browsing session or is refreshed due to a
 // long period of time has passed since the last computation.
 const base::Feature kFlocIdComputedEventLogging{
-    "FlocIdComputedEventLogging", base::FEATURE_DISABLED_BY_DEFAULT};
+    "FlocIdComputedEventLogging", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// If enabled, a computed floc will be invalidated if it appears in a blocklist.
-const base::Feature kFlocIdBlocklistFiltering{
-    "FlocIdBlocklistFiltering", base::FEATURE_DISABLED_BY_DEFAULT};
+// If enabled, the sim-hash floc computed from history will be further encoded
+// based on the sorting-lsh.
+const base::Feature kFlocIdSortingLshBasedComputation{
+    "FlocIdSortingLshBasedComputation", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables Focus Mode which brings up a PWA-like window look.
 const base::Feature kFocusMode{"FocusMode", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -414,11 +435,18 @@ const base::Feature kHappinessTrackingSurveysForDesktopDemo{
     "HappinessTrackingSurveysForDesktopDemo",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables or disables the Happiness Tracking System for same-site cookies
+// issues in Chrome DevTools on Desktop.
+const base::Feature
+    kHappinessTrackingSurveysForDesktopDevToolsIssuesCookiesSameSite{
+        "HappinessTrackingSurveysForDesktopDevToolsIssuesCookiesSameSite",
+        base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables the migration of Happiness Tracking Surveys on Desktop (to the latest
 // version).
 const base::Feature kHappinessTrackingSurveysForDesktopMigration{
     "HappinessTrackingSurveysForDesktopMigration",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables or disables the Happiness Tracking System for Desktop Chrome
 // Settings.
@@ -618,6 +646,10 @@ const base::Feature kPerAppTimeLimits{"PerAppTimeLimits",
                                       base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
+// Enables using the prediction service for permission prompts.
+const base::Feature kPermissionPredictions{"PermissionPredictions",
+                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
 #if defined(OS_CHROMEOS)
 // Enable support for "Plugin VMs" on Chrome OS.
 const base::Feature kPluginVm{"PluginVm", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -632,10 +664,11 @@ const base::Feature kPredictivePrefetchingAllowedOnAllConnectionTypes{
 const base::Feature kPrerenderFallbackToPreconnect{
     "PrerenderFallbackToPreconnect", base::FEATURE_ENABLED_BY_DEFAULT};
 
-#if defined(OS_ANDROID)
-const base::Feature kPrivacyElevatedAndroid{"PrivacyElevatedAndroid",
-                                            base::FEATURE_ENABLED_BY_DEFAULT};
+// Enables additional contextual entry points to privacy settings.
+const base::Feature kPrivacyAdvisor{"PrivacyAdvisor",
+                                    base::FEATURE_DISABLED_BY_DEFAULT};
 
+#if defined(OS_ANDROID)
 const base::Feature kPrivacyReorderedAndroid{"PrivacyReorderedAndroid",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
@@ -709,11 +742,6 @@ const base::Feature kSharesheet{"Sharesheet",
 const base::Feature kShow10_10ObsoleteInfobar{
     "Show1010ObsoleteInfobar", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_MAC)
-
-#if defined(OS_ANDROID)
-const base::Feature kShowTrustedPublisherURL{"ShowTrustedPublisherURL",
-                                             base::FEATURE_ENABLED_BY_DEFAULT};
-#endif
 
 // Alternative to switches::kSitePerProcess, for turning on full site isolation.
 // Launch bug: https://crbug.com/810843.  This is a //chrome-layer feature to

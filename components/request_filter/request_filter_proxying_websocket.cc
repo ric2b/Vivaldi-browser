@@ -171,6 +171,10 @@ void RequestFilterProxyingWebSocket::OnOpeningHandshakeStarted(
   forwarding_handshake_client_->OnOpeningHandshakeStarted(std::move(request));
 }
 
+void RequestFilterProxyingWebSocket::OnFailure(const std::string&,
+                                               int net_error,
+                                               int response_code) {}
+
 void RequestFilterProxyingWebSocket::ContinueToHeadersReceived() {
   auto continuation = base::BindRepeating(
       &RequestFilterProxyingWebSocket::OnHeadersReceivedComplete,
@@ -324,7 +328,6 @@ void RequestFilterProxyingWebSocket::StartProxying(
     request.headers.SetHeader(net::HttpRequestHeaders::kUserAgent, *user_agent);
   }
   request.request_initiator = origin;
-  request.resource_type = static_cast<int>(blink::mojom::ResourceType::kObject);
 
   auto proxy = std::make_unique<RequestFilterProxyingWebSocket>(
       std::move(factory), request, std::move(additional_headers),
@@ -432,9 +435,9 @@ void RequestFilterProxyingWebSocket::ContinueToStartRequest(int error_code) {
   // See also CreateWebSocket in
   // //network/services/public/mojom/network_context.mojom.
   receiver_as_handshake_client_.set_disconnect_with_reason_handler(
-      base::BindOnce(
-          &RequestFilterProxyingWebSocket::OnMojoConnectionErrorWithCustomReason,
-          base::Unretained(this)));
+      base::BindOnce(&RequestFilterProxyingWebSocket::
+                         OnMojoConnectionErrorWithCustomReason,
+                     base::Unretained(this)));
   forwarding_handshake_client_.set_disconnect_handler(
       base::BindOnce(&RequestFilterProxyingWebSocket::OnMojoConnectionError,
                      base::Unretained(this)));

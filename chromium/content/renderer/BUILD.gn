@@ -11,13 +11,6 @@ import("//ppapi/buildflags/buildflags.gni")
 import("//third_party/webrtc/webrtc.gni")
 import("//tools/ipc_fuzzer/ipc_fuzzer.gni")
 
-# This file depends on the legacy global sources assignment filter. It should
-# be converted to check target platform before assigning source files to the
-# sources variable. Remove this import and set_sources_assignment_filter call
-# when the file has been converted. See https://crbug.com/1018739 for details.
-import("//build/config/deprecated_default_sources_assignment_filter.gni")
-set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
-
 if (is_component_build) {
   link_target_type = "source_set"
 } else {
@@ -54,8 +47,6 @@ target(link_target_type, "renderer") {
     "accessibility/render_accessibility_manager.h",
     "agent_scheduling_group.cc",
     "agent_scheduling_group.h",
-    "android/synchronous_layer_tree_frame_sink_impl.cc",
-    "android/synchronous_layer_tree_frame_sink_impl.h",
     "browser_exposed_renderer_interfaces.cc",
     "browser_exposed_renderer_interfaces.h",
     "categorized_worker_pool.cc",
@@ -82,60 +73,24 @@ target(link_target_type, "renderer") {
     "frame_owner_properties_converter.h",
     "gpu_benchmarking_extension.cc",
     "gpu_benchmarking_extension.h",
-    "history_entry.cc",
-    "history_entry.h",
-    "history_serialization.cc",
-    "history_serialization.h",
     "impression_conversions.cc",
     "impression_conversions.h",
     "in_process_renderer_thread.cc",
     "in_process_renderer_thread.h",
     "internal_document_state_data.cc",
     "internal_document_state_data.h",
-    "java/gin_java_bridge_dispatcher.cc",
-    "java/gin_java_bridge_dispatcher.h",
-    "java/gin_java_bridge_object.cc",
-    "java/gin_java_bridge_object.h",
-    "java/gin_java_bridge_value_converter.cc",
-    "java/gin_java_bridge_value_converter.h",
-    "java/gin_java_function_invocation_helper.cc",
-    "java/gin_java_function_invocation_helper.h",
-    "loader/child_url_loader_factory_bundle.cc",
-    "loader/child_url_loader_factory_bundle.h",
     "loader/navigation_body_loader.cc",
     "loader/navigation_body_loader.h",
-    "loader/request_extra_data.cc",
-    "loader/request_extra_data.h",
     "loader/resource_dispatcher.cc",
     "loader/resource_dispatcher.h",
-    "loader/resource_load_stats.cc",
-    "loader/resource_load_stats.h",
     "loader/sync_load_context.cc",
     "loader/sync_load_context.h",
-    "loader/sync_load_response.cc",
-    "loader/sync_load_response.h",
-    "loader/tracked_child_url_loader_factory_bundle.cc",
-    "loader/tracked_child_url_loader_factory_bundle.h",
     "loader/url_loader_client_impl.cc",
     "loader/url_loader_client_impl.h",
     "loader/web_url_loader_impl.cc",
     "loader/web_url_loader_impl.h",
-    "loader/web_url_request_util.cc",
-    "loader/web_url_request_util.h",
     "loader/web_worker_fetch_context_impl.cc",
     "loader/web_worker_fetch_context_impl.h",
-    "media/android/flinging_renderer_client.cc",
-    "media/android/flinging_renderer_client.h",
-    "media/android/flinging_renderer_client_factory.cc",
-    "media/android/flinging_renderer_client_factory.h",
-    "media/android/media_player_renderer_client.cc",
-    "media/android/media_player_renderer_client.h",
-    "media/android/media_player_renderer_client_factory.cc",
-    "media/android/media_player_renderer_client_factory.h",
-    "media/android/stream_texture_factory.cc",
-    "media/android/stream_texture_factory.h",
-    "media/android/stream_texture_wrapper_impl.cc",
-    "media/android/stream_texture_wrapper_impl.h",
     "media/audio_decoder.cc",
     "media/audio_decoder.h",
     "media/batching_media_log.cc",
@@ -166,8 +121,6 @@ target(link_target_type, "renderer") {
     "mhtml_handle_writer.h",
     "mojo/blink_interface_registry_impl.cc",
     "mojo/blink_interface_registry_impl.h",
-    "mouse_lock_dispatcher.cc",
-    "mouse_lock_dispatcher.h",
     "navigation_client.cc",
     "navigation_client.h",
     "navigation_state.cc",
@@ -178,8 +131,6 @@ target(link_target_type, "renderer") {
     "peripheral_content_heuristic.h",
     "render_frame_impl.cc",
     "render_frame_impl.h",
-    "render_frame_metadata_observer_impl.cc",
-    "render_frame_metadata_observer_impl.h",
     "render_frame_proxy.cc",
     "render_frame_proxy.h",
     "render_process.cc",
@@ -190,25 +141,15 @@ target(link_target_type, "renderer") {
     "render_thread_impl.h",
     "render_view_impl.cc",
     "render_view_impl.h",
-    "render_view_linux.cc",
-    "render_view_win.cc",
     "render_widget.cc",
     "render_widget.h",
     "render_widget_delegate.h",
-    "render_widget_mouse_lock_dispatcher.cc",
-    "render_widget_mouse_lock_dispatcher.h",
     "renderer_blink_platform_impl.cc",
     "renderer_blink_platform_impl.h",
     "renderer_main.cc",
     "renderer_main_platform_delegate.h",
-    "renderer_main_platform_delegate_android.cc",
-    "renderer_main_platform_delegate_linux.cc",
-    "renderer_main_platform_delegate_mac.mm",
-    "renderer_main_platform_delegate_win.cc",
     "sad_plugin.cc",
     "sad_plugin.h",
-    "seccomp_sandbox_status_android.cc",
-    "seccomp_sandbox_status_android.h",
     "service_worker/controller_service_worker_connector.cc",
     "service_worker/controller_service_worker_connector.h",
     "service_worker/embedded_worker_instance_client_impl.cc",
@@ -235,10 +176,6 @@ target(link_target_type, "renderer") {
     "stats_collection_controller.h",
     "storage_util.cc",
     "storage_util.h",
-    "stream_texture_host_android.cc",
-    "stream_texture_host_android.h",
-    "theme_helper_mac.h",
-    "theme_helper_mac.mm",
     "top_level_blame_context.cc",
     "top_level_blame_context.h",
     "v8_value_converter_impl.cc",
@@ -263,6 +200,52 @@ target(link_target_type, "renderer") {
     "worker/worker_thread_registry.h",
   ]
 
+  if (is_android) {
+    sources += [
+      "java/gin_java_bridge_dispatcher.cc",
+      "java/gin_java_bridge_dispatcher.h",
+      "java/gin_java_bridge_object.cc",
+      "java/gin_java_bridge_object.h",
+      "java/gin_java_bridge_value_converter.cc",
+      "java/gin_java_bridge_value_converter.h",
+      "java/gin_java_function_invocation_helper.cc",
+      "java/gin_java_function_invocation_helper.h",
+      "media/android/flinging_renderer_client.cc",
+      "media/android/flinging_renderer_client.h",
+      "media/android/flinging_renderer_client_factory.cc",
+      "media/android/flinging_renderer_client_factory.h",
+      "media/android/media_player_renderer_client.cc",
+      "media/android/media_player_renderer_client.h",
+      "media/android/media_player_renderer_client_factory.cc",
+      "media/android/media_player_renderer_client_factory.h",
+      "media/android/stream_texture_factory.cc",
+      "media/android/stream_texture_factory.h",
+      "media/android/stream_texture_wrapper_impl.cc",
+      "media/android/stream_texture_wrapper_impl.h",
+      "renderer_main_platform_delegate_android.cc",
+      "seccomp_sandbox_status_android.cc",
+      "seccomp_sandbox_status_android.h",
+      "stream_texture_host_android.cc",
+      "stream_texture_host_android.h",
+    ]
+  }
+
+  if (is_linux || is_chromeos) {
+    sources += [ "renderer_main_platform_delegate_linux.cc" ]
+  }
+
+  if (is_mac) {
+    sources += [
+      "renderer_main_platform_delegate_mac.mm",
+      "theme_helper_mac.h",
+      "theme_helper_mac.mm",
+    ]
+  }
+
+  if (is_win) {
+    sources += [ "renderer_main_platform_delegate_win.cc" ]
+  }
+
   if (enable_cast_renderer) {
     sources += [
       "media/cast_renderer_client_factory.cc",
@@ -286,6 +269,7 @@ target(link_target_type, "renderer") {
     "//base",
     "//base:i18n",
     "//build:chromecast_buildflags",
+    "//build:chromeos_buildflags",
     "//cc",
     "//cc/animation",
     "//cc/mojo_embedder",
@@ -380,30 +364,12 @@ target(link_target_type, "renderer") {
   allow_circular_includes_from = []
 
   if (is_android) {
-    set_sources_assignment_filter([])
-    sources += [
-      # Add back the Linux file which Android shares.
-      "render_view_linux.cc",
-    ]
-    set_sources_assignment_filter(deprecated_default_sources_assignment_filter)
-
     deps += [
       # Used by Android WebView only.
       "//components/viz/service",
       "//third_party/android_ndk:cpu_features",
       "//third_party/ashmem",
       "//third_party/libphonenumber",
-    ]
-  } else {
-    sources -= [
-      "java/gin_java_bridge_dispatcher.cc",
-      "java/gin_java_bridge_dispatcher.h",
-      "java/gin_java_bridge_object.cc",
-      "java/gin_java_bridge_object.h",
-      "java/gin_java_bridge_value_converter.cc",
-      "java/gin_java_bridge_value_converter.h",
-      "java/gin_java_function_invocation_helper.cc",
-      "java/gin_java_function_invocation_helper.h",
     ]
   }
 
@@ -415,7 +381,6 @@ target(link_target_type, "renderer") {
     sources += [
       "media/fuchsia_renderer_factory.cc",
       "media/fuchsia_renderer_factory.h",
-      "render_view_fuchsia.cc",
       "renderer_main_platform_delegate_fuchsia.cc",
     ]
 
@@ -461,7 +426,6 @@ target(link_target_type, "renderer") {
       "pepper/content_renderer_pepper_host_factory.h",
       "pepper/event_conversion.cc",
       "pepper/event_conversion.h",
-      "pepper/fullscreen_container.h",
       "pepper/gfx_conversion.h",
       "pepper/host_array_buffer_var.cc",
       "pepper/host_array_buffer_var.h",
@@ -477,14 +441,10 @@ target(link_target_type, "renderer") {
       "pepper/message_channel.h",
       "pepper/pepper_audio_controller.cc",
       "pepper/pepper_audio_controller.h",
-      "pepper/pepper_audio_encoder_host.cc",
-      "pepper/pepper_audio_encoder_host.h",
       "pepper/pepper_audio_input_host.cc",
       "pepper/pepper_audio_input_host.h",
       "pepper/pepper_audio_output_host.cc",
       "pepper/pepper_audio_output_host.h",
-      "pepper/pepper_broker.cc",
-      "pepper/pepper_broker.h",
       "pepper/pepper_browser_connection.cc",
       "pepper/pepper_browser_connection.h",
       "pepper/pepper_camera_device_host.cc",
@@ -537,24 +497,16 @@ target(link_target_type, "renderer") {
       "pepper/pepper_webplugin_impl.h",
       "pepper/pepper_websocket_host.cc",
       "pepper/pepper_websocket_host.h",
-      "pepper/plugin_instance_throttler_impl.cc",
-      "pepper/plugin_instance_throttler_impl.h",
       "pepper/plugin_module.cc",
       "pepper/plugin_module.h",
       "pepper/plugin_object.cc",
       "pepper/plugin_object.h",
-      "pepper/plugin_power_saver_helper.cc",
-      "pepper/plugin_power_saver_helper.h",
       "pepper/ppapi_preferences_builder.cc",
       "pepper/ppapi_preferences_builder.h",
       "pepper/ppb_audio_impl.cc",
       "pepper/ppb_audio_impl.h",
-      "pepper/ppb_broker_impl.cc",
-      "pepper/ppb_broker_impl.h",
       "pepper/ppb_buffer_impl.cc",
       "pepper/ppb_buffer_impl.h",
-      "pepper/ppb_flash_message_loop_impl.cc",
-      "pepper/ppb_flash_message_loop_impl.h",
       "pepper/ppb_graphics_3d_impl.cc",
       "pepper/ppb_graphics_3d_impl.h",
       "pepper/ppb_image_data_impl.cc",
@@ -584,8 +536,6 @@ target(link_target_type, "renderer") {
       "pepper/video_decoder_shim.h",
       "pepper/video_encoder_shim.cc",
       "pepper/video_encoder_shim.h",
-      "render_widget_fullscreen_pepper.cc",
-      "render_widget_fullscreen_pepper.h",
     ]
 
     deps += [

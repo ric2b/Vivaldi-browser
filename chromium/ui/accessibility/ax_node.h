@@ -297,6 +297,16 @@ class AX_EXPORT AXNode final {
   base::string16 GetInheritedString16Attribute(
       ax::mojom::StringAttribute attribute) const;
 
+  // If this node is a leaf, returns the inner text of this node. This is
+  // equivalent to its visible accessible name. Otherwise, if this node is not a
+  // leaf, represents every non-textual child node with a special "embedded
+  // object character", and every textual child node with its inner text.
+  // Textual nodes include e.g. static text and white space.
+  //
+  // This is how displayed text and embedded objects are represented in
+  // ATK and IAccessible2 APIs.
+  std::string GetHypertext() const;
+
   // Returns the text of this node and all descendant nodes; including text
   // found in embedded objects.
   //
@@ -305,7 +315,7 @@ class AX_EXPORT AXNode final {
   // not returned.
   std::string GetInnerText() const;
 
-  // Return a string representing the language code.
+  // Returns a string representing the language code.
   //
   // This will consider the language declared in the DOM, and may eventually
   // attempt to automatically detect the language from the text.
@@ -314,6 +324,13 @@ class AX_EXPORT AXNode final {
   //
   // Returns empty string if no appropriate language was found.
   std::string GetLanguage() const;
+
+  // Returns the value of a control such as a text field, a slider, a <select>
+  // element, a date picker or an ARIA combo box. In order to minimize
+  // cross-process communication between the renderer and the browser, this
+  // method may compute the value from the control's inner text in the case of a
+  // text field.
+  std::string GetValueForControl() const;
 
   //
   // Helper functions for tables, table rows, and table cells.
@@ -440,8 +457,13 @@ class AX_EXPORT AXNode final {
   // collapsed.
   AXNode* GetCollapsedMenuListPopUpButtonAncestor() const;
 
-  // Returns the text field ancestor of this current node if any.
+  // If this node is within an editable region, returns the node that is at the
+  // root of that editable region, otherwise returns nullptr. In accessibility,
+  // an editable region is synonymous to a text field.
   AXNode* GetTextFieldAncestor() const;
+
+  // Returns true if the ancestor of the current node is a plain text field.
+  bool IsDescendantOfPlainTextField() const;
 
   // Finds and returns a pointer to ordered set containing node.
   AXNode* GetOrderedSet() const;
@@ -458,6 +480,20 @@ class AX_EXPORT AXNode final {
   int UpdateUnignoredCachedValuesRecursive(int startIndex);
   AXNode* ComputeLastUnignoredChildRecursive() const;
   AXNode* ComputeFirstUnignoredChildRecursive() const;
+
+  // Returns the value of a range control such as a slider or a scroll bar in
+  // text format.
+  std::string GetTextForRangeValue() const;
+
+  // Returns the value of a color well (a color chooser control) in a human
+  // readable format. For example: "50% red 40% green 90% blue".
+  std::string GetValueForColorWell() const;
+
+  // Returns the value of a text field. If necessary, computes the value from
+  // the field's internal representation in the accessibility tree, in order to
+  // minimize cross-process communication between the renderer and the browser
+  // processes.
+  std::string GetValueForTextField() const;
 
   OwnerTree* const tree_;  // Owns this.
   size_t index_in_parent_;

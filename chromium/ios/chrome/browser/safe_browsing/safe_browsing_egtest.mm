@@ -11,6 +11,7 @@
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_earl_grey.h"
 #import "ios/chrome/browser/ui/bookmarks/bookmark_earl_grey_ui.h"
+#import "ios/chrome/browser/ui/tab_switcher/tab_grid/features.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_app_interface.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
@@ -96,9 +97,12 @@ std::unique_ptr<net::test_server::HttpResponse> HandleRequest(
 
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration config;
-  config.features_enabled.push_back(safe_browsing::kSafeBrowsingAvailableOnIOS);
   config.features_enabled.push_back(safe_browsing::kRealTimeUrlLookupEnabled);
-  config.features_enabled.push_back(web::features::kSSLCommittedInterstitials);
+  // EnableCloseAllTabsConfirmation feature is disabled in order to be able to
+  // restore session from |triggerRestoreViaTabGridRemoveAllUndo|.
+  // TODO(crbug.com/1146391): Remove dependency on
+  // kEnableCloseAllTabsConfirmation flag.
+  config.features_disabled.push_back(kEnableCloseAllTabsConfirmation);
 
   // Use commandline args to insert fake unsafe URLs into the Safe Browsing
   // database.
@@ -448,7 +452,8 @@ std::unique_ptr<net::test_server::HttpResponse> HandleRequest(
 
 // Tests performing a back navigation to a warning page and a forward navigation
 // from a warning page, in incognito mode.
-- (void)testBackForwardNavigationWithWarningInIncognito {
+// crbug.com/1147360 Test is flaky
+- (void)DISABLED_testBackForwardNavigationWithWarningInIncognito {
   [ChromeEarlGrey openNewIncognitoTab];
   [ChromeEarlGrey loadURL:_safeURL1];
   [ChromeEarlGrey waitForWebStateContainingText:_safeContent1];

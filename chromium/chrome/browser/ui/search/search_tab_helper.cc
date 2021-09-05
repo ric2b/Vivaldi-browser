@@ -31,7 +31,6 @@
 #include "chrome/browser/search/instant_service.h"
 #include "chrome/browser/search/instant_service_factory.h"
 #include "chrome/browser/search/local_ntp_source.h"
-#include "chrome/browser/search/ntp_features.h"
 #include "chrome/browser/search/promos/promo_service.h"
 #include "chrome/browser/search/promos/promo_service_factory.h"
 #include "chrome/browser/search/search.h"
@@ -76,6 +75,7 @@
 #include "components/omnibox/browser/suggestion_answer.h"
 #include "components/omnibox/browser/vector_icons.h"
 #include "components/omnibox/common/omnibox_features.h"
+#include "components/search/ntp_features.h"
 #include "components/search/search.h"
 #include "components/search_engines/omnibox_focus_type.h"
 #include "components/search_engines/template_url_service.h"
@@ -914,7 +914,7 @@ void SearchTabHelper::OpenAutocompleteMatch(
       /*elapsed_time_since_last_change_to_default_match=*/
       elapsed_time_since_last_change_to_default_match,
       /*result=*/autocomplete_controller_->result());
-  autocomplete_controller_->AddProvidersInfo(&log.providers_info);
+  autocomplete_controller_->AddProviderAndTriggeringLogs(&log);
 
   OmniboxEventGlobalTracker::GetInstance()->OnURLOpened(&log);
 

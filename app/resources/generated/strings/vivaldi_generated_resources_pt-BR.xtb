@@ -19,7 +19,6 @@
 <translation id="1221825588892235038">Apenas seleção</translation>
 <translation id="1244303850296295656">Erro na extensão</translation>
 <translation id="125220115284141797">Padrões</translation>
-<translation id="1274977772557788323">Configurações de armazenamento do Adobe Flash Player</translation>
 <translation id="1297175357211070620">Destino</translation>
 <translation id="1303101771013849280">Arquivo HTML de marcadores</translation>
 <translation id="1380436189840894976">Sair do modo privado mesmo assim?</translation>
@@ -74,7 +73,6 @@
 <translation id="2218515861914035131">Colar como texto sem formatação</translation>
 <translation id="2249605167705922988">1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Permitir identificadores únicos (talvez seja necessário reiniciar o computador)</translation>
-<translation id="2263497240924215535">(Desativado)</translation>
 <translation id="2277255602909579701">Cookies e outros armazenamentos dos sites</translation>
 <translation id="2280486287150724112">Margem direta</translation>
 <translation id="2282146716419988068">Processo de GPU</translation>
@@ -125,7 +123,6 @@
 <translation id="3013291976881901233">Dispositivos MIDI</translation>
 <translation id="3021678814754966447">Exibir Código Fonte do Frame</translation>
 <translation id="3036546437875325427">Ativar Flash</translation>
-<translation id="3038675903128704560">Não permitir que os sites usem um plugin para acessar seu computador</translation>
 <translation id="3046910703532196514">Página da web, completa</translation>
 <translation id="3067198360141518313">Executar este plug-in</translation>
 <translation id="3080207940057008665">Outro programa em seu computador adicionou um tema que pode modificar a forma como o Vivaldi funciona.</translation>
@@ -155,12 +152,10 @@
 <translation id="3378572629723696641">Esta extensão pode ter sido corrompida.</translation>
 <translation id="3387614642886316601">Usar a verificação ortográfica aprimorada</translation>
 <translation id="3432227430032737297">Excluir Cookies Pesquisados</translation>
-<translation id="3440761377721825626">Perguntar quando um site quiser usar um plugin para acessar seu computador</translation>
 <translation id="345693547134384690">Abrir &amp;imagem em uma nova guia</translation>
 <translation id="3494769164076977169">Perguntar quando um site tentar fazer download de arquivos automaticamente após o primeiro arquivo (recomendado)</translation>
 <translation id="3505030558724226696">Revogar acesso ao dispositivo</translation>
 <translation id="3511307672085573050">Copiar end&amp;ereço do link</translation>
-<translation id="3523642406908660543">Perguntar quando um site quiser usar um plugin para acessar seu computador (recomendado)</translation>
 <translation id="354068948465830244">Pode ler e alterar os dados do site</translation>
 <translation id="3560034655160545939">&amp;Verificação ortográfica</translation>
 <translation id="3574917942258583917">Sair do modo de navegação anônima mesmo assim?</translation>
@@ -219,7 +214,6 @@
 <translation id="4423376891418188461">Restaurar Configurações</translation>
 <translation id="4434045419905280838">Popups e redirecionamentos</translation>
 <translation id="4478664379124702289">Salvar Lin&amp;k Como...</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535">Não foi possível transmitir <ph name="HOST_NAME" />.</translation>
 <translation id="4593021220803146968">&amp;Acessar <ph name="URL" /></translation>
 <translation id="4595560905247879544">Aplicativos e extensões só podem ser modificados pelo administrador (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -300,7 +294,6 @@
 <translation id="583281660410589416">Desconhecida</translation>
 <translation id="5860491529813859533">Ativar</translation>
 <translation id="5867841422488265304">Pesquisar ou digitar endereço da web</translation>
-<translation id="5908769186679515905">Impedir que os sites executem Flash</translation>
 <translation id="5910363049092958439">Sal&amp;var Imagem Como...</translation>
 <translation id="5956585768868398362">Esta é a página de pesquisa que você esperava?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (pico de <ph name="NUM_KILOBYTES_LIVE" />)</translation>
@@ -373,7 +366,6 @@
 <translation id="7287143125007575591">Acesso negado.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Exibir &amp;controles</translation>
-<translation id="7311079019872751559">Plugins fora do sandbox</translation>
 <translation id="7385854874724088939">Ocorreu um erro durante a impressão.  Verifique a sua impressora e tente novamente.</translation>
 <translation id="7412226954991670867">Memória da GPU</translation>
 <translation id="7421925624202799674">Exibir Código Fonte da Página</translation>

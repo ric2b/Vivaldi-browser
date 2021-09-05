@@ -12,7 +12,6 @@
 #include "base/bind.h"
 #include "base/run_loop.h"
 #include "base/task/post_task.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/unguessable_token.h"
 #include "content/browser/loader/navigation_loader_interceptor.h"
 #include "content/browser/loader/navigation_url_loader.h"
@@ -206,8 +205,8 @@ class NavigationURLLoaderImplTest : public testing::Test {
         new NavigationRequestInfo(
             std::move(common_params), std::move(begin_params),
             net::IsolationInfo::Create(
-                net::IsolationInfo::RedirectMode::kUpdateTopFrame, origin,
-                origin, net::SiteForCookies::FromUrl(url)),
+                net::IsolationInfo::RequestType::kMainFrame, origin, origin,
+                net::SiteForCookies::FromUrl(url)),
             is_main_frame, false /* parent_is_main_frame */,
             false /* are_ancestors_secure */, -1 /* frame_tree_node_id */,
             false /* is_for_guests_only */, false /* report_raw_headers */,
@@ -280,25 +279,6 @@ class NavigationURLLoaderImplTest : public testing::Test {
     }
   }
 
-  net::RequestPriority NavigateAndReturnRequestPriority(const GURL& url,
-                                                        bool is_main_frame) {
-    TestNavigationURLLoaderDelegate delegate;
-    base::test::ScopedFeatureList scoped_feature_list_;
-
-    scoped_feature_list_.InitAndEnableFeature(features::kLowPriorityIframes);
-
-    std::unique_ptr<NavigationURLLoader> loader = CreateTestLoader(
-        url,
-        base::StringPrintf("%s: %s", net::HttpRequestHeaders::kOrigin,
-                           url.GetOrigin().spec().c_str()),
-        "GET", &delegate, NavigationDownloadPolicy(), is_main_frame);
-    delegate.WaitForRequestRedirected();
-    loader->FollowRedirect({}, {}, {}, blink::PreviewsTypes::PREVIEWS_OFF);
-    delegate.WaitForResponseStarted();
-
-    return most_recent_resource_request_.value().priority;
-  }
-
   net::RedirectInfo NavigateAndReturnRedirectInfo(const GURL& url,
                                                   bool upgrade_if_insecure,
                                                   bool expect_request_fail) {
@@ -328,16 +308,6 @@ class NavigationURLLoaderImplTest : public testing::Test {
   base::Optional<network::ResourceRequest> most_recent_resource_request_;
 };
 
-TEST_F(NavigationURLLoaderImplTest, RequestPriority) {
-  ASSERT_TRUE(http_test_server_.Start());
-  const GURL url = http_test_server_.GetURL("/redirect301-to-echo");
-
-  EXPECT_EQ(net::HIGHEST,
-            NavigateAndReturnRequestPriority(url, true /* is_main_frame */));
-  EXPECT_EQ(net::LOWEST,
-            NavigateAndReturnRequestPriority(url, false /* is_main_frame */));
-}
-
 TEST_F(NavigationURLLoaderImplTest, IsolationInfoOfMainFrameNavigation) {
   ASSERT_TRUE(http_test_server_.Start());
 
@@ -356,9 +326,9 @@ TEST_F(NavigationURLLoaderImplTest, IsolationInfoOfMainFrameNavigation) {
   ASSERT_TRUE(most_recent_resource_request_);
   ASSERT_TRUE(most_recent_resource_request_->trusted_params);
   EXPECT_TRUE(
-      net::IsolationInfo::Create(
-          net::IsolationInfo::RedirectMode::kUpdateTopFrame, origin, origin,
-          net::SiteForCookies::FromOrigin(origin))
+      net::IsolationInfo::Create(net::IsolationInfo::RequestType::kMainFrame,
+                                 origin, origin,
+                                 net::SiteForCookies::FromOrigin(origin))
           .IsEqualForTesting(
               most_recent_resource_request_->trusted_params->isolation_info));
 }
@@ -375,9 +345,9 @@ TEST_F(NavigationURLLoaderImplTest,
 
   ASSERT_TRUE(most_recent_resource_request_->trusted_params);
   EXPECT_TRUE(
-      net::IsolationInfo::Create(
-          net::IsolationInfo::RedirectMode::kUpdateTopFrame, origin, origin,
-          net::SiteForCookies::FromOrigin(origin))
+      net::IsolationInfo::Create(net::IsolationInfo::RequestType::kMainFrame,
+                                 origin, origin,
+                                 net::SiteForCookies::FromOrigin(origin))
           .IsEqualForTesting(
               most_recent_resource_request_->trusted_params->isolation_info));
 }

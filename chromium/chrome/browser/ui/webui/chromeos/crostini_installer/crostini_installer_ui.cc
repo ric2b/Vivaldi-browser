@@ -7,8 +7,9 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/strings/string16.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
 #include "chrome/browser/chromeos/crostini/crostini_disk.h"
 #include "chrome/browser/chromeos/crostini/crostini_installer.h"
@@ -28,6 +29,7 @@
 #include "ui/base/text/bytes_formatting.h"
 #include "ui/base/webui/web_ui_util.h"
 #include "ui/chromeos/devicetype_utils.h"
+#include "ui/resources/grit/webui_generated_resources.h"
 #include "ui/resources/grit/webui_resources.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/web_dialogs/web_dialog_ui.h"
@@ -155,8 +157,8 @@ CrostiniInstallerUI::CrostiniInstallerUI(content::WebUI* web_ui)
                           IDR_CROSTINI_INSTALLER_MOJO_LITE_JS);
   source->AddResourcePath("crostini_types.mojom-lite.js",
                           IDR_CROSTINI_INSTALLER_TYPES_MOJO_LITE_JS);
-  source->AddResourcePath("test_loader.js", IDR_WEBUI_JS_TEST_LOADER);
-  source->AddResourcePath("test_loader.html", IDR_WEBUI_HTML_TEST_LOADER);
+  source->AddResourcePath("test_loader.js", IDR_WEBUI_JS_TEST_LOADER_JS);
+  source->AddResourcePath("test_loader.html", IDR_WEBUI_HTML_TEST_LOADER_HTML);
   source->AddResourcePath("images/linux_illustration.png",
                           IDR_LINUX_ILLUSTRATION);
   source->SetDefaultResource(IDR_CROSTINI_INSTALLER_INDEX_HTML);

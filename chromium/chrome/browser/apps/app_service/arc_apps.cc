@@ -9,7 +9,7 @@
 
 #include "ash/public/cpp/app_menu_constants.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/containers/flat_map.h"
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
@@ -769,8 +769,9 @@ void ArcApps::LaunchAppWithIntent(const std::string& app_id,
     }
 
     if (intent->mime_type.has_value() && intent->file_urls.has_value()) {
+      const auto file_urls = intent->file_urls.value();
       file_manager::util::ConvertToContentUrls(
-          apps::GetFileSystemURL(profile_, intent->file_urls.value()),
+          apps::GetFileSystemURL(profile_, file_urls),
           base::BindOnce(&OnContentUrlResolved, std::move(intent),
                          std::move(activity)));
       return;
@@ -960,6 +961,13 @@ void ArcApps::GetMenuModel(const std::string& app_id,
 
   BuildMenuForShortcut(app_info->package_name, std::move(menu_items),
                        std::move(callback));
+}
+
+void ArcApps::ExecuteContextMenuCommand(const std::string& app_id,
+                                        int command_id,
+                                        const std::string& shortcut_id,
+                                        int64_t display_id) {
+  arc::ExecuteArcShortcutCommand(profile_, app_id, shortcut_id, display_id);
 }
 
 void ArcApps::OpenNativeSettings(const std::string& app_id) {

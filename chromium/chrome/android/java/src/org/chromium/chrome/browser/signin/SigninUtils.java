@@ -12,13 +12,14 @@ import android.os.Build;
 import android.provider.Settings;
 
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import org.chromium.base.IntentUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.NativeMethods;
 import org.chromium.chrome.browser.app.ChromeActivity;
-import org.chromium.chrome.browser.help.HelpAndFeedback;
+import org.chromium.chrome.browser.feedback.HelpAndFeedbackLauncherImpl;
 import org.chromium.chrome.browser.incognito.interstitial.IncognitoInterstitialDelegate;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.account_picker.AccountConsistencyPromoAction;
@@ -80,8 +81,8 @@ public class SigninUtils {
     }
 
     @CalledByNative
-    private static void openAccountPickerBottomSheet(
-            WindowAndroid windowAndroid, String continueUrl) {
+    @VisibleForTesting
+    static void openAccountPickerBottomSheet(WindowAndroid windowAndroid, String continueUrl) {
         ThreadUtils.assertOnUiThread();
         SigninManager signinManager = IdentityServicesProvider.get().getSigninManager(
                 Profile.getLastUsedRegularProfile());
@@ -115,7 +116,7 @@ public class SigninUtils {
         TabCreator incognitoTabCreator = activity.getTabCreator(/*incognito=*/true);
         IncognitoInterstitialDelegate incognitoInterstitialDelegate =
                 new IncognitoInterstitialDelegate(activity, regularTabModel, incognitoTabCreator,
-                        HelpAndFeedback.getInstance());
+                        HelpAndFeedbackLauncherImpl.getInstance());
 
         AccountPickerBottomSheetCoordinator coordinator =
                 new AccountPickerBottomSheetCoordinator(activity, bottomSheetController,

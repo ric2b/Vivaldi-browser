@@ -22,6 +22,8 @@ import org.junit.runner.RunWith;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
@@ -42,8 +44,6 @@ import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
 import org.chromium.chrome.test.util.browser.TabLoadObserver;
 import org.chromium.content_public.browser.LoadUrlParams;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.DOMUtils;
 import org.chromium.content_public.browser.test.util.JavaScriptUtils;
 import org.chromium.content_public.browser.test.util.KeyUtils;
@@ -306,6 +306,32 @@ public class NavigateTest {
                 content);
     }
 
+    /**
+     * Test 'Request Desktop Site' option properly affects UA client hints with Critical-CH
+     */
+    @Test
+    @MediumTest
+    @Feature({"Navigation"})
+    @CommandLineFlags.
+    Add({"enable-features=UserAgentClientHint, FeaturePolicyForClientHints, CriticalClientHint"})
+    // TODO(https://crbug.com/928669) Remove switch when UA-CH-* launched.
+    public void testRequestDesktopSiteCriticalClientHints() throws Exception {
+        // TODO(https://crbug.com/1138913): Move EchoCriticalHeader request handler here when
+        // implemented
+        String url = mTestServer.getURL("/echocriticalheader");
+        final Tab tab = mActivityTestRule.getActivity().getActivityTab();
+        TestThreadUtils.runOnUiThreadBlocking(
+                ()
+                        -> tab.getWebContents().getNavigationController().setUseDesktopUserAgent(
+                                true /* useDesktop */, true /* reloadOnChange */));
+
+        navigateAndObserve(url, url);
+        ChromeTabUtils.waitForTabPageLoaded(tab, url);
+        String content = JavaScriptUtils.executeJavaScriptAndWaitForResult(
+                tab.getWebContents(), "document.body.textContent");
+        // Note: |content| is JSON, hence lots of escaping.
+        Assert.assertEquals("Proper headers", "\"?0\\\"Linux\\\"\"", content);
+    }
     /**
      * Test Opening a link and verify that TabObserver#onPageLoadStarted gives the old and new URL.
      */

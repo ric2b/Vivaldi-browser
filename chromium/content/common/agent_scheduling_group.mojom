@@ -4,12 +4,14 @@
 
 module content.mojom;
 
+import "content/common/associated_interfaces.mojom";
 import "content/common/document_scoped_interface_bundle.mojom";
 import "content/common/native_types.mojom";
 import "ipc/constants.mojom";
 import "mojo/public/mojom/base/generic_pending_receiver.mojom";
 import "mojo/public/mojom/base/unguessable_token.mojom";
 import "third_party/blink/public/mojom/frame/frame_owner_properties.mojom";
+import "third_party/blink/public/mojom/frame/policy_container.mojom";
 import "third_party/blink/public/mojom/page/page.mojom";
 import "third_party/blink/public/mojom/page/widget.mojom";
 import "third_party/blink/public/mojom/renderer_preferences.mojom";
@@ -121,6 +123,13 @@ struct CreateViewParams {
 
   // Endpoint for any messages that are broadcast to all views in a WebContents.
   pending_associated_receiver<blink.mojom.PageBroadcast> blink_page_broadcast;
+
+  // The policy container for the main frame to be created. This is null when
+  // creating a RenderView for a remote main frame, or when the main frame has
+  // no policy container yet (for example, because it is a speculative
+  // RenderFrameHost), and the policy container will be sent during
+  // CommitNavigation.
+  blink.mojom.PolicyContainer? policy_container;
 };
 
 struct CreateFrameWidgetParams {
@@ -193,6 +202,12 @@ struct CreateFrameParams {
 
   // Whether or not the frame has previously committed a real load.
   bool has_committed_real_load;
+
+  // The policy container for the frame to be created. This can be null if we
+  // could not determine a policy container yet, for example in case of a
+  // speculative RenderFrameHost. In that case, the final policy container will
+  // be sent along CommitNavigation.
+  blink.mojom.PolicyContainer? policy_container;
 };
 
 
@@ -206,13 +221,29 @@ interface AgentSchedulingGroupHost {
 // AgentSchedulingGroupHost and the renderer process's AgentSchedulingGroup.
 // Implemented by content::AgentSchedulingGroup (in the renderer process).
 interface AgentSchedulingGroup {
+  // Tells the renderer to bind the receiver to a backing RouteProvider
+  // implementation, which in practice is itself. Also passes a remote to the
+  // RouteProvider interface owned by AgentSchedulingGroupHost so that we
+  // immediately have bidirectional RouteProvider communication between
+  // AgentSchedulingGroup <=> AgentSchedulingGroupHost. We have this as a
+  // method on this interface, as opposed to passing this remote/receiver pair
+  // over the method that creates the remote AgentSchedulingGroup. This is
+  // because we need the RouteProvider remote/receiver pair to be associated
+  // with the message pipe that the AgentSchedulingGroup is associated with,
+  // which may be different than the message pipe that we create the
+  // AgentSchedulingGroup over.
+  BindAssociatedRouteProvider(
+    pending_associated_remote<RouteProvider> remote,
+    pending_associated_receiver<RouteProvider> receiver);
+
   // Tells the renderer to create a new view.
   CreateView(CreateViewParams params);
 
   // Tells the renderer to destroy an existing view. This method must be called
   // exactly once for each invocation of CreateView. |view_id| is synonymous
-  // with |routing_id|.
-  DestroyView(int32 view_id);
+  // with |routing_id|. A callback is provided so the browser receives
+  // notification the destruction is complete.
+  DestroyView(int32 view_id) => ();
 
   // Tells the renderer to create a new RenderFrame.
   CreateFrame(CreateFrameParams params);

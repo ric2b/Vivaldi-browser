@@ -201,6 +201,10 @@ public abstract class ChromeFeatureList {
             "AutofillEnableCardNicknameManagement";
     public static final String AUTOFILL_ENABLE_GOOGLE_ISSUED_CARD =
             "AutofillEnableGoogleIssuedCard";
+    public static final String AUTOFILL_ENABLE_PASSWORD_INFO_BAR_ACCOUNT_INDICATION_FOOTER =
+            "AutofillEnablePasswordInfoBarAccountIndicationFooter";
+    public static final String AUTOFILL_ENABLE_SAVE_CARD_INFO_BAR_ACCOUNT_INDICATION_FOOTER =
+            "AutofillEnableSaveCardInfoBarAccountIndicationFooter";
     public static final String ADJUST_WEBAPK_INSTALLATION_SPACE = "AdjustWebApkInstallationSpace";
     public static final String ANDROID_DEFAULT_BROWSER_PROMO = "AndroidDefaultBrowserPromo";
     public static final String ANDROID_MANAGED_BY_MENU_ITEM = "AndroidManagedByMenuItem";
@@ -212,9 +216,13 @@ public abstract class ChromeFeatureList {
     public static final String ANDROID_PAY_INTEGRATION_V2 = "AndroidPayIntegrationV2";
     public static final String ANDROID_SEARCH_ENGINE_CHOICE_NOTIFICATION =
             "AndroidSearchEngineChoiceNotification";
+    public static final String ASSISTANT_INTENT_PAGE_URL = "AssistantIntentPageUrl";
     public static final String AUTOFILL_ASSISTANT = "AutofillAssistant";
     public static final String AUTOFILL_ASSISTANT_CHROME_ENTRY = "AutofillAssistantChromeEntry";
     public static final String AUTOFILL_ASSISTANT_DIRECT_ACTIONS = "AutofillAssistantDirectActions";
+    public static final String AUTOFILL_ASSISTANT_PROACTIVE_HELP = "AutofillAssistantProactiveHelp";
+    public static final String AUTOFILL_ASSISTANT_DISABLE_PROACTIVE_HELP_TIED_TO_MSBB =
+            "AutofillAssistantDisableProactiveHelpTiedToMSBB";
     public static final String AUTOFILL_MANUAL_FALLBACK_ANDROID = "AutofillManualFallbackAndroid";
     public static final String AUTOFILL_REFRESH_STYLE_ANDROID = "AutofillRefreshStyleAndroid";
     public static final String AUTOFILL_KEYBOARD_ACCESSORY = "AutofillKeyboardAccessory";
@@ -235,10 +243,12 @@ public abstract class ChromeFeatureList {
     public static final String CLOSE_TAB_SUGGESTIONS = "CloseTabSuggestions";
     public static final String DONT_AUTO_HIDE_BROWSER_CONTROLS = "DontAutoHideBrowserControls";
     public static final String CHROME_SHARE_HIGHLIGHTS_ANDROID = "ChromeShareHighlightsAndroid";
+    public static final String CHROME_SHARE_LONG_SCREENSHOT = "ChromeShareLongScreenshot";
     public static final String CHROME_SHARE_QRCODE = "ChromeShareQRCode";
     public static final String CHROME_SHARE_SCREENSHOT = "ChromeShareScreenshot";
     public static final String CHROME_SHARING_HUB = "ChromeSharingHub";
     public static final String CHROME_SHARING_HUB_V15 = "ChromeSharingHubV15";
+    public static final String CHROME_STARTUP_DELEGATE = "ChromeStartupDelegate";
     public static final String CLEAR_OLD_BROWSING_DATA = "ClearOldBrowsingData";
     public static final String COMMAND_LINE_ON_NON_ROOTED = "CommandLineOnNonRooted";
     public static final String CONDITIONAL_TAB_STRIP_ANDROID = "ConditionalTabStripAndroid";
@@ -257,6 +267,8 @@ public abstract class ChromeFeatureList {
     public static final String CONTEXTUAL_SEARCH_DEFINITIONS = "ContextualSearchDefinitions";
     public static final String CONTEXTUAL_SEARCH_LEGACY_HTTP_POLICY =
             "ContextualSearchLegacyHttpPolicy";
+    public static final String CONTEXTUAL_SEARCH_LITERAL_SEARCH_TAP =
+            "ContextualSearchLiteralSearchTap";
     public static final String CONTEXTUAL_SEARCH_ML_TAP_SUPPRESSION =
             "ContextualSearchMlTapSuppression";
     public static final String CONTEXTUAL_SEARCH_LONGPRESS_RESOLVE =
@@ -285,6 +297,7 @@ public abstract class ChromeFeatureList {
     public static final String DOWNLOADS_LOCATION_CHANGE = "DownloadsLocationChange";
     public static final String DOWNLOAD_LATER = "DownloadLater";
     public static final String EDIT_PASSWORDS_IN_SETTINGS = "EditPasswordsInSettings";
+    public static final String EARLY_LIBRARY_LOAD = "EarlyLibraryLoad";
     public static final String ENHANCED_PROTECTION_PROMO_CARD = "EnhancedProtectionPromoCard";
     public static final String EPHEMERAL_TAB_USING_BOTTOM_SHEET = "EphemeralTabUsingBottomSheet";
     public static final String EXPLICIT_LANGUAGE_ASK = "ExplicitLanguageAsk";
@@ -296,7 +309,6 @@ public abstract class ChromeFeatureList {
     public static final String HANDLE_MEDIA_INTENTS = "HandleMediaIntents";
     public static final String HIDE_FROM_API_3_TRANSITIONS_FROM_HISTORY =
             "HideFromApi3TransitionsFromHistory";
-    public static final String HOMEPAGE_LOCATION_POLICY = "HomepageLocationPolicy";
     public static final String HOMEPAGE_PROMO_CARD = "HomepagePromoCard";
     public static final String HOMEPAGE_PROMO_SYNTHETIC_PROMO_SEEN_ENABLED =
             "HomepagePromoSyntheticPromoSeenEnabled";
@@ -305,13 +317,17 @@ public abstract class ChromeFeatureList {
     public static final String HOMEPAGE_SETTINGS_UI_CONVERSION = "HomepageSettingsUIConversion";
     public static final String HORIZONTAL_TAB_SWITCHER_ANDROID = "HorizontalTabSwitcherAndroid";
     public static final String IMMERSIVE_UI_MODE = "ImmersiveUiMode";
+    public static final String INCOGNITO_SCREENSHOT = "IncognitoScreenshot";
     public static final String INLINE_UPDATE_FLOW = "InlineUpdateFlow";
     public static final String INSTALLABLE_AMBIENT_BADGE_INFOBAR = "InstallableAmbientBadgeInfoBar";
     public static final String INSTANT_START = "InstantStart";
     public static final String INTEREST_FEEDV1_CLICKS_AND_VIEWS_CONDITIONAL_UPLOAD =
             "InterestFeedV1ClickAndViewActionsConditionalUpload";
     public static final String INTEREST_FEED_CONTENT_SUGGESTIONS = "InterestFeedContentSuggestions";
-    public static final String INTEREST_FEED_FEEDBACK = "InterestFeedFeedback";
+    public static final String INTEREST_FEED_NOTICE_CARD_AUTO_DISMISS =
+            "InterestFeedNoticeCardAutoDismiss";
+    public static final String INTEREST_FEED_SPINNER_ALWAYS_ANIMATE =
+            "InterestFeedSpinnerAlwaysAnimate";
     public static final String INTEREST_FEED_V2 = "InterestFeedV2";
     public static final String KITKAT_SUPPORTED = "KitKatSupported";
     public static final String LOOKALIKE_NAVIGATION_URL_SUGGESTIONS_UI =
@@ -338,7 +354,6 @@ public abstract class ChromeFeatureList {
             "OmniboxAdaptiveSuggestionsCount";
     public static final String OMNIBOX_ASSISTANT_VOICE_SEARCH = "OmniboxAssistantVoiceSearch";
     public static final String OMNIBOX_COMPACT_SUGGESTIONS = "OmniboxCompactSuggestions";
-    public static final String OMNIBOX_DEFERRED_KEYBOARD_POPUP = "OmniboxDeferredKeyboardPopup";
     public static final String OMNIBOX_ENABLE_CLIPBOARD_PROVIDER_IMAGE_SUGGESTIONS =
             "OmniboxEnableClipboardProviderImageSuggestions";
     public static final String OMNIBOX_HIDE_VISITS_FROM_CCT = "OmniboxHideVisitsFromCct";
@@ -346,8 +361,6 @@ public abstract class ChromeFeatureList {
     public static final String OMNIBOX_SEARCH_ENGINE_LOGO = "OmniboxSearchEngineLogo";
     public static final String OMNIBOX_SEARCH_READY_INCOGNITO = "OmniboxSearchReadyIncognito";
     public static final String OMNIBOX_SPARE_RENDERER = "OmniboxSpareRenderer";
-    public static final String OMNIBOX_SUGGESTIONS_RECYCLER_VIEW = "OmniboxSuggestionsRecyclerView";
-    public static final String OMNIBOX_SUGGESTIONS_WRAP_AROUND = "OmniboxSuggestionsWrapAround";
     public static final String OVERLAY_NEW_LAYOUT = "OverlayNewLayout";
     public static final String OVERSCROLL_HISTORY_NAVIGATION = "OverscrollHistoryNavigation";
     public static final String PAGE_INFO_PERFORMANCE_HINTS = "PageInfoPerformanceHints";
@@ -366,7 +379,6 @@ public abstract class ChromeFeatureList {
     public static final String PREFETCH_NOTIFICATION_SCHEDULING_INTEGRATION =
             "PrefetchNotificationSchedulingIntegration";
     public static final String PRIORITIZE_BOOTSTRAP_TASKS = "PrioritizeBootstrapTasks";
-    public static final String PRIVACY_ELEVATED_ANDROID = "PrivacyElevatedAndroid";
     public static final String PRIVACY_REORDERED_ANDROID = "PrivacyReorderedAndroid";
     public static final String PROBABILISTIC_CRYPTID_RENDERER = "ProbabilisticCryptidRenderer";
     public static final String QUERY_TILES_GEO_FILTER = "QueryTilesGeoFilter";
@@ -388,8 +400,7 @@ public abstract class ChromeFeatureList {
     public static final String SAFE_BROWSING_DELAYED_WARNINGS = "SafeBrowsingDelayedWarnings";
     public static final String SAFE_BROWSING_ENHANCED_PROTECTION_ENABLED =
             "SafeBrowsingEnhancedProtection";
-    public static final String SAFE_BROWSING_SECURITY_SECTION_UI =
-            "SafeBrowsingSecuritySectionUIAndroid";
+    public static final String SAFE_BROWSING_SECTION_UI = "SafeBrowsingSecuritySectionUIAndroid";
     public static final String SAME_SITE_BY_DEFAULT_COOKIES = "SameSiteByDefaultCookies";
     public static final String SEARCH_ENGINE_PROMO_EXISTING_DEVICE =
             "SearchEnginePromo.ExistingDevice";
@@ -399,6 +410,7 @@ public abstract class ChromeFeatureList {
             "ServiceManagerForBackgroundPrefetch";
     public static final String SERVICE_MANAGER_FOR_DOWNLOAD = "ServiceManagerForDownload";
     public static final String SHARE_BUTTON_IN_TOP_TOOLBAR = "ShareButtonInTopToolbar";
+    public static final String SHARE_BY_DEFAULT_IN_CCT = "ShareByDefaultInCCT";
     public static final String SHARED_CLIPBOARD_UI = "SharedClipboardUI";
     public static final String SHARING_QR_CODE_ANDROID = "SharingQrCodeAndroid";
     public static final String SHOW_TRUSTED_PUBLISHER_URL = "ShowTrustedPublisherURL";
@@ -427,7 +439,9 @@ public abstract class ChromeFeatureList {
             "TabbedAppOverflowMenuThreeButtonActionbar";
     public static final String TEST_DEFAULT_DISABLED = "TestDefaultDisabled";
     public static final String TEST_DEFAULT_ENABLED = "TestDefaultEnabled";
-    public static final String TOUCH_TO_FILL_ANDROID = "TouchToFillAndroid";
+    public static final String TOOLBAR_IPH_ANDROID = "ToolbarIphAndroid";
+    public static final String TRANSLATE_ASSIST_CONTENT = "TranslateAssistContent";
+    public static final String TRANSLATE_INTENT = "TranslateIntent";
     public static final String TRUSTED_WEB_ACTIVITY_LOCATION_DELEGATION =
             "TrustedWebActivityLocationDelegation";
     public static final String TRUSTED_WEB_ACTIVITY_NEW_DISCLOSURE =
@@ -437,12 +451,16 @@ public abstract class ChromeFeatureList {
             "TrustedWebActivityQualityEnforcement";
     public static final String TRUSTED_WEB_ACTIVITY_QUALITY_ENFORCEMENT_FORCED =
             "TrustedWebActivityQualityEnforcementForced";
+    public static final String TRUSTED_WEB_ACTIVITY_QUALITY_ENFORCEMENT_WARNING =
+            "TrustedWebActivityQualityEnforcementWarning";
     public static final String VIDEO_TUTORIALS = "VideoTutorials";
     public static final String UPDATE_NOTIFICATION_SCHEDULING_INTEGRATION =
             "UpdateNotificationSchedulingIntegration";
     public static final String UPDATE_NOTIFICATION_IMMEDIATE_SHOW_OPTION =
             "UpdateNotificationScheduleServiceImmediateShowOption";
-    public static final String USAGE_STATS = "UsageStats";
+    public static final String USE_CHIME_ANDROID_SDK = "UseChimeAndroidSdk";
+    public static final String VOICE_SEARCH_AUDIO_CAPTURE_POLICY = "VoiceSearchAudioCapturePolicy";
+    public static final String VOICE_BUTTON_IN_TOP_TOOLBAR = "VoiceButtonInTopToolbar";
     public static final String VR_BROWSING_FEEDBACK = "VrBrowsingFeedback";
     public static final String WEBAPK_ADAPTIVE_ICON = "WebApkAdaptiveIcon";
     public static final String WEB_AUTH = "WebAuthentication";

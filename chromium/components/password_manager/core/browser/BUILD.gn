@@ -79,6 +79,8 @@ static_library("browser") {
     "credential_manager_pending_prevent_silent_access_task.h",
     "credential_manager_pending_request_task.cc",
     "credential_manager_pending_request_task.h",
+    "credential_manager_utils.cc",
+    "credential_manager_utils.h",
     "credentials_cleaner.cc",
     "credentials_cleaner.h",
     "credentials_cleaner_runner.cc",
@@ -175,6 +177,12 @@ static_library("browser") {
     "password_manager_util.h",
     "password_requirements_service.cc",
     "password_requirements_service.h",
+    "password_reuse_detection_manager.cc",
+    "password_reuse_detection_manager.h",
+    "password_reuse_detector.cc",
+    "password_reuse_detector.h",
+    "password_reuse_detector_consumer.cc",
+    "password_reuse_detector_consumer.h",
     "password_save_manager.h",
     "password_save_manager_impl.cc",
     "password_save_manager_impl.h",
@@ -182,7 +190,6 @@ static_library("browser") {
     "password_session_durations_metrics_recorder.h",
     "password_store.cc",
     "password_store.h",
-    "password_store_change.cc",
     "password_store_change.h",
     "password_store_consumer.cc",
     "password_store_consumer.h",
@@ -190,6 +197,8 @@ static_library("browser") {
     "password_store_default.h",
     "password_store_factory_util.cc",
     "password_store_factory_util.h",
+    "password_store_signin_notifier.cc",
+    "password_store_signin_notifier.h",
     "password_store_sync.cc",
     "password_store_sync.h",
     "password_sync_util.cc",
@@ -211,6 +220,8 @@ static_library("browser") {
     "site_affiliation/affiliation_service_impl.h",
     "site_affiliation/asset_link_data.cc",
     "site_affiliation/asset_link_data.h",
+    "site_affiliation/hash_affiliation_fetcher.cc",
+    "site_affiliation/hash_affiliation_fetcher.h",
     "sql_table_builder.cc",
     "sql_table_builder.h",
     "statistics_table.cc",
@@ -252,19 +263,6 @@ static_library("browser") {
   ]
 
   all_dependent_configs = [ ":password_reuse_detection_config" ]
-
-  if (password_reuse_detection_support) {
-    sources += [
-      "password_reuse_detection_manager.cc",
-      "password_reuse_detection_manager.h",
-      "password_reuse_detector.cc",
-      "password_reuse_detector.h",
-      "password_reuse_detector_consumer.cc",
-      "password_reuse_detector_consumer.h",
-      "password_store_signin_notifier.cc",
-      "password_store_signin_notifier.h",
-    ]
-  }
 
   public_deps = [
     ":password_form",
@@ -408,10 +406,15 @@ source_set("csv_unittests") {
 # cyclic dependencies.
 source_set("password_form") {
   sources = [
+    "password_form.cc",
     "password_form.h",
-    "password_form_forward.h",
   ]
-  deps = [ "//components/autofill/core/common" ]
+  deps = [
+    "//base",
+    "//components/autofill/core/common",
+    "//components/autofill/core/common/mojom:mojo_types_shared",
+    "//url",
+  ]
 }
 
 static_library("password_generator") {
@@ -508,6 +511,8 @@ static_library("test_support") {
     "stub_password_manager_client.h",
     "stub_password_manager_driver.cc",
     "stub_password_manager_driver.h",
+    "sync_username_test_base.cc",
+    "sync_username_test_base.h",
     "test_password_store.cc",
     "test_password_store.h",
   ]
@@ -515,13 +520,18 @@ static_library("test_support") {
   public_deps = [
     ":browser",
     ":hash_password_manager",
+    ":password_hash_data",
+    "//base/test:test_support",
     "//components/autofill/core/browser:test_support",
     "//components/keyed_service/core",
     "//components/password_manager/core/browser/leak_detection",
     "//components/safe_browsing:buildflags",
+    "//components/signin/public/identity_manager:test_support",
+    "//components/sync:test_support",
     "//components/ukm",
     "//services/network/public/cpp",
     "//testing/gmock",
+    "//testing/gtest",
     "//url",
   ]
   deps = [
@@ -529,7 +539,6 @@ static_library("test_support") {
     "//base",
     "//components/autofill/core/common",
     "//net:net",
-    "//testing/gtest",
   ]
 }
 
@@ -598,6 +607,7 @@ source_set("unit_tests") {
     "credential_manager_password_form_manager_unittest.cc",
     "credential_manager_pending_prevent_silent_access_task_unittest.cc",
     "credential_manager_pending_request_task_unittest.cc",
+    "credential_manager_utils_unittest.cc",
     "credentials_cleaner_runner_unittest.cc",
     "credentials_cleaner_unittest.cc",
     "export/csv_writer_unittest.cc",
@@ -638,6 +648,8 @@ source_set("unit_tests") {
     "password_manager_unittest.cc",
     "password_manager_util_unittest.cc",
     "password_requirements_service_unittest.cc",
+    "password_reuse_detection_manager_unittest.cc",
+    "password_reuse_detector_unittest.cc",
     "password_save_manager_impl_unittest.cc",
     "password_store_default_unittest.cc",
     "password_store_origin_unittest.h",
@@ -646,15 +658,15 @@ source_set("unit_tests") {
     "password_ui_utils_unittest.cc",
     "possible_username_data_unittest.cc",
     "psl_matching_helper_unittest.cc",
+    "site_affiliation/affiliation_fetcher_factory_impl_unittest.cc",
     "site_affiliation/affiliation_service_impl_unittest.cc",
     "site_affiliation/asset_link_data_unittest.cc",
+    "site_affiliation/hash_affiliation_fetcher_unittest.cc",
     "sql_table_builder_unittest.cc",
     "statistics_table_unittest.cc",
     "store_metrics_reporter_unittest.cc",
     "sync/password_sync_bridge_unittest.cc",
     "sync_credentials_filter_unittest.cc",
-    "sync_username_test_base.cc",
-    "sync_username_test_base.h",
     "ui/bulk_leak_check_service_adapter_unittest.cc",
     "ui/compromised_credentials_reader_unittest.cc",
     "ui/insecure_credentials_manager_unittest.cc",
@@ -676,12 +688,6 @@ source_set("unit_tests") {
     sources += [ "login_database_ios_unittest.cc" ]
   } else {
     sources += [ "http_credentials_cleaner_unittest.cc" ]
-  }
-  if (password_reuse_detection_support) {
-    sources += [
-      "password_reuse_detection_manager_unittest.cc",
-      "password_reuse_detector_unittest.cc",
-    ]
   }
 
   if (is_win || is_mac || is_linux || is_chromeos) {

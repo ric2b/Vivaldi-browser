@@ -44,7 +44,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="UMA.CleanExitBeaconConsistency" enum="UmaCleanExitConsistency"
     expires_after="M85">
-  <owner>siggi@chromium.org</owner>
+  <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
     Reports the combined state of distinct clean exit beacons stored in Local
@@ -53,8 +53,8 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.ClientIdBackupRecoveredWithAge" units="hours"
-    expires_after="2020-10-25">
-  <owner>gab@chromium.org</owner>
+    expires_after="2021-02-25">
+  <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
     Recorded when we are somehow missing the client ID stored in Local State yet
@@ -225,7 +225,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.LogUpload.Canceled.CellularConstraint"
-    enum="BooleanCanceled" expires_after="2021-03-07">
+    enum="BooleanCanceled" expires_after="2021-05-09">
   <owner>holte@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
@@ -315,7 +315,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.MetricsService.Initialize" enum="Boolean"
-    expires_after="2020-12-01">
+    expires_after="2021-04-11">
   <owner>rkaplow@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -355,30 +355,79 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram base="true" name="UMA.PersistentAllocator.Errors"
+<histogram name="UMA.PersistentAllocator.{PersistentMemoryErrors}Errors"
     enum="PersistentAllocatorErrors" expires_after="M85">
   <owner>bcwhite@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
     Errors detected by the persistent memory allocator. These are set when they
-    occur.
+    occur. {PersistentMemoryErrors}
   </summary>
+  <token key="PersistentMemoryErrors">
+    <variant name="">
+      <obsolete>
+        Base histogram. Use suffixes of this histogram instead.
+      </obsolete>
+    </variant>
+    <variant name="BrowserMetrics." summary="For browser process metrics."/>
+    <variant name="CrashpadMetrics." summary="For metrics from Crashpad."/>
+    <variant name="FieldTrialAllocator." summary="For field-trial allocator."/>
+    <variant name="GpuMetrics." summary="For GPU process metrics."/>
+    <variant name="NotificationHelperMetrics."
+        summary="For notification_helper process metrics."/>
+    <variant name="PpapiBrokerMetrics."
+        summary="For &quot;PPAPI broker&quot; process metrics."/>
+    <variant name="PpapiPluginMetrics."
+        summary="For &quot;PPAPI plugin&quot; process metrics."/>
+    <variant name="RendererMetrics." summary="For renderer process metrics."/>
+    <variant name="SandboxHelperMetrics."
+        summary="For &quot;sandbox helper&quot; process metrics."/>
+    <variant name="SetupMetrics." summary="For setup metrics."/>
+    <variant name="UtilityMetrics."
+        summary="For &quot;utility&quot; process metrics."/>
+    <variant name="ZygoteMetrics."
+        summary="For &quot;zygote&quot; process metrics."/>
+  </token>
 </histogram>
 
-<histogram base="true" name="UMA.PersistentAllocator.UsedPct" units="%"
-    expires_after="M87">
+<histogram name="UMA.PersistentAllocator.{PersistentMemoryUsedPct}UsedPct"
+    units="%" expires_after="M87">
   <owner>bcwhite@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
     Percentage of persistent memory segment that has been allocated. This is
-    updated only once per reporting cycle.
+    updated only once per reporting cycle. {PersistentMemoryUsedPct}
   </summary>
+  <token key="PersistentMemoryUsedPct">
+    <variant name="">
+      <obsolete>
+        Base histogram. Use suffixes of this histogram instead.
+      </obsolete>
+    </variant>
+    <variant name="BrowserMetrics." summary="For browser process metrics."/>
+    <variant name="FieldTrialAllocator." summary="For field-trial allocator."/>
+    <variant name="GpuMetrics." summary="For GPU process metrics."/>
+    <variant name="NotificationHelperMetrics."
+        summary="For notification_helper process metrics."/>
+    <variant name="PpapiBrokerMetrics."
+        summary="For &quot;PPAPI broker&quot; process metrics."/>
+    <variant name="PpapiPluginMetrics."
+        summary="For &quot;PPAPI plugin&quot; process metrics."/>
+    <variant name="RendererMetrics." summary="For renderer process metrics."/>
+    <variant name="SandboxHelperMetrics."
+        summary="For &quot;sandbox helper&quot; process metrics."/>
+    <variant name="SetupMetrics." summary="For setup metrics."/>
+    <variant name="UtilityMetrics."
+        summary="For &quot;utility&quot; process metrics."/>
+    <variant name="ZygoteMetrics."
+        summary="For &quot;zygote&quot; process metrics."/>
+  </token>
 </histogram>
 
 <histogram name="UMA.PersistentHistograms.InitResult"
-    enum="PersistentHistogramsInitResult" expires_after="2021-02-21">
+    enum="PersistentHistogramsInitResult" expires_after="2021-04-25">
   <owner>bcwhite@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -452,7 +501,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.StructuredMetrics.EventRecordingState"
-    enum="StructuredMetricsEventRecordingState" expires_after="2021-02-01">
+    enum="StructuredMetricsEventRecordingState" expires_after="2021-04-04">
   <owner>tby@chromium.org</owner>
   <owner>rkaplow@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
@@ -475,7 +524,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.StructuredMetrics.KeyValidationState"
-    enum="StructuredMetricsKeyValidationState" expires_after="2021-02-01">
+    enum="StructuredMetricsKeyValidationState" expires_after="2021-04-04">
   <owner>tby@chromium.org</owner>
   <owner>rkaplow@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
@@ -487,7 +536,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.StructuredMetrics.NumEventsInUpload" units="count"
-    expires_after="2021-02-01">
+    expires_after="2021-04-04">
   <owner>tby@chromium.org</owner>
   <owner>rkaplow@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
@@ -498,7 +547,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.StructuredMetrics.PrefReadError"
-    enum="PrefServiceReadError" expires_after="2021-02-01">
+    enum="PrefServiceReadError" expires_after="2021-04-04">
   <owner>tby@chromium.org</owner>
   <owner>rkaplow@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
@@ -522,7 +571,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="UMA.TruncatedEvents.UserAction" units="events"
-    expires_after="2021-03-28">
+    expires_after="2021-05-09">
   <owner>rkaplow@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -535,9 +584,41 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     expires_after="2021-08-30">
   <owner>holte@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
+  <owner>mpearson@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
-    Counter for number of UMA unsent logs removed from persistent storage.
+    The number of UMA unsent logs removed from persistent storage.
+
+    Useful in comparison with UMA.UnsentLogs.IntendingToSend (that counts hte
+    number of UMA unsent logs that are intended to be sent, i.e., not dropped).
+  </summary>
+</histogram>
+
+<histogram name="UMA.UnsentLogs.DroppedSize" units="bytes"
+    expires_after="2021-08-30">
+  <owner>akirabaruah@chromium.org</owner>
+  <owner>rkaplow@chromium.org</owner>
+  <owner>asvitkine@chromium.org</owner>
+  <owner>src/base/metrics/OWNERS</owner>
+  <summary>
+    Size of unsent logs removed from persistent storage due to exceeding the
+    individual log size limit. Unsent log trimming occurs immediately after
+    initial logs creation, upon successful log upload, or whenever
+    MetricsService stops recording.
+  </summary>
+</histogram>
+
+<histogram name="UMA.UnsentLogs.IntendingToSend" units="logs"
+    expires_after="2021-04-01">
+  <owner>mpearson@chromium.org</owner>
+  <owner>src/base/metrics/OWNERS</owner>
+  <summary>
+    The number of UMA unsent logs from persistent storage that will be staged /
+    are intended to be sent. These logs are not dropped from persistent storage.
+
+    Useful in comparison with UMA.UnsentLogs.Dropped (to see how many persistent
+    logs are intended to be sent versus are not intended to be sent) and with
+    UMA.UnsentLogs.IntendingToSend (to see how many are actually sent).
   </summary>
 </histogram>
 
@@ -550,6 +631,17 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     The size of all persistent initial or ongoing logs that have been
     proto-encoded and compressed in the previous browser run; it is recorded on
     the browser start up. The value '0' means no unsent logs.
+  </summary>
+</histogram>
+
+<histogram name="UMA.UnsentLogs.Sent" enum="Boolean" expires_after="2021-04-01">
+  <owner>mpearson@chromium.org</owner>
+  <owner>src/base/metrics/OWNERS</owner>
+  <summary>
+    Emitted when a UMA unsent log is marked as sent.
+
+    Useful in comparison with UMA.UnsentLogs.Dropped and
+    UMA.UnsentLogs.IntendingToSend.
   </summary>
 </histogram>
 
@@ -583,6 +675,26 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <summary>
     The percentage of the unsent samples over the total in the previous browser
     run; it is recorded on the browser start up.
+  </summary>
+</histogram>
+
+<histogram name="UMA.UserActionsCount" enum="Boolean"
+    expires_after="2021-04-01">
+  <owner>mpearson@chromium.org</owner>
+  <owner>src/base/metrics/OWNERS</owner>
+  <summary>
+    Emitted when a user action is recorded.
+
+    Intended to be used to estimate how many user actions are lost due lack of
+    being persisted in the same way histograms are. One way to use this
+    histogram is to look as the count in this histogram in logs that come from
+    the previous session. All of those user actions will have been lost.
+
+    Also note that user actions can be lost due to being truncated before
+    uploading a UMA record. Those logs user actions are recorded in the
+    histogram UMA.TruncatedEvents.UserAction.
+
+    There may be other ways user actions are dropped too.
   </summary>
 </histogram>
 

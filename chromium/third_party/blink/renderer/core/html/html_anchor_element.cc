@@ -28,6 +28,7 @@
 #include "base/time/time.h"
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/mojom/feature_policy/feature_policy_feature.mojom-blink.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/web_prescient_networking.h"
@@ -164,7 +165,7 @@ static void AppendServerMapMousePosition(StringBuilder& url, Event* event) {
   // The origin (0,0) is at the upper left of the content area, inside the
   // padding and border.
   map_point -=
-      FloatSize(ToLayoutBox(layout_object)->PhysicalContentBoxOffset());
+      FloatSize(To<LayoutBox>(layout_object)->PhysicalContentBoxOffset());
 
   // CSS zoom is not reflected in the map coordinates.
   float scale_factor = 1 / layout_object->Style()->EffectiveZoom();
@@ -329,10 +330,19 @@ void HTMLAnchorElement::SetRel(const AtomicString& value) {
     link_relations_ |= kRelationNoReferrer;
   if (new_link_relations.Contains("noopener"))
     link_relations_ |= kRelationNoOpener;
+  if (new_link_relations.Contains("opener"))
+    link_relations_ |= kRelationOpener;
 }
 
 const AtomicString& HTMLAnchorElement::GetName() const {
   return GetNameAttribute();
+}
+
+const AtomicString& HTMLAnchorElement::GetEffectiveTarget() const {
+  const AtomicString& target = FastGetAttribute(html_names::kTargetAttr);
+  if (!target.IsEmpty())
+    return target;
+  return GetDocument().BaseTarget();
 }
 
 int HTMLAnchorElement::DefaultTabIndex() const {
@@ -508,7 +518,7 @@ void HTMLAnchorElement::HandleClick(Event& event) {
       return;
     request.SetSuggestedFilename(
         static_cast<String>(FastGetAttribute(html_names::kDownloadAttr)));
-    request.SetRequestContext(mojom::RequestContextType::DOWNLOAD);
+    request.SetRequestContext(mojom::blink::RequestContextType::DOWNLOAD);
     request.SetRequestorOrigin(window->GetSecurityOrigin());
     network::mojom::ReferrerPolicy referrer_policy =
         request.GetReferrerPolicy();
@@ -522,9 +532,9 @@ void HTMLAnchorElement::HandleClick(Event& event) {
     return;
   }
 
-  request.SetRequestContext(mojom::RequestContextType::HYPERLINK);
+  request.SetRequestContext(mojom::blink::RequestContextType::HYPERLINK);
   request.SetHasUserGesture(LocalFrame::HasTransientUserActivation(frame));
-  const AtomicString& target = FastGetAttribute(html_names::kTargetAttr);
+  const AtomicString& target = GetEffectiveTarget();
   FrameLoadRequest frame_request(window, request);
   frame_request.SetNavigationPolicy(NavigationPolicyFromEvent(&event));
   frame_request.SetClientRedirectReason(ClientNavigationReason::kAnchorClick);
@@ -532,8 +542,14 @@ void HTMLAnchorElement::HandleClick(Event& event) {
     frame_request.SetNoReferrer();
     frame_request.SetNoOpener();
   }
-  if (HasRel(kRelationNoOpener))
+  if (HasRel(kRelationNoOpener) ||
+      (EqualIgnoringASCIICase(target, "_blank") && !HasRel(kRelationOpener) &&
+       RuntimeEnabledFeatures::TargetBlankImpliesNoOpenerEnabled() &&
+       frame->GetSettings()
+           ->GetTargetBlankImpliesNoOpenerEnabledWillBeRemoved())) {
     frame_request.SetNoOpener();
+  }
+
   frame_request.SetTriggeringEventInfo(
       event.isTrusted() ? TriggeringEventInfo::kFromTrustedEvent
                         : TriggeringEventInfo::kFromUntrustedEvent);
@@ -542,11 +558,7 @@ void HTMLAnchorElement::HandleClick(Event& event) {
   frame->MaybeLogAdClickNavigation();
 
   Frame* target_frame =
-      frame->Tree()
-          .FindOrCreateFrameForNavigation(
-              frame_request,
-              target.IsEmpty() ? GetDocument().BaseTarget() : target)
-          .frame;
+      frame->Tree().FindOrCreateFrameForNavigation(frame_request, target).frame;
 
   // If hrefTranslate is enabled and set restrict processing it
   // to same frame or navigations with noopener set.

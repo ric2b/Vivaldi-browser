@@ -25,9 +25,6 @@ class ColorTrackingVectorImageButton : public ImageButton {
   ColorTrackingVectorImageButton(PressedCallback callback,
                                  const gfx::VectorIcon& icon)
       : ImageButton(std::move(callback)), icon_(icon) {}
-  ColorTrackingVectorImageButton(ButtonListener* listener,
-                                 const gfx::VectorIcon& icon)
-      : ColorTrackingVectorImageButton(PressedCallback(listener, this), icon) {}
 
   // ImageButton:
   void OnThemeChanged() override {
@@ -52,15 +49,6 @@ std::unique_ptr<ImageButton> CreateVectorImageButtonWithNativeTheme(
   return button;
 }
 
-std::unique_ptr<ImageButton> CreateVectorImageButtonWithNativeTheme(
-    ButtonListener* listener,
-    const gfx::VectorIcon& icon) {
-  auto button =
-      std::make_unique<ColorTrackingVectorImageButton>(listener, icon);
-  ConfigureVectorImageButton(button.get());
-  return button;
-}
-
 std::unique_ptr<ImageButton> CreateVectorImageButton(
     Button::PressedCallback callback) {
   auto button = std::make_unique<ImageButton>(std::move(callback));
@@ -68,22 +56,9 @@ std::unique_ptr<ImageButton> CreateVectorImageButton(
   return button;
 }
 
-std::unique_ptr<ImageButton> CreateVectorImageButton(ButtonListener* listener) {
-  auto button = std::make_unique<ImageButton>(listener);
-  ConfigureVectorImageButton(button.get());
-  return button;
-}
-
 std::unique_ptr<ToggleImageButton> CreateVectorToggleImageButton(
     Button::PressedCallback callback) {
   auto button = std::make_unique<ToggleImageButton>(std::move(callback));
-  ConfigureVectorImageButton(button.get());
-  return button;
-}
-
-std::unique_ptr<ToggleImageButton> CreateVectorToggleImageButton(
-    ButtonListener* listener) {
-  auto button = std::make_unique<ToggleImageButton>(listener);
   ConfigureVectorImageButton(button.get());
   return button;
 }

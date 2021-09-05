@@ -6,12 +6,14 @@ import './data_point.js';
 import './diagnostics_card.js';
 import './diagnostics_shared_css.js';
 import './percent_bar_chart.js';
+import './routine_section.js';
+import './strings.m.js';
 
-import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
-import {MemoryUsage, SystemDataProviderInterface} from './diagnostics_types.js'
-import {getSystemDataProvider} from './mojo_interface_provider.js';
 import {I18nBehavior} from 'chrome://resources/js/i18n_behavior.m.js';
-import './strings.js';
+import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {MemoryUsage, RoutineName, SystemDataProviderInterface} from './diagnostics_types.js'
+import {getSystemDataProvider} from './mojo_interface_provider.js';
 
 /**
  * @fileoverview
@@ -29,7 +31,24 @@ Polymer({
    */
   systemDataProvider_: null,
 
+  /**
+   * Receiver responsible for observing memory usage.
+   * @private {
+   *  ?chromeos.diagnostics.mojom.MemoryUsageObserverReceiver}
+   */
+  memoryUsageObserverReceiver_: null,
+
   properties: {
+    /** @private {!Array<!RoutineName>} */
+    routines_: {
+      type: Array,
+      value: () => {
+        return [
+          RoutineName.kMemory,
+        ];
+      }
+    },
+
     /** @private {!MemoryUsage} */
     memoryUsage_: {
       type: Object,
@@ -42,9 +61,22 @@ Polymer({
     this.observeMemoryUsage_();
   },
 
+  /** @override */
+  detached() {
+    this.memoryUsageObserverReceiver_.$.close();
+  },
+
   /** @private */
   observeMemoryUsage_() {
-    this.systemDataProvider_.observeMemoryUsage(this);
+    this.memoryUsageObserverReceiver_ =
+        new chromeos.diagnostics.mojom.MemoryUsageObserverReceiver(
+            /**
+             * @type {!chromeos.diagnostics.mojom.MemoryUsageObserverInterface}
+             */
+            (this));
+
+    this.systemDataProvider_.observeMemoryUsage(
+        this.memoryUsageObserverReceiver_.$.bindNewPipeAndPassRemote());
   },
 
   /**
@@ -62,7 +94,6 @@ Polymer({
    * @private
    */
   getTotalUsedMemory_(memoryUsage) {
-    return memoryUsage.total_memory_kib -
-        memoryUsage.available_memory_kib;
+    return memoryUsage.totalMemoryKib - memoryUsage.availableMemoryKib;
   }
 });

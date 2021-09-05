@@ -11,7 +11,10 @@
 #include "base/files/file_path.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/observer_list.h"
 #include "base/process/process.h"
+#include "base/time/time.h"
+#include "chrome/browser/chromeos/crosapi/browser_manager_observer.h"
 #include "chrome/browser/chromeos/crosapi/environment_provider.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
 #include "components/session_manager/core/session_manager_observer.h"
@@ -48,6 +51,10 @@ class BrowserManager : public session_manager::SessionManagerObserver {
   // call SetLoadCompleteCallback() to be notified when the download completes.
   bool IsReady() const;
 
+  // Returns true if Lacros is in running state.
+  // Virtual for testing.
+  virtual bool IsRunning() const;
+
   // Sets a callback to be called when the binary download completes. The
   // download may not be successful.
   using LoadCompleteCallback = base::OnceCallback<void(bool success)>;
@@ -68,10 +75,40 @@ class BrowserManager : public session_manager::SessionManagerObserver {
   // so should be avoided.
   void NewWindow();
 
+  // Returns true if crosapi interface supports GetFeedbackData API.
+  bool GetFeedbackDataSupported() const;
+
+  using GetFeedbackDataCallback = base::OnceCallback<void(base::Value)>;
+  // Gathers Lacros feedback data.
+  // Virtual for testing.
+  virtual void GetFeedbackData(GetFeedbackDataCallback callback);
+
+  // Returns true if crosapi interface supports GetHistograms API.
+  bool GetHistogramsSupported() const;
+
+  using GetHistogramsCallback = base::OnceCallback<void(const std::string&)>;
+  // Gets Lacros histograms.
+  void GetHistograms(GetHistogramsCallback callback);
+
+  // Returns true if crosapi interface supports GetActiveTabUrl API.
+  bool GetActiveTabUrlSupported() const;
+
+  using GetActiveTabUrlCallback =
+      base::OnceCallback<void(const base::Optional<GURL>&)>;
+  // Gets Url of the active tab from lacros if there is any.
+  void GetActiveTabUrl(GetActiveTabUrlCallback callback);
+
+  void AddObserver(BrowserManagerObserver* observer);
+  void RemoveObserver(BrowserManagerObserver* observer);
+
   const std::string& lacros_version() const { return lacros_version_; }
   void set_lacros_version(const std::string& version) {
     lacros_version_ = version;
   }
+
+ protected:
+  // Notifies Mojo connection to lacros-chrome has been disconnected.
+  void NotifyMojoDisconnected();
 
  private:
   enum class State {
@@ -132,6 +169,9 @@ class BrowserManager : public session_manager::SessionManagerObserver {
   // Called on load completion.
   void OnLoadComplete(const base::FilePath& path);
 
+  // Callback of QueryVersion for LacrosChromeService.
+  void OnLacrosChromeServiceVersionReady(uint32_t version);
+
   State state_ = State::NOT_INITIALIZED;
 
   // May be null in tests.
@@ -148,8 +188,14 @@ class BrowserManager : public session_manager::SessionManagerObserver {
   // For example, "87.0.0.1 dev", "86.0.4240.38 beta".
   std::string lacros_version_;
 
+  // Version of LacrosChromeService mojo interface.
+  uint32_t lacros_chrome_service_version_ = 0;
+
   // Called when the binary download completes.
   LoadCompleteCallback load_complete_callback_;
+
+  // Time when the lacros process was launched.
+  base::TimeTicks lacros_launch_time_;
 
   // Process handle for the lacros-chrome process.
   base::Process lacros_process_;
@@ -169,6 +215,8 @@ class BrowserManager : public session_manager::SessionManagerObserver {
 
   // Used to pass ash-chrome specific flags/configurations to lacros-chrome.
   std::unique_ptr<EnvironmentProvider> environment_provider_;
+
+  base::ObserverList<BrowserManagerObserver> observers_;
 
   base::WeakPtrFactory<BrowserManager> weak_factory_{this};
 };

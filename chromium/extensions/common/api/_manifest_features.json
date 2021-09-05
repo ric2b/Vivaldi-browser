@@ -57,7 +57,7 @@
     "min_manifest_version": 2
   },
   "background.service_worker": {
-    "channel": "dev",
+    "channel": "stable",
     "extension_types": ["extension"],
     "min_manifest_version": 2
   },
@@ -162,7 +162,7 @@
     }
   ],
   "host_permissions": {
-    "channel": "dev",
+    "channel": "stable",
     "extension_types": ["extension"],
     "min_manifest_version": 3
   },

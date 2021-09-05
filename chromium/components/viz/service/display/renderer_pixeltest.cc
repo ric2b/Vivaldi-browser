@@ -9,7 +9,7 @@
 #include <tuple>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/memory/aligned_memory.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/shared_memory_mapping.h"
@@ -29,6 +29,7 @@
 #include "components/viz/common/quads/texture_draw_quad.h"
 #include "components/viz/common/resources/bitmap_allocation.h"
 #include "components/viz/common/resources/resource_format_utils.h"
+#include "components/viz/service/display/delegated_ink_point_pixel_test_helper.h"
 #include "components/viz/service/display/gl_renderer.h"
 #include "components/viz/service/display/software_renderer.h"
 #include "components/viz/service/display/viz_pixel_test.h"
@@ -150,12 +151,12 @@ SharedQuadState* CreateTestSharedQuadState(
   const bool is_clipped = false;
   const bool are_contents_opaque = false;
   const float opacity = 1.0f;
-  const gfx::RRectF rounded_corner_bounds = rrect;
+  const gfx::MaskFilterInfo mask_filter_info(rrect);
   const SkBlendMode blend_mode = SkBlendMode::kSrcOver;
   int sorting_context_id = 0;
   SharedQuadState* shared_state = render_pass->CreateAndAppendSharedQuadState();
   shared_state->SetAll(quad_to_target_transform, layer_rect, visible_layer_rect,
-                       rounded_corner_bounds, clip_rect, is_clipped,
+                       mask_filter_info, clip_rect, is_clipped,
                        are_contents_opaque, opacity, blend_mode,
                        sorting_context_id);
   return shared_state;
@@ -175,7 +176,7 @@ SharedQuadState* CreateTestSharedQuadStateClipped(
   int sorting_context_id = 0;
   SharedQuadState* shared_state = render_pass->CreateAndAppendSharedQuadState();
   shared_state->SetAll(quad_to_target_transform, layer_rect, visible_layer_rect,
-                       /*rounded_corner_bounds=*/gfx::RRectF(), clip_rect,
+                       /*mask_filter_info=*/gfx::MaskFilterInfo(), clip_rect,
                        is_clipped, are_contents_opaque, opacity, blend_mode,
                        sorting_context_id);
   return shared_state;
@@ -3540,7 +3541,7 @@ TEST_P(GPURendererPixelTest, TileDrawQuadForceAntiAliasingOff) {
 
   SkBitmap bitmap;
   bitmap.allocN32Pixels(32, 32);
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   canvas.clear(SK_ColorTRANSPARENT);
 
   gfx::Size tile_size(32, 32);
@@ -4005,7 +4006,7 @@ TEST_P(RendererPixelTest, TileDrawQuadNearestNeighbor) {
   SkImageInfo info = SkImageInfo::Make(2, 2, ct, kPremul_SkAlphaType);
   SkBitmap bitmap;
   bitmap.allocPixels(info);
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   draw_point_color(&canvas, 0, 0, SK_ColorGREEN);
   draw_point_color(&canvas, 0, 1, SK_ColorBLUE);
   draw_point_color(&canvas, 1, 0, SK_ColorBLUE);
@@ -4060,7 +4061,7 @@ TEST_F(SoftwareRendererPixelTest, TextureDrawQuadNearestNeighbor) {
 
   SkBitmap bitmap;
   bitmap.allocN32Pixels(2, 2);
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   draw_point_color(&canvas, 0, 0, SK_ColorGREEN);
   draw_point_color(&canvas, 0, 1, SK_ColorBLUE);
   draw_point_color(&canvas, 1, 0, SK_ColorBLUE);
@@ -4112,7 +4113,7 @@ TEST_F(SoftwareRendererPixelTest, TextureDrawQuadLinear) {
   SkBitmap bitmap;
   bitmap.allocN32Pixels(2, 2);
   {
-    SkCanvas canvas(bitmap);
+    SkCanvas canvas(bitmap, SkSurfaceProps{});
     draw_point_color(&canvas, 0, 0, SK_ColorGREEN);
     draw_point_color(&canvas, 0, 1, SK_ColorBLUE);
     draw_point_color(&canvas, 1, 0, SK_ColorBLUE);
@@ -4458,7 +4459,7 @@ TEST_P(GPURendererPixelTest, TextureQuadBatching) {
   SkBitmap bitmap;
   bitmap.allocPixels(
       SkImageInfo::MakeN32Premul(mask_rect.width(), mask_rect.height()));
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   SkPaint paint;
   paint.setStyle(SkPaint::kStroke_Style);
   paint.setStrokeWidth(SkIntToScalar(4));
@@ -4540,7 +4541,7 @@ TEST_P(GPURendererPixelTest, TileQuadClamping) {
   // layer rect red.
   SkBitmap bitmap;
   bitmap.allocN32Pixels(tile_size.width(), tile_size.height());
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, SkSurfaceProps{});
   SkPaint red;
   red.setColor(SK_ColorRED);
   canvas.drawRect(SkRect::MakeWH(tile_size.width(), tile_size.height()), red);
@@ -4992,12 +4993,11 @@ class ColorTransformPixelTest
   }
 
   void Basic() {
-    // SkColorSpace doesn't support piecewise transfer functions so skip those
-    // with SkiaRenderer.
-    if (!is_gl_renderer() &&
-        (src_color_space_.GetTransferID() == TransferID::PIECEWISE_HDR ||
+    // Skip piecewise transfer functions because SkColorSpace (needed for
+    // CopyOutputResult::AsSkBitmap) doesn't support them..
+    if ((src_color_space_.GetTransferID() == TransferID::PIECEWISE_HDR ||
          dst_color_space_.GetTransferID() == TransferID::PIECEWISE_HDR)) {
-      LOG(ERROR) << "Skipping piecewise HDR function with Skia";
+      LOG(ERROR) << "Skipping piecewise HDR function";
       return;
     }
 
@@ -5169,6 +5169,227 @@ INSTANTIATE_TEST_SUITE_P(
                      testing::ValuesIn(dst_color_spaces),
                      testing::Bool()));
 
+class DelegatedInkTest : public VizPixelTestWithParam,
+                         public DelegatedInkPointPixelTestHelper {
+ public:
+  void SetUp() override {
+    // Partial swap must be enabled or else the test will pass even if the
+    // delegated ink trail damage rect is wrong, because the whole frame is
+    // always redrawn otherwise.
+    renderer_settings_.partial_swap_enabled = true;
+    VizPixelTestWithParam::SetUp();
+    EXPECT_TRUE(VizPixelTestWithParam::renderer_->use_partial_swap());
+
+    SetRendererAndCreateInkRenderer(VizPixelTestWithParam::renderer_.get());
+  }
+
+  std::unique_ptr<AggregatedRenderPass> CreateTestRootRenderPass(
+      AggregatedRenderPassId id,
+      const gfx::Rect& output_rect,
+      const gfx::Rect& damage_rect) {
+    auto pass = std::make_unique<AggregatedRenderPass>();
+    const gfx::Transform transform_to_root_target;
+    pass->SetNew(id, output_rect, damage_rect, transform_to_root_target);
+    return pass;
+  }
+
+  bool DrawAndTestTrail(base::FilePath::StringPieceType file) {
+    gfx::Rect rect(this->device_viewport_size_);
+
+    // Minimize the root render pass damage rect so that it has to be expanded
+    // by the delegated ink trail damage rect to confirm that it is the right
+    // size to remove old trails and add new ones.
+    gfx::Rect damage_rect(0, 0, 1, 1);
+    AggregatedRenderPassId id{1};
+    std::unique_ptr<AggregatedRenderPass> pass =
+        CreateTestRootRenderPass(id, rect, damage_rect);
+
+    SharedQuadState* shared_state = CreateTestSharedQuadState(
+        gfx::Transform(), rect, pass.get(), gfx::RRectF());
+
+    SolidColorDrawQuad* color_quad =
+        pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
+    color_quad->SetNew(shared_state, rect, rect, SK_ColorWHITE, false);
+
+    AggregatedRenderPassList pass_list;
+    pass_list.push_back(std::move(pass));
+
+    return this->RunPixelTest(&pass_list, base::FilePath(file),
+                              cc::FuzzyPixelOffByOneComparator(true));
+  }
+};
+
+INSTANTIATE_TEST_SUITE_P(,
+                         DelegatedInkTest,
+                         testing::ValuesIn(GetRendererTypesSkiaOnly()),
+                         testing::PrintToStringParamName());
+
+// Draw a single trail and erase it, making sure that no bits of trail are left
+// behind.
+TEST_P(DelegatedInkTest, DrawOneTrailAndErase) {
+  // First provide the metadata required to draw the trail, numbers arbitrary.
+  CreateAndSendMetadata(gfx::PointF(10, 10), 3.5f, SK_ColorBLACK,
+                        gfx::RectF(0, 0, 175, 172));
+
+  // Then provide some points for the trail to draw. Numbers chosen arbitrarily
+  // after the first point, which must match the metadata. This will predict no
+  // points, so a trail made of 3 points will be drawn.
+  CreateAndSendPointFromMetadata();
+  CreateAndSendPointFromLastPoint(gfx::PointF(75, 62));
+  CreateAndSendPointFromLastPoint(gfx::PointF(124, 45));
+
+  // Confirm that the trail was drawn.
+  EXPECT_TRUE(
+      DrawAndTestTrail(FILE_PATH_LITERAL("delegated_ink_one_trail.png")));
+
+  // The metadata should have been cleared after drawing, so confirm that there
+  // is no trail after another draw.
+  EXPECT_TRUE(DrawAndTestTrail(FILE_PATH_LITERAL("white.png")));
+}
+
+// Confirm that drawing a second trail completely removes the first trail.
+TEST_P(DelegatedInkTest, DrawTwoTrailsAndErase) {
+  // TODO(crbug.com/1021566): Enable this test for SkiaRenderer Dawn.
+  if (renderer_type() == RendererType::kSkiaDawn)
+    return;
+
+  // First provide the metadata required to draw the trail, numbers arbitrary.
+  CreateAndSendMetadata(gfx::PointF(140, 48), 8.2f, SK_ColorMAGENTA,
+                        gfx::RectF(0, 0, 200, 200));
+
+  // Then provide some points for the trail to draw. Numbers chosen arbitrarily
+  // after the first point, which must match the metadata. No points will be
+  // predicted, so a trail made of 2 points will be drawn.
+  CreateAndSendPointFromMetadata();
+  CreateAndSendPointFromLastPoint(gfx::PointF(115, 85));
+
+  // Confirm that the trail was drawn correctly.
+  EXPECT_TRUE(DrawAndTestTrail(
+      FILE_PATH_LITERAL("delegated_ink_two_trails_first.png")));
+
+  // Now provide new metadata and points to draw a new trail. Just use the last
+  // point draw above as the starting point for the new trail. One point will
+  // be predicted, so a trail consisting of 4 points will be drawn.
+  CreateAndSendMetadataFromLastPoint();
+  CreateAndSendPointFromLastPoint(gfx::PointF(134, 100));
+  CreateAndSendPointFromLastPoint(gfx::PointF(150, 81.44f));
+
+  // Confirm the first trail is gone and only the second remains.
+  EXPECT_TRUE(DrawAndTestTrail(
+      FILE_PATH_LITERAL("delegated_ink_two_trails_second.png")));
+
+  // Confirm all trails are gone.
+  EXPECT_TRUE(DrawAndTestTrail(FILE_PATH_LITERAL("white.png")));
+}
+
+// Confirm that the trail can't be drawn beyond the presentation area.
+TEST_P(DelegatedInkTest, TrailExtendsBeyondPresentationArea) {
+  // TODO(crbug.com/1021566): Enable this test for SkiaRenderer Dawn.
+  if (renderer_type() == RendererType::kSkiaDawn)
+    return;
+
+  const gfx::RectF kPresentationArea(30, 30, 100, 100);
+  CreateAndSendMetadata(gfx::PointF(50.2f, 89.999f), 15.22f, SK_ColorCYAN,
+                        kPresentationArea);
+
+  // Send points such that some extend beyond the presentation area to confirm
+  // that the trail is clipped correctly. One point will be predicted, so the
+  // trail will be made of 9 points.
+  CreateAndSendPointFromMetadata();
+  CreateAndSendPointFromLastPoint(gfx::PointF(80.7f, 149.6f));
+  CreateAndSendPointFromLastPoint(gfx::PointF(128.999f, 110.01f));
+  CreateAndSendPointFromLastPoint(gfx::PointF(50, 50));
+  CreateAndSendPointFromLastPoint(gfx::PointF(10.1f, 30.3f));
+  CreateAndSendPointFromLastPoint(gfx::PointF(29.98f, 66));
+  CreateAndSendPointFromLastPoint(gfx::PointF(52.3456f, 2.31f));
+  CreateAndSendPointFromLastPoint(gfx::PointF(97, 36.9f));
+  EXPECT_TRUE(DrawAndTestTrail(FILE_PATH_LITERAL(
+      "delegated_ink_trail_clipped_by_presentation_area.png")));
+}
+
+// Confirm that the trail appears on top of everything, including batched quads
+// that are drawn as part of the call to FinishDrawingQuadList.
+TEST_P(DelegatedInkTest, DelegatedInkTrailAfterBatchedQuads) {
+  gfx::Rect rect(this->device_viewport_size_);
+
+  AggregatedRenderPassId id{1};
+  auto pass = CreateTestRootRenderPass(id, rect, rect);
+
+  SharedQuadState* shared_state = CreateTestSharedQuadState(
+      gfx::Transform(), rect, pass.get(), gfx::RRectF());
+
+  CreateTestTextureDrawQuad(
+      !is_software_renderer(), gfx::Rect(this->device_viewport_size_),
+      SkColorSetARGB(128, 0, 255, 0),  // Texel color.
+      SK_ColorTRANSPARENT,             // Background color.
+      true,                            // Premultiplied alpha.
+      shared_state, this->resource_provider_.get(),
+      this->child_resource_provider_.get(), this->shared_bitmap_manager_.get(),
+      this->child_context_provider_, pass.get());
+
+  auto* color_quad = pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
+  color_quad->SetNew(shared_state, rect, rect, SK_ColorWHITE, false);
+
+  AggregatedRenderPassList pass_list;
+  pass_list.push_back(std::move(pass));
+
+  const gfx::RectF kPresentationArea(0, 0, 200, 200);
+  CreateAndSendMetadata(gfx::PointF(34.f, 72.f), 7.77f, SK_ColorDKGRAY,
+                        kPresentationArea);
+  CreateAndSendPointFromMetadata();
+  CreateAndSendPointFromLastPoint(gfx::PointF(79, 101));
+  CreateAndSendPointFromLastPoint(gfx::PointF(134, 114));
+
+  EXPECT_TRUE(this->RunPixelTest(
+      &pass_list,
+      base::FilePath(
+          FILE_PATH_LITERAL("delegated_ink_trail_on_batched_quads.png")),
+      cc::FuzzyPixelOffByOneComparator(true)));
+}
+
+// Confirm that delegated ink trails are not drawn on non-root render passes.
+TEST_P(DelegatedInkTest, SimpleTrailNonRootRenderPass) {
+  gfx::Rect rect(this->device_viewport_size_);
+
+  AggregatedRenderPassId child_id{2};
+  auto child_pass = CreateTestRenderPass(child_id, rect, gfx::Transform());
+
+  SharedQuadState* child_shared_state = CreateTestSharedQuadState(
+      gfx::Transform(), rect, child_pass.get(), gfx::RRectF());
+
+  auto* color_quad = child_pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
+  color_quad->SetNew(child_shared_state, rect, rect, SK_ColorGREEN, false);
+
+  AggregatedRenderPassId root_id{1};
+  auto root_pass = CreateTestRootRenderPass(root_id, rect, rect);
+
+  SharedQuadState* root_shared_state = CreateTestSharedQuadState(
+      gfx::Transform(), rect, root_pass.get(), gfx::RRectF());
+
+  CreateTestRenderPassDrawQuad(root_shared_state, rect, child_id,
+                               root_pass.get());
+
+  auto* child_pass_ptr = child_pass.get();
+
+  AggregatedRenderPassList pass_list;
+  pass_list.push_back(std::move(child_pass));
+  pass_list.push_back(std::move(root_pass));
+
+  // Values for a simple delegated ink trail, numbers chosen arbitrarily.
+  const gfx::RectF kPresentationArea(0, 0, 200, 200);
+  CreateAndSendMetadata(gfx::PointF(156.f, 111.f), 19.177f, SK_ColorRED,
+                        kPresentationArea);
+  CreateAndSendPointFromMetadata();
+  CreateAndSendPointFromLastPoint(gfx::PointF(119, 87.23f));
+  CreateAndSendPointFromLastPoint(gfx::PointF(74.222f, 95.4f));
+
+  // This will only check what was drawn in the child pass, which should never
+  // contain a delegated ink trail, so it should be solid green.
+  EXPECT_TRUE(this->RunPixelTestWithReadbackTarget(
+      &pass_list, child_pass_ptr,
+      base::FilePath(FILE_PATH_LITERAL("green.png")),
+      cc::ExactPixelComparator(true)));
+}
 #endif  // !defined(OS_ANDROID)
 
 }  // namespace

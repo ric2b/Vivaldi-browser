@@ -107,7 +107,7 @@ class AppsNavigationThrottle : public content::NavigationThrottle {
     DIALOG_DEACTIVATED = 1,
     OBSOLETE_ALWAYS_PRESSED = 2,
     OBSOLETE_JUST_ONCE_PRESSED = 3,
-    PREFERRED_ACTIVITY_FOUND = 4,
+    PREFERRED_ARC_ACTIVITY_FOUND = 4,
     // The prefix "CHROME"/"ARC_APP"/"PWA_APP" determines whether the user
     // pressed [Stay in Chrome] or [Use app] at IntentPickerBubbleView.
     // "PREFERRED" denotes when the user decides to save this selection, whether
@@ -121,8 +121,11 @@ class AppsNavigationThrottle : public content::NavigationThrottle {
     ERROR_BEFORE_PICKER = 10,
     INVALID = 11,
     DEVICE_PRESSED = 12,
-    MAC_NATIVE_APP_PRESSED = 13,
-    kMaxValue = MAC_NATIVE_APP_PRESSED,
+    MAC_OS_APP_PRESSED = 13,
+    PWA_APP_PREFERRED_PRESSED = 14,
+    PREFERRED_PWA_FOUND = 15,
+    PREFERRED_CHROME_BROWSER_FOUND = 16,
+    kMaxValue = PREFERRED_CHROME_BROWSER_FOUND,
   };
 
   // As for PickerAction, these define the buckets for an UMA histogram, so this
@@ -134,8 +137,8 @@ class AppsNavigationThrottle : public content::NavigationThrottle {
     CHROME = 1,
     PWA = 2,
     DEVICE = 3,
-    MAC_NATIVE = 4,
-    kMaxValue = MAC_NATIVE,
+    MAC_OS = 4,
+    kMaxValue = MAC_OS,
   };
 
   // TODO(ajlinker): move these two functions below to IntentHandlingMetrics.

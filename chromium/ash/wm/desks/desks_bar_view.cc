@@ -27,7 +27,6 @@
 #include "ui/aura/window.h"
 #include "ui/events/event_observer.h"
 #include "ui/events/types/event_type.h"
-#include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/event_monitor.h"
 #include "ui/views/widget/widget.h"
@@ -130,16 +129,13 @@ class DeskBarHoverObserver : public ui::EventObserver {
 
 DesksBarView::DesksBarView(OverviewGrid* overview_grid)
     : background_view_(new views::View),
-      new_desk_button_(new NewDeskButton(this)),
+      new_desk_button_(new NewDeskButton()),
       overview_grid_(overview_grid) {
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
 
   background_view_->SetPaintToLayer(ui::LAYER_SOLID_COLOR);
   background_view_->layer()->SetFillsBoundsOpaquely(false);
-  background_view_->layer()->SetColor(
-      AshColorProvider::Get()->GetShieldLayerColor(
-          AshColorProvider::ShieldLayerType::kShield80));
 
   AddChildView(background_view_);
   AddChildView(new_desk_button_);
@@ -302,15 +298,17 @@ void DesksBarView::OnGestureEvent(ui::GestureEvent* event) {
   }
 }
 
+void DesksBarView::OnThemeChanged() {
+  views::View::OnThemeChanged();
+  DCHECK_EQ(ui::LAYER_SOLID_COLOR, background_view_->layer()->type());
+  background_view_->layer()->SetColor(
+      AshColorProvider::Get()->GetShieldLayerColor(
+          AshColorProvider::ShieldLayerType::kShield80));
+}
+
 bool DesksBarView::UsesCompactLayout() const {
   return width() <= kUseCompactLayoutWidthThreshold ||
          width() <= min_width_to_fit_contents_;
-}
-
-void DesksBarView::ButtonPressed(views::Button* sender,
-                                 const ui::Event& event) {
-  if (sender == new_desk_button_)
-    new_desk_button_->OnButtonPressed();
 }
 
 void DesksBarView::OnDeskAdded(const Desk* desk) {

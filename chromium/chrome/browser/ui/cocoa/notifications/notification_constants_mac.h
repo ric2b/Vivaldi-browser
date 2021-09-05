@@ -12,13 +12,15 @@ namespace notification_constants {
 extern NSString* const kNotificationTitle;
 extern NSString* const kNotificationSubTitle;
 extern NSString* const kNotificationInformativeText;
-extern NSString* const kNotificationImage;
+extern NSString* const kNotificationIcon;
+extern NSString* const kNotificationIconPath;
 extern NSString* const kNotificationButtonOne;
 extern NSString* const kNotificationButtonTwo;
 extern NSString* const kNotificationTag;
 extern NSString* const kNotificationCloseButtonTag;
 extern NSString* const kNotificationOptionsButtonTag;
 extern NSString* const kNotificationSettingsButtonTag;
+extern NSString* const kNotificationCategoryIdentifier;
 
 extern NSString* const kNotificationOrigin;
 extern NSString* const kNotificationId;

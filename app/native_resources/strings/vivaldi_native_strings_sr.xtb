@@ -9,8 +9,10 @@
 <translation id="1411638389238344450">Пошаљи везу поштом</translation>
 <translation id="1454726940098520109">Не приказуј поново потврду</translation>
 <translation id="1462666970065907900">Да ли заиста желите да затворите овај прозор?</translation>
+<translation id="1526344461589023948">Дошло је до грешке приликом покушаја чувања преузетог ажурирања. Проверите да ли рачунар има довољно простора на диску и покушајте поново касније.</translation>
 <translation id="1657174850639146440">Чудовиште 9</translation>
 <translation id="1676595396635191120">Нови приватни прозор</translation>
+<translation id="1702758681952953055">Ако се грешка и даље јавља, пријавите је и укључите следеће детаље:</translation>
 <translation id="1728549374069268714">Налепи и иди</translation>
 <translation id="1756026472674246267">Отвори везу у новој картици</translation>
 <translation id="1759842336958782510">Chrome</translation>
@@ -20,6 +22,7 @@
 <translation id="1924750141060565109">Пејзаж 15</translation>
 <translation id="19598411548897379">Опште</translation>
 <translation id="2079036669923635404">Кликните овде да бисте ажурирали Vivaldi на верзију <ph name="VERSION" />.</translation>
+<translation id="2141974047387702305">Дошло је до грешке приликом преузимања датотека за ажурирање. Проверите интернет везу и покушајте поново касније.</translation>
 <translation id="2441056087170876076">Чудовиште 2</translation>
 <translation id="2444387452209867610">Убаци белешку</translation>
 <translation id="2486841023299517366">Животиња 4</translation>
@@ -45,6 +48,7 @@
 <translation id="3542768452570884558">Отвори везу у новом прозору</translation>
 <translation id="3588820906588687999">Отвори слику у новој картици</translation>
 <translation id="3601066750251199488">Чудовиште 3</translation>
+<translation id="3708982624815781692">Преузимање је отказано.</translation>
 <translation id="3732157130969736834">Додај везу у обележиваче</translation>
 <translation id="3732388226447288666">Животиња 2</translation>
 <translation id="3732439195215136813">Животиња 5</translation>
@@ -81,11 +85,13 @@
 <translation id="5594602170491763400">Чудовиште 5</translation>
 <translation id="5615637589913244581">Opera 15+ (Бета)</translation>
 <translation id="5648110075441906505">Отвори слику у новом прозору</translation>
+<translation id="5656371807944747581">Грешка при ажурирању!</translation>
 <translation id="5716238312826274098">Онемогућавање обавештења</translation>
 <translation id="5770433027661640693">Пејзаж 10</translation>
 <translation id="5857090052475505287">Нова фасцикла</translation>
 <translation id="588258955323874662">Цео екран</translation>
 <translation id="5916080360077521750">На жалост, подешавања Chrome прегледача нису доступна док је прегледач покренут. За увоз тих подешавања у Vivaldi, сачувајте ваш рад и затворите све прозоре Chrome прегледача. Након тога кликните на Настави.</translation>
+<translation id="6040143037577758943">Затвори</translation>
 <translation id="6229528619562190452">Кликните овде да бисте ажурирали Vivaldi.</translation>
 <translation id="6234173136417926046">Користи слику као позадину брзог бирања</translation>
 <translation id="630690498669249215">Датотека са обележивачима из Opera</translation>
@@ -102,9 +108,11 @@
 <translation id="7111492742514999492">Пејзаж 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi прегледач су омогућили пројекат отвореног кода <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> и други <ph name="BEGIN_LINK_OSS" />софтвер отвореног кода<ph name="END_LINK_OSS" />.</translation>
+<translation id="7581266044164103589">Покретање програма за ажурирање није успело. Проверите да ли рачунар има довољно меморије или простора на диску и покушајте поново касније.</translation>
 <translation id="7715497554424665066">Игнориши ажурирање</translation>
 <translation id="7724603315864178912">Исеци</translation>
 <translation id="7793738202466490491">Додај као догађај календара</translation>
+<translation id="7848222781052558334">Потврда дигиталног потписа преузетих датотека није успела.</translation>
 <translation id="7865983598101744945">Потврда затварања прегледача</translation>
 <translation id="7957213167373139414">Мој календар</translation>
 <translation id="8027581147000338959">Отвори у новом прозору</translation>

@@ -45,8 +45,8 @@ apps::PickerEntryType GetPickerEntryType(apps::mojom::AppType app_type) {
     case apps::mojom::AppType::kWeb:
       picker_entry_type = apps::PickerEntryType::kWeb;
       break;
-    case apps::mojom::AppType::kMacNative:
-      picker_entry_type = apps::PickerEntryType::kMacNative;
+    case apps::mojom::AppType::kMacOs:
+      picker_entry_type = apps::PickerEntryType::kMacOs;
       break;
   }
   return picker_entry_type;
@@ -278,6 +278,11 @@ bool CommonAppsNavigationThrottle::ShouldCancelNavigation(
                           /*prefer_container=*/true),
             url, launch_source, display::kDefaultDisplayId);
         CloseOrGoBack(web_contents);
+        apps::IntentHandlingMetrics::RecordIntentPickerUserInteractionMetrics(
+            /*selected_app_package=*/preferred_app_id.value(),
+            GetPickerEntryType(app_type),
+            apps::IntentPickerCloseReason::PREFERRED_APP_FOUND,
+            apps::Source::kHttpOrHttps, /*should_persist=*/false);
         return true;
       }
     }
@@ -294,6 +299,10 @@ void CommonAppsNavigationThrottle::ShowIntentPickerForApps(
   if (apps.empty()) {
     IntentPickerTabHelper::SetShouldShowIcon(web_contents, false);
     ui_displayed_ = false;
+    apps::IntentHandlingMetrics::RecordIntentPickerUserInteractionMetrics(
+        /*selected_app_package=*/std::string(), apps::PickerEntryType::kUnknown,
+        apps::IntentPickerCloseReason::ERROR_BEFORE_PICKER,
+        apps::Source::kHttpOrHttps, /*should_persist=*/false);
     return;
   }
 
@@ -345,6 +354,11 @@ bool CommonAppsNavigationThrottle::ShouldAutoDisplayUi(
     auto preferred_app_id = proxy->PreferredApps().FindPreferredAppForUrl(url);
     if (preferred_app_id.has_value() &&
         preferred_app_id.value() == kUseBrowserForLink) {
+      apps::IntentHandlingMetrics::RecordIntentPickerUserInteractionMetrics(
+          /*selected_app_package=*/preferred_app_id.value(),
+          apps::PickerEntryType::kUnknown,
+          apps::IntentPickerCloseReason::PREFERRED_APP_FOUND,
+          apps::Source::kHttpOrHttps, /*should_persist=*/false);
       return false;
     }
   }

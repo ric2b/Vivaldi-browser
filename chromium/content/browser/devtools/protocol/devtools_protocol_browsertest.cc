@@ -9,7 +9,7 @@
 
 #include "base/base64.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/json/json_reader.h"
@@ -256,8 +256,11 @@ IN_PROC_BROWSER_TEST_F(SyntheticKeyEventTest, DISABLED_KeyboardEventAck) {
       "document.body.addEventListener('keydown', () => {debugger;});"));
 
   auto filter = std::make_unique<InputMsgWatcher>(
-      RenderWidgetHostImpl::From(
-          shell()->web_contents()->GetRenderViewHost()->GetWidget()),
+      RenderWidgetHostImpl::From(shell()
+                                     ->web_contents()
+                                     ->GetMainFrame()
+                                     ->GetRenderViewHost()
+                                     ->GetWidget()),
       blink::WebInputEvent::Type::kRawKeyDown);
 
   SendCommand("Debugger.enable", nullptr);
@@ -282,8 +285,11 @@ IN_PROC_BROWSER_TEST_F(SyntheticMouseEventTest, MouseEventAck) {
       "document.body.addEventListener('mousedown', () => {debugger;});"));
 
   auto filter = std::make_unique<InputMsgWatcher>(
-      RenderWidgetHostImpl::From(
-          shell()->web_contents()->GetRenderViewHost()->GetWidget()),
+      RenderWidgetHostImpl::From(shell()
+                                     ->web_contents()
+                                     ->GetMainFrame()
+                                     ->GetRenderViewHost()
+                                     ->GetWidget()),
       blink::WebInputEvent::Type::kMouseDown);
 
   SendCommand("Debugger.enable", nullptr);
@@ -937,6 +943,47 @@ IN_PROC_BROWSER_TEST_F(SitePerProcessDevToolsProtocolTest, PageCrashInFrame) {
   std::string crashed_target_id;
   ASSERT_TRUE(params->GetString("targetId", &crashed_target_id));
   EXPECT_EQ(frame_target_id, crashed_target_id);
+}
+
+IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, PageCrashClearsPendingCommands) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  GURL test_url = embedded_test_server()->GetURL("/devtools/navigation.html");
+  NavigateToURLBlockUntilNavigationsComplete(shell(), test_url, 1);
+  Attach();
+
+  std::unique_ptr<base::DictionaryValue> command_params;
+  command_params = std::make_unique<base::DictionaryValue>();
+  command_params->SetBoolean("discover", true);
+
+  SendCommand("Target.setDiscoverTargets", std::move(command_params));
+
+  std::string target_id;
+  std::unique_ptr<base::DictionaryValue> params;
+  std::string type;
+  params = WaitForNotification("Target.targetCreated", true);
+  ASSERT_TRUE(params->GetString("targetInfo.type", &type));
+  ASSERT_EQ(type, "page");
+  ASSERT_TRUE(params->GetString("targetInfo.targetId", &target_id));
+
+  SendCommand("Debugger.enable", nullptr, true);
+
+  params = std::make_unique<base::DictionaryValue>();
+  params->SetString("expression", "console.log('first page'); debugger");
+  SendCommand("Runtime.evaluate", std::move(params), false);
+  WaitForNotification("Debugger.paused");
+
+  {
+    content::ScopedAllowRendererCrashes scoped_allow_renderer_crashes;
+    shell()->LoadURL(GURL(content::kChromeUICrashURL));
+    params = WaitForNotification("Target.targetCrashed", true);
+  }
+  ClearNotifications();
+  SendCommand("Page.reload", std::move(params), false);
+  WaitForNotification("Inspector.targetReloadedAfterCrash", true);
+  params = std::make_unique<base::DictionaryValue>();
+  params->SetString("expression", "console.log('second page')");
+  SendCommand("Runtime.evaluate", std::move(params), true);
+  EXPECT_THAT(console_messages_, ElementsAre("first page", "second page"));
 }
 
 IN_PROC_BROWSER_TEST_F(DevToolsProtocolTest, NavigationPreservesMessages) {

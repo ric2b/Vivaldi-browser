@@ -23,6 +23,7 @@
 <translation id="1450753235335490080"><ph name="CONTENT_TYPE" />: nie udało się udostępnić</translation>
 <translation id="1487931858675166540">Element <ph name="FIRST_ITEM_TITLE" /> został zastąpiony elementem <ph name="SECOND_ITEM_TITLE" /></translation>
 <translation id="1498028757988366001">Z Twojej historii wyszukiwania. Jeśli usuniesz zapytanie „<ph name="QUERY" />” z historii, zostanie ono trwale usunięte z Twojego konta na wszystkich urządzeniach.</translation>
+<translation id="1510238584712386396">Menu z aplikacjami</translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{1 minuta i }few{# minuty i }many{# minut i }other{# minuty i }}</translation>
 <translation id="1643823602425662293">Powiadomienie</translation>
 <translation id="169515659049020177">Shift</translation>
@@ -99,6 +100,7 @@
 <translation id="3600969208114796418">Plik <ph name="SAVEAS_EXTENSION_TYPE" /></translation>
 <translation id="3608915363409716668"><ph name="MAXIMUM_VALUE" />+</translation>
 <translation id="3618849550573277856">Sprawdź słowo „<ph name="LOOKUP_STRING" />”</translation>
+<translation id="3622035490309591977">Historia schowka</translation>
 <translation id="364720409959344976">Wybierz folder do przesłania</translation>
 <translation id="3660179305079774227">Strzałka w górę</translation>
 <translation id="3670030362669914947">Numer</translation>
@@ -151,6 +153,7 @@
 <translation id="5763338081255973061">{DAYS,plural, =0{Aktywność dzisiaj}=1{Aktywność 1 dzień temu}few{Aktywność # dni temu}many{Aktywność # dni temu}other{Aktywność # dnia temu}}</translation>
 <translation id="5768079895599174203">{DAYS,plural, =1{1 dzień i }few{# dni i }many{# dni i }other{# dnia i }}</translation>
 <translation id="5789643057113097023">.</translation>
+<translation id="5843690142429128814">Obraz.</translation>
 <translation id="5866104238061687188">{YEARS,plural, =1{za 1 rok}few{za # lata}many{za # lat}other{za # roku}}</translation>
 <translation id="588258955323874662">Pełny ekran</translation>
 <translation id="5906667377645263094">{SECONDS,plural, =1{Pozostała 1 sekunda}few{Pozostały # sekundy}many{Pozostało # sekund}other{Pozostało # sekundy}}</translation>
@@ -191,6 +194,7 @@
 <translation id="6845533974506654842">naciśnij</translation>
 <translation id="6863590663815976734">{HOURS,plural, =1{Pozostała 1 godzina}few{Pozostały # godziny}many{Pozostało # godzin}other{Pozostało # godziny}}</translation>
 <translation id="688711909580084195">Strona internetowa bez tytułu</translation>
+<translation id="6902419395050653510">Treść HTML.</translation>
 <translation id="6907759265145635167"><ph name="QUANTITY" /> PB/s</translation>
 <translation id="6917971086528278418">{YEARS,plural, =1{Pozostał rok}few{Pozostały # lata}many{Pozostało # lat}other{Pozostało # roku}}</translation>
 <translation id="6945221475159498467">Wybierz</translation>

@@ -202,6 +202,44 @@ class PLATFORM_EXPORT FrameWidget
   virtual gfx::PointF DIPsToBlinkSpace(const gfx::PointF& point) = 0;
   virtual gfx::Point DIPsToRoundedBlinkSpace(const gfx::Point& point) = 0;
   virtual float DIPsToBlinkSpace(float scalar) = 0;
+
+  virtual void RequestMouseLock(
+      bool has_transient_user_activation,
+      bool request_unadjusted_movement,
+      mojom::blink::WidgetInputHandlerHost::RequestMouseLockCallback
+          callback) = 0;
+
+  // Mouse capture has been lost.
+  virtual void MouseCaptureLost() = 0;
+
+  // Determines whether composition can happen inline.
+  virtual bool CanComposeInline() = 0;
+
+  // Determines if IME events should be sent to Plugin instead of processed to
+  // the currently focused frame.
+  virtual bool ShouldDispatchImeEventsToPlugin() = 0;
+
+  // Set the composition in plugin.
+  virtual void ImeSetCompositionForPlugin(
+      const String& text,
+      const Vector<ui::ImeTextSpan>& ime_text_spans,
+      const gfx::Range& replacement_range,
+      int selection_start,
+      int selection_end) = 0;
+
+  // Commit the text to plugin.
+  virtual void ImeCommitTextForPlugin(
+      const String& text,
+      const Vector<ui::ImeTextSpan>& ime_text_spans,
+      const gfx::Range& replacement_range,
+      int relative_cursor_pos) = 0;
+
+  // Indicate composition is complete to plugin.
+  virtual void ImeFinishComposingTextForPlugin(bool keep_selection) = 0;
+
+  // Returns the FrameSinkId for this widget which is used for identifying
+  // frames submitted from the compositor.
+  virtual const viz::FrameSinkId& GetFrameSinkId() = 0;
 };
 
 }  // namespace blink

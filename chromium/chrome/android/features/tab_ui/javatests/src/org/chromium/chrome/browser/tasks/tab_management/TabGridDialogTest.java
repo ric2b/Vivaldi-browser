@@ -88,6 +88,7 @@ import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.test.params.ParameterAnnotations;
 import org.chromium.base.test.params.ParameterizedRunner;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
@@ -108,7 +109,6 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeRenderTestRule;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.ui.KeyboardVisibilityDelegate;
 import org.chromium.ui.test.util.NightModeTestUtils;
@@ -691,6 +691,7 @@ public class TabGridDialogTest {
     @MediumTest
     @Feature({"RenderTest"})
     @ParameterAnnotations.UseMethodParameter(NightModeTestUtils.NightModeParams.class)
+    @FlakyTest(message = "https://crbug.com/1139475")
     public void testRenderDialog_3Tabs_Portrait(boolean nightModeEnabled) throws Exception {
         final ChromeTabbedActivity cta = mActivityTestRule.getActivity();
         prepareTabsWithThumbnail(mActivityTestRule, 3, 0, "about:blank");

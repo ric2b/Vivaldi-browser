@@ -106,8 +106,9 @@ TextExample::TextExample() : ExampleBase("Text Styles") {}
 TextExample::~TextExample() = default;
 
 Checkbox* TextExample::AddCheckbox(GridLayout* layout, const char* name) {
-  return layout->AddView(
-      std::make_unique<Checkbox>(base::ASCIIToUTF16(name), this));
+  return layout->AddView(std::make_unique<Checkbox>(
+      base::ASCIIToUTF16(name),
+      base::BindRepeating(&TextExample::UpdateStyle, base::Unretained(this))));
 }
 
 Combobox* TextExample::AddCombobox(GridLayout* layout,
@@ -121,7 +122,7 @@ Combobox* TextExample::AddCombobox(GridLayout* layout,
       std::make_unique<Combobox>(
           std::make_unique<ExampleComboboxModel>(strings, count)),
       kNumColumns - 1, 1);
-  combobox->set_callback(
+  combobox->SetCallback(
       base::BindRepeating(combobox_callback, base::Unretained(this)));
   return combobox;
 }
@@ -208,7 +209,7 @@ void TextExample::CreateExampleView(View* container) {
   TextComboboxChanged();  // Sets initial text content.
 }
 
-void TextExample::ButtonPressed(Button* button, const ui::Event& event) {
+void TextExample::UpdateStyle() {
   int flags = text_view_->GetFlags();
   int style = text_view_->GetStyle();
   SetFlagFromCheckbox(multiline_checkbox_, &flags, gfx::Canvas::MULTI_LINE);

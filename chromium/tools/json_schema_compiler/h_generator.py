@@ -116,6 +116,7 @@ class _Generator(object):
       for event in self._namespace.events.values():
         c.Cblock(self._GenerateEvent(event))
     (c.Concat(cpp_util.CloseNamespace(cpp_namespace))
+      .Append()
       .Append('#endif  // %s' % ifndef_name)
       .Append()
     )
@@ -232,6 +233,8 @@ class _Generator(object):
       (c.Sblock('struct %(classname)s {')
         .Append('%(classname)s();')
         .Append('~%(classname)s();')
+        .Append('%(classname)s(const %(classname)s&) = delete;')
+        .Append('%(classname)s& operator=(const %(classname)s&) = delete;')
         .Append('%(classname)s(%(classname)s&& rhs);')
         .Append('%(classname)s& operator=(%(classname)s&& rhs);')
       )
@@ -293,12 +296,7 @@ class _Generator(object):
                       self._type_helper.GetCppType(type_.additional_properties,
                                                    is_in_container=True))
             )
-      (c.Eblock()
-        .Append()
-        .Sblock(' private:')
-          .Append('DISALLOW_COPY_AND_ASSIGN(%(classname)s);')
-        .Eblock('};')
-      )
+      (c.Eblock('};'))
     return c.Substitute({'classname': classname})
 
   def _GenerateEvent(self, event):
@@ -310,7 +308,7 @@ class _Generator(object):
     (c.Append('namespace %s {' % event_namespace)
       .Append()
       .Concat(self._GenerateEventNameConstant(event))
-      .Concat(self._GenerateCreateCallbackArguments(event))
+      .Concat(self._GenerateAsyncResponseArguments(event.params))
       .Append('}  // namespace %s' % event_namespace)
     )
     return c
@@ -329,8 +327,8 @@ class _Generator(object):
       .Append()
       .Cblock(self._GenerateFunctionParams(function))
     )
-    if function.callback:
-      c.Cblock(self._GenerateFunctionResults(function.callback))
+    if function.returns_async:
+      c.Cblock(self._GenerateFunctionResults(function.returns_async))
     c.Append('}  // namespace %s' % function_namespace)
     return c
 
@@ -344,6 +342,8 @@ class _Generator(object):
     (c.Sblock('struct Params {')
       .Append('static std::unique_ptr<Params> Create(%s);' %
                   self._GenerateParams(('const base::ListValue& args',)))
+      .Append('Params(const Params&) = delete;')
+      .Append('Params& operator=(const Params&) = delete;')
       .Append('~Params();')
       .Append()
       .Cblock(self._GenerateTypes(p.type_ for p in function.params))
@@ -352,8 +352,6 @@ class _Generator(object):
       .Append()
       .Sblock(' private:')
         .Append('Params();')
-        .Append()
-        .Append('DISALLOW_COPY_AND_ASSIGN(Params);')
       .Eblock('};')
     )
     return c
@@ -428,11 +426,11 @@ class _Generator(object):
 
     return c
 
-  def _GenerateCreateCallbackArguments(self, function):
-    """Generates functions for passing parameters to a callback.
+  def _GenerateAsyncResponseArguments(self, params):
+    """Generates a function to create the arguments to pass as results to a
+    function callback, promise or event details.
     """
     c = Code()
-    params = function.params
     c.Cblock(self._GenerateTypes((p.type_ for p in params), is_toplevel=True))
 
     declaration_list = []
@@ -454,13 +452,13 @@ class _Generator(object):
     c.Append()
     return c
 
-  def _GenerateFunctionResults(self, callback):
+  def _GenerateFunctionResults(self, returns_async):
     """Generates namespace for passing a function's result back.
     """
     c = Code()
     (c.Append('namespace Results {')
       .Append()
-      .Concat(self._GenerateCreateCallbackArguments(callback))
+      .Concat(self._GenerateAsyncResponseArguments(returns_async.params))
       .Append('}  // namespace Results')
     )
     return c

@@ -11,8 +11,8 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/trace_event/trace_event.h"
-#include "components/sync/base/cancelation_signal.h"
 #include "components/sync/engine/sync_engine_switches.h"
+#include "components/sync/engine_impl/cancelation_signal.h"
 #include "components/sync/engine_impl/commit.h"
 #include "components/sync/engine_impl/commit_processor.h"
 #include "components/sync/engine_impl/cycle/nudge_tracker.h"
@@ -150,8 +150,8 @@ SyncerError Syncer::BuildAndPostCommits(const ModelTypeSet& request_types,
         cycle->context()->max_commit_batch_size(),
         cycle->context()->account_name(), cycle->context()->cache_guid(),
         cycle->context()->cookie_jar_mismatch(),
-        cycle->context()->cookie_jar_empty(), &commit_processor,
-        cycle->context()->extensions_activity()));
+        cycle->context()->cookie_jar_empty(), cycle->context()->single_client(),
+        &commit_processor, cycle->context()->extensions_activity()));
     if (!commit) {
       break;
     }
@@ -165,7 +165,6 @@ SyncerError Syncer::BuildAndPostCommits(const ModelTypeSet& request_types,
       base::UmaHistogramEnumeration(kPrefix + ModelTypeToHistogramSuffix(type),
                                     error.value());
     }
-    commit->CleanUp();
     if (error.value() != SyncerError::SYNCER_OK) {
       return error;
     }

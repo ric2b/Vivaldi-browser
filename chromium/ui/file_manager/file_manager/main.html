@@ -111,6 +111,7 @@
       <command id="unmount" label="$i18n{UNMOUNT_DEVICE_BUTTON_LABEL}"
                shortcut="E|Shift|Ctrl">
       <command id="format" label="$i18n{FORMAT_DEVICE_BUTTON_LABEL}">
+      <command id="erase-device" label="$i18n{REPARTITION_DEVICE_BUTTON_LABEL}">
       <command id="configure" label="$i18n{CONFIGURE_VOLUME_BUTTON_LABEL}">
 
       <command id="volume-help" label="$i18n{DRIVE_MENU_HELP}">
@@ -223,6 +224,7 @@
         <cr-menu-item command="#configure"></cr-menu-item>
         <cr-menu-item command="#unmount"></cr-menu-item>
         <cr-menu-item command="#format"></cr-menu-item>
+        <cr-menu-item command="#erase-device"></cr-menu-item>
         <cr-menu-item command="#rename"></cr-menu-item>
         <cr-menu-item command="#unpin-folder"></cr-menu-item>
         <cr-menu-item command="#share-with-linux"></cr-menu-item>
@@ -297,6 +299,7 @@
         <cr-menu-item id="gear-menu-newservice" command="#new-service"
             sub-menu="#add-new-services-menu"></cr-menu-item>
         <cr-menu-item id="gear-menu-format" command="#format"></cr-menu-item>
+        <cr-menu-item id="gear-menu-erase" command="#erase-device"></cr-menu-item>
         <cr-menu-item id="volume-space-info" command="#volume-storage">
           <div id="volume-space-info-contents">
             <span id="volume-space-info-label"></span>
@@ -365,7 +368,9 @@
       <div id="action-bar">
         <div id="pinned-toggle-wrapper" hidden>
           <span id="pinned-toggle-label">$i18n{OFFLINE_COLUMN_LABEL}</span>
-          <cr-toggle id="pinned-toggle" command="#toggle-pinned"></cr-toggle>
+          <cr-toggle id="pinned-toggle" command="#toggle-pinned"
+                     aria-labelledby="pinned-toggle-label">
+          </cr-toggle>
         </div>
         <button id="tasks" class="combobutton menu-button" menu="#tasks-menu"
                 tabindex="0" hidden
@@ -537,6 +542,20 @@
               <div class="volume-warning banner-cloud-bg" id="drive-auth-failed-warning" hidden>
                 <div class="drive-icon"></div>
                 <div class="drive-text" id="drive-auth-failed-warning-text"></div>
+              </div>
+              <div class="volume-warning" id="offline-info-banner" hidden>
+                <div class="info-icon"></div>
+                <div id="offline-info-banner-text" class="body2-primary">
+                  $i18n{OFFLINE_BANNER_MESSAGE}
+                </div>
+                <div class="button-group">
+                  <cr-button id="offline-learn-more" class="banner-close text-button"
+                             aria-labelledby="offline-info-banner-text"
+                             aria-describedby="offline-learn-more"
+                             aria-disabled="false" role="button" tabindex="0">
+                    $i18n{DRIVE_LEARN_MORE}
+                  </cr-button>
+                </div>
               </div>
               <div class="downloads-warning" hidden></div>
               <files-message id='files-message' hidden></files-message>

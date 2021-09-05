@@ -12,7 +12,6 @@
 #include "ash/public/cpp/holding_space/holding_space_prefs.h"
 #include "ash/public/cpp/shelf_config.h"
 #include "ash/session/session_controller_impl.h"
-#include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/system/holding_space/holding_space_item_view.h"
 #include "ash/system/holding_space/holding_space_tray.h"
@@ -83,11 +82,13 @@ class HoldingSpaceBubbleContainer : public views::View {
  private:
   // views::View:
   void ChildPreferredSizeChanged(views::View* child) override {
-    PreferredSizeChanged();
+    if (GetWidget())
+      PreferredSizeChanged();
   }
 
   void ChildVisibilityChanged(views::View* child) override {
-    PreferredSizeChanged();
+    if (GetWidget())
+      PreferredSizeChanged();
   }
 
   views::BoxLayout* layout_ = nullptr;
@@ -133,6 +134,13 @@ HoldingSpaceTrayBubble::HoldingSpaceTrayBubble(
       std::make_unique<RecentFilesContainer>(&delegate_));
   SetupViewLayer(recent_files_container_);
 
+  // Populate both containers if holding space model has already been attached.
+  HoldingSpaceModel* model = HoldingSpaceController::Get()->model();
+  if (model) {
+    pinned_files_container_->OnHoldingSpaceModelAttached(model);
+    recent_files_container_->OnHoldingSpaceModelAttached(model);
+  }
+
   // Show the bubble.
   bubble_wrapper_ = std::make_unique<TrayBubbleWrapper>(
       holding_space_tray, bubble_view, false /* is_persistent */);
@@ -156,10 +164,19 @@ HoldingSpaceTrayBubble::HoldingSpaceTrayBubble(
   std::vector<const HoldingSpaceItem*> visible_items;
   FindVisibleHoldingSpaceItems(bubble_view, &visible_items);
   holding_space_metrics::RecordItemCounts(visible_items);
+
+  shelf_observer_.Add(holding_space_tray_->shelf());
+  tablet_mode_observer_.Add(Shell::Get()->tablet_mode_controller());
 }
 
 HoldingSpaceTrayBubble::~HoldingSpaceTrayBubble() {
   bubble_wrapper_->bubble_view()->ResetDelegate();
+
+  // Explicitly reset holding space item view containers so that they will stop
+  // observing the holding space controller/model while they are asynchronously
+  // destroyed.
+  pinned_files_container_->Reset();
+  recent_files_container_->Reset();
 }
 
 void HoldingSpaceTrayBubble::AnchorUpdated() {
@@ -190,6 +207,28 @@ int HoldingSpaceTrayBubble::CalculateMaxHeight() const {
   const int bubble_vertical_margin = insets.top() + insets.bottom();
 
   return free_space_height_above_anchor - bubble_vertical_margin;
+}
+
+void HoldingSpaceTrayBubble::UpdateBubbleBounds() {
+  bubble_wrapper_->bubble_view()->SetMaxHeight(CalculateMaxHeight());
+  bubble_wrapper_->bubble_view()->ChangeAnchorRect(
+      holding_space_tray_->shelf()->GetSystemTrayAnchorRect());
+}
+
+void HoldingSpaceTrayBubble::OnDisplayConfigurationChanged() {
+  UpdateBubbleBounds();
+}
+
+void HoldingSpaceTrayBubble::OnAutoHideStateChanged(ShelfAutoHideState state) {
+  UpdateBubbleBounds();
+}
+
+void HoldingSpaceTrayBubble::OnTabletModeStarted() {
+  UpdateBubbleBounds();
+}
+
+void HoldingSpaceTrayBubble::OnTabletModeEnded() {
+  UpdateBubbleBounds();
 }
 
 }  // namespace ash

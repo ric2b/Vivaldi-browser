@@ -8,8 +8,10 @@
 <translation id="1281950884873973195">Loom 5</translation>
 <translation id="1411638389238344450">Saada link meiliga</translation>
 <translation id="1454726940098520109">Seda kinnitust rohkem ei näidata</translation>
+<translation id="1526344461589023948">Allalaaditud uuenduse salvestamisel tekkis tõrge. Palun vaata, et arvutis oleks piisavalt vaba kettaruumi, ja proovi siis uuesti.</translation>
 <translation id="1657174850639146440">Koll 9</translation>
 <translation id="1676595396635191120">Uus privaatne aken</translation>
+<translation id="1702758681952953055">Kui probleem püsib, siis palun teata veast ja pane kaasa järgmised üksikasjad:</translation>
 <translation id="1728549374069268714">Aseta ja mine</translation>
 <translation id="1756026472674246267">Ava link uuel kaardil</translation>
 <translation id="1759842336958782510">Chrome</translation>
@@ -19,6 +21,7 @@
 <translation id="1924750141060565109">Maastik 15</translation>
 <translation id="19598411548897379">Üldine</translation>
 <translation id="2079036669923635404">Klõpsa siin, et uuendada Vivaldi versioonile <ph name="VERSION" />.</translation>
+<translation id="2141974047387702305">Uuendusfailide allalaadimisel tekkis tõrge. Palun vaata, et Interneti-ühendus toimiks, ja proovi siis uuesti.</translation>
 <translation id="2441056087170876076">Koll 2</translation>
 <translation id="2444387452209867610">Sisesta märge</translation>
 <translation id="2486841023299517366">Loom 4</translation>
@@ -43,6 +46,7 @@
 <translation id="3542768452570884558">Ava link uues aknas</translation>
 <translation id="3588820906588687999">Ava pilt uuel kaardil</translation>
 <translation id="3601066750251199488">Koll 3</translation>
+<translation id="3708982624815781692">Allalaadimine katkestati.</translation>
 <translation id="3732157130969736834">Lisa link järjehoidjatesse</translation>
 <translation id="3732388226447288666">Loom 2</translation>
 <translation id="3732439195215136813">Loom 5</translation>
@@ -78,11 +82,13 @@
 <translation id="5594602170491763400">Koll 5</translation>
 <translation id="5615637589913244581">Opera versioon 15+ (beeta)</translation>
 <translation id="5648110075441906505">Ava pilt uues aknas</translation>
+<translation id="5656371807944747581">Tõrge uuendamisel!</translation>
 <translation id="5716238312826274098">Märguannete keelamine</translation>
 <translation id="5770433027661640693">Maastik 10</translation>
 <translation id="5857090052475505287">Uus kaust</translation>
 <translation id="588258955323874662">Täisekraan</translation>
 <translation id="5916080360077521750">Chrome’i töötamise ajal pole sinu seaded kahjuks kättesaadavad. Nende Vivaldisse importimiseks salvesta oma töö ja sulge kõik Chrome’i aknad. Seejärel klõpsa „Jätka”.</translation>
+<translation id="6040143037577758943">Sulge</translation>
 <translation id="6229528619562190452">Klõpsa siin Vivaldi uuendamiseks.</translation>
 <translation id="6234173136417926046">Kasuta pilti avalehe taustana</translation>
 <translation id="630690498669249215">Opera järjehoidjate fail</translation>
@@ -99,9 +105,11 @@
 <translation id="7111492742514999492">Maastik 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi on loodud avatud lähtekoodiga <ph name="BEGIN_LINK_CHROMIUM" />Chromiumi projekti<ph name="END_LINK_CHROMIUM" /> ja hulga <ph name="BEGIN_LINK_OSS" />muu avatud lähtekoodiga tarkvara<ph name="END_LINK_OSS" /> põhjal.</translation>
+<translation id="7581266044164103589">Uuenduse paigaldusprogrammi käivitamine ebaõnnestus. Palun vaata, et arvutil oleks piisavalt vaba mälumahtu ja kettaruumi, ja proovi siis uuesti.</translation>
 <translation id="7715497554424665066">&amp;Eira uuendust</translation>
 <translation id="7724603315864178912">Lõika</translation>
 <translation id="7793738202466490491">Lisa kalendrisündmusena</translation>
+<translation id="7848222781052558334">Allalaaditud failide digitaalallkirja verifitseerimine ebaõnnestus.</translation>
 <translation id="7865983598101744945">Väljumiskinnitus</translation>
 <translation id="7957213167373139414">Minu kalender</translation>
 <translation id="8027581147000338959">Ava uues aknas</translation>

@@ -5,9 +5,9 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_PLATFORM_HEAP_COLLECTION_SUPPORT_HEAP_HASH_TABLE_BACKING_H_
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_HEAP_COLLECTION_SUPPORT_HEAP_HASH_TABLE_BACKING_H_
 
-#include "third_party/blink/renderer/platform/heap/heap_page.h"
-#include "third_party/blink/renderer/platform/heap/threading_traits.h"
-#include "third_party/blink/renderer/platform/heap/trace_traits.h"
+#include "third_party/blink/renderer/platform/heap/impl/heap_page.h"
+#include "third_party/blink/renderer/platform/heap/impl/threading_traits.h"
+#include "third_party/blink/renderer/platform/heap/impl/trace_traits.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/conditional_destructor.h"
 
@@ -199,7 +199,8 @@ class ConcurrentBucket {
  private:
   // Alignment is needed for atomic accesses to |buf_| and to assure |buf_|
   // can be accessed the same as objects of type T
-  alignas(std::max(alignof(T), sizeof(size_t))) char buf_[sizeof(T)];
+  static constexpr size_t boundary = std::max(alignof(T), sizeof(size_t));
+  alignas(boundary) char buf_[sizeof(T)];
 };
 
 template <typename Key, typename Value>
@@ -223,7 +224,8 @@ class ConcurrentBucket<KeyValuePair<Key, Value>> {
  private:
   // Alignment is needed for atomic accesses to |buf_| and to assure |buf_|
   // can be accessed the same as objects of type Key
-  alignas(std::max(alignof(Key), sizeof(size_t))) char buf_[sizeof(Key)];
+  static constexpr size_t boundary = std::max(alignof(Key), sizeof(size_t));
+  alignas(boundary) char buf_[sizeof(Key)];
   const Value* value_;
 };
 
@@ -339,11 +341,7 @@ struct TraceKeyValuePairInCollectionTrait {
       // The following passes on kNoWeakHandling for tracing value as the value
       // callback is only invoked to keep value alive iff key is alive,
       // following ephemeron semantics.
-      visitor->TraceEphemeron(
-          *helper.key, helper.value,
-          blink::TraceCollectionIfEnabled<
-              kNoWeakHandling, typename EphemeronHelper::ValueType,
-              typename EphemeronHelper::ValueTraits>::Trace);
+      visitor->TraceEphemeron(*helper.key, helper.value);
     }
   };
 

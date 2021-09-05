@@ -202,6 +202,7 @@ bool StructTraits<
       !data.ReadThrottlingProfileId(&out->throttling_profile_id) ||
       !data.ReadFetchWindowId(&out->fetch_window_id) ||
       !data.ReadDevtoolsRequestId(&out->devtools_request_id) ||
+      !data.ReadDevtoolsStackId(&out->devtools_stack_id) ||
       !data.ReadRecursivePrefetchToken(&out->recursive_prefetch_token)) {
     // Note that data.ReadTrustTokenParams is temporarily handled below.
     return false;
@@ -241,6 +242,7 @@ bool StructTraits<
   out->is_revalidating = data.is_revalidating();
   out->is_signed_exchange_prefetch_cache_enabled =
       data.is_signed_exchange_prefetch_cache_enabled();
+  out->is_fetch_like_api = data.is_fetch_like_api();
   out->obey_origin_policy = data.obey_origin_policy();
   return true;
 }
@@ -266,18 +268,20 @@ bool StructTraits<network::mojom::DataElementDataView, network::DataElement>::
     network::debug::SetDeserializationCrashKeyString("data_element_path");
     return false;
   }
-  if (!data.ReadBlobUuid(&out->blob_uuid_)) {
-    network::debug::SetDeserializationCrashKeyString("data_element_blob_uuid");
-    return false;
-  }
   if (!data.ReadExpectedModificationTime(&out->expected_modification_time_)) {
     return false;
   }
   if (data.type() == network::mojom::DataElementType::kBytes) {
-    if (!data.ReadBuf(&out->buf_))
+    mojo_base::BigBufferView big_buffer;
+    if (!data.ReadBuf(&big_buffer))
       return false;
-    if (data.length() != out->buf_.size())
+    // TODO(yoichio): Fix DataElementDataView::ReadBuf issue
+    // (crbug.com/1152664).
+    if (data.length() != big_buffer.data().size())
       return false;
+    out->buf_.clear();
+    out->buf_.insert(out->buf_.end(), big_buffer.data().begin(),
+                     big_buffer.data().end());
   }
   out->type_ = data.type();
   out->data_pipe_getter_ = data.TakeDataPipeGetter<

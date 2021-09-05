@@ -6,10 +6,12 @@
 
 #include "base/bind.h"
 #include "third_party/blink/public/platform/platform.h"
+#include "third_party/blink/public/platform/resource_load_info_notifier_wrapper.h"
 #include "third_party/blink/public/platform/scheduler/web_resource_loading_task_runner_handle.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/web_url_loader_client.h"
 #include "third_party/blink/public/platform/web_url_request.h"
+#include "third_party/blink/public/platform/web_url_request_extra_data.h"
 
 namespace blink {
 
@@ -17,24 +19,25 @@ std::unique_ptr<WebURLLoader>
 InternetDisconnectedWebURLLoaderFactory::CreateURLLoader(
     const WebURLRequest&,
     std::unique_ptr<scheduler::WebResourceLoadingTaskRunnerHandle>
-        task_runner_handle) {
-  DCHECK(task_runner_handle);
+        freezable_task_runner_handle,
+    std::unique_ptr<scheduler::WebResourceLoadingTaskRunnerHandle>
+        unfreezable_task_runner_handle) {
+  DCHECK(freezable_task_runner_handle);
   return std::make_unique<InternetDisconnectedWebURLLoader>(
-      std::move(task_runner_handle));
+      std::move(freezable_task_runner_handle));
 }
 
 InternetDisconnectedWebURLLoader::InternetDisconnectedWebURLLoader(
     std::unique_ptr<scheduler::WebResourceLoadingTaskRunnerHandle>
-        task_runner_handle)
-    : task_runner_handle_(std::move(task_runner_handle)) {}
+        freezable_task_runner_handle)
+    : task_runner_handle_(std::move(freezable_task_runner_handle)) {}
 
 InternetDisconnectedWebURLLoader::~InternetDisconnectedWebURLLoader() = default;
 
 void InternetDisconnectedWebURLLoader::LoadSynchronously(
     std::unique_ptr<network::ResourceRequest> request,
-    scoped_refptr<WebURLRequest::ExtraData> request_extra_data,
+    scoped_refptr<WebURLRequestExtraData> url_request_extra_data,
     int requestor_id,
-    bool download_to_network_cache_only,
     bool pass_response_pipe_to_client,
     bool no_mime_sniffing,
     base::TimeDelta timeout_interval,
@@ -44,16 +47,19 @@ void InternetDisconnectedWebURLLoader::LoadSynchronously(
     WebData&,
     int64_t& encoded_data_length,
     int64_t& encoded_body_length,
-    WebBlobInfo& downloaded_blob) {
+    WebBlobInfo& downloaded_blob,
+    std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>
+        resource_load_info_notifier_wrapper) {
   NOTREACHED();
 }
 
 void InternetDisconnectedWebURLLoader::LoadAsynchronously(
     std::unique_ptr<network::ResourceRequest> request,
-    scoped_refptr<WebURLRequest::ExtraData> request_extra_data,
+    scoped_refptr<WebURLRequestExtraData> url_request_extra_data,
     int requestor_id,
-    bool download_to_network_cache_only,
     bool no_mime_sniffing,
+    std::unique_ptr<blink::ResourceLoadInfoNotifierWrapper>
+        resource_load_info_notifier_wrapper,
     WebURLLoaderClient* client) {
   DCHECK(task_runner_handle_);
   task_runner_handle_->GetTaskRunner()->PostTask(
@@ -68,7 +74,7 @@ void InternetDisconnectedWebURLLoader::LoadAsynchronously(
           WebURLError(net::ERR_INTERNET_DISCONNECTED, KURL(request->url))));
 }
 
-void InternetDisconnectedWebURLLoader::SetDefersLoading(bool defers) {}
+void InternetDisconnectedWebURLLoader::SetDefersLoading(DeferType defers) {}
 
 void InternetDisconnectedWebURLLoader::DidChangePriority(
     WebURLRequest::Priority,
@@ -77,13 +83,13 @@ void InternetDisconnectedWebURLLoader::DidChangePriority(
 void InternetDisconnectedWebURLLoader::DidFail(WebURLLoaderClient* client,
                                                const WebURLError& error) {
   DCHECK(client);
-  client->DidFail(error, 0 /* total_encoded_data_length */,
-                  0 /* total_encoded_body_length */,
-                  0 /* total_decoded_body_length */);
+  client->DidFail(
+      error, base::TimeTicks::Now(), /*total_encoded_data_length=*/0,
+      /*total_encoded_body_length=*/0, /*total_decoded_body_length=*/0);
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
-InternetDisconnectedWebURLLoader::GetTaskRunner() {
+InternetDisconnectedWebURLLoader::GetTaskRunnerForBodyLoader() {
   return task_runner_handle_->GetTaskRunner();
 }
 

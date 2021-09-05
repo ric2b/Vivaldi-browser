@@ -35,6 +35,10 @@
 // to the animatees.
 - (void)addAnimatee:(id<ViewRevealingAnimatee>)animatee;
 
+// Manually sets the state of the pan handler to a specific state, optionally
+// animated.
+- (void)setState:(ViewRevealState)state animated:(BOOL)animated;
+
 // Height of the view that will be revealed after the transition to Peeked
 // state.
 @property(nonatomic, assign, readonly) CGFloat peekedHeight;

@@ -12,7 +12,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -128,12 +128,10 @@ bool RevokeAllSecondaryTokens(
 
 // TODO(https://crbug.com/1122551): Move this code and
 // |RevokeAllSecondaryTokens| to |DiceAccountReconcilorDelegate|.
-signin::RevokeTokenAction RevokeTokensNotInCookies(
+void RevokeTokensNotInCookies(
     signin::IdentityManager* identity_manager,
     const CoreAccountId& primary_account,
     const std::vector<gaia::ListedAccount>& gaia_accounts) {
-  bool invalidated_primary_account_token = false;
-  bool revoked_token_for_secondary_account = false;
   signin_metrics::SourceForRefreshTokenOperation source =
       signin_metrics::SourceForRefreshTokenOperation::
           kAccountReconcilor_RevokeTokensNotInCookies;
@@ -146,28 +144,11 @@ signin::RevokeTokenAction RevokeTokensNotInCookies(
 
     auto* accounts_mutator = identity_manager->GetAccountsMutator();
     if (account == primary_account) {
-      invalidated_primary_account_token = true;
       accounts_mutator->InvalidateRefreshTokenForPrimaryAccount(source);
     } else {
-      revoked_token_for_secondary_account = true;
       accounts_mutator->RemoveAccount(account, source);
     }
   }
-
-  signin::RevokeTokenAction revoke_token_action =
-      signin::RevokeTokenAction::kNone;
-  if (invalidated_primary_account_token &&
-      revoked_token_for_secondary_account) {
-    revoke_token_action =
-        signin::RevokeTokenAction::kRevokeTokensForPrimaryAndSecondaryAccounts;
-  } else if (invalidated_primary_account_token) {
-    revoke_token_action =
-        signin::RevokeTokenAction::kInvalidatePrimaryAccountToken;
-  } else if (revoked_token_for_secondary_account) {
-    revoke_token_action =
-        signin::RevokeTokenAction::kRevokeSecondaryAccountsTokens;
-  }
-  return revoke_token_action;
 }
 
 // Pick the account will become first after this reconcile is finished.
@@ -365,8 +346,7 @@ void AccountReconcilor::RemoveObserver(Observer* observer) {
 void AccountReconcilor::OnContentSettingChanged(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
-    ContentSettingsType content_type,
-    const std::string& resource_identifier) {
+    ContentSettingsType content_type) {
   // If this is not a change to cookie settings, just ignore.
   if (content_type != ContentSettingsType::COOKIES)
     return;
@@ -652,9 +632,9 @@ void AccountReconcilor::OnAccountsInCookieUpdated(
     // thus use sync account.
     // TODO(https://crbug.com/1122551): Move to |DiceAccountReconcilorDelegate|.
     DCHECK_EQ(consent_level, ConsentLevel::kSync);
-    signin::RevokeTokenAction revoke_token_action = RevokeTokensNotInCookies(
-        identity_manager_, primary_account, verified_gaia_accounts);
-    delegate_->OnRevokeTokensNotInCookiesCompleted(revoke_token_action);
+    RevokeTokensNotInCookies(identity_manager_, primary_account,
+                             verified_gaia_accounts);
+    delegate_->OnRevokeTokensNotInCookiesCompleted();
   }
 
   // Revoking tokens for secondary accounts causes the AccountTracker to

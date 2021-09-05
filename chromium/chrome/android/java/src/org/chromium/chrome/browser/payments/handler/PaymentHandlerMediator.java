@@ -14,6 +14,7 @@ import org.chromium.chrome.browser.compositor.bottombar.OverlayPanel.StateChange
 import org.chromium.chrome.browser.lifecycle.ActivityLifecycleDispatcher;
 import org.chromium.chrome.browser.lifecycle.Destroyable;
 import org.chromium.chrome.browser.payments.ServiceWorkerPaymentAppBridge;
+import org.chromium.chrome.browser.payments.SslValidityChecker;
 import org.chromium.chrome.browser.payments.handler.PaymentHandlerCoordinator.PaymentHandlerUiObserver;
 import org.chromium.chrome.browser.payments.handler.toolbar.PaymentHandlerToolbarCoordinator.PaymentHandlerToolbarObserver;
 import org.chromium.chrome.browser.ui.TabObscuringHandler;
@@ -22,11 +23,11 @@ import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetObserver;
 import org.chromium.components.browser_ui.widget.scrim.ScrimCoordinator;
-import org.chromium.components.payments.SslValidityChecker;
 import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.NavigationHandle;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
+import org.chromium.payments.mojom.PaymentEventResponseType;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.util.TokenHolder;
 
@@ -205,20 +206,24 @@ import java.lang.annotation.RetentionPolicy;
 
         switch (mCloseReason) {
             case CloseReason.INSECURE_NAVIGATION:
-                ServiceWorkerPaymentAppBridge.onClosingPaymentAppWindowForInsecureNavigation(
-                        mPaymentRequestWebContents);
+                ServiceWorkerPaymentAppBridge.onClosingPaymentAppWindow(mPaymentRequestWebContents,
+                        PaymentEventResponseType.PAYMENT_HANDLER_INSECURE_NAVIGATION);
                 break;
             case CloseReason.USER:
-                // Intentional fallthrough.
+                ServiceWorkerPaymentAppBridge.onClosingPaymentAppWindow(mPaymentRequestWebContents,
+                        PaymentEventResponseType.PAYMENT_HANDLER_WINDOW_CLOSING);
+                break;
             case CloseReason.FAIL_LOAD:
-                // Intentional fallthrough.
-                // TODO(crbug.com/1017926): Respond to service worker with the net error.
+                ServiceWorkerPaymentAppBridge.onClosingPaymentAppWindow(mPaymentRequestWebContents,
+                        PaymentEventResponseType.PAYMENT_HANDLER_FAIL_TO_LOAD_MAIN_FRAME);
+                break;
             case CloseReason.ACTIVITY_DIED:
-                ServiceWorkerPaymentAppBridge.onClosingPaymentAppWindow(mPaymentRequestWebContents);
+                ServiceWorkerPaymentAppBridge.onClosingPaymentAppWindow(mPaymentRequestWebContents,
+                        PaymentEventResponseType.PAYMENT_HANDLER_ACTIVITY_DIED);
                 break;
             case CloseReason.OTHERS:
                 // No need to notify ServiceWorkerPaymentAppBridge when merchant aborts the
-                // payment request (and thus {@link PaymentRequestImpl} closes
+                // payment request (and thus {@link ChromePaymentRequestService} closes
                 // PaymentHandlerMediator). "OTHERS" category includes this cases.
                 // TODO(crbug.com/1091957): we should explicitly list merchant aborting payment
                 // request as a {@link CloseReason}, renames "OTHERS" as "UNKNOWN" and asserts
@@ -270,6 +275,7 @@ import java.lang.annotation.RetentionPolicy;
     // Implement WebContentsObserver:
     @Override
     public void didFailLoad(boolean isMainFrame, int errorCode, String failingUrl) {
+        if (!isMainFrame) return;
         mHandler.post(() -> {
             mCloseReason = CloseReason.FAIL_LOAD;
             mHider.run();

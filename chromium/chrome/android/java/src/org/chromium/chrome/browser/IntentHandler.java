@@ -43,11 +43,12 @@ import org.chromium.chrome.browser.externalnav.ExternalNavigationDelegateImpl;
 import org.chromium.chrome.browser.externalnav.IntentWithRequestMetadataHandler;
 import org.chromium.chrome.browser.externalnav.IntentWithRequestMetadataHandler.RequestMetadata;
 import org.chromium.chrome.browser.offlinepages.OfflinePageUtils;
-import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinatorFactory;
+import org.chromium.chrome.browser.omnibox.suggestions.AutocompleteCoordinator;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.search_engines.TemplateUrlServiceFactory;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
+import org.chromium.chrome.browser.translate.TranslateIntentHandler;
 import org.chromium.chrome.browser.webapps.WebappActivity;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.embedder_support.util.UrlUtilities;
@@ -67,6 +68,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+
+import org.vivaldi.browser.common.VivaldiIntentHandler;
 
 /**
  * Handles all browser-related Intents.
@@ -295,7 +298,8 @@ public class IntentHandler {
     @IntDef({TabOpenType.OPEN_NEW_TAB, TabOpenType.REUSE_URL_MATCHING_TAB_ELSE_NEW_TAB,
             TabOpenType.REUSE_APP_ID_MATCHING_TAB_ELSE_NEW_TAB, TabOpenType.CLOBBER_CURRENT_TAB,
             TabOpenType.BRING_TAB_TO_FRONT, TabOpenType.OPEN_NEW_INCOGNITO_TAB,
-            TabOpenType.REUSE_TAB_MATCHING_ID_ELSE_NEW_TAB})
+            TabOpenType.REUSE_TAB_MATCHING_ID_ELSE_NEW_TAB,
+            TabOpenType.OPEN_NEW_TAB_AND_SCAN_QR_CODE}) // Vivaldi
     @Retention(RetentionPolicy.SOURCE)
     public @interface TabOpenType {
         int OPEN_NEW_TAB = 0;
@@ -314,6 +318,8 @@ public class IntentHandler {
         // the intent url is a result of a redirect, so that a tab pointing at the original URL can
         // be reused.
         int REUSE_TAB_MATCHING_ID_ELSE_NEW_TAB = 6;
+        // Vivaldi
+        int OPEN_NEW_TAB_AND_SCAN_QR_CODE = 7;
 
         String BRING_TAB_TO_FRONT_STRING = "BRING_TAB_TO_FRONT";
         String REUSE_TAB_MATCHING_ID_STRING = "REUSE_TAB_MATCHING_ID";
@@ -333,6 +339,16 @@ public class IntentHandler {
                 Intent intent);
 
         void processWebSearchIntent(String query);
+
+        /**
+         * Processes a TRANSLATE_TAB intent.
+         * @param targetLanguageCode The language code that the page should be translated into.
+         *         Optional.
+         * @param expectedUrl The URL of the page that should be translated. If this doesn't match
+         *         the current tab, no translate will be performed.
+         */
+        void processTranslateTabIntent(
+                @Nullable String targetLanguageCode, @Nullable String expectedUrl);
     }
 
     /** Sets whether or not test intents are enabled. */
@@ -470,7 +486,8 @@ public class IntentHandler {
                 intent, TabOpenType.BRING_TAB_TO_FRONT_STRING, Tab.INVALID_TAB_ID);
         if (url == null && tabIdToBringToFront == Tab.INVALID_TAB_ID
                 && tabOpenType != TabOpenType.OPEN_NEW_INCOGNITO_TAB) {
-            return handleWebSearchIntent(intent);
+            return handleWebSearchIntent(intent)
+                    || TranslateIntentHandler.handleTranslateTabIntent(intent, mDelegate);
         }
 
         String referrerUrl = getReferrerUrlIncludingExtraHeaders(intent);
@@ -657,7 +674,7 @@ public class IntentHandler {
             return null;
         }
         String query = results.get(0);
-        String url = AutocompleteCoordinatorFactory.qualifyPartialURLQuery(query);
+        String url = AutocompleteCoordinator.qualifyPartialURLQuery(query);
         if (url == null) {
             List<String> urls = IntentUtils.safeGetStringArrayListExtra(
                     intent, RecognizerResultsIntent.EXTRA_VOICE_SEARCH_RESULT_URLS);
@@ -870,9 +887,10 @@ public class IntentHandler {
      * Returns true if the app should ignore a given intent.
      *
      * @param intent Intent to check.
+     * @param startedActivity True if the Activity was not running prior to receiving the Intent.
      * @return true if the intent should be ignored.
      */
-    public boolean shouldIgnoreIntent(Intent intent) {
+    public boolean shouldIgnoreIntent(Intent intent, boolean startedActivity) {
         // Although not documented to, many/most methods that retrieve values from an Intent may
         // throw. Because we can't control what packages might send to us, we should catch any
         // Throwable and then fail closed (safe). This is ugly, but resolves top crashers in the
@@ -909,6 +927,12 @@ public class IntentHandler {
             String url = getUrlFromIntent(intent);
             if (url == null && Intent.ACTION_MAIN.equals(intent.getAction())) {
                 return false;
+            }
+
+            // Ignore Translate intents if they were the intent that started the activity.
+            if (startedActivity && intent != null
+                    && TranslateIntentHandler.ACTION_TRANSLATE_TAB.equals(intent.getAction())) {
+                return true;
             }
 
             // Ignore all intents that specify a Chrome internal scheme if they did not come from
@@ -1070,6 +1094,10 @@ public class IntentHandler {
      * intents with action NDEF_DISCOVERED (links beamed over NFC) are handled properly.
      */
     private @TabOpenType int getTabOpenType(Intent intent) {
+        if (IntentUtils.safeGetBooleanExtra(intent, Browser.EXTRA_CREATE_NEW_TAB, false) &&
+                IntentUtils.safeGetBooleanExtra(
+                        intent, VivaldiIntentHandler.EXTRA_SCAN_QR_CODE, false))
+            return TabOpenType.OPEN_NEW_TAB_AND_SCAN_QR_CODE;
         if (IntentUtils.safeGetBooleanExtra(
                     intent, ShortcutHelper.REUSE_URL_MATCHING_TAB_ELSE_NEW_TAB, false)) {
             return TabOpenType.REUSE_URL_MATCHING_TAB_ELSE_NEW_TAB;

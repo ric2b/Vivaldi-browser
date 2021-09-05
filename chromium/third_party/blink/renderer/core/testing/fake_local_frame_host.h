@@ -10,6 +10,7 @@
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom-blink.h"
+#include "third_party/blink/public/mojom/frame/policy_container.mojom-blink.h"
 #include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom-blink.h"
 
 namespace blink {
@@ -29,7 +30,6 @@ class FakeLocalFrameHost : public mojom::blink::LocalFrameHost {
   void FullscreenStateChanged(bool is_fullscreen) override;
   void RegisterProtocolHandler(const WTF::String& scheme,
                                const ::blink::KURL& url,
-                               const ::WTF::String& title,
                                bool user_gesture) override;
   void UnregisterProtocolHandler(const WTF::String& scheme,
                                  const ::blink::KURL& url,
@@ -42,9 +42,9 @@ class FakeLocalFrameHost : public mojom::blink::LocalFrameHost {
   void SetNeedsOcclusionTracking(bool needs_tracking) override;
   void SetVirtualKeyboardOverlayPolicy(bool vk_overlays_content) override;
   void VisibilityChanged(mojom::blink::FrameVisibility visibility) override;
-  void DidChangeThemeColor(
-      const base::Optional<::SkColor>& theme_color) override;
-  void DidChangeBackgroundColor(const SkColor& background_color) override;
+  void DidChangeThemeColor(base::Optional<::SkColor> theme_color) override;
+  void DidChangeBackgroundColor(SkColor background_color,
+                                bool color_adjust) override;
   void DidFailLoadWithError(const ::blink::KURL& url,
                             int32_t error_code) override;
   void DidFocusFrame() override;
@@ -126,6 +126,9 @@ class FakeLocalFrameHost : public mojom::blink::LocalFrameHost {
                                  parsed_csp_attribute) override;
   void DidChangeFramePolicy(const base::UnguessableToken& child_frame_token,
                             const FramePolicy& frame_policy) override;
+  void BindPolicyContainer(
+      mojo::PendingAssociatedReceiver<mojom::blink::PolicyContainerHost>
+          receiver) override;
   void CapturePaintPreviewOfSubframe(
       const gfx::Rect& clip_rect,
       const base::UnguessableToken& guid) override;

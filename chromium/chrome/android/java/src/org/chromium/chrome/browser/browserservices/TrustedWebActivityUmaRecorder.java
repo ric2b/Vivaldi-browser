@@ -215,13 +215,20 @@ public class TrustedWebActivityUmaRecorder {
     }
 
     public void recordQualityEnforcementViolation(
-            @QualityEnforcer.ViolationType int type, boolean crashed) {
+            Tab tab, @QualityEnforcementViolationType int type) {
         RecordHistogram.recordEnumeratedHistogram("TrustedWebActivity.QualityEnforcementViolation",
-                type, QualityEnforcer.ViolationType.NUM_ENTRIES);
-        if (crashed) {
-            RecordHistogram.recordEnumeratedHistogram(
-                    "TrustedWebActivity.QualityEnforcementViolation.Crashed", type,
-                    QualityEnforcer.ViolationType.NUM_ENTRIES);
-        }
+                type, QualityEnforcementViolationType.MAX_VALUE + 1);
+
+        new UkmRecorder.Bridge().recordEventWithIntegerMetric(tab.getWebContents(),
+                /* eventName = */ "TrustedWebActivity.QualityEnforcementViolation",
+                /* metricName = */ "ViolationType",
+                /* metricValue = */ type);
+    }
+
+    public void recordQualityEnforcementViolationCrashed(
+            @QualityEnforcementViolationType int type) {
+        RecordHistogram.recordEnumeratedHistogram(
+                "TrustedWebActivity.QualityEnforcementViolation.Crashed", type,
+                QualityEnforcementViolationType.MAX_VALUE + 1);
     }
 }

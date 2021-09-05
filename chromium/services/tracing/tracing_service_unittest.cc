@@ -10,7 +10,7 @@
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_simple_task_runner.h"
@@ -145,8 +145,7 @@ class TestTracingClient : public mojom::TracingSessionClient {
 
     consumer_host_->EnableTracing(
         tracing_session_host_.BindNewPipeAndPassReceiver(),
-        receiver_.BindNewPipeAndPassRemote(), std::move(perfetto_config),
-        tracing::mojom::TracingClientPriority::kUserInitiated);
+        receiver_.BindNewPipeAndPassRemote(), std::move(perfetto_config));
 
     tracing_session_host_->RequestBufferUsage(
         base::BindOnce([](base::OnceClosure on_response, bool, float,
@@ -161,7 +160,7 @@ class TestTracingClient : public mojom::TracingSessionClient {
 
   // tracing::mojom::TracingSessionClient implementation:
   void OnTracingEnabled() override {}
-  void OnTracingDisabled() override {
+  void OnTracingDisabled(bool) override {
     std::move(tracing_disabled_callback_).Run();
   }
 

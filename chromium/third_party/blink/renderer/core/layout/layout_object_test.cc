@@ -90,8 +90,6 @@ TEST_F(LayoutObjectTest, DisplayInlineBlockCreateObject) {
 }
 
 TEST_F(LayoutObjectTest, BackdropFilterAsGroupingProperty) {
-  ScopedTransformInteropForTest enabled(true);
-
   SetBodyInnerHTML(R"HTML(
     <style> div { transform-style: preserve-3d; } </style>
     <div id=target1 style="backdrop-filter: blur(2px)"></div>
@@ -114,8 +112,6 @@ TEST_F(LayoutObjectTest, BackdropFilterAsGroupingProperty) {
 }
 
 TEST_F(LayoutObjectTest, BlendModeAsGroupingProperty) {
-  ScopedTransformInteropForTest enabled(true);
-
   SetBodyInnerHTML(R"HTML(
     <style> div { transform-style: preserve-3d; } </style>
     <div id=target1 style="mix-blend-mode: multiply"></div>
@@ -133,8 +129,6 @@ TEST_F(LayoutObjectTest, BlendModeAsGroupingProperty) {
 }
 
 TEST_F(LayoutObjectTest, CSSClipAsGroupingProperty) {
-  ScopedTransformInteropForTest enabled(true);
-
   SetBodyInnerHTML(R"HTML(
     <style> div { transform-style: preserve-3d; } </style>
     <div id=target1 style="clip: rect(1px, 2px, 3px, 4px)"></div>
@@ -158,8 +152,6 @@ TEST_F(LayoutObjectTest, CSSClipAsGroupingProperty) {
 }
 
 TEST_F(LayoutObjectTest, ClipPathAsGroupingProperty) {
-  ScopedTransformInteropForTest enabled(true);
-
   SetBodyInnerHTML(R"HTML(
     <style> div { transform-style: preserve-3d; } </style>
     <div id=target1 style="clip-path: circle(40%)"></div>
@@ -177,8 +169,6 @@ TEST_F(LayoutObjectTest, ClipPathAsGroupingProperty) {
 }
 
 TEST_F(LayoutObjectTest, IsolationAsGroupingProperty) {
-  ScopedTransformInteropForTest enabled(true);
-
   SetBodyInnerHTML(R"HTML(
     <style> div { transform-style: preserve-3d; } </style>
     <div id=target1 style="isolation: isolate"></div>
@@ -196,8 +186,6 @@ TEST_F(LayoutObjectTest, IsolationAsGroupingProperty) {
 }
 
 TEST_F(LayoutObjectTest, MaskAsGroupingProperty) {
-  ScopedTransformInteropForTest enabled(true);
-
   SetBodyInnerHTML(R"HTML(
     <style> div { transform-style: preserve-3d; } </style>
     <div id=target1 style="-webkit-mask:linear-gradient(black,transparent)">
@@ -213,18 +201,6 @@ TEST_F(LayoutObjectTest, MaskAsGroupingProperty) {
                    ->StyleRef()
                    .HasGroupingPropertyForUsedTransformStyle3D());
   EXPECT_TRUE(GetLayoutObjectByElementId("target2")->StyleRef().Preserves3D());
-}
-
-TEST_F(LayoutObjectTest, UseCountBackdropFilterAsGroupingProperty) {
-  SetBodyInnerHTML(R"HTML(
-    <style> div { transform-style: preserve-3d; } </style>
-    <div id=target style="backdrop-filter: blur(2px)"></div>
-  )HTML");
-  EXPECT_FALSE(GetLayoutObjectByElementId("target")
-                   ->StyleRef()
-                   .HasGroupingPropertyForUsedTransformStyle3D());
-  EXPECT_TRUE(GetDocument().IsUseCounted(
-      WebFeature::kAdditionalGroupingPropertiesForCompat));
 }
 
 TEST_F(LayoutObjectTest, UseCountContainWithoutContentVisibility) {
@@ -474,10 +450,10 @@ TEST_F(LayoutObjectTest, FloatUnderBlock) {
     </div>
   )HTML");
 
-  LayoutBoxModelObject* layered_div =
-      ToLayoutBoxModelObject(GetLayoutObjectByElementId("layered-div"));
-  LayoutBoxModelObject* container =
-      ToLayoutBoxModelObject(GetLayoutObjectByElementId("container"));
+  auto* layered_div =
+      To<LayoutBoxModelObject>(GetLayoutObjectByElementId("layered-div"));
+  auto* container =
+      To<LayoutBoxModelObject>(GetLayoutObjectByElementId("container"));
   LayoutObject* floating = GetLayoutObjectByElementId("floating");
 
   EXPECT_EQ(layered_div->Layer(), layered_div->PaintingLayer());
@@ -494,10 +470,8 @@ TEST_F(LayoutObjectTest, InlineFloatMismatch) {
     </span>
   )HTML");
 
-  LayoutObject* float_obj =
-      ToLayoutBoxModelObject(GetLayoutObjectByElementId("float_obj"));
-  LayoutObject* span =
-      ToLayoutBoxModelObject(GetLayoutObjectByElementId("span"));
+  LayoutObject* float_obj = GetLayoutObjectByElementId("float_obj");
+  LayoutObject* span = GetLayoutObjectByElementId("span");
   if (RuntimeEnabledFeatures::LayoutNGEnabled()) {
     // 10px for margin + 40px for inset.
     EXPECT_EQ(PhysicalOffset(50, 0), float_obj->OffsetFromAncestor(span));
@@ -518,12 +492,12 @@ TEST_F(LayoutObjectTest, FloatUnderInline) {
     </div>
   )HTML");
 
-  LayoutBoxModelObject* layered_div =
-      ToLayoutBoxModelObject(GetLayoutObjectByElementId("layered-div"));
-  LayoutBoxModelObject* container =
-      ToLayoutBoxModelObject(GetLayoutObjectByElementId("container"));
-  LayoutBoxModelObject* layered_span =
-      ToLayoutBoxModelObject(GetLayoutObjectByElementId("layered-span"));
+  auto* layered_div =
+      To<LayoutBoxModelObject>(GetLayoutObjectByElementId("layered-div"));
+  auto* container =
+      To<LayoutBoxModelObject>(GetLayoutObjectByElementId("container"));
+  auto* layered_span =
+      To<LayoutBoxModelObject>(GetLayoutObjectByElementId("layered-span"));
   LayoutObject* floating = GetLayoutObjectByElementId("floating");
 
   EXPECT_EQ(layered_div->Layer(), layered_div->PaintingLayer());
@@ -675,22 +649,22 @@ TEST_F(LayoutObjectTest, AssociatedLayoutObjectOfFirstLetterPunctuations) {
   Node* sample = GetDocument().getElementById("sample");
   Node* text = sample->firstChild();
 
-  const LayoutTextFragment* layout_object0 =
-      ToLayoutTextFragment(AssociatedLayoutObjectOf(*text, 0));
+  const auto* layout_object0 =
+      To<LayoutTextFragment>(AssociatedLayoutObjectOf(*text, 0));
   EXPECT_FALSE(layout_object0->IsRemainingTextLayoutObject());
 
-  const LayoutTextFragment* layout_object1 =
-      ToLayoutTextFragment(AssociatedLayoutObjectOf(*text, 1));
+  const auto* layout_object1 =
+      To<LayoutTextFragment>(AssociatedLayoutObjectOf(*text, 1));
   EXPECT_EQ(layout_object0, layout_object1)
       << "A character 'a' should be part of first letter.";
 
-  const LayoutTextFragment* layout_object2 =
-      ToLayoutTextFragment(AssociatedLayoutObjectOf(*text, 2));
+  const auto* layout_object2 =
+      To<LayoutTextFragment>(AssociatedLayoutObjectOf(*text, 2));
   EXPECT_EQ(layout_object0, layout_object2)
       << "close parenthesis should be part of first letter.";
 
-  const LayoutTextFragment* layout_object3 =
-      ToLayoutTextFragment(AssociatedLayoutObjectOf(*text, 3));
+  const auto* layout_object3 =
+      To<LayoutTextFragment>(AssociatedLayoutObjectOf(*text, 3));
   EXPECT_TRUE(layout_object3->IsRemainingTextLayoutObject());
 }
 
@@ -707,12 +681,12 @@ TEST_F(LayoutObjectTest, AssociatedLayoutObjectOfFirstLetterSplit) {
   To<Text>(first_letter)->splitText(1, ASSERT_NO_EXCEPTION);
   UpdateAllLifecyclePhasesForTest();
 
-  const LayoutTextFragment* layout_object0 =
-      ToLayoutTextFragment(AssociatedLayoutObjectOf(*first_letter, 0));
+  const auto* layout_object0 =
+      To<LayoutTextFragment>(AssociatedLayoutObjectOf(*first_letter, 0));
   EXPECT_FALSE(layout_object0->IsRemainingTextLayoutObject());
 
-  const LayoutTextFragment* layout_object1 =
-      ToLayoutTextFragment(AssociatedLayoutObjectOf(*first_letter, 1));
+  const auto* layout_object1 =
+      To<LayoutTextFragment>(AssociatedLayoutObjectOf(*first_letter, 1));
   EXPECT_EQ(layout_object0, layout_object1);
 }
 
@@ -733,16 +707,16 @@ TEST_F(LayoutObjectTest,
   Node* sample = GetDocument().getElementById("sample");
   Node* text = sample->firstChild();
 
-  const LayoutTextFragment* layout_object0 =
-      ToLayoutTextFragment(AssociatedLayoutObjectOf(*text, 0));
+  const auto* layout_object0 =
+      To<LayoutTextFragment>(AssociatedLayoutObjectOf(*text, 0));
   EXPECT_FALSE(layout_object0->IsRemainingTextLayoutObject());
 
-  const LayoutTextFragment* layout_object1 =
-      ToLayoutTextFragment(AssociatedLayoutObjectOf(*text, 1));
+  const auto* layout_object1 =
+      To<LayoutTextFragment>(AssociatedLayoutObjectOf(*text, 1));
   EXPECT_TRUE(layout_object1->IsRemainingTextLayoutObject());
 
-  const LayoutTextFragment* layout_object2 =
-      ToLayoutTextFragment(AssociatedLayoutObjectOf(*text, 2));
+  const auto* layout_object2 =
+      To<LayoutTextFragment>(AssociatedLayoutObjectOf(*text, 2));
   EXPECT_EQ(layout_object1, layout_object2);
 }
 
@@ -1069,15 +1043,14 @@ TEST_F(LayoutObjectTest, UpdateVisualRectAfterAncestorLayout) {
   auto* target = GetDocument().getElementById("target");
   target->setAttribute(html_names::kStyleAttr, "height: 300px");
   UpdateAllLifecyclePhasesForTest();
-  const auto* container = GetLayoutObjectByElementId("ancestor");
-  EXPECT_EQ(LayoutRect(0, 0, 100, 300),
-            ToLayoutBox(container)->VisualOverflowRect());
+  const auto* container = GetLayoutBoxByElementId("ancestor");
+  EXPECT_EQ(LayoutRect(0, 0, 100, 300), container->VisualOverflowRect());
 }
 
 class LayoutObjectSimTest : public SimTest {
  public:
   bool DocumentHasTouchActionRegion(const EventHandlerRegistry& registry) {
-    GetDocument().View()->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
+    GetDocument().View()->UpdateAllLifecyclePhasesForTest();
     return registry.HasEventHandlers(
         EventHandlerRegistry::EventHandlerClass::kTouchAction);
   }
@@ -1150,7 +1123,7 @@ TEST_F(LayoutObjectSimTest, HitTestForOcclusionInIframe) {
     <div id='target'>target</div>
   )HTML");
 
-  GetDocument().View()->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
+  GetDocument().View()->UpdateAllLifecyclePhasesForTest();
   Element* iframe_element = GetDocument().QuerySelector("iframe");
   auto* frame_owner_element = To<HTMLFrameOwnerElement>(iframe_element);
   Document* iframe_doc = frame_owner_element->contentDocument();
@@ -1160,7 +1133,7 @@ TEST_F(LayoutObjectSimTest, HitTestForOcclusionInIframe) {
 
   Element* occluder = GetDocument().getElementById("occluder");
   occluder->SetInlineStyleProperty(CSSPropertyID::kMarginTop, "-150px");
-  GetDocument().View()->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
+  GetDocument().View()->UpdateAllLifecyclePhasesForTest();
   result = target->GetLayoutObject()->HitTestForOcclusion();
   EXPECT_EQ(result.InnerNode(), occluder);
 }
@@ -1183,7 +1156,7 @@ TEST_F(LayoutObjectSimTest, FirstLineBackgroundImage) {
     <div>To keep the image alive when target is set display: none</div>
   )HTML");
 
-  GetDocument().View()->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
+  GetDocument().View()->UpdateAllLifecyclePhasesForTest();
 
   auto* target = GetDocument().getElementById("target");
   auto* target_object = target->GetLayoutObject();
@@ -1215,7 +1188,7 @@ TEST_F(LayoutObjectSimTest, FirstLineBackgroundImage) {
   EXPECT_FALSE(second_line->SlowFirstChild()->ShouldDoFullPaintInvalidation());
 
   target->setAttribute(html_names::kStyleAttr, "display: none");
-  GetDocument().View()->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
+  GetDocument().View()->UpdateAllLifecyclePhasesForTest();
   target_object = target->GetLayoutObject();
   EXPECT_EQ(nullptr, target_object);
   // The image is still alive because the other div's first line style still
@@ -1294,7 +1267,7 @@ TEST_F(LayoutObjectSimTest, FirstLineBackgroundImageDirtyStyleCrash) {
     <div id="target">Text</div>
   )HTML");
 
-  GetDocument().View()->UpdateAllLifecyclePhases(DocumentUpdateReason::kTest);
+  GetDocument().View()->UpdateAllLifecyclePhasesForTest();
 
   CSSStyleSheet* sheet =
       To<HTMLStyleElement>(GetDocument().getElementById("style"))->sheet();
@@ -1390,10 +1363,8 @@ TEST_F(LayoutObjectTest, PerspectiveIsNotParent) {
     </div>
   )HTML");
 
-  auto* ancestor =
-      ToLayoutBox(GetDocument().getElementById("ancestor")->GetLayoutObject());
-  auto* child =
-      ToLayoutBox(GetDocument().getElementById("child")->GetLayoutObject());
+  auto* ancestor = GetLayoutBoxByElementId("ancestor");
+  auto* child = GetLayoutBoxByElementId("child");
 
   TransformationMatrix transform;
   child->GetTransformFromContainer(ancestor, PhysicalOffset(), transform);
@@ -1414,8 +1385,8 @@ TEST_F(LayoutObjectTest, PerspectiveWithAnonymousTable) {
   )HTML");
 
   LayoutObject* child = GetLayoutObjectByElementId("child");
-  LayoutBoxModelObject* ancestor =
-      ToLayoutBoxModelObject(GetLayoutObjectByElementId("ancestor"));
+  auto* ancestor =
+      To<LayoutBoxModelObject>(GetLayoutObjectByElementId("ancestor"));
 
   TransformationMatrix transform;
   child->GetTransformFromContainer(ancestor, PhysicalOffset(), transform);
@@ -1469,13 +1440,13 @@ TEST_F(LayoutObjectTest, LocalToAncestorRectFastPath) {
   PhysicalRect result2;
 
   EXPECT_TRUE(target2->LocalToAncestorRectFastPath(
-      rect, ToLayoutBoxModelObject(ancestor2), kUseGeometryMapperMode,
+      rect, To<LayoutBoxModelObject>(ancestor2), kUseGeometryMapperMode,
       result2));
   EXPECT_EQ(PhysicalRect(75, 15, 10, 10), result2);
 
   EXPECT_EQ(
       PhysicalRect(75, 15, 10, 10),
-      target2->LocalToAncestorRect(rect, ToLayoutBoxModelObject(ancestor2)));
+      target2->LocalToAncestorRect(rect, To<LayoutBoxModelObject>(ancestor2)));
   // Compare with non-fast path.
   EXPECT_TRUE(target2->LocalToAncestorRectFastPath(
       rect, nullptr, kUseGeometryMapperMode, result2));

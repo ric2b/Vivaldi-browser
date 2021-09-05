@@ -147,8 +147,9 @@ LengthBox StyleBuilderConverter::ConvertClip(StyleResolverState& state,
 scoped_refptr<ClipPathOperation> StyleBuilderConverter::ConvertClipPath(
     StyleResolverState& state,
     const CSSValue& value) {
-  if (value.IsBasicShapeValue())
+  if (value.IsBasicShapeValue() || value.IsPathValue())
     return ShapeClipPathOperation::Create(BasicShapeForValue(state, value));
+
   if (const auto* url_value = DynamicTo<cssvalue::CSSURIValue>(value)) {
     SVGResource* resource =
         state.GetElementStyleResources().GetSVGResourceFromValue(
@@ -520,8 +521,7 @@ FontSelectionValue StyleBuilderConverterBase::ConvertFontStyle(
       return FontSelectionValue(
           To<CSSPrimitiveValue>(values->Item(0)).ComputeDegrees());
     } else {
-      const CSSIdentifierValue* identifier_value =
-          style_range_value->GetFontStyleValue();
+      identifier_value = style_range_value->GetFontStyleValue();
       if (identifier_value->GetValueID() == CSSValueID::kNormal)
         return NormalSlopeValue();
       if (identifier_value->GetValueID() == CSSValueID::kItalic ||
@@ -1007,14 +1007,15 @@ void StyleBuilderConverter::ConvertGridTrackList(
             DynamicTo<cssvalue::CSSGridIntegerRepeatValue>(curr_value.Get())) {
       size_t repetitions = repeated_values->Repetitions();
       for (size_t i = 0; i < repetitions; ++i) {
-        for (auto curr_value : *repeated_values)
-          convert_line_name_or_track_size(*curr_value);
+        for (auto curr_repeat_value : *repeated_values)
+          convert_line_name_or_track_size(*curr_repeat_value);
       }
       if (RuntimeEnabledFeatures::LayoutNGGridEnabled()) {
         Vector<GridTrackSize> repeater_sizes;
-        for (auto curr_value : *repeated_values) {
-          if (!curr_value->IsGridLineNamesValue()) {
-            repeater_sizes.push_back(ConvertGridTrackSize(state, *curr_value));
+        for (auto curr_repeat_value : *repeated_values) {
+          if (!curr_repeat_value->IsGridLineNamesValue()) {
+            repeater_sizes.push_back(
+                ConvertGridTrackSize(state, *curr_repeat_value));
           }
         }
         track_sizes.NGTrackList().AddRepeater(repeater_sizes, repetitions);
@@ -1389,8 +1390,8 @@ ShadowData StyleBuilderConverter::ConvertShadow(
       shadow.spread ? shadow.spread->ComputeLength<float>(conversion_data) : 0;
   ShadowStyle shadow_style =
       shadow.style && shadow.style->GetValueID() == CSSValueID::kInset
-          ? kInset
-          : kNormal;
+          ? ShadowStyle::kInset
+          : ShadowStyle::kNormal;
   StyleColor color = StyleColor::CurrentColor();
   if (shadow.color) {
     if (state) {
@@ -1930,8 +1931,9 @@ static const CSSValue& ComputeRegisteredPropertyValue(
     if (value_id == CSSValueID::kCurrentcolor)
       return value;
     if (StyleColor::IsColorKeyword(value_id)) {
-      ColorScheme scheme =
-          state ? state->Style()->UsedColorScheme() : ColorScheme::kLight;
+      mojom::blink::ColorScheme scheme =
+          state ? state->Style()->UsedColorScheme()
+                : mojom::blink::ColorScheme::kLight;
       Color color = document.GetTextLinkColors().ColorFromCSSValue(
           value, Color(), scheme, false);
       return *cssvalue::CSSColorValue::Create(color.Rgb());
@@ -2019,8 +2021,6 @@ FloatSize GetRatioFromList(const CSSValueList& list) {
   float height = 1;
   if (ratio_list->length() == 2u)
     height = To<CSSPrimitiveValue>(ratio_list->Item(1)).GetFloatValue();
-  if (width == 0 && height == 0)
-    width = 1;
   return FloatSize(width, height);
 }
 
@@ -2055,6 +2055,14 @@ StyleAspectRatio StyleBuilderConverter::ConvertAspectRatio(
       has_auto ? EAspectRatioType::kAutoAndRatio : EAspectRatioType::kRatio;
   FloatSize ratio = GetRatioFromList(list);
   return StyleAspectRatio(type, ratio);
+}
+
+bool StyleBuilderConverter::ConvertInternalAlignSelfBlock(
+    StyleResolverState&,
+    const CSSValue& value) {
+  auto* identifier_value = DynamicTo<CSSIdentifierValue>(value);
+  return identifier_value &&
+         identifier_value->GetValueID() == CSSValueID::kCenter;
 }
 
 bool StyleBuilderConverter::ConvertInternalEmptyLineHeight(

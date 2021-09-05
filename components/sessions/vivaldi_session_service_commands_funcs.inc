@@ -17,3 +17,18 @@ std::unique_ptr<SessionCommand> CreateSetExtDataCommand(
   return vivaldi::CreateSetTabExtDataCommand(kCommandSetExtData, tab_id,
                                              ext_data);
 }
+
+std::unique_ptr<SessionCommand> CreatePageActionOverrideCommand(
+    const SessionID& tab_id,
+    const std::string& script_path,
+    bool is_enabled_override) {
+  return vivaldi::CreatePageActionOverrideCommand(
+      kCommandPageActionOverrides, tab_id, script_path, is_enabled_override);
+}
+
+std::unique_ptr<SessionCommand> CreateRemovePageActionOverrideCommand(
+    const SessionID& tab_id,
+    const std::string& script_path) {
+  return vivaldi::CreateRemovePageActionOverrideCommand(
+      kCommandRemovePageActionOverrides, tab_id, script_path);
+}

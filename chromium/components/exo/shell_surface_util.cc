@@ -23,7 +23,7 @@
 #include "ui/wm/core/window_util.h"
 
 #if defined(OS_CHROMEOS)
-#include "ash/public/cpp/window_properties.h"
+#include "chromeos/ui/base/window_properties.h"
 #endif  // defined(OS_CHROMEOS)
 
 DEFINE_UI_CLASS_PROPERTY_TYPE(exo::Permission*)
@@ -97,6 +97,11 @@ void SetArcAppType(aura::Window* window) {
                       static_cast<int>(ash::AppType::ARC_APP));
 }
 
+void SetLacrosAppType(aura::Window* window) {
+  window->SetProperty(aura::client::kAppType,
+                      static_cast<int>(ash::AppType::LACROS));
+}
+
 void SetShellStartupId(aura::Window* window,
                        const base::Optional<std::string>& id) {
   TRACE_EVENT1("exo", "SetStartupId", "startup_id", id ? *id : "null");
@@ -113,11 +118,11 @@ const std::string* GetShellStartupId(aura::Window* window) {
 
 void SetShellUseImmersiveForFullscreen(aura::Window* window, bool value) {
 #if defined(OS_CHROMEOS)
-  window->SetProperty(ash::kImmersiveImpliedByFullscreen, value);
+  window->SetProperty(chromeos::kImmersiveImpliedByFullscreen, value);
 
   // Ensure the shelf is fully hidden in plain fullscreen, but shown
   // (auto-hides based on mouse movement) when in immersive fullscreen.
-  window->SetProperty(ash::kHideShelfWhenFullscreenKey, !value);
+  window->SetProperty(chromeos::kHideShelfWhenFullscreenKey, !value);
 #endif  // defined(OS_CHROMEOS)
 }
 
@@ -139,6 +144,10 @@ const base::Optional<int32_t> GetShellClientAccessibilityId(
     return base::nullopt;
   else
     return id;
+}
+
+bool IsShellMainSurfaceKey(const void* key) {
+  return kMainSurfaceKey == key;
 }
 
 void SetShellMainSurface(aura::Window* window, Surface* surface) {

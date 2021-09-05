@@ -487,6 +487,10 @@ dictionary VolumeMetadata {
   // Drive label of the volume. Removable partitions that belong to the
   // same physical removable device share the same drive label.
   DOMString? driveLabel;
+
+  // The path on the remote host where this volume is mounted, for crostini this
+  // is the user's homedir (/home/<username>).
+  DOMString? remoteMountPath;
 };
 
 // Payload data for mount event.
@@ -520,7 +524,7 @@ dictionary FileTransferStatus {
   double total;
 
   // Total number of jobs.
-  long num_total_jobs;
+  long numTotalJobs;
 
   // If true, hide when a job is completed when there are zero jobs in
   // progress. Otherwise, hide when one job is in progress.
@@ -912,8 +916,8 @@ callback InstallLinuxPackageCallback = void(
 // |result| String representing the detected coding system.
 callback DetectCharacterEncodingCallback = void(DOMString result);
 
-// |thumbnailDataUrl| A data URL for the thumbnail as a PNG; |thumbnailDataUrl|
-// is empty if no thumbnail was available.
+// |thumbnailDataUrl| A data URL for the thumbnail; |thumbnailDataUrl| is empty
+// if no thumbnail was available.
 callback GetThumbnailCallback = void(DOMString thumbnailDataUrl);
 
 // |apps| List of Android picker apps.
@@ -1085,7 +1089,7 @@ interface Functions {
   // |entry| Entry of the image to copy to the system clipboard.
   [nocompile]
   static void copyImageToClipboard([instanceof=Entry] object entry,
-                                   SimpleCallback callback);
+                                   BooleanCallback callback);
 
   // Starts to copy an entry. If the source is a directory, the copy is done
   // recursively.
@@ -1306,13 +1310,34 @@ interface Functions {
   [nocompile]
   static void importCrostiniImage([instanceof=Entry] object entry);
 
-  // For a given file entry, retrieves its thumbnail. If |cropToSquare| is true,
+  // For a file in DriveFS, retrieves its thumbnail. If |cropToSquare| is true,
   // returns a thumbnail appropriate for file list or grid views; otherwise,
   // returns a thumbnail appropriate for quickview.
   [nocompile]
-  static void getThumbnail([instanceOf=FileEntry] object entry,
-                           boolean cropToSquare,
-                           GetThumbnailCallback callback);
+  static void getDriveThumbnail([instanceof=FileEntry] object entry,
+                                boolean cropToSquare,
+                                GetThumbnailCallback callback);
+
+  // For a local PDF file, retrieves its thumbnail with a given |width| and
+  // |height|.
+  [nocompile]
+  static void getPdfThumbnail([instanceof=FileEntry] object entry,
+                              long width,
+                              long height,
+                              GetThumbnailCallback callback);
+
+  // Retrieves a thumbnail of an ARC DocumentsProvider file, closely matching
+  // the hinted size specified by |widthHint| and |heightHint|, but not
+  // necessarily the exact size. |callback| is called with thumbnail data
+  // encoded as a data URL. If the document does not support thumbnails,
+  // |callback| is called with an empty string.
+  // Note: The thumbnail data may originate from third-party application code,
+  // and is untrustworthy (Security).
+  [nocompile]
+  static void getArcDocumentsProviderThumbnail([instanceof=FileEntry] object entry,
+                                               long widthHint,
+                                               long heightHint,
+                                               GetThumbnailCallback callback);
 
   // Returns a guessed character encoding of a hex-encoded string. Every 2
   // characters of |bytes| represent one byte by 2-digit hexadecimal number.
@@ -1368,6 +1393,8 @@ interface Events {
   static void onMountCompleted(MountCompletedEvent event);
 
   static void onFileTransfersUpdated(FileTransferStatus event);
+
+  static void onPinTransfersUpdated(FileTransferStatus event);
 
   static void onCopyProgress(long copyId, CopyProgressStatus status);
 

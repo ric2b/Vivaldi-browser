@@ -15,12 +15,12 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/bubble_anchor_util_views.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/title_origin_label.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/permissions/features.h"
 #include "components/permissions/permission_request.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/elide_url.h"
@@ -34,16 +34,20 @@
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/image_button_factory.h"
+#include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/color_tracking_icon_view.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/views/layout/layout_provider.h"
+#include "ui/views/style/platform_style.h"
 #include "ui/views/widget/widget.h"
 
 PermissionPromptBubbleView::PermissionPromptBubbleView(
     Browser* browser,
     permissions::PermissionPrompt::Delegate* delegate,
-    base::TimeTicks permission_requested_time)
+    base::TimeTicks permission_requested_time,
+    PermissionPromptStyle prompt_style)
     : browser_(browser),
       delegate_(delegate),
       visible_requests_(GetVisibleRequests()),
@@ -57,20 +61,72 @@ PermissionPromptBubbleView::PermissionPromptBubbleView(
   // as the default action.
   SetDefaultButton(ui::DIALOG_BUTTON_NONE);
 
-  SetButtonLabel(ui::DIALOG_BUTTON_OK,
-                 l10n_util::GetStringUTF16(IDS_PERMISSION_ALLOW));
-  SetButtonLabel(ui::DIALOG_BUTTON_CANCEL,
-                 l10n_util::GetStringUTF16(IDS_PERMISSION_DENY));
+  if (ShouldShowAllowThisTimeButton()) {
+    // Host every button in the extra_view to have full control over the width
+    // of the dialog.
+    SetButtons(ui::DIALOG_BUTTON_NONE);
 
-  SetAcceptCallback(base::BindOnce(
-      &PermissionPromptBubbleView::AcceptPermission, base::Unretained(this)));
-  SetCancelCallback(base::BindOnce(&PermissionPromptBubbleView::DenyPermission,
-                                   base::Unretained(this)));
+    views::LayoutProvider* const layout_provider = views::LayoutProvider::Get();
+    const int button_spacing = layout_provider->GetDistanceMetric(
+        views::DISTANCE_RELATED_BUTTON_HORIZONTAL);
+    auto buttons_container = std::make_unique<views::View>();
+    buttons_container->SetLayoutManager(std::make_unique<views::BoxLayout>(
+        views::BoxLayout::Orientation::kHorizontal, gfx::Insets(),
+        button_spacing));
 
-  // If the permission chip feature is enabled, the chip is indicating the
-  // pending permission request and so the bubble can be opened and closed
-  // repeatedly.
-  if (!base::FeatureList::IsEnabled(features::kPermissionChip)) {
+    auto allow_once_button = std::make_unique<views::MdTextButton>(
+        base::BindRepeating(
+            &PermissionPromptBubbleView::AcceptPermissionThisTime,
+            base::Unretained(this)),
+        l10n_util::GetStringUTF16(IDS_PERMISSION_ALLOW_ONCE));
+
+    auto allow_always_button = std::make_unique<views::MdTextButton>(
+        base::BindRepeating(&PermissionPromptBubbleView::AcceptPermission,
+                            base::Unretained(this)),
+        l10n_util::GetStringUTF16(IDS_PERMISSION_ALLOW_ALWAYS));
+
+    auto block_button = std::make_unique<views::MdTextButton>(
+        base::BindRepeating(&PermissionPromptBubbleView::DenyPermission,
+                            base::Unretained(this)),
+        l10n_util::GetStringUTF16(IDS_PERMISSION_DENY));
+
+    if (permissions::feature_params::kOkButtonBehavesAsAllowAlways.Get()) {
+      buttons_container->AddChildView(std::move(allow_once_button));
+      if (views::PlatformStyle::kIsOkButtonLeading) {
+        buttons_container->AddChildView(std::move(allow_always_button));
+        buttons_container->AddChildView(std::move(block_button));
+      } else {
+        buttons_container->AddChildView(std::move(block_button));
+        buttons_container->AddChildView(std::move(allow_always_button));
+      }
+    } else {
+      buttons_container->AddChildView(std::move(allow_always_button));
+      if (views::PlatformStyle::kIsOkButtonLeading) {
+        buttons_container->AddChildView(std::move(allow_once_button));
+        buttons_container->AddChildView(std::move(block_button));
+      } else {
+        buttons_container->AddChildView(std::move(block_button));
+        buttons_container->AddChildView(std::move(allow_once_button));
+      }
+    }
+    SetExtraView(std::move(buttons_container));
+  } else {
+    SetButtonLabel(ui::DIALOG_BUTTON_OK,
+                   l10n_util::GetStringUTF16(IDS_PERMISSION_ALLOW));
+    SetAcceptCallback(base::BindOnce(
+        &PermissionPromptBubbleView::AcceptPermission, base::Unretained(this)));
+
+    SetButtonLabel(ui::DIALOG_BUTTON_CANCEL,
+                   l10n_util::GetStringUTF16(IDS_PERMISSION_DENY));
+    SetCancelCallback(base::BindOnce(
+        &PermissionPromptBubbleView::DenyPermission, base::Unretained(this)));
+  }
+
+  // If bubble hanging off the padlock icon, with no chip showing, it shouldn't
+  // close on deactivate and it should stick until user makes a decision.
+  // Otherwise, the chip is indicating the pending permission request and so the
+  // bubble can be opened and closed repeatedly.
+  if (prompt_style == PermissionPromptStyle::kBubbleOnly) {
     set_close_on_deactivate(false);
     DialogDelegate::SetCloseCallback(
         base::BindOnce(&PermissionPromptBubbleView::ClosingPermission,
@@ -81,6 +137,9 @@ PermissionPromptBubbleView::PermissionPromptBubbleView(
       views::BoxLayout::Orientation::kVertical, gfx::Insets(),
       ChromeLayoutProvider::Get()->GetDistanceMetric(
           views::DISTANCE_RELATED_CONTROL_VERTICAL)));
+
+  set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
+      views::DISTANCE_BUBBLE_PREFERRED_WIDTH));
 
   for (permissions::PermissionRequest* request : visible_requests_)
     AddPermissionRequestLine(request);
@@ -97,8 +156,14 @@ PermissionPromptBubbleView::PermissionPromptBubbleView(
       ContentSettingsType::PLUGINS) {
     auto* learn_more_button =
         SetExtraView(views::CreateVectorImageButtonWithNativeTheme(
-            this, vector_icons::kHelpOutlineIcon));
-    learn_more_button->SetFocusForPlatform();
+            base::BindRepeating(
+                [](Browser* browser) {
+                  chrome::AddSelectedTabWithURL(
+                      browser, GURL(chrome::kFlashDeprecationLearnMoreURL),
+                      ui::PAGE_TRANSITION_LINK);
+                },
+                base::Unretained(browser)),
+            vector_icons::kHelpOutlineIcon));
     learn_more_button->SetTooltipText(
         l10n_util::GetStringUTF16(IDS_LEARN_MORE));
   }
@@ -208,8 +273,13 @@ bool PermissionPromptBubbleView::ShouldShowCloseButton() const {
 }
 
 base::string16 PermissionPromptBubbleView::GetWindowTitle() const {
-  return l10n_util::GetStringFUTF16(IDS_PERMISSIONS_BUBBLE_PROMPT,
-                                    name_or_origin_.name_or_origin);
+  int message_id;
+  if (ShouldShowAllowThisTimeButton()) {
+    message_id = IDS_PERMISSIONS_BUBBLE_PROMPT_ONE_TIME;
+  } else {
+    message_id = IDS_PERMISSIONS_BUBBLE_PROMPT;
+  }
+  return l10n_util::GetStringFUTF16(message_id, name_or_origin_.name_or_origin);
 }
 
 base::string16 PermissionPromptBubbleView::GetAccessibleWindowTitle() const {
@@ -244,25 +314,10 @@ base::string16 PermissionPromptBubbleView::GetAccessibleWindowTitle() const {
       visible_requests_[1]->GetMessageTextFragment());
 }
 
-gfx::Size PermissionPromptBubbleView::CalculatePreferredSize() const {
-  const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-                        DISTANCE_BUBBLE_PREFERRED_WIDTH) -
-                    margins().width();
-  return gfx::Size(width, GetHeightForWidth(width));
-}
-
-void PermissionPromptBubbleView::ButtonPressed(views::Button* sender,
-                                               const ui::Event& event) {
-  DCHECK_EQ(sender, GetExtraView());
-  chrome::AddSelectedTabWithURL(browser_,
-                                GURL(chrome::kFlashDeprecationLearnMoreURL),
-                                ui::PAGE_TRANSITION_LINK);
-}
-
 PermissionPromptBubbleView::DisplayNameOrOrigin
 PermissionPromptBubbleView::GetDisplayNameOrOrigin() const {
   DCHECK(!visible_requests_.empty());
-  GURL origin_url = visible_requests_[0]->GetOrigin();
+  GURL origin_url = delegate_->GetRequestingOrigin();
 
   if (origin_url.SchemeIs(extensions::kExtensionScheme)) {
     base::string16 extension_name =
@@ -295,7 +350,7 @@ base::Optional<base::string16> PermissionPromptBubbleView::GetExtraText()
       return l10n_util::GetStringFUTF16(
           IDS_STORAGE_ACCESS_PERMISSION_EXPLANATION,
           url_formatter::FormatUrlForSecurityDisplay(
-              visible_requests_[0]->GetOrigin(),
+              delegate_->GetRequestingOrigin(),
               url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC),
           url_formatter::FormatUrlForSecurityDisplay(
               delegate_->GetEmbeddingOrigin(),
@@ -308,6 +363,11 @@ base::Optional<base::string16> PermissionPromptBubbleView::GetExtraText()
 void PermissionPromptBubbleView::AcceptPermission() {
   RecordDecision();
   delegate_->Accept();
+}
+
+void PermissionPromptBubbleView::AcceptPermissionThisTime() {
+  RecordDecision();
+  delegate_->AcceptThisTime();
 }
 
 void PermissionPromptBubbleView::DenyPermission() {
@@ -324,4 +384,16 @@ void PermissionPromptBubbleView::RecordDecision() {
   base::UmaHistogramLongTimes(
       "Permissions.Prompt.TimeToDecision",
       base::TimeTicks::Now() - permission_requested_time_);
+}
+
+bool PermissionPromptBubbleView::ShouldShowAllowThisTimeButton() const {
+  if (!base::FeatureList::IsEnabled(
+          permissions::features::kOneTimeGeolocationPermission)) {
+    return false;
+  }
+  if (delegate_->Requests().size() > 1)
+    return false;
+  CHECK_GT(delegate_->Requests().size(), 0u);
+  return delegate_->Requests()[0]->GetContentSettingsType() ==
+         ContentSettingsType::GEOLOCATION;
 }

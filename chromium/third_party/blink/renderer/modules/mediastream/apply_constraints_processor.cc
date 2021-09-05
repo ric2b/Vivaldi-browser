@@ -224,6 +224,10 @@ void ApplyConstraintsProcessor::FinalizeVideoRequest() {
   blink::VideoCaptureSettings settings = SelectVideoSettings({format});
 
   if (settings.HasValue()) {
+    if (settings.min_frame_rate().has_value()) {
+      GetCurrentVideoTrack()->SetMinimumFrameRate(
+          settings.min_frame_rate().value());
+    }
     video_source_->ReconfigureTrack(GetCurrentVideoTrack(),
                                     settings.track_adapter_settings());
     ApplyConstraintsSucceeded();
@@ -282,8 +286,8 @@ ApplyConstraintsProcessor::GetCurrentAudioSource() {
 blink::MediaStreamVideoTrack*
 ApplyConstraintsProcessor::GetCurrentVideoTrack() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
-  MediaStreamVideoTrack* track = MediaStreamVideoTrack::GetVideoTrack(
-      WebMediaStreamTrack(current_request_->Track()));
+  MediaStreamVideoTrack* track =
+      MediaStreamVideoTrack::From(current_request_->Track());
   DCHECK(track);
   return track;
 }

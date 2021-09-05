@@ -26,7 +26,7 @@
 
 #include "base/auto_reset.h"
 #include "base/stl_util.h"
-#include "third_party/blink/renderer/bindings/core/v8/script_event_listener.h"
+#include "third_party/blink/renderer/bindings/core/v8/js_event_handler_for_content_attribute.h"
 #include "third_party/blink/renderer/core/animation/document_animations.h"
 #include "third_party/blink/renderer/core/animation/effect_stack.h"
 #include "third_party/blink/renderer/core/animation/element_animations.h"
@@ -267,52 +267,30 @@ void SVGElement::ClearAnimatedAttribute(const QualifiedName& attribute) {
   });
 }
 
-// TODO(crbug.com/1134652): For now composited animation doesn't work for SVG
-// if the animation also has properties other than the supported ones. We should
-// remove this when we make SVG CSS animations work in the same way as other
-// elements.
-static PropertyHandleSet SupportedCompositedAnimationProperties() {
-  DEFINE_STATIC_LOCAL(PropertyHandleSet, supported_properties,
-                      ({PropertyHandle(GetCSSPropertyOpacity()),
-                        PropertyHandle(GetCSSPropertyTransform()),
-                        PropertyHandle(GetCSSPropertyRotate()),
-                        PropertyHandle(GetCSSPropertyScale()),
-                        PropertyHandle(GetCSSPropertyTranslate()),
-                        PropertyHandle(GetCSSPropertyFilter()),
-                        PropertyHandle(GetCSSPropertyBackdropFilter())}));
-  return supported_properties;
+void SVGElement::SetAnimatedMotionTransform(
+    const AffineTransform& motion_transform) {
+  ForSelfAndInstances(this, [&motion_transform](SVGElement* element) {
+    AffineTransform* transform = element->AnimateMotionTransform();
+    DCHECK(transform);
+    *transform = motion_transform;
+    if (LayoutObject* layout_object = element->GetLayoutObject()) {
+      layout_object->SetNeedsTransformUpdate();
+      // The transform paint property relies on the SVG transform value.
+      layout_object->SetNeedsPaintPropertyUpdate();
+      MarkForLayoutAndParentResourceInvalidation(*layout_object);
+    }
+  });
 }
 
-static bool HasMainThreadAnimationProperty(const AnimationEffect* effect) {
-  const KeyframeEffectModelBase* model = nullptr;
-  if (auto* keyframe_effect = DynamicTo<KeyframeEffect>(effect))
-    model = DynamicTo<KeyframeEffectModelBase>(keyframe_effect->Model());
-  else if (auto* inert_effect = DynamicTo<InertEffect>(effect))
-    model = DynamicTo<KeyframeEffectModelBase>(inert_effect->Model());
-  if (!model)
-    return false;
-  for (auto& property : model->Properties()) {
-    if (!SupportedCompositedAnimationProperties().Contains(property))
-      return true;
-  }
-  return false;
+void SVGElement::ClearAnimatedMotionTransform() {
+  SetAnimatedMotionTransform(AffineTransform());
 }
 
-bool SVGElement::HasMainThreadAnimations() const {
+bool SVGElement::HasNonCSSPropertyAnimations() const {
   if (HasSVGRareData() && !SvgRareData()->WebAnimatedAttributes().IsEmpty())
     return true;
   if (GetSMILAnimations() && GetSMILAnimations()->HasAnimations())
     return true;
-  if (auto* element_animations = GetElementAnimations()) {
-    for (auto& entry : element_animations->Animations()) {
-      if (HasMainThreadAnimationProperty(entry.key->effect()))
-        return true;
-    }
-    for (auto& entry : element_animations->GetWorkletAnimations()) {
-      if (HasMainThreadAnimationProperty(entry->GetEffect()))
-        return true;
-    }
-  }
   return false;
 }
 
@@ -550,7 +528,7 @@ void SVGElement::InvalidateRelativeLengthClients(
 
   if (LayoutObject* layout_object = GetLayoutObject()) {
     if (HasRelativeLengths() && layout_object->IsSVGResourceContainer()) {
-      ToLayoutSVGResourceContainer(layout_object)
+      To<LayoutSVGResourceContainer>(layout_object)
           ->InvalidateCacheAndMarkForLayout(
               layout_invalidation_reason::kSizeChanged, layout_scope);
     } else if (SelfHasRelativeLengths()) {
@@ -675,8 +653,8 @@ void SVGElement::ParseAttribute(const AttributeModificationParams& params) {
       HTMLElement::EventNameForAttributeName(params.name);
   if (!event_name.IsNull()) {
     SetAttributeEventListener(
-        event_name,
-        CreateAttributeEventListener(this, params.name, params.new_value));
+        event_name, JSEventHandlerForContentAttribute::Create(
+                        GetExecutionContext(), params.name, params.new_value));
     return;
   }
 
@@ -926,7 +904,8 @@ void SVGElement::AttributeChanged(const AttributeModificationParams& params) {
   if (params.name == html_names::kStyleAttr)
     return;
 
-  SvgAttributeBaseValChanged(params.name);
+  SvgAttributeChanged(params.name);
+  UpdateWebAnimatedAttributeOnBaseValChange(params.name);
 }
 
 void SVGElement::SvgAttributeChanged(const QualifiedName& attr_name) {
@@ -944,8 +923,15 @@ void SVGElement::SvgAttributeChanged(const QualifiedName& attr_name) {
   }
 }
 
-void SVGElement::SvgAttributeBaseValChanged(const QualifiedName& attribute) {
+void SVGElement::BaseValueChanged(
+    const SVGAnimatedPropertyBase& animated_property) {
+  const QualifiedName& attribute = animated_property.AttributeName();
+  EnsureUniqueElementData().SetSvgAttributesAreDirty(true);
   SvgAttributeChanged(attribute);
+  if (class_name_ == &animated_property) {
+    UpdateClassList(g_null_atom,
+                    AtomicString(class_name_->BaseValue()->Value()));
+  }
   UpdateWebAnimatedAttributeOnBaseValChange(attribute);
 }
 

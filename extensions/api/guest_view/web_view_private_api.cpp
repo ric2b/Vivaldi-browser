@@ -197,7 +197,7 @@ ExtensionFunction::ResponseAction WebViewPrivateSetIsFullscreenFunction::Run() {
   std::unique_ptr<Params> params = Params::Create(*args_);
   EXTENSION_FUNCTION_VALIDATE(params);
 
-  guest_->SetIsFullscreen(params->is_fullscreen, params->skip_window_state);
+  guest_->SetIsFullscreen(params->is_fullscreen);
   return RespondNow(NoArguments());
 }
 

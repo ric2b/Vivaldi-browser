@@ -9,7 +9,7 @@
 #include <algorithm>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/system/sys_info.h"
@@ -20,10 +20,11 @@
 #include "chrome/updater/app/server/win/com_classes.h"
 #include "chrome/updater/app/server/win/com_classes_legacy.h"
 #include "chrome/updater/configurator.h"
-#include "chrome/updater/control_service_in_process.h"
+#include "chrome/updater/control_service.h"
 #include "chrome/updater/prefs.h"
-#include "chrome/updater/update_service_in_process.h"
+#include "chrome/updater/update_service.h"
 #include "chrome/updater/win/constants.h"
+#include "chrome/updater/win/setup/uninstall.h"
 #include "chrome/updater/win/wrl_module.h"
 #include "components/prefs/pref_service.h"
 
@@ -112,7 +113,7 @@ HRESULT ComServerApp::RegisterClassObjects() {
       std::extent<decltype(cookies_)>() == base::size(class_factories),
       "Arrays cookies_ and class_factories must be the same size.");
 
-  IID class_ids[] = {__uuidof(UpdaterClass), CLSID_UpdaterControlServiceClass,
+  IID class_ids[] = {__uuidof(UpdaterClass), CLSID_UpdaterControlClass,
                      CLSID_GoogleUpdate3WebUserClass};
   DCHECK_EQ(base::size(cookies_), base::size(class_ids));
   static_assert(std::extent<decltype(cookies_)>() == base::size(class_ids),
@@ -147,23 +148,22 @@ void ComServerApp::Stop() {
   main_task_runner_->PostTask(
       FROM_HERE, base::BindOnce([]() {
         scoped_refptr<ComServerApp> this_server = AppServerSingletonInstance();
-        this_server->config_->GetPrefService()->CommitPendingWrite();
         this_server->update_service_ = nullptr;
         this_server->control_service_ = nullptr;
-        this_server->config_ = nullptr;
         this_server->Shutdown(0);
       }));
 }
 
-void ComServerApp::ActiveDuty() {
+void ComServerApp::ActiveDuty(scoped_refptr<UpdateService> update_service,
+                              scoped_refptr<ControlService> control_service) {
   if (!com_initializer_.Succeeded()) {
     PLOG(ERROR) << "Failed to initialize COM";
     Shutdown(-1);
     return;
   }
   main_task_runner_ = base::SequencedTaskRunnerHandle::Get();
-  update_service_ = base::MakeRefCounted<UpdateServiceInProcess>(config_);
-  control_service_ = base::MakeRefCounted<ControlServiceInProcess>(config_);
+  update_service_ = update_service;
+  control_service_ = control_service;
   CreateWRLModule();
   HRESULT hr = RegisterClassObjects();
   if (FAILED(hr))
@@ -171,7 +171,8 @@ void ComServerApp::ActiveDuty() {
 }
 
 void ComServerApp::UninstallSelf() {
-  // TODO(crbug.com/1098934): Uninstall this candidate version of the updater.
+  // TODO(crbug.com/1096654): Add support for is_machine.
+  UninstallCandidate(false);
 }
 
 bool ComServerApp::SwapRPCInterfaces() {

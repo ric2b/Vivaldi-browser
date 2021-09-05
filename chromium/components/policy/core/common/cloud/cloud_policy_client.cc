@@ -9,7 +9,6 @@
 #include "build/build_config.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback_helpers.h"
 #include "base/guid.h"
 #include "base/json/json_reader.h"
@@ -21,6 +20,7 @@
 #include "components/policy/core/common/cloud/device_management_service.h"
 #include "components/policy/core/common/cloud/dm_auth.h"
 #include "components/policy/core/common/cloud/dmserver_job_configurations.h"
+#include "components/policy/core/common/cloud/encrypted_reporting_job_configuration.h"
 #include "components/policy/core/common/cloud/realtime_reporting_job_configuration.h"
 #include "components/policy/core/common/cloud/signing_service.h"
 #include "google_apis/gaia/gaia_constants.h"
@@ -591,8 +591,8 @@ void CloudPolicyClient::UploadChromeOsUserReport(
   request_jobs_.push_back(service_->CreateJob(std::move(config)));
 }
 
-void CloudPolicyClient::UploadRealtimeReport(base::Value report,
-                                             StatusCallback callback) {
+void CloudPolicyClient::UploadSecurityEventReport(base::Value report,
+                                                  StatusCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK(is_registered());
   CreateNewRealtimeReportingJob(
@@ -601,13 +601,38 @@ void CloudPolicyClient::UploadRealtimeReport(base::Value report,
       add_connector_url_params_, std::move(callback));
 }
 
+void CloudPolicyClient::UploadEncryptedReport(
+    const ::reporting::EncryptedRecord& record,
+    base::Optional<base::Value> context,
+    StatusCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  if (!is_registered()) {
+    std::move(callback).Run(false);
+    return;
+  }
+
+  std::unique_ptr<EncryptedReportingJobConfiguration> config =
+      std::make_unique<EncryptedReportingJobConfiguration>(
+          this, service()->configuration()->GetEncryptedReportingServerUrl(),
+          base::BindOnce(&CloudPolicyClient::OnEncryptedReportUploadCompleted,
+                         weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+  if (!config->AddEncryptedRecord(record)) {
+    return;
+  }
+  if (context.has_value()) {
+    config->UpdateContext(context.value());
+  }
+  request_jobs_.push_back(service_->CreateJob(std::move(config)));
+}
+
 void CloudPolicyClient::UploadAppInstallReport(base::Value report,
                                                StatusCallback callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   CHECK(is_registered());
   CancelAppInstallReportUpload();
   app_install_report_request_job_ = CreateNewRealtimeReportingJob(
-      std::move(report), service()->configuration()->GetReportingServerUrl(),
+      std::move(report),
+      service()->configuration()->GetRealtimeReportingServerUrl(),
       /* add_connector_url_params=*/false, std::move(callback));
   DCHECK(app_install_report_request_job_);
 }
@@ -627,7 +652,8 @@ void CloudPolicyClient::UploadExtensionInstallReport(base::Value report,
   CHECK(is_registered());
   CancelExtensionInstallReportUpload();
   extension_install_report_request_job_ = CreateNewRealtimeReportingJob(
-      std::move(report), service()->configuration()->GetReportingServerUrl(),
+      std::move(report),
+      service()->configuration()->GetRealtimeReportingServerUrl(),
       /* add_connector_url_params=*/false, std::move(callback));
   DCHECK(extension_install_report_request_job_);
 }
@@ -677,8 +703,7 @@ DeviceManagementService::Job* CloudPolicyClient::CreateNewRealtimeReportingJob(
     StatusCallback callback) {
   std::unique_ptr<RealtimeReportingJobConfiguration> config =
       std::make_unique<RealtimeReportingJobConfiguration>(
-          this, DMAuth::FromDMToken(dm_token_), server_url,
-          add_connector_url_params,
+          this, server_url, add_connector_url_params,
           base::BindOnce(&CloudPolicyClient::OnRealtimeReportUploadCompleted,
                          weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 
@@ -1251,6 +1276,24 @@ void CloudPolicyClient::OnRealtimeReportUploadCompleted(
 
   std::move(callback).Run(status == DM_STATUS_SUCCESS);
   RemoveJob(job);
+}
+
+// |job| can be null if the owning EncryptedReportingJobConfiguration is
+// destroyed prior to calling OnUploadComplete. In that case, callback will be
+// called with false value.
+void CloudPolicyClient::OnEncryptedReportUploadCompleted(
+    StatusCallback callback,
+    DeviceManagementService::Job* job,
+    DeviceManagementStatus status,
+    int net_error,
+    const base::Value& response) {
+  if (job == nullptr) {
+    std::move(callback).Run(false);
+    return;
+  }
+
+  OnRealtimeReportUploadCompleted(std::move(callback), job, status, net_error,
+                                  response);
 }
 
 void CloudPolicyClient::OnRemoteCommandsFetched(

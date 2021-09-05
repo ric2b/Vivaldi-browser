@@ -14,7 +14,7 @@
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
@@ -31,7 +31,6 @@
 #include "content/common/frame.mojom.h"
 #include "content/common/frame_messages.h"
 #include "content/common/input_messages.h"
-#include "content/common/view_messages.h"
 #include "content/public/android/content_jni_headers/WebContentsImpl_jni.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -479,7 +478,11 @@ void WebContentsAndroid::ScrollFocusedEditableNodeIntoView(
   auto* input_handler = web_contents_->GetFocusedFrameWidgetInputHandler();
   if (!input_handler)
     return;
-  input_handler->ScrollFocusedEditableNodeIntoRect(gfx::Rect());
+  RenderFrameHostImpl* rfh = web_contents_->GetMainFrame();
+  bool should_overlay_content =
+      rfh && rfh->ShouldVirtualKeyboardOverlayContent();
+  if (!should_overlay_content)
+    input_handler->ScrollFocusedEditableNodeIntoRect(gfx::Rect());
 }
 
 void WebContentsAndroid::SelectWordAroundCaretAck(bool did_select,
@@ -772,7 +775,7 @@ void WebContentsAndroid::OnFinishDownloadImage(
     // WARNING: convering to java bitmaps results in duplicate memory
     // allocations, which increases the chance of OOMs if DownloadImage() is
     // misused.
-    ScopedJavaLocalRef<jobject> jbitmap = gfx::ConvertToJavaBitmap(&bitmap);
+    ScopedJavaLocalRef<jobject> jbitmap = gfx::ConvertToJavaBitmap(bitmap);
     Java_WebContentsImpl_addToBitmapList(env, jbitmaps, jbitmap);
   }
   for (const gfx::Size& size : sizes) {

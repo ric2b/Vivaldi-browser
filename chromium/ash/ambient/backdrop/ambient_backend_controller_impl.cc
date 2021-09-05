@@ -22,6 +22,7 @@
 #include "base/barrier_closure.h"
 #include "base/base64.h"
 #include "base/guid.h"
+#include "base/logging.h"
 #include "base/optional.h"
 #include "base/time/time.h"
 #include "chromeos/assistant/internal/ambient/backdrop_client_config.h"
@@ -199,8 +200,11 @@ ScreenUpdate ToScreenUpdate(
       DCHECK(backdrop_topic.has_url());
 
       auto topic_type = ToAmbientModeTopicType(backdrop_topic);
-      if (!ambient::util::IsAmbientModeTopicTypeAllowed(topic_type))
+      if (!ambient::util::IsAmbientModeTopicTypeAllowed(topic_type)) {
+        DVLOG(3) << "Filtering topic_type: "
+                 << backdrop::TopicSource_Name(backdrop_topic.topic_type());
         continue;
+      }
 
       AmbientModeTopic ambient_topic;
       ambient_topic.topic_type = topic_type;
@@ -386,14 +390,6 @@ void AmbientBackendControllerImpl::FetchPersonalAlbums(
       base::BindOnce(&AmbientBackendControllerImpl::FetchPersonalAlbumsInternal,
                      weak_factory_.GetWeakPtr(), banner_width, banner_height,
                      num_albums, resume_token, std::move(callback)));
-}
-
-void AmbientBackendControllerImpl::SetPhotoRefreshInterval(
-    base::TimeDelta interval) {
-  Shell::Get()
-      ->ambient_controller()
-      ->GetAmbientBackendModel()
-      ->SetPhotoRefreshInterval(interval);
 }
 
 void AmbientBackendControllerImpl::FetchWeather(FetchWeatherCallback callback) {

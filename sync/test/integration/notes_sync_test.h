@@ -15,6 +15,8 @@ class NotesSyncTest : public SyncTest {
 
   bool SetupClients() override;
 
+  bool UseVerifier() override;
+
   // Verify that the local notes model (for the Profile corresponding to
   // |index|) matches the data on the FakeServer. It is assumed that FakeServer
   // is being used and each notes has a unique title. Folders are not

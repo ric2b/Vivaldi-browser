@@ -9,6 +9,10 @@ import("//testing/test.gni")
 import("//third_party/protobuf/proto_library.gni")
 import("//third_party/webrtc/webrtc.gni")
 
+if (is_android) {
+  import("//build/config/android/rules.gni")
+}
+
 # Public common API headers, mojom and libraries that can be linked and
 # referenced both by browser-side and renderer-side components.
 component("common") {
@@ -66,12 +70,10 @@ source_set("headers") {
     "context_menu_data/edit_flags.h",
     "context_menu_data/input_field_type.h",
     "context_menu_data/media_type.h",
-    "css/color_scheme.h",
     "css/forced_colors.h",
     "css/navigation_controls.h",
     "css/page_orientation.h",
     "css/page_size_type.h",
-    "css/preferred_color_scheme.h",
     "css/screen_spanning.h",
     "custom_handlers/protocol_handler_utils.h",
     "device_memory/approximated_device_memory.h",
@@ -115,6 +117,7 @@ source_set("headers") {
     "input/web_pointer_properties.h",
     "input/web_touch_event.h",
     "input/web_touch_point.h",
+    "loader/http_body_element_type.h",
     "loader/loading_behavior_flag.h",
     "loader/mime_sniffing_throttle.h",
     "loader/mime_sniffing_url_loader.h",
@@ -131,7 +134,10 @@ source_set("headers") {
     "manifest/manifest.h",
     "manifest/manifest_icon_selector.h",
     "manifest/manifest_util.h",
+    "media/display_type.h",
     "media/video_capture.h",
+    "media/watch_time_component.h",
+    "media/watch_time_reporter.h",
     "mediastream/media_devices.h",
     "mediastream/media_devices_mojom_traits.h",
     "mediastream/media_stream_controls.h",
@@ -149,6 +155,7 @@ source_set("headers") {
     "metrics/document_update_reason.h",
     "metrics/form_element_pii_type.h",
     "mime_util/mime_util.h",
+    "mobile_metrics/mobile_friendliness.h",
     "navigation/triggering_event_info.h",
     "notifications/notification_constants.h",
     "notifications/notification_mojom_traits.h",
@@ -163,34 +170,29 @@ source_set("headers") {
     "page/drag_operation.h",
     "page/launching_process_state.h",
     "page/page_zoom.h",
+    "page_state/page_state.h",
+    "page_state/page_state_serialization.h",
     "peerconnection/peer_connection_tracker_mojom_traits.h",
     "peerconnection/webrtc_ip_handling_policy.h",
     "permissions/permission_utils.h",
+    "renderer_preferences/renderer_preferences.h",
     "scheduler/web_scheduler_tracked_feature.h",
+    "security/protocol_handler_security_level.h",
     "security/security_style.h",
     "security_context/insecure_request_policy.h",
     "service_worker/service_worker_scope_match.h",
     "service_worker/service_worker_status_code.h",
     "service_worker/service_worker_type_converters.h",
     "service_worker/service_worker_types.h",
-    "sms/sms_receiver_destroyed_reason.h",
-    "sms/sms_receiver_outcome.h",
+    "sms/webotp_service_destroyed_reason.h",
+    "sms/webotp_service_outcome.h",
     "switches.h",
     "thread_safe_browser_interface_broker_proxy.h",
-    "tokens/multi_token.h",
-    "tokens/multi_token_internal.h",
-    "tokens/token_mojom_traits_helper.h",
-    "tokens/tokens.h",
-    "tokens/tokens_mojom_traits.h",
     "unique_name/unique_name_helper.h",
     "user_agent/user_agent_metadata.h",
     "web_cache/web_cache_resource_type_stats.h",
     "web_package/signed_exchange_consts.h",
     "web_package/web_package_request_matcher.h",
-    "web_preferences/autoplay_policy.h",
-    "web_preferences/editing_behavior_types.h",
-    "web_preferences/image_animation_policy.h",
-    "web_preferences/viewport_style.h",
     "web_preferences/web_preferences.h",
     "widget/device_emulation_params.h",
     "widget/screen_info.h",
@@ -204,6 +206,7 @@ source_set("headers") {
     "//skia",
     "//skia/public/mojom:shared_typemap_traits",
     "//third_party/blink/public/common/privacy_budget",
+    "//third_party/blink/public/common/tokens:tokens_headers",
     "//third_party/blink/public/mojom:mojom_modules_headers",
     "//third_party/blink/public/mojom:mojom_platform_shared",
     "//third_party/blink/public/mojom:web_bluetooth_mojo_bindings_headers",
@@ -261,4 +264,19 @@ if (is_android || is_win) {
 
 proto_library("font_enumeration_table_proto") {
   sources = [ "font_access/font_enumeration_table.proto" ]
+}
+
+if (is_android) {
+  java_cpp_features("java_features_srcjar") {
+    # External code should depend on ":common_java" instead.
+    visibility = [ ":*" ]
+    sources = [ "//third_party/blink/common/features.cc" ]
+    template = "//third_party/blink/public/common/android/java_templates/BlinkFeatures.java.tmpl"
+  }
+
+  android_library("common_java") {
+    # Right now, this only includes the Java features. But if we need more Java
+    # files, they should be added here as necessary.
+    srcjar_deps = [ ":java_features_srcjar" ]
+  }
 }

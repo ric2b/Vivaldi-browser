@@ -69,8 +69,6 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
                            const std::string& message) override;
   void ReportHeavyAdIssue(blink::mojom::HeavyAdResolutionStatus resolution,
                           blink::mojom::HeavyAdReason reason) override;
-  void AddUniqueMessageToConsole(blink::mojom::ConsoleMessageLevel level,
-                                 const std::string& message) override;
   bool IsTestRenderFrameHost() const override;
 
   // Public overrides to expose RenderFrameHostImpl's mojo methods to tests.
@@ -215,9 +213,6 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
   // callbacks.
   void SimulateLoadingCompleted(LoadingScenario loading_scenario);
 
-  // Expose CreateNewFullscreenWidget for tests.
-  using RenderFrameHostImpl::CreateNewFullscreenWidget;
-
  protected:
   void SendCommitNavigation(
       mojom::NavigationClient* navigation_client,
@@ -236,6 +231,7 @@ class TestRenderFrameHost : public RenderFrameHostImpl,
       blink::mojom::ServiceWorkerContainerInfoForClientPtr container_info,
       mojo::PendingRemote<network::mojom::URLLoaderFactory>
           prefetch_loader_factory,
+      blink::mojom::PolicyContainerPtr policy_container,
       const base::UnguessableToken& devtools_navigation_token) override;
   void SendCommitFailedNavigation(
       mojom::NavigationClient* navigation_client,

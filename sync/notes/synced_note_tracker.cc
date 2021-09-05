@@ -513,6 +513,10 @@ bool SyncedNoteTracker::InitEntitiesFromModelAndMetadata(
         return false;
       }
 
+      if (!note_metadata.metadata().has_client_tag_hash()) {
+        note_without_client_tag_found = true;
+      }
+
       auto tombstone_entity = std::make_unique<Entity>(
           /*node=*/nullptr, std::make_unique<sync_pb::EntityMetadata>(
                                 std::move(*note_metadata.mutable_metadata())));
@@ -782,17 +786,16 @@ size_t SyncedNoteTracker::EstimateMemoryUsage() const {
   return memory_usage;
 }
 
-size_t SyncedNoteTracker::TrackedEntitiesCountForTest() const {
-  return sync_id_to_entities_map_.size();
-}
-
-size_t SyncedNoteTracker::TrackedNotesCountForDebugging() const {
+size_t SyncedNoteTracker::TrackedNotesCount() const {
   return note_node_to_entities_map_.size();
 }
 
-size_t SyncedNoteTracker::TrackedUncommittedTombstonesCountForDebugging()
-    const {
+size_t SyncedNoteTracker::TrackedUncommittedTombstonesCount() const {
   return ordered_local_tombstones_.size();
+}
+
+size_t SyncedNoteTracker::TrackedEntitiesCountForTest() const {
+  return sync_id_to_entities_map_.size();
 }
 
 void SyncedNoteTracker::CheckAllNodesTracked(

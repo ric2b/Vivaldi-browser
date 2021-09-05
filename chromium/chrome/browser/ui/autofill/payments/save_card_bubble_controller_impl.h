@@ -39,7 +39,7 @@ class SaveCardBubbleControllerImpl
   class ObserverForTest {
    public:
     virtual void OnBubbleShown() = 0;
-    virtual void OnBubbleClosed() = 0;
+    virtual void OnIconShown() = 0;
   };
 
   ~SaveCardBubbleControllerImpl() override;
@@ -130,8 +130,7 @@ class SaveCardBubbleControllerImpl
   // TODO(crbug.com/864702): Don't show promo if user is a butter user.
   bool ShouldShowSignInPromo() const override;
   void OnSyncPromoAccepted(const AccountInfo& account,
-                           signin_metrics::AccessPoint access_point,
-                           bool is_default_promo_account) override;
+                           signin_metrics::AccessPoint access_point) override;
   void OnSaveButton(const AutofillClient::UserProvidedCardDetails&
                         user_provided_card_details) override;
   void OnCancelButton() override;

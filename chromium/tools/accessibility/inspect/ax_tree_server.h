@@ -22,13 +22,12 @@ class AXTreeServer final {
   AXTreeServer(gfx::AcceleratedWidget widget,
                const base::FilePath& filters_path,
                bool use_json);
-  AXTreeServer(const AccessibilityTreeFormatter::TreeSelector& selector,
+  AXTreeServer(const ui::AXTreeSelector& selector,
                const base::FilePath& filters_path,
                bool use_json);
 
  private:
-  using BuildTree = base::OnceCallback<std::unique_ptr<base::DictionaryValue>(
-      AccessibilityTreeFormatter*)>;
+  using BuildTree = base::OnceCallback<base::Value(const ui::AXTreeFormatter*)>;
 
   // Builds and formats the accessible tree.
   void Run(BuildTree build_tree,
@@ -36,11 +35,11 @@ class AXTreeServer final {
            bool use_json);
 
   // Generates property filters.
-  std::vector<AccessibilityTreeFormatter::PropertyFilter> GetPropertyFilters(
+  std::vector<ui::AXPropertyFilter> GetPropertyFilters(
       const base::FilePath& filters_path);
 
   // Formats and dumps into console the tree.
-  void Format(AccessibilityTreeFormatter& formatter,
+  void Format(ui::AXTreeFormatter& formatter,
               const base::DictionaryValue& dict,
               bool use_json);
 

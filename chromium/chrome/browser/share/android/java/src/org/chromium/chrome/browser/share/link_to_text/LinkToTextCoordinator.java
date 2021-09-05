@@ -6,8 +6,6 @@ package org.chromium.chrome.browser.share.link_to_text;
 
 import android.content.Context;
 import android.net.Uri;
-import android.view.LayoutInflater;
-import android.widget.TextView;
 
 import org.chromium.blink.mojom.TextFragmentSelectorProducer;
 import org.chromium.chrome.R;
@@ -66,18 +64,13 @@ public class LinkToTextCoordinator extends EmptyTabObserver {
             // custom positioning as |setView| and |setGravity| are deprecated starting API 30.
             String toastMessage =
                     mContext.getResources().getString(R.string.link_to_text_failure_toast_message);
-            LayoutInflater inflater = LayoutInflater.from(mContext);
-            TextView text = (TextView) inflater.inflate(R.layout.custom_toast_layout, null);
-            text.setText(toastMessage);
-            text.announceForAccessibility(toastMessage);
-
-            Toast toast = new Toast(mContext);
-            toast.setView(text);
-            toast.setDuration(Toast.LENGTH_SHORT);
+            Toast toast = Toast.makeText(mContext, toastMessage, Toast.LENGTH_SHORT);
             toast.setGravity(toast.getGravity(), toast.getXOffset(),
                     mContext.getResources().getDimensionPixelSize(R.dimen.y_offset));
             toast.show();
         }
+        // After generation results are communicated to users, cleanup to remove tab listener.
+        cleanup();
     }
 
     public void requestSelector() {
@@ -93,7 +86,6 @@ public class LinkToTextCoordinator extends EmptyTabObserver {
             @Override
             public void call(String selector) {
                 onSelectorReady(selector);
-                cleanup();
             }
         });
     }

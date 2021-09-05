@@ -12,7 +12,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/pickle.h"
@@ -67,6 +67,7 @@
 #include "components/sessions/vivaldi_session_service_commands.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
+#include "components/page_actions/page_actions_tab_helper.h"
 
 using base::Time;
 using content::NavigationEntry;
@@ -721,6 +722,16 @@ void SessionService::BuildCommandsForTab(
         sessions::CreateSetExtDataCommand(session_id, tab->GetExtData()));
   }
 
+  auto* page_actions_helper = page_actions::TabHelper::FromWebContents(tab);
+  if (page_actions_helper) {
+    for (const auto& script_overrides :
+         page_actions_helper->GetScriptOverrides()) {
+      sessions::CreatePageActionOverrideCommand(
+          session_id, script_overrides.first.AsUTF8Unsafe(),
+          script_overrides.second);
+    }
+  }
+
   const blink::UserAgentOverride& ua_override = tab->GetUserAgentOverride();
 
   if (!ua_override.ua_string_override.empty()) {
@@ -796,8 +807,9 @@ void SessionService::BuildCommandsForBrowser(
                                                   browser->user_title()));
   }
 
-  sessions::CreateSetWindowWorkspaceCommand(
-      browser->session_id(), browser->window()->GetWorkspace());
+  command_storage_manager_->AppendRebuildCommand(
+      sessions::CreateSetWindowWorkspaceCommand(
+          browser->session_id(), browser->window()->GetWorkspace()));
 
   if (!browser->ext_data().empty()) {
     command_storage_manager_->AppendRebuildCommand(

@@ -23,7 +23,7 @@
 #include "media/gpu/buildflags.h"
 #include "services/metrics/public/cpp/delegating_ukm_recorder.h"
 #include "services/metrics/public/cpp/mojo_ukm_recorder.h"
-#include "third_party/skia/include/core/SkFontLCDConfig.h"
+#include "skia/ext/legacy_display_globals.h"
 
 namespace {
 
@@ -159,18 +159,15 @@ void VizMainImpl::CreateGpuService(
   if (!gpu_init_->gpu_info().in_process_gpu) {
     // If the GPU is running in the browser process, discardable memory manager
     // has already been initialized.
-    discardable_shared_memory_manager_ = std::make_unique<
+    discardable_shared_memory_manager_ = base::MakeRefCounted<
         discardable_memory::ClientDiscardableSharedMemoryManager>(
         std::move(discardable_memory_manager), io_task_runner());
     base::DiscardableMemoryAllocator::SetInstance(
         discardable_shared_memory_manager_.get());
   }
 
-  SkFontLCDConfig::SetSubpixelOrder(
-      gfx::FontRenderParams::SubpixelRenderingToSkiaLCDOrder(
-          subpixel_rendering));
-  SkFontLCDConfig::SetSubpixelOrientation(
-      gfx::FontRenderParams::SubpixelRenderingToSkiaLCDOrientation(
+  skia::LegacyDisplayGlobals::SetCachedPixelGeometry(
+      gfx::FontRenderParams::SubpixelRenderingToSkiaPixelGeometry(
           subpixel_rendering));
 
   gpu_service_->Bind(std::move(pending_receiver));

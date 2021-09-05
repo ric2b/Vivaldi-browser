@@ -20,6 +20,8 @@ bool IsInViewport(blink::Document* document,
 bool IsTooSmall(blink::WebRect& rect);
 bool IsVisible(blink::WebElement element);
 bool HasNavigableTag(blink::WebElement& element);
+bool HasNavigableListeners(blink::WebElement& element);
+bool IsNavigableElement(blink::WebElement& element);
 blink::WebRect RevertDeviceScaling(blink::WebRect rect, float scale);
 blink::IntRect FindImageElementRect(blink::WebElement element);
 std::string ElementPath(blink::WebElement& element);

@@ -15,6 +15,7 @@
 #include "components/autofill/core/browser/payments/full_card_request.h"
 #include "components/autofill/core/browser/payments/payments_client.h"
 #include "components/autofill/core/browser/payments/risk_data_loader.h"
+#include "content/public/browser/global_routing_id.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
 
 namespace autofill {
@@ -67,9 +68,11 @@ class CvcUnmaskViewController
   // PaymentRequestSheetController:
   base::string16 GetSheetTitle() override;
   void FillContentView(views::View* content_view) override;
-  std::unique_ptr<views::Button> CreatePrimaryButton() override;
+  base::string16 GetPrimaryButtonLabel() override;
+  views::Button::PressedCallback GetPrimaryButtonCallback() override;
+  int GetPrimaryButtonId() override;
+  bool GetPrimaryButtonEnabled() override;
   bool ShouldShowSecondaryButton() override;
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
  private:
   // Called when the user confirms their CVC. This will pass the value to the
@@ -85,6 +88,9 @@ class CvcUnmaskViewController
   bool GetSheetId(DialogViewID* sheet_id) override;
   views::View* GetFirstFocusedView() override;
 
+  // PaymentRequestSheetController:
+  void BackButtonPressed() override;
+
   // views::TextfieldController:
   void ContentsChanged(views::Textfield* sender,
                        const base::string16& new_contents) override;
@@ -95,7 +101,7 @@ class CvcUnmaskViewController
   autofill::YearComboboxModel year_combobox_model_;
   views::Textfield* cvc_field_;  // owned by the view hierarchy, outlives this.
   autofill::CreditCard credit_card_;
-  content::WebContents* web_contents_;
+  const content::GlobalFrameRoutingId frame_routing_id_;
   autofill::payments::PaymentsClient payments_client_;
   autofill::payments::FullCardRequest full_card_request_;
   base::WeakPtr<autofill::CardUnmaskDelegate> unmask_delegate_;

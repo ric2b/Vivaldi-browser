@@ -26,13 +26,13 @@ const int kCUAMarkerMarginEm = 1;
 ListMarker::ListMarker() : marker_text_type_(kNotText) {}
 
 const ListMarker* ListMarker::Get(const LayoutObject* marker) {
-  if (auto* outside_marker = ToLayoutOutsideListMarkerOrNull(marker))
+  if (auto* outside_marker = DynamicTo<LayoutOutsideListMarker>(marker))
     return &outside_marker->Marker();
-  if (auto* inside_marker = ToLayoutInsideListMarkerOrNull(marker))
+  if (auto* inside_marker = DynamicTo<LayoutInsideListMarker>(marker))
     return &inside_marker->Marker();
-  if (auto* ng_outside_marker = ToLayoutNGOutsideListMarkerOrNull(marker))
+  if (auto* ng_outside_marker = DynamicTo<LayoutNGOutsideListMarker>(marker))
     return &ng_outside_marker->Marker();
-  if (auto* ng_inside_marker = ToLayoutNGInsideListMarkerOrNull(marker))
+  if (auto* ng_inside_marker = DynamicTo<LayoutNGInsideListMarker>(marker))
     return &ng_inside_marker->Marker();
   return nullptr;
 }
@@ -43,9 +43,9 @@ ListMarker* ListMarker::Get(LayoutObject* marker) {
 }
 
 LayoutObject* ListMarker::MarkerFromListItem(const LayoutObject* list_item) {
-  if (auto* legacy_list_item = ToLayoutListItemOrNull(list_item))
+  if (auto* legacy_list_item = DynamicTo<LayoutListItem>(list_item))
     return legacy_list_item->Marker();
-  if (auto* ng_list_item = ToLayoutNGListItemOrNull(list_item))
+  if (auto* ng_list_item = DynamicTo<LayoutNGListItem>(list_item))
     return ng_list_item->Marker();
   return nullptr;
 }
@@ -62,18 +62,18 @@ LayoutBlockFlow* ListMarker::ListItemBlockFlow(
     const LayoutObject& marker) const {
   DCHECK_EQ(Get(&marker), this);
   LayoutObject* list_item = ListItem(marker);
-  if (auto* legacy_list_item = ToLayoutListItemOrNull(list_item))
+  if (auto* legacy_list_item = DynamicTo<LayoutListItem>(list_item))
     return legacy_list_item;
-  if (auto* ng_list_item = ToLayoutNGListItemOrNull(list_item))
+  if (auto* ng_list_item = DynamicTo<LayoutNGListItem>(list_item))
     return ng_list_item;
   NOTREACHED();
   return nullptr;
 }
 
 int ListMarker::ListItemValue(const LayoutObject& list_item) const {
-  if (auto* legacy_list_item = ToLayoutListItemOrNull(list_item))
+  if (auto* legacy_list_item = DynamicTo<LayoutListItem>(list_item))
     return legacy_list_item->Value();
-  if (auto* ng_list_item = ToLayoutNGListItemOrNull(list_item))
+  if (auto* ng_list_item = DynamicTo<LayoutNGListItem>(list_item))
     return ng_list_item->Value();
   NOTREACHED();
   return 0;
@@ -113,7 +113,7 @@ void ListMarker::UpdateMarkerText(LayoutObject& marker, LayoutText* text) {
 
 void ListMarker::UpdateMarkerText(LayoutObject& marker) {
   DCHECK_EQ(Get(&marker), this);
-  UpdateMarkerText(marker, ToLayoutText(marker.SlowFirstChild()));
+  UpdateMarkerText(marker, To<LayoutText>(marker.SlowFirstChild()));
 }
 
 ListMarker::MarkerTextType ListMarker::MarkerText(
@@ -184,10 +184,9 @@ String ListMarker::TextAlternative(const LayoutObject& marker) const {
 
   // There should be a single text child
   DCHECK(child);
-  DCHECK(child->IsText());
   DCHECK(!child->NextSibling());
 
-  return ToLayoutText(child)->PlainText();
+  return To<LayoutText>(child)->PlainText();
 }
 
 void ListMarker::UpdateMarkerContentIfNeeded(LayoutObject& marker) {
@@ -207,7 +206,7 @@ void ListMarker::UpdateMarkerContentIfNeeded(LayoutObject& marker) {
     if (child) {
       // If the url of `list-style-image` changed, create a new LayoutImage.
       if (!child->IsLayoutImage() ||
-          ToLayoutImage(child)->ImageResource()->ImagePtr() !=
+          To<LayoutImage>(child)->ImageResource()->ImagePtr() !=
               list_style_image->Data()) {
         child->Destroy();
         child = nullptr;
@@ -247,7 +246,7 @@ void ListMarker::UpdateMarkerContentIfNeeded(LayoutObject& marker) {
           marker.StyleRef(), marker.StyleRef().Display());
   if (child) {
     if (child->IsText()) {
-      text = ToLayoutText(child);
+      text = To<LayoutText>(child);
       text->SetStyle(text_style);
     } else {
       child->Destroy();

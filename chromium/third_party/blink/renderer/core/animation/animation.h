@@ -199,7 +199,7 @@ class CORE_EXPORT Animation : public EventTargetWithInlineData,
   double playbackRate() const;
   void setPlaybackRate(double, ExceptionState& = ASSERT_NO_EXCEPTION);
   AnimationTimeline* timeline() { return timeline_; }
-  void setTimeline(AnimationTimeline* timeline);
+  virtual void setTimeline(AnimationTimeline* timeline);
   Document* GetDocument() const;
 
   base::Optional<double> startTime() const;
@@ -221,6 +221,9 @@ class CORE_EXPORT Animation : public EventTargetWithInlineData,
 
   // This should only be used for CSS
   void Unpause();
+  bool ResetsCurrentTimeOnResume() const {
+    return reset_current_time_on_resume_;
+  }
 
   void SetOutdated();
   bool Outdated() { return outdated_; }
@@ -266,6 +269,7 @@ class CORE_EXPORT Animation : public EventTargetWithInlineData,
   void SetEffectSuppressed(bool);
 
   void InvalidateKeyframeEffect(const TreeScope&);
+  void InvalidateEffectTargetStyle();
 
   void Trace(Visitor*) const override;
 

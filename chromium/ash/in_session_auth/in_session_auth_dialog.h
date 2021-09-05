@@ -8,6 +8,11 @@
 #include <memory>
 
 #include "ash/ash_export.h"
+#include "ash/in_session_auth/auth_dialog_contents_view.h"
+
+namespace aura {
+class Window;
+}
 
 namespace views {
 class Widget;
@@ -15,15 +20,17 @@ class Widget;
 
 namespace ash {
 
-class AuthDialogContentsView;
-class RoundedCornerDecorator;
-
 // InSessionAuthDialog gets instantiated on every request to show
 // an authentication dialog, and gets destroyed when the request is
 // completed.
 class InSessionAuthDialog {
  public:
-  explicit InSessionAuthDialog(uint32_t auth_methods);
+  InSessionAuthDialog(
+      uint32_t auth_methods,
+      aura::Window* parent_window,
+      const std::string& origin_name,
+      const AuthDialogContentsView::AuthMethodsMetadata& auth_metadata,
+      const UserAvatar& avatar);
   InSessionAuthDialog(const InSessionAuthDialog&) = delete;
   InSessionAuthDialog& operator=(const InSessionAuthDialog&) = delete;
   ~InSessionAuthDialog();
@@ -41,8 +48,7 @@ class InSessionAuthDialog {
 
   // Pointer to the contents view. Used to query and update the set of available
   // auth methods.
-  AuthDialogContentsView* contents_view_ = nullptr;
-  std::unique_ptr<RoundedCornerDecorator> rounded_corner_decorator_;
+  const uint32_t auth_methods_;
 };
 
 }  // namespace ash

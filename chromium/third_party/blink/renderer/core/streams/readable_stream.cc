@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/streams/readable_stream.h"
 
 #include "base/stl_util.h"
+#include "third_party/blink/renderer/bindings/core/v8/readable_stream_default_reader_or_readable_stream_byob_reader.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_function.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_abort_signal.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_iterator_result_value.h"
@@ -17,8 +18,11 @@
 #include "third_party/blink/renderer/core/streams/miscellaneous_operations.h"
 #include "third_party/blink/renderer/core/streams/promise_handler.h"
 #include "third_party/blink/renderer/core/streams/readable_stream_default_controller.h"
-#include "third_party/blink/renderer/core/streams/readable_stream_reader.h"
+#include "third_party/blink/renderer/core/streams/readable_stream_generic_reader.h"
+#include "third_party/blink/renderer/core/streams/readable_stream_get_reader_options.h"
+#include "third_party/blink/renderer/core/streams/readable_writable_pair.h"
 #include "third_party/blink/renderer/core/streams/stream_algorithms.h"
+#include "third_party/blink/renderer/core/streams/stream_pipe_options.h"
 #include "third_party/blink/renderer/core/streams/stream_promise_resolver.h"
 #include "third_party/blink/renderer/core/streams/transferable_streams.h"
 #include "third_party/blink/renderer/core/streams/underlying_source_base.h"
@@ -42,62 +46,14 @@ namespace blink {
 ReadableStream::PipeOptions::PipeOptions()
     : prevent_close_(false), prevent_abort_(false), prevent_cancel_(false) {}
 
-ReadableStream::PipeOptions::PipeOptions(ScriptState* script_state,
-                                         ScriptValue options,
-                                         ExceptionState& exception_state) {
-  auto* isolate = script_state->GetIsolate();
-  v8::TryCatch block(isolate);
-  v8::Local<v8::Value> options_value = options.V8Value();
-  v8::Local<v8::Object> options_object;
-  if (options_value->IsUndefined()) {
-    options_object = v8::Object::New(isolate);
-  } else if (!options_value->ToObject(script_state->GetContext())
-                  .ToLocal(&options_object)) {
-    exception_state.RethrowV8Exception(block.Exception());
-    return;
-  }
-
-  // 4. Set preventClose to ! ToBoolean(preventClose), set preventAbort to !
-  // ToBoolean(preventAbort), and set preventCancel to !
-  // ToBoolean(preventCancel).
-  prevent_close_ =
-      GetBoolean(script_state, options_object, "preventClose", exception_state);
-  if (exception_state.HadException()) {
-    return;
-  }
-
-  prevent_abort_ =
-      GetBoolean(script_state, options_object, "preventAbort", exception_state);
-  if (exception_state.HadException()) {
-    return;
-  }
-
-  prevent_cancel_ = GetBoolean(script_state, options_object, "preventCancel",
-                               exception_state);
-  if (exception_state.HadException()) {
-    return;
-  }
-
-  v8::Local<v8::Value> signal_value;
-  if (!options_object
-           ->Get(script_state->GetContext(), V8AtomicString(isolate, "signal"))
-           .ToLocal(&signal_value)) {
-    exception_state.RethrowV8Exception(block.Exception());
-    return;
-  }
-
-  // 5. If signal is not undefined, and signal is not an instance of the
-  // AbortSignal interface, throw a TypeError exception.
-  if (signal_value->IsUndefined())
-    return;
-
-  signal_ = V8AbortSignal::ToImplWithTypeCheck(isolate, signal_value);
-  if (!signal_) {
-    exception_state.ThrowTypeError(
-        "'signal' must be an AbortSignal object or undefined");
-    return;
-  }
-}
+ReadableStream::PipeOptions::PipeOptions(const StreamPipeOptions* options)
+    : prevent_close_(options->hasPreventClose() ? options->preventClose()
+                                                : false),
+      prevent_abort_(options->hasPreventAbort() ? options->preventAbort()
+                                                : false),
+      prevent_cancel_(options->hasPreventCancel() ? options->preventCancel()
+                                                  : false),
+      signal_(options->hasSignal() ? options->signal() : nullptr) {}
 
 void ReadableStream::PipeOptions::Trace(Visitor* visitor) const {
   visitor->Trace(signal_);
@@ -404,7 +360,7 @@ class ReadableStream::PipeToEngine final
     }
 
     is_reading_ = true;
-    ThenPromise(ReadableStreamReader::Read(script_state_, reader_)
+    ThenPromise(ReadableStreamDefaultReader::Read(script_state_, reader_)
                     ->V8Promise(script_state_->GetIsolate()),
                 &PipeToEngine::ReadFulfilled, &PipeToEngine::ReadRejected);
     return Undefined();
@@ -635,7 +591,7 @@ class ReadableStream::PipeToEngine final
     WritableStreamDefaultWriter::Release(script_state_, writer_);
 
     // b. Perform ! ReadableStreamReaderGenericRelease(reader).
-    ReadableStreamReader::GenericRelease(script_state_, reader_);
+    ReadableStreamGenericReader::GenericRelease(script_state_, reader_);
 
     // TODO(ricea): Implement signal.
     // c. If signal is not undefined, remove abortAlgorithm from signal.
@@ -733,7 +689,7 @@ class ReadableStream::PipeToEngine final
 
   Member<ScriptState> script_state_;
   Member<PipeOptions> pipe_options_;
-  Member<ReadableStreamReader> reader_;
+  Member<ReadableStreamDefaultReader> reader_;
   Member<WritableStreamDefaultWriter> writer_;
   Member<StreamPromiseResolver> promise_;
   TraceWrapperV8Reference<v8::Promise> last_write_;
@@ -773,7 +729,7 @@ class ReadableStream::TeeEngine final : public GarbageCollected<TeeEngine> {
   class CancelAlgorithm;
 
   Member<ReadableStream> stream_;
-  Member<ReadableStreamReader> reader_;
+  Member<ReadableStreamDefaultReader> reader_;
   Member<StreamPromiseResolver> cancel_promise_;
   bool closed_ = false;
 
@@ -803,7 +759,7 @@ class ReadableStream::TeeEngine::PullAlgorithm final : public StreamAlgorithm {
     //      and performs the following steps:
     return StreamThenPromise(
         script_state->GetContext(),
-        ReadableStreamReader::Read(script_state, engine_->reader_)
+        ReadableStreamDefaultReader::Read(script_state, engine_->reader_)
             ->V8Promise(script_state->GetIsolate()),
         MakeGarbageCollected<ResolveFunction>(script_state, engine_));
   }
@@ -1251,192 +1207,130 @@ ScriptPromise ReadableStream::cancel(ScriptState* script_state,
   return ScriptPromise(script_state, result);
 }
 
-ReadableStreamDefaultReader* ReadableStream::getReader(
+void ReadableStream::getReader(
     ScriptState* script_state,
+    ReadableStreamDefaultReaderOrReadableStreamBYOBReader& return_value,
     ExceptionState& exception_state) {
   // https://streams.spec.whatwg.org/#rs-get-reader
-  // 2. If mode is undefined, return ? AcquireReadableStreamDefaultReader(this,
-  //    true).
-  return AcquireDefaultReader(script_state, this, true, exception_state);
+  // 1. If options["mode"] does not exist, return ?
+  // AcquireReadableStreamDefaultReader(this).
+  return_value.SetReadableStreamDefaultReader(
+      AcquireDefaultReader(script_state, this, true, exception_state));
 }
 
-ReadableStreamDefaultReader* ReadableStream::getReader(
+void ReadableStream::getReader(
     ScriptState* script_state,
-    ScriptValue options,
+    ReadableStreamGetReaderOptions* options,
+    ReadableStreamDefaultReaderOrReadableStreamBYOBReader& return_value,
     ExceptionState& exception_state) {
   // https://streams.spec.whatwg.org/#rs-get-reader
-  // Since we don't support byob readers, the only thing
-  // GetReaderValidateOptions() needs to do is throw an exception if
-  // |options.mode| is invalid.
-  GetReaderValidateOptions(script_state, options, exception_state);
-  if (exception_state.HadException()) {
-    return nullptr;
+  // Since byob readers are not completely implemented yet, this function should
+  // just call the default getReader().
+  // TODO(nidhijaju): Add assertion options["mode"] is "byob" and return
+  // ? AcquireReadableStreamBYOBReader(this) according to spec, once byob
+  // readers have been implemented.
+  if (options->hasMode()) {
+    DCHECK_EQ(options->mode(), "byob");
+    exception_state.ThrowTypeError("byob not implemented");
+    return;
   }
-
-  return getReader(script_state, exception_state);
+  getReader(script_state, return_value, exception_state);
 }
 
-ScriptValue ReadableStream::pipeThrough(ScriptState* script_state,
-                                        ScriptValue transform_stream,
-                                        ExceptionState& exception_state) {
-  return pipeThrough(script_state, transform_stream,
-                     ScriptValue(script_state->GetIsolate(),
-                                 v8::Undefined(script_state->GetIsolate())),
+ReadableStreamDefaultReader* ReadableStream::GetDefaultReaderForTesting(
+    ScriptState* script_state,
+    ExceptionState& exception_state) {
+  ReadableStreamDefaultReaderOrReadableStreamBYOBReader return_value;
+  getReader(script_state, return_value, exception_state);
+  return return_value.GetAsReadableStreamDefaultReader();
+}
+
+ReadableStream* ReadableStream::pipeThrough(ScriptState* script_state,
+                                            ReadableWritablePair* transform,
+                                            ExceptionState& exception_state) {
+  return pipeThrough(script_state, transform, StreamPipeOptions::Create(),
                      exception_state);
 }
 
 // https://streams.spec.whatwg.org/#rs-pipe-through
-ScriptValue ReadableStream::pipeThrough(ScriptState* script_state,
-                                        ScriptValue transform_stream,
-                                        ScriptValue options,
-                                        ExceptionState& exception_state) {
+ReadableStream* ReadableStream::pipeThrough(ScriptState* script_state,
+                                            ReadableWritablePair* transform,
+                                            const StreamPipeOptions* options,
+                                            ExceptionState& exception_state) {
   // https://streams.spec.whatwg.org/#rs-pipe-through
-  // The first part of this function implements the unpacking of the {readable,
-  // writable} argument to the method.
-  v8::Local<v8::Value> pair_value = transform_stream.V8Value();
-  v8::Local<v8::Context> context = script_state->GetContext();
+  DCHECK(transform->hasReadable());
+  ReadableStream* readable_stream = transform->readable();
 
-  constexpr char kWritableIsNotWritableStream[] =
-      "parameter 1's 'writable' property is not a WritableStream.";
-  constexpr char kReadableIsNotReadableStream[] =
-      "parameter 1's 'readable' property is not a ReadableStream.";
-  constexpr char kWritableIsLocked[] = "parameter 1's 'writable' is locked.";
+  DCHECK(transform->hasWritable());
+  WritableStream* writable_stream = transform->writable();
 
-  v8::Local<v8::Object> pair;
-  if (!pair_value->ToObject(context).ToLocal(&pair)) {
-    exception_state.ThrowTypeError(kWritableIsNotWritableStream);
-    return ScriptValue();
-  }
-
-  v8::Isolate* isolate = script_state->GetIsolate();
-  v8::Local<v8::Value> writable, readable;
-  {
-    v8::TryCatch block(isolate);
-    if (!pair->Get(context, V8String(isolate, "writable")).ToLocal(&writable)) {
-      exception_state.RethrowV8Exception(block.Exception());
-      return ScriptValue();
-    }
-    DCHECK(!block.HasCaught());
-
-    if (!pair->Get(context, V8String(isolate, "readable")).ToLocal(&readable)) {
-      exception_state.RethrowV8Exception(block.Exception());
-      return ScriptValue();
-    }
-    DCHECK(!block.HasCaught());
-  }
-
-  // 2. If ! IsWritableStream(_writable_) is *false*, throw a *TypeError*
-  //    exception.
-  WritableStream* writable_stream =
-      V8WritableStream::ToImplWithTypeCheck(isolate, writable);
-  if (!writable_stream) {
-    exception_state.ThrowTypeError(kWritableIsNotWritableStream);
-    return ScriptValue();
-  }
-
-  // 3. If ! IsReadableStream(_readable_) is *false*, throw a *TypeError*
-  //    exception.
-  if (!V8ReadableStream::HasInstance(readable, isolate)) {
-    exception_state.ThrowTypeError(kReadableIsNotReadableStream);
-    return ScriptValue();
-  }
-
-  // 4. Set preventClose to ! ToBoolean(preventClose), set preventAbort to !
-  //    ToBoolean(preventAbort), and set preventCancel to !
-  //    ToBoolean(preventCancel).
-
-  // 5. If signal is not undefined, and signal is not an instance of the
-  //    AbortSignal interface, throw a TypeError exception.
-  auto* pipe_options =
-      MakeGarbageCollected<PipeOptions>(script_state, options, exception_state);
-  if (exception_state.HadException()) {
-    return ScriptValue();
-  }
-
-  // 6. If ! IsReadableStreamLocked(*this*) is *true*, throw a *TypeError*
-  //    exception.
+  // 1. If ! IsReadableStreamLocked(this) is true, throw a TypeError exception.
   if (IsLocked(this)) {
     exception_state.ThrowTypeError("Cannot pipe a locked stream");
-    return ScriptValue();
+    return nullptr;
   }
 
-  // 7. If ! IsWritableStreamLocked(_writable_) is *true*, throw a *TypeError*
-  //    exception.
+  // 2. If ! IsWritableStreamLocked(transform["writable"]) is true, throw a
+  //    TypeError exception.
   if (WritableStream::IsLocked(writable_stream)) {
-    exception_state.ThrowTypeError(kWritableIsLocked);
-    return ScriptValue();
+    exception_state.ThrowTypeError("parameter 1's 'writable' is locked");
+    return nullptr;
   }
 
-  // 8. Let _promise_ be ! ReadableStreamPipeTo(*this*, _writable_,
-  //    _preventClose_, _preventAbort_, _preventCancel_,
-  //   _signal_).
+  // 3. Let signal be options["signal"] if it exists, or undefined otherwise.
+  auto* pipe_options = MakeGarbageCollected<PipeOptions>(options);
 
+  // 4. Let promise be ! ReadableStreamPipeTo(this, transform["writable"],
+  //    options["preventClose"], options["preventAbort"],
+  //    options["preventCancel"], signal).
   ScriptPromise promise =
       PipeTo(script_state, this, writable_stream, pipe_options);
 
-  // 9. Set _promise_.[[PromiseIsHandled]] to *true*.
+  // 5. Set promise.[[PromiseIsHandled]] to true.
   promise.MarkAsHandled();
 
-  // 10. Return _readable_.
-  return ScriptValue(script_state->GetIsolate(), readable);
+  // 6. Return transform["readable"].
+  return readable_stream;
 }
 
 ScriptPromise ReadableStream::pipeTo(ScriptState* script_state,
-                                     ScriptValue destination,
+                                     WritableStream* destination,
                                      ExceptionState& exception_state) {
-  return pipeTo(script_state, destination,
-                ScriptValue(script_state->GetIsolate(),
-                            v8::Undefined(script_state->GetIsolate())),
+  return pipeTo(script_state, destination, StreamPipeOptions::Create(),
                 exception_state);
 }
 
 ScriptPromise ReadableStream::pipeTo(ScriptState* script_state,
-                                     ScriptValue destination_value,
-                                     ScriptValue options,
+                                     WritableStream* destination,
+                                     const StreamPipeOptions* options,
                                      ExceptionState& exception_state) {
   // https://streams.spec.whatwg.org/#rs-pipe-to
-  // 2. If ! IsWritableStream(dest) is false, return a promise rejected with a
-  //    TypeError exception.
-  // TODO(ricea): Do this in the IDL instead.
-  WritableStream* destination = V8WritableStream::ToImplWithTypeCheck(
-      script_state->GetIsolate(), destination_value.V8Value());
-
-  if (!destination) {
-    exception_state.ThrowTypeError("Illegal invocation");
-    return ScriptPromise();
-  }
-
-  // 3. Set preventClose to ! ToBoolean(preventClose), set preventAbort to !
-  //    ToBoolean(preventAbort), and set preventCancel to !
-  //    ToBoolean(preventCancel).
-  // 4. If signal is not undefined, and signal is not an instance of the
-  //    AbortSignal interface, return a promise rejected with a TypeError
-  //    exception.
-  auto* pipe_options =
-      MakeGarbageCollected<PipeOptions>(script_state, options, exception_state);
-  if (exception_state.HadException()) {
-    return ScriptPromise();
-  }
-
-  // 5. If ! IsReadableStreamLocked(this) is true, return a promise rejected
-  // with a TypeError exception.
+  // 1. If ! IsReadableStreamLocked(this) is true, return a promise rejected
+  //    with a TypeError exception.
   if (IsLocked(this)) {
     exception_state.ThrowTypeError("Cannot pipe a locked stream");
     return ScriptPromise();
   }
 
-  // 6. If ! IsWritableStreamLocked(dest) is true, return a promise rejected
-  // with a TypeError exception.
+  // 2. If ! IsWritableStreamLocked(destination) is true, return a promise
+  //    rejected with a TypeError exception.
   if (WritableStream::IsLocked(destination)) {
     exception_state.ThrowTypeError("Cannot pipe to a locked stream");
     return ScriptPromise();
   }
 
+  // 3. Let signal be options["signal"] if it exists, or undefined otherwise.
+  auto* pipe_options = MakeGarbageCollected<PipeOptions>(options);
+
+  // 4. Return ! ReadableStreamPipeTo(this, destination,
+  //    options["preventClose"], options["preventAbort"],
+  //    options["preventCancel"], signal).
   return PipeTo(script_state, this, destination, pipe_options);
 }
 
-ScriptValue ReadableStream::tee(ScriptState* script_state,
-                                ExceptionState& exception_state) {
+HeapVector<Member<ReadableStream>> ReadableStream::tee(
+    ScriptState* script_state,
+    ExceptionState& exception_state) {
   return CallTeeAndReturnBranchArray(script_state, this, exception_state);
 }
 
@@ -1539,26 +1433,25 @@ void ReadableStream::InitInternal(ScriptState* script_state,
 //
 // Readable stream abstract operations
 //
-ReadableStreamReader* ReadableStream::AcquireDefaultReader(
+ReadableStreamDefaultReader* ReadableStream::AcquireDefaultReader(
     ScriptState* script_state,
     ReadableStream* stream,
     bool for_author_code,
     ExceptionState& exception_state) {
   // https://streams.spec.whatwg.org/#acquire-readable-stream-reader
   // for_author_code is compulsory in this implementation
-  // 1. If forAuthorCode was not passed, set it to false.
 
-  // 2. Let reader be ? Construct(ReadableStreamDefaultReader, « stream »).
-  auto* reader = MakeGarbageCollected<ReadableStreamReader>(
+  // 1. Let reader by a new ReadableStreamDefaultReader.
+  // 2. Perform ? SetUpReadableStreamReader(reader, stream).
+  auto* reader = MakeGarbageCollected<ReadableStreamDefaultReader>(
       script_state, stream, exception_state);
   if (exception_state.HadException()) {
     return nullptr;
   }
 
-  // 3. Set reader.[[forAuthorCode]] to forAuthorCode.
   reader->for_author_code_ = for_author_code;
 
-  // 4. Return reader.
+  // 3. Return reader.
   return reader;
 }
 
@@ -1597,7 +1490,7 @@ void ReadableStream::LockAndDisturb(ScriptState* script_state) {
     return;
   }
 
-  ReadableStreamReader* reader = GetReaderNotForAuthorCode(script_state);
+  ReadableStreamGenericReader* reader = GetReaderNotForAuthorCode(script_state);
   DCHECK(reader);
 
   is_disturbed_ = true;
@@ -1703,7 +1596,10 @@ StreamPromiseResolver* ReadableStream::AddReadRequest(ScriptState* script_state,
                                                       ReadableStream* stream) {
   // https://streams.spec.whatwg.org/#readable-stream-add-read-request
   // 1. Assert: ! IsReadableStreamDefaultReader(stream.[[reader]]) is true.
-  DCHECK(stream->reader_);
+  ReadableStreamGenericReader* reader = stream->reader_;
+  ReadableStreamDefaultReader* default_reader =
+      static_cast<ReadableStreamDefaultReader*>(reader);
+  DCHECK(default_reader);
 
   // 2. Assert: stream.[[state]] is "readable".
   CHECK_EQ(stream->state_, kReadable);
@@ -1716,7 +1612,7 @@ StreamPromiseResolver* ReadableStream::AddReadRequest(ScriptState* script_state,
   // 4. Let readRequest be Record {[[promise]]: promise}.
   // 5. Append readRequest as the last element of stream.[[reader]].
   //  [[readRequests]].
-  stream->reader_->read_requests_.push_back(promise);
+  default_reader->read_requests_.push_back(promise);
 
   // 6. Return promise.
   return promise;
@@ -1777,7 +1673,7 @@ void ReadableStream::Close(ScriptState* script_state, ReadableStream* stream) {
   stream->state_ = kClosed;
 
   // 3. Let reader be stream.[[reader]].
-  ReadableStreamReader* reader = stream->reader_;
+  ReadableStreamGenericReader* reader = stream->reader_;
 
   // 4. If reader is undefined, return.
   if (!reader) {
@@ -1786,18 +1682,23 @@ void ReadableStream::Close(ScriptState* script_state, ReadableStream* stream) {
 
   // TODO(ricea): Support BYOB readers.
   // 5. If ! IsReadableStreamDefaultReader(reader) is true,
+  // TODO(nidhijaju): Add a check that the reader is a default reader once BYOB
+  // readers have been implemented, so the static_cast can be changed later on.
   //   a. Repeat for each readRequest that is an element of reader.
   //      [[readRequests]],
   HeapDeque<Member<StreamPromiseResolver>> requests;
-  requests.Swap(reader->read_requests_);
+  requests.Swap(
+      static_cast<ReadableStreamDefaultReader*>(reader)->read_requests_);
   for (StreamPromiseResolver* promise : requests) {
     //   i. Resolve readRequest.[[promise]] with !
     //      ReadableStreamCreateReadResult(undefined, true, reader.
     //      [[forAuthorCode]]).
-    promise->Resolve(script_state,
-                     CreateReadResult(script_state,
-                                      v8::Undefined(script_state->GetIsolate()),
-                                      true, reader->for_author_code_));
+    promise->Resolve(
+        script_state,
+        CreateReadResult(script_state,
+                         v8::Undefined(script_state->GetIsolate()), true,
+                         static_cast<ReadableStreamDefaultReader*>(reader)
+                             ->for_author_code_));
   }
 
   //   b. Set reader.[[readRequests]] to an empty List.
@@ -1868,7 +1769,7 @@ void ReadableStream::Error(ScriptState* script_state,
   stream->stored_error_.Set(isolate, e);
 
   // 5. Let reader be stream.[[reader]].
-  ReadableStreamReader* reader = stream->reader_;
+  ReadableStreamGenericReader* reader = stream->reader_;
 
   // 6. If reader is undefined, return.
   if (!reader) {
@@ -1879,13 +1780,15 @@ void ReadableStream::Error(ScriptState* script_state,
   // TODO(ricea): Support BYOB readers.
   //   a. Repeat for each readRequest that is an element of reader.
   //      [[readRequests]],
-  for (StreamPromiseResolver* promise : reader->read_requests_) {
+  ReadableStreamDefaultReader* default_reader =
+      static_cast<ReadableStreamDefaultReader*>(reader);
+  for (StreamPromiseResolver* promise : default_reader->read_requests_) {
     //   i. Reject readRequest.[[promise]] with e.
     promise->Reject(script_state, e);
   }
 
   //   b. Set reader.[[readRequests]] to a new empty List.
-  reader->read_requests_.clear();
+  default_reader->read_requests_.clear();
 
   // 9. Reject reader.[[closedPromise]] with e.
   reader->closed_promise_->Reject(script_state, e);
@@ -1900,84 +1803,42 @@ void ReadableStream::FulfillReadRequest(ScriptState* script_state,
                                         bool done) {
   // https://streams.spec.whatwg.org/#readable-stream-fulfill-read-request
   // 1. Let reader be stream.[[reader]].
-  ReadableStreamReader* reader = stream->reader_;
+  ReadableStreamGenericReader* reader = stream->reader_;
+  ReadableStreamDefaultReader* default_reader =
+      static_cast<ReadableStreamDefaultReader*>(reader);
 
   // 2. Let readRequest be the first element of reader.[[readRequests]].
-  StreamPromiseResolver* read_request = reader->read_requests_.front();
+  StreamPromiseResolver* read_request = default_reader->read_requests_.front();
 
   // 3. Remove readIntoRequest from reader.[[readIntoRequests]], shifting all
   //    other elements downward (so that the second becomes the first, and so
   //    on).
-  reader->read_requests_.pop_front();
+  default_reader->read_requests_.pop_front();
 
   // 4. Resolve readIntoRequest.[[promise]] with !
   //    ReadableStreamCreateReadResult(chunk, done, reader.[[forAuthorCode]]).
-  read_request->Resolve(
-      script_state, ReadableStream::CreateReadResult(script_state, chunk, done,
-                                                     reader->for_author_code_));
+  read_request->Resolve(script_state, ReadableStream::CreateReadResult(
+                                          script_state, chunk, done,
+                                          default_reader->for_author_code_));
 }
 
 int ReadableStream::GetNumReadRequests(const ReadableStream* stream) {
   // https://streams.spec.whatwg.org/#readable-stream-get-num-read-requests
   // 1. Return the number of elements in stream.[[reader]].[[readRequests]].
-  return stream->reader_->read_requests_.size();
+  ReadableStreamGenericReader* reader = stream->reader_;
+  return static_cast<ReadableStreamDefaultReader*>(reader)
+      ->read_requests_.size();
 }
 
 //
 // TODO(ricea): Functions for transferable streams.
 //
 
-void ReadableStream::GetReaderValidateOptions(ScriptState* script_state,
-                                              ScriptValue options,
-                                              ExceptionState& exception_state) {
-  // https://streams.spec.whatwg.org/#rs-get-reader
-  // The unpacking of |options| is indicated as part of the signature of the
-  // function in the standard.
-  v8::TryCatch block(script_state->GetIsolate());
-  v8::Local<v8::Value> mode;
-  v8::Local<v8::String> mode_string;
-  v8::Local<v8::Context> context = script_state->GetContext();
-  if (options.V8Value()->IsUndefined()) {
-    mode = v8::Undefined(script_state->GetIsolate());
-  } else {
-    v8::Local<v8::Object> v8_options;
-    if (!options.V8Value()->ToObject(context).ToLocal(&v8_options)) {
-      exception_state.RethrowV8Exception(block.Exception());
-      return;
-    }
-    if (!v8_options->Get(context, V8String(script_state->GetIsolate(), "mode"))
-             .ToLocal(&mode)) {
-      exception_state.RethrowV8Exception(block.Exception());
-      return;
-    }
-  }
-
-  // 3. Set mode to ? ToString(mode).
-  if (!mode->ToString(context).ToLocal(&mode_string)) {
-    exception_state.RethrowV8Exception(block.Exception());
-    return;
-  }
-
-  // 4. If mode is "byob", return ? AcquireReadableStreamBYOBReader(this, true).
-  if (ToCoreString(mode_string) == "byob") {
-    // TODO(ricea): Support BYOB readers.
-    exception_state.ThrowTypeError("invalid mode");
-    return;
-  }
-
-  if (!mode->IsUndefined()) {
-    // 5. Throw a RangeError exception.
-    exception_state.ThrowRangeError("invalid mode");
-    return;
-  }
-}
-
-ScriptValue ReadableStream::CallTeeAndReturnBranchArray(
+HeapVector<Member<ReadableStream>> ReadableStream::CallTeeAndReturnBranchArray(
     ScriptState* script_state,
     ReadableStream* readable,
     ExceptionState& exception_state) {
   // https://streams.spec.whatwg.org/#rs-tee
-  v8::Isolate* isolate = script_state->GetIsolate();
   ReadableStream* branch1 = nullptr;
   ReadableStream* branch2 = nullptr;
 
@@ -1985,35 +1846,12 @@ ScriptValue ReadableStream::CallTeeAndReturnBranchArray(
   readable->Tee(script_state, &branch1, &branch2, exception_state);
 
   if (!branch1 || !branch2)
-    return ScriptValue();
+    return HeapVector<Member<ReadableStream>>();
 
   DCHECK(!exception_state.HadException());
 
   // 3. Return ! CreateArrayFromList(branches).
-  v8::TryCatch block(isolate);
-  v8::Local<v8::Context> context = script_state->GetContext();
-  v8::Local<v8::Array> array = v8::Array::New(isolate, 2);
-  v8::Local<v8::Object> global = context->Global();
-
-  v8::Local<v8::Value> v8_branch1 = ToV8(branch1, global, isolate);
-  if (v8_branch1.IsEmpty()) {
-    exception_state.RethrowV8Exception(block.Exception());
-    return ScriptValue();
-  }
-  v8::Local<v8::Value> v8_branch2 = ToV8(branch2, global, isolate);
-  if (v8_branch1.IsEmpty()) {
-    exception_state.RethrowV8Exception(block.Exception());
-    return ScriptValue();
-  }
-  if (array->Set(context, V8String(isolate, "0"), v8_branch1).IsNothing()) {
-    exception_state.RethrowV8Exception(block.Exception());
-    return ScriptValue();
-  }
-  if (array->Set(context, V8String(isolate, "1"), v8_branch2).IsNothing()) {
-    exception_state.RethrowV8Exception(block.Exception());
-    return ScriptValue();
-  }
-  return ScriptValue(script_state->GetIsolate(), array);
+  return HeapVector<Member<ReadableStream>>({branch1, branch2});
 }
 
 }  // namespace blink

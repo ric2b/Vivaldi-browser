@@ -24,8 +24,8 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/web_contents.h"
 #include "net/http/http_util.h"
-#include "third_party/blink/public/common/web_preferences/web_preferences.h"
-#include "third_party/blink/public/mojom/renderer_preferences.mojom.h"
+#include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
+#include "third_party/blink/public/mojom/webpreferences/web_preferences.mojom.h"
 
 using base::android::ConvertJavaStringToUTF16;
 using base::android::ConvertUTF8ToJavaString;
@@ -45,7 +45,6 @@ void PopulateFixedWebPreferences(WebPreferences* web_prefs) {
   web_prefs->disable_features_depending_on_viz =
       !::features::IsUsingVizForWebView();
   web_prefs->disable_accelerated_small_canvases = true;
-  web_prefs->reenable_web_components_v0 = true;
   // WebView has historically not adjusted font scale for text autosizing.
   web_prefs->device_scale_adjustment = 1.0;
 }
@@ -239,8 +238,7 @@ void AwSettings::UpdateRendererPreferencesLocked(
     return;
 
   bool update_prefs = false;
-  blink::mojom::RendererPreferences* prefs =
-      web_contents()->GetMutableRendererPrefs();
+  blink::RendererPreferences* prefs = web_contents()->GetMutableRendererPrefs();
 
   if (!renderer_prefs_initialized_) {
     content::UpdateFontRendererPreferencesFromSystemSettings(prefs);
@@ -438,8 +436,8 @@ void AwSettings::PopulateWebPreferencesLocked(JNIEnv* env,
 
   web_prefs->autoplay_policy =
       Java_AwSettings_getMediaPlaybackRequiresUserGestureLocked(env, obj)
-          ? blink::web_pref::AutoplayPolicy::kUserGestureRequired
-          : blink::web_pref::AutoplayPolicy::kNoUserGestureRequired;
+          ? blink::mojom::AutoplayPolicy::kUserGestureRequired
+          : blink::mojom::AutoplayPolicy::kNoUserGestureRequired;
 
   ScopedJavaLocalRef<jstring> url =
       Java_AwSettings_getDefaultVideoPosterURLLocked(env, obj);
@@ -525,18 +523,20 @@ void AwSettings::PopulateWebPreferencesLocked(JNIEnv* env,
       break;
     }
   }
-  web_prefs->preferred_color_scheme = is_dark_mode_
-                                          ? blink::PreferredColorScheme::kDark
-                                          : blink::PreferredColorScheme::kLight;
+  web_prefs->preferred_color_scheme =
+      is_dark_mode_ ? blink::mojom::PreferredColorScheme::kDark
+                    : blink::mojom::PreferredColorScheme::kLight;
   if (is_dark_mode_) {
     switch (Java_AwSettings_getForceDarkBehaviorLocked(env, obj)) {
       case ForceDarkBehavior::FORCE_DARK_ONLY: {
-        web_prefs->preferred_color_scheme = blink::PreferredColorScheme::kLight;
+        web_prefs->preferred_color_scheme =
+            blink::mojom::PreferredColorScheme::kLight;
         web_prefs->force_dark_mode_enabled = true;
         break;
       }
       case ForceDarkBehavior::MEDIA_QUERY_ONLY: {
-        web_prefs->preferred_color_scheme = blink::PreferredColorScheme::kDark;
+        web_prefs->preferred_color_scheme =
+            blink::mojom::PreferredColorScheme::kDark;
         web_prefs->force_dark_mode_enabled = false;
         break;
       }
@@ -547,13 +547,15 @@ void AwSettings::PopulateWebPreferencesLocked(JNIEnv* env,
       // dark so that dark themed content will be preferred over force
       // darkening.
       case ForceDarkBehavior::PREFER_MEDIA_QUERY_OVER_FORCE_DARK: {
-        web_prefs->preferred_color_scheme = blink::PreferredColorScheme::kDark;
+        web_prefs->preferred_color_scheme =
+            blink::mojom::PreferredColorScheme::kDark;
         web_prefs->force_dark_mode_enabled = true;
         break;
       }
     }
   } else {
-    web_prefs->preferred_color_scheme = blink::PreferredColorScheme::kLight;
+    web_prefs->preferred_color_scheme =
+        blink::mojom::PreferredColorScheme::kLight;
     web_prefs->force_dark_mode_enabled = false;
   }
 }

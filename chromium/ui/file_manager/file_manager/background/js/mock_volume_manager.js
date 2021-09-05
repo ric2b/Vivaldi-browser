@@ -2,12 +2,30 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// clang-format off
+// #import {EntryLocationImpl} from './entry_location_impl.m.js';
+// #import {VolumeInfoImpl} from './volume_info_impl.m.js';
+// #import {VolumeInfoListImpl} from './volume_info_list_impl.m.js';
+// #import * as wrappedVolumeManagerFactory from './volume_manager_factory.m.js'; const {volumeManagerFactory} = wrappedVolumeManagerFactory;
+// #import {VolumeManagerImpl} from './volume_manager_impl.m.js';
+// #import * as wrappedVolumeManagerCommon from '../../../base/js/volume_manager_types.m.js'; const {VolumeManagerCommon} = wrappedVolumeManagerCommon;
+// #import {MockFileSystem} from '../../common/js/mock_entry.m.js';
+// #import * as wrappedUtil from '../../common/js/util.m.js'; const {util} = wrappedUtil;
+// #import {str} from '../../common/js/util.m.js';
+// #import {EntryLocation} from '../../../externs/entry_location.m.js';
+// #import {FilesAppEntry, FakeEntry} from '../../../externs/files_app_entry_interfaces.m.js';
+// #import {VolumeInfo} from '../../../externs/volume_info.m.js';
+// #import {VolumeInfoList} from '../../../externs/volume_info_list.m.js';
+// #import {VolumeManager} from '../../../externs/volume_manager.m.js';
+// #import {assert} from 'chrome://resources/js/assert.m.js';
+// clang-format on
+
 /**
  * Mock class for VolumeManager.
  * @final
  * @implements {VolumeManager}
  */
-class MockVolumeManager {
+/* #export */ class MockVolumeManager {
   constructor() {
     /** @const {!VolumeInfoList} */
     this.volumeInfoList = new VolumeInfoListImpl();
@@ -49,7 +67,7 @@ class MockVolumeManager {
         VolumeManagerCommon.RootType.DRIVE, str('DRIVE_DIRECTORY_LABEL'));
     /** @type {MockFileSystem} */ (drive.fileSystem)
         .populate(Object.values(driveFs.entries));
-    window.webkitResolveLocalFileSystmeURL = orig;
+    window.webkitResolveLocalFileSystemURL = orig;
 
     // Create Downloads.
     this.createVolumeInfo(
@@ -80,12 +98,13 @@ class MockVolumeManager {
    * @param {string} volumeId
    * @param {string} label
    * @param {string=} providerId
+   * @param {string=} remoteMountPath
    *
    * @return {!VolumeInfo}
    */
-  createVolumeInfo(type, volumeId, label, providerId) {
+  createVolumeInfo(type, volumeId, label, providerId, remoteMountPath) {
     const volumeInfo = MockVolumeManager.createMockVolumeInfo(
-        type, volumeId, label, undefined, providerId);
+        type, volumeId, label, undefined, providerId, remoteMountPath);
     this.volumeInfoList.add(volumeInfo);
     return volumeInfo;
   }
@@ -129,8 +148,8 @@ class MockVolumeManager {
     }
 
     const volumeInfo = this.getVolumeInfo(entry);
-    const rootType =
-        VolumeManagerCommon.getRootTypeFromVolumeType(volumeInfo.volumeType);
+    const rootType = VolumeManagerCommon.getRootTypeFromVolumeType(
+        assert(volumeInfo.volumeType));
     const isRootEntry = util.isSameEntry(entry, volumeInfo.fileSystem.root);
     return new EntryLocationImpl(volumeInfo, rootType, isRootEntry, false);
   }
@@ -165,9 +184,11 @@ class MockVolumeManager {
    * @param {string=} label Label.
    * @param {string=} devicePath Device path.
    * @param {string=} providerId Provider id.
+   * @param {string=} remoteMountPath Remote mount path.
    * @return {!VolumeInfo} Created mock VolumeInfo.
    */
-  static createMockVolumeInfo(type, volumeId, label, devicePath, providerId) {
+  static createMockVolumeInfo(
+      type, volumeId, label, devicePath, providerId, remoteMountPath) {
     const fileSystem = new MockFileSystem(volumeId, 'filesystem:' + volumeId);
 
     // If there's no label set it to volumeId to make it shorter to write
@@ -188,7 +209,8 @@ class MockVolumeManager {
         VolumeManagerCommon.Source.NETWORK,         // source
         VolumeManagerCommon.FileSystemType.UNKNOWN,  // diskFileSystemType
         {},                                          // iconSet
-        '');                                         // driveLabel
+        '',                                          // driveLabel
+        remoteMountPath);                            // remoteMountPath
 
     return volumeInfo;
   }

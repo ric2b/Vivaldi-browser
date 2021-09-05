@@ -25,6 +25,8 @@ import androidx.test.filters.LargeTest;
 import androidx.test.filters.MediumTest;
 import androidx.test.filters.SmallTest;
 
+import com.google.common.collect.ImmutableMap;
+
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -42,6 +44,7 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
+import org.chromium.components.viz.common.VizFeatures;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.common.ContentSwitches;
 import org.chromium.content_public.common.ContentUrlConstants;
@@ -537,10 +540,8 @@ public class AwContentsTest {
 
             url = testServer.getURL("/echoheader?Referer");
 
-            extraHeaders.clear();
-            extraHeaders.put("Referer", "http://www.example.com/");
-            mActivityTestRule.loadUrlSync(
-                    awContents, mContentsClient.getOnPageFinishedHelper(), url, extraHeaders);
+            mActivityTestRule.loadUrlSync(awContents, mContentsClient.getOnPageFinishedHelper(),
+                    url, ImmutableMap.of("Referer", "http://www.example.com/"));
 
             String referer = mActivityTestRule.getJavaScriptResultBodyTextContent(
                     awContents, mContentsClient);
@@ -808,6 +809,40 @@ public class AwContentsTest {
         Assert.assertEquals(0, consoleHelper.getMessages().size());
     }
 
+    /**
+     * Regression test for https://crbug.com/1145717. Load a URL that requires fixing and verify
+     * that the legacy behavior is preserved (i.e. that the URL is fixed + that no crashes happen in
+     * the product).
+     *
+     * The main test verification is that there are no crashes.  In particular, this test tries
+     * to verify that the `loadUrl` call above won't trigger:
+     * - NOTREACHED and DwoC in content::NavigationRequest's constructor for about: scheme
+     *   navigations that aren't about:blank nor about:srcdoc
+     * - CHECK in content::NavigationRequest::GetOriginForURLLoaderFactory caused by the
+     *   mismatch between the result of this method and the "about:" process lock.
+     */
+    @Test
+    @LargeTest
+    @Feature({"AndroidWebView"})
+    public void testLoadUrlAboutVersion() throws Throwable {
+        AwTestContainerView testView =
+                mActivityTestRule.createAwTestContainerViewOnMainSync(mContentsClient);
+        final AwContents awContents = testView.getAwContents();
+        mActivityTestRule.runOnUiThread(() -> {
+            // "about:safe-browsing" will be rewritten by
+            // components.url_formatter.UrlFormatter.fixupUrl into
+            // "chrome://safe-browsing/".
+            //
+            // Note that chrome://safe-browsing/ is one of very few chrome://... URLs that work
+            // in Android WebView.  In particular, chrome://version/ wouldn't work.
+            awContents.loadUrl("about:safe-browsing");
+        });
+
+        mContentsClient.getOnPageFinishedHelper().waitForCallback(
+                0, 1, WAIT_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        Assert.assertEquals("chrome://safe-browsing/", awContents.getLastCommittedUrl());
+    }
+
     private void doHardwareRenderingSmokeTest() throws Throwable {
         AwTestContainerView testView =
                 mActivityTestRule.createAwTestContainerViewOnMainSync(mContentsClient);
@@ -877,7 +912,8 @@ public class AwContentsTest {
     @Test
     @Feature({"AndroidWebView"})
     @MediumTest
-    @CommandLineFlags.Add({"enable-features=UseSkiaRenderer", "disable-oop-rasterization"})
+    @CommandLineFlags.
+    Add({"enable-features=" + VizFeatures.USE_SKIA_RENDERER, "disable-oop-rasterization"})
     public void testHardwareRenderingSmokeTestSkiaRenderer() throws Throwable {
         doHardwareRenderingSmokeTest();
     }

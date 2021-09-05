@@ -24,6 +24,9 @@ import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.prefs.PrefService;
 import org.chromium.components.user_prefs.UserPrefs;
 
+// Vivaldi
+import org.vivaldi.browser.preferences.VivaldiPreferences;
+
 /**
  * Fragment containing Download settings.
  */
@@ -40,6 +43,9 @@ public class DownloadSettings
     private ChromeSwitchPreference mDownloadLaterPromptEnabledPref;
     private ChromeSwitchPreference mLocationPromptEnabledPref;
     private ChromeSwitchPreference mPrefetchingEnabled;
+    //Vivaldi
+    private static final String PREF_EXTERNAL_DOWNLOAD_MANAGER = "external_download_manager";
+    private Preference mExternalDownloadManagerPref;
 
     @Override
     public void onCreatePreferences(@Nullable Bundle savedInstanceState, String s) {
@@ -69,6 +75,9 @@ public class DownloadSettings
         } else {
             getPreferenceScreen().removePreference(findPreference(PREF_PREFETCHING_ENABLED));
         }
+
+        // Vivaldi
+        mExternalDownloadManagerPref = findPreference(PREF_EXTERNAL_DOWNLOAD_MANAGER);
     }
 
     @Override
@@ -110,6 +119,13 @@ public class DownloadSettings
             mPrefetchingEnabled.setChecked(PrefetchConfiguration.isPrefetchingEnabledInSettings(
                     ProfileKey.getLastUsedRegularProfileKey()));
             updatePrefetchSummary();
+        }
+
+        // Vivaldi - update external download Manager summary
+        if (mExternalDownloadManagerPref != null) {
+            mExternalDownloadManagerPref.setSummary(
+                    VivaldiPreferences.getSharedPreferencesManager().readString(
+                            VivaldiPreferences.EXTERNAL_DOWNLOAD_MANAGER_APPLICATION, "Off"));
         }
     }
 

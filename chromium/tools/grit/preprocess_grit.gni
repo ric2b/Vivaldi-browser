@@ -2,10 +2,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/python.gni")
 import("//tools/grit/grit_defines.gni")
 
 template("preprocess_grit") {
-  action(target_name) {
+  # TODO(crbug.com/1112471): Get this to run cleanly under Python 3.
+  python2_action(target_name) {
     script = "//tools/grit/preprocess_grit.py"
 
     if (defined(invoker.deps)) {
@@ -26,6 +28,15 @@ template("preprocess_grit") {
              rebase_path(invoker.out_folder, root_build_dir),
              "--in-files",
            ] + invoker.in_files + grit_defines
+
+    if (defined(invoker.defines)) {
+      foreach(define, invoker.defines) {
+        args += [
+          "-D",
+          define,
+        ]
+      }
+    }
 
     if (defined(invoker.out_manifest)) {
       args += [

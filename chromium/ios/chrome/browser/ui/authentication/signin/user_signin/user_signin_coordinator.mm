@@ -7,6 +7,7 @@
 
 #import "base/mac/foundation_util.h"
 #import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/signin/authentication_service.h"
 #import "ios/chrome/browser/signin/authentication_service_factory.h"
 #import "ios/chrome/browser/signin/identity_manager_factory.h"
 #import "ios/chrome/browser/sync/consent_auditor_factory.h"
@@ -100,6 +101,14 @@ const CGFloat kFadeOutAnimationDuration = 0.16f;
 #pragma mark - SigninCoordinator
 
 - (void)start {
+  AuthenticationService* authenticationService =
+      AuthenticationServiceFactory::GetForBrowserState(
+          self.browser->GetBrowserState());
+  authenticationService->WaitUntilCacheIsPopulated();
+  // The user should be signed out before triggering sign-in or upgrade states.
+  // Users are allowed to be signed-in during FirstRun for testing purposes.
+  DCHECK(!authenticationService->IsAuthenticated() ||
+         self.signinIntent == UserSigninIntentFirstRun);
   [super start];
   self.viewController = [[UserSigninViewController alloc] init];
   self.viewController.delegate = self;
@@ -493,7 +502,7 @@ const CGFloat kFadeOutAnimationDuration = 0.16f;
 
 // Returns user policy used to handle existing data when switching signed in
 // account.
-- (ShouldClearData)getShouldClearData {
+- (ShouldClearData)shouldClearData {
   switch (self.signinIntent) {
     case UserSigninIntentFirstRun: {
       return SHOULD_CLEAR_DATA_MERGE_DATA;
@@ -512,7 +521,7 @@ const CGFloat kFadeOutAnimationDuration = 0.16f;
   AuthenticationFlow* authenticationFlow = [[AuthenticationFlow alloc]
                initWithBrowser:self.browser
                       identity:self.unifiedConsentCoordinator.selectedIdentity
-               shouldClearData:[self getShouldClearData]
+               shouldClearData:[self shouldClearData]
               postSignInAction:POST_SIGNIN_ACTION_NONE
       presentingViewController:self.viewController];
   authenticationFlow.dispatcher = HandlerForProtocol(

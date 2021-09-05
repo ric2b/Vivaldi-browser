@@ -23,7 +23,6 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
-#include "base/debug/alias.h"
 #include "base/file_version_info.h"
 #include "base/files/file_path.h"
 #include "base/location.h"
@@ -577,7 +576,7 @@ DXVAVideoDecodeAccelerator::DXVAVideoDecodeAccelerator(
     const gpu::GpuDriverBugWorkarounds& workarounds,
     const gpu::GpuPreferences& gpu_preferences,
     MediaLog* media_log)
-    : client_(NULL),
+    : client_(nullptr),
       dev_manager_reset_token_(0),
       dx11_dev_manager_reset_token_(0),
       egl_config_(NULL),
@@ -623,7 +622,7 @@ DXVAVideoDecodeAccelerator::DXVAVideoDecodeAccelerator(
 }
 
 DXVAVideoDecodeAccelerator::~DXVAVideoDecodeAccelerator() {
-  client_ = NULL;
+  client_ = nullptr;
 }
 
 bool DXVAVideoDecodeAccelerator::Initialize(const Config& config,
@@ -674,10 +673,17 @@ bool DXVAVideoDecodeAccelerator::Initialize(const Config& config,
     decoder_output_p010_or_p016_ = true;
   }
 
-  // Unfortunately, the profile is currently unreliable for
-  // VP9 (https://crbug.com/592074) so also try to use fp16 if HDR is on.
-  if (config.target_color_space.IsHDR()) {
+  // While we can rely on the profile to indicate HBD status for other codecs,
+  // AV1 may have both 8-bit SDR and 10-bit HDR in the same profile, so also
+  // check the color space to determine if HDR should be used. It's possible for
+  // HDR 8-bit content to be created too, it's just rare.
+  if (config.container_color_space.ToGfxColorSpace().IsHDR()) {
     use_fp16_ = true;
+    if (config.profile == AV1PROFILE_PROFILE_PRO ||
+        config.profile == AV1PROFILE_PROFILE_MAIN ||
+        config.profile == AV1PROFILE_PROFILE_HIGH) {
+      decoder_output_p010_or_p016_ = true;
+    }
   }
 
   // Not all versions of Windows 7 and later include Media Foundation DLLs.
@@ -756,6 +762,7 @@ bool DXVAVideoDecodeAccelerator::Initialize(const Config& config,
   if (codec_ == kCodecVP9)
     config_change_detector_.reset(new VP9ConfigChangeDetector());
 
+  processing_config_changed_ = false;
   SetState(kNormal);
 
   UMA_HISTOGRAM_ENUMERATION("Media.DXVAVDA.PictureBufferMechanism",
@@ -1954,7 +1961,7 @@ void DXVAVideoDecodeAccelerator::StopOnError(
 
   if (client_)
     client_->NotifyError(error);
-  client_ = NULL;
+  client_ = nullptr;
 
 #ifdef _DEBUG
   if (using_debug_device_) {
@@ -1990,16 +1997,34 @@ void DXVAVideoDecodeAccelerator::StopOnError(
   }
 }
 
-void DXVAVideoDecodeAccelerator::Invalidate() {
+void DXVAVideoDecodeAccelerator::Invalidate(bool for_config_change) {
+  DCHECK(main_thread_task_runner_->BelongsToCurrentThread());
+
   if (GetState() == kUninitialized)
     return;
 
   // Best effort to make the GL context current.
-  make_context_current_cb_.Run();
+  if (!make_context_current_cb_.Run()) {
+    // TODO(crbug.com/1139489): This may not be the right fix.
+    for (auto& kv : output_picture_buffers_) {
+      if (auto* fence = kv.second->reuse_fence())
+        fence->Invalidate();
+    }
+    for (auto& kv : stale_output_picture_buffers_) {
+      if (auto* fence = kv.second->reuse_fence())
+        fence->Invalidate();
+    }
+
+    // Since this is called by StopOnError() we can't call it directly.
+    DLOG(ERROR) << "Failed to make context current.";
+    for_config_change = false;
+    if (client_) {
+      client_->NotifyError(PLATFORM_FAILURE);
+      client_ = nullptr;
+    }
+  }
 
   StopDecoderThread();
-  weak_this_factory_.InvalidateWeakPtrs();
-  weak_ptr_ = weak_this_factory_.GetWeakPtr();
   pending_output_samples_.clear();
   decoder_.Reset();
   config_change_detector_.reset();
@@ -2009,7 +2034,10 @@ void DXVAVideoDecodeAccelerator::Invalidate() {
   // output picture buffers may need to be recreated in case the video
   // resolution changes. We already handle that in the
   // HandleResolutionChanged() function.
-  if (GetState() != kConfigChange) {
+  if (!for_config_change) {
+    weak_this_factory_.InvalidateWeakPtrs();
+    weak_ptr_ = weak_this_factory_.GetWeakPtr();
+
     output_picture_buffers_.clear();
     stale_output_picture_buffers_.clear();
     // We want to continue processing pending input after detecting a config
@@ -2039,29 +2067,6 @@ void DXVAVideoDecodeAccelerator::Invalidate() {
 }
 
 void DXVAVideoDecodeAccelerator::StopDecoderThread() {
-  // Try to determine what, if any exception last happened before a hang. See
-  // http://crbug.com/613701
-  uint64_t last_process_output_time = g_last_process_output_time;
-  HRESULT last_device_removed_reason = g_last_device_removed_reason;
-  LARGE_INTEGER perf_frequency;
-  ::QueryPerformanceFrequency(&perf_frequency);
-  uint32_t output_array_size = output_array_size_;
-  size_t sample_count;
-  {
-    base::AutoLock lock(decoder_lock_);
-    sample_count = pending_output_samples_.size();
-  }
-  size_t stale_output_picture_buffers_size =
-      stale_output_picture_buffers_.size();
-  PictureBufferMechanism mechanism = GetPictureBufferMechanism();
-
-  base::debug::Alias(&last_process_output_time);
-  base::debug::Alias(&last_device_removed_reason);
-  base::debug::Alias(&perf_frequency.QuadPart);
-  base::debug::Alias(&output_array_size);
-  base::debug::Alias(&sample_count);
-  base::debug::Alias(&stale_output_picture_buffers_size);
-  base::debug::Alias(&mechanism);
   decoder_thread_.Stop();
 }
 
@@ -2207,7 +2212,6 @@ void DXVAVideoDecodeAccelerator::FlushInternal() {
         FROM_HERE, base::BindOnce(&DXVAVideoDecodeAccelerator::NotifyFlushDone,
                                   weak_ptr_));
   } else {
-    processing_config_changed_ = false;
     main_thread_task_runner_->PostTask(
         FROM_HERE, base::BindOnce(&DXVAVideoDecodeAccelerator::ConfigChanged,
                                   weak_ptr_, config_));
@@ -2224,7 +2228,8 @@ void DXVAVideoDecodeAccelerator::DecodeInternal(
   if (GetState() == kUninitialized)
     return;
 
-  if (OutputSamplesPresent() || !pending_input_buffers_.empty()) {
+  if (OutputSamplesPresent() || !pending_input_buffers_.empty() ||
+      processing_config_changed_) {
     pending_input_buffers_.push_back(sample);
     return;
   }
@@ -2894,11 +2899,9 @@ bool DXVAVideoDecodeAccelerator::InitializeID3D11VideoProcessor(
   // Since the video processor doesn't support HLG, lets just do the YUV->RGB
   // conversion and let the output color space be HLG. This won't work well
   // unless color management is on, but if color management is off we don't
-  // support HLG anyways.
-  if (color_space == gfx::ColorSpace(gfx::ColorSpace::PrimaryID::BT2020,
-                                     gfx::ColorSpace::TransferID::ARIB_STD_B67,
-                                     gfx::ColorSpace::MatrixID::BT709,
-                                     gfx::ColorSpace::RangeID::LIMITED)) {
+  // support HLG anyways. See https://crbug.com/1144260#c6.
+  if (color_space.GetTransferID() ==
+      gfx::ColorSpace::TransferID::ARIB_STD_B67) {
     video_context1->VideoProcessorSetStreamColorSpace1(
         d3d11_processor_.Get(), 0,
         DXGI_COLOR_SPACE_YCBCR_STUDIO_G2084_LEFT_P2020);
@@ -2953,7 +2956,7 @@ void DXVAVideoDecodeAccelerator::SetDX11ProcessorHDRMetadataIfNeeded() {
   // stream metadata.  For the Radeon 5700, at least, this seems to do
   // something sane.  Not setting the metadata crashes intermittently.
   if (config_.hdr_metadata || use_empty_video_hdr_metadata_) {
-    gl::HDRMetadata stream_metadata;
+    gfx::HDRMetadata stream_metadata;
     if (config_.hdr_metadata)
       stream_metadata = *config_.hdr_metadata;
 
@@ -3058,9 +3061,7 @@ HRESULT DXVAVideoDecodeAccelerator::CheckConfigChanged(IMFSample* sample,
 
 void DXVAVideoDecodeAccelerator::ConfigChanged(const Config& config) {
   DCHECK(main_thread_task_runner_->BelongsToCurrentThread());
-
-  SetState(kConfigChange);
-  Invalidate();
+  Invalidate(/*for_config_change=*/true);
   Initialize(config_, client_);
   decoder_thread_task_runner_->PostTask(
       FROM_HERE,

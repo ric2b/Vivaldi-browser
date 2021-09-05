@@ -22,28 +22,58 @@ TEST(CableV2Encoding, TunnelServerURLs) {
       tunnelserver::EncodeDomain("abcd", tunnelserver::TLD::NET);
   uint8_t tunnel_id[16] = {0};
   const GURL url = tunnelserver::GetNewTunnelURL(encoded, tunnel_id);
-  EXPECT_TRUE(url.spec().find("//abcd.net/") != std::string::npos) << url;
+  EXPECT_TRUE(url.spec().find("//cable.abcd.net/") != std::string::npos) << url;
 }
 
-TEST(CableV2Encoding, EIDs) {
+TEST(CableV2Encoding, EIDToFromComponents) {
   eid::Components components;
   components.tunnel_server_domain = 0x010203;
   components.routing_id = {9, 10, 11};
   crypto::RandBytes(components.nonce);
 
-  CableEidArray eid = eid::FromComponents(components);
-  EXPECT_TRUE(eid::IsValid(eid));
-  eid::Components components2 = eid::ToComponents(eid);
+  const CableEidArray eid = eid::FromComponents(components);
+  const eid::Components components2 = eid::ToComponents(eid);
 
   EXPECT_EQ(components.routing_id, components2.routing_id);
   EXPECT_EQ(components.tunnel_server_domain, components2.tunnel_server_domain);
   EXPECT_EQ(components.nonce, components2.nonce);
+}
 
-  for (size_t i = 0; i < eid.size(); i++) {
-    eid[i] ^= 0xff;
-  }
+TEST(CableV2Encoding, EIDEncrypt) {
+  eid::Components components;
+  components.tunnel_server_domain = 0x010203;
+  components.routing_id = {9, 10, 11};
+  crypto::RandBytes(components.nonce);
+  const CableEidArray eid = eid::FromComponents(components);
 
-  EXPECT_FALSE(eid::IsValid(eid));
+  uint8_t key[kEIDKeySize];
+  crypto::RandBytes(key);
+  std::array<uint8_t, kAdvertSize> advert = eid::Encrypt(eid, key);
+
+  const base::Optional<CableEidArray> eid2 = eid::Decrypt(advert, key);
+  ASSERT_TRUE(eid2.has_value());
+  EXPECT_TRUE(memcmp(eid.data(), eid2->data(), eid.size()) == 0);
+
+  advert[0] ^= 1;
+  EXPECT_FALSE(eid::Decrypt(advert, key).has_value());
+}
+
+TEST(CableV2Encoding, QRs) {
+  std::array<uint8_t, kQRKeySize> qr_key;
+  crypto::RandBytes(qr_key);
+  std::string url = qr::Encode(qr_key);
+  EXPECT_LE(url.size(), 81u) << "QR code doesn't fit into version five";
+  const base::Optional<qr::Components> decoded = qr::Parse(url);
+  ASSERT_TRUE(decoded.has_value());
+  static_assert(EXTENT(qr_key) >= EXTENT(decoded->secret), "");
+  EXPECT_EQ(memcmp(decoded->secret.data(),
+                   &qr_key[qr_key.size() - decoded->secret.size()],
+                   decoded->secret.size()),
+            0);
+
+  url[0] ^= 4;
+  EXPECT_FALSE(qr::Parse(url));
+  EXPECT_FALSE(qr::Parse("nonsense"));
 }
 
 TEST(CableV2Encoding, PaddedCBOR) {
@@ -116,7 +146,6 @@ class CableV2HandshakeTest : public ::testing::Test {
  public:
   CableV2HandshakeTest() {
     std::fill(psk_.begin(), psk_.end(), 0);
-    std::fill(eid_.begin(), eid_.end(), 1);
     std::fill(identity_seed_.begin(), identity_seed_.end(), 2);
 
     bssl::UniquePtr<EC_GROUP> group(
@@ -132,7 +161,6 @@ class CableV2HandshakeTest : public ::testing::Test {
 
  protected:
   std::array<uint8_t, 32> psk_;
-  CableEidArray eid_;
   bssl::UniquePtr<EC_KEY> identity_key_;
   std::array<uint8_t, kP256X962Length> identity_public_;
   std::array<uint8_t, kQRSeedSize> identity_seed_;
@@ -174,11 +202,10 @@ TEST_F(CableV2HandshakeTest, QRHandshake) {
     HandshakeInitiator initiator(use_correct_key ? psk_ : wrong_psk,
                                  identity_public_,
                                  /*local_identity=*/nullptr);
-    std::vector<uint8_t> message =
-        initiator.BuildInitialMessage(eid_, kGetInfoBytes);
+    std::vector<uint8_t> message = initiator.BuildInitialMessage(kGetInfoBytes);
     std::vector<uint8_t> response;
     base::Optional<ResponderResult> responder_result(RespondToHandshake(
-        psk_, eid_, identity_seed_,
+        psk_, identity_seed_,
         /*peer_identity=*/base::nullopt, message, &response));
     ASSERT_EQ(responder_result.has_value(), use_correct_key);
     if (!use_correct_key) {
@@ -211,11 +238,10 @@ TEST_F(CableV2HandshakeTest, PairedHandshake) {
     HandshakeInitiator initiator(psk_,
                                  /*peer_identity=*/base::nullopt,
                                  bssl::UniquePtr<EC_KEY>(key));
-    std::vector<uint8_t> message =
-        initiator.BuildInitialMessage(eid_, kGetInfoBytes);
+    std::vector<uint8_t> message = initiator.BuildInitialMessage(kGetInfoBytes);
     std::vector<uint8_t> response;
     base::Optional<ResponderResult> responder_result(RespondToHandshake(
-        psk_, eid_,
+        psk_,
         /*identity_seed=*/base::nullopt, identity_public_, message, &response));
     ASSERT_EQ(responder_result.has_value(), use_correct_key);
 

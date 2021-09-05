@@ -22,10 +22,10 @@
 
 UninstallView::UninstallView(int* user_selection,
                              const base::Closure& quit_closure)
-    : confirm_label_(NULL),
-      delete_profile_(NULL),
-      change_default_browser_(NULL),
-      browsers_combo_(NULL),
+    : confirm_label_(nullptr),
+      delete_profile_(nullptr),
+      change_default_browser_(nullptr),
+      browsers_combo_(nullptr),
       user_selection_(*user_selection),
       quit_closure_(quit_closure) {
   SetButtonLabel(ui::DIALOG_BUTTON_OK,
@@ -125,7 +125,12 @@ void UninstallView::SetupControls() {
       change_default_browser_ =
           layout->AddView(std::make_unique<views::Checkbox>(
               l10n_util::GetStringUTF16(IDS_UNINSTALL_SET_DEFAULT_BROWSER),
-              this));
+              base::BindRepeating(
+                  [](UninstallView* view) {
+                    view->browsers_combo_->SetEnabled(
+                        view->change_default_browser_->GetChecked());
+                  },
+                  this)));
       browsers_combo_ =
           layout->AddView(std::make_unique<views::Combobox>(this));
       browsers_combo_->SetEnabled(false);
@@ -150,15 +155,6 @@ void UninstallView::OnDialogAccepted() {
 
 void UninstallView::OnDialogCancelled() {
   user_selection_ = chrome::RESULT_CODE_UNINSTALL_USER_CANCEL;
-}
-
-void UninstallView::ButtonPressed(views::Button* sender,
-                                  const ui::Event& event) {
-  if (change_default_browser_ == sender) {
-    // Disable the browsers combobox if the user unchecks the checkbox.
-    DCHECK(browsers_combo_);
-    browsers_combo_->SetEnabled(change_default_browser_->GetChecked());
-  }
 }
 
 int UninstallView::GetItemCount() const {

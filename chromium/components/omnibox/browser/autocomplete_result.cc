@@ -24,6 +24,7 @@
 #include "components/omnibox/browser/autocomplete_provider.h"
 #include "components/omnibox/browser/autocomplete_provider_client.h"
 #include "components/omnibox/browser/base_search_provider.h"
+#include "components/omnibox/browser/intranet_redirector_state.h"
 #include "components/omnibox/browser/match_compare.h"
 #include "components/omnibox/browser/omnibox_pedal.h"
 #include "components/omnibox/browser/omnibox_pedal_provider.h"
@@ -125,11 +126,22 @@ void AutocompleteResult::TransferOldMatches(
   if (old_matches->empty())
     return;
 
+  // Exclude specialized suggestion types from being transferred to prevent
+  // user-visible artifacts.
+  old_matches->matches_.erase(
+      std::remove_if(
+          old_matches->begin(), old_matches->end(),
+          [](const auto& match) {
+            return match.type == AutocompleteMatchType::TILE_NAVSUGGEST ||
+                   match.type == AutocompleteMatchType::TILE_SUGGESTION;
+          }),
+      old_matches->matches_.end());
+
   if (empty()) {
     // If we've got no matches we can copy everything from the last result.
     Swap(old_matches);
-    for (auto i(begin()); i != end(); ++i)
-      i->from_previous = true;
+    for (auto& match : *this)
+      match.from_previous = true;
     return;
   }
 
@@ -159,9 +171,8 @@ void AutocompleteResult::TransferOldMatches(
   BuildProviderToMatchesCopy(&matches_per_provider);
   // |old_matches| is going away soon, so we can move out the matches.
   old_matches->BuildProviderToMatchesMove(&old_matches_per_provider);
-  for (ProviderToMatches::iterator i = old_matches_per_provider.begin();
-       i != old_matches_per_provider.end(); ++i) {
-    MergeMatchesByProvider(&i->second, matches_per_provider[i->first]);
+  for (auto& pair : old_matches_per_provider) {
+    MergeMatchesByProvider(&pair.second, matches_per_provider[pair.first]);
   }
 
   SortAndCull(input, template_url_service);
@@ -714,7 +725,19 @@ void AutocompleteResult::Validate() const {
 // static
 GURL AutocompleteResult::ComputeAlternateNavUrl(
     const AutocompleteInput& input,
-    const AutocompleteMatch& match) {
+    const AutocompleteMatch& match,
+    AutocompleteProviderClient* provider_client) {
+  auto redirector_policy =
+      omnibox::GetInterceptionChecksBehavior(provider_client->GetLocalState());
+
+  bool policy_allows_alternate_navs =
+      (redirector_policy == omnibox::IntranetRedirectorBehavior::
+                                DISABLE_INTERCEPTION_CHECKS_ENABLE_INFOBARS ||
+       redirector_policy == omnibox::IntranetRedirectorBehavior::
+                                ENABLE_INTERCEPTION_CHECKS_AND_INFOBARS);
+  if (!policy_allows_alternate_navs)
+    return GURL();
+
   return ((input.type() == metrics::OmniboxInputType::UNKNOWN) &&
           (AutocompleteMatch::IsSearchType(match.type)) &&
           !ui::PageTransitionCoreTypeIs(match.transition,

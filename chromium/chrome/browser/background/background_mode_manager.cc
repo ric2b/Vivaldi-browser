@@ -12,8 +12,8 @@
 
 #include "base/base_paths.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/logging.h"
@@ -25,6 +25,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
@@ -867,7 +868,7 @@ void BackgroundModeManager::CreateStatusTrayIcon() {
 
   // Since there are multiple profiles which share the status tray, we now
   // use the browser process to keep track of it.
-#if !defined(OS_MAC) && !defined(OS_CHROMEOS)
+#if !defined(OS_MAC) && !defined(OS_CHROMEOS) && !BUILDFLAG(IS_LACROS)
   if (!status_tray_)
     status_tray_ = g_browser_process->status_tray();
 #endif

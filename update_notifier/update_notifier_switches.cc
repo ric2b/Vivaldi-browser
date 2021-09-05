@@ -8,4 +8,16 @@ namespace vivaldi_update_notifier {
 const char kCheckForUpdates[] = "c";
 const char kQuit[] = "q";
 
-}  // namesspace vivaldi_update_notifier
+#if !defined(OFFICIAL_BUILD)
+// Set the the directory to look for the installer for delta updates.
+const char kUpdateExeDir[] = "update-exe-dir";
+
+// Keep the process running even when automatic option to check for updates is
+// disabled.
+const char kUpdateKeepRunning[] = "update-keep-running";
+
+// Set the version that will be used for update checks and delta downloads.
+const char kUpdateVersion[] = "update-version";
+
+#endif
+}  // namespace vivaldi_update_notifier

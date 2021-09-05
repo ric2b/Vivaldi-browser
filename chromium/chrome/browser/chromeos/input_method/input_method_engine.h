@@ -118,10 +118,6 @@ class InputMethodEngine : public InputMethodEngineBase,
   void OnSuggestionsChanged(
       const std::vector<std::string>& suggestions) override;
 
-  bool ShowMultipleSuggestions(int context_id,
-                               const std::vector<base::string16>& suggestions,
-                               std::string* error) override;
-
   bool SetButtonHighlighted(int context_id,
                             const ui::ime::AssistiveWindowButton& button,
                             bool highlighted,
@@ -179,6 +175,18 @@ class InputMethodEngine : public InputMethodEngineBase,
   // event handler.
   bool IsValidKeyEvent(const ui::KeyEvent* ui_event) override;
 
+  // Sets a range as autocorrected to display a special dashed underline.  Start
+  // and end are code point offsets in the surroundingTextInfo which control the
+  // start and end point of the underline which is added to the text to show a
+  // word was autocorrected.
+  // TODO(b/171924748): Improve documentation for this function all the way down
+  // the stack.
+  bool SetAutocorrectRange(const base::string16& autocorrect_text,
+                           uint32_t start,
+                           uint32_t end) override;
+
+  gfx::Range GetAutocorrectRange() override;
+
  private:
   // InputMethodEngineBase:
   void UpdateComposition(const ui::CompositionText& composition_text,
@@ -193,13 +201,9 @@ class InputMethodEngine : public InputMethodEngineBase,
       uint32_t end,
       const std::vector<ui::ImeTextSpan>& text_spans) override;
 
-  gfx::Range GetAutocorrectRange() override;
 
   gfx::Rect GetAutocorrectCharacterBounds() override;
 
-  bool SetAutocorrectRange(const base::string16& autocorrect_text,
-                           uint32_t start,
-                           uint32_t end) override;
 
   bool SetSelectionRange(uint32_t start, uint32_t end) override;
 

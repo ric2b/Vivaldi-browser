@@ -6,14 +6,13 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -763,8 +762,18 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, MAYBE_TotalSentDataObserved) {
             model()->GetColumnValue(ColumnSpecifier::TOTAL_NETWORK_USE, 0));
 }
 
-// Checks that task manager counts idle wakeups.
-IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, IdleWakeups) {
+// Checks that task manager counts idle wakeups. Since this test relies on
+// forcing actual system-level idle wakeups to happen, it is inherently
+// dependent on the load of the rest of the system, details of the OS scheduler,
+// and so on, which makes it very prone to flakes.
+#if defined(OS_MAC)
+// This test is too flaky to be useable on Mac, because of the reasons given
+// above.
+#define MAYBE_IdleWakeups DISABLED_IdleWakeups
+#else
+#define MAYBE_IdleWakeups IdleWakeups
+#endif
+IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, MAYBE_IdleWakeups) {
   ShowTaskManager();
   model()->ToggleColumnVisibility(ColumnSpecifier::IDLE_WAKEUPS);
 
@@ -784,12 +793,7 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, IdleWakeups) {
 
 // The script above should trigger a lot of idle wakeups - up to 1000 per
 // second. Let's make sure we get at least 100 (in case the test runs slow).
-// On Mac, set a lower threshold because Chrome Mac generates fewer wakes.
-#if defined(OS_MAC)
-  const int kMinExpectedWakeCount = 50;
-#else
   const int kMinExpectedWakeCount = 100;
-#endif  // defined(OS_MAC)
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerStatToExceed(
       MatchTab("title1.html"), ColumnSpecifier::IDLE_WAKEUPS,
       kMinExpectedWakeCount));
@@ -865,7 +869,7 @@ IN_PROC_BROWSER_TEST_F(TaskManagerBrowserTest, HistoryNavigationInNewTab) {
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(1, MatchTab("title1.html")));
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(1, MatchAnyTab()));
 
-  ui_test_utils::NavigateToURL(browser(), GURL("about:version"));
+  ui_test_utils::NavigateToURL(browser(), GURL("chrome://version/"));
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(1, MatchTab("About Version")));
   ASSERT_NO_FATAL_FAILURE(WaitForTaskManagerRows(1, MatchAnyTab()));
 

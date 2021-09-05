@@ -24,10 +24,6 @@ struct ImporterAutofillFormDataEntry;
 struct ImportedNotesEntry;
 struct ImportedSpeedDialEntry;
 
-namespace autofill {
-struct PasswordForm;
-}
-
 namespace importer {
 struct SearchEngineInfo;
 }
@@ -52,7 +48,7 @@ class ImporterBridge : public base::RefCountedThreadSafe<ImporterBridge> {
       const std::vector<importer::SearchEngineInfo>& search_engines,
       bool unique_on_host_and_path) = 0;
 
-  virtual void SetPasswordForm(const autofill::PasswordForm& form) = 0;
+  virtual void SetPasswordForm(const importer::ImportedPasswordForm& form) = 0;
 
   virtual void SetAutofillFormData(
       const std::vector<ImporterAutofillFormDataEntry>& entries) = 0;

@@ -235,21 +235,6 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
       const ui::AXClippingBehavior clipping_behavior,
       ui::AXOffscreenResult* offscreen_result = nullptr) const;
 
-  // Returns the value of a control, such as the value of a text field, a slider
-  // or a scrollbar.
-  //
-  // For text fields, computes the value of the field from its internal
-  // representation in the accessibility tree if necessary.
-  //
-  // This is to handle the cases such as ARIA textbox, where the value should
-  // be calculated from the object's inner text, as well as all text fields
-  // originating from Blink where the HTML value attribute cannot always be
-  // trusted.
-  //
-  // TODO(nektar): Move this method to AXNode when AXNodePosition and
-  // BrowserAccessibilityPosition are merged into one class.
-  virtual base::string16 GetValue() const;
-
   // This is an approximate hit test that only uses the information in
   // the browser process to compute the correct result. It will not return
   // correct results in many cases of z-index, overflow, and absolute
@@ -437,7 +422,7 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   gfx::NativeViewAccessible GetPreviousSibling() override;
 
   bool IsChildOfLeaf() const override;
-  bool IsChildOfPlainTextField() const override;
+  bool IsDescendantOfPlainTextField() const override;
   bool IsLeaf() const override;
   bool IsToplevelBrowserWindow() override;
   gfx::NativeViewAccessible GetClosestPlatformObject() const override;
@@ -449,6 +434,7 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   base::string16 GetHypertext() const override;
   bool SetHypertextSelection(int start_offset, int end_offset) override;
   base::string16 GetInnerText() const override;
+  base::string16 GetValueForControl() const override;
   gfx::Rect GetBoundsRect(
       const ui::AXCoordinateSystem coordinate_system,
       const ui::AXClippingBehavior clipping_behavior,
@@ -547,9 +533,23 @@ class CONTENT_EXPORT BrowserAccessibility : public ui::AXPlatformNodeDelegate {
   base::Optional<int> GetPosInSet() const override;
   base::Optional<int> GetSetSize() const override;
 
+  // Returns true if this node is a list marker or if it's a descendant
+  // of a list marker node. Returns false otherwise.
   bool IsInListMarker() const;
+
+  // Returns true if this node is a collapsed popup button that is parent to a
+  // menu list popup.
   bool IsCollapsedMenuListPopUpButton() const;
+
+  // Returns the popup button ancestor of this current node if any. The popup
+  // button needs to be the parent of a menu list popup and needs to be
+  // collapsed.
   BrowserAccessibility* GetCollapsedMenuListPopUpButtonAncestor() const;
+
+  // If this node is within an editable region, returns the node that is at the
+  // root of that editable region, otherwise returns nullptr. In accessibility,
+  // an editable region is synonymous to a text field.
+  BrowserAccessibility* GetTextFieldAncestor() const;
 
   // Returns true if:
   // 1. This node is a list, AND

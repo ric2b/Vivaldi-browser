@@ -78,8 +78,8 @@ bool RegisterFlashTestPluginLibrary(base::CommandLine* command_line,
   std::vector<PluginInfo> plugins;
   // Register a fake Flash with 100.0 version (to avoid outdated checks).
   base::FilePath::StringType fake_flash_parameter =
-      base::FilePath::FromUTF8Unsafe(
-          std::string("#") + content::kFlashPluginName + "#Description#100.0")
+      base::FilePath::FromUTF8Unsafe(std::string("#") + "Shockwave Flash" +
+                                     "#Description#100.0")
           .value();
   plugins.push_back(
       PluginInfo(library_name, fake_flash_parameter,
@@ -111,20 +111,6 @@ bool RegisterTestPluginWithExtraParameters(
 bool RegisterCorbTestPlugin(base::CommandLine* command_line) {
   StringType library_name =
       base::FilePath::FromUTF8Unsafe(ppapi::kCorbTestPluginName).value();
-  return RegisterFlashTestPluginLibrary(command_line, library_name);
-}
-
-bool RegisterFlashTestPlugin(base::CommandLine* command_line) {
-  // Power Saver plugin requires Pepper testing API.
-  command_line->AppendSwitch(switches::kEnablePepperTesting);
-
-  // The Power Saver plugin ignores the data attribute and just draws a
-  // checkerboard pattern - while providing some Plugin Power Saver diagnostics.
-  //
-  // It was originally designed just for Plugin Power Saver tests, but is
-  // useful for testing as a fake Flash plugin in a variety of tests.
-  StringType library_name =
-      base::FilePath::FromUTF8Unsafe(ppapi::kPowerSaverTestPluginName).value();
   return RegisterFlashTestPluginLibrary(command_line, library_name);
 }
 

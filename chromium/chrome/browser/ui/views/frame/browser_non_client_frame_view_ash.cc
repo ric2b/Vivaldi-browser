@@ -6,22 +6,13 @@
 
 #include <algorithm>
 
-#include "ash/public/cpp/app_types.h"
-#include "ash/public/cpp/caption_buttons/frame_caption_button_container_view.h"
-#include "ash/public/cpp/default_frame_header.h"
-#include "ash/public/cpp/frame_utils.h"
-#include "ash/public/cpp/tablet_mode.h"
-#include "ash/public/cpp/window_properties.h"
-#include "ash/public/cpp/window_state_type.h"
-#include "ash/wm/window_util.h"
 #include "base/metrics/user_metrics.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/themes/theme_properties.h"
-#include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_helper.h"
-#include "chrome/browser/ui/ash/session_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/ui_features.h"
@@ -38,7 +29,13 @@
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chromeos/constants/chromeos_features.h"
-#include "chromeos/ui/chromeos_ui_constants.h"
+#include "chromeos/ui/base/chromeos_ui_constants.h"
+#include "chromeos/ui/base/tablet_state.h"
+#include "chromeos/ui/base/window_properties.h"
+#include "chromeos/ui/base/window_state_type.h"
+#include "chromeos/ui/frame/caption_buttons/frame_caption_button_container_view.h"
+#include "chromeos/ui/frame/default_frame_header.h"
+#include "chromeos/ui/frame/frame_utils.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_enums.mojom.h"
@@ -47,6 +44,7 @@
 #include "ui/aura/env.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/layout.h"
+#include "ui/display/screen.h"
 #include "ui/events/gestures/gesture_recognizer.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/rect.h"
@@ -62,6 +60,13 @@
 #if BUILDFLAG(ENABLE_WEBUI_TAB_STRIP)
 #include "chrome/browser/ui/views/frame/webui_tab_strip_container_view.h"
 #endif  // BUILDFLAG(ENABLE_WEBUI_TAB_STRIP)
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "ash/public/cpp/app_types.h"
+#include "ash/wm/window_util.h"
+#include "chrome/browser/ui/ash/multi_user/multi_user_window_manager_helper.h"
+#include "chrome/browser/ui/ash/session_util.h"
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 namespace {
 
@@ -89,12 +94,16 @@ BrowserNonClientFrameViewAsh::BrowserNonClientFrameViewAsh(
     BrowserFrame* frame,
     BrowserView* browser_view)
     : BrowserNonClientFrameView(frame, browser_view) {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // TODO(https://crbug.com/1067535): Check whether Ash/Chrome and Lacros
+  // will share the same ResizeHandler class.
   ash::window_util::InstallResizeHandleWindowTargeterForWindow(
       frame->GetNativeWindow());
+#endif
 }
 
 BrowserNonClientFrameViewAsh::~BrowserNonClientFrameViewAsh() {
-  ash::TabletMode::Get()->RemoveObserver(this);
+  display::Screen::GetScreen()->RemoveObserver(this);
 
   ImmersiveModeController* immersive_controller =
       browser_view()->immersive_mode_controller();
@@ -103,7 +112,8 @@ BrowserNonClientFrameViewAsh::~BrowserNonClientFrameViewAsh() {
 }
 
 void BrowserNonClientFrameViewAsh::Init() {
-  caption_button_container_ = new ash::FrameCaptionButtonContainerView(frame());
+  caption_button_container_ =
+      new chromeos::FrameCaptionButtonContainerView(frame());
   caption_button_container_->UpdateCaptionButtonState(false /*=animate*/);
   AddChildView(caption_button_container_);
 
@@ -120,19 +130,23 @@ void BrowserNonClientFrameViewAsh::Init() {
   UpdateProfileIcons();
 
   aura::Window* window = frame()->GetNativeWindow();
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // This is only needed for ash. For lacros, Exo tags the associated
+  // ShellSurface as being of AppType::LACROS.
   window->SetProperty(
       aura::client::kAppType,
       static_cast<int>(browser->deprecated_is_app() ? ash::AppType::CHROME_APP
                                                     : ash::AppType::BROWSER));
+#endif
 
   window_observer_.Add(GetFrameWindow());
 
   // To preserve privacy, tag incognito windows so that they won't be included
   // in screenshot sent to assistant server.
   if (browser->profile()->IsOffTheRecord())
-    window->SetProperty(ash::kBlockedForAssistantSnapshotKey, true);
+    window->SetProperty(chromeos::kBlockedForAssistantSnapshotKey, true);
 
-  ash::TabletMode::Get()->AddObserver(this);
+  display::Screen::GetScreen()->AddObserver(this);
 
   if (frame()->ShouldDrawFrameHeader())
     frame_header_ = CreateFrameHeader();
@@ -194,7 +208,7 @@ int BrowserNonClientFrameViewAsh::GetTopInset(bool restored) const {
 }
 
 int BrowserNonClientFrameViewAsh::GetThemeBackgroundXInset() const {
-  return BrowserFrameHeaderAsh::GetThemeBackgroundXInset();
+  return BrowserFrameHeaderChromeOS::GetThemeBackgroundXInset();
 }
 
 void BrowserNonClientFrameViewAsh::UpdateFrameColor() {
@@ -253,7 +267,7 @@ gfx::Rect BrowserNonClientFrameViewAsh::GetWindowBoundsForClientBounds(
 }
 
 int BrowserNonClientFrameViewAsh::NonClientHitTest(const gfx::Point& point) {
-  int hit_test = ash::FrameBorderNonClientHitTest(this, point);
+  int hit_test = chromeos::FrameBorderNonClientHitTest(this, point);
 
   // When the window is restored we want a large click target above the tabs
   // to drag the window, so redirect clicks in the tab's shadow to caption.
@@ -292,7 +306,7 @@ void BrowserNonClientFrameViewAsh::UpdateWindowTitle() {
     frame_header_->SchedulePaintForTitle();
 
   frame()->GetNativeWindow()->SetProperty(
-      ash::kWindowOverviewTitleKey,
+      chromeos::kWindowOverviewTitleKey,
       browser_view()->browser()->GetWindowTitleForCurrentTab(
           /*include_app_name=*/false));
 }
@@ -413,12 +427,19 @@ gfx::ImageSkia BrowserNonClientFrameViewAsh::GetFrameHeaderOverlayImage(
                                      : BrowserFrameActiveState::kInactive);
 }
 
-void BrowserNonClientFrameViewAsh::OnTabletModeStarted() {
-  OnTabletModeToggled(true);
-}
-
-void BrowserNonClientFrameViewAsh::OnTabletModeEnded() {
-  OnTabletModeToggled(false);
+void BrowserNonClientFrameViewAsh::OnDisplayTabletStateChanged(
+    display::TabletState state) {
+  switch (state) {
+    case display::TabletState::kInTabletMode:
+      OnTabletModeToggled(true);
+      return;
+    case display::TabletState::kInClamshellMode:
+      OnTabletModeToggled(false);
+      return;
+    case display::TabletState::kEnteringTabletMode:
+    case display::TabletState::kExitingTabletMode:
+      break;
+  }
 }
 
 void BrowserNonClientFrameViewAsh::OnTabletModeToggled(bool enabled) {
@@ -487,7 +508,7 @@ void BrowserNonClientFrameViewAsh::OnWindowDestroying(aura::Window* window) {
 void BrowserNonClientFrameViewAsh::OnWindowPropertyChanged(aura::Window* window,
                                                            const void* key,
                                                            intptr_t old) {
-  if (key == ash::kIsShowingInOverviewKey) {
+  if (key == chromeos::kIsShowingInOverviewKey) {
     OnAddedToOrRemovedFromOverview();
     return;
   }
@@ -498,7 +519,7 @@ void BrowserNonClientFrameViewAsh::OnWindowPropertyChanged(aura::Window* window,
   if (key == aura::client::kShowStateKey) {
     frame_header_->OnShowStateChanged(
         window->GetProperty(aura::client::kShowStateKey));
-  } else if (key == ash::kFrameRestoreLookKey) {
+  } else if (key == chromeos::kFrameRestoreLookKey) {
     frame_header_->view()->InvalidateLayout();
   }
 }
@@ -557,7 +578,7 @@ bool BrowserNonClientFrameViewAsh::ShouldShowCaptionButtons() const {
 bool BrowserNonClientFrameViewAsh::ShouldShowCaptionButtonsWhenNotInOverview()
     const {
   return UsePackagedAppHeaderStyle(browser_view()->browser()) ||
-         !ash::TabletMode::Get()->InTabletMode();
+         !chromeos::TabletState::Get()->InTabletMode();
 }
 
 int BrowserNonClientFrameViewAsh::GetToolbarLeftInset() const {
@@ -612,15 +633,15 @@ void BrowserNonClientFrameViewAsh::OnAddedToOrRemovedFromOverview() {
     web_app_frame_toolbar()->SetVisible(should_show_caption_buttons);
 }
 
-std::unique_ptr<ash::FrameHeader>
+std::unique_ptr<chromeos::FrameHeader>
 BrowserNonClientFrameViewAsh::CreateFrameHeader() {
-  std::unique_ptr<ash::FrameHeader> header;
+  std::unique_ptr<chromeos::FrameHeader> header;
   Browser* browser = browser_view()->browser();
   if (!UsePackagedAppHeaderStyle(browser)) {
-    header = std::make_unique<BrowserFrameHeaderAsh>(frame(), this, this,
-                                                     caption_button_container_);
+    header = std::make_unique<BrowserFrameHeaderChromeOS>(
+        frame(), this, this, caption_button_container_);
   } else {
-    header = std::make_unique<ash::DefaultFrameHeader>(
+    header = std::make_unique<chromeos::DefaultFrameHeader>(
         frame(), this, caption_button_container_);
   }
 
@@ -639,6 +660,7 @@ void BrowserNonClientFrameViewAsh::UpdateTopViewInset() {
 }
 
 bool BrowserNonClientFrameViewAsh::ShouldShowProfileIndicatorIcon() const {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // We only show the profile indicator for the teleported browser windows
   // between multi-user sessions. Note that you can't teleport an incognito
   // window.
@@ -659,9 +681,14 @@ bool BrowserNonClientFrameViewAsh::ShouldShowProfileIndicatorIcon() const {
 
   return MultiUserWindowManagerHelper::ShouldShowAvatar(
       browser_view()->GetNativeWindow());
+#else
+  NOTIMPLEMENTED() << "Multi-signin support is deprecated in Lacros.";
+  return false;
+#endif
 }
 
 void BrowserNonClientFrameViewAsh::UpdateProfileIcons() {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   View* root_view = frame()->GetRootView();
   if (ShouldShowProfileIndicatorIcon()) {
     bool needs_layout = !profile_indicator_icon_;
@@ -686,6 +713,9 @@ void BrowserNonClientFrameViewAsh::UpdateProfileIcons() {
     if (root_view)
       root_view->Layout();
   }
+#else
+  NOTIMPLEMENTED() << "Multi-signin support is deprecated in Lacros.";
+#endif
 }
 
 void BrowserNonClientFrameViewAsh::LayoutProfileIndicator() {
@@ -702,7 +732,7 @@ void BrowserNonClientFrameViewAsh::LayoutProfileIndicator() {
 }
 
 bool BrowserNonClientFrameViewAsh::IsInOverviewMode() const {
-  return GetFrameWindow()->GetProperty(ash::kIsShowingInOverviewKey);
+  return GetFrameWindow()->GetProperty(chromeos::kIsShowingInOverviewKey);
 }
 
 void BrowserNonClientFrameViewAsh::OnUpdateFrameColor() {
@@ -720,12 +750,12 @@ void BrowserNonClientFrameViewAsh::OnUpdateFrameColor() {
   }
 
   if (active_color) {
-    window->SetProperty(ash::kFrameActiveColorKey, *active_color);
-    window->SetProperty(ash::kFrameInactiveColorKey,
+    window->SetProperty(chromeos::kFrameActiveColorKey, *active_color);
+    window->SetProperty(chromeos::kFrameInactiveColorKey,
                         inactive_color.value_or(*active_color));
   } else {
-    window->ClearProperty(ash::kFrameActiveColorKey);
-    window->ClearProperty(ash::kFrameInactiveColorKey);
+    window->ClearProperty(chromeos::kFrameActiveColorKey);
+    window->ClearProperty(chromeos::kFrameInactiveColorKey);
   }
 
   if (frame_header_)

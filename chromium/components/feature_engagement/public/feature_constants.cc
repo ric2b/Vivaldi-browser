@@ -30,6 +30,8 @@ const base::Feature kIPHWebUITabStripFeature{"IPH_WebUITabStrip",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHDesktopSnoozeFeature{"IPH_DesktopSnoozeFeature",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHDesktopPwaInstallFeature{
+    "IPH_DesktopPwaInstall", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_WIN) || defined(OS_APPLE) || defined(OS_LINUX) ||
         // defined(OS_CHROMEOS)
 
@@ -73,6 +75,12 @@ const base::Feature kIPHDownloadInfoBarDownloadsAreFasterFeature{
     "IPH_DownloadInfoBarDownloadsAreFaster", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHQuietNotificationPromptsFeature{
     "IPH_QuietNotificationPrompts", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHReadLaterContextMenuFeature{
+    "IPH_ReadLaterContextMenu", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHReadLaterAppMenuBookmarkThisPageFeature{
+    "IPH_ReadLaterAppMenuBookmarkThisPage", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHReadLaterAppMenuBookmarksFeature{
+    "IPH_ReadLaterAppMenuBookmarks", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHEphemeralTabFeature{"IPH_EphemeralTab",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHFeedCardMenuFeature{"IPH_FeedCardMenu",
@@ -89,6 +97,8 @@ const base::Feature kIPHKeyboardAccessoryPasswordFillingFeature{
     "IPH_KeyboardAccessoryPasswordFilling", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHKeyboardAccessoryPaymentFillingFeature{
     "IPH_KeyboardAccessoryPaymentFilling", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHNewTabPageHomeButtonFeature{
+    "IPH_NewTabPageHomeButton", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHPreviewsOmniboxUIFeature{
     "IPH_PreviewsOmniboxUI", base::FEATURE_ENABLED_BY_DEFAULT};
 const base::Feature kIPHTabGroupsQuicklyComparePagesFeature{
@@ -99,12 +109,20 @@ const base::Feature kIPHTabGroupsYourTabsAreTogetherFeature{
     "IPH_TabGroupsYourTabsTogether", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHTabGroupsDragAndDropFeature{
     "IPH_TabGroupsDragAndDrop", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHTabSwitcherButtonFeature{
+    "IPH_TabSwitcherButton", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHTranslateMenuButtonFeature{
     "IPH_TranslateMenuButton", base::FEATURE_ENABLED_BY_DEFAULT};
-const base::Feature kIPHVideoTutorialDownloadFeature{
-    "IPH_VideoTutorial_Download", base::FEATURE_ENABLED_BY_DEFAULT};
-const base::Feature kIPHVideoTutorialSearchFeature{
-    "IPH_VideoTutorial_Search", base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kIPHVideoTutorialNTPChromeIntroFeature{
+    "IPH_VideoTutorial_NTP_ChromeIntro", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHVideoTutorialNTPDownloadFeature{
+    "IPH_VideoTutorial_NTP_Download", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHVideoTutorialNTPSearchFeature{
+    "IPH_VideoTutorial_NTP_Search", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHVideoTutorialNTPVoiceSearchFeature{
+    "IPH_VideoTutorial_NTP_VoiceSearch", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHVideoTutorialNTPSummaryFeature{
+    "IPH_VideoTutorial_NTP_Summary", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHExploreSitesTileFeature{
     "IPH_ExploreSitesTile", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHFeedHeaderMenuFeature{
@@ -115,6 +133,8 @@ const base::Feature kIPHChromeReengagementNotification2Feature{
     "IPH_ChromeReengagementNotification2", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kIPHChromeReengagementNotification3Feature{
     "IPH_ChromeReengagementNotification3", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kIPHPwaInstallAvailableFeature{
+    "IPH_PwaInstallAvailable", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_IOS)

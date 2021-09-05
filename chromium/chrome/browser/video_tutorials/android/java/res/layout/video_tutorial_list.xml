@@ -6,27 +6,24 @@
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/video_tutorial_list"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:paddingTop="30dp"
-    android:paddingStart="@dimen/promo_compact_padding"
-    android:paddingEnd="@dimen/promo_compact_padding">
-
+    android:paddingTop="20dp" >
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal">
+        android:orientation="horizontal" >
 
-        <!-- TODO(shaktisahu): Use correct string after the string CL lands. -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/close"
-            android:textAppearance="@style/TextAppearance.TextLarge.Primary" />
+            android:layout_marginStart="12dp"
+            android:layout_gravity="center_vertical"
+            android:text="@string/video_tutorials_learn_chrome"
+            android:textAppearance="@style/TextAppearance.Headline.Primary" />
 
         <Space
             android:layout_width="0dp"
@@ -35,16 +32,20 @@
 
         <org.chromium.ui.widget.ChromeImageButton
             android:id="@+id/close_button"
-            android:layout_height="24dp"
-            android:layout_width="24dp"
+            android:layout_height="48dp"
+            android:layout_width="48dp"
             android:background="?attr/selectableItemBackground"
             android:contentDescription="@string/close"
-            android:src="@drawable/btn_close" />
+            android:scaleType="center"
+            android:src="@drawable/btn_close"
+            app:tint="@color/default_icon_color_tint_list" />
     </LinearLayout>
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/recycler_view"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_marginTop="16dp" />
+        android:layout_marginTop="16dp"
+        android:layout_marginStart="12dp"
+        android:layout_marginEnd="12dp" />
 </LinearLayout>

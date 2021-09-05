@@ -4,6 +4,8 @@
 
 #include "third_party/blink/renderer/modules/xr/xr_reference_space.h"
 
+#include <sstream>
+
 #include "device/vr/public/mojom/vr_service.mojom-blink.h"
 #include "third_party/blink/renderer/modules/xr/xr_pose.h"
 #include "third_party/blink/renderer/modules/xr/xr_reference_space_event.h"
@@ -69,18 +71,18 @@ XRPose* XRReferenceSpace::getPose(XRSpace* other_space) {
 }
 
 void XRReferenceSpace::SetMojoFromFloor() {
-  const device::mojom::blink::VRDisplayInfoPtr& display_info =
-      session()->GetVRDisplayInfo();
+  const device::mojom::blink::VRStageParametersPtr& stage_parameters =
+      session()->GetStageParameters();
 
-  if (display_info && display_info->stage_parameters) {
-    // Use the transform given by xrDisplayInfo's stage_parameters if available.
+  if (stage_parameters) {
+    // Use the transform given by stage_parameters if available.
     mojo_from_floor_ = std::make_unique<TransformationMatrix>(
-        display_info->stage_parameters->mojo_from_floor.matrix());
+        stage_parameters->mojo_from_floor.matrix());
   } else {
     mojo_from_floor_.reset();
   }
 
-  display_info_id_ = session()->DisplayInfoPtrId();
+  stage_parameters_id_ = session()->StageParametersId();
 }
 
 base::Optional<TransformationMatrix> XRReferenceSpace::MojoFromNative() {
@@ -103,9 +105,9 @@ base::Optional<TransformationMatrix> XRReferenceSpace::MojoFromNative() {
       return *mojo_from_native;
     }
     case ReferenceSpaceType::kLocalFloor: {
-      // Check first to see if the xrDisplayInfo has updated since the last
+      // Check first to see if the stage_parameters has updated since the last
       // call. If so, update the floor-level transform.
-      if (display_info_id_ != session()->DisplayInfoPtrId())
+      if (stage_parameters_id_ != session()->StageParametersId())
         SetMojoFromFloor();
 
       if (mojo_from_floor_) {
@@ -195,6 +197,14 @@ XRReferenceSpace* XRReferenceSpace::cloneWithOriginOffset(
 base::Optional<device::mojom::blink::XRNativeOriginInformation>
 XRReferenceSpace::NativeOrigin() const {
   return XRNativeOriginInformation::Create(this);
+}
+
+std::string XRReferenceSpace::ToString() const {
+  std::stringstream ss;
+
+  ss << "XRReferenceSpace(type=" << type_ << ")";
+
+  return ss.str();
 }
 
 void XRReferenceSpace::Trace(Visitor* visitor) const {

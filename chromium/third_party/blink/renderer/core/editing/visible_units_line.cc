@@ -143,7 +143,7 @@ static PositionWithAffinityTemplate<Strategy> EndPositionForLine(
 
   auto* end_text_node = DynamicTo<Text>(end_node);
   if (end_box->IsInlineTextBox() && end_text_node) {
-    const InlineTextBox* end_text_box = ToInlineTextBox(end_box);
+    const auto* end_text_box = To<InlineTextBox>(end_box);
     int end_offset = end_text_box->Start();
     if (!end_text_box->IsLineBreak())
       end_offset += end_text_box->Len();
@@ -208,7 +208,7 @@ PositionWithAffinityTemplate<Strategy> StartPositionForLine(
   return PositionWithAffinityTemplate<Strategy>(
       text_start_node
           ? PositionTemplate<Strategy>(text_start_node,
-                                       ToInlineTextBox(start_box)->Start())
+                                       To<InlineTextBox>(start_box)->Start())
           : PositionTemplate<Strategy>::BeforeNode(*start_node));
 }
 
@@ -313,6 +313,8 @@ PositionWithAffinityTemplate<Strategy> StartOfLineAlgorithm(
       vis_pos, c.GetPosition());
 }
 
+}  // namespace
+
 PositionWithAffinity StartOfLine(const PositionWithAffinity& current_position) {
   return StartOfLineAlgorithm<EditingStrategy>(current_position);
 }
@@ -321,8 +323,6 @@ PositionInFlatTreeWithAffinity StartOfLine(
     const PositionInFlatTreeWithAffinity& current_position) {
   return StartOfLineAlgorithm<EditingInFlatTreeStrategy>(current_position);
 }
-
-}  // namespace
 
 // FIXME: Rename this function to reflect the fact it ignores bidi levels.
 VisiblePosition StartOfLine(const VisiblePosition& current_position) {
@@ -394,11 +394,11 @@ static PositionWithAffinityTemplate<Strategy> EndOfLineAlgorithm(
       candidate_position, current_position.GetPosition());
 }
 
-static PositionWithAffinity EndOfLine(const PositionWithAffinity& position) {
+PositionWithAffinity EndOfLine(const PositionWithAffinity& position) {
   return EndOfLineAlgorithm<EditingStrategy>(position);
 }
 
-static PositionInFlatTreeWithAffinity EndOfLine(
+PositionInFlatTreeWithAffinity EndOfLine(
     const PositionInFlatTreeWithAffinity& position) {
   return EndOfLineAlgorithm<EditingInFlatTreeStrategy>(position);
 }

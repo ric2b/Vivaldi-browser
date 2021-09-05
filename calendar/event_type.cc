@@ -112,6 +112,8 @@ EventRow::EventRow(const EventRow&& other) noexcept
       invites_to_create(other.invites_to_create),
       timezone(other.timezone),
       is_template(other.is_template),
+      priority(other.priority),
+      percentage_complete(other.percentage_complete),
       updateFields(other.updateFields) {}
 
 EventResult::EventResult() {}

@@ -5,7 +5,6 @@
 #include "components/exo/shell_surface.h"
 
 #include "ash/public/cpp/shell_window_ids.h"
-#include "ash/public/cpp/window_state_type.h"
 #include "ash/scoped_animation_disabler.h"
 #include "ash/shell.h"
 #include "ash/wm/desks/desks_util.h"
@@ -15,6 +14,7 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chromeos/ui/base/window_state_type.h"
 #include "components/exo/shell_surface_util.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/cursor_client.h"
@@ -386,16 +386,17 @@ void ShellSurface::OnWindowBoundsChanged(aura::Window* window,
 ////////////////////////////////////////////////////////////////////////////////
 // ash::WindowStateObserver overrides:
 
-void ShellSurface::OnPreWindowStateTypeChange(ash::WindowState* window_state,
-                                              ash::WindowStateType old_type) {
-  ash::WindowStateType new_type = window_state->GetStateType();
-  if (ash::IsMinimizedWindowStateType(old_type) ||
-      ash::IsMinimizedWindowStateType(new_type)) {
+void ShellSurface::OnPreWindowStateTypeChange(
+    ash::WindowState* window_state,
+    chromeos::WindowStateType old_type) {
+  chromeos::WindowStateType new_type = window_state->GetStateType();
+  if (chromeos::IsMinimizedWindowStateType(old_type) ||
+      chromeos::IsMinimizedWindowStateType(new_type)) {
     return;
   }
 
-  if (ash::IsMaximizedOrFullscreenOrPinnedWindowStateType(old_type) ||
-      ash::IsMaximizedOrFullscreenOrPinnedWindowStateType(new_type)) {
+  if (chromeos::IsMaximizedOrFullscreenOrPinnedWindowStateType(old_type) ||
+      chromeos::IsMaximizedOrFullscreenOrPinnedWindowStateType(new_type)) {
     if (!widget_)
       return;
     // When transitioning in/out of maximized or fullscreen mode, we need to
@@ -418,10 +419,11 @@ void ShellSurface::OnPreWindowStateTypeChange(ash::WindowState* window_state,
   }
 }
 
-void ShellSurface::OnPostWindowStateTypeChange(ash::WindowState* window_state,
-                                               ash::WindowStateType old_type) {
-  ash::WindowStateType new_type = window_state->GetStateType();
-  if (ash::IsMaximizedOrFullscreenOrPinnedWindowStateType(new_type)) {
+void ShellSurface::OnPostWindowStateTypeChange(
+    ash::WindowState* window_state,
+    chromeos::WindowStateType old_type) {
+  chromeos::WindowStateType new_type = window_state->GetStateType();
+  if (chromeos::IsMaximizedOrFullscreenOrPinnedWindowStateType(new_type)) {
     Configure();
   }
 
@@ -499,32 +501,28 @@ bool ShellSurface::OnPreWidgetCommit() {
 ////////////////////////////////////////////////////////////////////////////////
 // ShellSurface, private:
 
-void ShellSurface::SetParentWindow(aura::Window* parent) {
-  if (parent_) {
-    parent_->RemoveObserver(this);
+void ShellSurface::SetParentWindow(aura::Window* new_parent) {
+  if (parent()) {
+    parent()->RemoveObserver(this);
     if (widget_) {
       aura::Window* child_window = widget_->GetNativeWindow();
       wm::TransientWindowManager::GetOrCreate(child_window)
           ->set_parent_controls_visibility(false);
-      wm::RemoveTransientChild(parent_, child_window);
+      wm::RemoveTransientChild(parent(), child_window);
     }
   }
-  parent_ = parent;
-  if (parent_) {
-    parent_->AddObserver(this);
+  SetParentInternal(new_parent);
+  if (parent()) {
+    parent()->AddObserver(this);
     MaybeMakeTransient();
   }
-
-  // If |parent_| is set effects the ability to maximize the window.
-  if (widget_)
-    widget_->OnSizeConstraintsChanged();
 }
 
 void ShellSurface::MaybeMakeTransient() {
-  if (!parent_ || !widget_)
+  if (!parent() || !widget_)
     return;
   aura::Window* child_window = widget_->GetNativeWindow();
-  wm::AddTransientChild(parent_, child_window);
+  wm::AddTransientChild(parent(), child_window);
   // In the case of activatable non-popups, we also want the parent to control
   // the child's visibility.
   if (!widget_->is_top_level() || !widget_->CanActivate())
@@ -557,9 +555,9 @@ void ShellSurface::Configure(bool ends_drag) {
           GetClientViewBounds().size(), window_state->GetStateType(),
           IsResizing(), widget_->IsActive(), origin_offset);
     } else {
-      serial =
-          configure_callback_.Run(gfx::Size(), ash::WindowStateType::kNormal,
-                                  false, false, origin_offset);
+      serial = configure_callback_.Run(gfx::Size(),
+                                       chromeos::WindowStateType::kNormal,
+                                       false, false, origin_offset);
     }
   }
 

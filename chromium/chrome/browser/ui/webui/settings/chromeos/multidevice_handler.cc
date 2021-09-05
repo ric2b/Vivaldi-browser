@@ -5,7 +5,7 @@
 #include "chrome/browser/ui/webui/settings/chromeos/multidevice_handler.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/android_sms/android_sms_pairing_state_tracker_impl.h"
@@ -16,6 +16,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/chromeos/multidevice_setup/multidevice_setup_dialog.h"
 #include "chromeos/components/multidevice/logging/logging.h"
+#include "chromeos/components/phonehub/util/histogram_util.h"
 #include "chromeos/components/proximity_auth/proximity_auth_pref_names.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/services/multidevice_setup/public/cpp/prefs.h"
@@ -38,13 +39,11 @@ const char kPageContentDataMessagesStateKey[] = "messagesState";
 const char kPageContentDataPhoneHubStateKey[] = "phoneHubState";
 const char kPageContentDataPhoneHubNotificationsStateKey[] =
     "phoneHubNotificationsState";
-const char kPageContentDataPhoneHubNotificationBadgeStateKey[] =
-    "phoneHubNotificationBadgeState";
 const char kPageContentDataPhoneHubTaskContinuationStateKey[] =
     "phoneHubTaskContinuationState";
 const char kPageContentDataWifiSyncStateKey[] = "wifiSyncState";
 const char kPageContentDataSmartLockStateKey[] = "smartLockState";
-const char kIsNotificationAccessGranted[] = "isNotificationAccessGranted";
+const char kNotificationAccessStatus[] = "notificationAccessStatus";
 const char kIsAndroidSmsPairingComplete[] = "isAndroidSmsPairingComplete";
 
 constexpr char kAndroidSmsInfoOriginKey[] = "origin";
@@ -275,6 +274,11 @@ void MultideviceHandler::HandleSetFeatureEnabledState(
       feature, enabled, auth_token,
       base::BindOnce(&MultideviceHandler::OnSetFeatureStateEnabledResult,
                      callback_weak_ptr_factory_.GetWeakPtr(), callback_id));
+
+  if (feature == multidevice_setup::mojom::Feature::kPhoneHub) {
+    phonehub::util::LogFeatureOptInEntryPoint(
+        phonehub::util::OptInEntryPoint::kSettings);
+  }
 }
 
 void MultideviceHandler::HandleRemoveHostDevice(const base::ListValue* args) {
@@ -375,9 +379,12 @@ void MultideviceHandler::HandleAttemptNotificationSetup(
   DCHECK(features::IsPhoneHubEnabled());
   DCHECK(!notification_access_operation_);
 
-  if (notification_access_manager_->HasAccessBeenGranted()) {
-    PA_LOG(WARNING) << "Phonehub notification access has already been granted, "
-                       "returning early.";
+  phonehub::NotificationAccessManager::AccessStatus access_status =
+      notification_access_manager_->GetAccessStatus();
+  if (access_status != phonehub::NotificationAccessManager::AccessStatus::
+                           kAvailableButNotGranted) {
+    PA_LOG(WARNING) << "Cannot request notification access setup flow; current "
+                    << "status: " << access_status;
     return;
   }
 
@@ -449,11 +456,6 @@ MultideviceHandler::GeneratePageContentDataDictionary() {
           feature_states
               [multidevice_setup::mojom::Feature::kPhoneHubNotifications]));
   page_content_dictionary->SetInteger(
-      kPageContentDataPhoneHubNotificationBadgeStateKey,
-      static_cast<int32_t>(
-          feature_states
-              [multidevice_setup::mojom::Feature::kPhoneHubNotificationBadge]));
-  page_content_dictionary->SetInteger(
       kPageContentDataPhoneHubTaskContinuationStateKey,
       static_cast<int32_t>(
           feature_states
@@ -474,11 +476,12 @@ MultideviceHandler::GeneratePageContentDataDictionary() {
           ? android_sms_pairing_state_tracker_->IsAndroidSmsPairingComplete()
           : false);
 
-  page_content_dictionary->SetBoolean(
-      kIsNotificationAccessGranted,
-      notification_access_manager_
-          ? notification_access_manager_->HasAccessBeenGranted()
-          : false);
+  phonehub::NotificationAccessManager::AccessStatus access_status = phonehub::
+      NotificationAccessManager::AccessStatus::kAvailableButNotGranted;
+  if (notification_access_manager_)
+    access_status = notification_access_manager_->GetAccessStatus();
+  page_content_dictionary->SetInteger(kNotificationAccessStatus,
+                                      static_cast<int32_t>(access_status));
 
   return page_content_dictionary;
 }

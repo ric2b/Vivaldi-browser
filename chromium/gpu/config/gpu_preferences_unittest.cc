@@ -8,6 +8,7 @@
 #include "base/command_line.h"
 #include "base/message_loop/message_pump_type.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "gpu/config/gpu_switches.h"
 #include "gpu/ipc/common/gpu_preferences.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -74,11 +75,17 @@ void CheckGpuPreferencesEqual(GpuPreferences left, GpuPreferences right) {
             right.watchdog_starts_backgrounded);
   EXPECT_EQ(left.gr_context_type, right.gr_context_type);
   EXPECT_EQ(left.use_vulkan, right.use_vulkan);
+  EXPECT_EQ(left.enable_vulkan_protected_memory,
+            right.enable_vulkan_protected_memory);
+  EXPECT_EQ(left.vulkan_heap_memory_limit, right.vulkan_heap_memory_limit);
+  EXPECT_EQ(left.vulkan_sync_cpu_memory_limit,
+            right.vulkan_sync_cpu_memory_limit);
   EXPECT_EQ(left.enable_gpu_benchmarking_extension,
             right.enable_gpu_benchmarking_extension);
   EXPECT_EQ(left.enable_webgpu, right.enable_webgpu);
   EXPECT_EQ(left.enable_dawn_backend_validation,
             right.enable_dawn_backend_validation);
+  EXPECT_EQ(left.disable_dawn_robustness, right.disable_dawn_robustness);
   EXPECT_EQ(left.enable_gpu_blocked_time_metric,
             right.enable_gpu_blocked_time_metric);
   EXPECT_EQ(left.enable_perf_data_collection,
@@ -88,7 +95,7 @@ void CheckGpuPreferencesEqual(GpuPreferences left, GpuPreferences right) {
 #endif
   EXPECT_EQ(left.enable_native_gpu_memory_buffers,
             right.enable_native_gpu_memory_buffers);
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
   EXPECT_EQ(left.platform_disallows_chromeos_direct_video_decoder,
             right.platform_disallows_chromeos_direct_video_decoder);
 #endif
@@ -112,12 +119,6 @@ TEST(GpuPreferencesTest, EncodeDecode) {
 
     GpuPreferences default_prefs;
     mojom::GpuPreferences prefs_mojom;
-
-    // Make sure all fields are included in mojo struct.
-    // TODO(zmo): This test isn't perfect. If a field isn't included in
-    // mojom::GpuPreferences, the two struct sizes might still be equal due to
-    // alignment.
-    EXPECT_EQ(sizeof(default_prefs), sizeof(prefs_mojom));
 
 #define GPU_PREFERENCES_FIELD(name, value)         \
   input_prefs.name = value;                        \
@@ -174,6 +175,8 @@ TEST(GpuPreferencesTest, EncodeDecode) {
                                mojom::GrContextType::kVulkan)
     GPU_PREFERENCES_FIELD_ENUM(use_vulkan, VulkanImplementationName::kNative,
                                mojom::VulkanImplementationName::kNative)
+    GPU_PREFERENCES_FIELD(vulkan_heap_memory_limit, 1);
+    GPU_PREFERENCES_FIELD(vulkan_sync_cpu_memory_limit, 1);
     GPU_PREFERENCES_FIELD(enable_gpu_benchmarking_extension, true)
     GPU_PREFERENCES_FIELD(enable_webgpu, true)
     GPU_PREFERENCES_FIELD(enable_dawn_backend_validation, true)
@@ -184,7 +187,7 @@ TEST(GpuPreferencesTest, EncodeDecode) {
                                base::MessagePumpType::UI)
 #endif
     GPU_PREFERENCES_FIELD(enable_native_gpu_memory_buffers, true);
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
     GPU_PREFERENCES_FIELD(platform_disallows_chromeos_direct_video_decoder,
                           true);
 #endif
@@ -269,6 +272,8 @@ TEST(GpuPreferencesTest, DISABLED_DecodePreferences) {
   PRINT_BOOL(watchdog_starts_backgrounded);
   PRINT_INT(gr_context_type);
   PRINT_INT(use_vulkan);
+  PRINT_INT(vulkan_heap_memory_limit);
+  PRINT_INT(vulkan_sync_cpu_memory_limit);
   PRINT_BOOL(enable_gpu_benchmarking_extension);
   PRINT_BOOL(enable_webgpu);
   PRINT_BOOL(enable_dawn_backend_validation);
@@ -278,7 +283,7 @@ TEST(GpuPreferencesTest, DISABLED_DecodePreferences) {
   PRINT_INT(message_pump_type);
 #endif
   PRINT_BOOL(enable_native_gpu_memory_buffers);
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
   PRINT_BOOL(platform_disallows_chromeos_direct_video_decoder);
 #endif
   printf("}\n");

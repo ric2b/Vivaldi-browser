@@ -10,7 +10,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/cpu.h"
 #include "base/dcheck_is_on.h"
@@ -22,6 +22,7 @@
 #include "base/system/sys_info.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_config.h"
+#include "base/tracing/protos/grit/tracing_proto_resources.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "components/tracing/common/trace_startup_config.h"
@@ -42,10 +43,14 @@
 #include "net/base/network_change_notifier.h"
 #include "services/tracing/public/cpp/perfetto/perfetto_config.h"
 #include "services/tracing/public/cpp/perfetto/perfetto_traced_process.h"
+#include "services/tracing/public/cpp/perfetto/trace_event_data_source.h"
 #include "services/tracing/public/cpp/trace_event_agent.h"
 #include "services/tracing/public/cpp/traced_process_impl.h"
 #include "services/tracing/public/cpp/tracing_features.h"
 #include "services/tracing/public/mojom/constants.mojom.h"
+#include "third_party/perfetto/include/perfetto/protozero/message.h"
+#include "third_party/perfetto/protos/perfetto/trace/extension_descriptor.pbzero.h"
+#include "third_party/perfetto/protos/perfetto/trace/trace_packet.pbzero.h"
 #include "v8/include/v8-version-string.h"
 
 #if defined(OS_CHROMEOS)
@@ -219,6 +224,9 @@ void TracingControllerImpl::AddAgents() {
         base::BindRepeating(&TracingDelegate::GenerateMetadataDict,
                             base::Unretained(delegate_.get())));
   }
+  tracing::TraceEventMetadataSource::GetInstance()->AddGeneratorFunction(
+      base::BindRepeating(&TracingControllerImpl::GenerateMetadataPacket,
+                          base::Unretained(this)));
 #if defined(OS_ANDROID)
   tracing::PerfettoTracedProcess::Get()->AddDataSource(
       tracing::JavaHeapProfiler::GetInstance());
@@ -231,6 +239,23 @@ void TracingControllerImpl::ConnectToServiceIfNeeded() {
         consumer_host_.BindNewPipeAndPassReceiver());
     consumer_host_.reset_on_disconnect();
   }
+}
+
+void TracingControllerImpl::GenerateMetadataPacket(
+    perfetto::protos::pbzero::TracePacket* handle,
+    bool privacy_filtering_enabled) {
+  if (privacy_filtering_enabled)
+    return;
+
+  auto* extension_descriptor = handle->BeginNestedMessage<protozero::Message>(
+      perfetto::protos::pbzero::TracePacket::kExtensionDescriptorFieldNumber);
+  scoped_refptr<base::RefCountedMemory> descriptor_bytes(
+      GetContentClient()->GetDataResourceBytes(chrome_track_event_descriptor));
+  if (!descriptor_bytes)
+    return;
+  extension_descriptor->AppendBytes(
+      perfetto::protos::pbzero::ExtensionDescriptor::kExtensionSetFieldNumber,
+      descriptor_bytes->data(), descriptor_bytes->size());
 }
 
 // Can be called on any thread.
@@ -403,12 +428,14 @@ bool TracingControllerImpl::StartTracing(
   ConnectToServiceIfNeeded();
 
   perfetto::TraceConfig perfetto_config = tracing::GetDefaultPerfettoConfig(
-      trace_config, /*requires_anonymized_data=*/false);
+      trace_config,
+      /*privacy_filtering_enabled=*/false,
+      /*convert_to_legacy_json=*/true,
+      perfetto::protos::gen::ChromeConfig::USER_INITIATED);
 
   consumer_host_->EnableTracing(
       tracing_session_host_.BindNewPipeAndPassReceiver(),
-      receiver_.BindNewPipeAndPassRemote(), std::move(perfetto_config),
-      tracing::mojom::TracingClientPriority::kUserInitiated);
+      receiver_.BindNewPipeAndPassRemote(), std::move(perfetto_config));
   receiver_.set_disconnect_handler(base::BindOnce(
       &TracingControllerImpl::OnTracingFailed, base::Unretained(this)));
   tracing_session_host_.set_disconnect_handler(base::BindOnce(
@@ -599,7 +626,7 @@ void TracingControllerImpl::OnTracingEnabled() {
     std::move(start_tracing_callback_).Run();
 }
 
-void TracingControllerImpl::OnTracingDisabled() {}
+void TracingControllerImpl::OnTracingDisabled(bool) {}
 
 void TracingControllerImpl::OnTracingFailed() {
   CompleteFlush();

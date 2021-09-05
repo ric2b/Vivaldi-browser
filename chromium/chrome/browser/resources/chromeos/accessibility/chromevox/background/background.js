@@ -185,23 +185,19 @@ Background = class extends ChromeVoxState {
     };
     new ProgressPlayer();
 
-    chrome.commandLinePrivate.hasSwitch(
-        'enable-experimental-accessibility-chromevox-tutorial', (enabled) => {
+    chrome.loginState.getSessionState((sessionState) => {
+      // If starting ChromeVox from OOBE, start the tutorial.
+      if (sessionState === chrome.loginState.SessionState.IN_OOBE_SCREEN) {
+        chrome.chromeosInfoPrivate.isTabletModeEnabled((enabled) => {
+          // Only start the tutorial if we are not in tablet mode. This
+          // is a temporary workaround until we implement a touch-specific
+          // tutorial.
           if (!enabled) {
-            return;
+            (new PanelCommand(PanelCommandType.TUTORIAL)).send();
           }
-
-          chrome.loginState.getSessionState((sessionState) => {
-            // If starting ChromeVox from OOBE, start the ChromeVox tutorial.
-            // Use a timeout to allow ChromeVox to initialize first.
-            if (sessionState ===
-                chrome.loginState.SessionState.IN_OOBE_SCREEN) {
-              setTimeout(() => {
-                (new PanelCommand(PanelCommandType.TUTORIAL)).send();
-              }, 1000);
-            }
-          });
         });
+      }
+    });
   }
 
   /**
@@ -257,7 +253,7 @@ Background = class extends ChromeVoxState {
     start.setAccessibilityFocus();
 
     const root = AutomationUtil.getTopLevelRoot(start);
-    if (!root || root.role == RoleType.DESKTOP || root == start) {
+    if (!root || root.role === RoleType.DESKTOP || root === start) {
       return;
     }
 
@@ -306,8 +302,8 @@ Background = class extends ChromeVoxState {
       const curRootEnd = range.end.node.root;
 
       // Deny crossing over the start of the page selection and roots.
-      if (pageRootStart != pageRootEnd || pageRootStart != curRootStart ||
-          pageRootEnd != curRootEnd) {
+      if (pageRootStart !== pageRootEnd || pageRootStart !== curRootStart ||
+          pageRootEnd !== curRootEnd) {
         o.format('@end_selection');
         DesktopAutomationHandler.instance.ignoreDocumentSelectionFromAction(
             false);
@@ -330,8 +326,8 @@ Background = class extends ChromeVoxState {
           selectedRange = prevRange;
         }
         const wasBackwardSel =
-            this.pageSel_.start.compare(this.pageSel_.end) == Dir.BACKWARD ||
-            dir == Dir.BACKWARD;
+            this.pageSel_.start.compare(this.pageSel_.end) === Dir.BACKWARD ||
+            dir === Dir.BACKWARD;
         this.pageSel_ = new cursors.Range(
             this.pageSel_.start, wasBackwardSel ? range.start : range.end);
         if (this.pageSel_) {
@@ -391,13 +387,13 @@ Background = class extends ChromeVoxState {
 
     switch (target) {
       case 'next':
-        if (action == 'getIsClassicEnabled') {
+        if (action === 'getIsClassicEnabled') {
           const url = msg['url'];
           const isClassicEnabled = false;
           port.postMessage({target: 'next', isClassicEnabled});
-        } else if (action == 'onCommand') {
+        } else if (action === 'onCommand') {
           CommandHandler.onCommand(msg['command']);
-        } else if (action == 'flushNextUtterance') {
+        } else if (action === 'flushNextUtterance') {
           Output.forceModeForNextSpeechUtterance(QueueMode.FLUSH);
         }
         break;
@@ -430,14 +426,14 @@ Background = class extends ChromeVoxState {
    */
   onClipboardEvent_(evt) {
     let text = '';
-    if (evt.type == 'paste') {
+    if (evt.type === 'paste') {
       if (this.preventPasteOutput_) {
         this.preventPasteOutput_ = false;
         return;
       }
       text = evt.clipboardData.getData('text');
       ChromeVox.tts.speak(Msgs.getMsg(evt.type, [text]), QueueMode.QUEUE);
-    } else if (evt.type == 'copy' || evt.type == 'cut') {
+    } else if (evt.type === 'copy' || evt.type === 'cut') {
       this.preventPasteOutput_ = true;
       const textarea = document.createElement('textarea');
       document.body.appendChild(textarea);
@@ -479,8 +475,8 @@ Background = class extends ChromeVoxState {
 
       entered
           .filter((f) => {
-            return f.role == RoleType.PLUGIN_OBJECT ||
-                f.role == RoleType.IFRAME;
+            return f.role === RoleType.PLUGIN_OBJECT ||
+                f.role === RoleType.IFRAME;
           })
           .forEach((container) => {
             if (!container.state[StateType.FOCUSED]) {
@@ -516,7 +512,7 @@ Background = class extends ChromeVoxState {
 
     // If a common ancestor of |start| and |end| is a link, focus that.
     let ancestor = AutomationUtil.getLeastCommonAncestor(start, end);
-    while (ancestor && ancestor.root == start.root) {
+    while (ancestor && ancestor.root === start.root) {
       if (isFocusableLinkOrControl(ancestor)) {
         if (!ancestor.state[StateType.FOCUSED]) {
           ancestor.focus();

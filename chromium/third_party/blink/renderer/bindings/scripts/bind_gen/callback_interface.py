@@ -16,6 +16,7 @@ from .code_node_cxx import CxxFuncDefNode
 from .code_node_cxx import CxxNamespaceNode
 from .codegen_accumulator import CodeGenAccumulator
 from .codegen_context import CodeGenContext
+from .codegen_utils import collect_forward_decls_and_include_headers
 from .codegen_utils import component_export
 from .codegen_utils import component_export_header
 from .codegen_utils import enclose_with_header_guard
@@ -30,7 +31,6 @@ from .task_queue import TaskQueue
 
 # IDL callback interface and IDL callback function share a lot by their nature,
 # so this module uses some implementations from IDL callback function.
-from .callback_function import collect_forward_decls_and_include_headers
 from .callback_function import make_callback_invocation_function
 from .callback_function import make_invoke_and_report_function
 from .callback_function import make_is_runnable_or_throw_exception
@@ -202,7 +202,7 @@ def generate_callback_interface(callback_interface_identifier):
     ])
     installer_function_defs.accumulate(
         CodeGenAccumulator.require_include_headers([
-            "third_party/blink/renderer/bindings/core/v8/v8_dom_configuration.h"
+            "third_party/blink/renderer/platform/bindings/idl_member_installer.h",
         ]))
 
     # WrapperTypeInfo
@@ -289,7 +289,9 @@ def generate_callback_interface(callback_interface_identifier):
     ])
     (header_forward_decls, header_include_headers, source_forward_decls,
      source_include_headers) = collect_forward_decls_and_include_headers(
-         callback_interface.operation_groups[0][0])
+         [callback_interface.operation_groups[0][0].return_type] +
+         map(lambda argument: argument.idl_type,
+             callback_interface.operation_groups[0][0].arguments))
     header_node.accumulator.add_class_decls(header_forward_decls)
     header_node.accumulator.add_include_headers(header_include_headers)
     source_node.accumulator.add_class_decls(source_forward_decls)
@@ -310,13 +312,6 @@ def generate_callback_interface(callback_interface_identifier):
 
         class_def.public_section.append(get_wrapper_type_info_def)
         class_def.public_section.append(EmptyNode())
-        class_def.public_section.extend([
-            TextNode("// Migration adapter"),
-            TextNode("static v8::Local<v8::FunctionTemplate> DomTemplate("
-                     "v8::Isolate* isolate, "
-                     "const DOMWrapperWorld& world);"),
-            EmptyNode(),
-        ])
         class_def.private_section.append(wrapper_type_info_var_def)
         class_def.private_section.append(EmptyNode())
         source_blink_ns.body.extend([

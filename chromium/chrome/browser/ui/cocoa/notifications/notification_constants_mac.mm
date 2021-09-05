@@ -11,13 +11,15 @@ namespace notification_constants {
 NSString* const kNotificationTitle = @"title";
 NSString* const kNotificationSubTitle = @"subtitle";
 NSString* const kNotificationInformativeText = @"informativeText";
-NSString* const kNotificationImage = @"icon";
+NSString* const kNotificationIcon = @"icon";
+NSString* const kNotificationIconPath = @"iconPath";
 NSString* const kNotificationButtonOne = @"buttonOne";
 NSString* const kNotificationButtonTwo = @"buttonTwo";
 NSString* const kNotificationTag = @"tag";
 NSString* const kNotificationCloseButtonTag = @"closeButton";
 NSString* const kNotificationOptionsButtonTag = @"optionsButton";
 NSString* const kNotificationSettingsButtonTag = @"settingsButton";
+NSString* const kNotificationCategoryIdentifier = @"categoryIdentifier";
 
 // Applicable to NotificationBuilder and NotificationResponseBuilder
 NSString* const kNotificationOrigin = @"notificationOrigin";

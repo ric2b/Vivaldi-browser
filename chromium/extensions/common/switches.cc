@@ -4,6 +4,8 @@
 
 #include "extensions/common/switches.h"
 
+#include "build/chromeos_buildflags.h"
+
 namespace extensions {
 
 namespace switches {
@@ -62,7 +64,7 @@ const char kLoadApps[] = "load-apps";
 // Comma-separated list of paths to extensions to load at startup.
 const char kLoadExtension[] = "load-extension";
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 // Path to the unpacked test extension to load into the signin profile. The ID
 // extension loaded must match kTestSigninProfileExtensionId.
 const char kLoadSigninProfileTestExtension[] =
@@ -83,6 +85,9 @@ const char kTraceAppSource[] = "enable-trace-app-source";
 // Enable package hash check: the .crx file sha256 hash sum should be equal to
 // the one received from update manifest.
 const char kEnableCrxHashCheck[] = "enable-crx-hash-check";
+
+// Mute extension errors while working with new manifest version.
+const char kAllowFutureManifestVersion[] = "allow-future-manifest-version";
 
 }  // namespace switches
 

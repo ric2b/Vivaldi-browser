@@ -10,6 +10,7 @@
 #include "base/memory/ref_counted_memory.h"
 #include "chrome/browser/buildflags.h"
 #include "chrome/browser/media/kaleidoscope/constants.h"
+#include "chrome/browser/media/kaleidoscope/grit/kaleidoscope_resources.h"
 #include "chrome/browser/media/kaleidoscope/kaleidoscope_data_provider_impl.h"
 #include "chrome/browser/media/kaleidoscope/kaleidoscope_metrics_recorder.h"
 #include "chrome/browser/media/kaleidoscope/kaleidoscope_switches.h"
@@ -22,10 +23,6 @@
 #include "content/public/browser/web_ui_data_source.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
 #include "ui/base/resource/resource_bundle.h"
-
-#if BUILDFLAG(ENABLE_KALEIDOSCOPE)
-#include "chrome/browser/media/kaleidoscope/grit/kaleidoscope_resources.h"
-#endif  // BUILDFLAG(ENABLE_KALEIDOSCOPE)
 
 namespace {
 
@@ -206,6 +203,27 @@ void OnStringsRequest(const std::string& path,
   std::move(callback).Run(ref_contents);
 }
 
+content::WebUIDataSource* CreateUntrustedPALChildWebUIDataSource() {
+  content::WebUIDataSource* untrusted_source =
+      content::WebUIDataSource::Create(kKaleidoscopeUntrustedPALChildURL);
+  untrusted_source->DisableDenyXFrameOptions();
+
+  // Allow scripts from Google.
+  untrusted_source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::ScriptSrc,
+      "script-src https://imasdk.googleapis.com 'unsafe-inline' 'self';");
+  untrusted_source->DisableTrustedTypesCSP();
+
+#if BUILDFLAG(ENABLE_KALEIDOSCOPE)
+  untrusted_source->AddResourcePath("pal-child.html",
+                                    IDR_KALEIDOSCOPE_PAL_CHILD_HTML);
+  untrusted_source->AddResourcePath("pal-child.js",
+                                    IDR_KALEIDOSCOPE_PAL_CHILD_JS);
+#endif  // BUILDFLAG(ENABLE_KALEIDOSCOPE)
+
+  return untrusted_source;
+}
+
 }  // anonymous namespace
 
 // We set |enable_chrome_send| to true since we need it for browser tests.
@@ -217,6 +235,8 @@ KaleidoscopeUI::KaleidoscopeUI(content::WebUI* web_ui)
   content::WebUIDataSource::Add(browser_context, CreateWebUIDataSource());
   content::WebUIDataSource::Add(browser_context,
                                 CreateUntrustedWebUIDataSource());
+  content::WebUIDataSource::Add(browser_context,
+                                CreateUntrustedPALChildWebUIDataSource());
 }
 
 KaleidoscopeUI::~KaleidoscopeUI() {
@@ -264,12 +284,13 @@ content::WebUIDataSource* KaleidoscopeUI::CreateWebUIDataSource() {
   html_source->AddResourcePath(
       "chrome/browser/media/feeds/media_feeds_store.mojom-lite.js",
       IDR_MEDIA_FEEDS_STORE_MOJOM_LITE_JS);
-  html_source->AddResourcePath("module.js", IDR_KALEIDOSCOPE_NTP_MODULE_JS);
   html_source->AddResourcePath("content.js", IDR_KALEIDOSCOPE_CONTENT_JS);
   html_source->AddResourcePath("shared.css", IDR_KALEIDOSCOPE_SHARED_CSS);
 
   html_source->SetDefaultResource(IDR_KALEIDOSCOPE_HTML);
 #endif  // BUILDFLAG(ENABLE_KALEIDOSCOPE)
+
+  html_source->AddResourcePath("module.js", IDR_KALEIDOSCOPE_NTP_MODULE_JS);
 
   return html_source;
 }
@@ -314,7 +335,8 @@ content::WebUIDataSource* KaleidoscopeUI::CreateUntrustedWebUIDataSource() {
   // Allow YouTube videos to be embedded.
   untrusted_source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ChildSrc,
-      "child-src https://www.youtube.com;");
+      "child-src https://www.youtube.com "
+      "chrome-untrusted://kaleidoscope-pal-generator;");
 
   // Add the URL to the backend.
   untrusted_source->AddString("googleApiUrl", backend_url.spec());
@@ -326,6 +348,7 @@ content::WebUIDataSource* KaleidoscopeUI::CreateUntrustedWebUIDataSource() {
   untrusted_source->AddResourcePath("content.js", IDR_KALEIDOSCOPE_CONTENT_JS);
   untrusted_source->AddResourcePath("content-worker.js",
                                     IDR_KALEIDOSCOPE_CONTENT_WORKER_JS);
+  untrusted_source->AddResourcePath("icons.js", IDR_KALEIDOSCOPE_ICONS_JS);
   untrusted_source->AddResourcePath("messages.js",
                                     IDR_KALEIDOSCOPE_MESSAGES_JS);
   untrusted_source->AddResourcePath("toolbar.js", IDR_KALEIDOSCOPE_TOOLBAR_JS);

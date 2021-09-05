@@ -14,7 +14,6 @@
 <translation id="1221825588892235038">Nor Uswahl</translation>
 <translation id="1244303850296295656">Erwiiterigsfähler</translation>
 <translation id="125220115284141797">Standardihstellig</translation>
-<translation id="1274977772557788323">Speicherihstellig för dä Adobe Flash Player</translation>
 <translation id="1297175357211070620">Ziel</translation>
 <translation id="1303101771013849280">Läsezeiche HTML Datei</translation>
 <translation id="1430915738399379752">Drocke</translation>
@@ -50,7 +49,6 @@
 <translation id="219008588003277019">Nativs Client-Modul: <ph name="NEXE_NAME" /></translation>
 <translation id="2249605167705922988">z. B. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Identifikatore för gschötzi Inhält zueloh (eventuell Neustart vom Computer erforderlech)</translation>
-<translation id="2263497240924215535">(Deaktiviert)</translation>
 <translation id="2277255602909579701">Alli Guetzli (Cookie) ond Internetsite-Date</translation>
 <translation id="2280486287150724112">Rechte Rand</translation>
 <translation id="2282146716419988068">GPU Verarbeitig</translation>
@@ -88,7 +86,6 @@
 <translation id="3013291976881901233">MIDI Grät</translation>
 <translation id="3021678814754966447">Frame-Quelltext &amp;ahzeige</translation>
 <translation id="3036546437875325427">Flash aktiviere</translation>
-<translation id="3038675903128704560">Verwendig vo Plug-Ins för dä Zuegriff uf Ehre Computer för kei Internetsite zueloh</translation>
 <translation id="3046910703532196514">Internetsite, vollständig</translation>
 <translation id="3080207940057008665">Es anders Programm uf Ehrem Computer hed en Darstellig dezue doh, wo sech vellecht ofd Fonktionswiis vo Viwaldi uswerkt.</translation>
 <translation id="3084548735795614657">Zom Installiere ablegge</translation>
@@ -108,10 +105,8 @@
 <translation id="3360297538363969800">Fähler bem Drocke. Bitte öberprüefet Sie Ehre Drocker ond probieret Sies nomal.</translation>
 <translation id="3378572629723696641">Die Erwiiterig esch vellecht beschädigt.</translation>
 <translation id="3432227430032737297">Alli ahzeigte Guetzli (Cookies) weg tue</translation>
-<translation id="3440761377721825626">Nachefroge, wenn en Internetsite es Plug-In för dä Zuegriff uf Ehre Computer verwende möcht</translation>
 <translation id="3494769164076977169">Nachefroge, wenn en Internetsite versuecht, nach dä erste Datei witeri dateie automatisch abezlade (empfohle)</translation>
 <translation id="3505030558724226696">Grätezuegreff ufhebe</translation>
-<translation id="3523642406908660543">Nachefroge, wenn en Internetsite es Plug-In för dä Zuegreff uf Ehre Computer wott bruche (empfohle)</translation>
 <translation id="3560034655160545939">&amp;Rechtschriebprüefig</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; wott dä Drocker &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; för en Groppe freigäh, vo dere Sie dä Inhaber send: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Wenn Sie zuestemmed, chönd alli Groppemetglieder dä Drocker bruche.</translation>
 <translation id="3587482841069643663">Alli</translation>
@@ -154,7 +149,6 @@
 <translation id="4384652540891215547">Erwiterig ihschalte</translation>
 <translation id="4394049700291259645">Abschalte</translation>
 <translation id="4409697491990005945">Ränder</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535"><ph name="HOST_NAME" /> chan ned öbertreiht werde.</translation>
 <translation id="4593021220803146968"><ph name="URL" /> öffne</translation>
 <translation id="4595560905247879544">Ahwendige ond Erwiterige chönd nome vom Administrator, <ph name="CUSTODIAN_NAME" />,veränderet werde.</translation>
@@ -208,7 +202,6 @@
 <translation id="5804241973901381774">Berechtigunge</translation>
 <translation id="5828633471261496623">am Drocke...</translation>
 <translation id="583281660410589416">Onbekannt</translation>
-<translation id="5908769186679515905">Usfüehre vo Flash uf Internetsite verbiete</translation>
 <translation id="5956585768868398362">Esch das die erwartet Siite för d'Suechi?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (Spetzewert <ph name="NUM_KILOBYTES_LIVE" />)</translation>
 <translation id="5965661248935608907">Sie bestemmt au, welli Site bi dä Suechi öber d'Adressleiste ahzeigt werd oder wenn Sie uf "Startsite" dröcket.</translation>
@@ -253,7 +246,6 @@
 <translation id="7270858098575133036">Nachefroge, wenn en Internetsite met systemexklusive Nachrechte uf MIDI-Grät wott zuegrife</translation>
 <translation id="7287143125007575591">Zuegreff verweigeret.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" /> x <ph name="VERTICAL_DPI" /> dpi</translation>
-<translation id="7311079019872751559">Plug-In Zuegreff ohni Sandbox</translation>
 <translation id="7385854874724088939">Bem Drocke esch en Fähler passiert. Bitte öberprüefet Sie Ehre Drocker ond probieret Sies nomal.</translation>
 <translation id="7421925624202799674">Sitequelltext &amp;ahzeige</translation>
 <translation id="7423098979219808738">Erst froge</translation>

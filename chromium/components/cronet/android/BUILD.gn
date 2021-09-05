@@ -67,6 +67,10 @@ java_cpp_enum("net_request_priority_java") {
   sources = [ "//net/base/request_priority.h" ]
 }
 
+java_cpp_enum("net_idempotency_java") {
+  sources = [ "//net/base/idempotency.h" ]
+}
+
 java_cpp_enum("network_quality_observation_source_java") {
   sources = [ "//net/nqe/network_quality_observation_source.h" ]
 }
@@ -82,12 +86,10 @@ java_cpp_enum("http_cache_type_java") {
 java_cpp_template("load_states_list") {
   sources = [ "java/src/org/chromium/net/impl/LoadState.template" ]
   inputs = [ "//net/base/load_states_list.h" ]
-  package_path = "org/chromium/net/impl"
 }
 
 java_cpp_template("integrated_mode_state") {
   sources = [ "java/src/org/chromium/net/impl/IntegratedModeState.template" ]
-  package_path = "org/chromium/net/impl"
   if (integrated_mode) {
     defines = [ "INTEGRATED_MODE" ]
   }
@@ -348,6 +350,7 @@ android_library("cronet_impl_fake_base_java") {
 }
 
 cronet_impl_native_java_srcjar_deps = [
+  ":net_idempotency_java",
   ":net_request_priority_java",
   ":network_quality_observation_source_java",
   ":url_request_error_java",
@@ -1017,6 +1020,7 @@ if (!is_component_build) {
     # it depends on basically all source files.
     enable_lint = true
     lint_suppressions_file = "lint-suppressions.xml"
+    lint_baseline_file = "lint-baseline.xml"
 
     # Still needs to support Jelly Bean. See crbug.com/922656.
     lint_min_sdk_version = 16
@@ -1184,6 +1188,7 @@ if (!is_component_build) {
         "//base/android/proguard/chromium_apk.flags",
         "//testing/android/proguard_for_test.flags",
       ]
+      enable_proguard_checks = false
     }
   }
 

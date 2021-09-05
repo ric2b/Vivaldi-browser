@@ -674,7 +674,7 @@ Compositor::GetBeginMainFrameMetrics() {
 void Compositor::NotifyThroughputTrackerResults(
     cc::CustomTrackerResults results) {
   for (auto& pair : results)
-    ReportThroughputForTracker(pair.first, std::move(pair.second));
+    ReportMetricsForTracker(pair.first, std::move(pair.second));
 }
 
 void Compositor::DidReceiveCompositorFrameAck() {
@@ -689,6 +689,8 @@ void Compositor::DidPresentCompositorFrame(
   TRACE_EVENT_MARK_WITH_TIMESTAMP1("cc,benchmark", "FramePresented",
                                    feedback.timestamp, "environment",
                                    "browser");
+  for (auto& observer : observer_list_)
+    observer.OnDidPresentCompositorFrame(frame_token, feedback);
 }
 
 void Compositor::DidSubmitCompositorFrame() {
@@ -757,14 +759,14 @@ void Compositor::RequestPresentationTimeForNextFrame(
   host_->RequestPresentationTimeForNextFrame(std::move(callback));
 }
 
-void Compositor::ReportThroughputForTracker(
+void Compositor::ReportMetricsForTracker(
     int tracker_id,
-    cc::FrameSequenceMetrics::ThroughputData throughput) {
+    const cc::FrameSequenceMetrics::CustomReportData& data) {
   auto it = throughput_tracker_map_.find(tracker_id);
   if (it == throughput_tracker_map_.end())
     return;
 
-  std::move(it->second).Run(std::move(throughput));
+  std::move(it->second).Run(data);
   throughput_tracker_map_.erase(it);
 }
 

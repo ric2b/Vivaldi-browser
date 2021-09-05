@@ -68,17 +68,20 @@ class ExecutionContextImpl : public ExecutionContext,
     return node_->process_node();
   }
 
+  // Returns the current priority of the execution context, and the reason for
+  // the execution context having that particular priority.
+  const PriorityAndReason& GetPriorityAndReason() const override {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    return node_->priority_and_reason();
+  }
+
   const FrameNode* GetFrameNode() const override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    if (std::is_same<FrameNodeImpl, NodeImplType>::value)
-      return reinterpret_cast<const FrameNode*>(node_);
     return nullptr;
   }
 
   const WorkerNode* GetWorkerNode() const override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-    if (std::is_same<WorkerNodeImpl, NodeImplType>::value)
-      return reinterpret_cast<const WorkerNodeImpl*>(node_);
     return nullptr;
   }
 
@@ -113,6 +116,11 @@ class FrameExecutionContext
     return blink::ExecutionContextToken(node_->frame_token());
   }
 
+  const FrameNode* GetFrameNode() const override {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    return node_;
+  }
+
  protected:
   friend class NodeAttachedDataImpl<FrameExecutionContext>;
   explicit FrameExecutionContext(const FrameNodeImpl* frame_node)
@@ -134,6 +142,11 @@ class WorkerExecutionContext
   blink::ExecutionContextToken GetToken() const override {
     DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     return ToExecutionContextToken(node_->worker_token());
+  }
+
+  const WorkerNode* GetWorkerNode() const override {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    return node_;
   }
 
  protected:

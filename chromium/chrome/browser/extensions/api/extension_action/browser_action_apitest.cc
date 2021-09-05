@@ -207,6 +207,34 @@ class BrowserActionApiLazyTest
               action->GetBadgeBackgroundColor(ExtensionAction::kDefaultTabId));
   }
 
+  void RunEnableTest(base::StringPiece path, bool start_enabled) {
+    ExtensionTestMessageListener ready_listener("ready", true);
+    const Extension* extension =
+        LoadExtensionWithParamFlags(test_data_dir_.AppendASCII(path));
+    ASSERT_TRUE(extension) << message_;
+    // Test that there is a browser action in the toolbar.
+    ASSERT_EQ(1, GetBrowserActionsBar()->NumberOfBrowserActions());
+
+    ASSERT_TRUE(ready_listener.WaitUntilSatisfied());
+    ExtensionAction* action = GetBrowserAction(browser(), *extension);
+
+    // Tell the extension to enable/disable the browser action state and then
+    // catch the result.
+    ResultCatcher catcher;
+    if (start_enabled) {
+      action->SetIsVisible(ExtensionAction::kDefaultTabId, true);
+      ready_listener.Reply("start enabled");
+    } else {
+      action->SetIsVisible(ExtensionAction::kDefaultTabId, false);
+      ready_listener.Reply("start disabled");
+    }
+    EXPECT_TRUE(catcher.GetNextResult());
+
+    // Test that changes were applied.
+    EXPECT_EQ(!start_enabled,
+              action->GetIsVisible(ExtensionAction::kDefaultTabId));
+  }
+
  private:
   base::test::ScopedFeatureList feature_list_;
   std::unique_ptr<extensions::ScopedWorkerBasedExtensionsChannel>
@@ -235,6 +263,14 @@ IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest, Basic) {
   ExecuteExtensionAction(browser(), extension);
 
   EXPECT_TRUE(catcher.GetNextResult());
+}
+
+IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest, Disable) {
+  ASSERT_NO_FATAL_FAILURE(RunEnableTest("browser_action/enable", true));
+}
+
+IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest, Enable) {
+  ASSERT_NO_FATAL_FAILURE(RunEnableTest("browser_action/enable", false));
 }
 
 IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest, Update) {
@@ -529,6 +565,40 @@ IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest,
   EXPECT_EQ("hi!", GetBrowserActionsBar()->GetTooltip(0));
 }
 
+// Test that calling chrome.browserAction.setIcon() can set the icon for
+// extension.
+IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest, BrowserActionSetIcon) {
+  ASSERT_TRUE(RunExtensionTest("browser_action/set_icon")) << message_;
+  const Extension* extension = GetSingleLoadedExtension();
+  ASSERT_TRUE(extension) << message_;
+
+  int tab_id = ExtensionTabUtil::GetTabId(
+      browser()->tab_strip_model()->GetActiveWebContents());
+
+  ExtensionAction* browser_action = GetBrowserAction(browser(), *extension);
+  ASSERT_TRUE(browser_action)
+      << "Browser action test extension should have a browser action.";
+
+  EXPECT_FALSE(browser_action->default_icon());
+  EXPECT_EQ(0u,
+            browser_action->GetExplicitlySetIcon(tab_id).RepresentationCount());
+
+  // Simulate a click on the browser action icon. The onClicked handler will
+  // call setIcon().
+  {
+    ResultCatcher catcher;
+    GetBrowserActionsBar()->Press(0);
+    ASSERT_TRUE(catcher.GetNextResult());
+  }
+
+  // The call to setIcon in background.html set an icon, so the
+  // current tab's setting should have changed, but the default setting
+  // should not have changed.
+  EXPECT_FALSE(browser_action->default_icon());
+  EXPECT_EQ(1u,
+            browser_action->GetExplicitlySetIcon(tab_id).RepresentationCount());
+}
+
 // Test that calling chrome.browserAction.setPopup() can enable and change
 // a popup.
 IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest, BrowserActionAddPopup) {
@@ -620,7 +690,7 @@ IN_PROC_BROWSER_TEST_P(BrowserActionApiLazyTest, BrowserActionRemovePopup) {
       << "a specific tab id.";
 }
 
-#if defined(OS_WIN) || defined(OS_LINUX)
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS)
 // Flaky: https://crbug.com/1113904
 #define MAYBE_IncognitoBasic DISABLED_IncognitoBasic
 #else

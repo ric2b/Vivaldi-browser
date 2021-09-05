@@ -67,12 +67,6 @@ class OmniboxViewViews : public OmniboxView,
   // The internal view class name.
   static const char kViewClassName[];
 
-  // Range of command IDs to use for the items in the send tab to self submenu.
-  static const int kMinSendTabToSelfSubMenuCommandId =
-      send_tab_to_self::SendTabToSelfSubMenuModel::kMinCommandId;
-  static const int kMaxSendTabToSelfSubMenuCommandId =
-      send_tab_to_self::SendTabToSelfSubMenuModel::kMaxCommandId;
-
   // Max width of the gradient mask used to smooth ElideAnimation edges.
   static const int kSmoothingGradientMaxWidth = 15;
 
@@ -280,6 +274,9 @@ class OmniboxViewViews : public OmniboxView,
   virtual void ApplyColor(SkColor color, const gfx::Range& range);
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(
+      OmniboxViewViewsTest,
+      RendererInitiatedFocusPreservesCursorWhenStartingFocused);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsRevealOnHoverTest, HoverAndExit);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsRevealOnHoverTest, HoverAndExitIDN);
   FRIEND_TEST_ALL_PREFIXES(OmniboxViewViewsRevealOnHoverTest, PrivateRegistry);
@@ -412,7 +409,7 @@ class OmniboxViewViews : public OmniboxView,
                                    bool save_original_selection,
                                    bool notify_text_changed) override;
   void OnInlineAutocompleteTextMaybeChanged(const base::string16& display_text,
-                                            size_t user_text_start,
+                                            std::vector<gfx::Range> selections,
                                             size_t user_text_length) override;
   void OnInlineAutocompleteTextCleared() override;
   void OnRevertTemporaryText(const base::string16& display_text,
@@ -644,6 +641,9 @@ class OmniboxViewViews : public OmniboxView,
   // GESTURE_TAP. We want to select all only when the textfield is not in focus
   // and gets a tap. So we use this variable to remember focus state before tap.
   bool select_all_on_gesture_tap_ = false;
+
+  // Whether the user should be notified if the clipboard is restricted.
+  bool show_rejection_ui_if_any_ = false;
 
   // Keep track of the word that would be selected if URL is unelided between
   // a single and double click. This is an edge case where the elided URL is

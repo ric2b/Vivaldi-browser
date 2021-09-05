@@ -17,9 +17,15 @@ class MacOSSDKApi(recipe_api.RecipeApi):
   def __init__(self, sdk_properties, *args, **kwargs):
     super(MacOSSDKApi, self).__init__(*args, **kwargs)
 
+    self._sdk_dir = None
     self._sdk_version = sdk_properties['sdk_version'].lower()
     self._tool_package = sdk_properties['tool_package']
     self._tool_version = sdk_properties['tool_version']
+
+  @property
+  def sdk_dir(self):
+    assert self._sdk_dir
+    return self._sdk_dir
 
   @contextmanager
   def __call__(self):
@@ -61,9 +67,9 @@ class MacOSSDKApi(recipe_api.RecipeApi):
 
     try:
       with self.m.context(infra_steps=True):
-        sdk_dir = self._ensure_sdk()
+        self._sdk_dir = self._ensure_sdk()
         self.m.step('select XCode',
-                    ['sudo', 'xcode-select', '--switch', sdk_dir])
+                    ['sudo', 'xcode-select', '--switch', self._sdk_dir])
       yield
     finally:
       with self.m.context(infra_steps=True):

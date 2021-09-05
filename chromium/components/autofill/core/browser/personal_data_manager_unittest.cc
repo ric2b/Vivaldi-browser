@@ -15,7 +15,7 @@
 #include <vector>
 
 #include "base/base64.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/guid.h"
 #include "base/i18n/time_formatting.h"
@@ -2035,7 +2035,6 @@ TEST_F(PersonalDataManagerTest, DefaultCountryCodeComesFromProfiles) {
 
 TEST_F(PersonalDataManagerTest, DefaultCountryCodeComesFromVariations) {
   base::test::ScopedFeatureList enabled;
-  enabled.InitAndEnableFeature(features::kAutofillUseVariationCountryCode);
 
   const std::string expected_country_code = "DE";
   const std::string unepected_country_code = "FR";

@@ -25,6 +25,7 @@
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "net/http/http_util.h"
 #include "services/network/public/cpp/weak_wrapper_shared_url_loader_factory.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -137,9 +138,9 @@ CloudSpeechRecognitionClientUnitTest::CloudSpeechRecognitionClientUnitTest() =
 
 void CloudSpeechRecognitionClientUnitTest::SetUp() {
   client_under_test_ = std::make_unique<CloudSpeechRecognitionClient>(
-      media::BindToCurrentLoop(
-          base::Bind(&CloudSpeechRecognitionClientUnitTest::OnRecognitionEvent,
-                     base::Unretained(this))),
+      media::BindToCurrentLoop(base::BindRepeating(
+          &CloudSpeechRecognitionClientUnitTest::OnRecognitionEvent,
+          base::Unretained(this))),
       nullptr);
 
   speech_recognition_service_impl_ =

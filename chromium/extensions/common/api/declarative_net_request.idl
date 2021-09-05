@@ -428,12 +428,19 @@ namespace declarativeNetRequest {
     DOMString[]? enableRulesetIds;
   };
 
+  dictionary ExtensionActionOptions {
+    // Whether to automatically display the action count for a page as the
+    // extension's badge text. False by default.
+    boolean displayActionCountAsBadgeText;
+  };
+
   callback EmptyCallback = void();
   callback GetAllowedPagesCallback = void(DOMString[] result);
   callback GetRulesCallback = void(Rule[] rules);
   callback GetMatchedRulesCallback = void(RulesMatchedDetails details);
   callback GetEnabledRulesetsCallback = void(DOMString[] rulesetIds);
   callback IsRegexSupportedCallback = void(IsRegexSupportedResult result);
+  callback GetAvailableStaticRuleCountCallback = void(long count);
 
   interface Functions {
 
@@ -500,10 +507,10 @@ namespace declarativeNetRequest {
     static void getMatchedRules(optional MatchedRulesFilter filter,
                                 GetMatchedRulesCallback callback);
 
-    // Sets whether to automatically badge extension's icon to the matched
-    // action count for a tab. This preference is persisted across sessions and
-    // is false by default.
-    static void setActionCountAsBadgeText(boolean enable);
+    // Configures how matched actions will be displayed on the extension action.
+    // This preference is persisted across sessions.
+    static void setExtensionActionOptions(
+        ExtensionActionOptions options);
 
     // Checks if the given regular expression will be supported as a
     // <code>regexFilter</code> rule condition.
@@ -512,6 +519,11 @@ namespace declarativeNetRequest {
     // expression is supported and the reason if not.
     static void isRegexSupported(RegexOptions regexOptions,
                                  IsRegexSupportedCallback callback);
+
+    // Returns the number of static rules an extension can enable before the
+    // global static rule limit is reached.
+    // TODO(crbug.com/983299): Add documentation once implementation is complete.
+    [nodoc] static void getAvailableStaticRuleCount(GetAvailableStaticRuleCountCallback callback);
   };
 
   interface Properties {

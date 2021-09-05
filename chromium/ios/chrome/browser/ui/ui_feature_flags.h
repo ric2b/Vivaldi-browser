@@ -65,9 +65,6 @@ extern const base::Feature kSharedHighlightingIOS;
 // Feature flag that enables taking fullpage screenshots of a webpage.
 extern const base::Feature kEnableFullPageScreenshot;
 
-// Feature flag that enables reauth for filling passwords;
-extern const base::Feature kEnableAutofillPasswordReauthIOS;
-
 // Feature flag that enables showing a fullscreen modal promo informing users
 // about the default browser feature that also provides a button to send the
 // users in the Settings.app to update the default browser.
@@ -80,5 +77,15 @@ extern const base::Feature kDefaultBrowserSettings;
 // TODO(crbug.com/1128242): Remove this flag after the refactoring work is
 // finished. Flag to modernize the tabstrip without disturbing the existing one.
 extern const base::Feature kModernTabStrip;
+
+// Adds a setting to enable biometric authentication for incognito tabs.
+extern const base::Feature kIncognitoAuthentication;
+
+// Feature flag that experiments with new location permissions user experiences.
+extern const base::Feature kLocationPermissionsPrompt;
+
+// Feature flag that enables persisting the Crash Restore Infobar across
+// navigations.
+extern const base::Feature kIOSPersistCrashRestore;
 
 #endif  // IOS_CHROME_BROWSER_UI_UI_FEATURE_FLAGS_H_

@@ -33,7 +33,9 @@
     "aquarium_20k": {
       "ci_095": 45.797,
       "avg": 139.949,
-      "cpu_wall_time_ratio": 0.455
+      "cpu_wall_time_ratio": 0.455,
+      "experimental": true,
+      "_comment": "crbug.com/1134251"
     },
     "balls_css_transition_2_properties": {
       "ci_095": 7.166,
@@ -110,7 +112,9 @@
     "css_value_type_shadow": {
       "ci_095": 18.3,
       "avg": 65.502,
-      "cpu_wall_time_ratio": 0.585
+      "cpu_wall_time_ratio": 0.585,
+      "experimental": true,
+      "_comment": "crbug.com/1139155"
     },
     "animometer_webgl_attrib_arrays": {
       "ci_095": 0.44,
@@ -133,7 +137,9 @@
     "ie_chalkboard": {
       "ci_095": 32.615,
       "avg": 62.871,
-      "cpu_wall_time_ratio": 0.491
+      "cpu_wall_time_ratio": 0.491,
+      "experimental": true,
+      "_comment": "crbug.com/1133599"
     },
     "new_tilings": {
       "ci_095": 0.146,

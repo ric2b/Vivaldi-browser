@@ -39,6 +39,11 @@ class ASH_EXPORT WmGestureHandler {
   static constexpr float kVerticalThresholdDp = 300.f;
   static constexpr float kHorizontalThresholdDp = 330.f;
 
+  // The amount in trackpad units the fingers must move in a direction before a
+  // continuous gesture animation is started. This is to minimize accidental
+  // scrolls.
+  static constexpr int kContinuousGestureMoveThresholdDp = 10;
+
   WmGestureHandler();
   WmGestureHandler(const WmGestureHandler&) = delete;
   WmGestureHandler& operator=(const WmGestureHandler&) = delete;
@@ -54,8 +59,6 @@ class ASH_EXPORT WmGestureHandler {
   // the event has been handled and should not be processed further, false
   // otherwise.
   bool ProcessScrollEvent(const ui::ScrollEvent& event);
-
-  static void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
  private:
   // A struct containing the relevant data during a scroll session.

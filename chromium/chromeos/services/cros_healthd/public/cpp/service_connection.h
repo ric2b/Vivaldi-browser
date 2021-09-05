@@ -65,8 +65,6 @@ class ServiceConnection {
   // src/chromeos/service/cros_healthd/public/mojom/cros_healthd.mojom for
   // details.
   virtual void RunBatteryCapacityRoutine(
-      uint32_t low_mah,
-      uint32_t high_mah,
       mojom::CrosHealthdDiagnosticsService::RunBatteryCapacityRoutineCallback
           callback) = 0;
 
@@ -74,8 +72,6 @@ class ServiceConnection {
   // src/chromeos/service/cros_healthd/public/mojom/cros_healthd.mojom for
   // details.
   virtual void RunBatteryHealthRoutine(
-      uint32_t maximum_cycle_count,
-      uint32_t percent_battery_wear_allowed,
       mojom::CrosHealthdDiagnosticsService::RunBatteryHealthRoutineCallback
           callback) = 0;
 
@@ -186,11 +182,60 @@ class ServiceConnection {
       mojom::CrosHealthdDiagnosticsService::RunLanConnectivityRoutineCallback
           callback) = 0;
 
-  // Requests that cros_healthd runs the lan connectivity routine. See
+  // Requests that cros_healthd runs the signal strength routine. See
   // src/chromeos/service/cros_healthd/public/mojom/cros_healthd.mojom for
   // details.
   virtual void RunSignalStrengthRoutine(
       mojom::CrosHealthdDiagnosticsService::RunSignalStrengthRoutineCallback
+          callback) = 0;
+
+  // Requests that cros_healthd runs the gateway can be pinged routine. See
+  // src/chromeos/service/cros_healthd/public/mojom/cros_healthd.mojom for
+  // details.
+  virtual void RunGatewayCanBePingedRoutine(
+      mojom::CrosHealthdDiagnosticsService::RunGatewayCanBePingedRoutineCallback
+          callback) = 0;
+
+  // Requests that cros_healthd runs the has secure wifi routine. See
+  // src/chromeos/service/cros_healthd/public/mojom/cros_healthd.mojom for
+  // details.
+  virtual void RunHasSecureWiFiConnectionRoutine(
+      mojom::CrosHealthdDiagnosticsService::
+          RunHasSecureWiFiConnectionRoutineCallback callback) = 0;
+
+  // Requests that cros_healthd runs DNS resolver present routine. See
+  // src/chromeos/service/cros_healthd/public/mojom/cros_healthd.mojom for
+  // details.
+  virtual void RunDnsResolverPresentRoutine(
+      mojom::CrosHealthdDiagnosticsService::RunDnsResolverPresentRoutineCallback
+          callback) = 0;
+
+  // Requests that cros_healthd runs the DNS latency routine. See
+  // src/chromeos/service/cros_healthd/public/mojom/cros_healthd.mojom for
+  // details.
+  virtual void RunDnsLatencyRoutine(
+      mojom::CrosHealthdDiagnosticsService::RunDnsLatencyRoutineCallback
+          callback) = 0;
+
+  // Requests that cros_healthd runs the DNS resolution routine. See
+  // src/chromeos/service/cros_healthd/public/mojom/cros_healthd.mojom for
+  // details.
+  virtual void RunDnsResolutionRoutine(
+      mojom::CrosHealthdDiagnosticsService::RunDnsResolutionRoutineCallback
+          callback) = 0;
+
+  // Requests that cros_healthd runs the captive portal routine. See
+  // src/chromeos/service/cros_healthd/public/mojom/cros_healthd.mojom for
+  // details.
+  virtual void RunCaptivePortalRoutine(
+      mojom::CrosHealthdDiagnosticsService::RunCaptivePortalRoutineCallback
+          callback) = 0;
+
+  // Requests that cros_healthd runs the HTTP firewall routine. See
+  // src/chromeos/service/cros_healthd/public/mojom/cros_healthd.mojom for
+  // details.
+  virtual void RunHttpFirewallRoutine(
+      mojom::CrosHealthdDiagnosticsService::RunHttpFirewallRoutineCallback
           callback) = 0;
 
   // Subscribes to cros_healthd's Bluetooth-related events. See

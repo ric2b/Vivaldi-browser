@@ -34,6 +34,7 @@ public class TabbedModeTabDelegateFactory implements TabDelegateFactory {
     private final BrowserControlsVisibilityDelegate mAppBrowserControlsVisibilityDelegate;
     private final Supplier<ShareDelegate> mShareDelegateSupplier;
     private final Supplier<EphemeralTabCoordinator> mEphemeralTabCoordinatorSupplier;
+    private final Runnable mContextMenuCopyLinkObserver;
     private final BottomSheetController mBottomSheetController;
     private NativePageFactory mNativePageFactory;
 
@@ -41,11 +42,12 @@ public class TabbedModeTabDelegateFactory implements TabDelegateFactory {
             BrowserControlsVisibilityDelegate appBrowserControlsVisibilityDelegate,
             Supplier<ShareDelegate> shareDelegateSupplier,
             Supplier<EphemeralTabCoordinator> ephemeralTabCoordinatorSupplier,
-            BottomSheetController sheetController) {
+            Runnable contextMenuCopyLinkObserver, BottomSheetController sheetController) {
         mActivity = activity;
         mAppBrowserControlsVisibilityDelegate = appBrowserControlsVisibilityDelegate;
         mShareDelegateSupplier = shareDelegateSupplier;
         mEphemeralTabCoordinatorSupplier = ephemeralTabCoordinatorSupplier;
+        mContextMenuCopyLinkObserver = contextMenuCopyLinkObserver;
         mBottomSheetController = sheetController;
     }
 
@@ -62,8 +64,9 @@ public class TabbedModeTabDelegateFactory implements TabDelegateFactory {
     @Override
     public ContextMenuPopulatorFactory createContextMenuPopulatorFactory(Tab tab) {
         return new ChromeContextMenuPopulatorFactory(
-                new TabContextMenuItemDelegate(
-                        tab, mActivity.getTabModelSelector(), mEphemeralTabCoordinatorSupplier),
+                new TabContextMenuItemDelegate(tab, mActivity.getTabModelSelector(),
+                        mEphemeralTabCoordinatorSupplier, mContextMenuCopyLinkObserver,
+                        mActivity::getSnackbarManager),
                 mShareDelegateSupplier, ChromeContextMenuPopulator.ContextMenuMode.NORMAL,
                 AppHooks.get().getExternalAuthUtils());
     }

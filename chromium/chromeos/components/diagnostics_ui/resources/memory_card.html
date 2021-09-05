@@ -2,21 +2,18 @@
 </style>
 
 <diagnostics-card>
-  <div slot="title">
-    <div id="cardTitle">[[i18n('memoryTitle')]]</div>
-  </div>
-  <data-point slot="body" id="memoryTotal"
-    value="[[memoryUsage_.total_memory_kib]]">
+  <div id="cardTitle" slot="title">[[i18n('memoryTitle')]]</div>
+  <percent-bar-chart slot="left-panel" header="[[i18n('usedMemory')]]"
+    value="[[getTotalUsedMemory_(memoryUsage_)]]"
+    max="[[memoryUsage_.totalMemoryKib]]">
+  </percent-bar-chart>
+  <data-point slot="body" id="memoryTotal" header="[[i18n('totalMemory')]]"
+    value="[[memoryUsage_.totalMemoryKib]]">
   </data-point>
   <data-point slot="body" id="memoryAvailable"
-    value="[[memoryUsage_.available_memory_kib]]">
+    header="[[i18n('memoryAvailable')]]"
+    value="[[memoryUsage_.availableMemoryKib]]">
   </data-point>
-  <data-point slot="body" id="memoryFree"
-    value="[[memoryUsage_.free_memory_kib]]">
-  </data-point>
-  <!-- TODO(joonbug): Localize once strings are confirmed -->
-  <percent-bar-chart slot="body" title="Used memory"
-    value="[[getTotalUsedMemory_(memoryUsage_)]]"
-    max="[[memoryUsage_.total_memory_kib]]">
-  </percent-bar-chart>
+
+  <routine-section slot="routines" routines="[[routines_]]"></routine-section>
 </diagnostics-card>

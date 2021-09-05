@@ -89,9 +89,11 @@ class AccountPickerBottomSheetMediator implements AccountPickerCoordinator.Liste
     @Override
     public void addAccount() {
         AccountPickerDelegate.recordAccountConsistencyPromoAction(
-                AccountConsistencyPromoAction.ADD_ACCOUNT);
+                AccountConsistencyPromoAction.ADD_ACCOUNT_STARTED);
         mAccountPickerDelegate.addAccount(accountName -> {
             mAddedAccountName = accountName;
+            AccountPickerDelegate.recordAccountConsistencyPromoAction(
+                    AccountConsistencyPromoAction.ADD_ACCOUNT_COMPLETED);
             onAccountSelected(accountName, false);
         });
     }
@@ -217,6 +219,8 @@ class AccountPickerBottomSheetMediator implements AccountPickerCoordinator.Liste
 
     private void signIn() {
         mModel.set(AccountPickerBottomSheetProperties.VIEW_STATE, ViewState.SIGNIN_IN_PROGRESS);
+        AccountPickerDelegate.recordAccountConsistencyPromoShownCount(
+                "Signin.AccountConsistencyPromoAction.SignedIn.Count");
         if (TextUtils.equals(mSelectedAccountName, mAddedAccountName)) {
             AccountPickerDelegate.recordAccountConsistencyPromoAction(
                     AccountConsistencyPromoAction.SIGNED_IN_WITH_ADDED_ACCOUNT);

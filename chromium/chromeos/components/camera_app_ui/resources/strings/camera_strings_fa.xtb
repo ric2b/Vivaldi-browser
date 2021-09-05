@@ -3,6 +3,7 @@
 <translationbundle lang="fa">
 <translation id="1276998909102132017">تصاویر گالری</translation>
 <translation id="1430915738399379752">چاپ</translation>
+<translation id="1473110567575736769">زمان‌سنج ۳ ثانیه‌ای</translation>
 <translation id="1620510694547887537">دوربین</translation>
 <translation id="1627744224761163218">۴ × ۴</translation>
 <translation id="1664224225747386870">چیزی ضبط نشد</translation>
@@ -29,7 +30,9 @@
 <translation id="3259149966178251584">وضوح دوربین</translation>
 <translation id="3517926952904427380">عکس عمودی ممکن نیست</translation>
 <translation id="3569311554794739032">واقعاً می‌خواهید <ph name="FILE" /> را بردارید؟</translation>
+<translation id="3750315947605636967">برنامه دیگری درحال استفاده از دوربین شما است</translation>
 <translation id="3810838688059735925">فیلم</translation>
+<translation id="4000398125663085899">‏عکس‌ها و ویدیوهای جدید اکنون در پوشه‌ای در برنامه Files: «فایل‌های من &gt; دوربین» ذخیره خواهند شد.</translation>
 <translation id="4118525110028899586">توقف موقت ضبط</translation>
 <translation id="4279490309300973883">بازتاب می‌شود</translation>
 <translation id="4329152592498422850">تغییر وضعیت به گرفتن عکس مربع</translation>
@@ -43,9 +46,11 @@
 <translation id="5057360777601936059">درحال‌حاضر دوربینتان دردسترس نیست.
         مطمئن شوید دوربین درست وصل شده باشد.</translation>
 <translation id="5152121255775685072">رفتن به گالری</translation>
+<translation id="5422455049771430511">عکس‌ها و ویدیوهایتان مکان جدیدی دارند</translation>
 <translation id="5671277269877808209">مربع</translation>
 <translation id="5775960006311140197">حالت کارشناس</translation>
 <translation id="5869546221129391014">جدولی</translation>
+<translation id="6040143037577758943">بستن</translation>
 <translation id="6073451960410192870">توقف ضبط</translation>
 <translation id="6197807149213783179">ذخیره فراداده</translation>
 <translation id="6233780560267770709">۳ در ۳</translation>
@@ -60,6 +65,7 @@
 <translation id="6965382102122355670">قبول</translation>
 <translation id="698156982839284926">۳ ثانیه</translation>
 <translation id="712848772518857951">واقعاً می‌خواهید <ph name="COUNT" /> مورد را بردارید؟</translation>
+<translation id="7134221860976209830">زمان‌سنج ۱۰ ثانیه‌ای</translation>
 <translation id="7243947652761655814">وضوح ویدیو</translation>
 <translation id="7337660886763914220">خطاهایی در سیستم فایل روی داده است.</translation>
 <translation id="7557677699350329807">جابه‌جایی به دوربین بعدی</translation>
@@ -67,7 +73,6 @@
 <translation id="7649070708921625228">راهنما</translation>
 <translation id="7658239707568436148">لغو</translation>
 <translation id="7670511624014457267">60 FPS</translation>
-<translation id="8049189770492311300">تایمر</translation>
 <translation id="8067883171444229417">پخش ویدیو</translation>
 <translation id="8131740175452115882">تأیید</translation>
 <translation id="8145038249676204903">رفتن به حالت عکس‌برداری</translation>

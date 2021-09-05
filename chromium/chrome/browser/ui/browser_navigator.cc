@@ -16,8 +16,8 @@
 #include "chrome/browser/browser_about_handler.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/platform_util.h"
+#include "chrome/browser/prefetch/no_state_prefetch/prerender_manager_factory.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
-#include "chrome/browser/prerender/prerender_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_host/chrome_navigation_ui_data.h"
 #include "chrome/browser/signin/signin_promo.h"
@@ -35,11 +35,10 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/url_constants.h"
 #include "components/captive_portal/core/buildflags.h"
+#include "components/no_state_prefetch/browser/prerender_manager.h"
 #include "components/prefs/pref_service.h"
-#include "components/prerender/browser/prerender_manager.h"
 #include "content/public/browser/browser_url_handler.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_service.h"
@@ -169,7 +168,7 @@ std::pair<Browser*, int> GetBrowserAndTabForDisposition(
     if (app_id) {
       std::string app_name = web_app::GenerateApplicationNameFromAppId(*app_id);
       return {
-          new Browser(Browser::CreateParams::CreateForApp(
+          Browser::Create(Browser::CreateParams::CreateForApp(
               app_name,
               true,  // trusted_source. Installed PWAs are considered trusted.
               params.window_bounds, profile, params.user_gesture)),
@@ -239,17 +238,18 @@ std::pair<Browser*, int> GetBrowserAndTabForDisposition(
                                              params.user_gesture);
         browser_params.trusted_source = params.trusted_source;
         browser_params.initial_bounds = params.window_bounds;
-        return {new Browser(browser_params), -1};
+        return {Browser::Create(browser_params), -1};
       }
-      return {new Browser(Browser::CreateParams::CreateForAppPopup(
+      return {Browser::Create(Browser::CreateParams::CreateForAppPopup(
                   app_name, params.trusted_source, params.window_bounds,
                   profile, params.user_gesture)),
               -1};
     }
     case WindowOpenDisposition::NEW_WINDOW:
       // Make a new normal browser window.
-      return {new Browser(Browser::CreateParams(profile, params.user_gesture)),
-              -1};
+      return {
+          Browser::Create(Browser::CreateParams(profile, params.user_gesture)),
+          -1};
     case WindowOpenDisposition::OFF_THE_RECORD:
       // Make or find an incognito window.
       return {GetOrCreateBrowser(profile->GetPrimaryOTRProfile(),

@@ -14,6 +14,7 @@
 #include "base/task/current_thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/renderer_host/dip_util.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
@@ -29,6 +30,7 @@
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
+#include "content/public/test/slow_http_response.h"
 #include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "content/test/did_commit_navigation_interceptor.h"
@@ -94,7 +96,8 @@ class RenderWidgetHostViewBrowserTest : public ContentBrowserTest {
   }
 
   RenderViewHost* GetRenderViewHost() const {
-    RenderViewHost* const rvh = shell()->web_contents()->GetRenderViewHost();
+    RenderViewHost* const rvh =
+        shell()->web_contents()->GetMainFrame()->GetRenderViewHost();
     CHECK(rvh);
     return rvh;
   }
@@ -293,6 +296,68 @@ IN_PROC_BROWSER_TEST_F(NoCompositingRenderWidgetHostViewBrowserTest,
 }
 #endif  // !defined(OS_MAC)
 
+namespace {
+
+std::unique_ptr<net::test_server::HttpResponse> HandleSlowStyleSheet(
+    const net::test_server::HttpRequest& request) {
+  auto response = std::make_unique<SlowHttpResponse>(request.relative_url);
+  if (!response->IsHandledUrl())
+    return nullptr;
+  return std::move(response);
+}
+
+class DOMContentLoadedObserver : public WebContentsObserver {
+ public:
+  explicit DOMContentLoadedObserver(WebContents* web_contents)
+      : WebContentsObserver(web_contents) {}
+
+  bool Wait() {
+    run_loop_.Run();
+    return dom_content_loaded_ && !did_paint_;
+  }
+
+ private:
+  // WebContentsObserver:
+  void DOMContentLoaded(RenderFrameHost* render_frame_host) override {
+    dom_content_loaded_ = true;
+    run_loop_.Quit();
+  }
+  void DidFirstVisuallyNonEmptyPaint() override { did_paint_ = true; }
+
+  base::RunLoop run_loop_;
+  bool did_paint_{false};
+  bool dom_content_loaded_{false};
+};
+
+}  // namespace
+
+IN_PROC_BROWSER_TEST_F(NoCompositingRenderWidgetHostViewBrowserTest,
+                       ColorSchemeMetaBackground) {
+  embedded_test_server()->RegisterRequestHandler(
+      base::BindRepeating(&HandleSlowStyleSheet));
+  ASSERT_TRUE(embedded_test_server()->Start());
+  DOMContentLoadedObserver observer(shell()->web_contents());
+  shell()->LoadURL(
+      embedded_test_server()->GetURL("/dark_color_scheme_meta_slow.html"));
+  EXPECT_TRUE(observer.Wait());
+  auto bg_color = GetRenderWidgetHostView()->content_background_color();
+  ASSERT_TRUE(bg_color.has_value());
+  EXPECT_EQ(SkColorSetRGB(18, 18, 18), bg_color.value());
+}
+
+IN_PROC_BROWSER_TEST_F(NoCompositingRenderWidgetHostViewBrowserTest,
+                       NoColorSchemeMetaBackground) {
+  embedded_test_server()->RegisterRequestHandler(
+      base::BindRepeating(&HandleSlowStyleSheet));
+  ASSERT_TRUE(embedded_test_server()->Start());
+  DOMContentLoadedObserver observer(shell()->web_contents());
+  shell()->LoadURL(
+      embedded_test_server()->GetURL("/no_color_scheme_meta_slow.html"));
+  EXPECT_TRUE(observer.Wait());
+  auto bg_color = GetRenderWidgetHostView()->content_background_color();
+  ASSERT_FALSE(bg_color.has_value());
+}
+
 IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewBrowserTestBase,
                        CompositorWorksWhenReusingRenderer) {
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -334,7 +399,7 @@ IN_PROC_BROWSER_TEST_F(RenderWidgetHostViewBrowserTestBase,
   EXPECT_EQ(web_contents->GetMainFrame()->GetProcess(),
             new_web_contents->GetMainFrame()->GetProcess());
   MainThreadFrameObserver observer(
-      web_contents->GetRenderViewHost()->GetWidget());
+      web_contents->GetMainFrame()->GetRenderViewHost()->GetWidget());
   for (int i = 0; i < 5; ++i)
     observer.Wait();
 }
@@ -810,7 +875,7 @@ IN_PROC_BROWSER_TEST_P(
   PerformTestWithLeftRightRects(html_rect_size, copy_rect, output_size);
 }
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 // On ChromeOS there is no software compositing.
 static const auto kTestCompositingModes = testing::Values(GL_COMPOSITING);
 #else

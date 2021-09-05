@@ -15,8 +15,8 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -116,7 +116,9 @@ class ConnectTestingEventInterface : public WebSocketEventInterface {
                      uint16_t code,
                      const std::string& reason) override;
 
-  void OnFailChannel(const std::string& message) override;
+  void OnFailChannel(const std::string& message,
+                     int net_error,
+                     base::Optional<int> response_code) override;
 
   void OnStartOpeningHandshake(
       std::unique_ptr<WebSocketHandshakeRequestInfo> request) override;
@@ -188,7 +190,10 @@ void ConnectTestingEventInterface::OnDropChannel(bool was_clean,
                                                  uint16_t code,
                                                  const std::string& reason) {}
 
-void ConnectTestingEventInterface::OnFailChannel(const std::string& message) {
+void ConnectTestingEventInterface::OnFailChannel(
+    const std::string& message,
+    int net_error,
+    base::Optional<int> response_code) {
   failed_ = true;
   failure_message_ = message;
   QuitNestedEventLoop();
@@ -292,9 +297,9 @@ class WebSocketEndToEndTest : public TestWithTaskEnvironment {
     url::Origin origin = url::Origin::Create(GURL("http://localhost"));
     net::SiteForCookies site_for_cookies =
         net::SiteForCookies::FromOrigin(origin);
-    IsolationInfo isolation_info = IsolationInfo::Create(
-        IsolationInfo::RedirectMode::kUpdateNothing, origin, origin,
-        SiteForCookies::FromOrigin(origin));
+    IsolationInfo isolation_info =
+        IsolationInfo::Create(IsolationInfo::RequestType::kOther, origin,
+                              origin, SiteForCookies::FromOrigin(origin));
     event_interface_ = new ConnectTestingEventInterface();
     channel_ = std::make_unique<WebSocketChannel>(
         base::WrapUnique(event_interface_), &context_);

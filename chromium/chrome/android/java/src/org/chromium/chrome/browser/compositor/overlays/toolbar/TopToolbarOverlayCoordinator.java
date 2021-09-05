@@ -7,21 +7,18 @@ package org.chromium.chrome.browser.compositor.overlays.toolbar;
 import android.content.Context;
 import android.graphics.RectF;
 
-import androidx.annotation.Nullable;
-
-import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.Callback;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
-import org.chromium.chrome.browser.compositor.LayerTitleCache;
-import org.chromium.chrome.browser.compositor.layouts.CompositorModelChangeProcessor;
-import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
-import org.chromium.chrome.browser.compositor.layouts.components.VirtualView;
-import org.chromium.chrome.browser.compositor.layouts.eventfilter.EventFilter;
-import org.chromium.chrome.browser.compositor.overlays.SceneOverlay;
-import org.chromium.chrome.browser.compositor.scene_layer.SceneOverlayLayer;
-import org.chromium.chrome.browser.toolbar.ControlContainer;
+import org.chromium.chrome.browser.layouts.CompositorModelChangeProcessor;
+import org.chromium.chrome.browser.layouts.EventFilter;
+import org.chromium.chrome.browser.layouts.LayoutManager;
+import org.chromium.chrome.browser.layouts.SceneOverlay;
+import org.chromium.chrome.browser.layouts.components.VirtualView;
+import org.chromium.chrome.browser.layouts.scene_layer.SceneOverlayLayer;
+import org.chromium.components.browser_ui.widget.ClipDrawableProgressBar;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.resources.ResourceManager;
 
@@ -41,12 +38,10 @@ public class TopToolbarOverlayCoordinator implements SceneOverlay {
     /** Business logic for this overlay. */
     private final TopToolbarOverlayMediator mMediator;
 
-    public TopToolbarOverlayCoordinator(Context context,
-            CompositorModelChangeProcessor.FrameRequestSupplier frameRequestSupplier,
-            LayoutManager layoutManager, @Nullable ControlContainer controlContainer,
+    public TopToolbarOverlayCoordinator(Context context, LayoutManager layoutManager,
+            Callback<ClipDrawableProgressBar.DrawingInfo> progressInfoCallback,
             ActivityTabProvider tabSupplier,
             BrowserControlsStateProvider browserControlsStateProvider,
-            ObservableSupplier<Boolean> androidViewShownSupplier,
             Supplier<ResourceManager> resourceManagerSupplier) {
         mModel = new PropertyModel.Builder(TopToolbarOverlayProperties.ALL_KEYS)
                          .with(TopToolbarOverlayProperties.RESOURCE_ID, R.id.control_container)
@@ -57,11 +52,19 @@ public class TopToolbarOverlayCoordinator implements SceneOverlay {
                                  browserControlsStateProvider.getTopControlOffset()) // Vivaldi
                          .build();
         mSceneLayer = new TopToolbarSceneLayer(resourceManagerSupplier);
-        mChangeProcessor = CompositorModelChangeProcessor.create(
-                mModel, mSceneLayer, TopToolbarSceneLayer::bind, frameRequestSupplier, true);
+        mChangeProcessor =
+                layoutManager.createCompositorMCP(mModel, mSceneLayer, TopToolbarSceneLayer::bind);
 
-        mMediator = new TopToolbarOverlayMediator(mModel, context, layoutManager, controlContainer,
-                tabSupplier, browserControlsStateProvider, androidViewShownSupplier);
+        mMediator = new TopToolbarOverlayMediator(mModel, context, layoutManager,
+                progressInfoCallback, tabSupplier, browserControlsStateProvider);
+    }
+
+    /**
+     * Set whether the android view corresponding with this overlay is showing.
+     * @param isVisible Whether the android view is visible.
+     */
+    public void setIsAndroidViewVisible(boolean isVisible) {
+        mMediator.setIsAndroidViewVisible(isVisible);
     }
 
     /** Clean up this component. */
@@ -72,8 +75,8 @@ public class TopToolbarOverlayCoordinator implements SceneOverlay {
     }
 
     @Override
-    public SceneOverlayLayer getUpdatedSceneOverlayTree(RectF viewport, RectF visibleViewport,
-            LayerTitleCache layerTitleCache, ResourceManager resourceManager, float yOffset) {
+    public SceneOverlayLayer getUpdatedSceneOverlayTree(
+            RectF viewport, RectF visibleViewport, ResourceManager resourceManager, float yOffset) {
         return mSceneLayer;
     }
 

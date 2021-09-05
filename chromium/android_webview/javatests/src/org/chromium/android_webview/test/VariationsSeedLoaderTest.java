@@ -20,12 +20,12 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.android_webview.VariationsSeedLoader;
 import org.chromium.android_webview.common.AwSwitches;
 import org.chromium.android_webview.common.variations.VariationsServiceMetricsHelper;
 import org.chromium.android_webview.common.variations.VariationsUtils;
 import org.chromium.android_webview.test.services.MockVariationsSeedServer;
 import org.chromium.android_webview.test.util.VariationsTestUtils;
+import org.chromium.android_webview.variations.VariationsSeedLoader;
 import org.chromium.base.ContextUtils;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CallbackHelper;
@@ -162,18 +162,6 @@ public class VariationsSeedLoaderTest {
         // expectedValue*2 are in the same bucket, we probably messed up the bucket configuration.
         Assert.assertEquals(0,
                 RecordHistogram.getHistogramValueCountForTesting(histogramName, expectedValue * 2));
-    }
-
-    private void assertNoAppSeedRequestStateValues() {
-        Assert.assertEquals(0,
-                RecordHistogram.getHistogramTotalCountForTesting(
-                        VariationsSeedLoader.APP_SEED_REQUEST_STATE_HISTOGRAM_NAME));
-    }
-
-    private void assertSingleAppSeedRequestStateValue(
-            @VariationsSeedLoader.AppSeedRequestState int state) {
-        assertSingleRecordInHistogram(
-                VariationsSeedLoader.APP_SEED_REQUEST_STATE_HISTOGRAM_NAME, state);
     }
 
     // Test the case that:
@@ -362,74 +350,6 @@ public class VariationsSeedLoaderTest {
         } finally {
             VariationsTestUtils.deleteSeeds();
         }
-    }
-
-    // Test we record the Variations.AppSeedRequestState metric when the seed is fresh.
-    @Test
-    @MediumTest
-    public void testRecordSeedFresh() throws Exception {
-        File oldFile = VariationsUtils.getSeedFile();
-        Assert.assertTrue("Expected seed file to not already exist", oldFile.createNewFile());
-        VariationsTestUtils.writeMockSeed(oldFile);
-        oldFile.setLastModified(CURRENT_TIME_MILLIS);
-        assertNoAppSeedRequestStateValues();
-
-        runTestLoaderBlocking();
-
-        assertSingleAppSeedRequestStateValue(VariationsSeedLoader.AppSeedRequestState.SEED_FRESH);
-    }
-
-    // Test we record the Variations.AppSeedRequestState metric when a new seed is requested.
-    @Test
-    @MediumTest
-    public void testRecordSeedRequested() throws Exception {
-        File oldFile = VariationsUtils.getSeedFile();
-        Assert.assertTrue("Expected seed file to not already exist", oldFile.createNewFile());
-        VariationsTestUtils.writeMockSeed(oldFile);
-        oldFile.setLastModified(EXPIRED_TIMESTAMP);
-        assertNoAppSeedRequestStateValues();
-
-        runTestLoaderBlocking();
-
-        assertSingleAppSeedRequestStateValue(
-                VariationsSeedLoader.AppSeedRequestState.SEED_REQUESTED);
-    }
-
-    // Test we record the Variations.AppSeedRequestState metric when a seed request is throttled.
-    @Test
-    @MediumTest
-    public void testRecordSeedRequestThrottled() throws Exception {
-        File oldFile = VariationsUtils.getSeedFile();
-        Assert.assertTrue("Expected seed file to not already exist", oldFile.createNewFile());
-        VariationsTestUtils.writeMockSeed(oldFile);
-        oldFile.setLastModified(EXPIRED_TIMESTAMP);
-        // Update the last modified time of the stamp file to simulate having just requested a
-        // new seed from the service.
-        VariationsUtils.updateStampTime();
-        assertNoAppSeedRequestStateValues();
-
-        runTestLoaderBlocking();
-
-        assertSingleAppSeedRequestStateValue(
-                VariationsSeedLoader.AppSeedRequestState.SEED_REQUEST_THROTTLED);
-    }
-
-    // Test we record the Variations.AppSeedFreshness metric with loading a seed.
-    @Test
-    @MediumTest
-    public void testRecordAppSeedFreshness() throws Exception {
-        long seedAgeHours = 2;
-        File oldFile = VariationsUtils.getSeedFile();
-        Assert.assertTrue("Expected seed file to not already exist", oldFile.createNewFile());
-        VariationsTestUtils.writeMockSeed(oldFile);
-        oldFile.setLastModified(CURRENT_TIME_MILLIS - TimeUnit.HOURS.toMillis(seedAgeHours));
-
-        runTestLoaderBlocking();
-
-        Assert.assertEquals(1,
-                RecordHistogram.getHistogramValueCountForTesting(
-                        VariationsSeedLoader.APP_SEED_FRESHNESS_HISTOGRAM_NAME,
-                        (int) TimeUnit.HOURS.toMinutes(seedAgeHours)));
     }
 
     // Tests that the finch-seed-expiration-age flag works.

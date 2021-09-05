@@ -127,6 +127,9 @@ class AndroidPlatformConfiguration : public DefaultPlatformConfiguration {
   RuntimeModuleState GetRuntimeModuleState(
       base::Optional<version_info::Channel> release_channel) const override;
 
+  RelativePopulations GetEnableRates(
+      base::Optional<version_info::Channel> release_channel) const override;
+
   void RequestRuntimeModuleInstall() const override;
 
   double GetChildProcessEnableFraction(
@@ -175,6 +178,19 @@ AndroidPlatformConfiguration::GetRuntimeModuleState(
   return RuntimeModuleState::kModuleNotAvailable;
 }
 
+ThreadProfilerPlatformConfiguration::RelativePopulations
+AndroidPlatformConfiguration::GetEnableRates(
+    base::Optional<version_info::Channel> release_channel) const {
+  if (release_channel) {
+    CHECK(*release_channel == version_info::Channel::CANARY ||
+          *release_channel == version_info::Channel::DEV);
+    // Use a 50/50 experiment to maximize signal in the relevant metrics.
+    return RelativePopulations{0, 50};
+  }
+
+  return DefaultPlatformConfiguration::GetEnableRates(release_channel);
+}
+
 void AndroidPlatformConfiguration::RequestRuntimeModuleInstall() const {
   // The install can only be done in the browser process.
   CHECK_EQ(metrics::CallStackProfileParams::BROWSER_PROCESS,
@@ -192,6 +208,9 @@ double AndroidPlatformConfiguration::GetChildProcessEnableFraction(
   if (browser_test_mode_enabled())
     return DefaultPlatformConfiguration::GetChildProcessEnableFraction(process);
 
+  if (process == metrics::CallStackProfileParams::RENDERER_PROCESS)
+    return 0.4;
+
   // TODO(https://crbug.com/1004855): Enable for all the default processes.
   return 0.0;
 }
@@ -199,15 +218,23 @@ double AndroidPlatformConfiguration::GetChildProcessEnableFraction(
 bool AndroidPlatformConfiguration::IsEnabledForThread(
     metrics::CallStackProfileParams::Process process,
     metrics::CallStackProfileParams::Thread thread) const {
-  // Disable for all supported threads pending launch. Enable only for browser
-  // tests.
+  // Enable on renderer process main thread in production, for now.
+  if (process == metrics::CallStackProfileParams::RENDERER_PROCESS &&
+      thread == metrics::CallStackProfileParams::MAIN_THREAD) {
+    return true;
+  }
+
+  // Otherwise enable in dedicated ThreadProfiler browser tests.
   return browser_test_mode_enabled();
 }
 
 bool AndroidPlatformConfiguration::IsSupportedForChannel(
     base::Optional<version_info::Channel> release_channel) const {
-  // On Android profiling is only enabled in its own dedicated browser tests
-  // in local builds and the CQ.
+  // Enable on canary, for now.
+  if (release_channel && *release_channel == version_info::Channel::CANARY)
+    return true;
+
+  // Otherwise enable in dedicated ThreadProfiler browser tests.
   // TODO(https://crbug.com/1004855): Enable across all browser tests.
   return browser_test_mode_enabled();
 }

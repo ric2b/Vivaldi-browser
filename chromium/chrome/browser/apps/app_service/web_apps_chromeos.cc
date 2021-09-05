@@ -10,8 +10,8 @@
 #include "ash/public/cpp/app_list/app_list_metrics.h"
 #include "ash/public/cpp/app_menu_constants.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/optional.h"
 #include "base/stl_util.h"
@@ -231,6 +231,14 @@ void WebAppsChromeOs::GetMenuModel(const std::string& app_id,
   }
 
   std::move(callback).Run(std::move(menu_items));
+}
+
+void WebAppsChromeOs::ExecuteContextMenuCommand(const std::string& app_id,
+                                                int command_id,
+                                                const std::string& shortcut_id,
+                                                int64_t display_id) {
+  // TODO(crbug.com/1129721) Implement it for shortcut menu in web apps.
+  NOTIMPLEMENTED();
 }
 
 void WebAppsChromeOs::OnWebAppUninstalled(const web_app::AppId& app_id) {

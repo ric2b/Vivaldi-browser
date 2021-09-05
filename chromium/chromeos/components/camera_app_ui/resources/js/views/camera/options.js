@@ -9,9 +9,8 @@ import {Camera3DeviceInfo} from '../../device/camera3_device_info.js';
 import {DeviceInfoUpdater} from '../../device/device_info_updater.js';
 import * as dom from '../../dom.js';
 import * as nav from '../../nav.js';
-import {PerfEvent} from '../../perf.js';
 import * as state from '../../state.js';
-import {Facing, ViewName} from '../../type.js';
+import {Facing, PerfEvent, ViewName} from '../../type.js';
 import * as util from '../../util.js';
 
 /**
@@ -97,6 +96,13 @@ export class Options {
 
     this.toggleMic_.addEventListener('click', () => this.updateAudioByMic_());
     this.toggleMirror_.addEventListener('click', () => this.saveMirroring_());
+
+    util.bindElementAriaLabelWithState({
+      element: dom.get('#toggle-timer', Element),
+      state: state.State.TIMER_3SEC,
+      onLabel: 'toggle_timer_3s_button',
+      offLabel: 'toggle_timer_10s_button',
+    });
 
     // Restore saved mirroring states per video device.
     browserProxy.localStorageGet({mirroringToggles: {}})

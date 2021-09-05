@@ -12,6 +12,7 @@
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
 #include "third_party/blink/renderer/core/layout/geometry/physical_rect.h"
 #include "third_party/blink/renderer/core/layout/layout_object.h"
+#include "third_party/blink/renderer/core/paint/paint_layer.h"
 
 namespace vivaldi {
 
@@ -70,6 +71,39 @@ bool IsVisible(blink::WebElement element) {
   return true;
 }
 
+bool HasNavigableListeners(blink::WebElement& element) {
+  blink::Element* elm = element.Unwrap<blink::Element>();
+
+  if (!elm) {
+    return false;
+  }
+
+  if (!elm->GetLayoutObject()) {
+    return false;
+  }
+
+  if (elm->HasJSBasedEventListeners(blink::event_type_names::kClick) ||
+      elm->HasJSBasedEventListeners(blink::event_type_names::kKeydown) ||
+      elm->HasJSBasedEventListeners(blink::event_type_names::kKeypress) ||
+      elm->HasJSBasedEventListeners(blink::event_type_names::kKeyup) ||
+      elm->HasJSBasedEventListeners(blink::event_type_names::kMouseover) ||
+      elm->HasJSBasedEventListeners(blink::event_type_names::kMouseenter))
+    return true;
+
+  if (elm->GetComputedStyle() && elm->ParentComputedStyle()) {
+    if (elm->GetComputedStyle()->Cursor() == blink::ECursor::kPointer &&
+        elm->ParentComputedStyle()->Cursor() != blink::ECursor::kPointer) {
+      return true;
+    }
+  }
+  if (!elm->IsSVGElement())
+    return false;
+  return (elm->HasEventListeners(blink::event_type_names::kFocus) ||
+          elm->HasEventListeners(blink::event_type_names::kBlur) ||
+          elm->HasEventListeners(blink::event_type_names::kFocusin) ||
+          elm->HasEventListeners(blink::event_type_names::kFocusout));
+}
+
 bool HasNavigableTag(blink::WebElement& element) {
   bool is_navigable_tag = false;
 
@@ -88,6 +122,24 @@ bool HasNavigableTag(blink::WebElement& element) {
   }
 
   if (is_navigable_tag) {
+    return true;
+  }
+  return false;
+}
+
+bool IsNavigableElement(blink::WebElement& element) {
+  blink::Element* elm = element.Unwrap<blink::Element>();
+  blink::Node* node = elm;
+
+  if (HasNavigableTag(element)) {
+    return true;
+  } else if (HasNavigableListeners(element)) {
+    // If the element is a container we exclude it, even if it has a listener.
+    blink::LayoutObject* layout_object = node->GetLayoutObject();
+    const blink::PaintLayer* paint_layer = layout_object->PaintingLayer();
+    if (paint_layer && paint_layer->HasVisibleDescendant()) {
+      return false;
+    }
     return true;
   }
   return false;

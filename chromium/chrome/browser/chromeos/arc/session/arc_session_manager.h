@@ -15,9 +15,9 @@
 #include "base/observer_list.h"
 #include "base/optional.h"
 #include "base/timer/timer.h"
-#include "chrome/browser/chromeos/arc/arc_app_id_provider_impl.h"
 #include "chrome/browser/chromeos/arc/arc_support_host.h"
 #include "chrome/browser/chromeos/arc/session/adb_sideloading_availability_delegate_impl.h"
+#include "chrome/browser/chromeos/arc/session/arc_app_id_provider_impl.h"
 #include "chrome/browser/chromeos/arc/session/arc_session_manager_observer.h"
 #include "chrome/browser/chromeos/policy/android_management_client.h"
 #include "chromeos/dbus/concierge_client.h"
@@ -25,6 +25,7 @@
 #include "components/arc/mojom/auth.mojom.h"
 #include "components/arc/session/arc_session_runner.h"
 #include "components/arc/session/arc_stop_reason.h"
+#include "third_party/abseil-cpp/absl/types/variant.h"
 
 class ArcAppLauncher;
 class PrefService;
@@ -44,6 +45,7 @@ class ArcTermsOfServiceNegotiator;
 class ArcUiAvailabilityReporter;
 
 enum class ProvisioningResult : int;
+enum class ArcStopReason;
 
 // This class is responsible for handing stages of ARC life-cycle.
 class ArcSessionManager : public ArcSessionRunner::Observer,
@@ -210,8 +212,12 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   // On provisioning completion (regardless of whether successfully done or
   // not), this is called with its status. On success, called with
   // ProvisioningResult::SUCCESS, otherwise |result| is the error reason.
-  void OnProvisioningFinished(ProvisioningResult result,
-                              mojom::ArcSignInErrorPtr error);
+  // |error| either contains the sign-in error that came from ARC or it may
+  // indicate that ARC stopped prematurely and provisioning could not finish
+  // successfully.
+  void OnProvisioningFinished(
+      ProvisioningResult result,
+      absl::variant<mojom::ArcSignInErrorPtr, ArcStopReason> error);
 
   // A helper function that calls ArcSessionRunner's SetUserInfo.
   void SetUserInfo();
@@ -250,7 +256,8 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   void SetArcSessionRunnerForTesting(
       std::unique_ptr<ArcSessionRunner> arc_session_runner);
   ArcSessionRunner* GetArcSessionRunnerForTesting();
-  void SetAttemptUserExitCallbackForTesting(const base::Closure& callback);
+  void SetAttemptUserExitCallbackForTesting(
+      const base::RepeatingClosure& callback);
 
   // Returns whether the Play Store app is requested to be launched by this
   // class. Should be used only for tests.
@@ -418,7 +425,7 @@ class ArcSessionManager : public ArcSessionRunner::Observer,
   base::TimeTicks sign_in_start_time_;
   // The time when ARC was about to start.
   base::TimeTicks arc_start_time_;
-  base::Closure attempt_user_exit_callback_;
+  base::RepeatingClosure attempt_user_exit_callback_;
 
   ArcAppIdProviderImpl app_id_provider_;
 

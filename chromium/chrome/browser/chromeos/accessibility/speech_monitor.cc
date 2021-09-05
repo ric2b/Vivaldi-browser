@@ -29,7 +29,11 @@ SpeechMonitor::~SpeechMonitor() {
     CHECK(replay_called_) << "Expectation was made, but Replay() not called.";
 }
 
-bool SpeechMonitor::PlatformImplAvailable() {
+bool SpeechMonitor::PlatformImplSupported() {
+  return true;
+}
+
+bool SpeechMonitor::PlatformImplInitialized() {
   return true;
 }
 
@@ -87,6 +91,8 @@ void SpeechMonitor::ClearError() {
 void SpeechMonitor::SetError(const std::string& error) {
   error_ = error;
 }
+
+void SpeechMonitor::Shutdown() {}
 
 double SpeechMonitor::CalculateUtteranceDelayMS() {
   std::chrono::steady_clock::time_point now = std::chrono::steady_clock::now();

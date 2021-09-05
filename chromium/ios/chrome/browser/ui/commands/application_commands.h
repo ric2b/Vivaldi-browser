@@ -7,6 +7,8 @@
 
 #import <Foundation/Foundation.h>
 
+#include "ios/public/provider/chrome/browser/user_feedback/user_feedback_sender.h"
+
 @class OpenNewTabCommand;
 @class ShowSigninCommand;
 @class StartVoiceSearchCommand;
@@ -77,6 +79,9 @@ enum class KeyRetrievalTriggerForUMA;
 - (void)showAdvancedSigninSettingsFromViewController:
     (UIViewController*)baseViewController;
 
+- (void)showLocationPermissionsFromViewController:
+    (UIViewController*)baseViewController;
+
 // Presents the Trusted Vault reauth dialog.
 // |baseViewController| presents the sign-in.
 // |retrievalTrigger| UI elements where the trusted vault reauth has been
@@ -103,8 +108,9 @@ enum class KeyRetrievalTriggerForUMA;
 // Prepare to show the TabSwitcher UI.
 - (void)prepareTabSwitcher;
 
-// Shows the TabSwitcher UI.
-- (void)displayTabSwitcher;
+// Shows the TabSwitcher UI. When the thumb strip is enabled, shows the
+// TabSwitcher UI, specifically in its grid layout.
+- (void)displayTabSwitcherInGridLayout;
 
 // TODO(crbug.com/779791) : Do not pass baseViewController through dispatcher.
 // Shows the Autofill Settings UI, presenting from |baseViewController|.
@@ -113,12 +119,14 @@ enum class KeyRetrievalTriggerForUMA;
 
 // Shows the Report an Issue UI, presenting from |baseViewController|.
 - (void)showReportAnIssueFromViewController:
-    (UIViewController*)baseViewController;
+            (UIViewController*)baseViewController
+                                     sender:(UserFeedbackSender)sender;
 
 // Shows the Report an Issue UI, presenting from |baseViewController|, using
 // |specificProductData| for additional product data to be sent in the report.
 - (void)
     showReportAnIssueFromViewController:(UIViewController*)baseViewController
+                                 sender:(UserFeedbackSender)sender
                     specificProductData:(NSDictionary<NSString*, NSString*>*)
                                             specificProductData;
 
@@ -140,6 +148,10 @@ enum class KeyRetrievalTriggerForUMA;
 // Shows the consistency promo UI that allows users to sign in to Chrome using
 // the default accounts on the device.
 - (void)showConsistencyPromoFromViewController:
+    (UIViewController*)baseViewController;
+
+// Shows a notification with the signed-in user account.
+- (void)showSigninAccountNotificationFromViewController:
     (UIViewController*)baseViewController;
 
 // Sets whether the UI is displaying incognito content.

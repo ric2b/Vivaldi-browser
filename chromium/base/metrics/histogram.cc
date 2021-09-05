@@ -13,7 +13,6 @@
 #include <limits.h>
 #include <math.h>
 
-#include <algorithm>
 #include <string>
 #include <utility>
 
@@ -29,6 +28,7 @@
 #include "base/metrics/sample_vector.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/pickle.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
@@ -454,13 +454,10 @@ bool Histogram::InspectConstructionArguments(StringPiece name,
     UmaHistogramSparse("Histogram.TooManyBuckets.1000",
                        static_cast<Sample>(HashMetricName(name)));
 
-    // TODO(bcwhite): Clean these up as bugs get fixed. Also look at injecting
-    // whitelist (using hashes) from a higher layer rather than hardcoding
-    // them here.
+    // TODO(bcwhite): Look at injecting allowlist (using hashes) from a higher
+    // layer rather than hardcoding them here.
     // Blink.UseCounter legitimately has more than 1000 entries in its enum.
-    // Arc.OOMKills: https://crbug.com/916757
-    if (!StartsWith(name, "Blink.UseCounter") &&
-        !StartsWith(name, "Arc.OOMKills.")) {
+    if (!StartsWith(name, "Blink.UseCounter")) {
       DVLOG(1) << "Histogram: " << name
                << " has bad bucket_count: " << *bucket_count << " (limit "
                << kBucketCount_MAX << ")";
@@ -1248,8 +1245,8 @@ class CustomHistogram::Factory : public Histogram::Factory {
     std::vector<int> ranges = *custom_ranges_;
     ranges.push_back(0);  // Ensure we have a zero value.
     ranges.push_back(HistogramBase::kSampleType_MAX);
-    std::sort(ranges.begin(), ranges.end());
-    ranges.erase(std::unique(ranges.begin(), ranges.end()), ranges.end());
+    ranges::sort(ranges);
+    ranges.erase(ranges::unique(ranges), ranges.end());
 
     BucketRanges* bucket_ranges = new BucketRanges(ranges.size());
     for (uint32_t i = 0; i < ranges.size(); i++) {

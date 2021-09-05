@@ -27,6 +27,7 @@
 #include "ash/wm/wm_event.h"
 #include "base/i18n/rtl.h"
 #include "base/metrics/user_metrics.h"
+#include "chromeos/ui/base/window_properties.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/wm/core/coordinate_conversion.h"
@@ -284,7 +285,7 @@ void BackGestureEventHandler::OnTouchEvent(ui::TouchEvent* event) {
 
     gesture_provider_.OnTouchEventAck(
         touch_event_copy.unique_event_id(), /*event_consumed=*/false,
-        /*is_source_touch_event_set_non_blocking=*/false);
+        /*is_source_touch_event_set_blocking=*/false);
 
     std::vector<std::unique_ptr<ui::GestureEvent>> gestures =
         gesture_provider_.GetAndResetPendingGestures();
@@ -489,7 +490,7 @@ bool BackGestureEventHandler::ShouldWaitForTouchPressAck(
     return false;
 
   aura::Window* top_window = window_util::GetTopWindow();
-  return !top_window->GetProperty(kIsShowingInOverviewKey) &&
+  return !top_window->GetProperty(chromeos::kIsShowingInOverviewKey) &&
          Shell::Get()->shell_delegate()->ShouldWaitForTouchPressAck(top_window);
 }
 

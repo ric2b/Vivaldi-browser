@@ -18,15 +18,16 @@ import org.junit.runner.RunWith;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.init.BrowserParts;
 import org.chromium.chrome.browser.init.ChromeBrowserInitializer;
 import org.chromium.chrome.browser.init.EmptyBrowserParts;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
+import org.chromium.chrome.test.util.ChromeApplicationTestUtils;
 import org.chromium.components.metrics.MetricsSwitches;
 import org.chromium.content_public.browser.UiThreadTaskTraits;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -53,6 +54,7 @@ public final class BackgroundMetricsTest {
     public void pressHome() {
         UiDevice device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation());
         device.pressHome();
+        ChromeApplicationTestUtils.waitUntilChromeInBackground();
     }
 
     private void loadNative() {
@@ -86,7 +88,7 @@ public final class BackgroundMetricsTest {
                         "Session.Background.TotalDuration"));
 
         // Foreground Chrome, and verify a background session is recorded.
-        mActivityTestRule.startMainActivityOnBlankPage();
+        mActivityTestRule.resumeMainActivityFromLauncher();
         waitForHistogram("Session.Background.TotalDuration", 1);
     }
 
@@ -105,7 +107,7 @@ public final class BackgroundMetricsTest {
                         "Session.Background.TotalDuration"));
 
         // Foreground Chrome, and verify a background session is recorded.
-        mActivityTestRule.startMainActivityOnBlankPage();
+        mActivityTestRule.resumeMainActivityFromLauncher();
         waitForHistogram("Session.Background.TotalDuration", 1);
 
         // UMABackgroundSessions triggers additional UMA logs to be written, but there's currently

@@ -15,10 +15,6 @@ namespace autofill {
 class PersonalDataManager;
 }  // namespace autofill
 
-namespace password_manager {
-class PasswordManagerClient;
-}  // namespace password_manager
-
 namespace version_info {
 enum class Channel;
 }  // namespace version_info
@@ -60,10 +56,6 @@ class Client {
   // Returns the current active personal data manager.
   virtual autofill::PersonalDataManager* GetPersonalDataManager() const = 0;
 
-  // Return the password manager client for the current WebContents.
-  virtual password_manager::PasswordManagerClient* GetPasswordManagerClient()
-      const = 0;
-
   // Returns the currently active login fetcher.
   virtual WebsiteLoginManager* GetWebsiteLoginManager() const = 0;
 
@@ -93,6 +85,9 @@ class Client {
 
   // Whether this client has had an UI.
   virtual bool HasHadUI() const = 0;
+
+  // Returns whether the user has seen a trigger script before or not.
+  virtual bool IsFirstTimeTriggerScriptUser() const = 0;
 
  protected:
   Client() = default;

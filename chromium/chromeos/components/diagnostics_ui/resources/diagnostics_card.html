@@ -2,24 +2,35 @@
   #card-wrapper {
     border: 1px solid var(--diagnostics-border-color);
     border-radius: 14px;
-    height: 180px;
     margin: 10px 0;
+    min-height: 150px;
   }
 
   .body-container {
-    column-gap: 15px;
+    column-gap: 10px;
     display: grid;
     grid-template-columns: repeat(auto-fill, 100px);
+    justify-content: end;
+    row-gap: 5px;
   }
 
-  .title-container {
+  .card-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .routine-container {
     @apply --diagnostics-default-font;
   }
 
   .spacing {
-    margin-top: 18px;
+    margin: 18px 0px;
     padding-inline-end: 15px;
     padding-inline-start: 15px;
+  }
+
+  .title-container {
+    @apply --diagnostics-default-font;
   }
 </style>
 
@@ -27,8 +38,16 @@
   <div id="title" class="title-container spacing">
     <slot name="title"></slot>
   </div>
+  <div class="card-columns spacing">
+    <div>
+      <slot name="left-panel"></slot>
+    </div>
+    <div id="body" class="body-container">
+      <slot name="body"></slot>
+    </div>
+  </div>
 
-  <div id="body" class="body-container spacing">
-    <slot name="body"></slot>
+  <div id="routines" class="routine-container spacing">
+    <slot name="routines"></slot>
   </div>
 </div>

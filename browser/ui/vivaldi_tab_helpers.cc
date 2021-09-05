@@ -15,8 +15,10 @@ using content::WebContents;
 
 namespace vivaldi {
 void VivaldiAttachTabHelpers(WebContents* web_contents) {
-  VivaldiSubresourceFilterClient::CreateForWebContents(web_contents);
-
+  if (vivaldi::IsVivaldiRunning() || vivaldi::ForcedVivaldiRunning()) {
+    VivaldiSubresourceFilterClient::CreateThrottleManagerWithClientForWebContents(
+      web_contents);
+  }
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   if (vivaldi::IsVivaldiRunning()) {
     extensions::VivaldiPrivateTabObserver::CreateForWebContents(web_contents);

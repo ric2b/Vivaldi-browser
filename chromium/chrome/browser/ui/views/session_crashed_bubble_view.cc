@@ -11,7 +11,7 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task_runner_util.h"
@@ -229,7 +229,7 @@ views::BubbleDialogDelegateView* SessionCrashedBubbleView::ShowBubble(
   SessionCrashedBubbleDelegate* bubble_delegate = bubble_delegate_unique.get();
 
   ui::DialogModel::Builder dialog_builder(std::move(bubble_delegate_unique));
-  dialog_builder.SetShowCloseButton(true)
+  dialog_builder
       .SetTitle(l10n_util::GetStringUTF16(IDS_SESSION_CRASHED_BUBBLE_TITLE))
       .DisableCloseOnDeactivate()
       .SetIsAlertDialog()

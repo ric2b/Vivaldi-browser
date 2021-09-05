@@ -29,7 +29,6 @@
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/autofill/core/common/mojom/autofill_types.mojom.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/autofill/core/common/password_form_fill_data.h"
 #include "components/autofill/core/common/renderer_id.h"
 #include "components/password_manager/core/common/password_manager_features.h"
@@ -45,7 +44,7 @@
 #include "third_party/blink/public/platform/web_vector.h"
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_form_element.h"
-#include "third_party/blink/public/web/web_widget.h"
+#include "third_party/blink/public/web/web_frame_widget.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
 #if defined(OS_ANDROID)
@@ -59,7 +58,6 @@
 using autofill::FormRendererId;
 using autofill::FormTracker;
 using autofill::mojom::FocusedFieldType;
-using autofill::mojom::PasswordFormFieldPredictionType;
 using autofill::mojom::SubmissionIndicatorEvent;
 using base::ASCIIToUTF16;
 using base::UTF16ToUTF8;
@@ -269,6 +267,10 @@ const char kDivWrappedFormHTML[] =
     "  </DIV>"
     "</DIV>";
 
+const char kJavaScriptRemoveForm[] =
+    "var form = document.getElementById('LoginTestForm');"
+    "form.parentNode.removeChild(form);";
+
 // Sets the "readonly" attribute of |element| to the value given by |read_only|.
 void SetElementReadOnly(WebInputElement& element, bool read_only) {
   element.SetAttribute(WebString::FromUTF8("readonly"),
@@ -388,8 +390,8 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
     LoadHTML(kFormHTML);
 
     // Necessary for SimulateElementClick() to work correctly.
-    GetWebWidget()->Resize(blink::WebSize(500, 500));
-    GetWebWidget()->SetFocus(true);
+    GetWebFrameWidget()->Resize(blink::WebSize(500, 500));
+    GetWebFrameWidget()->SetFocus(true);
 
     // Now retrieve the input elements so the test can access them.
     UpdateUsernameAndPasswordElements();
@@ -434,13 +436,6 @@ class PasswordAutofillAgentTest : public ChromeRenderViewTest {
     scoped_feature_list_.InitAndEnableFeature(
         password_manager::features::kEnableOverwritingPlaceholderUsernames);
   }
-
-#if defined(OS_ANDROID)
-  void EnableTouchToFillFeature() {
-    scoped_feature_list_.InitAndEnableFeature(
-        autofill::features::kTouchToFillAndroid);
-  }
-#endif
 
   void EnableShowAutofillSignatures() {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
@@ -1771,19 +1766,6 @@ TEST_F(PasswordAutofillAgentTest, TouchToFillSuppressesPopups) {
 
 TEST_F(PasswordAutofillAgentTest, DontTryToShowTouchToFillReadonlyPassword) {
   SetElementReadOnly(password_element_, true);
-  SimulateOnFillPasswordForm(fill_data_);
-
-  EXPECT_FALSE(
-      password_autofill_agent_->TryToShowTouchToFill(password_element_));
-}
-
-TEST_F(PasswordAutofillAgentTest, DontShowTouchToFillOnSecurePageIfParamIsSet) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeatureWithParameters(
-      features::kAutofillTouchToFill, {{"insecure-origins-only", "true"}});
-
-  // Reload the page with a secure origin.
-  LoadHTMLWithUrlOverride(kFormHTML, "https://example.com");
   SimulateOnFillPasswordForm(fill_data_);
 
   EXPECT_FALSE(
@@ -3476,10 +3458,7 @@ TEST_F(PasswordAutofillAgentTest,
 
   // Simulate that JavaScript removes the submitted form from DOM. That means
   // that a submission was successful.
-  std::string remove_form =
-      "var form = document.getElementById('LoginTestForm');"
-      "form.parentNode.removeChild(form);";
-  ExecuteJavaScriptForTests(remove_form.c_str());
+  ExecuteJavaScriptForTests(kJavaScriptRemoveForm);
 
   FireDidFinishSameDocumentNavigation();
 
@@ -3982,6 +3961,37 @@ TEST_F(PasswordAutofillAgentTest, NoRefillOfUserInput) {
   CheckTextFieldsStateForElements(username_element_, kAliceUsername, true,
                                   password_element_, "newpwd", false, false,
                                   false);
+}
+
+// Tests that a JavaScript submission (e.g. via removing the form from a DOM)
+// gets registered following a autofill after user trigger.
+TEST_F(PasswordAutofillAgentTest, XhrSubmissionAfterFillingSuggestion) {
+  SimulateOnFillPasswordForm(fill_data_);
+
+  SimulateSuggestionChoiceOfUsernameAndPassword(username_element_,
+                                                ASCIIToUTF16(kBobUsername),
+                                                ASCIIToUTF16(kBobPassword));
+
+  // Simulate that JavaScript removes the submitted form from DOM. That means
+  // that a submission was successful.
+  ExecuteJavaScriptForTests(kJavaScriptRemoveForm);
+  ExpectSameDocumentNavigationWithUsernameAndPasswords(
+      fill_data_.form_renderer_id, kBobUsername, kBobPassword, std::string(),
+      SubmissionIndicatorEvent::DOM_MUTATION_AFTER_XHR);
+}
+
+// Tests that a JavaScript submission (e.g. via removing the form from a DOM)
+// does not get registered following a mere autofill on page load. This is
+// necessary, because we potentially fill many forms on pageload, which the user
+// likely won't interact with.
+TEST_F(PasswordAutofillAgentTest, NoXhrSubmissionAfterFillingOnPageload) {
+  SimulateOnFillPasswordForm(fill_data_);
+
+  // Simulate that JavaScript removes the submitted form from DOM. That means
+  // that a submission was successful.
+  ExecuteJavaScriptForTests(kJavaScriptRemoveForm);
+  base::RunLoop().RunUntilIdle();
+  ASSERT_FALSE(fake_driver_.called_same_document_navigation());
 }
 
 }  // namespace autofill

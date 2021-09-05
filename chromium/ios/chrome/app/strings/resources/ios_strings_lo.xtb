@@ -18,7 +18,9 @@
 <translation id="1112015203684611006">ການພິມບໍ່ສຳເລັດ.</translation>
 <translation id="1125564390852150847">ສ້າງ​ແຖບ​ໃໝ່.</translation>
 <translation id="1145536944570833626">ລຶບຂໍ້ມູນທີ່ມີຢູ່.</translation>
+<translation id="1147031633655575115">ເຂົ້າສູ່ລະບົບເປັນ <ph name="USER" /></translation>
 <translation id="1154690515305205900">ບໍ່ສາມາດສ້າງລິ້ງເຊື່ອມໂຍງໄປຍັງຂໍ້ຄວາມທີ່ໄຮໄລ້ໄວ້ໄດ້.</translation>
+<translation id="1157749421655780457">ອະນຸຍາດສະຖານທີ່...</translation>
 <translation id="1165039591588034296">ຜິດພາດ</translation>
 <translation id="1172898394251786223">ຫ້ອງ​ໃສ່​ຂໍ້​ມູນ​ຕໍ່​ໄປ</translation>
 <translation id="1176932207622159128">ບໍ່​ສາ​ມາດ​ບັນ​ທຶກ​ຮູບ​ໄດ້</translation>
@@ -53,6 +55,7 @@
 <translation id="1449835205994625556">ເຊື່ອງລະຫັດຜ່ານ</translation>
 <translation id="145015347812617860"><ph name="COUNT" /> ລາຍ​ການ</translation>
 <translation id="1491277525950327607">ແຕະສອງຄັ້ງເພື່ອສັບປ່ຽນການຕັ້ງຄ່າ</translation>
+<translation id="1492417797159476138">ທ່ານໄດ້ບັນທຶກຊື່ຜູ້ໃຊ້ນີ້ສຳລັບເວັບໄຊນີ້ຢູ່ກ່ອນແລ້ວ</translation>
 <translation id="1509486075633541495">ເຂົ້າສູ່ລະບົບເວັບໄຊ</translation>
 <translation id="1509960214886564027">ຄຸນສົມບັດໃນຫຼາຍໆເວັບໄຊອາດຈະໃຊ້ບໍ່ໄດ້</translation>
 <translation id="152234381334907219">ຢ່າບັນທຶກ</translation>
@@ -266,6 +269,7 @@
 <translation id="385051799172605136">ກັບ​ຄືນ​</translation>
 <translation id="3892144330757387737">ທ່ານຈະເຫັນປະຫວັດຂອງທ່ານຢູ່ບ່ອນນີ້</translation>
 <translation id="3897092660631435901">ເມ​ນູ</translation>
+<translation id="3913386780052199712">ເຂົ້າສູ່ລະບົບ Chrome ແລ້ວ</translation>
 <translation id="3915450441834151894">ຂໍ້ມູນເວັບໄຊ</translation>
 <translation id="3922310737605261887">ຊອກຫາຂໍ້ຄວາມທີ່ສຳເນົາໄວ້</translation>
 <translation id="3928666092801078803">ລວມຂໍ້ມູນຂອງຂ້ອຍເຂົ້າກັນ</translation>
@@ -340,6 +344,7 @@
 <translation id="4751645464639803239">ແຖບທີ່ບໍ່ເຜີຍຕົວຕົນໃໝ່</translation>
 <translation id="4758977202923349869">ຈັດຕຳແໜ່ງບັດເຄຣດິດໃຫ້ຢູ່ໃນຂອບນີ້</translation>
 <translation id="4775879719735953715">ໂປຣແກຣມທ່ອງເວັບເລີ່ມຕົ້ນ</translation>
+<translation id="4778644898150334464">ໃຊ້ລະຫັດຜ່ານອື່ນ</translation>
 <translation id="4802417911091824046">ການເຂົ້າລະຫັດໂດຍໃຊ້ລະຫັດຜ່ານບໍ່ຮວມເອົາວິທີການຈ່າຍເງິນ ແລະ ທີ່ຢູ່ຈາກ Google Pay.
 
 ເພື່ອປ່ຽນການຕັ້ງຄ່ານີ້, ກະລຸນາ <ph name="BEGIN_LINK" />ຣີເຊັດການຊິິ້ງຂໍ້ມູນ<ph name="END_LINK" /></translation>
@@ -372,6 +377,7 @@
 <translation id="5059136629401106827">ຕົກລົງ</translation>
 <translation id="5062321486222145940">ຕິດ​ຕັ້ງ Google Drive</translation>
 <translation id="5083464117946352670">ບໍ່​ສາ​ມາດ​ກຳ​ນົດ​ຂະ​ໜາດ​ໄຟ​ລ໌​ໄດ້.</translation>
+<translation id="5090832849094901128">ການລຶບລະຫັດຜ່ານນີ້ຈະບໍ່ລຶບບັນຊີຂອງທ່ານໃນ <ph name="WEBSITE" />.</translation>
 <translation id="5094827893301452931">Tweet ສໍາ​ເລັດ​.</translation>
 <translation id="5118764316110575523">ປິດ</translation>
 <translation id="5127805178023152808">ຊິງ​ຄ໌​ປິດ</translation>
@@ -511,6 +517,9 @@ Handoff ຍັງ​ຕ້ອງ​ໄດ້​ເປີດ​ໃຊ້​ງາ
 <translation id="6476800141292307438">ກຳລັງແປໜ້າເວັບເປັນ <ph name="LANGUAGE" />. ມີຕົວເລືອກໃຫ້ນຳໃຊ້ຢູ່ໃກ້ລຸ່ມສຸດຂອງໜ້າຈໍ.</translation>
 <translation id="648164694371393720">ການຮອງຮັບຄວາມຖືກຕ້ອງຜິດພາດ</translation>
 <translation id="6482629121755362506"><ph name="NUMBER_OF_SELECTED_BOOKMARKS" /> ລາຍ​ການ​ຖືກ​ລຶບ​ແລ້ວ</translation>
+<translation id="6497772452874122664">ຖ້າທ່ານເຊື່ອຖື <ph name="TIME" />, ທ່ານສາມາດໃຊ້ລະຫັດຜ່ານທີ່ບັນທຶກໄວ້ຈາກເວັບໄຊອື່ນໄດ້.
+
+ພະຍາຍາມໃຊ້ລະຫັດຜ່ານສະເພາະສຳລັບທຸກໆເວັບໄຊ.</translation>
 <translation id="651505212789431520">ຍົກເລີກການຊິ້ງຂໍ້ມູນບໍ? ທ່ານສາມາດເປີດການຊິ້ງຂໍ້ມູນໄດ້ທຸກເວລາໃນການຕັ້ງຄ່າ.</translation>
 <translation id="6561262006871132942">ຊຸມເຂົ້າ</translation>
 <translation id="6585618849026997638">ທ່ານສາມາດກັບໄປຫາໜ້າທີ່ສຳຄັນຕໍ່ກັບທ່ານໂດຍການເພີ່ມບຸກມາກໄດ້</translation>
@@ -590,6 +599,7 @@ Handoff ຍັງ​ຕ້ອງ​ໄດ້​ເປີດ​ໃຊ້​ງາ
 <translation id="739941347996872055">ແຖບກ່ອນໜ້າ</translation>
 <translation id="7400418766976504921">URL</translation>
 <translation id="7409985198648820906"><ph name="UNREAD_COUNT" /> ບົດຄວາມທີ່ຍັງບໍ່ໄດ້ອ່ານ.</translation>
+<translation id="7412027924265291969">ສືບຕໍ່</translation>
 <translation id="7425346204213733349">ການປ່ຽນແປງຕໍ່ກັບບຸກມາກ, ປະຫວັດ, ລະຫັດຜ່ານ ແລະ ການຕັ້ງຄ່າອື່ນຂອງທ່ານຈະບໍ່ຖືກຊິ້ງກັບບັນຊີ Google ຂອງທ່ານອີກຕໍ່ໄປ. ແນວໃດກໍຕາມ, ຂໍ້ມູນທີ່ມີຢູ່ຂອງທ່ານຈະຍັງຄົງເກັບຮັກສາໄວ້ໃນບັນຊີ Google ຂອງທ່ານ.</translation>
 <translation id="7435356471928173109">ປິດໄວ້ໂດຍຜູ້ເບິ່ງແຍງລະບົບຂອງທ່ານ</translation>
 <translation id="7454057999980797137">ລັດ / ຄາວ​ຕີ້</translation>
@@ -600,6 +610,7 @@ Handoff ຍັງ​ຕ້ອງ​ໄດ້​ເປີດ​ໃຊ້​ງາ
 <translation id="7472734401283673885">ຊື່​ບໍ​ລິ​ສັດ</translation>
 <translation id="7473891865547856676">​ບໍ່, ຂອບ​ໃຈ</translation>
 <translation id="7481312909269577407">ສົ່ງຕໍ່</translation>
+<translation id="7483467499335917849">ໃຊ້ສະຖານທີ່ປັດຈຸບັນຂອງທ່ານ</translation>
 <translation id="750493650310597496">0 ເລືອກແລ້ວ</translation>
 <translation id="7514365320538308">ດາວ​ໂຫລດ</translation>
 <translation id="7537586195939242955">ຂໍ​ອະ​ໄພ​, ບັດຜ່ານ​ຂອງ​ທ່ານ​ບໍ່​ສາ​ມາດຕິດ​ຕັ້ງ​ໃສ່​ປຶ້ມ​ຜ່ານ​ໃນ​ເວ​ລາ​ນີ້​ໄດ້.</translation>
@@ -733,6 +744,7 @@ Handoff ຍັງ​ຕ້ອງ​ໄດ້​ເປີດ​ໃຊ້​ງາ
 <translation id="9094033019050270033">ອັບ​ເດດ​ລະ​ຫັດ​ຜ່ານ</translation>
 <translation id="9100610230175265781">ຕ້ອງມີລະຫັດຜ່ານ</translation>
 <translation id="9107664647686727385">ກວດຫາລະຫັດຜ່ານທີ່ຖືກລະເມີດ</translation>
+<translation id="9137526406337347448">ການບໍລິການ Google</translation>
 <translation id="9148126808321036104">ລົງຊື່ເຂົ້າ​ໃຊ້ອີກ</translation>
 <translation id="9152539721251340337">ສ້າງລະຫັດ QR</translation>
 <translation id="9157836665414082580">ປິດກ່ອງໂຕ້ຕອບ</translation>

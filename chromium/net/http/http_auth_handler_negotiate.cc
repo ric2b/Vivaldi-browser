@@ -7,7 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -36,14 +36,13 @@ namespace {
 base::Value NetLogParameterChannelBindings(
     const std::string& channel_binding_token,
     NetLogCaptureMode capture_mode) {
-  base::DictionaryValue dict;
+  base::Value dict(base::Value::Type::DICTIONARY);
   if (!NetLogCaptureIncludesSocketBytes(capture_mode))
-    return std::move(dict);
+    return dict;
 
-  dict.Clear();
-  dict.SetString("token", base::HexEncode(channel_binding_token.data(),
-                                          channel_binding_token.size()));
-  return std::move(dict);
+  dict.SetStringKey("token", base::HexEncode(channel_binding_token.data(),
+                                             channel_binding_token.size()));
+  return dict;
 }
 
 // Uses |negotiate_auth_system_factory| to create the auth system, otherwise

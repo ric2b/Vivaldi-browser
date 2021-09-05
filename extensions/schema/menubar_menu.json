@@ -35,7 +35,7 @@
         "id": "ItemType",
         "type": "string",
         "description": "What kind of item.",
-        "enum": [ "normal", "checkbox", "radiobutton" ]
+        "enum": [ "normal", "checkbox", "radio" ]
       },
       {
         "id": "Rect",

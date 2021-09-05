@@ -4,7 +4,7 @@ AccessibilityManagerLoginTest.*
 ActiveDirectoryJoinTest.*
 ActiveDirectoryLoginAutocompleteTest.*
 ActiveDirectoryLoginTest.*
-All/DiscoverScreenTest.*
+All/PinSetupScreenTest.*
 All/EphemeralUserOobeTest.*
 All/GestureNavigationScreenTest.*
 All/MergeSessionTest.*
@@ -14,6 +14,7 @@ All/OobeInteractiveUITest.*
 All/OobeLocalizationTest.*
 All/OobeZeroTouchInteractiveUITest.*
 All/ParameterizedArcTermsOfServiceScreenTest.*
+All/PendingUpdateScreenTest.*
 All/PublicSessionOobeTest.*
 All/PublicSessionWithTermsOfServiceOobeTest.*
 All/SAMLPasswordAttributesTest.*
@@ -96,6 +97,8 @@ OobeSpokenFeedbackTest.*
 OobeTest.*
 OobeZeroTouchInteractiveUITest.*
 PackagedLicenseScreenTest.*
+ParentalHandoffScreenBrowserTest.*
+ParentalHandoffScreenChildBrowserTest.*
 PolicyProvidedCertsOnUserSessionInitTest.*
 PresetPolicyDeviceDisablingTest.*
 PrimaryUserPoliciesProxiedTest.*
@@ -116,6 +119,7 @@ SAMLEnrollmentTest.*
 SAMLPolicyTest.*
 SamlTest.*
 SecurityTokenSamlTest.*
+SigninToUserProfileSwitchTest.*
 SiteIsolationFlagHandlingTest.*
 StartupBrowserWindowLaunchSuppressedTest.*
 SyncConsentRecorderTest.*
@@ -124,6 +128,7 @@ SyncConsentTest.*
 SyncConsentTimezoneOverride.*
 SystemWebDialogOobeTest.*
 TermsOfServiceScreenTest.*
+UpdateRequiredScreenPolicyPresentTest.*
 UpdateRequiredScreenTest.*
 UpdateScreenTest.*
 UserCloudExternalDataManagerTest.*

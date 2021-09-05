@@ -9,8 +9,10 @@
 <translation id="1411638389238344450">Koppeling e-&amp;mailen</translation>
 <translation id="1454726940098520109">Niet meer vragen</translation>
 <translation id="1462666970065907900">Weet je zeker dat je dit venster wilt sluiten?</translation>
+<translation id="1526344461589023948">Er is iets misgegaan bij het opslaan van een binnengehaalde update. Controleer dat de computer genoeg schijfruimte heeft en probeer het opnieuw.</translation>
 <translation id="1657174850639146440">Monster 9</translation>
 <translation id="1676595396635191120">Nieuw privévenster</translation>
+<translation id="1702758681952953055">Als deze fout aanhoudt, maak er dan melding van met de volgende details:</translation>
 <translation id="1728549374069268714">Plakken &amp;en gaan</translation>
 <translation id="1756026472674246267">Koppeling openen in nieuwe &amp;tab</translation>
 <translation id="1759842336958782510">Chrome</translation>
@@ -20,6 +22,7 @@
 <translation id="1924750141060565109">Landschap 15</translation>
 <translation id="19598411548897379">Algemeen</translation>
 <translation id="2079036669923635404">Klik hier om Vivaldi bij te werken naar versie <ph name="VERSION" />.</translation>
+<translation id="2141974047387702305">Er is iets misgegaan bij het binnenhalen van de updatebestanden. Controleer je internetverbinding en probeer het opnieuw.</translation>
 <translation id="2441056087170876076">Monster 2</translation>
 <translation id="2444387452209867610">Notitie in&amp;voegen</translation>
 <translation id="2486841023299517366">Dier 4</translation>
@@ -45,6 +48,7 @@
 <translation id="3542768452570884558">Koppeling openen in &amp;nieuw venster</translation>
 <translation id="3588820906588687999">Afbeelding openen in nieuwe &amp;tab</translation>
 <translation id="3601066750251199488">Monster 3</translation>
+<translation id="3708982624815781692">De download is geannuleerd.</translation>
 <translation id="3732157130969736834">Koppeling toevoegen aan &amp;bladwijzers</translation>
 <translation id="3732388226447288666">Dier 2</translation>
 <translation id="3732439195215136813">Dier 5</translation>
@@ -81,11 +85,13 @@
 <translation id="5594602170491763400">Monster 5</translation>
 <translation id="5615637589913244581">Opera versie 15+ (Bèta)</translation>
 <translation id="5648110075441906505">Afbeelding openen in &amp;nieuw venster</translation>
+<translation id="5656371807944747581">Updatefout!</translation>
 <translation id="5716238312826274098">Meldingen uitschakelen</translation>
 <translation id="5770433027661640693">Landschap 10</translation>
 <translation id="5857090052475505287">Nieuwe map</translation>
 <translation id="588258955323874662">Volledig &amp;scherm</translation>
 <translation id="5916080360077521750">Helaas zijn instellingen van Chrome niet te benaderen als die browser open staat. Om Chrome-instellingen in Vivaldi te importeren, sla je je werk op en sluit je alle vensters van Chrome. Klik daarna op Opnieuw proberen.</translation>
+<translation id="6040143037577758943">Sluiten</translation>
 <translation id="6229528619562190452">Klik hier om Vivaldi te vernieuwen.</translation>
 <translation id="6234173136417926046">Afbeelding &amp;gebruiken als snelkiezerachtergrond</translation>
 <translation id="630690498669249215">Bladwijzerbestand uit Opera</translation>
@@ -102,9 +108,11 @@
 <translation id="7111492742514999492">Landschap 9</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldi wordt mogelijk gemaakt door het <ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" /> opensourceproject en andere <ph name="BEGIN_LINK_OSS" />opensourceprogrammatuur<ph name="END_LINK_OSS" />.</translation>
+<translation id="7581266044164103589">Kan het installatieprogramma van de update niet starten. Controleer dat de computer genoeg geheugen en schijfruimte heeft en probeer het opnieuw.</translation>
 <translation id="7715497554424665066">Nieuwe versie negeren</translation>
 <translation id="7724603315864178912">Knippen</translation>
 <translation id="7793738202466490491">Toevoegen als kalendergebeurtenis</translation>
+<translation id="7848222781052558334">De digitale ondertekening van de binnengehaalde bestanden kon niet worden geverifieerd.</translation>
 <translation id="7865983598101744945">Afsluiten bevestigen</translation>
 <translation id="7957213167373139414">Mijn kalender</translation>
 <translation id="8027581147000338959">Openen in nieuw venster</translation>

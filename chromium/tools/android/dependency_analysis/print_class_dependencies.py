@@ -16,12 +16,20 @@ import print_dependencies_helper
 import serialization
 
 
+# Return values of categorize_dependency().
+IGNORE = 'ignore'
+CLEAR = 'clear'
+PRINT = 'print'
+
+
 @dataclass
 class PrintMode:
     """Options of how and which dependencies to output."""
     inbound: bool
     outbound: bool
     ignore_modularized: bool
+    ignore_audited_here: bool
+    ignore_same_package: bool
     fully_qualified: bool
 
 
@@ -100,15 +108,39 @@ def is_ignored_class_dependency(class_name: str) -> bool:
     return class_name in IGNORED_CLASSES
 
 
-def print_class_nodes(class_nodes: List[class_dependency.JavaClass],
-                      print_mode: PrintMode, class_name: str,
-                      direction: str) -> TargetDependencies:
+def categorize_dependency(from_class: class_dependency.JavaClass,
+                          to_class: class_dependency.JavaClass,
+                          ignore_modularized: bool, print_mode: PrintMode,
+                          audited_classes: Set[str]) -> str:
+    """Decides if a class dependency should be printed, cleared, or ignored."""
+    if is_ignored_class_dependency(to_class.name):
+        return IGNORE
+    if ignore_modularized and all(
+            is_allowed_target_dependency(target)
+            for target in to_class.build_targets):
+        return CLEAR
+    if (print_mode.ignore_same_package
+            and to_class.package == from_class.package):
+        return IGNORE
+    if print_mode.ignore_audited_here and to_class.name in audited_classes:
+        return IGNORE
+    return PRINT
+
+
+def print_class_dependencies(to_classes: List[class_dependency.JavaClass],
+                             print_mode: PrintMode,
+                             from_class: class_dependency.JavaClass,
+                             direction: str,
+                             audited_classes: Set[str]) -> TargetDependencies:
     """Prints the class dependencies to or from a class, grouped by target.
 
     If direction is OUTBOUND and print_mode.ignore_modularized is True, omits
     modularized outbound dependencies and returns the build targets that need
     to be added for those dependencies. In other cases, returns an empty
     TargetDependencies.
+
+    If print_mode.ignore_same_package is True, omits outbound dependencies in
+    the same package.
     """
     ignore_modularized = direction == OUTBOUND and print_mode.ignore_modularized
     bullet_point = '<-' if direction == INBOUND else '->'
@@ -121,43 +153,48 @@ def print_class_nodes(class_nodes: List[class_dependency.JavaClass],
     suspect_dependencies = 0
 
     target_dependencies = TargetDependencies()
-    class_nodes = sorted(class_nodes, key=lambda c: str(c.build_targets))
+    to_classes = sorted(to_classes, key=lambda c: str(c.build_targets))
     last_build_target = None
-    for class_node in class_nodes:
-        if is_ignored_class_dependency(class_node.name):
+
+    for to_class in to_classes:
+        # Check if dependency should be ignored due to --ignore-modularized,
+        # --ignore-same-package, or due to being an ignored class.
+        # Check if dependency should be listed as a cleared dep.
+        ignore_allow = categorize_dependency(from_class, to_class,
+                                             ignore_modularized, print_mode,
+                                             audited_classes)
+        if ignore_allow == CLEAR:
+            target_dependencies.update_with_class_node(to_class)
             continue
-        if ignore_modularized:
-            if all(
-                    is_allowed_target_dependency(target)
-                    for target in class_node.build_targets):
-                target_dependencies.update_with_class_node(class_node)
-                continue
-            else:
-                suspect_dependencies += 1
-        build_target = str(class_node.build_targets)
+        elif ignore_allow == IGNORE:
+            continue
+
+        # Print the dependency
+        suspect_dependencies += 1
+        build_target = str(to_class.build_targets)
         if last_build_target != build_target:
             build_target_names = [
                 get_build_target_name_to_display(target, print_mode)
-                for target in class_node.build_targets
+                for target in to_class.build_targets
             ]
             build_target_names_string = ", ".join(build_target_names)
             print_backlog.append((4, f'[{build_target_names_string}]'))
             last_build_target = build_target
-        display_name = get_class_name_to_display(class_node.name, print_mode)
+        display_name = get_class_name_to_display(to_class.name, print_mode)
         print_backlog.append((8, f'{bullet_point} {display_name}'))
 
     # Print header
+    class_name = get_class_name_to_display(from_class.name, print_mode)
     if ignore_modularized:
-        cleared = len(class_nodes) - suspect_dependencies
+        cleared = len(to_classes) - suspect_dependencies
         print(f'{class_name} has {suspect_dependencies} outbound dependencies '
               f'that may need to be broken (omitted {cleared} cleared '
               f'dependencies):')
     else:
         if direction == INBOUND:
-            print(f'{class_name} has {len(class_nodes)} inbound dependencies:')
+            print(f'{class_name} has {len(to_classes)} inbound dependencies:')
         else:
-            print(
-                f'{class_name} has {len(class_nodes)} outbound dependencies:')
+            print(f'{class_name} has {len(to_classes)} outbound dependencies:')
 
     # Print build targets and dependencies
     for indent, message in print_backlog:
@@ -169,82 +206,21 @@ def print_class_nodes(class_nodes: List[class_dependency.JavaClass],
 
 def print_class_dependencies_for_key(
         class_graph: class_dependency.JavaClassDependencyGraph, key: str,
-        print_mode: PrintMode) -> TargetDependencies:
+        print_mode: PrintMode,
+        audited_classes: Set[str]) -> TargetDependencies:
     """Prints dependencies for a valid key into the class graph."""
     target_dependencies = TargetDependencies()
     node: class_dependency.JavaClass = class_graph.get_node_by_key(key)
-    class_name = get_class_name_to_display(node.name, print_mode)
 
     if print_mode.inbound:
-        print_class_nodes(graph.sorted_nodes_by_name(node.inbound), print_mode,
-                          class_name, INBOUND)
+        print_class_dependencies(graph.sorted_nodes_by_name(node.inbound),
+                                 print_mode, node, INBOUND, audited_classes)
 
     if print_mode.outbound:
-        target_dependencies = print_class_nodes(
-            graph.sorted_nodes_by_name(node.outbound), print_mode, class_name,
-            OUTBOUND)
+        target_dependencies = print_class_dependencies(
+            graph.sorted_nodes_by_name(node.outbound), print_mode, node,
+            OUTBOUND, audited_classes)
     return target_dependencies
-
-
-def get_valid_classes_from_class_input(
-        class_graph: class_dependency.JavaClassDependencyGraph,
-        class_names_input: str) -> List[str]:
-    """Parses classes given as input into fully qualified, valid classes."""
-    result = []
-
-    class_graph_keys = [node.name for node in class_graph.nodes]
-
-    class_names = class_names_input.split(',')
-
-    for class_name in class_names:
-        valid_keys = print_dependencies_helper.get_valid_class_keys_matching(
-            class_graph_keys, class_name)
-
-        check_only_one_valid_key(valid_keys, class_name, 'class')
-
-        result.append(valid_keys[0])
-
-    return result
-
-
-def get_valid_classes_from_package_input(
-        package_graph: package_dependency.JavaPackageDependencyGraph,
-        package_names_input: str) -> List[str]:
-    """Parses packages given as input into fully qualified, valid classes."""
-    result = []
-
-    package_graph_keys = [node.name for node in package_graph.nodes]
-
-    package_names = package_names_input.split(',')
-
-    for package_name in package_names:
-        valid_keys = print_dependencies_helper.get_valid_package_keys_matching(
-            package_graph_keys, package_name)
-
-        check_only_one_valid_key(valid_keys, package_name, 'package')
-
-        package_key: str = valid_keys[0]
-        package_node: package_dependency.JavaPackage = \
-            package_graph.get_node_by_key(package_key)
-        classes_in_package: List[str] = sorted(package_node.classes.keys())
-        result.extend(classes_in_package)
-
-    return result
-
-
-def check_only_one_valid_key(valid_keys: List[str], key_input: str,
-                             entity: str) -> None:
-    if len(valid_keys) == 0:
-        raise ValueError(f'No {entity} found by the name {key_input}.')
-    elif len(valid_keys) > 1:
-        print(f'Multiple valid keys found for the name {key_input}, '
-              'please disambiguate between one of the following options:')
-        for valid_key in valid_keys:
-            print(f'\t{valid_key}')
-        raise ValueError(
-            f'Multiple valid keys found for the name {key_input}.')
-    else:  # len(valid_keys) == 1
-        return
 
 
 def main():
@@ -296,6 +272,14 @@ def main():
                             help='Do not print outbound dependencies on '
                             'allowed (modules, components, base, etc.) '
                             'dependencies.')
+    arg_parser.add_argument('--ignore-audited-here',
+                            action='store_true',
+                            help='Do not print outbound dependencies on '
+                            'other classes being audited in this run.')
+    arg_parser.add_argument('--ignore-same-package',
+                            action='store_true',
+                            help='Do not print outbound dependencies on '
+                            'classes in the same package.')
     arguments = arg_parser.parse_args()
 
     if not arguments.class_names and not arguments.package_names:
@@ -305,20 +289,22 @@ def main():
     print_mode = PrintMode(inbound=not arguments.outbound_only,
                            outbound=not arguments.inbound_only,
                            ignore_modularized=arguments.ignore_modularized,
+                           ignore_audited_here=arguments.ignore_audited_here,
+                           ignore_same_package=arguments.ignore_same_package,
                            fully_qualified=arguments.fully_qualified)
 
-    class_graph, package_graph = \
+    class_graph, package_graph, _ = \
         serialization.load_class_and_package_graphs_from_file(arguments.file)
 
     valid_class_names = []
     if arguments.class_names:
         valid_class_names.extend(
-            get_valid_classes_from_class_input(class_graph,
-                                               arguments.class_names))
+            print_dependencies_helper.get_valid_classes_from_class_input(
+                class_graph, arguments.class_names))
     if arguments.package_names:
         valid_class_names.extend(
-            get_valid_classes_from_package_input(package_graph,
-                                                 arguments.package_names))
+            print_dependencies_helper.get_valid_classes_from_package_input(
+                package_graph, arguments.package_names))
 
     target_dependencies = TargetDependencies()
     for i, fully_qualified_class_name in enumerate(valid_class_names):
@@ -326,7 +312,8 @@ def main():
             print()
 
         new_target_deps = print_class_dependencies_for_key(
-            class_graph, fully_qualified_class_name, print_mode)
+            class_graph, fully_qualified_class_name, print_mode,
+            set(valid_class_names))
         target_dependencies.merge(new_target_deps)
 
     target_dependencies.print()

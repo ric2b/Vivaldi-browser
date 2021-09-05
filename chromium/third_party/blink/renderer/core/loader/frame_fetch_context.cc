@@ -242,6 +242,7 @@ ResourceFetcher* FrameFetchContext::CreateFetcherForCommittedDocument(
   ResourceFetcherInit init(
       properties, frame_fetch_context,
       frame->GetTaskRunner(TaskType::kNetworking),
+      frame->GetTaskRunner(TaskType::kNetworkingUnfreezable),
       MakeGarbageCollected<LoaderFactoryForFrame>(loader, *frame->DomWindow()),
       frame->DomWindow());
   init.use_counter =
@@ -362,7 +363,7 @@ mojom::FetchCacheMode FrameFetchContext::ResourceRequestCachePolicy(
 
 void FrameFetchContext::PrepareRequest(
     ResourceRequest& request,
-    const FetchInitiatorInfo& initiator_info,
+    ResourceLoaderOptions& options,
     WebScopedVirtualTimePauser& virtual_time_pauser,
     ResourceType resource_type) {
   // TODO(yhirano): Clarify which statements are actually needed when
@@ -371,7 +372,7 @@ void FrameFetchContext::PrepareRequest(
 
   SetFirstPartyCookie(request);
   if (request.GetRequestContext() ==
-      mojom::RequestContextType::SERVICE_WORKER) {
+      mojom::blink::RequestContextType::SERVICE_WORKER) {
     // The top frame origin is defined to be null for service worker main
     // resource requests.
     DCHECK(!request.TopFrameOrigin());
@@ -403,7 +404,7 @@ void FrameFetchContext::PrepareRequest(
         WebScopedVirtualTimePauser::VirtualTaskDuration::kNonInstant);
   }
 
-  probe::PrepareRequest(Probe(), document_loader_, request, initiator_info,
+  probe::PrepareRequest(Probe(), document_loader_, request, options,
                         resource_type);
 
   // ServiceWorker hook ups.
@@ -815,7 +816,7 @@ FrameFetchContext::CreateWebSocketHandshakeThrottle() {
 }
 
 bool FrameFetchContext::ShouldBlockFetchByMixedContentCheck(
-    mojom::RequestContextType request_context,
+    mojom::blink::RequestContextType request_context,
     const base::Optional<ResourceRequest::RedirectInfo>& redirect_info,
     const KURL& url,
     ReportingDisposition reporting_disposition,
@@ -843,7 +844,7 @@ bool FrameFetchContext::ShouldBlockFetchAsCredentialedSubresource(
     return false;
 
   if (resource_request.GetRequestContext() ==
-      mojom::RequestContextType::XML_HTTP_REQUEST) {
+      mojom::blink::RequestContextType::XML_HTTP_REQUEST) {
     return false;
   }
 
@@ -1107,6 +1108,13 @@ void FrameFetchContext::DidObserveLoadingBehavior(
   if (GetResourceFetcherProperties().IsDetached())
     return;
   GetFrame()->Loader().GetDocumentLoader()->DidObserveLoadingBehavior(behavior);
+}
+
+std::unique_ptr<ResourceLoadInfoNotifierWrapper>
+FrameFetchContext::CreateResourceLoadInfoNotifierWrapper() {
+  if (GetResourceFetcherProperties().IsDetached())
+    return nullptr;
+  return GetLocalFrameClient()->CreateResourceLoadInfoNotifierWrapper();
 }
 
 mojom::blink::ContentSecurityNotifier&

@@ -309,13 +309,23 @@ class NotifierViewCheckbox : public views::Checkbox {
 // We do not use views::Checkbox class directly because it doesn't support
 // showing 'icon'.
 NotifierSettingsView::NotifierButton::NotifierButton(
-    const NotifierMetadata& notifier,
-    views::ButtonListener* listener)
-    : views::Button(listener), notifier_id_(notifier.notifier_id) {
+    const NotifierMetadata& notifier)
+    : views::Button(PressedCallback()), notifier_id_(notifier.notifier_id) {
+  SetFocusBehavior(views::View::FocusBehavior::ACCESSIBLE_ONLY);
+
   auto icon_view = std::make_unique<views::ImageView>();
   auto name_view = std::make_unique<views::Label>(notifier.name);
-  auto checkbox = std::make_unique<NotifierViewCheckbox>(base::string16(),
-                                                         this /* listener */);
+  auto checkbox = std::make_unique<NotifierViewCheckbox>(
+      base::string16(),
+      base::BindRepeating(
+          [](NotifierButton* button, const ui::Event& event) {
+            // The checkbox state has already changed at this point, but we'll
+            // update the state on NotifierSettingsView::NotifierButtonPressed()
+            // too, so here change back to the previous state.
+            button->checkbox_->SetChecked(!button->checkbox_->GetChecked());
+            button->NotifyClick(event);
+          },
+          this));
   name_view->SetAutoColorReadabilityEnabled(false);
   name_view->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
       ContentLayerType::kTextColorPrimary));
@@ -374,17 +384,6 @@ bool NotifierSettingsView::NotifierButton::GetChecked() const {
 
 const char* NotifierSettingsView::NotifierButton::GetClassName() const {
   return "NotifierButton";
-}
-
-void NotifierSettingsView::NotifierButton::ButtonPressed(
-    views::Button* button,
-    const ui::Event& event) {
-  DCHECK_EQ(button, checkbox_);
-  // The checkbox state has already changed at this point, but we'll update
-  // the state on NotifierSettingsView::ButtonPressed() too, so here change
-  // back to the previous state.
-  checkbox_->SetChecked(!checkbox_->GetChecked());
-  Button::NotifyClick(event);
 }
 
 void NotifierSettingsView::NotifierButton::GetAccessibleNodeData(
@@ -465,7 +464,9 @@ NotifierSettingsView::NotifierSettingsView() {
             IDS_ASH_MESSAGE_CENTER_APP_BADGING_BUTTON_TOOLTIP));
     auto app_badging_toggle = base::WrapUnique<views::ToggleButton>(
         TrayPopupUtils::CreateToggleButton(
-            this, IDS_ASH_MESSAGE_CENTER_APP_BADGING_BUTTON_TOOLTIP));
+            base::BindRepeating(&NotifierSettingsView::AppBadgingTogglePressed,
+                                base::Unretained(this)),
+            IDS_ASH_MESSAGE_CENTER_APP_BADGING_BUTTON_TOOLTIP));
     app_badging_toggle_ = app_badging_toggle.get();
 
     SessionControllerImpl* session_controller =
@@ -482,12 +483,12 @@ NotifierSettingsView::NotifierSettingsView() {
     app_badging_view->SetBorder(
         views::CreateSolidSidedBorder(0, 0, 0, 1, kTopBorderColor));
     header_view->AddChildView(std::move(app_badging_view));
-  }
 
-  // Separator between toggle button rows.
-  auto separator = std::make_unique<views::Separator>();
-  separator->SetColor(separator_color);
-  header_view->AddChildView(std::move(separator));
+    // Separator between toggle button rows.
+    auto separator = std::make_unique<views::Separator>();
+    separator->SetColor(separator_color);
+    header_view->AddChildView(std::move(separator));
+  }
 
   // Row for the quiet mode toggle button.
   auto quiet_mode_icon = std::make_unique<views::ImageView>();
@@ -497,7 +498,9 @@ NotifierSettingsView::NotifierSettingsView() {
           IDS_ASH_MESSAGE_CENTER_QUIET_MODE_BUTTON_TOOLTIP));
   auto quiet_mode_toggle =
       base::WrapUnique<views::ToggleButton>(TrayPopupUtils::CreateToggleButton(
-          this, IDS_ASH_MESSAGE_CENTER_QUIET_MODE_BUTTON_TOOLTIP));
+          base::BindRepeating(&NotifierSettingsView::QuietModeTogglePressed,
+                              base::Unretained(this)),
+          IDS_ASH_MESSAGE_CENTER_QUIET_MODE_BUTTON_TOOLTIP));
   quiet_mode_toggle_ = quiet_mode_toggle.get();
   auto quiet_mode_view = CreateToggleButtonRow(std::move(quiet_mode_icon),
                                                std::move(quiet_mode_label),
@@ -552,8 +555,7 @@ void NotifierSettingsView::SetQuietModeState(bool is_quiet_mode) {
         kNotificationCenterDoNotDisturbOnIcon, kMenuIconSize, icon_color));
   } else {
     quiet_mode_icon_->SetImage(gfx::CreateVectorIcon(
-        kNotificationCenterDoNotDisturbOffIcon, kMenuIconSize,
-        AshColorProvider::GetDisabledColor(icon_color)));
+        kNotificationCenterDoNotDisturbOffIcon, kMenuIconSize, icon_color));
   }
 }
 
@@ -582,7 +584,10 @@ void NotifierSettingsView::OnNotifiersUpdated(
       gfx::Insets(0, kHorizontalMargin)));
 
   for (const auto& notifier : notifiers) {
-    NotifierButton* button = new NotifierButton(notifier, this);
+    NotifierButton* button = new NotifierButton(notifier);
+    button->SetCallback(
+        base::BindRepeating(&NotifierSettingsView::NotifierButtonPressed,
+                            base::Unretained(this), button));
     NotifierButtonWrapperView* wrapper = new NotifierButtonWrapperView(button);
 
     wrapper->SetFocusBehavior(FocusBehavior::ALWAYS);
@@ -666,36 +671,6 @@ bool NotifierSettingsView::OnMouseWheel(const ui::MouseWheelEvent& event) {
   return scroller_->OnMouseWheel(event);
 }
 
-void NotifierSettingsView::ButtonPressed(views::Button* sender,
-                                         const ui::Event& event) {
-  if (sender == app_badging_toggle_) {
-    SessionControllerImpl* session_controller =
-        Shell::Get()->session_controller();
-    PrefService* prefs = session_controller->GetLastActiveUserPrefService();
-    if (prefs) {
-      prefs->SetBoolean(prefs::kAppNotificationBadgingEnabled,
-                        app_badging_toggle_->GetIsOn());
-    }
-    return;
-  }
-
-  if (sender == quiet_mode_toggle_) {
-    LogUserQuietModeEvent(quiet_mode_toggle_->GetIsOn());
-    MessageCenter::Get()->SetQuietMode(quiet_mode_toggle_->GetIsOn());
-    return;
-  }
-
-  auto iter = buttons_.find(static_cast<NotifierButton*>(sender));
-  if (iter == buttons_.end())
-    return;
-
-  NotifierButton* button = *iter;
-  button->SetChecked(!button->GetChecked());
-  NotifierSettingsController::Get()->SetNotifierEnabled(button->notifier_id(),
-                                                        button->GetChecked());
-  NotifierSettingsController::Get()->GetNotifiers();
-}
-
 std::unique_ptr<views::View> NotifierSettingsView::CreateToggleButtonRow(
     std::unique_ptr<views::ImageView> icon,
     std::unique_ptr<views::Label> label,
@@ -722,10 +697,32 @@ std::unique_ptr<views::View> NotifierSettingsView::CreateToggleButtonRow(
   auto* label_ptr = row_view->AddChildView(std::move(label));
   row_layout->SetFlexForView(label_ptr, 1);
 
-  toggle_button->EnableCanvasFlippingForRTLUI(true);
+  toggle_button->SetFlipCanvasOnPaintForRTLUI(true);
   row_view->AddChildView(std::move(toggle_button));
 
   return row_view;
+}
+
+void NotifierSettingsView::AppBadgingTogglePressed() {
+  SessionControllerImpl* session_controller =
+      Shell::Get()->session_controller();
+  PrefService* prefs = session_controller->GetLastActiveUserPrefService();
+  if (prefs) {
+    prefs->SetBoolean(prefs::kAppNotificationBadgingEnabled,
+                      app_badging_toggle_->GetIsOn());
+  }
+}
+
+void NotifierSettingsView::QuietModeTogglePressed() {
+  LogUserQuietModeEvent(quiet_mode_toggle_->GetIsOn());
+  MessageCenter::Get()->SetQuietMode(quiet_mode_toggle_->GetIsOn());
+}
+
+void NotifierSettingsView::NotifierButtonPressed(NotifierButton* button) {
+  button->SetChecked(!button->GetChecked());
+  NotifierSettingsController::Get()->SetNotifierEnabled(button->notifier_id(),
+                                                        button->GetChecked());
+  NotifierSettingsController::Get()->GetNotifiers();
 }
 
 }  // namespace ash

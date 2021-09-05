@@ -292,7 +292,7 @@ bool IsPatternValidForType(const std::string& pattern_string,
 
   // Don't allow patterns for WebUI schemes, even though it's a valid pattern.
   // WebUI permissions are controlled by ContentSettingsRegistry
-  // WhitelistedSchemes and WebUIAllowlist. Users shouldn't be able to grant
+  // AllowlistedSchemes and WebUIAllowlist. Users shouldn't be able to grant
   // extra permissions or revoke existing permissions.
   if (pattern.GetScheme() == ContentSettingsPattern::SCHEME_CHROME ||
       pattern.GetScheme() == ContentSettingsPattern::SCHEME_CHROMEUNTRUSTED ||
@@ -339,8 +339,7 @@ void LogAllSitesAction(AllSitesAction2 action) {
 int GetNumCookieExceptionsOfTypes(HostContentSettingsMap* map,
                                   const std::set<ContentSetting> types) {
   ContentSettingsForOneType output;
-  map->GetSettingsForOneType(ContentSettingsType::COOKIES, std::string(),
-                             &output);
+  map->GetSettingsForOneType(ContentSettingsType::COOKIES, &output);
   return std::count_if(
       output.begin(), output.end(),
       [types](const ContentSettingPatternSource setting) {
@@ -445,10 +444,6 @@ void SiteSettingsHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback(
       "setOriginPermissions",
       base::BindRepeating(&SiteSettingsHandler::HandleSetOriginPermissions,
-                          base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
-      "clearFlashPref",
-      base::BindRepeating(&SiteSettingsHandler::HandleClearFlashPref,
                           base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       "resetCategoryPermissionForPattern",
@@ -587,8 +582,7 @@ void SiteSettingsHandler::OnPrefEnableDrmChanged() {
 void SiteSettingsHandler::OnContentSettingChanged(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
-    ContentSettingsType content_type,
-    const std::string& resource_identifier) {
+    ContentSettingsType content_type) {
   if (!site_settings::HasRegisteredGroupName(content_type))
     return;
 
@@ -1061,8 +1055,7 @@ void SiteSettingsHandler::HandleSetOriginPermissions(
       PermissionDecisionAutoBlockerFactory::GetForProfile(profile_)
           ->RemoveEmbargoAndResetCounts(origin, content_type);
     }
-    map->SetContentSettingDefaultScope(origin, origin, content_type,
-                                       std::string(), setting);
+    map->SetContentSettingDefaultScope(origin, origin, content_type, setting);
     if (content_type == ContentSettingsType::SOUND) {
       ContentSetting default_setting =
           map->GetDefaultContentSetting(ContentSettingsType::SOUND, nullptr);
@@ -1094,19 +1087,6 @@ void SiteSettingsHandler::HandleSetOriginPermissions(
       }
     }
   }
-}
-
-void SiteSettingsHandler::HandleClearFlashPref(const base::ListValue* args) {
-  CHECK_EQ(1U, args->GetSize());
-  std::string origin_string;
-  CHECK(args->GetString(0, &origin_string));
-
-  HostContentSettingsMap* map =
-      HostContentSettingsMapFactory::GetForProfile(profile_);
-  const GURL origin(origin_string);
-  map->SetWebsiteSettingDefaultScope(origin, origin,
-                                     ContentSettingsType::PLUGINS_DATA,
-                                     std::string(), nullptr);
 }
 
 void SiteSettingsHandler::HandleResetCategoryPermissionForPattern(
@@ -1148,7 +1128,7 @@ void SiteSettingsHandler::HandleResetCategoryPermissionForPattern(
           permissions::PermissionSourceUI::SITE_SETTINGS);
 
   map->SetContentSettingCustomScope(primary_pattern, secondary_pattern,
-                                    content_type, "", CONTENT_SETTING_DEFAULT);
+                                    content_type, CONTENT_SETTING_DEFAULT);
 
   if (content_type == ContentSettingsType::SOUND) {
     ContentSetting default_setting =
@@ -1214,7 +1194,7 @@ void SiteSettingsHandler::HandleSetCategoryPermissionForPattern(
           permissions::PermissionSourceUI::SITE_SETTINGS);
 
   map->SetContentSettingCustomScope(primary_pattern, secondary_pattern,
-                                    content_type, "", setting);
+                                    content_type, setting);
 
   if (content_type == ContentSettingsType::SOUND) {
     ContentSetting default_setting =

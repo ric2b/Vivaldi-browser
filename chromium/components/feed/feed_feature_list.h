@@ -24,14 +24,16 @@ extern const base::FeatureParam<int> kTimeoutDurationSeconds;
 extern const base::FeatureParam<bool> kThrottleBackgroundFetches;
 extern const base::FeatureParam<bool> kOnlySetLastRefreshAttemptOnSuccess;
 
-extern const base::Feature kInterestFeedFeedback;
-
 // Indicates if user card clicks and views in Chrome's feed should be reported
 // for personalization. Also enables the feed header menu to manage the feed.
 extern const base::Feature kReportFeedUserActions;
 
 extern const base::Feature kInterestFeedV1ClicksAndViewsConditionalUpload;
 extern const base::Feature kInterestFeedV2ClicksAndViewsConditionalUpload;
+
+extern const base::Feature kInterestFeedNoticeCardAutoDismiss;
+
+extern const base::Feature kInterestFeedSpinnerAlwaysAnimate;
 
 std::string GetFeedReferrerUrl();
 

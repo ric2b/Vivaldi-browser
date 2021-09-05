@@ -178,12 +178,6 @@ void WebContentsViewAndroid::RestoreFocus() {
 }
 
 void WebContentsViewAndroid::FocusThroughTabTraversal(bool reverse) {
-  content::RenderWidgetHostView* fullscreen_view =
-      web_contents_->GetFullscreenRenderWidgetHostView();
-  if (fullscreen_view) {
-    fullscreen_view->Focus();
-    return;
-  }
   web_contents_->GetRenderViewHost()->SetInitialFocus(reverse);
 }
 
@@ -339,7 +333,8 @@ void WebContentsViewAndroid::StartDragging(
   ScopedJavaLocalRef<jstring> jtext =
       ConvertUTF16ToJavaString(env, *drop_data.text);
 
-  if (!native_view->StartDragAndDrop(jtext, gfx::ConvertToJavaBitmap(bitmap))) {
+  if (!native_view->StartDragAndDrop(jtext,
+                                     gfx::ConvertToJavaBitmap(*bitmap))) {
     // Need to clear drag and drop state in blink.
     OnSystemDragEnded();
     return;
@@ -602,6 +597,13 @@ void WebContentsViewAndroid::OnControlsResizeViewChanged() {
   if (rwhv)
     rwhv->SynchronizeVisualProperties(cc::DeadlinePolicy::UseDefaultDeadline(),
                                       base::nullopt);
+}
+
+void WebContentsViewAndroid::NotifyVirtualKeyboardOverlayRect(
+    const gfx::Rect& keyboard_rect) {
+  auto* rwhv = GetRenderWidgetHostViewAndroid();
+  if (rwhv)
+    rwhv->NotifyVirtualKeyboardOverlayRect(keyboard_rect);
 }
 
 } // namespace content

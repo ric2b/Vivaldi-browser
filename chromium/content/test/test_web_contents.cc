@@ -21,15 +21,14 @@
 #include "content/browser/site_instance_impl.h"
 #include "content/common/frame_messages.h"
 #include "content/common/render_message_filter.mojom.h"
-#include "content/common/view_messages.h"
 #include "content/public/browser/notification_registrar.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/notification_types.h"
-#include "content/public/common/page_state.h"
 #include "content/public/common/url_utils.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/navigation_simulator.h"
 #include "content/test/test_render_view_host.h"
+#include "third_party/blink/public/common/page_state/page_state.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom.h"
 #include "ui/base/page_transition_types.h"
 
@@ -176,10 +175,10 @@ void TestWebContents::TestDidNavigateWithSequenceNumber(
   params.http_status_code = 200;
   params.url_is_unreachable = false;
   if (item_sequence_number != -1 && document_sequence_number != -1) {
-    params.page_state = PageState::CreateForTestingWithSequenceNumbers(
+    params.page_state = blink::PageState::CreateForTestingWithSequenceNumbers(
         url, item_sequence_number, document_sequence_number);
   } else {
-    params.page_state = PageState::CreateFromURL(url);
+    params.page_state = blink::PageState::CreateFromURL(url);
   }
   params.original_request_url = GURL();
   params.is_overriding_user_agent = false;
@@ -221,8 +220,9 @@ bool TestWebContents::TestDidDownloadImage(
   ImageDownloadCallback callback =
       std::move(pending_image_downloads_[url].front().second);
   pending_image_downloads_[url].pop_front();
-  std::move(callback).Run(id, http_status_code, url, bitmaps,
-                          original_bitmap_sizes);
+  WebContentsImpl::OnDidDownloadImage(std::move(callback), id, url,
+                                      http_status_code, bitmaps,
+                                      original_bitmap_sizes);
   return true;
 }
 
@@ -386,17 +386,15 @@ RenderFrameHostDelegate* TestWebContents::CreateNewWindow(
   return nullptr;
 }
 
-void TestWebContents::CreateNewWidget(
+RenderWidgetHostImpl* TestWebContents::CreateNewPopupWidget(
     AgentSchedulingGroupHost& agent_scheduling_group,
     int32_t route_id,
+    mojo::PendingAssociatedReceiver<blink::mojom::PopupWidgetHost>
+        blink_popup_widget_host,
     mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost> blink_widget_host,
-    mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget) {}
-
-void TestWebContents::CreateNewFullscreenWidget(
-    AgentSchedulingGroupHost& agent_scheduling_group,
-    int32_t route_id,
-    mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost> blink_widget_host,
-    mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget) {}
+    mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget) {
+  return nullptr;
+}
 
 void TestWebContents::ShowCreatedWindow(RenderFrameHost* opener,
                                         int route_id,
@@ -407,9 +405,6 @@ void TestWebContents::ShowCreatedWindow(RenderFrameHost* opener,
 void TestWebContents::ShowCreatedWidget(int process_id,
                                         int route_id,
                                         const gfx::Rect& initial_rect) {}
-
-void TestWebContents::ShowCreatedFullscreenWidget(int process_id,
-                                                  int route_id) {}
 
 void TestWebContents::SaveFrameWithHeaders(
     const GURL& url,

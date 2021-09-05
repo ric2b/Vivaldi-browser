@@ -34,6 +34,7 @@
 #include "chrome/browser/accessibility/accessibility_labels_service.h"
 #include "chrome/browser/accessibility/accessibility_labels_service_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "chrome/browser/browser_features.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/account_manager/child_account_type_changed_user_data.h"
@@ -268,12 +269,6 @@ void CancelProfileDeletion(const base::FilePath& path) {
 }
 #endif
 
-bool IsProfileDirectoryMarkedForDeletion(const base::FilePath& profile_path) {
-  auto it = ProfilesToDelete().find(profile_path);
-  return it != ProfilesToDelete().end() &&
-         it->second == ProfileDeletionStage::MARKED;
-}
-
 // Physically remove deleted profile directories from disk.
 void NukeProfileFromDisk(const base::FilePath& profile_path) {
   // Delete both the profile directory and its corresponding cache.
@@ -338,8 +333,8 @@ void OnProfileLoaded(ProfileManager::ProfileLoadedCallback client_callback,
 
 #if !defined(OS_ANDROID)
 // Helper function for ScheduleForcedEphemeralProfileForDeletion.
-bool IsProfileEphemeral(ProfileAttributesStorage* storage,
-                        const base::FilePath& profile_dir) {
+bool IsRegisteredAsEphemeral(ProfileAttributesStorage* storage,
+                             const base::FilePath& profile_dir) {
   ProfileAttributesEntry* entry = nullptr;
   return storage->GetProfileAttributesWithPath(profile_dir, &entry) &&
          entry->IsEphemeral();
@@ -379,6 +374,14 @@ ProfileManager::ProfileManager(const base::FilePath& user_data_dir)
 
 ProfileManager::~ProfileManager() {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+}
+
+// static
+bool ProfileManager::IsProfileDirectoryMarkedForDeletion(
+    const base::FilePath& profile_path) {
+  const auto it = ProfilesToDelete().find(profile_path);
+  return it != ProfilesToDelete().end() &&
+         it->second == ProfileDeletionStage::MARKED;
 }
 
 #if BUILDFLAG(ENABLE_SESSION_SERVICE)
@@ -599,13 +602,17 @@ void ProfileManager::CreateProfileAsync(const base::FilePath& profile_path,
   if (!callback.is_null()) {
     if (iter != profiles_info_.end() && info->created) {
       Profile* profile = info->profile.get();
-      // If this was the guest profile, apply settings and go OffTheRecord.
+      // If this was the non-ephemeral Guest profile, apply settings and go
+      // OffTheRecord.
       // The system profile also needs characteristics of being off the record,
       // such as having no extensions, not writing to disk, etc.
-      if (profile->IsGuestSession() || profile->IsSystemProfile()) {
+      if (profile->IsGuestSession() || profile->IsEphemeralGuestProfile() ||
+          profile->IsSystemProfile()) {
         SetNonPersonalProfilePrefs(profile);
-        profile = profile->GetPrimaryOTRProfile();
       }
+      if (profile->IsGuestSession() || profile->IsSystemProfile())
+        profile = profile->GetPrimaryOTRProfile();
+
       // Profile has already been created. Run callback immediately.
       callback.Run(profile, Profile::CREATE_STATUS_INITIALIZED);
     } else {
@@ -717,7 +724,7 @@ std::vector<Profile*> ProfileManager::GetLastOpenedProfiles(
       if (profile) {
         // crbug.com/823338 -> CHECK that the profiles aren't guest or
         // incognito, causing a crash during session restore.
-        CHECK(!profile->IsGuestSession())
+        CHECK(!profile->IsGuestSession() && !profile->IsEphemeralGuestProfile())
             << "Guest profiles shouldn't have been saved as active profiles";
         CHECK(!profile->IsOffTheRecord())
             << "OTR profiles shouldn't have been saved as active profiles";
@@ -793,8 +800,32 @@ base::FilePath ProfileManager::GetGuestProfilePath() {
 
   ProfileManager* profile_manager = g_browser_process->profile_manager();
 
-  base::FilePath guest_path = profile_manager->user_data_dir();
-  return guest_path.Append(chrome::kGuestProfileDir);
+  if (profile_manager->guest_profile_path_.empty()) {
+    if (Profile::IsEphemeralGuestProfileEnabled()) {
+      PrefService* local_state = g_browser_process->local_state();
+      DCHECK(local_state);
+
+      // Create the next Guest profile in the next available directory slot.
+      int next_directory =
+          local_state->GetInteger(prefs::kGuestProfilesNumCreated);
+      std::string profile_name = chrome::kEphemeralGuestProfileDirPrefix;
+      profile_name.append(base::NumberToString(next_directory));
+      base::FilePath new_path = profile_manager->user_data_dir();
+#if defined(OS_WIN)
+      new_path = new_path.Append(base::ASCIIToUTF16(profile_name));
+#else
+      new_path = new_path.Append(profile_name);
+#endif
+      local_state->SetInteger(prefs::kGuestProfilesNumCreated,
+                              ++next_directory);
+      profile_manager->guest_profile_path_ = new_path;
+    } else {
+      profile_manager->guest_profile_path_ =
+          profile_manager->user_data_dir().Append(chrome::kGuestProfileDir);
+    }
+  }
+
+  return profile_manager->guest_profile_path_;
 }
 
 // static
@@ -1051,7 +1082,7 @@ void ProfileManager::InitProfileUserPrefs(Profile* profile) {
   size_t avatar_index;
   std::string profile_name;
   std::string supervised_user_id;
-  if (profile->IsGuestSession()) {
+  if (profile->IsGuestSession() || profile->IsEphemeralGuestProfile()) {
     profile_name = l10n_util::GetStringUTF8(IDS_PROFILES_GUEST_PROFILE_NAME);
     avatar_index = 0;
   } else {
@@ -1189,8 +1220,10 @@ void ProfileManager::OnProfileCreated(Profile* profile,
   if (profile) {
     // If this was the guest or system profile, finish setting its special
     // status.
-    if (profile->IsGuestSession() || profile->IsSystemProfile())
+    if (profile->IsGuestSession() || profile->IsSystemProfile() ||
+        profile->IsEphemeralGuestProfile()) {
       SetNonPersonalProfilePrefs(profile);
+    }
 
     // Invoke CREATED callback for incognito profiles.
     if (go_off_the_record)
@@ -1449,6 +1482,52 @@ bool ProfileManager::AddProfile(std::unique_ptr<Profile> profile) {
   return true;
 }
 
+#if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+void ProfileManager::RemoveProfile(const base::FilePath& profile_dir) {
+  TRACE_EVENT0("browser", "ProfileManager::RemoveProfile");
+
+  DCHECK(base::Contains(profiles_info_, profile_dir));
+
+  Profile* profile = GetProfileByPath(profile_dir);
+  bool ephemeral =
+      profile->GetPrefs()->GetBoolean(prefs::kForceEphemeralProfiles);
+
+  // Remove from |profiles_info_|, eventually causing the Profile object's
+  // destruction.
+  profiles_info_.erase(profile_dir);
+
+  if (!ephemeral)
+    return;
+
+  // If the profile is ephemeral, also do some cleanup.
+
+  // Set a new active profile.
+  base::Optional<base::FilePath> new_active_profile_dir =
+      FindLastActiveProfile(base::BindRepeating(
+          [](const base::FilePath& profile_dir, ProfileAttributesEntry* entry) {
+            return entry->GetPath() != profile_dir;
+          },
+          profile_dir));
+  if (!new_active_profile_dir.has_value())
+    new_active_profile_dir = GenerateNextProfileDirectoryPath();
+  DCHECK(!new_active_profile_dir->empty());
+  RemoveFromLastActiveProfilesPrefList(profile_dir);
+  profiles::SetLastUsedProfile(
+      new_active_profile_dir->BaseName().MaybeAsASCII());
+
+  ProfileAttributesStorage& storage = GetProfileAttributesStorage();
+  storage.RemoveProfile(profile_dir);
+
+  // TODO(crbug.com/88586): There could still be pending tasks that write to
+  // disk, and don't need the Profile. If they run after
+  // NukeProfileFromDisk(), they may still leave files behind.
+  base::ThreadPool::PostTask(FROM_HERE,
+                             {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+                              base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+                             base::BindOnce(&NukeProfileFromDisk, profile_dir));
+}
+#endif  // !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
+
 Profile* ProfileManager::CreateAndInitializeProfile(
     const base::FilePath& profile_dir) {
   TRACE_EVENT0("browser", "ProfileManager::CreateAndInitializeProfile");
@@ -1623,6 +1702,51 @@ void ProfileManager::FinishDeletingProfile(
   // Prevents CreateProfileAsync from re-creating the profile.
   MarkProfileDirectoryForDeletion(profile_dir);
 }
+
+base::Optional<base::FilePath> ProfileManager::FindLastActiveProfile(
+    base::RepeatingCallback<bool(ProfileAttributesEntry*)> predicate) {
+  bool found_entry_loaded = false;
+  ProfileAttributesEntry* found_entry = nullptr;
+  ProfileAttributesStorage& storage = GetProfileAttributesStorage();
+  for (ProfileAttributesEntry* entry : storage.GetAllProfilesAttributes()) {
+    // Skip all profiles forbidden to rollback.
+    base::FilePath entry_path = entry->GetPath();
+    if (!predicate.Run(entry) || entry_path == GetGuestProfilePath() ||
+        entry->IsLegacySupervised() ||
+        IsProfileDirectoryMarkedForDeletion(entry_path))
+      continue;
+    // Check if |entry| preferable over |found_entry|.
+    bool entry_loaded = !!GetProfileByPath(entry_path);
+    if (!found_entry || (!found_entry_loaded && entry_loaded) ||
+        found_entry->GetActiveTime() < entry->GetActiveTime()) {
+      found_entry = entry;
+      found_entry_loaded = entry_loaded;
+    }
+  }
+  return found_entry ? base::Optional<base::FilePath>(found_entry->GetPath())
+                     : base::nullopt;
+}
+
+// static
+void ProfileManager::CleanUpGuestProfile() {
+// ChromeOS handles guest data independently.
+#if !defined(OS_CHROMEOS)
+  ProfileManager* profile_manager = g_browser_process->profile_manager();
+
+  Profile* profile =
+      profile_manager->GetProfileByPath(profile_manager->GetGuestProfilePath());
+  if (profile) {
+    // Clear all browsing data once a Guest Session completes. The Guest
+    // profile has BrowserContextKeyedServices that the ProfileDestroyer
+    // can't delete it properly.
+    // TODO(https://crbug.com/88586): Delete the guest when regular profiles
+    // become deletable when not needed.
+    profiles::RemoveBrowsingDataForProfile(GetGuestProfilePath());
+  }
+  profile_manager->guest_profile_path_.clear();
+#endif  //! defined(OS_CHROMEOS)
+}
+
 #endif  // !defined(OS_ANDROID)
 
 ProfileManager::ProfileInfo* ProfileManager::RegisterProfile(
@@ -1733,6 +1857,9 @@ void ProfileManager::AddProfileToStorage(Profile* profile) {
       storage.GetProfileAttributesWithPath(profile->GetPath(), &entry);
   DCHECK(has_entry);
 
+  if (profile->IsEphemeralGuestProfile())
+    profile->GetPrefs()->SetBoolean(prefs::kForceEphemeralProfiles, true);
+
   if (profile->GetPrefs()->GetBoolean(prefs::kForceEphemeralProfiles))
     entry->SetIsEphemeral(true);
 
@@ -1782,7 +1909,7 @@ void ProfileManager::SaveActiveProfiles() {
   for (it = active_profiles_.begin(); it != active_profiles_.end(); ++it) {
     // crbug.com/823338 -> CHECK that the profiles aren't guest or incognito,
     // causing a crash during session restore.
-    CHECK(!(*it)->IsGuestSession())
+    CHECK((!(*it)->IsGuestSession()) && (!(*it)->IsEphemeralGuestProfile()))
         << "Guest profiles shouldn't be saved as active profiles";
     CHECK(!(*it)->IsOffTheRecord())
         << "OTR profiles shouldn't be saved as active profiles";
@@ -1836,10 +1963,37 @@ void ProfileManager::OnBrowserClosed(Browser* browser) {
       return;
   }
 
+  if (profile->IsGuestSession() || profile->IsEphemeralGuestProfile())
+    CleanUpGuestProfile();
+
+#if !defined(OS_CHROMEOS)
+  ProfileAttributesEntry* entry;
+  bool background_mode =
+      GetProfileAttributesStorage().GetProfileAttributesWithPath(
+          profile->GetPath(), &entry) &&
+      entry->GetBackgroundStatus();
+  if (base::FeatureList::IsEnabled(features::kDestroyProfileOnBrowserClose) &&
+      !profile->IsOffTheRecord() &&
+      !background_mode) {
+    // Post this to a task, so other OnBrowserClosed() hooks and the destructor
+    // for Browser have time to run before we destroy the Profile.
+    content::GetUIThreadTaskRunner({})->PostTask(
+        FROM_HERE, base::BindOnce(&ProfileManager::RemoveProfile,
+                                  base::Unretained(this), profile->GetPath()));
+    return;
+  }
+#endif
+
   base::FilePath path = profile->GetPath();
   if (IsProfileDirectoryMarkedForDeletion(path)) {
     // Do nothing if the profile is already being deleted.
   } else if (profile->GetPrefs()->GetBoolean(prefs::kForceEphemeralProfiles)) {
+    // Avoid scheduling deletion if it's a testing profile that is not
+    // registered with profile manager.
+    if (profile->AsTestingProfile() &&
+        !IsRegisteredAsEphemeral(&GetProfileAttributesStorage(), path)) {
+      return;
+    }
     // Delete if the profile is an ephemeral profile.
     ScheduleForcedEphemeralProfileForDeletion(path);
   }
@@ -1937,34 +2091,20 @@ void ProfileManager::OnNewActiveProfileLoaded(
 void ProfileManager::ScheduleForcedEphemeralProfileForDeletion(
     const base::FilePath& profile_dir) {
   DCHECK_EQ(0u, chrome::GetBrowserCount(GetProfileByPath(profile_dir)));
-  DCHECK(IsProfileEphemeral(&GetProfileAttributesStorage(), profile_dir));
+  DCHECK(IsRegisteredAsEphemeral(&GetProfileAttributesStorage(), profile_dir));
 
-  // Search for latest active profile, already loaded preferably.
-  bool found_entry_loaded = false;
-  ProfileAttributesEntry* found_entry = nullptr;
-  ProfileAttributesStorage& storage = GetProfileAttributesStorage();
-  for (ProfileAttributesEntry* entry : storage.GetAllProfilesAttributes()) {
-    // Skip all profiles forbidden to rollback.
-    base::FilePath entry_path = entry->GetPath();
-    if (entry_path == profile_dir ||
-        entry_path == GetGuestProfilePath() ||
-        entry->IsLegacySupervised() ||
-        IsProfileDirectoryMarkedForDeletion(entry_path))
-      continue;
-    // Check if |entry| preferable over |found_entry|.
-    bool entry_loaded = !!GetProfileByPath(entry_path);
-    if (!found_entry || (!found_entry_loaded && entry_loaded) ||
-        found_entry->GetActiveTime() < entry->GetActiveTime()) {
-      found_entry = entry;
-      found_entry_loaded = entry_loaded;
-    }
-  }
-
+  base::Optional<base::FilePath> new_active_profile_dir =
+      FindLastActiveProfile(base::BindRepeating(
+          [](const base::FilePath& profile_dir, ProfileAttributesEntry* entry) {
+            return entry->GetPath() != profile_dir;
+          },
+          profile_dir));
+  if (!new_active_profile_dir.has_value())
+    new_active_profile_dir = GenerateNextProfileDirectoryPath();
+  DCHECK(!new_active_profile_dir->empty());
   RemoveFromLastActiveProfilesPrefList(profile_dir);
 
-  const base::FilePath new_active_profile_dir =
-      found_entry ? found_entry->GetPath() : GenerateNextProfileDirectoryPath();
-  FinishDeletingProfile(profile_dir, new_active_profile_dir);
+  FinishDeletingProfile(profile_dir, new_active_profile_dir.value());
 }
 #endif  // !defined(OS_ANDROID)
 

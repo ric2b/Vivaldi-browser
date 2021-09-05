@@ -52,6 +52,10 @@ bool MockSharedWorker::CheckReceivedTerminate() {
   return true;
 }
 
+void MockSharedWorker::Disconnect() {
+  receiver_.reset();
+}
+
 void MockSharedWorker::Connect(int connection_request_id,
                                blink::MessagePortDescriptor port) {
   connect_received_.emplace(connection_request_id,
@@ -95,6 +99,10 @@ bool MockSharedWorkerFactory::CheckReceivedCreateSharedWorker(
   return true;
 }
 
+void MockSharedWorkerFactory::Disconnect() {
+  receiver_.reset();
+}
+
 void MockSharedWorkerFactory::CreateSharedWorker(
     blink::mojom::SharedWorkerInfoPtr info,
     const blink::SharedWorkerToken& token,
@@ -103,7 +111,7 @@ void MockSharedWorkerFactory::CreateSharedWorker(
     const blink::UserAgentMetadata& ua_metadata,
     bool pause_on_start,
     const base::UnguessableToken& devtools_worker_token,
-    blink::mojom::RendererPreferencesPtr renderer_preferences,
+    const blink::RendererPreferences& renderer_preferences,
     mojo::PendingReceiver<blink::mojom::RendererPreferenceWatcher>
         preference_watcher_receiver,
     mojo::PendingRemote<blink::mojom::WorkerContentSettingsProxy>

@@ -11,8 +11,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/task_environment.h"
 #include "build/build_config.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/browser/web_applications/test/web_app_icon_test_utils.h"
-#include "chrome/common/web_application_info.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/color_utils.h"
@@ -167,13 +167,14 @@ void TestIconGeneration(int icon_size,
 class WebAppIconGeneratorTest : public testing::Test {
  public:
   WebAppIconGeneratorTest() = default;
+  WebAppIconGeneratorTest(const WebAppIconGeneratorTest&) = delete;
+  WebAppIconGeneratorTest& operator=(const WebAppIconGeneratorTest&) = delete;
 
  private:
   // Needed to bypass DCHECK in GetFallbackFont.
   base::test::TaskEnvironment task_environment_{
       base::test::TaskEnvironment::MainThreadType::UI};
 
-  DISALLOW_COPY_AND_ASSIGN(WebAppIconGeneratorTest);
 };
 
 TEST_F(WebAppIconGeneratorTest, ConstrainBitmapsToSizes) {

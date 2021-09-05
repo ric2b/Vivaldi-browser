@@ -14,7 +14,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/numerics/ranges.h"
-#include "base/stl_util.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -229,14 +229,6 @@ class TabStripModel::WebContentsData : public content::WebContentsObserver {
   bool blocked_ = false;
 
   // The group that contains this tab, if any.
-  // TODO(https://crbug.com/915956): While tab groups are being prototyped
-  // (behind a feature flag), we are tracking group membership in the simplest
-  // possible way. There are some known issues intentionally punted here:
-  //   - Groups are meant to be contiguous, but this data organization doesn't
-  //     help to ensure that they stay contiguous. Any kind of tab movement may
-  //     break that guarantee, with undefined results.
-  //   - The exact shape of the group-related changes to the TabStripModel API
-  //     (and the relevant bits of the extension API) are TBD.
   base::Optional<tab_groups::TabGroupId> group_ = base::nullopt;
 };
 
@@ -876,6 +868,24 @@ base::Optional<tab_groups::TabGroupId> TabStripModel::GetTabGroupForTab(
   return ContainsIndex(index) ? contents_data_[index]->group() : base::nullopt;
 }
 
+base::Optional<tab_groups::TabGroupId> TabStripModel::GetSurroundingTabGroup(
+    int index) const {
+  if (!ContainsIndex(index - 1) || !ContainsIndex(index))
+    return base::nullopt;
+
+  // If the tab before is not in a group, a tab inserted at |index|
+  // wouldn't be surrounded by one group.
+  base::Optional<tab_groups::TabGroupId> group = GetTabGroupForTab(index - 1);
+  if (!group)
+    return base::nullopt;
+
+  // If the tab after is in a different (or no) group, a new tab at
+  // |index| isn't surrounded.
+  if (group != GetTabGroupForTab(index))
+    return base::nullopt;
+  return group;
+}
+
 int TabStripModel::IndexOfFirstNonPinnedTab() const {
   for (size_t i = 0; i < contents_data_.size(); ++i) {
     if (!IsTabPinned(static_cast<int>(i)))
@@ -981,7 +991,7 @@ void TabStripModel::AddWebContents(
   if (group.has_value()) {
     auto grouped_tabs = group_model_->GetTabGroup(group.value())->ListTabs();
     if (grouped_tabs.size() > 0) {
-      DCHECK(base::STLIsSorted(grouped_tabs));
+      DCHECK(base::ranges::is_sorted(grouped_tabs));
       index = base::ClampToRange(index, grouped_tabs.front(),
                                  grouped_tabs.back() + 1);
     }
@@ -1069,6 +1079,10 @@ tab_groups::TabGroupId TabStripModel::AddToNewGroup(
     const std::vector<int>& indices) {
   ReentrancyCheck reentrancy_check(&reentrancy_guard_);
 
+  // Ensure that the indices are sorted and unique.
+  DCHECK(base::ranges::is_sorted(indices));
+  DCHECK(std::adjacent_find(indices.begin(), indices.end()) == indices.end());
+
   // The odds of |new_group| colliding with an existing group are astronomically
   // low. If there is a collision, a DCHECK will fail in |AddToNewGroupImpl()|,
   // in which case there is probably something wrong with
@@ -1083,6 +1097,10 @@ tab_groups::TabGroupId TabStripModel::AddToNewGroup(
 void TabStripModel::AddToExistingGroup(const std::vector<int>& indices,
                                        const tab_groups::TabGroupId& group) {
   ReentrancyCheck reentrancy_check(&reentrancy_guard_);
+
+  // Ensure that the indices are sorted and unique.
+  DCHECK(base::ranges::is_sorted(indices));
+  DCHECK(std::adjacent_find(indices.begin(), indices.end()) == indices.end());
 
   AddToExistingGroupImpl(indices, group);
 }
@@ -2052,7 +2070,7 @@ void TabStripModel::AddToExistingGroupImpl(
   std::vector<int> new_indices = SetTabsPinned(indices, false);
 
   std::vector<int> tabs_in_group = group_model_->GetTabGroup(group)->ListTabs();
-  DCHECK(base::STLIsSorted(tabs_in_group));
+  DCHECK(base::ranges::is_sorted(tabs_in_group));
 
   // Split |new_indices| into |tabs_left_of_group| and |tabs_right_of_group| to
   // be moved to proper destination index. Directly set the group for indices
@@ -2121,7 +2139,6 @@ void TabStripModel::MoveAndSetGroup(
 void TabStripModel::AddToReadLaterImpl(const std::vector<int>& indices) {
   ReadingListModel* model =
       ReadingListModelFactory::GetForBrowserContext(profile_);
-  std::vector<WebContents*> closing_contents;
   if (!model || !model->loaded())
     return;
 
@@ -2133,11 +2150,8 @@ void TabStripModel::AddToReadLaterImpl(const std::vector<int>& indices) {
     if (model->IsUrlSupported(url)) {
       model->AddEntry(url, base::UTF16ToUTF8(title),
                       reading_list::EntrySource::ADDED_VIA_CURRENT_APP);
-      closing_contents.push_back(contents);
     }
   }
-  InternalCloseTabs(closing_contents,
-                    CLOSE_CREATE_HISTORICAL_TAB | CLOSE_USER_GESTURE);
 }
 
 base::Optional<tab_groups::TabGroupId> TabStripModel::UngroupTab(int index) {
@@ -2256,7 +2270,7 @@ void TabStripModel::SetSitesMuted(const std::vector<int>& indices,
         setting = CONTENT_SETTING_DEFAULT;
       }
       settings->SetContentSettingDefaultScope(
-          url, url, ContentSettingsType::SOUND, std::string(), setting);
+          url, url, ContentSettingsType::SOUND, setting);
     }
   }
 }

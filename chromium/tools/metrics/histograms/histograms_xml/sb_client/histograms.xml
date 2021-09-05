@@ -22,7 +22,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histograms>
 
 <histogram name="SBClientDownload.CheckDownloadStats"
-    enum="SBClientDownloadCheckDownloadStats" expires_after="2021-02-07">
+    enum="SBClientDownloadCheckDownloadStats" expires_after="2021-04-11">
   <owner>vakh@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <owner>mattm@chromium.org</owner>
@@ -47,6 +47,16 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="SBClientDownload.DeepScanTrigger" enum="SBDeepScanTriggers"
+    expires_after="2021-04-28">
+  <owner>drubery@chromium.org</owner>
+  <owner>chrome-safebrowsing-alerts@google.com</owner>
+  <summary>
+    Records the reason each file was uploaded to Safe Browsing for deep
+    scanning. This is logged on every deep scan.
+  </summary>
+</histogram>
+
 <histogram name="SBClientDownload.DmgFileSuccessByType"
     enum="SBClientDownloadExtensions" expires_after="M90">
   <owner>drubery@chromium.org</owner>
@@ -58,7 +68,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SBClientDownload.DownloadExtensions"
-    enum="SBClientDownloadExtensions" expires_after="2021-02-07">
+    enum="SBClientDownloadExtensions" expires_after="2021-04-25">
   <owner>vakh@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <owner>mattm@chromium.org</owner>
@@ -179,6 +189,24 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="SBClientDownload.MalwareDeepScanResult.{trigger}"
+    enum="SBClientDownloadCheckResult" expires_after="2021-04-28">
+  <owner>drubery@chromium.org</owner>
+  <owner>chrome-safebrowsing-alerts@google.com</owner>
+  <summary>
+    Records the result of a malware deep scan, split by the reason the file was
+    uploaded for scanning. This is logged only for succesful scans. The overall
+    rate of successful scans is logged in
+    SafeBrowsingBinaryUploadRequest.MalwareResult.
+  </summary>
+  <token key="trigger">
+    <variant name="AdvancedProtectionPrompt"
+        summary="Advanced Protection user selected 'Scan'"/>
+    <variant name="Policy" summary="Triggered by enterprise policy"/>
+    <variant name="Unknown" summary="Unknown trigger"/>
+  </token>
+</histogram>
+
 <histogram name="SBClientDownload.ZipFileSuccess" enum="BooleanSuccess"
     expires_after="M83">
   <owner>drubery@chromium.org</owner>
@@ -250,9 +278,19 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <summary>The counts for malware verdicts given by server side model.</summary>
 </histogram>
 
+<histogram name="SBClientPhishing.CacheDetectsPhishing"
+    enum="BooleanIsPhishing" expires_after="2021-09-17">
+  <owner>drubery@chromium.org</owner>
+  <owner>chrome-safebrowsing-alerts@google.com</owner>
+  <summary>
+    When a result is served from cache, this histogram records whether the
+    result was phishing or not.
+  </summary>
+</histogram>
+
 <histogram name="SBClientPhishing.CancelClassificationReason"
     enum="SBClientPhishingCancelClassificationReason"
-    expires_after="2021-01-27">
+    expires_after="2021-04-11">
   <owner>drubery@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>
@@ -284,7 +322,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SBClientPhishing.ClassifierNotReadyReason"
-    enum="SBClientPhishingClientModelStatus" expires_after="2021-02-21">
+    enum="SBClientPhishingClientModelStatus" expires_after="2021-04-25">
   <owner>drubery@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>
@@ -415,7 +453,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SBClientPhishing.PhishingDetectionDuration" units="ms"
-    expires_after="2021-02-06">
+    expires_after="2021-04-11">
   <owner>bdea@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>
@@ -424,7 +462,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SBClientPhishing.PhishingDetectorResult"
-    enum="ClientSidePhishingResult" expires_after="2021-01-31">
+    enum="ClientSidePhishingResult" expires_after="2021-04-04">
   <owner>drubery@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>The result enum received from the renderer-side classifier</summary>
@@ -503,7 +541,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SBClientPhishing.TermFeatureChunkTime" units="ms"
-    expires_after="2021-01-27">
+    expires_after="2021-04-11">
   <owner>drubery@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>
@@ -512,7 +550,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SBClientPhishing.TermFeatureIterations" units="units"
-    expires_after="2021-01-27">
+    expires_after="2021-04-25">
   <owner>drubery@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>
@@ -521,7 +559,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SBClientPhishing.TermFeatureTimeout" units="units"
-    expires_after="2021-01-27">
+    expires_after="2021-04-11">
   <owner>drubery@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>
@@ -531,7 +569,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SBClientPhishing.TermFeatureTotalTime" units="ms"
-    expires_after="2021-01-27">
+    expires_after="2021-04-18">
   <owner>drubery@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>
@@ -561,7 +599,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SBClientPhishing.VisualComparisonTime" units="ms"
-    expires_after="2020-11-22">
+    expires_after="2021-05-22">
   <owner>drubery@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>

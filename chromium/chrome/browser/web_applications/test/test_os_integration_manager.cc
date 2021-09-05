@@ -41,22 +41,23 @@ void TestOsIntegrationManager::InstallOsHooks(
     std::unique_ptr<WebApplicationInfo> web_app_info,
     InstallOsHooksOptions options) {
   OsHooksResults os_hooks_results{false};
-  os_hooks_results[OsHookType::kFileHandlers] = true;
-  os_hooks_results[OsHookType::kShortcutsMenu] = true;
+  last_options_ = options;
+
+  if (options.os_hooks[OsHookType::kFileHandlers])
+    os_hooks_results[OsHookType::kFileHandlers] = true;
 
   did_add_to_desktop_ = options.add_to_desktop;
 
   if (options.os_hooks[OsHookType::kShortcuts] && can_create_shortcuts_) {
     bool success = true;
+    ++num_create_shortcuts_calls_;
     auto it = next_create_shortcut_results_.find(app_id);
     if (it != next_create_shortcut_results_.end()) {
       success = it->second;
       next_create_shortcut_results_.erase(app_id);
     }
-    if (success) {
-      ++num_create_shortcuts_calls_;
+    if (success)
       os_hooks_results[OsHookType::kShortcutsMenu] = true;
-    }
   }
 
   if (options.os_hooks[OsHookType::kRunOnOsLogin]) {
@@ -76,25 +77,31 @@ void TestOsIntegrationManager::UninstallOsHooks(
     const AppId& app_id,
     const OsHooksResults& os_hooks,
     UninstallOsHooksCallback callback) {
-  NOTIMPLEMENTED();
+  base::SequencedTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(std::move(callback), os_hooks));
 }
 
 void TestOsIntegrationManager::UninstallAllOsHooks(
     const AppId& app_id,
     UninstallOsHooksCallback callback) {
-  NOTIMPLEMENTED();
+  OsHooksResults os_hooks_results{true};
+  UninstallOsHooks(app_id, os_hooks_results, std::move(callback));
 }
 
 void TestOsIntegrationManager::UpdateOsHooks(
     const AppId& app_id,
     base::StringPiece old_name,
     const WebApplicationInfo& web_app_info) {
-  NOTIMPLEMENTED();
 }
 
 void TestOsIntegrationManager::SetFileHandlerManager(
     std::unique_ptr<FileHandlerManager> file_handler_manager) {
   set_file_handler_manager(std::move(file_handler_manager));
+}
+
+TestOsIntegrationManager*
+TestOsIntegrationManager::AsTestOsIntegrationManager() {
+  return this;
 }
 
 TestShortcutManager::TestShortcutManager(Profile* profile)
@@ -112,4 +119,5 @@ void TestShortcutManager::GetShortcutInfoForApp(
     GetShortcutInfoCallback callback) {
   std::move(callback).Run(nullptr);
 }
+
 }  // namespace web_app

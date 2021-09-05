@@ -44,6 +44,11 @@ class AccessibilityCommon {
         {}, this.onMagnifierUpdated_.bind(this));
     chrome.accessibilityFeatures.screenMagnifier.onChange.addListener(
         this.onMagnifierUpdated_.bind(this));
+
+    chrome.accessibilityFeatures.dockedMagnifier.get(
+        {}, this.onMagnifierUpdated_.bind(this));
+    chrome.accessibilityFeatures.dockedMagnifier.onChange.addListener(
+        this.onMagnifierUpdated_.bind(this));
   }
 
   /**
@@ -71,6 +76,7 @@ class AccessibilityCommon {
     if (details.value && !this.magnifier_) {
       this.magnifier_ = new Magnifier();
     } else if (!details.value && this.magnifier_) {
+      this.magnifier_.onMagnifierDisabled();
       this.magnifier_ = null;
     }
   }

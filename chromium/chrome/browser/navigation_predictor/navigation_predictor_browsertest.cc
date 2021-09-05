@@ -11,7 +11,7 @@
 #include "chrome/browser/navigation_predictor/navigation_predictor.h"
 #include "chrome/browser/navigation_predictor/navigation_predictor_keyed_service.h"
 #include "chrome/browser/navigation_predictor/navigation_predictor_keyed_service_factory.h"
-#include "chrome/browser/prerender/prerender_manager_factory.h"
+#include "chrome/browser/prefetch/no_state_prefetch/prerender_manager_factory.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/subresource_filter/subresource_filter_browser_test_harness.h"
 #include "chrome/browser/ui/browser.h"
@@ -20,7 +20,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/search_test_utils.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/prerender/browser/prerender_manager.h"
+#include "components/no_state_prefetch/browser/prerender_manager.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/test/browser_test.h"
@@ -364,9 +364,6 @@ class NavigationPredictorBrowserTestWithPrefetchAfterPreconnect
 IN_PROC_BROWSER_TEST_F(
     NavigationPredictorBrowserTestWithPrefetchAfterPreconnect,
     DISABLE_ON_CHROMEOS(PrefetchAfterPreconnect)) {
-  prerender::PrerenderManager::SetMode(
-      prerender::PrerenderManager::PRERENDER_MODE_NOSTATE_PREFETCH);
-
   const GURL& url = GetTestURL("/page_with_same_host_anchor_element.html");
   std::unique_ptr<ukm::TestAutoSetUkmRecorder> ukm_recorder =
       std::make_unique<ukm::TestAutoSetUkmRecorder>();

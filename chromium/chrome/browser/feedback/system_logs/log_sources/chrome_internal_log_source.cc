@@ -29,7 +29,7 @@
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/common/channel_info.h"
 #include "components/prefs/pref_service.h"
-#include "components/sync/driver/about_sync_util.h"
+#include "components/sync/driver/sync_internals_util.h"
 #include "components/sync/driver/sync_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/browser/api/power/power_api.h"
@@ -48,9 +48,12 @@
 #include "chrome/browser/chromeos/login/demo_mode/demo_session.h"
 #include "chrome/browser/chromeos/login/login_pref_names.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
+#include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/metrics/chromeos_metrics_provider.h"
+#include "chrome/browser/metrics/enrollment_status.h"
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/util/version_loader.h"
+#include "chromeos/settings/cros_settings_names.h"
 #include "chromeos/system/statistics_provider.h"
 #endif
 
@@ -90,6 +93,7 @@ constexpr char kChromeEnrollmentTag[] = "ENTERPRISE_ENROLLED";
 constexpr char kHWIDKey[] = "HWID";
 constexpr char kSettingsKey[] = "settings";
 constexpr char kLocalStateSettingsResponseKey[] = "Local State: settings";
+constexpr char kLTSChromeVersionPrefix[] = "LTS ";
 constexpr char kArcStatusKey[] = "CHROMEOS_ARC_STATUS";
 constexpr char kMonitorInfoKey[] = "monitor_info";
 constexpr char kAccountTypeKey[] = "account_type";
@@ -154,18 +158,14 @@ std::string GetPrimaryAccountTypeString() {
 
 std::string GetEnrollmentStatusString() {
   switch (ChromeOSMetricsProvider::GetEnrollmentStatus()) {
-    case ChromeOSMetricsProvider::NON_MANAGED:
+    case EnrollmentStatus::kNonManaged:
       return "Not managed";
-    case ChromeOSMetricsProvider::MANAGED:
+    case EnrollmentStatus::kManaged:
       return "Managed";
-    case ChromeOSMetricsProvider::UNUSED:
-    case ChromeOSMetricsProvider::ERROR_GETTING_ENROLLMENT_STATUS:
-    case ChromeOSMetricsProvider::ENROLLMENT_STATUS_MAX:
+    case EnrollmentStatus::kUnused:
+    case EnrollmentStatus::kErrorGettingStatus:
       return "Error retrieving status";
   }
-  // For compilers that don't recognize all cases handled above.
-  NOTREACHED();
-  return std::string();
 }
 
 std::string GetDisplayInfoString(
@@ -245,6 +245,14 @@ std::string GetChromeVersionString() {
 #endif
 
 #if defined(OS_CHROMEOS)
+  // If the device is receiving LTS updates, add a prefix to the version string.
+  // The value of the policy is ignored here.
+  std::string value;
+  const bool is_lts = chromeos::CrosSettings::Get()->GetString(
+      chromeos::kReleaseLtsTag, &value);
+  if (is_lts)
+    browser_version = kLTSChromeVersionPrefix + browser_version;
+
   // If lacros-chrome is allowed & supported, and launched before, which
   // is indicated by |lacros_version| in BrowserManager being set to non-empty
   // string during lacros startup, attach its version in the chrome
@@ -393,35 +401,15 @@ void ChromeInternalLogSource::PopulateSyncLogs(SystemLogsResponse* response) {
   if (!profile || !ProfileSyncServiceFactory::HasSyncService(profile))
     return;
 
-  syncer::SyncService* service =
-      ProfileSyncServiceFactory::GetForProfile(profile);
-  std::unique_ptr<base::DictionaryValue> sync_logs(
-      syncer::sync_ui_util::ConstructAboutInformation(service,
-                                                      chrome::GetChannel()));
-
-  // Remove identity section.
-  base::ListValue* details = NULL;
-  sync_logs->GetList(syncer::sync_ui_util::kDetailsKey, &details);
-  if (!details)
-    return;
-  for (auto it = details->begin(); it != details->end(); ++it) {
-    base::DictionaryValue* dict = NULL;
-    if (it->GetAsDictionary(&dict)) {
-      std::string title;
-      dict->GetString("title", &title);
-      if (title == syncer::sync_ui_util::kIdentityTitle) {
-        details->Erase(it, NULL);
-        break;
-      }
-    }
-  }
-
-  // Add sync logs to logs.
-  std::string sync_logs_string;
-  JSONStringValueSerializer serializer(&sync_logs_string);
-  serializer.Serialize(*sync_logs.get());
-
-  response->emplace(kSyncDataKey, sync_logs_string);
+  // Add sync logs to |response|.
+  std::unique_ptr<base::DictionaryValue> sync_logs =
+      syncer::sync_ui_util::ConstructAboutInformation(
+          syncer::sync_ui_util::IncludeSensitiveData(false),
+          ProfileSyncServiceFactory::GetForProfile(profile),
+          chrome::GetChannel());
+  std::string serialized_sync_logs;
+  JSONStringValueSerializer(&serialized_sync_logs).Serialize(*sync_logs);
+  response->emplace(kSyncDataKey, serialized_sync_logs);
 }
 
 void ChromeInternalLogSource::PopulateExtensionInfoLogs(
@@ -487,11 +475,12 @@ void ChromeInternalLogSource::PopulateLocalStateSettings(
     SystemLogsResponse* response) {
   // Extract the "settings" entry in the local state and serialize back to
   // a string.
-  std::unique_ptr<base::DictionaryValue> local_state =
+  base::Value local_state =
       g_browser_process->local_state()->GetPreferenceValues(
           PrefService::EXCLUDE_DEFAULTS);
-  const base::DictionaryValue* local_state_settings = nullptr;
-  if (!local_state->GetDictionary(kSettingsKey, &local_state_settings)) {
+  const base::Value* local_state_settings =
+      local_state.FindDictKey(kSettingsKey);
+  if (!local_state_settings) {
     VLOG(1) << "Failed to extract the settings entry from Local State.";
     return;
   }

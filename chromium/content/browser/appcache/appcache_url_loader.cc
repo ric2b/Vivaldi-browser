@@ -197,10 +197,7 @@ AppCacheURLLoader::AppCacheURLLoader(
                                mojo::SimpleWatcher::ArmingPolicy::MANUAL,
                                base::SequencedTaskRunnerHandle::Get()),
       loader_callback_(std::move(loader_callback)),
-      appcache_request_(appcache_request->GetWeakPtr()),
-      is_main_resource_load_(
-          blink::IsResourceTypeFrame(static_cast<blink::mojom::ResourceType>(
-              appcache_request->GetResourceType()))) {}
+      appcache_request_(appcache_request->GetWeakPtr()) {}
 
 void AppCacheURLLoader::CallLoaderCallback(base::OnceClosure continuation) {
   DCHECK(loader_callback_);
@@ -290,7 +287,6 @@ void AppCacheURLLoader::OnResponseBodyStreamReady(MojoResult result) {
   // TODO(ananta)
   // Add proper error handling here.
   if (result != MOJO_RESULT_OK) {
-    DCHECK(false);
     NotifyCompleted(net::ERR_FAILED);
     return;
   }

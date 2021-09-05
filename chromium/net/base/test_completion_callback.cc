@@ -5,7 +5,7 @@
 #include "net/base/test_completion_callback.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
 #include "base/run_loop.h"
 #include "net/base/io_buffer.h"
@@ -32,9 +32,8 @@ void TestCompletionCallbackBaseInternal::WaitForResult() {
   have_result_ = false;  // Auto-reset for next callback.
 }
 
-TestCompletionCallbackBaseInternal::TestCompletionCallbackBaseInternal()
-    : have_result_(false) {
-}
+TestCompletionCallbackBaseInternal::TestCompletionCallbackBaseInternal() =
+    default;
 
 TestCompletionCallbackBaseInternal::~TestCompletionCallbackBaseInternal() =
     default;

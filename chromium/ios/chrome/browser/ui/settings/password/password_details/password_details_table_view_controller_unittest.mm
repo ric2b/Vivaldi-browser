@@ -9,7 +9,7 @@
 #include "base/ios/ios_util.h"
 #include "base/mac/foundation_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "components/autofill/core/common/password_form.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "ios/chrome/browser/browser_state/test_chrome_browser_state.h"
 #import "ios/chrome/browser/ui/commands/snackbar_commands.h"
 #import "ios/chrome/browser/ui/settings/cells/settings_image_detail_text_item.h"
@@ -50,6 +50,8 @@ constexpr char kPassword[] = "test";
 
 @property(nonatomic, assign) BOOL deletionCalled;
 
+@property(nonatomic, assign) BOOL deletionCalledOnCompromisedPassword;
+
 @property(nonatomic, assign) BOOL editingCalled;
 
 @end
@@ -62,8 +64,10 @@ constexpr char kPassword[] = "test";
 - (void)showPasscodeDialog {
 }
 
-- (void)showPasswordDeleteDialogWithOrigin:(NSString*)origin {
+- (void)showPasswordDeleteDialogWithOrigin:(NSString*)origin
+                       compromisedPassword:(BOOL)compromisedPassword {
   self.deletionCalled = YES;
+  self.deletionCalledOnCompromisedPassword = compromisedPassword;
 }
 
 - (void)showPasswordEditDialogWithOrigin:(NSString*)origin {
@@ -87,6 +91,10 @@ constexpr char kPassword[] = "test";
             (PasswordDetailsTableViewController*)viewController
                didEditPasswordDetails:(PasswordDetails*)password {
   self.password = password;
+}
+
+- (BOOL)isUsernameReused:(NSString*)newUsername {
+  return NO;
 }
 
 @end
@@ -142,14 +150,14 @@ class PasswordDetailsTableViewControllerTest
                    std::string username = kUsername,
                    std::string password = kPassword,
                    bool isCompromised = false) {
-    auto form = autofill::PasswordForm();
+    auto form = password_manager::PasswordForm();
     form.signon_realm = website;
     form.username_value = base::ASCIIToUTF16(username);
     form.password_value = base::ASCIIToUTF16(password);
     form.url = GURL(website);
     form.action = GURL(website + "/action");
     form.username_element = base::ASCIIToUTF16("email");
-    form.scheme = autofill::PasswordForm::Scheme::kHtml;
+    form.scheme = password_manager::PasswordForm::Scheme::kHtml;
 
     PasswordDetails* passwordDetails =
         [[PasswordDetails alloc] initWithPasswordForm:form];
@@ -161,7 +169,7 @@ class PasswordDetailsTableViewControllerTest
   }
 
   void SetFederatedPassword() {
-    auto form = autofill::PasswordForm();
+    auto form = password_manager::PasswordForm();
     form.username_value = base::ASCIIToUTF16("test@egmail.com");
     form.url = GURL(base::ASCIIToUTF16("http://www.example.com/"));
     form.signon_realm = form.url.spec();
@@ -175,7 +183,7 @@ class PasswordDetailsTableViewControllerTest
   }
 
   void SetBlockedOrigin() {
-    auto form = autofill::PasswordForm();
+    auto form = password_manager::PasswordForm();
     form.url = GURL("http://www.example.com/");
     form.blocked_by_user = true;
     form.signon_realm = form.url.spec();
@@ -332,6 +340,25 @@ TEST_F(PasswordDetailsTableViewControllerTest, TestPasswordDelete) {
             from:nil
         forEvent:nil];
   EXPECT_TRUE(handler().deletionCalled);
+  EXPECT_FALSE(handler().deletionCalledOnCompromisedPassword);
+}
+
+// Tests compromised password deletion trigger showing password delete dialog.
+TEST_F(PasswordDetailsTableViewControllerTest, TestCompromisedPasswordDelete) {
+  SetPassword(kExampleCom, kUsername, kPassword, true);
+
+  EXPECT_FALSE(handler().deletionCalled);
+  PasswordDetailsTableViewController* passwordDetails =
+      base::mac::ObjCCastStrict<PasswordDetailsTableViewController>(
+          controller());
+  [passwordDetails editButtonPressed];
+  [[UIApplication sharedApplication]
+      sendAction:passwordDetails.deleteButton.action
+              to:passwordDetails.deleteButton.target
+            from:nil
+        forEvent:nil];
+  EXPECT_TRUE(handler().deletionCalled);
+  EXPECT_TRUE(handler().deletionCalledOnCompromisedPassword);
 }
 
 // Tests password editing. User confirmed this action.
@@ -402,10 +429,11 @@ TEST_F(PasswordDetailsTableViewControllerTest,
 TEST_F(PasswordDetailsTableViewControllerTest, TestFederatedCredential) {
   SetFederatedPassword();
   EXPECT_EQ(1, NumberOfSections());
-  EXPECT_EQ(2, NumberOfItemsInSection(0));
+  EXPECT_EQ(3, NumberOfItemsInSection(0));
 
   CheckEditCellText(@"http://www.example.com/", 0, 0);
   CheckEditCellText(@"test@egmail.com", 0, 1);
+  CheckEditCellText(@"www.example.com", 0, 2);
 
   reauth().expectedResult = ReauthenticationResult::kFailure;
   PasswordDetailsTableViewController* passwordDetails =

@@ -16,8 +16,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.MockitoAnnotations.initMocks;
 
-import android.accounts.Account;
-
 import androidx.fragment.app.FragmentActivity;
 
 import org.junit.After;
@@ -93,6 +91,8 @@ public class AccountPickerDelegateTest {
 
     private AccountPickerDelegate mDelegate;
 
+    private CoreAccountInfo mCoreAccountInfo;
+
     @Before
     public void setUp() {
         initMocks(this);
@@ -104,6 +104,9 @@ public class AccountPickerDelegateTest {
         when(IdentityServicesProvider.get().getIdentityManager(any()))
                 .thenReturn(mIdentityManagerMock);
         when(IdentityServicesProvider.get().getSigninManager(any())).thenReturn(mSigninManagerMock);
+
+        mCoreAccountInfo =
+                mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_ACCOUNT_EMAIL);
 
         mDelegate = new AccountPickerDelegate(
                 mWindowAndroidMock, mTabMock, mWebSigninBridgeFactoryMock, CONTINUE_URL);
@@ -118,14 +121,11 @@ public class AccountPickerDelegateTest {
 
     @Test
     public void testSignInSucceeded() {
-        Account account =
-                mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_ACCOUNT_EMAIL);
-        CoreAccountInfo coreAccountInfo = mAccountManagerTestRule.toCoreAccountInfo(account.name);
-        mDelegate.signIn(coreAccountInfo, error -> {});
+        mDelegate.signIn(mCoreAccountInfo, error -> {});
         InOrder calledInOrder = inOrder(mWebSigninBridgeFactoryMock, mSigninManagerMock);
         calledInOrder.verify(mWebSigninBridgeFactoryMock)
-                .create(mProfileMock, coreAccountInfo, mDelegate);
-        calledInOrder.verify(mSigninManagerMock).signin(eq(coreAccountInfo), any());
+                .create(mProfileMock, mCoreAccountInfo, mDelegate);
+        calledInOrder.verify(mSigninManagerMock).signin(eq(mCoreAccountInfo), any());
         mDelegate.onSigninSucceeded();
         verify(mTabMock).loadUrl(mLoadUrlParamsCaptor.capture());
         LoadUrlParams loadUrlParams = mLoadUrlParamsCaptor.getValue();
@@ -134,17 +134,14 @@ public class AccountPickerDelegateTest {
 
     @Test
     public void testSignInAborted() {
-        Account account =
-                mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_ACCOUNT_EMAIL);
-        CoreAccountInfo coreAccountInfo = mAccountManagerTestRule.toCoreAccountInfo(account.name);
         doAnswer(invocation -> {
             SigninManager.SignInCallback callback = invocation.getArgument(1);
             callback.onSignInAborted();
             return null;
         })
                 .when(mSigninManagerMock)
-                .signin(eq(coreAccountInfo), any());
-        mDelegate.signIn(coreAccountInfo, error -> {});
+                .signin(eq(mCoreAccountInfo), any());
+        mDelegate.signIn(mCoreAccountInfo, error -> {});
         verify(mWebSigninBridgeMock).destroy();
     }
 
@@ -153,30 +150,24 @@ public class AccountPickerDelegateTest {
         // In case an error is fired because cookies are taking longer to generate than usual,
         // if user retries the sign-in from the error screen, we need to sign out the user
         // first before signing in again.
-        Account account =
-                mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_ACCOUNT_EMAIL);
-        CoreAccountInfo coreAccountInfo = mAccountManagerTestRule.toCoreAccountInfo(account.name);
-        mDelegate.signIn(coreAccountInfo, error -> {});
-        when(mIdentityManagerMock.getPrimaryAccountInfo(anyInt())).thenReturn(coreAccountInfo);
+        mDelegate.signIn(mCoreAccountInfo, error -> {});
+        when(mIdentityManagerMock.getPrimaryAccountInfo(anyInt())).thenReturn(mCoreAccountInfo);
 
-        mDelegate.signIn(coreAccountInfo, error -> {});
+        mDelegate.signIn(mCoreAccountInfo, error -> {});
         InOrder calledInOrder = inOrder(mWebSigninBridgeMock, mSigninManagerMock,
                 mWebSigninBridgeFactoryMock, mSigninManagerMock);
         calledInOrder.verify(mWebSigninBridgeMock).destroy();
         calledInOrder.verify(mSigninManagerMock).signOut(anyInt());
         calledInOrder.verify(mWebSigninBridgeFactoryMock)
-                .create(mProfileMock, coreAccountInfo, mDelegate);
-        calledInOrder.verify(mSigninManagerMock).signin(eq(coreAccountInfo), any());
+                .create(mProfileMock, mCoreAccountInfo, mDelegate);
+        calledInOrder.verify(mSigninManagerMock).signin(eq(mCoreAccountInfo), any());
     }
 
     @Test
     public void testSignInFailedWithConnectionError() {
-        Account account =
-                mAccountManagerTestRule.addAccount(AccountManagerTestRule.TEST_ACCOUNT_EMAIL);
-        CoreAccountInfo coreAccountInfo = mAccountManagerTestRule.toCoreAccountInfo(account.name);
         Callback<GoogleServiceAuthError> mockCallback = mock(Callback.class);
         GoogleServiceAuthError error = new GoogleServiceAuthError(State.CONNECTION_FAILED);
-        mDelegate.signIn(coreAccountInfo, mockCallback);
+        mDelegate.signIn(mCoreAccountInfo, mockCallback);
         mDelegate.onSigninFailed(error);
         verify(mockCallback).onResult(error);
         // WebSigninBridge should be kept alive in case cookies are taking longer to

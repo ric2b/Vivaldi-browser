@@ -143,6 +143,16 @@ class FindInPageControllerTest : public InProcessBrowserTest {
     EnsureFindBoxOpenForBrowser(browser());
   }
 
+  int FindNext(WebContents* web_contents, int* ordinal) {
+    browser()->GetFindBarController()->Show(true /*find_next*/);
+    ui_test_utils::FindResultWaiter observer(web_contents);
+    observer.Wait();
+    if (ordinal) {
+      *ordinal = observer.active_match_ordinal();
+    }
+    return observer.number_of_matches();
+  }
+
   int FindInPage16(WebContents* web_contents,
                    const base::string16& search_str,
                    bool forward,
@@ -425,6 +435,30 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, FindInPageSpecialURLs) {
   // We find next and we go back so find coordinates should be the same as
   // previous ones.
   ASSERT_EQ(first, first_reverse);
+}
+
+// This tests the following bug that used to exist:
+// 1) Do a find that has 0 results
+// 2) Navigate to a new page (on the same domain) that contains the search text.
+// 3) Open the find bar. It will be prepopulated with the previous search text
+// and should show the number of matches for that text. The bug caused it to
+// show 0 matches instead.
+IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, StaleCountAfterNoResults) {
+  WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  ui_test_utils::NavigateToURL(browser(), GetURL("simple.html"));
+  EXPECT_EQ(0, FindInPageASCII(web_contents, "link", kFwd, kIgnoreCase,
+                               nullptr));
+  browser()->GetFindBarController()->EndFindSession(
+      find_in_page::SelectionAction::kKeep, find_in_page::ResultAction::kKeep);
+
+  ui_test_utils::NavigateToURL(browser(), GetURL("link.html"));
+  browser()->GetFindBarController()->Show();
+  ui_test_utils::FindResultWaiter observer(web_contents);
+  observer.Wait();
+  EXPECT_EQ(1, observer.number_of_matches());
+  EXPECT_EQ(0, observer.active_match_ordinal());
 }
 
 // Verifies that comments and meta data are not searchable.
@@ -1066,9 +1100,8 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest,
 
   // Search for 'no_match'. No matches should be found.
   int ordinal = 0;
-  WebContents* web_contents =
-      browser()->tab_strip_model()->GetActiveWebContents();
-  EXPECT_EQ(0, FindInPageASCII(web_contents, "no_match",
+  auto* tab_strip = browser()->tab_strip_model();
+  EXPECT_EQ(0, FindInPageASCII(tab_strip->GetActiveWebContents(), "no_match",
                                kFwd, kIgnoreCase, &ordinal));
   EXPECT_EQ(0, ordinal);
 
@@ -1078,8 +1111,7 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest,
 
   // Simulate what happens when you press F3 for FindNext. We should get a
   // response here (a hang means search was aborted).
-  EXPECT_EQ(0, ui_test_utils::FindInPage(web_contents, base::string16(), kFwd,
-                                         kIgnoreCase, &ordinal, nullptr));
+  EXPECT_EQ(0, FindNext(tab_strip->GetActiveWebContents(), &ordinal));
   EXPECT_EQ(0, ordinal);
 
   // Open another tab (tab C).
@@ -1088,8 +1120,7 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest,
 
   // Simulate what happens when you press F3 for FindNext. We should get a
   // response here (a hang means search was aborted).
-  EXPECT_EQ(0, ui_test_utils::FindInPage(web_contents, base::string16(), kFwd,
-                                         kIgnoreCase, &ordinal, nullptr));
+  EXPECT_EQ(0, FindNext(tab_strip->GetActiveWebContents(), &ordinal));
   EXPECT_EQ(0, ordinal);
 }
 
@@ -1134,8 +1165,7 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, RestartSearchFromF3) {
 
   // Simulate what happens when you press F3 for FindNext. Still should show
   // one match. This cleared the pre-populate string at one point (see bug).
-  EXPECT_EQ(1, ui_test_utils::FindInPage(web_contents, base::string16(), kFwd,
-                                         kIgnoreCase, &ordinal, nullptr));
+  EXPECT_EQ(1, FindNext(web_contents, &ordinal));
   EXPECT_EQ(1, ordinal);
 
   // End the Find session, thereby making the next F3 start afresh.
@@ -1143,7 +1173,7 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, RestartSearchFromF3) {
       find_in_page::SelectionAction::kKeep, find_in_page::ResultAction::kKeep);
 
   // Simulate F3 while Find box is closed. Should have 1 match.
-  EXPECT_EQ(1, FindInPageASCII(web_contents, "", kFwd, kIgnoreCase, &ordinal));
+  EXPECT_EQ(1, FindNext(web_contents, &ordinal));
   EXPECT_EQ(1, ordinal);
 }
 
@@ -1187,8 +1217,7 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, MAYBE_PreferPreviousSearch) {
   browser()->GetFindBarController()->EndFindSession(
       find_in_page::SelectionAction::kKeep, find_in_page::ResultAction::kKeep);
   // Simulate F3.
-  ui_test_utils::FindInPage(web_contents_1, base::string16(), kFwd, kIgnoreCase,
-                            &ordinal, nullptr);
+  FindNext(web_contents_1, &ordinal);
   FindBar* find_bar = browser()->GetFindBarController()->find_bar();
   if (find_bar->HasGlobalFindPasteboard()) {
     EXPECT_EQ(find_in_page::FindTabHelper::FromWebContents(web_contents_1)
@@ -1359,7 +1388,7 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, NoIncognitoPrepopulate) {
   // Open a new incognito window and navigate to the same page.
   Profile* incognito_profile = browser()->profile()->GetPrimaryOTRProfile();
   Browser* incognito_browser =
-      new Browser(Browser::CreateParams(incognito_profile, true));
+      Browser::Create(Browser::CreateParams(incognito_profile, true));
   content::WindowedNotificationObserver observer(
       content::NOTIFICATION_LOAD_STOP,
       content::NotificationService::AllSources());
@@ -1421,7 +1450,7 @@ IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, ActivateLinkNavigatesPage) {
 IN_PROC_BROWSER_TEST_F(FindInPageControllerTest, FitWindow) {
   Browser::CreateParams params(Browser::TYPE_POPUP, browser()->profile(), true);
   params.initial_bounds = gfx::Rect(0, 0, 250, 500);
-  Browser* popup = new Browser(params);
+  Browser* popup = Browser::Create(params);
   content::WindowedNotificationObserver observer(
       content::NOTIFICATION_LOAD_STOP,
       content::NotificationService::AllSources());

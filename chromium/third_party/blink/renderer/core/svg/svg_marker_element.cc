@@ -99,11 +99,10 @@ void SVGMarkerElement::Trace(Visitor* visitor) const {
 }
 
 AffineTransform SVGMarkerElement::ViewBoxToViewTransform(
-    float view_width,
-    float view_height) const {
+    const FloatSize& viewport_size) const {
   return SVGFitToViewBox::ViewBoxToViewTransform(
       viewBox()->CurrentValue()->Value(), preserveAspectRatio()->CurrentValue(),
-      view_width, view_height);
+      viewport_size);
 }
 
 void SVGMarkerElement::SvgAttributeChanged(const QualifiedName& attr_name) {
@@ -119,7 +118,8 @@ void SVGMarkerElement::SvgAttributeChanged(const QualifiedName& attr_name) {
       attr_name == svg_names::kMarkerUnitsAttr ||
       attr_name == svg_names::kOrientAttr) {
     SVGElement::InvalidationGuard invalidation_guard(this);
-    auto* resource_container = ToLayoutSVGResourceContainer(GetLayoutObject());
+    auto* resource_container =
+        To<LayoutSVGResourceContainer>(GetLayoutObject());
     if (resource_container) {
       // The marker transform depends on both viewbox attributes, and the marker
       // size attributes (width, height).

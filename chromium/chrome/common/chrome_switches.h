@@ -37,7 +37,6 @@ namespace switches {
 // alongside the definition of their values in the .cc file.
 extern const char kAllowCrossOriginAuthPrompt[];
 extern const char kAllowHttpScreenCapture[];
-extern const char kAllowOutdatedPlugins[];
 extern const char kAllowProfilesOutsideUserDir[];
 extern const char kAllowRunningInsecureContent[];
 extern const char kAllowSilentPush[];
@@ -72,7 +71,6 @@ extern const char kDiagnosticsFormat[];
 extern const char kDiagnosticsRecovery[];
 extern const char kDisableAutoReload[];
 extern const char kDisableBackgroundNetworking[];
-extern const char kDisableBundledPpapiFlash[];
 extern const char kDisableClientSidePhishingDetection[];
 extern const char kDisableComponentExtensionsWithBackgroundPages[];
 extern const char kDisableComponentUpdate[];
@@ -138,8 +136,7 @@ extern const char kPackExtension[];
 extern const char kPackExtensionKey[];
 extern const char kPermissionRequestApiScope[];
 extern const char kPermissionRequestApiUrl[];
-extern const char kPpapiFlashPath[];
-extern const char kPpapiFlashVersion[];
+extern const char kPredictionServiceMockLikelihood[];
 extern const char kPrivetIPv6Only[];
 extern const char kProductVersion[];
 extern const char kProfileDirectory[];
@@ -196,7 +193,6 @@ extern const char kForceShowUpdateMenuBadge[];
 extern const char kForceShowUpdateMenuItemCustomSummary[];
 extern const char kForceUpdateMenuType[];
 extern const char kMarketUrlForTesting[];
-extern const char kTrustedCDNBaseURLForTests[];
 extern const char kWebApkServerUrl[];
 #endif  // defined(OS_ANDROID)
 
@@ -260,8 +256,6 @@ extern const char kGuest[];
 #endif
 
 #if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
-// Only has an effect in branded builds.
-extern const char kEnableChromeBrowserCloudManagement[];
 extern const char kUseSystemDefaultPrinter[];
 #endif
 

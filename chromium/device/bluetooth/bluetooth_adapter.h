@@ -307,7 +307,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
         const std::vector<uint8_t>& value) {}
   };
 
-  // Used to configure a listening servie.
+  // Used to configure a listening service.
   struct DEVICE_BLUETOOTH_EXPORT ServiceOptions {
     ServiceOptions();
     ~ServiceOptions();
@@ -315,6 +315,16 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
     base::Optional<int> channel;
     base::Optional<int> psm;
     base::Optional<std::string> name;
+
+    // Clients can configure this option to choose if they want to enforce
+    // bonding with remote devices that connect to this device. Options:
+    //   * Unset: bonding is not enforced by the local device, and the remote
+    //     device can choose if they want to enforce bonding.
+    //   * Set to false: bonding is prevented by the local device. Clients which
+    //     use this are responsible for securing their communication at the
+    //     application level.
+    //   * Set to true: bonding is enforced by the local device.
+    base::Optional<bool> require_authentication;
   };
 
   // The ErrorCallback is used for methods that can fail in which case it is
@@ -333,6 +343,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
   using CreateAdvertisementCallback =
       base::OnceCallback<void(scoped_refptr<BluetoothAdvertisement>)>;
   using AdvertisementErrorCallback = BluetoothAdvertisement::ErrorCallback;
+  using ConnectDeviceCallback = base::OnceCallback<void(BluetoothDevice*)>;
   using DiscoverySessionErrorCallback =
       base::OnceCallback<void(UMABluetoothDiscoverySessionOutcome)>;
   // The is_error bool is a flag to indicate if the result is an error(true)
@@ -578,6 +589,17 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
   // advertisements and will stop advertising them.
   virtual void ResetAdvertising(base::OnceClosure callback,
                                 AdvertisementErrorCallback error_callback) = 0;
+
+  // Connect to a device with |address| that is either undiscovered or not
+  // previously paired or connected. Callers are responsible for ensuring that
+  // the device with |address| is available and nearby via their own out-of-band
+  // mechanism, and should not call this method if GetDevice(address) returns
+  // a valid reference (in which case this method will fail).
+  virtual void ConnectDevice(
+      const std::string& address,
+      const base::Optional<BluetoothDevice::AddressType>& address_type,
+      ConnectDeviceCallback callback,
+      ErrorCallback error_callback) = 0;
 #endif
 
   // Returns the list of pending advertisements that are not registered yet.
@@ -784,14 +806,6 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothAdapter
   std::set<BluetoothDiscoverySession*> discovery_sessions_;
 
  private:
-  // Histograms the result of StartDiscoverySession.
-  static void RecordBluetoothDiscoverySessionStartOutcome(
-      UMABluetoothDiscoverySessionOutcome outcome);
-
-  // Histograms the result of BluetoothDiscoverySession::Stop.
-  static void RecordBluetoothDiscoverySessionStopOutcome(
-      UMABluetoothDiscoverySessionOutcome outcome);
-
   // This is the callback for all OS level calls to StartScanWithFilter,
   // UpdateFilter, and StopScan.  It updates the state accordingly, calls all
   // appropriate callbacks, and calls ProcessDiscoveryQueue().

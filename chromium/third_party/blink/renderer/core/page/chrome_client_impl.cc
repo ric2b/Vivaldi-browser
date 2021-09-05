@@ -60,7 +60,6 @@
 #include "third_party/blink/renderer/core/events/web_input_event_conversion.h"
 #include "third_party/blink/renderer/core/exported/web_dev_tools_agent_impl.h"
 #include "third_party/blink/renderer/core/exported/web_plugin_container_impl.h"
-#include "third_party/blink/renderer/core/exported/web_remote_frame_impl.h"
 #include "third_party/blink/renderer/core/exported/web_settings_impl.h"
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
 #include "third_party/blink/renderer/core/frame/browser_controls.h"
@@ -69,6 +68,7 @@
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
+#include "third_party/blink/renderer/core/frame/web_remote_frame_impl.h"
 #include "third_party/blink/renderer/core/frame/web_view_frame_widget.h"
 #include "third_party/blink/renderer/core/fullscreen/fullscreen.h"
 #include "third_party/blink/renderer/core/html/forms/color_chooser.h"
@@ -81,6 +81,7 @@
 #include "third_party/blink/renderer/core/html/forms/external_date_time_chooser.h"
 #include "third_party/blink/renderer/core/html/forms/external_popup_menu.h"
 #include "third_party/blink/renderer/core/html/forms/file_chooser.h"
+#include "third_party/blink/renderer/core/html/forms/html_form_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/forms/internal_popup_menu.h"
 #include "third_party/blink/renderer/core/inspector/dev_tools_emulator.h"
@@ -214,12 +215,7 @@ bool ChromeClientImpl::CanTakeFocus(mojom::blink::FocusType) {
 }
 
 void ChromeClientImpl::TakeFocus(mojom::blink::FocusType type) {
-  if (!web_view_->Client())
-    return;
-  if (type == mojom::blink::FocusType::kBackward)
-    web_view_->Client()->FocusPrevious();
-  else
-    web_view_->Client()->FocusNext();
+  web_view_->TakeFocus(type == mojom::blink::FocusType::kBackward);
 }
 
 void ChromeClientImpl::SetKeyboardFocusURL(Element* new_focus_element) {
@@ -251,7 +247,8 @@ Page* ChromeClientImpl::CreateWindowDelegate(
     const WebWindowFeatures& features,
     network::mojom::blink::WebSandboxFlags sandbox_flags,
     const FeaturePolicyFeatureState& opener_feature_state,
-    const SessionStorageNamespaceId& session_storage_namespace_id) {
+    const SessionStorageNamespaceId& session_storage_namespace_id,
+    bool& consumed_user_gesture) {
   if (!web_view_->Client())
     return nullptr;
 
@@ -266,7 +263,8 @@ Page* ChromeClientImpl::CreateWindowDelegate(
           WebLocalFrameImpl::FromFrame(frame),
           WrappedResourceRequest(r.GetResourceRequest()), features, frame_name,
           static_cast<WebNavigationPolicy>(r.GetNavigationPolicy()),
-          sandbox_flags, opener_feature_state, session_storage_namespace_id));
+          sandbox_flags, opener_feature_state, session_storage_namespace_id,
+          consumed_user_gesture));
   if (!new_view)
     return nullptr;
   return new_view->GetPage();
@@ -307,13 +305,12 @@ void ChromeClientImpl::SetOverscrollBehavior(
       overscroll_behavior);
 }
 
-void ChromeClientImpl::Show(NavigationPolicy navigation_policy) {
-  // TODO(darin): Change caller to pass LocalFrame.
-  WebLocalFrameImpl* main_frame = web_view_->MainFrameImpl();
-  DCHECK(main_frame);
-  main_frame->FrameWidgetImpl()->Client()->Show(
-      static_cast<WebNavigationPolicy>(navigation_policy));
-  main_frame->DevToolsAgentImpl()->DidShowNewWindow();
+void ChromeClientImpl::Show(const base::UnguessableToken& opener_frame_token,
+                            NavigationPolicy navigation_policy,
+                            const IntRect& initial_rect,
+                            bool user_gesture) {
+  web_view_->Show(opener_frame_token, navigation_policy, initial_rect,
+                  user_gesture);
 }
 
 bool ChromeClientImpl::ShouldReportDetailedMessageForSource(
@@ -532,11 +529,9 @@ void ChromeClientImpl::ShowMouseOverURL(const HitTestResult& result) {
     } else if (result.InnerNode() &&
                (IsA<HTMLObjectElement>(*result.InnerNode()) ||
                 IsA<HTMLEmbedElement>(*result.InnerNode()))) {
-      LayoutObject* object = result.InnerNode()->GetLayoutObject();
-      if (object && object->IsLayoutEmbeddedContent()) {
-        WebPluginContainerImpl* plugin_view =
-            ToLayoutEmbeddedContent(object)->Plugin();
-        if (plugin_view) {
+      if (auto* embedded = DynamicTo<LayoutEmbeddedContent>(
+              result.InnerNode()->GetLayoutObject())) {
+        if (WebPluginContainerImpl* plugin_view = embedded->Plugin()) {
           url = plugin_view->Plugin()->LinkAtPosition(
               result.RoundedPointInInnerNodeFrame());
         }
@@ -834,9 +829,9 @@ void ChromeClientImpl::SetBrowserControlsState(float top_height,
                                                float bottom_height,
                                                bool shrinks_layout) {
   DCHECK(web_view_->MainFrameWidget());
-  WebSize size = web_view_->MainFrameWidget()->Size();
+  gfx::Size size = web_view_->MainFrameWidget()->Size();
   if (shrinks_layout)
-    size.height -= top_height + bottom_height;
+    size -= gfx::Size(0, top_height + bottom_height);
 
   web_view_->ResizeWithBrowserControls(size, top_height, bottom_height,
                                        shrinks_layout);
@@ -852,13 +847,6 @@ bool ChromeClientImpl::ShouldOpenUIElementDuringPageDismissal(
     UIElementType ui_element_type,
     const String& dialog_message,
     Document::PageDismissalType dismissal_type) const {
-  // TODO(https://crbug.com/937569): Remove this in Chrome 88.
-  if (ui_element_type == ChromeClient::UIElementType::kPopup &&
-      web_view_->Client() &&
-      web_view_->Client()->AllowPopupsDuringPageUnload()) {
-    return true;
-  }
-
   StringBuilder builder;
   builder.Append("Blocked ");
   builder.Append(UIElementTypeToString(ui_element_type));
@@ -878,8 +866,7 @@ bool ChromeClientImpl::ShouldOpenUIElementDuringPageDismissal(
 }
 
 viz::FrameSinkId ChromeClientImpl::GetFrameSinkId(LocalFrame* frame) {
-  WebWidgetClient* client = frame->GetWidgetForLocalRoot()->Client();
-  return client->GetFrameSinkId();
+  return frame->GetWidgetForLocalRoot()->GetFrameSinkId();
 }
 
 void ChromeClientImpl::RequestDecode(LocalFrame* frame,
@@ -1029,36 +1016,6 @@ void ChromeClientImpl::SetTouchAction(LocalFrame* frame,
     return;
 
   widget->ProcessTouchAction(touch_action);
-}
-
-bool ChromeClientImpl::RequestPointerLock(
-    LocalFrame* frame,
-    WebWidgetClient::PointerLockCallback callback,
-    bool request_unadjusted_movement) {
-  return WebLocalFrameImpl::FromFrame(frame)
-      ->LocalRootFrameWidget()
-      ->Client()
-      ->RequestPointerLock(WebLocalFrameImpl::FromFrame(frame),
-                           std::move(callback), request_unadjusted_movement);
-}
-
-bool ChromeClientImpl::RequestPointerLockChange(
-    LocalFrame* frame,
-    WebWidgetClient::PointerLockCallback callback,
-    bool request_unadjusted_movement) {
-  return WebLocalFrameImpl::FromFrame(frame)
-      ->LocalRootFrameWidget()
-      ->Client()
-      ->RequestPointerLockChange(WebLocalFrameImpl::FromFrame(frame),
-                                 std::move(callback),
-                                 request_unadjusted_movement);
-}
-
-void ChromeClientImpl::RequestPointerUnlock(LocalFrame* frame) {
-  return WebLocalFrameImpl::FromFrame(frame)
-      ->LocalRootFrameWidget()
-      ->Client()
-      ->RequestPointerUnlock();
 }
 
 void ChromeClientImpl::DidAssociateFormControlsAfterLoad(LocalFrame* frame) {
@@ -1221,6 +1178,19 @@ void ChromeClientImpl::BatterySavingsChanged(LocalFrame& main_frame,
   WebLocalFrameImpl::FromFrame(main_frame)
       ->FrameWidgetImpl()
       ->BatterySavingsChanged(savings);
+}
+
+void ChromeClientImpl::FormElementReset(HTMLFormElement& element) {
+  Document& doc = element.GetDocument();
+  if (auto* fill_client = AutofillClientFromFrame(doc.GetFrame()))
+    fill_client->FormElementReset(WebFormElement(&element));
+}
+
+void ChromeClientImpl::PasswordFieldReset(HTMLInputElement& element) {
+  if (auto* fill_client =
+          AutofillClientFromFrame(element.GetDocument().GetFrame())) {
+    fill_client->PasswordFieldReset(WebInputElement(&element));
+  }
 }
 
 }  // namespace blink

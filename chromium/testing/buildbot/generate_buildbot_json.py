@@ -314,6 +314,12 @@ class BBJSONGenerator(object):
         metavar='JSON_FILE_PATH',
         help='Outputs results into a json file. Only works with query function.'
     )
+    parser.add_argument('--isolate-map-file',
+                        metavar='PATH',
+                        help='path to additional isolate map files.',
+                        default=[],
+                        action='append',
+                        dest='isolate_map_files')
     parser.add_argument(
         '--infra-config-dir',
         help='Path to the LUCI services configuration directory',
@@ -460,6 +466,7 @@ class BBJSONGenerator(object):
     #   --extra-browser-args=arg1 arg2
     arr = self.merge_command_line_args(arr, '--enable-features=', ',')
     arr = self.merge_command_line_args(arr, '--extra-browser-args=', ' ')
+    arr = self.merge_command_line_args(arr, '--test-launcher-filter-file=', ';')
     return arr
 
   def substitute_magic_args(self, test_config):
@@ -727,8 +734,9 @@ class BBJSONGenerator(object):
 
     self.initialize_args_for_test(
         result, tester_config, additional_arg_keys=['gtest_args'])
-    if self.is_android(tester_config) and tester_config.get('use_swarming',
-                                                            True):
+    if self.is_android(tester_config) and tester_config.get(
+        'use_swarming',
+        True) and not test_config.get('use_isolated_scripts_api', False):
       self.add_android_presentation_args(tester_config, test_name, result)
       result['args'] = result.get('args', []) + ['--recover-devices']
 
@@ -740,9 +748,14 @@ class BBJSONGenerator(object):
     if not result.get('merge'):
       # TODO(https://crbug.com/958376): Consider adding the ability to not have
       # this default.
+      if test_config.get('use_isolated_scripts_api', False):
+        merge_script = 'standard_isolated_script_merge'
+      else:
+        merge_script = 'standard_gtest_merge'
+
       result['merge'] = {
-        'script': '//testing/merge_scripts/standard_gtest_merge.py',
-        'args': [],
+          'script': '//testing/merge_scripts/%s.py' % merge_script,
+          'args': [],
       }
     return result
 
@@ -1113,6 +1126,14 @@ class BBJSONGenerator(object):
     self.exceptions = self.load_pyl_file('test_suite_exceptions.pyl')
     self.mixins = self.load_pyl_file('mixins.pyl')
     self.gn_isolate_map = self.load_pyl_file('gn_isolate_map.pyl')
+    for isolate_map in self.args.isolate_map_files:
+      isolate_map = self.load_pyl_file(isolate_map)
+      duplicates = set(isolate_map).intersection(self.gn_isolate_map)
+      if duplicates:
+        raise BBGenErr('Duplicate targets in isolate map files: %s.' %
+                       ', '.join(duplicates))
+      self.gn_isolate_map.update(isolate_map)
+
     self.variants = self.load_pyl_file('variants.pyl')
 
   def resolve_configuration_files(self):
@@ -1343,7 +1364,7 @@ class BBJSONGenerator(object):
       self.write_file(self.pyl_file_path(filename + suffix), jsonstr)
 
   def get_valid_bot_names(self):
-    # Extract bot names from infra/config/luci-milo.cfg.
+    # Extract bot names from infra/config/generated/luci-milo.cfg.
     # NOTE: This reference can cause issues; if a file changes there, the
     # presubmit here won't be run by default. A manually maintained list there
     # tries to run presubmit here when luci-milo.cfg is changed. If any other
@@ -1418,19 +1439,13 @@ class BBJSONGenerator(object):
         'win32-dbg',
         'win-archive-dbg',
         'win32-archive-dbg',
-        # TODO(crbug.com/1033753) Delete these when coverage is enabled by
-        # default on Windows tryjobs.
-        'GPU Win x64 Builder Code Coverage',
-        'Win x64 Builder Code Coverage',
-        'Win10 Tests x64 Code Coverage',
-        'Win10 x64 Release (NVIDIA) Code Coverage',
-        # TODO(crbug.com/1024915) Delete these when coverage is enabled by
-        # default on Mac OS tryjobs.
-        'Mac Builder Code Coverage',
-        'Mac10.13 Tests Code Coverage',
-        'GPU Mac Builder Code Coverage',
-        'Mac Release (Intel) Code Coverage',
-        'Mac Retina Release (AMD) Code Coverage',
+        # TODO(https://crbug.com/1127088): remove once LTS version has been set
+        "chromeos-arm-generic-lts",
+        "chromeos-betty-pi-arc-chrome-lts",
+        "chromeos-eve-chrome-lts",
+        "chromeos-kevin-chrome-lts",
+        "linux-chromeos-lts",
+        "linux64-lts",
     ]
 
   def get_internal_waterfalls(self):

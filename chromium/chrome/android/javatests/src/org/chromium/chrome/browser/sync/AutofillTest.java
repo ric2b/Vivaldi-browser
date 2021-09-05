@@ -18,6 +18,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.CriteriaNotSatisfiedException;
 import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -25,9 +28,6 @@ import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
 import org.chromium.components.sync.ModelType;
 import org.chromium.components.sync.protocol.AutofillProfileSpecifics;
 import org.chromium.components.sync.protocol.EntitySpecifics;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
-import org.chromium.content_public.browser.test.util.CriteriaNotSatisfiedException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -76,7 +76,7 @@ public class AutofillTest {
 
     @Before
     public void setUp() throws Exception {
-        mSyncTestRule.setUpAccountAndSignInForTesting();
+        mSyncTestRule.setUpAccountAndEnableSyncForTesting();
         // Make sure the initial state is clean.
         assertClientAutofillProfileCount(0);
         assertServerAutofillProfileCountWithName(0, STREET);

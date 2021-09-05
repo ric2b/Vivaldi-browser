@@ -6,6 +6,7 @@
 #define UI_VIEWS_CONTROLS_LABEL_H_
 
 #include <memory>
+#include <vector>
 
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
@@ -92,6 +93,7 @@ class VIEWS_EXPORT Label : public View,
   // Where the label appears in the UI. Passed in from the constructor. This is
   // a value from views::style::TextContext or an enum that extends it.
   int GetTextContext() const;
+  void SetTextContext(int text_context);
 
   // The style of the label.  This is a value from views::style::TextStyle or an
   // enum that extends it.
@@ -137,6 +139,16 @@ class VIEWS_EXPORT Label : public View,
   // consistency with RenderText field name.
   bool GetSubpixelRenderingEnabled() const;
   void SetSubpixelRenderingEnabled(bool subpixel_rendering_enabled);
+
+  // Gets/Sets whether the DCHECK() checking that subpixel-rendered text is
+  // only drawn onto opaque layers is skipped. Use this to suppress false
+  // positives - for example, if the label is drawn onto an opaque region of a
+  // non-opaque layer. If possible, prefer making the layer opaque or painting
+  // onto an opaque views::Background, as those cases are detected and
+  // excluded by this DCHECK automatically.
+  bool GetSkipSubpixelRenderingOpacityCheck() const;
+  void SetSkipSubpixelRenderingOpacityCheck(
+      bool skip_subpixel_rendering_opacity_check);
 
   // Gets/Sets the horizontal alignment; the argument value is mirrored in RTL
   // UI.
@@ -264,6 +276,10 @@ class VIEWS_EXPORT Label : public View,
   // |range| endpoints don't lie on grapheme boundaries.
   void SelectRange(const gfx::Range& range);
 
+  // Get the visual bounds containing the logical substring of the full text
+  // within the |range|. See gfx::RenderText.
+  std::vector<gfx::Rect> GetSubstringBounds(const gfx::Range& range);
+
   views::PropertyChangedSubscription AddTextChangedCallback(
       views::PropertyChangedCallback callback) WARN_UNUSED_RESULT;
 
@@ -314,6 +330,7 @@ class VIEWS_EXPORT Label : public View,
   FRIEND_TEST_ALL_PREFIXES(LabelTest, FocusBounds);
   FRIEND_TEST_ALL_PREFIXES(LabelTest, MultiLineSizingWithElide);
   FRIEND_TEST_ALL_PREFIXES(LabelTest, IsDisplayTextTruncated);
+  FRIEND_TEST_ALL_PREFIXES(LabelTest, ChecksSubpixelRenderingOntoOpaqueSurface);
   friend class LabelSelectionTest;
 
   // ContextMenuController overrides:
@@ -392,7 +409,7 @@ class VIEWS_EXPORT Label : public View,
   // Builds |context_menu_contents_|.
   void BuildContextMenuContents();
 
-  const int text_context_;
+  int text_context_;
   int text_style_;
   base::Optional<int> line_height_;
 
@@ -423,6 +440,7 @@ class VIEWS_EXPORT Label : public View,
   gfx::ElideBehavior elide_behavior_ = gfx::ELIDE_TAIL;
 
   bool subpixel_rendering_enabled_ = true;
+  bool skip_subpixel_rendering_opacity_check_ = false;
   bool auto_color_readability_enabled_ = true;
   // TODO(mukai): remove |multi_line_| when all RenderText can render multiline.
   bool multi_line_ = false;
@@ -447,6 +465,7 @@ BEGIN_VIEW_BUILDER(VIEWS_EXPORT, Label, View)
 VIEW_BUILDER_PROPERTY(const gfx::FontList&, FontList)
 VIEW_BUILDER_PROPERTY(const base::string16&, Text)
 VIEW_BUILDER_PROPERTY(int, TextStyle)
+VIEW_BUILDER_PROPERTY(int, TextContext)
 VIEW_BUILDER_PROPERTY(bool, AutoColorReadabilityEnabled)
 VIEW_BUILDER_PROPERTY(SkColor, EnabledColor)
 VIEW_BUILDER_PROPERTY(SkColor, BackgroundColor)
@@ -454,6 +473,7 @@ VIEW_BUILDER_PROPERTY(SkColor, SelectionTextColor)
 VIEW_BUILDER_PROPERTY(SkColor, SelectionBackgroundColor)
 VIEW_BUILDER_PROPERTY(const gfx::ShadowValues&, Shadows)
 VIEW_BUILDER_PROPERTY(bool, SubpixelRenderingEnabled)
+VIEW_BUILDER_PROPERTY(bool, SkipSubpixelRenderingOpacityCheck)
 VIEW_BUILDER_PROPERTY(gfx::HorizontalAlignment, HorizontalAlignment)
 VIEW_BUILDER_PROPERTY(gfx::VerticalAlignment, VerticalAlignment)
 VIEW_BUILDER_PROPERTY(int, LineHeight)
@@ -468,8 +488,10 @@ VIEW_BUILDER_PROPERTY(bool, HandlesTooltips)
 VIEW_BUILDER_PROPERTY(int, MaximumWidth)
 VIEW_BUILDER_PROPERTY(bool, CollapseWhenHidden)
 VIEW_BUILDER_PROPERTY(bool, Selectable)
-END_VIEW_BUILDER(VIEWS_EXPORT, Label)
+END_VIEW_BUILDER
 
 }  // namespace views
+
+DEFINE_VIEW_BUILDER(VIEWS_EXPORT, Label)
 
 #endif  // UI_VIEWS_CONTROLS_LABEL_H_

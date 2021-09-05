@@ -248,8 +248,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="GCM.LoadStatus" enum="GCMLoadStatus"
-    expires_after="2020-09-27">
-  <owner>jianli@chromium.org</owner>
+    expires_after="2021-05-02">
+  <owner>peter@chromium.org</owner>
+  <owner>knollr@chromium.org</owner>
   <summary>Status code of loading from the persistent GCM store.</summary>
 </histogram>
 
@@ -293,7 +294,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="GCM.RegistrationRequest.NetErrorCode" enum="NetErrorCodes"
-    expires_after="2021-02-07">
+    expires_after="2021-04-11">
   <owner>peter@chromium.org</owner>
   <owner>platform-capabilities@chromium.org</owner>
   <summary>
@@ -303,7 +304,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="GCM.RegistrationRequestStatus"
-    enum="GCMRegistrationRequestStatus" expires_after="2021-03-07">
+    enum="GCMRegistrationRequestStatus" expires_after="2021-05-09">
   <owner>peter@chromium.org</owner>
   <summary>
     Status code of the outcome of a GCM registration request. The Unknown error
@@ -315,6 +316,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="GCM.RegistrationSenderIdCount" units="units"
     expires_after="M85">
+  <obsolete>
+    Removed 10/2020 because there no longer was a need for the data.
+  </obsolete>
   <owner>jianli@chromium.org</owner>
   <summary>Number of sender IDs specified in a registration request.</summary>
 </histogram>
@@ -385,7 +389,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="GCM.SendWebPushMessageResult" enum="SendWebPushMessageResult"
-    expires_after="2021-02-14">
+    expires_after="2021-04-18">
   <owner>alexchau@chromium.org</owner>
   <owner>peter@chromium.org</owner>
   <summary>

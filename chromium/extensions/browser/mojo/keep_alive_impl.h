@@ -7,6 +7,7 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/scoped_observation.h"
 #include "base/scoped_observer.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_observer.h"
@@ -60,7 +61,7 @@ class KeepAliveImpl : public KeepAlive,
   const Extension* extension_;
   ScopedObserver<ExtensionRegistry, ExtensionRegistryObserver>
       extension_registry_observer_{this};
-  ScopedObserver<ProcessManager, ProcessManagerObserver>
+  base::ScopedObservation<ProcessManager, ProcessManagerObserver>
       process_manager_observation_{this};
   mojo::Receiver<KeepAlive> receiver_;
 

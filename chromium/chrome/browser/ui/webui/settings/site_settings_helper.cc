@@ -23,8 +23,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/serial/serial_chooser_context.h"
 #include "chrome/browser/serial/serial_chooser_context_factory.h"
-#include "chrome/browser/subresource_filter/subresource_filter_content_settings_manager.h"
-#include "chrome/browser/subresource_filter/subresource_filter_profile_context.h"
 #include "chrome/browser/subresource_filter/subresource_filter_profile_context_factory.h"
 #include "chrome/browser/usb/usb_chooser_context.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
@@ -40,6 +38,8 @@
 #include "components/permissions/permission_util.h"
 #include "components/permissions/permissions_client.h"
 #include "components/prefs/pref_service.h"
+#include "components/subresource_filter/content/browser/subresource_filter_content_settings_manager.h"
+#include "components/subresource_filter/content/browser/subresource_filter_profile_context.h"
 #include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/public/common/content_features.h"
@@ -134,7 +134,6 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::CLIENT_HINTS, nullptr},
     {ContentSettingsType::ACCESSIBILITY_EVENTS, nullptr},
     {ContentSettingsType::CLIPBOARD_SANITIZED_WRITE, nullptr},
-    {ContentSettingsType::PLUGINS_DATA, nullptr},
     {ContentSettingsType::BACKGROUND_FETCH, nullptr},
     {ContentSettingsType::INTENT_PICKER_DISPLAY, nullptr},
     {ContentSettingsType::PERIODIC_BACKGROUND_SYNC, nullptr},
@@ -149,6 +148,7 @@ const ContentSettingsTypeNameEntry kContentSettingsTypeGroupNames[] = {
     {ContentSettingsType::CAMERA_PAN_TILT_ZOOM, nullptr},
     {ContentSettingsType::INSECURE_PRIVATE_NETWORK, nullptr},
     {ContentSettingsType::PERMISSION_AUTOREVOCATION_DATA, nullptr},
+    {ContentSettingsType::FILE_SYSTEM_LAST_PICKED_DIRECTORY, nullptr},
 };
 static_assert(base::size(kContentSettingsTypeGroupNames) ==
                   // ContentSettingsType starts at -1, so add 1 here.
@@ -240,9 +240,10 @@ SiteSettingSource CalculateSiteSettingSource(
   if (content_type == ContentSettingsType::ADS &&
       base::FeatureList::IsEnabled(
           subresource_filter::kSafeBrowsingSubresourceFilter)) {
-    SubresourceFilterContentSettingsManager* settings_manager =
-        SubresourceFilterProfileContextFactory::GetForProfile(profile)
-            ->settings_manager();
+    subresource_filter::SubresourceFilterContentSettingsManager*
+        settings_manager =
+            SubresourceFilterProfileContextFactory::GetForProfile(profile)
+                ->settings_manager();
 
     if (settings_manager->GetSiteActivationFromMetadata(origin)) {
       return SiteSettingSource::kAdsFilterBlocklist;  // Source #6.
@@ -539,12 +540,12 @@ void GetExceptionsForContentType(
   HostContentSettingsMap* map =
       HostContentSettingsMapFactory::GetForProfile(profile);
 
-  map->GetSettingsForOneType(type, std::string(), &all_settings);
+  map->GetSettingsForOneType(type, &all_settings);
 
   // Will return only regular settings for a regular profile and only incognito
   // settings for an incognito Profile.
   ContentSettingsForOneType discarded_settings;
-  map->GetDiscardedSettingsForOneType(type, std::string(), &discarded_settings);
+  map->GetDiscardedSettingsForOneType(type, &discarded_settings);
 
   // Group settings by primary_pattern.
   AllPatternsSettings all_patterns_settings;
@@ -575,7 +576,7 @@ void GetExceptionsForContentType(
 
   ContentSettingsForOneType embargo_settings;
   map->GetSettingsForOneType(ContentSettingsType::PERMISSION_AUTOBLOCKER_DATA,
-                             std::string(), &embargo_settings);
+                             &embargo_settings);
 
   permissions::PermissionDecisionAutoBlocker* auto_blocker =
       permissions::PermissionsClient::Get()->GetPermissionDecisionAutoBlocker(
@@ -705,8 +706,8 @@ ContentSetting GetContentSettingForOrigin(
   // content settings, not just the permissions, plus all the possible sources,
   // and the calls to HostContentSettingsMap should be removed.
   content_settings::SettingInfo info;
-  std::unique_ptr<base::Value> value = map->GetWebsiteSetting(
-      origin, origin, content_type, std::string(), &info);
+  std::unique_ptr<base::Value> value =
+      map->GetWebsiteSetting(origin, origin, content_type, &info);
 
   // Retrieve the content setting.
   permissions::PermissionResult result(
@@ -728,6 +729,11 @@ ContentSetting GetContentSettingForOrigin(
       CalculateSiteSettingSource(profile, content_type, origin, info, result));
   *display_name = GetDisplayNameForGURL(origin, extension_registry);
 
+  if (info.session_model == content_settings::SessionModel::OneTime) {
+    DCHECK_EQ(content_type, ContentSettingsType::GEOLOCATION);
+    DCHECK_EQ(result.content_setting, CONTENT_SETTING_ALLOW);
+    return CONTENT_SETTING_DEFAULT;
+  }
   return result.content_setting;
 }
 
@@ -735,7 +741,7 @@ std::vector<ContentSettingPatternSource> GetSiteExceptionsForContentType(
     HostContentSettingsMap* map,
     ContentSettingsType content_type) {
   ContentSettingsForOneType entries;
-  map->GetSettingsForOneType(content_type, std::string(), &entries);
+  map->GetSettingsForOneType(content_type, &entries);
   entries.erase(std::remove_if(entries.begin(), entries.end(),
                                [](const ContentSettingPatternSource& e) {
                                  return !PatternAppliesToSingleOrigin(e) ||

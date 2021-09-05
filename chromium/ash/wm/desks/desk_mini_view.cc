@@ -23,7 +23,6 @@
 #include "ui/aura/window.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/canvas.h"
-#include "ui/gfx/color_palette.h"
 #include "ui/views/widget/widget.h"
 #include "ui/wm/core/coordinate_conversion.h"
 
@@ -36,12 +35,6 @@ constexpr int kLabelPreviewSpacing = 8;
 constexpr int kCloseButtonMargin = 8;
 
 constexpr int kMinDeskNameViewWidth = 20;
-
-constexpr SkColor kDarkModeActiveColor = SK_ColorWHITE;
-constexpr SkColor kLightModeActiveColor = SK_ColorBLACK;
-constexpr SkColor kInactiveColor = SK_ColorTRANSPARENT;
-
-constexpr SkColor kDraggedOverColor = SkColorSetARGB(0xFF, 0x5B, 0xBC, 0xFF);
 
 // Returns the width of the desk preview based on its |preview_height| and the
 // aspect ratio of the root window taken from |root_window_size|.
@@ -81,9 +74,14 @@ DeskMiniView::DeskMiniView(DesksBarView* owner_bar,
 
   // TODO(afakhry): Tooltips.
 
-  desk_preview_ = AddChildView(std::make_unique<DeskPreviewView>(this));
+  desk_preview_ = AddChildView(std::make_unique<DeskPreviewView>(
+      base::BindRepeating(&DeskMiniView::OnDeskPreviewPressed,
+                          base::Unretained(this)),
+      this));
   desk_name_view_ = AddChildView(std::move(desk_name_view));
-  close_desk_button_ = AddChildView(std::make_unique<CloseDeskButton>(this));
+  close_desk_button_ =
+      AddChildView(std::make_unique<CloseDeskButton>(base::BindRepeating(
+          &DeskMiniView::OnCloseButtonPressed, base::Unretained(this))));
 
   UpdateCloseButtonVisibility();
   UpdateBorderColor();
@@ -135,19 +133,16 @@ void DeskMiniView::OnWidgetGestureTap(const gfx::Rect& screen_rect,
 void DeskMiniView::UpdateBorderColor() {
   DCHECK(desk_);
   auto* color_provider = AshColorProvider::Get();
-  if (owner_bar_->dragged_item_over_bar() &&
-      IsPointOnMiniView(owner_bar_->last_dragged_item_screen_location())) {
-    desk_preview_->SetBorderColor(kDraggedOverColor);
-  } else if (IsViewHighlighted()) {
+  if ((owner_bar_->dragged_item_over_bar() &&
+       IsPointOnMiniView(owner_bar_->last_dragged_item_screen_location())) ||
+      IsViewHighlighted()) {
     desk_preview_->SetBorderColor(color_provider->GetControlsLayerColor(
         AshColorProvider::ControlsLayerType::kFocusRingColor));
   } else if (!desk_->is_active()) {
-    desk_preview_->SetBorderColor(kInactiveColor);
+    desk_preview_->SetBorderColor(SK_ColorTRANSPARENT);
   } else {
-    // Default theme for desks is dark mode.
-    desk_preview_->SetBorderColor(color_provider->IsDarkModeEnabled()
-                                      ? kDarkModeActiveColor
-                                      : kLightModeActiveColor);
+    desk_preview_->SetBorderColor(color_provider->GetContentLayerColor(
+        AshColorProvider::ContentLayerType::kCurrentDeskColor));
   }
 }
 
@@ -212,13 +207,9 @@ void DeskMiniView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   }
 }
 
-void DeskMiniView::ButtonPressed(views::Button* sender,
-                                 const ui::Event& event) {
-  DCHECK(desk_);
-  if (sender == close_desk_button_)
-    OnCloseButtonPressed();
-  else if (sender == desk_preview_)
-    OnDeskPreviewPressed();
+void DeskMiniView::OnThemeChanged() {
+  views::View::OnThemeChanged();
+  UpdateBorderColor();
 }
 
 void DeskMiniView::OnContentChanged() {

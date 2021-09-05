@@ -37,6 +37,7 @@
 #include "content/browser/locks/lock_manager.h"
 #include "content/browser/notifications/platform_notification_context_impl.h"
 #include "content/browser/payments/payment_app_context_impl.h"
+#include "content/browser/prerender/prerender_host_registry.h"
 #include "content/browser/push_messaging/push_messaging_context.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/url_loader_factory_getter.h"
@@ -53,6 +54,7 @@
 #include "services/network/public/mojom/cookie_manager.mojom.h"
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
+#include "services/network/public/mojom/trust_tokens.mojom.h"
 #include "storage/browser/quota/special_storage_policy.h"
 #include "third_party/blink/public/mojom/dom_storage/dom_storage.mojom.h"
 
@@ -106,6 +108,10 @@ class CONTENT_EXPORT StoragePartitionImpl
               original_factory)>;
   static void SetGetURLLoaderFactoryForBrowserProcessCallbackForTesting(
       CreateNetworkFactoryCallback url_loader_factory_callback);
+
+  // Forces Storage Service instances to be run in-process, ignoring the
+  // StorageServiceOutOfProcess feature setting.
+  static void ForceInProcessStorageServiceForTesting();
 
   void OverrideQuotaManagerForTesting(
       storage::QuotaManager* quota_manager);
@@ -204,6 +210,7 @@ class CONTENT_EXPORT StoragePartitionImpl
   NativeIOContext* GetNativeIOContext();
   ConversionManagerImpl* GetConversionManager();
   FontAccessManagerImpl* GetFontAccessManager();
+  PrerenderHostRegistry* GetPrerenderHostRegistry();
   std::string GetPartitionDomain();
 
   // blink::mojom::DomStorage interface.
@@ -273,6 +280,9 @@ class CONTENT_EXPORT StoragePartitionImpl
 #if defined(OS_CHROMEOS)
   void OnTrustAnchorUsed() override;
 #endif
+  void OnTrustTokenIssuanceDivertedToSystem(
+      network::mojom::FulfillTrustTokenIssuanceRequestPtr request,
+      OnTrustTokenIssuanceDivertedToSystemCallback callback) override;
 
   scoped_refptr<URLLoaderFactoryGetter> url_loader_factory_getter() {
     return url_loader_factory_getter_;
@@ -306,17 +316,17 @@ class CONTENT_EXPORT StoragePartitionImpl
   }
 
   // When this StoragePartition is for guests (e.g., for a <webview> tag), this
-  // is the site URL to use when creating a SiteInstance for a service worker.
-  // Typically one would use the script URL of the service worker (e.g.,
-  // "https://example.com/sw.js"), but if this StoragePartition is for guests,
-  // one must use the <webview> guest site URL to ensure that the
-  // service worker stays in this StoragePartition. This is an empty GURL if
-  // this StoragePartition is not for guests.
-  void set_site_for_guest_service_worker(const GURL& site_for_service_worker) {
-    site_for_guest_service_worker_ = site_for_service_worker;
+  // is the site URL to use when creating a SiteInstance for a service worker or
+  // a shared worker. Typically one would use the script URL of the worker
+  // (e.g., "https://example.com/sw.js"), but if this StoragePartition is for
+  // guests, one must use the <webview> guest site URL to ensure that the worker
+  // stays in this StoragePartition. This is an empty GURL if this
+  // StoragePartition is not for guests.
+  void set_site_for_guest_service_worker_or_shared_worker(const GURL& site) {
+    site_for_guest_service_worker_or_shared_worker_ = site;
   }
-  const GURL& site_for_guest_service_worker() const {
-    return site_for_guest_service_worker_;
+  const GURL& site_for_guest_service_worker_or_shared_worker() const {
+    return site_for_guest_service_worker_or_shared_worker_;
   }
 
   // Use the network context to retrieve the origin policy manager.
@@ -528,6 +538,7 @@ class CONTENT_EXPORT StoragePartitionImpl
   std::unique_ptr<NativeIOContext> native_io_context_;
   std::unique_ptr<ConversionManagerImpl> conversion_manager_;
   std::unique_ptr<FontAccessManagerImpl> font_access_manager_;
+  std::unique_ptr<PrerenderHostRegistry> prerender_host_registry_;
 
   // ReceiverSet for DomStorage, using the
   // ChildProcessSecurityPolicyImpl::Handle as the binding context type. The
@@ -577,8 +588,8 @@ class CONTENT_EXPORT StoragePartitionImpl
   // Initialized in InitNetworkContext() and never updated after then.
   std::vector<std::string> cors_exempt_header_list_;
 
-  // See comments for site_for_guest_service_worker().
-  GURL site_for_guest_service_worker_;
+  // See comments for site_for_guest_service_worker_or_shared_worker().
+  GURL site_for_guest_service_worker_or_shared_worker_;
 
   // Track number of running deletion. For test use only.
   int deletion_helpers_running_;

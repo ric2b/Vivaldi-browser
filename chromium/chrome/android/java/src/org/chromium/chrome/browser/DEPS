@@ -68,12 +68,6 @@ specific_include_rules = {
   "CardUnmaskPrompt\.java": [
     "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
   ],
-  "BookmarkPage\.java": [
-    "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
-  ],
-  "BookmarkUtils\.java": [
-    "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
-  ],
   "QualityEnforcer\.java": [
     "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
   ],
@@ -266,19 +260,10 @@ specific_include_rules = {
   "FakeAppUpdateManagerWrapper\.java": [
     "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
   ],
-  "UpdateNotificationControllerFactory\.java": [
-    "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
-  ],
-  "UpdateNotificationControllerImpl\.java": [
-    "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
-  ],
-  "UpdateNotificationServiceBridge\.java": [
-    "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
-  ],
   "AutocompleteMediator\.java": [
     "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
   ],
-  "PaintPreviewHelper\.java": [
+  "StartupPaintPreviewHelper\.java": [
     "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
   ],
   "AutoSigninSnackbarController\.java": [
@@ -288,9 +273,6 @@ specific_include_rules = {
     "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
   ],
   "PasswordChangeLauncher\.java": [
-    "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
-  ],
-  "PasswordCheckupLauncher\.java": [
     "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
   ],
   "PasswordGenerationDialogBridge\.java": [
@@ -311,10 +293,10 @@ specific_include_rules = {
   "CardEditor\.java": [
     "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
   ],
-  "PaymentRequestFactory\.java": [
+  "ChromePaymentRequestFactory\.java": [
     "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
   ],
-  "PaymentRequestImpl\.java": [
+  "ChromePaymentRequestService\.java": [
     "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
   ],
   "TwaPackageManagerDelegate\.java": [
@@ -329,16 +311,13 @@ specific_include_rules = {
   "PaymentHandlerToolbarCoordinator\.java": [
     "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
   ],
-  "PaymentUIsManager\.java": [
+  "PaymentUiService\.java": [
     "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
   ],
   "PrintShareActivity\.java": [
     "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
   ],
   "SafeBrowsingPasswordReuseDialogBridge\.java": [
-    "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
-  ],
-  "EditorScreenshotTask\.java": [
     "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
   ],
   "SendTabToSelfInfoBarController\.java": [
@@ -377,12 +356,6 @@ specific_include_rules = {
   "ToolbarButtonInProductHelpController\.java": [
     "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
   ],
-  "ToolbarManager\.java": [
-    "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
-  ],
-  "BottomControlsCoordinator\.java": [
-    "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
-  ],
   "CustomTabToolbar\.java": [
     "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
   ],
@@ -395,10 +368,7 @@ specific_include_rules = {
   "SuspendedTab\.java": [
     "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
   ],
-  "ArCoreJavaUtils\.java": [
-    "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
-  ],
-  "ArImmersiveOverlay\.java": [
+  "ArCompositorDelegateImpl\.java": [
     "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
   ],
   "WebApkActivityCoordinator\.java": [
@@ -419,7 +389,7 @@ specific_include_rules = {
   "WebappDeferredStartupWithStorageHandler\.java": [
     "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
   ],
-  "WebappDisclosureSnackbarController\.java": [
+  "WebappDisclosureController\.java": [
     "+chrome/android/java/src/org/chromium/chrome/browser/app/ChromeActivity.java",
   ],
   "AddToHomescreenCoordinator\.java": [

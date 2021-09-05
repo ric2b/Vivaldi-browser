@@ -56,11 +56,9 @@ LayoutText* AbstractInlineTextBox::GetFirstLetterPseudoLayoutText() const {
   Node* node = GetLineLayoutItem().GetNode();
   if (!node)
     return nullptr;
-
-  LayoutObject* layout_object = node->GetLayoutObject();
-  if (!layout_object || !layout_object->IsText())
-    return nullptr;
-  return ToLayoutText(layout_object)->GetFirstLetterPart();
+  if (auto* layout_text = DynamicTo<LayoutText>(node->GetLayoutObject()))
+    return layout_text->GetFirstLetterPart();
+  return nullptr;
 }
 
 // ----
@@ -353,9 +351,8 @@ scoped_refptr<AbstractInlineTextBox> LegacyAbstractInlineTextBox::NextOnLine()
     return nullptr;
 
   InlineBox* next = inline_text_box_->NextOnLine();
-  if (next && next->IsInlineTextBox())
-    return GetOrCreate(ToInlineTextBox(next)->GetLineLayoutItem(),
-                       ToInlineTextBox(next));
+  if (auto* text_box = DynamicTo<InlineTextBox>(next))
+    return GetOrCreate(text_box->GetLineLayoutItem(), text_box);
 
   return nullptr;
 }
@@ -368,9 +365,8 @@ LegacyAbstractInlineTextBox::PreviousOnLine() const {
     return nullptr;
 
   InlineBox* previous = inline_text_box_->PrevOnLine();
-  if (previous && previous->IsInlineTextBox())
-    return GetOrCreate(ToInlineTextBox(previous)->GetLineLayoutItem(),
-                       ToInlineTextBox(previous));
+  if (auto* text_box = DynamicTo<InlineTextBox>(previous))
+    return GetOrCreate(text_box->GetLineLayoutItem(), text_box);
 
   return nullptr;
 }

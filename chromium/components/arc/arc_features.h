@@ -12,11 +12,9 @@
 namespace arc {
 
 // Please keep alphabetized.
-extern const base::Feature kAppRuntimePerormanceStatistics;
 extern const base::Feature kBootCompletedBroadcastFeature;
 extern const base::Feature kCleanArcDataOnRegularToChildTransitionFeature;
 extern const base::Feature kCustomTabsExperimentFeature;
-extern const base::Feature kEnableApplicationZoomFeature;
 extern const base::Feature kEnableChildToRegularTransitionFeature;
 extern const base::Feature kEnableDocumentsProviderInFilesAppFeature;
 extern const base::Feature kEnableRegularToChildTransitionFeature;

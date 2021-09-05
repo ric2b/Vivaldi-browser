@@ -6,7 +6,10 @@
 <link rel="import" href="chrome://resources/cr_elements/cr_checkbox/cr_checkbox.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 
-<dom-module id="recommend-apps">
+<link rel="import" href="/components/oobe_i18n_behavior.html">
+<link rel="import" href="/components/throbber_notice.html">
+
+<dom-module id="recommend-apps-element">
   <template>
     <style include="oobe-dialog-host"></style>
     <link rel="stylesheet" href="recommend_apps.css">
@@ -31,9 +34,9 @@
       </div>
       <div slot="bottom-buttons" class="layout horizontal end-justified">
         <oobe-text-button id="skipButton"
-            text-key="recommendAppsSkip" on-tap="onSkip_" border>
+            text-key="recommendAppsSkip" on-click="onSkip_" border>
         </oobe-text-button>
-        <oobe-next-button id="installButton" on-tap="onInstall_" inverse
+        <oobe-next-button id="installButton" on-click="onInstall_" inverse
             text-key="recommendAppsInstall"
             disabled="[[!canProceed_(appsSelected_)]]">
         </oobe-next-button>

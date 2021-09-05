@@ -17,12 +17,13 @@ import org.junit.runner.RunWith;
 import org.chromium.base.task.PostTask;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.FlakyTest;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.chrome.R;
-import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
+import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.EdgeSwipeHandler;
 import org.chromium.chrome.browser.compositor.layouts.eventfilter.ScrollDirection;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
@@ -34,7 +35,6 @@ import org.chromium.content_public.browser.UiThreadTaskTraits;
 import org.chromium.content_public.browser.ViewEventSink;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.content_public.browser.WebContentsObserver;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestTouchUtils;
 import org.chromium.content_public.browser.test.util.TouchCommon;
 import org.chromium.content_public.browser.test.util.WebContentsUtils;
@@ -123,7 +123,7 @@ public class ContentViewFocusTest {
         });
 
         CriteriaHelper.pollUiThread(() -> {
-            LayoutManager driver = mActivityTestRule.getActivity().getLayoutManager();
+            LayoutManagerImpl driver = mActivityTestRule.getActivity().getLayoutManager();
             return !driver.getActiveLayout().shouldDisplayContentOverlay();
         }, "Layout still requesting Tab Android view be attached");
 
@@ -135,7 +135,7 @@ public class ContentViewFocusTest {
         PostTask.runOrPostTask(UiThreadTaskTraits.DEFAULT, () -> edgeSwipeHandler.swipeFinished());
 
         CriteriaHelper.pollUiThread(() -> {
-            LayoutManager driver = mActivityTestRule.getActivity().getLayoutManager();
+            LayoutManagerImpl driver = mActivityTestRule.getActivity().getLayoutManager();
             return driver.getActiveLayout().shouldDisplayContentOverlay();
         }, "Layout not requesting Tab Android view be attached");
 

@@ -37,7 +37,6 @@
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/work_area_insets.h"
 #include "base/command_line.h"
-#include "chromeos/constants/chromeos_switches.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_owner.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
@@ -74,11 +73,6 @@ views::View* FindFirstOrLastFocusableChild(views::View* root,
       views::FocusSearch::StartingViewPolicy::kSkipStartingView,
       views::FocusSearch::AnchoredDialogPolicy::kCanGoIntoAnchoredDialog,
       &dummy_focus_traversable, &dummy_focus_traversable_view);
-}
-
-bool IsHotseatEnabled() {
-  return Shell::Get()->IsInTabletMode() &&
-         chromeos::switches::ShouldShowShelfHotseat();
 }
 
 // Sets the shelf opacity to 0 when the shelf is done hiding to avoid getting
@@ -318,8 +312,7 @@ void ShelfWidget::DelegateView::UpdateOpaqueBackground() {
   const bool tablet_mode = Shell::Get()->IsInTabletMode();
   const bool in_app = ShelfConfig::Get()->is_in_app();
 
-  bool show_opaque_background =
-      !tablet_mode || in_app || !chromeos::switches::ShouldShowShelfHotseat();
+  bool show_opaque_background = !tablet_mode || in_app;
   if (show_opaque_background != opaque_background()->visible())
     opaque_background()->SetVisible(show_opaque_background);
 
@@ -344,7 +337,7 @@ void ShelfWidget::DelegateView::UpdateOpaqueBackground() {
   // or whenever we are "in app".
   if (background_type == ShelfBackgroundType::kMaximized ||
       background_type == ShelfBackgroundType::kInApp ||
-      (tablet_mode && in_app && chromeos::switches::ShouldShowShelfHotseat())) {
+      (tablet_mode && in_app)) {
     opaque_background()->SetRoundedCornerRadius({0, 0, 0, 0});
   } else {
     opaque_background()->SetRoundedCornerRadius({
@@ -369,7 +362,6 @@ void ShelfWidget::DelegateView::UpdateDragHandle() {
   }
 
   if (!Shell::Get()->IsInTabletMode() || !ShelfConfig::Get()->is_in_app() ||
-      !chromeos::switches::ShouldShowShelfHotseat() ||
       hide_background_for_transitions_) {
     drag_handle_->SetVisible(false);
     return;
@@ -608,7 +600,7 @@ void ShelfWidget::Initialize(aura::Window* shelf_container) {
 
   // Sets initial session state to make sure the UI is properly shown.
   OnSessionStateChanged(Shell::Get()->session_controller()->GetSessionState());
-  GetFocusManager()->set_arrow_key_traversal_enabled_for_widget(true);
+  delegate_view_->SetEnableArrowKeyTraversal(true);
 
   Shell::Get()->accessibility_controller()->AddObserver(this);
 }
@@ -702,20 +694,9 @@ gfx::Rect ShelfWidget::GetScreenBoundsOfItemIconForWindow(
   if (id.IsNull())
     return gfx::Rect();
 
-  if (chromeos::switches::ShouldShowShelfHotseat()) {
-    return hotseat_widget()
-        ->scrollable_shelf_view()
-        ->GetTargetScreenBoundsOfItemIcon(id);
-  }
-
-  gfx::Rect bounds(
-      hotseat_widget()->GetShelfView()->GetIdealBoundsOfItemIcon(id));
-  gfx::Point screen_origin;
-  views::View::ConvertPointToScreen(hotseat_widget()->GetShelfView(),
-                                    &screen_origin);
-  return gfx::Rect(screen_origin.x() + bounds.x(),
-                   screen_origin.y() + bounds.y(), bounds.width(),
-                   bounds.height());
+  return hotseat_widget()
+      ->scrollable_shelf_view()
+      ->GetTargetScreenBoundsOfItemIcon(id);
 }
 
 gfx::Rect ShelfWidget::GetVisibleShelfBounds() const {
@@ -777,9 +758,11 @@ void ShelfWidget::CalculateTargetBounds() {
       WorkAreaInsets::ForWindow(GetNativeWindow());
 
   if (layout_manager->is_shelf_auto_hidden()) {
+    const display::Display display =
+        display::Screen::GetScreen()->GetDisplayNearestWindow(
+            GetNativeWindow());
     shelf_in_screen_portion =
-        Shell::Get()->app_list_controller()->home_launcher_transition_state() ==
-                AppListControllerImpl::HomeLauncherTransitionState::kMostlyShown
+        Shell::Get()->app_list_controller()->GetTargetVisibility(display.id())
             ? shelf_size
             : ShelfConfig::Get()->hidden_shelf_in_screen_portion();
   } else if (layout_manager->visibility_state() == SHELF_HIDDEN ||
@@ -871,7 +854,7 @@ void ShelfWidget::UpdateLayout(bool animate) {
 
 void ShelfWidget::UpdateTargetBoundsForGesture(int shelf_position) {
   if (shelf_->IsHorizontalAlignment()) {
-    if (!IsHotseatEnabled())
+    if (!Shell::Get()->IsInTabletMode())
       target_bounds_.set_y(shelf_position);
   } else {
     target_bounds_.set_x(shelf_position);

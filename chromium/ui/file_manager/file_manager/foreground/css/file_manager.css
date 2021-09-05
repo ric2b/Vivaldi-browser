@@ -1854,10 +1854,6 @@ body:not(.files-ng) .downloads-warning .warning-message {
   margin-inline-end: 40px;
 }
 
-body.files-ng .downloads-warning .warning-message {
-  margin-inline-end: 20px;
-}
-
 body.files-ng .warning-message .link-wrapper {
   display: inline;
 }
@@ -1963,8 +1959,10 @@ body:not(.files-ng) .volume-warning .drive-text {
 
 body.files-ng .button-group {
   display: flex;
+  flex: 0 0 auto;
   flex-direction: row-reverse;
   margin-inline-start: auto;
+  padding-inline-start: 48px;
 }
 
 body.files-ng .button-group > a {
@@ -1986,6 +1984,17 @@ body.files-ng .volume-warning .banner-button {
   margin-inline-end: 8px;
   padding-inline-end: 16px;
   padding-inline-start: 16px;
+}
+
+body.files-ng .volume-warning .info-icon {
+  -webkit-mask-image: url(../images/files/ui/info.svg);
+  background-color: var(--cros-text-color-secondary);
+  background-size: 20px 20px;
+  flex: none;
+  height: 20px;
+  margin-inline-end: 16px;
+  margin-inline-start: 8px;
+  width: 20px;
 }
 
 body:not(.files-ng) .banner-close {
@@ -2647,7 +2656,7 @@ li[renaming=''] .badge {
   background-position: center center;
   background-repeat: no-repeat;
   color: #888;
-  content: '\00a0';
+  content: ' ';
   padding-inline-start: 13px;
   position: relative;
   top: 1px;
@@ -2660,7 +2669,7 @@ li[renaming=''] .badge {
   background-position: center center;
   background-repeat: no-repeat;
   color: #888;
-  content: '\00a0';
+  content: ' ';
   padding-inline-start: 13px;
   position: relative;
   top: -1px;

@@ -9,13 +9,15 @@
 #include <vector>
 
 #include "base/check.h"
+#include "base/containers/span.h"
 #include "base/files/file_path.h"
 #include "base/optional.h"
 #include "base/strings/utf_string_conversions.h"
+#include "build/chromeos_buildflags.h"
 #include "content/browser/file_system_access/native_file_system_manager_impl.h"
-#include "content/public/common/drop_data.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "services/network/public/mojom/referrer_policy.mojom-shared.h"
+#include "storage/browser/file_system/external_mount_points.h"
 #include "third_party/blink/public/mojom/file_system_access/native_file_system_drag_drop_token.mojom.h"
 #include "third_party/blink/public/mojom/page/drag.mojom.h"
 #include "ui/base/clipboard/clipboard_constants.h"
@@ -23,6 +25,29 @@
 #include "url/gurl.h"
 
 namespace content {
+
+namespace {
+
+// On Chrome OS paths that exist on an external mount point need to be treated
+// differently to make sure the native file system code accesses these paths via
+// the correct file system backend. This method checks if this is the case, and
+// updates `entry_path` to the path that should be used by the native file
+// system implementation.
+content::NativeFileSystemEntryFactory::PathType MaybeRemapPath(
+    base::FilePath* entry_path) {
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  base::FilePath virtual_path;
+  auto* external_mount_points =
+      storage::ExternalMountPoints::GetSystemInstance();
+  if (external_mount_points->GetVirtualPath(*entry_path, &virtual_path)) {
+    *entry_path = std::move(virtual_path);
+    return content::NativeFileSystemEntryFactory::PathType::kExternal;
+  }
+#endif
+  return content::NativeFileSystemEntryFactory::PathType::kLocal;
+}
+
+}  // namespace
 
 blink::mojom::DragDataPtr DropDataToDragData(
     const DropData& drop_data,
@@ -58,11 +83,17 @@ blink::mojom::DragDataPtr DropDataToDragData(
     blink::mojom::DragItemFilePtr item = blink::mojom::DragItemFile::New();
     item->path = file.path;
     item->display_name = file.display_name;
+
     mojo::PendingRemote<blink::mojom::NativeFileSystemDragDropToken>
         pending_token;
+    base::FilePath entry_path = file.path;
+    NativeFileSystemManagerImpl::PathType path_type =
+        MaybeRemapPath(&entry_path);
     native_file_system_manager->CreateNativeFileSystemDragDropToken(
-        file.path, child_id, pending_token.InitWithNewPipeAndPassReceiver());
+        path_type, entry_path, child_id,
+        pending_token.InitWithNewPipeAndPassReceiver());
     item->native_file_system_token = std::move(pending_token);
+
     items.push_back(blink::mojom::DragItem::NewFile(std::move(item)));
   }
   for (const content::DropData::FileSystemFileInfo& file_system_file :
@@ -94,6 +125,51 @@ blink::mojom::DragDataPtr DropDataToDragData(
           : base::Optional<std::string>(
                 base::UTF16ToUTF8(drop_data.filesystem_id)),
       drop_data.referrer_policy);
+}
+
+blink::mojom::DragDataPtr DropMetaDataToDragData(
+    const std::vector<DropData::Metadata>& drop_meta_data) {
+  std::vector<blink::mojom::DragItemPtr> items;
+
+  for (const auto& meta_data_item : drop_meta_data) {
+    if (meta_data_item.kind == DropData::Kind::STRING) {
+      blink::mojom::DragItemStringPtr item =
+          blink::mojom::DragItemString::New();
+      item->string_type = base::UTF16ToUTF8(meta_data_item.mime_type);
+      // Have to pass a dummy URL here instead of an empty URL because the
+      // DropData received by browser_plugins goes through a round trip:
+      // DropData::MetaData --> WebDragData-->DropData. In the end, DropData
+      // will contain an empty URL (which means no URL is dragged) if the URL in
+      // WebDragData is empty.
+      if (base::EqualsASCII(meta_data_item.mime_type, ui::kMimeTypeURIList)) {
+        item->string_data = base::UTF8ToUTF16("about:dragdrop-placeholder");
+      }
+      items.push_back(blink::mojom::DragItem::NewString(std::move(item)));
+      continue;
+    }
+
+    // TODO(hush): crbug.com/584789. Blink needs to support creating a file with
+    // just the mimetype. This is needed to drag files to WebView on Android
+    // platform.
+    if ((meta_data_item.kind == DropData::Kind::FILENAME) &&
+        !meta_data_item.filename.empty()) {
+      blink::mojom::DragItemFilePtr item = blink::mojom::DragItemFile::New();
+      item->path = meta_data_item.filename;
+      items.push_back(blink::mojom::DragItem::NewFile(std::move(item)));
+      continue;
+    }
+
+    if (meta_data_item.kind == DropData::Kind::FILESYSTEMFILE) {
+      blink::mojom::DragItemFileSystemFilePtr item =
+          blink::mojom::DragItemFileSystemFile::New();
+      item->url = meta_data_item.file_system_url;
+      items.push_back(
+          blink::mojom::DragItem::NewFileSystemFile(std::move(item)));
+      continue;
+    }
+  }
+  return blink::mojom::DragData::New(std::move(items), base::nullopt,
+                                     network::mojom::ReferrerPolicy::kDefault);
 }
 
 DropData DragDataToDropData(const blink::mojom::DragData& drag_data) {
@@ -130,7 +206,7 @@ DropData DragDataToDropData(const blink::mojom::DragData& drag_data) {
         DCHECK(result.file_contents.empty());
 
         const blink::mojom::DragItemBinaryPtr& binary_item = item->get_binary();
-        std::vector<uint8_t> contents = binary_item->data;
+        base::span<const uint8_t> contents = base::make_span(binary_item->data);
         result.file_contents.assign(contents.begin(), contents.end());
         result.file_contents_source_url = binary_item->source_url;
         result.file_contents_filename_extension =

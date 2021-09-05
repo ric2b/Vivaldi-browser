@@ -19,8 +19,9 @@
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/style/ash_color_provider.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -59,7 +60,6 @@ constexpr SkColor kPublicSessionBlueColor =
     SkColorSetARGB(0xDE, 0x7B, 0xAA, 0xF7);
 constexpr SkColor kSelectionMenuTitleColor =
     SkColorSetARGB(0x57, 0xFF, 0xFF, 0xFF);
-constexpr SkColor kArrowButtonColor = SkColorSetARGB(0xFF, 0x42, 0x85, 0xF4);
 
 constexpr int kDropDownIconSizeDp = 16;
 constexpr int kArrowButtonSizeDp = 48;
@@ -129,9 +129,8 @@ class LoginExpandedPublicAccountEventHandler : public ui::EventHandler {
 // Button with text on the left side and an icon on the right side.
 class SelectionButtonView : public LoginButton {
  public:
-  SelectionButtonView(const base::string16& text,
-                      views::ButtonListener* listener)
-      : LoginButton(listener) {
+  SelectionButtonView(PressedCallback callback, const base::string16& text)
+      : LoginButton(std::move(callback)) {
     SetPaintToLayer();
     layer()->SetFillsBoundsOpaquely(false);
     SetFocusBehavior(FocusBehavior::ALWAYS);
@@ -154,7 +153,9 @@ class SelectionButtonView : public LoginButton {
         views::BoxLayout::MainAxisAlignment::kStart);
     AddChildView(label_container);
 
-    label_ = CreateLabel(text, SK_ColorWHITE);
+    label_ = CreateLabel(
+        text, AshColorProvider::Get()->GetContentLayerColor(
+                  AshColorProvider::ContentLayerType::kTextColorPrimary));
     left_margin_view_ = add_horizontal_margin(left_margin_, label_container);
     label_container->AddChildView(label_);
 
@@ -239,7 +240,9 @@ class MonitoringWarningView : public NonAccessibleView {
 
     const base::string16 label_text = l10n_util::GetStringUTF16(
         IDS_ASH_LOGIN_PUBLIC_ACCOUNT_MONITORING_WARNING);
-    label_ = CreateLabel(label_text, SK_ColorWHITE);
+    label_ = CreateLabel(
+        label_text, AshColorProvider::Get()->GetContentLayerColor(
+                        AshColorProvider::ContentLayerType::kTextColorPrimary));
     label_->SetMultiLine(true);
     label_->SetLineHeight(kTextLineHeightDp);
     AddChildView(label_);
@@ -248,7 +251,7 @@ class MonitoringWarningView : public NonAccessibleView {
   enum class WarningType { kNone, kSoftWarning, kFullWarning };
 
   void UpdateForUser(const LoginUserInfo& user) {
-    enterprise_domain_ = user.public_account_info->device_enterprise_domain;
+    device_manager_ = user.public_account_info->device_enterprise_manager;
     UpdateLabel();
   }
 
@@ -263,19 +266,19 @@ class MonitoringWarningView : public NonAccessibleView {
   void UpdateLabel() {
     // Call sequence of UpdateForUser() and SetWarningType() is not clear.
     // In case SetWarningType is called first there is a need to wait for
-    // enterprise_domain_ is set.
-    if (warning_type_ == WarningType::kNone || !enterprise_domain_.has_value())
+    // device_manager_ is set.
+    if (warning_type_ == WarningType::kNone || !device_manager_.has_value())
       return;
     base::string16 label_text;
     if (warning_type_ == WarningType::kFullWarning) {
       label_text = l10n_util::GetStringFUTF16(
           IDS_ASH_LOGIN_MANAGED_SESSION_MONITORING_FULL_WARNING,
-          base::UTF8ToUTF16(enterprise_domain_.value()));
+          base::UTF8ToUTF16(device_manager_.value()));
       image_->SetVisible(true);
     } else {
       label_text = l10n_util::GetStringFUTF16(
           IDS_ASH_LOGIN_MANAGED_SESSION_MONITORING_SOFT_WARNING,
-          base::UTF8ToUTF16(enterprise_domain_.value()));
+          base::UTF8ToUTF16(device_manager_.value()));
       image_->SetVisible(false);
     }
     label_->SetText(label_text);
@@ -284,7 +287,7 @@ class MonitoringWarningView : public NonAccessibleView {
   friend class LoginExpandedPublicAccountView::TestApi;
 
   WarningType warning_type_;
-  base::Optional<std::string> enterprise_domain_;
+  base::Optional<std::string> device_manager_;
   views::ImageView* image_;
   views::Label* label_;
 
@@ -292,7 +295,7 @@ class MonitoringWarningView : public NonAccessibleView {
 };
 
 // Implements the right part of the expanded public session view.
-class RightPaneView : public NonAccessibleView, public views::ButtonListener {
+class RightPaneView : public NonAccessibleView {
  public:
   explicit RightPaneView(const base::RepeatingClosure& on_learn_more_tapped) {
     SetPreferredSize(
@@ -324,7 +327,8 @@ class RightPaneView : public NonAccessibleView, public views::ButtonListener {
     views::StyledLabel::RangeStyleInfo style;
     style.custom_font = learn_more_label_->GetFontList().Derive(
         0, gfx::Font::FontStyle::NORMAL, gfx::Font::Weight::NORMAL);
-    style.override_color = SK_ColorWHITE;
+    style.override_color = AshColorProvider::Get()->GetContentLayerColor(
+        AshColorProvider::ContentLayerType::kTextColorPrimary);
     learn_more_label_->AddStyleRange(gfx::Range(0, offset), style);
 
     views::StyledLabel::RangeStyleInfo link_style =
@@ -336,9 +340,10 @@ class RightPaneView : public NonAccessibleView, public views::ButtonListener {
 
     // Create button to show/hide advanced view.
     advanced_view_button_ = new SelectionButtonView(
+        base::BindRepeating(&RightPaneView::AdvancedViewButtonPressed,
+                            base::Unretained(this)),
         l10n_util::GetStringUTF16(
-            IDS_ASH_LOGIN_PUBLIC_SESSION_LANGUAGE_AND_INPUT),
-        this);
+            IDS_ASH_LOGIN_PUBLIC_SESSION_LANGUAGE_AND_INPUT));
     advanced_view_button_->SetTextColor(kPublicSessionBlueColor);
     advanced_view_button_->SetIcon(kLoginScreenButtonDropdownIcon,
                                    kPublicSessionBlueColor);
@@ -354,8 +359,9 @@ class RightPaneView : public NonAccessibleView, public views::ButtonListener {
 
     // Creates button to open the menu.
     auto create_menu_button =
-        [&](const base::string16& text) -> SelectionButtonView* {
-      auto* button = new SelectionButtonView(text, this);
+        [&](views::Button::PressedCallback callback,
+            const base::string16& text) -> SelectionButtonView* {
+      auto* button = new SelectionButtonView(std::move(callback), text);
       button->SetPreferredSize(
           gfx::Size(kSelectionBoxWidthDp, kSelectionBoxHeightDp));
       button->SetMargins(kLeftMarginForSelectionButton,
@@ -375,12 +381,18 @@ class RightPaneView : public NonAccessibleView, public views::ButtonListener {
     views::Label* language_title = CreateLabel(
         l10n_util::GetStringUTF16(IDS_ASH_LOGIN_LANGUAGE_SELECTION_SELECT),
         kSelectionMenuTitleColor);
-    language_selection_ = create_menu_button(base::string16());
+    language_selection_ = create_menu_button(
+        base::BindRepeating(&RightPaneView::LanguageSelectionButtonPressed,
+                            base::Unretained(this)),
+        base::string16());
 
     views::Label* keyboard_title = CreateLabel(
         l10n_util::GetStringUTF16(IDS_ASH_LOGIN_KEYBOARD_SELECTION_SELECT),
         kSelectionMenuTitleColor);
-    keyboard_selection_ = create_menu_button(base::string16());
+    keyboard_selection_ = create_menu_button(
+        base::BindRepeating(&RightPaneView::KeyboardSelectionButtonPressed,
+                            base::Unretained(this)),
+        base::string16());
 
     advanced_view_->AddChildView(language_title);
     advanced_view_->AddChildView(
@@ -393,8 +405,10 @@ class RightPaneView : public NonAccessibleView, public views::ButtonListener {
         create_padding(kSpacingBetweenSelectionTitleAndButtonDp));
     advanced_view_->AddChildView(keyboard_selection_);
 
-    submit_button_ = new ArrowButtonView(this, kArrowButtonSizeDp);
-    submit_button_->SetBackgroundColor(kArrowButtonColor);
+    submit_button_ = new ArrowButtonView(
+        base::BindRepeating(&RightPaneView::SubmitButtonPressed,
+                            base::Unretained(this)),
+        kArrowButtonSizeDp);
     AddChildView(submit_button_);
   }
 
@@ -433,49 +447,6 @@ class RightPaneView : public NonAccessibleView, public views::ButtonListener {
     submit_button_->SetPosition(
         gfx::Point(bounds.right() - kArrowButtonSizeDp,
                    bounds.bottom() - kArrowButtonSizeDp));
-  }
-
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override {
-    if (sender == advanced_view_button_) {
-      show_advanced_view_ = !show_advanced_view_;
-      show_advanced_changed_by_user_ = true;
-      Layout();
-    } else if (sender == submit_button_) {
-      // TODO(crbug.com/984021) change to LaunchSamlPublicSession which would
-      // take selected_language_item_.value, selected_keyboard_item_.value too.
-      if (current_user_.public_account_info->using_saml) {
-        Shell::Get()->login_screen_controller()->ShowGaiaSignin(
-            current_user_.basic_user_info.account_id);
-      } else {
-        Shell::Get()->login_screen_controller()->LaunchPublicSession(
-            current_user_.basic_user_info.account_id,
-            selected_language_item_.value, selected_keyboard_item_.value);
-      }
-    } else if (sender == language_selection_) {
-      DCHECK(language_menu_view_);
-      if (language_menu_view_->GetVisible()) {
-        language_menu_view_->Hide();
-      } else {
-        bool opener_had_focus = language_selection_->HasFocus();
-
-        language_menu_view_->Show();
-
-        if (opener_had_focus)
-          language_menu_view_->RequestFocus();
-      }
-    } else if (sender == keyboard_selection_) {
-      DCHECK(keyboard_menu_view_);
-      if (keyboard_menu_view_->GetVisible()) {
-        keyboard_menu_view_->Hide();
-      } else {
-        bool opener_had_focus = keyboard_selection_->HasFocus();
-
-        keyboard_menu_view_->Show();
-
-        if (opener_had_focus)
-          keyboard_menu_view_->RequestFocus();
-      }
-    }
   }
 
   void UpdateForUser(const LoginUserInfo& user) {
@@ -611,6 +582,53 @@ class RightPaneView : public NonAccessibleView, public views::ButtonListener {
  private:
   friend class LoginExpandedPublicAccountView::TestApi;
 
+  void AdvancedViewButtonPressed() {
+    show_advanced_view_ = !show_advanced_view_;
+    show_advanced_changed_by_user_ = true;
+    Layout();
+  }
+
+  void SubmitButtonPressed() {
+    // TODO(crbug.com/984021) change to LaunchSamlPublicSession which would
+    // take selected_language_item_.value, selected_keyboard_item_.value too.
+    if (current_user_.public_account_info->using_saml) {
+      Shell::Get()->login_screen_controller()->ShowGaiaSignin(
+          current_user_.basic_user_info.account_id);
+    } else {
+      Shell::Get()->login_screen_controller()->LaunchPublicSession(
+          current_user_.basic_user_info.account_id,
+          selected_language_item_.value, selected_keyboard_item_.value);
+    }
+  }
+
+  void LanguageSelectionButtonPressed() {
+    DCHECK(language_menu_view_);
+    if (language_menu_view_->GetVisible()) {
+      language_menu_view_->Hide();
+    } else {
+      bool opener_had_focus = language_selection_->HasFocus();
+
+      language_menu_view_->Show();
+
+      if (opener_had_focus)
+        language_menu_view_->RequestFocus();
+    }
+  }
+
+  void KeyboardSelectionButtonPressed() {
+    DCHECK(keyboard_menu_view_);
+    if (keyboard_menu_view_->GetVisible()) {
+      keyboard_menu_view_->Hide();
+    } else {
+      bool opener_had_focus = keyboard_selection_->HasFocus();
+
+      keyboard_menu_view_->Show();
+
+      if (opener_had_focus)
+        keyboard_menu_view_->RequestFocus();
+    }
+  }
+
   bool show_advanced_view_ = false;
   LoginUserInfo current_user_;
 
@@ -724,7 +742,7 @@ LoginExpandedPublicAccountView::TestApi::monitoring_warning_label() {
 
 void LoginExpandedPublicAccountView::TestApi::ResetUserForTest() {
   if (view_->right_pane_->monitoring_warning_view_)
-    view_->right_pane_->monitoring_warning_view_->enterprise_domain_.reset();
+    view_->right_pane_->monitoring_warning_view_->device_manager_.reset();
 }
 
 bool LoginExpandedPublicAccountView::TestApi::SelectLanguage(
@@ -758,20 +776,6 @@ std::vector<LocaleItem> LoginExpandedPublicAccountView::TestApi::GetLocales() {
     locales.push_back(locale);
   }
   return locales;
-}
-
-void LoginExpandedPublicAccountView::TestApi::OnAdvancedButtonTap() {
-  view_->right_pane_->ButtonPressed(
-      views::Button::AsButton(advanced_view_button()),
-      ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::PointF(), gfx::PointF(),
-                     base::TimeTicks(), 0, 0));
-}
-
-void LoginExpandedPublicAccountView::TestApi::OnSubmitButtonTap() {
-  view_->right_pane_->ButtonPressed(
-      views::Button::AsButton(submit_button()),
-      ui::MouseEvent(ui::ET_MOUSE_PRESSED, gfx::PointF(), gfx::PointF(),
-                     base::TimeTicks(), 0, 0));
 }
 
 LoginExpandedPublicAccountView::LoginExpandedPublicAccountView(

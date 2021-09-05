@@ -27,6 +27,10 @@ class UkmRecorder;
 
 namespace blink {
 
+namespace scheduler {
+class WebAgentGroupScheduler;
+}  // namespace scheduler
+
 class PageScheduler;
 class WebSchedulingTaskQueue;
 
@@ -119,11 +123,21 @@ class FrameScheduler : public FrameOrWorkerScheduler {
   virtual std::unique_ptr<scheduler::WebResourceLoadingTaskRunnerHandle>
   CreateResourceLoadingTaskRunnerHandle() = 0;
 
+  // Returns a WebResourceLoadingTaskRunnerHandle which is intended to be used
+  // by the loading stack, same as CreateResourceLoadingTaskRunnerHandle(), but
+  // the task type of this runner is unfreezable if kLoadingTasksUnfreezable
+  // feature is on.
+  virtual std::unique_ptr<scheduler::WebResourceLoadingTaskRunnerHandle>
+  CreateResourceLoadingMaybeUnfreezableTaskRunnerHandle() = 0;
+
   virtual std::unique_ptr<WebSchedulingTaskQueue> CreateWebSchedulingTaskQueue(
       WebSchedulingPriority) = 0;
 
   // Returns the parent PageScheduler.
   virtual PageScheduler* GetPageScheduler() const = 0;
+
+  // Returns the parent AgentGroupScheduler.
+  virtual scheduler::WebAgentGroupScheduler* GetAgentGroupScheduler() = 0;
 
   // Returns a WebScopedVirtualTimePauser which can be used to vote for pausing
   // virtual time. Virtual time will be paused if any WebScopedVirtualTimePauser

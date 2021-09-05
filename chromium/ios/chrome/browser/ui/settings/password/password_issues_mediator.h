@@ -9,12 +9,12 @@
 
 #import "ios/chrome/common/ui/reauthentication/reauthentication_module.h"
 
+namespace password_manager {
+struct PasswordForm;
+}  // namespace password_manager
+
 class IOSChromePasswordCheckManager;
 @protocol PasswordIssuesConsumer;
-
-namespace autofill {
-struct PasswordForm;
-}
 
 // This mediator fetches and organises the credentials for its consumer.
 @interface PasswordIssuesMediator : NSObject <SuccessfulReauthTimeAccessor>
@@ -27,7 +27,7 @@ struct PasswordForm;
 @property(nonatomic, weak) id<PasswordIssuesConsumer> consumer;
 
 // Deletes password from the password store.
-- (void)deletePassword:(const autofill::PasswordForm&)password;
+- (void)deletePassword:(const password_manager::PasswordForm&)password;
 
 @end
 

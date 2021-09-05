@@ -18,6 +18,10 @@
 
 namespace blink {
 
+namespace scheduler {
+class WebAgentGroupScheduler;
+}  // namespace scheduler
+
 class PLATFORM_EXPORT PageScheduler {
  public:
   class PLATFORM_EXPORT Delegate {
@@ -57,6 +61,8 @@ class PLATFORM_EXPORT PageScheduler {
   // Invoked when the local main frame's network becomes almost idle.
   // Never invoked if the main frame is remote.
   virtual void OnLocalMainFrameNetworkAlmostIdle() = 0;
+  // Whether the main frame of this page is in BackForwardCache or not.
+  virtual bool IsInBackForwardCache() const = 0;
 
   // Creates a new FrameScheduler. The caller is responsible for deleting
   // it. All tasks executed by the frame scheduler will be attributed to
@@ -156,6 +162,9 @@ class PLATFORM_EXPORT PageScheduler {
   virtual WebScopedVirtualTimePauser CreateWebScopedVirtualTimePauser(
       const String& name,
       WebScopedVirtualTimePauser::VirtualTaskDuration) = 0;
+
+  // Returns WebAgentGroupScheduler
+  virtual scheduler::WebAgentGroupScheduler& GetAgentGroupScheduler() = 0;
 };
 
 }  // namespace blink

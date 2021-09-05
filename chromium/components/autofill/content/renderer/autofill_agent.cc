@@ -40,7 +40,6 @@
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/form_data_predictions.h"
 #include "components/autofill/core/common/form_field_data.h"
-#include "components/autofill/core/common/password_form.h"
 #include "components/autofill/core/common/password_form_fill_data.h"
 #include "components/autofill/core/common/save_password_progress_logger.h"
 #include "content/public/common/content_switches.h"
@@ -217,11 +216,9 @@ void AutofillAgent::FocusedElementChanged(const WebElement& element) {
   HidePopup();
 
   if (element.IsNull()) {
-    if (!last_interacted_form_.IsNull()) {
-      // Focus moved away from the last interacted form to somewhere else on
-      // the page.
-      GetAutofillDriver()->FocusNoLongerOnForm();
-    }
+    // Focus moved away from the last interacted form (if any) to somewhere else
+    // on the page.
+    GetAutofillDriver()->FocusNoLongerOnForm(!last_interacted_form_.IsNull());
     return;
   }
 
@@ -232,7 +229,7 @@ void AutofillAgent::FocusedElementChanged(const WebElement& element) {
       (!input || last_interacted_form_ != input->Form())) {
     // The focused element is not part of the last interacted form (could be
     // in a different form).
-    GetAutofillDriver()->FocusNoLongerOnForm();
+    GetAutofillDriver()->FocusNoLongerOnForm(/*had_interacted_form=*/true);
     focus_moved_to_new_form = true;
   }
 
@@ -930,6 +927,14 @@ bool AutofillAgent::ShouldSuppressKeyboard(
           autofill_assistant_agent_->ShouldSuppressKeyboard());
 }
 
+void AutofillAgent::FormElementReset(const WebFormElement& form) {
+  password_autofill_agent_->InformAboutFormClearing(form);
+}
+
+void AutofillAgent::PasswordFieldReset(const WebInputElement& element) {
+  password_autofill_agent_->InformAboutFieldClearing(element);
+}
+
 void AutofillAgent::SelectWasUpdated(
     const blink::WebFormControlElement& element) {
   // Look for the form and field associated with the select element. If they are
@@ -1104,6 +1109,11 @@ void AutofillAgent::AddFormObserver(Observer* observer) {
 
 void AutofillAgent::RemoveFormObserver(Observer* observer) {
   form_tracker_.RemoveObserver(observer);
+}
+
+void AutofillAgent::TrackAutofilledElement(
+    const blink::WebFormControlElement& element) {
+  form_tracker_.TrackAutofilledElement(element);
 }
 
 base::Optional<FormData> AutofillAgent::GetSubmittedForm() const {

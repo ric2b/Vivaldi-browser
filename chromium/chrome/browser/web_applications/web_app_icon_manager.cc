@@ -14,7 +14,7 @@
 #include "base/logging.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/memory/scoped_refptr.h"
-#include "base/stl_util.h"
+#include "base/ranges/algorithm.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/task_traits.h"
@@ -563,7 +563,8 @@ bool WebAppIconManager::HasIcons(const AppId& app_id,
   if (!web_app)
     return false;
 
-  return base::STLIncludes(web_app->downloaded_icon_sizes(purpose), icon_sizes);
+  return base::ranges::includes(web_app->downloaded_icon_sizes(purpose),
+                                icon_sizes);
 }
 
 base::Optional<AppIconManager::IconSizeAndPurpose>
@@ -769,14 +770,17 @@ void WebAppIconManager::ReadFavicon(const AppId& app_id) {
   if (!HasSmallestIcon(app_id, {IconPurpose::ANY}, gfx::kFaviconSize))
     return;
 
-  ReadSmallestIconAny(app_id, gfx::kFaviconSize,
-                      base::BindOnce(&WebAppIconManager::OnReadFavicon,
-                                     weak_ptr_factory_.GetWeakPtr(), app_id));
+  ReadIconAndResize(app_id, IconPurpose::ANY, gfx::kFaviconSize,
+                    base::BindOnce(&WebAppIconManager::OnReadFavicon,
+                                   weak_ptr_factory_.GetWeakPtr(), app_id));
 }
 
-void WebAppIconManager::OnReadFavicon(const AppId& app_id,
-                                      const SkBitmap& bitmap) {
-  favicon_cache_[app_id] = bitmap;
+void WebAppIconManager::OnReadFavicon(
+    const AppId& app_id,
+    const std::map<SquareSizePx, SkBitmap> icons) {
+  const auto it = icons.find(gfx::kFaviconSize);
+  if (it != icons.end())
+    favicon_cache_[app_id] = it->second;
   if (favicon_read_callback_)
     favicon_read_callback_.Run(app_id);
 }

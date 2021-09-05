@@ -83,7 +83,7 @@ LargeBlobsRequest::~LargeBlobsRequest() = default;
 
 void LargeBlobsRequest::SetPinParam(
     const pin::TokenResponse& pin_uv_auth_token) {
-  pin_uv_auth_protocol_ = pin::kProtocolVersion;
+  DCHECK(set_) << "SetPinParam should only be used for write requests";
   std::vector<uint8_t> pin_auth(pin::kPinUvAuthTokenSafetyPadding.begin(),
                                 pin::kPinUvAuthTokenSafetyPadding.end());
   pin_auth.insert(pin_auth.end(), kLargeBlobPinPrefix.begin(),
@@ -91,10 +91,11 @@ void LargeBlobsRequest::SetPinParam(
   const std::array<uint8_t, 4> offset_array =
       fido_parsing_utils::Uint32LittleEndian(offset_);
   pin_auth.insert(pin_auth.end(), offset_array.begin(), offset_array.end());
-  if (set_) {
-    pin_auth.insert(pin_auth.end(), set_->begin(), set_->end());
-  }
-  pin_uv_auth_param_ = pin_uv_auth_token.PinAuth(pin_auth);
+  std::array<uint8_t, crypto::kSHA256Length> set_hash =
+      crypto::SHA256Hash(*set_);
+  pin_auth.insert(pin_auth.end(), set_hash.begin(), set_hash.end());
+  std::tie(pin_uv_auth_protocol_, pin_uv_auth_param_) =
+      pin_uv_auth_token.PinAuth(pin_auth);
 }
 
 // static
@@ -159,7 +160,7 @@ AsCTAPRequestValuePair(const LargeBlobsRequest& request) {
   }
   if (request.pin_uv_auth_protocol_) {
     map.emplace(static_cast<int>(LargeBlobsRequestKey::kPinUvAuthProtocol),
-                *request.pin_uv_auth_protocol_);
+                static_cast<uint8_t>(*request.pin_uv_auth_protocol_));
   }
   return std::make_pair(CtapRequestCommand::kAuthenticatorLargeBlobs,
                         cbor::Value(std::move(map)));
@@ -200,7 +201,7 @@ LargeBlobData::LargeBlobData(
     : ciphertext_(std::move(ciphertext)), orig_size_(std::move(orig_size)) {
   std::copy(nonce.begin(), nonce.end(), nonce_.begin());
 }
-LargeBlobData::LargeBlobData(LargeBlobKey key, std::vector<uint8_t> blob) {
+LargeBlobData::LargeBlobData(LargeBlobKey key, base::span<const uint8_t> blob) {
   orig_size_ = blob.size();
   crypto::Aead aead(crypto::Aead::AeadAlgorithm::AES_256_GCM);
   aead.Init(key);

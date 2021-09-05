@@ -11,7 +11,7 @@
 #include <string>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
@@ -104,7 +104,6 @@
 #include "content/public/browser/ssl_status.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "content/public/common/frame_navigate_params.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -291,7 +290,8 @@ class RenderViewSizeObserver : public content::WebContentsObserver {
   // WebContentsDelegate::DidNavigateMainFramePostCommit is called.
   void NavigationEntryCommitted(
       const content::LoadCommittedDetails& details) override {
-    content::RenderViewHost* rvh = web_contents()->GetRenderViewHost();
+    content::RenderViewHost* rvh =
+        web_contents()->GetMainFrame()->GetRenderViewHost();
     render_view_sizes_[rvh].rwhv_commit_size =
         web_contents()->GetRenderWidgetHostView()->GetViewBounds().size();
     render_view_sizes_[rvh].wcv_commit_size =
@@ -850,18 +850,17 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, BeforeUnloadVsBeforeReload) {
   alert->view()->AcceptAppModalDialog();
 }
 
-class BrowserTestWithTabGroupsEnabled : public BrowserTest {
+class BrowserTestWithTabGroupsAutoCreateEnabled : public BrowserTest {
  public:
-  BrowserTestWithTabGroupsEnabled() {
-    feature_list_.InitWithFeatures(
-        {features::kTabGroups, features::kTabGroupsAutoCreate}, {});
+  BrowserTestWithTabGroupsAutoCreateEnabled() {
+    feature_list_.InitWithFeatures({features::kTabGroupsAutoCreate}, {});
   }
 
  private:
   base::test::ScopedFeatureList feature_list_;
 };
 
-IN_PROC_BROWSER_TEST_F(BrowserTestWithTabGroupsEnabled,
+IN_PROC_BROWSER_TEST_F(BrowserTestWithTabGroupsAutoCreateEnabled,
                        NewTabFromLinkInGroupedTabOpensInGroup) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -884,7 +883,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTestWithTabGroupsEnabled,
   EXPECT_EQ(group_id, model->GetTabGroupForTab(1));
 }
 
-IN_PROC_BROWSER_TEST_F(BrowserTestWithTabGroupsEnabled,
+IN_PROC_BROWSER_TEST_F(BrowserTestWithTabGroupsAutoCreateEnabled,
                        NewTabFromLinkWithSameDomainCreatesGroup) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -911,7 +910,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTestWithTabGroupsEnabled,
             model->GetTabGroupForTab(1).value());
 }
 
-IN_PROC_BROWSER_TEST_F(BrowserTestWithTabGroupsEnabled,
+IN_PROC_BROWSER_TEST_F(BrowserTestWithTabGroupsAutoCreateEnabled,
                        NewTabFromLinkWithDifferentDomainDoesNotCreateGroup) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -936,8 +935,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTestWithTabGroupsEnabled,
   EXPECT_FALSE(model->GetTabGroupForTab(1).has_value());
 }
 
-IN_PROC_BROWSER_TEST_F(BrowserTestWithTabGroupsEnabled,
-                       TargetBlankLinkOpensInGroup) {
+IN_PROC_BROWSER_TEST_F(BrowserTest, TargetBlankLinkOpensInGroup) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Add a grouped tab.
@@ -1349,7 +1347,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, OverscrollEnabledInRegularWindows) {
 }
 
 IN_PROC_BROWSER_TEST_F(BrowserTest, OverscrollEnabledInPopups) {
-  Browser* popup_browser = new Browser(
+  Browser* popup_browser = Browser::Create(
       Browser::CreateParams(Browser::TYPE_POPUP, browser()->profile(), true));
   ASSERT_TRUE(popup_browser->is_type_popup());
   EXPECT_TRUE(popup_browser->CanOverscrollContent());
@@ -1600,7 +1598,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, StartMaximized) {
                                                browser()->profile(), true)};
   for (size_t i = 0; i < base::size(params); ++i) {
     params[i].initial_show_state = ui::SHOW_STATE_MAXIMIZED;
-    AddBlankTabAndShow(new Browser(params[i]));
+    AddBlankTabAndShow(Browser::Create(params[i]));
   }
 }
 
@@ -1617,7 +1615,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, StartMinimized) {
                                                browser()->profile(), true)};
   for (size_t i = 0; i < base::size(params); ++i) {
     params[i].initial_show_state = ui::SHOW_STATE_MINIMIZED;
-    AddBlankTabAndShow(new Browser(params[i]));
+    AddBlankTabAndShow(Browser::Create(params[i]));
   }
 }
 
@@ -1680,7 +1678,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, DisableMenuItemsWhenIncognitoIsForced) {
   EXPECT_TRUE(command_updater->IsCommandEnabled(IDC_NEW_INCOGNITO_WINDOW));
 
   // Create a new browser.
-  Browser* new_browser = new Browser(Browser::CreateParams(
+  Browser* new_browser = Browser::Create(Browser::CreateParams(
       browser()->profile()->GetPrimaryOTRProfile(), true));
   CommandUpdater* new_command_updater = new_browser->command_controller();
   // It should have Bookmarks & Settings commands disabled by default.
@@ -1695,7 +1693,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, DisableMenuItemsWhenIncognitoIsForced) {
 
 #if defined(OS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(BrowserTest, ArcBrowserWindowFeaturesSetCorrectly) {
-  Browser* new_browser = new Browser(
+  Browser* new_browser = Browser::Create(
       Browser::CreateParams(Browser::TYPE_CUSTOM_TAB, browser()->profile(),
                             /* user_gesture= */ true));
   ASSERT_TRUE(new_browser);
@@ -1735,7 +1733,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest,
 
   // Create a new browser.
   Browser* new_browser =
-      new Browser(Browser::CreateParams(browser()->profile(), true));
+      Browser::Create(Browser::CreateParams(browser()->profile(), true));
   CommandUpdater* new_command_updater = new_browser->command_controller();
   EXPECT_FALSE(new_command_updater->IsCommandEnabled(IDC_NEW_INCOGNITO_WINDOW));
   EXPECT_TRUE(new_command_updater->IsCommandEnabled(IDC_NEW_WINDOW));
@@ -1781,7 +1779,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTestWithExtensionsDisabled,
 
   // Create a popup (non-main-UI-type) browser. Settings command as well
   // as Extensions should be disabled.
-  Browser* popup_browser = new Browser(
+  Browser* popup_browser = Browser::Create(
       Browser::CreateParams(Browser::TYPE_POPUP, browser()->profile(), true));
   CommandUpdater* popup_command_updater = popup_browser->command_controller();
   EXPECT_FALSE(popup_command_updater->IsCommandEnabled(IDC_MANAGE_EXTENSIONS));
@@ -1796,7 +1794,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTestWithExtensionsDisabled,
 IN_PROC_BROWSER_TEST_F(BrowserTest,
                        DisableOptionsAndImportMenuItemsConsistently) {
   // Create a popup browser.
-  Browser* popup_browser = new Browser(
+  Browser* popup_browser = Browser::Create(
       Browser::CreateParams(Browser::TYPE_POPUP, browser()->profile(), true));
   CommandUpdater* command_updater = popup_browser->command_controller();
   // OPTIONS and IMPORT_SETTINGS are disabled for a non-normal UI.
@@ -1920,7 +1918,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest2, NoTabsInPopups) {
   EXPECT_EQ(1, browser()->tab_strip_model()->count());
 
   // Open a popup browser with a single blank foreground tab.
-  Browser* popup_browser = new Browser(
+  Browser* popup_browser = Browser::Create(
       Browser::CreateParams(Browser::TYPE_POPUP, browser()->profile()));
   chrome::AddTabAt(popup_browser, GURL(), -1, true);
   EXPECT_EQ(1, popup_browser->tab_strip_model()->count());
@@ -1937,7 +1935,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest2, NoTabsInPopups) {
   EXPECT_EQ(2, browser()->tab_strip_model()->count());
 
   // Open an app frame browser with a single blank foreground tab.
-  Browser* app_browser = new Browser(Browser::CreateParams::CreateForApp(
+  Browser* app_browser = Browser::Create(Browser::CreateParams::CreateForApp(
       L"Test", browser()->profile(), false));
   chrome::AddTabAt(app_browser, GURL(), -1, true);
   EXPECT_EQ(1, app_browser->tab_strip_model()->count());
@@ -1955,8 +1953,9 @@ IN_PROC_BROWSER_TEST_F(BrowserTest2, NoTabsInPopups) {
   EXPECT_EQ(3, browser()->tab_strip_model()->count());
 
   // Open an app frame popup browser with a single blank foreground tab.
-  Browser* app_popup_browser = new Browser(Browser::CreateParams::CreateForApp(
-      L"Test", browser()->profile(), false));
+  Browser* app_popup_browser = Browser::Create(
+      Browser::CreateParams::CreateForApp(
+          L"Test", browser()->profile(), false));
   chrome::AddTabAt(app_popup_browser, GURL(), -1, true);
   EXPECT_EQ(1, app_popup_browser->tab_strip_model()->count());
 
@@ -2260,9 +2259,6 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, AboutVersion) {
   ASSERT_GT(ui_test_utils::FindInPage(tab, ASCIIToUTF16("JavaScript"), true,
                                       true, NULL, NULL),
             0);
-  ASSERT_GT(ui_test_utils::FindInPage(tab, ASCIIToUTF16("Flash"), true, true,
-                                      NULL, NULL),
-            0);
 }
 
 static const base::FilePath::CharType* kTestDir =
@@ -2486,7 +2482,8 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, GetSizeForNewRenderView) {
   ASSERT_EQ(BookmarkBar::HIDDEN, browser()->bookmark_bar_state());
   WebContents* web_contents =
       browser()->tab_strip_model()->GetActiveWebContents();
-  content::RenderViewHost* prev_rvh = web_contents->GetRenderViewHost();
+  content::RenderViewHost* prev_rvh =
+      web_contents->GetMainFrame()->GetRenderViewHost();
   const gfx::Size initial_wcv_size = web_contents->GetContainerBounds().size();
   RenderViewSizeObserver observer(web_contents, browser()->window());
 
@@ -2495,12 +2492,12 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, GetSizeForNewRenderView) {
                                embedded_test_server()->GetURL("/title1.html"));
   ASSERT_EQ(BookmarkBar::HIDDEN, browser()->bookmark_bar_state());
   // A new RenderViewHost should be created.
-  EXPECT_NE(prev_rvh, web_contents->GetRenderViewHost());
-  prev_rvh = web_contents->GetRenderViewHost();
+  EXPECT_NE(prev_rvh, web_contents->GetMainFrame()->GetRenderViewHost());
+  prev_rvh = web_contents->GetMainFrame()->GetRenderViewHost();
   gfx::Size rwhv_create_size0, rwhv_commit_size0, wcv_commit_size0;
-  observer.GetSizeForRenderViewHost(web_contents->GetRenderViewHost(),
-                                    &rwhv_create_size0, &rwhv_commit_size0,
-                                    &wcv_commit_size0);
+  observer.GetSizeForRenderViewHost(
+      web_contents->GetMainFrame()->GetRenderViewHost(), &rwhv_create_size0,
+      &rwhv_commit_size0, &wcv_commit_size0);
   EXPECT_EQ(gfx::Size(initial_wcv_size.width(), initial_wcv_size.height()),
             rwhv_create_size0);
   // When a navigation entry is committed, the size of RenderWidgetHostView
@@ -2529,11 +2526,11 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, GetSizeForNewRenderView) {
                                https_test_server.GetURL("/title2.html"));
   ASSERT_EQ(BookmarkBar::HIDDEN, browser()->bookmark_bar_state());
   // A new RenderVieHost should be created.
-  EXPECT_NE(prev_rvh, web_contents->GetRenderViewHost());
+  EXPECT_NE(prev_rvh, web_contents->GetMainFrame()->GetRenderViewHost());
   gfx::Size rwhv_create_size1, rwhv_commit_size1, wcv_commit_size1;
-  observer.GetSizeForRenderViewHost(web_contents->GetRenderViewHost(),
-                                    &rwhv_create_size1, &rwhv_commit_size1,
-                                    &wcv_commit_size1);
+  observer.GetSizeForRenderViewHost(
+      web_contents->GetMainFrame()->GetRenderViewHost(), &rwhv_create_size1,
+      &rwhv_commit_size1, &wcv_commit_size1);
   EXPECT_EQ(rwhv_create_size1, rwhv_commit_size1);
   EXPECT_EQ(rwhv_commit_size1,
             web_contents->GetRenderWidgetHostView()->GetViewBounds().size());
@@ -2548,9 +2545,9 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, GetSizeForNewRenderView) {
                                embedded_test_server()->GetURL("/title2.html"));
   ASSERT_EQ(BookmarkBar::HIDDEN, browser()->bookmark_bar_state());
   gfx::Size rwhv_create_size2, rwhv_commit_size2, wcv_commit_size2;
-  observer.GetSizeForRenderViewHost(web_contents->GetRenderViewHost(),
-                                    &rwhv_create_size2, &rwhv_commit_size2,
-                                    &wcv_commit_size2);
+  observer.GetSizeForRenderViewHost(
+      web_contents->GetMainFrame()->GetRenderViewHost(), &rwhv_create_size2,
+      &rwhv_commit_size2, &wcv_commit_size2);
 
   // The behavior on OSX and Views is incorrect in this edge case, but they are
   // differently incorrect.
@@ -2698,7 +2695,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, TestPopupBounds) {
     Browser::CreateParams params(Browser::TYPE_POPUP, browser()->profile(),
                                  true);
     params.initial_bounds = gfx::Rect(0, 0, 100, 122);
-    Browser* browser = new Browser(params);
+    Browser* browser = Browser::Create(params);
     gfx::Rect bounds = browser->window()->GetBounds();
 
     // Should be EXPECT_EQ, but this width is inconsistent across platforms.
@@ -2717,7 +2714,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, TestPopupBounds) {
                                  true);
     params.initial_bounds = gfx::Rect(0, 0, 100, 122);
     params.trusted_source = true;
-    Browser* browser = new Browser(params);
+    Browser* browser = Browser::Create(params);
     gfx::Rect bounds = browser->window()->GetBounds();
 
     // Should be EXPECT_EQ, but this width is inconsistent across platforms.
@@ -2733,7 +2730,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, TestPopupBounds) {
     Browser::CreateParams params = Browser::CreateParams::CreateForApp(
         "app-name", false, gfx::Rect(0, 0, 100, 122), browser()->profile(),
         true);
-    Browser* browser = new Browser(params);
+    Browser* browser = Browser::Create(params);
     gfx::Rect bounds = browser->window()->GetBounds();
 
     // Should be EXPECT_EQ, but this width is inconsistent across platforms.
@@ -2749,7 +2746,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, TestPopupBounds) {
     Browser::CreateParams params = Browser::CreateParams::CreateForApp(
         "app-name", true, gfx::Rect(0, 0, 100, 122), browser()->profile(),
         true);
-    Browser* browser = new Browser(params);
+    Browser* browser = Browser::Create(params);
     gfx::Rect bounds = browser->window()->GetBounds();
 
     // Should be EXPECT_EQ, but this width is inconsistent across platforms.
@@ -2765,7 +2762,7 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, TestPopupBounds) {
     Browser::CreateParams params =
         Browser::CreateParams::CreateForDevTools(browser()->profile());
     params.initial_bounds = gfx::Rect(0, 0, 100, 122);
-    Browser* browser = new Browser(params);
+    Browser* browser = Browser::Create(params);
     gfx::Rect bounds = browser->window()->GetBounds();
 
     // Should be EXPECT_EQ, but this width is inconsistent across platforms.
@@ -2823,45 +2820,6 @@ IN_PROC_BROWSER_TEST_F(BrowserTest, DialogsAllowedInFullscreenWithinTabMode) {
 
   browser_as_dialog_delegate->SetWebContentsBlocked(tab, false);
   tab->DecrementCapturerCount(/* stay_hidden */ false);
-}
-
-IN_PROC_BROWSER_TEST_F(BrowserTest, CountIncognitoWindows) {
-  DCHECK_EQ(0, BrowserList::GetOffTheRecordBrowsersActiveForProfile(
-                   browser()->profile()));
-
-  // Create an incognito browser and check the count.
-  Browser* browser1 = CreateIncognitoBrowser(browser()->profile());
-  DCHECK_EQ(1, BrowserList::GetOffTheRecordBrowsersActiveForProfile(
-                   browser()->profile()));
-
-  // Create another incognito browser and check the count.
-  Browser* browser2 = CreateIncognitoBrowser(browser()->profile());
-  DCHECK_EQ(2, BrowserList::GetOffTheRecordBrowsersActiveForProfile(
-                   browser()->profile()));
-
-  // Open a docked DevTool window and count.
-  DevToolsWindow* devtools_window =
-      DevToolsWindowTesting::OpenDevToolsWindowSync(browser1, true);
-  DCHECK_EQ(2, BrowserList::GetOffTheRecordBrowsersActiveForProfile(
-                   browser()->profile()));
-  DevToolsWindowTesting::CloseDevToolsWindowSync(devtools_window);
-
-  // Open a detached DevTool window and count.
-  devtools_window =
-      DevToolsWindowTesting::OpenDevToolsWindowSync(browser1, false);
-  DCHECK_EQ(2, BrowserList::GetOffTheRecordBrowsersActiveForProfile(
-                   browser()->profile()));
-  DevToolsWindowTesting::CloseDevToolsWindowSync(devtools_window);
-
-  // Close one browser and count.
-  CloseBrowserSynchronously(browser2);
-  DCHECK_EQ(1, BrowserList::GetOffTheRecordBrowsersActiveForProfile(
-                   browser()->profile()));
-
-  // Close another browser and count.
-  CloseBrowserSynchronously(browser1);
-  DCHECK_EQ(0, BrowserList::GetOffTheRecordBrowsersActiveForProfile(
-                   browser()->profile()));
 }
 
 IN_PROC_BROWSER_TEST_F(BrowserTest, IsOffTheRecordBrowserInUse) {

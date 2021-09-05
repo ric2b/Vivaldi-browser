@@ -26,6 +26,7 @@ import org.mockito.MockitoAnnotations;
 import org.robolectric.annotation.Config;
 
 import org.chromium.base.ContextUtils;
+import org.chromium.base.FeatureList;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
@@ -53,6 +54,7 @@ import org.chromium.content.browser.ContentFeatureListImplJni;
 import org.chromium.content_public.browser.ContentFeatureList;
 import org.chromium.content_public.browser.NavigationController;
 import org.chromium.content_public.browser.WebContents;
+import org.chromium.ui.modaldialog.ModalDialogManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -98,6 +100,8 @@ public class TabbedAppMenuPropertiesDelegateUnitTest {
     Profile mProfileMock;
     @Mock
     private ContentFeatureListImpl.Natives mContentFeatureListJniMock;
+    @Mock
+    private ModalDialogManager mModalDialogManager;
 
     private OneshotSupplierImpl<OverviewModeBehavior> mOverviewModeSupplier =
             new OneshotSupplierImpl<>();
@@ -125,11 +129,13 @@ public class TabbedAppMenuPropertiesDelegateUnitTest {
         when(mContentFeatureListJniMock.isEnabled(
                      ContentFeatureList.EXPERIMENTAL_ACCESSIBILITY_LABELS))
                 .thenReturn(false);
+        FeatureList.setTestCanUseDefaultsForTesting();
 
-        mTabbedAppMenuPropertiesDelegate = Mockito.spy(new TabbedAppMenuPropertiesDelegate(
-                ContextUtils.getApplicationContext(), mActivityTabProvider,
-                mMultiWindowModeStateDispatcher, mTabModelSelector, mToolbarManager, mDecorView,
-                mAppMenuDelegate, mOverviewModeSupplier, mBookmarkBridgeSupplier));
+        mTabbedAppMenuPropertiesDelegate = Mockito.spy(
+                new TabbedAppMenuPropertiesDelegate(ContextUtils.getApplicationContext(),
+                        mActivityTabProvider, mMultiWindowModeStateDispatcher, mTabModelSelector,
+                        mToolbarManager, mDecorView, mAppMenuDelegate, mOverviewModeSupplier,
+                        mBookmarkBridgeSupplier, mModalDialogManager));
     }
 
     @Test
@@ -142,7 +148,9 @@ public class TabbedAppMenuPropertiesDelegateUnitTest {
         doReturn(false)
                 .when(mTabbedAppMenuPropertiesDelegate)
                 .shouldShowPaintPreview(anyBoolean(), any(Tab.class), anyBoolean());
-        doReturn(true).when(mTabbedAppMenuPropertiesDelegate).shouldShowTranslateMenuItem(any());
+        doReturn(true)
+                .when(mTabbedAppMenuPropertiesDelegate)
+                .shouldShowTranslateMenuItem(any(Tab.class));
         doReturn(new AppBannerManager.InstallStringPair(
                          R.string.menu_add_to_homescreen, R.string.add))
                 .when(mTabbedAppMenuPropertiesDelegate)

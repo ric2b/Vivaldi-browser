@@ -90,6 +90,7 @@
 #include "net/http/http_request_headers.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_response_info.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/cpp/url_loader_completion_status.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "third_party/blink/public/common/features.h"
@@ -121,7 +122,7 @@ class ResultRecordingClient : public network::mojom::URLLoaderClient {
  public:
   ResultRecordingClient(
       const GURL& url,
-      base::UkmSourceId ukm_source_id,
+      ukm::SourceIdObj ukm_source_id,
       mojo::PendingRemote<network::mojom::URLLoaderClient> real_client)
       : url_(url),
         ukm_source_id_(ukm_source_id),
@@ -168,15 +169,15 @@ class ResultRecordingClient : public network::mojom::URLLoaderClient {
 
  private:
   GURL url_;
-  base::UkmSourceId ukm_source_id_;
+  ukm::SourceIdObj ukm_source_id_;
   mojo::Remote<network::mojom::URLLoaderClient> real_client_;
 };
 
 mojo::PendingRemote<network::mojom::URLLoaderClient> WrapWithMetricsIfNeeded(
     const GURL& url,
-    base::UkmSourceId ukm_source_id,
+    ukm::SourceIdObj ukm_source_id,
     mojo::PendingRemote<network::mojom::URLLoaderClient> in_client) {
-  if (ukm_source_id == base::kInvalidUkmSourceId)
+  if (ukm_source_id == ukm::kInvalidSourceIdObj)
     return in_client;
 
   mojo::PendingRemote<network::mojom::URLLoaderClient> proxy_client_remote;
@@ -465,7 +466,7 @@ class ExtensionURLLoaderFactory
  public:
   static mojo::PendingRemote<network::mojom::URLLoaderFactory> Create(
       content::BrowserContext* browser_context,
-      base::UkmSourceId ukm_source_id,
+      ukm::SourceIdObj ukm_source_id,
       bool is_web_view_request,
       int render_process_id) {
     DCHECK(browser_context);
@@ -498,7 +499,7 @@ class ExtensionURLLoaderFactory
   // the NonNetworkURLLoaderFactoryBase::OnDisconnect method.
   ExtensionURLLoaderFactory(
       content::BrowserContext* browser_context,
-      base::UkmSourceId ukm_source_id,
+      ukm::SourceIdObj ukm_source_id,
       bool is_web_view_request,
       int render_process_id,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory> factory_receiver)
@@ -793,7 +794,7 @@ class ExtensionURLLoaderFactory
 
   content::BrowserContext* browser_context_;
   bool is_web_view_request_;
-  base::UkmSourceId ukm_source_id_;
+  ukm::SourceIdObj ukm_source_id_;
 
   // We store the ID and get RenderProcessHost each time it's needed. This is to
   // avoid holding on to stale pointers if we get requests past the lifetime of
@@ -856,7 +857,7 @@ void SetExtensionProtocolTestHandler(ExtensionProtocolTestHandler* handler) {
 mojo::PendingRemote<network::mojom::URLLoaderFactory>
 CreateExtensionNavigationURLLoaderFactory(
     content::BrowserContext* browser_context,
-    base::UkmSourceId ukm_source_id,
+    ukm::SourceIdObj ukm_source_id,
     bool is_web_view_request) {
   return ExtensionURLLoaderFactory::Create(
       browser_context, ukm_source_id, is_web_view_request,
@@ -867,7 +868,7 @@ mojo::PendingRemote<network::mojom::URLLoaderFactory>
 CreateExtensionWorkerMainResourceURLLoaderFactory(
     content::BrowserContext* browser_context) {
   return ExtensionURLLoaderFactory::Create(
-      browser_context, base::kInvalidUkmSourceId,
+      browser_context, ukm::kInvalidSourceIdObj,
       /*is_web_view_request=*/false,
       content::ChildProcessHost::kInvalidUniqueID);
 }
@@ -876,7 +877,7 @@ mojo::PendingRemote<network::mojom::URLLoaderFactory>
 CreateExtensionServiceWorkerScriptURLLoaderFactory(
     content::BrowserContext* browser_context) {
   return ExtensionURLLoaderFactory::Create(
-      browser_context, base::kInvalidUkmSourceId,
+      browser_context, ukm::kInvalidSourceIdObj,
       /*is_web_view_request=*/false,
       content::ChildProcessHost::kInvalidUniqueID);
 }
@@ -891,9 +892,9 @@ CreateExtensionURLLoaderFactory(int render_process_id, int render_frame_id) {
 
   content::RenderFrameHost* rfh =
       content::RenderFrameHost::FromID(render_process_id, render_frame_id);
-  base::UkmSourceId ukm_source_id = base::kInvalidUkmSourceId;
+  ukm::SourceIdObj ukm_source_id = ukm::kInvalidSourceIdObj;
   if (rfh)
-    ukm_source_id = base::UkmSourceId::FromInt64(rfh->GetPageUkmSourceId());
+    ukm_source_id = ukm::SourceIdObj::FromInt64(rfh->GetPageUkmSourceId());
 
   return ExtensionURLLoaderFactory::Create(
       browser_context, ukm_source_id, is_web_view_request, render_process_id);

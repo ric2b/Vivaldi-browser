@@ -17,7 +17,7 @@
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/installable/installable_data.h"
@@ -26,6 +26,7 @@
 #include "chrome/browser/web_applications/components/web_app_helpers.h"
 #include "chrome/browser/web_applications/components/web_app_icon_generator.h"
 #include "chrome/browser/web_applications/components/web_app_utils.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/browser/web_applications/test/test_data_retriever.h"
 #include "chrome/browser/web_applications/test/test_file_handler_manager.h"
 #include "chrome/browser/web_applications/test/test_file_utils.h"
@@ -44,7 +45,6 @@
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "chrome/browser/web_applications/web_app_sync_bridge.h"
 #include "chrome/common/chrome_features.h"
-#include "chrome/common/web_application_info.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
@@ -98,20 +98,17 @@ class WebAppInstallTaskTest : public WebAppTest {
     install_finalizer_ =
         std::make_unique<WebAppInstallFinalizer>(profile(), icon_manager_.get(),
                                                  /*legacy_finalizer=*/nullptr);
-    os_integration_manager_ = std::make_unique<TestOsIntegrationManager>(
-        profile(), /*app_shortcut_manager=*/nullptr,
-        /*file_handler_manager=*/nullptr);
 
-    install_finalizer_->SetSubsystems(
-        &registrar(), ui_manager_.get(),
-        &test_registry_controller_->sync_bridge());
+    install_finalizer_->SetSubsystems(&registrar(), ui_manager_.get(),
+                                      &test_registry_controller_->sync_bridge(),
+                                      &test_os_integration_manager());
 
     auto data_retriever = std::make_unique<TestDataRetriever>();
     data_retriever_ = data_retriever.get();
 
     install_task_ = std::make_unique<WebAppInstallTask>(
-        profile(), os_integration_manager_.get(), install_finalizer_.get(),
-        std::move(data_retriever));
+        profile(), &test_os_integration_manager(), install_finalizer_.get(),
+        std::move(data_retriever), &registrar());
 
     url_loader_ = std::make_unique<TestWebAppUrlLoader>();
     controller().Init();
@@ -183,8 +180,8 @@ class WebAppInstallTaskTest : public WebAppTest {
     data_retriever_ = static_cast<TestDataRetriever*>(data_retriever.get());
 
     install_task_ = std::make_unique<WebAppInstallTask>(
-        profile(), os_integration_manager_.get(), install_finalizer_.get(),
-        std::move(data_retriever));
+        profile(), &test_os_integration_manager(), install_finalizer_.get(),
+        std::move(data_retriever), &registrar());
   }
 
   void SetInstallFinalizerForTesting() {
@@ -323,7 +320,7 @@ class WebAppInstallTaskTest : public WebAppTest {
 
   WebAppRegistrar& registrar() { return controller().registrar(); }
   TestOsIntegrationManager& test_os_integration_manager() {
-    return *os_integration_manager_;
+    return controller().os_integration_manager();
   }
   TestWebAppUrlLoader& url_loader() { return *url_loader_; }
   TestDataRetriever& data_retriever() {
@@ -335,7 +332,6 @@ class WebAppInstallTaskTest : public WebAppTest {
   std::unique_ptr<WebAppInstallTask> install_task_;
   std::unique_ptr<TestWebAppUiManager> ui_manager_;
   std::unique_ptr<InstallFinalizer> install_finalizer_;
-  std::unique_ptr<TestOsIntegrationManager> os_integration_manager_;
 
   // Owned by icon_manager_:
   TestFileUtils* file_utils_ = nullptr;
@@ -1014,8 +1010,8 @@ TEST_F(WebAppInstallTaskTest, InstallWebAppWithParams_GuestProfile) {
                                              /*scope=*/GURL{});
 
   auto install_task = std::make_unique<WebAppInstallTask>(
-      guest_profile, os_integration_manager_.get(), install_finalizer_.get(),
-      std::move(data_retriever));
+      guest_profile, &test_os_integration_manager(), install_finalizer_.get(),
+      std::move(data_retriever), &registrar());
 
   base::RunLoop run_loop;
   install_task->InstallWebAppWithParams(
@@ -1186,8 +1182,8 @@ TEST_F(WebAppInstallTaskTest, LoadAndRetrieveWebApplicationInfoWithIcons) {
     url_loader().SetNextLoadUrlResult(url, WebAppUrlLoader::Result::kUrlLoaded);
 
     auto task = std::make_unique<WebAppInstallTask>(
-        profile(), os_integration_manager_.get(), install_finalizer_.get(),
-        std::move(data_retriever));
+        profile(), &test_os_integration_manager(), install_finalizer_.get(),
+        std::move(data_retriever), &registrar());
 
     std::unique_ptr<WebApplicationInfo> info;
     task->LoadAndRetrieveWebApplicationInfoWithIcons(

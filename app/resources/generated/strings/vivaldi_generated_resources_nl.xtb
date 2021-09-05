@@ -19,7 +19,6 @@
 <translation id="1221825588892235038">Alleen selectie</translation>
 <translation id="1244303850296295656">Fout met extensie</translation>
 <translation id="125220115284141797">Standaard</translation>
-<translation id="1274977772557788323">Opslaginstellingen voor Adobe Flash Player</translation>
 <translation id="1297175357211070620">Bestemming</translation>
 <translation id="1303101771013849280">Html-bladwijzerbestand</translation>
 <translation id="1380436189840894976">Privémodus toch sluiten?</translation>
@@ -74,7 +73,6 @@
 <translation id="2218515861914035131">Plakken als platte &amp;tekst</translation>
 <translation id="2249605167705922988">bijv. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Identificatoren toestaan voor beveiligde inhoud (PC-herstart mogelijk vereist)</translation>
-<translation id="2263497240924215535">(Uitgeschakeld)</translation>
 <translation id="2277255602909579701">Alle cookies en websitegegevens</translation>
 <translation id="2280486287150724112">Marge rechts</translation>
 <translation id="2282146716419988068">GPU-proces</translation>
@@ -104,6 +102,7 @@
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Opnieuw inschakelen</translation>
 <translation id="2721037002783622288">Afbeelding &amp;zoeken in <ph name="SEARCH_ENGINE" /></translation>
+<translation id="2783321960289401138">Snelkoppeling maken...</translation>
 <translation id="2785873697295365461">Bestandsdescriptors</translation>
 <translation id="2809586584051668049">en <ph name="NUMBER_ADDITIONAL_DISABLED" /> andere</translation>
 <translation id="2812989263793994277">Geen afbeeldingen weergeven</translation>
@@ -125,7 +124,6 @@
 <translation id="3013291976881901233">MIDI-apparaten</translation>
 <translation id="3021678814754966447">&amp;Framebron weergeven</translation>
 <translation id="3036546437875325427">Flash inschakelen</translation>
-<translation id="3038675903128704560">Websites niet toestaan een plug-in te gebruiken om toegang te krijgen tot je computer</translation>
 <translation id="3046910703532196514">Webpagina, compleet</translation>
 <translation id="3067198360141518313">Deze plug-in uitvoeren</translation>
 <translation id="3080207940057008665">Een ander programma op je computer heeft een thema toegevoegd dat de manier waarop Vivaldi werkt kan wijzigen.</translation>
@@ -155,18 +153,17 @@
 <translation id="3378572629723696641">Deze extensie is mogelijk beschadigd.</translation>
 <translation id="3387614642886316601">Verbeterde spellingcontrole gebruiken</translation>
 <translation id="3432227430032737297">Alle weergegeven verwijderen</translation>
-<translation id="3440761377721825626">Goedkeuring vragen wanneer een website een plug-in wil gebruiken om toegang tot je computer te krijgen</translation>
 <translation id="345693547134384690">Afbeelding openen in nieuwe &amp;tab</translation>
 <translation id="3494769164076977169">Goedkeuring vragen als een website na het eerste bestand probeert aanvullende bestanden automatisch te downloaden (aanbevolen)</translation>
 <translation id="3505030558724226696">Apparaattoegang intrekken</translation>
 <translation id="3511307672085573050">Koppelingsadr&amp;es kopiëren</translation>
-<translation id="3523642406908660543">Goedkeuring vragen wanneer een website een plug-in wil gebruiken om toegang tot je computer te krijgen (aanbevolen)</translation>
 <translation id="354068948465830244">Kan websitegegevens lezen en wijzigen</translation>
 <translation id="3560034655160545939">&amp;Spellingcontrole</translation>
 <translation id="3574917942258583917">Privémodus toch afsluiten?</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; wil een printer delen &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; met een van je groepen: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Als je akkoord gaat, kunnen alle groepsleden de printer gebruiken voor afdrukken.</translation>
 <translation id="3587482841069643663">Alles</translation>
 <translation id="3627588569887975815">Koppeling openen in privévenster</translation>
+<translation id="3627879631695760395"><ph name="APP" /> installeren...</translation>
 <translation id="3668823961463113931">Handlers</translation>
 <translation id="3678156199662914018">Extensie: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Verzoek voor scherm delen van <ph name="APP_NAME" /></translation>
@@ -219,7 +216,6 @@
 <translation id="4423376891418188461">Instellingen herstellen</translation>
 <translation id="4434045419905280838">Pop-ups en omleidingen</translation>
 <translation id="4478664379124702289">&amp;Koppeling opslaan als...</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535">Kan <ph name="HOST_NAME" /> niet casten.</translation>
 <translation id="4593021220803146968">&amp;Ga naar <ph name="URL" /></translation>
 <translation id="4595560905247879544">Apps en extensies kunnen alleen worden aangepast door de beheerder (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -300,7 +296,6 @@
 <translation id="583281660410589416">Onbekend</translation>
 <translation id="5860491529813859533">Inschakelen</translation>
 <translation id="5867841422488265304">Voer een adres of zoekopdracht in</translation>
-<translation id="5908769186679515905">Niet toestaan dat websites Flash uitvoeren</translation>
 <translation id="5910363049092958439">Af&amp;beelding opslaan als...</translation>
 <translation id="5956585768868398362">Is dit de zoekpagina die je verwachtte?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> piek)</translation>
@@ -373,7 +368,6 @@
 <translation id="7287143125007575591">Toegang geweigerd.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Besturingselementen &amp;weergeven</translation>
-<translation id="7311079019872751559">Plug-in-toegang zonder sandbox</translation>
 <translation id="7385854874724088939">Er is iets misgegaan bij het afdrukken. Controleer de printer en probeer het opnieuw.</translation>
 <translation id="7412226954991670867">GPU-geheugen</translation>
 <translation id="7421925624202799674">Paginabron &amp;weergeven</translation>
@@ -476,6 +470,7 @@ Bewaar je sleutelbestand op een veilige plaats. Je hebt het bestand nodig om nie
 <translation id="9027459031423301635">Koppeling openen in nieuwe &amp;tab</translation>
 <translation id="9056810968620647706">Geen overeenkomsten gevonden.</translation>
 <translation id="9137916601698928395">Koppeling openen als <ph name="USER" /></translation>
+<translation id="91568222606626347">Snelkoppeling maken...</translation>
 <translation id="916607977885256133">Beeld-in-beeld</translation>
 <translation id="9170848237812810038">Ongedaan &amp;maken</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" toegevoegd</translation>

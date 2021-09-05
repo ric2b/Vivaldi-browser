@@ -35,10 +35,12 @@
 #include "services/network/public/mojom/web_sandbox_flags.mojom-shared.h"
 #include "third_party/blink/public/common/dom_storage/session_storage_namespace_id.h"
 #include "third_party/blink/public/common/feature_policy/feature_policy_features.h"
+#include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/blink/public/mojom/page/page_visibility_state.mojom-forward.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/public/web/web_ax_enums.h"
 #include "third_party/blink/public/web/web_frame.h"
+#include "third_party/blink/public/web/web_navigation_policy.h"
 #include "third_party/blink/public/web/web_widget_client.h"
 
 namespace blink {
@@ -47,7 +49,6 @@ class WebPagePopup;
 class WebURLRequest;
 class WebView;
 struct WebRect;
-struct WebSize;
 struct WebWindowFeatures;
 
 class WebViewClient {
@@ -70,7 +71,8 @@ class WebViewClient {
       WebNavigationPolicy policy,
       network::mojom::WebSandboxFlags,
       const FeaturePolicyFeatureState&,
-      const SessionStorageNamespaceId& session_storage_namespace_id) {
+      const SessionStorageNamespaceId& session_storage_namespace_id,
+      bool& consumed_user_gesture) {
     return nullptr;
   }
 
@@ -100,16 +102,13 @@ class WebViewClient {
 
   virtual void OnPageFrozenChanged(bool frozen) {}
 
+  virtual void DidUpdateRendererPreferences() {}
+
   // UI ------------------------------------------------------------------
 
   // Called to determine if drag-n-drop operations may initiate a page
   // navigation.
   virtual bool AcceptsLoadDrops() { return true; }
-
-  // Take focus away from the WebView by focusing an adjacent UI element
-  // in the containing window.
-  virtual void FocusNext() {}
-  virtual void FocusPrevious() {}
 
   // Called to check if layout update should be processed.
   virtual bool CanUpdateLayout() { return false; }
@@ -123,7 +122,7 @@ class WebViewClient {
 
   // Return true to swallow the input event if the embedder will start a
   // disambiguation popup
-  virtual bool DidTapMultipleTargets(const WebSize& visual_viewport_offset,
+  virtual bool DidTapMultipleTargets(const gfx::Size& visual_viewport_offset,
                                      const WebRect& touch_rect,
                                      const WebVector<WebRect>& target_rects) {
     return false;
@@ -133,13 +132,19 @@ class WebViewClient {
   virtual WebString AcceptLanguages() { return WebString(); }
 
   // Called when the View has changed size as a result of an auto-resize.
-  virtual void DidAutoResize(const WebSize& new_size) {}
+  virtual void DidAutoResize(const gfx::Size& new_size) {}
 
   // Called when the View acquires focus.
   virtual void DidFocus() {}
 
   // Called when the View's zoom has changed.
   virtual void ZoomLevelChanged() {}
+
+  // Notification that the output of a BeginMainFrame was committed to the
+  // compositor (thread), though would not be submitted to the display
+  // compositor yet. This will only be called for local main frames.
+  virtual void DidCommitCompositorFrameForLocalMainFrame(
+      base::TimeTicks commit_start_time) {}
 
   // Session history -----------------------------------------------------
 
@@ -160,10 +165,6 @@ class WebViewClient {
   // Gestures -------------------------------------------------------------
 
   virtual bool CanHandleGestureEvent() { return false; }
-
-  // Policies -------------------------------------------------------------
-
-  virtual bool AllowPopupsDuringPageUnload() { return false; }
 
   // History -------------------------------------------------------------
   virtual void OnSetHistoryOffsetAndLength(int history_offset,

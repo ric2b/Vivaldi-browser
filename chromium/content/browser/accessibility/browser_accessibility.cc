@@ -70,8 +70,11 @@ const BrowserAccessibility* GetTextContainerForPlainTextField(
   if (child->InternalChildCount() == 1) {
     const BrowserAccessibility* grand_child = child->InternalGetFirstChild();
     if (grand_child->GetRole() == ax::mojom::Role::kGenericContainer) {
-      DCHECK_EQ(grand_child->InternalGetFirstChild()->GetRole(),
-                ax::mojom::Role::kStaticText);
+      // There is not always a static text child of the grandchild, but if there
+      // is, it must be static text.
+      DCHECK(!grand_child->InternalGetFirstChild() ||
+             grand_child->InternalGetFirstChild()->GetRole() ==
+                 ax::mojom::Role::kStaticText);
       return grand_child;
     }
     DCHECK_EQ(child->InternalGetFirstChild()->GetRole(),
@@ -192,8 +195,7 @@ bool BrowserAccessibility::IsDescendantOf(
 }
 
 bool BrowserAccessibility::IsDocument() const {
-  return GetRole() == ax::mojom::Role::kRootWebArea ||
-         GetRole() == ax::mojom::Role::kWebArea;
+  return ui::IsDocument(GetRole());
 }
 
 bool BrowserAccessibility::IsIgnored() const {
@@ -704,12 +706,6 @@ gfx::Rect BrowserAccessibility::GetInnerTextRangeBoundsRectInSubtree(
         coordinate_system, clipping_behavior, offscreen_result);
   }
 
-  if (IsPlainTextField() && InternalChildCount() == 1) {
-    return GetTextContainerForPlainTextField(*this)->RelativeToAbsoluteBounds(
-        GetInlineTextRect(start_offset, end_offset, GetInnerText().length()),
-        coordinate_system, clipping_behavior, offscreen_result);
-  }
-
   gfx::Rect bounds;
   int child_offset_in_parent = 0;
   for (InternalChildIterator it = InternalChildrenBegin();
@@ -803,17 +799,6 @@ gfx::RectF BrowserAccessibility::GetInlineTextRect(const int start_offset,
   }
 
   return bounds;
-}
-
-base::string16 BrowserAccessibility::GetValue() const {
-  base::string16 value =
-      GetString16Attribute(ax::mojom::StringAttribute::kValue);
-  // Some screen readers like Jaws and VoiceOver require a value to be set in
-  // text fields with rich content, even though the same information is
-  // available on the children.
-  if (value.empty() && IsRichTextField())
-    return BrowserAccessibility::GetInnerText();
-  return value;
 }
 
 BrowserAccessibility* BrowserAccessibility::ApproximateHitTest(
@@ -1103,6 +1088,10 @@ base::string16 BrowserAccessibility::GetHypertext() const {
 
 base::string16 BrowserAccessibility::GetInnerText() const {
   return base::UTF8ToUTF16(node()->GetInnerText());
+}
+
+base::string16 BrowserAccessibility::GetValueForControl() const {
+  return base::UTF8ToUTF16(node()->GetValueForControl());
 }
 
 gfx::Rect BrowserAccessibility::RelativeToAbsoluteBounds(
@@ -1526,9 +1515,8 @@ bool BrowserAccessibility::IsToplevelBrowserWindow() {
   return false;
 }
 
-bool BrowserAccessibility::IsChildOfPlainTextField() const {
-  ui::AXNode* textfield_node = node()->GetTextFieldAncestor();
-  return textfield_node && textfield_node->data().IsPlainTextField();
+bool BrowserAccessibility::IsDescendantOfPlainTextField() const {
+  return node()->IsDescendantOfPlainTextField();
 }
 
 gfx::NativeViewAccessible BrowserAccessibility::GetClosestPlatformObject()
@@ -2094,8 +2082,14 @@ BrowserAccessibility::GetCollapsedMenuListPopUpButtonAncestor() const {
   ui::AXNode* popup_button = node()->GetCollapsedMenuListPopUpButtonAncestor();
   if (!popup_button)
     return nullptr;
-
   return manager()->GetFromAXNode(popup_button);
+}
+
+BrowserAccessibility* BrowserAccessibility::GetTextFieldAncestor() const {
+  ui::AXNode* text_field_ancestor = node()->GetTextFieldAncestor();
+  if (!text_field_ancestor)
+    return nullptr;
+  return manager()->GetFromAXNode(text_field_ancestor);
 }
 
 std::string BrowserAccessibility::ToString() const {

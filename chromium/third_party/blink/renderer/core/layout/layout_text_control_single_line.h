@@ -47,7 +47,8 @@ class LayoutTextControlSingleLine : public LayoutTextControl {
  private:
   bool IsOfType(LayoutObjectType type) const override {
     NOT_DESTROYED();
-    return type == kLayoutObjectTextField || LayoutTextControl::IsOfType(type);
+    return type == kLayoutObjectTextControlSingleLine ||
+           LayoutTextControl::IsOfType(type);
   }
 
   void Paint(const PaintInfo&) const override;
@@ -58,15 +59,7 @@ class LayoutTextControlSingleLine : public LayoutTextControl {
                    const PhysicalOffset& accumulated_offset,
                    HitTestAction) final;
 
-  // Subclassed to forward to our inner div.
-  LayoutUnit ScrollWidth() const final;
-  LayoutUnit ScrollHeight() const final;
-
   int TextBlockWidth() const;
-  LayoutUnit PreferredContentLogicalWidth(float char_width) const final;
-  LayoutUnit ComputeControlLogicalHeight(
-      LayoutUnit line_height,
-      LayoutUnit non_content_height) const override;
 
   void ComputeVisualOverflow(bool recompute_floats) override;
 

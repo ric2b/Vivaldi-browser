@@ -7,17 +7,17 @@
 
 #import "ios/chrome/browser/ui/settings/password/password_issue.h"
 
-namespace autofill {
+namespace password_manager {
 struct PasswordForm;
-}
+}  // namespace password_manager
 
 // Class based on PasswordIssue which adds PasswordForm as a property.
 @interface PasswordIssueWithForm : NSObject <PasswordIssue>
 
 // Password form is used to display Password Details screen.
-@property(nonatomic, readonly) autofill::PasswordForm form;
+@property(nonatomic, readonly) password_manager::PasswordForm form;
 
-- (instancetype)initWithPasswordForm:(autofill::PasswordForm)form
+- (instancetype)initWithPasswordForm:(password_manager::PasswordForm)form
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;

@@ -193,7 +193,7 @@ LabelPattern LabelPattern::GetPattern(const SourceDir& current_dir,
         value, "Invalid label pattern.",
         "You seem to be using the wildcard more generally that is supported.\n"
         "Did you mean \"foo:*\" to match everything in the file, or\n"
-        "\"./*\" to recursively match everything in the currend subtree.");
+        "\"./*\" to recursively match everything in the current subtree.");
     return LabelPattern();
   }
 

@@ -13,6 +13,7 @@ import {ViewName} from './type.js';
 import * as util from './util.js';
 // eslint-disable-next-line no-unused-vars
 import {View} from './views/view.js';
+import {windowController} from './window_controller/window_controller.js';
 
 /**
  * All views stacked in ascending z-order (DOM order) for navigation, and only
@@ -178,7 +179,12 @@ export function onKeyPressed(event) {
   const key = util.getShortcutIdentifier(event);
   switch (key) {
     case 'BrowserBack':
-      chrome.app.window.current().minimize();
+      windowController.minimize();
+      break;
+    case 'Ctrl-=':
+    case 'Ctrl--':
+      // Blocks the in-app zoom in/out to avoid unexpected layout.
+      event.preventDefault();
       break;
     case 'Ctrl-V':
       toast.showDebugMessage(browserProxy.getAppVersion());

@@ -170,7 +170,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Autofill.BetterAuth.CardUnmaskDuration.Fido" units="ms"
-    expires_after="2021-02-14">
+    expires_after="2021-05-31">
   <owner>jsaul@google.com</owner>
   <owner>manasverma@google.com</owner>
   <owner>autofill-auth-team@google.com</owner>
@@ -181,7 +181,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Autofill.BetterAuth.CardUnmaskPreflightCalled"
-    enum="BooleanHit" expires_after="2021-02-21">
+    enum="BooleanHit" expires_after="2021-05-31">
   <owner>jsaul@google.com</owner>
   <owner>manasverma@google.com</owner>
   <owner>autofill-auth-team@google.com</owner>
@@ -198,7 +198,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Autofill.BetterAuth.CardUnmaskPreflightDuration" units="ms"
-    expires_after="2021-02-21">
+    expires_after="2021-05-31">
   <owner>jsaul@google.com</owner>
   <owner>manasverma@google.com</owner>
   <owner>autofill-auth-team@google.com</owner>
@@ -211,7 +211,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Autofill.BetterAuth.CardUnmaskTypeDecision"
-    enum="AutofillCreditCardUnmaskDecisionMetric" expires_after="2021-02-21">
+    enum="AutofillCreditCardUnmaskDecisionMetric" expires_after="2021-05-31">
   <owner>jsaul@google.com</owner>
   <owner>manasverma@google.com</owner>
   <owner>autofill-auth-team@google.com</owner>
@@ -224,7 +224,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Autofill.BetterAuth.FlowEvents"
-    enum="AutofillCreditCardAuthenticationEvents" expires_after="2021-02-14">
+    enum="AutofillCreditCardAuthenticationEvents" expires_after="2021-05-31">
   <owner>jsaul@google.com</owner>
   <owner>manasverma@google.com</owner>
   <owner>autofill-auth-team@google.com</owner>
@@ -238,7 +238,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Autofill.BetterAuth.OptInCalled"
-    enum="AutofillCreditCardWebauthnOptInParameters" expires_after="2021-02-14">
+    enum="AutofillCreditCardWebauthnOptInParameters" expires_after="2021-05-31">
   <owner>jsaul@google.com</owner>
   <owner>manasverma@google.com</owner>
   <owner>autofill-auth-team@google.com</owner>
@@ -253,7 +253,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Autofill.BetterAuth.OptInPromoShown"
-    enum="BooleanHit" expires_after="2021-02-21">
+    enum="BooleanHit" expires_after="2021-05-31">
   <owner>jsaul@google.com</owner>
   <owner>manasverma@google.com</owner>
   <owner>autofill-auth-team@google.com</owner>
@@ -274,7 +274,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Autofill.BetterAuth.OptInPromoUserDecision"
-    enum="AutofillWebauthnOptInPromoUserDecision" expires_after="2021-02-21">
+    enum="AutofillWebauthnOptInPromoUserDecision" expires_after="2021-05-31">
   <owner>jsaul@google.com</owner>
   <owner>manasverma@google.com</owner>
   <owner>autofill-auth-team@google.com</owner>
@@ -290,7 +290,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Autofill.BetterAuth.OptOutCalled.FromSettingsPage"
-    enum="BooleanHit" expires_after="2021-02-28">
+    enum="BooleanHit" expires_after="2021-05-31">
   <owner>jsaul@google.com</owner>
   <owner>manasverma@google.com</owner>
   <owner>autofill-auth-team@google.com</owner>
@@ -307,7 +307,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram base="true"
     name="Autofill.BetterAuth.UserPerceivedLatencyOnCardSelection"
-    enum="AutofillCreditCardPreflightCallEvent" expires_after="2021-02-21">
+    enum="AutofillCreditCardPreflightCallEvent" expires_after="2021-05-31">
   <owner>jsaul@google.com</owner>
   <owner>manasverma@google.com</owner>
   <owner>autofill-auth-team@google.com</owner>
@@ -324,7 +324,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="Autofill.BetterAuth.UserPerceivedLatencyOnCardSelection.OptedIn.Duration"
-    units="ms" expires_after="2021-02-21">
+    units="ms" expires_after="2021-05-31">
   <owner>jsaul@google.com</owner>
   <owner>manasverma@google.com</owner>
   <owner>autofill-auth-team@google.com</owner>
@@ -340,7 +340,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram
     name="Autofill.BetterAuth.UserPerceivedLatencyOnCardSelection.OptedIn.TimedOutCvcFallback"
     enum="AutofillCreditCardUserPerceivedLatencyFollowUp"
-    expires_after="2020-12-15">
+    expires_after="2021-05-31">
   <owner>jsaul@google.com</owner>
   <owner>manasverma@google.com</owner>
   <owner>autofill-auth-team@google.com</owner>
@@ -354,7 +354,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Autofill.BetterAuth.UserVerifiabilityCheckDuration" units="ms"
-    expires_after="2020-12-15">
+    expires_after="2021-05-31">
   <owner>jsaul@google.com</owner>
   <owner>manasverma@google.com</owner>
   <owner>autofill-auth-team@google.com</owner>
@@ -366,7 +366,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Autofill.BetterAuth.WebauthnResult"
-    enum="AutofillCreditCardWebauthnResultMetric" expires_after="2021-02-14">
+    enum="AutofillCreditCardWebauthnResultMetric" expires_after="2021-05-31">
   <owner>jsaul@google.com</owner>
   <owner>manasverma@google.com</owner>
   <owner>autofill-auth-team@google.com</owner>
@@ -417,7 +417,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Autofill.CardUploadEnabled" enum="AutofillCardUploadEnabled"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>aneeshali@google.com</owner>
   <owner>jsaul@google.com</owner>
   <summary>
@@ -592,7 +592,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Autofill.ExpirationDateFixFlowPromptShown" enum="Boolean"
-    expires_after="2021-02-01">
+    expires_after="2021-04-04">
   <owner>siashah@google.com</owner>
   <owner>jsaul@google.com</owner>
   <owner>payments-autofill-team@google.com</owner>
@@ -763,6 +763,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Autofill.FormEvents.CreditCard.WithServerNickname"
     enum="AutofillFormEvent" expires_after="2021-04-01">
+  <obsolete>
+    Removed 10/2020 as it is launched and no longer needed for analysis.
+  </obsolete>
   <owner>sujiezhu@google.com</owner>
   <owner>jsaul@google.com</owner>
   <summary>
@@ -783,6 +786,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histogram
     name="Autofill.FormEvents.CreditCard.WithServerNickname.SelectionDuration"
     units="units" expires_after="2021-04-01">
+  <obsolete>
+    Removed 10/2020 as it is launched and no longer needed for analysis.
+  </obsolete>
   <owner>sujiezhu@google.com</owner>
   <owner>jsaul@google.com</owner>
   <summary>
@@ -793,6 +799,15 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
     nicknames to compare the selection duration. For enabled user, we will show
     nickname and log. For the other, we won't show nickname in suggestion but we
     still log to this histogram.
+  </summary>
+</histogram>
+
+<histogram name="Autofill.FormFillSuccessIOS"
+    enum="BooleanAutofillFormFillSuccessIOS" expires_after="2021-04-30">
+  <owner>kazinova@chromium.org</owner>
+  <owner>chrome-autofill@google.com</owner>
+  <summary>
+    Records whether the the form was successfully filled by Autofill on iOS.
   </summary>
 </histogram>
 
@@ -1456,7 +1471,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Autofill.ServerCardLinkClicked" enum="AutofillSyncState"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>jsaul@google.com</owner>
   <owner>battre@chromium.org</owner>
   <owner>chrome-autofill@google.com</owner>
@@ -1561,7 +1576,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Autofill.StrikeDatabase.NthStrikeAdded" units="strikes"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
 <!-- Name completed by histogram_suffixes name="AutofillStrikeDatabaseProjectType" -->
 
   <owner>jsaul@google.com</owner>
@@ -1573,7 +1588,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Autofill.StrikeDatabase.StrikeDatabaseInitFailed"
-    units="attempts" expires_after="2021-01-31">
+    units="attempts" expires_after="2021-04-04">
   <owner>jsaul@google.com</owner>
   <owner>annelim@google.com</owner>
   <summary>

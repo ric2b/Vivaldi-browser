@@ -10,6 +10,7 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/events/ozone/layout/keyboard_layout_engine_manager.h"
 #include "ui/events/ozone/layout/scoped_keyboard_layout_engine.h"
+#include "ui/ozone/common/features.h"
 #include "ui/ozone/platform/wayland/host/wayland_output_manager.h"
 #include "ui/ozone/platform/wayland/host/wayland_screen.h"
 #include "ui/ozone/platform/wayland/test/mock_surface.h"
@@ -28,7 +29,8 @@ using ::testing::SaveArg;
 namespace ui {
 
 WaylandTest::WaylandTest()
-    : task_environment_(base::test::TaskEnvironment::MainThreadType::UI) {
+    : task_environment_(base::test::TaskEnvironment::MainThreadType::UI,
+                        base::test::TaskEnvironment::TimeSource::MOCK_TIME) {
 #if BUILDFLAG(USE_XKBCOMMON)
   auto keyboard_layout_engine =
       std::make_unique<XkbKeyboardLayoutEngine>(xkb_evdev_code_converter_);
@@ -52,7 +54,8 @@ void WaylandTest::SetUp() {
   // that automatically through changes done to "variants", which is also
   // convenient to have locally so that we don't need to worry about that (it's
   // the Wayland DragAndDrop that relies on the feature).
-  feature_list_.InitAndEnableFeature(features::kUseOzonePlatform);
+  feature_list_.InitWithFeatures(
+      {features::kUseOzonePlatform, ui::kWaylandOverlayDelegation}, {});
   ASSERT_TRUE(features::IsUsingOzonePlatform());
 
   ASSERT_TRUE(server_.Start(GetParam()));

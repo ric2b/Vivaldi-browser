@@ -15,6 +15,8 @@
 #include "components/performance_manager/graph/node_base.h"
 #include "components/performance_manager/public/graph/frame_node.h"
 #include "components/performance_manager/public/graph/node_attached_data.h"
+#include "components/performance_manager/public/mojom/coordination_unit.mojom.h"
+#include "components/performance_manager/public/mojom/web_memory.mojom.h"
 #include "components/performance_manager/public/render_frame_host_proxy.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -59,6 +61,8 @@ class FrameNodeImpl
       public TypedNodeBase<FrameNodeImpl, FrameNode, FrameNodeObserver>,
       public mojom::DocumentCoordinationUnit {
  public:
+  using PassKey = util::PassKey<FrameNodeImpl>;
+
   static const char kDefaultPriorityReason[];
   static constexpr NodeTypeEnum Type() { return NodeTypeEnum::kFrame; }
 
@@ -82,6 +86,7 @@ class FrameNodeImpl
   void SetNetworkAlmostIdle() override;
   void SetLifecycleState(LifecycleState state) override;
   void SetHasNonEmptyBeforeUnload(bool has_nonempty_beforeunload) override;
+  void SetViewportIntersection(const gfx::Rect& viewport_intersection) override;
   void SetOriginTrialFreezePolicy(mojom::InterventionPolicy policy) override;
   void SetIsAdFrame() override;
   void SetHadFormInteraction() override;
@@ -89,6 +94,9 @@ class FrameNodeImpl
   void OnFirstContentfulPaint(
       base::TimeDelta time_since_navigation_start) override;
   const RenderFrameHostProxy& GetRenderFrameHostProxy() const override;
+  void OnWebMemoryMeasurementRequested(
+      mojom::WebMemoryMeasurement::Mode mode,
+      OnWebMemoryMeasurementRequestedCallback callback) override;
 
   // Partial FrameNodbase::TimeDelta time_since_navigatione implementation:
   bool IsMainFrame() const override;
@@ -120,12 +128,15 @@ class FrameNodeImpl
   const PriorityAndReason& priority_and_reason() const;
   bool had_form_interaction() const;
   bool is_audible() const;
+  const base::Optional<gfx::Rect>& viewport_intersection() const;
+  Visibility visibility() const;
 
   // Setters are not thread safe.
   void SetIsCurrent(bool is_current);
   void SetIsHoldingWebLock(bool is_holding_weblock);
   void SetIsHoldingIndexedDBLock(bool is_holding_indexeddb_lock);
   void SetIsAudible(bool is_audible);
+  void SetVisibility(Visibility visibility);
 
   // Invoked when a navigation is committed in the frame.
   void OnNavigationCommitted(const GURL& url, bool same_document);
@@ -159,9 +170,11 @@ class FrameNodeImpl
     return &execution_context_;
   }
 
+  static PassKey CreatePassKeyForTesting() { return PassKey(); }
+
  private:
+  friend class ExecutionContextPriorityAccess;
   friend class FrameNodeImplDescriber;
-  friend class FramePriorityAccess;
   friend class ProcessNodeImpl;
 
   // Rest of FrameNode implementation. These are private so that users of the
@@ -190,6 +203,8 @@ class FrameNodeImpl
   const PriorityAndReason& GetPriorityAndReason() const override;
   bool HadFormInteraction() const override;
   bool IsAudible() const override;
+  const base::Optional<gfx::Rect>& GetViewportIntersection() const override;
+  Visibility GetVisibility() const override;
 
   // Properties associated with a Document, which are reset when a
   // different-document navigation is committed in the frame.
@@ -250,6 +265,10 @@ class FrameNodeImpl
   bool HasFrameNodeInAncestors(FrameNodeImpl* frame_node) const;
   bool HasFrameNodeInDescendants(FrameNodeImpl* frame_node) const;
   bool HasFrameNodeInTree(FrameNodeImpl* frame_node) const;
+
+  // Returns the initial visibility of this frame. Should only be called when
+  // the frame node joins the graph.
+  Visibility GetInitialFrameVisibility() const;
 
   mojo::Receiver<mojom::DocumentCoordinationUnit> receiver_{this};
 
@@ -321,7 +340,7 @@ class FrameNodeImpl
   // The child workers of this frame.
   base::flat_set<WorkerNodeImpl*> child_worker_nodes_;
 
-  // Frame priority information. Set via FramePriorityDecorator.
+  // Frame priority information. Set via ExecutionContextPriorityDecorator.
   ObservedProperty::NotifiesOnlyOnChangesWithPreviousValue<
       PriorityAndReason,
       const PriorityAndReason&,
@@ -336,13 +355,32 @@ class FrameNodeImpl
       NotifiesOnlyOnChanges<bool, &FrameNodeObserver::OnIsAudibleChanged>
           is_audible_{false};
 
-  // Inline storage for FramePriorityDecorator data.
-  frame_priority::AcceptedVote accepted_vote_;
+  // Tracks the intersection of this frame with the viewport.
+  //
+  // Note that the viewport intersection for the main frame is always invalid.
+  // This is because the main frame always occupies the entirety of the viewport
+  // so there is no point in tracking it. To avoid programming mistakes, it is
+  // forbidden to query this property for the main frame.
+  ObservedProperty::NotifiesOnlyOnChanges<
+      base::Optional<gfx::Rect>,
+      &FrameNodeObserver::OnViewportIntersectionChanged>
+      viewport_intersection_;
+
+  // Indicates if the frame is visible. This is initialized in
+  // FrameNodeImpl::OnJoiningGraph() and then maintained by
+  // FrameVisibilityDecorator.
+  ObservedProperty::NotifiesOnlyOnChanges<
+      Visibility,
+      &FrameNodeObserver::OnFrameVisibilityChanged>
+      visibility_{Visibility::kUnknown};
 
   // Inline storage for ExecutionContext.
   std::unique_ptr<NodeAttachedData> execution_context_;
 
-  base::WeakPtrFactory<FrameNodeImpl> weak_factory_;
+  // Inline storage for ExecutionContextPriorityDecorator data.
+  execution_context_priority::AcceptedVote accepted_vote_;
+
+  base::WeakPtrFactory<FrameNodeImpl> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(FrameNodeImpl);
 };

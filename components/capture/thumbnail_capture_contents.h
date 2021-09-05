@@ -76,7 +76,6 @@ class ThumbnailCaptureContents
   bool CanDragEnter(content::WebContents* source,
                     const content::DropData& data,
                     blink::DragOperationsMask operations_allowed) override;
-  bool EmbedsFullscreenWidget() override;
   void RequestMediaAccessPermission(
       content::WebContents* contents,
       const content::MediaStreamRequest& request,

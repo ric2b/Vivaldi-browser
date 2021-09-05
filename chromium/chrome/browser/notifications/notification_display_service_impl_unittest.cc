@@ -7,11 +7,11 @@
 #include <string>
 #include <vector>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/notifications/notification_blocker.h"
 #include "chrome/browser/notifications/notification_display_queue.h"
@@ -36,7 +36,10 @@ class FakeNotificationBlocker : public NotificationBlocker {
   ~FakeNotificationBlocker() override = default;
 
   // NotificationDisplayQueue::NotificationBlocker:
-  bool ShouldBlockNotifications() override { return should_block_; }
+  bool ShouldBlockNotification(
+      const message_center::Notification& notification) override {
+    return should_block_;
+  }
 
   void SetShouldBlockNotifications(bool should_block) {
     should_block_ = should_block;
@@ -81,8 +84,7 @@ message_center::Notification CreateNotification(const std::string& id) {
       /*message=*/base::string16(), /*icon=*/gfx::Image(),
       /*display_source=*/base::string16(),
       /*origin_url=*/GURL(), message_center::NotifierId(),
-      message_center::RichNotificationData(),
-      base::MakeRefCounted<message_center::NotificationDelegate>());
+      message_center::RichNotificationData(), /*delegate=*/nullptr);
 }
 
 }  // namespace
@@ -151,12 +153,12 @@ class NotificationDisplayServiceImplTest : public testing::Test {
   }
 
   void DisplayNotification(const std::string id) {
-    service_->Display(NotificationHandler::Type::TRANSIENT,
+    service_->Display(NotificationHandler::Type::WEB_PERSISTENT,
                       CreateNotification(id), /*metadata=*/nullptr);
   }
 
   void CloseNotification(const std::string id) {
-    service_->Close(NotificationHandler::Type::TRANSIENT, id);
+    service_->Close(NotificationHandler::Type::WEB_PERSISTENT, id);
   }
 
  private:

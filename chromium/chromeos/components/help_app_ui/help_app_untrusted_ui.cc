@@ -12,6 +12,7 @@
 #include "chromeos/strings/grit/chromeos_strings.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "services/network/public/mojom/content_security_policy.mojom.h"
+#include "ui/resources/grit/webui_generated_resources.h"
 #include "ui/resources/grit/webui_resources.h"
 
 namespace chromeos {
@@ -25,7 +26,7 @@ content::WebUIDataSource* CreateHelpAppUntrustedDataSource(
   // the other paths.
   source->SetDefaultResource(IDR_HELP_APP_APP_HTML);
   source->AddResourcePath("app_bin.js", IDR_HELP_APP_APP_BIN_JS);
-  source->AddResourcePath("load_time_data.js", IDR_WEBUI_JS_LOAD_TIME_DATA);
+  source->AddResourcePath("load_time_data.js", IDR_WEBUI_JS_LOAD_TIME_DATA_JS);
   source->AddResourcePath("help_app_app_scripts.js",
                           IDR_HELP_APP_APP_SCRIPTS_JS);
   source->DisableTrustedTypesCSP();

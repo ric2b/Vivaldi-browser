@@ -415,7 +415,7 @@ SoftwareImageDecodeCache::DecodeImageIfNecessary(const CacheKey& key,
               ? SkIRect::MakeWH(paint_image.width(), paint_image.height())
               : gfx::RectToSkIRect(key.src_rect());
       DrawImage candidate_draw_image(
-          paint_image, src_rect, kNone_SkFilterQuality, SkMatrix::I(),
+          paint_image, false, src_rect, kNone_SkFilterQuality, SkMatrix::I(),
           key.frame_key().frame_index(), key.target_color_space());
       candidate_key.emplace(CacheKey::FromDrawImage(
           candidate_draw_image,
@@ -565,10 +565,9 @@ DecodedDrawImage SoftwareImageDecodeCache::GetDecodedImageForDrawInternal(
   if (!decoded_image)
     return DecodedDrawImage();
 
-  auto decoded_draw_image =
-      DecodedDrawImage(std::move(decoded_image), cache_entry->src_rect_offset(),
-                       GetScaleAdjustment(key), GetDecodedFilterQuality(key),
-                       cache_entry->is_budgeted);
+  auto decoded_draw_image = DecodedDrawImage(
+      std::move(decoded_image), nullptr, cache_entry->src_rect_offset(),
+      GetScaleAdjustment(key), GetDecodedFilterQuality(key));
   return decoded_draw_image;
 }
 

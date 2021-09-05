@@ -8,7 +8,6 @@
 #include <utility>
 
 #include "base/macros.h"
-#include "chrome/browser/browsing_data/browsing_data_flash_lso_helper.h"
 #include "chrome/browser/browsing_data/cookies_tree_model.h"
 #include "chrome/browser/content_settings/cookie_settings_factory.h"
 #include "chrome/browser/infobars/infobar_service.h"
@@ -109,7 +108,7 @@ std::unique_ptr<CookiesTreeModel> CreateCookiesTreeModel(
       shared_objects.local_storages(), shared_objects.session_storages(),
       shared_objects.appcaches(), shared_objects.indexed_dbs(),
       shared_objects.file_systems(), nullptr, shared_objects.service_workers(),
-      shared_objects.shared_workers(), shared_objects.cache_storages(), nullptr,
+      shared_objects.shared_workers(), shared_objects.cache_storages(),
       nullptr);
 
   return std::make_unique<CookiesTreeModel>(std::move(container), nullptr);
@@ -294,23 +293,6 @@ void CollectedCookiesViews::DeleteDelegate() {
     // Tell the owner to delete |this|.
     destroying_ = true;
     web_contents_->RemoveUserData(UserDataKey());
-  }
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// CollectedCookiesViews, views::ButtonListener implementation:
-
-void CollectedCookiesViews::ButtonPressed(views::Button* sender,
-                                          const ui::Event& event) {
-  if (sender == block_allowed_button_) {
-    AddContentException(allowed_cookies_tree_, CONTENT_SETTING_BLOCK);
-  } else if (sender == delete_allowed_button_) {
-    allowed_cookies_tree_model_->DeleteCookieNode(
-        static_cast<CookieTreeNode*>(allowed_cookies_tree_->GetSelectedNode()));
-  } else if (sender == allow_blocked_button_) {
-    AddContentException(blocked_cookies_tree_, CONTENT_SETTING_ALLOW);
-  } else if (sender == for_session_blocked_button_) {
-    AddContentException(blocked_cookies_tree_, CONTENT_SETTING_SESSION_ONLY);
   }
 }
 
@@ -556,11 +538,20 @@ std::unique_ptr<views::View> CollectedCookiesViews::CreateButtonsPane() {
     StartNewButtonColumnSet(layout, 0);
     block_allowed_button_ =
         layout->AddView(std::make_unique<views::MdTextButton>(
-            this,
+            base::BindRepeating(&CollectedCookiesViews::AddContentException,
+                                base::Unretained(this), allowed_cookies_tree_,
+                                CONTENT_SETTING_BLOCK),
             l10n_util::GetStringUTF16(IDS_COLLECTED_COOKIES_BLOCK_BUTTON)));
     delete_allowed_button_ =
         layout->AddView(std::make_unique<views::MdTextButton>(
-            this, l10n_util::GetStringUTF16(IDS_COOKIES_REMOVE_LABEL)));
+            base::BindRepeating(
+                [](CollectedCookiesViews* view) {
+                  view->allowed_cookies_tree_model_->DeleteCookieNode(
+                      static_cast<CookieTreeNode*>(
+                          view->allowed_cookies_tree_->GetSelectedNode()));
+                },
+                base::Unretained(this)),
+            l10n_util::GetStringUTF16(IDS_COOKIES_REMOVE_LABEL)));
 
     allowed_buttons_pane_ = view->AddChildView(std::move(allowed));
   }
@@ -574,12 +565,17 @@ std::unique_ptr<views::View> CollectedCookiesViews::CreateButtonsPane() {
     StartNewButtonColumnSet(layout, 0);
     allow_blocked_button_ =
         layout->AddView(std::make_unique<views::MdTextButton>(
-            this,
+            base::BindRepeating(&CollectedCookiesViews::AddContentException,
+                                base::Unretained(this), blocked_cookies_tree_,
+                                CONTENT_SETTING_ALLOW),
             l10n_util::GetStringUTF16(IDS_COLLECTED_COOKIES_ALLOW_BUTTON)));
     for_session_blocked_button_ =
         layout->AddView(std::make_unique<views::MdTextButton>(
-            this, l10n_util::GetStringUTF16(
-                      IDS_COLLECTED_COOKIES_SESSION_ONLY_BUTTON)));
+            base::BindRepeating(&CollectedCookiesViews::AddContentException,
+                                base::Unretained(this), blocked_cookies_tree_,
+                                CONTENT_SETTING_SESSION_ONLY),
+            l10n_util::GetStringUTF16(
+                IDS_COLLECTED_COOKIES_SESSION_ONLY_BUTTON)));
 
     blocked_buttons_pane_ = view->AddChildView(std::move(blocked));
   }

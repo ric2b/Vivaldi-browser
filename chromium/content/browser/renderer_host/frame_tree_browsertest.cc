@@ -5,7 +5,6 @@
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/strings/stringprintf.h"
-#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/frame_tree.h"
 #include "content/browser/renderer_host/frame_tree_node.h"
@@ -128,7 +127,8 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest, FrameTreeAfterCrash) {
       shell(), embedded_test_server()->GetURL("/frame_tree/top.html")));
 
   // Ensure the view and frame are live.
-  RenderViewHost* rvh = shell()->web_contents()->GetRenderViewHost();
+  RenderViewHost* rvh =
+      shell()->web_contents()->GetMainFrame()->GetRenderViewHost();
   RenderFrameHostImpl* rfh1 =
       static_cast<RenderFrameHostImpl*>(rvh->GetMainFrame());
   EXPECT_TRUE(rvh->IsRenderViewLive());
@@ -208,7 +208,7 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest, IsRenderFrameLive) {
 
   // Load a same-site page into iframe and it should still be live.
   GURL http_url(embedded_test_server()->GetURL("/title1.html"));
-  NavigateFrameToURL(root->child_at(0), http_url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(0), http_url));
   EXPECT_TRUE(
       root->current_frame_host()->render_view_host()->IsRenderViewLive());
   EXPECT_TRUE(root->current_frame_host()->IsRenderFrameLive());
@@ -246,7 +246,7 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest, OriginSetOnNavigation) {
 
   // Navigate the iframe cross-origin.
   GURL frame_url(embedded_test_server()->GetURL("b.com", "/title1.html"));
-  NavigateFrameToURL(root->child_at(0), frame_url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(0), frame_url));
   EXPECT_EQ(frame_url, root->child_at(0)->current_url());
   EXPECT_EQ(frame_url.GetOrigin().spec(),
             root->child_at(0)->current_origin().Serialize() + '/');
@@ -602,7 +602,7 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest, SandboxFlagsSetForMainFrame) {
 
   // Navigating the main frame to a different URL should clear sandbox flags.
   GURL unsandboxed_url(embedded_test_server()->GetURL("/title1.html"));
-  NavigateFrameToURL(root, unsandboxed_url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(root, unsandboxed_url));
 
   // Verify that sandbox flags are cleared properly for the root FrameTreeNode
   // and RenderFrameHost.
@@ -712,7 +712,7 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest,
   // should retain those flags set by the frame owner.
   GURL frame_url(embedded_test_server()->GetURL("/title1.html"));
 
-  NavigateFrameToURL(root->child_at(0), frame_url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(0), frame_url));
   EXPECT_EQ(network::mojom::WebSandboxFlags::kNone,
             root->child_at(0)->effective_frame_policy().sandbox_flags);
   EXPECT_EQ(network::mojom::WebSandboxFlags::kNone,
@@ -720,7 +720,7 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest,
   EXPECT_EQ(root->child_at(0)->active_sandbox_flags(),
             root->child_at(0)->current_frame_host()->active_sandbox_flags());
 
-  NavigateFrameToURL(root->child_at(1), frame_url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(1), frame_url));
   EXPECT_EQ(network::mojom::WebSandboxFlags::kAll &
                 ~network::mojom::WebSandboxFlags::kScripts &
                 ~network::mojom::WebSandboxFlags::kAutomaticFeatures &
@@ -834,12 +834,12 @@ IN_PROC_BROWSER_TEST_F(CrossProcessFrameTreeBrowserTest,
 
   // Load same-site page into iframe.
   GURL http_url(embedded_test_server()->GetURL("/title1.html"));
-  NavigateFrameToURL(root->child_at(0), http_url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(0), http_url));
 
   // Load cross-site page into iframe.
   GURL cross_site_url(
       embedded_test_server()->GetURL("foo.com", "/title2.html"));
-  NavigateFrameToURL(root->child_at(0), cross_site_url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(0), cross_site_url));
 
   // Ensure that we have created a new process for the subframe.
   ASSERT_EQ(2U, root->child_count());
@@ -848,7 +848,7 @@ IN_PROC_BROWSER_TEST_F(CrossProcessFrameTreeBrowserTest,
   RenderViewHost* rvh = child->current_frame_host()->render_view_host();
   RenderProcessHost* rph = child->current_frame_host()->GetProcess();
 
-  EXPECT_NE(shell()->web_contents()->GetRenderViewHost(), rvh);
+  EXPECT_NE(shell()->web_contents()->GetMainFrame()->GetRenderViewHost(), rvh);
   EXPECT_NE(shell()->web_contents()->GetSiteInstance(), child_instance);
   EXPECT_NE(shell()->web_contents()->GetMainFrame()->GetProcess(), rph);
 
@@ -898,7 +898,7 @@ IN_PROC_BROWSER_TEST_F(CrossProcessFrameTreeBrowserTest,
   // Load cross-site page into the first frame.
   GURL cross_site_url(
       embedded_test_server()->GetURL("foo.com", "/title2.html"));
-  NavigateFrameToURL(root->child_at(0), cross_site_url);
+  EXPECT_TRUE(NavigateToURLFromRenderer(root->child_at(0), cross_site_url));
 
   EXPECT_EQ(root->child_at(0)->current_origin().Serialize() + '/',
             cross_site_url.GetOrigin().spec());

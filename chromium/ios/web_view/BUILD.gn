@@ -274,6 +274,7 @@ source_set("web_view_sources") {
     "//components/language/ios/browser",
     "//components/leveldb_proto",
     "//components/metrics:library_support",
+    "//components/metrics/demographics",
     "//components/password_manager/core/browser",
     "//components/password_manager/core/browser:affiliation",
     "//components/password_manager/core/common",
@@ -475,7 +476,6 @@ test("ios_web_view_unittests") {
     "//components/autofill/core/browser:test_support",
     "//components/autofill/ios/browser:test_support",
     "//components/autofill/ios/form_util:test_support",
-    "//components/browser_sync:test_support",
     "//components/invalidation/impl:test_support",
     "//components/password_manager/core/browser:test_support",
     "//components/prefs:test_support",
@@ -562,6 +562,7 @@ repack("repack_resources") {
     "$root_gen_dir/components/components_resources.pak",
     "$root_gen_dir/components/sync_driver_resources.pak",
     "$root_gen_dir/ios/web/ios_web_resources.pak",
+    "$root_gen_dir/ui/resources/webui_generated_resources.pak",
     "$root_gen_dir/ui/resources/webui_resources.pak",
   ]
   output = "$target_gen_dir/web_view_resources.pak"
@@ -634,8 +635,8 @@ if (additional_toolchains == [] || current_toolchain == default_toolchain) {
 
       outputs = [ _output ]
 
-      args = [ rebase_path(_output, root_out_dir) ] +
-             rebase_path(_dsyms, root_out_dir)
+      args = [ rebase_path(_output, root_build_dir) ] +
+             rebase_path(_dsyms, root_build_dir)
 
       deps = [ ":web_view" ]
     }

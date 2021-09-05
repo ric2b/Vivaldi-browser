@@ -16,7 +16,6 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/base/resource/resource_bundle.h"
-#include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/controls/label.h"
 
@@ -78,7 +77,7 @@ views::View* CommonPaletteTool::CreateDefaultView(const base::string16& name) {
       AshColorProvider::ContentLayerType::kButtonIconColor);
   gfx::ImageSkia icon =
       CreateVectorIcon(GetPaletteIcon(), kMenuIconSize, icon_color);
-  highlight_view_ = new HoverHighlightView(this, true /* use_unified_theme */);
+  highlight_view_ = new HoverHighlightView(this);
   highlight_view_->AddIconAndLabel(icon, name);
   return highlight_view_;
 }

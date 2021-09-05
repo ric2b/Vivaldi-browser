@@ -20,15 +20,13 @@ import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
-import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.test.BaseRobolectricTestRunner;
 import org.chromium.chrome.browser.ActivityTabProvider;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
-import org.chromium.chrome.browser.compositor.layouts.LayoutManager;
+import org.chromium.chrome.browser.compositor.layouts.LayoutManagerImpl;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabImpl;
 import org.chromium.chrome.browser.tab.TabObserver;
-import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.ui.modelutil.PropertyModel;
 
 /** Tests for the top toolbar overlay's mediator (composited version of the top toolbar). */
@@ -41,10 +39,7 @@ public class TopToolbarOverlayMediatorTest {
     private Context mContext;
 
     @Mock
-    private LayoutManager mLayoutManager;
-
-    @Mock
-    private ControlContainer mControlContainer;
+    private LayoutManagerImpl mLayoutManager;
 
     @Mock
     private BrowserControlsStateProvider mBrowserControlsProvider;
@@ -67,14 +62,9 @@ public class TopToolbarOverlayMediatorTest {
     @Captor
     private ArgumentCaptor<ActivityTabProvider.ActivityTabObserver> mActivityTabObserverCaptor;
 
-    private ObservableSupplierImpl<Boolean> mAndroidViewShownSupplier;
-
     @Before
     public void beforeTest() {
         MockitoAnnotations.initMocks(this);
-
-        mAndroidViewShownSupplier = new ObservableSupplierImpl<>();
-        mAndroidViewShownSupplier.set(true);
 
         TopToolbarOverlayMediator.setToolbarBackgroundColorForTesting(Color.RED);
         TopToolbarOverlayMediator.setUrlBarColorForTesting(Color.BLUE);
@@ -91,9 +81,9 @@ public class TopToolbarOverlayMediatorTest {
                          .with(TopToolbarOverlayProperties.PROGRESS_BAR_INFO, null)
                          .build();
 
-        mMediator =
-                new TopToolbarOverlayMediator(mModel, mContext, mLayoutManager, mControlContainer,
-                        mTabSupplier, mBrowserControlsProvider, mAndroidViewShownSupplier);
+        mMediator = new TopToolbarOverlayMediator(mModel, mContext, mLayoutManager,
+                (info) -> {}, mTabSupplier, mBrowserControlsProvider);
+        mMediator.setIsAndroidViewVisible(true);
 
         // Ensure the observer is added to the initial tab.
         verify(mTabSupplier).addObserverAndTrigger(mActivityTabObserverCaptor.capture());
@@ -142,12 +132,12 @@ public class TopToolbarOverlayMediatorTest {
 
     @Test
     public void testShadowVisibility_androidViewForceHidden() {
-        mAndroidViewShownSupplier.set(true);
+        mMediator.setIsAndroidViewVisible(true);
 
         Assert.assertFalse(
                 "Shadow should be invisible.", mModel.get(TopToolbarOverlayProperties.SHOW_SHADOW));
 
-        mAndroidViewShownSupplier.set(false);
+        mMediator.setIsAndroidViewVisible(false);
 
         Assert.assertTrue(
                 "Shadow should be visible.", mModel.get(TopToolbarOverlayProperties.SHOW_SHADOW));

@@ -27,7 +27,7 @@
 #include "ui/gfx/gpu_memory_buffer.h"
 
 namespace base {
-class SingleThreadTaskRunner;
+class SequencedTaskRunner;
 }  // namespace base
 
 namespace gfx {
@@ -67,6 +67,7 @@ class MEDIA_EXPORT GpuVideoAcceleratorFactories {
     XB30,             // 10:10:10:2 RGBX in one GMB
     RGBA,             // One 8:8:8:8 RGBA
     BGRA,             // One 8:8:8:8 BGRA (Usually Mac)
+    P010,             // One P010 GMB.
   };
 
   enum class Supported {
@@ -184,7 +185,7 @@ class MEDIA_EXPORT GpuVideoAcceleratorFactories {
       size_t size) = 0;
 
   // Returns the task runner the video accelerator runs on.
-  virtual scoped_refptr<base::SingleThreadTaskRunner> GetTaskRunner() = 0;
+  virtual scoped_refptr<base::SequencedTaskRunner> GetTaskRunner() = 0;
 
   virtual viz::RasterContextProvider* GetMediaContextProvider() = 0;
 

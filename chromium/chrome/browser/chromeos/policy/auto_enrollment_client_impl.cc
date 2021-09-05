@@ -23,6 +23,7 @@
 #include "components/policy/core/common/cloud/device_management_service.h"
 #include "components/policy/core/common/cloud/dm_auth.h"
 #include "components/policy/core/common/cloud/dmserver_job_configurations.h"
+#include "components/policy/core/common/cloud/enterprise_metrics.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -49,32 +50,6 @@ using EnrollmentCheckType =
 // Timeout for running private set membership protocol.
 constexpr base::TimeDelta kPrivateSetMembershipTimeout =
     base::TimeDelta::FromSeconds(15);
-
-// UMA histogram names.
-constexpr char kUMAHashDanceSuccessTime[] =
-    "Enterprise.AutoEnrollmentHashDanceSuccessTime";
-constexpr char kUMAPrivateSetMembershipHashDanceComparison[] =
-    "Enterprise.AutoEnrollmentPrivateSetMembershipHashDanceComparison";
-constexpr char kUMAPrivateSetMembershipSuccessTime[] =
-    "Enterprise.AutoEnrollmentPrivateSetMembershipSuccessTime";
-constexpr char kUMAPrivateSetMembershipRequestStatus[] =
-    "Enterprise.AutoEnrollmentPrivateSetMembershipRequestStatus";
-
-// The following histogram names where added before private set membership
-// existed. They are only recorded for hash dance.
-
-constexpr char kUMAProtocolTime[] = "Enterprise.AutoEnrollmentProtocolTime";
-constexpr char kUMABucketDownloadTime[] =
-    "Enterprise.AutoEnrollmentBucketDownloadTime";
-constexpr char kUMAExtraTime[] = "Enterprise.AutoEnrollmentExtraTime";
-constexpr char kUMARequestStatus[] = "Enterprise.AutoEnrollmentRequestStatus";
-constexpr char kUMANetworkErrorCode[] =
-    "Enterprise.AutoEnrollmentRequestNetworkErrorCode";
-
-// Suffix for initial enrollment.
-constexpr char kUMASuffixInitialEnrollment[] = ".InitialEnrollment";
-// Suffix for Forced Re-Enrollment.
-constexpr char kUMASuffixFRE[] = ".ForcedReenrollment";
 
 // Returns the power of the next power-of-2 starting at |value|.
 int NextPowerOf2(int64_t value) {
@@ -300,18 +275,18 @@ class PrivateSetMembershipHelper {
 
   // Tries to load the result of a previous execution of the private set
   // memberhsip protocol from local state. Returns decision value if it has been
-  // made and is valid, otherwise nullptr.
-  const base::Value* GetPrivateSetMembershipCachedDecision() const {
+  // made and is valid, otherwise nullopt.
+  base::Optional<bool> GetPrivateSetMembershipCachedDecision() const {
     const PrefService::Preference* has_psm_server_state_pref =
         local_state_->FindPreference(prefs::kShouldRetrieveDeviceState);
 
     if (!has_psm_server_state_pref ||
         has_psm_server_state_pref->IsDefaultValue() ||
         !has_psm_server_state_pref->GetValue()->is_bool()) {
-      return nullptr;
+      return base::nullopt;
     }
 
-    return has_psm_server_state_pref->GetValue();
+    return has_psm_server_state_pref->GetValue()->GetBool();
   }
 
   // Indicate whether an error occurred while executing the private set
@@ -857,7 +832,7 @@ AutoEnrollmentClientImpl::FactoryImpl::CreateForFRE(
       std::make_unique<StateDownloadMessageProcessorFRE>(
           server_backed_state_key),
       power_initial, power_limit,
-      /*power_outdated_server_detect=*/base::nullopt, kUMASuffixFRE,
+      /*power_outdated_server_detect=*/base::nullopt, kUMAHashDanceSuffixFRE,
       /*private_set_membership_helper=*/nullptr));
 }
 
@@ -881,7 +856,7 @@ AutoEnrollmentClientImpl::FactoryImpl::CreateForInitialEnrollment(
           device_serial_number, device_brand_code),
       power_initial, power_limit,
       base::make_optional(power_outdated_server_detect),
-      kUMASuffixInitialEnrollment,
+      kUMAHashDanceSuffixInitialEnrollment,
       chromeos::AutoEnrollmentController::IsPrivateSetMembershipEnabled()
           ? std::make_unique<PrivateSetMembershipHelper>(
                 device_management_service, url_loader_factory, local_state,
@@ -907,8 +882,8 @@ void AutoEnrollmentClientImpl::Start() {
 
   // Drop the previous job and reset state.
   request_job_.reset();
+  hash_dance_time_start_ = base::TimeTicks();
   state_ = AUTO_ENROLLMENT_STATE_PENDING;
-  time_start_ = base::TimeTicks::Now();
   modulus_updates_received_ = 0;
   has_server_state_ = false;
   device_state_available_ = false;
@@ -921,7 +896,9 @@ void AutoEnrollmentClientImpl::Retry() {
 }
 
 void AutoEnrollmentClientImpl::CancelAndDeleteSoon() {
-  if (time_start_.is_null() || !request_job_) {
+  // Check if neither Hash dance request i.e. DeviceAutoEnrollmentRequest nor
+  // DeviceStateRetrievalRequest is in progress.
+  if (!request_job_) {
     // The client isn't running, just delete it.
     delete this;
   } else {
@@ -1032,19 +1009,24 @@ bool AutoEnrollmentClientImpl::RetryStep() {
 }
 
 bool AutoEnrollmentClientImpl::PrivateSetMembershipRetryStep() {
-  // Don't retry if the protocol is disabled, protocol is still running, or an
-  // error occurred while executing the protocol.
+  // Don't retry if the protocol is disabled, or an error occurred while
+  // executing the protocol.
   if (!private_set_membership_helper_ ||
-      private_set_membership_helper_->HasPrivateSetMembershipError() ||
-      private_set_membership_helper_->IsCheckMembershipInProgress())
+      private_set_membership_helper_->HasPrivateSetMembershipError()) {
     return false;
+  }
 
-  const base::Value* private_set_membership_server_state =
+  // If the private set membership protocol is in progress, signal to the caller
+  // that nothing else needs to be done.
+  if (private_set_membership_helper_->IsCheckMembershipInProgress())
+    return true;
+
+  const base::Optional<bool> private_set_membership_server_state =
       private_set_membership_helper_->GetPrivateSetMembershipCachedDecision();
 
-  if (private_set_membership_server_state) {
+  if (private_set_membership_server_state.has_value()) {
     LOG(WARNING) << "PSM Cached: psm_server_state="
-                 << private_set_membership_server_state->GetBool();
+                 << private_set_membership_server_state.value();
     return false;
   } else {
     private_set_membership_helper_->CheckMembership(base::BindOnce(
@@ -1056,7 +1038,7 @@ bool AutoEnrollmentClientImpl::PrivateSetMembershipRetryStep() {
 void AutoEnrollmentClientImpl::SetPrivateSetMembershipRlweClientForTesting(
     std::unique_ptr<psm_rlwe::PrivateMembershipRlweClient>
         private_set_membership_rlwe_client,
-    psm_rlwe::RlwePlaintextId& psm_rlwe_id) {
+    const psm_rlwe::RlwePlaintextId& psm_rlwe_id) {
   if (!private_set_membership_helper_)
     return;
 
@@ -1112,6 +1094,10 @@ void AutoEnrollmentClientImpl::NextStep() {
 }
 
 void AutoEnrollmentClientImpl::SendBucketDownloadRequest() {
+  // Start the Hash dance timer during the first attempt.
+  if (hash_dance_time_start_.is_null())
+    hash_dance_time_start_ = base::TimeTicks::Now();
+
   std::string id_hash = device_identifier_provider_->GetIdHash();
   // Currently AutoEnrollmentClientImpl supports working with hashes that are at
   // least 8 bytes long. If this is reduced, the computation of the remainder
@@ -1180,11 +1166,12 @@ void AutoEnrollmentClientImpl::HandleRequestCompletion(
     DeviceManagementStatus status,
     int net_error,
     const em::DeviceManagementResponse& response) {
-  base::UmaHistogramSparse(kUMARequestStatus + uma_suffix_, status);
+  base::UmaHistogramSparse(kUMAHashDanceRequestStatus + uma_suffix_, status);
   if (status != DM_STATUS_SUCCESS) {
     LOG(ERROR) << "Auto enrollment error: " << status;
     if (status == DM_STATUS_REQUEST_FAILED)
-      base::UmaHistogramSparse(kUMANetworkErrorCode + uma_suffix_, -net_error);
+      base::UmaHistogramSparse(kUMAHashDanceNetworkErrorCode + uma_suffix_,
+                               -net_error);
     request_job_.reset();
 
     // Abort if CancelAndDeleteSoon has been called meanwhile.
@@ -1347,15 +1334,15 @@ void AutoEnrollmentClientImpl::UpdateBucketDownloadTimingHistograms() {
   static const int kBuckets = 50;
 
   base::TimeTicks now = base::TimeTicks::Now();
-  if (!time_start_.is_null()) {
-    base::TimeDelta delta = now - time_start_;
-    base::UmaHistogramCustomTimes(kUMAProtocolTime + uma_suffix_, delta, kMin,
-                                  kMax, kBuckets);
+  if (!hash_dance_time_start_.is_null()) {
+    base::TimeDelta delta = now - hash_dance_time_start_;
+    base::UmaHistogramCustomTimes(kUMAHashDanceProtocolTime + uma_suffix_,
+                                  delta, kMin, kMax, kBuckets);
   }
   if (!time_start_bucket_download_.is_null()) {
     base::TimeDelta delta = now - time_start_bucket_download_;
-    base::UmaHistogramCustomTimes(kUMABucketDownloadTime + uma_suffix_, delta,
-                                  kMin, kMax, kBuckets);
+    base::UmaHistogramCustomTimes(kUMAHashDanceBucketDownloadTime + uma_suffix_,
+                                  delta, kMin, kMax, kBuckets);
   }
   base::TimeDelta delta = kZero;
   if (!time_extra_start_.is_null())
@@ -1363,8 +1350,8 @@ void AutoEnrollmentClientImpl::UpdateBucketDownloadTimingHistograms() {
   // This samples |kZero| when there was no need for extra time, so that we can
   // measure the ratio of users that succeeded without needing a delay to the
   // total users going through OOBE.
-  base::UmaHistogramCustomTimes(kUMAExtraTime + uma_suffix_, delta, kMin, kMax,
-                                kBuckets);
+  base::UmaHistogramCustomTimes(kUMAHashDanceExtraTime + uma_suffix_, delta,
+                                kMin, kMax, kBuckets);
 }
 
 void AutoEnrollmentClientImpl::RecordHashDanceSuccessTimeHistogram() {
@@ -1375,8 +1362,8 @@ void AutoEnrollmentClientImpl::RecordHashDanceSuccessTimeHistogram() {
   static const int kBuckets = 50;
 
   base::TimeTicks now = base::TimeTicks::Now();
-  if (!time_start_.is_null()) {
-    base::TimeDelta delta = now - time_start_;
+  if (!hash_dance_time_start_.is_null()) {
+    base::TimeDelta delta = now - hash_dance_time_start_;
     base::UmaHistogramCustomTimes(kUMAHashDanceSuccessTime + uma_suffix_, delta,
                                   kMin, kMax, kBuckets);
   }
@@ -1392,8 +1379,6 @@ void AutoEnrollmentClientImpl::RecordPrivateSetMembershipHashDanceComparison() {
   // Make sure to only record once per instance.
   recorded_psm_hash_dance_comparison_ = true;
 
-  bool private_set_membership_decision =
-      private_set_membership_helper_->GetPrivateSetMembershipCachedDecision();
   bool private_set_membership_error =
       private_set_membership_helper_->HasPrivateSetMembershipError();
 
@@ -1419,8 +1404,15 @@ void AutoEnrollmentClientImpl::RecordPrivateSetMembershipHashDanceComparison() {
 
   auto comparison = PrivateSetMembershipHashDanceComparison::kEqualResults;
   if (!hash_dance_error && !private_set_membership_error) {
+    base::Optional<bool> private_set_membership_decision =
+        private_set_membership_helper_->GetPrivateSetMembershipCachedDecision();
+
+    // There was no error and this function is only invoked after PSM has been
+    // performed, so there must be a decision.
+    DCHECK(private_set_membership_decision.has_value());
+
     comparison =
-        (hash_dance_decision == private_set_membership_decision)
+        (hash_dance_decision == private_set_membership_decision.value())
             ? PrivateSetMembershipHashDanceComparison::kEqualResults
             : PrivateSetMembershipHashDanceComparison::kDifferentResults;
   } else if (hash_dance_error && !private_set_membership_error) {

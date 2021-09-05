@@ -43,6 +43,12 @@ class FileOperationManagerImpl {
      * @const
      */
     this.eventRouter_ = new fileOperationUtil.EventRouter();
+
+    /**
+     * @private {!Trash}
+     * @const
+     */
+    this.trash_ = new Trash();
   }
 
   /**
@@ -382,9 +388,21 @@ class FileOperationManagerImpl {
   }
 
   /**
+   * Returns true if all entries will use trash for delete.
+   *
+   * @param {!VolumeManager} volumeManager
+   * @param {!Array<!Entry>} entries The entries.
+   * @return {boolean}
+   */
+  willUseTrash(volumeManager, entries) {
+    return entries.every(
+        entry => this.trash_.shouldMoveToTrash(volumeManager, entry));
+  }
+
+  /**
    * Schedules the files deletion.
    *
-   * @param {Array<Entry>} entries The entries.
+   * @param {!Array<!Entry>} entries The entries.
    */
   deleteEntries(entries) {
     const task =
@@ -394,7 +412,8 @@ class FileOperationManagerImpl {
           entrySize: {},
           totalBytes: 0,
           processedBytes: 0,
-          cancelRequested: false
+          cancelRequested: false,
+          trashedItems: [],
         }));
 
     // Obtains entry size and sum them up.
@@ -436,6 +455,14 @@ class FileOperationManagerImpl {
    * @private
    */
   serviceAllDeleteTasks_() {
+    if (!this.volumeManager_) {
+      volumeManagerFactory.getInstance().then(volumeManager => {
+        this.volumeManager_ = volumeManager;
+        this.serviceAllDeleteTasks_();
+      });
+      return;
+    }
+
     this.serviceDeleteTask_(this.deleteTasks_[0], () => {
       this.deleteTasks_.shift();
       if (this.deleteTasks_.length) {
@@ -463,16 +490,21 @@ class FileOperationManagerImpl {
       }
       this.eventRouter_.sendDeleteEvent(
           fileOperationUtil.EventRouter.EventType.PROGRESS, task);
-      util.removeFileOrDirectory(
-          task.entries[0],
-          () => {
+      this.trash_
+          .removeFileOrDirectory(
+              assert(this.volumeManager_), task.entries[0],
+              /*permanentlyDelete=*/ false)
+          .then(trashItem => {
+            if (trashItem) {
+              task.trashedItems.push(trashItem);
+            }
             this.eventRouter_.sendEntryChangedEvent(
                 util.EntryChangedKind.DELETED, task.entries[0]);
             task.processedBytes += task.entrySize[task.entries[0].toURL()];
             task.entries.shift();
             deleteOneEntry(inCallback);
-          },
-          inError => {
+          })
+          .catch(inError => {
             error = inError;
             inCallback();
           });
@@ -494,6 +526,22 @@ class FileOperationManagerImpl {
       inCallback();
       callback();
     });
+  }
+
+  /**
+   * Restores files from trash.
+   *
+   * @param {Array<!fileOperationUtil.TrashItem>} trashItems The trash items.
+   */
+  restoreDeleted(trashItems) {
+    const volumeManager = assert(this.volumeManager_);
+    while (trashItems.length) {
+      this.trash_
+          .restore(
+              volumeManager,
+              /** @type {!TrashItem} */ (trashItems.pop()))
+          .catch(e => console.error('Error restoring deleted file', e));
+    }
   }
 
   /**

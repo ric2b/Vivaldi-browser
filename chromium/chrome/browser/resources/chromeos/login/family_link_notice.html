@@ -2,11 +2,16 @@
 Use of this source code is governed by a BSD-style license that can be
 found in the LICENSE file. -->
 
-<link rel="import" href="chrome://oobe/custom_elements.html">
 <link rel="import" href="chrome://resources/cr_elements/shared_vars_css.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 
-<dom-module id="family-link-notice">
+<link rel="import" href="chrome://oobe/custom_elements.html">
+
+<link rel="import" href="/components/common_styles.html">
+<link rel="import" href="/components/hd_iron_icon.html">
+<link rel="import" href="/components/oobe_i18n_behavior.html">
+
+<dom-module id="family-link-notice-element">
   <template>
     <style include="oobe-dialog-host"></style>
     <oobe-dialog id="familyLinkDialog" role="dialog" has-buttons
@@ -26,7 +31,7 @@ found in the LICENSE file. -->
       <div slot="bottom-buttons" class="layout horizontal end-justified">
         <oobe-next-button id="continueButton"
             text-key="familyLinkContinueButton" class="focus-on-show"
-            inverse on-tap="onContinueButtonPressed_"></oobe-next-button>
+            inverse on-click="onContinueButtonPressed_"></oobe-next-button>
       </div>
     </oobe-dialog>
   </template>

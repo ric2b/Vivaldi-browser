@@ -24,7 +24,8 @@ js_type_check("closure_compile_index") {
 }
 
 js_type_check("closure_compile_app") {
-  closure_flags = media_closure_flags
+  closure_flags =
+      media_closure_flags + ignore_load_time_data_errors_closure_flags
   deps = [ ":receiver" ]
 }
 
@@ -55,11 +56,21 @@ js_library("error_reporter") {
   externs_list = [ "$externs_path/crash_report_private.js" ]
 }
 
+js_library("piex_module_loader") {
+}
+
+js_library("piex_module") {
+  deps = [ "//ui/file_manager/image_loader:piex_loader" ]
+}
+
 js_library("receiver") {
   externs_list = [ "media_app.externs.js" ]
   deps = [
     ":message_types",
+    ":piex_module",
+    ":piex_module_loader",
     "//chromeos/components/system_apps/public/js:message_pipe",
+    "//ui/webui/resources/js:load_time_data",
   ]
 }
 

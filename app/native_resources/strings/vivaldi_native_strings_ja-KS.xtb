@@ -9,8 +9,10 @@
 <translation id="1411638389238344450">リンクをメールで送る</translation>
 <translation id="1454726940098520109">分かったからもうええわ</translation>
 <translation id="1462666970065907900">このウィンドウほんまに閉じんの？</translation>
+<translation id="1526344461589023948">ダウンロードした更新ファイル、保存できへんかったわ。コンピューターの空きが十分あるか確認して、もう一回試してみて。</translation>
 <translation id="1657174850639146440">怪獣９</translation>
 <translation id="1676595396635191120">さらのプライベートウィンドウ</translation>
+<translation id="1702758681952953055">もしエラーが消えへんかったら、報告していただけると助かるわ。こちらの情報くださいな：</translation>
 <translation id="1728549374069268714">貼り付けてそこ行く</translation>
 <translation id="1756026472674246267">さらのタブで開く</translation>
 <translation id="1759842336958782510">Chrome</translation>
@@ -20,6 +22,7 @@
 <translation id="1924750141060565109">風景１５</translation>
 <translation id="19598411548897379">一般</translation>
 <translation id="2079036669923635404">新しいVivaldi、バージョン<ph name="VERSION" />もう出てるで。</translation>
+<translation id="2141974047387702305">更新ファイルのダウンロード中にエラー出たわ。インターネット接続確認して、後でもう一回やってみて。</translation>
 <translation id="2441056087170876076">怪獣２</translation>
 <translation id="2444387452209867610">メモ入れ込む</translation>
 <translation id="2486841023299517366">動物４</translation>
@@ -45,6 +48,7 @@
 <translation id="3542768452570884558">さらのウィンドウで開く (&amp;W)</translation>
 <translation id="3588820906588687999">さらのタブで画像開く</translation>
 <translation id="3601066750251199488">怪獣３</translation>
+<translation id="3708982624815781692">ダウンロード、キャンセルされたわ。</translation>
 <translation id="3732157130969736834">リンク先をブックマークに入れとく</translation>
 <translation id="3732388226447288666">動物２</translation>
 <translation id="3732439195215136813">動物５</translation>
@@ -81,11 +85,13 @@
 <translation id="5594602170491763400">怪獣５</translation>
 <translation id="5615637589913244581">Opera バージョン 15以上 (ベータ)</translation>
 <translation id="5648110075441906505">さらのウィンドウで画像開く</translation>
+<translation id="5656371807944747581">アップデートエラー！</translation>
 <translation id="5716238312826274098">通知を無効にする</translation>
 <translation id="5770433027661640693">風景１０</translation>
 <translation id="5857090052475505287">さらのフォルダー</translation>
 <translation id="588258955323874662">全画面表示</translation>
 <translation id="5916080360077521750">ごめん、Chrome起動中やから設定が使えへんわ。Vivaldiに設定取り込むんやったら、作業中の処理保存して全部のChromeウィンドウ閉じてからやってみて。</translation>
+<translation id="6040143037577758943">閉じる</translation>
 <translation id="6229528619562190452">クリックしてVivaldiを更新。</translation>
 <translation id="6234173136417926046">画像をスタートページの背景に使う</translation>
 <translation id="630690498669249215">Operaのブックマークファイル</translation>
@@ -102,9 +108,11 @@
 <translation id="7111492742514999492">風景９</translation>
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7496505986576158197">Vivaldiは<ph name="BEGIN_LINK_CHROMIUM" />Chromium<ph name="END_LINK_CHROMIUM" />オープンソースプロジェクトとその他<ph name="BEGIN_LINK_OSS" />オープンソースソフトウェア<ph name="END_LINK_OSS" />で成り立っております。</translation>
+<translation id="7581266044164103589">更新インストーラー、起動できへんかったわ。コンピューターにメモリとストレージの空きが十分あるか確認して、後でもう一回試してみて。</translation>
 <translation id="7715497554424665066">更新シカトする (&amp;I)</translation>
 <translation id="7724603315864178912">切り取り</translation>
 <translation id="7793738202466490491">カレンダーイベントとして追加</translation>
+<translation id="7848222781052558334">ダウンロードされたファイルのデジタル署名認証に失敗したわ。</translation>
 <translation id="7865983598101744945">終了の確認</translation>
 <translation id="7957213167373139414">カレンダー</translation>
 <translation id="8027581147000338959">さらのウィンドウで開く</translation>
@@ -118,7 +126,7 @@
 <translation id="8539196077526389150">風景１３</translation>
 <translation id="8624587806981488221">画像もっかい読み込む (&amp;R)</translation>
 <translation id="864444594187862076">Opera バージョン 15以上 (デベロッパー)</translation>
-<translation id="8651348004684669199">アクティブなタブを追加</translation>
+<translation id="8651348004684669199">今出てるタブ追加</translation>
 <translation id="8669345741879513971">怪獣１０</translation>
 <translation id="867544375504146191">Yandex</translation>
 <translation id="8768970203213061953">風景１４</translation>

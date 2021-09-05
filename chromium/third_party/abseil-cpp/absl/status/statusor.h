@@ -129,7 +129,7 @@ class ABSL_MUST_USE_RESULT StatusOr;
 // Example:
 //
 //   absl::StatusOr<int> i = GetCount();
-//   if (foo.ok()) {
+//   if (i.ok()) {
 //     updated_total += *i
 //   }
 //
@@ -542,7 +542,7 @@ class StatusOr : private internal_statusor::StatusOrData<T>,
 
   // StatusOr<T>::value_or()
   //
-  // Returns the current value of `this->ok() == true`. Otherwise constructs a
+  // Returns the current value if `this->ok() == true`. Otherwise constructs a
   // value using the provided `default_value`.
   //
   // Unlike `value`, this function returns by value, copying the current value

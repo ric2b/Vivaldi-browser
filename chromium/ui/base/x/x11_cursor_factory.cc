@@ -11,7 +11,6 @@
 #include "ui/base/x/x11_util.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/x/connection.h"
-#include "ui/gfx/x/x11.h"
 
 namespace ui {
 
@@ -160,7 +159,8 @@ base::Optional<PlatformCursor> X11CursorFactory::GetDefaultCursor(
   return ToPlatformCursor(cursor.get());
 }
 
-PlatformCursor X11CursorFactory::CreateImageCursor(const SkBitmap& bitmap,
+PlatformCursor X11CursorFactory::CreateImageCursor(mojom::CursorType type,
+                                                   const SkBitmap& bitmap,
                                                    const gfx::Point& hotspot) {
   // There is a problem with custom cursors that have no custom data. The
   // resulting SkBitmap is empty and X crashes when creating a zero size cursor
@@ -181,6 +181,7 @@ PlatformCursor X11CursorFactory::CreateImageCursor(const SkBitmap& bitmap,
 }
 
 PlatformCursor X11CursorFactory::CreateAnimatedCursor(
+    mojom::CursorType type,
     const std::vector<SkBitmap>& bitmaps,
     const gfx::Point& hotspot,
     int frame_delay_ms) {

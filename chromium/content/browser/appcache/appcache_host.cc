@@ -24,6 +24,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/url_constants.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "services/network/public/mojom/url_loader_factory.mojom.h"
 #include "storage/browser/quota/quota_manager_proxy.h"
 #include "third_party/blink/public/mojom/appcache/appcache.mojom.h"
@@ -402,22 +403,22 @@ void AppCacheHost::GetResourceList(GetResourceListCallback callback) {
 
 std::unique_ptr<AppCacheRequestHandler> AppCacheHost::CreateRequestHandler(
     std::unique_ptr<AppCacheRequest> request,
-    blink::mojom::ResourceType resource_type,
+    network::mojom::RequestDestination request_destination,
     bool should_reset_appcache) {
-  if (AppCacheRequestHandler::IsMainResourceType(resource_type)) {
+  if (AppCacheRequestHandler::IsMainRequestDestination(request_destination)) {
     // Store the first party origin so that it can be used later in SelectCache
     // for checking whether the creation of the appcache is allowed.
     site_for_cookies_ = request->GetSiteForCookies();
     site_for_cookies_initialized_ = true;
     top_frame_origin_ = request->GetTopFrameOrigin();
     return base::WrapUnique(new AppCacheRequestHandler(
-        this, resource_type, should_reset_appcache, std::move(request)));
+        this, request_destination, should_reset_appcache, std::move(request)));
   }
 
   if ((associated_cache() && associated_cache()->is_complete()) ||
       is_selection_pending()) {
     return base::WrapUnique(new AppCacheRequestHandler(
-        this, resource_type, should_reset_appcache, std::move(request)));
+        this, request_destination, should_reset_appcache, std::move(request)));
   }
   return nullptr;
 }
@@ -657,7 +658,7 @@ void AppCacheHost::MaybePassSubresourceFactory() {
         rfh->GetProcess()->GetBrowserContext(), rfh, process_id_,
         ContentBrowserClient::URLLoaderFactoryType::kDocumentSubResource,
         origin_for_url_loader_factory_, base::nullopt /* navigation_id */,
-        base::UkmSourceId::FromInt64(rfh->GetPageUkmSourceId()),
+        ukm::SourceIdObj::FromInt64(rfh->GetPageUkmSourceId()),
         &factory_receiver, nullptr /* header_client */,
         nullptr /* bypass_redirect_checks */, nullptr /* disable_secure_dns */,
         nullptr /* factory_override */);

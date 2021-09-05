@@ -7,6 +7,7 @@
 #include <set>
 #include <utility>
 
+#include "base/auto_reset.h"
 #include "base/check_op.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
@@ -672,7 +673,31 @@ void OmniboxViewViews::SetFocus(bool is_user_initiated) {
             ->GetRevealedLock(ImmersiveModeController::ANIMATE_REVEAL_YES));
   }
 
+  const bool omnibox_already_focused = HasFocus();
+
+  if (is_user_initiated)
+    model()->Unelide();
+
   RequestFocus();
+
+  if (omnibox_already_focused)
+    model()->ClearKeyword();
+
+  // If the user initiated the focus, then we always select-all, even if the
+  // omnibox is already focused. This can happen if the user pressed Ctrl+L
+  // while already typing in the omnibox.
+  //
+  // For renderer initiated focuses (like NTP or about:blank page load finish):
+  //  - If the omnibox was not already focused, select-all. This handles the
+  //    about:blank homepage case, where the location bar has initial focus.
+  //    It annoys users if the URL is not pre-selected. https://crbug.com/45260.
+  //  - If the omnibox is already focused, DO NOT select-all. This can happen
+  //    if the user starts typing before the NTP finishes loading. If the NTP
+  //    finishes loading and then does a renderer-initiated focus, performing
+  //    a select-all here would surprisingly overwrite the user's first few
+  //    typed characters. https://crbug.com/924935.
+  if (is_user_initiated || !omnibox_already_focused)
+    SelectAll(true);
 
   // |is_user_initiated| is true for focus events from keyboard accelerators.
   if (is_user_initiated)
@@ -770,7 +795,7 @@ void OmniboxViewViews::ExecuteCommand(int command_id, int event_flags) {
   switch (command_id) {
     // These commands don't invoke the popup via OnBefore/AfterPossibleChange().
     case IDC_PASTE_AND_GO:
-      model()->PasteAndGo(GetClipboardText());
+      model()->PasteAndGo(GetClipboardText(/*notify_if_restricted=*/true));
       return;
     case IDC_SHOW_FULL_URLS:
     case IDC_EDIT_SEARCH_ENGINES:
@@ -913,7 +938,7 @@ base::string16 OmniboxViewViews::GetSelectedText() const {
 }
 
 void OmniboxViewViews::OnOmniboxPaste() {
-  const base::string16 text(GetClipboardText());
+  const base::string16 text(GetClipboardText(/*notify_if_restricted=*/true));
 
   if (text.empty() ||
       // When the fakebox is focused, ignore pasted whitespace because if the
@@ -1016,18 +1041,17 @@ void OmniboxViewViews::OnTemporaryTextMaybeChanged(
 
 void OmniboxViewViews::OnInlineAutocompleteTextMaybeChanged(
     const base::string16& display_text,
-    size_t user_text_start,
+    std::vector<gfx::Range> selections,
     size_t user_text_length) {
   if (display_text == GetText())
     return;
 
   if (!IsIMEComposing()) {
-    std::vector<gfx::Range> ranges = {
-        {display_text.size(), user_text_length + user_text_start}};
-    if (user_text_start)
-      ranges.push_back({0, user_text_start});
-    SetTextAndSelectedRanges(display_text, ranges);
+    SetTextAndSelectedRanges(display_text, selections);
   } else if (location_bar_view_) {
+    // TODO(manukh) IME should be updated with prefix and split rich
+    // autocompletion if those features launch. Likewise, remove
+    // |user_text_length| param if it can be computed.
     location_bar_view_->SetImeInlineAutocompletion(
         display_text.substr(user_text_length));
   }
@@ -1447,9 +1471,10 @@ base::string16 OmniboxViewViews::GetLabelForCommandId(int command_id) const {
 
   // Don't paste-and-go data that was marked by its originator as confidential.
   constexpr size_t kMaxSelectionTextLength = 50;
-  const base::string16 clipboard_text = IsClipboardDataMarkedAsConfidential()
-                                            ? base::string16()
-                                            : GetClipboardText();
+  const base::string16 clipboard_text =
+      IsClipboardDataMarkedAsConfidential()
+          ? base::string16()
+          : GetClipboardText(/*notify_if_restricted=*/false);
 
   if (clipboard_text.empty())
     return l10n_util::GetStringUTF16(IDS_PASTE_AND_GO_EMPTY);
@@ -1542,7 +1567,9 @@ bool OmniboxViewViews::OnMousePressed(const ui::MouseEvent& event) {
               offset + GetCursorPosition() - next_double_click_selection_len_;
         }
         // Reset selection
-        SelectAll(false);
+        // Select all in the reverse direction so as not to scroll the caret
+        // into view and shift the contents jarringly.
+        SelectAll(true);
       }
     } else if (event.GetClickCount() == 2 && event.IsLeftMouseButton()) {
       // If the user double clicked and we unelided between the first and second
@@ -1953,10 +1980,12 @@ void OmniboxViewViews::OnBlur() {
 
 bool OmniboxViewViews::IsCommandIdEnabled(int command_id) const {
   if (command_id == Textfield::kPaste)
-    return !GetReadOnly() && !GetClipboardText().empty();
+    return !GetReadOnly() &&
+           !GetClipboardText(/*notify_if_restricted=*/false).empty();
   if (command_id == IDC_PASTE_AND_GO) {
     return !GetReadOnly() && !IsClipboardDataMarkedAsConfidential() &&
-           model()->CanPasteAndGo(GetClipboardText());
+           model()->CanPasteAndGo(
+               GetClipboardText(/*notify_if_restricted=*/false));
   }
 
   // Menu item is only shown when it is valid.
@@ -2086,7 +2115,8 @@ bool OmniboxViewViews::IsTextEditCommandEnabled(
     case ui::TextEditCommand::MOVE_DOWN:
       return !GetReadOnly();
     case ui::TextEditCommand::PASTE:
-      return !GetReadOnly() && !GetClipboardText().empty();
+      return !GetReadOnly() &&
+             !GetClipboardText(show_rejection_ui_if_any_).empty();
     default:
       return Textfield::IsTextEditCommandEnabled(command);
   }
@@ -2097,6 +2127,8 @@ void OmniboxViewViews::ExecuteTextEditCommand(ui::TextEditCommand command) {
   // executed. Since we are not always calling the base class implementation
   // here, we need to deactivate touch text selection here, too.
   DestroyTouchSelection();
+
+  base::AutoReset<bool> show_rejection_ui(&show_rejection_ui_if_any_, true);
 
   if (!IsTextEditCommandEnabled(command))
     return;
@@ -2152,6 +2184,11 @@ bool OmniboxViewViews::HandleKeyEvent(views::Textfield* textfield,
   // Otherwise, if num-lock is off, the events are handled as [Up], [Down], etc.
   if (event.IsUnicodeKeyCode())
     return false;
+
+  // Show a notification if the clipboard is restricted by the rules of the
+  // data leak prevention policy. This state is used by the
+  // IsTextEditCommandEnabled(ui::TextEditCommand::PASTE) cases below.
+  base::AutoReset<bool> show_rejection_ui(&show_rejection_ui_if_any_, true);
 
   const bool shift = event.IsShiftDown();
   const bool control = event.IsControlDown();
@@ -2316,7 +2353,9 @@ void OmniboxViewViews::OnAfterUserAction(views::Textfield* sender) {
 void OmniboxViewViews::OnAfterCutOrCopy(ui::ClipboardBuffer clipboard_buffer) {
   ui::Clipboard* cb = ui::Clipboard::GetForCurrentThread();
   base::string16 selected_text;
-  cb->ReadText(clipboard_buffer, /* data_dst = */ nullptr, &selected_text);
+  ui::DataTransferEndpoint data_dst = ui::DataTransferEndpoint(
+      ui::EndpointType::kDefault, /*notify_if_restricted=*/false);
+  cb->ReadText(clipboard_buffer, &data_dst, &selected_text);
   GURL url;
   bool write_url = false;
   model()->AdjustTextForCopy(GetSelectedRange().GetMin(), &selected_text, &url,

@@ -200,8 +200,7 @@ class CalendarUpdateEventFunction : public CalendarFunctionWithCallback {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void UpdateEventComplete(
-      std::shared_ptr<calendar::UpdateEventResult> results);
+  void UpdateEventComplete(std::shared_ptr<calendar::EventResultCB> results);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(CalendarUpdateEventFunction);

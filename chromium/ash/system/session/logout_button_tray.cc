@@ -24,7 +24,6 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "ui/accessibility/ax_node_data.h"
-#include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/controls/button/md_text_button.h"
@@ -36,13 +35,12 @@ LogoutButtonTray::LogoutButtonTray(Shelf* shelf) : TrayBackgroundView(shelf) {
   DCHECK(shelf);
   Shell::Get()->session_controller()->AddObserver(this);
 
-  auto button = std::make_unique<views::MdTextButton>(this, base::string16(),
-                                                      CONTEXT_LAUNCHER_BUTTON);
-  button->SetProminent(true);
-  button->SetBgColorOverride(AshColorProvider::Get()->GetControlsLayerColor(
-      AshColorProvider::ControlsLayerType::kControlBackgroundColorAlert));
-
-  button_ = tray_container()->AddChildView(std::move(button));
+  button_ =
+      tray_container()->AddChildView(std::make_unique<views::MdTextButton>(
+          base::BindRepeating(&LogoutButtonTray::ButtonPressed,
+                              base::Unretained(this)),
+          base::string16(), CONTEXT_LAUNCHER_BUTTON));
+  button_->SetProminent(true);
 }
 
 LogoutButtonTray::~LogoutButtonTray() {
@@ -66,22 +64,6 @@ void LogoutButtonTray::UpdateBackground() {
   // The logout button does not have a background.
 }
 
-void LogoutButtonTray::ButtonPressed(views::Button* sender,
-                                     const ui::Event& event) {
-  DCHECK_EQ(button_, sender);
-
-  if (dialog_duration_ <= base::TimeDelta()) {
-    if (Shell::Get()->session_controller()->IsDemoSession())
-      base::RecordAction(base::UserMetricsAction("DemoMode.ExitFromShelf"));
-    // Sign out immediately if |dialog_duration_| is non-positive.
-    Shell::Get()->session_controller()->RequestSignOut();
-  } else if (Shell::Get()->logout_confirmation_controller()) {
-    Shell::Get()->logout_confirmation_controller()->ConfirmLogout(
-        base::TimeTicks::Now() + dialog_duration_,
-        LogoutConfirmationController::Source::kShelfExitButton);
-  }
-}
-
 void LogoutButtonTray::OnActiveUserPrefServiceChanged(PrefService* prefs) {
   pref_change_registrar_.reset();
   pref_change_registrar_ = std::make_unique<PrefChangeRegistrar>();
@@ -102,6 +84,12 @@ void LogoutButtonTray::OnActiveUserPrefServiceChanged(PrefService* prefs) {
 
 const char* LogoutButtonTray::GetClassName() const {
   return "LogoutButtonTray";
+}
+
+void LogoutButtonTray::OnThemeChanged() {
+  TrayBackgroundView::OnThemeChanged();
+  button_->SetBgColorOverride(AshColorProvider::Get()->GetControlsLayerColor(
+      AshColorProvider::ControlsLayerType::kControlBackgroundColorAlert));
 }
 
 void LogoutButtonTray::UpdateShowLogoutButtonInTray() {
@@ -159,6 +147,19 @@ void LogoutButtonTray::UpdateButtonTextAndImage() {
     button_->SetMinSize(gfx::Size(kTrayItemSize, kTrayItemSize));
   }
   UpdateVisibility();
+}
+
+void LogoutButtonTray::ButtonPressed() {
+  if (dialog_duration_ <= base::TimeDelta()) {
+    if (Shell::Get()->session_controller()->IsDemoSession())
+      base::RecordAction(base::UserMetricsAction("DemoMode.ExitFromShelf"));
+    // Sign out immediately if |dialog_duration_| is non-positive.
+    Shell::Get()->session_controller()->RequestSignOut();
+  } else if (Shell::Get()->logout_confirmation_controller()) {
+    Shell::Get()->logout_confirmation_controller()->ConfirmLogout(
+        base::TimeTicks::Now() + dialog_duration_,
+        LogoutConfirmationController::Source::kShelfExitButton);
+  }
 }
 
 }  // namespace ash

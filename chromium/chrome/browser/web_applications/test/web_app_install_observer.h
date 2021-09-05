@@ -9,7 +9,6 @@
 #include <set>
 
 #include "base/callback.h"
-#include "base/macros.h"
 #include "base/scoped_observer.h"
 #include "chrome/browser/web_applications/components/app_registrar.h"
 #include "chrome/browser/web_applications/components/app_registrar_observer.h"
@@ -35,6 +34,16 @@ class WebAppInstallObserver final : public AppRegistrarObserver {
       const std::set<AppId>& listening_for_install_app_ids);
 
   // Restricts this observer to only listen for the given
+  // |listening_for_install_with_os_hooks_app_ids|. Settings these means that
+  // the WebAppInstalledWithOsHooksDelegate doesn't get called until all of the
+  // ids in |listening_for_install_with_os_hooks_app_ids| are installed. This
+  // also applies to AwaitNextInstallWithOsHooks().
+  static std::unique_ptr<WebAppInstallObserver>
+  CreateInstallWithOsHooksListener(
+      Profile* registrar,
+      const std::set<AppId>& listening_for_install_app_ids);
+
+  // Restricts this observer to only listen for the given
   // |listening_for_uninstall_app_ids|. Settings these means that the
   // WebAppUninstalledDelegate doesn't get called until all of the ids in
   // |listening_for_uninstall_app_ids| are uninstalled. This also applies to
@@ -42,6 +51,9 @@ class WebAppInstallObserver final : public AppRegistrarObserver {
   static std::unique_ptr<WebAppInstallObserver> CreateUninstallListener(
       Profile* registrar,
       const std::set<AppId>& listening_for_uninstall_app_ids);
+
+  WebAppInstallObserver(const WebAppInstallObserver&) = delete;
+  WebAppInstallObserver& operator=(const WebAppInstallObserver&) = delete;
 
   ~WebAppInstallObserver() override;
 
@@ -62,6 +74,11 @@ class WebAppInstallObserver final : public AppRegistrarObserver {
       base::RepeatingCallback<void(const AppId& app_id)>;
   void SetWebAppInstalledDelegate(WebAppInstalledDelegate delegate);
 
+  using WebAppInstalledWithOsHooksDelegate =
+      base::RepeatingCallback<void(const AppId& app_id)>;
+  void SetWebAppInstalledWithOsHooksDelegate(
+      WebAppInstalledWithOsHooksDelegate delegate);
+
   using WebAppUninstalledDelegate =
       base::RepeatingCallback<void(const AppId& app_id)>;
   void SetWebAppUninstalledDelegate(WebAppUninstalledDelegate delegate);
@@ -78,6 +95,7 @@ class WebAppInstallObserver final : public AppRegistrarObserver {
 
   // AppRegistrarObserver:
   void OnWebAppInstalled(const AppId& app_id) override;
+  void OnWebAppInstalledWithOsHooks(const AppId& app_id) override;
   void OnWebAppsWillBeUpdatedFromSync(
       const std::vector<const WebApp*>& new_apps_state) override;
   void OnWebAppUninstalled(const AppId& app_id) override;
@@ -94,24 +112,32 @@ class WebAppInstallObserver final : public AppRegistrarObserver {
   explicit WebAppInstallObserver(
       AppRegistrar* registrar,
       const std::set<AppId>& listening_for_install_app_ids,
-      const std::set<AppId>& listening_for_uninstall_app_ids);
+      const std::set<AppId>& listening_for_uninstall_app_ids,
+      const std::set<AppId>& listening_for_install_with_os_hooks_app_ids);
   explicit WebAppInstallObserver(
       Profile* profile,
       const std::set<AppId>& listening_for_install_app_ids,
-      const std::set<AppId>& listening_for_uninstall_app_ids);
+      const std::set<AppId>& listening_for_uninstall_app_ids,
+      const std::set<AppId>& listening_for_install_with_os_hooks_app_ids);
 
   std::set<AppId> listening_for_install_app_ids_;
   std::set<AppId> listening_for_uninstall_app_ids_;
+  std::set<AppId> listening_for_install_with_os_hooks_app_ids_;
 
   WebAppInstalledDelegate app_installed_delegate_;
+  WebAppInstalledWithOsHooksDelegate app_installed_with_os_hooks_delegate_;
   WebAppWillBeUpdatedFromSyncDelegate app_will_be_updated_from_sync_delegate_;
   WebAppUninstalledDelegate app_uninstalled_delegate_;
   WebAppProfileWillBeDeletedDelegate app_profile_will_be_deleted_delegate_;
 
   ScopedObserver<AppRegistrar, AppRegistrarObserver> observer_{this};
 
-  DISALLOW_COPY_AND_ASSIGN(WebAppInstallObserver);
 };
+
+// Convenience method to crreate an observer to wait for the next install
+// finished with OS hooks deployment, or for all installations of |app_ids|.
+AppId AwaitNextInstallWithOsHooks(Profile* registrar,
+                                  const std::set<AppId>& app_ids = {});
 
 }  // namespace web_app
 

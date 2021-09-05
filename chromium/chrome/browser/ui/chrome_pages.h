@@ -67,6 +67,7 @@ enum FeedbackSource {
   kFeedbackSourceNetworkHealthPage,
   kFeedbackSourceTabSearch,
   kFeedbackSourceCameraApp,
+  kFeedbackSourceCaptureMode,
 
   // Must be last.
   kFeedbackSourceCount,
@@ -152,6 +153,8 @@ void ShowAppManagementPage(Profile* profile,
 
 void ShowPrintManagementApp(Profile* profile,
                             PrintManagementAppEntryPoint entry_point);
+
+void ShowConnectivityDiagnosticsApp(Profile* profile);
 #endif
 
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)

@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "ash/accessibility/accessibility_panel_layout_manager.h"
+#include "ash/ambient/test/ambient_ash_test_helper.h"
 #include "ash/app_list/test/app_list_test_helper.h"
 #include "ash/display/extended_mouse_warp_controller.h"
 #include "ash/display/mouse_cursor_event_filter.h"
@@ -382,6 +383,10 @@ AppListTestHelper* AshTestBase::GetAppListTestHelper() {
   return ash_test_helper_->app_list_test_helper();
 }
 
+AmbientAshTestHelper* AshTestBase::GetAmbientAshTestHelper() {
+  return ash_test_helper_->ambient_ash_test_helper();
+}
+
 void AshTestBase::CreateUserSessions(int n) {
   GetSessionControllerClient()->CreatePredefinedUserSessions(n);
 }
@@ -396,9 +401,9 @@ void AshTestBase::SimulateUserLogin(const std::string& user_email,
 
 void AshTestBase::SimulateNewUserFirstLogin(const std::string& user_email) {
   TestSessionControllerClient* session = GetSessionControllerClient();
-  session->AddUserSession(
-      user_email, user_manager::USER_TYPE_REGULAR, true /* enable_settings */,
-      true /* provide_pref_service */, true /* is_new_profile */);
+  session->AddUserSession(user_email, user_manager::USER_TYPE_REGULAR,
+                          true /* provide_pref_service */,
+                          true /* is_new_profile */);
   session->SwitchActiveUser(AccountId::FromUserEmail(user_email));
   session->SetSessionState(session_manager::SessionState::ACTIVE);
 }

@@ -28,6 +28,7 @@
     kMenubar,
     kMenubarMenu,
     kNotes,
+    kPageActions,
     kPipPrivate,
     kPrefs,
     kRuntimePrivate,

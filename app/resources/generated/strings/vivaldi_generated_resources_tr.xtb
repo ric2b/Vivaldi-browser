@@ -18,7 +18,6 @@
 <translation id="1221825588892235038">Yalnızca seçilen</translation>
 <translation id="1244303850296295656">Eklenti hatası</translation>
 <translation id="125220115284141797">Varsayılan</translation>
-<translation id="1274977772557788323">Adobe Flash Player Depolama ayarları</translation>
 <translation id="1297175357211070620">Hedef</translation>
 <translation id="1303101771013849280">Yer İmleri HTML Dosyası</translation>
 <translation id="1380436189840894976">Yine de gizli moddan çıkılsın mı?</translation>
@@ -71,7 +70,6 @@
 <translation id="2218515861914035131">Düz metin olarak yapıştır</translation>
 <translation id="2249605167705922988">örn. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Korumalı içerik için tanımlayıcılara izin ver (bilgisayarı yeniden başlatmak gerekebilir)</translation>
-<translation id="2263497240924215535">(Devre Dışı)</translation>
 <translation id="2277255602909579701">Tüm çerezler ve site verileri</translation>
 <translation id="2280486287150724112">Sağ kenar boşluğu</translation>
 <translation id="2282146716419988068">GPU İşlemi</translation>
@@ -119,7 +117,6 @@
 <translation id="3013291976881901233">MIDI cihazlar</translation>
 <translation id="3021678814754966447">Çerçeve Kaynağını &amp;Görüntüle</translation>
 <translation id="3036546437875325427">Flash'ı Etkinleştir</translation>
-<translation id="3038675903128704560">Sitelerin bilgisayarıma erişmek için eklenti kullanmasına izin verme</translation>
 <translation id="3046910703532196514">Web Sayfası, Tamamı</translation>
 <translation id="3067198360141518313">Bu eklentiyi çalıştır</translation>
 <translation id="3080207940057008665">Bilgisayarınızdaki başka bir program, Vivaldi'nin çalışma şeklini değiştirebilecek bir tema ekledi.</translation>
@@ -146,12 +143,10 @@
 <translation id="3378572629723696641">Bu eklenti bozuk olabilir.</translation>
 <translation id="3387614642886316601">Gelişmiş yazım denetimini kullan</translation>
 <translation id="3432227430032737297">Tüm Gösterilenleri Kaldır</translation>
-<translation id="3440761377721825626">Bir site bilgisayarıma erişmek için eklenti kullanmak istediğinde bana sor</translation>
 <translation id="345693547134384690">&amp;Resmi yeni sekmede aç</translation>
 <translation id="3494769164076977169">Bir site ilk dosyadan sonraki dosyaları otomatik olarak indirmeye çalıştığında bana sor (önerilen)</translation>
 <translation id="3505030558724226696">Cihaz erişimini iptal et</translation>
 <translation id="3511307672085573050">Bağlantı Adr&amp;esini Kopyala</translation>
-<translation id="3523642406908660543">Bir site bilgisayarıma erişmek için eklenti kullanmak istediğinde bana sor (önerilen)</translation>
 <translation id="354068948465830244">Bu eklenti, site verilerini okuyabilir ve değiştirebilir</translation>
 <translation id="3560034655160545939">&amp;Yazım denetimi</translation>
 <translation id="3574917942258583917">Yine de gizli moddan çıkılsın mı?</translation>
@@ -210,7 +205,6 @@
 <translation id="4423376891418188461">Ayarları Geri Yükle</translation>
 <translation id="4434045419905280838">Açılır pencereler ve yönlendirmeler</translation>
 <translation id="4478664379124702289">Bağlantıyı Farklı Kay&amp;det...</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535"><ph name="HOST_NAME" /> yayınlanamıyor.</translation>
 <translation id="4593021220803146968"><ph name="URL" /> adresine &amp;git</translation>
 <translation id="4595560905247879544">Uygulamalar ve eklentiler sadece yönetici (<ph name="CUSTODIAN_NAME" />) tarafından değiştirilebilir.</translation>
@@ -287,7 +281,6 @@
 <translation id="583281660410589416">Bilinmiyor</translation>
 <translation id="5860491529813859533">Aç</translation>
 <translation id="5867841422488265304">Web adresini arayın veya yazın</translation>
-<translation id="5908769186679515905">Sitelerin Flash çalıştırmasını engelle</translation>
 <translation id="5910363049092958439">Resmi Farklı Ka&amp;ydet...</translation>
 <translation id="5956585768868398362">Bu beklediğiniz arama sayfası mı?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (en yüksek <ph name="NUM_KILOBYTES_LIVE" />)</translation>
@@ -356,7 +349,6 @@
 <translation id="7287143125007575591">Erişim reddedildi.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">&amp;Denetimleri göster</translation>
-<translation id="7311079019872751559">Korumalı alan içinde olmayan eklenti erişimi</translation>
 <translation id="7385854874724088939">Yazdırmaya çalışırken bir sorun oluştu. Lütfen yazıcınızı kontrol edin ve tekrar deneyin.</translation>
 <translation id="7412226954991670867">GPU Belleği</translation>
 <translation id="7421925624202799674">&amp;Sayfa Kaynağını Görüntüle</translation>

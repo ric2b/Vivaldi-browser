@@ -14,7 +14,7 @@
 
 #include "base/auto_reset.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/debug/alias.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -27,6 +27,8 @@
 #include "base/win/scoped_gdi_object.h"
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
+#include "services/tracing/public/cpp/perfetto/macros.h"
+#include "third_party/perfetto/protos/perfetto/trace/track_event/chrome_window_handle_event_info.pbzero.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/accessibility/accessibility_switches.h"
 #include "ui/accessibility/platform/ax_fragment_root_win.h"
@@ -393,6 +395,7 @@ base::LazyInstance<HWNDMessageHandler::FullscreenWindowMonitorMap>::
 // HWNDMessageHandler, public:
 
 LONG HWNDMessageHandler::last_touch_or_pen_message_time_ = 0;
+bool HWNDMessageHandler::is_pen_active_in_client_area_ = false;
 
 HWNDMessageHandler::HWNDMessageHandler(HWNDMessageHandlerDelegate* delegate,
                                        const std::string& debugging_id)
@@ -988,7 +991,12 @@ HICON HWNDMessageHandler::GetSmallWindowIcon() const {
 LRESULT HWNDMessageHandler::OnWndProc(UINT message,
                                       WPARAM w_param,
                                       LPARAM l_param) {
-  TRACE_EVENT1("ui", "HWNDMessageHandler::OnWndProc", "message_id", message);
+  TRACE_EVENT("ui", "HWNDMessageHandler::OnWndProc",
+              [&](perfetto::EventContext ctx) {
+                perfetto::protos::pbzero::ChromeWindowHandleEventInfo* args =
+                    ctx.event()->set_chrome_window_handle_event_info();
+                args->set_message_id(message);
+              });
 
   HWND window = hwnd();
   LRESULT result = 0;
@@ -1700,8 +1708,12 @@ LRESULT HWNDMessageHandler::OnDpiChanged(UINT msg,
   if (LOWORD(w_param) != HIWORD(w_param))
     NOTIMPLEMENTED() << "Received non-square scaling factors";
 
-  TRACE_EVENT1("ui", "HWNDMessageHandler::OnDwmCompositionChanged", "dpi",
-               LOWORD(w_param));
+  TRACE_EVENT("ui", "HWNDMessageHandler::OnDpiChanged",
+              [&](perfetto::EventContext ctx) {
+                perfetto::protos::pbzero::ChromeWindowHandleEventInfo* args =
+                    ctx.event()->set_chrome_window_handle_event_info();
+                args->set_dpi(LOWORD(w_param));
+              });
 
   int dpi;
   float scaling_factor;
@@ -2478,6 +2490,11 @@ LRESULT HWNDMessageHandler::OnScrollMessage(UINT message,
 LRESULT HWNDMessageHandler::OnSetCursor(UINT message,
                                         WPARAM w_param,
                                         LPARAM l_param) {
+  // Ignore system generated cursors likely caused by window management mouse
+  // moves while the pen is active over the window client area.
+  if (is_pen_active_in_client_area_)
+    return 1;
+
   // Reimplement the necessary default behavior here. Calling DefWindowProc can
   // trigger weird non-client painting for non-glass windows with custom frames.
   // Using a ScopedRedrawLock to prevent caption rendering artifacts may allow
@@ -2969,6 +2986,22 @@ LRESULT HWNDMessageHandler::HandleMouseEventInternal(UINT message,
                                                      WPARAM w_param,
                                                      LPARAM l_param,
                                                      bool track_mouse) {
+  // Ignore system generated mouse messages while the pen is active over the
+  // window client area.
+  if (is_pen_active_in_client_area_) {
+    INPUT_MESSAGE_SOURCE input_message_source;
+    static const auto get_current_input_message_source =
+        reinterpret_cast<decltype(&::GetCurrentInputMessageSource)>(
+            base::win::GetUser32FunctionPointer(
+                "GetCurrentInputMessageSource"));
+    if (get_current_input_message_source &&
+        get_current_input_message_source(&input_message_source) &&
+        input_message_source.deviceType == IMDT_UNAVAILABLE) {
+      return 0;
+    }
+    is_pen_active_in_client_area_ = false;
+  }
+
   // We handle touch events in Aura. Windows generates synthesized mouse
   // messages whenever there's a touch, but it doesn't give us the actual touch
   // messages if it thinks the touch point is in non-client space.
@@ -3031,7 +3064,7 @@ LRESULT HWNDMessageHandler::HandleMouseEventInternal(UINT message,
         // we need to tell the RootView to send the mouse pressed event (which
         // sets capture, allowing subsequent WM_LBUTTONUP (note, _not_
         // WM_NCLBUTTONUP) to fire so that the appropriate WM_SYSCOMMAND can be
-        // sent by the applicable button's ButtonListener. We _have_ to do this
+        // sent by the applicable button's callback. We _have_ to do this this
         // way rather than letting Windows just send the syscommand itself (as
         // would happen if we never did this dance) because for some insane
         // reason DefWindowProc for WM_NCLBUTTONDOWN also renders the pressed
@@ -3271,6 +3304,7 @@ LRESULT HWNDMessageHandler::HandlePointerEventTypePenClient(UINT message,
       NOTREACHED();
 
     last_touch_or_pen_message_time_ = ::GetMessageTime();
+    is_pen_active_in_client_area_ = true;
   }
 
   // Always mark as handled as we don't want to generate WM_MOUSE compatiblity
@@ -3296,9 +3330,7 @@ bool HWNDMessageHandler::IsSynthesizedMouseMessage(unsigned int message,
     ::ClientToScreen(hwnd(), &mouse_location);
     POINT cursor_pos = {0};
     ::GetCursorPos(&cursor_pos);
-    if (memcmp(&cursor_pos, &mouse_location, sizeof(POINT)))
-      return false;
-    return true;
+    return memcmp(&cursor_pos, &mouse_location, sizeof(POINT)) == 0;
   }
   return false;
 }

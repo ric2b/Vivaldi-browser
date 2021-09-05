@@ -109,6 +109,8 @@ std::string GetConfiguration(const base::DictionaryValue* extra_values,
                     types.Has(syncer::UserSelectableType::kPasswords));
   result.SetBoolean("preferencesSynced",
                     types.Has(syncer::UserSelectableType::kPreferences));
+  result.SetBoolean("readingListSynced",
+                    types.Has(syncer::UserSelectableType::kReadingList));
   result.SetBoolean("tabsSynced", types.Has(syncer::UserSelectableType::kTabs));
   result.SetBoolean("themesSynced",
                     types.Has(syncer::UserSelectableType::kThemes));
@@ -174,6 +176,8 @@ void CheckConfigDataTypeArguments(const base::DictionaryValue* dictionary,
             types.Has(syncer::UserSelectableType::kPasswords));
   CheckBool(dictionary, "preferencesSynced",
             types.Has(syncer::UserSelectableType::kPreferences));
+  CheckBool(dictionary, "readingListSynced",
+            types.Has(syncer::UserSelectableType::kReadingList));
   CheckBool(dictionary, "tabsSynced",
             types.Has(syncer::UserSelectableType::kTabs));
   CheckBool(dictionary, "themesSynced",
@@ -243,8 +247,6 @@ class PeopleHandlerTest : public ChromeRenderViewHostTestHarness {
     ON_CALL(*mock_sync_service_->GetMockUserSettings(),
             GetExplicitPassphraseTime())
         .WillByDefault(Return(base::Time()));
-    ON_CALL(*mock_sync_service_, GetRegisteredDataTypes())
-        .WillByDefault(Return(syncer::ModelTypeSet()));
     ON_CALL(*mock_sync_service_, GetSetupInProgressHandle())
         .WillByDefault(
             Return(ByMove(std::make_unique<syncer::SyncSetupInProgressHandle>(
@@ -917,6 +919,7 @@ TEST_F(PeopleHandlerTest, ShowSetupSyncEverything) {
   CheckBool(dictionary, "extensionsRegistered", true);
   CheckBool(dictionary, "passwordsRegistered", true);
   CheckBool(dictionary, "preferencesRegistered", true);
+  CheckBool(dictionary, "readingListRegistered", true);
   CheckBool(dictionary, "tabsRegistered", true);
   CheckBool(dictionary, "themesRegistered", true);
   CheckBool(dictionary, "typedUrlsRegistered", true);
@@ -1098,9 +1101,6 @@ TEST_F(PeopleHandlerTest, TurnOnEncryptAllDisallowed) {
   list_args.AppendString(kTestCallbackId);
   list_args.AppendString(args);
 
-  EXPECT_CALL(*mock_sync_service_->GetMockUserSettings(),
-              EnableEncryptEverything())
-      .Times(0);
   EXPECT_CALL(*mock_sync_service_->GetMockUserSettings(),
               SetEncryptionPassphrase(_))
       .Times(0);

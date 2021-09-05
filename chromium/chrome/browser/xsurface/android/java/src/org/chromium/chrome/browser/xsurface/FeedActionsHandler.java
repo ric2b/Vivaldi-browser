@@ -4,6 +4,10 @@
 
 package org.chromium.chrome.browser.xsurface;
 
+import android.view.View;
+
+import androidx.annotation.Nullable;
+
 import java.util.Map;
 
 /**
@@ -22,6 +26,13 @@ public interface FeedActionsHandler {
      * Sends data back to the server when content is clicked.
      */
     default void processThereAndBackAgainData(byte[] data) {}
+
+    /**
+     * Sends data back to the server when content is clicked and provides the corresponding view
+     * through |actionSourceView| which can be null.
+     */
+    @Deprecated
+    default void processThereAndBackAgainData(byte[] data, @Nullable View actionSourceView) {}
 
     /**
      * Stores a view FeedAction for eventual upload. 'data' is a serialized FeedAction protobuf
@@ -91,4 +102,11 @@ public interface FeedActionsHandler {
      */
     default void showSnackbar(String text, String actionLabel, SnackbarDuration duration,
             SnackbarController controller) {}
+
+    /**
+     * Share a URL. This will bring up the sharing sheet.
+     * @param url The url of the page to be shared.
+     * @param title The title of the page to be shared.
+     */
+    default void share(String url, String title) {}
 }

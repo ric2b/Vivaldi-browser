@@ -60,6 +60,10 @@ NotesSyncTest::NotesSyncTest(TestType test_type) : SyncTest(test_type) {}
 
 NotesSyncTest::~NotesSyncTest() {}
 
+bool NotesSyncTest::UseVerifier() {
+  return true;
+}
+
 void NotesSyncTest::SetUp() {
   vivaldi::ForceVivaldiRunning(true);
   SyncTest::SetUp();
@@ -74,7 +78,7 @@ bool NotesSyncTest::SetupClients() {
   if (!SyncTest::SetupClients())
     return false;
 
-  if (use_verifier())
+  if (UseVerifier())
     WaitForNotesModelToLoad(NotesModelFactory::GetForBrowserContext(verifier()));
 
   return true;

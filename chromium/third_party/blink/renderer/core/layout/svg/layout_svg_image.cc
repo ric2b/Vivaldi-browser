@@ -50,7 +50,6 @@ namespace blink {
 
 LayoutSVGImage::LayoutSVGImage(SVGImageElement* impl)
     : LayoutSVGModelObject(impl),
-      needs_boundaries_update_(true),
       needs_transform_update_(true),
       transform_uses_reference_box_(false),
       image_resource_(MakeGarbageCollected<LayoutImageResource>()) {
@@ -152,11 +151,7 @@ bool LayoutSVGImage::UpdateBoundingBox() {
   if (style.Width().IsAuto() || style.Height().IsAuto())
     object_bounding_box_.SetSize(CalculateObjectSize());
 
-  if (old_object_bounding_box != object_bounding_box_) {
-    SetShouldDoFullPaintInvalidation(PaintInvalidationReason::kImage);
-    needs_boundaries_update_ = true;
-  }
-  return old_object_bounding_box.Size() != object_bounding_box_.Size();
+  return old_object_bounding_box != object_bounding_box_;
 }
 
 void LayoutSVGImage::UpdateLayout() {
@@ -164,19 +159,13 @@ void LayoutSVGImage::UpdateLayout() {
   DCHECK(NeedsLayout());
   LayoutAnalyzer::Scope analyzer(*this);
 
-  // Invalidate all resources of this client if our layout changed.
-  if (EverHadLayout() && SelfNeedsLayout())
-    SVGResourcesCache::ClientLayoutChanged(*this);
+  const bool bbox_changed = UpdateBoundingBox();
+  if (bbox_changed) {
+    SetShouldDoFullPaintInvalidation(PaintInvalidationReason::kImage);
 
-  FloatPoint old_bbox_location = object_bounding_box_.Location();
-  bool bbox_changed = UpdateBoundingBox() ||
-                      old_bbox_location != object_bounding_box_.Location();
-
-  bool update_parent_boundaries = false;
-  if (needs_boundaries_update_) {
-    local_visual_rect_ = object_bounding_box_;
-    needs_boundaries_update_ = false;
-    update_parent_boundaries = true;
+    // Invalidate all resources of this client if our reference box changed.
+    if (EverHadLayout())
+      SVGResourceInvalidator(*this).InvalidateEffects();
   }
 
   if (!needs_transform_update_ && transform_uses_reference_box_) {
@@ -185,6 +174,7 @@ void LayoutSVGImage::UpdateLayout() {
       SetNeedsPaintPropertyUpdate();
   }
 
+  bool update_parent_boundaries = bbox_changed;
   if (needs_transform_update_) {
     local_transform_ = CalculateLocalTransform();
     needs_transform_update_ = false;
@@ -195,7 +185,6 @@ void LayoutSVGImage::UpdateLayout() {
   if (update_parent_boundaries)
     LayoutSVGModelObject::SetNeedsBoundariesUpdate();
 
-  DCHECK(!needs_boundaries_update_);
   DCHECK(!needs_transform_update_);
 
   if (auto* svg_image_element = DynamicTo<SVGImageElement>(GetElement())) {
@@ -256,7 +245,7 @@ void LayoutSVGImage::ImageChanged(WrappedImagePtr, CanDeferInvalidation defer) {
                                                                          false);
 
   if (StyleRef().Width().IsAuto() || StyleRef().Height().IsAuto()) {
-    if (UpdateBoundingBox())
+    if (CalculateObjectSize() != object_bounding_box_.Size())
       SetNeedsLayout(layout_invalidation_reason::kSizeChanged);
   }
 

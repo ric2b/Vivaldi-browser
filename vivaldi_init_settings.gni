@@ -56,6 +56,9 @@ declare_overrides() {
     # since we cannot update current builders to have SDK 10.15
     # due to unsupported hardware prevening an OSX upgrade
     # mac_sdk_official_version = "10.14"
+    if (target_cpu == "arm64") {
+      mac_use_sdk = "11.0"
+    }
   }
 
   # Needed until we discover what is causing the unused argument during clcache

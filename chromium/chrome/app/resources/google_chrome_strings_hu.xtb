@@ -23,7 +23,6 @@
 <translation id="1587325591171447154">A(z) <ph name="FILE_NAME" /> veszélyes, ezért a Chrome letiltotta.</translation>
 <translation id="1597911401261118146">Ha ellenőrizni szeretné, hogy jelszavai biztonságban vannak-e az adatvédelmi incidensektől és más biztonsági problémáktól, <ph name="BEGIN_LINK" />jelentkezzen be a Chrome-ba<ph name="END_LINK" />.</translation>
 <translation id="1619887657840448962">A Chrome biztonságosabbá tétele érdekében kikapcsoltuk a következő bővítményt, amely nem a(z) <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> szolgáltatásból származik, és előfordulhat, hogy az Ön tudta nélkül lett telepítve.</translation>
-<translation id="162448658176061655">A Chrome hetente egyszer keres nemkívánatos szoftvereket. Legutóbb frissítve: az imént.</translation>
 <translation id="162629503687514352">A Chrome OS nem tudta szinkronizálni az Ön jelszavait.</translation>
 <translation id="1628000112320670027">Segítség a Chrome használatával kapcsolatban</translation>
 <translation id="1662639173275167396">A Chrome OS létrejöttéhez egyéb <ph name="BEGIN_LINK_CROS_OSS" />nyílt forráskódú szoftverek<ph name="END_LINK_CROS_OSS" /> is hozzájárultak, ahogyan a <ph name="BEGIN_LINK_LINUX_OSS" />Linux (béta)<ph name="END_LINK_LINUX_OSS" /> létrejöttéhez is.</translation>
@@ -76,6 +75,7 @@
 <translation id="2926676257163822632">A gyenge jelszavakat könnyű kitalálni. Engedélyezze a Chrome számára, hogy <ph name="BEGIN_LINK" /> erős jelszavakat hozzon létre Önnek, és megjegyezze őket<ph name="END_LINK" />.</translation>
 <translation id="2929907241665500097">Ismeretlen hiba történt, ezért a Chrome nem frissült. <ph name="BEGIN_LINK" />A Chrome frissítési problémáinak megoldása.<ph name="END_LINK" /></translation>
 <translation id="2969728957078202736"><ph name="PAGE_TITLE" /> – Hálózati bejelentkezés – Chrome</translation>
+<translation id="298099161970687941">Kérdezzen rá a Chrome megnyitásakor</translation>
 <translation id="3037838751736561277">A Google Chrome háttérmódban van.</translation>
 <translation id="3059710691562604940">A Biztonságos Böngészés ki van kapcsolva. A Chrome a szolgáltatás bekapcsolását javasolja.</translation>
 <translation id="3065168410429928842">Chrome-lap</translation>
@@ -144,7 +144,6 @@
 <translation id="4771048833395599659">Ez a fájl veszélyes lehet, ezért a Chrome letiltotta.</translation>
 <translation id="479167709087336770">A szolgáltatás ugyanazt a helyesírás-ellenőrzést használja, mint a Google Kereső. A begépelt szöveget a böngésző elküldi a Google-nak. A beállítások között ezt bármikor módosíthatja.</translation>
 <translation id="4891791193823137474">A Google Chrome futhat a háttérben</translation>
-<translation id="489337168347244450">{NUM_DAYS,plural, =1{A Chrome hetente egyszer keres nemkívánatos szoftvereket. Legutóbb frissítve: 1 napja.}other{A Chrome hetente egyszer keres nemkívánatos szoftvereket. Legutóbb frissítve: {NUM_DAYS} napja.}}</translation>
 <translation id="4895437082222824641">Link megnyi&amp;tása új Chrome-lapon</translation>
 <translation id="4953650215774548573">A Google Chrome beállítása alapértelmezett böngészőként</translation>
 <translation id="495931528404527476">A Chrome-ban</translation>
@@ -160,7 +159,6 @@
 <translation id="5430073640787465221">A beállításait tartalmazó fájl hibás vagy érvénytelen. A Google Chrome nem tudja helyreállítani a beállításait.</translation>
 <translation id="556024056938947818">A Google Chrome megpróbálja megjeleníteni a jelszavakat.</translation>
 <translation id="5566025111015594046">Google Chrome (mDNS-In)</translation>
-<translation id="5633355459292055250">Kérdezzen rá a Chrome megnyitásakor</translation>
 <translation id="5657226924540934362">Ha valamelyik beállítás nem látható ezen az oldalon, keresse a <ph name="LINK_BEGIN" />Chrome OS beállításai<ph name="LINK_END" /> között</translation>
 <translation id="565744775970812598">A(z) <ph name="FILE_NAME" /> veszélyes lehet, ezért a Chrome letiltotta.</translation>
 <translation id="5678190148303298925">{COUNT,plural, =0{Rendszergazdája arra kéri, hogy indítsa újra a Chrome-ot a frissítés alkalmazásához.}=1{Rendszergazdája arra kéri, hogy indítsa újra a Chrome-ot a frissítés alkalmazásához. Az inkognitó ablak nem fog újra megnyílni.}other{Rendszergazdája arra kéri, hogy indítsa újra a Chrome-ot a frissítés alkalmazásához. A(z) # inkognitó ablak nem fog újra megnyílni.}}</translation>
@@ -185,7 +183,6 @@
 <translation id="6291549208091401781">A Google Chrome már telepítve van az összes felhasználó számára a számítógépen.</translation>
 <translation id="6338556085225130112">A Google Chrome frissítése</translation>
 <translation id="6368958679917195344">A Chrome OS-hez egyéb <ph name="BEGIN_LINK_CROS_OSS" />nyílt forráskódú szoftver<ph name="END_LINK_CROS_OSS" /> is hozzájárult.</translation>
-<translation id="6454142105866844106">A Chrome hetente egyszer keres nem kívánt szoftvereket.</translation>
 <translation id="6515495397637126556"><ph name="PAGE_TITLE" /> – Google Chrome Dev</translation>
 <translation id="6566149418543181476">A Google Chrome frissítése (<ph name="PROGRESS_PERCENT" />)</translation>
 <translation id="6650333065969705433">Ahhoz, hogy használhassa a Rosettát védett médiatartalmak lejátszásához, újra kell indítania a Chrome-ot.</translation>
@@ -205,13 +202,11 @@
 <translation id="7106741999175697885">Feladatkezelő - Google Chrome</translation>
 <translation id="7140653346177713799">{COUNT,plural, =0{Új Chrome-frissítés jelent meg, amely az újraindítás után azonnal érvénybe lép.}=1{Új Chrome-frissítés jelent meg, amely az újraindítás után azonnal érvénybe lép. Az inkognitó ablak nem fog újra megnyílni.}other{Új Chrome-frissítés jelent meg, amely az újraindítás után azonnal érvénybe lép. A(z) # inkognitó ablak nem fog újra megnyílni.}}</translation>
 <translation id="7155997830309522122">Ha igen, akkor módosítsa a Chrome böngészőben mentett jelszót az új jelszóra.</translation>
-<translation id="7236955538461508933">{NUM_HOURS,plural, =1{A Chrome hetente egyszer keres nemkívánatos szoftvereket. Legutóbb frissítve: 1 órája.}other{A Chrome hetente egyszer keres nemkívánatos szoftvereket. Legutóbb frissítve: {NUM_HOURS} órája.}}</translation>
 <translation id="7242029209006116544">Kezelt fiókkal jelentkezik be, és annak adminisztrátora számára hozzáférést biztosít Google Chrome-profiljához. Chrome-adatait – például alkalmazásait, könyvjelzőit, előzményeit, jelszavait és más beállításait – a rendszer véglegesen társítja a(z) <ph name="USER_NAME" /> fiókhoz. Ezen adatokat a Google-fiók Irányítópultján törölheti, de más fiókhoz nem társíthatja őket. Létrehozhat egy új profilt is meglévő Chrome-adatainak külön tárolásához. <ph name="LEARN_MORE" /></translation>
 <translation id="7295052994004373688">A Google Chrome kezelőfelülete ezen a nyelven jelenik meg.</translation>
 <translation id="7296210096911315575">Fontos használati és biztonsági információk</translation>
 <translation id="7308322188646931570">A Chrome-nak tárhelyhozzáférésre van szüksége a fájlok letöltéséhez</translation>
 <translation id="7339898014177206373">Új ablak</translation>
-<translation id="7386132805935307836">A Chrome hetente egyszer keres nemkívánatos szoftvereket. Legutóbb frissítve: tegnap.</translation>
 <translation id="7398801000654795464"><ph name="USER_EMAIL_ADDRESS" /> néven volt bejelentkezve a Chrome-ba. Kérjük, ugyanazzal a fiókkal jelentkezzen be újra.</translation>
 <translation id="7408085963519505752">Chrome OS – Szerződési Feltételek</translation>
 <translation id="7419046106786626209">A Chrome OS nem tudta szinkronizálni az adatait, mert a szinkronizálás nem érhető el az Ön domainjénél.</translation>
@@ -246,7 +241,6 @@
 <translation id="828798499196665338">Szülőd kikapcsolta a Chrome „Engedélyek webhelyek, alkalmazások és bővítmények számára” beállítását. A(z) <ph name="EXTENSION_TYPE_PARAMETER" /> nem engedélyezhető.</translation>
 <translation id="8290100596633877290">Hmm. A Google Chrome összeomlott. Újraindítja most?</translation>
 <translation id="8342675569599923794">Ez a fájl veszélyes, ezért a Chrome letiltotta.</translation>
-<translation id="8344083974188970894">{NUM_MINS,plural, =1{A Chrome hetente egyszer keres nemkívánatos szoftvereket. Legutóbb frissítve: 1 perce.}other{A Chrome hetente egyszer keres nemkívánatos szoftvereket. Legutóbb frissítve: {NUM_MINS} perce.}}</translation>
 <translation id="8370517070665726704">Copyright <ph name="YEAR" /> Google LLC. Minden jog fenntartva.</translation>
 <translation id="840084489713044809">A Google Chrome exportálni szeretné a jelszavakat.</translation>
 <translation id="8433638294851456451">Ha innen szeretne számot küldeni Android-telefonjára, jelentkezzen be a Chrome-ba mindkét eszközén.</translation>
@@ -261,7 +255,6 @@
 <translation id="8641606876632989680">A Chrome figyelmezteti Önt, amikor olyan jelszóval jelentkezik be, amelyhez illetéktelenül hozzáfértek</translation>
 <translation id="8669527147644353129">Google Chrome segéd</translation>
 <translation id="8679801911857917785">Továbbá azt is szabályozza, hogy melyik oldal jelenik meg a Chrome indításakor.</translation>
-<translation id="8681614230122836773">A Chrome kártékony szoftvert talált az Ön számítógépén</translation>
 <translation id="870251953148363156">A &amp;Google Chrome frissítése</translation>
 <translation id="873133009373065397">A Google Chrome problémába ütközött az alapértelmezett böngésző megállapításakor vagy beállításakor</translation>
 <translation id="8748242232968346981">Saját profilt hozna létre a Chrome-ban?</translation>

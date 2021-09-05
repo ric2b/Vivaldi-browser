@@ -30,6 +30,7 @@
 #include <utility>
 
 #include "base/auto_reset.h"
+#include "cc/base/features.h"
 #include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom-blink-forward.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_context.h"
@@ -438,25 +439,26 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
 
   LayoutBox* EnclosingScrollableBox() const;
 
-  // Returns the root of the inline formatting context |this| belongs to. |this|
-  // must be |IsInline()|. The root is the object that holds |NGInlineNodeData|
-  // and the root |NGPaintFragment| if it's in LayoutNG context. See also
-  // |ContainingFragmentainer()|.
-  LayoutBlockFlow* RootInlineFormattingContext() const;
-
   // Returns the |LayoutBlockFlow| that has |NGFragmentItems| for |this|. This
-  // is usually the same as |RootInlineFormattingContext()|, but it is the child
-  // of that when the IFC has multicol applied. TODO(crbug.com/1076470)
+  // is usually the same as |ContainingNGBlockFlow()|, but it is the child of
+  // that when the IFC has multicol applied. TODO(crbug.com/1076470)
   LayoutBlockFlow* FragmentItemsContainer() const;
 
   // Returns the containing block flow if it's a LayoutNGBlockFlow, or nullptr
   // otherwise. Note that the semantics is different from |EnclosingBox| for
   // atomic inlines that this function returns the container, while
   // |EnclosingBox| returns the atomic inline itself.
+  //
+  // |this| must be |IsInline()|. The root is the object that holds
+  // |NGInlineNodeData| and the root |NGPaintFragment| if it's in
+  // LayoutNG context.
   LayoutBlockFlow* ContainingNGBlockFlow() const;
 
   // Returns |NGPhysicalBoxFragment| for |ContainingNGBlockFlow()| or nullptr
   // otherwise.
+  //
+  // TODO(crbug.com/1061423): Remove this method. We shouldn't assume
+  // that there's only one fragment.
   const NGPhysicalBoxFragment* ContainingBlockFlowFragment() const;
 
   // Function to return our enclosing flow thread if we are contained inside
@@ -838,11 +840,11 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   }
   bool IsLayoutTableCol() const {
     NOT_DESTROYED();
-    return IsOfType(kLayoutObjectLayoutTableCol);
+    return IsOfType(kLayoutObjectTableCol);
   }
   bool IsLayoutNGTableCol() const {
     NOT_DESTROYED();
-    return IsOfType(kLayoutObjectLayoutNGTableCol);
+    return IsOfType(kLayoutObjectNGTableCol);
   }
   bool IsListItem() const {
     NOT_DESTROYED();
@@ -882,8 +884,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   }
   bool IsButtonIncludingNG() const {
     NOT_DESTROYED();
-    return IsOfType(kLayoutObjectLayoutButton) ||
-           IsOfType(kLayoutObjectNGButton);
+    return IsOfType(kLayoutObjectButton) || IsOfType(kLayoutObjectNGButton);
   }
   bool IsLayoutNGButton() const {
     NOT_DESTROYED();
@@ -891,39 +892,39 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   }
   bool IsLayoutNGCustom() const {
     NOT_DESTROYED();
-    return IsOfType(kLayoutObjectLayoutNGCustom);
+    return IsOfType(kLayoutObjectNGCustom);
   }
   bool IsLayoutGrid() const {
     NOT_DESTROYED();
-    return IsOfType(kLayoutObjectLayoutGrid);
+    return IsOfType(kLayoutObjectGrid);
   }
   bool IsLayoutIFrame() const {
     NOT_DESTROYED();
-    return IsOfType(kLayoutObjectLayoutIFrame);
+    return IsOfType(kLayoutObjectIFrame);
   }
   bool IsLayoutImage() const {
     NOT_DESTROYED();
-    return IsOfType(kLayoutObjectLayoutImage);
+    return IsOfType(kLayoutObjectImage);
   }
   bool IsLayoutMultiColumnSet() const {
     NOT_DESTROYED();
-    return IsOfType(kLayoutObjectLayoutMultiColumnSet);
+    return IsOfType(kLayoutObjectMultiColumnSet);
   }
   bool IsLayoutMultiColumnSpannerPlaceholder() const {
     NOT_DESTROYED();
-    return IsOfType(kLayoutObjectLayoutMultiColumnSpannerPlaceholder);
+    return IsOfType(kLayoutObjectMultiColumnSpannerPlaceholder);
   }
   bool IsLayoutReplaced() const {
     NOT_DESTROYED();
-    return IsOfType(kLayoutObjectLayoutReplaced);
+    return IsOfType(kLayoutObjectReplaced);
   }
   bool IsLayoutCustomScrollbarPart() const {
     NOT_DESTROYED();
-    return IsOfType(kLayoutObjectLayoutCustomScrollbarPart);
+    return IsOfType(kLayoutObjectCustomScrollbarPart);
   }
   bool IsLayoutView() const {
     NOT_DESTROYED();
-    return IsOfType(kLayoutObjectLayoutView);
+    return IsOfType(kLayoutObjectView);
   }
   bool IsRuby() const {
     NOT_DESTROYED();
@@ -961,13 +962,17 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     NOT_DESTROYED();
     return IsOfType(kLayoutObjectTableRow);
   }
+  bool IsLegacyTableRow() const {
+    NOT_DESTROYED();
+    return IsTableRow() && !IsLayoutNGObject();
+  }
   bool IsTableSection() const {
     NOT_DESTROYED();
     return IsOfType(kLayoutObjectTableSection);
   }
   bool IsTextAreaIncludingNG() const {
     NOT_DESTROYED();
-    return IsOfType(kLayoutObjectTextArea) ||
+    return IsOfType(kLayoutObjectTextControlMultiLine) ||
            IsOfType(kLayoutObjectNGTextControlMultiLine);
   }
   bool IsTextControlIncludingNG() const {
@@ -978,7 +983,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   }
   bool IsTextFieldIncludingNG() const {
     NOT_DESTROYED();
-    return IsOfType(kLayoutObjectTextField) ||
+    return IsOfType(kLayoutObjectTextControlSingleLine) ||
            IsOfType(kLayoutObjectNGTextControlSingleLine);
   }
   bool IsVideo() const {
@@ -2723,7 +2728,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   void ImageNotifyFinished(ImageResourceContent*) override;
   void NotifyImageFullyRemoved(ImageResourceContent*) override;
   bool WillRenderImage() final;
-  bool GetImageAnimationPolicy(web_pref::ImageAnimationPolicy&) final;
+  bool GetImageAnimationPolicy(mojom::blink::ImageAnimationPolicy&) final;
 
   void Remove() {
     NOT_DESTROYED();
@@ -2850,7 +2855,12 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   void SetShouldDoFullPaintInvalidation(
       PaintInvalidationReason = PaintInvalidationReason::kFull);
   void SetShouldDoFullPaintInvalidationWithoutGeometryChange(
-      PaintInvalidationReason = PaintInvalidationReason::kFull);
+      PaintInvalidationReason reason = PaintInvalidationReason::kFull) {
+    NOT_DESTROYED();
+    // Use SetBackgroundNeedsFullPaintInvalidation() instead. See comment above.
+    DCHECK_NE(reason, PaintInvalidationReason::kBackground);
+    SetShouldDoFullPaintInvalidationWithoutGeometryChangeInternal(reason);
+  }
 
   void ClearPaintInvalidationFlags();
 
@@ -2899,6 +2909,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     return bitfields_.ShouldDelayFullPaintInvalidation();
   }
   void SetShouldDelayFullPaintInvalidation();
+  void ClearShouldDelayFullPaintInvalidation();
 
   bool ShouldInvalidateSelection() const {
     NOT_DESTROYED();
@@ -2997,6 +3008,32 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     bitfields_.SetInsideBlockingTouchEventHandler(inside);
   }
 
+  // Whether this object's Node has a blocking wheel event handler on itself or
+  // an ancestor.
+  bool InsideBlockingWheelEventHandler() const {
+    return bitfields_.InsideBlockingWheelEventHandler();
+  }
+  // Mark this object as having a |InsideBlockingWheelEventHandler| changed, and
+  // mark all ancestors as having a descendant that changed. This will cause a
+  // PrePaint tree walk to update blocking wheel event handler state.
+  void MarkBlockingWheelEventHandlerChanged();
+  bool BlockingWheelEventHandlerChanged() const {
+    // TODO(https://crbug.com/841364): This block is optimized to avoid costly
+    // checks for kWheelEventRegions. It will be simplified once
+    // kWheelEventRegions feature flag is removed.
+    if (!bitfields_.BlockingWheelEventHandlerChanged())
+      return false;
+    return base::FeatureList::IsEnabled(::features::kWheelEventRegions)
+               ? bitfields_.BlockingWheelEventHandlerChanged()
+               : false;
+  }
+  bool DescendantBlockingWheelEventHandlerChanged() const {
+    return bitfields_.DescendantBlockingWheelEventHandlerChanged();
+  }
+  void UpdateInsideBlockingWheelEventHandler(bool inside) {
+    bitfields_.SetInsideBlockingWheelEventHandler(inside);
+  }
+
   // Painters can use const methods only, except for these explicitly declared
   // methods.
   class CORE_EXPORT MutableForPainting {
@@ -3021,8 +3058,9 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     }
     void SetShouldDoFullPaintInvalidationWithoutGeometryChange(
         PaintInvalidationReason reason) {
-      layout_object_.SetShouldDoFullPaintInvalidationWithoutGeometryChange(
-          reason);
+      layout_object_
+          .SetShouldDoFullPaintInvalidationWithoutGeometryChangeInternal(
+              reason);
     }
     void SetBackgroundNeedsFullPaintInvalidation() {
       layout_object_.SetBackgroundNeedsFullPaintInvalidation();
@@ -3060,6 +3098,10 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
       layout_object_.UpdateInsideBlockingTouchEventHandler(inside);
     }
 
+    void UpdateInsideBlockingWheelEventHandler(bool inside) {
+      layout_object_.UpdateInsideBlockingWheelEventHandler(inside);
+    }
+
     void InvalidateIntersectionObserverCachedRects() {
       layout_object_.InvalidateIntersectionObserverCachedRects();
     }
@@ -3074,6 +3116,10 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
       layout_object_.bitfields_.SetNeedsPaintPropertyUpdate(false);
     }
 #endif
+
+    void SetShouldSkipNextLayoutShiftTracking(bool b) {
+      layout_object_.SetShouldSkipNextLayoutShiftTracking(b);
+    }
 
     FragmentData& FirstFragment() { return layout_object_.fragment_; }
 
@@ -3182,7 +3228,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   }
   void SetBackgroundNeedsFullPaintInvalidation() {
     NOT_DESTROYED();
-    SetShouldDoFullPaintInvalidationWithoutGeometryChange(
+    SetShouldDoFullPaintInvalidationWithoutGeometryChangeInternal(
         PaintInvalidationReason::kBackground);
     bitfields_.SetBackgroundNeedsFullPaintInvalidation(true);
   }
@@ -3219,9 +3265,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // !Table()->ShouldCollapseBorders().
   bool HasNonCollapsedBorderDecoration() const {
     NOT_DESTROYED();
-    // We can only ensure this flag is up-to-date after PrePaint.
     DCHECK_GE(GetDocument().Lifecycle().GetState(),
-              DocumentLifecycle::kPrePaintClean);
+              DocumentLifecycle::kInPerformLayout);
     return bitfields_.HasNonCollapsedBorderDecoration();
   }
   void SetHasNonCollapsedBorderDecoration(bool b) {
@@ -3232,6 +3277,16 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   bool BeingDestroyed() const {
     NOT_DESTROYED();
     return bitfields_.BeingDestroyed();
+  }
+
+  bool IsTableColumnsConstraintsDirty() const {
+    NOT_DESTROYED();
+    return bitfields_.IsTableColumnsConstraintsDirty();
+  }
+
+  void SetTableColumnConstraintDirty(bool b) {
+    NOT_DESTROYED();
+    bitfields_.SetIsTableColumnsConstraintsDirty(b);
   }
 
   DisplayLockContext* GetDisplayLockContext() const {
@@ -3272,55 +3327,64 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     return true;
   }
 
+  bool TransformAffectsVectorEffect() const {
+    NOT_DESTROYED();
+    return bitfields_.TransformAffectsVectorEffect();
+  }
+
+  bool ShouldSkipNextLayoutShiftTracking() const {
+    return bitfields_.ShouldSkipNextLayoutShiftTracking();
+  }
+  void SetShouldSkipNextLayoutShiftTracking(bool b) {
+    bitfields_.SetShouldSkipNextLayoutShiftTracking(b);
+  }
+
  protected:
+  // Identifiers for each of LayoutObject subclasses.
+  // The identifier name for blink::LayoutFoo should be kLayoutObjectFoo.
   enum LayoutObjectType {
     kLayoutObjectBr,
+    kLayoutObjectButton,
     kLayoutObjectCanvas,
-    kLayoutObjectFieldset,
     kLayoutObjectCounter,
+    kLayoutObjectCustomScrollbarPart,
     kLayoutObjectDetailsMarker,
     kLayoutObjectEmbeddedObject,
+    kLayoutObjectFieldset,
     kLayoutObjectFileUploadControl,
     kLayoutObjectFrame,
     kLayoutObjectFrameSet,
+    kLayoutObjectGrid,
+    kLayoutObjectIFrame,
+    kLayoutObjectImage,
     kLayoutObjectInsideListMarker,
-    kLayoutObjectLayoutTableCol,
-    kLayoutObjectLayoutNGTableCol,
     kLayoutObjectListItem,
     kLayoutObjectListMarker,
     kLayoutObjectListMarkerImage,
     kLayoutObjectMathML,
     kLayoutObjectMathMLRoot,
     kLayoutObjectMedia,
+    kLayoutObjectMultiColumnSet,
+    kLayoutObjectMultiColumnSpannerPlaceholder,
     kLayoutObjectNGBlockFlow,
     kLayoutObjectNGButton,
+    kLayoutObjectNGCustom,
     kLayoutObjectNGFieldset,
     kLayoutObjectNGFlexibleBox,
     kLayoutObjectNGGrid,
-    kLayoutObjectNGMixin,
-    kLayoutObjectNGListItem,
     kLayoutObjectNGInsideListMarker,
+    kLayoutObjectNGListItem,
+    kLayoutObjectNGMixin,
     kLayoutObjectNGOutsideListMarker,
     kLayoutObjectNGProgress,
+    kLayoutObjectNGTableCol,
     kLayoutObjectNGText,
     kLayoutObjectNGTextControlMultiLine,
     kLayoutObjectNGTextControlSingleLine,
     kLayoutObjectOutsideListMarker,
     kLayoutObjectProgress,
     kLayoutObjectQuote,
-    kLayoutObjectLayoutButton,
-    kLayoutObjectLayoutNGCustom,
-    kLayoutObjectLayoutFlowThread,
-    kLayoutObjectLayoutGrid,
-    kLayoutObjectLayoutIFrame,
-    kLayoutObjectLayoutImage,
-    kLayoutObjectLayoutInline,
-    kLayoutObjectLayoutMultiColumnSet,
-    kLayoutObjectLayoutMultiColumnSpannerPlaceholder,
-    kLayoutObjectLayoutEmbeddedContent,
-    kLayoutObjectLayoutReplaced,
-    kLayoutObjectLayoutCustomScrollbarPart,
-    kLayoutObjectLayoutView,
+    kLayoutObjectReplaced,
     kLayoutObjectRuby,
     kLayoutObjectRubyBase,
     kLayoutObjectRubyRun,
@@ -3329,29 +3393,31 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     kLayoutObjectTableCaption,
     kLayoutObjectTableCell,
     kLayoutObjectTableCellLegacy,
+    kLayoutObjectTableCol,
     kLayoutObjectTableRow,
     kLayoutObjectTableSection,
-    kLayoutObjectTextArea,
     kLayoutObjectTextControl,
-    kLayoutObjectTextField,
+    kLayoutObjectTextControlMultiLine,
+    kLayoutObjectTextControlSingleLine,
     kLayoutObjectVideo,
+    kLayoutObjectView,
     kLayoutObjectWidget,
 
     kLayoutObjectSVG, /* Keep by itself? */
-    kLayoutObjectSVGRoot,
     kLayoutObjectSVGContainer,
-    kLayoutObjectSVGTransformableContainer,
-    kLayoutObjectSVGViewportContainer,
+    kLayoutObjectSVGFilterPrimitive,
+    kLayoutObjectSVGForeignObject,
     kLayoutObjectSVGHiddenContainer,
+    kLayoutObjectSVGImage,
+    kLayoutObjectSVGInline,
+    kLayoutObjectSVGInlineText,
+    kLayoutObjectSVGResourceContainer,
+    kLayoutObjectSVGRoot,
     kLayoutObjectSVGShape,
     kLayoutObjectSVGText,
     kLayoutObjectSVGTextPath,
-    kLayoutObjectSVGInline,
-    kLayoutObjectSVGInlineText,
-    kLayoutObjectSVGImage,
-    kLayoutObjectSVGForeignObject,
-    kLayoutObjectSVGResourceContainer,
-    kLayoutObjectSVGFilterPrimitive,
+    kLayoutObjectSVGTransformableContainer,
+    kLayoutObjectSVGViewportContainer,
   };
   virtual bool IsOfType(LayoutObjectType type) const {
     NOT_DESTROYED();
@@ -3496,6 +3562,12 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // object is really in the first line which is unknown before layout.
   const ComputedStyle* FirstLineStyleWithoutFallback() const;
 
+  void SetTransformAffectsVectorEffect(bool b) {
+    NOT_DESTROYED();
+    DCHECK(IsSVGChild());
+    bitfields_.SetTransformAffectsVectorEffect(b);
+  }
+
  private:
   bool LocalToAncestorRectFastPath(const PhysicalRect& rect,
                                    const LayoutBoxModelObject* ancestor,
@@ -3572,6 +3644,9 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
       const LayoutBox* box_for_flipping) const;
 
   void MarkSelfPaintingLayerForVisualOverflowRecalc();
+
+  void SetShouldDoFullPaintInvalidationWithoutGeometryChangeInternal(
+      PaintInvalidationReason);
 
   // This is set by Set[Subtree]ShouldDoFullPaintInvalidation, and cleared
   // during PrePaint in this object's InvalidatePaint(). It's different from
@@ -3686,12 +3761,19 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
           inside_blocking_touch_event_handler_(false),
           effective_allowed_touch_action_changed_(true),
           descendant_effective_allowed_touch_action_changed_(false),
+          inside_blocking_wheel_event_handler_(false),
+          blocking_wheel_event_handler_changed_(true),
+          descendant_blocking_wheel_event_handler_changed_(false),
           is_effective_root_scroller_(false),
           is_global_root_scroller_(false),
           registered_as_first_line_image_observer_(false),
           is_html_legend_element_(false),
           has_non_collapsed_border_decoration_(false),
           being_destroyed_(false),
+          is_layout_ng_object_for_list_marker_image_(false),
+          is_table_column_constraints_dirty_(false),
+          transform_affects_vector_effect_(false),
+          should_skip_next_layout_shift_tracking_(true),
           positioned_state_(kIsStaticallyPositioned),
           selection_state_(static_cast<unsigned>(SelectionState::kNone)),
           subtree_paint_property_update_reasons_(
@@ -3950,6 +4032,23 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     ADD_BOOLEAN_BITFIELD(descendant_effective_allowed_touch_action_changed_,
                          DescendantEffectiveAllowedTouchActionChanged);
 
+    // Whether this object's Node has a blocking wheel event handler on itself
+    // or an ancestor. This is updated during the PrePaint phase.
+    ADD_BOOLEAN_BITFIELD(inside_blocking_wheel_event_handler_,
+                         InsideBlockingWheelEventHandler);
+
+    // Set when |InsideBlockingWheelEventHandler| changes (i.e., blocking wheel
+    // event handlers change). This only needs to be set on the object that
+    // changes as the PrePaint walk will ensure descendants are updated.
+    ADD_BOOLEAN_BITFIELD(blocking_wheel_event_handler_changed_,
+                         BlockingWheelEventHandlerChanged);
+
+    // Set when a descendant's |InsideBlockingWheelEventHandler| changes. This
+    // is used to ensure the PrePaint tree walk processes objects with
+    // |blocking_wheel_event_handler_changed_|.
+    ADD_BOOLEAN_BITFIELD(descendant_blocking_wheel_event_handler_changed_,
+                         DescendantBlockingWheelEventHandlerChanged);
+
     // See page/scrolling/README.md for an explanation of root scroller and how
     // it works.
     ADD_BOOLEAN_BITFIELD(is_effective_root_scroller_, IsEffectiveRootScroller);
@@ -3973,8 +4072,26 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     ADD_BOOLEAN_BITFIELD(being_destroyed_, BeingDestroyed);
 
     // From LayoutListMarkerImage
-    ADD_BOOLEAN_BITFIELD(is_layout_ng_object_for_list_marker_image,
+    ADD_BOOLEAN_BITFIELD(is_layout_ng_object_for_list_marker_image_,
                          IsLayoutNGObjectForListMarkerImage);
+
+    // Column constraints are cached on LayoutNGTable.
+    // When this flag is set, any cached constraints are invalid.
+    ADD_BOOLEAN_BITFIELD(is_table_column_constraints_dirty_,
+                         IsTableColumnsConstraintsDirty);
+
+    // For transformable SVG child objects, indicates if this object or any
+    // descendant has special vector effect that is affected by transform on
+    // this object. For an SVG child object having special vector effect, this
+    // flag is set on all transformable ancestors up to the SVG root (not
+    // included).
+    ADD_BOOLEAN_BITFIELD(transform_affects_vector_effect_,
+                         TransformAffectsVectorEffect);
+
+    // Whether to skip layout shift tracking in the next paint invalidation.
+    // See PaintInvalidator::UpdateLayoutShiftTracking().
+    ADD_BOOLEAN_BITFIELD(should_skip_next_layout_shift_tracking_,
+                         ShouldSkipNextLayoutShiftTracking);
 
    private:
     // This is the cached 'position' value of this object
@@ -4089,6 +4206,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   void SetNormalChildNeedsLayout(bool b) {
     NOT_DESTROYED();
     bitfields_.SetNormalChildNeedsLayout(b);
+    if (b)
+      bitfields_.SetIsTableColumnsConstraintsDirty(true);
   }
   void SetPosChildNeedsLayout(bool b) {
     NOT_DESTROYED();
@@ -4115,6 +4234,10 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   static bool affects_parent_block_;
 
   FragmentData fragment_;
+
+#if DCHECK_IS_ON()
+  bool is_destroyed_ = false;
+#endif
 };
 
 // Allow equality comparisons of LayoutObjects by reference or pointer,
@@ -4174,7 +4297,7 @@ inline bool LayoutObject::CanTraversePhysicalFragments() const {
   if (PaintFragment())
     return false;
   // The NG paint system currently doesn't support table-cells.
-  if (IsTableCell())
+  if (IsTableCellLegacy())
     return false;
   return true;
 }
@@ -4193,6 +4316,7 @@ inline void LayoutObject::SetNeedsLayout(
                                bitfields_.SelfNeedsLayoutForAvailableSpace();
   SetSelfNeedsLayoutForStyle(true);
   SetNeedsOverflowRecalc();
+  SetTableColumnConstraintDirty(true);
   if (!already_needed_layout) {
     TRACE_EVENT_INSTANT1(
         TRACE_DISABLED_BY_DEFAULT("devtools.timeline.invalidationTracking"),

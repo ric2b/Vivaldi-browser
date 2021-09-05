@@ -14,6 +14,7 @@
 #include "chrome/browser/ui/views/tabs/tab_strip.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/test/browser_test.h"
+#include "ui/views/layout/flex_layout.h"
 
 class TabStripRegionViewBrowserTest
     : public InProcessBrowserTest,
@@ -28,11 +29,9 @@ class TabStripRegionViewBrowserTest
   void SetUp() override {
     // Run the test with both kTabSearchFixedEntrypoint enabled and disabled.
     if (GetParam()) {
-      scoped_feature_list_.InitWithFeatures(
-          {features::kTabSearch, features::kTabSearchFixedEntrypoint}, {});
+      scoped_feature_list_.InitWithFeatures({features::kTabSearch}, {});
     } else {
-      scoped_feature_list_.InitWithFeatures(
-          {}, {features::kTabSearch, features::kTabSearchFixedEntrypoint});
+      scoped_feature_list_.InitWithFeatures({}, {features::kTabSearch});
     }
     InProcessBrowserTest::SetUp();
   }
@@ -53,7 +52,9 @@ class TabStripRegionViewBrowserTest
     return browser_view()->GetTabSearchButton();
   }
 
-  views::View* new_tab_button() { return tab_strip()->new_tab_button(); }
+  views::View* new_tab_button() {
+    return tab_strip_region_view()->new_tab_button();
+  }
 
  private:
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -174,6 +175,18 @@ IN_PROC_BROWSER_TEST_P(TabStripRegionViewBrowserTest, TestBeginEndFocus) {
   EXPECT_TRUE(tab_strip_region_view()->AcceleratorPressed(
       tab_strip_region_view()->home_key()));
   EXPECT_TRUE(tab_0->HasFocus());
+}
+
+IN_PROC_BROWSER_TEST_P(TabStripRegionViewBrowserTest,
+                       TestSearchButtonIsEndAligned) {
+  if (base::FeatureList::IsEnabled(features::kTabSearch)) {
+    const int kRightMargin = tab_strip_region_view()
+                                 ->layout_manager_for_testing()
+                                 ->interior_margin()
+                                 .right();
+    EXPECT_EQ(tab_strip_region_view()->GetLocalBounds().right() - kRightMargin,
+              tab_search_button()->bounds().right());
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(All,

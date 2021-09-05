@@ -44,19 +44,7 @@ constexpr char kLearnMoreUrl[] =
     "https://groups.google.com/a/googleproductforums.com/d/topic/chrome/"
     "Xrco2HsXS-8/discussion";
 
-// Tag value used to uniquely identify the "learn more" (?) button.
-constexpr int kLearnMoreButton = 100;
-
-std::unique_ptr<views::View> CreateExtraView(views::ButtonListener* listener) {
-  auto learn_more = views::CreateVectorImageButtonWithNativeTheme(
-      listener, vector_icons::kHelpOutlineIcon);
-  learn_more->SetTooltipText(l10n_util::GetStringUTF16(IDS_LEARN_MORE));
-  learn_more->set_tag(kLearnMoreButton);
-  return learn_more;
-}
-
-class InvertBubbleView : public views::BubbleDialogDelegateView,
-                         public views::ButtonListener {
+class InvertBubbleView : public views::BubbleDialogDelegateView {
  public:
   InvertBubbleView(Browser* browser, views::View* anchor_view);
   ~InvertBubbleView() override;
@@ -68,9 +56,6 @@ class InvertBubbleView : public views::BubbleDialogDelegateView,
   // Overridden from views::WidgetDelegate:
   base::string16 GetWindowTitle() const override;
   bool ShouldShowCloseButton() const override;
-
-  // Overridden from views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
   void OpenLink(const std::string& url, const ui::Event& event);
 
@@ -85,7 +70,15 @@ InvertBubbleView::InvertBubbleView(Browser* browser, views::View* anchor_view)
       browser_(browser) {
   SetButtons(ui::DIALOG_BUTTON_OK);
   SetButtonLabel(ui::DIALOG_BUTTON_OK, l10n_util::GetStringUTF16(IDS_DONE));
-  SetExtraView(::CreateExtraView(this));
+
+  auto button = views::CreateVectorImageButtonWithNativeTheme(
+      base::BindRepeating(&InvertBubbleView::OpenLink, base::Unretained(this),
+                          kLearnMoreUrl),
+      vector_icons::kHelpOutlineIcon);
+  button->SetTooltipText(l10n_util::GetStringUTF16(IDS_LEARN_MORE));
+  button->SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
+  SetExtraView(std::move(button));
+
   set_margins(gfx::Insets());
   chrome::RecordDialogCreation(chrome::DialogIdentifier::INVERT);
 }
@@ -111,16 +104,16 @@ void InvertBubbleView::Init() {
   auto* high_contrast = AddChildView(std::make_unique<views::Link>(
       l10n_util::GetStringUTF16(IDS_HIGH_CONTRAST_EXT),
       views::style::CONTEXT_DIALOG_BODY_TEXT));
-  high_contrast->set_callback(base::BindRepeating(&InvertBubbleView::OpenLink,
-                                                  base::Unretained(this),
-                                                  kHighContrastExtensionUrl));
+  high_contrast->SetCallback(base::BindRepeating(&InvertBubbleView::OpenLink,
+                                                 base::Unretained(this),
+                                                 kHighContrastExtensionUrl));
 
   auto* dark_theme = AddChildView(
       std::make_unique<views::Link>(l10n_util::GetStringUTF16(IDS_DARK_THEME),
                                     views::style::CONTEXT_DIALOG_BODY_TEXT));
-  dark_theme->set_callback(base::BindRepeating(&InvertBubbleView::OpenLink,
-                                               base::Unretained(this),
-                                               kDarkThemeSearchUrl));
+  dark_theme->SetCallback(base::BindRepeating(&InvertBubbleView::OpenLink,
+                                              base::Unretained(this),
+                                              kDarkThemeSearchUrl));
 
   // Switching to high-contrast mode has a nasty habit of causing Chrome
   // top-level windows to lose focus, so closing the bubble on deactivate
@@ -136,12 +129,6 @@ base::string16 InvertBubbleView::GetWindowTitle() const {
 
 bool InvertBubbleView::ShouldShowCloseButton() const {
   return true;
-}
-
-void InvertBubbleView::ButtonPressed(views::Button* sender,
-                                     const ui::Event& event) {
-  if (sender->tag() == kLearnMoreButton)
-    OpenLink(kLearnMoreUrl, event);
 }
 
 void InvertBubbleView::OpenLink(const std::string& url,

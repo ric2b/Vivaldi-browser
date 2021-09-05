@@ -17,7 +17,6 @@
 #include "media/audio/audio_device_description.h"
 #include "media/base/media_switches.h"
 #include "ui/views/animation/slide_out_controller_delegate.h"
-#include "ui/views/controls/button/button.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/widget/unique_widget_ptr.h"
 
@@ -26,6 +25,7 @@ class MediaNotificationItem;
 }  // namespace media_message_center
 
 namespace views {
+class LabelButton;
 class ImageButton;
 class SlideOutController;
 }  // namespace views
@@ -43,16 +43,14 @@ class MediaNotificationContainerImplView
       public MediaNotificationContainerImpl,
       public MediaNotificationDeviceSelectorViewDelegate,
       public views::SlideOutControllerDelegate,
-      public views::ButtonListener,
       public views::FocusChangeListener {
  public:
   MediaNotificationContainerImplView(
       const std::string& id,
       base::WeakPtr<media_message_center::MediaNotificationItem> item,
       MediaNotificationService* service,
-      media_message_center::MediaNotificationViewImpl::BackgroundStyle
-          background_style = media_message_center::MediaNotificationViewImpl::
-              BackgroundStyle::kDefault);
+      base::Optional<media_message_center::NotificationTheme> theme =
+          base::nullopt);
   ~MediaNotificationContainerImplView() override;
 
   // views::Button:
@@ -89,9 +87,6 @@ class MediaNotificationContainerImplView
   void OnSlideChanged(bool in_progress) override {}
   void OnSlideOut() override;
 
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
   // MediaNotificationContainerImpl:
   void AddObserver(MediaNotificationContainerObserver* observer) override;
   void RemoveObserver(MediaNotificationContainerObserver* observer) override;
@@ -119,6 +114,7 @@ class MediaNotificationContainerImplView
   const base::string16& GetTitle();
 
   views::ImageButton* GetDismissButtonForTesting();
+  views::Button* GetStopCastingButtonForTesting();
 
   media_message_center::MediaNotificationViewImpl* view_for_testing() {
     DCHECK(!base::FeatureList::IsEnabled(media::kGlobalMediaControlsModernUI));
@@ -174,6 +170,10 @@ class MediaNotificationContainerImplView
   media_message_center::MediaNotificationView* view_ = nullptr;
   MediaNotificationDeviceSelectorView* audio_device_selector_view_ = nullptr;
 
+  // Only shows up for cast notifications.
+  views::View* stop_button_strip_ = nullptr;
+  views::LabelButton* stop_cast_button_ = nullptr;
+
   SkColor foreground_color_;
   SkColor background_color_;
 
@@ -213,6 +213,8 @@ class MediaNotificationContainerImplView
   views::UniqueWidgetPtr drag_image_widget_;
 
   MediaNotificationService* const service_;
+
+  const bool is_cros_;
 
   DISALLOW_COPY_AND_ASSIGN(MediaNotificationContainerImplView);
 };

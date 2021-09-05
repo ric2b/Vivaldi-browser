@@ -10,20 +10,20 @@
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
+#include "third_party/blink/public/common/renderer_preferences/renderer_preferences.h"
 #include "third_party/blink/public/mojom/loader/resource_load_info_notifier.mojom.h"
 #include "third_party/blink/public/mojom/renderer_preference_watcher.mojom-forward.h"
-#include "third_party/blink/public/mojom/renderer_preferences.mojom-forward.h"
 #include "third_party/blink/public/mojom/worker/dedicated_worker_host_factory.mojom.h"
 #include "third_party/blink/public/platform/web_dedicated_worker_host_factory_client.h"
 
 namespace blink {
+class ChildURLLoaderFactoryBundle;
 class WebDedicatedWorker;
 class WebWorkerFetchContext;
 }  // namespace blink
 
 namespace content {
 
-class ChildURLLoaderFactoryBundle;
 class ServiceWorkerProviderContext;
 class WebWorkerFetchContextImpl;
 
@@ -58,7 +58,7 @@ class DedicatedWorkerHostFactoryClient final
       scoped_refptr<base::SingleThreadTaskRunner> task_runner) override;
 
   scoped_refptr<WebWorkerFetchContextImpl> CreateWorkerFetchContext(
-      blink::mojom::RendererPreferences renderer_preference,
+      const blink::RendererPreferences& renderer_preference,
       mojo::PendingReceiver<blink::mojom::RendererPreferenceWatcher>
           watcher_receiver,
       mojo::PendingRemote<blink::mojom::ResourceLoadInfoNotifier>
@@ -83,7 +83,8 @@ class DedicatedWorkerHostFactoryClient final
   // |worker_| owns |this|.
   blink::WebDedicatedWorker* worker_;
 
-  scoped_refptr<ChildURLLoaderFactoryBundle> subresource_loader_factory_bundle_;
+  scoped_refptr<blink::ChildURLLoaderFactoryBundle>
+      subresource_loader_factory_bundle_;
   mojo::PendingReceiver<blink::mojom::SubresourceLoaderUpdater>
       pending_subresource_loader_updater_;
 

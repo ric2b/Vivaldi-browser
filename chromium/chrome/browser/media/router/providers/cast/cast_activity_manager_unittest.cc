@@ -11,12 +11,12 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/mock_callback.h"
 #include "base/test/values_test_util.h"
 #include "base/values.h"
@@ -25,12 +25,12 @@
 #include "chrome/browser/media/router/providers/cast/mock_app_activity.h"
 #include "chrome/browser/media/router/providers/cast/test_util.h"
 #include "chrome/browser/media/router/providers/common/buffered_message_sender.h"
-#include "chrome/browser/media/router/test/mock_logger.h"
 #include "chrome/browser/media/router/test/mock_mojo_media_router.h"
 #include "chrome/browser/media/router/test/provider_test_helpers.h"
 #include "components/cast_channel/cast_message_util.h"
 #include "components/cast_channel/cast_test_util.h"
 #include "components/media_router/common/media_source.h"
+#include "components/media_router/common/test/mock_logger.h"
 #include "components/media_router/common/test/test_helper.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -291,6 +291,12 @@ class CastActivityManagerTest : public testing::Test,
     EXPECT_CALL(message_handler_,
                 EnsureConnection(kChannelId, "theClientId", "theTransportId",
                                  cast_channel::VirtualConnectionType::kStrong));
+    EXPECT_CALL(message_handler_,
+                SendMediaRequest(kChannelId,
+                                 // NOTE: MEDIA_GET_STATUS is translated to
+                                 // GET_STATUS inside SendMediaRequest.
+                                 IsJson(R"({"type": "MEDIA_GET_STATUS"})"),
+                                 "theClientId", "theTransportId"));
 
     auto response = GetSuccessLaunchResponse(app_id);
     session_tracker_->SetSessionForTest(

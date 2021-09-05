@@ -39,10 +39,9 @@ class MEDIA_EXPORT VideoEncoder {
     Options(const Options&);
     ~Options();
     base::Optional<uint64_t> bitrate;
-    double framerate = 30.0;
+    base::Optional<double> framerate;
 
-    int width = 0;
-    int height = 0;
+    gfx::Size frame_size;
 
     base::Optional<int> keyframe_interval = 10000;
   };
@@ -92,14 +91,16 @@ class MEDIA_EXPORT VideoEncoder {
                       bool key_frame,
                       StatusCB done_cb) = 0;
 
-  // Adjust encoder options for future frames, executing the
-  // |done_cb| upon completion.
+  // Adjust encoder options and the output callback for future frames, executing
+  // the |done_cb| upon completion.
   //
   // Note:
   // 1. Not all options can be changed on the fly.
   // 2. ChangeOptions() should be called after calling Flush() and waiting
   // for it to finish.
-  virtual void ChangeOptions(const Options& options, StatusCB done_cb) = 0;
+  virtual void ChangeOptions(const Options& options,
+                             OutputCB output_cb,
+                             StatusCB done_cb) = 0;
 
   // Requests all outputs for already encoded frames to be
   // produced via |output_cb| and calls |dene_cb| after that.

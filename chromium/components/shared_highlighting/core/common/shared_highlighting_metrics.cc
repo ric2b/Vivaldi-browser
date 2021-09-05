@@ -7,6 +7,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
 #include "components/search_engines/search_engine_utils.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 
 namespace shared_highlighting {
 
@@ -70,4 +71,65 @@ void LogGenerateErrorTabCrash() {
 void LogGenerateErrorIFrame() {
   LogLinkGenerationErrorReason(LinkGenerationError::kIFrame);
 }
+
+void LogGenerateSuccessLatency(base::TimeDelta latency) {
+  base::UmaHistogramTimes("SharedHighlights.LinkGenerated.TimeToGenerate",
+                          latency);
+}
+
+void LogGenerateErrorLatency(base::TimeDelta latency) {
+  base::UmaHistogramTimes("SharedHighlights.LinkGenerated.Error.TimeToGenerate",
+                          latency);
+}
+
+void LogLinkOpenedUkmEvent(ukm::SourceId source_id,
+                           const GURL& referrer,
+                           bool success) {
+  LogLinkOpenedUkmEvent(ukm::UkmRecorder::Get(), source_id, referrer, success);
+}
+
+void LogLinkOpenedUkmEvent(ukm::UkmRecorder* recorder,
+                           ukm::SourceId source_id,
+                           const GURL& referrer,
+                           bool success) {
+  DCHECK(recorder);
+  if (source_id != ukm::kInvalidSourceId) {
+    ukm::builders::SharedHighlights_LinkOpened(source_id)
+        .SetSuccess(success)
+        .SetSource(static_cast<int64_t>(GetLinkSource(referrer)))
+        .Record(recorder);
+  }
+}
+
+void LogLinkGeneratedSuccessUkmEvent(ukm::SourceId source_id) {
+  LogLinkGeneratedSuccessUkmEvent(ukm::UkmRecorder::Get(), source_id);
+}
+
+void LogLinkGeneratedSuccessUkmEvent(ukm::UkmRecorder* recorder,
+                                     ukm::SourceId source_id) {
+  DCHECK(recorder);
+  if (source_id != ukm::kInvalidSourceId) {
+    ukm::builders::SharedHighlights_LinkGenerated(source_id)
+        .SetSuccess(true)
+        .Record(recorder);
+  }
+}
+
+void LogLinkGeneratedErrorUkmEvent(ukm::SourceId source_id,
+                                   LinkGenerationError reason) {
+  LogLinkGeneratedErrorUkmEvent(ukm::UkmRecorder::Get(), source_id, reason);
+}
+
+void LogLinkGeneratedErrorUkmEvent(ukm::UkmRecorder* recorder,
+                                   ukm::SourceId source_id,
+                                   LinkGenerationError reason) {
+  DCHECK(recorder);
+  if (source_id != ukm::kInvalidSourceId) {
+    ukm::builders::SharedHighlights_LinkGenerated(source_id)
+        .SetSuccess(false)
+        .SetError(static_cast<int64_t>(reason))
+        .Record(recorder);
+  }
+}
+
 }  // namespace shared_highlighting

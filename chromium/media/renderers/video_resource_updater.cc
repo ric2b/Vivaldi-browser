@@ -123,10 +123,15 @@ VideoFrameResourceType ExternalResourceTypeForHardwarePlanes(
       return VideoFrameResourceType::YUV;
 
     case PIXEL_FORMAT_P016LE:
-      DCHECK_EQ(num_textures, 1);
+      if (num_textures == 1) {
+        // Single-texture multi-planar frames can be sampled as RGB.
+        buffer_formats[0] = gfx::BufferFormat::P010;
+        return VideoFrameResourceType::RGB;
+      }
       // TODO(mcasas): Support other formats such as e.g. P012.
-      buffer_formats[0] = gfx::BufferFormat::P010;
-      return VideoFrameResourceType::RGB;
+      buffer_formats[0] = gfx::BufferFormat::R_16;
+      buffer_formats[1] = gfx::BufferFormat::RG_88;
+      return VideoFrameResourceType::YUV;
 
     case PIXEL_FORMAT_UYVY:
       NOTREACHED();
@@ -528,23 +533,24 @@ void VideoResourceUpdater::ReleaseFrameResources() {
   frame_resources_.clear();
 }
 
-void VideoResourceUpdater::AppendQuads(viz::CompositorRenderPass* render_pass,
-                                       scoped_refptr<VideoFrame> frame,
-                                       gfx::Transform transform,
-                                       gfx::Rect quad_rect,
-                                       gfx::Rect visible_quad_rect,
-                                       const gfx::RRectF& rounded_corner_bounds,
-                                       gfx::Rect clip_rect,
-                                       bool is_clipped,
-                                       bool contents_opaque,
-                                       float draw_opacity,
-                                       int sorting_context_id) {
+void VideoResourceUpdater::AppendQuads(
+    viz::CompositorRenderPass* render_pass,
+    scoped_refptr<VideoFrame> frame,
+    gfx::Transform transform,
+    gfx::Rect quad_rect,
+    gfx::Rect visible_quad_rect,
+    const gfx::MaskFilterInfo& mask_filter_info,
+    gfx::Rect clip_rect,
+    bool is_clipped,
+    bool contents_opaque,
+    float draw_opacity,
+    int sorting_context_id) {
   DCHECK(frame.get());
 
   viz::SharedQuadState* shared_quad_state =
       render_pass->CreateAndAppendSharedQuadState();
   shared_quad_state->SetAll(transform, quad_rect, visible_quad_rect,
-                            rounded_corner_bounds, clip_rect, is_clipped,
+                            mask_filter_info, clip_rect, is_clipped,
                             contents_opaque, draw_opacity,
                             SkBlendMode::kSrcOver, sorting_context_id);
 
@@ -582,6 +588,7 @@ void VideoResourceUpdater::AppendQuads(viz::CompositorRenderPass* render_pass,
                 VideoFrame::NumPlanes(frame->format()));
       if (frame->HasTextures()) {
         DCHECK(frame->format() == PIXEL_FORMAT_NV12 ||
+               frame->format() == PIXEL_FORMAT_P016LE ||
                frame->format() == PIXEL_FORMAT_I420);
       }
 

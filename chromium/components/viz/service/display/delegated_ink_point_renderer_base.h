@@ -8,10 +8,13 @@
 #include <map>
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "components/viz/service/viz_service_export.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "services/viz/public/mojom/compositing/delegated_ink_point.mojom.h"
+#include "ui/base/prediction/input_predictor.h"
+#include "ui/base/prediction/prediction_metrics_handler.h"
 
 namespace viz {
 class DelegatedInkMetadata;
@@ -20,6 +23,14 @@ class DelegatedInkMetadata;
 // When this is hit, the oldest one will be removed each time a new one is
 // added.
 constexpr int kMaximumDelegatedInkPointsStored = 10;
+
+// The number of points to predict into the future, when prediction is
+// available.
+constexpr int kNumberOfPointsToPredict = 1;
+
+// The time that each predicted point should be ahead of the previous point,
+// in milliseconds.
+constexpr int kNumberOfMillisecondsIntoFutureToPredictPerPoint = 12;
 
 // This is the base class used for rendering delegated ink trails on the end of
 // strokes to reduce user perceived latency. On initialization, it binds the
@@ -41,11 +52,10 @@ class VIZ_SERVICE_EXPORT DelegatedInkPointRendererBase
       mojo::PendingReceiver<mojom::DelegatedInkPointRenderer> receiver);
 
   void StoreDelegatedInkPoint(const DelegatedInkPoint& point) override;
-  void SetDelegatedInkMetadata(std::unique_ptr<DelegatedInkMetadata> metadata) {
-    metadata_ = std::move(metadata);
-  }
+  void SetDelegatedInkMetadata(std::unique_ptr<DelegatedInkMetadata> metadata);
 
-  void DrawDelegatedInkTrail();
+  virtual void FinalizePathForDraw() = 0;
+  virtual gfx::Rect GetDamageRect() = 0;
 
  protected:
   // |points_| is not emptied each time after the points are drawn, because one
@@ -53,15 +63,15 @@ class VIZ_SERVICE_EXPORT DelegatedInkPointRendererBase
   // ink trail. However, if a point has a timestamp that is earlier than the
   // timestamp on the metadata, then the point has already been drawn, and
   // therefore should be removed from |points_| before drawing.
-  void FilterPoints();
+  std::vector<DelegatedInkPoint> FilterPoints();
+
+  void PredictPoints(std::vector<DelegatedInkPoint>* ink_points_to_draw);
+  void ResetPrediction();
 
   std::unique_ptr<DelegatedInkMetadata> metadata_;
-  std::map<base::TimeTicks, gfx::PointF> points_;
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(DisplayTest, SkiaDelegatedInkRenderer);
-
-  void virtual DrawDelegatedInkTrailInternal() = 0;
+  friend class SkiaDelegatedInkRendererTest;
 
   const std::map<base::TimeTicks, gfx::PointF>& GetPointsMapForTest() const {
     return points_;
@@ -70,6 +80,19 @@ class VIZ_SERVICE_EXPORT DelegatedInkPointRendererBase
   const DelegatedInkMetadata* GetMetadataForTest() const {
     return metadata_.get();
   }
+
+  virtual int GetPathPointCountForTest() const = 0;
+
+  // The points that arrived from the browser process and may be drawn as part
+  // of the ink trail.
+  std::map<base::TimeTicks, gfx::PointF> points_;
+
+  // Kalman predictor that is used for generating predicted points.
+  std::unique_ptr<ui::InputPredictor> predictor_;
+
+  // Handler for calculating useful metrics for evaluating predicted points
+  // and populating the histograms with those metrics.
+  ui::PredictionMetricsHandler metrics_handler_;
 
   mojo::Receiver<mojom::DelegatedInkPointRenderer> receiver_{this};
 };

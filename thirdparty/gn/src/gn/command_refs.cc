@@ -237,8 +237,8 @@ const char kRefs_HelpShort[] = "refs: Find stuff referencing a target or file.";
 const char kRefs_Help[] =
     R"(gn refs
 
-  gn refs <out_dir> (<label_pattern>|<label>|<file>|@<response_file>)*
-          [--all] [--default-toolchain] [--as=...] [--testonly=...] [--type=...]
+  gn refs <out_dir> (<label_pattern>|<label>|<file>|@<response_file>)* [--all]
+          [--default-toolchain] [--as=...] [--testonly=...] [--type=...]
 
   Finds reverse dependencies (which targets reference something). The input is
   a list containing:

@@ -5,13 +5,18 @@
 #include "ash/system/phonehub/continue_browsing_chip.h"
 
 #include "ash/public/cpp/new_window_delegate.h"
+#include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/style/ash_color_provider.h"
+#include "ash/system/phonehub/phone_hub_metrics.h"
 #include "ash/system/phonehub/phone_hub_tray.h"
 #include "ash/system/status_area_widget.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chromeos/components/multidevice/logging/logging.h"
+#include "chromeos/components/phonehub/user_action_recorder.h"
+#include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
@@ -20,60 +25,87 @@ namespace ash {
 
 namespace {
 
-constexpr gfx::Insets kContinueBrowsingChipPadding(8, 8);
-constexpr int kContinueBrowsingChipSpacing = 5;
-constexpr int kContinueBrowsingChipFaviconSpacing = 5;
-constexpr gfx::Size kContinueBrowsingChipFaviconSize(50, 50);
-constexpr int kTaskContinuationChipRadius = 10;
+// Appearance in dip.
+constexpr gfx::Insets kContinueBrowsingChipInsets(8, 8);
+constexpr int kContinueBrowsingChipSpacing = 8;
+constexpr int kContinueBrowsingChipFaviconSpacing = 8;
+constexpr gfx::Size kContinueBrowsingChipFaviconSize(16, 16);
+constexpr int kTaskContinuationChipRadius = 8;
 constexpr int kTitleMaxLines = 2;
-constexpr gfx::Size kTitleViewSize(100, 40);
 
 }  // namespace
 
 ContinueBrowsingChip::ContinueBrowsingChip(
-    const chromeos::phonehub::BrowserTabsModel::BrowserTabMetadata& metadata)
-    : views::Button(this), url_(metadata.url) {
+    const chromeos::phonehub::BrowserTabsModel::BrowserTabMetadata& metadata,
+    int index,
+    chromeos::phonehub::UserActionRecorder* user_action_recorder)
+    : views::Button(base::BindRepeating(&ContinueBrowsingChip::ButtonPressed,
+                                        base::Unretained(this))),
+      url_(metadata.url),
+      index_(index),
+      user_action_recorder_(user_action_recorder) {
+  auto* color_provider = AshColorProvider::Get();
+  SetFocusBehavior(FocusBehavior::ALWAYS);
+  focus_ring()->SetColor(color_provider->GetControlsLayerColor(
+      AshColorProvider::ControlsLayerType::kFocusRingColor));
+
+  // Install this highlight path generator to set the desired shape for
+  // our focus ring.
+  views::InstallRoundRectHighlightPathGenerator(this, gfx::Insets(),
+                                                kTaskContinuationChipRadius);
+
   auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
-      views::BoxLayout::Orientation::kVertical, kContinueBrowsingChipPadding,
+      views::BoxLayout::Orientation::kVertical, kContinueBrowsingChipInsets,
       kContinueBrowsingChipSpacing));
-  layout->set_main_axis_alignment(views::BoxLayout::MainAxisAlignment::kCenter);
+  layout->set_main_axis_alignment(views::BoxLayout::MainAxisAlignment::kStart);
   layout->set_cross_axis_alignment(
       views::BoxLayout::CrossAxisAlignment::kStart);
 
+  // Inits the header view which consists of the favicon image and the url.
   auto* header_view = AddChildView(std::make_unique<views::View>());
   auto* header_layout =
       header_view->SetLayoutManager(std::make_unique<views::BoxLayout>(
           views::BoxLayout::Orientation::kHorizontal, gfx::Insets(),
           kContinueBrowsingChipFaviconSpacing));
   header_layout->set_main_axis_alignment(
-      views::BoxLayout::MainAxisAlignment::kCenter);
+      views::BoxLayout::MainAxisAlignment::kStart);
   header_layout->set_cross_axis_alignment(
-      views::BoxLayout::CrossAxisAlignment::kStart);
+      views::BoxLayout::CrossAxisAlignment::kCenter);
 
   auto* favicon =
       header_view->AddChildView(std::make_unique<views::ImageView>());
   favicon->SetImageSize(kContinueBrowsingChipFaviconSize);
-  favicon->SetImage(metadata.favicon.AsImageSkia());
 
-  auto* title_label =
-      header_view->AddChildView(std::make_unique<views::Label>(metadata.title));
-  title_label->SetAutoColorReadabilityEnabled(false);
-  title_label->SetSubpixelRenderingEnabled(false);
-  title_label->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
-      AshColorProvider::ContentLayerType::kTextColorPrimary));
-  title_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  title_label->SetMultiLine(true);
-  title_label->SetMaxLines(kTitleMaxLines);
-  title_label->SetSize(kTitleViewSize);
-  title_label->SetFontList(
-      title_label->font_list().DeriveWithWeight(gfx::Font::Weight::BOLD));
+  if (metadata.favicon.IsEmpty()) {
+    favicon->SetImage(CreateVectorIcon(
+        kPhoneHubDefaultFaviconIcon,
+        AshColorProvider::Get()->GetContentLayerColor(
+            AshColorProvider::ContentLayerType::kIconColorPrimary)));
+  } else {
+    favicon->SetImage(metadata.favicon.AsImageSkia());
+  }
 
-  auto* url_label = AddChildView(
+  auto* url_label = header_view->AddChildView(
       std::make_unique<views::Label>(base::UTF8ToUTF16(metadata.url.host())));
   url_label->SetAutoColorReadabilityEnabled(false);
   url_label->SetSubpixelRenderingEnabled(false);
   url_label->SetEnabledColor(AshColorProvider::Get()->GetContentLayerColor(
       AshColorProvider::ContentLayerType::kTextColorPrimary));
+  url_label->SetElideBehavior(gfx::ElideBehavior::ELIDE_TAIL);
+
+  auto* title_label =
+      AddChildView(std::make_unique<views::Label>(metadata.title));
+  title_label->SetAutoColorReadabilityEnabled(false);
+  title_label->SetSubpixelRenderingEnabled(false);
+  title_label->SetEnabledColor(color_provider->GetContentLayerColor(
+      AshColorProvider::ContentLayerType::kTextColorPrimary));
+  title_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  title_label->SetMultiLine(true);
+  title_label->SetMaxLines(kTitleMaxLines);
+  title_label->SetFontList(
+      title_label->font_list().DeriveWithWeight(gfx::Font::Weight::BOLD));
+
+  SetTooltipText(metadata.title);
 }
 
 void ContinueBrowsingChip::OnPaintBackground(gfx::Canvas* canvas) {
@@ -86,21 +118,34 @@ void ContinueBrowsingChip::OnPaintBackground(gfx::Canvas* canvas) {
   views::View::OnPaintBackground(canvas);
 }
 
-void ContinueBrowsingChip::ButtonPressed(views::Button* sender,
-                                         const ui::Event& event) {
-  PA_LOG(INFO) << "Opening browser tab: " << url_;
-  NewWindowDelegate::GetInstance()->NewTabWithUrl(
-      url_, /*from_user_interaction=*/true);
-  Shell::GetPrimaryRootWindowController()
-      ->GetStatusAreaWidget()
-      ->phone_hub_tray()
-      ->CloseBubble();
-}
-
 ContinueBrowsingChip::~ContinueBrowsingChip() = default;
 
 const char* ContinueBrowsingChip::GetClassName() const {
   return "ContinueBrowsingChip";
+}
+
+void ContinueBrowsingChip::ButtonPressed() {
+  PA_LOG(INFO) << "Opening browser tab: " << url_;
+  phone_hub_metrics::LogTabContinuationChipClicked(index_);
+  user_action_recorder_->RecordBrowserTabOpened();
+
+  NewWindowDelegate::GetInstance()->NewTabWithUrl(
+      url_, /*from_user_interaction=*/true);
+
+  // Close Phone Hub bubble in current display.
+  views::Widget* const widget = GetWidget();
+  // |widget| is null when this function is called before the view is added to a
+  // widget (in unit tests).
+  if (!widget)
+    return;
+  int64_t current_display_id =
+      display::Screen::GetScreen()
+          ->GetDisplayNearestWindow(widget->GetNativeWindow())
+          .id();
+  Shell::GetRootWindowControllerWithDisplayId(current_display_id)
+      ->GetStatusAreaWidget()
+      ->phone_hub_tray()
+      ->CloseBubble();
 }
 
 }  // namespace ash

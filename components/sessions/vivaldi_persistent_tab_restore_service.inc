@@ -38,18 +38,43 @@
     }                                                                      \
     current_tab->ext_data.swap(ext_data);                                  \
     break;                                                                 \
+  }                                                                        \
+                                                                           \
+  case kCommandPageActionOverrides: {                                      \
+    if (!current_tab)                                                      \
+      return;                                                              \
+    SessionID tab_id = SessionID::InvalidValue();                          \
+    std::string script_path;                                               \
+    bool is_enabled_override;                                              \
+    if (!vivaldi::RestorePageActionOverrideCommand(                        \
+            command, &tab_id, &script_path, &is_enabled_override)) {       \
+      return;                                                              \
+    }                                                                      \
+    current_tab->page_action_overrides.emplace(                            \
+        std::make_pair(script_path, is_enabled_override));                 \
+    break;                                                                 \
   }
 
-void VivaldiTabScheduleExtCommand(SnapshottingCommandStorageManager* command_storage_manager,
-                                  const TabRestoreService::Tab& tab) {
+void VivaldiScheduleTabCommands(
+    SnapshottingCommandStorageManager* command_storage_manager,
+    const TabRestoreService::Tab& tab) {
   if (!tab.ext_data.empty()) {
-    command_storage_manager->ScheduleCommand(vivaldi::CreateSetTabExtDataCommand(
-        kCommandSetExtData, tab.id, tab.ext_data));
+    command_storage_manager->ScheduleCommand(
+        vivaldi::CreateSetTabExtDataCommand(kCommandSetExtData, tab.id,
+                                            tab.ext_data));
+  }
+
+  for (const auto& page_action_override : tab.page_action_overrides) {
+    command_storage_manager->ScheduleCommand(
+        vivaldi::CreatePageActionOverrideCommand(
+            kCommandPageActionOverrides, tab.id, page_action_override.first,
+            page_action_override.second));
   }
 }
 
-void VivaldiWindowsScheduleExtCommand(SnapshottingCommandStorageManager* command_storage_manager,
-                                      const TabRestoreService::Window& window) {
+void VivaldiWindowsScheduleExtCommand(
+    SnapshottingCommandStorageManager* command_storage_manager,
+    const TabRestoreService::Window& window) {
   if (!window.ext_data.empty()) {
     command_storage_manager->ScheduleCommand(
         vivaldi::CreateSetWindowExtDataCommand(kCommandSetWindowExtData,

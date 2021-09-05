@@ -252,8 +252,7 @@ void FrameLoader::Init() {
   auto navigation_params = std::make_unique<WebNavigationParams>();
   navigation_params->url = KURL(g_empty_string);
   navigation_params->frame_policy =
-      frame_->Owner() ? base::make_optional(frame_->Owner()->GetFramePolicy())
-                      : base::nullopt;
+      frame_->Owner() ? frame_->Owner()->GetFramePolicy() : FramePolicy();
 
   DocumentLoader* new_document_loader = Client()->CreateDocumentLoader(
       frame_, kWebNavigationTypeOther, CreateCSPForInitialEmptyDocument(),
@@ -279,7 +278,7 @@ LocalFrameClient* FrameLoader::Client() const {
   return frame_->Client();
 }
 
-void FrameLoader::SetDefersLoading(bool defers) {
+void FrameLoader::SetDefersLoading(WebURLLoader::DeferType defers) {
   if (frame_->GetDocument())
     frame_->GetDocument()->Fetcher()->SetDefersLoading(defers);
   if (document_loader_)
@@ -597,25 +596,26 @@ static WebNavigationType DetermineNavigationType(
   return kWebNavigationTypeOther;
 }
 
-static mojom::RequestContextType DetermineRequestContextFromNavigationType(
+static mojom::blink::RequestContextType
+DetermineRequestContextFromNavigationType(
     const WebNavigationType navigation_type) {
   switch (navigation_type) {
     case kWebNavigationTypeLinkClicked:
-      return mojom::RequestContextType::HYPERLINK;
+      return mojom::blink::RequestContextType::HYPERLINK;
 
     case kWebNavigationTypeOther:
-      return mojom::RequestContextType::LOCATION;
+      return mojom::blink::RequestContextType::LOCATION;
 
     case kWebNavigationTypeFormResubmitted:
     case kWebNavigationTypeFormSubmitted:
-      return mojom::RequestContextType::FORM;
+      return mojom::blink::RequestContextType::FORM;
 
     case kWebNavigationTypeBackForward:
     case kWebNavigationTypeReload:
-      return mojom::RequestContextType::INTERNAL;
+      return mojom::blink::RequestContextType::INTERNAL;
   }
   NOTREACHED();
-  return mojom::RequestContextType::HYPERLINK;
+  return mojom::blink::RequestContextType::HYPERLINK;
 }
 
 static network::mojom::RequestDestination
@@ -716,13 +716,13 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
   WebNavigationType navigation_type = DetermineNavigationType(
       frame_load_type, resource_request.HttpBody() || request.Form(),
       request.GetTriggeringEventInfo() != TriggeringEventInfo::kNotFromEvent);
-  mojom::RequestContextType request_context_type =
+  mojom::blink::RequestContextType request_context_type =
       DetermineRequestContextFromNavigationType(navigation_type);
 
   // TODO(lyf): handle `frame` context type. https://crbug.com/1019716
-  if (mojom::RequestContextType::LOCATION == request_context_type &&
+  if (mojom::blink::RequestContextType::LOCATION == request_context_type &&
       !frame_->IsMainFrame()) {
-    request_context_type = mojom::RequestContextType::IFRAME;
+    request_context_type = mojom::blink::RequestContextType::IFRAME;
   }
   resource_request.SetRequestContext(request_context_type);
   resource_request.SetRequestDestination(
@@ -1046,6 +1046,14 @@ void FrameLoader::CommitNavigation(
     content_security_policy->AddPolicyFromHeaderValue(
         csp, network::mojom::ContentSecurityPolicyType::kEnforce,
         network::mojom::ContentSecurityPolicySource::kHTTP);
+  }
+
+  // The navigation to the initial empty document is committed directly by Blink
+  // and doesn't have a policy container, so we keep the frame's policy
+  // container (which was inherited by the parent/opener) in that case.
+  if (navigation_params->policy_container) {
+    frame_->SetPolicyContainer(PolicyContainer::CreateFromWebPolicyContainer(
+        std::move(navigation_params->policy_container)));
   }
 
   base::Optional<Document::UnloadEventTiming> unload_timing;
@@ -1379,6 +1387,7 @@ void FrameLoader::ProcessFragment(const KURL& url,
   // restoring the past scroll offset during a history navigation. In these
   // cases we assume the scroll was restored from history (by the page).
   const bool uses_manual_scroll_restoration =
+      frame_load_type == WebFrameLoadType::kBackForward &&
       GetDocumentLoader()->GetHistoryItem() &&
       GetDocumentLoader()->GetHistoryItem()->ScrollRestorationType() ==
           mojom::blink::ScrollRestorationType::kManual;

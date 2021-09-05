@@ -3,11 +3,11 @@
 #ifndef COMPONENTS_ADVERSE_ADBLOCKING_VIVALDI_SUBRESOURCE_FILTER_CLIENT_H_
 #define COMPONENTS_ADVERSE_ADBLOCKING_VIVALDI_SUBRESOURCE_FILTER_CLIENT_H_
 
+#include "chrome/browser/subresource_filter/chrome_subresource_filter_client.h"
+
 #include "components/subresource_filter/content/browser/subresource_filter_client.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
-
-class SubresourceFilterProfileContext;
 
 namespace content {
 class NavigationThrottle;
@@ -21,60 +21,72 @@ class AdverseAdFilterListService;
 
 namespace subresource_filter {
 class ContentSubresourceFilterThrottleManager;
+class SubresourceFilterProfileContext;
 }  // namespace subresource_filter
 
 class SubresourceFilterContentSettingsManager;
 
 class VivaldiSubresourceFilterClient
-    : public content::WebContentsObserver,
-      public content::WebContentsUserData<VivaldiSubresourceFilterClient>,
-      public subresource_filter::SubresourceFilterClient,
-      public base::SupportsWeakPtr<VivaldiSubresourceFilterClient> {
+    : public subresource_filter::SubresourceFilterClient {
  public:
-  explicit VivaldiSubresourceFilterClient(content::WebContents* web_contents);
+  VivaldiSubresourceFilterClient(
+      content::WebContents* web_contents,
+      ChromeSubresourceFilterClient* csfc);
   ~VivaldiSubresourceFilterClient() override;
+
+  // Creates a ContentSubresourceFilterThrottleManager and attaches it to
+  // |web_contents|, passing it an instance of this client and other
+  // embedder-level state.
+  static void CreateThrottleManagerWithClientForWebContents(
+      content::WebContents* web_contents);
+
+  // Returns the VivaldiSubresourceFilterClient instance that is owned by the
+  // ThrottleManager owned by |web_contents|, or nullptr if there is no such
+  // ThrottleManager.
+  static VivaldiSubresourceFilterClient* FromWebContents(
+      content::WebContents* web_contents);
 
   void MaybeAppendNavigationThrottles(
       content::NavigationHandle* navigation_handle,
       std::vector<std::unique_ptr<content::NavigationThrottle>>* throttles);
 
-  // content::WebContentsObserver:
-  void DidStartNavigation(
-      content::NavigationHandle* navigation_handle) override;
-
   // SubresourceFilterClient:
   void ShowNotification() override;
-  subresource_filter::mojom::ActivationLevel OnPageActivationComputed(
-      content::NavigationHandle* navigation_handle,
-      subresource_filter::mojom::ActivationLevel initial_activation_level,
-      subresource_filter::ActivationDecision* decision) override;
 
-  bool did_show_ui_for_navigation() const;
+  subresource_filter::mojom::ActivationLevel OnPageActivationComputed(
+    content::NavigationHandle* navigation_handle,
+    subresource_filter::mojom::ActivationLevel initial_activation_level,
+    subresource_filter::ActivationDecision* decision) override;
+
+  void OnAdsViolationTriggered(
+      content::RenderFrameHost* rfh,
+      subresource_filter::mojom::AdsViolation triggered_violation) override;
+  const scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>
+  GetSafeBrowsingDatabaseManager() override;
+  void OnReloadRequested() override;
+
   void SetAdblockList(AdverseAdFilterListService* list) {
     adblock_list_ = list;
   }
   AdverseAdFilterListService* adblock_list() { return adblock_list_; }
 
-  void OnAdsViolationTriggered(content::RenderFrameHost* rfh,
-      subresource_filter::mojom::AdsViolation triggered_violation) override;
+  void ToggleForceActivationInCurrentWebContents(bool force_activation);
 
-  const scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager>
-  GetSafeBrowsingDatabaseManager() override;
+  bool did_show_ui_for_navigation() const {
+    return chrome_subresource_filter_client_->did_show_ui_for_navigation();
+  }
 
  private:
-  friend class content::WebContentsUserData<VivaldiSubresourceFilterClient>;
-
-  std::unique_ptr<subresource_filter::ContentSubresourceFilterThrottleManager>
-      throttle_manager_;
 
   // io task runner
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
 
+  // Used to chain WebContents attachments, make this a unique pointer.
+  std::unique_ptr<ChromeSubresourceFilterClient> chrome_subresource_filter_client_;
+
   AdverseAdFilterListService* adblock_list_ = nullptr;  // owned by the profile.
 
-  SubresourceFilterProfileContext* profile_context_ = nullptr;
-
-  WEB_CONTENTS_USER_DATA_KEY_DECL();
+  subresource_filter::SubresourceFilterProfileContext* profile_context_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiSubresourceFilterClient);
 };

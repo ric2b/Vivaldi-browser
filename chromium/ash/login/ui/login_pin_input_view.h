@@ -7,6 +7,7 @@
 
 #include "ash/ash_export.h"
 #include "ash/login/ui/access_code_input.h"
+#include "ash/login/ui/login_palette.h"
 #include "ash/login/ui/non_accessible_view.h"
 #include "ui/views/view.h"
 
@@ -34,6 +35,8 @@ class ASH_EXPORT LoginPinInputView : public views::View {
   using OnPinSubmit = base::RepeatingCallback<void(const base::string16& pin)>;
   using OnPinChanged = base::RepeatingCallback<void(bool is_empty)>;
 
+  static const int kDefaultLength;
+
   class ASH_EXPORT TestApi {
    public:
     explicit TestApi(LoginPinInputView* view);
@@ -46,7 +49,7 @@ class ASH_EXPORT LoginPinInputView : public views::View {
     LoginPinInputView* const view_;
   };
 
-  LoginPinInputView();
+  explicit LoginPinInputView(const LoginPalette& palette);
   LoginPinInputView& operator=(const LoginPinInputView&) = delete;
   LoginPinInputView(const LoginPinInputView&) = delete;
   ~LoginPinInputView() override;
@@ -62,6 +65,10 @@ class ASH_EXPORT LoginPinInputView : public views::View {
   // Updates the length of the field. Used when switching users.
   void UpdateLength(const size_t pin_length);
 
+  // When set, hitting return will attempt an unlock with an empty PIN.
+  // LoginAuthUserView interprets such attempts as a SmartLock unlock.
+  void SetAuthenticateWithEmptyPinOnReturnKey(bool enabled);
+
   void Reset();
   void Backspace();
   void InsertDigit(int digit);
@@ -73,6 +80,7 @@ class ASH_EXPORT LoginPinInputView : public views::View {
   // views::View
   gfx::Size CalculatePreferredSize() const override;
   void RequestFocus() override;
+  bool OnKeyPressed(const ui::KeyEvent& event) override;
 
  private:
   // The code input will call this when all digits are in.
@@ -82,13 +90,19 @@ class ASH_EXPORT LoginPinInputView : public views::View {
   void OnChanged(bool is_empty);
 
   // Current field length.
-  size_t length_;
+  size_t length_ = kDefaultLength;
+
+  // Palette for the instance.
+  LoginPalette palette_;
 
   // Whether the field is read only.
   bool is_read_only_ = false;
 
   // The input field owned by this view.
   LoginPinInput* code_input_ = nullptr;
+
+  // Whether the 'Return' key should trigger an unlock with an empty PIN.
+  bool authenticate_with_empty_pin_on_return_key_ = false;
 
   OnPinSubmit on_submit_;
   OnPinChanged on_changed_;

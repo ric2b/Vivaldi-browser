@@ -6,7 +6,6 @@
 
 #include "ash/style/ash_color_provider.h"
 #include "ash/system/tray/tray_popup_utils.h"
-#include "ash/system/unified/unified_system_tray_view.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/skbitmap_operations.h"
@@ -35,12 +34,11 @@ class CustomShapeButtonHighlightPathGenerator
 
 namespace ash {
 
-CustomShapeButton::CustomShapeButton(views::ButtonListener* listener)
-    : ImageButton(listener) {
+CustomShapeButton::CustomShapeButton(PressedCallback callback)
+    : ImageButton(std::move(callback)) {
   TrayPopupUtils::ConfigureTrayPopupButton(this);
   views::HighlightPathGenerator::Install(
       this, std::make_unique<CustomShapeButtonHighlightPathGenerator>());
-  focus_ring()->SetColor(UnifiedSystemTrayView::GetFocusRingColor());
 }
 
 CustomShapeButton::~CustomShapeButton() = default;
@@ -68,6 +66,13 @@ CustomShapeButton::CreateInkDropHighlight() const {
 
 const char* CustomShapeButton::GetClassName() const {
   return "CustomShapeButton";
+}
+
+void CustomShapeButton::OnThemeChanged() {
+  ImageButton::OnThemeChanged();
+  focus_ring()->SetColor(AshColorProvider::Get()->GetControlsLayerColor(
+      AshColorProvider::ControlsLayerType::kFocusRingColor));
+  SchedulePaint();
 }
 
 void CustomShapeButton::PaintCustomShapePath(gfx::Canvas* canvas) {

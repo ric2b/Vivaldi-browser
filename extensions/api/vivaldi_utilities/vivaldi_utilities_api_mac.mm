@@ -47,8 +47,13 @@ bool UtilitiesGetSystemDateFormatFunction::ReadDateFormats(
 }
 
 std::string UtilitiesGetSystemCountryFunction::ReadCountry() {
-  // TODO(igor@vivaldi.com): Implement this.
-  return std::string();
+  std::string result;
+  if (@available(macOS 10.12, *)) {
+    NSLocale* locale = [NSLocale autoupdatingCurrentLocale];
+    NSString* countryCode = locale.countryCode;
+    result = [countryCode UTF8String];
+  }
+  return result;
 }
 
 }  // namespace extensions

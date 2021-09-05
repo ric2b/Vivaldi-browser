@@ -36,7 +36,7 @@ NavigationEvent::NavigationEvent()
       original_request_url(),
       source_tab_id(SessionID::InvalidValue()),
       target_tab_id(SessionID::InvalidValue()),
-      frame_id(-1),
+      frame_id(content::RenderFrameHost::kNoFrameTreeNodeId),
       last_updated(base::Time::Now()),
       navigation_initiation(ReferrerChainEntry::UNDEFINED),
       has_committed(false),
@@ -289,8 +289,7 @@ void SafeBrowsingNavigationObserver::DidOpenRequestedURL(
 void SafeBrowsingNavigationObserver::OnContentSettingChanged(
     const ContentSettingsPattern& primary_pattern,
     const ContentSettingsPattern& secondary_pattern,
-    ContentSettingsType content_type,
-    const std::string& resource_identifier) {
+    ContentSettingsType content_type) {
   // For all the content settings that can be changed via page info UI, we
   // assume there is a user gesture associated with the content setting change.
   if (web_contents() &&

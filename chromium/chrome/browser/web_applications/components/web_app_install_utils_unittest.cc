@@ -13,16 +13,17 @@
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/web_applications/components/web_app_constants.h"
 #include "chrome/browser/web_applications/components/web_app_icon_generator.h"
+#include "chrome/browser/web_applications/components/web_application_info.h"
 #include "chrome/browser/web_applications/test/web_app_icon_test_utils.h"
 #include "chrome/common/chrome_features.h"
-#include "chrome/common/web_application_info.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace web_app {
 
-using Purpose = blink::Manifest::ImageResource::Purpose;
+using Purpose = blink::mojom::ManifestImageResource_Purpose;
 
 namespace {
 
@@ -109,6 +110,13 @@ TEST(WebAppInstallUtils, UpdateWebAppInfoFromManifest) {
     manifest.protocol_handlers.push_back(protocol_handler);
   }
 
+  {
+    blink::Manifest::UrlHandler url_handler;
+    url_handler.origin =
+        url::Origin::Create(GURL("https://url_handlers_origin.com/"));
+    manifest.url_handlers.push_back(url_handler);
+  }
+
   UpdateWebAppInfoFromManifest(manifest, &web_app_info);
   EXPECT_EQ(base::UTF8ToUTF16(kAppShortName), web_app_info.title);
   EXPECT_EQ(AppUrl(), web_app_info.start_url);
@@ -163,6 +171,11 @@ TEST(WebAppInstallUtils, UpdateWebAppInfoFromManifest) {
   auto protocol_handler = web_app_info.protocol_handlers[0];
   EXPECT_EQ(protocol_handler.protocol, base::UTF8ToUTF16("mailto"));
   EXPECT_EQ(protocol_handler.url, GURL("http://example.com/handle=%s"));
+
+  EXPECT_EQ(1u, web_app_info.url_handlers.size());
+  auto url_handler = web_app_info.url_handlers[0];
+  EXPECT_EQ(url_handler.origin,
+            url::Origin::Create(GURL("https://url_handlers_origin.com/")));
 }
 
 TEST(WebAppInstallUtils, UpdateWebAppInfoFromManifest_EmptyName) {
@@ -210,9 +223,9 @@ TEST(WebAppInstallUtils, UpdateWebAppInfoFromManifest_ShareTarget) {
   {
     blink::Manifest::ShareTarget share_target;
     share_target.action = GURL("http://example.com/share1");
-    share_target.method = blink::Manifest::ShareTarget::Method::kPost;
+    share_target.method = blink::mojom::ManifestShareTarget_Method::kPost;
     share_target.enctype =
-        blink::Manifest::ShareTarget::Enctype::kMultipartFormData;
+        blink::mojom::ManifestShareTarget_Enctype::kMultipartFormData;
     share_target.params.title = base::ASCIIToUTF16("kTitle");
     share_target.params.text = base::ASCIIToUTF16("kText");
 
@@ -247,9 +260,9 @@ TEST(WebAppInstallUtils, UpdateWebAppInfoFromManifest_ShareTarget) {
   {
     blink::Manifest::ShareTarget share_target;
     share_target.action = GURL("http://example.com/share2");
-    share_target.method = blink::Manifest::ShareTarget::Method::kGet;
+    share_target.method = blink::mojom::ManifestShareTarget_Method::kGet;
     share_target.enctype =
-        blink::Manifest::ShareTarget::Enctype::kFormUrlEncoded;
+        blink::mojom::ManifestShareTarget_Enctype::kFormUrlEncoded;
     share_target.params.text = base::ASCIIToUTF16("kText");
     share_target.params.url = base::ASCIIToUTF16("kUrl");
 
@@ -319,6 +332,13 @@ TEST_F(WebAppInstallUtilsWithShortcutsMenu,
     protocol_handler.protocol = base::UTF8ToUTF16("mailto");
     protocol_handler.url = GURL("http://example.com/handle=%s");
     manifest.protocol_handlers.push_back(protocol_handler);
+  }
+
+  {
+    blink::Manifest::UrlHandler url_handler;
+    url_handler.origin =
+        url::Origin::Create(GURL("https://url_handlers_origin.com/"));
+    manifest.url_handlers.push_back(url_handler);
   }
 
   UpdateWebAppInfoFromManifest(manifest, &web_app_info);
@@ -411,6 +431,12 @@ TEST_F(WebAppInstallUtilsWithShortcutsMenu,
   auto protocol_handler = web_app_info.protocol_handlers[0];
   EXPECT_EQ(protocol_handler.protocol, base::UTF8ToUTF16("mailto"));
   EXPECT_EQ(protocol_handler.url, GURL("http://example.com/handle=%s"));
+
+  // Check URL handlers were updated
+  EXPECT_EQ(1u, web_app_info.url_handlers.size());
+  auto url_handler = web_app_info.url_handlers[0];
+  EXPECT_EQ(url_handler.origin,
+            url::Origin::Create(GURL("https://url_handlers_origin.com/")));
 }
 
 // Tests that we limit the number of icons declared by a site.

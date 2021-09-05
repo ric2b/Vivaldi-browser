@@ -11,7 +11,7 @@
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/strings/string16.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/banners/app_banner_manager.h"
@@ -128,11 +128,12 @@ class AppBannerManagerTest : public AppBannerManager {
 
   void InvalidateWeakPtrs() override { weak_factory_.InvalidateWeakPtrs(); }
 
-  bool IsSupportedAppPlatform(const base::string16& platform) const override {
+  bool IsSupportedNonWebAppPlatform(
+      const base::string16& platform) const override {
     return base::EqualsASCII(platform, "chrome_web_store");
   }
 
-  bool IsRelatedAppInstalled(
+  bool IsRelatedNonWebAppInstalled(
       const blink::Manifest::RelatedApplication& related_app) const override {
     // Corresponds to the id listed in manifest_listing_related_chrome_app.json.
     return base::EqualsASCII(related_app.platform.value_or(base::string16()),
@@ -382,7 +383,13 @@ IN_PROC_BROWSER_TEST_F(AppBannerManagerBrowserTest, NoManifest) {
       NO_MANIFEST);
 }
 
-IN_PROC_BROWSER_TEST_F(AppBannerManagerBrowserTest, MissingManifest) {
+// TODO(crbug.com/1146526): Test is flaky on Mac.
+#if defined(OS_MAC)
+#define MAYBE_MissingManifest DISABLED_MissingManifest
+#else
+#define MAYBE_MissingManifest MissingManifest
+#endif
+IN_PROC_BROWSER_TEST_F(AppBannerManagerBrowserTest, MAYBE_MissingManifest) {
   std::unique_ptr<AppBannerManagerTest> manager(
       CreateAppBannerManager(browser()));
   RunBannerTest(browser(), manager.get(),

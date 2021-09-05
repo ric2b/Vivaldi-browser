@@ -8,7 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/memory/read_only_shared_memory_region.h"
 #include "base/memory/shared_memory_mapping.h"
@@ -131,7 +131,7 @@ bool PixelTest::RunPixelTestWithReadbackTargetAndArea(
   renderer_->DecideRenderPassAllocationsForFrame(*pass_list);
   float device_scale_factor = 1.f;
   renderer_->DrawFrame(pass_list, device_scale_factor, device_viewport_size_,
-                       display_color_spaces_);
+                       display_color_spaces_, &surface_damage_rect_list_);
 
   // Call SwapBuffersSkipped(), so the renderer can have a chance to release
   // resources.
@@ -166,7 +166,7 @@ bool PixelTest::RunPixelTest(viz::AggregatedRenderPassList* pass_list,
   renderer_->DecideRenderPassAllocationsForFrame(*pass_list);
   float device_scale_factor = 1.f;
   renderer_->DrawFrame(pass_list, device_scale_factor, device_viewport_size_,
-                       display_color_spaces_);
+                       display_color_spaces_, &surface_damage_rect_list_);
 
   // Call SwapBuffersSkipped(), so the renderer can have a chance to release
   // resources.
@@ -291,11 +291,13 @@ void PixelTest::SetUpSkiaRenderer(gfx::SurfaceOrigin output_surface_origin) {
   // Set up the GPU service.
   gpu_service_holder_ = viz::TestGpuServiceHolder::GetInstance();
 
-  // Set up the skia renderer.
+  auto skia_deps = std::make_unique<viz::SkiaOutputSurfaceDependencyImpl>(
+      gpu_service(), gpu::kNullSurfaceHandle);
+  display_controller_ =
+      std::make_unique<viz::DisplayCompositorMemoryAndTaskController>(
+          std::move(skia_deps));
   output_surface_ = viz::SkiaOutputSurfaceImpl::Create(
-      std::make_unique<viz::SkiaOutputSurfaceDependencyImpl>(
-          gpu_service(), gpu::kNullSurfaceHandle),
-      renderer_settings_, &debug_settings_);
+      display_controller_.get(), renderer_settings_, &debug_settings_);
   output_surface_->BindToClient(output_surface_client_.get());
   static_cast<viz::SkiaOutputSurfaceImpl*>(output_surface_.get())
       ->SetCapabilitiesForTesting(output_surface_origin);

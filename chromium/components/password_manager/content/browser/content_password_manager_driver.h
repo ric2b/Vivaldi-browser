@@ -81,9 +81,9 @@ class ContentPasswordManagerDriver
   void AnnotateFieldsWithParsingResult(
       const autofill::ParsingResult& parsing_result) override;
 
-  // Notify the renderer that the user wants to generate password manually.
+  // Notify the renderer that the user wants to trigger password generation.
   void GeneratePassword(autofill::mojom::PasswordGenerationAgent::
-                            UserTriggeredGeneratePasswordCallback callback);
+                            TriggeredGeneratePasswordCallback callback);
 
   content::RenderFrameHost* render_frame_host() const {
     return render_frame_host_;
@@ -103,6 +103,7 @@ class ContentPasswordManagerDriver
   void InformAboutUserInput(const autofill::FormData& form_data) override;
   void SameDocumentNavigation(autofill::mojom::SubmissionIndicatorEvent
                                   submission_indication_event) override;
+  void PasswordFormCleared(const autofill::FormData& form_data) override;
   void RecordSavePasswordProgress(const std::string& log) override;
   void UserModifiedPasswordField() override;
   void UserModifiedNonPasswordField(autofill::FieldRendererId renderer_id,

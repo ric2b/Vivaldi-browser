@@ -52,7 +52,6 @@ CustomConstructor
 CustomElementCallbacks
 DefaultValue=Undefined
 DeprecateAs=*
-DisableInNewIDLCompiler
 DoNotCheckConstants
 DoNotTestNewObject
 EnforceRange
@@ -65,6 +64,7 @@ HighEntropy=|Direct
 HTMLConstructor
 ImmutablePrototype
 ImplementedAs=*
+IsCodeLike
 LegacyLenientSetter
 LegacyLenientThis
 LegacyNoInterfaceObject

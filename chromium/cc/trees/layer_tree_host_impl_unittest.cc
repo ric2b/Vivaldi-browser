@@ -12,14 +12,14 @@
 
 #include "base/base_switches.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/ptr_util.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -273,6 +273,7 @@ class LayerTreeHostImplTest : public testing::Test,
       base::TimeTicks first_scroll_timestamp) override {
     first_scroll_observed++;
   }
+  bool IsInSynchronousComposite() const override { return false; }
   void set_reduce_memory_result(bool reduce_memory_result) {
     reduce_memory_result_ = reduce_memory_result;
   }
@@ -291,7 +292,7 @@ class LayerTreeHostImplTest : public testing::Test,
     host_impl_ = LayerTreeHostImpl::Create(
         settings, this, &task_runner_provider_, &stats_instrumentation_,
         &task_graph_runner_,
-        AnimationHost::CreateForTesting(ThreadInstance::IMPL), 0,
+        AnimationHost::CreateForTesting(ThreadInstance::IMPL), nullptr, 0,
         image_worker_ ? image_worker_->task_runner() : nullptr, nullptr);
     InputHandler::Create(static_cast<CompositorDelegateForInput&>(*host_impl_));
     layer_tree_frame_sink_ = std::move(layer_tree_frame_sink);
@@ -1262,16 +1263,12 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, ScrollRootCallsCommitAndRedraw) {
   EXPECT_TRUE(did_request_commit_);
 }
 
-// Ensure correct semantics for the IsActivelyPrecisionScrolling method. This
+// Ensure correct semantics for the GetActivelyScrollingType method. This
 // method is used to determine scheduler policy so it wants to report true only
 // when real scrolling is occurring (i.e. the compositor is consuming scroll
-// delta, the page isn't handling the events itself). We also only consider
-// this signal for non-animated scrolls. This is partially historical but also
-// makes some sense since touchscreen/high-precision touchpad scrolling has a
-// physical metaphor (movement sticks to finger) so smoothness should be
-// prioritized.
+// delta, the page isn't handling the events itself).
 TEST_P(ScrollUnifiedLayerTreeHostImplTest,
-       ActivelyTouchScrollingOnlyAfterScrollMovement) {
+       ActivelyScrollingOnlyAfterScrollMovement) {
   SetupViewportLayersOuterScrolls(gfx::Size(50, 50), gfx::Size(100, 100));
   DrawFrame();
 
@@ -1286,29 +1283,33 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest,
     EXPECT_EQ(ScrollThread::SCROLL_ON_IMPL_THREAD, status.thread);
     EXPECT_EQ(MainThreadScrollingReason::kNotScrollingOnMain,
               status.main_thread_scrolling_reasons);
-    EXPECT_FALSE(host_impl_->IsActivelyPrecisionScrolling());
+    EXPECT_EQ(host_impl_->GetActivelyScrollingType(),
+              ActivelyScrollingType::kNone);
 
     // There is no extent upwards so the scroll won't consume any delta.
     GetInputHandler().ScrollUpdate(
         UpdateState(gfx::Point(), gfx::Vector2d(0, -10),
                     ui::ScrollInputType::kTouchscreen)
             .get());
-    EXPECT_FALSE(host_impl_->IsActivelyPrecisionScrolling());
+    EXPECT_EQ(host_impl_->GetActivelyScrollingType(),
+              ActivelyScrollingType::kNone);
 
     // This should scroll so ensure the bit flips to true.
     GetInputHandler().ScrollUpdate(
         UpdateState(gfx::Point(), gfx::Vector2d(0, 10),
                     ui::ScrollInputType::kTouchscreen)
             .get());
-    EXPECT_TRUE(host_impl_->IsActivelyPrecisionScrolling());
+    EXPECT_EQ(host_impl_->GetActivelyScrollingType(),
+              ActivelyScrollingType::kPrecise);
     GetInputHandler().ScrollEnd();
-    EXPECT_FALSE(host_impl_->IsActivelyPrecisionScrolling());
+    EXPECT_EQ(host_impl_->GetActivelyScrollingType(),
+              ActivelyScrollingType::kNone);
   }
 
   ASSERT_EQ(10, CurrentScrollOffset(OuterViewportScrollLayer()).y());
 
-  // Ensure an animated wheel scroll doesn't cause the bit to flip even when
-  // scrolling occurs.
+  // Ensure an animated wheel scroll only causes the bit to flip when enabling
+  // smoothness mode (i.e. the value of GetParam().animate);
   {
     InputHandler::ScrollStatus status = GetInputHandler().ScrollBegin(
         BeginState(gfx::Point(), gfx::Vector2dF(0, 10),
@@ -1316,11 +1317,13 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest,
             .get(),
         ui::ScrollInputType::kWheel);
     EXPECT_EQ(ScrollThread::SCROLL_ON_IMPL_THREAD, status.thread);
-    EXPECT_FALSE(host_impl_->IsActivelyPrecisionScrolling());
+    EXPECT_EQ(host_impl_->GetActivelyScrollingType(),
+              ActivelyScrollingType::kNone);
 
     GetInputHandler().ScrollUpdate(
         AnimatedUpdateState(gfx::Point(), gfx::Vector2dF(0, 10)).get());
-    EXPECT_FALSE(host_impl_->IsActivelyPrecisionScrolling());
+    EXPECT_EQ(host_impl_->GetActivelyScrollingType(),
+              ActivelyScrollingType::kAnimated);
 
     base::TimeTicks cur_time =
         base::TimeTicks() + base::TimeDelta::FromMilliseconds(100);
@@ -1339,18 +1342,22 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest,
     // The animation is setup in the first frame so tick at least twice to
     // actually animate it.
     ANIMATE(0);
-    EXPECT_FALSE(host_impl_->IsActivelyPrecisionScrolling());
+    EXPECT_EQ(host_impl_->GetActivelyScrollingType(),
+              ActivelyScrollingType::kAnimated);
     ANIMATE(200);
-    EXPECT_FALSE(host_impl_->IsActivelyPrecisionScrolling());
+    EXPECT_EQ(host_impl_->GetActivelyScrollingType(),
+              ActivelyScrollingType::kAnimated);
     ANIMATE(1000);
-    EXPECT_FALSE(host_impl_->IsActivelyPrecisionScrolling());
+    EXPECT_EQ(host_impl_->GetActivelyScrollingType(),
+              ActivelyScrollingType::kAnimated);
 
 #undef ANIMATE
 
     ASSERT_EQ(20, CurrentScrollOffset(OuterViewportScrollLayer()).y());
 
     GetInputHandler().ScrollEnd();
-    EXPECT_FALSE(host_impl_->IsActivelyPrecisionScrolling());
+    EXPECT_EQ(host_impl_->GetActivelyScrollingType(),
+              ActivelyScrollingType::kNone);
   }
 }
 
@@ -4942,6 +4949,7 @@ class LayerTreeHostImplOverridePhysicalTime : public LayerTreeHostImpl {
                           rendering_stats_instrumentation,
                           task_graph_runner,
                           AnimationHost::CreateForTesting(ThreadInstance::IMPL),
+                          nullptr,
                           0,
                           nullptr,
                           nullptr) {}
@@ -5401,32 +5409,6 @@ TEST_P(LayerTreeHostImplTestMultiScrollable,
   EXPECT_TRUE(scrollbar_1_->Opacity());
   EXPECT_TRUE(scrollbar_2_->Opacity());
 
-  EXPECT_FALSE(animation_task_.is_null());
-}
-
-TEST_P(LayerTreeHostImplTestMultiScrollable, ScrollbarFlashWhenMouseEnter) {
-  LayerTreeSettings settings = DefaultSettings();
-  settings.scrollbar_fade_delay = base::TimeDelta::FromMilliseconds(500);
-  settings.scrollbar_fade_duration = base::TimeDelta::FromMilliseconds(300);
-  settings.scrollbar_animator = LayerTreeSettings::AURA_OVERLAY;
-  settings.scrollbar_flash_when_mouse_enter = true;
-
-  SetUpLayers(settings);
-
-  EXPECT_EQ(scrollbar_1_->Opacity(), 0);
-  EXPECT_EQ(scrollbar_2_->Opacity(), 0);
-
-  // Scroll should flash when mouse enter.
-  GetInputHandler().MouseMoveAt(gfx::Point(1, 1));
-
-  EXPECT_TRUE(scrollbar_1_->Opacity());
-  EXPECT_FALSE(scrollbar_2_->Opacity());
-  EXPECT_FALSE(animation_task_.is_null());
-
-  GetInputHandler().MouseMoveAt(gfx::Point(51, 51));
-
-  EXPECT_TRUE(scrollbar_1_->Opacity());
-  EXPECT_TRUE(scrollbar_2_->Opacity());
   EXPECT_FALSE(animation_task_.is_null());
 }
 
@@ -10849,8 +10831,8 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, PartialSwapReceivesDamageRect) {
       LayerTreeHostImpl::Create(
           settings, this, &task_runner_provider_, &stats_instrumentation_,
           &task_graph_runner_,
-          AnimationHost::CreateForTesting(ThreadInstance::IMPL), 0, nullptr,
-          nullptr);
+          AnimationHost::CreateForTesting(ThreadInstance::IMPL), nullptr, 0,
+          nullptr, nullptr);
   layer_tree_host_impl->SetVisible(true);
   layer_tree_host_impl->InitializeFrameSink(layer_tree_frame_sink.get());
 
@@ -11298,8 +11280,8 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest, MemoryLimits) {
   host_impl_ = LayerTreeHostImpl::Create(
       settings, this, &task_runner_provider_, &stats_instrumentation_,
       &task_graph_runner_,
-      AnimationHost::CreateForTesting(ThreadInstance::IMPL), 0, nullptr,
-      nullptr);
+      AnimationHost::CreateForTesting(ThreadInstance::IMPL), nullptr, 0,
+      nullptr, nullptr);
   InputHandler::Create(static_cast<CompositorDelegateForInput&>(*host_impl_));
 
   // Gpu compositing.
@@ -11557,8 +11539,14 @@ class FrameSinkClient : public TestLayerTreeFrameSinkClient {
       scoped_refptr<viz::ContextProvider> display_context_provider)
       : display_context_provider_(std::move(display_context_provider)) {}
 
-  std::unique_ptr<viz::SkiaOutputSurface> CreateDisplaySkiaOutputSurface()
-      override {
+  std::unique_ptr<viz::DisplayCompositorMemoryAndTaskController>
+  CreateDisplayController() override {
+    // In this implementation, no output surface has a real gpu thread, and
+    // there is no overlay support.
+    return nullptr;
+  }
+  std::unique_ptr<viz::SkiaOutputSurface> CreateDisplaySkiaOutputSurface(
+      viz::DisplayCompositorMemoryAndTaskController*) override {
     return viz::FakeSkiaOutputSurface::Create3d(
         std::move(display_context_provider_));
   }
@@ -14067,20 +14055,21 @@ TEST_F(LayerTreeHostImplTest, FrameCounterReset) {
   dropped_frame_counter->AddGoodFrame();
   EXPECT_EQ(dropped_frame_counter->total_frames(), 1u);
 
-  dropped_frame_counter->AddDroppedFrameAffectingSmoothness();
-  // FCP not received, so the total_smoothness_dropped_ won't increase.
-  EXPECT_EQ(dropped_frame_counter->total_smoothness_dropped(), 0u);
-
   auto interval = base::TimeDelta::FromMilliseconds(16);
   base::TimeTicks now = base::TimeTicks::Now();
   auto deadline = now + interval;
   viz::BeginFrameArgs args = viz::BeginFrameArgs::Create(
-      BEGINFRAME_FROM_HERE, 1u /*source_id*/, 1u /*sequence_number*/, now,
+      BEGINFRAME_FROM_HERE, 1u /*source_id*/, 2u /*sequence_number*/, now,
       deadline, interval, viz::BeginFrameArgs::NORMAL);
+
+  dropped_frame_counter->OnEndFrame(args, true);
+  // FCP not received, so the total_smoothness_dropped_ won't increase.
+  EXPECT_EQ(dropped_frame_counter->total_smoothness_dropped(), 0u);
+
   BeginMainFrameMetrics begin_frame_metrics;
   begin_frame_metrics.should_measure_smoothness = true;
   host_impl_->ReadyToCommit(args, &begin_frame_metrics);
-  dropped_frame_counter->AddDroppedFrameAffectingSmoothness();
+  dropped_frame_counter->OnEndFrame(args, true);
   EXPECT_EQ(dropped_frame_counter->total_smoothness_dropped(), 1u);
 
   total_frame_counter->set_total_frames_for_testing(1u);
@@ -15862,8 +15851,8 @@ TEST_P(ScrollUnifiedLayerTreeHostImplTest,
   host_impl_ = LayerTreeHostImpl::Create(
       DefaultSettings(), this, &task_runner_provider_, &stats_instrumentation_,
       &task_graph_runner_,
-      AnimationHost::CreateForTesting(ThreadInstance::IMPL), 0, nullptr,
-      nullptr);
+      AnimationHost::CreateForTesting(ThreadInstance::IMPL), nullptr, 0,
+      nullptr, nullptr);
   InputHandler::Create(static_cast<CompositorDelegateForInput&>(*host_impl_));
   host_impl_->SetVisible(true);
 
@@ -18110,8 +18099,8 @@ TEST_F(LayerTreeHostImplTest, FrameElementIdHitTestOverlapRoundedCorners) {
 
   // Add rounded corners to the layer, which are unable to be hit tested by the
   // simple quad-based logic.
-  CreateEffectNode(rounded_frame_layer).rounded_corner_bounds =
-      gfx::RRectF(25, 25, 50, 50, 5);
+  CreateEffectNode(rounded_frame_layer).mask_filter_info =
+      gfx::MaskFilterInfo(gfx::RRectF(25, 25, 50, 50, 5));
 
   UpdateDrawProperties(host_impl_->active_tree());
 

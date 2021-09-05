@@ -89,9 +89,9 @@ PhysicalRect InitializeRootRect(const LayoutObject* root,
     // we can zoom out to fit the entire element width.
     result = layout_view->OverflowClipRect(PhysicalOffset());
   } else if (root->IsBox() && root->IsScrollContainer()) {
-    result = ToLayoutBox(root)->PhysicalContentBoxRect();
+    result = To<LayoutBox>(root)->PhysicalContentBoxRect();
   } else {
-    result = PhysicalRect(ToLayoutBoxModelObject(root)->BorderBoundingBox());
+    result = PhysicalRect(To<LayoutBoxModelObject>(root)->BorderBoundingBox());
   }
   ApplyMargin(result, margin, root->StyleRef().EffectiveZoom());
   return result;
@@ -105,14 +105,14 @@ PhysicalRect InitializeTargetRect(const LayoutObject* target,
   PhysicalRect result;
   if ((flags & IntersectionGeometry::kShouldUseReplacedContentRect) &&
       target->IsLayoutEmbeddedContent()) {
-    result = ToLayoutEmbeddedContent(target)->ReplacedContentRect();
+    result = To<LayoutEmbeddedContent>(target)->ReplacedContentRect();
   } else if (target->IsBox()) {
-    result = PhysicalRect(ToLayoutBoxModelObject(target)->BorderBoundingBox());
+    result = PhysicalRect(To<LayoutBox>(target)->BorderBoundingBox());
   } else if (target->IsLayoutInline()) {
     result = target->AbsoluteToLocalRect(
         PhysicalRect::EnclosingRect(target->AbsoluteBoundingBoxFloatRect()));
   } else {
-    result = ToLayoutText(target)->PhysicalLinesBoundingBox();
+    result = To<LayoutText>(target)->PhysicalLinesBoundingBox();
   }
   ApplyMargin(result, margin, root->StyleRef().EffectiveZoom(),
               InitializeRootRect(root, {} /* margin */));
@@ -132,7 +132,7 @@ LayoutView* LocalRootView(const LayoutObject& object) {
 //   https://w3c.github.io/IntersectionObserver/v2/#calculate-visibility-algo
 bool ComputeIsVisible(const LayoutObject* target, const PhysicalRect& rect) {
   if (target->GetDocument().GetFrame()->LocalFrameRoot().GetOcclusionState() !=
-      FrameOcclusionState::kGuaranteedNotOccluded) {
+      mojom::blink::FrameOcclusionState::kGuaranteedNotOccluded) {
     return false;
   }
   if (target->HasDistortingVisualEffects())
@@ -446,7 +446,7 @@ bool IntersectionGeometry::ClipToRoot(const LayoutObject* root,
   // TODO(szager): the writing mode flipping needs a test.
   const LayoutBox* local_ancestor = nullptr;
   if (!RootIsImplicit() || root->GetDocument().IsInMainFrame())
-    local_ancestor = ToLayoutBox(root);
+    local_ancestor = To<LayoutBox>(root);
 
   unsigned flags = kDefaultVisualRectFlags | kEdgeInclusive |
                    kDontApplyMainFrameOverflowClip;

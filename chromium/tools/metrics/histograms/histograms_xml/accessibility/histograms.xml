@@ -23,6 +23,9 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram name="Accessibility.Android.AnimationsEnabled2"
     enum="AccessibilityAndroidAnimationsEnabled" expires_after="M85">
+  <obsolete>
+    Removed 10/2020, having expired in M85.
+  </obsolete>
   <owner>dmazzoni@chromium.org</owner>
   <owner>smcgruer@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
@@ -101,7 +104,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.ATK-APIs" enum="AccessibilityATKAPIEnum"
-    expires_after="M88">
+    expires_after="M95">
   <owner>dmazzoni@chromium.org</owner>
   <owner>jkim@igalia.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
@@ -212,7 +215,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.CrosCursorHighlight" enum="BooleanEnabled"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>dmazzoni@chromium.org</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
@@ -262,7 +265,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.CrosHighContrast" enum="BooleanEnabled"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>dmazzoni@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
@@ -351,7 +354,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="Accessibility.CrosShelfNavigationButtonsInTabletModeChanged.OOBE"
-    enum="BooleanEnabled" expires_after="M85">
+    enum="BooleanEnabled" expires_after="M91">
   <owner>gzadina@google.com</owner>
   <owner>tbarzic@chromium.org</owner>
   <summary>
@@ -365,7 +368,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 
 <histogram
     name="Accessibility.CrosShelfNavigationButtonsInTabletModeChanged.OsSettings"
-    enum="BooleanEnabled" expires_after="M85">
+    enum="BooleanEnabled" expires_after="M91">
   <owner>gzadina@google.com</owner>
   <owner>tbarzic@chromium.org</owner>
   <summary>
@@ -414,13 +417,24 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.CrosVirtualKeyboard" enum="BooleanEnabled"
-    expires_after="2021-01-31">
+    expires_after="2021-04-25">
   <owner>dmazzoni@chromium.org</owner>
   <owner>kenjibaheux@google.com</owner>
   <owner>chrome-a11y-core@google.com</owner>
   <summary>
     Whether the Chrome OS Virtual Keyboard feature is on (logged once 45 secs
     after startup).
+  </summary>
+</histogram>
+
+<histogram name="Accessibility.FocusHighlight.ToggleEnabled"
+    enum="BooleanEnabled" expires_after="2021-03-31">
+  <owner>aboxhall@chromium.org</owner>
+  <owner>chrome-a11y-core@google.com</owner>
+  <summary>
+    The value of the &quot;show a quick focus highlight&quot; setting, logged
+    immediately after toggling. This will show us how often users are turning
+    the feature on, and how often they are turning it back off again.
   </summary>
 </histogram>
 
@@ -471,7 +485,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.iOS.NewLargerTextCategory" enum="BooleanHit"
-    expires_after="2021-02-28">
+    expires_after="2021-05-02">
   <owner>gambard@chromium.org</owner>
   <owner>rkgibson@google.com</owner>
   <summary>
@@ -507,7 +521,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Accessibility.LanguageDetection.LangsPerPage" units="count"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>chrishall@chromium.org</owner>
   <owner>aboxhall@chromium.org</owner>
   <owner>dmazzoni@chromium.org</owner>
@@ -613,6 +627,18 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   <summary>
     Records when a user enables or disables the Live Caption feature from
     chrome://settings.
+  </summary>
+</histogram>
+
+<histogram name="Accessibility.LiveCaption.UseSodaForLiveCaption"
+    enum="BooleanEnabled" expires_after="2021-04-30">
+  <owner>abigailbklein@google.com</owner>
+  <owner>evliu@google.com</owner>
+  <owner>chrome-a11y-core@google.com</owner>
+  <summary>
+    Whether the Live Caption feature is powered by the Speech On-Device API
+    (SODA). This is logged once during the initialization of the caption
+    controller at browser start up.
   </summary>
 </histogram>
 

@@ -14,6 +14,7 @@
 #include "base/values.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys.h"
 #include "chrome/browser/chromeos/platform_keys/platform_keys_service.h"
+#include "chromeos/dbus/attestation/interface.pb.h"
 #include "chromeos/dbus/constants/attestation_constants.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "net/cert/x509_certificate.h"
@@ -24,13 +25,14 @@ class Profile;
 namespace chromeos {
 
 namespace platform_keys {
+class KeyPermissionsManager;
 class PlatformKeysService;
 }  // namespace platform_keys
 
 namespace cert_provisioning {
 
 // Used for both DeleteVaKey and DeleteVaKeysByPrefix
-using DeleteVaKeyCallback = base::OnceCallback<void(base::Optional<bool>)>;
+using DeleteVaKeyCallback = base::OnceCallback<void(bool)>;
 
 const char kKeyNamePrefix[] = "cert-provis-";
 
@@ -146,6 +148,15 @@ scoped_refptr<net::X509Certificate> CreateSingleCertificateFromBytes(
 // being shut down.
 platform_keys::PlatformKeysService* GetPlatformKeysService(CertScope scope,
                                                            Profile* profile);
+
+// Returns the KeyPermissionsManager to be used.
+// If |scope| is CertScope::kDevice, |profile| is ignored and the
+// system token key permissions manager is returned.
+// If |scope| is CertScope::kUser, returns the user private slot key permissions
+// manager for |profile|.
+platform_keys::KeyPermissionsManager* GetKeyPermissionsManager(
+    CertScope scope,
+    Profile* profile);
 
 }  // namespace cert_provisioning
 }  // namespace chromeos

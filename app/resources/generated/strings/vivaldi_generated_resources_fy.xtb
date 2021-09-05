@@ -19,7 +19,6 @@
 <translation id="1221825588892235038">Seleksje allinne</translation>
 <translation id="1244303850296295656">Tafoeging flater</translation>
 <translation id="125220115284141797">Standert</translation>
-<translation id="1274977772557788323">Adobe Flash Player ynstellingen fan bewarjen</translation>
 <translation id="1297175357211070620">Bestimming</translation>
 <translation id="1303101771013849280">Makket blêdwizer fan HTML triem</translation>
 <translation id="1380436189840894976">Privee modus dochs slute?</translation>
@@ -74,7 +73,6 @@
 <translation id="2218515861914035131">Plakke as tekst sûnder opmaak</translation>
 <translation id="2249605167705922988">bgl. 1-5, 8, 11-13</translation>
 <translation id="225240747099314620">Stean identifisearjen ta foar beskerme ynhâld (kompjûter werstart kin fereaske wêze)</translation>
-<translation id="2263497240924215535">(Utskeakele)</translation>
 <translation id="2277255602909579701">Alle koekjes en webstee gegevens</translation>
 <translation id="2280486287150724112">Marzje rjochts</translation>
 <translation id="2282146716419988068">GPU proses</translation>
@@ -104,6 +102,7 @@
 <translation id="2662876636500006917">Chrome Web Store</translation>
 <translation id="2678063897982469759">Op 'e nij ynskeakelje</translation>
 <translation id="2721037002783622288">&amp;Sykje om ôfbylding mei <ph name="SEARCH_ENGINE" /></translation>
+<translation id="2783321960289401138">Fluchtoets oanmeitsje...</translation>
 <translation id="2785873697295365461">Triem omskriuwers</translation>
 <translation id="2809586584051668049">en <ph name="NUMBER_ADDITIONAL_DISABLED" /> mear</translation>
 <translation id="2812989263793994277">Lit gjin ôfbyldings sjen</translation>
@@ -125,7 +124,6 @@
 <translation id="3013291976881901233">MIDI apparaten</translation>
 <translation id="3021678814754966447">&amp;Ramt boarne besjen</translation>
 <translation id="3036546437875325427">FLash ynskeakelje</translation>
-<translation id="3038675903128704560">Stean it gjin inkele webstee ta om in ynstekker te brûken foar tagong ta jo kompjûter</translation>
 <translation id="3046910703532196514">Webstee, kompleet</translation>
 <translation id="3067198360141518313">Dizze ynstekker útfiere</translation>
 <translation id="3080207940057008665">In oar programma op jo kompjûter hat in tema taheakke dy de manier hoe't Vivaldi wurket feroarje kin.</translation>
@@ -155,18 +153,17 @@
 <translation id="3378572629723696641">Dizze tafoeging is mooglik beskeadige.</translation>
 <translation id="3387614642886316601">Ferbettere staveringshifker brûke</translation>
 <translation id="3432227430032737297">Alles sichtber wiskje</translation>
-<translation id="3440761377721825626">Freegje as in webstee in ynstekker brûker wolle om tagong te krijen ta jo kompjûter</translation>
 <translation id="345693547134384690">&amp;Ofbylding yn nije ljepper iepenje</translation>
 <translation id="3494769164076977169">Freegje as in webstee besiket om triemmen automatysk yn te laden nei de earste triem (rekommandearre)</translation>
 <translation id="3505030558724226696">Apparaat tagong ynlûke</translation>
 <translation id="3511307672085573050">Keppeling adr&amp;es kopiearje</translation>
-<translation id="3523642406908660543">Freegje as in webstee in ynstekker brûker wolle om tagong te krijen ta jo kompjûter (rekommandearre)</translation>
 <translation id="354068948465830244">Dit kin webstee gegevens lêze en feroarje</translation>
 <translation id="3560034655160545939">&amp;Staveringshifker</translation>
 <translation id="3574917942258583917">Privee modus dochs ferlitte?</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt;wol in printer diele &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; mei in groep fan dy: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. As jo dit akseptearje, kinne alle groepsleden nei de printer printsje.</translation>
 <translation id="3587482841069643663">Alles</translation>
 <translation id="3627588569887975815">Keppeling yn ynko&amp;gnito finster iepenje</translation>
+<translation id="3627879631695760395"><ph name="APP" /> ynstallearje...</translation>
 <translation id="3668823961463113931">Handlers</translation>
 <translation id="3678156199662914018">Tafoeging: <ph name="EXTENSION_NAME" /></translation>
 <translation id="3683524264665795342">Fersyk om skerm te dielen fan <ph name="APP_NAME" /></translation>
@@ -219,7 +216,6 @@
 <translation id="4423376891418188461">Ynstellingen werstellen</translation>
 <translation id="4434045419905280838">Pop-up en omlaat</translation>
 <translation id="4478664379124702289">Bewarje &amp;keppeling as...</translation>
-<translation id="4552089082226364758">Flash</translation>
 <translation id="4579581181964204535">Cast <ph name="HOST_NAME" /> net mooglik.</translation>
 <translation id="4593021220803146968">&amp;Gean nei <ph name="URL" /></translation>
 <translation id="4595560905247879544">Apps en tafoegings kinne allinne feroare wurde troch de behearder (<ph name="CUSTODIAN_NAME" />).</translation>
@@ -300,7 +296,6 @@
 <translation id="583281660410589416">Unbekend</translation>
 <translation id="5860491529813859533">Ynskeakelje</translation>
 <translation id="5867841422488265304">Fier in adres of syk opdracht yn</translation>
-<translation id="5908769186679515905">Tsjinkear websteeën fan it útfieren fan Flash</translation>
 <translation id="5910363049092958439">Be&amp;warje ôfbylding as...</translation>
 <translation id="5956585768868398362">Is dit de syk side dy't jo ferwachte?</translation>
 <translation id="5963453369025043595"><ph name="NUM_HANDLES" /> (<ph name="NUM_KILOBYTES_LIVE" /> piek)</translation>
@@ -373,7 +368,6 @@
 <translation id="7287143125007575591">Tagong wegere.</translation>
 <translation id="7288676996127329262"><ph name="HORIZONTAL_DPI" />x<ph name="VERTICAL_DPI" /> dpi</translation>
 <translation id="7309257895202129721">Bestjoeringseleminten &amp;sjen litte</translation>
-<translation id="7311079019872751559">Ynstekker tagong sûnder sandbox</translation>
 <translation id="7385854874724088939">Der barde in flater by it printsjen. Kontrolearje jo printer en besykje nochris.</translation>
 <translation id="7412226954991670867">GPU ûnthâld</translation>
 <translation id="7421925624202799674">&amp;Side boarne besjen</translation>
@@ -477,6 +471,7 @@ Bewarje jo kaai triem op in feilich plak. Jo ha it nedich om nije ferzjen fan jo
 <translation id="9027459031423301635">Keppeling iepenje yn nije &amp;ljepper</translation>
 <translation id="9056810968620647706">Gjin oerienkomsten fûn.</translation>
 <translation id="9137916601698928395">Iepenje kepeling as <ph name="USER" /></translation>
+<translation id="91568222606626347">Fluchtoets oanmeitsje...</translation>
 <translation id="916607977885256133">Byld yn byld</translation>
 <translation id="9170848237812810038">&amp;Ungedien meitsje</translation>
 <translation id="9215293857209265904">"<ph name="EXTENSION_NAME" />" is taheakke</translation>

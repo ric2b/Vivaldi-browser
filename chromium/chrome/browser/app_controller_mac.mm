@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <memory>
+#include <vector>
 
 #include "base/allocator/allocator_shim.h"
 #include "base/allocator/buildflags.h"
@@ -78,6 +79,7 @@
 #import "chrome/browser/ui/cocoa/share_menu_controller.h"
 #import "chrome/browser/ui/cocoa/tab_menu_bridge.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
+#include "chrome/browser/ui/profile_picker.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/startup/startup_browser_creator_impl.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -110,6 +112,7 @@
 #include "ui/base/cocoa/focus_window_set.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
+#include "url/gurl.h"
 
 //vivaldi
 #include "app/vivaldi_apptools.h"
@@ -920,7 +923,7 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
         // downloads page if the user chooses to wait.
         Browser* browser = chrome::FindBrowserWithProfile(profiles[i]);
         if (!browser) {
-          browser = new Browser(Browser::CreateParams(profiles[i], true));
+          browser = Browser::Create(Browser::CreateParams(profiles[i], true));
           browser->window()->Show();
         }
         DCHECK(browser);
@@ -1460,10 +1463,26 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
   // profile are implemented as forced incognito, we can't open a new guest
   // browser either, so we have to show the User Manager as well.
   Profile* lastProfile = [self lastProfile];
+  if (!lastProfile) {
+    // Without a profile there's nothing that can be done, but still return NO
+    // to AppKit as there's nothing that it can do either.
+    return NO;
+  }
   if (lastProfile->IsGuestSession() || IsProfileSignedOut(lastProfile) ||
       lastProfile->IsSystemProfile()) {
+    // Note: If the profile picker feature is enabled, this opens the profile
+    // picker, unless forced signin is enabled (in which case the old user
+    // manager is still shown).
     UserManager::Show(base::FilePath(),
                       profiles::USER_MANAGER_SELECT_PROFILE_NO_ACTION);
+  } else if (ProfilePicker::ShouldShowAtLaunch(
+                 // Pass an empty command line, because this is not application
+                 // startup. The original arguments (e.g. --incognito) are no
+                 // longer relevant.
+                 base::CommandLine(base::CommandLine::NO_PROGRAM),
+                 /*urls_to_launch=*/std::vector<GURL>())) {
+    ProfilePicker::Show(
+        ProfilePicker::EntryPoint::kNewSessionOnExistingProcess);
   } else {
     CreateBrowser(lastProfile);
   }
@@ -1710,7 +1729,7 @@ static base::mac::ScopedObjCClassSwizzler* g_swizzle_imk_input_session;
 
   // if no browser window exists then create one with no tabs to be filled in
   if (!browser) {
-    browser = new Browser(
+    browser = Browser::Create(
         Browser::CreateParams([self safeLastProfileForNewWindows], true));
     browser->window()->Show();
   }

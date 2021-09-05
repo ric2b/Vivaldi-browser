@@ -47,7 +47,6 @@ enum Event {
   kHitTestResult,
   kHover,
   kImageFrameUpdated,     // Web
-  kInvalidStatusChanged,  // Implicit
   kLayoutComplete,        // Web
   kLiveRegionCreated,     // Implicit
   kLiveRegionChanged,     // Web
@@ -57,7 +56,6 @@ enum Event {
   kMediaStartedPlaying,   // Native / Automation
   kMediaStoppedPlaying,   // Native / Automation
   kMenuEnd,               // Native / web: menu interaction has ended.
-  kMenuListItemSelected,  // Web
   kMenuListValueChanged,  // Web
   kMenuPopupEnd,          // Native / web: a menu/submenu is hidden/closed.
   kMenuPopupStart,        // Native / web: a menu/submenu is shown/opened.
@@ -79,16 +77,16 @@ enum Event {
   kShow,                     // Native / Automation
   kStateChanged,             // Native / Automation
   kTextChanged,
-  kWindowActivated,             // Native
-  kWindowDeactivated,           // Native
-  kWindowVisibilityChanged,     // Native
+  // TODO(nektar): Remove kTextSelectionChanged.
   kTextSelectionChanged,
   kTooltipClosed,
   kTooltipOpened,
-  kTreeChanged,  // Accessibility tree changed. Don't
-                 // explicitly fire an accessibility event,
-                 // only implicitly due to the change.
+  kTreeChanged,  // Don't explicitly fire this event.
+  // TODO(nektar): Remove kValueChanged.
   kValueChanged,
+  kWindowActivated,             // Native
+  kWindowDeactivated,           // Native
+  kWindowVisibilityChanged,     // Native
 };
 
 // Accessibility object roles.
@@ -176,6 +174,8 @@ enum Role {
   kDocNoteRef,
   kDocNotice,
   kDocPageBreak,
+  kDocPageFooter,
+  kDocPageHeader,
   kDocPageList,
   kDocPart,
   kDocPreface,
@@ -501,6 +501,7 @@ enum StringAttribute {
   // Only used when invalid_state == invalid_state_other.
   kAriaInvalidValue,
   kAutoComplete,
+  kCheckedStateDescription,
   kChildTreeId,
   kClassName,
   kContainerLiveRelevant,

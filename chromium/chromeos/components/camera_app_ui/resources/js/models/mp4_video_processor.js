@@ -9,6 +9,8 @@ import runFFmpeg from '../lib/ffmpeg.js';
 import {WaitableEvent} from '../waitable_event.js';
 // eslint-disable-next-line no-unused-vars
 import {AsyncWriter} from './async_writer.js';
+// eslint-disable-next-line no-unused-vars
+import {VideoProcessor} from './video_processor_interface.js';
 
 /**
  * A file stream in Emscripten.
@@ -30,9 +32,9 @@ let FileStream;  // eslint-disable-line no-unused-vars
 let FileOps;  // eslint-disable-line no-unused-vars
 
 /**
- * An emulated stdin device backed by Int8Array.
+ * An emulated input device backed by Int8Array.
  */
-class StdinDevice {
+class InputDevice {
   /**
    * @public
    */
@@ -151,9 +153,9 @@ class StdinDevice {
 }
 
 /**
- * An emulated stdout device.
+ * An emulated output device.
  */
-class StdoutDevice {
+class OutputDevice {
   /**
    * @param {!AsyncWriter} output Where should the device write to.
    */
@@ -185,9 +187,27 @@ class StdoutDevice {
     const blob = new Blob([buffer.subarray(offset, offset + length)]);
     assert(
         position === undefined || position === stream.position,
-        'stdout is not seekable');
+        'combined seek-and-write operation is not supported');
     this.output_.write(blob);
     return length;
+  }
+
+  /**
+   * Implements the llseek() operation for the emulated device.
+   * Only SEEK_SET (0) is supported as |whence|. Reference:
+   * https://emscripten.org/docs/api_reference/Filesystem-API.html#FS.llseek
+   * @param {!FileStream} stream
+   * @param {number} offset The offset in bytes relative to |whence|.
+   * @param {number} whence The reference position to be used.
+   * @return {number} The resulting file position.
+   */
+  llseek(stream, offset, whence) {
+    assert(whence === 0, 'only SEEK_SET is supported');
+    assert(this.output_.seekable());
+    if (stream.position !== offset) {
+      this.output_.seek(offset);
+    }
+    return offset;
   }
 
   /**
@@ -211,43 +231,56 @@ class StdoutDevice {
     return {
       open: () => {},
       close: this.close.bind(this),
-      read: () => assertNotReached('read should not be called on stdout'),
+      read: () => assertNotReached('read should not be called on output'),
       write: this.write.bind(this),
-      llseek: () => assertNotReached('llseek should not be called on stdout'),
+      llseek: this.llseek.bind(this),
     };
   }
 }
 
 /**
  * A video processor that can remux mkv to mp4.
+ * @implements {VideoProcessor}
  */
 class Mp4VideoProcessor {
   /**
    * @param {!AsyncWriter} output The output writer of mp4.
+   * @param {{seekable: boolean}} opts
    */
-  constructor(output) {
+  constructor(output, {seekable}) {
     this.output_ = output;
-    this.stdin_ = new StdinDevice();
-    this.stdout_ = new StdoutDevice(output);
+    this.inputDevice_ = new InputDevice();
+    this.outputDevice_ = new OutputDevice(output);
     this.jobQueue_ = new AsyncJobQueue();
 
+    const args = [
+      // Make the procssing pipeline start earlier by shorten the initial
+      // analyze durtaion from the default 5s to 1s. This reduce the
+      // stop-capture lantency significantly for short videos.
+      '-analyzeduration', '1M',
+      // mkv input from stdin
+      '-f', 'matroska', '-i', 'pipe:0',
+      // transcode audio to aac and copy the video
+      '-c:a', 'aac', '-c:v', 'copy',
+      // show error log only
+      '-hide_banner', '-loglevel', 'error',
+      // do not ask anything
+      '-nostdin', '-y'  // eslint-disable-line comma-dangle
+    ];
+
+    // TODO(crbug.com/1140852): Remove non-seekable code path once the Android
+    // camera intent helper support seek operation.
+    if (!seekable) {
+      // Mark unseekable.
+      args.push('-seekable', '0');
+      // Produce a fragmented MP4.
+      args.push('-movflags', 'frag_keyframe', '-frag_duration', '100000');
+    }
+
+    args.push('/output.mp4');
+
     const config = {
-      arguments: [
-        // Make the procssing pipeline start earlier by shorten the initial
-        // analyze durtaion from the default 5s to 1s. This reduce the
-        // stop-capture lantency significantly for short videos.
-        '-analyzeduration', '1M',
-        // mkv input from stdin
-        '-f', 'matroska', '-i', 'pipe:0',
-        // transcode audio to aac and copy the video
-        '-c:a', 'aac', '-c:v', 'copy',
-        // verbose and don't ask anything
-        '-hide_banner', '-loglevel', 'error', '-nostdin', '-y',
-        // streaming friendly output
-        '-movflags', 'frag_keyframe', '-frag_duration', '100000',
-        // mp4 output to stdout
-        '-f', 'mp4', 'pipe:1'  // eslint-disable-line comma-dangle
-      ],
+      arguments: args,
       locateFile: (file) => {
         assert(file === 'ffmpeg.wasm');
         return '/js/lib/ffmpeg.wasm';
@@ -262,11 +295,14 @@ class Mp4VideoProcessor {
         // major numbers 1, 3, 5, 6, 64, and 65. Ref:
         // https://github.com/emscripten-core/emscripten/blob/1ed6dd5cfb88d927ec03ecac8756f0273810d5c9/src/library_fs.js#L1331
         const input = fs.makedev(80, 0);
-        fs.registerDevice(input, this.stdin_.getFileOps());
+        fs.registerDevice(input, this.inputDevice_.getFileOps());
         fs.mkdev('/dev/stdin', input);
+
         const output = fs.makedev(80, 1);
-        fs.registerDevice(output, this.stdout_.getFileOps());
-        fs.mkdev('/dev/stdout', output);
+        fs.registerDevice(output, this.outputDevice_.getFileOps());
+        fs.mkdev('/output.mp4', output);
+
+        fs.symlink('/dev/tty1', '/dev/stdout');
         fs.symlink('/dev/tty1', '/dev/stderr');
         const stdin = fs.open('/dev/stdin', 'r');
         const stdout = fs.open('/dev/stdout', 'w');
@@ -291,7 +327,7 @@ class Mp4VideoProcessor {
 
     // This is a function to be called by ffmpeg before running read() in C.
     globalThis.waitReadable = (callback) => {
-      this.stdin_.setReadableCallback(callback);
+      this.inputDevice_.setReadableCallback(callback);
     };
   }
 
@@ -299,10 +335,10 @@ class Mp4VideoProcessor {
    * Writes a blob with mkv data into the processor.
    * @param {!Blob} blob
    */
-  write(blob) {
+  async write(blob) {
     this.jobQueue_.push(async () => {
       const buf = await blob.arrayBuffer();
-      this.stdin_.push(new Int8Array(buf));
+      this.inputDevice_.push(new Int8Array(buf));
     });
   }
 
@@ -311,17 +347,25 @@ class Mp4VideoProcessor {
    * @return {!Promise} Resolved when all write operations are finished.
    */
   async close() {
-    // Flush and close stdin.
+    // Flush and close the input device.
     this.jobQueue_.push(async () => {
-      this.stdin_.endPush();
+      this.inputDevice_.endPush();
     });
     await this.jobQueue_.flush();
 
-    // Wait until stdout is closed.
-    await this.stdout_.waitClosed();
+    // Wait until the output device is closed.
+    await this.outputDevice_.waitClosed();
 
     // Flush and close the output writer.
     await this.output_.close();
+  }
+
+  /**
+   * Expose the VideoProcessor constructor to given end point.
+   * @param {!Port} endPoint
+   */
+  static exposeVideoProcessor(endPoint) {
+    Comlink.expose(Mp4VideoProcessor, endPoint);
   }
 }
 

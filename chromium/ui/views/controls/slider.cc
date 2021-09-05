@@ -27,6 +27,7 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/native_theme/native_theme.h"
+#include "ui/views/metadata/metadata_impl_macros.h"
 #include "ui/views/widget/widget.h"
 
 namespace views {
@@ -70,12 +71,9 @@ float GetNearestAllowedValue(const base::flat_set<float>& allowed_values,
 
 }  // namespace
 
-Slider::Slider(SliderListener* listener)
-    : listener_(listener),
-      highlight_animation_(this),
-      pending_accessibility_value_change_(false) {
+Slider::Slider(SliderListener* listener) : listener_(listener) {
   highlight_animation_.SetSlideDuration(base::TimeDelta::FromMilliseconds(150));
-  EnableCanvasFlippingForRTLUI(true);
+  SetFlipCanvasOnPaintForRTLUI(true);
 #if defined(OS_APPLE)
   SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
 #else

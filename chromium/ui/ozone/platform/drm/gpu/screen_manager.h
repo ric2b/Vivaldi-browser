@@ -52,6 +52,7 @@ class ScreenManager {
     const gfx::Point origin;
     std::unique_ptr<drmModeModeInfo> mode = nullptr;
   };
+  using ControllerConfigsList = std::vector<ControllerConfigParams>;
 
   ScreenManager();
   virtual ~ScreenManager();
@@ -68,8 +69,7 @@ class ScreenManager {
 
   // Enables/Disables the display controller based on if a mode exists.
   base::flat_map<int64_t, bool> ConfigureDisplayControllers(
-      const std::vector<ScreenManager::ControllerConfigParams>&
-          controllers_params);
+      const ControllerConfigsList& controllers_params);
 
   // Returns a reference to the display controller configured to display within
   // |bounds|. If the caller caches the controller it must also register as an
@@ -106,24 +106,24 @@ class ScreenManager {
       uint32_t crtc);
 
   base::flat_map<int64_t, bool> TestAndModeset(
-      const std::vector<ControllerConfigParams>& controllers_params);
+      const ControllerConfigsList& controllers_params);
 
-  bool TestModeset(
-      const std::vector<ControllerConfigParams>& controllers_params);
+  bool TestModeset(const ControllerConfigsList& controllers_params);
 
   base::flat_map<int64_t, bool> Modeset(
-      const std::vector<ControllerConfigParams>& controllers_params);
+      const ControllerConfigsList& controllers_params);
 
   // Configures a display controller to be enabled. The display controller is
   // identified by (|crtc|, |connector|) and the controller is to be modeset
   // using |mode|. Controller modeset props are added into |commit_request|.
-  bool SetDisplayControllerForEnableAndGetProps(
+  void SetDisplayControllerForEnableAndGetProps(
       CommitRequest* commit_request,
       const scoped_refptr<DrmDevice>& drm,
       uint32_t crtc,
       uint32_t connector,
       const gfx::Point& origin,
-      const drmModeModeInfo& mode);
+      const drmModeModeInfo& mode,
+      const DrmOverlayPlane& primary);
 
   // Configures a display controller to be disabled. The display controller is
   // identified by |crtc|. Controller modeset props are added into
@@ -139,6 +139,10 @@ class ScreenManager {
                                          const CommitRequest& commit_request,
                                          bool did_succeed);
 
+  void HandleMirrorIfExists(
+      const ControllerConfigParams& config,
+      const HardwareDisplayControllers::iterator& controller);
+
   // Returns an iterator into |controllers_| for the controller located at
   // |origin|.
   HardwareDisplayControllers::iterator FindActiveDisplayControllerByLocation(
@@ -150,26 +154,19 @@ class ScreenManager {
       const scoped_refptr<DrmDevice>& drm,
       const gfx::Rect& bounds);
 
-  // Tries to set the |original| controller to mirror those in |mirror|.
-  // |original| is an iterator to the HDC where the controller is currently
-  // present.
-  bool HandleMirrorMode(CommitRequest* commit_request,
-                        HardwareDisplayControllers::iterator original,
-                        HardwareDisplayControllers::iterator mirror,
-                        const drmModeModeInfo& mode);
-
   DrmOverlayPlane GetModesetBuffer(HardwareDisplayController* controller,
-                                   const gfx::Rect& bounds);
+                                   const gfx::Rect& bounds,
+                                   const std::vector<uint64_t>& modifiers);
 
-  // Gets props for modesetting the |controller| using |origin| and |mode|. If
-  // there is a window at the controller location, then we'll re-use the current
-  // buffer.
-  bool GetModesetControllerProps(CommitRequest* commit_request,
+  // Gets props for modesetting the |controller| using |origin| and |mode|.
+  void GetModesetControllerProps(CommitRequest* commit_request,
                                  HardwareDisplayController* controller,
                                  const gfx::Point& origin,
-                                 const drmModeModeInfo& mode);
-  bool GetEnableControllerProps(CommitRequest* commit_request,
-                                HardwareDisplayController* controller);
+                                 const drmModeModeInfo& mode,
+                                 const DrmOverlayPlane& primary);
+  void GetEnableControllerProps(CommitRequest* commit_request,
+                                HardwareDisplayController* controller,
+                                const DrmOverlayPlane& primary);
 
   DrmWindow* FindWindowAt(const gfx::Rect& bounds) const;
 

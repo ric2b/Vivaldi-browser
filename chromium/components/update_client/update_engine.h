@@ -80,13 +80,6 @@ class UpdateEngine : public base::RefCountedThreadSafe<UpdateEngine> {
 
   void UpdateComplete(scoped_refptr<UpdateContext> update_context, Error error);
 
-  void ComponentCheckingForUpdatesStart(
-      scoped_refptr<UpdateContext> update_context,
-      const std::string& id);
-  void ComponentCheckingForUpdatesComplete(
-      scoped_refptr<UpdateContext> update_context);
-  void UpdateCheckComplete(scoped_refptr<UpdateContext> update_context);
-
   void DoUpdateCheck(scoped_refptr<UpdateContext> update_context);
   void UpdateCheckResultsAvailable(
       scoped_refptr<UpdateContext> update_context,
@@ -94,6 +87,7 @@ class UpdateEngine : public base::RefCountedThreadSafe<UpdateEngine> {
       ErrorCategory error_category,
       int error,
       int retry_after_sec);
+  void UpdateCheckComplete(scoped_refptr<UpdateContext> update_context);
 
   void HandleComponent(scoped_refptr<UpdateContext> update_context);
   void HandleComponentComplete(scoped_refptr<UpdateContext> update_context);
@@ -127,7 +121,6 @@ struct UpdateContext : public base::RefCountedThreadSafe<UpdateContext> {
       scoped_refptr<Configurator> config,
       bool is_foreground,
       const std::vector<std::string>& ids,
-      UpdateClient::CrxDataCallback crx_data_callback,
       UpdateClient::CrxStateChangeCallback crx_state_change_callback,
       const UpdateEngine::NotifyObserversCallback& notify_observers_callback,
       UpdateEngine::Callback callback,
@@ -149,9 +142,6 @@ struct UpdateContext : public base::RefCountedThreadSafe<UpdateContext> {
 
   // Contains the map of ids to components for all the CRX in this context.
   IdToComponentPtrMap components;
-
-  // Called before an update check, when update metadata is needed.
-  UpdateEngine::CrxDataCallback crx_data_callback;
 
   // Called when the observable state of the CRX component has changed.
   UpdateClient::CrxStateChangeCallback crx_state_change_callback;
@@ -176,9 +166,6 @@ struct UpdateContext : public base::RefCountedThreadSafe<UpdateContext> {
 
   // The error reported by the update checker.
   int update_check_error = 0;
-
-  size_t num_components_ready_to_check = 0;
-  size_t num_components_checked = 0;
 
   // Contains the ids of the components that the state machine must handle.
   base::queue<std::string> component_queue;

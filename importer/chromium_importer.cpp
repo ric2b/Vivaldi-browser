@@ -23,7 +23,7 @@
 #include "chrome/common/importer/importer_bridge.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/ini_parser.h"
-#include "components/autofill/core/common/password_form.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "components/os_crypt/os_crypt.h"
 #include "importer/chrome_importer_utils.h"
 #include "sql/statement.h"
@@ -77,7 +77,7 @@ void ChromiumImporter::StartImport(
 void ChromiumImporter::ImportPasswords() {
   // Initializes Chrome decryptor
 
-  std::vector<autofill::PasswordForm> forms;
+  std::vector<importer::ImportedPasswordForm> forms;
   base::FilePath source_path = profile_dir_;
 
   base::FilePath file = source_path.AppendASCII("Login Data");
@@ -97,22 +97,22 @@ void ChromiumImporter::ImportPasswords() {
 
 bool ChromiumImporter::ReadAndParseSignons(
     const base::FilePath& sqlite_file,
-    std::vector<autofill::PasswordForm>* forms) {
+    std::vector<importer::ImportedPasswordForm>* forms) {
   sql::Database db;
   if (!db.Open(sqlite_file))
     return false;
 
   const char query2[] =
       "SELECT origin_url, action_url, username_element, username_value, "
-      "password_element, password_value, submit_element, signon_realm, "
-      "preferred FROM logins";
+      "password_element, password_value, submit_element, signon_realm "
+      "FROM logins";
 
   sql::Statement s2(db.GetUniqueStatement(query2));
   if (!s2.is_valid())
     return false;
 
   while (s2.Step()) {
-    autofill::PasswordForm form;
+    importer::ImportedPasswordForm form;
     form.url = GURL(s2.ColumnString(0));
     form.action = GURL(s2.ColumnString(1));
     form.username_element = base::UTF8ToUTF16(s2.ColumnString(2));
@@ -131,9 +131,7 @@ bool ChromiumImporter::ReadAndParseSignons(
 #endif
 
     form.password_value = plain_text;
-
-    form.submit_element = base::UTF8ToUTF16(s2.ColumnString(6));
-    form.signon_realm = s2.ColumnString(7);
+    form.signon_realm = s2.ColumnString(6);
 
     forms->push_back(form);
   }

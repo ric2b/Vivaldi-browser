@@ -396,7 +396,7 @@ class PowerMeasurementIntegrationTest(gpu_integration_test.GpuIntegrationTest):
 
   @staticmethod
   def _AppendResults(results_sum, results):
-    assert type(results_sum) is dict and type(results) is dict
+    assert isinstance(results_sum, dict) and isinstance(results, dict)
     assert results
     first_append = not results_sum
     for key, value in results.items():
@@ -404,7 +404,7 @@ class PowerMeasurementIntegrationTest(gpu_integration_test.GpuIntegrationTest):
         results_sum[key] = [value]
       else:
         assert key in results_sum
-        assert type(results_sum[key]) is list
+        assert isinstance(results_sum[key], list)
         results_sum[key].append(value)
     return results_sum
 
@@ -448,10 +448,7 @@ class PowerMeasurementIntegrationTest(gpu_integration_test.GpuIntegrationTest):
     PowerMeasurementIntegrationTest._LogResults(results_sum)
 
   def _RunTest_Video(self, test_path, params):
-    disabled_features = [
-        'D3D11VideoDecoder', 'DirectCompositionUseNV12DecodeSwapChain',
-        'DirectCompositionUnderlays'
-    ]
+    disabled_features = ['D3D11VideoDecoder']
 
     results_sum = {}
     for iteration in range(params.repeat):
@@ -460,7 +457,7 @@ class PowerMeasurementIntegrationTest(gpu_integration_test.GpuIntegrationTest):
       self.RestartBrowserWithArgs([
           # All bots are connected with a power source, however, we want to to
           # test with the code path that's enabled with battery power.
-          cba.DISABLE_VP_SCALING,
+          cba.DISABLE_DIRECT_COMPOSITION_VP_SCALING,
           '--disable-features=' + ','.join(disabled_features)
       ])
 

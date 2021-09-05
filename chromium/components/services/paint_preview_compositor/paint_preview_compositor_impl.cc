@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/memory/memory_pressure_listener.h"
 #include "base/optional.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -17,6 +18,7 @@
 #include "components/paint_preview/common/serial_utils.h"
 #include "components/paint_preview/common/serialized_recording.h"
 #include "components/services/paint_preview_compositor/public/mojom/paint_preview_compositor.mojom.h"
+#include "skia/ext/legacy_display_globals.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkImageInfo.h"
@@ -81,16 +83,23 @@ base::Optional<PaintPreviewFrame> BuildFrame(
   return frame;
 }
 
-base::Optional<SkBitmap> CreateBitmap(sk_sp<SkPicture> skp,
-                                      const gfx::Rect& clip_rect,
-                                      float scale_factor) {
+// Holds a ref to the discardable_shared_memory_manager so it sticks around
+// until at least after skia is finished with it.
+base::Optional<SkBitmap> CreateBitmap(
+    scoped_refptr<discardable_memory::ClientDiscardableSharedMemoryManager>
+        discardable_shared_memory_manager,
+    sk_sp<SkPicture> skp,
+    const gfx::Rect& clip_rect,
+    float scale_factor) {
   TRACE_EVENT0("paint_preview", "PaintPreviewCompositorImpl::CreateBitmap");
   SkBitmap bitmap;
-  if (!bitmap.tryAllocPixels(
-          SkImageInfo::MakeN32Premul(clip_rect.width(), clip_rect.height()))) {
+  // Use N32 rather than an alpha color type as frames cannot have transparent
+  // backgrounds.
+  if (!bitmap.tryAllocPixels(SkImageInfo::MakeN32(
+          clip_rect.width(), clip_rect.height(), kOpaque_SkAlphaType))) {
     return base::nullopt;
   }
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, skia::LegacyDisplayGlobals::GetSkSurfaceProps());
   SkMatrix matrix;
   matrix.setScaleTranslate(scale_factor, scale_factor, -clip_rect.x(),
                            -clip_rect.y());
@@ -102,11 +111,18 @@ base::Optional<SkBitmap> CreateBitmap(sk_sp<SkPicture> skp,
 
 PaintPreviewCompositorImpl::PaintPreviewCompositorImpl(
     mojo::PendingReceiver<mojom::PaintPreviewCompositor> receiver,
-    base::OnceClosure disconnect_handler) {
+    scoped_refptr<discardable_memory::ClientDiscardableSharedMemoryManager>
+        discardable_shared_memory_manager,
+    base::OnceClosure disconnect_handler)
+    : discardable_shared_memory_manager_(discardable_shared_memory_manager) {
   if (receiver) {
     receiver_.Bind(std::move(receiver));
     receiver_.set_disconnect_handler(std::move(disconnect_handler));
   }
+  listener_ = std::make_unique<base::MemoryPressureListener>(
+      FROM_HERE,
+      base::BindRepeating(&PaintPreviewCompositorImpl::OnMemoryPressure,
+                          weak_ptr_factory_.GetWeakPtr()));
 }
 
 PaintPreviewCompositorImpl::~PaintPreviewCompositorImpl() {
@@ -190,9 +206,10 @@ void PaintPreviewCompositorImpl::BitmapForSeparatedFrame(
 
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE,
-      {base::TaskPriority::USER_VISIBLE, base::WithBaseSyncPrimitives()},
-      base::BindOnce(&CreateBitmap, frame_it->second.skp, clip_rect,
-                     scale_factor),
+      {base::TaskPriority::USER_VISIBLE, base::WithBaseSyncPrimitives(),
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+      base::BindOnce(&CreateBitmap, discardable_shared_memory_manager_,
+                     frame_it->second.skp, clip_rect, scale_factor),
       base::BindOnce(
           [](BitmapForSeparatedFrameCallback callback,
              const base::Optional<SkBitmap>& maybe_bitmap) {
@@ -267,8 +284,10 @@ void PaintPreviewCompositorImpl::BitmapForMainFrame(
 
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE,
-      {base::TaskPriority::USER_VISIBLE, base::WithBaseSyncPrimitives()},
-      base::BindOnce(&CreateBitmap, root_frame_, clip_rect, scale_factor),
+      {base::TaskPriority::USER_VISIBLE, base::WithBaseSyncPrimitives(),
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+      base::BindOnce(&CreateBitmap, discardable_shared_memory_manager_,
+                     root_frame_, clip_rect, scale_factor),
       base::BindOnce(
           [](BitmapForMainFrameCallback callback,
              const base::Optional<SkBitmap>& maybe_bitmap) {
@@ -287,6 +306,14 @@ void PaintPreviewCompositorImpl::BitmapForMainFrame(
 
 void PaintPreviewCompositorImpl::SetRootFrameUrl(const GURL& url) {
   url_ = url;
+}
+
+void PaintPreviewCompositorImpl::OnMemoryPressure(
+    base::MemoryPressureListener::MemoryPressureLevel memory_pressure_level) {
+  if (memory_pressure_level >=
+      base::MemoryPressureListener::MEMORY_PRESSURE_LEVEL_CRITICAL) {
+    receiver_.reset();
+  }
 }
 
 bool PaintPreviewCompositorImpl::AddFrame(

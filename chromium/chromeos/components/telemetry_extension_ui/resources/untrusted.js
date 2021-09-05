@@ -45,9 +45,9 @@ chromeos.test_support = {};
      */
     async getAvailableRoutines() {
       const response =
-          /** @type {dpsl_internal.DiagnosticsGetAvailableRoutinesResponse} */ (
-              await messagePipe.sendMessage(
-                  dpsl_internal.Message.DIAGNOSTICS_AVAILABLE_ROUTINES));
+          /** @type {!dpsl_internal.DiagnosticsGetAvailableRoutinesResponse} */
+          (await messagePipe.sendMessage(
+              dpsl_internal.Message.DIAGNOSTICS_AVAILABLE_ROUTINES));
       return response;
     }
 
@@ -61,7 +61,7 @@ chromeos.test_support = {};
      */
     async sendCommandToRoutine(routineId, command, includeOutput) {
       const message =
-          /** @type {dpsl_internal.DiagnosticsGetRoutineUpdateRequest} */ ({
+          /** @type {!dpsl_internal.DiagnosticsGetRoutineUpdateRequest} */ ({
             routineId: routineId,
             command: command,
             includeOutput: includeOutput,
@@ -77,21 +77,13 @@ chromeos.test_support = {};
 
     /**
      * Requests battery capacity routine to be run.
-     * @param { !number } lowMah
-     * @param { !number } highMah
      * @return { !Promise<!Object> }
      * @public
      */
-    async runBatteryCapacityRoutine(lowMah, highMah) {
-      const message =
-          /**
-             @type {!dpsl_internal.DiagnosticsRunBatteryCapacityRoutineRequest}
-               */
-          ({lowMah: lowMah, highMah: highMah});
+    async runBatteryCapacityRoutine() {
       const response =
           /** @type {!Object} */ (await messagePipe.sendMessage(
-              dpsl_internal.Message.DIAGNOSTICS_RUN_BATTERY_CAPACITY_ROUTINE,
-              message));
+              dpsl_internal.Message.DIAGNOSTICS_RUN_BATTERY_CAPACITY_ROUTINE));
       if (response instanceof Error) {
         throw response;
       }
@@ -100,25 +92,13 @@ chromeos.test_support = {};
 
     /**
      * Requests battery health routine to be run.
-     * @param { !number } maximumCycleCount
-     * @param { !number } percentBatteryWearAllowed
      * @return { !Promise<!Object> }
      * @public
      */
-    async runBatteryHealthRoutine(
-        maximumCycleCount, percentBatteryWearAllowed) {
-      const message =
-          /**
-             @type {!dpsl_internal.DiagnosticsRunBatteryCapacityRoutineRequest}
-               */
-          ({
-            maximumCycleCount: maximumCycleCount,
-            percentBatteryWearAllowed: percentBatteryWearAllowed
-          });
+    async runBatteryHealthRoutine() {
       const response =
           /** @type {!Object} */ (await messagePipe.sendMessage(
-              dpsl_internal.Message.DIAGNOSTICS_RUN_BATTERY_HEALTH_ROUTINE,
-              message));
+              dpsl_internal.Message.DIAGNOSTICS_RUN_BATTERY_HEALTH_ROUTINE));
       if (response instanceof Error) {
         throw response;
       }

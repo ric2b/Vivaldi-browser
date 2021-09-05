@@ -21,6 +21,7 @@
 #include "build/build_config.h"
 #include "components/autofill/core/common/form_data.h"
 #include "components/autofill/core/common/password_form_generation_data.h"
+#include "components/autofill/core/common/password_generation_util.h"
 #include "components/password_manager/core/browser/android_affiliation/affiliation_utils.h"
 #include "components/password_manager/core/browser/browser_save_password_progress_logger.h"
 #include "components/password_manager/core/browser/field_info_manager.h"
@@ -50,7 +51,7 @@ using autofill::FormStructure;
 using autofill::GaiaIdHash;
 using autofill::NOT_USERNAME;
 using autofill::SINGLE_USERNAME;
-using autofill::ValueElementPair;
+using autofill::password_generation::PasswordGenerationType;
 using base::TimeDelta;
 using base::TimeTicks;
 
@@ -97,6 +98,13 @@ bool FormContainsFieldWithName(const FormData& form,
       return true;
   }
   return false;
+}
+
+// Returns whether reparsing server predictions following a form change is
+// enabled.
+bool IsReparsingServerPredictionsEnabled() {
+  return base::FeatureList::IsEnabled(
+      features::kReparseServerPredictionsFollowingFormChange);
 }
 
 bool IsUsernameFirstFlowFeatureEnabled() {
@@ -312,11 +320,6 @@ void PasswordFormManager::Save() {
 }
 
 void PasswordFormManager::Update(const PasswordForm& credentials_to_update) {
-  metrics_util::LogPasswordAcceptedSaveUpdateSubmissionIndicatorEvent(
-      parsed_submitted_form_->submission_event);
-  metrics_recorder_->SetSubmissionIndicatorEvent(
-      parsed_submitted_form_->submission_event);
-
   password_save_manager_->Update(credentials_to_update, observed_form(),
                                  *parsed_submitted_form_);
 
@@ -487,7 +490,8 @@ bool PasswordFormManager::HasGeneratedPassword() const {
 }
 
 void PasswordFormManager::SetGenerationPopupWasShown(
-    bool is_manual_generation) {
+    PasswordGenerationType type) {
+  const bool is_manual_generation = type == PasswordGenerationType::kManual;
   votes_uploader_.set_generation_popup_was_shown(true);
   votes_uploader_.set_is_manual_generation(is_manual_generation);
   metrics_recorder_->SetPasswordGenerationPopupShown(true,
@@ -766,15 +770,9 @@ void PasswordFormManager::ProcessServerPredictions(
     // predictions again.
     return;
   }
-  FormSignature observed_form_signature =
-      CalculateFormSignature(*observed_form());
-  auto it = predictions.find(observed_form_signature);
-  if (it == predictions.end())
-    return;
-
-  ReportTimeBetweenStoreAndServerUMA();
-  parser_.set_predictions(it->second);
-  Fill();
+  UpdatePredictionsForObservedForm(predictions);
+  if (parser_.predictions())
+    Fill();
 }
 
 void PasswordFormManager::Fill() {
@@ -801,21 +799,15 @@ void PasswordFormManager::Fill() {
     return;
 
   if (observed_password_form->is_new_password_reliable && !IsBlacklisted()) {
+    driver_->FormEligibleForGenerationFound({
 #if defined(OS_IOS)
-    driver_->FormEligibleForGenerationFound(
-        {/*form_renderer_id*/ observed_password_form->form_data
-             .unique_renderer_id,
-         /*new_password_element_renderer_id*/
-         observed_password_form->new_password_element_renderer_id,
-         /*confirmation_password_element_renderer_id*/
-         observed_password_form->confirmation_password_element_renderer_id});
-#else
-    driver_->FormEligibleForGenerationFound(
-        {/*new_password_renderer_id*/
-         observed_password_form->new_password_element_renderer_id,
-         /*confirmation_password_renderer_id*/
-         observed_password_form->confirmation_password_element_renderer_id});
+      .form_renderer_id = observed_password_form->form_data.unique_renderer_id,
 #endif
+      .new_password_renderer_id =
+          observed_password_form->new_password_element_renderer_id,
+      .confirmation_password_renderer_id =
+          observed_password_form->confirmation_password_element_renderer_id,
+    });
   }
 
 #if defined(OS_IOS)
@@ -827,18 +819,26 @@ void PasswordFormManager::Fill() {
   SendFillInformationToRenderer(
       client_, driver_.get(), *observed_password_form.get(),
       form_fetcher_->GetBestMatches(), form_fetcher_->GetFederatedMatches(),
-      form_fetcher_->GetPreferredMatch(), metrics_recorder_.get());
+      form_fetcher_->GetPreferredMatch(), form_fetcher_->IsBlacklisted(),
+      metrics_recorder_.get());
 }
 
-void PasswordFormManager::FillForm(const FormData& observed_form_data) {
+void PasswordFormManager::FillForm(
+    const FormData& observed_form_data,
+    const std::map<FormSignature, FormPredictions>& predictions) {
   uint32_t differences_bitmask =
       FindFormsDifferences(*observed_form(), observed_form_data);
   metrics_recorder_->RecordFormChangeBitmask(differences_bitmask);
 
-  if (differences_bitmask)
-    *mutable_observed_form() = observed_form_data;
-
-  if (!waiting_for_server_predictions_)
+  bool new_predictions_available = false;
+  if (differences_bitmask) {
+    UpdateFormManagerWithFormChanges(observed_form_data, predictions);
+    new_predictions_available =
+        parser_.predictions() && IsReparsingServerPredictionsEnabled();
+  }
+  // Fill the form if relevant form predictions were found or if the
+  // manager is not waiting for new server predictions.
+  if (new_predictions_available || !waiting_for_server_predictions_)
     Fill();
 }
 
@@ -1061,6 +1061,31 @@ bool PasswordFormManager::UsePossibleUsername(
                            "Local heuristics");
   return is_possible_username_valid;
 #endif  // defined(OS_ANDROID)
+}
+
+void PasswordFormManager::UpdatePredictionsForObservedForm(
+    const std::map<FormSignature, FormPredictions>& predictions) {
+  FormSignature observed_form_signature =
+      CalculateFormSignature(*observed_form());
+  auto it = predictions.find(observed_form_signature);
+  if (it == predictions.end())
+    return;
+
+  ReportTimeBetweenStoreAndServerUMA();
+  parser_.set_predictions(it->second);
+}
+
+void PasswordFormManager::UpdateFormManagerWithFormChanges(
+    const FormData& observed_form_data,
+    const std::map<FormSignature, FormPredictions>& predictions) {
+  *mutable_observed_form() = observed_form_data;
+  if (!IsReparsingServerPredictionsEnabled())
+    return;
+
+  // If the observed form has changed, it might be autofilled again.
+  autofills_left_ = kMaxTimesAutofill;
+  parser_.reset_predictions();
+  UpdatePredictionsForObservedForm(predictions);
 }
 
 }  // namespace password_manager

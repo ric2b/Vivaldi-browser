@@ -45,9 +45,8 @@ class CORE_EXPORT ScrollTimeline : public AnimationTimeline {
                  Element*,
                  ScrollDirection,
                  HeapVector<Member<ScrollTimelineOffset>>*,
-                 double);
+                 base::Optional<double>);
 
-  // AnimationTimeline implementation.
   bool IsScrollTimeline() const override { return true; }
   // ScrollTimeline is not active if scrollSource is null, does not currently
   // have a CSS layout box, or if its layout box is not a scroll container.
@@ -60,7 +59,7 @@ class CORE_EXPORT ScrollTimeline : public AnimationTimeline {
   void ScheduleNextService() override;
 
   // IDL API implementation.
-  Element* scrollSource();
+  Element* scrollSource() const;
   String orientation();
   // TODO(crbug.com/1094014): scrollOffsets will replace start and end
   // offsets once spec decision on multiple scroll offsets is finalized.
@@ -69,6 +68,8 @@ class CORE_EXPORT ScrollTimeline : public AnimationTimeline {
   void endScrollOffset(ScrollTimelineOffsetValue& result) const;
   const HeapVector<ScrollTimelineOffsetValue> scrollOffsets() const;
 
+  void currentTime(CSSNumberish&) override;
+  void duration(CSSNumberish&) override;
   void timeRange(DoubleOrScrollTimelineAutoKeyword&);
 
   // Returns the Node that should actually have the ScrollableArea (if one
@@ -89,6 +90,10 @@ class CORE_EXPORT ScrollTimeline : public AnimationTimeline {
   // Invalidates scroll timeline as a result of scroller properties change.
   // This may lead the timeline to request a new animation frame.
   virtual void Invalidate();
+
+  // Mark every effect target of every Animation attached to this timeline
+  // for style recalc.
+  void InvalidateEffectTargetStyle();
 
   CompositorAnimationTimeline* EnsureCompositorTimeline() override;
   void UpdateCompositorTimeline() override;
@@ -115,6 +120,10 @@ class CORE_EXPORT ScrollTimeline : public AnimationTimeline {
 
  protected:
   PhaseAndTime CurrentPhaseAndTime() override;
+  double GetTimeRange() const { return time_range_ ? time_range_.value() : 0; }
+  bool ScrollOffsetsEqual(
+      const HeapVector<Member<ScrollTimelineOffset>>& other) const;
+  size_t AttachedAnimationsCount() const { return scroll_animations_.size(); }
 
  private:
   // https://wicg.github.io/scroll-animations/#avoiding-cycles
@@ -159,7 +168,7 @@ class CORE_EXPORT ScrollTimeline : public AnimationTimeline {
   ScrollDirection orientation_;
   Member<HeapVector<Member<ScrollTimelineOffset>>> scroll_offsets_;
 
-  double time_range_;
+  base::Optional<double> time_range_;
 
   // Snapshotted value produced by the last SnapshotState call.
   TimelineState timeline_state_snapshotted_;

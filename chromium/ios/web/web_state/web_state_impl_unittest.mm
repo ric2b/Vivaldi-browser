@@ -35,6 +35,7 @@
 #import "ios/web/public/test/fakes/test_web_state_delegate.h"
 #import "ios/web/public/test/fakes/test_web_state_observer.h"
 #include "ios/web/public/test/web_test.h"
+#import "ios/web/public/test/web_view_content_test_util.h"
 #import "ios/web/public/ui/context_menu_params.h"
 #import "ios/web/public/ui/java_script_dialog_presenter.h"
 #import "ios/web/public/web_state_delegate.h"
@@ -497,8 +498,8 @@ TEST_F(WebStateImplTest, DelegateTest) {
 
   // Test that ShowRepostFormWarningDialog() is called.
   EXPECT_FALSE(delegate.last_repost_form_request());
-  base::Callback<void(bool)> repost_callback;
-  web_state_->ShowRepostFormWarningDialog(repost_callback);
+  base::OnceCallback<void(bool)> repost_callback;
+  web_state_->ShowRepostFormWarningDialog(std::move(repost_callback));
   ASSERT_TRUE(delegate.last_repost_form_request());
   EXPECT_EQ(delegate.last_repost_form_request()->web_state, web_state_.get());
 
@@ -528,7 +529,7 @@ TEST_F(WebStateImplTest, DelegateTest) {
   NSURLProtectionSpace* protection_space = [[NSURLProtectionSpace alloc] init];
   NSURLCredential* credential = [[NSURLCredential alloc] init];
   WebStateDelegate::AuthCallback callback;
-  web_state_->OnAuthRequired(protection_space, credential, callback);
+  web_state_->OnAuthRequired(protection_space, credential, std::move(callback));
   ASSERT_TRUE(delegate.last_authentication_request());
   EXPECT_EQ(delegate.last_authentication_request()->web_state,
             web_state_.get());
@@ -1173,6 +1174,55 @@ TEST_F(WebStateImplTest, DisallowSnapshotsDuringDialogPresentation) {
   delegate.GetTestJavaScriptDialogPresenter()->set_callback_execution_paused(
       false);
   EXPECT_TRUE(web_state_->CanTakeSnapshot());
+}
+
+// Tests that the WebView is removed from the view hierarchy and the
+// visibilitychange JavaScript event is fired when covering/revealing the
+// WebContent.
+TEST_F(WebStateImplTest, VisibilitychangeEventFired) {
+  // Mark the WebState as visibile before adding the observer.
+  web_state_->WasShown();
+
+  std::unique_ptr<TestWebStateObserver> observer(
+      new TestWebStateObserver(web_state_.get()));
+
+  // Add the WebState to the view hierarchy so the visibilitychange event is
+  // fired.
+  UIWindow* window = [UIApplication sharedApplication].keyWindow;
+  [window addSubview:web_state_->GetView()];
+
+  // Load the HTML content.
+  CRWWebController* web_controller = web_state_->GetWebController();
+  NSString* html_content = @"<html><head><script>"
+                            "document.addEventListener('visibilitychange', "
+                            "function() {document.body.innerHTML = "
+                            "document.visibilityState;});</script>"
+                            "</head><body>Hello world</body></html>";
+  [web_controller loadHTML:html_content forURL:GURL("http://example.org")];
+
+  ASSERT_TRUE(
+      test::WaitForWebViewContainingText(web_state_.get(), "Hello world"));
+
+  // Check that covering the WebState is notifying the observers that it is
+  // hidden and that the visibilitychange event is fired
+  ASSERT_EQ(nullptr, observer->was_hidden_info());
+
+  web_state_->DidCoverWebContent();
+  ASSERT_TRUE(test::WaitForWebViewContainingText(web_state_.get(), "hidden"));
+  ASSERT_NE(nullptr, observer->was_hidden_info());
+  EXPECT_EQ(web_state_.get(), observer->was_hidden_info()->web_state);
+
+  // Check that revealing the WebState is notifying the observers that it is
+  // shown and that the visibilitychange event is fired
+  ASSERT_EQ(nullptr, observer->was_shown_info());
+
+  web_state_->DidRevealWebContent();
+  ASSERT_TRUE(test::WaitForWebViewContainingText(web_state_.get(), "visible"));
+  ASSERT_NE(nullptr, observer->was_shown_info());
+  EXPECT_EQ(web_state_.get(), observer->was_shown_info()->web_state);
+
+  // Cleanup.
+  [web_state_->GetView() removeFromSuperview];
 }
 
 }  // namespace web

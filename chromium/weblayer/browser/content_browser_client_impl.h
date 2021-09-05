@@ -132,7 +132,7 @@ class ContentBrowserClientImpl : public content::ContentBrowserClient {
       URLLoaderFactoryType type,
       const url::Origin& request_initiator,
       base::Optional<int64_t> navigation_id,
-      base::UkmSourceId ukm_source_id,
+      ukm::SourceIdObj ukm_source_id,
       mojo::PendingReceiver<network::mojom::URLLoaderFactory>* factory_receiver,
       mojo::PendingRemote<network::mojom::TrustedURLLoaderHeaderClient>*
           header_client,
@@ -155,6 +155,7 @@ class ContentBrowserClientImpl : public content::ContentBrowserClient {
   content::SpeechRecognitionManagerDelegate*
   CreateSpeechRecognitionManagerDelegate() override;
   ukm::UkmService* GetUkmService() override;
+  bool HasErrorPage(int http_status_code) override;
 
   void CreateFeatureListAndFieldTrials();
 

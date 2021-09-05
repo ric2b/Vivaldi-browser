@@ -31,7 +31,9 @@
 namespace blink {
 
 LayoutSVGResourceMarker::LayoutSVGResourceMarker(SVGMarkerElement* node)
-    : LayoutSVGResourceContainer(node), needs_transform_update_(true) {}
+    : LayoutSVGResourceContainer(node),
+      needs_transform_update_(true),
+      is_in_layout_(false) {}
 
 LayoutSVGResourceMarker::~LayoutSVGResourceMarker() = default;
 
@@ -43,9 +45,9 @@ void LayoutSVGResourceMarker::UpdateLayout() {
 
   base::AutoReset<bool> in_layout_change(&is_in_layout_, true);
 
-  // LayoutSVGHiddenContainer overwrites layout(). We need the
-  // layouting of LayoutSVGContainer for calculating  local
-  // transformations and paint invalidation.
+  // LayoutSVGHiddenContainer overrides UpdateLayout(). We need the
+  // LayoutSVGContainer behavior for calculating local transformations and paint
+  // invalidation.
   LayoutSVGContainer::UpdateLayout();
 
   ClearInvalidationMask();
@@ -160,8 +162,7 @@ SVGTransformChange LayoutSVGResourceMarker::CalculateLocalTransform(
   viewport_size_ = FloatSize(width, height);
 
   SVGTransformChangeDetector change_detector(local_to_parent_transform_);
-  local_to_parent_transform_ = marker->ViewBoxToViewTransform(
-      viewport_size_.Width(), viewport_size_.Height());
+  local_to_parent_transform_ = marker->ViewBoxToViewTransform(viewport_size_);
 
   needs_transform_update_ = false;
   return change_detector.ComputeChange(local_to_parent_transform_);

@@ -28,6 +28,7 @@ namespace blink {
 
 class AffineTransform;
 class FloatRect;
+class FloatSize;
 class QualifiedName;
 class SVGAnimatedPreserveAspectRatio;
 class SVGAnimatedRect;
@@ -38,13 +39,9 @@ class SVGFitToViewBox : public GarbageCollectedMixin {
  public:
   static AffineTransform ViewBoxToViewTransform(const FloatRect& view_box_rect,
                                                 const SVGPreserveAspectRatio*,
-                                                float view_width,
-                                                float view_height);
+                                                const FloatSize& viewport_size);
 
   static bool IsKnownAttribute(const QualifiedName&);
-
-  bool HasValidViewBox() const;
-  bool HasEmptyViewBox() const;
 
   // JS API
   SVGAnimatedRect* viewBox() const { return view_box_.Get(); }

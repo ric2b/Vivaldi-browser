@@ -25,7 +25,7 @@
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/mock_entropy_provider.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/platform_thread.h"
@@ -72,6 +72,7 @@
 #include "net/test/embedded_test_server/http_response.h"
 #include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "ppapi/buildflags/buildflags.h"
+#include "services/metrics/public/cpp/ukm_source_id.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
@@ -142,7 +143,19 @@ void ExpectRequestIsolationInfo(
 // AllowRenderingMhtmlOverHttp() and allows consumers to set a value.
 class DownloadTestContentBrowserClient : public TestContentBrowserClient {
  public:
-  DownloadTestContentBrowserClient() = default;
+  DownloadTestContentBrowserClient() {
+#if defined(OS_ANDROID)
+    content_url_loader_factory_ = std::make_unique<FakeNetworkURLLoaderFactory>(
+        "HTTP/1.1 200 OK\nContent-Type: multipart/related\n\n",
+        "This is a test for download mhtml through non http/https urls",
+        /* network_accessed */ true, net::OK);
+#endif  // OS_ANDROID
+
+    file_url_loader_factory_ = std::make_unique<FakeNetworkURLLoaderFactory>(
+        "HTTP/1.1 200 OK\nContent-Type: multipart/related\n\n",
+        "This is a test for download mhtml through non http/https urls",
+        /* network_accessed */ true, net::OK);
+  }
 
   bool AllowRenderingMhtmlOverHttp(NavigationUIData* navigation_data) override {
     return allowed_rendering_mhtml_over_http_;
@@ -162,34 +175,31 @@ class DownloadTestContentBrowserClient : public TestContentBrowserClient {
 
   void RegisterNonNetworkNavigationURLLoaderFactories(
       int frame_tree_node_id,
-      base::UkmSourceId ukm_source_id,
-      NonNetworkURLLoaderFactoryDeprecatedMap* uniquely_owned_factories,
+      ukm::SourceIdObj ukm_source_id,
       NonNetworkURLLoaderFactoryMap* factories) override {
     if (!enable_register_non_network_url_loader_)
       return;
 
 #if defined(OS_ANDROID)
-    auto content_url_loader_factory =
-        std::make_unique<FakeNetworkURLLoaderFactory>(
-            "HTTP/1.1 200 OK\nContent-Type: multipart/related\n\n",
-            "This is a test for download mhtml through non http/https urls",
-            /* network_accessed */ true, net::OK);
-    uniquely_owned_factories->emplace(url::kContentScheme,
-                                      std::move(content_url_loader_factory));
+    mojo::PendingRemote<network::mojom::URLLoaderFactory>
+        content_factory_remote;
+    content_url_loader_factory_->Clone(
+        content_factory_remote.InitWithNewPipeAndPassReceiver());
+    factories->emplace(url::kContentScheme, std::move(content_factory_remote));
 #endif  // OS_ANDROID
 
-    auto file_url_loader_factory =
-        std::make_unique<FakeNetworkURLLoaderFactory>(
-            "HTTP/1.1 200 OK\nContent-Type: multipart/related\n\n",
-            "This is a test for download mhtml through non http/https urls",
-            /* network_accessed */ true, net::OK);
-    uniquely_owned_factories->emplace(url::kFileScheme,
-                                      std::move(file_url_loader_factory));
+    mojo::PendingRemote<network::mojom::URLLoaderFactory> file_factory_remote;
+    file_url_loader_factory_->Clone(
+        file_factory_remote.InitWithNewPipeAndPassReceiver());
+    factories->emplace(url::kFileScheme, std::move(file_factory_remote));
   }
 
  private:
   bool allowed_rendering_mhtml_over_http_ = false;
   bool enable_register_non_network_url_loader_ = false;
+
+  std::unique_ptr<FakeNetworkURLLoaderFactory> content_url_loader_factory_;
+  std::unique_ptr<FakeNetworkURLLoaderFactory> file_url_loader_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(DownloadTestContentBrowserClient);
 };
@@ -2905,14 +2915,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, CancelResumingDownload) {
   EXPECT_TRUE(EnsureNoPendingDownloads());
 }
 
-// Flaky on ASAN. crbug.com/838403
-#if defined(ADDRESS_SANITIZER)
-#define MAYBE_RemoveResumedDownload DISABLED_RemoveResumedDownload
-#else
-#define MAYBE_RemoveResumedDownload RemoveResumedDownload
-#endif  // defined(ADDRESS_SANITIZER)
-
-IN_PROC_BROWSER_TEST_F(DownloadContentTest, MAYBE_RemoveResumedDownload) {
+IN_PROC_BROWSER_TEST_F(DownloadContentTest, RemoveResumedDownload) {
   SetupErrorInjectionDownloads();
   TestDownloadHttpResponse::Parameters parameters =
       TestDownloadHttpResponse::Parameters::WithSingleInterruption(
@@ -3588,7 +3591,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest,
   // The IsolationInfo after the cross-site redirect should be the same as
   // if there were a top-level navigation to the final URL.
   net::IsolationInfo expected_isolation_info = net::IsolationInfo::Create(
-      net::IsolationInfo::RedirectMode::kUpdateTopFrame, final_url_origin,
+      net::IsolationInfo::RequestType::kMainFrame, final_url_origin,
       final_url_origin, net::SiteForCookies::FromOrigin(final_url_origin));
 
   // <origin_one>/download-attribute.html initiates a download of
@@ -3816,11 +3819,19 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest,
   mouse_event.button = blink::WebMouseEvent::Button::kLeft;
   mouse_event.SetPositionInWidget(15, 15);
   mouse_event.click_count = 1;
-  shell()->web_contents()->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
-      mouse_event);
+  shell()
+      ->web_contents()
+      ->GetMainFrame()
+      ->GetRenderViewHost()
+      ->GetWidget()
+      ->ForwardMouseEvent(mouse_event);
   mouse_event.SetType(blink::WebInputEvent::Type::kMouseUp);
-  shell()->web_contents()->GetRenderViewHost()->GetWidget()->ForwardMouseEvent(
-      mouse_event);
+  shell()
+      ->web_contents()
+      ->GetMainFrame()
+      ->GetRenderViewHost()
+      ->GetWidget()
+      ->ForwardMouseEvent(mouse_event);
 
   observer->WaitForFinished();
   EXPECT_EQ(
@@ -4064,7 +4075,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest,
       kOriginTwo, SlowDownloadHttpResponse::kKnownSizeUrl);
   url::Origin download_origin = url::Origin::Create(slow_download_url);
   net::IsolationInfo expected_isolation_info = net::IsolationInfo::Create(
-      net::IsolationInfo::RedirectMode::kUpdateTopFrame, download_origin,
+      net::IsolationInfo::RequestType::kMainFrame, download_origin,
       download_origin, net::SiteForCookies::FromOrigin(download_origin));
 
   GURL frame_url = embedded_test_server()->GetURL(
@@ -4133,7 +4144,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest,
   // The IsolationInfo of the download should be the same as that of a top-level
   // navigation to the download.
   net::IsolationInfo expected_isolation_info = net::IsolationInfo::Create(
-      net::IsolationInfo::RedirectMode::kUpdateFrameOnly, download_origin,
+      net::IsolationInfo::RequestType::kSubFrame, download_origin,
       download_origin, net::SiteForCookies::FromOrigin(download_origin));
 
   GURL frame_url = origin_one.GetURL("/download-attribute.html?target=" +
@@ -4313,7 +4324,14 @@ IN_PROC_BROWSER_TEST_F(ParallelDownloadTest,
 
 // Verify that if the second request fails after the beginning request takes
 // over and completes its slice, download should complete.
-IN_PROC_BROWSER_TEST_F(ParallelDownloadTest, MiddleSliceDelayedError) {
+// Flaky on Windows and Linux.  http://crbug.com/1106059
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_CHROMEOS)
+#define MAYBE_MiddleSliceDelayedError DISABLED_MiddleSliceDelayedError
+#else
+#define MAYBE_MiddleSliceDelayedError MiddleSliceDelayedError
+#endif
+
+IN_PROC_BROWSER_TEST_F(ParallelDownloadTest, MAYBE_MiddleSliceDelayedError) {
   scoped_refptr<TestFileErrorInjector> injector(
       TestFileErrorInjector::Create(DownloadManagerForShell(shell())));
 

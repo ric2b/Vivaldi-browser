@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "content/browser/xr/service/xr_runtime_manager_impl.h"
-#include "content/public/browser/xr_runtime_manager.h"
 
 #include <string>
 #include <utility>
@@ -19,6 +18,7 @@
 #include "content/public/browser/device_service.h"
 #include "content/public/browser/gpu_data_manager.h"
 #include "content/public/browser/gpu_utils.h"
+#include "content/public/browser/xr_runtime_manager.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "device/base/features.h"
@@ -179,7 +179,7 @@ BrowserXRRuntimeImpl* XRRuntimeManagerImpl::GetRuntimeForOptions(
   BrowserXRRuntimeImpl* runtime = nullptr;
   switch (options->mode) {
     case device::mojom::XRSessionMode::kImmersiveAr:
-      runtime = GetRuntime(device::mojom::XRDeviceId::ARCORE_DEVICE_ID);
+      runtime = GetImmersiveArRuntime();
       break;
     case device::mojom::XRSessionMode::kImmersiveVr:
       runtime = GetImmersiveVrRuntime();
@@ -211,12 +211,6 @@ BrowserXRRuntimeImpl* XRRuntimeManagerImpl::GetImmersiveVrRuntime() {
     return openxr;
 #endif
 
-#if BUILDFLAG(ENABLE_OCULUS_VR)
-  auto* oculus = GetRuntime(device::mojom::XRDeviceId::OCULUS_DEVICE_ID);
-  if (oculus)
-    return oculus;
-#endif
-
 #if BUILDFLAG(ENABLE_WINDOWS_MR)
   auto* wmr = GetRuntime(device::mojom::XRDeviceId::WINDOWS_MIXED_REALITY_ID);
   if (wmr)
@@ -227,9 +221,20 @@ BrowserXRRuntimeImpl* XRRuntimeManagerImpl::GetImmersiveVrRuntime() {
 }
 
 BrowserXRRuntimeImpl* XRRuntimeManagerImpl::GetImmersiveArRuntime() {
-  device::mojom::XRSessionOptions options = {};
-  options.mode = device::mojom::XRSessionMode::kImmersiveAr;
-  return GetRuntimeForOptions(&options);
+#if defined(OS_ANDROID)
+  auto* arcore_runtime =
+      GetRuntime(device::mojom::XRDeviceId::ARCORE_DEVICE_ID);
+  if (arcore_runtime && arcore_runtime->SupportsArBlendMode())
+    return arcore_runtime;
+#endif
+
+#if BUILDFLAG(ENABLE_OPENXR)
+  auto* openxr = GetRuntime(device::mojom::XRDeviceId::OPENXR_DEVICE_ID);
+  if (openxr && openxr->SupportsArBlendMode())
+    return openxr;
+#endif
+
+  return nullptr;
 }
 
 device::mojom::VRDisplayInfoPtr XRRuntimeManagerImpl::GetCurrentVRDisplayInfo(

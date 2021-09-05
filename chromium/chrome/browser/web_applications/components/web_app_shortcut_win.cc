@@ -15,6 +15,7 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/hash/md5.h"
+#include "base/i18n/file_util_icu.h"
 #include "base/macros.h"
 #include "base/notreached.h"
 #include "base/path_service.h"
@@ -320,6 +321,12 @@ base::FilePath GetChromeProxyPath() {
 
 namespace internals {
 
+base::FilePath GetSanitizedFileName(const base::string16& name) {
+  base::string16 file_name = name;
+  base::i18n::ReplaceIllegalCharactersInPath(&file_name, '_');
+  return base::FilePath(file_name);
+}
+
 std::vector<base::FilePath> FindAppShortcutsByProfileAndTitle(
     const base::FilePath& shortcut_path,
     const base::FilePath& profile_path,
@@ -448,10 +455,6 @@ void UpdatePlatformShortcuts(const base::FilePath& web_app_path,
                              const ShortcutInfo& shortcut_info) {
   base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
                                                 base::BlockingType::MAY_BLOCK);
-
-  // Generates file name to use with persisted ico and shortcut file.
-  base::FilePath file_name =
-      web_app::internals::GetSanitizedFileName(shortcut_info.title);
 
   if (old_app_title != shortcut_info.title) {
     // The app's title has changed. Delete all existing app shortcuts and

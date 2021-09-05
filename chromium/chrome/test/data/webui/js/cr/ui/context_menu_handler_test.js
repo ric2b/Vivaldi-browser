@@ -2,6 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// clang-format off
+// #import {assertEquals} from '../../../chai_assert.js';
+// #import {contextMenuHandler} from 'chrome://resources/js/cr/ui/context_menu_handler.m.js';
+// #import {decorate} from 'chrome://resources/js/cr/ui.m.js';
+// #import {Menu} from 'chrome://resources/js/cr/ui/menu.m.js';
+// clang-format on
+
 function testShowAndHideEvents() {
   // Keep original Date.now not to affect other code.
   var originalDateNow = Date.now;
@@ -64,3 +71,7 @@ function testShowAndHideEvents() {
 
   Date.now = originalDateNow;
 }
+
+Object.assign(window, {
+  testShowAndHideEvents,
+});

@@ -17,18 +17,19 @@ import org.chromium.base.SysUtils;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ActivityTabProvider;
-import org.chromium.chrome.browser.ChromeVersionInfo;
 import org.chromium.chrome.browser.WebContentsFactory;
 import org.chromium.chrome.browser.content.ContentUtils;
 import org.chromium.chrome.browser.dependency_injection.ActivityScope;
 import org.chromium.chrome.browser.feature_engagement.TrackerFactory;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.incognito.IncognitoUtils;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tabmodel.TabCreator;
 import org.chromium.chrome.browser.ui.favicon.FaviconHelper;
 import org.chromium.chrome.browser.ui.favicon.FaviconUtils;
+import org.chromium.chrome.browser.version.ChromeVersionInfo;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetContent;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController.SheetState;
@@ -72,7 +73,7 @@ public class EphemeralTabCoordinator implements View.OnLayoutChangeListener {
     private EmptyBottomSheetObserver mSheetObserver;
 
     private String mUrl;
-    private int mCurrentMaxSheetHeight;
+    private int mCurrentMaxViewHeight;
     private boolean mPeeked;
     private boolean mViewed; // Moved up from peek state by user
     private boolean mFullyOpened;
@@ -127,9 +128,7 @@ public class EphemeralTabCoordinator implements View.OnLayoutChangeListener {
      */
     public void requestOpenSheet(String url, String title, boolean isIncognito) {
         mUrl = url;
-        Profile profile = isIncognito ? Profile.getLastUsedRegularProfile().getOffTheRecordProfile()
-                                      : Profile.getLastUsedRegularProfile();
-
+        Profile profile = getProfile(isIncognito);
         if (mMediator == null) {
             float topControlsHeight =
                     mContext.getResources().getDimensionPixelSize(R.dimen.toolbar_height_no_shadow)
@@ -139,7 +138,7 @@ public class EphemeralTabCoordinator implements View.OnLayoutChangeListener {
         }
         if (mWebContents == null) {
             assert mSheetContent == null;
-            createWebContents(isIncognito);
+            createWebContents(profile);
             mSheetObserver = new EmptyBottomSheetObserver() {
                 private int mCloseReason;
 
@@ -194,7 +193,7 @@ public class EphemeralTabCoordinator implements View.OnLayoutChangeListener {
             };
             mBottomSheetController.addObserver(mSheetObserver);
             mSheetContent = new EphemeralTabSheetContent(mContext, this::openInNewTab,
-                    this::onToolbarClick, this::close, getMaxSheetHeight());
+                    this::onToolbarClick, this::close, getMaxViewHeight());
             mMediator.init(mWebContents, mContentView, mSheetContent, profile);
             mLayoutView.addOnLayoutChangeListener(this);
         }
@@ -208,11 +207,18 @@ public class EphemeralTabCoordinator implements View.OnLayoutChangeListener {
         if (tracker.isInitialized()) tracker.notifyEvent(EventConstants.EPHEMERAL_TAB_USED);
     }
 
-    private void createWebContents(boolean incognito) {
+    private Profile getProfile(boolean isIncognito) {
+        if (!isIncognito) return Profile.getLastUsedRegularProfile();
+        Profile otrProfile = IncognitoUtils.getNonPrimaryOTRProfileFromWindowAndroid(mWindow);
+        return (otrProfile == null) ? Profile.getLastUsedRegularProfile().getPrimaryOTRProfile()
+                                    : otrProfile;
+    }
+
+    private void createWebContents(Profile profile) {
         assert mWebContents == null;
 
         // Creates an initially hidden WebContents which gets shown when the panel is opened.
-        mWebContents = WebContentsFactory.createWebContents(incognito, true);
+        mWebContents = WebContentsFactory.createWebContents(profile, true);
 
         mContentView = ContentView.createContentView(
                 mContext, null /* eventOffsetHandler */, mWebContents);
@@ -271,17 +277,18 @@ public class EphemeralTabCoordinator implements View.OnLayoutChangeListener {
 
         // It may not be possible to update the content height when the actual height changes
         // due to the current tab not being ready yet. Try it later again when the tab
-        // (hence MaxSheetHeight) becomes valid.
-        int maxSheetHeight = getMaxSheetHeight();
-        if (maxSheetHeight == 0 || mCurrentMaxSheetHeight == maxSheetHeight) return;
-        mSheetContent.updateContentHeight(maxSheetHeight);
-        mCurrentMaxSheetHeight = maxSheetHeight;
+        // (hence MaxViewHeight) becomes valid.
+        int maxViewHeight = getMaxViewHeight();
+        if (maxViewHeight == 0 || mCurrentMaxViewHeight == maxViewHeight) return;
+        mSheetContent.updateContentHeight(maxViewHeight);
+        mCurrentMaxViewHeight = maxViewHeight;
     }
 
-    private int getMaxSheetHeight() {
+    /** @return The maximum base view height for sheet content view. */
+    private int getMaxViewHeight() {
         Tab tab = mTabProvider.get();
         if (tab == null || tab.getView() == null) return 0;
-        return (int) (tab.getView().getHeight() * 0.9f);
+        return tab.getView().getHeight();
     }
 
     /**

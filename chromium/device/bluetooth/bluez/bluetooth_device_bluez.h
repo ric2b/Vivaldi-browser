@@ -17,6 +17,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequenced_task_runner.h"
+#include "build/chromeos_buildflags.h"
 #include "dbus/object_path.h"
 #include "device/bluetooth/bluetooth_common.h"
 #include "device/bluetooth/bluetooth_device.h"
@@ -104,7 +105,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceBlueZ
   void Pair(device::BluetoothDevice::PairingDelegate* pairing_delegate,
             base::OnceClosure callback,
             ConnectErrorCallback error_callback) override;
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
   void ExecuteWrite(base::OnceClosure callback,
                     ExecuteWriteErrorCallback error_callback) override;
   void AbortWrite(base::OnceClosure callback,
@@ -209,7 +210,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceBlueZ
                                 const std::string& error_name,
                                 const std::string& error_message);
 
-#if defined(OS_CHROMEOS)
+#if BUILDFLAG(IS_ASH)
   void OnExecuteWriteError(ExecuteWriteErrorCallback error_callback,
                            const std::string& error_name,
                            const std::string& error_message);
@@ -221,12 +222,10 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceBlueZ
 
   // Internal method to initiate a connection to this device, and methods called
   // by dbus:: on completion of the D-Bus method call.
-  void ConnectInternal(bool after_pairing,
-                       base::OnceClosure callback,
+  void ConnectInternal(base::OnceClosure callback,
                        ConnectErrorCallback error_callback);
-  void OnConnect(bool after_pairing, base::OnceClosure callback);
-  void OnConnectError(bool after_pairing,
-                      ConnectErrorCallback error_callback,
+  void OnConnect(base::OnceClosure callback);
+  void OnConnectError(ConnectErrorCallback error_callback,
                       const std::string& error_name,
                       const std::string& error_message);
 
@@ -271,8 +270,6 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDeviceBlueZ
   void OnForgetError(ErrorCallback error_callback,
                      const std::string& error_name,
                      const std::string& error_message);
-
-  void UnpauseDiscovery();
 
   // The dbus object path of the device object.
   dbus::ObjectPath object_path_;

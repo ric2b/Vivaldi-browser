@@ -20,16 +20,15 @@
 #include "chrome/browser/predictors/autocomplete_action_predictor_factory.h"
 #include "chrome/browser/predictors/predictor_database.h"
 #include "chrome/browser/predictors/predictor_database_factory.h"
-#include "chrome/browser/prerender/prerender_manager_factory.h"
+#include "chrome/browser/prefetch/no_state_prefetch/prerender_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/history/core/browser/in_memory_database.h"
+#include "components/no_state_prefetch/browser/prerender_handle.h"
+#include "components/no_state_prefetch/browser/prerender_manager.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_result.h"
 #include "components/omnibox/browser/omnibox_log.h"
 #include "components/omnibox/browser/omnibox_popup_model.h"
-#include "components/prerender/browser/prerender_field_trial.h"
-#include "components/prerender/browser/prerender_handle.h"
-#include "components/prerender/browser/prerender_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
@@ -204,13 +203,9 @@ AutocompleteActionPredictor::Action
     }
   }
 
-  // Downgrade prerender to preconnect if this is a search match or if
-  // nostate-prefetch is disabled.
-  if (action == ACTION_PRERENDER &&
-      (AutocompleteMatch::IsSearchType(match.type) ||
-       !prerender::IsNoStatePrefetchEnabled())) {
+  // Downgrade prerender to preconnect if this is a search match.
+  if (action == ACTION_PRERENDER && AutocompleteMatch::IsSearchType(match.type))
     action = ACTION_PRECONNECT;
-  }
 
   return action;
 }

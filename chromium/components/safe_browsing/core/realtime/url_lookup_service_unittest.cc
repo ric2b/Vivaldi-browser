@@ -202,7 +202,7 @@ TEST_F(RealTimeUrlLookupServiceTest, TestFillRequestProto) {
       {"http://example.com/", "http://example.com/"},
       {"http://user:pass@example.com/", "http://example.com/"},
       {"http://%123:bar@example.com/", "http://example.com/"},
-      {"http://example.com#123", "http://example.com/"}};
+      {"http://example.com/abc#123", "http://example.com/abc#123"}};
   for (size_t i = 0; i < base::size(sanitize_url_cases); i++) {
     GURL url(sanitize_url_cases[i].url);
     auto result = FillRequestProto(url);
@@ -527,10 +527,11 @@ TEST_F(RealTimeUrlLookupServiceTest, TestCanCheckUrl) {
                              {"http://10.1.1.1/path", false},
                              {"http://10.1.1.1.1/path", true},
                              {"http://example.test/path", true},
-                             {"https://example.test/path", true}};
-  for (size_t i = 0; i < base::size(can_check_url_cases); i++) {
-    GURL url(can_check_url_cases[i].url);
-    bool expected_can_check = can_check_url_cases[i].can_check;
+                             {"http://nodothost/path", false},
+                             {"http://x.x/shorthost", false}};
+  for (auto& can_check_url_case : can_check_url_cases) {
+    GURL url(can_check_url_case.url);
+    bool expected_can_check = can_check_url_case.can_check;
     EXPECT_EQ(expected_can_check, CanCheckUrl(url));
   }
 }

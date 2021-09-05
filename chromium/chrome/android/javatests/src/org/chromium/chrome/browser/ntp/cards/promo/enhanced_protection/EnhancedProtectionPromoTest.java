@@ -39,6 +39,8 @@ import org.mockito.MockitoAnnotations;
 
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.UserActionTester;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
@@ -48,7 +50,7 @@ import org.chromium.chrome.browser.ntp.cards.promo.enhanced_protection.EnhancedP
 import org.chromium.chrome.browser.preferences.Pref;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
-import org.chromium.chrome.browser.safe_browsing.settings.SecuritySettingsFragment;
+import org.chromium.chrome.browser.safe_browsing.settings.SafeBrowsingSettingsFragment;
 import org.chromium.chrome.browser.settings.SettingsActivity;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
@@ -58,8 +60,6 @@ import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.Features.EnableFeatures;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.components.user_prefs.UserPrefs;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 /**
@@ -155,7 +155,7 @@ public class EnhancedProtectionPromoTest {
 
         Matcher<Intent> isCorrectComponent = hasComponent(SettingsActivity.class.getName());
         Matcher<Intent> isCorrectFragment =
-                hasExtra("show_fragment", SecuritySettingsFragment.class.getName());
+                hasExtra("show_fragment", SafeBrowsingSettingsFragment.class.getName());
         intended(allOf(isCorrectComponent, isCorrectFragment));
 
         Assert.assertEquals("Promo accepted should be recorded once. ", 1,

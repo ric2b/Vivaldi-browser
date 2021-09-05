@@ -1,4 +1,4 @@
-// Copyright (c) 2020 The Chromium Authors. All rights reserved.
+// Copyright 2020 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -7,11 +7,16 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "chrome/browser/ui/views/accessibility/caption_bubble_model.h"
 #include "ui/native_theme/caption_style.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/controls/button/button.h"
+
+namespace base {
+class RetainingOneShotTimer;
+}
 
 namespace gfx {
 struct VectorIcon;
@@ -38,8 +43,7 @@ class CaptionBubbleFrameView;
 //  A caption bubble that floats above the BrowserView and shows automatically-
 //  generated text captions for audio and media streams from the current tab.
 //
-class CaptionBubble : public views::BubbleDialogDelegateView,
-                      public views::ButtonListener {
+class CaptionBubble : public views::BubbleDialogDelegateView {
  public:
   CaptionBubble(views::View* anchor,
                 BrowserView* browser_view,
@@ -72,6 +76,10 @@ class CaptionBubble : public views::BubbleDialogDelegateView,
   const char* GetClassName() const override;
 
   std::string GetLabelTextForTesting();
+  base::RetainingOneShotTimer* GetInactivityTimerForTesting();
+  void set_tick_clock_for_testing(const base::TickClock* tick_clock) {
+    tick_clock_ = tick_clock;
+  }
 
  protected:
   // views::BubbleDialogDelegateView:
@@ -82,6 +90,7 @@ class CaptionBubble : public views::BubbleDialogDelegateView,
   gfx::Rect GetBubbleBounds() override;
   void OnWidgetBoundsChanged(views::Widget* widget,
                              const gfx::Rect& new_bounds) override;
+  void OnWidgetVisibilityChanged(views::Widget* widget, bool visible) override;
   void OnKeyEvent(ui::KeyEvent* event) override;
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
   void OnFocus() override;
@@ -89,12 +98,12 @@ class CaptionBubble : public views::BubbleDialogDelegateView,
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   void AddedToWidget() override;
 
-  // views::ButtonListener:
-  void ButtonPressed(views::Button* sender, const ui::Event& event) override;
-
  private:
   friend class CaptionBubbleControllerViewsTest;
   friend class CaptionBubbleModel;
+
+  void CloseButtonPressed();
+  void ExpandOrCollapseButtonPressed();
 
   // Called by CaptionBubbleModel to notify this object that the model's text
   // has changed. Sets the text of the caption bubble to the model's text.
@@ -120,8 +129,18 @@ class CaptionBubble : public views::BubbleDialogDelegateView,
   void UpdateContentSize();
   void Redraw();
   std::unique_ptr<views::ImageButton> BuildImageButton(
+      views::Button::PressedCallback callback,
       const gfx::VectorIcon& icon,
       const int tooltip_text_id);
+  void AddVirtualChildView(const std::string& name,
+                           const size_t i,
+                           const gfx::Range& range);
+  std::vector<std::string> GetVirtualChildrenTextForTesting();
+
+  // After 5 seconds of inactivity, hide the caption bubble. Activity is defined
+  // as transcription received from the speech service or user interacting with
+  // the bubble through focus, pressing buttons, or dragging.
+  void OnInactivityTimeout();
 
   // Unowned. Owned by views hierarchy.
   views::Label* label_;
@@ -156,6 +175,11 @@ class CaptionBubble : public views::BubbleDialogDelegateView,
 
   // Whether the caption bubble is expanded to show more lines of text.
   bool is_expanded_ = false;
+
+  // A timer which causes the bubble to hide if there is no activity after a
+  // specified interval.
+  std::unique_ptr<base::RetainingOneShotTimer> inactivity_timer_;
+  const base::TickClock* tick_clock_;
 };
 
 }  // namespace captions

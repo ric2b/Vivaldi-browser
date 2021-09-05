@@ -7,14 +7,14 @@
 #include <utility>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/debug/leak_annotations.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/gtest_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/unguessable_token.h"
@@ -23,13 +23,13 @@
 #include "content/common/navigation_params_mojom_traits.h"
 #include "content/common/renderer.mojom.h"
 #include "content/common/unfreezable_frame_messages.h"
-#include "content/common/widget_messages.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/renderer/content_renderer_client.h"
 #include "content/public/renderer/document_state.h"
 #include "content/public/test/frame_load_waiter.h"
 #include "content/public/test/local_frame_host_interceptor.h"
+#include "content/public/test/policy_container_utils.h"
 #include "content/public/test/render_view_test.h"
 #include "content/public/test/test_utils.h"
 #include "content/renderer/agent_scheduling_group.h"
@@ -52,6 +52,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/loader/previews_state.h"
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom.h"
+#include "third_party/blink/public/mojom/frame/viewport_intersection_state.mojom-blink.h"
 #include "third_party/blink/public/mojom/page/record_content_to_visible_time_request.mojom.h"
 #include "third_party/blink/public/platform/web_runtime_features.h"
 #include "third_party/blink/public/platform/web_string.h"
@@ -149,7 +150,7 @@ class RenderFrameImplTest : public RenderViewTest {
         base::UnguessableToken::Create(), base::UnguessableToken::Create(),
         frame_replication_state, &compositor_deps_, std::move(widget_params),
         blink::mojom::FrameOwnerProperties::New(),
-        /*has_committed_real_load=*/true);
+        /*has_committed_real_load=*/true, CreateStubPolicyContainer());
 
     frame_ = static_cast<TestRenderFrame*>(
         RenderFrameImpl::FromRoutingID(kSubframeRouteId));
@@ -442,21 +443,11 @@ TEST_F(RenderFrameImplTest, FileUrlPathAlias) {
 
 TEST_F(RenderFrameImplTest, MainFrameIntersectionRecorded) {
   RenderFrameTestObserver observer(frame());
-  blink::WebRect viewport_intersection(0, 11, 200, 89);
-  blink::WebRect mainframe_intersection(0, 0, 200, 140);
-  blink::FrameOcclusionState occlusion_state =
-      blink::FrameOcclusionState::kUnknown;
-  gfx::Transform transform;
-  transform.Translate(100, 100);
-
-  WidgetMsg_SetViewportIntersection set_viewport_intersection_message(
-      0, {viewport_intersection, mainframe_intersection, blink::WebRect(),
-          occlusion_state, blink::WebSize(), gfx::Point(), transform});
-  frame_widget()->OnMessageReceived(set_viewport_intersection_message);
+  gfx::Rect mainframe_intersection(0, 0, 200, 140);
+  frame()->OnMainFrameIntersectionChanged(mainframe_intersection);
   // Setting a new frame intersection in a local frame triggers the render frame
   // observer call.
-  EXPECT_EQ(observer.last_intersection_rect(),
-            blink::WebRect(100, 100, 200, 140));
+  EXPECT_EQ(observer.last_intersection_rect(), blink::WebRect(0, 0, 200, 140));
 }
 
 // Used to annotate the source of an interface request.
@@ -1131,6 +1122,40 @@ TEST_F(RenderFrameRemoteInterfacesTest, ReusedOnSameDocumentNavigation) {
       std::move(interface_provider_receiver),
       std::move(browser_interface_broker_receiver),
       {{GURL(kTestFirstURL), kFrameEventDidCommitSameDocumentLoad}});
+}
+
+TEST_F(RenderFrameImplTest, LastCommittedUrlForUKM) {
+  // Test the case where we have a data url with a base_url.
+  GURL data_url = GURL("data:text/html,");
+  auto common_params = CreateCommonNavigationParams();
+  common_params->url = data_url;
+  common_params->navigation_type = mojom::NavigationType::DIFFERENT_DOCUMENT;
+  common_params->transition = ui::PAGE_TRANSITION_TYPED;
+  common_params->base_url_for_data_url = GURL("about:blank");
+  common_params->history_url_for_data_url = GURL("about:blank");
+  auto commit_params = CreateCommitNavigationParams();
+  auto waiter = std::make_unique<FrameLoadWaiter>(GetMainRenderFrame());
+  GetMainRenderFrame()->Navigate(std::move(common_params),
+                                 std::move(commit_params));
+  waiter->Wait();
+  EXPECT_EQ(GURL(GetMainRenderFrame()->LastCommittedUrlForUKM()), data_url);
+
+  // Test the case where we have an unreachable URL.
+  GURL unreachable_url = GURL("http://www.example.com");
+  waiter = std::make_unique<FrameLoadWaiter>(GetMainRenderFrame());
+  GetMainRenderFrame()->LoadHTMLString("test", data_url, "UTF-8",
+                                       unreachable_url,
+                                       false /* replace_current_item */);
+  waiter->Wait();
+  EXPECT_EQ(GURL(GetMainRenderFrame()->LastCommittedUrlForUKM()),
+            unreachable_url);
+
+  // Test the base case, normal load.
+  GURL override_url = GURL("http://example.com");
+  waiter = std::make_unique<FrameLoadWaiter>(GetMainRenderFrame());
+  LoadHTMLWithUrlOverride("Test", "http://example.com");
+  waiter->Wait();
+  EXPECT_EQ(GURL(GetMainRenderFrame()->LastCommittedUrlForUKM()), override_url);
 }
 
 }  // namespace content

@@ -30,6 +30,7 @@
 #include "components/viz/service/display/renderer_utils.h"
 #include "components/viz/service/display/software_output_device.h"
 #include "skia/ext/image_operations.h"
+#include "skia/ext/legacy_display_globals.h"
 #include "skia/ext/opacity_filter_canvas.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -65,8 +66,8 @@ class AnimatedImagesProvider : public cc::ImageProvider {
     return ScopedResult(cc::DecodedDrawImage(
         paint_image.GetSkImageForFrame(
             frame_index, cc::PaintImage::kDefaultGeneratorClientId),
-        SkSize::Make(0, 0), SkSize::Make(1.f, 1.f), draw_image.filter_quality(),
-        true /* is_budgeted */));
+        nullptr, SkSize::Make(0, 0), SkSize::Make(1.f, 1.f),
+        draw_image.filter_quality()));
   }
 
  private:
@@ -146,7 +147,8 @@ void SoftwareRenderer::BindFramebufferToTexture(
   DCHECK(it != render_pass_bitmaps_.end());
   SkBitmap& bitmap = it->second;
 
-  current_framebuffer_canvas_ = std::make_unique<SkCanvas>(bitmap);
+  current_framebuffer_canvas_ = std::make_unique<SkCanvas>(
+      bitmap, skia::LegacyDisplayGlobals::GetSkSurfaceProps());
   current_canvas_ = current_framebuffer_canvas_.get();
 }
 
@@ -257,7 +259,8 @@ void SoftwareRenderer::DoDrawQuad(const DrawQuad* quad,
   }
 
   if (should_apply_rounded_corner)
-    SetClipRRect(quad->shared_quad_state->rounded_corner_bounds);
+    SetClipRRect(
+        quad->shared_quad_state->mask_filter_info.rounded_corner_bounds());
 
   gfx::Transform quad_rect_matrix;
   QuadRectTransform(&quad_rect_matrix,
@@ -875,7 +878,7 @@ sk_sp<SkShader> SoftwareRenderer::GetBackdropFilterShader(
   if (!bitmap.tryAllocPixels(info))
     base::TerminateBecauseOutOfMemory(info.computeMinByteSize());
 
-  SkCanvas canvas(bitmap);
+  SkCanvas canvas(bitmap, skia::LegacyDisplayGlobals::GetSkSurfaceProps());
 
   // Clip the filtered image to the (rounded) bounding box of the element.
   if (backdrop_filter_bounds) {

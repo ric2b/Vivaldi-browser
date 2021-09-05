@@ -20,7 +20,6 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/scoped_file.h"
-#include "base/files/scoped_temp_dir.h"
 #include "base/format_macros.h"
 #include "base/hash/hash.h"
 #include "base/lazy_instance.h"
@@ -31,6 +30,7 @@
 #include "base/numerics/safe_conversions.h"
 #include "base/process/kill.h"
 #include "base/process/launch.h"
+#include "base/ranges/algorithm.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/pattern.h"
@@ -42,7 +42,6 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
-#include "base/task/post_job.h"
 #include "base/task/post_task.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/test/gtest_util.h"
@@ -253,7 +252,8 @@ bool BotModeEnabled(const CommandLine* command_line) {
 // Returns command line command line after gtest-specific processing
 // and applying |wrapper|.
 CommandLine PrepareCommandLineForGTest(const CommandLine& command_line,
-                                       const std::string& wrapper) {
+                                       const std::string& wrapper,
+                                       const size_t retries_left) {
   CommandLine new_command_line(command_line.GetProgram());
   CommandLine::SwitchMap switches = command_line.GetSwitches();
 
@@ -263,6 +263,16 @@ CommandLine PrepareCommandLineForGTest(const CommandLine& command_line,
 
   // Don't try to write the final XML report in child processes.
   switches.erase(kGTestOutputFlag);
+
+  if (switches.find(switches::kTestLauncherRetriesLeft) == switches.end()) {
+    switches[switches::kTestLauncherRetriesLeft] =
+#if defined(OS_WIN)
+        base::NumberToWString(
+#else
+        base::NumberToString(
+#endif
+            retries_left);
+  }
 
   for (CommandLine::SwitchMap::const_iterator iter = switches.begin();
        iter != switches.end(); ++iter) {
@@ -334,7 +344,7 @@ int LaunchChildTestProcessWithOptions(const CommandLine& command_line,
   // that we can install a different /data.
   new_options.spawn_flags = FDIO_SPAWN_CLONE_STDIO | FDIO_SPAWN_CLONE_JOB;
 
-  const base::FilePath kDataPath(base::fuchsia::kPersistedDataDirectoryPath);
+  const base::FilePath kDataPath(base::kPersistedDataDirectoryPath);
 
   // Clone all namespace entries from the current process, except /data, which
   // is overridden below.
@@ -377,7 +387,7 @@ int LaunchChildTestProcessWithOptions(const CommandLine& command_line,
   // Bind the new test subdirectory to /data in the child process' namespace.
   new_options.paths_to_transfer.push_back(
       {kDataPath,
-       base::fuchsia::OpenDirectory(nested_data_path).TakeChannel().release()});
+       base::OpenDirectoryHandle(nested_data_path).TakeChannel().release()});
 #endif  // defined(OS_FUCHSIA)
 
 #if defined(OS_LINUX) || defined(OS_CHROMEOS)
@@ -639,14 +649,15 @@ std::vector<std::string> ExtractTestsFromFilter(const std::string& filter,
 class TestRunner {
  public:
   explicit TestRunner(TestLauncher* launcher,
-                      size_t max_workers = 1u,
+                      size_t runner_count = 1u,
                       size_t batch_size = 1u)
       : launcher_(launcher),
-        max_workers_(max_workers),
+        runner_count_(runner_count),
         batch_size_(batch_size) {}
 
   // Sets |test_names| to be run, with |batch_size| tests per process.
-  // Posts a job to run LaunchChildGTestProcess on |max_workers| workers.
+  // Posts LaunchNextTask |runner_count| number of times, each with a separate
+  // task runner.
   void Run(const std::vector<std::string>& test_names);
 
  private:
@@ -658,131 +669,104 @@ class TestRunner {
            test_names.front().find(kPreTestPrefix) != std::string::npos;
   }
 
-  bool IsSingleThreaded() const { return batch_size_ == 0; }
+  // Launches the next child process on |task_runner| and clears
+  // |last_task_temp_dir| from the previous task.
+  void LaunchNextTask(scoped_refptr<TaskRunner> task_runner,
+                      const FilePath& last_task_temp_dir);
 
-  void WorkerTask(scoped_refptr<TaskRunner> main_task_runner,
-                  base::JobDelegate* delegate);
-  size_t GetMaxConcurrency(size_t worker_count) {
-    AutoLock auto_lock(lock_);
-    if (IsSingleThreaded())
-      return tests_to_run_.empty() ? 0 : 1;
-
-    // Round up the division to ensure enough workers for all tests.
-    return std::min((tests_to_run_.size() + batch_size_ - 1) / batch_size_,
-                    max_workers_);
+  // Forwards |last_task_temp_dir| and launches the next task on main thread.
+  // The method is called on |task_runner|.
+  void ClearAndLaunchNext(scoped_refptr<TaskRunner> main_thread_runner,
+                          scoped_refptr<TaskRunner> task_runner,
+                          const FilePath& last_task_temp_dir) {
+    main_thread_runner->PostTask(
+        FROM_HERE,
+        BindOnce(&TestRunner::LaunchNextTask, weak_ptr_factory_.GetWeakPtr(),
+                 task_runner, last_task_temp_dir));
   }
-
-  // Cleans up |task_temp_dir| from a previous task and quits |run_loop| if
-  // |done|.
-  void CleanupTask(base::ScopedTempDir task_temp_dir, bool done);
 
   ThreadChecker thread_checker_;
 
+  std::vector<std::string> tests_to_run_;
   TestLauncher* const launcher_;
-  JobHandle job_handle_;
-  // Max number of workers to use.
-  const size_t max_workers_;
+  std::vector<scoped_refptr<TaskRunner>> task_runners_;
+  // Number of sequenced task runners to use.
+  const size_t runner_count_;
+  // Number of TaskRunners that have finished.
+  size_t runners_done_ = 0;
   // Number of tests per process, 0 is special case for all tests.
   const size_t batch_size_;
   RunLoop run_loop_;
-
-  // Protects member used concurrently by worker tasks.
-  base::Lock lock_;
-  std::vector<std::string> tests_to_run_ GUARDED_BY(lock_);
 
   base::WeakPtrFactory<TestRunner> weak_ptr_factory_{this};
 };
 
 void TestRunner::Run(const std::vector<std::string>& test_names) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  // No workers, fail immediately.
-  CHECK_GT(max_workers_, 0u);
-  if (test_names.empty())
-    return;
-
-  {
-    AutoLock auto_lock(lock_);
-    tests_to_run_ = test_names;
-    // Reverse test order to avoid coping the whole vector when removing tests.
-    std::reverse(tests_to_run_.begin(), tests_to_run_.end());
+  // No sequence runners, fail immediately.
+  CHECK_GT(runner_count_, 0u);
+  tests_to_run_ = test_names;
+  // Reverse test order to avoid coping the whole vector when removing tests.
+  ranges::reverse(tests_to_run_);
+  runners_done_ = 0;
+  task_runners_.clear();
+  for (size_t i = 0; i < runner_count_; i++) {
+    task_runners_.push_back(ThreadPool::CreateSequencedTaskRunner(
+        {MayBlock(), TaskShutdownBehavior::BLOCK_SHUTDOWN}));
+    ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE,
+        BindOnce(&TestRunner::LaunchNextTask, weak_ptr_factory_.GetWeakPtr(),
+                 task_runners_.back(), FilePath()));
   }
-
-  job_handle_ = base::PostJob(
-      FROM_HERE, {TaskPriority::USER_BLOCKING, MayBlock()},
-      BindRepeating(&TestRunner::WorkerTask, Unretained(this),
-                    ThreadTaskRunnerHandle::Get()),
-      BindRepeating(&TestRunner::GetMaxConcurrency, Unretained(this)));
-
   run_loop_.Run();
 }
 
-void TestRunner::WorkerTask(scoped_refptr<TaskRunner> main_task_runner,
-                            base::JobDelegate* delegate) {
-  bool done = false;
-  while (!done && !delegate->ShouldYield()) {
-    // Create a temporary directory for this task. This directory will hold the
-    // flags and results files for the child processes as well as their User
-    // Data dir, where appropriate. For platforms that support per-child temp
-    // dirs, this directory will also contain one subdirectory per child for
-    // that child's process-wide temp dir.
-    base::ScopedTempDir task_temp_dir;
-    CHECK(task_temp_dir.CreateUniqueTempDir());
-    int child_index = 0;
-    bool reuse_state = true;
-    while (reuse_state) {
-      std::vector<std::string> batch;
-      {
-        AutoLock auto_lock(lock_);
-        size_t batch_size;
-        // Single threaded case runs all tests in one batch.
-        if (IsSingleThreaded())
-          batch_size = tests_to_run_.size();
-        // Run remaining tests up to |batch_size_|.
-        else
-          batch_size = std::min(batch_size_, tests_to_run_.size());
-        batch.assign(tests_to_run_.rbegin(),
-                     tests_to_run_.rbegin() + batch_size);
-        tests_to_run_.erase(tests_to_run_.end() - batch_size,
-                            tests_to_run_.end());
-        done = tests_to_run_.empty();
-      }
-      if (batch.empty())
-        break;
-
-      launcher_->LaunchChildGTestProcess(
-          main_task_runner, batch, task_temp_dir.GetPath(),
-          CreateChildTempDirIfSupported(task_temp_dir.GetPath(),
-                                        child_index++));
-      reuse_state = !done && ShouldReuseStateFromLastBatch(batch);
-    }
-
-    // Cleaning up test results is scheduled to |main_task_runner| because it
-    // must happen after all post processing step that was scheduled in
-    // LaunchChildGTestProcess to |main_task_runner|.
-    main_task_runner->PostTask(
-        FROM_HERE,
-        BindOnce(&TestRunner::CleanupTask, weak_ptr_factory_.GetWeakPtr(),
-                 std::move(task_temp_dir), done));
-  }
-}
-
-void TestRunner::CleanupTask(base::ScopedTempDir task_temp_dir, bool done) {
+void TestRunner::LaunchNextTask(scoped_refptr<TaskRunner> task_runner,
+                                const FilePath& last_task_temp_dir) {
   DCHECK(thread_checker_.CalledOnValidThread());
-
   // delete previous temporary directory
-  if (!task_temp_dir.Delete()) {
+  if (!last_task_temp_dir.empty() &&
+      !DeletePathRecursively(last_task_temp_dir)) {
     // This needs to be non-fatal at least for Windows.
-    LOG(WARNING) << "Failed to delete "
-                 << task_temp_dir.GetPath().AsUTF8Unsafe();
+    LOG(WARNING) << "Failed to delete " << last_task_temp_dir.AsUTF8Unsafe();
   }
 
-  if (!done)
+  // No more tests to run, finish sequence.
+  if (tests_to_run_.empty()) {
+    runners_done_++;
+    // All sequence runners are done, quit the loop.
+    if (runners_done_ == runner_count_)
+      run_loop_.QuitWhenIdle();
     return;
-
-  if (job_handle_) {
-    job_handle_.Cancel();
-    run_loop_.QuitWhenIdle();
   }
+
+  // Create a temporary directory for this task. This directory will hold the
+  // flags and results files for the child processes as well as their User Data
+  // dir, where appropriate. For platforms that support per-child temp dirs,
+  // this directory will also contain one subdirectory per child for that
+  // child's process-wide temp dir.
+  base::FilePath task_temp_dir;
+  CHECK(CreateNewTempDirectory(FilePath::StringType(), &task_temp_dir));
+  bool post_to_current_runner = true;
+  size_t batch_size = (batch_size_ == 0) ? tests_to_run_.size() : batch_size_;
+
+  int child_index = 0;
+  while (post_to_current_runner && !tests_to_run_.empty()) {
+    batch_size = std::min(batch_size, tests_to_run_.size());
+    std::vector<std::string> batch(tests_to_run_.rbegin(),
+                                   tests_to_run_.rbegin() + batch_size);
+    tests_to_run_.erase(tests_to_run_.end() - batch_size, tests_to_run_.end());
+    task_runner->PostTask(
+        FROM_HERE,
+        BindOnce(&TestLauncher::LaunchChildGTestProcess, Unretained(launcher_),
+                 ThreadTaskRunnerHandle::Get(), batch, task_temp_dir,
+                 CreateChildTempDirIfSupported(task_temp_dir, child_index++)));
+    post_to_current_runner = ShouldReuseStateFromLastBatch(batch);
+  }
+  task_runner->PostTask(
+      FROM_HERE,
+      BindOnce(&TestRunner::ClearAndLaunchNext, Unretained(this),
+               ThreadTaskRunnerHandle::Get(), task_runner, task_temp_dir));
 }
 
 // Returns the number of files and directories in |dir|, or 0 if |dir| is empty.
@@ -912,6 +896,7 @@ TestLauncher::TestLauncher(TestLauncherDelegate* launcher_delegate,
       test_finished_count_(0),
       test_success_count_(0),
       test_broken_count_(0),
+      retries_left_(0),
       retry_limit_(retry_limit),
       force_run_broken_tests_(false),
       watchdog_timer_(FROM_HERE,
@@ -1005,8 +990,8 @@ void TestLauncher::LaunchChildGTestProcess(
       test_names, task_temp_dir, &result_file);
 
   // Record the exact command line used to launch the child.
-  CommandLine new_command_line(
-      PrepareCommandLineForGTest(cmd_line, launcher_delegate_->GetWrapper()));
+  CommandLine new_command_line(PrepareCommandLineForGTest(
+      cmd_line, launcher_delegate_->GetWrapper(), retries_left_));
   LaunchOptions options;
   options.flags = launcher_delegate_->GetLaunchOptions();
 
@@ -1395,6 +1380,7 @@ bool TestLauncher::Init(CommandLine* command_line) {
     retry_limit_ = 0U;
   }
 
+  retries_left_ = retry_limit_;
   force_run_broken_tests_ =
       command_line->HasSwitch(switches::kTestLauncherForceRunBrokenTests);
 
@@ -1619,7 +1605,7 @@ bool TestLauncher::ShuffleTests(CommandLine* command_line) {
 
     std::mt19937 randomizer;
     randomizer.seed(shuffle_seed);
-    std::shuffle(tests_.begin(), tests_.end(), randomizer);
+    ranges::shuffle(tests_, randomizer);
 
     fprintf(stdout, "Randomizing with seed %u\n", shuffle_seed);
     fflush(stdout);
@@ -1837,9 +1823,7 @@ void TestLauncher::PrintFuzzyMatchingTestNames() {
 }
 
 bool TestLauncher::RunRetryTests() {
-  // Number of retries in this iteration.
-  size_t retry_count = 0;
-  while (!tests_to_retry_.empty() && retry_count < retry_limit_) {
+  while (!tests_to_retry_.empty() && retries_left_ > 0) {
     // Retry all tests that depend on a failing test.
     std::vector<std::string> test_names;
     for (const TestInfo& test_info : tests_) {
@@ -1856,12 +1840,12 @@ bool TestLauncher::RunRetryTests() {
       return false;
 
     fprintf(stdout, "Retrying %zu test%s (retry #%zu)\n", retry_started_count,
-            retry_started_count > 1 ? "s" : "", retry_count);
+            retry_started_count > 1 ? "s" : "", retry_limit_ - retries_left_);
     fflush(stdout);
 
+    --retries_left_;
     TestRunner test_runner(this);
     test_runner.Run(test_names);
-    retry_count++;
   }
   return tests_to_retry_.empty();
 }

@@ -7,9 +7,9 @@
 
 #include "components/autofill/core/common/mojom/autofill_types.mojom-forward.h"
 
-namespace autofill {
+namespace password_manager {
 struct PasswordForm;
-}  // namespace autofill
+}  // namespace password_manager
 
 // This interface is used for communicating between the all
 // passwords sheet controller and the Android frontend.
@@ -24,7 +24,8 @@ class AllPasswordsBottomSheetView {
   // Instructs All Passwords Sheet to show the provided |credentials| to the
   // user.
   virtual void Show(
-      const std::vector<std::unique_ptr<autofill::PasswordForm>>& credentials,
+      const std::vector<std::unique_ptr<password_manager::PasswordForm>>&
+          credentials,
       autofill::mojom::FocusedFieldType focused_field_type) = 0;
 };
 

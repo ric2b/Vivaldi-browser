@@ -54,11 +54,13 @@ Polymer({
         chromeos.settings.mojom.Setting.kGuestBrowsing,
         chromeos.settings.mojom.Setting.kShowUsernamesAndPhotosAtSignIn,
         chromeos.settings.mojom.Setting.kRestrictSignIn,
-        chromeos.settings.mojom.Setting.kAddToUserWhitelist,
-        chromeos.settings.mojom.Setting.kRemoveFromUserWhitelist,
+        chromeos.settings.mojom.Setting.kAddToUserAllowlist,
+        chromeos.settings.mojom.Setting.kRemoveFromUserAllowlist,
       ]),
     },
   },
+
+  listeners: {'all-managed-users-removed': 'focusAddUserButton_'},
 
   /** @override */
   created() {
@@ -78,7 +80,7 @@ Polymer({
    */
   beforeDeepLinkAttempt(settingId) {
     if (settingId !==
-        chromeos.settings.mojom.Setting.kRemoveFromUserWhitelist) {
+        chromeos.settings.mojom.Setting.kRemoveFromUserAllowlist) {
       // Continue with deep linking attempt.
       return true;
     }
@@ -123,7 +125,7 @@ Polymer({
 
   /** @private */
   onAddUserDialogClose_() {
-    cr.ui.focusWithoutInk(assert(this.$$('#add-user-button a')));
+    this.focusAddUserButton_();
   },
 
   /**
@@ -151,5 +153,10 @@ Polymer({
   /** @return {boolean} */
   shouldHideModifiedByOwnerLabel_() {
     return this.isUserListManaged_ || this.isOwner_;
+  },
+
+  /** @private */
+  focusAddUserButton_() {
+    cr.ui.focusWithoutInk(assert(this.$$('#add-user-button a')));
   },
 });

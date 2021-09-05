@@ -69,7 +69,7 @@ Problems:
    above the threshold.
 * `kUnsuccessfulNonDefaultNetworksPings`: One or more of the non-default
    networks has failed pings.
-* `kNonDefaultNetworksAboveLatencyThreshold`: One of more of the non-default
+* `kNonDefaultNetworksAboveLatencyThreshold`: One or more of the non-default
    networks has a latency above the threshold.
 
 #### HasSecureWiFiConnection
@@ -103,7 +103,7 @@ Problems:
 Tests whether the DNS latency is below an acceptable threshold.
 
 Problems:
-* `kFailedToResolveAllHosts`: Failed to resolve one or more hosts.
+* `kHostResolutionFailure`: Failed to resolve one or more hosts.
 * `kSlightlyAboveThreshold`: Average DNS latency across hosts is slightly above
    expected threshold.
 * `kSignificantlyAboveThreshold`: Average DNS latency across hosts is
@@ -127,10 +127,9 @@ Tests whether the internet connection is behind a captive portal.
 
 Problems:
 * `kNoActiveNetworks`: No active networks found.
-* `kRestrictedConnectivity`: The active network is detected to be behind a
-   captive portal and have restricted connectivity.
-* `kCaptivePortalState`: The active network is detected to be behind a captive
-   portal.
+* `kRestrictedConnectivity`: The active network is behind a captive portal and
+   has restricted connectivity.
+* `kCaptivePortalState`: The active network is behind a captive portal.
 
 ### Firewall Routines
 
@@ -145,6 +144,29 @@ Problems:
    threshold.
 * `kFirewallDetected`: Firewall detected.
 * `kPotentialFirewall`: A firewall may potentially exist.
+
+#### HttpsFirewall
+
+Tests whether a firewall is blocking HTTPS port 443.
+
+Problems:
+* `kHighDnsResolutionFailureRate`: DNS resolution failure rate is high.
+* `kFirewallDetected`: Firewall detected.
+* `kPotentialFirewall`: A firewall may potentially exist.
+
+### Google Services Routines
+
+Tests successful communication with various Google domains.
+
+#### HttpsLatency
+
+Tests whether the HTTPS latency is below an acceptable threshold.
+
+Problems:
+* `kFailedDnsResolutions`: One or more DNS resolutions resulted in a failure.
+* `kFailedHttpsRequests`: One or more HTTPS requests resulted in a failure.
+* `kHighLatency`: HTTPS request latency is high.
+* `kVeryHighLatency`: HTTPS request latency is very high.
 
 [Network Health and Configuration]: https://docs.google.com/document/d/10DSy-jZXaRo9I9aq1UqERy76t7HkgGvInWk57pHEkzg
 [network_diagnostics.mojom]: https://source.chromium.org/chromium/chromium/src/+/master:chromeos/services/network_health/public/mojom/network_diagnostics.mojom?originalUrl=https:%2F%2Fcs.chromium.org%2F

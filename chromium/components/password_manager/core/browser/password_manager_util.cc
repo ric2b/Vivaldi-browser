@@ -40,6 +40,7 @@
 #include "components/sync/driver/sync_service.h"
 #include "components/sync/driver/sync_user_settings.h"
 
+using autofill::password_generation::PasswordGenerationType;
 using password_manager::PasswordForm;
 
 namespace password_manager_util {
@@ -145,7 +146,7 @@ void UserTriggeredManualGenerationFromContextMenu(
     password_manager::PasswordManagerClient* password_manager_client) {
   if (!password_manager_client->GetPasswordFeatureManager()
            ->ShouldShowAccountStorageOptIn()) {
-    password_manager_client->GeneratePassword();
+    password_manager_client->GeneratePassword(PasswordGenerationType::kManual);
     LogPasswordGenerationEvent(autofill::password_generation::
                                    PASSWORD_GENERATION_CONTEXT_MENU_PRESSED);
     return;
@@ -159,7 +160,7 @@ void UserTriggeredManualGenerationFromContextMenu(
              password_manager::PasswordManagerClient::ReauthSucceeded
                  succeeded) {
             if (succeeded) {
-              client->GeneratePassword();
+              client->GeneratePassword(PasswordGenerationType::kManual);
               LogPasswordGenerationEvent(
                   autofill::password_generation::
                       PASSWORD_GENERATION_CONTEXT_MENU_PRESSED);
@@ -171,13 +172,13 @@ void UserTriggeredManualGenerationFromContextMenu(
 // TODO(http://crbug.com/890318): Add unitests to check cleaners are correctly
 // created.
 void RemoveUselessCredentials(
+    password_manager::CredentialsCleanerRunner* cleaning_tasks_runner,
     scoped_refptr<password_manager::PasswordStore> store,
     PrefService* prefs,
-    int delay_in_seconds,
+    base::TimeDelta delay,
     base::RepeatingCallback<network::mojom::NetworkContext*()>
         network_context_getter) {
-  auto cleaning_tasks_runner =
-      std::make_unique<password_manager::CredentialsCleanerRunner>();
+  DCHECK(cleaning_tasks_runner);
 
 #if !defined(OS_IOS)
   // Can be null for some unittests.
@@ -195,23 +196,19 @@ void RemoveUselessCredentials(
         FROM_HERE,
         base::BindOnce(
             &password_manager::CredentialsCleanerRunner::StartCleaning,
-            base::Unretained(cleaning_tasks_runner.release())),
-        base::TimeDelta::FromSeconds(delay_in_seconds));
+            cleaning_tasks_runner->GetWeakPtr()),
+        delay);
   }
 }
 
 base::StringPiece GetSignonRealmWithProtocolExcluded(const PasswordForm& form) {
-  base::StringPiece signon_realm_protocol_excluded = form.signon_realm;
+  base::StringPiece signon_realm = form.signon_realm;
 
   // Find the web origin (with protocol excluded) in the signon_realm.
-  const size_t after_protocol =
-      signon_realm_protocol_excluded.find(form.url.host_piece());
-  DCHECK_NE(after_protocol, base::StringPiece::npos);
+  const size_t after_protocol = signon_realm.find(form.url.host_piece());
 
   // Keep the string starting with position |after_protocol|.
-  signon_realm_protocol_excluded =
-      signon_realm_protocol_excluded.substr(after_protocol);
-  return signon_realm_protocol_excluded;
+  return signon_realm.substr(std::min(after_protocol, signon_realm.size()));
 }
 
 void FindBestMatches(

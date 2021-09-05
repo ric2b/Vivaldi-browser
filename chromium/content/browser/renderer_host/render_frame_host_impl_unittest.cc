@@ -92,11 +92,42 @@ TEST_F(RenderFrameHostImplTest, ExpectedMainWorldOrigin) {
   EXPECT_EQ(initial_rfh, main_rfh());
 }
 
-// Create a full screen popup RenderWidgetHost and View.
-TEST_F(RenderFrameHostImplTest, CreateFullscreenWidget) {
-  main_test_rfh()->CreateNewFullscreenWidget(
-      mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>(),
-      mojo::PendingAssociatedRemote<blink::mojom::Widget>(), base::DoNothing());
+TEST_F(RenderFrameHostImplTest, PolicyContainerLifecycle) {
+  TestRenderFrameHost* main_rfh = contents()->GetMainFrame();
+  ASSERT_NE(main_rfh->policy_container_host(), nullptr);
+  EXPECT_EQ(main_rfh->policy_container_host()->referrer_policy(),
+            network::mojom::ReferrerPolicy::kDefault);
+
+  static_cast<blink::mojom::PolicyContainerHost*>(
+      main_rfh->policy_container_host())
+      ->SetReferrerPolicy(network::mojom::ReferrerPolicy::kAlways);
+  EXPECT_EQ(main_rfh->policy_container_host()->referrer_policy(),
+            network::mojom::ReferrerPolicy::kAlways);
+
+  // Create a child frame and check that it inherits the PolicyContainerHost
+  // from the parent frame.
+  auto* child_frame = static_cast<TestRenderFrameHost*>(
+      content::RenderFrameHostTester::For(main_test_rfh())
+          ->AppendChild("child"));
+
+  ASSERT_NE(child_frame->policy_container_host(), nullptr);
+  EXPECT_EQ(child_frame->policy_container_host()->referrer_policy(),
+            network::mojom::ReferrerPolicy::kAlways);
+
+  // Create a new WebContents with opener and test that the new main frame
+  // inherits the PolicyContainerHost from the opener.
+  static_cast<blink::mojom::PolicyContainerHost*>(
+      child_frame->policy_container_host())
+      ->SetReferrerPolicy(network::mojom::ReferrerPolicy::kNever);
+  WebContents::CreateParams params(browser_context());
+  std::unique_ptr<WebContentsImpl> new_contents(
+      WebContentsImpl::CreateWithOpener(params, child_frame));
+  RenderFrameHostImpl* new_frame =
+      new_contents->GetFrameTree()->root()->current_frame_host();
+
+  ASSERT_NE(new_frame->policy_container_host(), nullptr);
+  EXPECT_EQ(new_frame->policy_container_host()->referrer_policy(),
+            network::mojom::ReferrerPolicy::kNever);
 }
 
 }  // namespace content

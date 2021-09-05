@@ -23,8 +23,8 @@
 #include "chrome/browser/ui/views/chrome_view_class_properties.h"
 #include "chrome/browser/ui/views/flying_indicator.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/in_product_help/feature_promo_colors.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_ink_drop_util.h"
+#include "chrome/browser/ui/views/user_education/feature_promo_colors.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/aura/window.h"
@@ -494,7 +494,10 @@ WebUITabCounterButton::WebUITabCounterButton(PressedCallback pressed_callback,
                                              BrowserView* browser_view)
     : Button(std::move(pressed_callback)),
       tab_strip_model_(browser_view->browser()->tab_strip_model()),
-      browser_view_(browser_view) {}
+      browser_view_(browser_view) {
+  // Not focusable by default, only for accessibility.
+  SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
+}
 
 WebUITabCounterButton::~WebUITabCounterButton() = default;
 

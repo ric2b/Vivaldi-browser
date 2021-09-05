@@ -7,6 +7,9 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "chromeos/components/multidevice/logging/logging.h"
 #include "chromeos/components/multidevice/remote_device_ref.h"
 #include "chromeos/components/multidevice/software_feature.h"
@@ -26,8 +29,26 @@ using multidevice_setup::mojom::Feature;
 using multidevice_setup::mojom::FeatureState;
 using multidevice_setup::mojom::HostStatus;
 
+bool IsEligiblePhoneHubHost(const RemoteDeviceRef& device) {
+  // Device must be capable of being a multi-device host.
+  if (device.GetSoftwareFeatureState(SoftwareFeature::kBetterTogetherHost) ==
+      SoftwareFeatureState::kNotSupported) {
+    return false;
+  }
+
+  if (device.GetSoftwareFeatureState(SoftwareFeature::kPhoneHubHost) ==
+      SoftwareFeatureState::kNotSupported) {
+    return false;
+  }
+
+  // Device must have a synced Bluetooth public address, which is used to
+  // bootstrap Phone Hub connections.
+  return !device.bluetooth_public_address().empty();
+}
+
 bool IsEligibleForFeature(
     const base::Optional<multidevice::RemoteDeviceRef>& local_device,
+    multidevice_setup::MultiDeviceSetupClient::HostStatusWithDevice host_status,
     const RemoteDeviceRefList& remote_devices,
     FeatureState feature_state) {
   // If the feature is prohibited by policy, we don't initialize Phone Hub
@@ -55,25 +76,20 @@ bool IsEligibleForFeature(
   if (local_device->bluetooth_public_address().empty())
     return false;
 
+  // If the host device is not an eligible host, do not initialize Phone Hub.
+  if (host_status.first == HostStatus::kNoEligibleHosts)
+    return false;
+
+  // If there is a host device available, check if the device is eligible for
+  // Phonehub.
+  if (host_status.second.has_value())
+    return IsEligiblePhoneHubHost(*(host_status.second));
+
+  // Otherwise, check if there is any available remote device that is
+  // eligible for Phonehub.
   for (const RemoteDeviceRef& device : remote_devices) {
-    // Device must be capable of being a multi-device host.
-    if (device.GetSoftwareFeatureState(SoftwareFeature::kBetterTogetherHost) ==
-        SoftwareFeatureState::kNotSupported) {
-      continue;
-    }
-
-    // Device must be capable of being a Phone Hub host.
-    if (device.GetSoftwareFeatureState(SoftwareFeature::kPhoneHubHost) ==
-        SoftwareFeatureState::kNotSupported) {
-      continue;
-    }
-
-    // Device must have a synced Bluetooth public address, which is used to
-    // bootstrap Phone Hub connections.
-    if (device.bluetooth_public_address().empty())
-      continue;
-
-    return true;
+    if (IsEligiblePhoneHubHost(device))
+      return true;
   }
 
   // If none of the devices return true above, there are no phones capable of
@@ -114,13 +130,21 @@ bool IsFeatureDisabledByUser(FeatureState feature_state) {
 FeatureStatusProviderImpl::FeatureStatusProviderImpl(
     device_sync::DeviceSyncClient* device_sync_client,
     multidevice_setup::MultiDeviceSetupClient* multidevice_setup_client,
-    ConnectionManager* connection_manager)
+    ConnectionManager* connection_manager,
+    session_manager::SessionManager* session_manager,
+    PowerManagerClient* power_manager_client)
     : device_sync_client_(device_sync_client),
       multidevice_setup_client_(multidevice_setup_client),
-      connection_manager_(connection_manager) {
+      connection_manager_(connection_manager),
+      session_manager_(session_manager),
+      power_manager_client_(power_manager_client) {
+  DCHECK(session_manager_);
+  DCHECK(power_manager_client_);
   device_sync_client_->AddObserver(this);
   multidevice_setup_client_->AddObserver(this);
   connection_manager_->AddObserver(this);
+  session_manager_->AddObserver(this);
+  power_manager_client_->AddObserver(this);
 
   device::BluetoothAdapterFactory::Get()->GetAdapter(
       base::BindOnce(&FeatureStatusProviderImpl::OnBluetoothAdapterReceived,
@@ -135,6 +159,8 @@ FeatureStatusProviderImpl::~FeatureStatusProviderImpl() {
   connection_manager_->RemoveObserver(this);
   if (bluetooth_adapter_)
     bluetooth_adapter_->RemoveObserver(this);
+  session_manager_->RemoveObserver(this);
+  power_manager_client_->RemoveObserver(this);
 }
 
 FeatureStatus FeatureStatusProviderImpl::GetStatus() const {
@@ -143,6 +169,19 @@ FeatureStatus FeatureStatusProviderImpl::GetStatus() const {
 
 void FeatureStatusProviderImpl::OnReady() {
   UpdateStatus();
+
+  // The status may change a few times before initialization is
+  // complete. Before the login status is recorded, all asynchronous
+  // action should be complete. Note that scheduling
+  // RecordFeatureStatusOnLogin() with BEST_EFFORT sooner (e.g in the
+  // constructor) may yield an incorrect metric, because there may be many
+  // cycles between the constructor being called and |device_sync_client_| being
+  // ready, allowing tasks posted even with BEST_EFFORT to succeed before
+  // initialization.
+  base::ThreadPool::PostTask(
+      FROM_HERE, {base::TaskPriority::BEST_EFFORT},
+      base::BindOnce(&FeatureStatusProviderImpl::RecordFeatureStatusOnLogin,
+                     weak_ptr_factory_.GetWeakPtr()));
 }
 
 void FeatureStatusProviderImpl::OnNewDevicesSynced() {
@@ -188,6 +227,10 @@ void FeatureStatusProviderImpl::OnConnectionStatusChanged() {
   UpdateStatus();
 }
 
+void FeatureStatusProviderImpl::OnSessionStateChanged() {
+  UpdateStatus();
+}
+
 void FeatureStatusProviderImpl::UpdateStatus() {
   DCHECK(status_.has_value());
 
@@ -199,23 +242,34 @@ void FeatureStatusProviderImpl::UpdateStatus() {
                << computed_status;
   *status_ = computed_status;
   NotifyStatusChanged();
+
+  if (!is_login_status_metric_recorded_)
+    return;
+
+  UMA_HISTOGRAM_ENUMERATION("PhoneHub.Adoption.FeatureStatusChangesSinceLogin",
+                            GetStatus());
 }
 
 FeatureStatus FeatureStatusProviderImpl::ComputeStatus() {
   FeatureState feature_state =
       multidevice_setup_client_->GetFeatureState(Feature::kPhoneHub);
 
+  HostStatus host_status = multidevice_setup_client_->GetHostStatus().first;
+
   // Note: If |device_sync_client_| is not yet ready, it has not initialized
   // itself with device metadata, so we assume that we are ineligible for the
   // feature until proven otherwise.
   if (!device_sync_client_->is_ready() ||
       !IsEligibleForFeature(device_sync_client_->GetLocalDeviceMetadata(),
+                            multidevice_setup_client_->GetHostStatus(),
                             device_sync_client_->GetSyncedDevices(),
                             feature_state)) {
     return FeatureStatus::kNotEligibleForFeature;
   }
 
-  HostStatus host_status = multidevice_setup_client_->GetHostStatus().first;
+  if (session_manager_->IsScreenLocked() || is_suspended_)
+    return FeatureStatus::kLockOrSuspended;
+
 
   if (host_status == HostStatus::kEligibleHostExistsButNoHostSet)
     return FeatureStatus::kEligiblePhoneButNotSetUp;
@@ -246,6 +300,26 @@ bool FeatureStatusProviderImpl::IsBluetoothOn() const {
     return false;
 
   return bluetooth_adapter_->IsPresent() && bluetooth_adapter_->IsPowered();
+}
+
+void FeatureStatusProviderImpl::RecordFeatureStatusOnLogin() {
+  UMA_HISTOGRAM_ENUMERATION("PhoneHub.Adoption.LoginFeatureStatus",
+                            GetStatus());
+  is_login_status_metric_recorded_ = true;
+}
+
+void FeatureStatusProviderImpl::SuspendImminent(
+    power_manager::SuspendImminent::Reason reason) {
+  PA_LOG(INFO) << "Device is suspending";
+  is_suspended_ = true;
+  UpdateStatus();
+}
+
+void FeatureStatusProviderImpl::SuspendDone(
+    const base::TimeDelta& sleep_duration) {
+  PA_LOG(INFO) << "Device has stopped suspending";
+  is_suspended_ = false;
+  UpdateStatus();
 }
 
 }  // namespace phonehub

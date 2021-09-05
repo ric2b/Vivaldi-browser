@@ -14,8 +14,10 @@
 #include "chrome/test/base/scoped_testing_local_state.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chromeos/dbus/shill/shill_clients.h"
 #include "chromeos/dbus/system_proxy/system_proxy_client.h"
 #include "chromeos/dbus/system_proxy/system_proxy_service.pb.h"
+#include "chromeos/network/network_handler.h"
 #include "components/arc/arc_prefs.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/network_service_instance.h"
@@ -39,8 +41,6 @@ using testing::Invoke;
 using testing::WithArg;
 
 namespace {
-constexpr char kSystemServicesUsername[] = "test_username";
-constexpr char kSystemServicesPassword[] = "test_password";
 constexpr char kBrowserUsername[] = "browser_username";
 constexpr char kBrowserPassword[] = "browser_password";
 constexpr char kKerberosActivePrincipalName[] = "kerberos_princ_name";
@@ -55,9 +55,12 @@ CreateNetworkContextForDefaultStoragePartition(
     network::NetworkService* network_service,
     content::BrowserContext* browser_context) {
   mojo::PendingRemote<network::mojom::NetworkContext> network_context_remote;
+  auto params = network::mojom::NetworkContextParams::New();
+  params->cert_verifier_params = content::GetCertVerifierParams(
+      network::mojom::CertVerifierCreationParams::New());
   auto network_context = std::make_unique<network::NetworkContext>(
       network_service, network_context_remote.InitWithNewPipeAndPassReceiver(),
-      network::mojom::NetworkContextParams::New());
+      std::move(params));
   content::BrowserContext::GetDefaultStoragePartition(browser_context)
       ->SetNetworkContextForTesting(std::move(network_context_remote));
   return network_context;
@@ -83,6 +86,9 @@ class SystemProxyManagerTest : public testing::Test {
   // testing::Test
   void SetUp() override {
     testing::Test::SetUp();
+    chromeos::shill_clients::InitializeFakes();
+    chromeos::NetworkHandler::Initialize();
+
     profile_ = std::make_unique<TestingProfile>();
     chromeos::SystemProxyClient::InitializeFake();
     system_proxy_manager_ = std::make_unique<SystemProxyManager>(
@@ -93,7 +99,10 @@ class SystemProxyManagerTest : public testing::Test {
 
   void TearDown() override {
     system_proxy_manager_->StopObservingPrimaryProfilePrefs();
+    system_proxy_manager_.reset();
     chromeos::SystemProxyClient::Shutdown();
+    chromeos::NetworkHandler::Shutdown();
+    chromeos::shill_clients::Shutdown();
   }
 
  protected:
@@ -124,28 +133,6 @@ class SystemProxyManagerTest : public testing::Test {
   chromeos::ScopedStubInstallAttributes test_install_attributes_;
 };
 
-// Verifies that System-proxy is configured with the system traffic credentials
-// set by |kSystemProxySettings| policy.
-TEST_F(SystemProxyManagerTest, SetAuthenticationDetails) {
-  EXPECT_EQ(0, client_test_interface()->GetSetAuthenticationDetailsCallCount());
-
-  SetPolicy(true /* system_proxy_enabled */, "" /* system_services_username */,
-            "" /* system_services_password */);
-  // Don't send empty credentials.
-  EXPECT_EQ(1, client_test_interface()->GetSetAuthenticationDetailsCallCount());
-
-  SetPolicy(true /* system_proxy_enabled */, kSystemServicesUsername,
-            kSystemServicesPassword);
-  EXPECT_EQ(2, client_test_interface()->GetSetAuthenticationDetailsCallCount());
-
-  system_proxy::SetAuthenticationDetailsRequest request =
-      client_test_interface()->GetLastAuthenticationDetailsRequest();
-
-  ASSERT_TRUE(request.has_credentials());
-  EXPECT_EQ(kSystemServicesUsername, request.credentials().username());
-  EXPECT_EQ(kSystemServicesPassword, request.credentials().password());
-}
-
 // Verifies requests to shut down are sent to System-proxy according to the
 // |kSystemProxySettings| policy.
 TEST_F(SystemProxyManagerTest, ShutDownDaemon) {
@@ -160,22 +147,35 @@ TEST_F(SystemProxyManagerTest, ShutDownDaemon) {
 // Tests that |SystemProxyManager| sends the correct Kerberos details and
 // updates to System-proxy.
 TEST_F(SystemProxyManagerTest, KerberosConfig) {
+  int expected_set_auth_details_call_count = 0;
   SetPolicy(true /* system_proxy_enabled */, "" /* system_services_username */,
             "" /* system_services_password */);
+  EXPECT_EQ(++expected_set_auth_details_call_count,
+            client_test_interface()->GetSetAuthenticationDetailsCallCount());
+
   local_state_.Get()->SetBoolean(prefs::kKerberosEnabled, true);
-  EXPECT_EQ(2, client_test_interface()->GetSetAuthenticationDetailsCallCount());
+  EXPECT_EQ(++expected_set_auth_details_call_count,
+            client_test_interface()->GetSetAuthenticationDetailsCallCount());
 
   system_proxy::SetAuthenticationDetailsRequest request =
       client_test_interface()->GetLastAuthenticationDetailsRequest();
   EXPECT_FALSE(request.has_credentials());
   EXPECT_TRUE(request.kerberos_enabled());
+  EXPECT_EQ(request.traffic_type(), system_proxy::TrafficOrigin::SYSTEM);
 
   // Set an active principal name.
   profile_->GetPrefs()->SetString(prefs::kKerberosActivePrincipalName,
                                   kKerberosActivePrincipalName);
-  EXPECT_EQ(3, client_test_interface()->GetSetAuthenticationDetailsCallCount());
+  EXPECT_EQ(++expected_set_auth_details_call_count,
+            client_test_interface()->GetSetAuthenticationDetailsCallCount());
+
+  profile_->GetPrefs()->SetBoolean(arc::prefs::kArcEnabled, true);
+  EXPECT_EQ(++expected_set_auth_details_call_count,
+            client_test_interface()->GetSetAuthenticationDetailsCallCount());
+
   request = client_test_interface()->GetLastAuthenticationDetailsRequest();
   EXPECT_EQ(kKerberosActivePrincipalName, request.active_principal_name());
+  EXPECT_EQ(request.traffic_type(), system_proxy::TrafficOrigin::ALL);
 
   // Remove the active principal name.
   profile_->GetPrefs()->SetString(prefs::kKerberosActivePrincipalName, "");
@@ -269,6 +269,16 @@ TEST_F(SystemProxyManagerTest, UserCredentialsRequestedFromNetworkService) {
   ASSERT_TRUE(request.has_credentials());
   EXPECT_EQ(kBrowserUsername, request.credentials().username());
   EXPECT_EQ(kBrowserPassword, request.credentials().password());
+  EXPECT_EQ(request.traffic_type(), system_proxy::TrafficOrigin::SYSTEM);
+
+  // Enable ARC and verify that the credentials are sent both for user and
+  // system traffic.
+  profile_->GetPrefs()->SetBoolean(arc::prefs::kArcEnabled, true);
+  task_environment_.RunUntilIdle();
+  client_test_interface()->SendAuthenticationRequiredSignal(details);
+  task_environment_.RunUntilIdle();
+  request = client_test_interface()->GetLastAuthenticationDetailsRequest();
+  EXPECT_EQ(request.traffic_type(), system_proxy::TrafficOrigin::ALL);
 }
 
 // Tests that |SystemProxyManager| sends requests to start and shut down the

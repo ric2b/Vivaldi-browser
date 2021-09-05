@@ -501,31 +501,30 @@ ExtensionActionSetBadgeBackgroundColorFunction::RunExtensionAction() {
 
 ExtensionFunction::ResponseAction
 ExtensionActionGetTitleFunction::RunExtensionAction() {
-  return RespondNow(OneArgument(
-      std::make_unique<base::Value>(extension_action_->GetTitle(tab_id_))));
+  return RespondNow(
+      OneArgument(base::Value(extension_action_->GetTitle(tab_id_))));
 }
 
 ExtensionFunction::ResponseAction
 ExtensionActionGetPopupFunction::RunExtensionAction() {
-  return RespondNow(OneArgument(std::make_unique<base::Value>(
-      extension_action_->GetPopupUrl(tab_id_).spec())));
+  return RespondNow(
+      OneArgument(base::Value(extension_action_->GetPopupUrl(tab_id_).spec())));
 }
 
 ExtensionFunction::ResponseAction
 ExtensionActionGetBadgeTextFunction::RunExtensionAction() {
-  // Return a placeholder value if the extension has called
-  // setActionCountAsBadgeText(true) and the badge count shown for this tab is
-  // the number of actions matched.
+  // Return a placeholder value if the extension has enabled using
+  // declarativeNetRequest action count as badge text and the badge count shown
+  // for this tab is the number of actions matched.
   std::string badge_text =
       extension_action_->UseDNRActionCountAsBadgeText(tab_id_)
           ? declarative_net_request::kActionCountPlaceholderBadgeText
           : extension_action_->GetExplicitlySetBadgeText(tab_id_);
 
   // TODO(crbug.com/990224): Document this behavior once
-  // chrome.declarativeNetRequest.setActionCountAsBadgeText is promoted to beta
+  // chrome.declarativeNetRequest.setExtensionActionOptions is promoted to beta
   // from trunk.
-  return RespondNow(
-      OneArgument(std::make_unique<base::Value>(std::move(badge_text))));
+  return RespondNow(OneArgument(base::Value(std::move(badge_text))));
 }
 
 ExtensionFunction::ResponseAction
@@ -536,7 +535,8 @@ ExtensionActionGetBadgeBackgroundColorFunction::RunExtensionAction() {
   list->AppendInteger(static_cast<int>(SkColorGetG(color)));
   list->AppendInteger(static_cast<int>(SkColorGetB(color)));
   list->AppendInteger(static_cast<int>(SkColorGetA(color)));
-  return RespondNow(OneArgument(std::move(list)));
+  return RespondNow(
+      OneArgument(base::Value::FromUniquePtrValue(std::move(list))));
 }
 
 BrowserActionOpenPopupFunction::BrowserActionOpenPopupFunction() = default;

@@ -9,7 +9,12 @@
 
 import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
 import 'chrome://resources/cr_elements/cr_dialog/cr_dialog.m.js';
+import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.m.js';
+import 'chrome://resources/cr_elements/shared_style_css.m.js';
+import 'chrome://resources/cr_elements/shared_vars_css.m.js';
+
 import {html, Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {TutorialCommon} from './tutorial_common.js';
 import {TutorialLesson} from './tutorial_lesson.js';
 
 /** @enum {string} */
@@ -64,6 +69,8 @@ Polymer({
 
   _template: html`{__html_template__}`,
 
+  behaviors: [TutorialCommon],
+
   properties: {
     curriculum: {
       type: String,
@@ -90,6 +97,8 @@ Polymer({
 
     numLessons: {type: Number, value: 0},
 
+    numLoadedLessons: {type: Number, value: 0},
+
     activeScreen: {type: String, observer: 'onActiveScreenChanged'},
 
     interactiveMode: {type: Boolean, value: false},
@@ -106,48 +115,12 @@ Polymer({
 
     isPracticeAreaActive: {type: Boolean, value: false},
 
-    // Labels and text content.
-
-    chooseYourExperience: {
-      type: String,
-      value: 'Choose your tutorial experience',
-    },
-    quickOrientation: {type: String, value: 'Quick orientation'},
-
-    essentialKeys: {type: String, value: 'Essential keys'},
-
-    navigation: {type: String, value: 'Navigation'},
-
-    commandReferences: {type: String, value: 'Command references'},
-
-    soundsAndSettings: {type: String, value: 'Sounds and settings'},
-
-    resources: {type: String, value: 'Resources'},
-
-    continue: {type: String, value: 'Continue where I left off'},
-
-    restartQuickOrientation: {type: String, value: 'Restart quick orientation'},
-
-    previousLesson: {type: String, value: 'Previous lesson'},
-
-    nextLesson: {type: String, value: 'Next lesson'},
-
-    mainMenu: {type: String, value: 'Main menu'},
-
-    lessonMenu: {type: String, value: 'All lessons'},
-
-    exitTutorial: {type: String, value: 'Exit tutorial'},
-
     lessonData: {
       type: Array,
       value: [
         {
-          title: 'Welcome to ChromeVox!',
-          content: [`Welcome to the ChromeVox tutorial. To exit this tutorial
-            at any time, press the Escape key on the top left corner
-            of the keyboard. To turn off ChromeVox, hold Control and Alt, and
-            press Z. When you're ready, use the spacebar to move to the next
-            lesson.`],
+          title: 'tutorial_welcome_heading',
+          content: ['tutorial_quick_orientation_intro_text'],
           medium: InteractionMedium.KEYBOARD,
           curriculums: [Curriculum.QUICK_ORIENTATION],
           actions: [
@@ -157,25 +130,21 @@ Polymer({
         },
 
         {
-          title: 'Essential Keys: Control',
-          content: [`Let's start with a few keys you'll use regularly: Control,
-            Shift, Search, and the Arrow keys. Find the Control key on the
-            bottom left corner of your keyboard. To continue, press the Control
-            key.`],
+          title: 'tutorial_quick_orientation_control_title',
+          content: ['tutorial_quick_orientation_control_text'],
           medium: InteractionMedium.KEYBOARD,
           curriculums: [Curriculum.QUICK_ORIENTATION],
-          actions: [
-            {type: 'key_sequence', value: {keys: {keyCode: [17 /* Ctrl */]}}}
-          ],
+          actions: [{
+            type: 'key_sequence',
+            value: {keys: {keyCode: [17 /* Ctrl */]}},
+            shouldPropagate: false
+          }],
           autoInteractive: true,
         },
 
         {
-          title: 'Essential Keys: Shift',
-          content: [`The Control key can be used at any time to temporarily stop
-            ChromeVox from speaking. Now, find the left Shift key, which is
-            directly above the Control key. To continue, press the left Shift
-            key.`],
+          title: 'tutorial_quick_orientation_shift_title',
+          content: ['tutorial_quick_orientation_shift_text'],
           medium: InteractionMedium.KEYBOARD,
           curriculums: [Curriculum.QUICK_ORIENTATION],
           actions: [
@@ -185,31 +154,22 @@ Polymer({
         },
 
         {
-          title: 'Essential Keys: Search',
-          content:
-              [`We'll talk more about the Shift key in later lessons, as it is
-            used in many ChromeVox commands. Next, you’ll learn about the
-            Search key. The Search key is used in combination with other keys
-            for ChromeVox commands. The Search key is immediately above the
-            left Shift key. To continue, press the Search key.`],
+          title: 'tutorial_quick_orientation_search_title',
+          content: ['tutorial_quick_orientation_search_text'],
           medium: InteractionMedium.KEYBOARD,
           curriculums: [Curriculum.QUICK_ORIENTATION],
           actions: [{
             type: 'key_sequence',
             value: {skipStripping: false, keys: {keyCode: [91 /* Search */]}},
-            afterActionMsg: 'You found the search key!',
           }],
           autoInteractive: true,
         },
 
         {
-          title: 'Basic navigation',
+          title: 'tutorial_quick_orientation_basic_navigation_title',
           content: [
-            `Now you’ll learn some basic navigation. You can hold Search and
-              press the arrow keys to move around the screen. To continue,
-              press Search + Right arrow.`,
-            `If you reach an item you want to click, press Search + Space.
-              Try it now to continue.`,
+            'tutorial_quick_orientation_basic_navigation_move_text',
+            'tutorial_quick_orientation_basic_navigation_click_text'
           ],
           medium: InteractionMedium.KEYBOARD,
           curriculums: [Curriculum.QUICK_ORIENTATION],
@@ -217,40 +177,30 @@ Polymer({
             {
               type: 'key_sequence',
               value: {cvoxModifier: true, keys: {keyCode: [39]}},
-              afterActionMsg: 'Great! You pressed Search + right arrow.'
             },
             {
               type: 'key_sequence',
               value: {cvoxModifier: true, keys: {keyCode: [32]}},
-              afterActionMsg: 'Great! You pressed Search + space',
             }
           ],
           autoInteractive: true,
         },
 
         {
-          title: 'Tab Navigation',
-          content: [
-            `You can also use the Tab key to move to the next interactive item
-            on the screen. Find the Tab key, which is directly above the Search
-            key. To continue, press the Tab key.`
-          ],
+          title: 'tutorial_quick_orientation_tab_title',
+          content: ['tutorial_quick_orientation_tab_text'],
           medium: InteractionMedium.KEYBOARD,
           curriculums: [Curriculum.QUICK_ORIENTATION],
           actions: [{
             type: 'key_sequence',
             value: {keys: {keyCode: [9 /* Tab */]}},
-            afterActionMsg: 'Great, you found the tab key!'
           }],
           autoInteractive: true,
         },
 
         {
-          title: 'Tab Navigation Continued',
-          content: [
-            `You can use Shift + Tab to move to the previous interactive item.
-            To continue, press Shift + Tab. `
-          ],
+          title: 'tutorial_quick_orientation_shift_tab_title',
+          content: ['tutorial_quick_orientation_shift_tab_text'],
           medium: InteractionMedium.KEYBOARD,
           curriculums: [Curriculum.QUICK_ORIENTATION],
           actions: [{
@@ -261,10 +211,8 @@ Polymer({
         },
 
         {
-          title: 'Enter',
-          content: [`You can also press Enter to activate items. For example,
-            Enter can be used to submit text in a form. To continue, press
-            Enter.`],
+          title: 'tutorial_quick_orientation_enter_title',
+          content: ['tutorial_quick_orientation_enter_text'],
           medium: InteractionMedium.KEYBOARD,
           curriculums: [Curriculum.QUICK_ORIENTATION],
           actions: [
@@ -274,22 +222,16 @@ Polymer({
         },
 
         {
-          title: 'Drop-Down Lists',
+          title: 'tutorial_quick_orientation_lists_title',
           content: [
-            `There will be times when you need to select an item from a
-              drop-down list. To do so, first expand the list by pressing Enter
-              or Search + Space. Then use the Up and Down arrow keys to select
-              an item. Finally, collapse the list by pressing Enter or Search +
-              Space.`,
-            `You can try this out in the Practice Area. To continue, use Search
-              + Right or Tab to find the Next lesson button. Then press Search
-              + Space or Enter to activate.`
+            'tutorial_quick_orientation_lists_text',
+            'tutorial_quick_orientation_lists_continue_text'
           ],
           medium: InteractionMedium.KEYBOARD,
           curriculums: [Curriculum.QUICK_ORIENTATION],
-          practiceTitle: 'Practice area: Drop-down lists',
+          practiceTitle: 'tutorial_quick_orientation_lists_practice_title',
           practiceInstructions:
-              `Try selecting your favorite season from the list.`,
+              'tutorial_quick_orientation_lists_practice_instructions',
           practiceFile: 'selects',
           practiceState: {},
           events: [],
@@ -297,188 +239,82 @@ Polymer({
         },
 
         {
-          title: 'Quick orientation complete!',
+          title: 'tutorial_quick_orientation_complete_title',
           content: [
-            `Well done! You’ve learned the ChromeVox basics. You can go through
-              the tutorial again or exit this tutorial by finding and clicking
-              on a button below.`,
-            `After you set up your device, you can come back to this tutorial
-              and view more lessons by pressing Search + O, then T.`,
+            'tutorial_quick_orientation_complete_text',
+            'tutorial_quick_orientation_complete_additional_text'
           ],
           medium: InteractionMedium.KEYBOARD,
           curriculums: [Curriculum.QUICK_ORIENTATION],
         },
 
         {
-          title: 'On, Off, and Stop',
-          content: [
-            'To temporarily stop ChromeVox from speaking, press the Control ' +
-                'key.',
-            'To turn ChromeVox on or off, use Control+Alt+Z.',
-          ],
+          title: 'tutorial_on_off_heading',
+          content: ['tutorial_control', 'tutorial_on_off'],
           medium: InteractionMedium.KEYBOARD,
           curriculums: [Curriculum.ESSENTIAL_KEYS],
         },
 
         {
-          title: 'The ChromeVox Modifier Key',
-          content: [
-            'In ChromeVox, the Search key is the modifier key. ' +
-                'Most ChromeVox shortcuts start with the Search key. ' +
-                'You’ll also use the arrow keys for navigation.',
-            'On the Chromebook, the Search key is immediately above the ' +
-                'left Shift key.',
-          ],
+          title: 'tutorial_modifier_heading',
+          content: ['tutorial_modifier', 'tutorial_chromebook_search'],
           medium: InteractionMedium.KEYBOARD,
           curriculums: [Curriculum.ESSENTIAL_KEYS],
         },
 
         {
-          title: 'Basic Navigation',
-          content: [
-            'To move forward between items on a page, press Search + Right ' +
-                'Arrow, or Search + Left Arrow to jump back.',
-            'To go to the next line, press Search + Down Arrow. ' +
-                'To get to the previous line, use Search + Up Arrow.',
-            'If you reach an item you want to click, press Search + Space.',
-          ],
+          title: 'tutorial_basic_navigation_heading',
+          content: ['tutorial_basic_navigation'],
           medium: InteractionMedium.KEYBOARD,
           curriculums: [Curriculum.NAVIGATION],
-          practiceTitle: 'Basic Navigation Practice',
-          practiceInstructions:
-              'Try using basic navigation to navigate through the items ' +
-              'below. Find the button titled "Click me" and use Search ' +
-              '+ Space to click it. Then move to the next lesson.',
-          practiceFile: 'basic_navigation',
-          practiceState: {
-            goal: {click: false},
-          },
-          events: ['click'],
-          hints: [
-            'Try pressing Search + left/right arrow. The search key is' +
-                ' directly above the shift key',
-            'Press Search + Space to activate the current item.'
-          ],
         },
 
         {
-          title: 'Jump Commands',
+          title: 'tutorial_jump_heading',
           content: [
-            'Use jump commands to skip to specific types of elements.',
-            'To jump forward between headings, press Search + H, or to ' +
-                'jump backward, press Search + Shift + H.',
-            'To jump forward between buttons, press Search + B, or to ' +
-                'jump backward, press Search + Shift + B',
-            'To jump foorward beetween links, press Search + L, or to ' +
-                'jump backward, press Search + Shift + L'
+            'tutorial_jump',
+            'tutorial_jump_efficiency',
+            'tutorial_jump_more',
           ],
           medium: InteractionMedium.KEYBOARD,
           curriculums: [Curriculum.NAVIGATION],
-          practiceTitle: 'Jump Commands Practice',
-          practiceInstructions:
-              'Try using what you have learned to navigate by element type. ' +
-              'Notice that navigation wraps if you are on the first or ' +
-              'last element and press previous element or next element, ' +
-              'respectively.',
+          practiceTitle: 'tutorial_jump_practice_title',
+          practiceInstructions: 'tutorial_jump_practice_instructions',
           practiceFile: 'jump_commands',
-          practiceState: {
-            'first-heading': {focus: false},
-            'first-link': {focus: false},
-            'first-button': {focus: false},
-            'second-heading': {focus: false},
-            'second-link': {focus: false},
-            'second-button': {focus: false},
-            'last-heading': {focus: false},
-            'last-link': {focus: false},
-            'last-button': {focus: false},
-          },
-          events: ['focus'],
-          hints: [
-            'Try using search + h to move by header',
-            'Try using search + b to move by button',
-            'Try using search + l to move by link'
-          ],
+          practiceState: {},
+          events: [],
+          hints: []
         },
 
         {
-          title: 'The ChromeVox Menu',
+          title: 'tutorial_menus_heading',
           content: [
-            'To explore all ChromeVox commands and shortcuts, press ' +
-                'Search + Period, then use the Arrow keys to navigate the ' +
-                'menus, and Enter to activate a command. Return here by ' +
-                'pressing Search+o then t.',
+            'tutorial_menus',
           ],
           medium: InteractionMedium.KEYBOARD,
           curriculums: [Curriculum.COMMAND_REFERENCES]
         },
 
         {
-          title: 'Helpful Chrome Shortcuts',
+          title: 'tutorial_chrome_shortcuts_heading',
           content: [
-            'The next few shortcuts aren’t ChromeVox commands, but they are ' +
-                'still very useful for getting the most out of Chrome.',
-            'To navigate forward through actionable items like buttons and ' +
-                'links, press the Tab key. To navigate backwards, press ' +
-                'Shift+Tab.',
-            'To enter the Chrome browser address box, also called the ' +
-                'omnibox, press Control + L.',
-            'To open and go to a new tab automatically, press Control+T. ' +
-                'Your cursor will be in the omnibox.',
-            ' To close a tab, press Control+W.',
-            'To move forward between open tabs, use Control+Tab.',
-            'To open the Chrome browser menu, press Alt+F.',
-            'To open the full list of keyboard shortcuts, press ' +
-                'Control + Alt + /'
+            'tutorial_chrome_shortcuts',
+            'tutorial_chromebook_ctrl_forward',
           ],
           medium: InteractionMedium.KEYBOARD,
           curriculums: [Curriculum.COMMAND_REFERENCES]
         },
 
         {
-          title: 'Sounds',
-          content: [
-            'ChromeVox uses sounds to give you essential and additional ' +
-                'information. You can use these sounds to navigate more ' +
-                'quickly by learning what each sound means. Once you get ' +
-                'more comfortable, you can turn off verbose descriptions in ' +
-                'speech and rely on them for essential information about the ' +
-                'page. Here is a complete list of sounds and what they mean',
-          ],
+          title: 'tutorial_earcon_page_title',
+          content: ['tutorial_earcon_page_body'],
           medium: InteractionMedium.KEYBOARD,
           curriculums: [Curriculum.SOUNDS_AND_SETTINGS]
         },
 
         {
-          title: 'Text fields',
-          content: ['Text content for text fields lesson'],
-          medium: InteractionMedium.KEYBOARD,
-          curriculums: [Curriculum.NONE],
-          practiceTitle: 'Edit fields practice',
-          practiceInstructions:
-              'Try using what you have learned about text fields and edit ' +
-              'the text fields below.',
-          practiceFile: 'text_fields',
-          practiceState: {
-            input: {focus: false, input: false},
-            editable: {focus: false, input: false}
-          },
-          events: ['focus', 'input'],
-          hints: [
-            'Once you find an editable element, you can type normally.',
-            'Try editing the content you entered'
-          ]
-        },
-
-        {
-          title: 'Resources',
-          content: [
-            'You’ve learned the essentials to use ChromeVox successfully.  ' +
-                'Remember that you can open the ChromeVox command menu at ' +
-                'any time by pressing Search+Period. To learn even more ' +
-                'about ChromeVox and Chrome OS, visit the following articles.',
-            'If you are done with the tutorial, use ChromeVox to navigate ' +
-                'to the Quit button and click it.'
-          ],
+          title: 'tutorial_learn_more_heading',
+          content: ['tutorial_learn_more'],
           medium: InteractionMedium.KEYBOARD,
           curriculums: [Curriculum.RESOURCES],
         }
@@ -488,13 +324,21 @@ Polymer({
 
   /** @override */
   ready() {
-    document.addEventListener('keydown', this.onKeyDown.bind(this));
     this.hideAllScreens();
+    document.addEventListener('keydown', this.onKeyDown.bind(this));
+    this.addEventListener('lessonready', () => {
+      this.numLoadedLessons += 1;
+      if (this.numLoadedLessons === this.lessonData.length) {
+        this.buildEarconLesson();
+        this.buildLearnMoreLesson();
+        this.dispatchEvent(
+            new CustomEvent('readyfortesting', {composed: true}));
+      }
+    });
     this.$.lessonTemplate.addEventListener('dom-change', (evt) => {
       // Executes once all lessons have been added to the dom.
       this.show();
     });
-    this.$.tutorial.addEventListener('focus', this.onFocus.bind(this), true);
     this.addEventListener('startpractice', (evt) => {
       this.isPracticeAreaActive = true;
       this.startNudges(NudgeType.PRACTICE_AREA);
@@ -581,9 +425,6 @@ Polymer({
       // Read the title since initial focus gets placed on the first piece of
       // text content.
       this.readCurrentLessonTitle();
-    } else {
-      // Otherwise, automatically read current lesson content.
-      setTimeout(this.readCurrentLessonContent.bind(this), 1000);
     }
   },
 
@@ -602,9 +443,15 @@ Polymer({
 
   /** @private */
   showLessonMenu() {
-    this.activeScreen = Screen.LESSON_MENU;
-    this.createLessonShortcuts();
-    this.$.lessonMenuHeader.focus();
+    if (this.includedLessons.length === 1) {
+      // If there's only one lesson, immediately show it.
+      this.showLesson(0);
+      this.activeScreen = Screen.LESSON;
+    } else {
+      this.activeScreen = Screen.LESSON_MENU;
+      this.createLessonShortcuts();
+      this.$.lessonMenuHeader.focus();
+    }
   },
 
   /** @private */
@@ -650,10 +497,11 @@ Polymer({
     // Create shortcuts for each included lesson.
     let count = 1;
     for (const lesson of this.includedLessons) {
-      const button = document.createElement('cr-button');
-      button.addEventListener('click', this.showLesson.bind(this, count - 1));
-      button.textContent = lesson.title;
-      this.$.lessonShortcuts.appendChild(button);
+      const shortcut = document.createElement('cr-link-row');
+      shortcut.addEventListener('click', this.showLesson.bind(this, count - 1));
+      shortcut.label = this.getMsg(lesson.title);
+      shortcut.classList.add('hr');
+      this.$.lessonShortcuts.appendChild(shortcut);
       count += 1;
     }
   },
@@ -690,7 +538,8 @@ Polymer({
   shouldHideLessonMenuButton(activeScreen) {
     return !this.curriculum || this.curriculum === Curriculum.NONE ||
         activeScreen === Screen.MAIN_MENU ||
-        activeScreen === Screen.LESSON_MENU;
+        activeScreen === Screen.LESSON_MENU ||
+        this.includedLessons.length === 1;
   },
 
   /**
@@ -742,13 +591,16 @@ Polymer({
     return activeScreen !== Screen.LESSON_MENU;
   },
 
+  shouldHideNavSeparator(activeScreen) {
+    return activeScreen !== Screen.LESSON;
+  },
+
   /**
    * @param {Curriculum} curriculum
    * @return {string}
    * @private
    */
   computeLessonMenuHeader(curriculum) {
-    // TODO (akihiroota): localize. (http://crbug.com/1124068).
     let numLessons = 0;
     for (let i = 0; i < this.lessonData.length; ++i) {
       if (this.lessonData[i].curriculums.includes(curriculum)) {
@@ -761,8 +613,8 @@ Polymer({
       words[i] = words[i][0].toUpperCase() + words[i].substring(1);
     }
     const curriculumCopy = words.join(' ');
-    return `${curriculumCopy} Tutorial, ${numLessons} ${
-        numLessons > 1 ? 'Lessons' : 'Lesson'}`;
+    return this.getMsg(
+        'tutorial_lesson_menu_header', [curriculumCopy, numLessons]);
   },
 
   /** @private */
@@ -869,13 +721,10 @@ Polymer({
         this.requestFullyDescribe.bind(this),
         this.requestFullyDescribe.bind(this),
         this.requestFullyDescribe.bind(this),
-        maybeGiveNudge.bind(
-            this, 'Hint: Hold Search and press the arrow keys to navigate.'),
-        maybeGiveNudge.bind(
-            this, 'Hint: Press Search + Space to activate the current item.'),
+        maybeGiveNudge.bind(this, this.getMsg('tutorial_hint_navigate')),
+        maybeGiveNudge.bind(this, this.getMsg('tutorial_hint_click')),
         this.requestSpeech.bind(
-            this, 'Hint: Press Escape if you would like to exit this tutorial.',
-            QueueMode.INTERJECT)
+            this, this.getMsg('tutorial_hint_exit'), QueueMode.INTERJECT)
       ];
     } else {
       throw new Error('Invalid NudgeType: ' + type);
@@ -890,7 +739,6 @@ Polymer({
     }
   },
 
-  /** @private */
   restartNudges() {
     this.stopNudges();
     this.setNudgeInterval();
@@ -927,20 +775,6 @@ Polymer({
         new CustomEvent('requestfullydescribe', {composed: true}));
   },
 
-  /**
-   * @param {Event} evt
-   * @private
-   */
-  onFocus(evt) {
-    // Restart nudges whenever focus changes. Skip this for the practice area
-    // so nudges are given in regular intervals.
-    if (this.isPracticeAreaActive) {
-      return;
-    }
-
-    this.restartNudges();
-  },
-
   /** @return {!TutorialLesson} */
   getCurrentLesson() {
     return this.includedLessons[this.activeLessonIndex];
@@ -954,7 +788,7 @@ Polymer({
   readCurrentLessonTitle() {
     const lesson = this.getCurrentLesson();
     this.requestSpeech(
-        lesson.title, QueueMode.INTERJECT, {doNotInterrupt: true});
+        this.getMsg(lesson.title), QueueMode.INTERJECT, {doNotInterrupt: true});
   },
 
   /**
@@ -966,7 +800,95 @@ Polymer({
     const lesson = this.getCurrentLesson();
     for (const text of lesson.content) {
       // Queue lesson content so it is read after the lesson title.
-      this.requestSpeech(text, QueueMode.QUEUE);
+      this.requestSpeech(this.getMsg(text), QueueMode.QUEUE);
     }
+  },
+
+  /**
+   * @private
+   * @suppress {undefinedVars|missingProperties} For referencing
+   * EarconDescription, which is defined on the Panel window.
+   */
+  buildEarconLesson() {
+    const earconLesson = this.getLessonWithTitle('tutorial_earcon_page_title');
+    if (!earconLesson) {
+      throw new Error('Could not find the earcon lesson.');
+    }
+
+    // Add text and listeners.
+    for (const earconId in EarconDescription) {
+      const msgid = EarconDescription[earconId];
+      const earconElement = document.createElement('p');
+      earconElement.innerText = this.getMsg(msgid);
+      earconElement.setAttribute('tabindex', -1);
+      earconElement.addEventListener(
+          'focus', this.requestEarcon.bind(this, earconId));
+      earconLesson.contentDiv.appendChild(earconElement);
+    }
+  },
+
+  /**
+   * @param {string} earconId
+   * @private
+   */
+  requestEarcon(earconId) {
+    this.dispatchEvent(
+        new CustomEvent('requestearcon', {composed: true, detail: {earconId}}));
+  },
+
+  /** @private */
+  buildLearnMoreLesson() {
+    const learnMoreLesson =
+        this.getLessonWithTitle('tutorial_learn_more_heading');
+    if (!learnMoreLesson) {
+      throw new Error('Could not find the learn more lesson');
+    }
+
+    // Add links to resources.
+    const resources = [
+      {
+        msgId: 'next_command_reference',
+        link: 'https://www.chromevox.com/next_keyboard_shortcuts.html'
+      },
+      {
+        msgId: 'chrome_keyboard_shortcuts',
+        link: 'https://support.google.com/chromebook/answer/183101?hl=en'
+      },
+      {
+        msgId: 'touchscreen_accessibility',
+        link: 'https://support.google.com/chromebook/answer/6103702?hl=en'
+      },
+    ];
+    for (const resource of resources) {
+      const link = document.createElement('a');
+      link.innerText = this.getMsg(resource.msgId);
+      link.href = resource.link;
+      link.addEventListener('click', (evt) => {
+        this.stopNudges();
+        this.dispatchEvent(new CustomEvent(
+            'openUrl', {composed: true, detail: {url: link.href}}));
+        evt.preventDefault();
+        evt.stopPropagation();
+      });
+      learnMoreLesson.contentDiv.appendChild(link);
+      const br = document.createElement('br');
+      learnMoreLesson.contentDiv.appendChild(br);
+    }
+  },
+
+  /**
+   * Find and return a lesson with the given title message id.
+   * @param {string} titleMsgId The message id of the lesson's title
+   * @return {Element}
+   * @private
+   */
+  getLessonWithTitle(titleMsgId) {
+    const elements = this.$.lessonContainer.children;
+    for (const element of elements) {
+      if (element.is === 'tutorial-lesson' && element.title === titleMsgId) {
+        return element;
+      }
+    }
+    return null;
   }
 });

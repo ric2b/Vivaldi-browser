@@ -170,7 +170,7 @@ std::string ResolveRelative(const StringType& input,
                             const std::string& value,
                             bool as_file,
                             const std::string_view& source_root,
-                            const std::string_view& actual_path_in = NULL,
+                            const std::string_view& actual_path_in = {},
                             StringAtom* actual_path_out = NULL);
 
 // Resolves source file or directory relative to some given source root. Returns

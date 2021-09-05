@@ -4,7 +4,7 @@
 
 #include "base/macros.h"
 #include "base/time/time.h"
-#include "components/metrics/demographic_metrics_provider.h"
+#include "components/metrics/demographics/demographic_metrics_provider.h"
 #include "components/ukm/ukm_service.h"
 #import "ios/chrome/browser/metrics/metrics_app_interface.h"
 #import "ios/chrome/browser/ui/authentication/signin_earl_grey.h"
@@ -196,7 +196,7 @@ const metrics::UserDemographicsProto::Gender kTestGender =
                  @"The report should contain the specified user demographics");
 
   const int success =
-      static_cast<int>(syncer::UserDemographicsStatus::kSuccess);
+      static_cast<int>(metrics::UserDemographicsStatus::kSuccess);
   GREYAssertNil([MetricsAppInterface
                     expectUniqueSampleWithCount:1
                                       forBucket:success
@@ -250,7 +250,7 @@ const metrics::UserDemographicsProto::Gender kTestGender =
                  @"The report should contain the specified user demographics");
 
   const int success =
-      static_cast<int>(syncer::UserDemographicsStatus::kSuccess);
+      static_cast<int>(metrics::UserDemographicsStatus::kSuccess);
   GREYAssertNil([MetricsAppInterface
                     expectUniqueSampleWithCount:1
                                       forBucket:success

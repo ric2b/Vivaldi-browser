@@ -17,11 +17,11 @@
 <translation id="1369915414381695676">Nettstedet <ph name="SITE_NAME" /> er lagt til</translation>
 <translation id="1383876407941801731">Søk</translation>
 <translation id="1384959399684842514">Nedlastingen er satt på pause</translation>
+<translation id="1415402041810619267">Nettadressen er avkortet</translation>
 <translation id="1431402976894535801">Blokkér nettsteder fra å vite når du er til stede</translation>
 <translation id="1446450296470737166">Full kontroll over MIDI-enheter</translation>
 <translation id="1509960214886564027">Det kan hende at funksjoner på mange nettsteder slutter å fungere</translation>
 <translation id="1620510694547887537">Kamera</translation>
-<translation id="1647391597548383849">Tilgang til kameraet ditt</translation>
 <translation id="1660204651932907780">Tillat nettsteder å spille av lyd (anbefales)</translation>
 <translation id="1677097821151855053">Informasjonskapsler og andre nettstedsdata brukes til å huske deg, for eksempel for å logge deg på eller for å vise deg personlig tilpassede annonser. For å administrere informasjonskapsler for alle nettsteder, se <ph name="BEGIN_LINK" />Innstillinger<ph name="END_LINK" />.</translation>
 <translation id="1688867105868176567">Vil du fjerne nettstedsdata?</translation>
@@ -39,13 +39,13 @@
 <translation id="1994173015038366702">Nettadressen til nettstedet</translation>
 <translation id="2025115093177348061">Utvidet virkelighet</translation>
 <translation id="2030769033451695672">Trykk for å gå tilbake til <ph name="URL_OF_THE_CURRENT_TAB" /></translation>
+<translation id="2054665754582400095">Tilstedeværelsen din</translation>
 <translation id="2079545284768500474">Angre</translation>
 <translation id="2091887806945687916">Lyd</translation>
 <translation id="2107397443965016585">Spør før nettsteder får tillatelse til å spille beskyttet innhold (anbefalt)</translation>
 <translation id="2146738493024040262">Åpne instant-appen</translation>
 <translation id="2148716181193084225">I dag</translation>
 <translation id="2182457891543959921">Spør før nettsteder får lage 3D-kart av omgivelsene dine eller spore kameraposisjonen (anbefales)</translation>
-<translation id="2187243482123994665">Brukertilstedeværelse</translation>
 <translation id="2212565012507486665">Tillat informasjonskapsler</translation>
 <translation id="2228071138934252756">For å gi <ph name="APP_NAME" /> tilgang til kameraet må du også slå på kameraet i <ph name="BEGIN_LINK" />Android-innstillingene<ph name="END_LINK" />.</translation>
 <translation id="2241634353105152135">Bare én gang</translation>
@@ -55,7 +55,6 @@
 <translation id="2402980924095424747"><ph name="MEGABYTES" /> MB</translation>
 <translation id="2404630663942400771">{PERMISSIONS_SUMMARY_ALLOWED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> og <ph name="NUM_MORE" /> til er tillatt}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> og <ph name="NUM_MORE" /> til er tillatt}}</translation>
 <translation id="2434158240863470628">Nedlasting fullført <ph name="SEPARATOR" /> <ph name="BYTES_DOWNLOADED" /></translation>
-<translation id="2440823041667407902">Posisjonstilgang</translation>
 <translation id="2482878487686419369">Varsler</translation>
 <translation id="2490684707762498678">Administreres av <ph name="APP_NAME" /></translation>
 <translation id="2498359688066513246">Hjelp og tilbakemelding</translation>
@@ -89,6 +88,7 @@
 <translation id="3227137524299004712">Mikrofon</translation>
 <translation id="3277252321222022663">Gi nettsteder tilgang til sensorer (anbefalt)</translation>
 <translation id="3295602654194328831">Skjul informasjonen</translation>
+<translation id="3328801116991980348">Informasjon om nettstedet</translation>
 <translation id="3333961966071413176">Alle kontakter</translation>
 <translation id="3386292677130313581">Spør før nettsteder får vite posisjonen min (anbefales)</translation>
 <translation id="3538390592868664640">Blokkér nettsteder fra å lage 3D-kart av omgivelsene dine eller spore kameraposisjonen</translation>
@@ -122,6 +122,7 @@
 <translation id="445467742685312942">Tillat at nettsteder kan spille beskyttet innhold</translation>
 <translation id="4468959413250150279">Kutt lyden for et bestemt nettsted.</translation>
 <translation id="4479647676395637221">Spør før nettsteder får bruke kameraet (anbefales)</translation>
+<translation id="4505788138578415521">Nettadressen er utvidet</translation>
 <translation id="4534723447064627427">For å gi <ph name="APP_NAME" /> tilgang til mikrofonen må du også slå på mikrofonen i <ph name="BEGIN_LINK" />Android-innstillingene<ph name="END_LINK" />.</translation>
 <translation id="4570913071927164677">Detaljer</translation>
 <translation id="4645575059429386691">Administreres av foreldrene dine</translation>
@@ -303,7 +304,6 @@
 <translation id="9074739597929991885">Bluetooth</translation>
 <translation id="9109747640384633967">{PERMISSIONS_SUMMARY_MIXED,plural, =1{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> og <ph name="NUM_MORE" /> til}other{<ph name="PERMISSION_1" />, <ph name="PERMISSION_2" /> og <ph name="NUM_MORE" /> til}}</translation>
 <translation id="913657688200966289">Slå på tillatelser for <ph name="APP_NAME" /> i <ph name="BEGIN_LINK" />Android-innstillingene<ph name="END_LINK" />.</translation>
-<translation id="945632385593298557">Tilgang til mikrofonen din</translation>
 <translation id="965817943346481315">Blokkér hvis nettstedet viser forstyrrende eller villedende annonser (anbefalt)</translation>
 <translation id="967624055006145463">Lagrede data</translation>
 </translationbundle>

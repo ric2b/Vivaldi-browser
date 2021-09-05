@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/optional.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/unguessable_token.h"
@@ -20,6 +20,7 @@
 #include "content/public/common/navigation_policy.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/test/mock_render_thread.h"
+#include "content/public/test/policy_container_utils.h"
 #include "content/renderer/loader/web_url_loader_impl.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -94,11 +95,6 @@ class MockFrameHost : public mojom::FrameHost {
     }
   }
 
-  void ShowCreatedWindow(int32_t pending_widget_routing_id,
-                         WindowOpenDisposition disposition,
-                         const gfx::Rect& initial_rect,
-                         bool user_gesture) override {}
-
   void set_overlay_routing_token(const base::UnguessableToken& token) {
     overlay_routing_token_ = token;
   }
@@ -129,31 +125,32 @@ class MockFrameHost : public mojom::FrameHost {
     return true;
   }
 
-  bool CreateNewWidget(
+  void CreateNewPopupWidget(
+      mojo::PendingAssociatedReceiver<blink::mojom::PopupWidgetHost>
+          blink_popup_widget_host,
       mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
           blink_widget_host,
-      mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget,
-      int32_t* out_routing_id) override {
+      mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget)
+      override {}
+
+  void CreateChildFrame(
+      int new_routing_id,
+      mojo::PendingReceiver<service_manager::mojom::InterfaceProvider>
+          interface_provider_receiver,
+      mojo::PendingReceiver<blink::mojom::BrowserInterfaceBroker>
+          browser_interface_broker_receiver,
+      blink::mojom::TreeScopeType scope,
+      const std::string& frame_name,
+      const std::string& frame_unique_name,
+      bool is_created_by_script,
+      const blink::FramePolicy& frame_policy,
+      blink::mojom::FrameOwnerPropertiesPtr frame_owner_properties,
+      blink::mojom::FrameOwnerElementType owner_type) override {
     MockRenderThread* mock_render_thread =
         static_cast<MockRenderThread*>(RenderThread::Get());
-    *out_routing_id = mock_render_thread->GetNextRoutingID();
-    return true;
-  }
-
-  void CreateNewWidget(
-      mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
-          blink_widget_host,
-      mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget,
-      CreateNewWidgetCallback callback) override {
-    std::move(callback).Run(MSG_ROUTING_NONE);
-  }
-
-  void CreateNewFullscreenWidget(
-      mojo::PendingAssociatedReceiver<blink::mojom::WidgetHost>
-          blink_widget_host,
-      mojo::PendingAssociatedRemote<blink::mojom::Widget> blink_widget,
-      CreateNewFullscreenWidgetCallback callback) override {
-    std::move(callback).Run(MSG_ROUTING_NONE);
+    mock_render_thread->OnCreateChildFrame(
+        new_routing_id, std::move(interface_provider_receiver),
+        std::move(browser_interface_broker_receiver));
   }
 
   void CreatePortal(mojo::PendingAssociatedReceiver<blink::mojom::Portal>,
@@ -208,7 +205,7 @@ class MockFrameHost : public mojom::FrameHost {
 
   void FrameSizeChanged(const gfx::Size& frame_size) override {}
 
-  void UpdateState(const PageState& state) override {
+  void UpdateState(const blink::PageState& state) override {
     is_page_state_updated_ = true;
   }
 
@@ -285,8 +282,9 @@ void TestRenderFrame::Navigate(network::mojom::URLResponseHeadPtr head,
   BindNavigationClient(
       mock_navigation_client_.BindNewEndpointAndPassDedicatedReceiver());
   std::unique_ptr<blink::PendingURLLoaderFactoryBundle> pending_factory_bundle =
-      ChildPendingURLLoaderFactoryBundle::CreateFromDefaultFactoryImpl(
+      blink::ChildPendingURLLoaderFactoryBundle::CreateFromDefaultFactoryImpl(
           std::make_unique<network::NotImplementedURLLoaderFactory>());
+
   CommitNavigation(std::move(common_params), std::move(commit_params),
                    std::move(head), mojo::ScopedDataPipeConsumerHandle(),
                    network::mojom::URLLoaderClientEndpointsPtr(),
@@ -295,6 +293,7 @@ void TestRenderFrame::Navigate(network::mojom::URLResponseHeadPtr head,
                    blink::mojom::ServiceWorkerContainerInfoForClientPtr(),
                    mojo::NullRemote() /* prefetch_loader_factory */,
                    base::UnguessableToken::Create(),
+                   CreateStubPolicyContainer(),
                    base::BindOnce(&MockFrameHost::DidCommitProvisionalLoad,
                                   base::Unretained(mock_frame_host_.get())));
 }
@@ -315,7 +314,7 @@ void TestRenderFrame::NavigateWithError(
   BindNavigationClient(
       mock_navigation_client_.BindNewEndpointAndPassDedicatedReceiver());
   std::unique_ptr<blink::PendingURLLoaderFactoryBundle> pending_factory_bundle =
-      ChildPendingURLLoaderFactoryBundle::CreateFromDefaultFactoryImpl(
+      blink::ChildPendingURLLoaderFactoryBundle::CreateFromDefaultFactoryImpl(
           std::make_unique<network::NotImplementedURLLoaderFactory>());
   mock_navigation_client_->CommitFailedNavigation(
       std::move(common_params), std::move(commit_params),

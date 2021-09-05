@@ -5,10 +5,13 @@
 #include "chrome/browser/enterprise/reporting/report_scheduler_desktop.h"
 
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/enterprise/reporting/extension_request/extension_request_report_throttler.h"
 #include "chrome/browser/enterprise/reporting/prefs.h"
 #include "chrome/browser/upgrade_detector/build_state.h"
 #include "chrome/common/chrome_constants.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
 
@@ -17,6 +20,8 @@ namespace em = enterprise_management;
 namespace enterprise_reporting {
 
 namespace {
+
+constexpr int kThrottleTimeInMinute = 1;
 
 // Returns true if this build should generate basic reports when an update is
 // detected.
@@ -28,6 +33,11 @@ constexpr bool ShouldReportUpdates() {
 #else
   return true;
 #endif
+}
+
+bool ShouldReportExtensionRequestRealtime() {
+  return base::FeatureList::IsEnabled(
+      features::kEnterpriseRealtimeExtensionRequest);
 }
 
 }  // namespace
@@ -43,6 +53,7 @@ ReportSchedulerDesktop::~ReportSchedulerDesktop() {
   // stale profiles and 0.72% reporting a single stale profile.
   if (ShouldReportUpdates())
     g_browser_process->GetBuildState()->RemoveObserver(this);
+  ExtensionRequestReportThrottler::Get()->Disable();
 }
 
 PrefService* ReportSchedulerDesktop::GetLocalState() {
@@ -80,11 +91,36 @@ void ReportSchedulerDesktop::StopWatchingUpdates() {
   }
 }
 
-void ReportSchedulerDesktop::SaveLastUploadVersion() {
+void ReportSchedulerDesktop::OnBrowserVersionUploaded() {
   if (ShouldReportUpdates()) {
     // Remember what browser version made this upload.
     GetLocalState()->SetString(kLastUploadVersion, chrome::kChromeVersion);
   }
+}
+
+void ReportSchedulerDesktop::StartWatchingExtensionRequestIfNeeded() {
+  if (!ShouldReportExtensionRequestRealtime())
+    return;
+
+  // On CrOS, the function may be called twice during startup.
+  if (ExtensionRequestReportThrottler::Get()->IsEnabled())
+    return;
+
+  ExtensionRequestReportThrottler::Get()->Enable(
+      base::TimeDelta::FromMinutes(kThrottleTimeInMinute),
+      base::BindRepeating(&ReportSchedulerDesktop::TriggerExtensionRequest,
+                          base::Unretained(this)));
+}
+
+void ReportSchedulerDesktop::StopWatchingExtensionRequest() {
+  ExtensionRequestReportThrottler::Get()->Disable();
+}
+
+void ReportSchedulerDesktop::OnExtensionRequestUploaded() {
+  auto* extension_request_report_throttler =
+      ExtensionRequestReportThrottler::Get();
+  if (extension_request_report_throttler->IsEnabled())
+    extension_request_report_throttler->OnExtensionRequestUploaded();
 }
 
 void ReportSchedulerDesktop::OnUpdate(const BuildState* build_state) {
@@ -95,6 +131,13 @@ void ReportSchedulerDesktop::OnUpdate(const BuildState* build_state) {
   if (!trigger_report_callback_.is_null()) {
     trigger_report_callback_.Run(
         ReportScheduler::ReportTrigger::kTriggerUpdate);
+  }
+}
+
+void ReportSchedulerDesktop::TriggerExtensionRequest() {
+  if (!trigger_report_callback_.is_null()) {
+    trigger_report_callback_.Run(
+        ReportScheduler::ReportTrigger::kTriggerExtensionRequest);
   }
 }
 

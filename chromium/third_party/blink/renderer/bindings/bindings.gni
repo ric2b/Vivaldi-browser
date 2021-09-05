@@ -79,8 +79,6 @@ bindings_core_v8_files =
                     "core/v8/script_custom_element_definition_data.h",
                     "core/v8/script_evaluation_result.cc",
                     "core/v8/script_evaluation_result.h",
-                    "core/v8/script_event_listener.cc",
-                    "core/v8/script_event_listener.h",
                     "core/v8/script_function.cc",
                     "core/v8/script_function.h",
                     "core/v8/script_iterator.cc",
@@ -180,6 +178,7 @@ bindings_dir = get_path_info(".", "abspath")
 blink_output_dir = "$root_gen_dir/third_party/blink/renderer"
 bindings_output_dir = "$root_gen_dir/third_party/blink/renderer/bindings"
 bindings_core_v8_output_dir = "$bindings_output_dir/core/v8"
+web_idl_database_filepath = "${bindings_output_dir}/web_idl_database.pickle"
 
 bindings_unittest_files =
     get_path_info(

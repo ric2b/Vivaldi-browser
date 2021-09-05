@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/platform/web_http_body.h"
 #include "third_party/blink/public/platform/web_security_origin.h"
 #include "third_party/blink/public/platform/web_string.h"
@@ -64,10 +65,6 @@ class MultiResolutionImageResourceFetcher::ClientImpl
   void DidReceiveResponse(const WebURLResponse& response) override {
     DCHECK(!completed_);
     response_ = response;
-  }
-  void DidReceiveCachedMetadata(const char* data, int data_length) override {
-    DCHECK(!completed_);
-    DCHECK_GT(data_length, 0);
   }
   void DidReceiveData(const char* data, int data_length) override {
     // The WebAssociatedURLLoader will continue after a load failure.
@@ -196,7 +193,7 @@ void MultiResolutionImageResourceFetcher::SetLoaderOptions(
 
 void MultiResolutionImageResourceFetcher::Start(
     LocalFrame* frame,
-    mojom::RequestContextType request_context,
+    mojom::blink::RequestContextType request_context,
     network::mojom::RequestMode request_mode,
     network::mojom::CredentialsMode credentials_mode,
     StartCallback callback) {

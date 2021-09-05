@@ -115,6 +115,10 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
     private static final String PREF_CONTEXTUAL_SEARCH = "contextual_search";
     @VisibleForTesting
     public static final String PREF_AUTOFILL_ASSISTANT = "autofill_assistant";
+    @VisibleForTesting
+    public static final String PREF_AUTOFILL_ASSISTANT_SUBSECTION = "autofill_assistant_subsection";
+    @VisibleForTesting
+    public static final String PREF_METRICS_SETTINGS = "metrics_settings";
 
     private static final int REQUEST_CODE_TRUSTED_VAULT_KEY_RETRIEVAL = 1;
 
@@ -152,7 +156,7 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
 
     private @SyncError int mCurrentSyncError = SyncError.NO_ERROR;
 
-    private boolean mIsSecurityPreferenceRemoved;
+    private boolean mIsSafeBrowsingPreferenceRemoved;
 
     /**
      * Creates an argument bundle for this fragment.
@@ -213,11 +217,11 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
         PreferenceCategory servicesCategory =
                 (PreferenceCategory) findPreference(PREF_SERVICES_CATEGORY);
 
-        // If security section UI is enabled, Safe Browsing related preferences will be moved to a
-        // dedicated "Security" preference page.
-        mIsSecurityPreferenceRemoved =
-                ChromeFeatureList.isEnabled(ChromeFeatureList.SAFE_BROWSING_SECURITY_SECTION_UI);
-        if (mIsSecurityPreferenceRemoved) {
+        // If Safe Browsing section UI is enabled, Safe Browsing related preferences will be moved
+        // to a dedicated "Safe Browsing" preference page.
+        mIsSafeBrowsingPreferenceRemoved =
+                ChromeFeatureList.isEnabled(ChromeFeatureList.SAFE_BROWSING_SECTION_UI);
+        if (mIsSafeBrowsingPreferenceRemoved) {
             removePreference(servicesCategory, findPreference(PREF_SAFE_BROWSING));
             removePreference(servicesCategory, findPreference(PREF_PASSWORD_LEAK_DETECTION));
             removePreference(servicesCategory, findPreference(PREF_SAFE_BROWSING_SCOUT_REPORTING));
@@ -240,6 +244,11 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
             mSafeBrowsingReporting.setManagedPreferenceDelegate(mManagedPreferenceDelegate);
         }
 
+        // If the metrics-settings-android flag is not enabled, remove the corresponding element.
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.METRICS_SETTINGS_ANDROID)) {
+            removePreference(servicesCategory, findPreference(PREF_METRICS_SETTINGS));
+        }
+
         mUsageAndCrashReporting =
                 (ChromeSwitchPreference) findPreference(PREF_USAGE_AND_CRASH_REPORTING);
         mUsageAndCrashReporting.setOnPreferenceChangeListener(this);
@@ -251,7 +260,15 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
         mUrlKeyedAnonymizedData.setManagedPreferenceDelegate(mManagedPreferenceDelegate);
 
         mAutofillAssistant = (ChromeSwitchPreference) findPreference(PREF_AUTOFILL_ASSISTANT);
-        if (shouldShowAutofillAssistantPreference()) {
+        Preference autofillAssistantSubsection = findPreference(PREF_AUTOFILL_ASSISTANT_SUBSECTION);
+        // Assistant autofill/voicesearch both live in the sub-section. If either one of them is
+        // enabled, then the subsection should show.
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.AUTOFILL_ASSISTANT_PROACTIVE_HELP)
+                || ChromeFeatureList.isEnabled(ChromeFeatureList.OMNIBOX_ASSISTANT_VOICE_SEARCH)) {
+            removePreference(servicesCategory, mAutofillAssistant);
+            mAutofillAssistant = null;
+            autofillAssistantSubsection.setVisible(true);
+        } else if (shouldShowAutofillAssistantPreference()) {
             mAutofillAssistant.setOnPreferenceChangeListener(this);
             mAutofillAssistant.setManagedPreferenceDelegate(mManagedPreferenceDelegate);
         } else {
@@ -330,7 +347,6 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
     public void onStart() {
         super.onStart();
         mProfileSyncService.addSyncStateChangedListener(this);
-        mSigninPreference.registerForUpdates();
 
         if (!mIsFromSigninScreen
                 || IdentityServicesProvider.get()
@@ -356,7 +372,6 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
     public void onStop() {
         super.onStop();
 
-        mSigninPreference.unregisterForUpdates();
         mProfileSyncService.removeSyncStateChangedListener(this);
     }
 
@@ -382,17 +397,17 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
         } else if (PREF_SEARCH_SUGGESTIONS.equals(key)) {
             mPrefService.setBoolean(Pref.SEARCH_SUGGEST_ENABLED, (boolean) newValue);
         } else if (PREF_SAFE_BROWSING.equals(key)) {
-            assert !mIsSecurityPreferenceRemoved;
+            assert !mIsSafeBrowsingPreferenceRemoved;
             mPrefService.setBoolean(Pref.SAFE_BROWSING_ENABLED, (boolean) newValue);
             // Toggling the safe browsing preference impacts the leak detection and the
             // safe browsing reporting preferences as well.
             PostTask.postTask(UiThreadTaskTraits.DEFAULT,
                     this::updateLeakDetectionAndSafeBrowsingReportingPreferences);
         } else if (PREF_PASSWORD_LEAK_DETECTION.equals(key)) {
-            assert !mIsSecurityPreferenceRemoved;
+            assert !mIsSafeBrowsingPreferenceRemoved;
             mPrefService.setBoolean(Pref.PASSWORD_LEAK_DETECTION_ENABLED, (boolean) newValue);
         } else if (PREF_SAFE_BROWSING_SCOUT_REPORTING.equals(key)) {
-            assert !mIsSecurityPreferenceRemoved;
+            assert !mIsSafeBrowsingPreferenceRemoved;
             SafeBrowsingBridge.setSafeBrowsingExtendedReportingEnabled((boolean) newValue);
         } else if (PREF_NAVIGATION_ERROR.equals(key)) {
             mPrefService.setBoolean(Pref.ALTERNATE_ERROR_PAGES_ENABLED, (boolean) newValue);
@@ -573,7 +588,7 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
 
         mSearchSuggestions.setChecked(mPrefService.getBoolean(Pref.SEARCH_SUGGEST_ENABLED));
         mNavigationError.setChecked(mPrefService.getBoolean(Pref.ALTERNATE_ERROR_PAGES_ENABLED));
-        if (!mIsSecurityPreferenceRemoved) {
+        if (!mIsSafeBrowsingPreferenceRemoved) {
             mSafeBrowsing.setChecked(mPrefService.getBoolean(Pref.SAFE_BROWSING_ENABLED));
             updateLeakDetectionAndSafeBrowsingReportingPreferences();
         }
@@ -644,7 +659,7 @@ public class SyncAndServicesSettings extends PreferenceFragmentCompat
      * its appearance needs to be updated. The same goes for safe browsing reporting.
      */
     private void updateLeakDetectionAndSafeBrowsingReportingPreferences() {
-        assert !mIsSecurityPreferenceRemoved;
+        assert !mIsSafeBrowsingPreferenceRemoved;
         boolean safe_browsing_enabled = mPrefService.getBoolean(Pref.SAFE_BROWSING_ENABLED);
         mSafeBrowsingReporting.setEnabled(safe_browsing_enabled);
         mSafeBrowsingReporting.setChecked(safe_browsing_enabled

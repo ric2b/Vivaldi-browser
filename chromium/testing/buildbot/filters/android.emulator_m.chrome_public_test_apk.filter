@@ -42,6 +42,9 @@
 # crbug.com/1061214
 -org.chromium.chrome.browser.customtabs.CustomTabActivityTest.testHiddenTabAndChangingFragmentDontWait
 
+# crbug.com/1036553
+-org.chromium.chrome.browser.translate.TranslateIntentTest.*
+
 # crbug.com/1041233
 -org.chromium.chrome.browser.gesturenav.NavigationHandlerTest.testSwipeNavigateOnNativePage
 -org.chromium.chrome.browser.gesturenav.NavigationHandlerTest.testSwipeNavigateOnRenderedPage
@@ -79,3 +82,6 @@
 # crbug.com/1130621
 -org.chromium.chrome.features.start_surface.StartSurfaceLayoutTest.testShowOnlyOneTabSuggestionMessageCard_withSoftCleanup
 -org.chromium.chrome.features.start_surface.StartSurfaceLayoutTest.testShowOnlyOneTabSuggestionMessageCard_withHardCleanup
+
+# crbug.com/1146477
+-org.chromium.chrome.browser.autofill.AutofillUpstreamTest.testSaveCardInfoBarWithEmptyMonthAndYear

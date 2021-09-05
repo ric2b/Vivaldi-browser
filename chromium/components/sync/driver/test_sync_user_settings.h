@@ -48,7 +48,6 @@ class TestSyncUserSettings : public SyncUserSettings {
 
   bool IsEncryptEverythingAllowed() const override;
   bool IsEncryptEverythingEnabled() const override;
-  void EnableEncryptEverything() override;
 
   syncer::ModelTypeSet GetEncryptedDataTypes() const override;
   bool IsPassphraseRequired() const override;
@@ -70,6 +69,7 @@ class TestSyncUserSettings : public SyncUserSettings {
   void SetPassphraseRequiredForPreferredDataTypes(bool required);
   void SetTrustedVaultKeyRequired(bool required);
   void SetTrustedVaultKeyRequiredForPreferredDataTypes(bool required);
+  void SetTrustedVaultRecoverabilityDegraded(bool degraded);
   void SetIsUsingSecondaryPassphrase(bool enabled);
 
  private:
@@ -86,6 +86,7 @@ class TestSyncUserSettings : public SyncUserSettings {
   bool passphrase_required_for_preferred_data_types_ = false;
   bool trusted_vault_key_required_ = false;
   bool trusted_vault_key_required_for_preferred_data_types_ = false;
+  bool trusted_vault_recoverability_degraded_ = false;
   bool using_secondary_passphrase_ = false;
 };
 

@@ -107,7 +107,26 @@ void InputEngine::ProcessMessage(const std::vector<uint8_t>& message,
   NOTIMPLEMENTED();  // Protobuf message is not used in the rulebased engine.
 }
 
-void InputEngine::OnFocus() {
+void InputEngine::OnInputMethodChanged(const std::string& engine_id) {
+  NOTIMPLEMENTED();  // Not used in the rulebased engine.
+}
+
+void InputEngine::OnFocus(mojom::InputFieldInfoPtr input_field_info) {
+  NOTIMPLEMENTED();  // Not used in the rulebased engine.
+}
+
+void InputEngine::OnBlur() {
+  NOTIMPLEMENTED();  // Not used in the rulebased engine.
+}
+
+void InputEngine::OnSurroundingTextChanged(
+    const std::string& text,
+    uint32_t offset,
+    mojom::SelectionRangePtr selection_range) {
+  NOTIMPLEMENTED();  // Not used in the rulebased engine.
+}
+
+void InputEngine::OnCompositionCanceled() {
   NOTIMPLEMENTED();  // Not used in the rulebased engine.
 }
 
@@ -153,6 +172,11 @@ void InputEngine::ProcessKeypressForRulebased(
   std::move(callback).Run(std::move(keypress_response));
 }
 
+void InputEngine::OnKeyEvent(mojom::PhysicalKeyEventPtr event,
+                             OnKeyEventCallback callback) {
+  NOTIMPLEMENTED();  // Not used in the rulebased engine.
+}
+
 void InputEngine::ResetForRulebased() {
   auto& context = channel_receivers_.current_context();
   auto& engine = context.get()->engine;
@@ -169,6 +193,27 @@ void InputEngine::GetRulebasedKeypressCountForTesting(
   auto& context = channel_receivers_.current_context();
   auto& engine = context.get()->engine;
   std::move(callback).Run(engine ? engine->process_key_count() : -1);
+}
+
+void InputEngine::CommitText(const std::string& text) {
+  NOTIMPLEMENTED();  // Not used in the rulebased engine.
+}
+
+void InputEngine::SetComposition(const std::string& text) {
+  NOTIMPLEMENTED();  // Not used in the rulebased engine.
+}
+
+void InputEngine::SetCompositionRange(uint32_t start, uint32_t end) {
+  NOTIMPLEMENTED();  // Not used in the rulebased engine.
+}
+
+void InputEngine::FinishComposition() {
+  NOTIMPLEMENTED();  // Not used in the rulebased engine.
+}
+
+void InputEngine::DeleteSurroundingText(uint32_t num_bytes_before_cursor,
+                                        uint32_t num_bytes_after_cursor) {
+  NOTIMPLEMENTED();  // Not used in the rulebased engine.
 }
 
 }  // namespace ime

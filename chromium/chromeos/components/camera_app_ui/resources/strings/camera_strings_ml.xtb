@@ -3,6 +3,7 @@
 <translationbundle lang="ml">
 <translation id="1276998909102132017">ഗാലറി ചിത്രങ്ങൾ</translation>
 <translation id="1430915738399379752">അച്ചടിക്കുക</translation>
+<translation id="1473110567575736769">3 സെക്കൻഡ് ടൈമർ</translation>
 <translation id="1620510694547887537">ക്യാമറ</translation>
 <translation id="1627744224761163218">4 x 4</translation>
 <translation id="1664224225747386870">ഒന്നും റെക്കോർഡ് ചെയ്‌തില്ല</translation>
@@ -29,7 +30,9 @@
 <translation id="3259149966178251584">ക്യാമറ റെസല്യൂഷൻ</translation>
 <translation id="3517926952904427380">പോർട്രെയ്റ്റ് ഫോട്ടോ എടുക്കാനായില്ല</translation>
 <translation id="3569311554794739032">"<ph name="FILE" />" നീക്കംചെയ്യണമെന്ന് തീർച്ചയാണോ?</translation>
+<translation id="3750315947605636967">നിങ്ങളുടെ ക്യാമറ മറ്റൊരു ആപ്പ് ഉപയോഗിക്കുന്നു</translation>
 <translation id="3810838688059735925">വീഡിയോ</translation>
+<translation id="4000398125663085899">പുതിയ ഫോട്ടോകളും വീഡിയോകളും ഇപ്പോൾ Files ആപ്പ്: എന്റെ ഫയലുകൾ &gt; ക്യാമറ എന്നതിലെ ഒരു ഫോൾഡറിലേക്ക് സംരക്ഷിക്കും</translation>
 <translation id="4118525110028899586">റെക്കോർഡ് ചെയ്യൽ തൽക്കാലം നിർത്തുക</translation>
 <translation id="4279490309300973883">മിററിംഗ്</translation>
 <translation id="4329152592498422850">സമചതുര ഫോട്ടോയെടുക്കൽ മോഡിലേക്ക് മാറുക</translation>
@@ -43,9 +46,11 @@
 <translation id="5057360777601936059">നിങ്ങളുടെ ക്യാമറ നിലവിൽ ലഭ്യമല്ല.
         ക്യാമറ ശരിയായി കണക്‌റ്റ് ചെയ്‌തിട്ടുണ്ടോയെന്ന് പരിശോധിക്കുക.</translation>
 <translation id="5152121255775685072">ഗാലറിയിലേക്ക് പോവുക</translation>
+<translation id="5422455049771430511">നിങ്ങളുടെ ഫോട്ടോകൾക്കും വീഡിയോകൾക്കും ഒരു പുതിയ ഇടം</translation>
 <translation id="5671277269877808209">ചതുരം</translation>
 <translation id="5775960006311140197">വിദഗ്‌ദ്ധ മോഡ്</translation>
 <translation id="5869546221129391014">ഗ്രിഡ്</translation>
+<translation id="6040143037577758943">അടയ്ക്കുക</translation>
 <translation id="6073451960410192870">റെക്കോർഡിംഗ് നിർത്തുക</translation>
 <translation id="6197807149213783179">മെറ്റാഡാറ്റ സംരക്ഷിക്കുക</translation>
 <translation id="6233780560267770709">3 ബൈ 3</translation>
@@ -60,6 +65,7 @@
 <translation id="6965382102122355670">ശരി</translation>
 <translation id="698156982839284926">3 സെക്കൻഡ്</translation>
 <translation id="712848772518857951">നിങ്ങൾക്ക് ശരിക്കും <ph name="COUNT" /> ഇനങ്ങൾ നീക്കംചെയ്യണോ?</translation>
+<translation id="7134221860976209830">10 സെക്കൻഡ് ടൈമർ</translation>
 <translation id="7243947652761655814">വീഡിയോ റെസല്യൂഷൻ</translation>
 <translation id="7337660886763914220">ഫയൽ സിസ്‌റ്റം പിശകുകൾ.</translation>
 <translation id="7557677699350329807">അടുത്ത ക്യാമറയിലേക്ക് മാറുക</translation>
@@ -67,7 +73,6 @@
 <translation id="7649070708921625228">സഹായം</translation>
 <translation id="7658239707568436148">റദ്ദാക്കൂ</translation>
 <translation id="7670511624014457267">60 FPS</translation>
-<translation id="8049189770492311300">ടൈമർ</translation>
 <translation id="8067883171444229417">വീഡിയോ പ്ലേ ചെയ്യുക</translation>
 <translation id="8131740175452115882">സ്ഥിരീകരിക്കുക</translation>
 <translation id="8145038249676204903">ഫോട്ടോ എടുക്കുന്നതിലേക്ക് മാറുക</translation>

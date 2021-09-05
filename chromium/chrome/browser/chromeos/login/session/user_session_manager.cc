@@ -60,7 +60,7 @@
 #include "chrome/browser/chromeos/login/saml/saml_offline_signin_limiter.h"
 #include "chrome/browser/chromeos/login/saml/saml_offline_signin_limiter_factory.h"
 #include "chrome/browser/chromeos/login/screens/arc_terms_of_service_screen.h"
-#include "chrome/browser/chromeos/login/screens/discover_screen.h"
+#include "chrome/browser/chromeos/login/screens/pin_setup_screen.h"
 #include "chrome/browser/chromeos/login/screens/sync_consent_screen.h"
 #include "chrome/browser/chromeos/login/session/user_session_initializer.h"
 #include "chrome/browser/chromeos/login/signin/oauth2_login_manager_factory.h"
@@ -68,7 +68,6 @@
 #include "chrome/browser/chromeos/login/startup_utils.h"
 #include "chrome/browser/chromeos/login/ui/input_events_blocker.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host.h"
-#include "chrome/browser/chromeos/login/user_flow.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/supervised_user_manager.h"
 #include "chrome/browser/chromeos/login/wizard_controller.h"
@@ -129,6 +128,7 @@
 #include "chromeos/settings/cros_settings_names.h"
 #include "chromeos/ui/vector_icons/vector_icons.h"
 #include "components/account_id/account_id.h"
+#include "components/account_manager_core/account.h"
 #include "components/component_updater/component_updater_service.h"
 #include "components/flags_ui/flags_ui_metrics.h"
 #include "components/flags_ui/pref_service_flags_storage.h"
@@ -194,8 +194,8 @@ void InitLocaleAndInputMethodsForNewUser(
   PrefService* prefs = profile->GetPrefs();
   std::string locale;
   if (!public_session_locale.empty()) {
-    // If this is a public session and the user chose a |public_session_locale|,
-    // write it to |prefs| so that the UI switches to it.
+    // If this is a public session and the user chose a `public_session_locale`,
+    // write it to `prefs` so that the UI switches to it.
     locale = public_session_locale;
     prefs->SetString(language::prefs::kApplicationLocale, locale);
 
@@ -213,7 +213,7 @@ void InitLocaleAndInputMethodsForNewUser(
   input_method::InputMethodDescriptor preferred_input_method;
   if (!public_session_input_method.empty()) {
     // If this is a public session and the user chose a valid
-    // |public_session_input_method|, use it as the |preferred_input_method|.
+    // `public_session_input_method`, use it as the `preferred_input_method`.
     const input_method::InputMethodDescriptor* const descriptor =
         manager->GetInputMethodUtil()->GetInputMethodDescriptorFromId(
             public_session_input_method);
@@ -225,7 +225,7 @@ void InitLocaleAndInputMethodsForNewUser(
     }
   }
 
-  // If |preferred_input_method| is not set, use the currently active input
+  // If `preferred_input_method` is not set, use the currently active input
   // method.
   if (preferred_input_method.id().empty()) {
     preferred_input_method =
@@ -243,7 +243,7 @@ void InitLocaleAndInputMethodsForNewUser(
     }
   }
 
-  // Derive kLanguagePreloadEngines from |locale| and |preferred_input_method|.
+  // Derive kLanguagePreloadEngines from `locale` and `preferred_input_method`.
   std::vector<std::string> input_method_ids;
   manager->GetInputMethodUtil()->GetFirstLoginInputMethodIds(
       locale, preferred_input_method, &input_method_ids);
@@ -307,10 +307,6 @@ bool NeedRestartToApplyPerSessionFlags(
   if (user_manager::UserManager::Get()->GetLoggedInUsers().size() != 1)
     return false;
 
-  // Only restart if needed and if not going into managed mode.
-  if (user_manager::UserManager::Get()->IsLoggedInAsSupervisedUser())
-    return false;
-
   auto* current_command_line = base::CommandLine::ForCurrentProcess();
   if (about_flags::AreSwitchesIdenticalToCurrentCommandLine(
           user_flags, *current_command_line, out_command_line_difference)) {
@@ -321,12 +317,6 @@ bool NeedRestartToApplyPerSessionFlags(
 }
 
 bool CanPerformEarlyRestart() {
-  if (!ChromeUserManager::Get()
-           ->GetCurrentUserFlow()
-           ->SupportsEarlyRestartToApplyFlags()) {
-    return false;
-  }
-
   const ExistingUserController* controller =
       ExistingUserController::current_controller();
   if (!controller)
@@ -452,10 +442,10 @@ void UserSessionManager::ApplyUserPolicyToSwitches(
 
   // Note: If a user policy is introduced again which translates to command-line
   // switches, make sure to wrap the policy-added command-line switches in
-  // |"--policy-switches-begin"| / |"--policy-switches-end"| sentinels.
+  // `"--policy-switches-begin"` / `"--policy-switches-end"` sentinels.
   // This is important, because only command-line switches between the
-  // |"--policy-switches-begin"| / |"--policy-switches-end"| and the
-  // |"--flag-switches-begin"| / |"--flag-switches-end"| sentinels will be
+  // `"--policy-switches-begin"` / `"--policy-switches-end"` and the
+  // `"--flag-switches-begin"` / `"--flag-switches-end"` sentinels will be
   // compared when comparing the current command line and the user session
   // command line in order to decide if chrome should be restarted.
 }
@@ -873,7 +863,7 @@ bool UserSessionManager::RestartToApplyPerSessionFlagsIfNeed(
       "Login.CustomFlags", command_line_difference, std::set<std::string>());
 
   base::CommandLine::StringVector flags;
-  // argv[0] is the program name |base::CommandLine::NO_PROGRAM|.
+  // argv[0] is the program name `base::CommandLine::NO_PROGRAM`.
   flags.assign(user_flags.argv().begin() + 1, user_flags.argv().end());
   LOG(WARNING) << "Restarting to apply per-session flags...";
   SetSwitchesForUser(
@@ -1151,8 +1141,8 @@ void UserSessionManager::PrepareProfile(const base::FilePath& profile_path) {
   // path or not. See https://codereview.chromium.org/171423009
   g_browser_process->profile_manager()->CreateProfileAsync(
       profile_path,
-      base::Bind(&UserSessionManager::OnProfileCreated, AsWeakPtr(),
-                 user_context_, is_demo_session),
+      base::BindRepeating(&UserSessionManager::OnProfileCreated, AsWeakPtr(),
+                          user_context_, is_demo_session),
       base::string16(), std::string());
 }
 
@@ -1266,7 +1256,7 @@ void UserSessionManager::InitProfilePreferences(
                        user_context.GetPublicSessionInputMethod());
 
     if (user_manager->GetPrimaryUser() == user &&
-        !DiscoverScreen::ShouldSkip() &&
+        !PinSetupScreen::ShouldSkip() &&
         !user_manager->IsUserNonCryptohomeDataEphemeral(user->GetAccountId())) {
       chromeos::DiscoverManager::Get()
           ->GetModule<chromeos::DiscoverModulePinSetup>()
@@ -1274,18 +1264,11 @@ void UserSessionManager::InitProfilePreferences(
     }
   }
 
-  if (user_manager->IsLoggedInAsSupervisedUser()) {
-    user_manager::User* active_user = user_manager->GetActiveUser();
-    std::string supervised_user_sync_id =
-        ChromeUserManager::Get()->GetSupervisedUserManager()->GetUserSyncId(
-            active_user->GetAccountId().GetUserEmail());
-    profile->GetPrefs()->SetString(::prefs::kSupervisedUserId,
-                                   supervised_user_sync_id);
-  } else if (user_manager->IsLoggedInAsUserWithGaiaAccount()) {
+  if (user_manager->IsLoggedInAsUserWithGaiaAccount()) {
     // Get the Gaia ID from the user context. This may not be available when
     // unlocking a previously opened profile, or when creating a supervised
     // user. However, in these cases the gaia_id should be already available in
-    // |IdentityManager|.
+    // `IdentityManager`.
     signin::IdentityManager* identity_manager =
         IdentityManagerFactory::GetForProfile(profile);
     std::string gaia_id = user_context.GetGaiaID();
@@ -1307,50 +1290,50 @@ void UserSessionManager::InitProfilePreferences(
     }
 
     // We need to set the Primary Account. This is handled by
-    // |IdentityManager|, which enforces the invariant that only an account
-    // previously known to |IdentityManager| can be set as the Primary
-    // Account. |IdentityManager| gets its knowledge of accounts from
-    // |AccountManager| and hence, before we set the Primary Account, we need
+    // `IdentityManager`, which enforces the invariant that only an account
+    // previously known to `IdentityManager` can be set as the Primary
+    // Account. `IdentityManager` gets its knowledge of accounts from
+    // `AccountManager` and hence, before we set the Primary Account, we need
     // to make sure that:
-    // 1. The account is present in |AccountManager|, and
-    // 2. |IdentityManager| has been notified about it.
+    // 1. The account is present in `AccountManager`, and
+    // 2. `IdentityManager` has been notified about it.
 
     AccountManager* account_manager =
         g_browser_process->platform_part()
             ->GetAccountManagerFactory()
             ->GetAccountManager(profile->GetPath().value());
 
-    // |AccountManager| MUST have been fully initialized at this point (via
-    // |UserSessionManager::InitializeAccountManager|), otherwise we cannot
-    // guarantee that |IdentityManager| will have this account in Step (2).
-    // Reason: |AccountManager::UpsertAccount| is an async API that can
+    // `AccountManager` MUST have been fully initialized at this point (via
+    // `UserSessionManager::InitializeAccountManager`), otherwise we cannot
+    // guarantee that `IdentityManager` will have this account in Step (2).
+    // Reason: `AccountManager::UpsertAccount` is an async API that can
     // technically take an arbitrarily long amount of time to complete and
-    // notify |AccountManager|'s observers. However, if |AccountManager| has
-    // been fully initialized, |AccountManager::UpsertAccount| and the
+    // notify `AccountManager`'s observers. However, if `AccountManager` has
+    // been fully initialized, `AccountManager::UpsertAccount` and the
     // associated notifications happen synchronously. We are relying on that
     // (undocumented) behaviour here.
     // TODO(sinhak): This is a leaky abstraction. Explore if
-    // |UserSessionManager::InitProfilePreferences| can handle an asynchronous
+    // `UserSessionManager::InitProfilePreferences` can handle an asynchronous
     // callback and continue.
     DCHECK(account_manager->IsInitialized());
 
-    const AccountManager::AccountKey account_key{
-        gaia_id, account_manager::AccountType::ACCOUNT_TYPE_GAIA};
+    const ::account_manager::AccountKey account_key{
+        gaia_id, account_manager::AccountType::kGaia};
 
-    // 1. Make sure that the account is present in |AccountManager|.
+    // 1. Make sure that the account is present in `AccountManager`.
     if (!user_context.GetRefreshToken().empty()) {
-      // |AccountManager::UpsertAccount| is idempotent. We can safely call it
+      // `AccountManager::UpsertAccount` is idempotent. We can safely call it
       // without checking for re-auth cases.
-      // We MUST NOT revoke old Device Account tokens (|revoke_old_token| =
-      // |false|), otherwise Gaia will revoke all tokens associated to this
-      // user's device id, including |refresh_token_| and the user will be
+      // We MUST NOT revoke old Device Account tokens (`revoke_old_token` =
+      // `false`), otherwise Gaia will revoke all tokens associated to this
+      // user's device id, including `refresh_token_` and the user will be
       // stuck performing an online auth with Gaia at every login. See
       // https://crbug.com/952570 and https://crbug.com/865189 for context.
       account_manager->UpsertAccount(account_key,
                                      user->GetDisplayEmail() /* raw_email */,
                                      user_context.GetRefreshToken());
     } else if (!account_manager->IsTokenAvailable(account_key)) {
-      // When |user_context| does not contain a refresh token and account is not
+      // When `user_context` does not contain a refresh token and account is not
       // present in the AccountManager it means the migration to the
       // AccountManager didn't happen.
       // Set account with dummy token to let IdentitManager know that account
@@ -1440,15 +1423,6 @@ void UserSessionManager::UserProfileInitialized(Profile* profile,
   if (!IsNewProfile(profile))
     os_sync_util::MigrateOsSyncPreferences(profile->GetPrefs());
 
-  // http://crbug/866790: After Supervised Users are deprecated, remove this.
-  bool is_supervised_user =
-      user_manager::UserManager::Get()->IsLoggedInAsSupervisedUser();
-  bool is_manager =
-      ChromeUserManager::Get()->GetSupervisedUserManager()->HasSupervisedUsers(
-          account_id.GetUserEmail());
-  if (is_manager || is_supervised_user)
-    ShowSupervisedUserDeprecationNotification(profile, is_manager);
-
   // Demo user signed in.
   if (is_incognito_profile) {
     profile->OnLogin();
@@ -1520,7 +1494,7 @@ void UserSessionManager::UserProfileInitialized(Profile* profile,
     // authentication states in the browser context and the user's profile must
     // be merged using /MergeSession instead. Authentication cookies set by a
     // SAML IdP will also be transferred when the user's cookie jar is not empty
-    // if |transfer_saml_auth_cookies_on_subsequent_login| is true.
+    // if `transfer_saml_auth_cookies_on_subsequent_login` is true.
     const bool transfer_auth_cookies_on_first_login = has_auth_cookies_;
 
     content::StoragePartition* signin_partition = login::GetSigninPartition();
@@ -1624,6 +1598,7 @@ void UserSessionManager::FinalizePrepareProfile(Profile* profile) {
                  UserContext::AUTH_FLOW_OFFLINE) {
         // Verify local sync token to check whether the local password is out
         // of sync.
+        password_sync_token_verifier->RecordTokenPollingStart();
         password_sync_token_verifier->CheckForPasswordNotInSync();
       } else {
         NOTREACHED();
@@ -1700,7 +1675,7 @@ void UserSessionManager::InitializeBrowser(Profile* profile) {
 
   // TODO(nkostylev): This pointer should probably never be NULL, but it looks
   // like OnProfileCreated() may be getting called before
-  // UserSessionManager::PrepareProfile() has set |delegate_| when Chrome is
+  // UserSessionManager::PrepareProfile() has set `delegate_` when Chrome is
   // killed during shutdown in tests -- see http://crosbug.com/18269.  Replace
   // this 'if' statement with a CHECK(delegate_) once the underlying issue is
   // resolved.
@@ -1747,11 +1722,9 @@ bool UserSessionManager::InitializeUserSession(Profile* profile) {
   ProfileHelper::Get()->ProfileStartup(profile);
 
   if (start_session_type_ == PRIMARY_USER_SESSION) {
-    UserFlow* user_flow = ChromeUserManager::Get()->GetCurrentUserFlow();
     WizardController* oobe_controller = WizardController::default_controller();
     base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
     bool skip_post_login_screens =
-        user_flow->ShouldSkipPostLoginScreens() ||
         (oobe_controller && oobe_controller->skip_post_login_screens()) ||
         cmdline->HasSwitch(chromeos::switches::kOobeSkipPostLogin);
 
@@ -2006,7 +1979,7 @@ void UserSessionManager::UpdateEasyUnlockKeys(const UserContext& user_context) {
   }
 
   // Only update Easy unlock keys for regular user.
-  // TODO(xiyuan): Fix inconsistency user type of |user_context| introduced in
+  // TODO(xiyuan): Fix inconsistency user type of `user_context` introduced in
   // authenticator.
   const user_manager::User* user =
       user_manager::UserManager::Get()->FindUser(user_context.GetAccountId());
@@ -2015,7 +1988,7 @@ void UserSessionManager::UpdateEasyUnlockKeys(const UserContext& user_context) {
     return;
   }
 
-  // Bail if |user_context| does not have secret.
+  // Bail if `user_context` does not have secret.
   if (user_context.GetKey()->GetSecret().empty()) {
     NotifyEasyUnlockKeyOpsFinished();
     return;
@@ -2083,7 +2056,7 @@ void UserSessionManager::ActiveUserChanged(user_manager::User* active_user) {
 
   input_method::InputMethodManager* manager =
       input_method::InputMethodManager::Get();
-  // |manager| might not be available in some unit tests.
+  // `manager` might not be available in some unit tests.
   if (!manager)
     return;
   manager->SetState(
@@ -2098,6 +2071,9 @@ UserSessionManager::GetDefaultIMEState(Profile* profile) {
   if (!state.get()) {
     // Profile can be NULL in tests.
     state = input_method::InputMethodManager::Get()->CreateNewState(profile);
+    if (ProfileHelper::Get()->IsSigninProfile(profile))
+      state->SetUIStyle(input_method::InputMethodManager::UIStyle::kLogin);
+
     default_ime_states_[profile] = state;
   }
   return state;
@@ -2119,7 +2095,7 @@ void UserSessionManager::CheckEolInfo(Profile* profile) {
 }
 
 void UserSessionManager::StartAccountManagerMigration(Profile* profile) {
-  // |migrator| is nullptr for incognito profiles.
+  // `migrator` is nullptr for incognito profiles.
   auto* migrator =
       chromeos::AccountManagerMigratorFactory::GetForBrowserContext(profile);
   if (migrator)
@@ -2144,11 +2120,6 @@ void UserSessionManager::DoBrowserLaunchInternal(Profile* profile,
         profile,
         base::Bind(&UserSessionManager::DoBrowserLaunchInternal, AsWeakPtr(),
                    profile, login_host, true /* locale_pref_checked */));
-    return;
-  }
-
-  if (!ChromeUserManager::Get()->GetCurrentUserFlow()->ShouldLaunchBrowser()) {
-    ChromeUserManager::Get()->GetCurrentUserFlow()->LaunchExtraSteps(profile);
     return;
   }
 
@@ -2292,7 +2263,7 @@ void UserSessionManager::SetSwitchesForUser(
     const AccountId& account_id,
     CommandLineSwitchesType switches_type,
     const std::vector<std::string>& switches) {
-  // TODO(pmarko): Introduce a CHECK that |account_id| is the primary user
+  // TODO(pmarko): Introduce a CHECK that `account_id` is the primary user
   // (https://crbug.com/832857).
   command_line_switches_[switches_type] = switches;
 

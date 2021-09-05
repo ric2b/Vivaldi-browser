@@ -14,52 +14,9 @@
 #error "This file requires ARC support."
 #endif
 
-@interface WKPreferences (Private)
-
-@property(nonatomic,
-          getter=_isSafeBrowsingEnabled,
-          setter=_setSafeBrowsingEnabled:) BOOL _safeBrowsingEnabled;
-
-@end
-
-@interface WKWebView (Private)
-
-- (void)_showSafeBrowsingWarningWithURL:(NSURL*)url
-                                  title:(NSString*)title
-                                warning:(NSString*)warning
-                                details:(NSAttributedString*)details
-                      completionHandler:(void (^)(BOOL))completionHandler;
-@end
-
 class WKWebViewUtilTest : public PlatformTest {};
 
 namespace web {
-
-// Tests that IsSafeBrowsingWarningDisplayedInWebView returns true when safe
-// browsing warning is displayed in WKWebView.
-TEST_F(WKWebViewUtilTest, TestIsSafeBrowsingWarningDisplayedInWebView) {
-  if (@available(iOS 12.2, *)) {
-    UIViewController* controller = [[UIViewController alloc] init];
-    UIApplication.sharedApplication.keyWindow.rootViewController = controller;
-    WKWebViewConfiguration* config = [[WKWebViewConfiguration alloc] init];
-    WKWebView* web_view = [[WKWebView alloc] initWithFrame:CGRectZero
-                                             configuration:config];
-    [controller.view addSubview:web_view];
-
-    // Use private API of WKPreferences to enable safe browsing warning.
-    [config.preferences _setSafeBrowsingEnabled:YES];
-
-    // Use private API of WKWebView to show safe browsing warning.
-    [web_view _showSafeBrowsingWarningWithURL:nil
-                                        title:nil
-                                      warning:nil
-                                      details:nil
-                            completionHandler:^(BOOL){
-                            }];
-
-    EXPECT_TRUE(web::IsSafeBrowsingWarningDisplayedInWebView(web_view));
-  }
-}
 
 #if defined(__IPHONE_14_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_14_0
 // Tests that CreateFullPagePDF calls createPDFWithConfiguration and it invokes
@@ -81,7 +38,7 @@ TEST_F(WKWebViewUtilTest, IOS14EnsureCallbackIsCalledWithData) {
     __block bool callback_called = false;
     __block NSData* callback_data = nil;
 
-    CreateFullPagePdf(web_view_mock, base::Bind(^(NSData* data) {
+    CreateFullPagePdf(web_view_mock, base::BindOnce(^(NSData* data) {
                         callback_called = true;
                         callback_data = [data copy];
                       }));
@@ -119,7 +76,7 @@ TEST_F(WKWebViewUtilTest, IOS14EnsureCallbackIsCalledWithNil) {
     __block bool callback_called = false;
     __block NSData* callback_data = nil;
 
-    CreateFullPagePdf(web_view_mock, base::Bind(^(NSData* data) {
+    CreateFullPagePdf(web_view_mock, base::BindOnce(^(NSData* data) {
                         callback_called = true;
                         callback_data = [data copy];
                       }));
@@ -146,7 +103,7 @@ TEST_F(WKWebViewUtilTest, IOS13EnsureCallbackIsCalled) {
   __block bool callback_called = false;
   __block NSData* callback_data = nil;
 
-  CreateFullPagePdf(web_view, base::Bind(^(NSData* data) {
+  CreateFullPagePdf(web_view, base::BindOnce(^(NSData* data) {
                       callback_called = true;
                       callback_data = [data copy];
                     }));
@@ -165,7 +122,7 @@ TEST_F(WKWebViewUtilTest, NULLWebView) {
   __block bool callback_called = false;
   __block NSData* callback_data = nil;
 
-  CreateFullPagePdf(nil, base::Bind(^(NSData* data) {
+  CreateFullPagePdf(nil, base::BindOnce(^(NSData* data) {
                       callback_called = true;
                       callback_data = [data copy];
                     }));

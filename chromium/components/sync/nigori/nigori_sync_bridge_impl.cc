@@ -357,12 +357,10 @@ class NigoriSyncBridgeImpl::BroadcastingObserver
 
   // SyncEncryptionHandler::Observer implementation.
   void OnPassphraseRequired(
-      PassphraseRequiredReason reason,
       const KeyDerivationParams& key_derivation_params,
       const sync_pb::EncryptedData& pending_keys) override {
     for (auto& observer : observers_) {
-      observer.OnPassphraseRequired(reason, key_derivation_params,
-                                    pending_keys);
+      observer.OnPassphraseRequired(key_derivation_params, pending_keys);
     }
   }
 
@@ -396,12 +394,6 @@ class NigoriSyncBridgeImpl::BroadcastingObserver
                                bool encrypt_everything) override {
     for (auto& observer : observers_) {
       observer.OnEncryptedTypesChanged(encrypted_types, encrypt_everything);
-    }
-  }
-
-  void OnEncryptionComplete() override {
-    for (auto& observer : observers_) {
-      observer.OnEncryptionComplete();
     }
   }
 
@@ -657,24 +649,6 @@ void NigoriSyncBridgeImpl::AddTrustedVaultDecryptionKeys(
   MaybeNotifyBootstrapTokenUpdated();
 }
 
-void NigoriSyncBridgeImpl::EnableEncryptEverything() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  // This method was relevant only for Directory implementation. USS
-  // implementation catches that as part of SetEncryptionPassphrase(), which
-  // is always called together with this method.
-  // TODO(crbug.com/1033040): remove this method and clean up calling sides.
-}
-
-bool NigoriSyncBridgeImpl::IsEncryptEverythingEnabled() const {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  // This method was relevant only for Directory implementation and used only
-  // for testing.
-  // TODO(crbug.com/1033040): remove this method or at least append ForTesting
-  // suffix.
-  NOTREACHED();
-  return false;
-}
-
 base::Time NigoriSyncBridgeImpl::GetKeystoreMigrationTime() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return state_.keystore_migration_time;
@@ -754,7 +728,9 @@ base::Optional<ModelError> NigoriSyncBridgeImpl::MergeSyncData(
   }
   DCHECK(data->specifics.has_nigori());
 
-  if (!data->specifics.nigori().encryption_keybag().blob().empty()) {
+  const NigoriSpecifics& specifics = data->specifics.nigori();
+  if (specifics.passphrase_type() != NigoriSpecifics::IMPLICIT_PASSPHRASE ||
+      !specifics.encryption_keybag().blob().empty()) {
     // We received regular Nigori.
     return UpdateLocalState(data->specifics.nigori());
   }
@@ -1142,8 +1118,7 @@ void NigoriSyncBridgeImpl::MaybeNotifyOfPendingKeys() const {
     case NigoriSpecifics::CUSTOM_PASSPHRASE:
     case NigoriSpecifics::FROZEN_IMPLICIT_PASSPHRASE:
       broadcasting_observer_->OnPassphraseRequired(
-          REASON_DECRYPTION, GetKeyDerivationParamsForPendingKeys(),
-          *state_.pending_keys);
+          GetKeyDerivationParamsForPendingKeys(), *state_.pending_keys);
       break;
     case NigoriSpecifics::TRUSTED_VAULT_PASSPHRASE:
       broadcasting_observer_->OnTrustedVaultKeyRequired();

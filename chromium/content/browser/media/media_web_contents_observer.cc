@@ -250,6 +250,7 @@ bool MediaWebContentsObserver::OnMessageReceived(
         OnAudioOutputSinkChangingDisabled)
     IPC_MESSAGE_HANDLER(MediaPlayerDelegateHostMsg_OnBufferUnderflow,
                         OnBufferUnderflow)
+    IPC_MESSAGE_HANDLER(MediaPlayerDelegateHostMsg_OnSeek, OnSeek)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
@@ -417,7 +418,7 @@ void MediaWebContentsObserver::OnAudioOutputSinkChanged(
          base::OnceCallback<void(const base::Optional<std::string>&)>
              callback) {
         MediaStreamManager::GetMediaDeviceIDForHMAC(
-            blink::MediaDeviceType::MEDIA_DEVICE_TYPE_AUDIO_OUTPUT, salt,
+            blink::mojom::MediaDeviceType::MEDIA_AUDIO_OUTPUT, salt,
             std::move(origin), hashed_device_id,
             base::SequencedTaskRunnerHandle::Get(), std::move(callback));
       },
@@ -451,6 +452,12 @@ void MediaWebContentsObserver::OnBufferUnderflow(
     int delegate_id) {
   const MediaPlayerId id(render_frame_host, delegate_id);
   web_contents_impl()->MediaBufferUnderflow(id);
+}
+
+void MediaWebContentsObserver::OnSeek(RenderFrameHost* render_frame_host,
+                                      int delegate_id) {
+  const MediaPlayerId id(render_frame_host, delegate_id);
+  web_contents_impl()->MediaPlayerSeek(id);
 }
 
 device::mojom::WakeLock* MediaWebContentsObserver::GetAudioWakeLock() {

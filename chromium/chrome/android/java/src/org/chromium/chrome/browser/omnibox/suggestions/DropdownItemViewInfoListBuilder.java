@@ -27,14 +27,15 @@ import org.chromium.chrome.browser.omnibox.suggestions.clipboard.ClipboardSugges
 import org.chromium.chrome.browser.omnibox.suggestions.editurl.EditUrlSuggestionProcessor;
 import org.chromium.chrome.browser.omnibox.suggestions.entity.EntitySuggestionProcessor;
 import org.chromium.chrome.browser.omnibox.suggestions.header.HeaderProcessor;
+import org.chromium.chrome.browser.omnibox.suggestions.mostvisited.MostVisitedTilesProcessor;
 import org.chromium.chrome.browser.omnibox.suggestions.tail.TailSuggestionProcessor;
 import org.chromium.chrome.browser.omnibox.suggestions.tiles.TileSuggestionProcessor;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.tab.Tab;
-import org.chromium.chrome.browser.ui.favicon.LargeIconBridge;
 import org.chromium.components.browser_ui.util.ConversionUtils;
 import org.chromium.components.browser_ui.util.GlobalDiscardableReferencePool;
+import org.chromium.components.favicon.LargeIconBridge;
 import org.chromium.components.query_tiles.QueryTile;
 import org.chromium.ui.modelutil.PropertyModel;
 
@@ -102,6 +103,8 @@ class DropdownItemViewInfoListBuilder {
         registerSuggestionProcessor(new TailSuggestionProcessor(context, host));
         registerSuggestionProcessor(
                 new TileSuggestionProcessor(context, queryTileSuggestionCallback));
+        registerSuggestionProcessor(
+                new MostVisitedTilesProcessor(context, host, iconBridgeSupplier));
         registerSuggestionProcessor(
                 new BasicSuggestionProcessor(context, host, textProvider, iconBridgeSupplier));
     }

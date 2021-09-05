@@ -4,6 +4,11 @@
 
 package org.chromium.chrome.browser.customtabs;
 
+import static androidx.test.espresso.assertion.ViewAssertions.matches;
+import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
+import static androidx.test.espresso.matcher.ViewMatchers.withId;
+
+import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -11,7 +16,6 @@ import static org.junit.Assert.assertTrue;
 import static org.chromium.chrome.browser.customtabs.CustomTabsTestUtils.addActionButtonToIntent;
 import static org.chromium.chrome.browser.customtabs.CustomTabsTestUtils.createTestBitmap;
 
-import android.annotation.SuppressLint;
 import android.annotation.TargetApi;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -32,6 +36,7 @@ import android.widget.RemoteViews;
 import androidx.annotation.DrawableRes;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.browser.customtabs.CustomTabsIntent;
+import androidx.test.espresso.Espresso;
 import androidx.test.filters.MediumTest;
 
 import org.junit.Assert;
@@ -43,6 +48,7 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.ContextUtils;
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.customtabs.CustomTabsTestUtils.OnFinishedForTest;
 import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabToolbar;
@@ -72,7 +78,7 @@ public class CustomTabActivityIncognitoTest {
     private static int sIdToIncrement = 1;
 
     @Rule
-    public CustomTabActivityTestRule mCustomTabActivityTestRule = new CustomTabActivityTestRule();
+    public IncognitoCustomTabActivityTestRule mCustomTabActivityTestRule = new IncognitoCustomTabActivityTestRule();
 
     @Rule
     public TestRule mProcessor = new Features.InstrumentationProcessor();
@@ -186,6 +192,59 @@ public class CustomTabActivityIncognitoTest {
     @Test
     @MediumTest
     @Features.EnableFeatures({ChromeFeatureList.CCT_INCOGNITO})
+    public void toolbarHasIncognitoLogo() throws Exception {
+        Intent intent = createMinimalIncognitoCustomTabIntent();
+        launchIncognitoCustomTab(intent);
+        Espresso.onView(withId(R.id.incognito_cct_logo_button)).check(matches(isDisplayed()));
+    }
+
+    @Test
+    @MediumTest
+    @Features.DisableFeatures({ChromeFeatureList.CCT_INCOGNITO})
+    public void toolbarDoesNotHaveIncognitoLogo() throws Exception {
+        Intent intent = createMinimalIncognitoCustomTabIntent();
+        launchIncognitoCustomTab(intent);
+        Espresso.onView(withId(R.id.incognito_cct_logo_button)).check(matches(not(isDisplayed())));
+    }
+
+    @Test
+    @MediumTest
+    @Features.DisableFeatures({ChromeFeatureList.CCT_INCOGNITO})
+    public void canLaunchFirstPartyIncognitoWithExtraWhenDisabled() throws Exception {
+        Intent intent = createMinimalIncognitoCustomTabIntent();
+        intent.putExtra(
+                IncognitoCustomTabIntentDataProvider.EXTRA_FORCE_ENABLE_FOR_EXPERIMENT, true);
+        CustomTabActivity activity = launchIncognitoCustomTab(intent);
+        assertTrue(activity.getActivityTab().isIncognito());
+    }
+
+    @Test
+    @MediumTest
+    @Features.DisableFeatures({ChromeFeatureList.CCT_INCOGNITO})
+    public void canHideToolbarIncognitoLogo() throws Exception {
+        Intent intent = createMinimalIncognitoCustomTabIntent();
+        // The icon is only hidden if an extra is supplied.
+        intent.putExtra(IncognitoCustomTabIntentDataProvider.EXTRA_HIDE_INCOGNITO_ICON, true);
+        launchIncognitoCustomTab(intent);
+        Espresso.onView(withId(R.id.incognito_cct_logo_button))
+                .check(matches(not(isDisplayed())));
+    }
+
+    @Test
+    @MediumTest
+    @Features.DisableFeatures({ChromeFeatureList.CCT_INCOGNITO})
+    public void canCustomizeToolbarColor() throws Exception {
+        Intent intent = createMinimalIncognitoCustomTabIntent();
+        // The color is only allowed if an extra is supplied.
+        intent.putExtra(IncognitoCustomTabIntentDataProvider.EXTRA_USE_NORMAL_PROFILE_STYLE, true);
+        intent.putExtra(CustomTabsIntent.EXTRA_TOOLBAR_COLOR, Color.RED);
+        CustomTabActivity activity = launchIncognitoCustomTab(intent);
+        assertEquals(Color.RED, getToolbarColor(activity));
+    }
+
+    @Test
+    @MediumTest
+    @Features.EnableFeatures({ChromeFeatureList.CCT_INCOGNITO})
     public void ignoresCustomizedToolbarColor() throws Exception {
         Intent intent = createMinimalIncognitoCustomTabIntent();
         intent.putExtra(CustomTabsIntent.EXTRA_TOOLBAR_COLOR, Color.RED);
@@ -197,7 +256,7 @@ public class CustomTabActivityIncognitoTest {
     @MediumTest
     @Features.EnableFeatures({ChromeFeatureList.CCT_INCOGNITO})
     @TargetApi(Build.VERSION_CODES.M)
-    @SuppressLint("NewApi")
+    @MinAndroidSdkLevel(Build.VERSION_CODES.M)
     public void closeAllIncognitoNotificationIsNotDisplayed() throws Exception {
         // It may happen that some previous incognito notification from tabbed activity may be
         // already be lying around. So, we test the delta instead to be 0.

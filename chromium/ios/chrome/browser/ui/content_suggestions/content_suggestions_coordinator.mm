@@ -124,6 +124,11 @@
 @property(nonatomic, assign) AuthenticationService* authService;
 // Coordinator in charge of handling sharing use cases.
 @property(nonatomic, strong) SharingCoordinator* sharingCoordinator;
+// YES if the feedShown method has already been called.
+// TODO(crbug.com/1126940): The coordinator shouldn't be keeping track of this
+// for its |self.discoverFeedViewController| remove once we have an appropriate
+// callback.
+@property(nonatomic, assign) BOOL feedShownWasCalled;
 
 @end
 
@@ -137,6 +142,10 @@
   }
 
   _visible = YES;
+
+  self.authService = AuthenticationServiceFactory::GetForBrowserState(
+      self.browser->GetBrowserState());
+  self.authService->WaitUntilCacheIsPopulated();
 
   ntp_snippets::ContentSuggestionsService* contentSuggestionsService =
       IOSChromeContentSuggestionsServiceFactory::GetForBrowserState(
@@ -164,9 +173,6 @@
   } else {
     ntp_home::RecordNTPImpression(ntp_home::LOCAL_SUGGESTIONS);
   }
-
-  self.authService = AuthenticationServiceFactory::GetForBrowserState(
-      self.browser->GetBrowserState());
 
   TemplateURLService* templateURLService =
       ios::TemplateURLServiceFactory::GetForBrowserState(
@@ -332,6 +338,11 @@
   [self.sharingCoordinator stop];
   self.sharingCoordinator = nil;
   self.headerController = nil;
+  if (IsDiscoverFeedEnabled()) {
+    ios::GetChromeBrowserProvider()
+        ->GetDiscoverFeedProvider()
+        ->RemoveFeedViewController(self.discoverFeedViewController);
+  }
   _visible = NO;
 }
 
@@ -358,6 +369,13 @@
 
 - (void)discoverHeaderMenuButtonShown:(UIView*)menuButton {
   _discoverFeedHeaderMenuButton = menuButton;
+}
+
+- (void)discoverFeedShown {
+  if (IsDiscoverFeedEnabled() && !self.feedShownWasCalled) {
+    ios::GetChromeBrowserProvider()->GetDiscoverFeedProvider()->FeedWasShown();
+    self.feedShownWasCalled = YES;
+  }
 }
 
 #pragma mark - OverscrollActionsControllerDelegate

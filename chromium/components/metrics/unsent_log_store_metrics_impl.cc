@@ -15,18 +15,28 @@ void UnsentLogStoreMetricsImpl::RecordLogReadStatus(
                                 UnsentLogStoreMetrics::END_RECALL_STATUS);
 }
 
-void UnsentLogStoreMetricsImpl::RecordCompressionRatio(
-    size_t compressed_size, size_t original_size) {
-  base::UmaHistogramPercentage(
+void UnsentLogStoreMetricsImpl::RecordCompressionRatio(size_t compressed_size,
+                                                       size_t original_size) {
+  base::UmaHistogramPercentageObsoleteDoNotUse(
       "UMA.ProtoCompressionRatio",
       static_cast<int>(100 * compressed_size / original_size));
 }
 
 void UnsentLogStoreMetricsImpl::RecordDroppedLogSize(size_t size) {
+  base::UmaHistogramCounts1M("UMA.UnsentLogs.DroppedSize",
+                             static_cast<int>(size));
 }
 
 void UnsentLogStoreMetricsImpl::RecordDroppedLogsNum(int dropped_logs_num) {
   base::UmaHistogramCounts1M("UMA.UnsentLogs.Dropped", dropped_logs_num);
+}
+
+void RecordIntendingToSentLogs(int num) {
+  base::UmaHistogramExactLinear("UMA.UnsentLogs.IntendingToSend", num, 22);
+}
+
+void RecordSentLog() {
+  base::UmaHistogramBoolean("UMA.UnsentLogs.Sent", true);
 }
 
 void UnsentLogStoreMetricsImpl::RecordLastUnsentLogMetadataMetrics(
@@ -50,9 +60,10 @@ void UnsentLogStoreMetricsImpl::RecordLastUnsentLogMetadataMetrics(
                                 persisted_size_in_kb);
 
   if (sent_samples_count == 0 && unsent_samples_count == 0) {
-    base::UmaHistogramPercentage("UMA.UnsentLogs.UnsentPercentage", 0);
+    base::UmaHistogramPercentageObsoleteDoNotUse(
+        "UMA.UnsentLogs.UnsentPercentage", 0);
   } else {
-    base::UmaHistogramPercentage(
+    base::UmaHistogramPercentageObsoleteDoNotUse(
         "UMA.UnsentLogs.UnsentPercentage",
         100 * unsent_samples_count /
             (unsent_samples_count + sent_samples_count));

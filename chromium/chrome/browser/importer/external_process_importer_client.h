@@ -35,12 +35,9 @@ struct ImportedNotesEntry;
 struct ImportedFaviconUsage;
 struct ImportedSpeedDialEntry;
 
-namespace autofill {
-struct PasswordForm;
-}
-
 namespace importer {
 struct ImporterAutofillFormDataEntry;
+struct ImportedPasswordForm;
 struct SearchEngineInfo;
 }
 
@@ -80,7 +77,8 @@ class ExternalProcessImporterClient
   void OnFaviconsImportStart(uint32_t total_favicons_count) override;
   void OnFaviconsImportGroup(
       const favicon_base::FaviconUsageDataList& favicons_group) override;
-  void OnPasswordFormImportReady(const autofill::PasswordForm& form) override;
+  void OnPasswordFormImportReady(
+      const importer::ImportedPasswordForm& form) override;
   void OnKeywordsImportReady(
       const std::vector<importer::SearchEngineInfo>& search_engines,
       bool unique_on_host_and_path) override;

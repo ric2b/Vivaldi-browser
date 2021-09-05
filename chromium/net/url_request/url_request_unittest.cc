@@ -6,7 +6,7 @@
 #include <utility>
 
 // This must be before Windows headers
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 
@@ -44,7 +44,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -640,20 +640,26 @@ class MockCertificateReportSender
       const GURL& report_uri,
       base::StringPiece content_type,
       base::StringPiece report,
+      const NetworkIsolationKey& network_isolation_key,
       base::OnceCallback<void()> success_callback,
       base::OnceCallback<void(const GURL&, int, int)> error_callback) override {
     latest_report_uri_ = report_uri;
     latest_report_.assign(report.data(), report.size());
     latest_content_type_.assign(content_type.data(), content_type.size());
+    latest_network_isolation_key_ = network_isolation_key;
   }
   const GURL& latest_report_uri() { return latest_report_uri_; }
   const std::string& latest_report() { return latest_report_; }
   const std::string& latest_content_type() { return latest_content_type_; }
+  const NetworkIsolationKey& latest_network_isolation_key() {
+    return latest_network_isolation_key_;
+  }
 
  private:
   GURL latest_report_uri_;
   std::string latest_report_;
   std::string latest_content_type_;
+  NetworkIsolationKey latest_network_isolation_key_;
 };
 
 // OCSPErrorTestDelegate caches the SSLInfo passed to OnSSLCertificateError.
@@ -2474,8 +2480,8 @@ TEST_F(URLRequestTest, SameSiteCookiesSpecialScheme) {
   ASSERT_TRUE(https_test_server.Start());
   EmbeddedTestServer http_test_server(EmbeddedTestServer::TYPE_HTTP);
   RegisterDefaultHandlers(&http_test_server);
-  // Ensure they are on different ports.
-  ASSERT_TRUE(http_test_server.Start(https_test_server.port() + 1));
+  ASSERT_TRUE(http_test_server.Start());
+  ASSERT_NE(https_test_server.port(), http_test_server.port());
   // Both hostnames should be 127.0.0.1 (so that we can use the same set of
   // cookies on both, for convenience).
   ASSERT_EQ(https_test_server.host_port_pair().host(),
@@ -2873,7 +2879,12 @@ class URLRequestTestHTTP : public URLRequestTest {
         origin2_(url::Origin::Create(GURL("https://bar.test/"))),
         isolation_info1_(IsolationInfo::CreateForInternalRequest(origin1_)),
         isolation_info2_(IsolationInfo::CreateForInternalRequest(origin2_)),
-        test_server_(base::FilePath(kTestFilePath)) {}
+        test_server_(base::FilePath(kTestFilePath)) {
+    // Needed for NetworkIsolationKey to make it down to the socket layer, for
+    // the PKP violation report test.
+    feature_list_.InitAndEnableFeature(
+        net::features::kPartitionConnectionsByNetworkIsolationKey);
+  }
 
  protected:
   // ProtocolHandler for the scheme that's unsafe to redirect to.
@@ -3036,6 +3047,8 @@ class URLRequestTestHTTP : public URLRequestTest {
   HttpTestServer* http_test_server() { return &test_server_; }
 
  private:
+  base::test::ScopedFeatureList feature_list_;
+
   HttpTestServer test_server_;
 };
 
@@ -4442,14 +4455,9 @@ TEST_F(URLRequestTestHTTP, NetworkDelegateInfoRedirect) {
                                              NetLogEventType::DELEGATE_INFO));
 }
 
-// TODO(svaldez): Update tests to use EmbeddedTestServer.
-#if !defined(OS_IOS)
 // Tests handling of delegate info from a URLRequest::Delegate.
 TEST_F(URLRequestTestHTTP, URLRequestDelegateInfo) {
-  SpawnedTestServer test_server(SpawnedTestServer::TYPE_HTTP,
-                                base::FilePath(kTestFilePath));
-
-  ASSERT_TRUE(test_server.Start());
+  ASSERT_TRUE(http_test_server()->Start());
 
   AsyncLoggingUrlRequestDelegate request_delegate(
       AsyncLoggingUrlRequestDelegate::NO_CANCEL);
@@ -4465,8 +4473,8 @@ TEST_F(URLRequestTestHTTP, URLRequestDelegateInfo) {
     // the possibility of multiple reads being combined in the unlikely event
     // that it occurs.
     std::unique_ptr<URLRequest> r(context.CreateRequest(
-        test_server.GetURL("/chunked?waitBetweenChunks=20"), DEFAULT_PRIORITY,
-        &request_delegate, TRAFFIC_ANNOTATION_FOR_TESTS));
+        http_test_server()->GetURL("/chunked?waitBetweenChunks=20"),
+        DEFAULT_PRIORITY, &request_delegate, TRAFFIC_ANNOTATION_FOR_TESTS));
     LoadStateWithParam load_state = r->GetLoadState();
     r->Start();
     request_delegate.RunUntilComplete();
@@ -4502,7 +4510,6 @@ TEST_F(URLRequestTestHTTP, URLRequestDelegateInfo) {
       entries, log_position + 1,
       NetLogEventType::URL_REQUEST_DELEGATE_RESPONSE_STARTED));
 }
-#endif  // !defined(OS_IOS)
 
 // Tests handling of delegate info from a URLRequest::Delegate in the case of
 // an HTTP redirect.
@@ -5202,11 +5209,14 @@ TEST_F(URLRequestTestHTTP, ProcessPKPAndSendReport) {
   context.set_cert_verifier(&cert_verifier);
   context.Init();
 
+  IsolationInfo isolation_info = IsolationInfo::CreateTransient();
+
   // Now send a request to trigger the violation.
   TestDelegate d;
   std::unique_ptr<URLRequest> violating_request(context.CreateRequest(
       https_test_server.GetURL(test_server_hostname, "/simple.html"),
       DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+  violating_request->set_isolation_info(isolation_info);
   violating_request->Start();
   d.RunUntilComplete();
 
@@ -5224,6 +5234,8 @@ TEST_F(URLRequestTestHTTP, ProcessPKPAndSendReport) {
   std::string report_hostname;
   EXPECT_TRUE(report_dict->GetString("hostname", &report_hostname));
   EXPECT_EQ(test_server_hostname, report_hostname);
+  EXPECT_EQ(isolation_info.network_isolation_key(),
+            mock_report_sender.latest_network_isolation_key());
 }
 
 // Tests that reports do not get sent on requests to static pkp hosts that
@@ -5269,6 +5281,7 @@ TEST_F(URLRequestTestHTTP, ProcessPKPWithNoViolation) {
   std::unique_ptr<URLRequest> request(context.CreateRequest(
       https_test_server.GetURL(test_server_hostname, "/simple.html"),
       DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+  request->set_isolation_info(IsolationInfo::CreateTransient());
   request->Start();
   d.RunUntilComplete();
 
@@ -5277,6 +5290,8 @@ TEST_F(URLRequestTestHTTP, ProcessPKPWithNoViolation) {
   EXPECT_EQ(OK, d.request_status());
   EXPECT_EQ(GURL(), mock_report_sender.latest_report_uri());
   EXPECT_EQ(std::string(), mock_report_sender.latest_report());
+  EXPECT_EQ(NetworkIsolationKey(),
+            mock_report_sender.latest_network_isolation_key());
   TransportSecurityState::STSState sts_state;
   TransportSecurityState::PKPState pkp_state;
   EXPECT_TRUE(security_state.GetStaticDomainState(test_server_hostname,
@@ -5327,6 +5342,7 @@ TEST_F(URLRequestTestHTTP, PKPBypassRecorded) {
   std::unique_ptr<URLRequest> request(context.CreateRequest(
       https_test_server.GetURL(test_server_hostname, "/simple.html"),
       DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+  request->set_isolation_info(IsolationInfo::CreateTransient());
   request->Start();
   d.RunUntilComplete();
 
@@ -5335,6 +5351,8 @@ TEST_F(URLRequestTestHTTP, PKPBypassRecorded) {
   EXPECT_EQ(OK, d.request_status());
   EXPECT_EQ(GURL(), mock_report_sender.latest_report_uri());
   EXPECT_EQ(std::string(), mock_report_sender.latest_report());
+  EXPECT_EQ(NetworkIsolationKey(),
+            mock_report_sender.latest_network_isolation_key());
   TransportSecurityState::STSState sts_state;
   TransportSecurityState::PKPState pkp_state;
   EXPECT_TRUE(security_state.GetStaticDomainState(test_server_hostname,
@@ -6695,22 +6713,22 @@ TEST_F(URLRequestTestHTTP, IsolationInfoUpdatedOnRedirect) {
     IsolationInfo expected_info_after_redirect;
   } kTestCases[] = {
       {IsolationInfo(), IsolationInfo()},
-      {IsolationInfo::Create(IsolationInfo::RedirectMode::kUpdateTopFrame,
+      {IsolationInfo::Create(IsolationInfo::RequestType::kMainFrame,
                              original_origin, original_origin,
                              SiteForCookies()),
-       IsolationInfo::Create(IsolationInfo::RedirectMode::kUpdateTopFrame,
+       IsolationInfo::Create(IsolationInfo::RequestType::kMainFrame,
                              redirect_origin, redirect_origin,
                              SiteForCookies::FromOrigin(redirect_origin))},
-      {IsolationInfo::Create(IsolationInfo::RedirectMode::kUpdateFrameOnly,
+      {IsolationInfo::Create(IsolationInfo::RequestType::kSubFrame,
                              original_origin, original_origin,
                              SiteForCookies::FromOrigin(original_origin)),
-       IsolationInfo::Create(IsolationInfo::RedirectMode::kUpdateFrameOnly,
+       IsolationInfo::Create(IsolationInfo::RequestType::kSubFrame,
                              original_origin, redirect_origin,
                              SiteForCookies::FromOrigin(original_origin))},
-      {IsolationInfo::Create(IsolationInfo::RedirectMode::kUpdateNothing,
+      {IsolationInfo::Create(IsolationInfo::RequestType::kOther,
                              original_origin, original_origin,
                              SiteForCookies()),
-       IsolationInfo::Create(IsolationInfo::RedirectMode::kUpdateNothing,
+       IsolationInfo::Create(IsolationInfo::RequestType::kOther,
                              original_origin, original_origin,
                              SiteForCookies())},
       {transient_isolation_info, transient_isolation_info},
@@ -6746,8 +6764,8 @@ TEST_F(URLRequestTestHTTP, IsolationInfoUpdatedOnRedirect) {
       EXPECT_EQ(!test_case.expected_info_after_redirect.network_isolation_key()
                      .IsTransient(),
                 r->was_cached());
-      EXPECT_EQ(test_case.expected_info_after_redirect.redirect_mode(),
-                r->isolation_info().redirect_mode());
+      EXPECT_EQ(test_case.expected_info_after_redirect.request_type(),
+                r->isolation_info().request_type());
       EXPECT_EQ(test_case.expected_info_after_redirect.top_frame_origin(),
                 r->isolation_info().top_frame_origin());
       EXPECT_EQ(test_case.expected_info_after_redirect.frame_origin(),
@@ -12209,6 +12227,122 @@ TEST_F(HTTPSEarlyDataTest, TLSEarlyDataPOSTTest) {
 
     // The Early-Data header should be omitted in the request, since we don't
     // send POSTs over early data, and the handler should return "0".
+    EXPECT_EQ("0", d.data_received());
+  }
+}
+
+// TLSEarlyDataTest tests that the 0-RTT is enabled for idempotent POST request.
+TEST_F(HTTPSEarlyDataTest, TLSEarlyDataIdempotentPOSTTest) {
+  ASSERT_TRUE(test_server_.Start());
+  context_.http_transaction_factory()->GetSession()->ClearSSLSessionCache();
+  const int kParamSize = 4 * 1024;
+  const GURL kUrl =
+      test_server_.GetURL("/zerortt?" + std::string(kParamSize, 'a'));
+
+  {
+    TestDelegate d;
+    std::unique_ptr<URLRequest> r(context_.CreateRequest(
+        kUrl, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+    r->Start();
+    EXPECT_TRUE(r->is_pending());
+
+    base::RunLoop().Run();
+
+    EXPECT_EQ(1, d.response_started_count());
+
+    EXPECT_EQ(SSL_CONNECTION_VERSION_TLS1_3,
+              SSLConnectionStatusToVersion(r->ssl_info().connection_status));
+    EXPECT_TRUE(r->ssl_info().unverified_cert.get());
+    EXPECT_TRUE(test_server_.GetCertificate()->EqualsIncludingChain(
+        r->ssl_info().cert.get()));
+
+    // The Early-Data header should be omitted in the initial request, and the
+    // handler should return "0".
+    EXPECT_EQ("0", d.data_received());
+  }
+
+  context_.http_transaction_factory()->GetSession()->CloseAllConnections(
+      ERR_FAILED, "Very good reason");
+  listener_.BufferNextConnection(kParamSize);
+
+  {
+    TestDelegate d;
+    std::unique_ptr<URLRequest> r(context_.CreateRequest(
+        kUrl, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+    r->set_method("POST");
+    r->SetIdempotency(net::IDEMPOTENT);
+    r->Start();
+    EXPECT_TRUE(r->is_pending());
+
+    base::RunLoop().Run();
+
+    EXPECT_EQ(1, d.response_started_count());
+
+    EXPECT_EQ(SSL_CONNECTION_VERSION_TLS1_3,
+              SSLConnectionStatusToVersion(r->ssl_info().connection_status));
+    EXPECT_TRUE(r->ssl_info().unverified_cert.get());
+    EXPECT_TRUE(test_server_.GetCertificate()->EqualsIncludingChain(
+        r->ssl_info().cert.get()));
+
+    // The Early-Data header should be set since the request is set as an
+    // idempotent POST request.
+    EXPECT_EQ("1", d.data_received());
+  }
+}
+
+// TLSEarlyDataTest tests that the 0-RTT is disabled for non-idempotent request.
+TEST_F(HTTPSEarlyDataTest, TLSEarlyDataNonIdempotentRequestTest) {
+  ASSERT_TRUE(test_server_.Start());
+  context_.http_transaction_factory()->GetSession()->ClearSSLSessionCache();
+
+  {
+    TestDelegate d;
+    std::unique_ptr<URLRequest> r(context_.CreateRequest(
+        test_server_.GetURL("/zerortt"), DEFAULT_PRIORITY, &d,
+        TRAFFIC_ANNOTATION_FOR_TESTS));
+    r->Start();
+    EXPECT_TRUE(r->is_pending());
+
+    base::RunLoop().Run();
+
+    EXPECT_EQ(1, d.response_started_count());
+
+    EXPECT_EQ(SSL_CONNECTION_VERSION_TLS1_3,
+              SSLConnectionStatusToVersion(r->ssl_info().connection_status));
+    EXPECT_TRUE(r->ssl_info().unverified_cert.get());
+    EXPECT_TRUE(test_server_.GetCertificate()->EqualsIncludingChain(
+        r->ssl_info().cert.get()));
+
+    // The Early-Data header should be omitted in the initial request, and the
+    // handler should return "0".
+    EXPECT_EQ("0", d.data_received());
+  }
+
+  context_.http_transaction_factory()->GetSession()->CloseAllConnections(
+      ERR_FAILED, "Very good reason");
+
+  {
+    TestDelegate d;
+    std::unique_ptr<URLRequest> r(context_.CreateRequest(
+        test_server_.GetURL("/zerortt"), DEFAULT_PRIORITY, &d,
+        TRAFFIC_ANNOTATION_FOR_TESTS));
+    // Sets the GET request as not idempotent.
+    r->SetIdempotency(net::NOT_IDEMPOTENT);
+    r->Start();
+    EXPECT_TRUE(r->is_pending());
+
+    base::RunLoop().Run();
+
+    EXPECT_EQ(1, d.response_started_count());
+
+    EXPECT_EQ(SSL_CONNECTION_VERSION_TLS1_3,
+              SSLConnectionStatusToVersion(r->ssl_info().connection_status));
+    EXPECT_TRUE(r->ssl_info().unverified_cert.get());
+    EXPECT_TRUE(test_server_.GetCertificate()->EqualsIncludingChain(
+        r->ssl_info().cert.get()));
+
+    // The Early-Data header should be omitted in the initial request even
+    // though it is a GET request, since the request is set as not idempotent.
     EXPECT_EQ("0", d.data_received());
   }
 }

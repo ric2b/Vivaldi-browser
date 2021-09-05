@@ -2,13 +2,25 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-function createSelectionModel(len, opt_dependentLeadItem) {
+// clang-format off
+// #import {assertEquals, assertArrayEquals} from '../../../chai_assert.js';
+// #import {ListSingleSelectionModel} from 'chrome://resources/js/cr/ui/list_single_selection_model.m.js';
+// #import {adjust} from './list_selection_model_test_util.m.js';
+// clang-format on
+
+/**
+ * @param {number} len size of the selection model.
+ * @param {boolean=} dependentLeadItem inverse value for `independentLeadItem_`
+ *     defaults to true.
+ * @return {!cr.ui.ListSingleSelectionModel}
+ */
+function createSelectionModel(len, dependentLeadItem) {
   var sm = new cr.ui.ListSingleSelectionModel(len);
-  sm.independentLeadItem_ = !opt_dependentLeadItem;
+  sm.independentLeadItem_ = !dependentLeadItem;
   return sm;
 }
 
-function testAdjust1() {
+/* #export */ function testAdjust1() {
   var sm = createSelectionModel(200);
 
   sm.leadIndex = sm.anchorIndex = sm.selectedIndex = 100;
@@ -19,7 +31,7 @@ function testAdjust1() {
   assertEquals(90, sm.selectedIndex);
 }
 
-function testAdjust2() {
+/* #export */ function testAdjust2() {
   var sm = createSelectionModel(200);
 
   sm.leadIndex = sm.anchorIndex = sm.selectedIndex = 50;
@@ -30,7 +42,7 @@ function testAdjust2() {
   assertEquals(50, sm.selectedIndex);
 }
 
-function testAdjust3() {
+/* #export */ function testAdjust3() {
   var sm = createSelectionModel(200);
 
   sm.leadIndex = sm.anchorIndex = sm.selectedIndex = 100;
@@ -41,7 +53,7 @@ function testAdjust3() {
   assertEquals(110, sm.selectedIndex);
 }
 
-function testAdjust4() {
+/* #export */ function testAdjust4() {
   var sm = createSelectionModel(100);
 
   sm.leadIndex = sm.anchorIndex = sm.selectedIndex = 99;
@@ -53,7 +65,7 @@ function testAdjust4() {
   assertArrayEquals([], sm.selectedIndexes);
 }
 
-function testAdjust5() {
+/* #export */ function testAdjust5() {
   var sm = createSelectionModel(1);
 
   sm.leadIndex = sm.anchorIndex = sm.selectedIndex = 0;
@@ -65,7 +77,7 @@ function testAdjust5() {
   assertArrayEquals([10], sm.selectedIndexes);
 }
 
-function testSelectedIndex1() {
+/* #export */ function testSelectedIndex1() {
   var sm = createSelectionModel(100, true);
 
   sm.selectedIndex = 99;
@@ -75,7 +87,7 @@ function testSelectedIndex1() {
   assertArrayEquals([99], sm.selectedIndexes);
 }
 
-function testLeadIndex1() {
+/* #export */ function testLeadIndex1() {
   var sm = createSelectionModel(100);
 
   sm.leadIndex = 99;
@@ -85,7 +97,7 @@ function testLeadIndex1() {
   assertArrayEquals([], sm.selectedIndexes);
 }
 
-function testLeadIndex2() {
+/* #export */ function testLeadIndex2() {
   var sm = createSelectionModel(100, true);
 
   sm.leadIndex = 99;
@@ -94,3 +106,14 @@ function testLeadIndex2() {
   assertEquals(-1, sm.anchorIndex, 'anchor');
   assertArrayEquals([], sm.selectedIndexes);
 }
+
+Object.assign(window, {
+  testAdjust1,
+  testAdjust2,
+  testAdjust3,
+  testAdjust4,
+  testAdjust5,
+  testSelectedIndex1,
+  testLeadIndex1,
+  testLeadIndex2,
+});

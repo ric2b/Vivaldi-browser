@@ -35,6 +35,7 @@
 
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
+#include "browser/sessions/page_actions_session_helper.h"
 
 class Profile;
 
@@ -232,6 +233,12 @@ class SessionService : public sessions::CommandStorageManagerDelegate,
                      const SessionID& tab_id,
                       const std::string& ext_data);
 
+  void PageActionOverridesChanged(
+      const SessionID& window_id,
+      const SessionID& tab_id,
+      const base::FilePath& script_path,
+      page_actions::Service::ScriptOverride script_override);
+
   // Tests Vivaldi specific attributes on the Browser to see if we should
   // track this in the session.
   static bool ShouldTrackVivaldiBrowser(Browser* browser);
@@ -243,6 +250,7 @@ class SessionService : public sessions::CommandStorageManagerDelegate,
   FRIEND_TEST_ALL_PREFIXES(SessionServiceTest, RestoreActivation1);
   FRIEND_TEST_ALL_PREFIXES(SessionServiceTest, RestoreActivation2);
   FRIEND_TEST_ALL_PREFIXES(SessionServiceTest, RemoveUnusedRestoreWindowsTest);
+  FRIEND_TEST_ALL_PREFIXES(SessionServiceTest, Workspace);
   FRIEND_TEST_ALL_PREFIXES(NoStartupWindowTest, DontInitSessionServiceForApps);
 
   typedef std::map<SessionID, std::pair<int, int>> IdToRange;
@@ -414,6 +422,8 @@ class SessionService : public sessions::CommandStorageManagerDelegate,
 
   // Force session commands to be rebuild before next save event.
   bool rebuild_on_next_save_;
+
+  PageActionsSessionHelper page_actions_helper{this};
 
   // Don't send duplicate SetSelectedTabInWindow commands when the selected
   // tab's index hasn't changed.

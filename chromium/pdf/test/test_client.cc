@@ -63,4 +63,12 @@ float TestClient::GetToolbarHeightInScreenCoords() {
   return 0;
 }
 
+void TestClient::SetSelectedText(const std::string& selected_text) {}
+
+void TestClient::SetLinkUnderCursor(const std::string& link_under_cursor) {}
+
+bool TestClient::IsValidLink(const std::string& url) {
+  return !url.empty();
+}
+
 }  // namespace chrome_pdf

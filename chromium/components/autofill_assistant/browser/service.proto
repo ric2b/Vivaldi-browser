@@ -124,8 +124,14 @@ message SupportsScriptResponseProto {
 
 // Overlay image to be drawn on top of full overlays.
 message OverlayImageProto {
-  // The image to display. If set, |image_size| is mandatory.
-  optional string image_url = 1;
+  // TODO(b/170202574): Remove legacy |image_url|.
+  // If set, |image_size| is mandatory.
+  oneof image {
+    // Deprecated, but currently still supported. The image to display.
+    string image_url = 1;
+    // The image to display.
+    DrawableProto image_drawable = 8;
+  }
   // The size of the image to display.
   optional ClientDimensionProto image_size = 2;
   // The margin between the top of the page (anchor) and the image.
@@ -142,7 +148,6 @@ message OverlayImageProto {
 }
 
 message ClientSettingsProto {
-  reserved 10, 11;
   message IntegrationTestSettings {
     // Disables animations for the poodle and the progress bar.
     optional bool disable_header_animations = 1;
@@ -176,13 +181,8 @@ message ClientSettingsProto {
   // become stable.
   optional int32 box_model_check_count = 7;
 
-  // Time to wait between two checks of the document state, when waiting for the
-  // document to become ready.
-  optional int32 document_ready_check_interval_ms = 8;
-
-  // Maximum number of checks to run while waiting for the document to become
-  // ready.
-  optional int32 document_ready_check_count = 9;
+  // Maximum time to wait until document has reached "ready" state.
+  optional int32 document_ready_check_timeout_ms = 20;
 
   // How much time to give users to tap undo when they tap a cancel button.
   optional int32 cancel_delay_ms = 12;
@@ -222,6 +222,8 @@ message ClientSettingsProto {
     optional string undo_label = 2;
   }
   optional BackButtonSettings back_button_settings = 19;
+
+  reserved 8 to 11;
 }
 
 message ScriptTimeoutError {
@@ -381,12 +383,22 @@ message InitialScriptActionsRequestProto {
   repeated ScriptParameterProto script_parameters = 2;
 }
 
+message RoundtripTimingStats {
+  // Reports how long it took for the previous roundtrip to the backend to
+  // complete.
+  optional int64 roundtrip_time_ms = 1;
+  // Reports the total client processing time for the executed batch of actions.
+  optional int64 client_time_ms = 2;
+}
+
 // Next request to get a script's actions.
 message NextScriptActionsRequestProto {
   // The result of processing each ActionProto from the previous response. This
   // field must be in the same order as the actions in the original response.
   // It may have less actions in case of failure.
   repeated ProcessedActionProto processed_actions = 1;
+  // Contains all roundtrip level (as opposed to action level) timing stats.
+  optional RoundtripTimingStats timing_stats = 2;
 }
 
 // Response of a script's actions.
@@ -416,21 +428,174 @@ message ActionsResponseProto {
   optional UpdateScriptListProto update_script_list = 5;
 }
 
+// Can be used to indicate the presence of a field, without the ambiguity that
+// a boolean field would have.
+message Empty {}
+
+// RPC request to fetch the available trigger scripts for a particular domain.
+message GetTriggerScriptsRequestProto {
+  // The exact url for which to fetch the trigger scripts.
+  optional string url = 1;
+  // The client context.
+  // NOTE: Currently, this will only contain the Chrome version number for
+  // privacy reasons.
+  optional ClientContextProto client_context = 2;
+  // Optional debug script parameters.
+  repeated ScriptParameterProto debug_script_parameters = 3;
+}
+
+// The RPC response to a |GetTriggerScriptsRequestProto|.
+message GetTriggerScriptsResponseProto {
+  // The available trigger scripts, if any.
+  repeated TriggerScriptProto trigger_scripts = 1;
+
+  // A list of additional domains and subdomains. Trigger scripts will
+  // automatically cancel the ongoing session if the user navigates away from
+  // the original domain or any of the additional domains.
+  repeated string additional_allowed_domains = 2;
+
+  // The amount of time a trigger script may evaluate trigger conditions while
+  // invisible. If a trigger script is invisible for this amount of time, it
+  // will automatically finish with LITE_SCRIPT_TRIGGER_CONDITION_TIMEOUT.
+  // If not specified, there is no automatic timeout.
+  //
+  // This is only counted while no trigger script is shown, and the time is
+  // reset on tab switch and whenever a trigger script is hidden. Note that this
+  // only counts the time in-between checks, so the actual timeout will be
+  // slightly longer.
+  optional int32 timeout_ms = 3;
+
+  // The amount of time between consecutive checks of trigger conditions. Should
+  // not be too small to limit performance impact.
+  optional int32 trigger_condition_check_interval_ms = 4 [default = 1000];
+}
+
+// A trigger script contains the full specification for a trigger script that is
+// run when a specific condition is true, prior to the full run.
+message TriggerScriptProto {
+  enum TriggerScriptAction {
+    UNDEFINED = 0;
+    // The current trigger script is cancelled. If the prompt is not currently
+    // being shown, this has no effect. If the prompt is currently being shown,
+    // the prompt is hidden and the trigger script is restarted once the trigger
+    // condition has become false again.
+    NOT_NOW = 1;
+    // Cancels the current trigger script and does not restart it for this
+    // session.
+    CANCEL_SESSION = 2;
+    // Cancels the current trigger script and prevents trigger scripts from ever
+    // running again. TODO(b/172039582): allow a per-domain opt-out.
+    CANCEL_FOREVER = 3;
+    // Displays a popup to give users additional cancel options.
+    SHOW_CANCEL_POPUP = 4;
+    // Stop the trigger script and start the regular script.
+    ACCEPT = 5;
+  }
+
+  // The |trigger_condition| must be true for the script to trigger.
+  optional TriggerScriptConditionProto trigger_condition = 1;
+
+  // The user interface to show.
+  optional TriggerScriptUIProto user_interface = 3;
+
+  // What should happen if the user swipe-dismisses the bottom sheet.
+  optional TriggerScriptAction on_swipe_to_dismiss = 4
+      [default = CANCEL_SESSION];
+
+  reserved 2;
+}
+
+message TriggerScriptConditionProto {
+  oneof type {
+    // The condition matches if all of these conditions match.
+    TriggerScriptConditionsProto all_of = 1;
+    // The condition matches if at least one of these conditions matches.
+    TriggerScriptConditionsProto any_of = 2;
+    // The condition matches if none of these conditions match.
+    TriggerScriptConditionsProto none_of = 3;
+
+    // The condition matches if the specified selector matches the current DOM..
+    SelectorProto selector = 8;
+    // The condition matches if the user has stored login credentials for the
+    // domain.
+    Empty stored_login_credentials = 5;
+    // The condition matches if the user has never seen a trigger script before.
+    Empty is_first_time_user = 6;
+    // The condition matches if the client is in the specified experiment.
+    int32 experiment_id = 7;
+    // The condition matches if the keyboard is hidden.
+    Empty keyboard_hidden = 9;
+  }
+
+  reserved 4;
+}
+
+message TriggerScriptConditionsProto {
+  repeated TriggerScriptConditionProto conditions = 1;
+}
+
+message TriggerScriptUIProto {
+  message ProgressBar {
+    repeated DrawableProto step_icons = 1;
+    optional int32 active_step = 2;
+  }
+
+  message TriggerChip {
+    optional ChipProto chip = 1;
+    optional TriggerScriptProto.TriggerScriptAction action = 2;
+  }
+  message Popup {
+    message Choice {
+      // The text to display.
+      optional string text = 1;
+      // The action to execute if this popup item is selected.
+      optional TriggerScriptProto.TriggerScriptAction action = 2;
+    }
+    // The available popup items.
+    repeated Choice choices = 1;
+  }
+
+  // The status message to display.
+  optional string status_message = 1;
+  // The callout to display. If not specified, no callout will be shown.
+  optional string callout_message = 2;
+  // The progress bar to display. If not specified, no progress bar will be
+  // shown.
+  optional ProgressBar progress_bar = 3;
+  // The cancel popup, usually associated with a particular chip.
+  optional Popup cancel_popup = 4;
+  // The available left-aligned chips, specified in order from left to right.
+  repeated TriggerChip left_aligned_chips = 5;
+  // The available right-aligned chips, specified in order from left to right.
+  repeated TriggerChip right_aligned_chips = 6;
+  // The status message to display when transitioning from this trigger script
+  // to the regular script.
+  optional string regular_script_loading_status_message = 7;
+  // Whether the visual viewport should be resized to allow scrolling to the
+  // bottom of the page while the trigger script is being displayed.
+  optional bool resize_visual_viewport = 8;
+}
+
 enum KeyboardValueFillStrategy {
   UNSPECIFIED_KEYBAORD_STRATEGY = 0;
 
   // Send a `node.value = "<value>"` JS command.
   SET_VALUE = 1;
 
-  // Send a `node.value = ""` JS command to clear the field, then send single
-  // key strokes.
+  // Send a `node.value = ""` JS command to clear the field, then click the
+  // field to focus it and send single key strokes.
   SIMULATE_KEY_PRESSES = 2;
 
   // Send a `node.select()` JS command to select the current field value, then
   // send single key strokes overwriting the current value.
   SIMULATE_KEY_PRESSES_SELECT_VALUE = 3;
+
+  // Send a `node.value = ""` JS command to clear the field, then send a
+  // `node.focus()` JS command to focus the field and send single key strokes.
+  SIMULATE_KEY_PRESSES_FOCUS = 4;
 }
 
+// Note: On multiple matches, the first one will be selected.
 enum DropdownSelectStrategy {
   UNSPECIFIED_SELECT_STRATEGY = 0;
 
@@ -490,7 +655,7 @@ message ActionProto {
     NavigateProto navigate = 9;
     PromptProto prompt = 10;
     TellProto tell = 11;
-    FocusElementProto focus_element = 12;
+    ShowCastProto show_cast = 12;
     WaitForDomProto wait_for_dom = 19;
     UseCreditCardProto use_card = 28;
     UseAddressProto use_address = 29;
@@ -513,6 +678,7 @@ message ActionProto {
     SaveGeneratedPasswordProto save_generated_password = 53;
     ConfigureUiStateProto configure_ui_state = 54;
     PresaveGeneratedPasswordProto presave_generated_password = 55;
+    GetElementStatusProto get_element_status = 56;
   }
 
   // Set to true to make the client remove any contextual information if the
@@ -570,6 +736,16 @@ message CollectUserDataResultProto {
   reserved 7, 8;
 }
 
+message ActionTimingStats {
+  // Requested delay before executing the action.
+  optional int64 delay_ms = 1;
+  // Time actively spent by the client to execute the action.
+  optional int64 active_time_ms = 2;
+  // Time spent waiting for users to complete a task and/or for website
+  // loading/navigation.
+  optional int64 wait_time_ms = 3;
+}
+
 message ProcessedActionProto {
   // The action that was processed.
   optional ActionProto action = 1;
@@ -580,7 +756,6 @@ message ProcessedActionProto {
 
   oneof result_data {
     PromptProto.Result prompt_choice = 5;
-    string html_source = 12;
     // Should be set as a result of CollectUserDataAction.
     CollectUserDataResultProto collect_user_data_result = 15;
     // Should be set as a result of SetFormFieldValueAction.
@@ -589,10 +764,13 @@ message ProcessedActionProto {
     WaitForDomProto.Result wait_for_dom_result = 22;
     // Should be set as a result of FormAction.
     FormProto.Result form_result = 21;
-
     WaitForDocumentProto.Result wait_for_document_result = 25;
     // Should be set as a result of ShowGenericUiProto.
     ShowGenericUiProto.Result show_generic_ui_result = 28;
+    // Should be set as a result of GetElementStatusProto.
+    GetElementStatusProto.Result get_element_status_result = 31;
+    // Should be set as a result of UploadDomProto.
+    UploadDomProto.Result upload_dom_result = 33;
   }
 
   // Reports information about navigation that happened while
@@ -603,12 +781,15 @@ message ProcessedActionProto {
   // include the delay specified in action.delay_ms.
   optional int64 run_time_ms = 23;
 
+  // Collects the timing stats related to the action execution.
+  optional ActionTimingStats timing_stats = 32;
+
   // If true, the user triggered, during the client action, at least one user
   // action, such as a prompt choice, through a direct action instead of
   // selecting a chip on the UI. This is meant for monitoring and debugging.
   optional bool direct_action = 24;
 
-  reserved 26, 27;
+  reserved 3, 4, 6 to 14, 16, 18, 26, 27, 29, 30;
 }
 
 // Extended information about the action status, which provides more details
@@ -631,6 +812,9 @@ message ProcessedActionStatusDetailsProto {
 
   // More information included for |SetFormFieldValueProto| related errors.
   optional SetFormFieldErrorInfoProto form_field_error_info = 4;
+
+  // Additional information from the |WebController|.
+  optional WebControllerErrorInfoProto web_controller_error_info = 5;
 }
 
 message NavigationInfoProto {
@@ -742,6 +926,77 @@ message SetFormFieldErrorInfoProto {
   optional int32 invalid_keypress_index = 1;
 }
 
+// Message to report errors related to WebController execution.
+message WebControllerErrorInfoProto {
+  enum WebAction {
+    UNSPECIFIED_WEB_ACTION = 0;
+
+    // Scroll an element into view by centering it on the page. This uses
+    // native JS functionality.
+    SCROLL_INTO_VIEW = 1;
+
+    // Waiting for the document ready state to be interactive.
+    WAIT_FOR_DOCUMENT_TO_BECOME_INTERACTIVE = 2;
+
+    // Send a click or tap event to an element.
+    CLICK_OR_TAP_ELEMENT = 3;
+
+    // Select an option from an HTML dropdown.
+    SELECT_OPTION = 4;
+
+    // Set the element's style to be highlighted by adding a BoxShadow to the
+    // element.
+    HIGHLIGHT_ELEMENT = 5;
+
+    // Scroll the element into view with padding. This does not use native JS
+    // functionality but calculates the scrolling manually.
+    SCROLL_INTO_VIEW_WITH_PADDING = 6;
+
+    // Get the |value| attribute of an element.
+    GET_FIELD_VALUE = 7;
+
+    // Get any attribute of an element.
+    GET_STRING_ATTRIBUTE = 8;
+
+    // Select an element's value. This does only work for text elements.
+    SELECT_FIELD_VALUE = 9;
+
+    // Set the |value| attribute of an element.
+    SET_VALUE_ATTRIBUTE = 10;
+
+    // Set any attribute of an element.
+    SET_ATTRIBUTE = 11;
+
+    // Send a series of keystroke inputs. This requires an element to have
+    // focus to receive them.
+    SEND_KEYBOARD_INPUT = 12;
+
+    // Get the outer HTML of an element.
+    GET_OUTER_HTML = 13;
+
+    // Get the tag of an element.
+    GET_ELEMENT_TAG = 14;
+
+    // Set active focus on a field.
+    FOCUS_FIELD = 15;
+
+    // Wait for an element position to stabilize before clicking or a tapping.
+    // Fails with ELEMENT_UNSTABLE.
+    WAIT_UNTIL_ELEMENT_IS_STABLE = 16;
+
+    // Check that the element is on top, usually as part of clicking.
+    // Fails with ELEMENT_NOT_ON_TOP.
+    ON_TOP = 17;
+
+    // Waiting for a certain document ready state failed.
+    WAIT_FOR_DOCUMENT_READY_STATE = 18;
+  }
+
+  // The web-action that failed. This is usually a step in an execution chain
+  // for an action.
+  optional WebAction failed_web_action = 1;
+}
+
 // The pseudo type values come from
 // https://chromedevtools.github.io/devtools-protocol/tot/DOM#type-PseudoType.
 enum PseudoType {
@@ -772,6 +1027,10 @@ message SelectorProto {
 
   // A filter that starts with one or more elements and returns one on more
   // elements. Filters are meant to be applied sequentially.
+  //
+  // The returned elements will be sorted by their order in the document.
+  // Elements that were matched via the labelled filter will have the same order
+  // as their label.
   message Filter {
     oneof filter {
       // Enter the document of an iframe or shadow root. The next filters apply
@@ -802,13 +1061,11 @@ message SelectorProto {
       //
       // This is the equivalent of the old MUST_BE_VISIBLE flag. It's been
       // renamed as having a bounding box is not enough to imply visibility.
-      EmptyFilter bounding_box = 6;
+      BoundingBoxFilter bounding_box = 6;
 
-      // Pick just one match and continue. Ignore all other matches.
-      //
-      // For backward-compatibility with older element references, pick_one can
-      // be put before enter_frame.
-      EmptyFilter pick_one = 7;
+      // Take the nth match. Fails with ELEMENT_RESOLUTION_FAILED if there are
+      // not enough matches.
+      NthMatchFilter nth_match = 7;
 
       // Only keep elements that have a pseudo-element with the given content.
       //
@@ -816,6 +1073,8 @@ message SelectorProto {
       //
       // Note that this just filters out elements. It doesn't select the
       // pseudo-element; use pseudo_type for that.
+      //
+      // Deprecated: prefer css_style. This should be removed in Chrome M89.
       PseudoElementContent pseudo_element_content = 8;
 
       // Go from label to the labelled control. Only works starting with current
@@ -842,6 +1101,44 @@ message SelectorProto {
       // always 0. If there are multiple elements at exactly the same distance,
       // an arbitrary one is returned.
       ProximityFilter closest = 10;
+
+      // Only keep results that match the given CSS selector.
+      string match_css_selector = 11;
+
+      // Only keep elements whose computed style match the given filter. This is
+      // based on Window.computedStyle()
+      CssStyleFilter css_style = 12;
+
+      // Filter out elements whose center point are covered by another element.
+      //
+      // This first calls Element.scrollIntoViewIfNeeded to make sure the
+      // element can be moved to the viewport, then calls
+      // DocumentOrShadowDom.getElementFromPoint and compares the result with
+      // the expected element. If the element at point is not the element, a
+      // descendant of the element or a label of the element, there is an
+      // overlay.
+      //
+      // Note that:
+      //
+      // - this filter will also weed out elements with no bounding box. Check
+      // with bounding_box { } first.
+      //
+      // - this filter will also weed out elements that cannot be scrolled into
+      // the viewport.
+      //
+      // - an element might be covered by an overlay and still be visible if the
+      // overlay is transparent. An element might be covered by an overlay and
+      // still be clickable, if the overlay intercepts and forwards events.
+      // Overlays with pointer-events set to none are ignored.
+      //
+      // - an element might be only partially covered by an overlay. This filter
+      // only checks the center of the element, since this is where the click
+      // action sends its clicks or taps.
+      //
+      // - this filter only detects overlays in the current frame. To detect
+      // overlays that cover the frame element itself, apply this filter on the
+      // frame element before calling enter_frame.
+      OnTopFilter on_top = 13;
     }
   }
 
@@ -861,6 +1158,35 @@ message SelectorProto {
   message PseudoElementContent {
     optional PseudoType pseudo_type = 1;
     optional TextFilter content = 2;
+  }
+
+  // Only keep elements whose computed style match the given filter. This is
+  // based on Window.computedStyle()
+  //
+  // See
+  // https://developer.mozilla.org/en-US/docs/Web/API/Window/getComputedStyle
+  message CssStyleFilter {
+    // CSS property name.
+    optional string property = 3;
+
+    // Name of the pseudo-element whose style should be checked. Leave it unset
+    // or set to the empty string to check the style of the real element.
+    //
+    // This is the pseudoElt argument of JavaScript's
+    // window.getComputedStyle(element, [, pseudoElt]).
+    optional string pseudo_element = 4;
+
+    // By default the text filter in |value| must match. Set this to false to
+    // require the text condition not to match.
+    optional bool should_match = 5 [default = true];
+
+    // CSS property value match.
+    //
+    // Valid computed CSS properties always have a value, even if it's a default
+    // value. The default value depends on the property.
+    optional TextFilter value = 6;
+
+    reserved 1, 2;
   }
 
   // Filter elements by their position on the page, relative to a given target
@@ -929,7 +1255,42 @@ message SelectorProto {
     optional int32 max_pairs = 5 [default = 50];
   }
 
+  // Only keep elements that have a bounding box.
+  message BoundingBoxFilter {
+    // If require_nonempty=false, which is the default, require elements to have
+    // at least one bounding rect returned by Element.getClientRects()
+    //
+    // If require_nonempty=true, additionally require the element's bounding
+    // client rect to have a nonzero width and height.
+    optional bool require_nonempty = 1;
+  }
+
+  // Filter out elements covered by other elements, such as overlays.
+  message OnTopFilter {
+    // If true, scroll the element into view before checking whether
+    // it's on top.
+    //
+    // The logic for checking whether an element is on top only works on
+    // elements that are positioned within the current viewport. Setting it to
+    // false turns off automatic scrolling to make the element visible, so the
+    // caller must make sure it's already the case.
+    optional bool scroll_into_view_if_needed = 1 [default = true];
+
+    // If true and the element cannot be scrolled into view, so the filter
+    // cannot check whether the element is on top, keep the element in the match
+    // set.
+    //
+    // This can be combined with scroll_into_view_if_needed=false to make
+    // this filter best effort and only check elements that are already in view.
+    optional bool accept_element_if_not_in_view = 2;
+  }
+
   message EmptyFilter {}
+
+  message NthMatchFilter {
+    // Take the match at the given |index|.
+    optional int32 index = 1;
+  }
 
   reserved 1 to 8;
 }
@@ -938,6 +1299,19 @@ message SelectorProto {
 message ClickProto {
   optional SelectorProto element_to_click = 1;
   optional ClickType click_type = 2;
+
+  // Configure whether click should check whether the element is the topmost
+  // element before clicking on it.
+  //
+  // If set to REQUIRE_STEP_SUCCESS, click might fail with ELEMENT_NOT_ON_TOP.
+  optional OptionalStep on_top = 3;
+}
+
+enum OptionalStep {
+  STEP_UNSPECIFIED = 0;
+  SKIP_STEP = 1;
+  REPORT_STEP_RESULT = 2;
+  REQUIRE_STEP_SUCCESS = 3;
 }
 
 // Contain all arguments to perform a select option action.
@@ -975,8 +1349,8 @@ message TellProto {
   optional bool needs_ui = 2 [default = true];
 }
 
-// Contain all arguments to focus on an element.
-message FocusElementProto {
+// Contain all arguments to show cast on an element.
+message ShowCastProto {
   message TopPadding {
     oneof top_padding {
       // Padding in CSS pixels. Eg. 20.
@@ -985,8 +1359,9 @@ message FocusElementProto {
       float ratio = 2;
     }
   }
-  // Element to focus on.
-  optional SelectorProto element = 1;
+
+  // Element to scroll to.
+  optional SelectorProto element_to_present = 1;
 
   // Optional title to show in the status bar.
   optional string title = 2;
@@ -1002,6 +1377,20 @@ message FocusElementProto {
 
   // The padding that will be added between the focused element and the top.
   optional TopPadding top_padding = 7;
+
+  // Configure whether the scrolling should wait for the element to be stable
+  // before scrolling.
+  //
+  // If set to REQUIRE_STEP_SUCCESS, scrolling may fail with ELEMENT_UNSTABLE.
+  optional OptionalStep wait_for_stable_element = 9;
+
+  // Maximum rounds to stable check.
+  optional int32 stable_check_max_rounds = 10 [default = 50];
+
+  // Interval for stable check in ms.
+  optional int32 stable_check_interval_ms = 11 [default = 200];
+
+  reserved 3, 4, 8;
 }
 
 // An area made up of rectangles whole border are made defined by the position
@@ -1205,9 +1594,18 @@ message ElementConditionsProto {
 // Volatile upload of a portion of the dom for backend analysis, does not store
 // anything.
 message UploadDomProto {
+  message Result {
+    // The outer HTML of the element(s) matched by |tree_root|.
+    repeated string outer_htmls = 1;
+  }
+
   // The element that should be a root of uploaded DOM. If empty then the whole
   // page is returned.
   optional SelectorProto tree_root = 1;
+
+  // Whether |tree_root| can match multiple elements. If false and multiple
+  // elements are matched, this action will fail with TOO_MANY_MATCHES.
+  optional bool can_match_multiple_elements = 2;
 }
 
 // Shows the progress bar.
@@ -1460,7 +1858,7 @@ message ShowGenericUiProto {
   reserved 10;
 }
 
-// Allow choosing one or more possibility. If FocusElement was called just
+// Allow choosing one or more possibility. If ShowCast was called just
 // before, allow interaction with the touchable element area, otherwise don't
 // allow any interactions.
 message PromptProto {
@@ -1530,7 +1928,7 @@ message PromptProto {
 
   // A list of domains and subdomains to allow users to navigate to when in
   // browse mode.
-  repeated string browse_domains_whitelist = 9;
+  repeated string browse_domains_allowlist = 9;
 
   // Result to pass to ProcessedActionProto.
   message Result {
@@ -2351,4 +2749,86 @@ message SelectionInputProto {
 message PopupMessageProto {
   // Message to show in the popup.
   optional string message = 1;
+}
+
+// Action to get an element's status.
+message GetElementStatusProto {
+  optional SelectorProto element = 1;
+
+  optional ValueMatch expected_value_match = 2;
+  optional ValueSource value_source = 4;
+
+  // If set and a mismatch happens, the action will report an failure status
+  // with |ELEMENT_MISMATCH|. If this flag is set to false, the action will not
+  // fail and simply report the result.
+  optional bool mismatch_should_fail = 3;
+
+  // The result that gets sent as part of |ProcessedActionProto.result_data|.
+  message Result {
+    // The field is considered not empty.
+    optional bool not_empty = 1;
+    // The field matches the expected input.
+    optional bool match_success = 2;
+    // The field was expected to match an empty expectation. For a value this
+    // means an empty expected value, for a RegExp this means the extracted
+    // match was empty.
+    optional bool expected_empty_match = 4;
+
+    // For logging and debugging.
+    repeated ComparisonReport reports = 3;
+  }
+
+  enum ValueSource {
+    NOT_SET = 0;
+    // Compare the element's |value| attribute against this expected match.
+    VALUE = 1;
+    // Compare the element's |innerText| attribute against this expected match.
+    INNER_TEXT = 2;
+  }
+
+  message MatchOptions {
+    optional bool case_sensitive = 1;
+    optional bool remove_space = 2;
+  }
+
+  message MatchExpectation {
+    optional MatchOptions match_options = 1;
+
+    oneof match_level {
+      bool full_match = 2;
+      bool contains = 3;
+      bool starts_with = 4;
+      bool ends_with = 5;
+    }
+  }
+
+  message TextMatch {
+    oneof value_source {
+      // The value to check against.
+      string value = 1;
+      // A value from an Autofill source. Note that this must be proceeded by a
+      // |CollectUserDataAction|.
+      AutofillValue autofill_value = 2;
+      // A regular expression.
+      string re2 = 4;
+    }
+
+    // Optional. The expectations to declare this as a matching success. If
+    // left empty, the action will always be treated as successful.
+    optional MatchExpectation match_expectation = 3;
+  }
+
+  message ValueMatch { optional TextMatch text_match = 1; }
+
+  message ComparisonReport {
+    optional MatchOptions match_options = 1;
+
+    optional bool full_match = 2;
+    optional bool contains = 3;
+    optional bool starts_with = 4;
+    optional bool ends_with = 5;
+
+    optional bool empty = 6;
+    optional bool expected_empty_match = 7;
+  }
 }

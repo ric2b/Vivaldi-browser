@@ -12,7 +12,7 @@
 #include "base/containers/flat_map.h"
 #include "base/strings/string_piece.h"
 #include "components/cast/cast_component_export.h"
-#include "third_party/blink/public/common/messaging/web_message_port.h"
+#include "components/cast/message_port/message_port.h"
 
 namespace cast_api_bindings {
 
@@ -20,8 +20,8 @@ namespace cast_api_bindings {
 // and to register handlers for communication with the content.
 class CAST_COMPONENT_EXPORT Manager {
  public:
-  using MessagePortConnectedHandler =
-      base::RepeatingCallback<void(blink::WebMessagePort)>;
+  using MessagePortConnectedHandler = base::RepeatingCallback<void(
+      std::unique_ptr<cast_api_bindings::MessagePort>)>;
 
   Manager();
   virtual ~Manager();
@@ -48,7 +48,8 @@ class CAST_COMPONENT_EXPORT Manager {
   // connection to |port_name|.
   // Returns |false| if the port was invalid or not registered in advance, at
   // which point the matchmaking port should be dropped.
-  bool OnPortConnected(base::StringPiece port_name, blink::WebMessagePort port);
+  bool OnPortConnected(base::StringPiece port_name,
+                       std::unique_ptr<cast_api_bindings::MessagePort> port);
 
  private:
   base::flat_map<std::string, MessagePortConnectedHandler> port_handlers_;

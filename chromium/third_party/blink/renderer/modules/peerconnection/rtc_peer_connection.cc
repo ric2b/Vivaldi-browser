@@ -100,7 +100,6 @@
 #include "third_party/blink/renderer/modules/peerconnection/rtc_track_event.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_void_request_impl.h"
 #include "third_party/blink/renderer/modules/peerconnection/rtc_void_request_promise_impl.h"
-#include "third_party/blink/renderer/modules/peerconnection/testing/internals_rtc_peer_connection.h"
 #include "third_party/blink/renderer/modules/peerconnection/web_rtc_stats_report_callback_resolver.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/microtask.h"
@@ -957,7 +956,7 @@ ScriptPromise RTCPeerConnection::CreateOffer(
       return ScriptPromise::CastUndefined(script_state);
     }
 
-    if (!constraints.IsEmpty()) {
+    if (!constraints.IsUnconstrained()) {
       UseCounter::Count(
           context, WebFeature::kRTCPeerConnectionCreateOfferLegacyConstraints);
     } else {

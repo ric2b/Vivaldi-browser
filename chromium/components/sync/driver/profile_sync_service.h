@@ -21,6 +21,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/invalidation/public/identity_provider.h"
+#include "components/policy/core/common/policy_service.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/base/sync_prefs.h"
@@ -60,10 +61,6 @@ namespace syncer {
 
 class BackendMigrator;
 class SyncAuthManager;
-class TypeDebugInfoObserver;
-struct CommitCounters;
-struct StatusCounters;
-struct UpdateCounters;
 
 // Look at the SyncService interface for information on how to use this class.
 // You should not need to know about ProfileSyncService directly.
@@ -100,8 +97,7 @@ class ProfileSyncService : public SyncService,
     network::NetworkConnectionTracker* network_connection_tracker = nullptr;
     version_info::Channel channel = version_info::Channel::UNKNOWN;
     std::string debug_identifier;
-    bool autofill_enable_account_wallet_storage = false;
-    bool enable_passwords_account_storage = false;
+    policy::PolicyService* policy_service = nullptr;
 
    private:
     DISALLOW_COPY_AND_ASSIGN(InitParams);
@@ -130,7 +126,6 @@ class ProfileSyncService : public SyncService,
   std::unique_ptr<SyncSetupInProgressHandle> GetSetupInProgressHandle()
       override;
   bool IsSetupInProgress() const override;
-  ModelTypeSet GetRegisteredDataTypes() const override;
   ModelTypeSet GetPreferredDataTypes() const override;
   ModelTypeSet GetActiveDataTypes() const override;
   ModelTypeSet GetBackedOffDataTypes() const override;
@@ -143,8 +138,10 @@ class ProfileSyncService : public SyncService,
       const std::string& gaia_id,
       const std::vector<std::vector<uint8_t>>& keys,
       int last_key_version) override;
-  UserDemographicsResult GetUserNoisedBirthYearAndGender(
-      base::Time now) override;
+  void AddTrustedVaultRecoveryMethodFromWeb(
+      const std::string& gaia_id,
+      const std::vector<uint8_t>& public_key,
+      base::OnceClosure callback) override;
   void AddObserver(SyncServiceObserver* observer) override;
   void RemoveObserver(SyncServiceObserver* observer) override;
   bool HasObserver(const SyncServiceObserver* observer) const override;
@@ -153,13 +150,14 @@ class ProfileSyncService : public SyncService,
   base::Time GetLastSyncedTimeForDebugging() const override;
   SyncCycleSnapshot GetLastCycleSnapshotForDebugging() const override;
   std::unique_ptr<base::Value> GetTypeStatusMapForDebugging() override;
+  void GetEntityCountsForDebugging(
+      base::OnceCallback<void(const std::vector<TypeEntitiesCount>&)> callback)
+      const override;
   const GURL& GetSyncServiceUrlForDebugging() const override;
   std::string GetUnrecoverableErrorMessageForDebugging() const override;
   base::Location GetUnrecoverableErrorLocationForDebugging() const override;
   void AddProtocolEventObserver(ProtocolEventObserver* observer) override;
   void RemoveProtocolEventObserver(ProtocolEventObserver* observer) override;
-  void AddTypeDebugInfoObserver(TypeDebugInfoObserver* observer) override;
-  void RemoveTypeDebugInfoObserver(TypeDebugInfoObserver* observer) override;
   base::WeakPtr<JsController> GetJsController() override;
   void GetAllNodesForDebugging(
       base::OnceCallback<void(std::unique_ptr<base::ListValue>)> callback)
@@ -175,14 +173,6 @@ class ProfileSyncService : public SyncService,
       bool success) override;
   void OnSyncCycleCompleted(const SyncCycleSnapshot& snapshot) override;
   void OnProtocolEvent(const ProtocolEvent& event) override;
-  void OnDirectoryTypeCommitCounterUpdated(
-      ModelType type,
-      const CommitCounters& counters) override;
-  void OnDirectoryTypeUpdateCounterUpdated(
-      ModelType type,
-      const UpdateCounters& counters) override;
-  void OnDatatypeStatusCounterUpdated(ModelType type,
-                                      const StatusCounters& counters) override;
   void OnConnectionStatusChange(ConnectionStatus status) override;
   void OnMigrationNeededForTypes(ModelTypeSet types) override;
   void OnActionableError(const SyncProtocolError& error) override;
@@ -223,7 +213,8 @@ class ProfileSyncService : public SyncService,
 
 #if defined(OS_ANDROID)
   // Persists the fact that sync should no longer respect whether Android master
-  // sync is enabled. Only called on Android.
+  // sync is enabled. This will be respected for the current syncing account
+  // (if one exists) and any future ones. Only called on Android.
   void SetDecoupledFromAndroidMasterSync();
 
   // Gets the persisted information of whether sync should no longer respect
@@ -252,6 +243,12 @@ class ProfileSyncService : public SyncService,
   void OverrideNetworkForTest(const CreateHttpPostProviderFactory&
                                   create_http_post_provider_factory_cb);
 
+  ModelTypeSet GetRegisteredDataTypesForTest() const;
+
+  // Simulates that all policies just got loaded. This does nothing if the
+  // policies were already loaded.
+  void TriggerPoliciesLoadedForTest();
+
   bool IsDataTypeControllerRunningForTest(ModelType type) const;
 
   // Some tests rely on injecting calls to the encryption observer.
@@ -273,13 +270,8 @@ class ProfileSyncService : public SyncService,
   };
 
   enum UnrecoverableErrorReason {
-    ERROR_REASON_UNSET,
-    ERROR_REASON_SYNCER,
     ERROR_REASON_ENGINE_INIT_FAILURE,
-    ERROR_REASON_CONFIGURATION_RETRY,
-    ERROR_REASON_CONFIGURATION_FAILURE,
     ERROR_REASON_ACTIONABLE_ERROR,
-    ERROR_REASON_LIMIT
   };
 
   // Virtual for testing.
@@ -310,6 +302,10 @@ class ProfileSyncService : public SyncService,
 
   bool UseTransportOnlyMode() const;
 
+  // Returns the set of data types that are supported in principle, possibly
+  // influenced by command-line options.
+  ModelTypeSet GetRegisteredDataTypes() const;
+
   // Returns the ModelTypes allowed in transport-only mode (i.e. those that are
   // not tied to sync-the-feature).
   ModelTypeSet GetModelTypesForTransportOnlyMode() const;
@@ -332,9 +328,10 @@ class ProfileSyncService : public SyncService,
                                 const std::string& message,
                                 UnrecoverableErrorReason reason);
 
-  // Stops the sync engine. Does NOT set IsSyncRequested to false. Use
-  // RequestStop for that. |data_fate| controls whether the local sync data is
+  // Stops the sync engine. |data_fate| controls whether the local sync data is
   // deleted or kept when the engine shuts down.
+  // Does NOT set IsSyncRequested to false, use StopAndClear() or
+  // SyncUserSettings::SetSyncRequested() for that.
   void StopImpl(SyncStopDataFate data_fate);
 
   // Puts the engine's sync scheduler into NORMAL mode.
@@ -380,7 +377,8 @@ class ProfileSyncService : public SyncService,
   // Called by SyncServiceCrypto when its required user action changes.
   void OnRequiredUserActionChanged();
 
-  std::string GetExperimentalAuthenticationSecret() const;
+  // Helper function to prevent future bugs that avoid notyfing while clearing.
+  void ClearLocalTransportDataAndNotify();
 
   // This profile's SyncClient, which abstracts away non-Sync dependencies and
   // the Sync API component factory.
@@ -408,17 +406,11 @@ class ProfileSyncService : public SyncService,
   // An identifier representing this instance for debugging purposes.
   const std::string debug_identifier_;
 
-  const bool autofill_enable_account_wallet_storage_;
-  const bool enable_passwords_account_storage_;
-
   // This specifies where to find the sync server.
   const GURL sync_service_url_;
 
   // A utility object containing logic and state relating to encryption.
   SyncServiceCrypto crypto_;
-
-  // TODO(crbug.com/923287): Move out of this class. Possibly to SyncEngineImpl.
-  scoped_refptr<base::SequencedTaskRunner> backend_task_runner_;
 
   // Our asynchronous engine to communicate with sync components living on
   // other threads.
@@ -455,7 +447,8 @@ class ProfileSyncService : public SyncService,
   bool sync_disabled_by_admin_;
 
   // Information describing an unrecoverable error.
-  UnrecoverableErrorReason unrecoverable_error_reason_;
+  base::Optional<UnrecoverableErrorReason> unrecoverable_error_reason_ =
+      base::nullopt;
   std::string unrecoverable_error_message_;
   base::Location unrecoverable_error_location_;
 
@@ -465,8 +458,6 @@ class ProfileSyncService : public SyncService,
   base::ObserverList<SyncServiceObserver>::Unchecked observers_;
   base::ObserverList<ProtocolEventObserver>::Unchecked
       protocol_event_observers_;
-  base::ObserverList<TypeDebugInfoObserver>::Unchecked
-      type_debug_info_observers_;
 
   SyncJsController sync_js_controller_;
 

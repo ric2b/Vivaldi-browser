@@ -22,7 +22,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 <histograms>
 
 <histogram name="Cryptohome.AsyncDBusRequest" units="ms"
-    expires_after="2021-02-21">
+    expires_after="2021-04-25">
   <owner>zuan@chromium.org</owner>
   <owner>cros-hwsec+uma@chromium.org</owner>
   <summary>
@@ -63,7 +63,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Cryptohome.DeprecatedApiCalled"
-    enum="CryptohomeDeprecatedApiCalled" expires_after="2021-02-01">
+    enum="CryptohomeDeprecatedApiCalled" expires_after="2021-04-04">
   <owner>apronin@chromium.org</owner>
   <owner>louiscollard@chromium.org</owner>
   <owner>zuan@chromium.org</owner>
@@ -206,7 +206,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Cryptohome.Errors" enum="CryptohomeError"
-    expires_after="2021-03-07">
+    expires_after="2021-05-09">
   <owner>apronin@chromium.org</owner>
   <owner>cros-hwsec+uma@chromium.org</owner>
   <summary>Cryptohome errors.</summary>
@@ -258,7 +258,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Cryptohome.HomedirEncryptionType" enum="HomedirEncryptionType"
-    expires_after="2021-02-07">
+    expires_after="2021-04-11">
   <owner>dspaid@chromium.org</owner>
   <summary>
     The encryption type used for a user's cryptohome directory. This is logged
@@ -277,7 +277,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram base="true" name="Cryptohome.LECredential"
-    enum="CryptohomeLECredError" expires_after="2021-02-28">
+    enum="CryptohomeLECredError" expires_after="2021-05-02">
 <!-- Name completed by histogram_suffixes name="LECredentialOps" -->
 
   <owner>pmalani@chromium.org</owner>
@@ -364,7 +364,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Cryptohome.OOPMountCleanupResult"
-    enum="CryptohomeOOPMountCleanupResult" expires_after="2021-02-01">
+    enum="CryptohomeOOPMountCleanupResult" expires_after="2021-04-04">
   <owner>betuls@chromium.org</owner>
   <owner>jorgelo@chromium.org</owner>
   <summary>
@@ -374,7 +374,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Cryptohome.OOPMountOperationResult"
-    enum="CryptohomeOOPMountOperationResult" expires_after="2021-02-01">
+    enum="CryptohomeOOPMountOperationResult" expires_after="2021-04-04">
   <owner>betuls@chromium.org</owner>
   <owner>jorgelo@chromium.org</owner>
   <summary>
@@ -384,7 +384,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Cryptohome.ParallelTasks" units="count"
-    expires_after="2021-03-07">
+    expires_after="2021-05-09">
   <owner>zuan@chromium.org</owner>
   <owner>cros-hwsec+uma@chromium.org</owner>
   <summary>
@@ -406,7 +406,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Cryptohome.TimeSessionUnlock" units="ms"
-    expires_after="2021-02-07">
+    expires_after="2021-04-11">
   <owner>kerrnel@chromium.org</owner>
   <owner>mnissler@chromium.org</owner>
   <summary>
@@ -438,7 +438,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Cryptohome.TimeToInitPkcs11" units="ms"
-    expires_after="2021-02-14">
+    expires_after="2021-04-18">
   <owner>apronin@chromium.org</owner>
   <owner>cros-hwsec+uma@chromium.org</owner>
   <summary>
@@ -449,7 +449,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Cryptohome.TimeToMountEx" units="ms"
-    expires_after="2021-02-01">
+    expires_after="2021-04-04">
   <owner>jorgelo@chromium.org</owner>
   <owner>cros-hwsec+uma@chromium.org</owner>
   <summary>
@@ -469,7 +469,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Cryptohome.TimeToMountGuestEx" units="ms"
-    expires_after="2021-02-01">
+    expires_after="2021-04-04">
   <owner>jorgelo@chromium.org</owner>
   <owner>cros-hwsec+uma@chromium.org</owner>
   <summary>
@@ -479,7 +479,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Cryptohome.TimeToPerformEphemeralMount" units="ms"
-    expires_after="2021-02-01">
+    expires_after="2021-04-04">
   <owner>jorgelo@chromium.org</owner>
   <owner>cros-hwsec+uma@chromium.org</owner>
   <summary>
@@ -502,7 +502,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Cryptohome.TimeToPerformOOPMountCleanup" units="ms"
-    expires_after="2021-01-31">
+    expires_after="2021-04-25">
   <owner>jorgelo@chromium.org</owner>
   <owner>betuls@chromium.org</owner>
   <summary>
@@ -513,7 +513,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Cryptohome.TimeToPerformOOPMountOperation" units="ms"
-    expires_after="2021-01-31">
+    expires_after="2021-04-04">
   <owner>jorgelo@chromium.org</owner>
   <owner>betuls@chromium.org</owner>
   <summary>
@@ -523,7 +523,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Cryptohome.TimeToTakeTpmOwnership" units="ms"
-    expires_after="2021-03-07">
+    expires_after="2021-05-09">
   <owner>apronin@chromium.org</owner>
   <owner>cros-hwsec+uma@chromium.org</owner>
   <summary>
@@ -533,7 +533,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="Cryptohome.TpmResults" enum="CryptohomeTpmResults"
-    expires_after="2021-02-07">
+    expires_after="2021-04-11">
   <owner>afakhry@chromium.org</owner>
   <summary>
     The errors resulting from interacting with the Trusted Platform Module (TPM)
@@ -541,7 +541,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="CryptohomeClient" units="ms" expires_after="2021-03-07">
+<histogram name="CryptohomeClient" units="ms" expires_after="2021-05-09">
   <owner>zuan@chromium.org</owner>
   <owner>cros-hwsec+uma@chromium.org</owner>
   <summary>

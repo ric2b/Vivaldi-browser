@@ -23,6 +23,8 @@
 <translation id="1591562245178063882">Энэ сар</translation>
 <translation id="1637811476055996098">Файлуудыг сонгох</translation>
 <translation id="1650423536718072820">ишлэл</translation>
+<translation id="1681022320378710418">одоогийн цаг</translation>
+<translation id="1727839386348365796">Eyedropper</translation>
 <translation id="1727886345390570319">хаалттай тайлбаруудын цэсийг нуух</translation>
 <translation id="1729654308190250600">Заавал имэйл хаяг оруулах ёстой.</translation>
 <translation id="1758486001363313524">Бусад ...</translation>
@@ -30,6 +32,7 @@
 <translation id="1806710327868736751">анхааруулах_мэдэгдэл</translation>
 <translation id="1821985195704844674">шаталсан хүснэгт</translation>
 <translation id="1822429046913737220">AM/PM</translation>
+<translation id="1823704031293214298">хуудасны хөл хэсэг</translation>
 <translation id="1832974991323546415">алсын төхөөрөмж дээр тоглуулах</translation>
 <translation id="190587075670221089">устгалт</translation>
 <translation id="1907737156431278478">жишээ</translation>
@@ -54,7 +57,7 @@
 <translation id="245932805758469625">видео үргэлжлэх үлдсэн секундийн тоо</translation>
 <translation id="248395913932153421">Өдөр</translation>
 <translation id="2507943997699731163">Энэ талбарыг бөглөнө үү.</translation>
-<translation id="2508569020611168319">чихтэй хуудасны жагсаалт</translation>
+<translation id="2508569020611168319">табын жагсаалт</translation>
 <translation id="2530182415807757784">олныг сонгох боломжтой, алийг нь ч сонгоогүй.</translation>
 <translation id="2561842179657104141">бусад медиа хяналтыг харуулах</translation>
 <translation id="2572483411312390101">Тоглуулах</translation>
@@ -73,13 +76,14 @@
 <translation id="2908441821576996758">Цэгээр тусгаарлагдсан и-мэйл хаягуудын жагсаалтыг оруулна уу.</translation>
 <translation id="2940813599313844715">обьект</translation>
 <translation id="3040011195152428237">холбоос</translation>
-<translation id="3049748772180311791"><ph name="QUANTITY" /> Мегабайт</translation>
+<translation id="3049748772180311791"><ph name="QUANTITY" /> МБ</translation>
 <translation id="3075154866155599887">Энэ талбар нь бүрэн бус эсвэл хүчин төгөлдөр бус огноотой байна. Хүчин төгөлдөр утга оруулна уу.</translation>
 <translation id="3078740164268491126">Хүснэгт</translation>
 <translation id="3086746722712840547">Тайлбар</translation>
 <translation id="310520048233152454">URL-аа оруулна уу.</translation>
 <translation id="3175736971608411871">хугацаа хэмжигч</translation>
 <translation id="3199563858620722075">багцийн хайрцаг</translation>
+<translation id="3220661731597678625">одоогийн алхам</translation>
 <translation id="3329013043687509092">Өнгөний нэвчилт</translation>
 <translation id="3450233048674729344">Оруулсан утга нь <ph name="MAXIMUM" />-тай тэнцүү эсвэл бага байх ёстой.</translation>
 <translation id="3486220673238053218">тодорхойлолт</translation>
@@ -105,11 +109,14 @@
 <translation id="4201051445878709314">Өмнөх сарыг харуулах</translation>
 <translation id="421884353938374759">Өнгө сонгогч</translation>
 <translation id="4248100235867064564">цэсний мөр</translation>
+<translation id="4293574643247337246">хуудасны толгой хэсэг</translation>
 <translation id="4360991593054037559">Хүчинтэй утгыг оруулна уу. Хамгийн ойрын хүчинтэй дараах хоёр <ph name="VALID_VALUE_LOW" /> болон <ph name="VALID_VALUE_HIGHER" />  утгууд байна.</translation>
+<translation id="4384249794467006333">Энэ зургийг шошголоогүй байна. Зургийн тайлбарыг авахын тулд баруун дээд хэсэгт байх Бусад сонголт цэсийг нээнэ үү.</translation>
 <translation id="4384583879834880242">Асуулт, хариулт</translation>
 <translation id="4444765639179266822"><ph name="OCR_TEXT" /> гэж хэлж байгаа бололтой</translation>
 <translation id="4446524499724042288">тайлбар толины лавлагаа</translation>
 <translation id="4522570452068850558">дэлгэрэнгүй мэдээлэл</translation>
+<translation id="4576178047100686001">Энэ зургийг шошголоогүй байна. Зургийн тайлбарыг авахын тулд зүүн дээд хэсэгт байх Бусад сонголт цэсийг нээнэ үү.</translation>
 <translation id="4597532268155981612">маягт</translation>
 <translation id="4661075872484491155">tree</translation>
 <translation id="4664250907885839816">'<ph name="ATSIGN" />'-ын дараах хэсэгт '<ph name="INVALIDCHARACTER" />' тэмдэг оруулахгүй байх хэрэгтэй.</translation>
@@ -122,6 +129,7 @@
 <translation id="4763480195061959176">видео</translation>
 <translation id="479989351350248267">хайлт</translation>
 <translation id="4812940957355064477">Нэг тоо оруулна уу.</translation>
+<translation id="4912200001568447310">одоогийн зүйл</translation>
 <translation id="4912536737030637138">ном зүйн хэсэг</translation>
 <translation id="4915360478455618802">Цаг сонгогчийг харуулах</translation>
 <translation id="492244087561876220">тайлбар</translation>
@@ -144,6 +152,7 @@
 <translation id="5334352251556557839">Медиа тоглуулах боломжгүй байна.</translation>
 <translation id="537648784377940524">Хамгийн бага огноо (<ph name="MIN_DATE_OR_TIME" />) нь хамгийн их огнооны (<ph name="MAX_DATE_OR_TIME" />) өмнө байх ёстой.</translation>
 <translation id="5406322316791861025">дүрслэл</translation>
+<translation id="5425179576310518467">одоогийн огноо</translation>
 <translation id="5453733299334684579">салаалсан зүйл</translation>
 <translation id="5466621249238537318">Нэг буюу түүнээс дээш файлыг сонгоно уу.</translation>
 <translation id="5468998798572797635">Дэлгэцийг хумих</translation>
@@ -173,6 +182,7 @@
 <translation id="6164829606128959761">метр</translation>
 <translation id="6166809985690652833">төгсгөлийн үг</translation>
 <translation id="6209276755895393898">Дараах шиг харагдаж байна: <ph name="DESCRIPTION" /></translation>
+<translation id="6212595056017402527">одоогийн хуудас</translation>
 <translation id="6213469881011901533">тайлбар толь</translation>
 <translation id="6281588256137006900">Цайвар байдал</translation>
 <translation id="6281763101136022427">url</translation>
@@ -207,6 +217,7 @@
 <translation id="6989848892321993519">Энэ текстийг <ph name="MIN_CHARACTERS" /> болон түүнээс дээш тэмдэгтээр уртасгана уу (та одоогоор 1 тэмдэгт оруулсан байна).</translation>
 <translation id="7034405885550056553">зөвлөмж</translation>
 <translation id="709897737746224366">Заагдсан форматанд тааруулна уу.</translation>
+<translation id="7102274145889307184">одоогийн байршил</translation>
 <translation id="7118469954320184356">Тайлбар алга.</translation>
 <translation id="7139483182332611405">удиртгал</translation>
 <translation id="7214187073215825913">контентын мэдээлэл</translation>
@@ -220,7 +231,7 @@
 <translation id="739024184232394898">Бусад...</translation>
 <translation id="7405738980073107433">нэмэлт тэмдэглэл</translation>
 <translation id="7410239719251593705">Насанд хүрэгчдэд зориулсан контент агуулсан бололтой. Тайлбар алга.</translation>
-<translation id="7460907917090416791"><ph name="QUANTITY" /> терабайт</translation>
+<translation id="7460907917090416791"><ph name="QUANTITY" /> ТБ</translation>
 <translation id="7491962110804786152">цонх</translation>
 <translation id="7514365320538308">Татаж авах</translation>
 <translation id="7529102961911894712">арын холбоос</translation>

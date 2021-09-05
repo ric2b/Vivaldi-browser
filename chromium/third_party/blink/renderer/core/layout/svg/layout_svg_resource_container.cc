@@ -19,7 +19,6 @@
 
 #include "third_party/blink/renderer/core/layout/svg/layout_svg_resource_container.h"
 
-#include "base/auto_reset.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_resources.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_resources_cache.h"
 #include "third_party/blink/renderer/core/layout/svg/svg_resources_cycle_solver.h"
@@ -42,7 +41,6 @@ LocalSVGResource* ResourceForContainer(
 
 LayoutSVGResourceContainer::LayoutSVGResourceContainer(SVGElement* node)
     : LayoutSVGHiddenContainer(node),
-      is_in_layout_(false),
       completed_invalidations_mask_(0),
       is_invalidating_(false) {}
 
@@ -50,17 +48,10 @@ LayoutSVGResourceContainer::~LayoutSVGResourceContainer() = default;
 
 void LayoutSVGResourceContainer::UpdateLayout() {
   NOT_DESTROYED();
-  // FIXME: Investigate a way to detect and break resource layout dependency
-  // cycles early. Then we can remove this method altogether, and fall back onto
-  // LayoutSVGHiddenContainer::layout().
+  // TODO(fs): This is only here to clear the invalidation mask, without that
+  // we wouldn't need to override LayoutSVGHiddenContainer::UpdateLayout().
   DCHECK(NeedsLayout());
-  if (is_in_layout_)
-    return;
-
-  base::AutoReset<bool> in_layout_change(&is_in_layout_, true);
-
   LayoutSVGHiddenContainer::UpdateLayout();
-
   ClearInvalidationMask();
 }
 
@@ -173,26 +164,6 @@ void LayoutSVGResourceContainer::MarkAllClientsForInvalidation(
   is_invalidating_ = false;
 }
 
-void LayoutSVGResourceContainer::MarkClientForInvalidation(
-    LayoutObject& client,
-    InvalidationModeMask invalidation_mask) {
-  if (invalidation_mask & SVGResourceClient::kPaintInvalidation) {
-    // Since LayoutSVGInlineTexts don't have SVGResources (they use their
-    // parent's), they will not be notified of changes to paint servers. So
-    // if the client is one that could have a LayoutSVGInlineText use a
-    // paint invalidation reason that will force paint invalidation of the
-    // entire <text>/<tspan>/... subtree.
-    client.SetSubtreeShouldDoFullPaintInvalidation(
-        PaintInvalidationReason::kSVGResource);
-    client.InvalidateClipPathCache();
-    // Invalidate paint properties to update effects if any.
-    client.SetNeedsPaintPropertyUpdate();
-  }
-
-  if (invalidation_mask & SVGResourceClient::kBoundariesInvalidation)
-    client.SetNeedsBoundariesUpdate();
-}
-
 void LayoutSVGResourceContainer::InvalidateCacheAndMarkForLayout(
     LayoutInvalidationReasonForTracing reason,
     SubtreeLayoutScope* layout_scope) {
@@ -221,24 +192,10 @@ static inline void RemoveFromCacheAndInvalidateDependencies(
   if (!element)
     return;
 
-  if (SVGResources* resources =
-          SVGResourcesCache::CachedResourcesForLayoutObject(object)) {
-    SVGElementResourceClient* client = element->GetSVGResourceClient();
-    if (resources->HasClipOrMaskOrFilter()) {
-      InvalidationModeMask invalidation_mask =
-          SVGResourceClient::kBoundariesInvalidation;
-      bool filter_data_invalidated = false;
-      if (resources->Filter()) {
-        filter_data_invalidated = client->ClearFilterData();
-        invalidation_mask |=
-            filter_data_invalidated ? SVGResourceClient::kPaintInvalidation : 0;
-      }
-      LayoutSVGResourceContainer::MarkClientForInvalidation(object,
-                                                            invalidation_mask);
-      if (filter_data_invalidated)
-        client->MarkFilterDataDirty();
-    }
-  }
+  // TODO(fs): Do we still need this? (If bounds are invalidated on a leaf
+  // LayoutObject, we will propagate that during the required layout and
+  // invalidate effects of self and any ancestors at that time.)
+  SVGResourceInvalidator(object).InvalidateEffects();
 
   element->NotifyIncomingReferences([needs_layout](SVGElement& element) {
     DCHECK(element.GetLayoutObject());
@@ -266,12 +223,33 @@ void LayoutSVGResourceContainer::MarkForLayoutAndParentResourceInvalidation(
 
     if (current->IsSVGResourceContainer()) {
       // This will process the rest of the ancestors.
-      ToLayoutSVGResourceContainer(current)->RemoveAllClientsFromCache();
+      To<LayoutSVGResourceContainer>(current)->RemoveAllClientsFromCache();
       break;
     }
 
     current = current->Parent();
   }
+}
+
+static inline bool IsLayoutObjectOfResourceContainer(
+    const LayoutObject& layout_object) {
+  const LayoutObject* current = &layout_object;
+  while (current) {
+    if (current->IsSVGResourceContainer())
+      return true;
+    current = current->Parent();
+  }
+  return false;
+}
+
+void LayoutSVGResourceContainer::StyleDidChange(LayoutObject& object,
+                                                StyleDifference diff) {
+  // If this LayoutObject is the child of a resource container and
+  // it requires repainting because of changes to CSS properties
+  // such as 'visibility', upgrade to invalidate layout.
+  bool needs_layout = diff.NeedsPaintInvalidation() &&
+                      IsLayoutObjectOfResourceContainer(object);
+  MarkForLayoutAndParentResourceInvalidation(object, needs_layout);
 }
 
 }  // namespace blink

@@ -80,6 +80,11 @@ class NGTableBorders : public RefCounted<NGTableBorders> {
   struct Edge {
     scoped_refptr<const ComputedStyle> style;
     EdgeSide edge_side;
+    // Box order is used to compute edge painting precedence.
+    // Lower box order has precedence.
+    // The order value is defined as "box visited index" while
+    // computing collapsed edges.
+    wtf_size_t box_order;
   };
 
   static LayoutUnit BorderWidth(const ComputedStyle* style,
@@ -104,18 +109,32 @@ class NGTableBorders : public RefCounted<NGTableBorders> {
                                   EdgeSide edge_side) {
     if (!style)
       return EBorderStyle::kNone;
+    EBorderStyle border_style;
     switch (edge_side) {
       case EdgeSide::kLeft:
-        return style->BorderLeftStyle();
+        border_style = style->BorderLeftStyle();
+        break;
       case EdgeSide::kRight:
-        return style->BorderRightStyle();
+        border_style = style->BorderRightStyle();
+        break;
       case EdgeSide::kTop:
-        return style->BorderTopStyle();
+        border_style = style->BorderTopStyle();
+        break;
       case EdgeSide::kBottom:
-        return style->BorderBottomStyle();
+        border_style = style->BorderBottomStyle();
+        break;
       case EdgeSide::kDoNotFill:
-        return EBorderStyle::kNone;
+        border_style = EBorderStyle::kNone;
+        break;
     }
+    // The spec (https://drafts.csswg.org/css-backgrounds-3/#border-style)
+    // states that outset is treated as grove in the collapsing border model,
+    // and inset is treated as ridge in the collapsing border model.
+    if (border_style == EBorderStyle::kOutset)
+      return EBorderStyle::kGroove;
+    if (border_style == EBorderStyle::kInset)
+      return EBorderStyle::kRidge;
+    return border_style;
   }
 
   static Color BorderColor(const ComputedStyle* style, EdgeSide edge_side) {
@@ -156,6 +175,10 @@ class NGTableBorders : public RefCounted<NGTableBorders> {
   Color BorderColor(wtf_size_t edge_index) const {
     return BorderColor(edges_[edge_index].style.get(),
                        edges_[edge_index].edge_side);
+  }
+
+  wtf_size_t BoxOrder(wtf_size_t edge_index) const {
+    return edges_[edge_index].box_order;
   }
 
   using Edges = Vector<Edge>;
@@ -205,8 +228,9 @@ class NGTableBorders : public RefCounted<NGTableBorders> {
                     wtf_size_t start_column,
                     wtf_size_t rowspan,
                     wtf_size_t colspan,
-                    const ComputedStyle* source_style,
+                    const ComputedStyle& source_style,
                     EdgeSource source,
+                    wtf_size_t box_order,
                     WritingDirectionMode table_writing_direction,
                     wtf_size_t section_index = kNotFound);
 
@@ -228,12 +252,24 @@ class NGTableBorders : public RefCounted<NGTableBorders> {
 
   wtf_size_t EdgeCount() const { return edges_.size(); }
 
+  bool CanPaint(wtf_size_t edge_index) const {
+    if (!HasEdgeAtIndex(edge_index))
+      return false;
+    EBorderStyle border_style = BorderStyle(edge_index);
+    if (border_style == EBorderStyle::kNone ||
+        border_style == EBorderStyle::kHidden)
+      return false;
+    if (BorderWidth(edge_index) == 0)
+      return false;
+    return true;
+  }
+
   bool HasEdgeAtIndex(wtf_size_t edge_index) const {
     return edge_index < edges_.size() && edges_[edge_index].style;
   }
 
   // Is there and edge at edges[edge_index + index_offset]?
-  bool HasEdgeAtIndex(wtf_size_t edge_index, int index_offset) const {
+  bool CanPaint(wtf_size_t edge_index, int index_offset) const {
     return (index_offset >= 0 ||
             (index_offset < 0 &&
              edge_index >= static_cast<wtf_size_t>(abs(index_offset)))) &&
@@ -271,13 +307,15 @@ class NGTableBorders : public RefCounted<NGTableBorders> {
   void MergeRowAxisBorder(wtf_size_t start_row,
                           wtf_size_t start_column,
                           wtf_size_t colspan,
-                          const ComputedStyle* source_style,
+                          const ComputedStyle& source_style,
+                          wtf_size_t box_order,
                           EdgeSide side);
 
   void MergeColumnAxisBorder(wtf_size_t start_row,
                              wtf_size_t start_column,
                              wtf_size_t rowspan,
-                             const ComputedStyle* source_style,
+                             const ComputedStyle& source_style,
+                             wtf_size_t box_order,
                              EdgeSide side);
 
   void MarkInnerBordersAsDoNotFill(wtf_size_t start_row,

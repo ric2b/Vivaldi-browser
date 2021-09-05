@@ -4,11 +4,11 @@
 
 #include <stdint.h>  // for uintptr_t
 
+#include <string>
 #include <tuple>    // for std::tie
 #include <utility>  // for std::swap
 
 #include "base/memory/checked_ptr.h"
-#include "gen/generated_header.h"
 
 class SomeClass {};
 class DerivedClass : public SomeClass {};
@@ -18,6 +18,7 @@ struct MyStruct {
   CheckedPtr<SomeClass> ptr2;
   CheckedPtr<const SomeClass> const_ptr;
   int (*func_ptr_field)();
+  CheckedPtr<const char> const_char_ptr;
 };
 
 namespace auto_tests {
@@ -173,20 +174,6 @@ void foo(int x) {
 
 }  // namespace ternary_operator_tests
 
-namespace generated_code_tests {
-
-void MyPrintf(const char* fmt, ...) {}
-
-void foo() {
-  GeneratedStruct s;
-
-  // No rewrite expected below (i.e. no |.get()| appended), because the field
-  // dereferenced below comes from (simulated) generated code.
-  MyPrintf("%p", s.ptr_field);
-}
-
-}  // namespace generated_code_tests
-
 namespace templated_functions {
 
 template <typename T>
@@ -259,6 +246,46 @@ void foo() {
 }
 
 }  // namespace templated_functions
+
+namespace implicit_constructors {
+
+// Based on //base/strings/string_piece_forward.h:
+template <typename STRING_TYPE>
+class BasicStringPiece;
+typedef BasicStringPiece<std::string> StringPiece;
+// Based on //base/strings/string_piece.h:
+template <typename STRING_TYPE>
+class BasicStringPiece {
+ public:
+  constexpr BasicStringPiece(const char* str) {}
+};
+// Test case:
+void FunctionTakingBasicStringPiece(StringPiece arg) {}
+
+class ClassWithImplicitConstructor {
+ public:
+  ClassWithImplicitConstructor(SomeClass* blah) {}
+};
+void FunctionTakingArgWithImplicitConstructor(
+    ClassWithImplicitConstructor arg) {}
+
+void foo() {
+  MyStruct my_struct;
+
+  // Expected rewrite - appending: .get().  This avoids the following error:
+  // error: no matching function for call to 'FunctionTakingBasicStringPiece'
+  // note: candidate function not viable: no known conversion from
+  // 'base::CheckedPtr<const char>' to 'templated_functions::StringPiece' (aka
+  // 'BasicStringPiece<basic_string<char, char_traits<char>, allocator<char>>>')
+  // for 1st argument
+  FunctionTakingBasicStringPiece(my_struct.const_char_ptr.get());
+
+  // Expected rewrite - appending: .get().  This is the same scenario as with
+  // StringPiece above (except that no templates are present here).
+  FunctionTakingArgWithImplicitConstructor(my_struct.ptr.get());
+}
+
+}  // namespace implicit_constructors
 
 namespace affected_implicit_template_specialization {
 

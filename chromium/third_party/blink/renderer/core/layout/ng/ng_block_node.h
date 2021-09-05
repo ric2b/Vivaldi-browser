@@ -18,6 +18,7 @@ class NGBlockBreakToken;
 class NGBoxFragmentBuilder;
 class NGConstraintSpace;
 class NGEarlyBreak;
+class NGFragmentItems;
 class NGLayoutResult;
 class NGPhysicalBoxFragment;
 class NGPhysicalContainerFragment;
@@ -27,7 +28,7 @@ struct NGLayoutAlgorithmParams;
 enum class MathScriptType;
 
 // Represents a node to be laid out.
-class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
+class CORE_EXPORT NGBlockNode : public NGLayoutInputNode {
   friend NGLayoutInputNode;
  public:
   explicit NGBlockNode(LayoutBox* box) : NGLayoutInputNode(box, kBlock) {}
@@ -94,13 +95,9 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
   NGBlockNode GetRenderedLegend() const;
   NGBlockNode GetFieldsetContent() const;
 
-  bool IsNGTable() const { return IsTable() && box_->IsLayoutNGMixin(); }
   bool IsNGTableCell() const {
     return box_->IsTableCell() && !box_->IsTableCellLegacy();
   }
-
-  bool IsFixedTableLayout() const;
-  const NGBoxStrut& GetTableBorders() const;
 
   // Return true if this block node establishes an inline formatting context.
   // This will only be the case if there is actual inline content. Empty nodes
@@ -115,6 +112,19 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
 
   // Returns the aspect ratio of a replaced element.
   LogicalSize GetAspectRatio() const;
+
+  // Returns the transform to apply to a child (e.g. for layout-overflow).
+  base::Optional<TransformationMatrix> GetTransformForChildFragment(
+      const NGPhysicalBoxFragment& child_fragment,
+      PhysicalSize size) const;
+
+  bool HasLeftOverflow() const { return box_->HasLeftOverflow(); }
+  bool HasTopOverflow() const { return box_->HasTopOverflow(); }
+  bool HasNonVisibleOverflow() const { return box_->HasNonVisibleOverflow(); }
+
+  OverflowClipAxes GetOverflowClipAxes() const {
+    return box_->GetOverflowClipAxes();
+  }
 
   // Returns true if this node should fill the viewport.
   // This occurs when we are in quirks-mode and we are *not* OOF-positioned,
@@ -206,8 +216,10 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
       const NGConstraintSpace&,
       const NGLayoutResult&,
       const NGBlockBreakToken* previous_break_token) const;
-  void CopyFragmentItemsToLayoutBox(const NGPhysicalBoxFragment& container,
-                                    const NGFragmentItems& items) const;
+  void CopyFragmentItemsToLayoutBox(
+      const NGPhysicalBoxFragment& container,
+      const NGFragmentItems& items,
+      const NGBlockBreakToken* previous_break_token) const;
   void CopyFragmentDataToLayoutBoxForInlineChildren(
       const NGPhysicalContainerFragment& container,
       LayoutUnit initial_container_width,
@@ -216,7 +228,11 @@ class CORE_EXPORT NGBlockNode final : public NGLayoutInputNode {
   void PlaceChildrenInLayoutBox(
       const NGPhysicalBoxFragment&,
       const NGBlockBreakToken* previous_break_token) const;
-  void PlaceChildrenInFlowThread(const NGPhysicalBoxFragment&) const;
+  void PlaceChildrenInFlowThread(
+      LayoutMultiColumnFlowThread*,
+      const NGConstraintSpace&,
+      const NGPhysicalBoxFragment&,
+      const NGBlockBreakToken* previous_container_break_token) const;
   void CopyChildFragmentPosition(
       const NGPhysicalBoxFragment& child_fragment,
       PhysicalOffset,

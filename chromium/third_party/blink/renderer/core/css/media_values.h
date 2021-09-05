@@ -5,6 +5,8 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_CSS_MEDIA_VALUES_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_CSS_MEDIA_VALUES_H_
 
+#include "third_party/blink/public/mojom/css/preferred_color_scheme.mojom-blink-forward.h"
+#include "third_party/blink/public/mojom/css/preferred_contrast.mojom-blink-forward.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom-shared.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
@@ -18,12 +20,12 @@ class CSSPrimitiveValue;
 class LocalFrame;
 enum class CSSValueID;
 enum class ColorSpaceGamut;
-enum class PreferredColorScheme;
 enum class ForcedColors;
 enum class NavigationControls;
 enum class ScreenSpanning;
 
-PreferredColorScheme CSSValueIDToPreferredColorScheme(CSSValueID id);
+mojom::blink::PreferredColorScheme CSSValueIDToPreferredColorScheme(
+    CSSValueID id);
 
 class CORE_EXPORT MediaValues : public GarbageCollected<MediaValues> {
  public:
@@ -81,7 +83,9 @@ class CORE_EXPORT MediaValues : public GarbageCollected<MediaValues> {
 
   virtual void OverrideViewportDimensions(double width, double height) = 0;
   virtual ColorSpaceGamut ColorGamut() const = 0;
-  virtual PreferredColorScheme GetPreferredColorScheme() const = 0;
+  virtual mojom::blink::PreferredColorScheme GetPreferredColorScheme()
+      const = 0;
+  virtual mojom::blink::PreferredContrast GetPreferredContrast() const = 0;
   virtual bool PrefersReducedMotion() const = 0;
   virtual bool PrefersReducedData() const = 0;
   virtual ForcedColors GetForcedColors() const = 0;
@@ -107,7 +111,10 @@ class CORE_EXPORT MediaValues : public GarbageCollected<MediaValues> {
   static ui::HoverType CalculatePrimaryHoverType(LocalFrame*);
   static int CalculateAvailableHoverTypes(LocalFrame*);
   static ColorSpaceGamut CalculateColorGamut(LocalFrame*);
-  static PreferredColorScheme CalculatePreferredColorScheme(LocalFrame*);
+  static mojom::blink::PreferredColorScheme CalculatePreferredColorScheme(
+      LocalFrame*);
+  static mojom::blink::PreferredContrast CalculatePreferredContrast(
+      LocalFrame*);
   static bool CalculatePrefersReducedMotion(LocalFrame*);
   static bool CalculatePrefersReducedData(LocalFrame*);
   static ForcedColors CalculateForcedColors();

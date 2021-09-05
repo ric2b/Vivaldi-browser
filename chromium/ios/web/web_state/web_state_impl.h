@@ -185,6 +185,8 @@ class WebStateImpl : public WebState,
   bool IsWebUsageEnabled() const override;
   void SetWebUsageEnabled(bool enabled) override;
   UIView* GetView() override;
+  void DidCoverWebContent() override;
+  void DidRevealWebContent() override;
   void WasShown() override;
   void WasHidden() override;
   void SetKeepRenderProcessAlive(bool keep_alive) override;
@@ -277,7 +279,7 @@ class WebStateImpl : public WebState,
   // and is unable to respond using cached credentials.
   void OnAuthRequired(NSURLProtectionSpace* protection_space,
                       NSURLCredential* proposed_credential,
-                      const WebStateDelegate::AuthCallback& callback);
+                      WebStateDelegate::AuthCallback callback);
 
   // Cancels all dialogs associated with this web_state.
   void CancelDialogs();
@@ -380,7 +382,8 @@ class WebStateImpl : public WebState,
   base::string16 empty_string16_;
 
   // Callbacks associated to command prefixes.
-  std::map<std::string, base::CallbackList<ScriptCommandCallbackSignature>>
+  std::map<std::string,
+           base::RepeatingCallbackList<ScriptCommandCallbackSignature>>
       script_command_callbacks_;
 
   // Whether this WebState has an opener.  See

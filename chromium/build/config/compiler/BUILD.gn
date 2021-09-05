@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/buildflag_header.gni")
 import("//build/config/android/config.gni")
 import("//build/config/c++/c++.gni")
 import("//build/config/chrome_build.gni")
@@ -89,13 +90,13 @@ declare_args() {
   # nonsensical for said projects.
   clang_use_default_sample_profile =
       chrome_pgo_phase == 0 && build_with_chromium && is_official_build &&
-      (is_android || chromeos_is_browser_only)
+      (is_android || chromeos_is_browser_only || is_chromecast)
 
   # This configuration is used to select a default profile in Chrome OS based on
   # the microarchitectures we are using. This is only used if
   # clang_use_default_sample_profile is true and clang_sample_profile_path is
   # empty.
-  chromeos_afdo_platform = "silvermont"
+  chromeos_afdo_platform = "atom"
 
   # Emit debug information for profiling wile building with clang.
   clang_emit_debug_info_for_profiling = false
@@ -143,8 +144,7 @@ declare_args() {
   # so only enable them by default for mainstream build configs.
   enable_wmax_tokens =
       !is_official_build &&
-      ((is_mac && target_cpu == "x64" && !use_system_xcode &&
-        mac_xcode_version == "default") ||
+      ((is_mac && target_cpu == "x64" && !use_system_xcode) ||
        (is_linux && !is_chromeos && target_cpu == "x64") ||
        (is_win && target_cpu == "x86") || (is_win && target_cpu == "x64") ||
        (is_android && target_cpu == "arm") ||
@@ -152,7 +152,7 @@ declare_args() {
 
   # Turn off the --call-graph-profile-sort flag for lld by default. Enable
   # selectively for targets where it's beneficial.
-  enable_call_graph_profile_sort = false
+  enable_call_graph_profile_sort = chrome_pgo_phase == 2
 }
 
 declare_args() {
@@ -294,9 +294,7 @@ config("compiler") {
     if (fatal_linker_warnings && !is_apple && current_os != "aix") {
       ldflags += [ "-Wl,--fatal-warnings" ]
     }
-    if (fatal_linker_warnings && is_apple &&
-        # TODO(https://crbug.com/1107955): Enable in arm64 component builds.
-        !(is_mac && target_cpu == "arm64" && is_component_build)) {
+    if (fatal_linker_warnings && is_apple) {
       ldflags += [ "-Wl,-fatal_warnings" ]
     }
   } else {
@@ -489,25 +487,6 @@ config("compiler") {
       "-mllvm",
       "-instcombine-lower-dbg-declare=0",
     ]
-
-    # Pinned clang has enable-dse-memoryssa enabled by default but it's broken,
-    # so we have to force it off.
-    # Trunk clang has it disabled by default but it might work, so we force it
-    # on so the ToT bots can check if it works now.
-    if (!llvm_force_head_revision) {
-      cflags += [
-        # TODO(https://crbug.com/1127713): Investigate, remove.
-        "-mllvm",
-        "-enable-dse-memoryssa=false",
-      ]
-    }
-    if (llvm_force_head_revision) {
-      cflags += [
-        # TODO(https://crbug.com/1127713): Investigate, remove.
-        "-mllvm",
-        "-enable-dse-memoryssa=true",
-      ]
-    }
   }
 
   # C11/C++11 compiler flags setup.
@@ -620,11 +599,14 @@ config("compiler") {
       # files on Windows (https://crbug.com/871962).
       ldflags += [
         "/opt:lldlto=" + lto_opt_level,
-        "/opt:lldltojobs=" + max_jobs_per_link,
+        "/opt:lldltojobs=all",
 
         # Experimentally determined to yield a reasonable trade-off between
         # build time, run-time performance, and binary size.
         "-mllvm:-import-instr-limit=10",
+
+        # TODO(https://crbug.com/1127713): Investigate, remove.
+        "-mllvm:-enable-dse-memoryssa=false",
       ]
     } else {
       ldflags += [ "-flto=thin" ]
@@ -633,10 +615,11 @@ config("compiler") {
       # usage in crbug.com/1038040. Note this will increase build time in
       # Chrome OS.
 
-      # Limit the parallelism to avoid too aggressive competition between
-      # linker jobs. This is still suboptimal to a potential dynamic
-      # resource allocation scheme, but should be good enough.
-      ldflags += [ "-Wl,--thinlto-jobs=" + max_jobs_per_link ]
+      # In ThinLTO builds, we run at most one link process at a time,
+      # and let it use all cores.
+      # TODO(thakis): Check if '=0' (that is, number of cores, instead
+      # of "all" which means number of hardware threads) is faster.
+      ldflags += [ "-Wl,--thinlto-jobs=all" ]
 
       # Limit the size of the ThinLTO cache to the lesser of 10% of
       # available disk space, 10GB and 100000 files.
@@ -648,12 +631,30 @@ config("compiler") {
         "-Wl,--thinlto-cache-policy,$cache_policy",
       ]
 
+      # TODO(https://crbug.com/1127713): Investigate, remove.
+      ldflags += [ "-Wl,-mllvm,-enable-dse-memoryssa=false" ]
+
       ldflags += [ "-Wl,--lto-O" + lto_opt_level ]
       if (thin_lto_enable_optimizations) {
+        # TODO(gbiv): We ideally shouldn't need to specify this; ThinLTO
+        # should be able to better manage binary size increases on its own.
+        import_instr_limit = -1
         if (is_android) {
-          # TODO(gbiv): We ideally shouldn't need to specify this; ThinLTO
-          # should be able to better manage binary size increases on its own.
-          ldflags += [ "-Wl,-mllvm,-import-instr-limit=5" ]
+          import_instr_limit = 5
+        } else if (is_chromeos) {
+          # Not much performance difference was noted between the default (100)
+          # and these. ARM was originally set lower than x86 to keep the size
+          # bloat of ThinLTO to <10%, but that's potentially no longer true.
+          # FIXME(inglorion): maybe tune these?
+          if (target_cpu == "arm" || target_cpu == "arm64") {
+            import_instr_limit = 20
+          } else {
+            import_instr_limit = 30
+          }
+        }
+
+        if (import_instr_limit != -1) {
+          ldflags += [ "-Wl,-mllvm,-import-instr-limit=$import_instr_limit" ]
         }
       }
     }
@@ -1079,10 +1080,7 @@ config("compiler_codegen") {
     ldflags += [ "-Wl,-mllvm,-enable-machine-outliner=never" ]
   }
 
-  # TODO(thakis): Remove `if (!is_win)` after next clang roll.
-  if (!is_win) {
-    asmflags = cflags
-  }
+  asmflags = cflags
 }
 
 # This provides options that make the build deterministic, so that the same
@@ -1546,6 +1544,11 @@ config("default_warnings") {
           "-Wno-implicit-fallthrough",
         ]
 
+        if (is_ios) {
+          # TODO(https://crbug.com/1143700): Clean up and re-enable.
+          cflags_objc = [ "-Wno-gnu-folding-constant" ]
+        }
+
         if (enable_wmax_tokens) {
           cflags += [ "-Wmax-tokens" ]
         } else {
@@ -1634,11 +1637,7 @@ config("chromium_code") {
     # ChromeOS: http://crbug.com/940863
     # Chromecast: http://crbug.com/942554
     has_dchecks = is_debug || dcheck_always_on
-    if (!has_dchecks && is_ios && use_xcode_clang) {
-      # TODO(thakis): Remove this branch once Xcode's clang has clang r356148.
-      cflags_c = [ "-Wextra-semi" ]
-      cflags_cc = [ "-Wextra-semi" ]
-    } else if (!has_dchecks && is_chromeos && is_chrome_branded) {
+    if (!has_dchecks && is_chromeos && is_chrome_branded) {
       # Temporarily disable -Wextra-semi for Chrome on Chrome OS.
     } else if (is_chromecast && chromecast_branding != "public") {
       # Temporarily disable -Wextra-semi for Chromecast.
@@ -1741,7 +1740,7 @@ config("no_rtti") {
 # (de)allocate memory on a different heap, which would spell trouble if pointers
 # to heap-allocated memory are passed over shared library boundaries.
 config("export_dynamic") {
-  if (is_desktop_linux || export_libcxxabi_from_executables) {
+  if (is_linux || export_libcxxabi_from_executables) {
     ldflags = [ "-rdynamic" ]
   }
 }
@@ -1808,9 +1807,18 @@ config("no_exceptions") {
 
 # Warnings ---------------------------------------------------------------------
 
+# Generate a warning for code that might emit a static initializer.
+# See: //docs/static_initializers.md
+# See: https://groups.google.com/a/chromium.org/d/topic/chromium-dev/B9Q5KTD7iCo/discussion
+config("wglobal_constructors") {
+  if (is_clang) {
+    cflags = [ "-Wglobal-constructors" ]
+  }
+}
+
 # This will generate warnings when using Clang if code generates exit-time
 # destructors, which will slow down closing the program.
-# TODO(thakis): Make this a blacklist instead, http://crbug.com/101600
+# TODO(thakis): Make this a blocklist instead, http://crbug.com/101600
 config("wexit_time_destructors") {
   if (is_clang) {
     cflags = [ "-Wexit-time-destructors" ]
@@ -2166,15 +2174,20 @@ if (is_clang && is_a_target_toolchain) {
   } else if (clang_use_default_sample_profile) {
     assert(build_with_chromium,
            "Our default profiles currently only apply to Chromium")
-    assert(is_android || chromeos_is_browser_only || is_chromeos,
-           "The current platform has no default profile")
-    if (is_android) {
+    assert(
+        is_android || chromeos_is_browser_only || is_chromeos || is_chromecast,
+        "The current platform has no default profile")
+    if (is_android || is_chromecast) {
       _clang_sample_profile = "//chrome/android/profiles/afdo.prof"
     } else {
+      # TODO(crbug/1135245): Remove silvermont, airmont and broadwell after
+      # the change atom and bigcore reaches Chrome OS.
       assert(
           chromeos_afdo_platform == "silvermont" ||
               chromeos_afdo_platform == "airmont" ||
-              chromeos_afdo_platform == "broadwell",
+              chromeos_afdo_platform == "broadwell" ||
+              chromeos_afdo_platform == "atom" ||
+              chromeos_afdo_platform == "bigcore",
           "Only silvermont, airmont and broadwell are valid Chrome OS profiles.")
       _clang_sample_profile =
           "//chromeos/profiles/${chromeos_afdo_platform}.afdo.prof"
@@ -2244,6 +2257,13 @@ config("win_pdbaltpath") {
   # build reproducibility. Debuggers look for pdb files next to executables,
   # so there's no downside to always using this.
   ldflags = [ "/pdbaltpath:%_PDB%" ]
+
+  if (enable_cet_shadow_stack && use_lld) {
+    # TODO(crbug.com/1136664): Investigate why Windows does not recognize
+    # CET in some binaries linked by LLD with /DEBUG.
+    # This is the best place for work around as it follows all /DEBUG uses.
+    ldflags += [ "/DEBUG:NONE" ]
+  }
 }
 
 # Full symbols.
@@ -2312,24 +2332,14 @@ config("symbols") {
       swiftflags = [ "-g" ]
     }
 
-    if (use_debug_fission && !is_nacl &&
-        (!is_android || target_os == "android")) {
-      # NOTE: Some Chrome OS builds globally set |use_debug_fission| to true,
-      # but they also build some targets whose toolchains aren't
-      # compatible with it. In particular don't turn it on for Android
-      # toolchain if not building for Android OS.
-      #
-      # TODO(https://crbug.com/837032): See if we can clean this up by e.g. not
-      # setting use_debug_fission globally.
+    if (use_debug_fission) {
       cflags += [ "-gsplit-dwarf" ]
     }
     asmflags = cflags
     ldflags = []
 
-    if (use_debug_fission && is_android && target_os == "android") {
-      # NOTE: This flag is for use by the link wrapper scripts. They are also
-      # expected to remove it before sending the rest of ldflags to the actual
-      # linker. Only expect Android Chrome build on Android OS to need this.
+    # TODO(agrieve): Not sure why this is Android-specific.
+    if (use_debug_fission && use_thin_lto && is_android) {
       ldflags += [ "-gsplit-dwarf" ]
     }
 
@@ -2471,7 +2481,7 @@ if (is_win || is_android || (is_chromeos && is_chromeos_device)) {
   # Use orderfile for linking Chrome on win, android, and Chrome OS.
   # This config enables using an orderfile for linking in LLD.
   config("chrome_orderfile_config") {
-    if (chrome_orderfile_path != "") {
+    if (chrome_orderfile_path != "" && !enable_call_graph_profile_sort) {
       assert(use_lld)
       _rebased_orderfile = rebase_path(chrome_orderfile_path, root_build_dir)
       if (is_android || (is_chromeos && is_chromeos_device)) {
@@ -2500,5 +2510,18 @@ config("default_init_stack_vars") {
   cflags = []
   if (init_stack_vars && is_clang && !is_nacl && !using_sanitizer) {
     cflags += [ "-ftrivial-auto-var-init=pattern" ]
+  }
+}
+
+buildflag_header("compiler_buildflags") {
+  header = "compiler_buildflags.h"
+
+  flags = [ "CLANG_PGO=$chrome_pgo_phase" ]
+}
+
+config("cet_shadow_stack") {
+  if (enable_cet_shadow_stack && is_win) {
+    assert(target_cpu == "x64")
+    ldflags = [ "/CETCOMPAT" ]
   }
 }

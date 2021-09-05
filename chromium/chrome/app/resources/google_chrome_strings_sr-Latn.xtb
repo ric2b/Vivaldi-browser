@@ -25,7 +25,6 @@ Neke funkcije su možda nedostupne i promene podešavanja neće biti sačuvane.
 <translation id="1587325591171447154">Datoteka <ph name="FILE_NAME" /> je opasna, pa ju je Chrome blokirao.</translation>
 <translation id="1597911401261118146">Da biste proverili da li su lozinke bezbedne od upada u podatke i drugih bezbednosnih problema, <ph name="BEGIN_LINK" />prijavite se u Chrome<ph name="END_LINK" />.</translation>
 <translation id="1619887657840448962">Da bismo učinili Chrome bezbednijim, onemogućili smo sledeći dodatak koji <ph name="IDS_EXTENSION_WEB_STORE_TITLE" /> ne navodi i koji je možda dodat bez vašeg znanja.</translation>
-<translation id="162448658176061655">Chrome proverava da li je prisutan neželjeni softver jednom nedeljno. Poslednji put provereno: malopre.</translation>
 <translation id="162629503687514352">Chrome OS nije uspeo da sinhronizuje lozinke.</translation>
 <translation id="1628000112320670027">Pronađite pomoć za Chrome</translation>
 <translation id="1662639173275167396">Chrome OS je omogućen zahvaljujući dodatnom <ph name="BEGIN_LINK_CROS_OSS" />softveru sa otvorenim kodom<ph name="END_LINK_CROS_OSS" />, kao što je <ph name="BEGIN_LINK_LINUX_OSS" />Linux (beta)<ph name="END_LINK_LINUX_OSS" />.</translation>
@@ -80,6 +79,7 @@ Neke funkcije su možda nedostupne i promene podešavanja neće biti sačuvane.
 <translation id="2926676257163822632">Slabe lozinke lako mogu da se pogode. Dozvolite da Chrome <ph name="BEGIN_LINK" />pravi i pamti jake lozinke za vas<ph name="END_LINK" />.</translation>
 <translation id="2929907241665500097">Chrome se nije ažurirao. Došlo je do greške. <ph name="BEGIN_LINK" />Otklonite probleme sa ažuriranjem Chrome-a i neuspela ažuriranja.<ph name="END_LINK" /></translation>
 <translation id="2969728957078202736"><ph name="PAGE_TITLE" /> – prijavljivanje na mrežu – Chrome</translation>
+<translation id="298099161970687941">Pitaj kada se Chrome otvara</translation>
 <translation id="3037838751736561277">Google Chrome je u pozadinskom režimu.</translation>
 <translation id="3059710691562604940">Bezbedno pregledanje je isključeno. Chrome preporučuje da ga uključite.</translation>
 <translation id="3065168410429928842">Kartica Chrome</translation>
@@ -148,7 +148,6 @@ Neke funkcije su možda nedostupne i promene podešavanja neće biti sačuvane.
 <translation id="4771048833395599659">Ova datoteka može da bude opasna, pa ju je Chrome blokirao.</translation>
 <translation id="479167709087336770">Koristi istu proveru pravopisa kao Google pretraga. Tekst koji unesete u pregledač se šalje Google-u. To uvek možete da promenite u podešavanjima.</translation>
 <translation id="4891791193823137474">Neka Google Chrome radi u pozadini</translation>
-<translation id="489337168347244450">{NUM_DAYS,plural, =1{Chrome proverava da li je prisutan neželjeni softver jednom nedeljno. Poslednji put provereno: pre 1 dan.}one{Chrome proverava da li je prisutan neželjeni softver jednom nedeljno. Poslednji put provereno: pre {NUM_DAYS} dan.}few{Chrome proverava da li je prisutan neželjeni softver jednom nedeljno. Poslednji put provereno: pre {NUM_DAYS} dana.}other{Chrome proverava da li je prisutan neželjeni softver jednom nedeljno. Poslednji put provereno: pre {NUM_DAYS} dana.}}</translation>
 <translation id="4895437082222824641">Otvori link u novoj Chrome &amp;kartici</translation>
 <translation id="4953650215774548573">Podesi Google Chrome kao podrazumevani pregledač</translation>
 <translation id="495931528404527476">U Chrome-u</translation>
@@ -168,7 +167,6 @@ Neke funkcije su možda nedostupne. Navedite drugi direktorijum profila ili kori
 Google Chrome ne može da vrati podešavanja.</translation>
 <translation id="556024056938947818">Google Chrome pokušava da prikaže lozinke.</translation>
 <translation id="5566025111015594046">Google Chrome (mDNS-In)</translation>
-<translation id="5633355459292055250">Pitaj kada otvaram Chrome</translation>
 <translation id="5657226924540934362">Ako se podešavanje ne prikazuje na ovoj stranici, potražite ga u <ph name="LINK_BEGIN" />
       podešavanjima Chrome OS-a<ph name="LINK_END" /></translation>
 <translation id="565744775970812598">Datoteka <ph name="FILE_NAME" /> je možda opasna, pa ju je Chrome blokirao.</translation>
@@ -194,7 +192,6 @@ Google Chrome ne može da vrati podešavanja.</translation>
 <translation id="6291549208091401781">Google Chrome je već instaliran za sve korisnike na računaru.</translation>
 <translation id="6338556085225130112">Ažuriranje Google Chrome-a</translation>
 <translation id="6368958679917195344">Chrome OS je moguć zahvaljujući dodatnom <ph name="BEGIN_LINK_CROS_OSS" />softver otvorenog koda<ph name="END_LINK_CROS_OSS" />.</translation>
-<translation id="6454142105866844106">Chrome proverava da li je prisutan neželjeni softver jednom nedeljno</translation>
 <translation id="6515495397637126556"><ph name="PAGE_TITLE" /> – Programerska verzija Google Chrome-a</translation>
 <translation id="6566149418543181476">Ažuriranje Google Chrome-a (<ph name="PROGRESS_PERCENT" />)</translation>
 <translation id="6650333065969705433">Da biste koristili aplikaciju Rosetta za puštanje zaštićenog medijskog sadržaja, morate da restartujete Chrome.</translation>
@@ -214,13 +211,11 @@ Google Chrome ne može da vrati podešavanja.</translation>
 <translation id="7106741999175697885">Menadžer zadataka – Google Chrome</translation>
 <translation id="7140653346177713799">{COUNT,plural, =0{Novo ažuriranje za Chrome je dostupno i primeniće se čim ga ponovo pokrenete.}=1{Novo ažuriranje za Chrome je dostupno i primeniće se čim ga ponovo pokrenete. Prozor bez arhiviranja se neće ponovo otvoriti.}one{Novo ažuriranje za Chrome je dostupno i primeniće se čim ga ponovo pokrenete. # prozor bez arhiviranja se neće ponovo otvoriti.}few{Novo ažuriranje za Chrome je dostupno i primeniće se čim ga ponovo pokrenete. # prozora bez arhiviranja se neće ponovo otvoriti.}other{Novo ažuriranje za Chrome je dostupno i primeniće se čim ga ponovo pokrenete. # prozora bez arhiviranja se neće ponovo otvoriti.}}</translation>
 <translation id="7155997830309522122">Ako je tako, izmenite sačuvanu lozinku u Chrome-u tako da se podudara sa novom lozinkom.</translation>
-<translation id="7236955538461508933">{NUM_HOURS,plural, =1{Chrome proverava da li je prisutan neželjeni softver jednom nedeljno. Poslednji put provereno: pre 1 sat.}one{Chrome proverava da li je prisutan neželjeni softver jednom nedeljno. Poslednji put provereno: pre {NUM_HOURS} sat.}few{Chrome proverava da li je prisutan neželjeni softver jednom nedeljno. Poslednji put provereno: pre {NUM_HOURS} sata.}other{Chrome proverava da li je prisutan neželjeni softver jednom nedeljno. Poslednji put provereno: pre {NUM_HOURS} sati.}}</translation>
 <translation id="7242029209006116544">Prijavljujete se pomoću naloga kojim se upravlja i dajete njegovom administratoru kontrolu nad Google Chrome profilom. Chrome podaci, kao što su aplikacije, obeleživači, istorija, lozinke i druga podešavanja, biće trajno povezani sa nalogom <ph name="USER_NAME" />. Moći ćete da izbrišete te podatke preko Kontrolne table Google naloga, ali nećete moći da ih povežete sa nekim drugim nalogom. Možete opcionalno da napravite novi profil da bi postojeći Chrome podaci ostali odvojeni. <ph name="LEARN_MORE" /></translation>
 <translation id="7295052994004373688">Ovaj jezik se koristi za prikazivanje korisničkog interfejsa Google Chrome-a</translation>
 <translation id="7296210096911315575">Važne informacije o upotrebi i bezbednosti</translation>
 <translation id="7308322188646931570">Chrome traži pristup memorijskom prostoru da bi preuzimao datoteke</translation>
 <translation id="7339898014177206373">Novi prozor</translation>
-<translation id="7386132805935307836">Chrome proverava da li je prisutan neželjeni softver jednom nedeljno. Poslednji put provereno: juče.</translation>
 <translation id="7398801000654795464">Bili ste prijavljeni u Chrome kao <ph name="USER_EMAIL_ADDRESS" />. Koristite isti nalog da biste se ponovo prijavili.</translation>
 <translation id="7408085963519505752">Chrome OS uslovi</translation>
 <translation id="7419046106786626209">Chrome OS ne može da sinhronizuje podatke jer Sinhronizacija nije dostupna za domen.</translation>
@@ -255,7 +250,6 @@ Google Chrome ne može da vrati podešavanja.</translation>
 <translation id="828798499196665338">Roditelj je isključio „Dozvole za sajtove, aplikacije i dodatke“ za Chrome. Omogućavanje ove stavke (<ph name="EXTENSION_TYPE_PARAMETER" />) nije dozvoljeno.</translation>
 <translation id="8290100596633877290">Opa! Google Chrome je otkazao. Želite li da ga odmah ponovo pokrenete?</translation>
 <translation id="8342675569599923794">Ova datoteka je opasna, pa ju je Chrome blokirao.</translation>
-<translation id="8344083974188970894">{NUM_MINS,plural, =1{Chrome proverava da li je prisutan neželjeni softver jednom nedeljno. Poslednji put provereno: pre 1 minut.}one{Chrome proverava da li je prisutan neželjeni softver jednom nedeljno. Poslednji put provereno: pre {NUM_MINS} minut.}few{Chrome proverava da li je prisutan neželjeni softver jednom nedeljno. Poslednji put provereno: pre {NUM_MINS} minuta.}other{Chrome proverava da li je prisutan neželjeni softver jednom nedeljno. Poslednji put provereno: pre {NUM_MINS} minuta.}}</translation>
 <translation id="8370517070665726704">Autorska prava <ph name="YEAR" />. Google LLC. Sva prava zadržana.</translation>
 <translation id="840084489713044809">Google Chrome želi da izveze lozinke.</translation>
 <translation id="8433638294851456451">Da biste poslali broj sa ovog uređaja na Android telefon, prijavite se u Chrome na oba uređaja.</translation>
@@ -270,7 +264,6 @@ Google Chrome ne može da vrati podešavanja.</translation>
 <translation id="8641606876632989680">Chrome će vas obavestiti kada se prijavite pomoću ugrožene lozinke</translation>
 <translation id="8669527147644353129">Google Chrome pomoćnik</translation>
 <translation id="8679801911857917785">Kontroliše i stranicu koja se prikazuje kada pokrenete Chrome.</translation>
-<translation id="8681614230122836773">Chrome je pronašao štetan softver na računaru</translation>
 <translation id="870251953148363156">Ažuriraj &amp;Google Chrome</translation>
 <translation id="873133009373065397">Google Chrome ne može da odredi ni da podesi podrazumevani pregledač</translation>
 <translation id="8748242232968346981">Želite da napravite svoj profil u Chrome-u?</translation>

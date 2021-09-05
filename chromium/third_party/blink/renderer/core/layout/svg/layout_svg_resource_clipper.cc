@@ -116,8 +116,8 @@ void LayoutSVGResourceClipper::RemoveAllClientsFromCache() {
   clip_content_path_.Clear();
   cached_paint_record_.reset();
   local_clip_bounds_ = FloatRect();
-  MarkAllClientsForInvalidation(SVGResourceClient::kLayoutInvalidation |
-                                SVGResourceClient::kBoundariesInvalidation);
+  MarkAllClientsForInvalidation(SVGResourceClient::kClipCacheInvalidation |
+                                SVGResourceClient::kPaintInvalidation);
 }
 
 base::Optional<Path> LayoutSVGResourceClipper::AsPath() {
@@ -258,7 +258,7 @@ bool LayoutSVGResourceClipper::HitTestClipContent(
     LayoutObject* layout_object = child_element.GetLayoutObject();
 
     DCHECK(!layout_object->IsBoxModelObject() ||
-           !ToLayoutBoxModelObject(layout_object)->HasSelfPaintingLayer());
+           !To<LayoutBoxModelObject>(layout_object)->HasSelfPaintingLayer());
 
     if (layout_object->NodeAtPoint(result, *local_location, PhysicalOffset(),
                                    kHitTestForeground))
@@ -270,9 +270,7 @@ bool LayoutSVGResourceClipper::HitTestClipContent(
 FloatRect LayoutSVGResourceClipper::ResourceBoundingBox(
     const FloatRect& reference_box) {
   NOT_DESTROYED();
-  // The resource has not been layouted yet. Return the reference box.
-  if (SelfNeedsLayout())
-    return reference_box;
+  DCHECK(!NeedsLayout());
 
   if (local_clip_bounds_.IsEmpty())
     CalculateLocalClipBounds();
@@ -285,14 +283,14 @@ void LayoutSVGResourceClipper::StyleDidChange(StyleDifference diff,
   NOT_DESTROYED();
   LayoutSVGResourceContainer::StyleDidChange(diff, old_style);
   if (diff.TransformChanged()) {
-    MarkAllClientsForInvalidation(SVGResourceClient::kBoundariesInvalidation |
+    MarkAllClientsForInvalidation(SVGResourceClient::kClipCacheInvalidation |
                                   SVGResourceClient::kPaintInvalidation);
   }
 }
 
 void LayoutSVGResourceClipper::WillBeDestroyed() {
   NOT_DESTROYED();
-  MarkAllClientsForInvalidation(SVGResourceClient::kBoundariesInvalidation |
+  MarkAllClientsForInvalidation(SVGResourceClient::kClipCacheInvalidation |
                                 SVGResourceClient::kPaintInvalidation);
   LayoutSVGResourceContainer::WillBeDestroyed();
 }

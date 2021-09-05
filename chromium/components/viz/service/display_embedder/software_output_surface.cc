@@ -147,13 +147,4 @@ void SoftwareOutputSurface::SetNeedsSwapSizeNotifications(
   needs_swap_size_notifications_ = needs_swap_size_notifications;
 }
 #endif
-
-scoped_refptr<gpu::GpuTaskSchedulerHelper>
-SoftwareOutputSurface::GetGpuTaskSchedulerHelper() {
-  return nullptr;
-}
-
-gpu::MemoryTracker* SoftwareOutputSurface::GetMemoryTracker() {
-  return nullptr;
-}
 }  // namespace viz

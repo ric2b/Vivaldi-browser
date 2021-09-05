@@ -37,7 +37,6 @@ import static org.chromium.chrome.browser.autofill_assistant.proto.ConfigureBott
 import static org.chromium.chrome.browser.autofill_assistant.proto.ConfigureBottomSheetProto.ViewportResizing.RESIZE_VISUAL_VIEWPORT;
 
 import android.graphics.Rect;
-import android.support.test.InstrumentationRegistry;
 
 import androidx.test.espresso.Espresso;
 import androidx.test.espresso.ViewAction;
@@ -54,6 +53,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
+import org.chromium.base.test.util.Criteria;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.chrome.autofill_assistant.R;
 import org.chromium.chrome.browser.autofill_assistant.proto.ActionProto;
@@ -66,10 +67,10 @@ import org.chromium.chrome.browser.autofill_assistant.proto.ConfigureBottomSheet
 import org.chromium.chrome.browser.autofill_assistant.proto.ConfigureBottomSheetProto.PeekMode;
 import org.chromium.chrome.browser.autofill_assistant.proto.ConfigureBottomSheetProto.ViewportResizing;
 import org.chromium.chrome.browser.autofill_assistant.proto.DetailsProto;
-import org.chromium.chrome.browser.autofill_assistant.proto.FocusElementProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.PromptProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.PromptProto.Choice;
 import org.chromium.chrome.browser.autofill_assistant.proto.SelectorProto;
+import org.chromium.chrome.browser.autofill_assistant.proto.ShowCastProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.ShowDetailsProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.SupportedScriptProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.SupportedScriptProto.PresentationProto;
@@ -78,11 +79,8 @@ import org.chromium.chrome.browser.autofill_assistant.proto.TextInputProto.Input
 import org.chromium.chrome.browser.autofill_assistant.proto.TextInputSectionProto;
 import org.chromium.chrome.browser.autofill_assistant.proto.UserFormSectionProto;
 import org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule;
-import org.chromium.chrome.browser.customtabs.CustomTabsTestUtils;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
-import org.chromium.content_public.browser.test.util.Criteria;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -103,9 +101,10 @@ public class AutofillAssistantBottomsheetTest {
     @Before
     public void setUp() {
         AutofillAssistantPreferencesUtil.setInitialPreferences(true);
-        mTestRule.startCustomTabActivityWithIntent(CustomTabsTestUtils.createMinimalCustomTabIntent(
-                InstrumentationRegistry.getTargetContext(),
-                mTestRule.getTestServer().getURL(TEST_PAGE)));
+        mTestRule.startCustomTabActivityWithIntent(
+                AutofillAssistantUiTestUtil.createMinimalCustomTabIntentForAutobot(
+                        mTestRule.getTestServer().getURL(TEST_PAGE),
+                        /* startImmediately = */ true));
         mTestRule.getActivity()
                 .getRootUiCoordinatorForTesting()
                 .getScrimCoordinator()
@@ -143,7 +142,7 @@ public class AutofillAssistantBottomsheetTest {
                          .build());
         // Focus on the bottom element.
         list.add((ActionProto) ActionProto.newBuilder()
-                         .setFocusElement(FocusElementProto.newBuilder().setElement(
+                         .setShowCast(ShowCastProto.newBuilder().setElementToPresent(
                                  SelectorProto.newBuilder().addFilters(
                                          SelectorProto.Filter.newBuilder().setCssSelector(
                                                  "p.bottom"))))
@@ -423,7 +422,7 @@ public class AutofillAssistantBottomsheetTest {
                          .build());
         // Focus on the bottom element.
         list.add((ActionProto) ActionProto.newBuilder()
-                         .setFocusElement(FocusElementProto.newBuilder().setElement(
+                         .setShowCast(ShowCastProto.newBuilder().setElementToPresent(
                                  SelectorProto.newBuilder().addFilters(
                                          SelectorProto.Filter.newBuilder().setCssSelector(
                                                  "p.bottom"))))

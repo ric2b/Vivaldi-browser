@@ -50,7 +50,9 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
   // Creates a copy of |other| but uses the "post-layout" fragments to ensure
   // fragment-tree consistency.
   static scoped_refptr<const NGLayoutResult> CloneWithPostLayoutFragments(
-      const NGLayoutResult& other);
+      const NGLayoutResult& other,
+      const base::Optional<PhysicalRect> updated_layout_overflow =
+          base::nullopt);
 
   // Create a copy of NGLayoutResult with |BfcBlockOffset| replaced by the given
   // parameter. Note, when |bfc_block_offset| is |nullopt|, |BfcBlockOffset| is
@@ -218,6 +220,12 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
     return HasRareData() ? rare_data_->table_column_count_ : 0;
   }
 
+  LayoutUnit MathItalicCorrection() const {
+    return HasRareData() && rare_data_->math_layout_data_
+               ? rare_data_->math_layout_data_->italic_correction_
+               : LayoutUnit();
+  }
+
   // The break-before value on the first child needs to be propagated to the
   // container, in search of a valid class A break point.
   EBreakBetween InitialBreakBefore() const {
@@ -342,6 +350,11 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
       scoped_refptr<const NGPhysicalContainerFragment> physical_fragment,
       NGLineBoxFragmentBuilder*);
 
+  // See https://mathml-refresh.github.io/mathml-core/#box-model
+  struct MathData {
+    LayoutUnit italic_correction_;
+  };
+
  private:
   friend class MutableForOutOfFlow;
 
@@ -414,6 +427,7 @@ class CORE_EXPORT NGLayoutResult : public RefCounted<NGLayoutResult> {
     bool is_single_use = false;
     int lines_until_clamp = 0;
     wtf_size_t table_column_count_ = 0;
+    base::Optional<MathData> math_layout_data_;
   };
 
   bool HasRareData() const { return bitfields_.has_rare_data; }

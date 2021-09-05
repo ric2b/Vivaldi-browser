@@ -9,7 +9,7 @@
 #include <memory>
 #include <vector>
 
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/test/task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "gpu/command_buffer/common/mailbox_holder.h"
@@ -30,6 +30,7 @@ scoped_refptr<VideoFrame> CreateGpuMemoryBufferVideoFrame(
     const gfx::Size& coded_size,
     const gfx::Rect& visible_rect,
     const gfx::Size& natural_size,
+    bool use_protected,
     base::TimeDelta timestamp) {
   base::Optional<gfx::BufferFormat> gfx_format =
       VideoPixelFormatToGfxBufferFormat(format);
@@ -68,7 +69,8 @@ class PlatformVideoFramePoolTest
     visible_rect_ = visible_rect;
     natural_size_ = visible_rect.size();
     layout_ = pool_->Initialize(fourcc, coded_size, visible_rect_,
-                                natural_size_, kNumFrames);
+                                natural_size_, kNumFrames,
+                                /*use_protected=*/false);
     return !!layout_;
   }
 
@@ -288,7 +290,8 @@ TEST_P(PlatformVideoFramePoolTest, InitializeFail) {
   SetCreateFrameCB(base::BindRepeating(
       [](gpu::GpuMemoryBufferFactory* factory, VideoPixelFormat format,
          const gfx::Size& coded_size, const gfx::Rect& visible_rect,
-         const gfx::Size& natural_size, base::TimeDelta timestamp) {
+         const gfx::Size& natural_size, bool use_protected,
+         base::TimeDelta timestamp) {
         auto frame = scoped_refptr<VideoFrame>(nullptr);
         return frame;
       }));

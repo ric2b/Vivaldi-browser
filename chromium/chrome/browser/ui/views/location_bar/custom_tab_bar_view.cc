@@ -47,7 +47,7 @@
 #include "url/gurl.h"
 
 #if defined(OS_CHROMEOS)
-#include "chromeos/ui/chromeos_ui_constants.h"
+#include "chromeos/ui/base/chromeos_ui_constants.h"
 #else
 #include "chrome/browser/themes/theme_properties.h"
 #endif
@@ -207,6 +207,7 @@ CustomTabBarView::CustomTabBarView(BrowserView* browser_view,
   close_button_->SetBorder(views::CreateEmptyBorder(
       gfx::Insets(GetLayoutConstant(LOCATION_BAR_CHILD_INTERIOR_PADDING))));
   close_button_->SizeToPreferredSize();
+  close_button_->SetFocusBehavior(views::View::FocusBehavior::ACCESSIBLE_ONLY);
   views::InstallCircleHighlightPathGenerator(close_button_);
 
   location_icon_view_ =

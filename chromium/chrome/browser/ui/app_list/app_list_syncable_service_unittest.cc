@@ -4,6 +4,9 @@
 
 #include "chrome/browser/ui/app_list/app_list_syncable_service.h"
 
+#include <algorithm>
+#include <utility>
+
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/app_list/internal_app_id_constants.h"
 #include "base/bind.h"
@@ -18,14 +21,13 @@
 #include "chrome/browser/ui/app_list/page_break_constants.h"
 #include "chrome/browser/ui/app_list/test/fake_app_list_model_updater.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/crx_file/id_util.h"
-#include "components/sync/model/fake_sync_change_processor.h"
 #include "components/sync/model/sync_error_factory.h"
-#include "components/sync/model/sync_error_factory_mock.h"
 #include "components/sync/protocol/sync.pb.h"
+#include "components/sync/test/model/fake_sync_change_processor.h"
+#include "components/sync/test/model/sync_error_factory_mock.h"
 #include "extensions/common/constants.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -214,6 +216,9 @@ std::string GetLastPositionString() {
 class AppListSyncableServiceTest : public AppListTestBase {
  public:
   AppListSyncableServiceTest() = default;
+  AppListSyncableServiceTest(const AppListSyncableServiceTest&) = delete;
+  AppListSyncableServiceTest& operator=(const AppListSyncableServiceTest&) =
+      delete;
   ~AppListSyncableServiceTest() override = default;
 
   void SetUp() override {
@@ -304,8 +309,6 @@ class AppListSyncableServiceTest : public AppListTestBase {
   std::unique_ptr<
       app_list::AppListSyncableService::ScopedModelUpdaterFactoryForTest>
       model_updater_factory_scope_;
-
-  DISALLOW_COPY_AND_ASSIGN(AppListSyncableServiceTest);
 };
 
 TEST_F(AppListSyncableServiceTest, OEMFolderForConflictingPos) {

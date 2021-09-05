@@ -70,6 +70,7 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualCtap2Device
     bool cred_protect_support = false;
     bool hmac_secret_support = false;
     bool large_blob_support = false;
+    bool always_uv = false;
     // The space available to store a large blob. In real authenticators this
     // may change depending on the number of resident credentials. We treat this
     // as a fixed size area for the large blob.
@@ -180,6 +181,11 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualCtap2Device
     // authenticator's U2F interface not to be available over CTAP2 for
     // assertions.
     bool ignore_u2f_credentials = false;
+
+    // pin_protocol is the PIN protocol version that this authenticator supports
+    // and reports in the pinProtocols field of the authenticatorGetInfo
+    // response.
+    PINUVAuthProtocol pin_protocol = PINUVAuthProtocol::kV1;
   };
 
   VirtualCtap2Device();
@@ -203,13 +209,14 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualCtap2Device
   // makeCredential and getAssertion from the CTAP2 spec.
   base::Optional<CtapDeviceResponseCode> CheckUserVerification(
       bool is_make_credential,
-      const AuthenticatorSupportedOptions& options,
+      const AuthenticatorGetInfoResponse& authenticator_info,
       const std::string& rp_id,
       const base::Optional<std::vector<uint8_t>>& pin_auth,
-      const base::Optional<uint8_t>& pin_protocol,
+      const base::Optional<PINUVAuthProtocol>& pin_protocol,
       base::span<const uint8_t> pin_token,
       base::span<const uint8_t> client_data_hash,
       UserVerificationRequirement user_verification,
+      bool user_presence_required,
       bool* out_user_verified);
   base::Optional<CtapDeviceResponseCode> OnMakeCredential(
       base::span<const uint8_t> request,
@@ -240,6 +247,8 @@ class COMPONENT_EXPORT(DEVICE_FIDO) VirtualCtap2Device
   AttestedCredentialData ConstructAttestedCredentialData(
       base::span<const uint8_t> key_handle,
       std::unique_ptr<PublicKey> public_key);
+
+  size_t remaining_resident_credentials();
 
   std::unique_ptr<VirtualU2fDevice> u2f_device_;
 

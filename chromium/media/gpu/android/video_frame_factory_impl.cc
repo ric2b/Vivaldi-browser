@@ -8,8 +8,8 @@
 
 #include "base/android/android_image_reader_compat.h"
 #include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
@@ -43,22 +43,16 @@ base::Optional<VideoFrameMetadata::CopyMode> GetVideoFrameCopyMode(
   if (!enable_threaded_texture_mailboxes)
     return base::nullopt;
 
-  if (features::IsAImageReaderEnabled() &&
-      base::FeatureList::IsEnabled(media::kWebViewZeroCopyVideo) &&
-      !base::android::AndroidImageReader::LimitAImageReaderMaxSizeToOne()) {
-    return VideoFrameMetadata::CopyMode::kCopyMailboxesOnly;
-  } else {
-    return VideoFrameMetadata::CopyMode::kCopyToNewTexture;
-  }
+  return features::IsWebViewZeroCopyVideoEnabled()
+             ? VideoFrameMetadata::CopyMode::kCopyMailboxesOnly
+             : VideoFrameMetadata::CopyMode::kCopyToNewTexture;
 }
 
 gpu::TextureOwner::Mode GetTextureOwnerMode(
     VideoFrameFactory::OverlayMode overlay_mode,
     const base::Optional<VideoFrameMetadata::CopyMode>& copy_mode) {
   if (copy_mode == VideoFrameMetadata::kCopyMailboxesOnly) {
-    DCHECK(features::IsAImageReaderEnabled() &&
-           base::FeatureList::IsEnabled(media::kWebViewZeroCopyVideo) &&
-           !base::android::AndroidImageReader::LimitAImageReaderMaxSizeToOne());
+    DCHECK(features::IsWebViewZeroCopyVideoEnabled());
     return gpu::TextureOwner::Mode::kAImageReaderInsecureMultithreaded;
   }
 

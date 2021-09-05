@@ -54,17 +54,15 @@ using IsolatedOriginSource = ChildProcessSecurityPolicy::IsolatedOriginSource;
 
 bool DoesURLRequireDedicatedProcess(const IsolationContext& isolation_context,
                                     const GURL& url) {
-  return SiteInstanceImpl::DoesSiteInfoRequireDedicatedProcess(
-      isolation_context,
-      SiteInstanceImpl::ComputeSiteInfoForTesting(isolation_context, url));
+  return SiteInstanceImpl::ComputeSiteInfoForTesting(isolation_context, url)
+      .RequiresDedicatedProcess(isolation_context);
 }
 
 SiteInfo CreateSimpleSiteInfo(const GURL& process_lock_url,
                               bool is_origin_keyed) {
   return SiteInfo(GURL("https://www.foo.com"), process_lock_url,
                   is_origin_keyed,
-                  false /* is_coop_coep_cross_origin_isolated */,
-                  base::nullopt /* coop_coep_cross_origin_isolated_origin */);
+                  CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
 }
 
 }  // namespace
@@ -429,13 +427,6 @@ TEST_F(SiteInstanceTest, SiteInstanceDestructor) {
 // Ensure that default SiteInstances are deleted when all references to them
 // are gone.
 TEST_F(SiteInstanceTest, DefaultSiteInstanceDestruction) {
-  // Skip this test case if the --site-per-process switch is present (e.g. on
-  // Site Isolation Android chromium.fyi bot).
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kSitePerProcess)) {
-    return;
-  }
-
   TestBrowserContext browser_context;
   base::test::ScopedCommandLine scoped_command_line;
 
@@ -448,24 +439,11 @@ TEST_F(SiteInstanceTest, DefaultSiteInstanceDestruction) {
   // are gone.
   auto site_instance = SiteInstanceImpl::CreateForUrlInfo(
       &browser_context, UrlInfo::CreateForTesting(GURL("http://foo.com")),
-      false /* is_coop_coep_cross_origin_isolated */);
-  if (AreDefaultSiteInstancesEnabled()) {
-    EXPECT_TRUE(site_instance->IsDefaultSiteInstance());
-  } else {
-    // TODO(958060): Remove the creation of this second instance once
-    // CreateForUrlInfo() starts returning a default SiteInstance without
-    // the need to specify a command-line flag.
-    EXPECT_FALSE(site_instance->IsDefaultSiteInstance());
-    auto related_instance =
-        site_instance->GetRelatedSiteInstance(GURL("http://bar.com"));
-    EXPECT_TRUE(static_cast<SiteInstanceImpl*>(related_instance.get())
-                    ->IsDefaultSiteInstance());
+      CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
 
-    related_instance.reset();
+  EXPECT_EQ(AreDefaultSiteInstancesEnabled(),
+            site_instance->IsDefaultSiteInstance());
 
-    EXPECT_EQ(1, browser_client()->GetAndClearSiteInstanceDeleteCount());
-    EXPECT_EQ(0, browser_client()->GetAndClearBrowsingInstanceDeleteCount());
-  }
   site_instance.reset();
 
   EXPECT_EQ(1, browser_client()->GetAndClearSiteInstanceDeleteCount());
@@ -476,18 +454,17 @@ TEST_F(SiteInstanceTest, DefaultSiteInstanceDestruction) {
 TEST_F(SiteInstanceTest, GetProcess) {
   // Ensure that GetProcess returns a process.
   std::unique_ptr<TestBrowserContext> browser_context(new TestBrowserContext());
-  std::unique_ptr<RenderProcessHost> host1;
   scoped_refptr<SiteInstanceImpl> instance(
       SiteInstanceImpl::Create(browser_context.get()));
-  host1.reset(instance->GetProcess());
-  EXPECT_TRUE(host1.get() != nullptr);
+  RenderProcessHost* host1 = instance->GetProcess();
+  EXPECT_TRUE(host1 != nullptr);
 
   // Ensure that GetProcess creates a new process.
   scoped_refptr<SiteInstanceImpl> instance2(
       SiteInstanceImpl::Create(browser_context.get()));
-  std::unique_ptr<RenderProcessHost> host2(instance2->GetProcess());
-  EXPECT_TRUE(host2.get() != nullptr);
-  EXPECT_NE(host1.get(), host2.get());
+  RenderProcessHost* host2 = instance2->GetProcess();
+  EXPECT_TRUE(host2 != nullptr);
+  EXPECT_NE(host1, host2);
 
   DrainMessageLoop();
 }
@@ -663,15 +640,14 @@ TEST_F(SiteInstanceTest, ProcessLockDoesNotUseEffectiveURL) {
   SiteInfo expected_site_info(
       app_url /* site_url */, nonapp_site_url /* process_lock_url */,
       false /* is_origin_keyed */,
-      false /* is_coop_coep_cross_origin_isolated */,
-      base::nullopt /* coop_coep_cross_origin_isolated_origin */);
+      CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
 
   // New SiteInstance in a new BrowsingInstance with a predetermined URL.
   {
     scoped_refptr<SiteInstanceImpl> site_instance =
         SiteInstanceImpl::CreateForUrlInfo(
             browser_context.get(), UrlInfo::CreateForTesting(test_url),
-            false /* is_coop_coep_cross_origin_isolated */);
+            CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
     EXPECT_EQ(expected_site_info, site_instance->GetSiteInfo());
   }
 
@@ -682,7 +658,7 @@ TEST_F(SiteInstanceTest, ProcessLockDoesNotUseEffectiveURL) {
         SiteInstanceImpl::CreateForUrlInfo(
             browser_context.get(),
             UrlInfo::CreateForTesting(GURL("https://bar.com/")),
-            false /* is_coop_coep_cross_origin_isolated */);
+            CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
     scoped_refptr<SiteInstance> site_instance =
         bar_site_instance->GetRelatedSiteInstance(test_url);
     auto* site_instance_impl =
@@ -775,8 +751,8 @@ TEST_F(SiteInstanceTest, OneSiteInstancePerSite) {
       switches::kProcessPerSite));
   std::unique_ptr<TestBrowserContext> browser_context(new TestBrowserContext());
   BrowsingInstance* browsing_instance = new BrowsingInstance(
-      browser_context.get(), false /* is_coop_coep_cross_origin_isolated */,
-      base::nullopt /* coop_coep_cross_origin_isolated_origin */);
+      browser_context.get(),
+      CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
 
   const GURL url_a1("http://www.google.com/1.html");
   scoped_refptr<SiteInstanceImpl> site_instance_a1(
@@ -809,8 +785,8 @@ TEST_F(SiteInstanceTest, OneSiteInstancePerSite) {
   // A visit to the original site in a new BrowsingInstance (same or different
   // browser context) should return a different SiteInstance.
   BrowsingInstance* browsing_instance2 = new BrowsingInstance(
-      browser_context.get(), false /* is_coop_coep_cross_origin_isolated */,
-      base::nullopt /* coop_coep_cross_origin_isolated_origin */);
+      browser_context.get(),
+      CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
   // Ensure the new SiteInstance is ref counted so that it gets deleted.
   scoped_refptr<SiteInstanceImpl> site_instance_a2_2(
       browsing_instance2->GetSiteInstanceForURL(
@@ -821,10 +797,9 @@ TEST_F(SiteInstanceTest, OneSiteInstancePerSite) {
 
   // The two SiteInstances for http://google.com should not use the same process
   // if process-per-site is not enabled.
-  std::unique_ptr<RenderProcessHost> process_a1(site_instance_a1->GetProcess());
-  std::unique_ptr<RenderProcessHost> process_a2_2(
-      site_instance_a2_2->GetProcess());
-  EXPECT_NE(process_a1.get(), process_a2_2.get());
+  RenderProcessHost* process_a1 = site_instance_a1->GetProcess();
+  RenderProcessHost* process_a2_2 = site_instance_a2_2->GetProcess();
+  EXPECT_NE(process_a1, process_a2_2);
 
   // Should be able to see that we do have SiteInstances.
   EXPECT_TRUE(browsing_instance->HasSiteInstance(
@@ -853,15 +828,15 @@ TEST_F(SiteInstanceTest, OneSiteInstancePerSiteInBrowserContext) {
       switches::kProcessPerSite);
   std::unique_ptr<TestBrowserContext> browser_context(new TestBrowserContext());
   scoped_refptr<BrowsingInstance> browsing_instance = new BrowsingInstance(
-      browser_context.get(), false /* is_coop_coep_cross_origin_isolated */,
-      base::nullopt /* coop_coep_cross_origin_isolated_origin */);
+      browser_context.get(),
+      CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
 
   const GURL url_a1("http://www.google.com/1.html");
   scoped_refptr<SiteInstanceImpl> site_instance_a1(
       browsing_instance->GetSiteInstanceForURL(
           UrlInfo::CreateForTesting(url_a1), false));
   EXPECT_TRUE(site_instance_a1.get() != nullptr);
-  std::unique_ptr<RenderProcessHost> process_a1(site_instance_a1->GetProcess());
+  RenderProcessHost* process_a1 = site_instance_a1->GetProcess();
 
   // A separate site should create a separate SiteInstance.
   const GURL url_b1("http://www.yahoo.com/");
@@ -887,30 +862,29 @@ TEST_F(SiteInstanceTest, OneSiteInstancePerSiteInBrowserContext) {
   // A visit to the original site in a new BrowsingInstance (same browser
   // context) should return a different SiteInstance with the same process.
   BrowsingInstance* browsing_instance2 = new BrowsingInstance(
-      browser_context.get(), false /* is_coop_coep_cross_origin_isolated */,
-      base::nullopt /* coop_coep_cross_origin_isolated_origin */);
+      browser_context.get(),
+      CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
   scoped_refptr<SiteInstanceImpl> site_instance_a1_2(
       browsing_instance2->GetSiteInstanceForURL(
           UrlInfo::CreateForTesting(url_a1), false));
   EXPECT_TRUE(site_instance_a1.get() != nullptr);
   EXPECT_NE(site_instance_a1.get(), site_instance_a1_2.get());
-  EXPECT_EQ(process_a1.get(), site_instance_a1_2->GetProcess());
+  EXPECT_EQ(process_a1, site_instance_a1_2->GetProcess());
 
   // A visit to the original site in a new BrowsingInstance (different browser
   // context) should return a different SiteInstance with a different process.
   std::unique_ptr<TestBrowserContext> browser_context2(
       new TestBrowserContext());
   BrowsingInstance* browsing_instance3 = new BrowsingInstance(
-      browser_context2.get(), false /* is_coop_coep_cross_origin_isolated */,
-      base::nullopt /* coop_coep_cross_origin_isolated_origin */);
+      browser_context2.get(),
+      CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
   scoped_refptr<SiteInstanceImpl> site_instance_a2_3(
       browsing_instance3->GetSiteInstanceForURL(
           UrlInfo::CreateForTesting(url_a2), false));
   EXPECT_TRUE(site_instance_a2_3.get() != nullptr);
-  std::unique_ptr<RenderProcessHost> process_a2_3(
-      site_instance_a2_3->GetProcess());
+  RenderProcessHost* process_a2_3 = site_instance_a2_3->GetProcess();
   EXPECT_NE(site_instance_a1.get(), site_instance_a2_3.get());
-  EXPECT_NE(process_a1.get(), process_a2_3.get());
+  EXPECT_NE(process_a1, process_a2_3);
 
   // Should be able to see that we do have SiteInstances.
   EXPECT_TRUE(browsing_instance->HasSiteInstance(
@@ -938,7 +912,7 @@ TEST_F(SiteInstanceTest, OneSiteInstancePerSiteInBrowserContext) {
 // of URLs.
 TEST_F(SiteInstanceTest, IsSuitableForUrlInfo) {
   std::unique_ptr<TestBrowserContext> browser_context(new TestBrowserContext());
-  std::unique_ptr<RenderProcessHost> host;
+  RenderProcessHost* host;
   scoped_refptr<SiteInstanceImpl> instance(
       SiteInstanceImpl::Create(browser_context.get()));
 
@@ -955,8 +929,8 @@ TEST_F(SiteInstanceTest, IsSuitableForUrlInfo) {
 
   // The call to GetProcess actually creates a new real process, which works
   // fine, but might be a cause for problems in different contexts.
-  host.reset(instance->GetProcess());
-  EXPECT_TRUE(host.get() != nullptr);
+  host = instance->GetProcess();
+  EXPECT_TRUE(host != nullptr);
   EXPECT_TRUE(instance->HasProcess());
 
   EXPECT_TRUE(instance->IsSuitableForUrlInfo(
@@ -972,7 +946,7 @@ TEST_F(SiteInstanceTest, IsSuitableForUrlInfo) {
   scoped_refptr<SiteInstanceImpl> webui_instance(
       SiteInstanceImpl::Create(browser_context.get()));
   webui_instance->SetSite(UrlInfo::CreateForTesting(webui_url));
-  std::unique_ptr<RenderProcessHost> webui_host(webui_instance->GetProcess());
+  RenderProcessHost* webui_host = webui_instance->GetProcess();
 
   // Simulate granting WebUI bindings for the process.
   ChildProcessSecurityPolicyImpl::GetInstance()->GrantWebUIBindings(
@@ -1006,7 +980,7 @@ TEST_F(SiteInstanceTest, IsSuitableForUrlInfoInSitePerProcess) {
   IsolateAllSitesForTesting(base::CommandLine::ForCurrentProcess());
 
   std::unique_ptr<TestBrowserContext> browser_context(new TestBrowserContext());
-  std::unique_ptr<RenderProcessHost> host;
+  RenderProcessHost* host;
   scoped_refptr<SiteInstanceImpl> instance(
       SiteInstanceImpl::Create(browser_context.get()));
 
@@ -1020,8 +994,8 @@ TEST_F(SiteInstanceTest, IsSuitableForUrlInfoInSitePerProcess) {
 
   // The call to GetProcess actually creates a new real process, which works
   // fine, but might be a cause for problems in different contexts.
-  host.reset(instance->GetProcess());
-  EXPECT_TRUE(host.get() != nullptr);
+  host = instance->GetProcess();
+  EXPECT_TRUE(host != nullptr);
   EXPECT_TRUE(instance->HasProcess());
 
   EXPECT_TRUE(instance->IsSuitableForUrlInfo(
@@ -1039,8 +1013,8 @@ TEST_F(SiteInstanceTest, IsSuitableForUrlInfoInSitePerProcess) {
 // wrong bindings for its URL.  http://crbug.com/174059.
 TEST_F(SiteInstanceTest, ProcessPerSiteWithWrongBindings) {
   std::unique_ptr<TestBrowserContext> browser_context(new TestBrowserContext());
-  std::unique_ptr<RenderProcessHost> host;
-  std::unique_ptr<RenderProcessHost> host2;
+  RenderProcessHost* host;
+  RenderProcessHost* host2;
   scoped_refptr<SiteInstanceImpl> instance(
       SiteInstanceImpl::Create(browser_context.get()));
 
@@ -1054,8 +1028,8 @@ TEST_F(SiteInstanceTest, ProcessPerSiteWithWrongBindings) {
   EXPECT_TRUE(instance->HasSite());
 
   // The call to GetProcess actually creates a new real process.
-  host.reset(instance->GetProcess());
-  EXPECT_TRUE(host.get() != nullptr);
+  host = instance->GetProcess();
+  EXPECT_TRUE(host != nullptr);
   EXPECT_TRUE(instance->HasProcess());
 
   // Without bindings, this should look like the wrong process.
@@ -1068,10 +1042,10 @@ TEST_F(SiteInstanceTest, ProcessPerSiteWithWrongBindings) {
   scoped_refptr<SiteInstanceImpl> instance2(
       SiteInstanceImpl::Create(browser_context.get()));
   instance2->SetSite(UrlInfo::CreateForTesting(webui_url));
-  host2.reset(instance2->GetProcess());
-  EXPECT_TRUE(host2.get() != nullptr);
+  host2 = instance2->GetProcess();
+  EXPECT_TRUE(host2 != nullptr);
   EXPECT_TRUE(instance2->HasProcess());
-  EXPECT_NE(host.get(), host2.get());
+  EXPECT_NE(host, host2);
 
   DrainMessageLoop();
 }
@@ -1082,17 +1056,17 @@ TEST_F(SiteInstanceTest, NoProcessPerSiteForEmptySite) {
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kProcessPerSite);
   std::unique_ptr<TestBrowserContext> browser_context(new TestBrowserContext());
-  std::unique_ptr<RenderProcessHost> host;
+  RenderProcessHost* host;
   scoped_refptr<SiteInstanceImpl> instance(
       SiteInstanceImpl::Create(browser_context.get()));
 
   instance->SetSite(UrlInfo());
   EXPECT_TRUE(instance->HasSite());
   EXPECT_TRUE(instance->GetSiteURL().is_empty());
-  host.reset(instance->GetProcess());
+  host = instance->GetProcess();
 
   EXPECT_FALSE(RenderProcessHostImpl::GetSoleProcessHostForSite(
-      instance->GetIsolationContext(), SiteInfo(), false));
+      instance->GetIsolationContext(), SiteInfo()));
 
   DrainMessageLoop();
 }
@@ -1470,8 +1444,7 @@ TEST_F(SiteInstanceTest, OriginalURL) {
   SiteInfo expected_site_info(
       app_url /* site_url */, original_url /* process_lock_url */,
       false /* is_origin_keyed */,
-      false /* is_coop_coep_cross_origin_isolated */,
-      base::nullopt /* coop_coep_cross_origin_isolated_origin */);
+      CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
 
   // New SiteInstance in a new BrowsingInstance with a predetermined URL.  In
   // this and subsequent cases, the site URL should consist of the effective
@@ -1481,7 +1454,7 @@ TEST_F(SiteInstanceTest, OriginalURL) {
     scoped_refptr<SiteInstanceImpl> site_instance =
         SiteInstanceImpl::CreateForUrlInfo(
             browser_context.get(), UrlInfo::CreateForTesting(original_url),
-            false /* is_coop_coep_cross_origin_isolated */);
+            CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
     EXPECT_EQ(expected_site_info, site_instance->GetSiteInfo());
     EXPECT_EQ(original_url, site_instance->original_url());
   }
@@ -1493,7 +1466,7 @@ TEST_F(SiteInstanceTest, OriginalURL) {
         SiteInstanceImpl::CreateForUrlInfo(
             browser_context.get(),
             UrlInfo::CreateForTesting(GURL("https://bar.com/")),
-            false /* is_coop_coep_cross_origin_isolated */);
+            CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
     scoped_refptr<SiteInstance> site_instance =
         bar_site_instance->GetRelatedSiteInstance(original_url);
     auto* site_instance_impl =
@@ -1521,8 +1494,7 @@ namespace {
 ProcessLock ProcessLockFromString(const std::string& url) {
   return ProcessLock(
       SiteInfo(GURL(url), GURL(url), false /* is_origin_keyed */,
-               false /* is_coop_coep_cross_origin_isolated */,
-               base::nullopt /* coop_coep_cross_origin_isolated_origin */));
+               CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated()));
 }
 
 }  // namespace
@@ -1605,19 +1577,19 @@ TEST_F(SiteInstanceTest, CreateForUrlInfo) {
 
   auto instance1 = SiteInstanceImpl::CreateForUrlInfo(
       context(), UrlInfo::CreateForTesting(kNonIsolatedUrl),
-      false /* is_coop_coep_cross_origin_isolated */);
+      CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
   auto instance2 = SiteInstanceImpl::CreateForUrlInfo(
       context(), UrlInfo::CreateForTesting(kIsolatedUrl),
-      false /* is_coop_coep_cross_origin_isolated */);
+      CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
   auto instance3 = SiteInstanceImpl::CreateForUrlInfo(
       context(), UrlInfo::CreateForTesting(kFileUrl),
-      false /* is_coop_coep_cross_origin_isolated */);
+      CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
   auto instance4 = SiteInstanceImpl::CreateForUrlInfo(
       context(), UrlInfo::CreateForTesting(GURL(url::kAboutBlankURL)),
-      false /* is_coop_coep_cross_origin_isolated */);
+      CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
   auto instance5 = SiteInstanceImpl::CreateForUrlInfo(
       context(), UrlInfo::CreateForTesting(kCustomUrl),
-      false /* is_coop_coep_cross_origin_isolated */);
+      CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
 
   if (AreDefaultSiteInstancesEnabled()) {
     EXPECT_TRUE(instance1->IsDefaultSiteInstance());
@@ -1680,7 +1652,7 @@ TEST_F(SiteInstanceTest, CreateForUrlInfo) {
   // a site set now.
   auto instance6 = SiteInstanceImpl::CreateForUrlInfo(
       context(), UrlInfo::CreateForTesting(kCustomUrl),
-      false /* is_coop_coep_cross_origin_isolated */);
+      CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
   EXPECT_FALSE(instance6->IsDefaultSiteInstance());
   EXPECT_FALSE(instance6->HasSite());
   EXPECT_FALSE(instance6->DoesSiteInfoForURLMatch(
@@ -1698,7 +1670,7 @@ TEST_F(SiteInstanceTest, CreateForGuest) {
   // any other standard URL.
   auto instance1 = SiteInstanceImpl::CreateForUrlInfo(
       context(), UrlInfo::CreateForTesting(kGuestUrl),
-      false /* is_coop_coep_cross_origin_isolated */);
+      CoopCoepCrossOriginIsolatedInfo::CreateNonIsolated());
   EXPECT_FALSE(instance1->IsGuest());
   if (AreAllSitesIsolatedForTesting()) {
     EXPECT_NE(kGuestUrl, instance1->GetSiteURL());

@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/css/parser/css_parser_fast_paths.h"
 
 #include "build/build_config.h"
+#include "third_party/blink/public/public_buildflags.h"
 #include "third_party/blink/renderer/core/css/css_color_value.h"
 #include "third_party/blink/renderer/core/css/css_function_value.h"
 #include "third_party/blink/renderer/core/css/css_identifier_value.h"
@@ -899,7 +900,7 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
       return value_id == CSSValueID::kNowrap || value_id == CSSValueID::kWrap ||
              value_id == CSSValueID::kWrapReverse;
     case CSSPropertyID::kHyphens:
-#if defined(OS_ANDROID) || defined(OS_MAC)
+#if BUILDFLAG(USE_MINIKIN_HYPHENATION) || defined(OS_MAC)
       return value_id == CSSValueID::kAuto || value_id == CSSValueID::kNone ||
              value_id == CSSValueID::kManual;
 #else
@@ -985,6 +986,9 @@ bool CSSParserFastPaths::IsValidKeywordPropertyAndValue(
              value_id == CSSValueID::kBreakAll ||
              value_id == CSSValueID::kKeepAll ||
              value_id == CSSValueID::kBreakWord;
+    case CSSPropertyID::kScrollbarWidth:
+      return value_id == CSSValueID::kAuto || value_id == CSSValueID::kThin ||
+             value_id == CSSValueID::kNone;
     case CSSPropertyID::kScrollSnapStop:
       return value_id == CSSValueID::kNormal || value_id == CSSValueID::kAlways;
     case CSSPropertyID::kOverscrollBehaviorInline:
@@ -1110,6 +1114,7 @@ bool CSSParserFastPaths::IsKeywordPropertyID(CSSPropertyID property_id) {
     case CSSPropertyID::kWhiteSpace:
     case CSSPropertyID::kWordBreak:
     case CSSPropertyID::kWritingMode:
+    case CSSPropertyID::kScrollbarWidth:
     case CSSPropertyID::kScrollSnapStop:
     case CSSPropertyID::kOriginTrialTestProperty:
       return true;
@@ -1137,8 +1142,7 @@ static CSSValue* ParseKeywordValue(CSSPropertyID property_id,
     if (!EqualIgnoringASCIICase(string, "initial") &&
         !EqualIgnoringASCIICase(string, "inherit") &&
         !EqualIgnoringASCIICase(string, "unset") &&
-        (!RuntimeEnabledFeatures::CSSRevertEnabled() ||
-         !EqualIgnoringASCIICase(string, "revert")))
+        !EqualIgnoringASCIICase(string, "revert"))
       return nullptr;
 
     // Parse CSS-wide keyword shorthands using the CSSPropertyParser.
@@ -1161,10 +1165,8 @@ static CSSValue* ParseKeywordValue(CSSPropertyID property_id,
     return CSSInitialValue::Create();
   if (value_id == CSSValueID::kUnset)
     return cssvalue::CSSUnsetValue::Create();
-  if (RuntimeEnabledFeatures::CSSRevertEnabled() &&
-      value_id == CSSValueID::kRevert) {
+  if (value_id == CSSValueID::kRevert)
     return cssvalue::CSSRevertValue::Create();
-  }
   if (CSSParserFastPaths::IsValidKeywordPropertyAndValue(property_id, value_id,
                                                          parser_mode))
     return CSSIdentifierValue::Create(value_id);

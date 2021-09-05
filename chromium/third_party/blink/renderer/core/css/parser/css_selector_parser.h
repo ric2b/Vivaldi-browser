@@ -46,6 +46,13 @@ class CORE_EXPORT CSSSelectorParser {
   CSSSelectorList ConsumeComplexSelectorList(CSSParserTokenStream&,
                                              CSSParserObserver*);
   CSSSelectorList ConsumeCompoundSelectorList(CSSParserTokenRange&);
+  // Consumes a complex selector list if inside_compound_pseudo_ is false,
+  // otherwise consumes a compound selector list.
+  CSSSelectorList ConsumeNestedSelectorList(CSSParserTokenRange&);
+  CSSSelectorList ConsumeForgivingNestedSelectorList(CSSParserTokenRange&);
+  // https://drafts.csswg.org/selectors/#typedef-forgiving-selector-list
+  CSSSelectorList ConsumeForgivingComplexSelectorList(CSSParserTokenRange&);
+  CSSSelectorList ConsumeForgivingCompoundSelectorList(CSSParserTokenRange&);
 
   std::unique_ptr<CSSParserSelector> ConsumeComplexSelector(
       CSSParserTokenRange&);
@@ -96,6 +103,27 @@ class CORE_EXPORT CSSSelectorParser {
   // we disallow :is()/:where().
   bool disallow_shadow_dom_v0_ = false;
   bool disallow_nested_complex_ = false;
+  // If we're inside a pseudo class that only accepts compound selectors,
+  // for example :host, inner :is()/:where() pseudo classes are also only
+  // allowed to contain compound selectors.
+  bool inside_compound_pseudo_ = false;
+  // When parsing a compound which includes a pseudo-element, the simple
+  // selectors permitted to follow that pseudo-element may be restricted.
+  // If this is the case, then restricting_pseudo_element_ will be set to the
+  // PseudoType of the pseudo-element causing the restriction.
+  CSSSelector::PseudoType restricting_pseudo_element_ =
+      CSSSelector::kPseudoUnknown;
+  // If we're _resisting_ the default namespace, it means that we are inside
+  // a nested selector (:is(), :where(), etc) where we should _consider_
+  // ignoring the default namespace (depending on circumstance). See the
+  // relevant spec text [1] regarding default namespaces for information about
+  // those circumstances.
+  //
+  // [1] https://drafts.csswg.org/selectors/#matches
+  bool resist_default_namespace_ = false;
+  // While this flag is true, the default namespace is ignored. In other words,
+  // the default namespace is '*' while this flag is true.
+  bool ignore_default_namespace_ = false;
 
   class DisallowPseudoElementsScope {
     STACK_ALLOCATED();

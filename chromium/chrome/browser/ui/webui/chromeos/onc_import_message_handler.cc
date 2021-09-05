@@ -5,7 +5,7 @@
 #include "chrome/browser/ui/webui/chromeos/onc_import_message_handler.h"
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -48,8 +48,8 @@ void OncImportMessageHandler::OnImportONC(const base::ListValue* list) {
   AllowJavascript();
   GetNSSCertDatabaseForProfile(
       Profile::FromWebUI(web_ui()),
-      base::Bind(&OncImportMessageHandler::ImportONCToNSSDB,
-                 weak_factory_.GetWeakPtr(), callback_id, onc_blob));
+      base::BindOnce(&OncImportMessageHandler::ImportONCToNSSDB,
+                     weak_factory_.GetWeakPtr(), callback_id, onc_blob));
 }
 
 void OncImportMessageHandler::ImportONCToNSSDB(const std::string& callback_id,

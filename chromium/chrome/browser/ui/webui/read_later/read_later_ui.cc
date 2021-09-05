@@ -21,9 +21,6 @@
 #include "ui/base/webui/web_ui_util.h"
 
 namespace {
-constexpr char kGeneratedPath[] =
-    "@out_folder@/gen/chrome/browser/resources/read_later/";
-
 void AddLocalizedString(content::WebUIDataSource* source,
                         const std::string& message,
                         int id) {
@@ -34,14 +31,13 @@ void AddLocalizedString(content::WebUIDataSource* source,
 }  // namespace
 
 ReadLaterUI::ReadLaterUI(content::WebUI* web_ui)
-    : ui::MojoWebUIController(web_ui) {
+    : ui::MojoBubbleWebUIController(web_ui) {
   content::WebUIDataSource* source =
       content::WebUIDataSource::Create(chrome::kChromeUIReadLaterHost);
-  source->AddResourcePath("read_later.mojom-lite.js",
-                          IDR_READ_LATER_MOJO_LITE_JS);
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
       {"readHeader", IDS_READ_LATER_MENU_READ_HEADER},
       {"title", IDS_READ_LATER_TITLE},
+      {"tooltipClose", IDS_CLOSE},
       {"tooltipDelete", IDS_DELETE},
       {"tooltipMarkAsRead", IDS_READ_LATER_MENU_TOOLTIP_MARK_AS_READ},
       {"tooltipMarkAsUnread", IDS_READ_LATER_MENU_TOOLTIP_MARK_AS_UNREAD},
@@ -52,7 +48,7 @@ ReadLaterUI::ReadLaterUI(content::WebUI* web_ui)
 
   webui::SetupWebUIDataSource(
       source, base::make_span(kReadLaterResources, kReadLaterResourcesSize),
-      kGeneratedPath, IDR_READ_LATER_HTML);
+      /*generated_path=*/std::string(), IDR_READ_LATER_READ_LATER_HTML);
   content::WebUIDataSource::Add(web_ui->GetWebContents()->GetBrowserContext(),
                                 source);
 }
@@ -72,5 +68,5 @@ void ReadLaterUI::CreatePageHandler(
     mojo::PendingReceiver<read_later::mojom::PageHandler> receiver) {
   DCHECK(page);
   page_handler_ = std::make_unique<ReadLaterPageHandler>(std::move(receiver),
-                                                         std::move(page));
+                                                         std::move(page), this);
 }

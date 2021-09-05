@@ -87,6 +87,8 @@ source_set("feature_flags") {
 source_set("test_support") {
   testonly = true
   sources = [
+    "browser_state_policy_connector_mock.h",
+    "browser_state_policy_connector_mock.mm",
     "enterprise_policy_test_helper.cc",
     "enterprise_policy_test_helper.h",
     "test_platform_policy_provider.cc",
@@ -134,6 +136,9 @@ source_set("unit_tests") {
     "browser_dm_token_storage_ios_unittest.mm",
     "policy_unittest.mm",
     "reporting/browser_report_generator_ios_unittest.mm",
+    "reporting/profile_report_generator_ios_unittest.mm",
+    "reporting/report_generator_ios_unittest.mm",
+    "reporting/report_scheduler_ios_unittest.mm",
   ]
   deps = [
     ":policy",
@@ -141,13 +146,19 @@ source_set("unit_tests") {
     ":test_support",
     "//base",
     "//base/test:test_support",
+    "//components/enterprise",
+    "//components/enterprise:test_support",
     "//components/policy/core/browser:test_support",
     "//ios/chrome/browser:chrome_paths",
     "//ios/chrome/browser:pref_names",
     "//ios/chrome/browser:utils",
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/chrome/browser/prefs",
+    "//ios/chrome/browser/signin:signin",
+    "//ios/chrome/browser/signin:test_support",
     "//ios/chrome/test:test_support",
+    "//ios/public/provider/chrome/browser/signin:test_support",
+    "//ios/web/public/test:test",
     "//testing/gtest",
   ]
 }
@@ -169,6 +180,8 @@ source_set("eg2_tests") {
     ":eg_test_support+eg2",
     ":test_resources",
     "//base",
+    "//components/autofill/core/common",
+    "//components/enterprise",
     "//components/password_manager/core/common",
     "//components/policy:generated",
     "//components/policy/core/common:common_constants",
@@ -179,7 +192,9 @@ source_set("eg2_tests") {
     "//ios/chrome/browser/translate:eg_test_support+eg2",
     "//ios/chrome/browser/ui/popup_menu:constants",
     "//ios/chrome/browser/ui/settings:constants",
+    "//ios/chrome/browser/ui/settings/autofill:constants",
     "//ios/chrome/browser/ui/settings/elements:constants",
+    "//ios/chrome/browser/ui/settings/language:language_ui_constants",
     "//ios/chrome/browser/ui/settings/password:password_constants",
     "//ios/chrome/browser/ui/table_view/cells:cells_constants",
     "//ios/chrome/test/earl_grey:eg_test_support+eg2",

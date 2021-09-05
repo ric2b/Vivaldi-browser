@@ -67,8 +67,6 @@ class BLINK_EXPORT WebAXSparseAttributeClient {
   WebAXSparseAttributeClient() = default;
   virtual ~WebAXSparseAttributeClient() = default;
 
-  virtual void AddBoolAttribute(WebAXBoolAttribute, bool) = 0;
-  virtual void AddStringAttribute(WebAXStringAttribute, const WebString&) = 0;
   virtual void AddObjectAttribute(WebAXObjectAttribute, const WebAXObject&) = 0;
   virtual void AddObjectVectorAttribute(WebAXObjectVectorAttribute,
                                         const WebVector<WebAXObject>&) = 0;
@@ -166,22 +164,16 @@ class WebAXObject {
 
   BLINK_EXPORT bool HasAriaAttribute() const;
   BLINK_EXPORT WebString AccessKey() const;
-  BLINK_EXPORT unsigned BackgroundColor() const;
   BLINK_EXPORT bool CanPress() const;
   BLINK_EXPORT bool CanSetValueAttribute() const;
-  BLINK_EXPORT unsigned GetColor() const;
   // Deprecated.
   BLINK_EXPORT void ColorValue(int& r, int& g, int& b) const;
   BLINK_EXPORT unsigned ColorValue() const;
   BLINK_EXPORT WebAXObject AriaActiveDescendant() const;
   BLINK_EXPORT WebString AutoComplete() const;
   BLINK_EXPORT ax::mojom::AriaCurrentState AriaCurrentState() const;
-  BLINK_EXPORT bool IsEditableRoot() const;
   BLINK_EXPORT bool IsEditable() const;
   BLINK_EXPORT bool AriaOwns(WebVector<WebAXObject>& owns_elements) const;
-  BLINK_EXPORT WebString FontFamily() const;
-  BLINK_EXPORT float FontSize() const;
-  BLINK_EXPORT float FontWeight() const;
   BLINK_EXPORT bool CanvasHasFallbackContent() const;
   BLINK_EXPORT WebAXObject ErrorMessage() const;
   // If this is an image, returns the image (scaled to maxSize) as a data url.
@@ -200,14 +192,7 @@ class WebAXObject {
   BLINK_EXPORT WebVector<WebAXObject> RadioButtonsInGroup() const;
   BLINK_EXPORT ax::mojom::Role Role() const;
   BLINK_EXPORT WebString StringValue() const;
-  BLINK_EXPORT ax::mojom::ListStyle GetListStyle() const;
   BLINK_EXPORT ax::mojom::WritingDirection GetTextDirection() const;
-  BLINK_EXPORT ax::mojom::TextPosition GetTextPosition() const;
-  BLINK_EXPORT void GetTextStyleAndTextDecorationStyle(
-      int32_t* text_style,
-      ax::mojom::TextDecorationStyle* text_overline_style,
-      ax::mojom::TextDecorationStyle* text_strikethrough_style,
-      ax::mojom::TextDecorationStyle* text_underline_style) const;
   BLINK_EXPORT WebURL Url() const;
   BLINK_EXPORT WebAXObject ChooserPopup() const;
 
@@ -257,13 +242,6 @@ class WebAXObject {
                               WebAXObject& focus_object,
                               int& focus_offset,
                               ax::mojom::TextAffinity& focus_affinity) const;
-
-  // The following selection functions return text offsets calculated starting
-  // from the current object. They only report on a selection that is placed on
-  // the current object or on any of its descendants.
-
-  BLINK_EXPORT unsigned SelectionEnd() const;
-  BLINK_EXPORT unsigned SelectionStart() const;
 
   // 1-based position in set & Size of set.
   BLINK_EXPORT int PosInSet() const;

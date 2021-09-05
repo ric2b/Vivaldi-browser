@@ -6,6 +6,7 @@
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/notreached.h"
+#include "chrome/android/features/autofill_assistant/jni_headers/AssistantChip_jni.h"
 #include "chrome/android/features/autofill_assistant/jni_headers/AssistantColor_jni.h"
 #include "chrome/android/features/autofill_assistant/jni_headers/AssistantDateTime_jni.h"
 #include "chrome/android/features/autofill_assistant/jni_headers/AssistantDialogButton_jni.h"
@@ -107,15 +108,14 @@ base::Optional<int> GetPixelSize(
   switch (proto.size_case()) {
     case ClientDimensionProto::kDp:
       return Java_AssistantDimension_getPixelSizeDp(env, jcontext, proto.dp());
-      break;
     case ClientDimensionProto::kWidthFactor:
       return Java_AssistantDimension_getPixelSizeWidthFactor(
           env, jcontext, proto.width_factor());
-      break;
     case ClientDimensionProto::kHeightFactor:
       return Java_AssistantDimension_getPixelSizeHeightFactor(
           env, jcontext, proto.height_factor());
-      break;
+    case ClientDimensionProto::kSizeInPixel:
+      return proto.size_in_pixel();
     case ClientDimensionProto::SIZE_NOT_SET:
       return base::nullopt;
   }
@@ -199,10 +199,11 @@ base::android::ScopedJavaLocalRef<jobject> CreateJavaDrawable(
       int diameter_size_in_pixel =
           ui_controller_android_utils::GetPixelSizeOrDefault(
               env, jcontext, proto.favicon().diameter_size(), 0);
+      std::string url = proto.favicon().has_website_url()
+                            ? proto.favicon().website_url()
+                            : user_model->GetCurrentURL().spec();
       return Java_AssistantDrawable_createFromFavicon(
-          env,
-          base::android::ConvertUTF8ToJavaString(
-              env, user_model->GetCurrentURL().spec()),
+          env, base::android::ConvertUTF8ToJavaString(env, url),
           diameter_size_in_pixel, proto.favicon().force_monogram());
     }
     case DrawableProto::DRAWABLE_NOT_SET:
@@ -423,6 +424,43 @@ int ToJavaBottomSheetState(BottomSheetState state) {
   }
 }
 
-}  // namespace ui_controller_android_utils
+base::android::ScopedJavaLocalRef<jobject> CreateJavaAssistantChip(
+    JNIEnv* env,
+    const ChipProto& chip) {
+  switch (chip.type()) {
+    default:  // Other chip types are not supported.
+      return nullptr;
 
+    case HIGHLIGHTED_ACTION:
+    case DONE_ACTION:
+      return Java_AssistantChip_createHighlightedAssistantChip(
+          env, chip.icon(),
+          base::android::ConvertUTF8ToJavaString(env, chip.text()),
+          /* disabled = */ false, chip.sticky(), /* visible = */ true);
+
+    case NORMAL_ACTION:
+    case CANCEL_ACTION:
+    case CLOSE_ACTION:
+      return Java_AssistantChip_createHairlineAssistantChip(
+          env, chip.icon(),
+          base::android::ConvertUTF8ToJavaString(env, chip.text()),
+          /* disabled = */ false, chip.sticky(), /* visible = */ true);
+  }
+}
+
+base::android::ScopedJavaLocalRef<jobject> CreateJavaAssistantChipList(
+    JNIEnv* env,
+    const std::vector<ChipProto>& chips) {
+  auto jlist = Java_AssistantChip_createChipList(env);
+  for (const auto& chip : chips) {
+    auto jchip = CreateJavaAssistantChip(env, chip);
+    if (!jchip) {
+      return nullptr;
+    }
+    Java_AssistantChip_addChipToList(env, jlist, jchip);
+  }
+  return jlist;
+}
+
+}  // namespace ui_controller_android_utils
 }  // namespace autofill_assistant

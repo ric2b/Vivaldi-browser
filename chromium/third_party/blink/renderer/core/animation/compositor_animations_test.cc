@@ -64,6 +64,8 @@
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/core/style/filter_operations.h"
 #include "third_party/blink/renderer/core/style/style_generated_image.h"
+#include "third_party/blink/renderer/core/svg/svg_element.h"
+#include "third_party/blink/renderer/core/svg/svg_length.h"
 #include "third_party/blink/renderer/core/testing/core_unit_test_helper.h"
 #include "third_party/blink/renderer/core/testing/dummy_page_holder.h"
 #include "third_party/blink/renderer/platform/animation/compositor_color_animation_curve.h"
@@ -560,6 +562,8 @@ TEST_P(AnimationCompositorAnimationsTest,
 
 TEST_P(AnimationCompositorAnimationsTest,
        IsNotCandidateForCompositorAnimationTransformDependsOnBoxSize) {
+  ScopedCompositeRelativeKeyframesForTest no_relative_keyframes(false);
+
   // Absolute transforms can be animated on the compositor.
   String transform = "translateX(2px) translateY(2px)";
   StringKeyframe* good_keyframe =
@@ -2143,9 +2147,7 @@ TEST_P(AnimationCompositorAnimationsTest,
   EXPECT_EQ(transform->GetBackfaceVisibilityForTesting(),
             TransformPaintPropertyNode::BackfaceVisibility::kVisible);
   const CompositedLayerMapping* composited_layer_mapping =
-      ToLayoutBoxModelObject(target->GetLayoutObject())
-          ->Layer()
-          ->GetCompositedLayerMapping();
+      target->GetLayoutBoxModelObject()->Layer()->GetCompositedLayerMapping();
   ASSERT_NE(nullptr, composited_layer_mapping);
   const auto& layer = composited_layer_mapping->MainGraphicsLayer()->CcLayer();
   EXPECT_FALSE(layer.should_check_backface_visibility());
@@ -2205,6 +2207,129 @@ TEST_P(AnimationCompositorAnimationsTest,
   EXPECT_NE(
       CheckCanStartElementOnCompositor(*target, *keyframe_animation_effect2_),
       CompositorAnimations::kNoFailure);
+}
+
+TEST_P(AnimationCompositorAnimationsTest,
+       CanStartTransformAnimationOnCompositorForSVG) {
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      .animate {
+        width: 100px;
+        height: 100px;
+        animation: wave 1s infinite;
+      }
+      @keyframes wave {
+        0% { transform: rotate(-5deg); }
+        100% { transform: rotate(5deg); }
+      }
+    </style>
+    <svg id="svg" class="animate">
+      <rect id="rect" class="animate"/>
+      <rect id="rect-useref" class="animate"/>
+      <rect id="rect-smil" class="animate">
+        <animateMotion dur="10s" repeatCount="indefinite"
+                       path="M0,0 L100,100 z"/>
+      </rect>
+      <rect id="rect-effect" class="animate"
+            vector-effect="non-scaling-stroke"/>
+      <g id="g-effect" class="animate">
+        <rect class="animate" vector-effect="non-scaling-stroke"/>
+      </g>
+      <svg id="nested-svg" class="animate"/>
+      <foreignObject id="foreign" class="animate"/>
+      <foreignObject id="foreign-zoomed" class="animate"
+                     style="zoom: 1.5; will-change: opacity"/>
+      <use id="use" href="#rect-useref" class="animate"/>
+      <use id="use-offset" href="#rect-useref" x="10" class="animate"/>
+    </svg>
+  )HTML");
+
+  auto CanStartAnimation = [&](const char* id) -> bool {
+    return CompositorAnimations::CanStartTransformAnimationOnCompositorForSVG(
+        To<SVGElement>(*GetDocument().getElementById(id)));
+  };
+
+  EXPECT_TRUE(CanStartAnimation("svg"));
+  EXPECT_TRUE(CanStartAnimation("rect"));
+  EXPECT_FALSE(CanStartAnimation("rect-useref"));
+  EXPECT_FALSE(CanStartAnimation("rect-smil"));
+  EXPECT_FALSE(CanStartAnimation("rect-effect"));
+  EXPECT_FALSE(CanStartAnimation("g-effect"));
+  EXPECT_FALSE(CanStartAnimation("nested-svg"));
+  EXPECT_TRUE(CanStartAnimation("foreign"));
+  EXPECT_FALSE(CanStartAnimation("foreign-zoomed"));
+  EXPECT_TRUE(CanStartAnimation("use"));
+  EXPECT_FALSE(CanStartAnimation("use-offset"));
+
+  To<SVGElement>(GetDocument().getElementById("rect"))
+      ->SetWebAnimatedAttribute(
+          svg_names::kXAttr,
+          MakeGarbageCollected<SVGLength>(SVGLength::Initial::kPercent50,
+                                          SVGLengthMode::kOther));
+  EXPECT_FALSE(CanStartAnimation("rect"));
+}
+
+TEST_P(AnimationCompositorAnimationsTest, UnsupportedSVGCSSProperty) {
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      @keyframes mixed {
+        0% { transform: rotate(-5deg); stroke-dashoffset: 0; }
+        100% { transform: rotate(5deg); stroke-dashoffset: 180; }
+      }
+    </style>
+    <svg>
+      <rect id="rect"
+            style="width: 100px; height: 100px; animation: mixed 1s infinite"/>
+    </svg>
+  )HTML");
+
+  Element* element = GetDocument().getElementById("rect");
+  const Animation& animation =
+      *element->GetElementAnimations()->Animations().begin()->key;
+  EXPECT_EQ(CompositorAnimations::kUnsupportedCSSProperty,
+            animation.CheckCanStartAnimationOnCompositor(
+                GetDocument().View()->GetPaintArtifactCompositor()));
+}
+
+TEST_P(AnimationCompositorAnimationsTest,
+       TotalAnimationCountAcrossAllDocuments) {
+  LoadTestData("animation-in-main-frame.html");
+
+  cc::AnimationHost* host =
+      GetFrame()->GetDocument()->View()->GetCompositorAnimationHost();
+
+  // We are checking that the animation count for all documents is 1 for every
+  // frame.
+  for (int i = 0; i < 9; i++) {
+    BeginFrame();
+    EXPECT_EQ(1U, host->MainThreadAnimationsCount());
+  }
+}
+
+TEST_P(AnimationCompositorAnimationsTest, TrackRafAnimationAcrossAllDocuments) {
+  LoadTestData("raf-countdown-in-main-frame.html");
+
+  cc::AnimationHost* host =
+      GetFrame()->GetDocument()->View()->GetCompositorAnimationHost();
+
+  // The test file registers two rAF 'animations'; one which ends after 5
+  // iterations and the other that ends after 10.
+  for (int i = 0; i < 9; i++) {
+    BeginFrame();
+    EXPECT_TRUE(host->CurrentFrameHadRAF());
+    EXPECT_TRUE(host->NextFrameHasPendingRAF());
+  }
+
+  // On the 10th iteration, there should be a current rAF, but no more pending
+  // rAFs.
+  BeginFrame();
+  EXPECT_TRUE(host->CurrentFrameHadRAF());
+  EXPECT_FALSE(host->NextFrameHasPendingRAF());
+
+  // On the 11th iteration, there should be no more rAFs firing.
+  BeginFrame();
+  EXPECT_FALSE(host->CurrentFrameHadRAF());
+  EXPECT_FALSE(host->NextFrameHasPendingRAF());
 }
 
 }  // namespace blink

@@ -25,7 +25,7 @@
 #include "ash/test/ash_test_base.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "components/exo/buffer.h"
 #include "components/exo/keyboard.h"
 #include "components/exo/keyboard_delegate.h"
@@ -46,6 +46,7 @@
 #include "ui/message_center/views/message_view_factory.h"
 #include "ui/message_center/views/notification_control_buttons_view.h"
 #include "ui/message_center/views/padded_button.h"
+#include "ui/views/test/button_test_api.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/widget/native_widget_delegate.h"
 
@@ -168,7 +169,7 @@ class ArcNotificationContentViewTest : public AshTestBase {
     views::Button* close_button = control_buttons_view->close_button();
     ASSERT_NE(nullptr, close_button);
     close_button->RequestFocus();
-    control_buttons_view->ButtonPressed(close_button, dummy_event);
+    views::test::ButtonTestApi(close_button).NotifyClick(dummy_event);
   }
 
   void CreateAndShowNotificationView(const Notification& notification) {

@@ -231,7 +231,7 @@ ExtensionInstallDialogView::ExtensionInstallDialogView(
   if (prompt_->has_webstore_data()) {
     auto store_link = std::make_unique<views::Link>(
         l10n_util::GetStringUTF16(IDS_EXTENSION_PROMPT_STORE_LINK));
-    store_link->set_callback(base::BindRepeating(
+    store_link->SetCallback(base::BindRepeating(
         &ExtensionInstallDialogView::LinkClicked, base::Unretained(this)));
     SetExtraView(std::move(store_link));
   } else if (prompt_->ShouldDisplayWithholdingUI()) {
@@ -267,7 +267,7 @@ void ExtensionInstallDialogView::ResizeWidget() {
 
 gfx::Size ExtensionInstallDialogView::CalculatePreferredSize() const {
   const int width = ChromeLayoutProvider::Get()->GetDistanceMetric(
-                        DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH) -
+                        views::DISTANCE_MODAL_DIALOG_PREFERRED_WIDTH) -
                     margins().width();
   return gfx::Size(width, GetHeightForWidth(width));
 }
@@ -421,10 +421,6 @@ void ExtensionInstallDialogView::OnShutdown(
   CloseDialog();
 }
 
-ax::mojom::Role ExtensionInstallDialogView::GetAccessibleWindowRole() {
-  return ax::mojom::Role::kAlertDialog;
-}
-
 base::string16 ExtensionInstallDialogView::GetAccessibleWindowTitle() const {
   return title_;
 }
@@ -520,7 +516,8 @@ void ExtensionInstallDialogView::CreateContents() {
   }
 
   scroll_view_ = new views::ScrollView();
-  scroll_view_->SetHideHorizontalScrollBar(true);
+  scroll_view_->SetHorizontalScrollBarMode(
+      views::ScrollView::ScrollBarMode::kDisabled);
   scroll_view_->SetContents(std::move(extension_info_container));
   scroll_view_->ClipHeightTo(
       0, provider->GetDistanceMetric(

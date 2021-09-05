@@ -19,7 +19,6 @@ extern const char kNullVersion[];
 
 // Command line switches.
 //
-
 // This switch starts the COM server. This switch is invoked by the COM runtime
 // when CoCreate is called on one of several CLSIDs that the server supports.
 // We expect to use the COM server for the following scenarios:
@@ -65,6 +64,13 @@ extern const char kUpdateSwitch[];
 
 // Installs the updater.
 extern const char kInstallSwitch[];
+
+// Contains the meta installer tag. The tag is a string of arguments, separated
+// by a delimiter (in this case, the delimiter is =). The tag is typically
+// embedded in the program image of the metainstaller, but for testing purposes,
+// the tag could be passed directly as a command line argument. The tag is
+// currently encoded as a ASCII string.
+extern const char kTagSwitch[];
 
 #if defined(OS_WIN)
 // A debug switch to indicate that --install is running from the `out` directory
@@ -179,9 +185,6 @@ constexpr int kErrorFailedToLockPrefsMutex = 1;
 // The server candidate failed to promote itself to active.
 constexpr int kErrorFailedToSwap = 2;
 
-// The server has finished qualification and will not do further operations.
-constexpr int kErrorQualificationExit = 3;
-
 // Policy Management constants.
 extern const char kProxyModeDirect[];
 extern const char kProxyModeAutoDetect[];
@@ -191,6 +194,7 @@ extern const char kProxyModeSystem[];
 
 extern const char kDownloadPreferenceCacheable[];
 
+constexpr int kPolicyNotSet = -1;
 constexpr int kPolicyDisabled = 0;
 constexpr int kPolicyEnabled = 1;
 constexpr int kPolicyEnabledMachineOnly = 4;

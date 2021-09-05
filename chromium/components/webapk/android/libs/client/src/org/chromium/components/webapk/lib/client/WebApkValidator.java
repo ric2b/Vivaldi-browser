@@ -177,10 +177,16 @@ public class WebApkValidator {
      */
     @SuppressLint("PackageManagerGetSignatures")
     public static boolean isValidWebApk(Context context, String webappPackageName) {
+        if (sOverrideValidationForTesting) {
+            if (DEBUG) {
+                Log.d(TAG, "WebApk validation is disabled for testing.");
+            }
+            return true;
+        }
         if (sExpectedSignature == null || sCommentSignedPublicKeyBytes == null) {
             Log.wtf(TAG,
-                    "WebApk validation failure - expected signature not set."
-                            + "missing call to WebApkValidator.initWithBrowserHostSignature");
+                    "WebApk validation failure - expected signature not set - "
+                            + "missing call to WebApkValidator.init");
             return false;
         }
         PackageInfo packageInfo;
@@ -193,12 +199,6 @@ public class WebApkValidator {
                 Log.d(TAG, "WebApk not found");
             }
             return false;
-        }
-        if (sOverrideValidationForTesting) {
-            if (DEBUG) {
-                Log.d(TAG, "WebApk validation is disabled for testing.");
-            }
-            return true;
         }
         if (isNotWebApkQuick(packageInfo)) {
             return false;
@@ -364,6 +364,7 @@ public class WebApkValidator {
      * @param manifestUrl The URL of the manifest that was used to generate the WebAPK.
      * @return The WebAPK's package name if installed, or null otherwise.
      */
+    @SuppressWarnings("QueryPermissionsNeeded")
     public static @Nullable String queryBoundWebApkForManifestUrl(
             Context context, String manifestUrl) {
         assert manifestUrl != null;

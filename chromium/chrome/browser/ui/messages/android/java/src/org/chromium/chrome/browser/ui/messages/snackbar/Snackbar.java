@@ -89,12 +89,14 @@ public class Snackbar {
     public static final int UMA_HOMEPAGE_PROMO_CHANGED_UNDO = 34;
     public static final int UMA_CONDITIONAL_TAB_STRIP_DISMISS_UNDO = 35;
     public static final int UMA_PAINT_PREVIEW_UPGRADE_NOTIFICATION = 36;
+    public static final int UMA_READING_LIST_BOOKMARK_ADDED = 37;
 
     private SnackbarController mController;
     private CharSequence mText;
     private String mTemplateText;
     private String mActionText;
     private Object mActionData;
+    private String mAccessibilityActionAnnouncement;
     private int mBackgroundColor;
     private int mTextApperanceResId;
     private boolean mSingleLine = true;
@@ -159,6 +161,16 @@ public class Snackbar {
     public Snackbar setAction(String actionText, Object actionData) {
         mActionText = actionText;
         mActionData = actionData;
+        return this;
+    }
+
+    /**
+     * Sets the text to accessibility announce when the action button is pressed.
+     * @param accessibilityActionAnnouncement An optional string to be announced when the action
+     *        button is pressed.
+     */
+    public Snackbar setActionAccessibilityAnnouncement(String accessibilityActionAnnouncement) {
+        mAccessibilityActionAnnouncement = accessibilityActionAnnouncement;
         return this;
     }
 
@@ -239,6 +251,10 @@ public class Snackbar {
 
     Object getActionData() {
         return mActionData;
+    }
+
+    String getActionAccessibilityAnnouncement() {
+        return mAccessibilityActionAnnouncement;
     }
 
     boolean getSingleLine() {

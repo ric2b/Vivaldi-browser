@@ -24,9 +24,8 @@ sk_sp<SkImage> CreateRasterImage() {
 }
 
 DecodedDrawImage CreateDecode() {
-  return DecodedDrawImage(CreateRasterImage(), SkSize::MakeEmpty(),
-                          SkSize::Make(1.0f, 1.0f), kMedium_SkFilterQuality,
-                          true);
+  return DecodedDrawImage(CreateRasterImage(), nullptr, SkSize::MakeEmpty(),
+                          SkSize::Make(1.0f, 1.0f), kMedium_SkFilterQuality);
 }
 
 class MockDecodeCache : public StubDecodeCache {
@@ -79,7 +78,7 @@ TEST(PlaybackImageProviderTest, SkipsAllImages) {
           .set_id(PaintImage::GetNextId())
           .set_image(CreateRasterImage(), PaintImage::GetNextContentId())
           .TakePaintImage(),
-      rect, kMedium_SkFilterQuality, matrix)));
+      false, rect, kMedium_SkFilterQuality, matrix)));
   EXPECT_EQ(cache.images_decoded(), 0);
 
   EXPECT_FALSE(provider.GetRasterContent(
@@ -102,7 +101,7 @@ TEST(PlaybackImageProviderTest, SkipsSomeImages) {
   SkIRect rect = SkIRect::MakeWH(10, 10);
   SkMatrix matrix = SkMatrix::I();
   EXPECT_FALSE(provider.GetRasterContent(
-      DrawImage(skip_image, rect, kMedium_SkFilterQuality, matrix)));
+      DrawImage(skip_image, false, rect, kMedium_SkFilterQuality, matrix)));
   EXPECT_EQ(cache.images_decoded(), 0);
 }
 
@@ -145,7 +144,7 @@ TEST(PlaybackImageProviderTest, SwapsGivenFrames) {
 
   SkIRect rect = SkIRect::MakeWH(10, 10);
   SkMatrix matrix = SkMatrix::I();
-  DrawImage draw_image(image, rect, kMedium_SkFilterQuality, matrix);
+  DrawImage draw_image(image, false, rect, kMedium_SkFilterQuality, matrix);
   provider.GetRasterContent(draw_image);
   ASSERT_TRUE(cache.last_image().paint_image());
   ASSERT_EQ(cache.last_image().paint_image(), image);
@@ -163,8 +162,8 @@ TEST(PlaybackImageProviderTest, BitmapImages) {
   {
     SkIRect rect = SkIRect::MakeWH(10, 10);
     SkMatrix matrix = SkMatrix::I();
-    auto draw_image = DrawImage(CreateBitmapImage(gfx::Size(10, 10)), rect,
-                                kMedium_SkFilterQuality, matrix);
+    auto draw_image = DrawImage(CreateBitmapImage(gfx::Size(10, 10)), false,
+                                rect, kMedium_SkFilterQuality, matrix);
     auto decode = provider.GetRasterContent(draw_image);
     EXPECT_TRUE(decode);
     EXPECT_EQ(cache.refed_image_count(), 1);
@@ -184,8 +183,8 @@ TEST(PlaybackImageProviderTest, IgnoresImagesNotSupportedByCache) {
   {
     SkIRect rect = SkIRect::MakeWH(10, 10);
     SkMatrix matrix = SkMatrix::I();
-    auto draw_image = DrawImage(CreateBitmapImage(gfx::Size(10, 10)), rect,
-                                kMedium_SkFilterQuality, matrix);
+    auto draw_image = DrawImage(CreateBitmapImage(gfx::Size(10, 10)), false,
+                                rect, kMedium_SkFilterQuality, matrix);
     auto decode = provider.GetRasterContent(draw_image);
     EXPECT_TRUE(decode);
     EXPECT_EQ(cache.refed_image_count(), 0);

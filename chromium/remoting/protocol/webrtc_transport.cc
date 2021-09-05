@@ -1090,6 +1090,7 @@ void WebrtcTransport::OnIceSelectedCandidatePairChanged(
     VLOG(0) << "Local IP address is invalid.";
   }
 
+  VLOG(0) << "Sending route-changed notification.";
   event_handler_->OnWebrtcTransportRouteChanged(route);
 }
 

@@ -28,10 +28,12 @@ BOOT_DISCOVERY_ATTEMPTS = 30
 # Number of failed connection attempts before redirecting system logs to stdout.
 CONNECT_RETRY_COUNT_BEFORE_LOGGING = 10
 
-TARGET_HASH_FILE_PATH = '/data/.hash'
+# Number of seconds to wait for device discovery.
+BOOT_DISCOVERY_TIMEOUT_SECS = 2 * 60
 
-# Number of seconds to wait when querying a list of all devices over mDNS.
-_LIST_DEVICES_TIMEOUT_SECS = 3
+# The timeout limit for one call to the device-finder tool.
+_DEVICE_FINDER_TIMEOUT_LIMIT_SECS = \
+    BOOT_DISCOVERY_TIMEOUT_SECS / BOOT_DISCOVERY_ATTEMPTS
 
 # Time between a reboot command is issued and when connection attempts from the
 # host begin.
@@ -91,8 +93,6 @@ class DeviceTarget(target.Target):
     self._host = host
     self._port = port
     self._fuchsia_out_dir = None
-    if fuchsia_out_dir:
-      self._fuchsia_out_dir = os.path.expanduser(fuchsia_out_dir)
     self._node_name = node_name
     self._os_check = os_check
     self._amber_repo = None
@@ -100,7 +100,7 @@ class DeviceTarget(target.Target):
     if self._host and self._node_name:
       raise Exception('Only one of "--host" or "--name" can be specified.')
 
-    if self._fuchsia_out_dir:
+    if fuchsia_out_dir:
       if ssh_config:
         raise Exception('Only one of "--fuchsia-out-dir" or "--ssh_config" can '
                         'be specified.')
@@ -149,20 +149,6 @@ class DeviceTarget(target.Target):
         "match. If 'update', then the target device will automatically "
         "be repaved. If 'ignore', then the OS version won\'t be checked.")
 
-  def _SDKHashMatches(self):
-    """Checks if /data/.hash on the device matches SDK_ROOT/.hash.
-
-    Returns True if the files are identical, or False otherwise.
-    """
-    with tempfile.NamedTemporaryFile() as tmp:
-      try:
-        self.GetFile(TARGET_HASH_FILE_PATH, tmp.name)
-      except subprocess.CalledProcessError:
-        # If the file is unretrievable for whatever reason, assume mismatch.
-        return False
-
-      return filecmp.cmp(tmp.name, os.path.join(SDK_ROOT, '.hash'), False)
-
   def _ProvisionDeviceIfNecessary(self):
     if self._Discover():
       self._WaitUntilReady()
@@ -184,13 +170,19 @@ class DeviceTarget(target.Target):
     dev_finder_path = GetHostToolPathFromPlatform('device-finder')
 
     if self._node_name:
-      command = [dev_finder_path, 'resolve',
-                 '-device-limit', '1',  # Exit early as soon as a host is found.
-                 self._node_name]
+      command = [
+          dev_finder_path,
+          'resolve',
+          '-timeout',
+          "%ds" % _DEVICE_FINDER_TIMEOUT_LIMIT_SECS,
+          '-device-limit',
+          '1',  # Exit early as soon as a host is found.
+          self._node_name
+      ]
     else:
       command = [
           dev_finder_path, 'list', '-full', '-timeout',
-          "%ds" % _LIST_DEVICES_TIMEOUT_SECS
+          "%ds" % _DEVICE_FINDER_TIMEOUT_LIMIT_SECS
       ]
 
     proc = subprocess.Popen(command,
@@ -198,7 +190,6 @@ class DeviceTarget(target.Target):
                             stderr=open(os.devnull, 'w'))
 
     output = set(proc.communicate()[0].strip().split('\n'))
-
     if proc.returncode != 0:
       return False
 
@@ -258,8 +249,8 @@ class DeviceTarget(target.Target):
     # Repeatdly query mDNS until we find the device, or we hit the timeout of
     # DISCOVERY_TIMEOUT_SECS.
     logging.info('Waiting for device to join network.')
-    for _ in xrange(_BOOT_DISCOVERY_ATTEMPTS):
-      if self.__Discover():
+    for _ in xrange(BOOT_DISCOVERY_ATTEMPTS):
+      if self._Discover():
         break
 
     if not self._host:
@@ -267,9 +258,6 @@ class DeviceTarget(target.Target):
                       self._node_name)
 
     self._WaitUntilReady();
-
-    # Update the target's hash to match the current tree's.
-    self.PutFile(os.path.join(SDK_ROOT, '.hash'), TARGET_HASH_FILE_PATH)
 
   def _GetEndpoint(self):
     return (self._host, self._port)

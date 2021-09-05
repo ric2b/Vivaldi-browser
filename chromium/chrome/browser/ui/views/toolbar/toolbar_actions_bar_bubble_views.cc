@@ -91,8 +91,9 @@ ToolbarActionsBarBubbleViews::CreateExtraInfoView() {
   if (!text.empty()) {
     if (extra_view_info->is_learn_more) {
       auto image_button = views::CreateVectorImageButtonWithNativeTheme(
-          this, vector_icons::kHelpOutlineIcon);
-      image_button->SetFocusForPlatform();
+          base::BindRepeating(&ToolbarActionsBarBubbleViews::ButtonPressed,
+                              base::Unretained(this)),
+          vector_icons::kHelpOutlineIcon);
       image_button->SetTooltipText(text);
       learn_more_button_ = image_button.get();
       extra_view = std::move(image_button);
@@ -112,6 +113,15 @@ ToolbarActionsBarBubbleViews::CreateExtraInfoView() {
     return parent;
   }
   return icon ? std::move(icon) : std::move(extra_view);
+}
+
+void ToolbarActionsBarBubbleViews::ButtonPressed() {
+  NotifyDelegateOfClose(ToolbarActionsBarBubbleDelegate::CLOSE_LEARN_MORE);
+  // Note that the Widget may or may not already be closed at this point,
+  // depending on delegate_->ShouldCloseOnDeactivate(). Widget::Close() protects
+  // against multiple calls (so long as they are not nested), and Widget
+  // destruction is asynchronous, so it is safe to call Close() again.
+  GetWidget()->Close();
 }
 
 void ToolbarActionsBarBubbleViews::NotifyDelegateOfClose(
@@ -156,9 +166,9 @@ void ToolbarActionsBarBubbleViews::Init() {
       views::BoxLayout::Orientation::kVertical, gfx::Insets(),
       provider->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_VERTICAL)));
 
-  int width = provider->GetDistanceMetric(
-                  ChromeDistanceMetric::DISTANCE_BUBBLE_PREFERRED_WIDTH) -
-              margins().width();
+  int width =
+      provider->GetDistanceMetric(views::DISTANCE_BUBBLE_PREFERRED_WIDTH) -
+      margins().width();
 
   if (!body_text_string.empty()) {
     body_text_ = new views::Label(body_text_string);
@@ -179,16 +189,6 @@ void ToolbarActionsBarBubbleViews::Init() {
     item_list_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     AddChildView(item_list_);
   }
-}
-
-void ToolbarActionsBarBubbleViews::ButtonPressed(views::Button* sender,
-                                                 const ui::Event& event) {
-  NotifyDelegateOfClose(ToolbarActionsBarBubbleDelegate::CLOSE_LEARN_MORE);
-  // Note that the Widget may or may not already be closed at this point,
-  // depending on delegate_->ShouldCloseOnDeactivate(). Widget::Close() protects
-  // against multiple calls (so long as they are not nested), and Widget
-  // destruction is asynchronous, so it is safe to call Close() again.
-  GetWidget()->Close();
 }
 
 void ToolbarActionsBarBubbleViews::OnWidgetVisibilityChanged(

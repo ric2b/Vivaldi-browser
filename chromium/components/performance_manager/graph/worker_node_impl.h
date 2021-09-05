@@ -11,6 +11,7 @@
 
 #include "base/containers/flat_set.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/util/type_safety/pass_key.h"
 #include "components/performance_manager/graph/node_base.h"
 #include "components/performance_manager/public/graph/worker_node.h"
@@ -30,6 +31,7 @@ class WorkerNodeImpl
     : public PublicNodeImpl<WorkerNodeImpl, WorkerNode>,
       public TypedNodeBase<WorkerNodeImpl, WorkerNode, WorkerNodeObserver> {
  public:
+  static const char kDefaultPriorityReason[];
   static constexpr NodeTypeEnum Type() { return NodeTypeEnum::kWorker; }
 
   WorkerNodeImpl(const std::string& browser_context_id,
@@ -46,6 +48,9 @@ class WorkerNodeImpl
   void AddClientWorker(WorkerNodeImpl* worker_node);
   void RemoveClientWorker(WorkerNodeImpl* worker_node);
 
+  // Sets the worker priority, and the reason behind it.
+  void SetPriorityAndReason(const PriorityAndReason& priority_and_reason);
+
   // Invoked when the worker script was fetched and the final response URL is
   // available.
   void OnFinalResponseURLDetermined(const GURL& url);
@@ -61,6 +66,11 @@ class WorkerNodeImpl
   const base::flat_set<FrameNodeImpl*>& client_frames() const;
   const base::flat_set<WorkerNodeImpl*>& client_workers() const;
   const base::flat_set<WorkerNodeImpl*>& child_workers() const;
+  const PriorityAndReason& priority_and_reason() const;
+
+  base::WeakPtr<WorkerNodeImpl> GetWeakPtr() {
+    return weak_factory_.GetWeakPtr();
+  }
 
   // Implementation details below this point.
 
@@ -71,6 +81,9 @@ class WorkerNodeImpl
   }
 
  private:
+  friend class ExecutionContextPriorityAccess;
+  friend class WorkerNodeImplDescriber;
+
   void OnJoiningGraph() override;
   void OnBeforeLeavingGraph() override;
 
@@ -84,6 +97,7 @@ class WorkerNodeImpl
   const base::flat_set<const FrameNode*> GetClientFrames() const override;
   const base::flat_set<const WorkerNode*> GetClientWorkers() const override;
   const base::flat_set<const WorkerNode*> GetChildWorkers() const override;
+  const PriorityAndReason& GetPriorityAndReason() const override;
 
   // Invoked when |worker_node| becomes a child of this worker.
   void AddChildWorker(WorkerNodeImpl* worker_node);
@@ -121,8 +135,21 @@ class WorkerNodeImpl
   // distinction between client workers and child workers.
   base::flat_set<WorkerNodeImpl*> child_workers_;
 
+  // Worker priority information. Set via ExecutionContextPriorityDecorator.
+  ObservedProperty::NotifiesOnlyOnChangesWithPreviousValue<
+      PriorityAndReason,
+      const PriorityAndReason&,
+      &WorkerNodeObserver::OnPriorityAndReasonChanged>
+      priority_and_reason_{PriorityAndReason(base::TaskPriority::LOWEST,
+                                             kDefaultPriorityReason)};
+
   // Used by ExecutionContextRegistry mechanism.
   std::unique_ptr<NodeAttachedData> execution_context_;
+
+  // Inline storage for ExecutionContextPriorityDecorator data.
+  execution_context_priority::AcceptedVote accepted_vote_;
+
+  base::WeakPtrFactory<WorkerNodeImpl> weak_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(WorkerNodeImpl);
 };

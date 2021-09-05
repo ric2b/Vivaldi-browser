@@ -276,8 +276,7 @@ class NetworkingPrivateApiTest : public ApiUnitTest {
 
   bool GetServiceProfile(const std::string& service_path,
                          std::string* profile_path) {
-    base::DictionaryValue properties;
-    return profile_test_->GetService(service_path, profile_path, &properties);
+    return profile_test_->GetService(service_path, profile_path).is_dict();
   }
 
   std::unique_ptr<base::DictionaryValue> GetNetworkProperties(
@@ -1094,8 +1093,10 @@ TEST_F(NetworkingPrivateApiTest, GetCellularProperties) {
                    .Build())
           .Set("ConnectionState", "Connected")
           .Set("GUID", "cellular_guid")
+          .Set("IPAddressConfigType", "DHCP")
           .Set("Metered", true)
           .Set("Name", "cellular")
+          .Set("NameServersConfigType", "DHCP")
           .Set("Source", "User")
           .Set("Type", "Cellular")
           .Build();
@@ -1154,8 +1155,10 @@ TEST_F(NetworkingPrivateApiTest, GetCellularPropertiesFromWebUi) {
                    .Build())
           .Set("ConnectionState", "Connected")
           .Set("GUID", "cellular_guid")
+          .Set("IPAddressConfigType", "DHCP")
           .Set("Metered", true)
           .Set("Name", "cellular")
+          .Set("NameServersConfigType", "DHCP")
           .Set("Source", "User")
           .Set("Type", "Cellular")
           .Build();

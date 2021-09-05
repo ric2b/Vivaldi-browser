@@ -32,6 +32,7 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/extensions_client.h"
 #include "extensions/common/host_id.h"
+#include "extensions/common/message_bundle.h"
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/socket_permission_data.h"
 #include "extensions/common/permissions/usb_device_permission_data.h"
@@ -329,11 +330,6 @@ IPC_STRUCT_END()
 #ifndef INTERNAL_EXTENSIONS_COMMON_EXTENSION_MESSAGES_H_
 #define INTERNAL_EXTENSIONS_COMMON_EXTENSION_MESSAGES_H_
 
-// IPC_MESSAGE macros choke on extra , in the std::map, when expanding. We need
-// to typedef it to avoid that.
-// Substitution map for l10n messages.
-typedef std::map<std::string, std::string> SubstitutionMap;
-
 // Map of extensions IDs to the executing script paths.
 typedef std::map<std::string, std::set<std::string> > ExecutingScriptsMap;
 
@@ -571,12 +567,6 @@ IPC_MESSAGE_ROUTED1(ExtensionMsg_SetFrameName,
 IPC_MESSAGE_CONTROL2(ExtensionMsg_SetSystemFont,
                      std::string /* font_family */,
                      std::string /* font_size */)
-
-// Marks an extension as 'active' in an extension process. 'Active' extensions
-// have more privileges than other extension content that might end up running
-// in the process (e.g. because of iframes or content scripts).
-IPC_MESSAGE_CONTROL1(ExtensionMsg_ActivateExtension,
-                     std::string /* extension_id */)
 
 // Notifies the renderer that extensions were loaded in the browser.
 IPC_MESSAGE_CONTROL1(ExtensionMsg_Loaded,
@@ -869,9 +859,10 @@ IPC_MESSAGE_CONTROL2(ExtensionHostMsg_PostMessage,
                      extensions::Message)
 
 // Used to get the extension message bundle.
-IPC_SYNC_MESSAGE_CONTROL1_1(ExtensionHostMsg_GetMessageBundle,
-                            std::string /* extension id */,
-                            SubstitutionMap /* message bundle */)
+IPC_SYNC_MESSAGE_CONTROL1_1(
+    ExtensionHostMsg_GetMessageBundle,
+    std::string /* extension id */,
+    extensions::MessageBundle::SubstitutionMap /* message bundle */)
 
 // Sent from the renderer to the browser to return the script running result.
 IPC_MESSAGE_ROUTED4(
@@ -999,11 +990,6 @@ IPC_MESSAGE_ROUTED3(ExtensionHostMsg_AutomationQuerySelector_Result,
                     int /* request_id */,
                     ExtensionHostMsg_AutomationQuerySelector_Error /* error */,
                     int /* result_acc_obj_id */)
-
-// Tells the renderer whether or not activity logging is enabled. This is only
-// sent if logging is or was previously enabled; not being enabled is assumed
-// otherwise.
-IPC_MESSAGE_CONTROL1(ExtensionMsg_SetActivityLoggingEnabled, bool /* enabled */)
 
 // Messages related to Extension Service Worker.
 #undef IPC_MESSAGE_START

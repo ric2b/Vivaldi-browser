@@ -2,19 +2,33 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// TODO(jschettler): Use es6 module for mojo binding (crbug/1004256).
-import 'chrome://resources/mojo/mojo/public/js/mojo_bindings_lite.js';
 import 'chrome://scanning/scanning_app.js';
 
-import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {setScanServiceForTesting} from 'chrome://scanning/mojo_interface_provider.js';
 import {ScannerArr} from 'chrome://scanning/scanning_app_types.js';
-import {getSourceTypeString, tokenToString} from 'chrome://scanning/scanning_app_util.js';
+import {tokenToString} from 'chrome://scanning/scanning_app_util.js';
+
+import {assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
+import {flushTasks, isVisible} from '../../test_util.m.js';
+
+import {changeSelect, createScanner, createScannerSource} from './scanning_app_test_utils.js';
 
 const ColorMode = {
   BLACK_AND_WHITE: chromeos.scanning.mojom.ColorMode.kBlackAndWhite,
   GRAYSCALE: chromeos.scanning.mojom.ColorMode.kGrayscale,
   COLOR: chromeos.scanning.mojom.ColorMode.kColor,
+};
+
+const FileType = {
+  JPG: chromeos.scanning.mojom.FileType.kJpg,
+  PDF: chromeos.scanning.mojom.FileType.kPdf,
+  PNG: chromeos.scanning.mojom.FileType.kPng,
+};
+
+const PageSize = {
+  A4: chromeos.scanning.mojom.PageSize.kIsoA4,
+  Letter: chromeos.scanning.mojom.PageSize.kNaLetter,
+  Max: chromeos.scanning.mojom.PageSize.kMax,
 };
 
 const SourceType = {
@@ -23,46 +37,33 @@ const SourceType = {
   ADF_DUPLEX: chromeos.scanning.mojom.SourceType.kAdfDuplex,
 };
 
-/**
- * @param {!mojoBase.mojom.UnguessableToken} id
- * @param {!string} displayName
- * @return {!chromeos.scanning.mojom.Scanner}
- */
-function createScanner(id, displayName) {
-  let scanner = {
-    'id': id,
-    'displayName': strToMojoString16(displayName),
-  };
-  return scanner;
-}
+const pageSizes = [PageSize.A4, PageSize.Letter, PageSize.Max];
 
-/**
- * @param {number} type
- * @param {!string} name
- * @return {!chromeos.scanning.mojom.ScanSource}
- */
-function createSource(type, name) {
-  let source = {
-    'type': type,
-    'name': name,
-  };
-  return source;
-}
+const firstScannerId =
+    /** @type {!mojoBase.mojom.UnguessableToken} */ ({high: 0, low: 1});
+const firstScannerName = 'Scanner 1';
 
-/**
- * Converts a JS string to a mojo_base::mojom::String16 object.
- * @param {!string} str
- * @return {!object}
- */
-function strToMojoString16(str) {
-  let arr = [];
-  for (var i = 0; i < str.length; i++) {
-    arr[i] = str.charCodeAt(i);
-  }
+const secondScannerId =
+    /** @type {!mojoBase.mojom.UnguessableToken} */ ({high: 0, low: 2});
+const secondScannerName = 'Scanner 2';
 
-  return {data: arr};
-}
+const firstCapabilities = {
+  sources: [
+    createScannerSource(SourceType.ADF_DUPLEX, 'adf duplex', pageSizes),
+    createScannerSource(SourceType.FLATBED, 'platen', pageSizes),
+  ],
+  colorModes: [ColorMode.BLACK_AND_WHITE, ColorMode.COLOR],
+  resolutions: [75, 100, 300]
+};
 
+const secondCapabilities = {
+  sources:
+      [createScannerSource(SourceType.ADF_SIMPLEX, 'adf simplex', pageSizes)],
+  colorModes: [ColorMode.GRAYSCALE],
+  resolutions: [150, 600]
+};
+
+/** @implements {chromeos.scanning.mojom.ScanServiceInterface} */
 class FakeScanService {
   constructor() {
     /** @private {!Map<string, !PromiseResolver>} */
@@ -77,15 +78,19 @@ class FakeScanService {
      */
     this.capabilities_ = new Map();
 
+    /** @private {?chromeos.scanning.mojom.ScanJobObserverRemote} */
+    this.scanJobObserverRemote_ = null;
+
     this.resetForTest();
   }
 
   resetForTest() {
     this.scanners_ = [];
     this.capabilities_ = new Map();
+    this.scanJobObserverRemote_ = null;
     this.resolverMap_.set('getScanners', new PromiseResolver());
     this.resolverMap_.set('getScannerCapabilities', new PromiseResolver());
-    this.resolverMap_.set('scan', new PromiseResolver());
+    this.resolverMap_.set('startScan', new PromiseResolver());
   }
 
   /**
@@ -136,6 +141,36 @@ class FakeScanService {
     this.capabilities_ = capabilities;
   }
 
+  /**
+   * @param {number} pageNumber
+   * @param {number} progressPercent
+   * @return {!Promise}
+   */
+  simulateProgress(pageNumber, progressPercent) {
+    this.scanJobObserverRemote_.onPageProgress(pageNumber, progressPercent);
+    return flushTasks();
+  }
+
+  /**
+   * @param {number} pageNumber
+   * @return {!Promise}
+   */
+  simulatePageComplete(pageNumber) {
+    this.scanJobObserverRemote_.onPageProgress(pageNumber, 100);
+    const fakePageData = [2, 57, 13, 289];
+    this.scanJobObserverRemote_.onPageComplete(fakePageData);
+    return flushTasks();
+  }
+
+  /**
+   * @param {boolean} success
+   * @return {!Promise}
+   */
+  simulateScanComplete(success) {
+    this.scanJobObserverRemote_.onScanComplete(success);
+    return flushTasks();
+  }
+
   // scanService methods:
 
   /** @return {!Promise<{scanners: !ScannerArr}>} */
@@ -161,22 +196,24 @@ class FakeScanService {
   /**
    * @param {!mojoBase.mojom.UnguessableToken} scanner_id
    * @param {!chromeos.scanning.mojom.ScanSettings} settings
+   * @param {!chromeos.scanning.mojom.ScanJobObserverRemote} remote
    * @return {!Promise<{success: boolean}>}
    */
-  scan(scanner_id, settings) {
+  startScan(scanner_id, settings, remote) {
     return new Promise(resolve => {
-      this.methodCalled('scan');
+      this.scanJobObserverRemote_ = remote;
+      this.methodCalled('startScan');
       resolve({success: true});
     });
   }
 }
 
-suite('ScanningAppTest', () => {
+export function scanningAppTest() {
   /** @type {?ScanningAppElement} */
   let scanningApp = null;
 
-  /** @type {?chromeos.scanning.mojom.ScanServiceRemote} */
-  let fakeScanService_;
+  /** @type {?FakeScanService} */
+  let fakeScanService_ = null;
 
   suiteSetup(() => {
     fakeScanService_ = new FakeScanService();
@@ -184,7 +221,7 @@ suite('ScanningAppTest', () => {
   });
 
   setup(function() {
-    PolymerTest.clearBody();
+    document.body.innerHTML = '';
   });
 
   teardown(function() {
@@ -202,232 +239,255 @@ suite('ScanningAppTest', () => {
   function initializeScanningApp(scanners, capabilities) {
     fakeScanService_.setScanners(scanners);
     fakeScanService_.setCapabilities(capabilities);
-    scanningApp = document.createElement('scanning-app');
+    scanningApp = /** @type {!ScanningAppElement} */ (
+        document.createElement('scanning-app'));
     document.body.appendChild(scanningApp);
     assert(!!scanningApp);
     return fakeScanService_.whenCalled('getScanners');
   }
 
+  /**
+   * Returns the "More settings" button.
+   * @return {!CrButtonElement}
+   */
+  function getMoreSettingsButton() {
+    const button =
+        /** @type {!CrButtonElement} */ (scanningApp.$$('#moreSettingsButton'));
+    assertTrue(!!button);
+    return button;
+  }
+
+  /**
+   * Clicks the "More settings" button.
+   * @return {!Promise}
+   */
+  function clickMoreSettingsButton() {
+    getMoreSettingsButton().click();
+    return flushTasks();
+  }
+
+  /**
+   * Clicks the "Done" button.
+   * @return {!Promise}
+   */
+  function clickDoneButton() {
+    const button = scanningApp.$$('#doneButton');
+    assertTrue(!!button);
+    button.click();
+    return flushTasks();
+  }
+
+  /**
+   * Returns whether the "More settings" section is expanded or not.
+   * @return {boolean}
+   */
+  function isSettingsOpen() {
+    return scanningApp.$$('#collapse').opened;
+  }
+
   test('Scan', () => {
-    const firstScannerId = {high: 0, low: 1};
-    const firstScannerName = 'Scanner 1';
-    const secondScannerId = {high: 0, low: 2};
-    const secondScannerName = 'Scanner 2';
     const expectedScanners = [
       createScanner(firstScannerId, firstScannerName),
       createScanner(secondScannerId, secondScannerName)
     ];
 
-    const firstCapabilities = {
-      sources: [
-        {type: SourceType.FLATBED, name: 'platen'},
-        {type: SourceType.ADF_DUPLEX, name: 'adf duplex'}
-      ],
-      colorModes: [ColorMode.BLACK_AND_WHITE, ColorMode.COLOR],
-      resolutions: [75, 100, 300]
-    };
-    const secondCapabilities = {
-      sources: [{type: SourceType.ADF_SIMPLEX, name: 'adf simplex'}],
-      colorModes: [ColorMode.GRAYSCALE],
-      resolutions: [150, 600]
-    };
-
     let capabilities = new Map();
     capabilities.set(firstScannerId, firstCapabilities);
     capabilities.set(secondScannerId, secondCapabilities);
 
+    /** @type {!HTMLSelectElement} */
+    let scannerSelect;
+    /** @type {!HTMLSelectElement} */
+    let sourceSelect;
+    /** @type {!HTMLSelectElement} */
+    let fileTypeSelect;
+    /** @type {!HTMLSelectElement} */
+    let colorModeSelect;
+    /** @type {!HTMLSelectElement} */
+    let pageSizeSelect;
+    /** @type {!HTMLSelectElement} */
+    let resolutionSelect;
+    /** @type {!CrButtonElement} */
+    let scanButton;
+    /** @type {!HTMLElement} */
+    let statusText;
+    /** @type {!HTMLElement} */
+    let helperText;
+    /** @type {!HTMLElement} */
+    let scanProgress;
+    /** @type {!HTMLElement} */
+    let progressText;
+    /** @type {!HTMLElement} */
+    let progressBar;
+
     return initializeScanningApp(expectedScanners, capabilities)
         .then(() => {
+          scannerSelect = scanningApp.$$('#scannerSelect').$$('select');
+          sourceSelect = scanningApp.$$('#sourceSelect').$$('select');
+          fileTypeSelect = scanningApp.$$('#fileTypeSelect').$$('select');
+          colorModeSelect = scanningApp.$$('#colorModeSelect').$$('select');
+          pageSizeSelect = scanningApp.$$('#pageSizeSelect').$$('select');
+          resolutionSelect = scanningApp.$$('#resolutionSelect').$$('select');
+          scanButton =
+              /** @type {!CrButtonElement} */ (scanningApp.$$('#scanButton'));
+          statusText =
+              /** @type {!HTMLElement} */ (scanningApp.$$('#statusText'));
+          helperText = scanningApp.$$('#scanPreview').$$('#helperText');
+          scanProgress = scanningApp.$$('#scanPreview').$$('#scanProgress');
+          progressText = scanningApp.$$('#scanPreview').$$('#progressText');
+          progressBar = scanningApp.$$('#scanPreview').$$('paper-progress');
           return fakeScanService_.whenCalled('getScannerCapabilities');
         })
         .then(() => {
           assertEquals(
               tokenToString(firstScannerId), scanningApp.selectedScannerId);
+          // A scanner with type "FLATBED" will be used as the selectedSource
+          // if it exists.
           assertEquals(
-              firstCapabilities.sources[0].name, scanningApp.selectedSource);
+              firstCapabilities.sources[1].name, scanningApp.selectedSource);
+          assertEquals(FileType.PNG.toString(), scanningApp.selectedFileType);
+          assertEquals(
+              firstCapabilities.colorModes[0].toString(),
+              scanningApp.selectedColorMode);
+          assertEquals(
+              firstCapabilities.sources[0].pageSizes[1].toString(),
+              scanningApp.selectedPageSize);
+          assertEquals(
+              firstCapabilities.resolutions[0].toString(),
+              scanningApp.selectedResolution);
 
           // Before the scan button is clicked, the settings and scan button
-          // should be enabled, and there should be no scan status.
-          const scannerSelect = scanningApp.$$('#scannerSelect').$$('select');
+          // should be enabled, and the helper text should be displayed.
           assertFalse(scannerSelect.disabled);
-          const sourceSelect = scanningApp.$$('#sourceSelect').$$('select');
           assertFalse(sourceSelect.disabled);
-          const scanButton = scanningApp.$$('#scanButton');
+          assertFalse(fileTypeSelect.disabled);
+          assertFalse(colorModeSelect.disabled);
+          assertFalse(pageSizeSelect.disabled);
+          assertFalse(resolutionSelect.disabled);
           assertFalse(scanButton.disabled);
-          const statusText = scanningApp.$$('#statusText');
           assertEquals('', statusText.textContent.trim());
-          scanButton.click();
+          assertTrue(isVisible(helperText));
+          assertFalse(isVisible(scanProgress));
+          assertFalse(isVisible(
+              /** @type {!HTMLElement} */ (scanningApp.$$('#fileSaved'))));
 
-          // After the scan button is clicked, the settings and scan button
-          // should be disabled, and the scan status should indicate that
-          // scanning is in progress.
+          // Click the Scan button and wait till the scan is started.
+          scanButton.click();
+          return fakeScanService_.whenCalled('startScan');
+        })
+        .then(() => {
+          // After the scan button is clicked and the scan has started, the
+          // settings and scan button should be disabled, and the progress bar
+          // and text should be visible and indicate that scanning is in
+          // progress.
           assertTrue(scannerSelect.disabled);
           assertTrue(sourceSelect.disabled);
+          assertTrue(fileTypeSelect.disabled);
+          assertTrue(colorModeSelect.disabled);
+          assertTrue(pageSizeSelect.disabled);
+          assertTrue(resolutionSelect.disabled);
           assertTrue(scanButton.disabled);
-          assertEquals('Scanning...', statusText.textContent.trim());
-          return fakeScanService_.whenCalled('scan');
+          assertFalse(isVisible(helperText));
+          assertTrue(isVisible(scanProgress));
+          assertFalse(isVisible(
+              /** @type {!HTMLElement} */ (scanningApp.$$('#fileSaved'))));
+          assertEquals('Scanning page 1', progressText.textContent.trim());
+          assertEquals(0, progressBar.value);
+
+          // Simulate a progress update and verify the progress bar and text are
+          // updated correctly.
+          return fakeScanService_.simulateProgress(1, 17);
+        })
+        .then(() => {
+          assertEquals('Scanning page 1', progressText.textContent.trim());
+          assertEquals(17, progressBar.value);
+
+          // Simulate a page complete update and verify the progress bar and
+          // text are updated correctly.
+          return fakeScanService_.simulatePageComplete(1);
+        })
+        .then(() => {
+          assertEquals('Scanning page 1', progressText.textContent.trim());
+          assertEquals(100, progressBar.value);
+
+          // Simulate a progress update for a second page and verify the
+          // progress bar and text are updated correctly.
+          return fakeScanService_.simulateProgress(2, 53);
+        })
+        .then(() => {
+          assertEquals('Scanning page 2', progressText.textContent.trim());
+          assertEquals(53, progressBar.value);
+
+          // Complete the page.
+          return fakeScanService_.simulatePageComplete(2);
+        })
+        .then(() => {
+          // Complete the scan.
+          return fakeScanService_.simulateScanComplete(true);
+        })
+        .then(() => {
+          assertTrue(isVisible(
+              /** @type {!HTMLElement} */ (scanningApp.$$('#fileSaved'))));
+          assertEquals(
+              'Scanned files saved!',
+              scanningApp.$$('#fileSaved').textContent.trim());
+
+          // Click the Done button to return to READY state.
+          return clickDoneButton();
         })
         .then(() => {
           // After scanning is complete, the settings and scan button should be
-          // enabled, and the scan status should indicate that scanning is
-          // complete.
-          assertFalse(scanningApp.$$('#scannerSelect').$$('select').disabled);
-          assertFalse(scanningApp.$$('#sourceSelect').$$('select').disabled);
-          assertFalse(scanningApp.$$('#scanButton').disabled);
-          assertEquals(
-              'Scan complete! File(s) saved to My files.',
-              scanningApp.$$('#statusText').textContent.trim());
+          // enabled. The progress bar and text should no longer be visible.
+          assertFalse(scannerSelect.disabled);
+          assertFalse(sourceSelect.disabled);
+          assertFalse(fileTypeSelect.disabled);
+          assertFalse(colorModeSelect.disabled);
+          assertFalse(pageSizeSelect.disabled);
+          assertFalse(resolutionSelect.disabled);
+          assertFalse(scanButton.disabled);
+          assertTrue(isVisible(helperText));
+          assertFalse(isVisible(scanProgress));
+          assertFalse(isVisible(
+              /** @type {!HTMLElement} */ (scanningApp.$$('#fileSaved'))));
         });
   });
-});
 
-suite('ScannerSelectTest', () => {
-  /** @type {!ScannerSelectElement} */
-  let scannerSelect;
+  test('PanelContainerContent', () => {
+    const scanners = [];
+    const capabilities = new Map();
+    return initializeScanningApp(scanners, capabilities).then(() => {
+      const panelContainer = scanningApp.$$('.panel-container');
+      assertTrue(!!panelContainer);
 
-  setup(() => {
-    scannerSelect = document.createElement('scanner-select');
-    assertTrue(!!scannerSelect);
-    scannerSelect.loaded = false;
-    document.body.appendChild(scannerSelect);
+      const leftPanel = scanningApp.$$('.panel-container > .left-panel');
+      const rightPanel = scanningApp.$$('.panel-container > .right-panel');
+
+      assertTrue(!!leftPanel);
+      assertTrue(!!rightPanel);
+    });
   });
 
-  teardown(() => {
-    scannerSelect.remove();
-    scannerSelect = null;
+  test('MoreSettingsToggle', () => {
+    const scanners = [createScanner(firstScannerId, firstScannerName)];
+    const capabilities = new Map();
+    capabilities.set(firstScannerId, firstCapabilities);
+    return initializeScanningApp(scanners, capabilities)
+        .then(() => {
+          return fakeScanService_.whenCalled('getScannerCapabilities');
+        })
+        .then(() => {
+          // Verify that expandable section is closed by default.
+          assertFalse(isSettingsOpen());
+          // Expand more settings section.
+          return clickMoreSettingsButton();
+        })
+        .then(() => {
+          assertTrue(isSettingsOpen());
+          // Close more settings section.
+          return clickMoreSettingsButton();
+        })
+        .then(() => {
+          assertFalse(isSettingsOpen());
+        });
   });
-
-  test('initializeScannerSelect', () => {
-    // Before options are added, the dropdown should be hidden and the throbber
-    // should be visible.
-    const select = scannerSelect.$$('select');
-    assertTrue(!!select);
-    assertTrue(select.hidden);
-    const throbber = scannerSelect.$$('.throbber-container');
-    assertTrue(!!throbber);
-    assertFalse(throbber.hidden);
-
-    const firstScannerId = {high: 0, low: 1};
-    const firstScannerName = 'Scanner 1';
-    const secondScannerId = {high: 0, low: 2};
-    const secondScannerName = 'Scanner 2';
-    const scannerArr = [
-      createScanner(firstScannerId, firstScannerName),
-      createScanner(secondScannerId, secondScannerName)
-    ];
-    scannerSelect.scanners = scannerArr;
-    scannerSelect.loaded = true;
-    flush();
-
-    // Verify that adding scanners and setting loaded to true results in the
-    // dropdown becoming visible with the correct options.
-    assertFalse(select.disabled);
-    assertFalse(select.hidden);
-    assertTrue(throbber.hidden);
-    assertEquals(2, select.length);
-    assertEquals(firstScannerName, select.options[0].textContent.trim());
-    assertEquals(secondScannerName, select.options[1].textContent.trim());
-    assertEquals(tokenToString(firstScannerId), select.value);
-  });
-
-  test('scannerSelectDisabled', () => {
-    const select = scannerSelect.$$('select');
-    assertTrue(!!select);
-
-    let scannerArr = [createScanner({high: 0, low: 1}, 'Scanner 1')];
-    scannerSelect.scanners = scannerArr;
-    scannerSelect.loaded = true;
-    flush();
-
-    // Verify the dropdown is disabled when there's only one option.
-    assertEquals(1, select.length);
-    assertTrue(select.disabled);
-
-    scannerArr =
-        scannerArr.concat([createScanner({high: 0, low: 2}, 'Scanner 2')]);
-    scannerSelect.scanners = scannerArr;
-    flush();
-
-    // Verify the dropdown is enabled when there's more than one option.
-    assertEquals(2, select.length);
-    assertFalse(select.disabled);
-  });
-
-  test('noScanners', () => {
-    const select = scannerSelect.$$('select');
-    assertTrue(!!select);
-
-    scannerSelect.loaded = true;
-    flush();
-
-    // Verify the dropdown is disabled and displays the default option when no
-    // scanners are available.
-    assertEquals(1, select.length);
-    assertEquals('No available scanners', select.options[0].textContent.trim());
-    assertTrue(select.disabled);
-  });
-});
-
-suite('SourceSelectTest', () => {
-  /** @type {!SourceSelectElement} */
-  let sourceSelect;
-
-  setup(() => {
-    sourceSelect = document.createElement('source-select');
-    assertTrue(!!sourceSelect);
-    document.body.appendChild(sourceSelect);
-  });
-
-  teardown(() => {
-    sourceSelect.remove();
-    sourceSelect = null;
-  });
-
-  test('initializeSourceSelect', () => {
-    // Before options are added, the dropdown should be disabled and empty.
-    const select = sourceSelect.$$('select');
-    assertTrue(!!select);
-    assertTrue(select.disabled);
-    assertEquals(0, select.length);
-
-    const firstSource = createSource(SourceType.FLATBED, 'platen');
-    const secondSource = createSource(SourceType.ADF_SIMPLEX, 'adf simplex');
-    const sourceArr = [firstSource, secondSource];
-    sourceSelect.sources = sourceArr;
-    flush();
-
-    // Verify that adding more than one source results in the dropdown becoming
-    // enabled with the correct options.
-    assertFalse(select.disabled);
-    assertEquals(2, select.length);
-    assertEquals(
-        getSourceTypeString(firstSource.type),
-        select.options[0].textContent.trim());
-    assertEquals(
-        getSourceTypeString(secondSource.type),
-        select.options[1].textContent.trim());
-    assertEquals(firstSource.name, select.value);
-  });
-
-  test('sourceSelectDisabled', () => {
-    const select = sourceSelect.$$('select');
-    assertTrue(!!select);
-
-    let sourceArr = [createSource(SourceType.FLATBED, 'flatbed')];
-    sourceSelect.sources = sourceArr;
-    flush();
-
-    // Verify the dropdown is disabled when there's only one option.
-    assertEquals(1, select.length);
-    assertTrue(select.disabled);
-
-    sourceArr =
-        sourceArr.concat([createSource(SourceType.ADF_DUPLEX, 'adf duplex')]);
-    sourceSelect.sources = sourceArr;
-    flush();
-
-    // Verify the dropdown is enabled when there's more than one option.
-    assertEquals(2, select.length);
-    assertFalse(select.disabled);
-  });
-});
+}

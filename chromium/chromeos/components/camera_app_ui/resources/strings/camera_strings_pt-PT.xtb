@@ -3,6 +3,7 @@
 <translationbundle lang="pt-PT">
 <translation id="1276998909102132017">Imagens da galeria</translation>
 <translation id="1430915738399379752">Imprimir</translation>
+<translation id="1473110567575736769">Temporizador de 3 segundos</translation>
 <translation id="1620510694547887537">Câmara</translation>
 <translation id="1627744224761163218">4 x 4</translation>
 <translation id="1664224225747386870">Nada foi gravado.</translation>
@@ -29,7 +30,9 @@
 <translation id="3259149966178251584">Resolução da câmara</translation>
 <translation id="3517926952904427380">Não é possível tirar foto de retrato</translation>
 <translation id="3569311554794739032">Tem a certeza de que pretende remover <ph name="FILE" />?</translation>
+<translation id="3750315947605636967">A sua câmara está a ser utilizada por outra app.</translation>
 <translation id="3810838688059735925">Vídeo</translation>
+<translation id="4000398125663085899">As fotos e os vídeos novos serão agora guardados numa pasta na app Files: Os meus ficheiros &gt; Câmara.</translation>
 <translation id="4118525110028899586">Interromper gravação</translation>
 <translation id="4279490309300973883">Espelhamento</translation>
 <translation id="4329152592498422850">Mudar para tirar foto quadrada</translation>
@@ -43,9 +46,11 @@
 <translation id="5057360777601936059">De momento, a câmara não está disponível.
         Verifique se a câmara está ligada corretamente.</translation>
 <translation id="5152121255775685072">Ir para a galeria</translation>
+<translation id="5422455049771430511">As suas fotos e vídeos têm uma nova localização</translation>
 <translation id="5671277269877808209">Quadrado</translation>
 <translation id="5775960006311140197">Modo Especialista</translation>
 <translation id="5869546221129391014">Grelha</translation>
+<translation id="6040143037577758943">Fechar</translation>
 <translation id="6073451960410192870">Parar gravação</translation>
 <translation id="6197807149213783179">Guardar metadados</translation>
 <translation id="6233780560267770709">3 por 3</translation>
@@ -60,6 +65,7 @@ Se o seu feedback for acerca da qualidade de imagem ou vídeo, anexe uma foto ou
 <translation id="6965382102122355670">OK</translation>
 <translation id="698156982839284926">3 segundos</translation>
 <translation id="712848772518857951">Pretende realmente remover <ph name="COUNT" /> itens?</translation>
+<translation id="7134221860976209830">Temporizador de 10 segundos</translation>
 <translation id="7243947652761655814">Resolução do vídeo</translation>
 <translation id="7337660886763914220">Erros do sistema de ficheiros.</translation>
 <translation id="7557677699350329807">Mudar para a câmara seguinte</translation>
@@ -67,7 +73,6 @@ Se o seu feedback for acerca da qualidade de imagem ou vídeo, anexe uma foto ou
 <translation id="7649070708921625228">Ajuda</translation>
 <translation id="7658239707568436148">Cancelar</translation>
 <translation id="7670511624014457267">60 FPS</translation>
-<translation id="8049189770492311300">Temporizador</translation>
 <translation id="8067883171444229417">Reproduzir vídeo</translation>
 <translation id="8131740175452115882">Confirmar</translation>
 <translation id="8145038249676204903">Mudar para tirar foto</translation>

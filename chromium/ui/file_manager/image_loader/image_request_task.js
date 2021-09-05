@@ -61,14 +61,6 @@ function ImageRequestTask(id, cache, request, callback) {
   this.ifd_ = null;
 
   /**
-   * The color space of the fetched image. Only RAW images provide a
-   * color space at this time, being 'sRgb' or 'adobeRgb'.
-   * @type {?string}
-   * @private
-   */
-  this.colorSpace_ = null;
-
-  /**
    * Used to download remote images using http:// or https:// protocols.
    * @type {XMLHttpRequest}
    * @private
@@ -123,6 +115,33 @@ ImageRequestTask.VIDEO_THUMBNAIL_POSITION = 3;  // [sec]
 ImageRequestTask.MAX_MILLISECONDS_TO_LOAD_VIDEO = 3000;
 
 /**
+ * The default size (width and height) of a square thumbnail. The value is set
+ * to match the behavior of drivefs thumbnail generation.
+ * See chromeos/components/drivefs/mojom/drivefs.mojom
+ * @const
+ * @type {number}
+ */
+ImageRequestTask.DEFAULT_THUMBNAIL_SQUARE_SIZE = 360;
+
+/**
+ * The default width of a non-square thumbnail. The value is set to match the
+ * behavior of drivefs thumbnail generation.
+ * See chromeos/components/drivefs/mojom/drivefs.mojom
+ * @const
+ * @type {number}
+ */
+ImageRequestTask.DEFAULT_THUMBNAIL_WIDTH = 500;
+
+/**
+ * The default height of a non-square thumbnail. The value is set to match the
+ * behavior of drivefs thumbnail generation.
+ * See chromeos/components/drivefs/mojom/drivefs.mojom
+ * @const
+ * @type {number}
+ */
+ImageRequestTask.DEFAULT_THUMBNAIL_HEIGHT = 500;
+
+/**
  * A map which is used to estimate content type from extension.
  * @enum {string}
  */
@@ -133,6 +152,16 @@ ImageRequestTask.ExtensionContentTypeMap = {
   bmp: 'image/bmp',
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg'
+};
+
+/**
+ * Extracts MIME type of a data URL.
+ * @param {string|undefined} dataUrl Data URL.
+ * @return {?string} MIME type string, or null if the URL is invalid.
+ */
+ImageRequestTask.getDataUrlMimeType = function(dataUrl) {
+  const dataUrlMatches = (dataUrl || '').match(/^data:([^,;]*)[,;]/);
+  return dataUrlMatches ? dataUrlMatches[1] : null;
 };
 
 /**
@@ -192,7 +221,7 @@ ImageRequestTask.prototype.downloadAndProcess = function(callback) {
   }
 
   this.downloadCallback_ = callback;
-  this.downloadOriginal_(
+  this.downloadThumbnail_(
       this.onImageLoad_.bind(this), this.onImageError_.bind(this));
 };
 
@@ -257,34 +286,20 @@ ImageRequestTask.prototype.saveToCache_ = function(width, height, data) {
 };
 
 /**
- * Gets a file thumb from the browser hosted environment. If the thumbnail
- * is returned it is assigned to this.image_ instance variable, which ultimately
- * results in onsuccess function associated with the image being called.
- * @param {string} url The URL of the file entry for which we get a thumbnail.
- * @param {function()} onFailure a callback invoked if errors occur.
+ * Gets the target image size for external thumbnails, where supported.
+   The defaults replicate drivefs thumbnailer behavior.
+ * @return {{width: !number, height: !number}}
  */
-ImageRequestTask.prototype.getExternalThumbnail = function(url, onFailure) {
-  window.webkitResolveLocalFileSystemURL(
-      url,
-      entry => {
-        chrome.fileManagerPrivate.getThumbnail(
-            /** @type {FileEntry} */ (entry), !!this.request_.crop,
-            thumbnail => {
-              if (chrome.runtime.lastError) {
-                console.error(chrome.runtime.lastError.message);
-                onFailure();
-              } else if (thumbnail) {
-                this.image_.src = thumbnail;
-                this.contentType_ = 'image/png';
-              } else {
-                onFailure();
-              }
-            });
-      },
-      error => {
-        console.error(error);
-        onFailure();
-      });
+ImageRequestTask.prototype.targetThumbnailSize_ = function() {
+  const crop = !!this.request_.crop;
+  const defaultWidth = crop ? ImageRequestTask.DEFAULT_THUMBNAIL_SQUARE_SIZE :
+                              ImageRequestTask.DEFAULT_THUMBNAIL_WIDTH;
+  const defaultHeight = crop ? ImageRequestTask.DEFAULT_THUMBNAIL_SQUARE_SIZE :
+                               ImageRequestTask.DEFAULT_THUMBNAIL_HEIGHT;
+  return {
+    width: this.request_.width || defaultWidth,
+    height: this.request_.height || defaultHeight,
+  };
 };
 
 /**
@@ -295,7 +310,7 @@ ImageRequestTask.prototype.getExternalThumbnail = function(url, onFailure) {
  * @param {function()} onFailure Failure callback.
  * @private
  */
-ImageRequestTask.prototype.downloadOriginal_ = function(onSuccess, onFailure) {
+ImageRequestTask.prototype.downloadThumbnail_ = function(onSuccess, onFailure) {
   // Load methods below set |this.image_.src|. Call revokeObjectURL(src) to
   // release resources if the image src was created with createObjectURL().
   this.image_.onload = function() {
@@ -308,23 +323,64 @@ ImageRequestTask.prototype.downloadOriginal_ = function(onSuccess, onFailure) {
   }.bind(this);
 
   // Load dataURL sources directly.
-  const dataUrlMatches = this.request_.url.match(/^data:([^,;]*)[,;]/);
-  if (dataUrlMatches) {
+  const dataUrlMimeType =
+      ImageRequestTask.getDataUrlMimeType(this.request_.url);
+  if (dataUrlMimeType) {
     this.image_.src = this.request_.url;
-    this.contentType_ = dataUrlMatches[1];
+    this.contentType_ = dataUrlMimeType;
     return;
   }
+
+  const resolveLocalFileSystemUrl = (url, onResolveSuccess) => {
+    window.webkitResolveLocalFileSystemURL(url, onResolveSuccess, error => {
+      console.error(error);
+      onFailure();
+    });
+  };
+
+  const onExternalThumbnail = (dataUrl) => {
+    if (chrome.runtime.lastError) {
+      console.error(chrome.runtime.lastError.message);
+      onFailure();
+    } else if (dataUrl) {
+      this.image_.src = dataUrl;
+      this.contentType_ = ImageRequestTask.getDataUrlMimeType(dataUrl);
+    } else {
+      onFailure();
+    }
+  };
 
   // Load Drive source thumbnail.
   const drivefsUrlMatches = this.request_.url.match(/^drivefs:(.*)/);
   if (drivefsUrlMatches) {
-    this.getExternalThumbnail(drivefsUrlMatches[1], onFailure);
+    const url = drivefsUrlMatches[1];
+    const cropToSquare = !!this.request_.crop;
+    resolveLocalFileSystemUrl(
+        url,
+        entry => chrome.fileManagerPrivate.getDriveThumbnail(
+            entry, cropToSquare, onExternalThumbnail));
     return;
   }
 
   // Load PDF source thumbnail.
   if (this.request_.url.endsWith('.pdf')) {
-    this.getExternalThumbnail(this.request_.url, onFailure);
+    const {width, height} = this.targetThumbnailSize_();
+    resolveLocalFileSystemUrl(
+        this.request_.url,
+        entry => chrome.fileManagerPrivate.getPdfThumbnail(
+            entry, width, height, onExternalThumbnail));
+    return;
+  }
+
+  // Load DocumentsProvider thumbnail, if supported.
+  const isDocumentsProviderRequest = !!this.request_.url.match(RegExp(
+      'filesystem:chrome-extension://[a-z]+/external/arc-documents-provider/.*'));
+  if (isDocumentsProviderRequest) {
+    const {width, height} = this.targetThumbnailSize_();
+    resolveLocalFileSystemUrl(this.request_.url, entry => {
+      chrome.fileManagerPrivate.getArcDocumentsProviderThumbnail(
+          entry, width, height, onExternalThumbnail);
+    });
     return;
   }
 
@@ -337,7 +393,6 @@ ImageRequestTask.prototype.downloadOriginal_ = function(onSuccess, onFailure) {
             function(data) {
               this.request_.orientation =
                   ImageOrientation.fromExifOrientation(data.orientation);
-              this.colorSpace_ = data.colorSpace;
               this.ifd_ = data.ifd;
               this.contentType_ = data.mimeType;
               const blob = new Blob([data.thumbnail], {type: data.mimeType});
@@ -564,18 +619,14 @@ ImageRequestTask.prototype.sendImageData_ = function(width, height, data) {
  * @private
  */
 ImageRequestTask.prototype.onImageLoad_ = function() {
-  const imageColorSpace = this.colorSpace_ || 'sRgb';
-
   // Perform processing if the url is not a data url, or if there are some
   // operations requested.
   let imageChanged = false;
   if (!(this.request_.url.match(/^data/) ||
         this.request_.url.match(/^drivefs:/)) ||
       ImageLoaderUtil.shouldProcess(
-          this.image_.width, this.image_.height, this.request_) ||
-      (imageColorSpace !== 'sRgb')) {
+          this.image_.width, this.image_.height, this.request_)) {
     ImageLoaderUtil.resizeAndCrop(this.image_, this.canvas_, this.request_);
-    ImageLoaderUtil.convertColorSpace(this.canvas_, imageColorSpace);
     imageChanged = true;  // The image is now on the <canvas>.
   }
 

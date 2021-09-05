@@ -8,6 +8,7 @@
 #include "ash/public/cpp/holding_space/holding_space_model.h"
 #include "ash/shell.h"
 #include "base/bind.h"
+#include "base/files/file_util.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/policy/dlp/mock_dlp_content_manager.h"
@@ -140,6 +141,8 @@ IN_PROC_BROWSER_TEST_P(ChromeScreenshotGrabberBrowserTest, TakeScreenshot) {
             notification->notifier_id().type);
   EXPECT_EQ("ash.screenshot", notification->notifier_id().id);
   EXPECT_EQ(GURL("chrome://screenshot"), notification->origin_url());
+  EXPECT_EQ(message_center::SystemNotificationWarningLevel::NORMAL,
+            notification->system_notification_warning_level());
 
   EXPECT_EQ(ui::ScreenshotResult::SUCCESS, screenshot_result_);
   {
@@ -187,7 +190,11 @@ IN_PROC_BROWSER_TEST_P(ChromeScreenshotGrabberBrowserTest,
   RunLoop();
 
   EXPECT_TRUE(notification_added_);
-  EXPECT_TRUE(display_service_->GetNotification(std::string("screenshot")));
+  auto notification =
+      display_service_->GetNotification(std::string("screenshot"));
+  EXPECT_TRUE(notification.has_value());
+  EXPECT_EQ(message_center::SystemNotificationWarningLevel::CRITICAL_WARNING,
+            notification->system_notification_warning_level());
   EXPECT_EQ(ui::ScreenshotResult::DISABLED, screenshot_result_);
 
   if (TemporaryHoldingSpaceEnabled()) {
@@ -215,7 +222,11 @@ IN_PROC_BROWSER_TEST_P(ChromeScreenshotGrabberBrowserTest,
   RunLoop();
 
   EXPECT_TRUE(notification_added_);
-  EXPECT_TRUE(display_service_->GetNotification(std::string("screenshot")));
+  auto notification =
+      display_service_->GetNotification(std::string("screenshot"));
+  EXPECT_TRUE(notification.has_value());
+  EXPECT_EQ(message_center::SystemNotificationWarningLevel::CRITICAL_WARNING,
+            notification->system_notification_warning_level());
   EXPECT_EQ(ui::ScreenshotResult::DISABLED, screenshot_result_);
 
   if (TemporaryHoldingSpaceEnabled()) {

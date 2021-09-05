@@ -35,8 +35,11 @@ android_resources("client_resources") {
 
 android_library("java") {
   sources = [
+    "org/chromium/weblayer/ActionModeCallback.java",
+    "org/chromium/weblayer/ActionModeItemType.java",
     "org/chromium/weblayer/BroadcastReceiver.java",
     "org/chromium/weblayer/Browser.java",
+    "org/chromium/weblayer/BrowserControlsOffsetCallback.java",
     "org/chromium/weblayer/BrowserFragment.java",
     "org/chromium/weblayer/BrowserRestoreCallback.java",
     "org/chromium/weblayer/BrowsingDataType.java",
@@ -67,6 +70,7 @@ android_library("java") {
     "org/chromium/weblayer/LoadError.java",
     "org/chromium/weblayer/MediaCaptureCallback.java",
     "org/chromium/weblayer/MediaCaptureController.java",
+    "org/chromium/weblayer/MediaPlaybackBaseService.java",
     "org/chromium/weblayer/MediaRouteDialogFragment.java",
     "org/chromium/weblayer/MediaSessionService.java",
     "org/chromium/weblayer/NavigateParams.java",
@@ -80,6 +84,7 @@ android_library("java") {
     "org/chromium/weblayer/PrerenderController.java",
     "org/chromium/weblayer/Profile.java",
     "org/chromium/weblayer/RemoteFragment.java",
+    "org/chromium/weblayer/RemoteMediaService.java",
     "org/chromium/weblayer/ScrollNotificationType.java",
     "org/chromium/weblayer/ScrollOffsetCallback.java",
     "org/chromium/weblayer/SettingType.java",

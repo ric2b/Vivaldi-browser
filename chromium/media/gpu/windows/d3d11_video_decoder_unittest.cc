@@ -9,7 +9,7 @@
 #include <initguid.h>
 
 #include "base/bind.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
@@ -348,22 +348,6 @@ TEST_F(D3D11VideoDecoderTest, DoesNotSupportEncryptionWithoutFlag) {
   DisableFeature(kHardwareSecureDecryption);
   InitializeDecoder(encrypted_config,
                     StatusCode::kDecoderInitializeNeverCompleted);
-}
-
-TEST_F(D3D11VideoDecoderTest, DoesNotSupportZeroCopyPreference) {
-  gpu_preferences_.enable_zero_copy_dxgi_video = false;
-  CreateDecoder();
-  InitializeDecoder(
-      TestVideoConfig::NormalCodecProfile(kCodecH264, H264PROFILE_MAIN),
-      StatusCode::kDecoderInitializeNeverCompleted);
-}
-
-TEST_F(D3D11VideoDecoderTest, DoesNotSupportZeroCopyWorkaround) {
-  gpu_workarounds_.disable_dxgi_zero_copy_video = true;
-  CreateDecoder();
-  InitializeDecoder(
-      TestVideoConfig::NormalCodecProfile(kCodecH264, H264PROFILE_MAIN),
-      StatusCode::kDecoderInitializeNeverCompleted);
 }
 
 TEST_F(D3D11VideoDecoderTest, IgnoreWorkaroundsIgnoresWorkaround) {

@@ -10,7 +10,7 @@
 #include "ash/login/ui/login_test_base.h"
 #include "ash/login/ui/login_test_utils.h"
 #include "ash/login/ui/login_user_view.h"
-#include "base/bind_helpers.h"
+#include "base/callback_helpers.h"
 #include "base/feature_list.h"
 #include "base/run_loop.h"
 #include "base/strings/strcat.h"
@@ -19,11 +19,14 @@
 #include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/events/event.h"
+#include "ui/events/event_constants.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/controls/textfield/textfield_test_api.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/views/test/button_test_api.h"
 #include "ui/views/widget/widget.h"
 
 using testing::_;
@@ -79,7 +82,8 @@ class LoginAuthUserViewUnittest
     LoginAuthUserView::Callbacks auth_callbacks;
     auth_callbacks.on_auth = base::DoNothing();
     auth_callbacks.on_easy_unlock_icon_hovered = base::DoNothing();
-    auth_callbacks.on_easy_unlock_icon_tapped = base::DoNothing();
+    auth_callbacks.on_easy_unlock_icon_tapped =
+        views::Button::PressedCallback();
     auth_callbacks.on_tap = base::DoNothing();
     auth_callbacks.on_remove_warning_shown = base::DoNothing();
     auth_callbacks.on_remove = base::DoNothing();
@@ -209,6 +213,39 @@ TEST_P(LoginAuthUserViewUnittest, PressReturnWithTapToUnlockEnabled) {
   base::RunLoop().RunUntilIdle();
 }
 
+// Verifies that pressing return on the pin input field when tap-to-unlock
+// is enabled attempts unlock.
+TEST_P(LoginAuthUserViewUnittest, PressReturnOnPinWithTapToUnlockEnabled) {
+  auto client = std::make_unique<MockLoginScreenClient>();
+
+  ui::test::EventGenerator* generator = GetEventGenerator();
+  LoginAuthUserView::TestApi auth_test(view_);
+  LoginUserView* user_view(auth_test.user_view());
+  LoginPinInputView* pin_input(auth_test.pin_input_view());
+
+  SetUserCount(1);
+
+  // One call using focus, and one direct call to the view.
+  EXPECT_CALL(*client,
+              AuthenticateUserWithEasyUnlock(
+                  user_view->current_user().basic_user_info.account_id))
+      .Times(2);
+  SetAuthMethods(LoginAuthUserView::AUTH_PASSWORD |
+                     LoginAuthUserView::AUTH_PIN | LoginAuthUserView::AUTH_TAP,
+                 /*show_pinpad_for_pw=*/false,
+                 /*virtual_keyboard_visible=*/false,
+                 /*autosubmit_pin_length=*/6);
+
+  // Call through correct focus.
+  pin_input->RequestFocus();
+  generator->PressKey(ui::KeyboardCode::VKEY_RETURN, ui::EF_NONE);
+
+  // Call the view directly as well.
+  pin_input->OnKeyPressed(ui::KeyEvent(
+      ui::ET_KEY_PRESSED, ui::KeyboardCode::VKEY_RETURN, ui::EF_NONE));
+  base::RunLoop().RunUntilIdle();
+}
+
 TEST_P(LoginAuthUserViewUnittest, OnlineSignInMessage) {
   auto client = std::make_unique<MockLoginScreenClient>();
   LoginAuthUserView::TestApi auth_test(view_);
@@ -227,7 +264,7 @@ TEST_P(LoginAuthUserViewUnittest, OnlineSignInMessage) {
       ShowGaiaSignin(user_view->current_user().basic_user_info.account_id));
   const ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
                              ui::EventTimeForNow(), 0, 0);
-  view_->ButtonPressed(online_sign_in_message, event);
+  views::test::ButtonTestApi(online_sign_in_message).NotifyClick(event);
   base::RunLoop().RunUntilIdle();
 
   // The online sign-in message is invisible for all other auth methods.
@@ -278,7 +315,6 @@ TEST_P(LoginAuthUserViewUnittest, PasswordFieldChangeOnUpdateUser) {
   view_->UpdateForUser(another_user);
   EXPECT_TRUE(password_test.textfield()->GetText().empty());
 
-  // TODO(tellier) - Check that this test is doing what it is intended to
   if (display_password_feature_enabled_) {
     password_test.textfield()->SetTextInputType(ui::TEXT_INPUT_TYPE_NULL);
     EXPECT_EQ(password_test.textfield()->GetTextInputType(),
@@ -413,7 +449,8 @@ TEST_P(LoginAuthUserViewUnittest, PinAutosubmitFieldModes) {
     // Clicking on the switch button changes to the password field
     const ui::MouseEvent event(ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(),
                                ui::EventTimeForNow(), 0, 0);
-    view_->ButtonPressed(auth_test.pin_password_toggle(), event);
+    views::test::ButtonTestApi(auth_test.pin_password_toggle())
+        .NotifyClick(event);
     base::RunLoop().RunUntilIdle();
     ExpectModeVisibility(LoginAuthUserView::InputFieldMode::PWD_WITH_TOGGLE);
     SetAuthMethods(LoginAuthUserView::AUTH_NONE);  // Clear state for next run.

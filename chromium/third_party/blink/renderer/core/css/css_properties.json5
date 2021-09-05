@@ -446,15 +446,6 @@
       valid_type: "str",
     },
 
-    // - affected_by_forced_colors
-    // The property value will be overridden with the default value defined in
-    // the forced colors UA style sheet when forced colors mode is enabled and
-    // forced-color-adjust is set to auto.
-    affected_by_forced_colors: {
-      default: false,
-      valid_type: "bool",
-    },
-
     // - valid_for_first_letter: true
     //
     // https://drafts.csswg.org/css-pseudo-4/#first-letter-styling
@@ -479,6 +470,14 @@
       valid_type: "bool",
     },
 
+    // - valid_for_highlight: true
+    //
+    // https://drafts.csswg.org/css-pseudo-4/#highlight-styling
+    valid_for_highlight: {
+      default: false,
+      valid_type: "bool",
+    },
+
     // - is_border
     // The property, when used by the author, will disable any native
     // appearance on UI elements.
@@ -494,6 +493,15 @@
       default: false,
       valid_type: "bool",
     },
+
+    // - tree_scoped_value: true
+    // Whether the property takes a tree-scoped reference as its value.
+    // https://drafts.csswg.org/css-scoping/#css-tree-scoped-reference
+    tree_scoped_value: {
+      default: false,
+      valid_type: "bool",
+    },
+
   },
 
   // Members in the data objects should appear in the same order as in the
@@ -575,6 +583,7 @@
       typedom_types: ["Keyword"],
       separator: ",",
       valid_for_marker: true,
+      tree_scoped_value: true,
     },
     {
       name: "animation-play-state",
@@ -700,10 +709,10 @@
       priority: "High",
       keywords: ["currentcolor"],
       typedom_types: ["Keyword"],
-      affected_by_forced_colors: true,
       valid_for_first_letter: true,
       valid_for_cue: true,
       valid_for_marker: true,
+      valid_for_highlight: true,
     },
     {
       name: "direction",
@@ -734,6 +743,7 @@
       valid_for_first_letter: true,
       valid_for_cue: true,
       valid_for_marker: true,
+      tree_scoped_value: true,
     },
     {
       name: "font-kerning",
@@ -958,6 +968,7 @@
       keywords: ["auto", "none"],
       typedom_types: ["Keyword"],
       default_value: "auto",
+      valid_for_highlight: true,
     },
     {
       name: "-webkit-locale",
@@ -1187,9 +1198,9 @@
       style_builder_template_args: {
         initial_color: "ComputedStyleInitialValues::InitialBackgroundColor",
       },
-      affected_by_forced_colors: true,
       valid_for_first_letter: true,
       valid_for_cue: true,
+      valid_for_highlight: true,
       is_background: true,
     },
     {
@@ -1204,7 +1215,6 @@
         fill_type: "Image",
         fill_type_getter: "GetImage",
       },
-      affected_by_forced_colors: true,
       valid_for_first_letter: true,
       valid_for_cue: true,
       is_background: true,
@@ -1303,7 +1313,6 @@
       typedom_types: ["Keyword"],
       converter: "ConvertStyleColor",
       style_builder_template: "color",
-      affected_by_forced_colors: true,
       valid_for_first_letter: true,
       is_border: true,
       computed_value_comparable: true,
@@ -1454,7 +1463,6 @@
       typedom_types: ["Keyword"],
       converter: "ConvertStyleColor",
       style_builder_template: "color",
-      affected_by_forced_colors: true,
       valid_for_first_letter: true,
       is_border: true,
       computed_value_comparable: true,
@@ -1506,7 +1514,6 @@
       typedom_types: ["Keyword"],
       converter: "ConvertStyleColor",
       style_builder_template: "color",
-      affected_by_forced_colors: true,
       valid_for_first_letter: true,
       is_border: true,
       computed_value_comparable: true,
@@ -1558,7 +1565,6 @@
       typedom_types: ["Keyword"],
       converter: "ConvertStyleColor",
       style_builder_template: "color",
-      affected_by_forced_colors: true,
       valid_for_first_letter: true,
       is_border: true,
       computed_value_comparable: true,
@@ -1652,7 +1658,6 @@
       converter: "ConvertShadowList",
       keywords: ["none"],
       typedom_types: ["Keyword"],
-      affected_by_forced_colors: true,
       valid_for_first_letter: true,
     },
     {
@@ -1731,6 +1736,7 @@
       style_builder_custom_functions: ["initial", "inherit", "value"],
       keywords: ["auto", "currentcolor"],
       typedom_types: ["Keyword"],
+      valid_for_highlight: true,
     },
     {
       name: "clear",
@@ -1808,11 +1814,11 @@
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal", "InitialValue"],
       style_builder_custom_functions: ["initial", "inherit", "value"],
       inherited: true,
-      runtime_flag: "CSSColorScheme",
-      include_paths: ["third_party/blink/public/common/css/color_scheme.h"],
+      include_paths: ["third_party/blink/public/mojom/frame/color_scheme.mojom-blink.h"],
       type_name: "Vector<AtomicString>",
       default_value: "Vector<AtomicString, 0>()",
       field_template: "external",
+      valid_for_highlight: true,
     },
     {
       name: "column-fill",
@@ -1909,7 +1915,8 @@
       ],
       default_value: "auto",
       style_builder_custom_functions: ["initial", "inherit", "value"],
-      typedom_types: ["Keyword"]
+      typedom_types: ["Keyword"],
+      valid_for_highlight: true,
     },
     {
       name: "cx",
@@ -1977,7 +1984,7 @@
       setter: "SetFillPaint",
       getter: "FillPaint",
       converter: "ConvertSVGPaint",
-      affected_by_forced_colors: true,
+      valid_for_highlight: true,
     },
     {
       name: "fill-opacity",
@@ -2363,6 +2370,7 @@
       typedom_types: ["Keyword", "Length", "Number", "Percentage"],
       valid_for_first_letter: true,
       valid_for_cue: true,
+      valid_for_marker: true,
     },
     {
       name: "line-height-step",
@@ -2762,7 +2770,6 @@
       typedom_types: ["Keyword"],
       converter: "ConvertStyleColor",
       style_builder_template: "color",
-      affected_by_forced_colors: true,
       valid_for_cue: true,
     },
     {
@@ -2845,6 +2852,17 @@
         physical_group: "overflow",
       },
       runtime_flag: "CSSLogicalOverflow",
+    },
+    {
+      name: "overflow-clip-margin",
+      property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
+      runtime_flag: "OverflowClip",
+      field_template: "external",
+      field_group: "*",
+      default_value: "LayoutUnit()",
+      type_name: "LayoutUnit",
+      include_paths: ["third_party/blink/renderer/platform/geometry/layout_unit.h"],
+      converter: "ConvertLayoutUnit",
     },
     {
       name: "overflow-x",
@@ -3126,6 +3144,17 @@
       ],
       typedom_types: ["Keyword"],
       runtime_flag: "ScrollbarGutter",
+    },
+    {
+      name: "scrollbar-width",
+      property_methods: ["CSSValueFromComputedStyleInternal"],
+      inherited: false,
+      field_group: "*",
+      field_template: "keyword",
+      keywords: ["auto", "thin", "none"],
+      default_value: "auto",
+      typedom_types: ["Keyword"],
+      runtime_flag: "CSSScrollbars",
     },
     {
       name: "scroll-behavior",
@@ -3441,7 +3470,7 @@
       setter: "SetStrokePaint",
       getter: "StrokePaint",
       converter: "ConvertSVGPaint",
-      affected_by_forced_colors: true,
+      valid_for_highlight: true,
     },
     {
       name: "stroke-dasharray",
@@ -3510,7 +3539,8 @@
       inherited: true,
       svg: true,
       converter: "ConvertUnzoomedLength",
-      typedom_types: ["Length", "Percentage"]
+      typedom_types: ["Length", "Percentage"],
+      valid_for_highlight: true,
     },
     {
       name: "table-layout",
@@ -3597,9 +3627,9 @@
       typedom_types: ["Keyword"],
       converter: "ConvertStyleColor",
       style_builder_template: "color",
-      affected_by_forced_colors: true,
       valid_for_first_letter: true,
       valid_for_cue: true,
+      valid_for_highlight: true,
       computed_value_comparable: true,
     },
     {
@@ -3615,6 +3645,7 @@
       converter: "ConvertFlags<TextDecoration>",
       valid_for_first_letter: true,
       valid_for_cue: true,
+      valid_for_highlight: true,
       computed_value_comparable: true,
     },
     {
@@ -3629,6 +3660,7 @@
       valid_for_first_letter: true,
       valid_for_cue: true,
       valid_for_marker: true,
+      valid_for_highlight: true,
       computed_value_comparable: true,
     },
     {
@@ -3641,6 +3673,7 @@
       default_value: "solid",
       valid_for_first_letter: true,
       valid_for_cue: true,
+      valid_for_highlight: true,
       computed_value_comparable: true,
     },
     {
@@ -3657,6 +3690,7 @@
       keywords: ["auto", "from-font"],
       typedom_types: ["Keyword", "Length", "Percentage"],
       valid_for_first_letter: true,
+      valid_for_highlight: true,
       computed_value_comparable: true,
     },
     {
@@ -3708,10 +3742,10 @@
       converter: "ConvertShadowList",
       keywords: ["none"],
       typedom_types: ["Keyword"],
-      affected_by_forced_colors: true,
       valid_for_first_letter: true,
       valid_for_cue: true,
       valid_for_marker: true,
+      valid_for_highlight: true,
     },
     {
       name: "text-size-adjust",
@@ -3786,7 +3820,7 @@
       name: "touch-action",
       property_methods: ["ParseSingleValue", "CSSValueFromComputedStyleInternal"],
       field_group: "*",
-      field_size: 6, // FIXME: Make this use "kTouchActionBits".
+      field_size: 7, // FIXME: Make this use "kTouchActionBits".
       field_template: "primitive",
       include_paths: ["third_party/blink/renderer/platform/graphics/touch_action.h"],
       default_value: "TouchAction::kAuto",
@@ -4127,7 +4161,6 @@
       typedom_types: ["Keyword"],
       converter: "ConvertStyleColor",
       style_builder_template: "color",
-      affected_by_forced_colors: true,
     },
     {
       name: "column-rule-style",
@@ -4407,7 +4440,6 @@
       field_template: "<color>",
       default_value: "StyleColor(LayoutTheme::TapHighlightColor())",
       converter: "ConvertStyleColor",
-      affected_by_forced_colors: true,
     },
     {
       name: "-webkit-text-combine",
@@ -4427,8 +4459,8 @@
       computed_style_custom_functions: ["getter"],
       converter: "ConvertStyleColor",
       style_builder_template: "color",
-      affected_by_forced_colors: true,
       valid_for_marker: true,
+      valid_for_highlight: true,
     },
     {
       name: "-webkit-text-emphasis-position",
@@ -4461,6 +4493,7 @@
       computed_style_custom_functions: ["getter"],
       converter: "ConvertStyleColor",
       style_builder_template: "color",
+      valid_for_highlight: true,
     },
     {
       name: "-webkit-text-security",
@@ -4484,6 +4517,7 @@
       computed_style_custom_functions: ["getter"],
       converter: "ConvertStyleColor",
       style_builder_template: "color",
+      valid_for_highlight: true,
     },
     {
       name: "-webkit-text-stroke-width",
@@ -4494,6 +4528,7 @@
       default_value: "0",
       type_name: "float",
       converter: "ConvertTextStrokeWidth",
+      valid_for_highlight: true,
     },
     {
       name: "-webkit-transform-origin-x",
@@ -5147,10 +5182,76 @@
       runtime_flag: "CSSFontFaceAdvanceOverride",
     },
     {
+      name: "advance-proportional-override",
+      is_descriptor: true,
+      is_property: false,
+      runtime_flag: "CSSFontFaceAdvanceProportionalOverride",
+    },
+    {
       name: "line-gap-override",
       is_descriptor: true,
       is_property: false,
       runtime_flag: "CSSFontMetricsOverride",
+    },
+    {
+      name: "system",
+      is_descriptor: true,
+      is_property: false,
+      runtime_flag: "CSSAtRuleCounterStyle",
+    },
+    {
+      name: "negative",
+      is_descriptor: true,
+      is_property: false,
+      runtime_flag: "CSSAtRuleCounterStyle",
+    },
+    {
+      name: "prefix",
+      is_descriptor: true,
+      is_property: false,
+      runtime_flag: "CSSAtRuleCounterStyle",
+    },
+    {
+      name: "suffix",
+      is_descriptor: true,
+      is_property: false,
+      runtime_flag: "CSSAtRuleCounterStyle",
+    },
+    {
+      name: "range",
+      is_descriptor: true,
+      is_property: false,
+      runtime_flag: "CSSAtRuleCounterStyle",
+    },
+    {
+      name: "pad",
+      is_descriptor: true,
+      is_property: false,
+      runtime_flag: "CSSAtRuleCounterStyle",
+    },
+    {
+      name: "fallback",
+      is_descriptor: true,
+      is_property: false,
+      runtime_flag: "CSSAtRuleCounterStyle",
+    },
+    {
+      name: "symbols",
+      is_descriptor: true,
+      is_property: false,
+      runtime_flag: "CSSAtRuleCounterStyle",
+    },
+    {
+      name: "additive-symbols",
+      is_descriptor: true,
+      is_property: false,
+      runtime_flag: "CSSAtRuleCounterStyle",
+    },
+    {
+      name: "speak-as",
+      is_descriptor: true,
+      is_property: false,
+      runtime_flag: "CSSAtRuleCounterStyle",
     },
 
     // Shorthands
@@ -5702,10 +5803,10 @@
       computed_style_custom_functions: ["getter", "setter"],
       style_builder_custom_functions: ["initial", "inherit", "value"],
       priority: "High",
-      affected_by_forced_colors: true,
       valid_for_first_letter: true,
       valid_for_cue: true,
       valid_for_marker: true,
+      valid_for_highlight: true,
     },
     {
       name: "-internal-visited-caret-color",
@@ -5723,6 +5824,7 @@
       style_builder_template_args: {
         initial_color: "StyleAutoColor::AutoColor",
       },
+      valid_for_highlight: true,
     },
     {
       name: "-internal-visited-column-rule-color",
@@ -5736,7 +5838,6 @@
       computed_style_custom_functions: ["getter","setter"],
       converter: "ConvertStyleColor",
       style_builder_template: "visited_color",
-      affected_by_forced_colors: true,
     },
     {
       name: "-internal-visited-background-color",
@@ -5753,9 +5854,9 @@
       style_builder_template_args: {
         initial_color: "ComputedStyleInitialValues::InitialBackgroundColor",
       },
-      affected_by_forced_colors: true,
       valid_for_first_letter: true,
       valid_for_cue: true,
+      valid_for_highlight: true,
     },
     {
       name: "-internal-visited-border-left-color",
@@ -5769,7 +5870,6 @@
       computed_style_custom_functions: ["getter", "setter"],
       converter: "ConvertStyleColor",
       style_builder_template: "visited_color",
-      affected_by_forced_colors: true,
       valid_for_first_letter: true,
     },
     {
@@ -5784,7 +5884,6 @@
       computed_style_custom_functions: ["getter", "setter"],
       converter: "ConvertStyleColor",
       style_builder_template: "visited_color",
-      affected_by_forced_colors: true,
       valid_for_first_letter: true,
     },
     {
@@ -5799,7 +5898,6 @@
       computed_style_custom_functions: ["getter", "setter"],
       converter: "ConvertStyleColor",
       style_builder_template: "visited_color",
-      affected_by_forced_colors: true,
       valid_for_first_letter: true,
     },
     {
@@ -5814,7 +5912,6 @@
       computed_style_custom_functions: ["getter", "setter"],
       converter: "ConvertStyleColor",
       style_builder_template: "visited_color",
-      affected_by_forced_colors: true,
       valid_for_first_letter: true,
     },
     {
@@ -5867,7 +5964,7 @@
       setter: "SetInternalVisitedFillPaint",
       getter: "FillPaint",
       converter: "ConvertSVGPaint",
-      affected_by_forced_colors: true,
+      valid_for_highlight: true,
     },
     {
       name: "-internal-visited-outline-color",
@@ -5881,7 +5978,6 @@
       computed_style_custom_functions: ["getter", "setter"],
       converter: "ConvertStyleColor",
       style_builder_template: "visited_color",
-      affected_by_forced_colors: true,
       valid_for_cue: true,
     },
     {
@@ -5894,7 +5990,7 @@
       setter: "SetInternalVisitedStrokePaint",
       getter: "StrokePaint",
       converter: "ConvertSVGPaint",
-      affected_by_forced_colors: true,
+      valid_for_highlight: true,
     },
     {
       name: "-internal-visited-text-decoration-color",
@@ -5908,9 +6004,9 @@
       computed_style_custom_functions: ["getter", "setter"],
       converter: "ConvertStyleColor",
       style_builder_template: "visited_color",
-      affected_by_forced_colors: true,
       valid_for_first_letter: true,
       valid_for_cue: true,
+      valid_for_highlight: true,
     },
     {
       name: "-internal-visited-text-emphasis-color",
@@ -5925,7 +6021,7 @@
       computed_style_custom_functions: ["getter", "setter"],
       converter: "ConvertStyleColor",
       style_builder_template: "visited_color",
-      affected_by_forced_colors: true,
+      valid_for_highlight: true,
     },
     {
       name: "-internal-visited-text-fill-color",
@@ -5940,6 +6036,7 @@
       computed_style_custom_functions: ["getter", "setter"],
       converter: "ConvertStyleColor",
       style_builder_template: "visited_color",
+      valid_for_highlight: true,
     },
     {
       name: "-internal-visited-text-stroke-color",
@@ -5954,6 +6051,7 @@
       computed_style_custom_functions: ["getter", "setter"],
       converter: "ConvertStyleColor",
       style_builder_template: "visited_color",
+      valid_for_highlight: true,
     },
 
     // Name: -internal-empty-line-height:
@@ -5976,6 +6074,28 @@
       default_value: "false",
       name_for_methods: "HasLineIfEmpty",
       converter: "ConvertInternalEmptyLineHeight",
+    },
+
+    // Name: -internal-align-self-block:
+    // Value: normal | center
+    // Applies to: A block child in a normal blow flow context
+    //    If 'center' is specified and the container's block size is not auto,
+    //    it works like "align-self: center" for grid/flex items.
+    //    The block child should create new block formatting context.
+    // Note:
+    //    The container of a child with -internal-align-self:block:center needs
+    //    to opt out from simplified layout.  See
+    //    CalculateSizeBasedLayoutCacheStatusWithGeometry().
+    {
+      name: "-internal-align-self-block",
+      property_methods: ["ParseSingleValue"],
+      inherited: false,
+      field_group: "*",
+      field_template: "primitive",
+      type_name: "bool",
+      default_value: "false",
+      name_for_methods: "AlignSelfBlockCenter",
+      converter: "ConvertInternalAlignSelfBlock",
     },
 
     // Aliases; these map to the same CSSPropertyID

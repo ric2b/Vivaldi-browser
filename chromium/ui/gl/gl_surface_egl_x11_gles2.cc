@@ -5,7 +5,6 @@
 #include "ui/gl/gl_surface_egl_x11_gles2.h"
 
 #include "ui/base/x/x11_util.h"
-#include "ui/gfx/x/x11.h"
 #include "ui/gfx/x/xproto.h"
 #include "ui/gfx/x/xproto_util.h"
 #include "ui/gl/egl_util.h"
@@ -35,7 +34,7 @@ bool NativeViewGLSurfaceEGLX11GLES2::InitializeNativeWindow() {
   // correctly ordered with GL, so that we don't have invalid transient states.
   // See https://crbug.com/326995.
   set_window(connection->GenerateId<x11::Window>());
-  connection->CreateWindow({
+  connection->CreateWindow(x11::CreateWindowRequest{
       .wid = window(),
       .parent = parent_window_,
       .width = size_.width(),

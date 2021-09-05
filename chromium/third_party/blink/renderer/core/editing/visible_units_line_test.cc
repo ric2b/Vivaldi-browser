@@ -65,6 +65,13 @@ class VisibleUnitsLineTest : public EditingTestBase {
         LogicalEndOfLine(CreateVisiblePosition(caret)).DeepEquivalent();
     return GetCaretTextFromBody(result);
   }
+
+  std::string TestStartOfLine(const std::string& input) {
+    const Position& caret = SetCaretTextToBody(input);
+    const Position& result =
+        StartOfLine(CreateVisiblePosition(caret)).DeepEquivalent();
+    return GetCaretTextFromBody(result);
+  }
 };
 
 class ParameterizedVisibleUnitsLineTest
@@ -663,6 +670,86 @@ TEST_F(VisibleUnitsLineTest, startOfLine) {
       StartOfLine(CreateVisiblePositionInFlatTree(*seven, 1)).DeepEquivalent());
 }
 
+TEST_P(ParameterizedVisibleUnitsLineTest, EndOfLineWithBidi) {
+  LoadAhem();
+  InsertStyleElement("p { font: 30px/3 Ahem; }");
+
+  EXPECT_EQ(
+      "<p dir=\"ltr\"><bdo dir=\"ltr\">ab cd ef|</bdo></p>",
+      TestEndOfLine("<p dir=\"ltr\"><bdo dir=\"ltr\">a|b cd ef</bdo></p>"))
+      << "LTR LTR";
+  EXPECT_EQ(
+      "<p dir=\"ltr\"><bdo dir=\"rtl\">ab cd ef|</bdo></p>",
+      TestEndOfLine("<p dir=\"ltr\"><bdo dir=\"rtl\">a|b cd ef</bdo></p>"))
+      << "LTR RTL";
+  EXPECT_EQ(
+      "<p dir=\"rtl\"><bdo dir=\"ltr\">ab cd ef|</bdo></p>",
+      TestEndOfLine("<p dir=\"rtl\"><bdo dir=\"ltr\">a|b cd ef</bdo></p>"))
+      << "RTL LTR";
+  EXPECT_EQ(
+      "<p dir=\"rtl\"><bdo dir=\"rtl\">ab cd ef|</bdo></p>",
+      TestEndOfLine("<p dir=\"rtl\"><bdo dir=\"rtl\">a|b cd ef</bdo></p>"))
+      << "RTL RTL";
+}
+
+// http://crbug.com/1136740
+TEST_P(ParameterizedVisibleUnitsLineTest, EndOfLineWithHangingSpace) {
+  LoadAhem();
+  InsertStyleElement(
+      "p {"
+      "font: 30px/3 Ahem;"
+      "overflow-wrap: break-word;"
+      "white-space: pre-wrap;"
+      "width: 4ch;"
+      "}");
+
+  // _____ _=Space
+  // abcd
+  // efgh
+  EXPECT_EQ("<p>     |abcdefgh</p>", TestEndOfLine("<p>|     abcdefgh</p>"));
+  EXPECT_EQ("<p>     |abcdefgh</p>", TestEndOfLine("<p> |    abcdefgh</p>"));
+  EXPECT_EQ("<p>     |abcdefgh</p>", TestEndOfLine("<p>  |   abcdefgh</p>"));
+  EXPECT_EQ("<p>     |abcdefgh</p>", TestEndOfLine("<p>   |  abcdefgh</p>"));
+  EXPECT_EQ("<p>     |abcdefgh</p>", TestEndOfLine("<p>    | abcdefgh</p>"));
+  EXPECT_EQ("<p>     abcd|efgh</p>", TestEndOfLine("<p>     |abcdefgh</p>"));
+  EXPECT_EQ("<p>     abcd|efgh</p>", TestEndOfLine("<p>     a|bcdefgh</p>"));
+
+  // __x__ _=Space
+  // abcd
+  // efgh
+  EXPECT_EQ("<p>  x |abcdefgh</p>", TestEndOfLine("<p>|  x abcdefgh</p>"));
+  EXPECT_EQ("<p>  x |abcdefgh</p>", TestEndOfLine("<p> | x abcdefgh</p>"));
+  EXPECT_EQ("<p>  x |abcdefgh</p>", TestEndOfLine("<p>  x| abcdefgh</p>"));
+  EXPECT_EQ("<p>  x |abcdefgh</p>", TestEndOfLine("<p>  x| abcdefgh</p>"));
+  EXPECT_EQ("<p>  x abcd|efgh</p>", TestEndOfLine("<p>  x |abcdefgh</p>"));
+  EXPECT_EQ("<p>  x abcd|efgh</p>", TestEndOfLine("<p>  x a|bcdefgh</p>"));
+}
+
+TEST_P(ParameterizedVisibleUnitsLineTest, EndOfLineWithPositionRelative) {
+  LoadAhem();
+  InsertStyleElement(
+      "b { position:relative; left: 30px; }"
+      "p { font: 30px/3 Ahem; }");
+
+  EXPECT_EQ("<p>ab <b>cd</b> <b>ef|</b></p>",
+            TestEndOfLine("<p>a|b <b>cd</b> <b>ef</b></p>"));
+  // Note: legacy result is wrong. See EndOfLineWithBidi.
+  EXPECT_EQ(
+      LayoutNGEnabled()
+          ? "<p><bdo dir=\"rtl\">ab <b>cd</b> <b>ef|</b></bdo></p>"
+          : "<p><bdo dir=\"rtl\">ab |<b>cd</b> <b>ef</b></bdo></p>",
+      TestEndOfLine("<p><bdo dir=\"rtl\">a|b <b>cd</b> <b>ef</b></bdo></p>"));
+  EXPECT_EQ("<p dir=\"rtl\">ab <b>cd</b> <b>ef|</b></p>",
+            TestEndOfLine("<p dir=\"rtl\">a|b <b>cd</b> <b>ef</b></p>"));
+  // Note: legacy result is wrong. See EndOfLineWithBidi.
+  EXPECT_EQ(
+      LayoutNGEnabled()
+          ? "<p dir=\"rtl\"><bdo dir=\"rtl\">ab <b>cd</b> <b>ef|</b></bdo></p>"
+          : "<p dir=\"rtl\"><bdo dir=\"rtl\">ab |<b>cd</b> <b>ef</b></bdo></p>",
+      TestEndOfLine(
+          "<p dir=\"rtl\"><bdo dir=\"rtl\">a|b <b>cd</b> <b>ef</b></bdo></p>"));
+}
+
 TEST_P(ParameterizedVisibleUnitsLineTest, EndOfLineWithSoftLineWrap3) {
   LoadAhem();
   InsertStyleElement(
@@ -828,6 +915,52 @@ TEST_P(ParameterizedVisibleUnitsLineTest, InSameLineWithMixedEditability) {
   PositionWithAffinity position2(selection.Extent());
   // "Same line" is restricted by editability boundaries.
   EXPECT_FALSE(InSameLine(position1, position2));
+}
+
+TEST_P(ParameterizedVisibleUnitsLineTest, StartOfLineWithBidi) {
+  LoadAhem();
+  InsertStyleElement("p { font: 30px/3 Ahem; }");
+
+  EXPECT_EQ(
+      "<p dir=\"ltr\"><bdo dir=\"ltr\">|abc xyz</bdo></p>",
+      TestStartOfLine("<p dir=\"ltr\"><bdo dir=\"ltr\">abc |xyz</bdo></p>"))
+      << "LTR LTR";
+  EXPECT_EQ(
+      "<p dir=\"ltr\"><bdo dir=\"rtl\">|abc xyz</bdo></p>",
+      TestStartOfLine("<p dir=\"ltr\"><bdo dir=\"rtl\">abc |xyz</bdo></p>"))
+      << "LTR RTL";
+  EXPECT_EQ(
+      "<p dir=\"rtl\"><bdo dir=\"ltr\">|abc xyz</bdo></p>",
+      TestStartOfLine("<p dir=\"rtl\"><bdo dir=\"ltr\">abc |xyz</bdo></p>"))
+      << "RTL LTR";
+  EXPECT_EQ(
+      "<p dir=\"rtl\"><bdo dir=\"rtl\">|abc xyz</bdo></p>",
+      TestStartOfLine("<p dir=\"rtl\"><bdo dir=\"rtl\">abc |xyz</bdo></p>"))
+      << "RTL RTL";
+}
+
+TEST_P(ParameterizedVisibleUnitsLineTest, StartOfLineWithPositionRelative) {
+  LoadAhem();
+  InsertStyleElement(
+      "b { position:relative; left: -100px; }"
+      "p { font: 30px/3 Ahem; }");
+
+  EXPECT_EQ("<p><b>|abc</b> xyz</p>", TestStartOfLine("<p><b>abc</b> |xyz</p>"))
+      << "LTR-LTR";
+  EXPECT_EQ("<p dir=\"rtl\"><b>|abc</b> xyz</p>",
+            TestStartOfLine("<p dir=\"rtl\"><b>abc</b> |xyz</p>"))
+      << "RTL-LTR";
+  // Legacy results are wrong. See StartOfLineWithBidi
+  EXPECT_EQ(LayoutNGEnabled() ? "<p><bdo dir=\"rtl\"><b>|abc</b> xyz</bdo></p>"
+                              : "<p><bdo dir=\"rtl\"><b>abc|</b> xyz</bdo></p>",
+            TestStartOfLine("<p><bdo dir=\"rtl\"><b>abc</b> |xyz</bdo></p>"))
+      << "LTR-RTL";
+  EXPECT_EQ(LayoutNGEnabled()
+                ? "<p dir=\"rtl\"><bdo dir=\"rtl\"><b>|abc</b> xyz</bdo></p>"
+                : "<p dir=\"rtl\"><bdo dir=\"rtl\"><b>abc|</b> xyz</bdo></p>",
+            TestStartOfLine(
+                "<p dir=\"rtl\"><bdo  dir=\"rtl\"><b>abc</b> |xyz</bdo></p>"))
+      << "RTL-RTL";
 }
 
 // https://crbug.com/947462

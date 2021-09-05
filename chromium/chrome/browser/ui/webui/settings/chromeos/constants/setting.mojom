@@ -35,6 +35,8 @@ enum Setting {
   kWifiMetered = 24,
   kCellularMetered = 25,
   kCellularAddNetwork = 26,
+  kCellularRemoveESimNetwork = 27,
+  kCellularRenameESimNetwork = 28,
 
   // Bluetooth section.
   kBluetoothOnOff = 100,
@@ -55,7 +57,8 @@ enum Setting {
   kNearbyShareOnOff = 208,
   kPhoneHubOnOff = 209,
   kPhoneHubNotificationsOnOff = 210,
-  kPhoneHubNotificationBadgeOnOff = 211,
+  // Note: Value 211 was for deprecated kPhoneHubNotificationBadgeOnOff.
+  // Do not reuse.
   kPhoneHubTaskContinuationOnOff = 212,
   kWifiSyncOnOff = 213,
 
@@ -68,8 +71,8 @@ enum Setting {
   kGuestBrowsing = 305,
   kShowUsernamesAndPhotosAtSignIn = 306,
   kRestrictSignIn = 307,
-  kAddToUserWhitelist = 308,
-  kRemoveFromUserWhitelist = 309,
+  kAddToUserAllowlist = 308,
+  kRemoveFromUserAllowlist = 309,
   kAddKerberosTicket = 310,
   kRemoveKerberosTicket = 311,
   kSetActiveKerberosTicket = 312,
@@ -213,6 +216,7 @@ enum Setting {
   kGetImageDescriptionsFromGoogle = 1526,
   kLiveCaptions = 1527,
   kEnableCursorColor = 1528,
+  kFullscreenMagnifierFocusFollowing = 1529,
 
   // Reset section.
   kPowerwash = 1600,
@@ -225,4 +229,9 @@ enum Setting {
   kGetHelpWithChromeOs = 1704,
   kReportAnIssue = 1705,
   kTermsOfService = 1706,
+
+  // Kerberos section.
+  kAddKerberosTicketV2 = 1800,
+  kRemoveKerberosTicketV2 = 1801,
+  kSetActiveKerberosTicketV2 = 1802,
 };

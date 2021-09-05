@@ -4,12 +4,12 @@
 
 // <include src="../oobe_hid_detection.js">
 // <include src="../oobe_i18n_dropdown.js">
+// <include src="../oobe_screen_enable_debugging.js">
 // <include src="../oobe_welcome_dialog.js">
 // <include src="../oobe_welcome.js">
 // <include src="../oobe_network.js">
 // <include src="../oobe_eula.js">
 // <include src="../oobe_update.js">
-// <include src="../components/oobe_slide.js">
 // <include src="../demo_setup.js">
 // <include src="../demo_preferences.js">
 // <include src="../enterprise_enrollment.js">

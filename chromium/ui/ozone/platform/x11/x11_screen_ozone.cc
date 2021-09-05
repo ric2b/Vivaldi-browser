@@ -4,6 +4,8 @@
 
 #include "ui/ozone/platform/x11/x11_screen_ozone.h"
 
+#include "ui/base/x/x11_idle_query.h"
+#include "ui/base/x/x11_screensaver_window_finder.h"
 #include "ui/base/x/x11_util.h"
 #include "ui/display/display_finder.h"
 #include "ui/display/util/display_util.h"
@@ -124,6 +126,16 @@ void X11ScreenOzone::SetScreenSaverSuspended(bool suspend) {
   SuspendX11ScreenSaver(suspend);
 }
 
+bool X11ScreenOzone::IsScreenSaverActive() const {
+  // Usually the screensaver is used to lock the screen.
+  return ScreensaverWindowFinder::ScreensaverWindowExists();
+}
+
+base::TimeDelta X11ScreenOzone::CalculateIdleTime() const {
+  IdleQueryX11 idle_query;
+  return base::TimeDelta::FromSeconds(idle_query.IdleTime());
+}
+
 void X11ScreenOzone::AddObserver(display::DisplayObserver* observer) {
   x11_display_manager_->AddObserver(observer);
 }
@@ -134,6 +146,12 @@ void X11ScreenOzone::RemoveObserver(display::DisplayObserver* observer) {
 
 std::string X11ScreenOzone::GetCurrentWorkspace() {
   return x11_display_manager_->GetCurrentWorkspace();
+}
+
+base::Value X11ScreenOzone::GetGpuExtraInfoAsListValue(
+    const gfx::GpuExtraInfo& gpu_extra_info) {
+  return ui::GpuExtraInfoAsListValue(gpu_extra_info.system_visual,
+                                     gpu_extra_info.rgba_visual);
 }
 
 bool X11ScreenOzone::DispatchXEvent(x11::Event* xev) {

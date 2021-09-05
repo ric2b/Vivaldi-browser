@@ -38,7 +38,7 @@ namespace blink {
 FloatRectOutsets ShadowList::RectOutsetsIncludingOriginal() const {
   FloatRectOutsets outsets;
   for (const ShadowData& shadow : Shadows()) {
-    if (shadow.Style() == kInset)
+    if (shadow.Style() == ShadowStyle::kInset)
       continue;
     outsets.Unite(shadow.RectOutsets());
   }
@@ -52,7 +52,7 @@ void ShadowList::AdjustRectForShadow(FloatRect& rect) const {
 sk_sp<SkDrawLooper> ShadowList::CreateDrawLooper(
     DrawLooperBuilder::ShadowAlphaMode alpha_mode,
     const Color& current_color,
-    ColorScheme color_scheme,
+    mojom::blink::ColorScheme color_scheme,
     bool is_horizontal) const {
   DrawLooperBuilder draw_looper_builder;
   for (wtf_size_t i = Shadows().size(); i--;) {

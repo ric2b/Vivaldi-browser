@@ -89,6 +89,7 @@ public final class InfoBarLayout extends ViewGroup implements View.OnClickListen
     private final ImageButton mCloseButton;
     private final InfoBarControlLayout mMessageLayout;
     private final List<InfoBarControlLayout> mControlLayouts;
+    private ViewGroup mFooterViewGroup;
 
     private TextView mMessageTextView;
     private ImageView mIconView;
@@ -210,6 +211,16 @@ public final class InfoBarLayout extends ViewGroup implements View.OnClickListen
     }
 
     /**
+     * Adds a footer at the bottom of the InfoBar which spans the InfoBar's whole width.
+     *
+     * @param footerView footer to be added.
+     */
+    public ViewGroup addFooterView(ViewGroup footerView) {
+        mFooterViewGroup = footerView;
+        return footerView;
+    }
+
+    /**
      * Adds one or two buttons to the layout.
      *
      * @param primaryText Text for the primary button.  If empty, no buttons are added at all.
@@ -286,6 +297,13 @@ public final class InfoBarLayout extends ViewGroup implements View.OnClickListen
     }
 
     /**
+     * Returns whether or not InfoBar has a footer.
+     */
+    public boolean hasFooter() {
+        return mFooterViewGroup != null;
+    }
+
+    /**
      * Returns the icon, or null if it doesn't exist.
      */
     public ImageView getIcon() {
@@ -304,6 +322,7 @@ public final class InfoBarLayout extends ViewGroup implements View.OnClickListen
         addView(mMessageLayout);
         for (View v : mControlLayouts) addView(v);
         if (mButtonRowLayout != null) addView(mButtonRowLayout);
+        if (mFooterViewGroup != null) addView(mFooterViewGroup);
         addView(mCloseButton);
     }
 
@@ -355,6 +374,8 @@ public final class InfoBarLayout extends ViewGroup implements View.OnClickListen
      * |  | BOTTOM ROW LAYOUT                                                      |  |
      * |  -------------------------------------------------------------------------|  |
      * |                                                                              |
+     * --------------------------------------------------------------------------------
+     * |  FOOTER                                                                      |
      * --------------------------------------------------------------------------------
      */
     @Override
@@ -428,6 +449,14 @@ public final class InfoBarLayout extends ViewGroup implements View.OnClickListen
 
         // Apply padding to the bottom of the infobar.
         layoutBottom += mPadding;
+
+        if (mFooterViewGroup != null) {
+            LayoutParams footerParams = getChildLayoutParams(mFooterViewGroup);
+            measureChildWithFixedWidth(mFooterViewGroup, layoutWidth);
+            footerParams.start = 0;
+            footerParams.top = layoutBottom;
+            layoutBottom += mFooterViewGroup.getMeasuredHeight();
+        }
 
         setMeasuredDimension(resolveSize(layoutWidth, widthMeasureSpec),
                 resolveSize(layoutBottom, heightMeasureSpec));

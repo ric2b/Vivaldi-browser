@@ -101,7 +101,6 @@ Polymer({
       case ContentSettingsTypes.GEOLOCATION:
       case ContentSettingsTypes.MIC:
       case ContentSettingsTypes.NOTIFICATIONS:
-      case ContentSettingsTypes.UNSANDBOXED_PLUGINS:
       case ContentSettingsTypes.MIDI_DEVICES:
       case ContentSettingsTypes.USB_DEVICES:
       case ContentSettingsTypes.SERIAL_PORTS:
@@ -113,13 +112,26 @@ Polymer({
       case ContentSettingsTypes.WINDOW_PLACEMENT:
         // "Ask" vs "Blocked".
         return ContentSetting.ASK;
-      case ContentSettingsTypes.PLUGINS:
-        // "Run important content" vs. "Block".
-        return ContentSetting.IMPORTANT_CONTENT;
       default:
         assertNotReached('Invalid category: ' + this.category);
         return ContentSetting.ALLOW;
     }
+  },
+
+  /**
+   * @return {string}
+   * @private
+   */
+  getEnabledButtonClass_() {
+    return this.allowOptionSubLabel ? 'two-line' : '';
+  },
+
+  /**
+   * @return {string}
+   * @private
+   */
+  getDisabledButtonClass_() {
+    return this.blockOptionSubLabel ? 'two-line' : '';
   },
 
   /**

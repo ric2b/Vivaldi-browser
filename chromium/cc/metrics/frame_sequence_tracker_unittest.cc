@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/test/metrics/histogram_tester.h"
 #include "cc/metrics/compositor_frame_reporting_controller.h"
 #include "cc/metrics/frame_sequence_tracker_collection.h"
@@ -1614,7 +1614,7 @@ TEST_F(FrameSequenceTrackerTest, TrackerTypeEncoding) {
 TEST_F(FrameSequenceTrackerTest, CustomTrackers) {
   CustomTrackerResults results;
   collection_.set_custom_tracker_results_added_callback(
-      base::BindLambdaForTesting([&](CustomTrackerResults reported) {
+      base::BindLambdaForTesting([&](const CustomTrackerResults& reported) {
         for (const auto& pair : reported)
           results[pair.first] = pair.second;
       }));

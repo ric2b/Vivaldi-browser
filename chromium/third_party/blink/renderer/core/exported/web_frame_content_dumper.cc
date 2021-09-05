@@ -34,7 +34,7 @@ void FrameContentAsPlainText(size_t max_chars,
   if (!document)
     return;
 
-  if (!frame->View() || frame->View()->ShouldThrottleRendering())
+  if (!frame->View() || frame->View()->CanThrottleRendering())
     return;
 
   DCHECK(!frame->View()->NeedsLayout());

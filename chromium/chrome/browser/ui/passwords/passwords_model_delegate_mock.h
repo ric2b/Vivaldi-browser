@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "chrome/browser/ui/passwords/passwords_model_delegate.h"
+#include "components/password_manager/core/browser/password_form.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 class PasswordsModelDelegateMock
@@ -31,11 +32,11 @@ class PasswordsModelDelegateMock
               (override));
   MOCK_METHOD(url::Origin, GetOrigin, (), (const override));
   MOCK_METHOD(password_manager::ui::State, GetState, (), (const override));
-  MOCK_METHOD(const autofill::PasswordForm&,
+  MOCK_METHOD(const password_manager::PasswordForm&,
               GetPendingPassword,
               (),
               (const override));
-  MOCK_METHOD(const std::vector<autofill::PasswordForm>&,
+  MOCK_METHOD(const std::vector<password_manager::PasswordForm>&,
               GetUnsyncedCredentials,
               (),
               (const override));
@@ -43,10 +44,11 @@ class PasswordsModelDelegateMock
               GetCredentialSource,
               (),
               (const override));
-  MOCK_METHOD(const std::vector<std::unique_ptr<autofill::PasswordForm>>&,
-              GetCurrentForms,
-              (),
-              (const override));
+  MOCK_METHOD(
+      const std::vector<std::unique_ptr<password_manager::PasswordForm>>&,
+      GetCurrentForms,
+      (),
+      (const override));
   MOCK_METHOD(password_manager::InteractionsStats*,
               GetCurrentInteractionStats,
               (),
@@ -66,14 +68,15 @@ class PasswordsModelDelegateMock
               (override));
   MOCK_METHOD(void,
               SaveUnsyncedCredentialsInProfileStore,
-              (const std::vector<autofill::PasswordForm>&),
+              (const std::vector<password_manager::PasswordForm>&),
               (override));
   MOCK_METHOD(void, DiscardUnsyncedCredentials, (), (override));
   MOCK_METHOD(void, MovePasswordToAccountStore, (), (override));
   MOCK_METHOD(void, BlockMovingPasswordToAccountStore, (), (override));
   MOCK_METHOD(void,
               ChooseCredential,
-              (const autofill::PasswordForm&, password_manager::CredentialType),
+              (const password_manager::PasswordForm&,
+               password_manager::CredentialType),
               (override));
   MOCK_METHOD(void,
               NavigateToPasswordManagerAccountDashboard,
@@ -87,10 +90,7 @@ class PasswordsModelDelegateMock
               NavigateToPasswordCheckup,
               (password_manager::PasswordCheckReferrer),
               (override));
-  MOCK_METHOD(void,
-              EnableSync,
-              (const AccountInfo& account, bool is_default_promo_account),
-              (override));
+  MOCK_METHOD(void, EnableSync, (const AccountInfo& account), (override));
   MOCK_METHOD(void, OnDialogHidden, (), (override));
   MOCK_METHOD(bool, AuthenticateUser, (), (override));
   MOCK_METHOD(void,

@@ -109,6 +109,11 @@ class CONTENT_EXPORT MediaStreamManager
                                    const blink::MediaStreamDevice& old_device,
                                    const blink::MediaStreamDevice& new_device)>;
 
+  using DeviceRequestStateChangeCallback = base::RepeatingCallback<void(
+      const std::string& label,
+      const blink::MediaStreamDevice& device,
+      const blink::mojom::MediaStreamStateChange new_state)>;
+
   // Callback for testing.
   using GenerateStreamTestCallback =
       base::OnceCallback<bool(const blink::StreamControls&)>;
@@ -190,7 +195,8 @@ class CONTENT_EXPORT MediaStreamManager
       blink::mojom::StreamSelectionInfoPtr audio_stream_selection_info_ptr,
       GenerateStreamCallback generate_stream_cb,
       DeviceStoppedCallback device_stopped_cb,
-      DeviceChangedCallback device_changed_cb);
+      DeviceChangedCallback device_changed_cb,
+      DeviceRequestStateChangeCallback device_request_state_change_cb);
 
   // Cancel an open request identified by |page_request_id| for the given frame.
   // Must be called on the IO thread.
@@ -322,11 +328,11 @@ class CONTENT_EXPORT MediaStreamManager
       std::string hmac_device_id,
       scoped_refptr<base::SequencedTaskRunner> task_runner,
       base::OnceCallback<void(const base::Optional<std::string>&)> callback);
-  // Overload that allows for a blink::MediaDeviceType to be specified instead
-  // of a blink::mojom::MediaStreamType. This allows for getting the raw device
-  // ID from the HMAC of an audio output device.
+  // Overload that allows for a blink::mojom::MediaDeviceType to be specified
+  // instead of a blink::mojom::MediaStreamType. This allows for getting the raw
+  // device ID from the HMAC of an audio output device.
   static void GetMediaDeviceIDForHMAC(
-      blink::MediaDeviceType device_type,
+      blink::mojom::MediaDeviceType device_type,
       std::string salt,
       url::Origin security_origin,
       std::string hmac_device_id,
@@ -347,13 +353,13 @@ class CONTENT_EXPORT MediaStreamManager
 
   // Helper for sending up-to-date device lists to media observer when a
   // capture device is plugged in or unplugged.
-  void NotifyDevicesChanged(blink::MediaDeviceType stream_type,
+  void NotifyDevicesChanged(blink::mojom::MediaDeviceType stream_type,
                             const blink::WebMediaDeviceInfoArray& devices);
 
   // This method is called when an audio or video device is removed. It makes
   // sure all MediaStreams that use a removed device are stopped and that the
   // render process is notified. Must be called on the IO thread.
-  void StopRemovedDevice(blink::MediaDeviceType type,
+  void StopRemovedDevice(blink::mojom::MediaDeviceType type,
                          const blink::WebMediaDeviceInfo& media_device_info);
 
   void SetGenerateStreamCallbackForTesting(
@@ -392,6 +398,10 @@ class CONTENT_EXPORT MediaStreamManager
   void StopMediaStreamFromBrowser(const std::string& label);
   void ChangeMediaStreamSourceFromBrowser(const std::string& label,
                                           const DesktopMediaID& media_id);
+  void RequestStateChangeFromBrowser(
+      const std::string& label,
+      const DesktopMediaID& media_id,
+      blink::mojom::MediaStreamStateChange new_state);
 
   // Helpers.
   // Checks if all devices that was requested in the request identififed by

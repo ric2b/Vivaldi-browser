@@ -80,6 +80,31 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram
+    name="SafeBrowsing.BrowserThrottle.IsCheckCompletedOnProcessResponse"
+    enum="BooleanCompleted" expires_after="2021-10-30">
+  <owner>xinghuilu@chromium.org</owner>
+  <owner>chrome-safebrowsing-alerts@google.com</owner>
+  <summary>
+    Logs whether the Safe Browsing check is completed when the URL loader starts
+    to process a response. If not, the URL loader will be deferred until the
+    Safe Browsing check is completed. Logs each time the URL loader dispatches
+    WillProcessResponse() and the Safe Browsing check doesn't block the URL.
+  </summary>
+</histogram>
+
+<histogram name="SafeBrowsing.BrowserThrottle.TotalDelay" units="ms"
+    expires_after="2021-10-30">
+  <owner>xinghuilu@chromium.org</owner>
+  <owner>chrome-safebrowsing-alerts@google.com</owner>
+  <summary>
+    Logs the latency between when the URL loader was deferred by Safe Browsing
+    check and when the check is completed. Logs each time the URL loader was
+    deferred by Safe Browsing check and the Safe Browsing check doesn't block
+    the URL.
+  </summary>
+</histogram>
+
 <histogram name="SafeBrowsing.CheckBrowseUrl.HasLocalMatch"
     enum="BooleanMatched" expires_after="2021-08-05">
   <owner>vakh@chromium.org</owner>
@@ -589,7 +614,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
-<histogram name="SafeBrowsing.DelayedWarnings.TimeOnPage" units="seconds"
+<histogram name="SafeBrowsing.DelayedWarnings.TimeOnPage" units="ms"
     expires_after="M89">
   <owner>meacer@chromium.org</owner>
   <owner>estark@chromium.org</owner>
@@ -605,7 +630,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SafeBrowsing.DelayedWarnings.TimeOnPage_UrlElisionDisabled"
-    units="seconds" expires_after="M89">
+    units="ms" expires_after="M89">
   <owner>meacer@chromium.org</owner>
   <owner>estark@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
@@ -617,7 +642,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SafeBrowsing.FileTypeUpdate.DynamicUpdateResult"
-    enum="SBFileTypeUpdateResult" expires_after="M86">
+    enum="SBFileTypeUpdateResult" expires_after="2021-04-13">
   <owner>drubery@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>
@@ -631,7 +656,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SafeBrowsing.FileTypeUpdate.DynamicUpdateVersion"
-    units="FileTypePolicies Version" expires_after="M86">
+    units="FileTypePolicies Version" expires_after="2021-04-13">
   <owner>drubery@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>
@@ -645,7 +670,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SafeBrowsing.FileTypeUpdate.ResourceBundleResult"
-    enum="SBFileTypeUpdateResult" expires_after="M86">
+    enum="SBFileTypeUpdateResult" expires_after="2021-04-13">
   <owner>drubery@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>
@@ -658,7 +683,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SafeBrowsing.FileTypeUpdate.ResourceBundleVersion"
-    units="FileTypePolicies Version" expires_after="M86">
+    units="FileTypePolicies Version" expires_after="2021-04-13">
   <owner>drubery@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>
@@ -690,8 +715,30 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
   </summary>
 </histogram>
 
+<histogram name="SafeBrowsing.Pref.Daily.Extended" enum="BooleanEnabled"
+    expires_after="2021-11-04">
+  <owner>xinghuilu@chromium.org</owner>
+  <owner>chrome-safebrowsing-alerts@google.com</owner>
+  <summary>
+    Whether the Safe Browsing extended reporting service is currently enabled.
+    Recorded for all non-Incognito profiles every 24 hours and at startup, if
+    the last recording was more than 24 hours ago.
+  </summary>
+</histogram>
+
+<histogram name="SafeBrowsing.Pref.Daily.SafeBrowsingState"
+    enum="SafeBrowsingState" expires_after="2021-11-04">
+  <owner>xinghuilu@chromium.org</owner>
+  <owner>chrome-safebrowsing-alerts@google.com</owner>
+  <summary>
+    The current Safe Browsing state of the profile. Recorded for all
+    non-Incognito profiles every 24 hours and at startup, if the last recording
+    was more than 24 hours ago.
+  </summary>
+</histogram>
+
 <histogram name="SafeBrowsing.Pref.Enhanced" enum="BooleanEnabled"
-    expires_after="2021-01-30">
+    expires_after="2021-04-04">
   <owner>bdea@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>
@@ -701,7 +748,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SafeBrowsing.Pref.Extended" enum="BooleanEnabled"
-    expires_after="2021-01-30">
+    expires_after="2021-04-04">
   <owner>vakh@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>
@@ -711,7 +758,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SafeBrowsing.Pref.General" enum="BooleanEnabled"
-    expires_after="2021-01-30">
+    expires_after="2021-04-04">
   <owner>vakh@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>
@@ -774,7 +821,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SafeBrowsing.RT.Backoff.State" enum="BooleanEnabled"
-    expires_after="2021-02-07">
+    expires_after="2021-04-11">
   <owner>vakh@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>
@@ -805,7 +852,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SafeBrowsing.RT.CanCheckDatabase" enum="BooleanEnabled"
-    expires_after="2021-03-05">
+    expires_after="2021-05-09">
   <owner>xinghuilu@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>
@@ -815,7 +862,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SafeBrowsing.RT.GetCache.Time" units="ms"
-    expires_after="2021-02-21">
+    expires_after="2021-04-25">
   <owner>xinghuilu@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>
@@ -826,7 +873,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SafeBrowsing.RT.GetCacheResult"
-    enum="SafeBrowsingRTLookupResponseVerdictType" expires_after="2021-02-21">
+    enum="SafeBrowsingRTLookupResponseVerdictType" expires_after="2021-04-25">
   <owner>xinghuilu@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>
@@ -838,7 +885,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SafeBrowsing.RT.GetToken.Time" units="ms"
-    expires_after="2021-03-05">
+    expires_after="2021-05-09">
   <owner>xinghuilu@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>
@@ -849,7 +896,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SafeBrowsing.RT.HasTokenFromFetcher" enum="BooleanHasToken"
-    expires_after="2021-03-05">
+    expires_after="2021-05-09">
   <owner>xinghuilu@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>
@@ -860,7 +907,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SafeBrowsing.RT.HasTokenInRequest" enum="BooleanHasToken"
-    expires_after="2021-03-05">
+    expires_after="2021-05-09">
   <owner>xinghuilu@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>
@@ -871,7 +918,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SafeBrowsing.RT.HasValidCacheManager" enum="BooleanValid"
-    expires_after="2021-02-21">
+    expires_after="2021-04-25">
   <owner>xinghuilu@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>
@@ -882,7 +929,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SafeBrowsing.RT.IsLookupServiceAvailable"
-    enum="BooleanAvailable" expires_after="2021-03-10">
+    enum="BooleanAvailable" expires_after="2021-05-09">
   <owner>xinghuilu@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>
@@ -894,7 +941,7 @@ reviews. Googlers can read more about this at go/gwsq-gerrit.
 </histogram>
 
 <histogram name="SafeBrowsing.RT.IsLookupSuccessful" enum="BooleanSuccess"
-    expires_after="2021-03-05">
+    expires_after="2021-05-09">
   <owner>xinghuilu@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>
@@ -1184,7 +1231,7 @@ Safe Browsing lookup mechanism is working as expected -->
 
 <histogram
     name="SafeBrowsing.V4LocalDatabaseManager.TimeSinceLastUpdateResponse"
-    units="ms" expires_after="2021-03-04">
+    units="ms" expires_after="2021-05-09">
   <owner>ajuma@chromium.org</owner>
   <owner>chrome-safebrowsing-alerts@google.com</owner>
   <summary>

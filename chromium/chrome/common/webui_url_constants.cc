@@ -224,6 +224,8 @@ const char kChromeUIArcGraphicsTracingHost[] = "arc-graphics-tracing";
 const char kChromeUIArcGraphicsTracingURL[] = "chrome://arc-graphics-tracing/";
 const char kChromeUIArcOverviewTracingHost[] = "arc-overview-tracing";
 const char kChromeUIArcOverviewTracingURL[] = "chrome://arc-overview-tracing/";
+const char kChromeUIArcPowerControlHost[] = "arc-power-control";
+const char kChromeUIArcPowerControlURL[] = "chrome://arc-power-control/";
 const char kChromeUIAssistantOptInHost[] = "assistant-optin";
 const char kChromeUIAssistantOptInURL[] = "chrome://assistant-optin/";
 const char kChromeUIAppDisabledHost[] = "app-disabled";
@@ -244,7 +246,6 @@ const char kChromeUICrostiniUpgraderHost[] = "crostini-upgrader";
 const char kChromeUICrostiniUpgraderUrl[] = "chrome://crostini-upgrader";
 const char kChromeUICryptohomeHost[] = "cryptohome";
 const char kChromeUIDeviceEmulatorHost[] = "device-emulator";
-const char kChromeUIDiscoverURL[] = "chrome://oobe/discover";
 const char kChromeUIFirstRunHost[] = "first-run";
 const char kChromeUIFirstRunURL[] = "chrome://first-run/";
 const char kChromeUIIntenetConfigDialogURL[] =
@@ -338,17 +339,17 @@ bool IsSystemWebUIHost(base::StringPiece host) {
 }
 #endif  // defined(OS_CHROMEOS)
 
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+const char kChromeUIWebUIJsExceptionHost[] = "webuijsexception";
+const char kChromeUIWebUIJsExceptionURL[] = "chrome://webuijsexception/";
+#endif
+
 #if defined(OS_WIN) || defined(OS_MAC) || defined(OS_LINUX) || \
     defined(OS_CHROMEOS)
 const char kChromeUIDiscardsHost[] = "discards";
 const char kChromeUIDiscardsURL[] = "chrome://discards/";
 const char kChromeUIHatsHost[] = "hats";
 const char kChromeUIHatsURL[] = "chrome://hats/";
-#if !defined(OS_CHROMEOS)
-const char kChromeUIProfilePickerHost[] = "profile-picker";
-const char kChromeUIProfilePickerUrl[] = "chrome://profile-picker/";
-const char kChromeUIProfilePickerStartupQuery[] = "startup";
-#endif
 #endif
 
 #if !defined(OS_ANDROID)
@@ -369,6 +370,12 @@ const char kChromeUISandboxHost[] = "sandbox";
     (defined(OS_LINUX) && !defined(OS_CHROMEOS))
 const char kChromeUIBrowserSwitchHost[] = "browser-switch";
 const char kChromeUIBrowserSwitchURL[] = "chrome://browser-switch/";
+const char kChromeUIProfileCustomizationHost[] = "profile-customization";
+const char kChromeUIProfileCustomizationURL[] =
+    "chrome://profile-customization";
+const char kChromeUIProfilePickerHost[] = "profile-picker";
+const char kChromeUIProfilePickerUrl[] = "chrome://profile-picker/";
+const char kChromeUIProfilePickerStartupQuery[] = "startup";
 #endif
 
 #if ((defined(OS_LINUX) || defined(OS_CHROMEOS)) && defined(TOOLKIT_VIEWS)) || \
@@ -607,6 +614,9 @@ const char* const kChromeDebugURLs[] = {
 #if defined(OS_ANDROID)
     content::kChromeUIGpuJavaCrashURL,
     kChromeUIJavaCrashURL,
+#endif
+#if defined(OS_LINUX) || defined(OS_CHROMEOS)
+    kChromeUIWebUIJsExceptionURL,
 #endif
     kChromeUIQuitURL,
     kChromeUIRestartURL};

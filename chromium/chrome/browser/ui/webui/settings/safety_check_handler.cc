@@ -12,11 +12,13 @@
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/string16.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/passwords_private/passwords_private_delegate_factory.h"
 #include "chrome/browser/password_manager/bulk_leak_check_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/version_ui.h"
 #include "chrome/common/channel_info.h"
+#include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -32,7 +34,9 @@
 #include "ui/base/l10n/l10n_util.h"
 
 #if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#include "base/win/registry.h"
 #include "chrome/browser/safe_browsing/chrome_cleaner/chrome_cleaner_controller_win.h"
+#include "components/chrome_cleaner/public/constants/constants.h"
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -93,7 +97,12 @@ SafetyCheckHandler::UpdateStatus ConvertToUpdateStatus(
 #if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 SafetyCheckHandler::ChromeCleanerStatus ConvertToChromeCleanerStatus(
     safe_browsing::ChromeCleanerController::State state,
-    safe_browsing::ChromeCleanerController::IdleReason idle_reason) {
+    safe_browsing::ChromeCleanerController::IdleReason idle_reason,
+    bool is_allowed_by_policy,
+    bool is_cct_timestamp_known) {
+  if (!is_allowed_by_policy) {
+    return SafetyCheckHandler::ChromeCleanerStatus::kDisabledByAdmin;
+  }
   switch (state) {
     case safe_browsing::ChromeCleanerController::State::kIdle:
       switch (idle_reason) {
@@ -101,18 +110,23 @@ SafetyCheckHandler::ChromeCleanerStatus ConvertToChromeCleanerStatus(
         case safe_browsing::ChromeCleanerController::IdleReason::
             kReporterFoundNothing:
         case safe_browsing::ChromeCleanerController::IdleReason::
-            kReporterFailed:
-        case safe_browsing::ChromeCleanerController::IdleReason::
             kScanningFoundNothing:
+        case safe_browsing::ChromeCleanerController::IdleReason::
+            kCleaningSucceeded:
+          return is_cct_timestamp_known
+                     ? SafetyCheckHandler::ChromeCleanerStatus::
+                           kNoUwsFoundWithTimestamp
+                     : SafetyCheckHandler::ChromeCleanerStatus::
+                           kNoUwsFoundWithoutTimestamp;
+        case safe_browsing::ChromeCleanerController::IdleReason::
+            kReporterFailed:
         case safe_browsing::ChromeCleanerController::IdleReason::
             kScanningFailed:
         case safe_browsing::ChromeCleanerController::IdleReason::
             kCleaningFailed:
         case safe_browsing::ChromeCleanerController::IdleReason::
-            kCleaningSucceeded:
-        case safe_browsing::ChromeCleanerController::IdleReason::
             kCleanerDownloadFailed:
-          return SafetyCheckHandler::ChromeCleanerStatus::kHidden;
+          return SafetyCheckHandler::ChromeCleanerStatus::kError;
         case safe_browsing::ChromeCleanerController::IdleReason::
             kConnectionLost:
         case safe_browsing::ChromeCleanerController::IdleReason::
@@ -121,8 +135,9 @@ SafetyCheckHandler::ChromeCleanerStatus ConvertToChromeCleanerStatus(
       }
     case safe_browsing::ChromeCleanerController::State::kReporterRunning:
     case safe_browsing::ChromeCleanerController::State::kScanning:
+      return SafetyCheckHandler::ChromeCleanerStatus::kScanningForUws;
     case safe_browsing::ChromeCleanerController::State::kCleaning:
-      return SafetyCheckHandler::ChromeCleanerStatus::kHidden;
+      return SafetyCheckHandler::ChromeCleanerStatus::kRemovingUws;
     case safe_browsing::ChromeCleanerController::State::kInfected:
       return SafetyCheckHandler::ChromeCleanerStatus::kInfected;
     case safe_browsing::ChromeCleanerController::State::kRebootRequired:
@@ -130,17 +145,68 @@ SafetyCheckHandler::ChromeCleanerStatus ConvertToChromeCleanerStatus(
   }
 }
 
-SafetyCheckHandler::ChromeCleanerStatus fetchCurrentChromeCleanerStatus() {
-  if (!safe_browsing::ChromeCleanerController::GetInstance()
-           ->IsAllowedByPolicy()) {
-    return SafetyCheckHandler::ChromeCleanerStatus::kHidden;
-  }
-  return ConvertToChromeCleanerStatus(
+SafetyCheckHandler::ChromeCleanerResult fetchChromeCleanerStatus(
+    std::unique_ptr<TimestampDelegate>& timestamp_delegate) {
+  SafetyCheckHandler::ChromeCleanerResult result;
+  result.cct_completion_time =
+      timestamp_delegate->FetchChromeCleanerScanCompletionTimestamp();
+  result.status = ConvertToChromeCleanerStatus(
       safe_browsing::ChromeCleanerController::GetInstance()->state(),
-      safe_browsing::ChromeCleanerController::GetInstance()->idle_reason());
+      safe_browsing::ChromeCleanerController::GetInstance()->idle_reason(),
+      safe_browsing::ChromeCleanerController::GetInstance()
+          ->IsAllowedByPolicy(),
+      !result.cct_completion_time.is_null());
+  return result;
 }
 #endif
 }  // namespace
+
+base::Time TimestampDelegate::GetSystemTime() {
+  return base::Time::Now();
+}
+
+#if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+base::Time TimestampDelegate::FetchChromeCleanerScanCompletionTimestamp() {
+  // TODO(crbug.com/1139806): The cleaner scan completion timestamp is not
+  // always written to the registry. As a workaround, it is also written to a
+  // pref. This ensures that the timestamp is preserved in case Chrome is still
+  // opened when the scan completes. Remove this workaround once the timestamp
+  // is written to the registry in all cases.
+  const base::Time end_time_from_prefs =
+      g_browser_process->local_state()->GetTime(
+          prefs::kChromeCleanerScanCompletionTime);
+
+  // Read the scan completion timestamp from the registry, if it exists there.
+  base::win::RegKey reporter_key;
+  int64_t end_time = 0;
+  if (reporter_key.Open(HKEY_CURRENT_USER,
+                        chrome_cleaner::kSoftwareRemovalToolRegistryKey,
+                        KEY_QUERY_VALUE | KEY_SET_VALUE) != ERROR_SUCCESS ||
+      reporter_key.ReadInt64(chrome_cleaner::kEndTimeValueName, &end_time) !=
+          ERROR_SUCCESS) {
+    // TODO(crbug.com/1139806): Part of the above workaround. If the registry
+    // does not contain the timestamp but the pref does, then return the one
+    // from the pref.
+    if (!end_time_from_prefs.is_null()) {
+      return end_time_from_prefs;
+    }
+    // Reading failed. Return 'null' time.
+    return base::Time();
+  }
+
+  // TODO(crbug.com/1139806): Part of the above workaround. If the timestamp in
+  // prefs is null or older than the one from the registry, then return the one
+  // from the registry. Otherwise return the one from prefs.
+  base::Time end_time_from_registry = base::Time::FromDeltaSinceWindowsEpoch(
+      base::TimeDelta::FromMicroseconds(end_time));
+  if (end_time_from_prefs.is_null() ||
+      end_time_from_prefs < end_time_from_registry) {
+    return end_time_from_registry;
+  } else {
+    return end_time_from_prefs;
+  }
+}
+#endif
 
 SafetyCheckHandler::SafetyCheckHandler() = default;
 
@@ -156,6 +222,12 @@ SafetyCheckHandler::~SafetyCheckHandler() {
 void SafetyCheckHandler::SendSafetyCheckStartedWebUiUpdates() {
   AllowJavascript();
 
+  // Ensure necessary delegates and helpers exist.
+  if (!timestamp_delegate_) {
+    timestamp_delegate_ = std::make_unique<TimestampDelegate>();
+  }
+  DCHECK(timestamp_delegate_);
+
   // Reset status of parent and children, which might have been set from a
   // previous run of safety check.
   parent_status_ = ParentStatus::kChecking;
@@ -166,7 +238,7 @@ void SafetyCheckHandler::SendSafetyCheckStartedWebUiUpdates() {
 #if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
   // If the Chrome cleaner status results in the child being hidden,
   // then also hide it already in the "running" state.
-  if (fetchCurrentChromeCleanerStatus() ==
+  if (fetchChromeCleanerStatus(timestamp_delegate_).status ==
       SafetyCheckHandler::ChromeCleanerStatus::kHidden) {
     chrome_cleaner_status_ = SafetyCheckHandler::ChromeCleanerStatus::kHidden;
   } else {
@@ -190,9 +262,11 @@ void SafetyCheckHandler::SendSafetyCheckStartedWebUiUpdates() {
       GetStringForExtensions(extensions_status_, Blocklisted(0),
                              ReenabledUser(0), ReenabledAdmin(0)));
 #if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  // Construct string without timestamp, using "null time" via |base::Time()|.
   FireBasicSafetyCheckWebUiListener(
       kChromeCleanerEvent, static_cast<int>(chrome_cleaner_status_),
-      GetStringForChromeCleaner(chrome_cleaner_status_));
+      GetStringForChromeCleaner(chrome_cleaner_status_, base::Time(),
+                                base::Time()));
 #endif
   // Parent update is last as it reveals the children elements.
   FireBasicSafetyCheckWebUiListener(kParentEvent,
@@ -261,13 +335,15 @@ SafetyCheckHandler::SafetyCheckHandler(
     password_manager::BulkLeakCheckService* leak_service,
     extensions::PasswordsPrivateDelegate* passwords_delegate,
     extensions::ExtensionPrefs* extension_prefs,
-    extensions::ExtensionServiceInterface* extension_service)
+    extensions::ExtensionServiceInterface* extension_service,
+    std::unique_ptr<TimestampDelegate> timestamp_delegate)
     : update_helper_(std::move(update_helper)),
       version_updater_(std::move(version_updater)),
       leak_service_(leak_service),
       passwords_delegate_(passwords_delegate),
       extension_prefs_(extension_prefs),
-      extension_service_(extension_service) {}
+      extension_service_(extension_service),
+      timestamp_delegate_(std::move(timestamp_delegate)) {}
 
 void SafetyCheckHandler::HandlePerformSafetyCheck(const base::ListValue* args) {
   SendSafetyCheckStartedWebUiUpdates();
@@ -287,6 +363,22 @@ void SafetyCheckHandler::HandleGetParentRanDisplayString(
   const base::Value* callback_id;
   CHECK(args->Get(0, &callback_id));
 
+  // Send updated timestamp-based display strings to all SC children who have
+  // such strings.
+#if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+  // String update for Chrome Cleaner.
+  base::DictionaryValue event;
+  event.SetIntKey(kNewState, static_cast<int>(chrome_cleaner_status_));
+  event.SetStringKey(
+      kDisplayString,
+      GetStringForChromeCleaner(
+          chrome_cleaner_status_,
+          timestamp_delegate_->FetchChromeCleanerScanCompletionTimestamp(),
+          timestamp_delegate_->GetSystemTime()));
+  FireWebUIListener(kChromeCleanerEvent, event);
+#endif
+
+  // String update for the parent.
   ResolveJavascriptCallback(
       *callback_id,
       base::Value(GetStringForParentRan(safety_check_completion_time_)));
@@ -372,9 +464,22 @@ void SafetyCheckHandler::CheckExtensions() {
 
 #if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 void SafetyCheckHandler::CheckChromeCleaner() {
-  // Registering the observer immediately triggers a callback with the
-  // current state.
-  safe_browsing::ChromeCleanerController::GetInstance()->AddObserver(this);
+  if (safe_browsing::ChromeCleanerController::GetInstance()->HasObserver(
+          this)) {
+    // Observer already registered. Just fetch the current CCT status.
+    OnChromeCleanerCheckResult(fetchChromeCleanerStatus(timestamp_delegate_));
+  } else {
+    // Registering the observer immediately triggers a callback with the
+    // current state.
+    safe_browsing::ChromeCleanerController::GetInstance()->AddObserver(this);
+  }
+  // Log the current status into metrics.
+  if (chrome_cleaner_status_ != ChromeCleanerStatus::kHidden &&
+      chrome_cleaner_status_ != ChromeCleanerStatus::kChecking) {
+    base::UmaHistogramEnumeration("Settings.SafetyCheck.ChromeCleanerResult",
+                                  chrome_cleaner_status_);
+  }
+  CompleteParentIfChildrenCompleted();
 }
 #endif
 
@@ -444,18 +549,15 @@ void SafetyCheckHandler::OnExtensionsCheckResult(
 
 #if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 void SafetyCheckHandler::OnChromeCleanerCheckResult(
-    ChromeCleanerStatus status) {
+    SafetyCheckHandler::ChromeCleanerResult result) {
   base::DictionaryValue event;
-  event.SetIntKey(kNewState, static_cast<int>(status));
-  event.SetStringKey(kDisplayString, GetStringForChromeCleaner(status));
+  event.SetIntKey(kNewState, static_cast<int>(result.status));
+  event.SetStringKey(
+      kDisplayString,
+      GetStringForChromeCleaner(result.status, result.cct_completion_time,
+                                timestamp_delegate_->GetSystemTime()));
   FireWebUIListener(kChromeCleanerEvent, event);
-  if (status != ChromeCleanerStatus::kHidden &&
-      status != ChromeCleanerStatus::kChecking) {
-    base::UmaHistogramEnumeration("Settings.SafetyCheck.ChromeCleanerResult",
-                                  status);
-  }
-  chrome_cleaner_status_ = status;
-  CompleteParentIfChildrenCompleted();
+  chrome_cleaner_status_ = result.status;
 }
 #endif
 
@@ -626,7 +728,9 @@ base::string16 SafetyCheckHandler::GetStringForExtensions(
 
 #if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 base::string16 SafetyCheckHandler::GetStringForChromeCleaner(
-    ChromeCleanerStatus status) {
+    ChromeCleanerStatus status,
+    base::Time cct_completion_time,
+    base::Time system_time) {
   switch (status) {
     case ChromeCleanerStatus::kHidden:
     case ChromeCleanerStatus::kChecking:
@@ -637,6 +741,25 @@ base::string16 SafetyCheckHandler::GetStringForChromeCleaner(
     case ChromeCleanerStatus::kRebootRequired:
       return l10n_util::GetStringUTF16(
           IDS_SETTINGS_RESET_CLEANUP_TITLE_RESTART);
+    case ChromeCleanerStatus::kScanningForUws:
+      return l10n_util::GetStringUTF16(
+          IDS_SETTINGS_SAFETY_CHECK_CHROME_CLEANER_SCANNING);
+    case ChromeCleanerStatus::kRemovingUws:
+      return l10n_util::GetStringUTF16(
+          IDS_SETTINGS_SAFETY_CHECK_CHROME_CLEANER_REMOVING);
+    case ChromeCleanerStatus::kDisabledByAdmin:
+      return l10n_util::GetStringFUTF16(
+          IDS_SETTINGS_SAFETY_CHECK_CHROME_CLEANER_DISABLED_BY_ADMIN,
+          base::ASCIIToUTF16(chrome::kWhoIsMyAdministratorHelpURL));
+    case ChromeCleanerStatus::kError:
+      return l10n_util::GetStringUTF16(
+          IDS_SETTINGS_SAFETY_CHECK_CHROME_CLEANER_ERROR);
+    case ChromeCleanerStatus::kNoUwsFoundWithTimestamp:
+      return SafetyCheckHandler::GetStringForChromeCleanerRan(
+          cct_completion_time, system_time);
+    case ChromeCleanerStatus::kNoUwsFoundWithoutTimestamp:
+      return l10n_util::GetStringUTF16(
+          IDS_SETTINGS_SAFETY_CHECK_CHROME_CLEANER_NO_UWS_WITHOUT_TIMESTAMP);
   }
 }
 #endif
@@ -711,28 +834,20 @@ base::string16 SafetyCheckHandler::GetStringForParentRan(
 }
 
 #if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
-base::string16 SafetyCheckHandler::GetStringForChromeCleanerRan() {
-  base::Time cct_completion_time;
-  // TODO(crbug.com/1087263): If FOIL completion time exists in Windows Registry
-  // write it to |cct_completion_time|.
-  return SafetyCheckHandler::GetStringForChromeCleanerRan(cct_completion_time,
-                                                          base::Time::Now());
-}
-
 base::string16 SafetyCheckHandler::GetStringForChromeCleanerRan(
     base::Time cct_completion_time,
     base::Time system_time) {
   if (cct_completion_time.is_null()) {
     return l10n_util::GetStringUTF16(
-        IDS_SETTINGS_SAFETY_CHECK_CHROME_CLEANER_AFTER);
+        IDS_SETTINGS_SAFETY_CHECK_CHROME_CLEANER_NO_UWS_WITHOUT_TIMESTAMP);
   }
   return SafetyCheckHandler::GetStringForTimePassed(
       cct_completion_time, system_time,
-      IDS_SETTINGS_SAFETY_CHECK_CHROME_CLEANER_AFTER_SECONDS,
-      IDS_SETTINGS_SAFETY_CHECK_CHROME_CLEANER_AFTER_MINUTES,
-      IDS_SETTINGS_SAFETY_CHECK_CHROME_CLEANER_AFTER_HOURS,
-      IDS_SETTINGS_SAFETY_CHECK_CHROME_CLEANER_YESTERDAY,
-      IDS_SETTINGS_SAFETY_CHECK_CHROME_CLEANER_AFTER_DAYS);
+      IDS_SETTINGS_SAFETY_CHECK_CHROME_CLEANER_NO_UWS_WITH_TIMESTAMP_AFTER_SECONDS,
+      IDS_SETTINGS_SAFETY_CHECK_CHROME_CLEANER_NO_UWS_WITH_TIMESTAMP_AFTER_MINUTES,
+      IDS_SETTINGS_SAFETY_CHECK_CHROME_CLEANER_NO_UWS_WITH_TIMESTAMP_AFTER_HOURS,
+      IDS_SETTINGS_SAFETY_CHECK_CHROME_CLEANER_NO_UWS_WITH_TIMESTAMP_YESTERDAY,
+      IDS_SETTINGS_SAFETY_CHECK_CHROME_CLEANER_NO_UWS_WITH_TIMESTAMP_AFTER_DAYS);
 }
 #endif
 
@@ -879,35 +994,35 @@ void SafetyCheckHandler::OnCompromisedCredentialsChanged(
 #if defined(OS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
 void SafetyCheckHandler::OnIdle(
     safe_browsing::ChromeCleanerController::IdleReason idle_reason) {
-  OnChromeCleanerCheckResult(fetchCurrentChromeCleanerStatus());
+  OnChromeCleanerCheckResult(fetchChromeCleanerStatus(timestamp_delegate_));
 }
 
 void SafetyCheckHandler::OnReporterRunning() {
-  OnChromeCleanerCheckResult(fetchCurrentChromeCleanerStatus());
+  OnChromeCleanerCheckResult(fetchChromeCleanerStatus(timestamp_delegate_));
 }
 
 void SafetyCheckHandler::OnScanning() {
-  OnChromeCleanerCheckResult(fetchCurrentChromeCleanerStatus());
+  OnChromeCleanerCheckResult(fetchChromeCleanerStatus(timestamp_delegate_));
 }
 
 void SafetyCheckHandler::OnInfected(
     bool is_powered_by_partner,
     const safe_browsing::ChromeCleanerScannerResults& scanner_results) {
-  OnChromeCleanerCheckResult(fetchCurrentChromeCleanerStatus());
+  OnChromeCleanerCheckResult(fetchChromeCleanerStatus(timestamp_delegate_));
 }
 
 void SafetyCheckHandler::OnCleaning(
     bool is_powered_by_partner,
     const safe_browsing::ChromeCleanerScannerResults& scanner_results) {
-  OnChromeCleanerCheckResult(fetchCurrentChromeCleanerStatus());
+  OnChromeCleanerCheckResult(fetchChromeCleanerStatus(timestamp_delegate_));
 }
 
 void SafetyCheckHandler::OnRebootRequired() {
-  OnChromeCleanerCheckResult(fetchCurrentChromeCleanerStatus());
+  OnChromeCleanerCheckResult(fetchChromeCleanerStatus(timestamp_delegate_));
 }
 
 void SafetyCheckHandler::OnRebootFailed() {
-  OnChromeCleanerCheckResult(fetchCurrentChromeCleanerStatus());
+  OnChromeCleanerCheckResult(fetchChromeCleanerStatus(timestamp_delegate_));
 }
 #endif
 

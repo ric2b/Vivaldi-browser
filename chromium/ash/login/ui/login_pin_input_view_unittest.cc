@@ -5,6 +5,7 @@
 #include "ash/login/ui/login_pin_input_view.h"
 #include <memory>
 #include <string>
+#include "ash/login/ui/login_palette.h"
 #include "ash/login/ui/login_test_base.h"
 #include "base/bind.h"
 #include "base/optional.h"
@@ -12,6 +13,7 @@
 #include "base/strings/string16.h"
 #include "ui/accessibility/ax_enums.mojom-shared.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/events/test/event_generator.h"
 #include "ui/views/widget/widget.h"
 
 namespace ash {
@@ -31,7 +33,7 @@ class LoginPinInputViewTest
 
   void SetUp() override {
     LoginTestBase::SetUp();
-    view_ = new LoginPinInputView();
+    view_ = new LoginPinInputView(CreateDefaultLoginPalette());
     view_->Init(base::BindRepeating(&LoginPinInputViewTest::OnPinSubmit,
                                     base::Unretained(this)),
                 base::BindRepeating(&LoginPinInputViewTest::OnPinChanged,
@@ -79,6 +81,23 @@ class LoginPinInputViewTest
   base::Optional<base::string16> submitted_pin_;
   base::Optional<bool> is_empty_;
 };
+
+// Verifies that pressing 'Return' on the PIN input field triggers an
+// unlock attempt by calling OnSubmit with an empty PIN.
+TEST_P(LoginPinInputViewTest, PressingReturnTriggersUnlockWithEmptyPin) {
+  // Hitting 'Return' should not trigger 'OnSubmit' with an empty PIN when not
+  // allowed.
+  view_->SetAuthenticateWithEmptyPinOnReturnKey(false);
+  ui::test::EventGenerator* generator = GetEventGenerator();
+  generator->PressKey(ui::KeyboardCode::VKEY_RETURN, 0);
+  ASSERT_FALSE(submitted_pin_.has_value());
+
+  // Hitting 'Return' should trigger 'OnSubmit' with an empty PIN.
+  view_->SetAuthenticateWithEmptyPinOnReturnKey(true);
+  generator->PressKey(ui::KeyboardCode::VKEY_RETURN, 0);
+  ASSERT_TRUE(submitted_pin_.has_value());
+  EXPECT_EQ(base::ASCIIToUTF16(""), *submitted_pin_);
+}
 
 // Tests that ChromeVox announces "Enter your PIN" when the
 // field gets focused

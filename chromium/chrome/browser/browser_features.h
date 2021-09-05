@@ -18,6 +18,8 @@ namespace features {
 
 extern const base::Feature kClosedTabCache;
 
+extern const base::Feature kDestroyProfileOnBrowserClose;
+
 extern const base::Feature kPromoBrowserCommands;
 extern const char kPromoBrowserCommandIdParam[];
 
@@ -28,7 +30,7 @@ extern const base::Feature kDoubleTapToZoomInTabletMode;
 #if !defined(OS_ANDROID)
 extern const base::Feature kCopyLinkToText;
 extern const base::Feature kMuteNotificationsDuringScreenShare;
-extern const base::Feature kNearbySharing;
+extern const base::Feature kShutdownSupportForKeepalive;
 #endif
 
 #if defined(OS_MAC)

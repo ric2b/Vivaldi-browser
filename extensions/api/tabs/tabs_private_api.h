@@ -12,14 +12,13 @@
 #include "base/scoped_observer.h"
 #include "chrome/browser/extensions/api/tabs/tabs_api.h"
 #include "chrome/browser/ui/tabs/tab_change_type.h"
-#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "components/content_settings/core/common/content_settings.h"
-#include "components/javascript_dialogs/app_modal_dialog_controller.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/zoom/zoom_observer.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/common/drop_data.h"
+#include "content/public/renderer/render_frame_observer.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/extension_event_histogram_value.h"
 #include "extensions/browser/extension_function.h"
@@ -38,46 +37,15 @@ typedef base::OnceCallback<void(
 typedef base::OnceCallback<void(int, int)>
     GetScrollPositionCallback;
 
-class TabStripModelObserver;
-
 namespace extensions {
 
-class VivaldiTabsPrivateApiNotification;
-
-class TabsPrivateAPI : public BrowserContextKeyedAPI,
-                       public TabStripModelObserver,
-                       public javascript_dialogs::AppModalDialogObserver {
+class TabsPrivateAPI {
  public:
-  explicit TabsPrivateAPI(content::BrowserContext* context);
-  ~TabsPrivateAPI() override;
+  static void Init();
 
-  static TabsPrivateAPI* FromBrowserContext(
-      content::BrowserContext* browser_context);
-
-  // KeyedService implementation.
-  void Shutdown() override;
-
-  // BrowserContextKeyedAPI implementation.
-  static BrowserContextKeyedAPIFactory<TabsPrivateAPI>* GetFactoryInstance();
-
- private:
-  friend class VivaldiEventHooksImpl;
-  friend class BrowserContextKeyedAPIFactory<TabsPrivateAPI>;
-
-  // TabStripModelObserver implementation
-  void TabChangedAt(content::WebContents* contents,
-                    int index,
-                    TabChangeType change_type) override;
-
-  // javascript_dialogs::AppModalDialogObserver implementation
-  void Notify(javascript_dialogs::AppModalDialogController* dialog) override;
-
-  // BrowserContextKeyedAPI implementation.
-  static const char* service_name() { return "TabsPrivateAPI"; }
-  static const bool kServiceIsNULLWhileTesting = true;
-  static const bool kServiceRedirectedInIncognito = true;
-
-  DISALLOW_COPY_AND_ASSIGN(TabsPrivateAPI);
+  static void NotifyTabChange(content::WebContents* web_contents,
+                              int index,
+                              TabChangeType change_type);
 };
 
 // Tab contents observer that forward private settings to any new renderer.
@@ -104,13 +72,14 @@ class VivaldiPrivateTabObserver
   void RenderViewHostChanged(content::RenderViewHost* old_host,
                              content::RenderViewHost* new_host) override;
   void WebContentsDestroyed() override;
-  bool OnMessageReceived(const IPC::Message& message) override;
   void DidFinishLoad(content::RenderFrameHost* render_frame_host,
                              const GURL& validated_url) override;
   void WebContentsDidDetach() override;
   void WebContentsDidAttach() override;
   void BeforeUnloadFired(bool proceed,
                          const base::TimeTicks& proceed_time) override;
+  bool OnMessageReceived(const IPC::Message& message,
+                         content::RenderFrameHost* render_frame_host) override;
 
   void SetShowImages(bool show_images);
   void SetLoadFromCacheOnly(bool load_from_cache_only);

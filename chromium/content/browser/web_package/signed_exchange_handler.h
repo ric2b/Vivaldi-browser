@@ -17,6 +17,7 @@
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "net/base/io_buffer.h"
+#include "net/base/network_isolation_key.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/cert_verify_result.h"
 #include "net/log/net_log_with_source.h"
@@ -94,6 +95,7 @@ class CONTENT_EXPORT SignedExchangeHandler {
       std::unique_ptr<net::SourceStream> body,
       ExchangeHeadersCallback headers_callback,
       std::unique_ptr<SignedExchangeCertFetcherFactory> cert_fetcher_factory,
+      const net::NetworkIsolationKey& network_isolation_key,
       int load_flags,
       std::unique_ptr<blink::WebPackageRequestMatcher> request_matcher,
       std::unique_ptr<SignedExchangeDevToolsProxy> devtools_proxy,
@@ -143,9 +145,7 @@ class CONTENT_EXPORT SignedExchangeHandler {
       const net::X509Certificate* verified_cert);
   bool CheckOCSPStatus(const net::OCSPVerifyResult& ocsp_result);
 
-  void OnVerifyCert(int32_t error_code,
-                    const net::CertVerifyResult& cv_result,
-                    const net::ct::CTVerifyResult& ct_result);
+  void OnVerifyCert(int32_t error_code, const net::CertVerifyResult& cv_result);
   std::unique_ptr<net::SourceStream> CreateResponseBodyStream();
 
   const bool is_secure_transport_;
@@ -168,6 +168,7 @@ class CONTENT_EXPORT SignedExchangeHandler {
 
   std::unique_ptr<SignedExchangeCertFetcherFactory> cert_fetcher_factory_;
   std::unique_ptr<SignedExchangeCertFetcher> cert_fetcher_;
+  const net::NetworkIsolationKey network_isolation_key_;
   const int load_flags_;
 
   std::unique_ptr<SignedExchangeCertificateChain> unverified_cert_chain_;

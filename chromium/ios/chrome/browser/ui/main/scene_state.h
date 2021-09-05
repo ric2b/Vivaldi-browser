@@ -89,6 +89,10 @@ typedef NS_ENUM(NSUInteger, SceneActivationLevel) {
 // When this is YES, the scene is showing the modal overlay.
 @property(nonatomic, assign) BOOL presentingModalOverlay;
 
+// When this is YES, the scene either resumed or started up in response to an
+// external intent.
+@property(nonatomic, assign) BOOL startupHadExternalIntent;
+
 // URLs passed to |UIWindowSceneDelegate scene:openURLContexts:| that needs to
 // be open next time the scene is activated.
 // Setting the property to not nil will add the new URL contexts to the set.
@@ -112,6 +116,17 @@ typedef NS_ENUM(NSUInteger, SceneActivationLevel) {
 
 // Adds a new agent. Agents are owned by the scene state.
 - (void)addAgent:(id<SceneAgent>)agent;
+
+// Array of all agents added to this scene state.
+- (NSArray*)connectedAgents;
+
+// Retrieves per-session preference for |key|. May return nil if the key is
+// not found.
+- (NSObject*)sessionObjectForKey:(NSString*)key;
+
+// Stores |object| as a per-session preference if supported by the device or
+// into NSUserDefaults otherwise (old table, phone, ...).
+- (void)setSessionObject:(NSObject*)object forKey:(NSString*)key;
 
 @end
 

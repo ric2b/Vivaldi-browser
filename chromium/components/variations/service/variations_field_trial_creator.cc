@@ -163,8 +163,7 @@ std::string VariationsFieldTrialCreator::GetLatestCountry() const {
 }
 
 bool VariationsFieldTrialCreator::CreateTrialsFromSeed(
-    std::unique_ptr<const base::FieldTrial::EntropyProvider>
-        low_entropy_provider,
+    const base::FieldTrial::EntropyProvider& low_entropy_provider,
     base::FeatureList* feature_list,
     SafeSeedManager* safe_seed_manager) {
   TRACE_EVENT0("startup", "VariationsFieldTrialCreator::CreateTrialsFromSeed");
@@ -206,7 +205,7 @@ bool VariationsFieldTrialCreator::CreateTrialsFromSeed(
       seed, *client_filterable_state,
       base::BindRepeating(&VariationsFieldTrialCreator::OverrideUIString,
                           base::Unretained(this)),
-      low_entropy_provider.get(), feature_list);
+      low_entropy_provider, feature_list);
 
   // Store into the |safe_seed_manager| the combined server and client data used
   // to create the field trials. But, as an optimization, skip this step when
@@ -432,7 +431,8 @@ bool VariationsFieldTrialCreator::SetupFieldTrials(
         low_entropy_provider,
     std::unique_ptr<base::FeatureList> feature_list,
     PlatformFieldTrials* platform_field_trials,
-    SafeSeedManager* safe_seed_manager) {
+    SafeSeedManager* safe_seed_manager,
+    base::Optional<int> low_entropy_source_value) {
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kEnableBenchmarking) ||
@@ -468,11 +468,13 @@ bool VariationsFieldTrialCreator::SetupFieldTrials(
 
   VariationsIdsProvider* http_header_provider =
       VariationsIdsProvider::GetInstance();
+  http_header_provider->SetLowEntropySourceValue(low_entropy_source_value);
   // Force the variation ids selected in chrome://flags and/or specified using
   // the command-line flag.
   auto result = http_header_provider->ForceVariationIds(
       variation_ids,
       command_line->GetSwitchValueASCII(switches::kForceVariationIds));
+
   switch (result) {
     case VariationsIdsProvider::ForceIdsResult::INVALID_SWITCH_ENTRY:
       ExitWithMessage(base::StringPrintf("Invalid --%s list specified.",
@@ -521,12 +523,12 @@ bool VariationsFieldTrialCreator::SetupFieldTrials(
 #endif  // BUILDFLAG(FIELDTRIAL_TESTING_ENABLED)
   bool used_seed = false;
   if (!used_testing_config) {
-    used_seed = CreateTrialsFromSeed(std::move(low_entropy_provider),
-                                     feature_list.get(), safe_seed_manager);
+    used_seed = CreateTrialsFromSeed(*low_entropy_provider, feature_list.get(),
+                                     safe_seed_manager);
   }
 
-  platform_field_trials->SetupFeatureControllingFieldTrials(used_seed,
-                                                            feature_list.get());
+  platform_field_trials->SetupFeatureControllingFieldTrials(
+      used_seed, *low_entropy_provider, feature_list.get());
 
   base::FeatureList::SetInstance(std::move(feature_list));
 

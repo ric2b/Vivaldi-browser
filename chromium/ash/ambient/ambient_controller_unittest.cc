@@ -14,7 +14,7 @@
 #include "ash/shell.h"
 #include "ash/system/power/power_status.h"
 #include "base/run_loop.h"
-#include "base/test/bind_test_util.h"
+#include "base/test/bind.h"
 #include "base/time/time.h"
 #include "chromeos/dbus/power/fake_power_manager_client.h"
 #include "chromeos/dbus/power/power_manager_client.h"
@@ -48,7 +48,7 @@ TEST_F(AmbientControllerTest, ShowAmbientScreenUponLock) {
 
   // Ambient mode will show after inacivity and successfully loading first
   // image.
-  FastForwardToInactivity();
+  FastForwardToLockScreenTimeout();
   FastForwardTiny();
 
   EXPECT_TRUE(container_view());
@@ -70,7 +70,7 @@ TEST_F(AmbientControllerTest, NotShowAmbientWhenPrefNotEnabled) {
 
   // Ambient mode will not show after inacivity and successfully loading first
   // image.
-  FastForwardToInactivity();
+  FastForwardToLockScreenTimeout();
   FastForwardTiny();
 
   EXPECT_FALSE(container_view());
@@ -85,7 +85,7 @@ TEST_F(AmbientControllerTest, NotShowAmbientWhenPrefNotEnabled) {
 
 TEST_F(AmbientControllerTest, HideAmbientScreen) {
   LockScreen();
-  FastForwardToInactivity();
+  FastForwardToLockScreenTimeout();
   FastForwardTiny();
 
   EXPECT_TRUE(container_view());
@@ -106,7 +106,7 @@ TEST_F(AmbientControllerTest, HideAmbientScreen) {
 
 TEST_F(AmbientControllerTest, CloseAmbientScreenUponUnlock) {
   LockScreen();
-  FastForwardToInactivity();
+  FastForwardToLockScreenTimeout();
   FastForwardTiny();
 
   EXPECT_TRUE(container_view());
@@ -130,7 +130,7 @@ TEST_F(AmbientControllerTest, CloseAmbientScreenUponUnlockSecondaryUser) {
   SetAmbientModeEnabled(true);
 
   LockScreen();
-  FastForwardToInactivity();
+  FastForwardToLockScreenTimeout();
   FastForwardTiny();
 
   EXPECT_TRUE(container_view());
@@ -145,7 +145,7 @@ TEST_F(AmbientControllerTest, CloseAmbientScreenUponUnlockSecondaryUser) {
   // The view should be destroyed along the widget.
   EXPECT_FALSE(container_view());
 
-  FastForwardToInactivity();
+  FastForwardToLockScreenTimeout();
   FastForwardTiny();
   EXPECT_EQ(AmbientUiModel::Get()->ui_visibility(),
             AmbientUiVisibility::kClosed);
@@ -161,7 +161,7 @@ TEST_F(AmbientControllerTest, NotShowAmbientWhenLockSecondaryUser) {
   SetAmbientModeEnabled(true);
 
   LockScreen();
-  FastForwardToInactivity();
+  FastForwardToLockScreenTimeout();
   FastForwardTiny();
 
   EXPECT_TRUE(container_view());
@@ -170,6 +170,10 @@ TEST_F(AmbientControllerTest, NotShowAmbientWhenLockSecondaryUser) {
   EXPECT_TRUE(ambient_controller()->IsShown());
 
   SimulateUserLogin(kUser2);
+  SetAmbientModeEnabled(true);
+
+  // Ambient mode should not show for second user even if that user has the pref
+  // turned on.
   EXPECT_EQ(AmbientUiModel::Get()->ui_visibility(),
             AmbientUiVisibility::kClosed);
   EXPECT_FALSE(ambient_controller()->IsShown());
@@ -177,7 +181,7 @@ TEST_F(AmbientControllerTest, NotShowAmbientWhenLockSecondaryUser) {
   EXPECT_FALSE(container_view());
 
   LockScreen();
-  FastForwardToInactivity();
+  FastForwardToLockScreenTimeout();
   FastForwardTiny();
 
   EXPECT_EQ(AmbientUiModel::Get()->ui_visibility(),
@@ -369,7 +373,7 @@ TEST_F(AmbientControllerTest,
   // Lock screen to start ambient mode, and flush the loop to ensure
   // the acquire wake lock request has reached the wake lock provider.
   LockScreen();
-  FastForwardToInactivity();
+  FastForwardToLockScreenTimeout();
   FastForwardTiny();
 
   EXPECT_EQ(1, GetNumOfActiveWakeLocks(
@@ -382,7 +386,7 @@ TEST_F(AmbientControllerTest,
                    device::mojom::WakeLockType::kPreventDisplaySleep));
 
   // Ambient screen showup again after inactivity.
-  FastForwardToInactivity();
+  FastForwardToLockScreenTimeout();
 
   EXPECT_EQ(1, GetNumOfActiveWakeLocks(
                    device::mojom::WakeLockType::kPreventDisplaySleep));
@@ -400,7 +404,7 @@ TEST_F(AmbientControllerTest,
   SetPowerStateDischarging();
   // Lock screen to start ambient mode.
   LockScreen();
-  FastForwardToInactivity();
+  FastForwardToLockScreenTimeout();
   FastForwardTiny();
 
   EXPECT_TRUE(ambient_controller()->IsShown());
@@ -481,7 +485,7 @@ TEST_F(AmbientControllerTest, ShouldDismissContainerViewOnEvents) {
 
 TEST_F(AmbientControllerTest, ShouldDismissAndThenComesBack) {
   LockScreen();
-  FastForwardToInactivity();
+  FastForwardToLockScreenTimeout();
   FastForwardTiny();
   EXPECT_TRUE(container_view()->GetWidget()->IsVisible());
 
@@ -490,7 +494,7 @@ TEST_F(AmbientControllerTest, ShouldDismissAndThenComesBack) {
   ambient_controller()->OnUserActivity(&key_event);
   EXPECT_FALSE(container_view());
 
-  FastForwardToInactivity();
+  FastForwardToLockScreenTimeout();
   FastForwardTiny();
   EXPECT_TRUE(container_view()->GetWidget()->IsVisible());
 }
@@ -563,7 +567,7 @@ TEST_F(AmbientControllerTest,
   EXPECT_FALSE(IsLocked());
   EXPECT_FALSE(ambient_controller()->IsShown());
 
-  FastForwardToInactivity();
+  FastForwardToLockScreenTimeout();
   FastForwardTiny();
   EXPECT_TRUE(ambient_controller()->IsShown());
 
@@ -632,7 +636,7 @@ TEST_F(AmbientControllerTest,
   SetScreenIdleStateAndWait(/*dimmed=*/true, /*off=*/false);
   EXPECT_FALSE(IsLocked());
 
-  FastForwardToInactivity();
+  FastForwardToLockScreenTimeout();
   FastForwardTiny();
   EXPECT_TRUE(ambient_controller()->IsShown());
 
@@ -642,7 +646,7 @@ TEST_F(AmbientControllerTest,
   // Should dismiss ambient mode screen.
   SetScreenBrightnessAndWait(/*percent=*/0);
   SetScreenIdleStateAndWait(/*dimmed=*/true, /*off=*/true);
-  FastForwardToInactivity();
+  FastForwardToLockScreenTimeout();
   FastForwardTiny();
   EXPECT_FALSE(ambient_controller()->IsShown());
 
@@ -653,7 +657,7 @@ TEST_F(AmbientControllerTest,
   EXPECT_TRUE(IsLocked());
   EXPECT_FALSE(ambient_controller()->IsShown());
 
-  FastForwardToInactivity();
+  FastForwardToLockScreenTimeout();
   FastForwardTiny();
   EXPECT_TRUE(ambient_controller()->IsShown());
 }
@@ -665,7 +669,7 @@ TEST_F(AmbientControllerTest, HideCursor) {
   cursor_manager->ShowCursor();
   EXPECT_TRUE(cursor_manager->IsCursorVisible());
 
-  FastForwardToInactivity();
+  FastForwardToLockScreenTimeout();
   FastForwardTiny();
 
   EXPECT_TRUE(container_view());

@@ -20,6 +20,7 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/mac/mac_logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/sys_byteorder.h"
 #include "media/base/video_frame.h"
 #include "media/base/async_destroy_video_decoder.h"

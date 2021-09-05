@@ -12,6 +12,7 @@
 #include "build/build_config.h"
 #include "cc/base/switches.h"
 #include "components/viz/common/features.h"
+#include "components/viz/common/switches.h"
 #include "components/viz/common/viz_utils.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/gpu/gpu_process_host.h"
@@ -45,6 +46,13 @@ void KillGpuProcessImpl(content::GpuProcessHost* host) {
   if (host) {
     host->ForceShutdown();
   }
+}
+
+bool GetUintFromSwitch(const base::CommandLine* command_line,
+                       const base::StringPiece& switch_string,
+                       uint32_t* value) {
+  std::string switch_value(command_line->GetSwitchValueASCII(switch_string));
+  return base::StringToUint(switch_value, value);
 }
 
 }  // namespace
@@ -99,6 +107,8 @@ const gpu::GpuPreferences GetGpuPreferencesFromCommandLine() {
 
   gpu_preferences.enable_oop_rasterization_ddl =
       base::FeatureList::IsEnabled(features::kOopRasterizationDDL);
+  gpu_preferences.enable_vulkan_protected_memory =
+      command_line->HasSwitch(switches::kEnableVulkanProtectedMemory);
   gpu_preferences.enforce_vulkan_protected_memory =
       command_line->HasSwitch(switches::kEnforceVulkanProtectedMemory);
   gpu_preferences.disable_vulkan_fallback_to_gl_for_testing =
@@ -127,6 +137,15 @@ const gpu::GpuPreferences GetGpuPreferencesFromCommandLine() {
   gpu_preferences.disable_oopr_debug_crash_dump =
       command_line->HasSwitch(switches::kDisableOoprDebugCrashDump);
 #endif
+
+  if (GetUintFromSwitch(command_line, switches::kVulkanHeapMemoryLimitMb,
+                        &gpu_preferences.vulkan_heap_memory_limit)) {
+    gpu_preferences.vulkan_heap_memory_limit *= 1024 * 1024;
+  }
+  if (GetUintFromSwitch(command_line, switches::kVulkanSyncCpuMemoryLimitMb,
+                        &gpu_preferences.vulkan_sync_cpu_memory_limit)) {
+    gpu_preferences.vulkan_sync_cpu_memory_limit *= 1024 * 1024;
+  }
 
   // Some of these preferences are set or adjusted in
   // GpuDataManagerImplPrivate::AppendGpuCommandLine.

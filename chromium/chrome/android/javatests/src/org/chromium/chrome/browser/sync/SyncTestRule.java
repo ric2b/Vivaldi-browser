@@ -4,7 +4,6 @@
 
 package org.chromium.chrome.browser.sync;
 
-import android.accounts.Account;
 import android.app.Activity;
 import android.app.PendingIntent;
 import android.content.Context;
@@ -20,15 +19,15 @@ import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
 
 import org.chromium.base.Promise;
-import org.chromium.chrome.browser.app.ChromeActivity;
+import org.chromium.base.test.util.CriteriaHelper;
 import org.chromium.chrome.browser.autofill.PersonalDataManager;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
-import org.chromium.chrome.browser.identity.UniqueIdentificationGenerator;
-import org.chromium.chrome.browser.identity.UniqueIdentificationGeneratorFactory;
-import org.chromium.chrome.browser.identity.UuidBasedUniqueIdentificationGenerator;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.signin.UnifiedConsentServiceBridge;
-import org.chromium.chrome.test.ChromeActivityTestRule;
+import org.chromium.chrome.browser.uid.UniqueIdentificationGenerator;
+import org.chromium.chrome.browser.uid.UniqueIdentificationGeneratorFactory;
+import org.chromium.chrome.browser.uid.UuidBasedUniqueIdentificationGenerator;
+import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.browser.signin.AccountManagerTestRule;
 import org.chromium.chrome.test.util.browser.signin.SigninTestUtil;
 import org.chromium.chrome.test.util.browser.sync.SyncTestUtil;
@@ -39,7 +38,6 @@ import org.chromium.components.sync.protocol.EntitySpecifics;
 import org.chromium.components.sync.protocol.SyncEntity;
 import org.chromium.components.sync.protocol.WalletMaskedCreditCard;
 import org.chromium.content_public.browser.test.NativeLibraryTestUtils;
-import org.chromium.content_public.browser.test.util.CriteriaHelper;
 import org.chromium.content_public.browser.test.util.TestThreadUtils;
 
 import java.util.Arrays;
@@ -52,7 +50,7 @@ import java.util.concurrent.Callable;
 /**
  * TestRule for common functionality between sync tests.
  */
-public class SyncTestRule extends ChromeActivityTestRule<ChromeActivity> {
+public class SyncTestRule extends ChromeTabbedActivityTestRule {
     private static final String TAG = "SyncTestBase";
 
     private static final String CLIENT_ID = "Client_ID";
@@ -142,9 +140,7 @@ public class SyncTestRule extends ChromeActivityTestRule<ChromeActivity> {
         ProfileSyncService.resetForTests();
     }
 
-    public SyncTestRule() {
-        super(ChromeActivity.class);
-    }
+    public SyncTestRule() {}
 
     /**Getters for Test variables */
     public Context getTargetContext() {
@@ -172,24 +168,24 @@ public class SyncTestRule extends ChromeActivityTestRule<ChromeActivity> {
     /**
      * Adds an account of default account name to AccountManagerFacade and waits for the seeding.
      */
-    public Account addTestAccount() {
-        Account account = mAccountManagerTestRule.addAccountAndWaitForSeeding(
-                AccountManagerTestRule.TEST_ACCOUNT_EMAIL);
-        Assert.assertFalse(SyncTestUtil.isSyncRequested());
-        return account;
+    public CoreAccountInfo addTestAccount() {
+        return addAccount(AccountManagerTestRule.TEST_ACCOUNT_EMAIL);
     }
 
     /**
      * Adds an account of given account name to AccountManagerFacade and waits for the seeding.
      */
-    public Account addAccount(String accountName) {
-        return mAccountManagerTestRule.addAccountAndWaitForSeeding(accountName);
+    public CoreAccountInfo addAccount(String accountName) {
+        CoreAccountInfo coreAccountInfo =
+                mAccountManagerTestRule.addAccountAndWaitForSeeding(accountName);
+        Assert.assertFalse(SyncTestUtil.isSyncRequested());
+        return coreAccountInfo;
     }
 
     /**
      * Returns the currently signed in account.
      */
-    public Account getCurrentSignedInAccount() {
+    public CoreAccountInfo getCurrentSignedInAccount() {
         return mAccountManagerTestRule.getCurrentSignedInAccount();
     }
 
@@ -198,25 +194,35 @@ public class SyncTestRule extends ChromeActivityTestRule<ChromeActivity> {
      * this. For most purposes this function should be used as this emulates the basic sign in flow.
      * @return the test account that is signed in.
      */
-    public Account setUpAccountAndSignInForTesting() {
-        Account account =
+    public CoreAccountInfo setUpAccountAndEnableSyncForTesting() {
+        CoreAccountInfo accountInfo =
                 mAccountManagerTestRule.addTestAccountThenSigninAndEnableSync(mProfileSyncService);
         enableUKM();
         SyncTestUtil.waitForSyncActive();
         SyncTestUtil.triggerSyncAndWaitForCompletion();
-        return account;
+        return accountInfo;
+    }
+
+    /**
+     * Set up a test account and sign in. Does not setup sync.
+     * @return the test accountInfo that is signed in.
+     */
+    public CoreAccountInfo setUpAccountAndSignInForTesting() {
+        CoreAccountInfo accountInfo = mAccountManagerTestRule.addTestAccountThenSignin();
+        enableUKM();
+        return accountInfo;
     }
 
     /**
      * Set up a test account, sign in but don't mark sync setup complete.
      * @return the test account that is signed in.
      */
-    public Account setUpTestAccountAndSignInWithSyncSetupAsIncomplete() {
-        Account account = mAccountManagerTestRule.addTestAccountThenSigninAndEnableSync(
+    public CoreAccountInfo setUpTestAccountAndSignInWithSyncSetupAsIncomplete() {
+        CoreAccountInfo accountInfo = mAccountManagerTestRule.addTestAccountThenSigninAndEnableSync(
                 /* profileSyncService= */ null);
         enableUKM();
         SyncTestUtil.waitForSyncTransportActive();
-        return account;
+        return accountInfo;
     }
 
     public void startSync() {
@@ -233,9 +239,8 @@ public class SyncTestRule extends ChromeActivityTestRule<ChromeActivity> {
         InstrumentationRegistry.getInstrumentation().waitForIdleSync();
     }
 
-    public void signinAndEnableSync(final Account account) {
-        SigninTestUtil.signinAndEnableSync(
-                mAccountManagerTestRule.toCoreAccountInfo(account.name), mProfileSyncService);
+    public void signinAndEnableSync(final CoreAccountInfo accountInfo) {
+        SigninTestUtil.signinAndEnableSync(accountInfo, mProfileSyncService);
         enableUKM();
         SyncTestUtil.waitForSyncActive();
         SyncTestUtil.triggerSyncAndWaitForCompletion();

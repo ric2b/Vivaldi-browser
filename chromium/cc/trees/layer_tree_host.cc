@@ -33,6 +33,7 @@
 #include "base/trace_event/traced_value.h"
 #include "build/build_config.h"
 #include "cc/base/devtools_instrumentation.h"
+#include "cc/base/features.h"
 #include "cc/base/histograms.h"
 #include "cc/base/math_util.h"
 #include "cc/debug/rendering_stats_instrumentation.h"
@@ -46,6 +47,7 @@
 #include "cc/metrics/ukm_smoothness_data.h"
 #include "cc/paint/paint_worklet_layer_painter.h"
 #include "cc/resources/ui_resource_manager.h"
+#include "cc/tiles/raster_dark_mode_filter.h"
 #include "cc/trees/clip_node.h"
 #include "cc/trees/compositor_commit_data.h"
 #include "cc/trees/draw_property_utils.h"
@@ -141,7 +143,8 @@ LayerTreeHost::LayerTreeHost(InitParams params, CompositorMode mode)
       id_(s_layer_tree_host_sequence_number.GetNext() + 1),
       task_graph_runner_(params.task_graph_runner),
       event_listener_properties_(),
-      mutator_host_(params.mutator_host) {
+      mutator_host_(params.mutator_host),
+      dark_mode_filter_(params.dark_mode_filter) {
   DCHECK(task_graph_runner_);
   DCHECK(!settings_.enable_checker_imaging || image_worker_task_runner_);
 
@@ -252,8 +255,8 @@ SwapPromiseManager* LayerTreeHost::GetSwapPromiseManager() {
 
 std::unique_ptr<EventsMetricsManager::ScopedMonitor>
 LayerTreeHost::GetScopedEventMetricsMonitor(
-    std::unique_ptr<EventMetrics> event_metrics) {
-  return events_metrics_manager_.GetScopedMonitor(std::move(event_metrics));
+    EventsMetricsManager::ScopedMonitor::DoneCallback done_callback) {
+  return events_metrics_manager_.GetScopedMonitor(std::move(done_callback));
 }
 
 void LayerTreeHost::ClearEventsMetrics() {
@@ -477,7 +480,7 @@ void LayerTreeHost::UpdateDeferMainFrameUpdateInternal() {
 }
 
 bool LayerTreeHost::IsUsingLayerLists() const {
-  return settings_.use_layer_lists && !force_use_property_tree_builder_;
+  return settings_.use_layer_lists;
 }
 
 void LayerTreeHost::CommitComplete() {
@@ -544,14 +547,15 @@ std::unique_ptr<LayerTreeHostImpl> LayerTreeHost::CreateLayerTreeHostImpl(
   std::unique_ptr<LayerTreeHostImpl> host_impl = LayerTreeHostImpl::Create(
       settings_, client, task_runner_provider_.get(),
       rendering_stats_instrumentation_.get(), task_graph_runner_,
-      std::move(mutator_host_impl), id_, std::move(image_worker_task_runner_),
-      scheduling_client_);
+      std::move(mutator_host_impl), dark_mode_filter_, id_,
+      std::move(image_worker_task_runner_), scheduling_client_);
   if (ukm_recorder_factory_) {
     host_impl->InitializeUkm(ukm_recorder_factory_->CreateRecorder());
     ukm_recorder_factory_.reset();
   }
 
   task_graph_runner_ = nullptr;
+  dark_mode_filter_ = nullptr;
   compositor_delegate_weak_ptr_ = host_impl->AsWeakPtr();
   return host_impl;
 }
@@ -691,12 +695,13 @@ void LayerTreeHost::LayoutAndUpdateLayers() {
   UpdateLayers();
 }
 
-void LayerTreeHost::Composite(base::TimeTicks frame_begin_time, bool raster) {
+void LayerTreeHost::CompositeForTest(base::TimeTicks frame_begin_time,
+                                     bool raster) {
   DCHECK(IsSingleThreaded());
   // This function is only valid when not using the scheduler.
   DCHECK(!settings_.single_thread_proxy_scheduler);
   SingleThreadProxy* proxy = static_cast<SingleThreadProxy*>(proxy_.get());
-  proxy->CompositeImmediately(frame_begin_time, raster);
+  proxy->CompositeImmediatelyForTest(frame_begin_time, raster);  // IN-TEST
 }
 
 bool LayerTreeHost::UpdateLayers() {
@@ -1153,18 +1158,7 @@ void LayerTreeHost::SetRootLayer(scoped_refptr<Layer> root_layer) {
   // This flag is sticky until a new tree comes along.
   gpu_rasterization_histogram_recorded_ = false;
 
-  force_use_property_tree_builder_ = false;
-
   SetNeedsFullTreeSync();
-}
-
-void LayerTreeHost::SetNonBlinkManagedRootLayer(
-    scoped_refptr<Layer> root_layer) {
-  SetRootLayer(std::move(root_layer));
-
-  DCHECK(!root_layer || root_layer_->children().empty());
-  if (IsUsingLayerLists() && root_layer_)
-    force_use_property_tree_builder_ = true;
 }
 
 void LayerTreeHost::RegisterViewportPropertyIds(
@@ -1223,7 +1217,8 @@ void LayerTreeHost::SetEventListenerProperties(
   // Thus when it changes, we want to request every layer to push properties
   // and recompute its wheel event handler region, since the computation is
   // done in PushPropertiesTo.
-  if (event_class == EventListenerClass::kMouseWheel) {
+  if (event_class == EventListenerClass::kMouseWheel &&
+      !base::FeatureList::IsEnabled(::features::kWheelEventRegions)) {
     bool new_property_is_blocking =
         properties == EventListenerProperties::kBlocking ||
         properties == EventListenerProperties::kBlockingAndPassive;

@@ -10,6 +10,7 @@ import androidx.annotation.Nullable;
 import org.chromium.base.MathUtils;
 import org.chromium.base.ObserverList;
 import org.chromium.base.TraceEvent;
+import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
 import org.chromium.chrome.browser.homepage.HomepageManager;
@@ -22,6 +23,7 @@ import org.chromium.chrome.browser.tab.TabCreationState;
 import org.chromium.chrome.browser.tab.TabLaunchType;
 import org.chromium.chrome.browser.tab.TabSelectionType;
 import org.chromium.chrome.browser.tab.state.CriticalPersistedTabData;
+import org.chromium.chrome.browser.tab.state.PersistedTabData;
 import org.chromium.chrome.browser.tabmodel.NextTabPolicy.NextTabPolicySupplier;
 import org.chromium.chrome.browser.tasks.tab_management.TabUiFeatureUtilities;
 import org.chromium.components.external_intents.InterceptNavigationDelegateImpl;
@@ -55,7 +57,6 @@ public class TabModelImpl extends TabModelJniBridge {
 
     private final TabCreator mRegularTabCreator;
     private final TabCreator mIncognitoTabCreator;
-    private final TabModelSelectorUma mUma;
     private final TabModelOrderController mOrderController;
     private final TabContentManager mTabContentManager;
     private final TabPersistentStore mTabSaver;
@@ -84,9 +85,10 @@ public class TabModelImpl extends TabModelJniBridge {
      * Whether this tab model supports undoing.
      */
     private boolean mIsUndoSupported = true;
+    private boolean mActive;
 
     public TabModelImpl(@NonNull Profile profile, boolean isTabbedActivity,
-            TabCreator regularTabCreator, TabCreator incognitoTabCreator, TabModelSelectorUma uma,
+            TabCreator regularTabCreator, TabCreator incognitoTabCreator,
             TabModelOrderController orderController, TabContentManager tabContentManager,
             TabPersistentStore tabSaver, NextTabPolicySupplier nextTabPolicySupplier,
             AsyncTabParamsManager asyncTabParamsManager, TabModelDelegate modelDelegate,
@@ -94,7 +96,6 @@ public class TabModelImpl extends TabModelJniBridge {
         super(profile, isTabbedActivity);
         mRegularTabCreator = regularTabCreator;
         mIncognitoTabCreator = incognitoTabCreator;
-        mUma = uma;
         mOrderController = orderController;
         mTabContentManager = tabContentManager;
         mTabSaver = tabSaver;
@@ -145,7 +146,7 @@ public class TabModelImpl extends TabModelJniBridge {
         // valid tabs, if the TabModel becomes active before any Tab is restored to that model.
         if (hasValidTab() && mIndex == INVALID_TAB_INDEX) {
             // Actually select the first tab if it is the active model, otherwise just set mIndex.
-            if (isCurrentModel()) {
+            if (isActiveModel()) {
                 TabModelUtils.setIndex(this, 0);
             } else {
                 mIndex = 0;
@@ -198,7 +199,7 @@ public class TabModelImpl extends TabModelJniBridge {
                 }
             }
 
-            if (!isCurrentModel()) {
+            if (!isActiveModel()) {
                 // When adding new tabs in the background, make sure we set a valid index when the
                 // first one is added.  When in the foreground, calls to setIndex will take care of
                 // this.
@@ -279,7 +280,7 @@ public class TabModelImpl extends TabModelJniBridge {
         //   * Otherwise, if closing the last incognito tab, select the current normal tab.
         //   * Otherwise, select nothing.
         Tab nextTab = null;
-        if (!isCurrentModel()) {
+        if (!isActiveModel()) {
             nextTab = TabModelUtils.getCurrentTab(mModelDelegate.getCurrentModel());
         } else if (tabToClose != currentTab && currentTab != null && !currentTab.isClosing()) {
             nextTab = currentTab;
@@ -342,7 +343,7 @@ public class TabModelImpl extends TabModelJniBridge {
         WebContents webContents = tab.getWebContents();
         if (webContents != null) webContents.setAudioMuted(false);
 
-        boolean activeModel = isCurrentModel();
+        boolean activeModel = isActiveModel();
 
         if (mIndex == INVALID_TAB_INDEX) {
             // If we're the active model call setIndex to actually select this tab, otherwise just
@@ -551,7 +552,7 @@ public class TabModelImpl extends TabModelJniBridge {
 
             // This can cause recursive entries into setIndex, which causes duplicate notifications
             // and UMA records.
-            if (!isCurrentModel()) mModelDelegate.selectModel(isIncognito());
+            if (!isActiveModel()) mModelDelegate.selectModel(isIncognito());
 
             if (!hasValidTab()) {
                 mIndex = INVALID_TAB_INDEX;
@@ -567,9 +568,9 @@ public class TabModelImpl extends TabModelJniBridge {
                 for (TabModelObserver obs : mObservers) obs.didSelectTab(tab, type, lastId);
 
                 boolean wasAlreadySelected = tab.getId() == lastId;
-                if (!wasAlreadySelected && type == TabSelectionType.FROM_USER && mUma != null) {
+                if (!wasAlreadySelected && type == TabSelectionType.FROM_USER) {
                     // We only want to record when the user actively switches to a different tab.
-                    mUma.userSwitchedToTab();
+                    RecordUserAction.record("MobileTabSwitched");
                 }
             }
         } finally {
@@ -578,8 +579,8 @@ public class TabModelImpl extends TabModelJniBridge {
     }
 
     @Override
-    public boolean isCurrentModel() {
-        return mModelDelegate.isCurrentModel(this);
+    public boolean isActiveModel() {
+        return mActive;
     }
 
     /**
@@ -665,6 +666,7 @@ public class TabModelImpl extends TabModelJniBridge {
     private void finalizeTabClosure(Tab tab, boolean notifyTabClosureCommitted) {
         if (mTabContentManager != null) mTabContentManager.removeTabThumbnail(tab.getId());
         mTabSaver.removeTabFromQueues(tab);
+        PersistedTabData.onTabClose(tab);
 
         if (!isIncognito()) HistoricalTabSaver.createHistoricalTab(tab);
 
@@ -807,17 +809,16 @@ public class TabModelImpl extends TabModelJniBridge {
     }
 
     @Override
-    protected TabCreator getTabCreator(Profile profile) {
-        // TODO(https://crbug.com/1099642): Update to get the proper tab creator for different OTR
-        // profiles.
-        return profile.isOffTheRecord() ? mIncognitoTabCreator : mRegularTabCreator;
+    protected TabCreator getTabCreator(boolean incognito) {
+        return incognito ? mIncognitoTabCreator : mRegularTabCreator;
     }
 
     @Override
     protected boolean createTabWithWebContents(
             Tab parent, Profile profile, WebContents webContents) {
-        return getTabCreator(profile).createTabWithWebContents(
-                parent, webContents, TabLaunchType.FROM_LONGPRESS_BACKGROUND);
+        return getTabCreator(profile.isOffTheRecord())
+                .createTabWithWebContents(
+                        parent, webContents, TabLaunchType.FROM_LONGPRESS_BACKGROUND);
     }
 
     @Override
@@ -856,10 +857,7 @@ public class TabModelImpl extends TabModelJniBridge {
         loadUrlParams.setVerbatimHeaders(extraHeaders);
         loadUrlParams.setPostData(postData);
         loadUrlParams.setIsRendererInitiated(isRendererInitiated);
-        // TODO(https://crbug.com/1099642): Update to pass the correct OTR profile.
-        Profile profile = Profile.getLastUsedRegularProfile();
-        if (incognito) profile = profile.getPrimaryOTRProfile();
-        getTabCreator(profile).createNewTab(
+        getTabCreator(incognito).createNewTab(
                 loadUrlParams, tabLaunchType, persistParentage ? parent : null);
     }
 
@@ -892,5 +890,10 @@ public class TabModelImpl extends TabModelJniBridge {
         mRecentlyClosedBridge.openRecentlyClosedTab();
         // If there is only one tab, select it.
         if (getCount() == 1) setIndex(0, TabSelectionType.FROM_NEW);
+    }
+
+    @Override
+    public void setActive(boolean active) {
+        mActive = active;
     }
 }

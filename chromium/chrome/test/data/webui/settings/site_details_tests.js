@@ -8,10 +8,11 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {listenOnce} from 'chrome://resources/js/util.m.js';
 import {flush,Polymer} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 import {ChooserType,ContentSetting,ContentSettingsTypes,SiteSettingSource,SiteSettingsPrefsBrowserProxyImpl,WebsiteUsageBrowserProxyImpl} from 'chrome://settings/lazy_load.js';
-import {Route,Router,routes} from 'chrome://settings/settings.js';
+import {MetricsBrowserProxyImpl, PrivacyElementInteractions, Route,Router,routes} from 'chrome://settings/settings.js';
 import {TestSiteSettingsPrefsBrowserProxy} from 'chrome://test/settings/test_site_settings_prefs_browser_proxy.js';
 import {createContentSettingTypeToValuePair,createRawChooserException,createRawSiteException,createSiteSettingsPrefs} from 'chrome://test/settings/test_util.js';
 import {TestBrowserProxy} from 'chrome://test/test_browser_proxy.m.js';
+import {TestMetricsBrowserProxy} from './test_metrics_browser_proxy.js';
 
 // clang-format on
 
@@ -51,6 +52,9 @@ suite('SiteDetails', function() {
    */
   let browserProxy;
 
+  /** @type {!TestMetricsBrowserProxy} */
+  let testMetricsBrowserProxy;
+
   /**
    * The mock website usage proxy object to use during test.
    * @type {TestWebsiteUsageBrowserProxy}
@@ -77,11 +81,6 @@ suite('SiteDetails', function() {
               ContentSettingsTypes.SOUND,
               [createRawSiteException('https://foo.com:443')]),
           createContentSettingTypeToValuePair(
-              ContentSettingsTypes.PLUGINS,
-              [createRawSiteException('https://foo.com:443', {
-                source: SiteSettingSource.EXTENSION,
-              })]),
-          createContentSettingTypeToValuePair(
               ContentSettingsTypes.POPUPS,
               [createRawSiteException('https://foo.com:443', {
                 setting: ContentSetting.BLOCK,
@@ -101,9 +100,6 @@ suite('SiteDetails', function() {
               [createRawSiteException('https://foo.com:443')]),
           createContentSettingTypeToValuePair(
               ContentSettingsTypes.CAMERA,
-              [createRawSiteException('https://foo.com:443')]),
-          createContentSettingTypeToValuePair(
-              ContentSettingsTypes.UNSANDBOXED_PLUGINS,
               [createRawSiteException('https://foo.com:443')]),
           createContentSettingTypeToValuePair(
               ContentSettingsTypes.AUTOMATIC_DOWNLOADS,
@@ -180,6 +176,8 @@ suite('SiteDetails', function() {
 
     browserProxy = new TestSiteSettingsPrefsBrowserProxy();
     SiteSettingsPrefsBrowserProxyImpl.instance_ = browserProxy;
+    testMetricsBrowserProxy = new TestMetricsBrowserProxy();
+    MetricsBrowserProxyImpl.instance_ = testMetricsBrowserProxy;
     websiteUsageProxy = new TestWebsiteUsageBrowserProxy();
     WebsiteUsageBrowserProxyImpl.instance_ = websiteUsageProxy;
 
@@ -355,6 +353,12 @@ suite('SiteDetails', function() {
         })
         .then(originCleared => {
           assertEquals('https://foo.com/', originCleared);
+          return testMetricsBrowserProxy.whenCalled(
+              'recordSettingsPageHistogram');
+        })
+        .then(metric => {
+          assertEquals(
+              PrivacyElementInteractions.SITE_DETAILS_CLEAR_DATA, metric);
         });
   });
 
@@ -393,8 +397,6 @@ suite('SiteDetails', function() {
                 // update expected values.
                 if (siteDetailsPermission.category ===
                         ContentSettingsTypes.NOTIFICATIONS ||
-                    siteDetailsPermission.category ===
-                        ContentSettingsTypes.PLUGINS ||
                     siteDetailsPermission.category ===
                         ContentSettingsTypes.JAVASCRIPT ||
                     siteDetailsPermission.category ===

@@ -2,7 +2,9 @@
      Use of this source code is governed by a BSD-style license that can be
      found in the LICENSE file. -->
 
-<dom-module id="tpm-error-message">
+<link rel="import" href="/components/oobe_i18n_behavior.html">
+
+<dom-module id="tpm-error-message-element">
   <template>
     <style include="oobe-dialog-host">
       oobe-dialog > iron-icon.warning {
@@ -15,7 +17,7 @@
       </iron-icon>
       <div slot="bottom-buttons" class="layout horizontal end-justified">
         <oobe-text-button id="restartButton" inverse
-            text-key="errorTpmFailureRebootButton" on-tap="onRestartTap_">
+            text-key="errorTpmFailureRebootButton" on-click="onRestartTap_">
         </oobe-text-button>
       </div>
     </oobe-dialog>

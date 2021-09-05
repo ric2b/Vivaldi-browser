@@ -18,7 +18,7 @@ buildflag_header("buildflags") {
   flags = [ "ENABLE_VR=$enable_vr" ]
 }
 
-aggregate_vector_icons2("omnibox_vector_icons") {
+aggregate_vector_icons("omnibox_vector_icons") {
   icon_directory = "vector_icons"
 
   sources = [
@@ -125,6 +125,10 @@ static_library("browser") {
     "in_memory_url_index.h",
     "in_memory_url_index_types.cc",
     "in_memory_url_index_types.h",
+    "inline_autocompletion_util.cc",
+    "inline_autocompletion_util.h",
+    "intranet_redirector_state.cc",
+    "intranet_redirector_state.h",
     "keyword_extensions_delegate.cc",
     "keyword_extensions_delegate.h",
     "keyword_provider.cc",
@@ -132,6 +136,8 @@ static_library("browser") {
     "local_history_zero_suggest_provider.cc",
     "local_history_zero_suggest_provider.h",
     "match_compare.h",
+    "most_visited_sites_provider.cc",
+    "most_visited_sites_provider.h",
     "omnibox_client.cc",
     "omnibox_client.h",
     "omnibox_controller.cc",
@@ -163,6 +169,8 @@ static_library("browser") {
     "omnibox_popup_view.h",
     "omnibox_prefs.cc",
     "omnibox_prefs.h",
+    "omnibox_triggered_feature_service.cc",
+    "omnibox_triggered_feature_service.h",
     "omnibox_view.cc",
     "omnibox_view.h",
     "on_device_head_model.cc",
@@ -432,6 +440,7 @@ static_library("test_support") {
     "//components/bookmarks/test",
     "//components/history/core/browser",
     "//components/history/core/test",
+    "//components/prefs:test_support",
     "//components/query_tiles/test:test_support",
     "//components/resources",
     "//components/search_engines",
@@ -487,9 +496,11 @@ source_set("unit_tests") {
     "history_url_provider_unittest.cc",
     "in_memory_url_index_types_unittest.cc",
     "in_memory_url_index_unittest.cc",
+    "inline_autocompletion_util_unittest.cc",
     "keyword_provider_unittest.cc",
     "local_history_zero_suggest_provider_unittest.cc",
     "location_bar_model_impl_unittest.cc",
+    "most_visited_sites_provider_unittest.cc",
     "omnibox_controller_unittest.cc",
     "omnibox_edit_model_unittest.cc",
     "omnibox_field_trial_unittest.cc",

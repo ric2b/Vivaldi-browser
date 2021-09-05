@@ -19,6 +19,7 @@
 #include "device/vr/public/mojom/isolated_xr_service.mojom.h"
 #include "device/vr/public/mojom/vr_service.mojom.h"
 #include "device/vr/util/fps_meter.h"
+#include "device/vr/util/sliding_average.h"
 #include "mojo/public/cpp/bindings/associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_receiver.h"
 #include "mojo/public/cpp/bindings/pending_associated_remote.h"
@@ -58,6 +59,9 @@ using ArCoreGlCreateSessionCallback = base::OnceCallback<void(
     mojo::PendingRemote<mojom::XRSessionController> session_controller,
     mojom::XRPresentationConnectionPtr presentation_connection)>;
 
+using ArCoreGlInitializeCallback = base::OnceCallback<void(
+    base::Optional<std::unordered_set<device::mojom::XRSessionFeature>>)>;
+
 // All of this class's methods must be called on the same valid GL thread with
 // the exception of GetGlThreadTaskRunner() and GetWeakPtr().
 class ArCoreGl : public mojom::XRFrameDataProvider,
@@ -74,8 +78,12 @@ class ArCoreGl : public mojom::XRFrameDataProvider,
       gfx::AcceleratedWidget drawing_widget,
       const gfx::Size& frame_size,
       display::Display::Rotation display_rotation,
-      const std::vector<device::mojom::XRSessionFeature>& enabled_features,
-      base::OnceCallback<void(bool)> callback);
+      const std::unordered_set<device::mojom::XRSessionFeature>&
+          required_features,
+      const std::unordered_set<device::mojom::XRSessionFeature>&
+          optional_features,
+      const std::vector<device::mojom::XRTrackedImagePtr>& tracked_images,
+      ArCoreGlInitializeCallback callback);
 
   void CreateSession(mojom::VRDisplayInfoPtr display_info,
                      ArCoreGlCreateSessionCallback create_callback,
@@ -172,15 +180,19 @@ class ArCoreGl : public mojom::XRFrameDataProvider,
                     mojom::XRFrameDataProvider::GetFrameDataCallback callback);
 
   bool InitializeGl(gfx::AcceleratedWidget drawing_widget);
-  void OnArImageTransportReady(base::OnceCallback<void(bool)> callback);
+  void OnArImageTransportReady(ArCoreGlInitializeCallback callback);
   bool IsOnGlThread() const;
   void CopyCameraImageToFramebuffer();
   void OnTransportFrameAvailable(const gfx::Transform& uv_transform);
+  void TransitionProcessingFrameToRendering();
 
-  // Use a helper method to avoid storing the mojo getframedata callback
-  // in a closure owned by the task runner, that would lead to inconsistent
-  // state on session shutdown. See https://crbug.com/1065572.
-  void RunNextGetFrameData();
+  void GetRenderedFrameStats();
+  void FinishRenderingFrame();
+  base::TimeDelta EstimatedArCoreFrameTime();
+  base::TimeDelta WaitTimeForArCoreUpdate();
+  base::TimeDelta WaitTimeForRenderCompletion();
+  void ScheduleGetFrameData();
+  void RunPendingGetFrameData();
 
   bool IsFeatureEnabled(mojom::XRSessionFeature feature);
 
@@ -225,6 +237,11 @@ class ArCoreGl : public mojom::XRFrameDataProvider,
   // smaller than the camera image if framebufferScaleFactor is < 1.0.
   gfx::Size transfer_size_ = gfx::Size(0, 0);
 
+  // Viewport size to use for new animating frames. Currently in-flight
+  // processing/rendering frames continue using the viewport size stored
+  // in their WebXrFrame state.
+  gfx::RectF viewport_bounds_ = gfx::RectF(0.f, 0.f, 1.f, 1.f);
+
   // The camera image size stays locked to the screen size even if
   // framebufferScaleFactor changes.
   gfx::Size camera_image_size_ = gfx::Size(0, 0);
@@ -234,10 +251,6 @@ class ArCoreGl : public mojom::XRFrameDataProvider,
   // UV transform for drawing the camera texture, this is supplied by ARCore
   // and can include 90 degree rotations or other nontrivial transforms.
   gfx::Transform uv_transform_;
-
-  // UV transform for drawing received WebGL content from a shared buffer's
-  // texture, this is simply an identity.
-  gfx::Transform shared_buffer_transform_;
 
   gfx::Transform projection_;
   gfx::Transform inverse_projection_;
@@ -251,9 +264,16 @@ class ArCoreGl : public mojom::XRFrameDataProvider,
 
   bool restrict_frame_data_ = false;
 
-  base::TimeTicks arcore_update_next_expected_;
-  base::TimeDelta arcore_last_frame_timestamp_;
-  base::TimeDelta arcore_frame_interval_;
+  base::TimeTicks last_arcore_update_time_;
+  base::TimeDelta last_arcore_frame_timestamp_;
+
+  device::SlidingTimeDeltaAverage average_camera_frametime_;
+  device::SlidingTimeDeltaAverage average_animate_time_;
+  device::SlidingTimeDeltaAverage average_process_time_;
+  device::SlidingTimeDeltaAverage average_render_time_;
+
+  float rendering_time_ratio_ = 0.0f;
+
   FPSMeter fps_meter_;
 
   mojo::Receiver<mojom::XRFrameDataProvider> frame_data_receiver_{this};
@@ -270,11 +290,16 @@ class ArCoreGl : public mojom::XRFrameDataProvider,
 
   // This closure saves arguments for the next GetFrameData call, including a
   // mojo callback. Must remain owned by ArCoreGl, don't pass it off to the task
-  // runner directly. See RunNextGetFrameData() comments.
+  // runner directly. Storing the mojo getframedata callback in a closure owned
+  // by the task runner would lead to inconsistent state on session shutdown.
+  // See https://crbug.com/1065572.
   base::OnceClosure pending_getframedata_;
 
   mojom::VRDisplayInfoPtr display_info_;
   bool display_info_changed_ = false;
+
+  mojom::VRStageParametersPtr stage_parameters_;
+  uint32_t stage_parameters_id_;
 
   // Currently estimated floor height.
   base::Optional<float> floor_height_estimate_;
